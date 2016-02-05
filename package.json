@@ -1,0 +1,51 @@
+{
+  "name": "react-designer",
+  "version": "1.0.0",
+  "description": "React designer tool",
+  "main": "lib/Select.js",
+  "scripts": {
+    "start": "node server.js",
+    "deploy": "NODE_ENV=production webpack -p --config webpack.production.js",
+    "build": "babel -d lib/ src/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fatiherikli/react-designer"
+  },
+  "keywords": [
+    "react",
+    "reactjs"
+  ],
+  "author": "Fatih Erikli <fatiherikli@gmail.com> (http://fatiherikli.com)",
+  "license": "MIT",
+  "homepage": "https://github.com/fatiherikli/react-designer",
+  "devDependencies": {
+    "babel-core": "^6.0.20",
+    "babel-eslint": "^4.1.3",
+    "babel-loader": "^6.0.1",
+    "babel-plugin-css-modules-transform": "0.0.4",
+    "babel-plugin-webpack-loaders": "^0.2.1",
+    "babel-preset-es2015": "^6.0.15",
+    "babel-preset-react": "^6.0.15",
+    "babel-preset-stage-0": "^6.0.15",
+    "css-loader": "^0.23.0",
+    "eslint-plugin-react": "^3.6.2",
+    "file-loader": "^0.8.5",
+    "react-hot-loader": "^1.3.0",
+    "svg-inline-loader": "^0.4.0",
+    "url-loader": "^0.5.7",
+    "webpack": "^1.12.2",
+    "webpack-dev-server": "^1.12.1",
+    "style-loader": "^0.13.0"
+  },
+  "dependencies": {
+    "classnames": "^2.2.1",
+    "lodash": "^3.10.1",
+    "radium": "^0.16.5",
+    "react": "^0.14.7",
+    "react-color": "^1.3.0",
+    "react-dom": "^0.14.0",
+    "react-hotkeys": "^0.7.1",
+    "react-portal": "^1.7.0"
+  }
+}
