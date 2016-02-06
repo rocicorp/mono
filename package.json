@@ -1,7 +1,7 @@
 {
   "name": "react-designer",
-  "version": "1.0.0",
-  "description": "React designer tool",
+  "version": "1.0.3",
+  "description": "Easy to configure, lightweight, editable vector graphics in your react components.",
   "main": "lib/Select.js",
   "scripts": {
     "start": "node server.js",
