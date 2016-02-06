@@ -13,6 +13,19 @@ Examples and demonstration:
 
 ![bezier editor](http://i.imgur.com/cqTleWB.gif)
 
+## Keymap
+
+| Parameter                  | Default                         | 
+| :-------------             |:------------------------------- 
+| `del` or `back`            | Removes the current object      | 
+| `arrows`                   | Move the current object by 1px  | 
+| `shift` + `arrows`         | Move the currnet object by 10px | 
+| `enter`                    | Close the drawing path          | 
+
+
+## Usage
+All the entities are pure react components in react-designer except action strategies. I have tried to explain that. I'm starting with components.
+
 ### Component: Designer
 
 This is the main canvas component which holds the all toolset and manages all drawing data. You could use this component to create drawing canvas.
@@ -54,6 +67,9 @@ The `Designer` component expects the following parameters:
 | onUpdate         | []                             | Your update callback.  |
 | objectTypes      |  Text, Circle, Rectangle, Path | Mapping of object types. |
 | snapToGrid       |  1                             | Snaps the objects accordingly this multipier. |
+| rotator          | rotate({object, mouse})        | The rotating strategy of objects
+| scale            | scale({object, mouse})         | The scaling strategy of objects
+| drag             | drag({object, mouse})          | The dragging strategy of objects
 
 
 Object types are pure react components which are derived from `Vector`.
@@ -101,7 +117,7 @@ You can register this object type in your `Designer` instance.
 
 Apart from meta options, the vectors have `panels` static definition which contains the available panels of their.
 
-Here is default panels in Vector component:
+Here are default panels in Vector component:
 
     static panels = [
         SizePanel,
@@ -112,7 +128,7 @@ Here is default panels in Vector component:
 
 ### Component: Panel
 
-You could extend this component to create completely different panel instead of builtins. 
+You can extend this component to create different panels instead of builtins. 
 
 It's a pure React component. The component have `object` and `onUpdate` props. You could reach the current state with `object`, and change this state with `onChange` callback. Let's create a dummy panel.
 
@@ -150,9 +166,73 @@ The parameters are same with Designer component, except the onUpdate callback is
       height={500}
       width={500} />
 
+### Action strategies
+
+The actions of `rotate`, `scale`, `drag` are pure functions. You can change this behaviours by passing your strategy. The action functions calling with the following object bundle.
+
+    {
+      object, // the current object
+      mouse, // mouse coordinates bundle. it have x and y attribtues
+      startPoint, // starting points of mouse and object bundles.
+      objectIndex, // the index of the object in the documen, 
+      objectRefs, // DOM references of objects in the document
+    } 
+
+Here are default action strategies:
+
+#### Dragger
+Moves the object to mouse bundle by the center of object.
+
+    // dragger.js
+    export default ({object, startPoint, mouse}) => {
+      return {
+        ...object,
+        x: mouse.x - (startPoint.clientX - startPoint.objectX),
+        y: mouse.y - (startPoint.clientY - startPoint.objectY)
+      };
+    };
+
+#### Scaler
+Scales the object by the difference with startPoint and current mouse bundle. If the difference lower than zero, changes the position of object.
+
+    // scale.js
+    export default ({object, startPoint, mouse}) => {
+      let {objectX, objectY, clientX, clientY} = startPoint;
+      let width = startPoint.width + mouse.x - clientX;
+      let height = startPoint.height + mouse.y - clientY;
+
+      return {
+        ...object,
+        x: width > 0 ? objectX: objectX + width,
+        y: height > 0 ? objectY: objectY + height,
+        width: Math.abs(width),
+        height: Math.abs(height)
+      };
+    };
+
+#### Rotator
+Changes the rotation as degree of object. This action may needs some improvement, I'm calculating with a base value (45 degree) because of the rotator anchor is on the upper right corner of object.
+
+    // rotate.js
+    export default ({object, startPoint, mouse}) => {
+      let angle = Math.atan2(
+        startPoint.objectX + (object.width || 0) / 2 - mouse.x, 
+        startPoint.objectY + (object.height || 0) / 2 - mouse.y
+      );
+
+      let asDegree = angle * 180 / Math.PI;
+      let rotation = (asDegree + 45) * -1;
+
+      return {
+        ...object,
+        rotate: rotation
+      };
+    };
+
+
 ### To-do
 
-I built this project to create user designed areas in my side project. So, this was a just hobby project, there may be things missing for a svg editor. I'm open to pull requests and feedback, and I need help to maintain. 
+I built this project to create user-designed areas in my side project. So, this was just a hobby project, there may be things missing for a svg editor. I'm open to pull requests and feedback, and I need help to maintain. 
 
 Here is a todo list that in my mind. You could extend this list.
 
