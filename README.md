@@ -32,28 +32,30 @@ This is the main canvas component which holds the all toolset and manages all dr
 
 An example with default configuration:
 
-    import Designer, {Text, Rectangle} from 'react-designer';
+```javascript
+import Designer, {Text, Rectangle} from 'react-designer';
 
-    class App() {
-      state = {
-        objects: [
-          {type: "text", x: 10, y: 20, text: "Hello!", fill: "red"},
-          {type: "rect", x: 50, y: 70, fill: "red"}
-        ]
-      }
+class App() {
+  state = {
+    objects: [
+      {type: "text", x: 10, y: 20, text: "Hello!", fill: "red"},
+      {type: "rect", x: 50, y: 70, fill: "red"}
+    ]
+  }
 
-      render() {
-        return (
-          <Designer width={250} height={350}
-            objectTypes={{
-              'text': Text,
-              'rect': Rect
-            }}
-            onUpdate={(objects) => this.setState({objects})}
-            objects={this.state.objects} />
-        )
-      }
-    }
+  render() {
+    return (
+      <Designer width={250} height={350}
+        objectTypes={{
+          'text': Text,
+          'rect': Rect
+        }}
+        onUpdate={(objects) => this.setState({objects})}
+        objects={this.state.objects} />
+    )
+  }
+}
+```
 
 The `Designer` component expects the following parameters:
 
@@ -109,24 +111,28 @@ class MyRectangle extends Vector {
 
 You can register this object type in your `Designer` instance.
 
-    <Designer 
-        objectTypes={{rectangle: MyRectangle}}
-        width={500}
-        height={500}
-        onUpdate={...}
-        objects={...}
-        onUpdate={...} />
+```javascript
+<Designer 
+    objectTypes={{rectangle: MyRectangle}}
+    width={500}
+    height={500}
+    onUpdate={...}
+    objects={...}
+    onUpdate={...} />
+```
 
 Apart from meta options, the vectors have `panels` static definition which contains the available panels of their.
 
 Here are default panels in Vector component:
 
-    static panels = [
-        SizePanel,
-        TextPanel,
-        StylePanel,
-        ArrangePanel
-    ];
+```javascript
+static panels = [
+    SizePanel,
+    TextPanel,
+    StylePanel,
+    ArrangePanel
+];
+```
 
 ### Component: Panel
 
@@ -134,27 +140,29 @@ You can extend this component to create different panels instead of builtins.
 
 It's a pure React component. The component have `object` and `onUpdate` props. You could reach the current state with `object`, and change this state with `onChange` callback. Let's create a dummy panel.
 
-    class MyPanel extends Panel {
-      render() {
-        let {object, onChange} = this.props;
-        return (
-          <PropertyGroup>
-              <Columns label="Colors">
-                <Column>
-                  <Button onClick={() => {onChange('color', 'blue')}}>
-                    Make blue
-                  </Button>
-                </Column>
-                <Column>
-                  <Button onClick={() => {onChange('color', 'yellow')}}>
-                    Make Yellow
-                  </Button>
-                </Column>
-              </Columns>
-          </PropertyGroup>
-        );
-      }
-    }
+```javascript
+class MyPanel extends Panel {
+  render() {
+    let {object, onChange} = this.props;
+    return (
+      <PropertyGroup>
+          <Columns label="Colors">
+            <Column>
+              <Button onClick={() => {onChange('color', 'blue')}}>
+                Make blue
+              </Button>
+            </Column>
+            <Column>
+              <Button onClick={() => {onChange('color', 'yellow')}}>
+                Make Yellow
+              </Button>
+            </Column>
+          </Columns>
+      </PropertyGroup>
+    );
+  }
+}
+```
 
 ### Component: Preview
 
@@ -162,74 +170,84 @@ You can use `Preview` component to disable editing tool set and controllers. Thi
 
 The parameters are same with Designer component, except the onUpdate callback is not necessarry.
 
-    <Preview 
-      objectTypes={{rectangle: MyRectangle}}
-      objects={this.state.objects}
-      height={500}
-      width={500} />
+```javascript
+<Preview 
+  objectTypes={{rectangle: MyRectangle}}
+  objects={this.state.objects}
+  height={500}
+  width={500} />
+```
 
 ### Action strategies
 
 The actions of `rotate`, `scale`, `drag` are pure functions. You can change this actions by passing your strategy. The action functions calling with the following object bundle.
 
-    {
-      object, // the current object
-      mouse, // mouse coordinates bundle. it have x and y attribtues
-      startPoint, // starting points of mouse and object bundles.
-      objectIndex, // the index of the object in the documen, 
-      objectRefs, // DOM references of objects in the document
-    } 
+```javascript
+{
+  object, // the current object
+  mouse, // mouse coordinates bundle. it have x and y attribtues
+  startPoint, // starting points of mouse and object bundles.
+  objectIndex, // the index of the object in the documen, 
+  objectRefs, // DOM references of objects in the document
+}
+```
 
 Here are default action strategies:
 
 #### Dragger
 Moves the object to mouse bundle by the center of object.
 
-    // dragger.js
-    export default ({object, startPoint, mouse}) => {
-      return {
-        ...object,
-        x: mouse.x - (startPoint.clientX - startPoint.objectX),
-        y: mouse.y - (startPoint.clientY - startPoint.objectY)
-      };
-    };
+```javascript
+// dragger.js
+export default ({object, startPoint, mouse}) => {
+  return {
+    ...object,
+    x: mouse.x - (startPoint.clientX - startPoint.objectX),
+    y: mouse.y - (startPoint.clientY - startPoint.objectY)
+  };
+};
+```
 
 #### Scaler
 Scales the object by the difference with startPoint and current mouse bundle. If the difference lower than zero, changes the position of object.
 
-    // scale.js
-    export default ({object, startPoint, mouse}) => {
-      let {objectX, objectY, clientX, clientY} = startPoint;
-      let width = startPoint.width + mouse.x - clientX;
-      let height = startPoint.height + mouse.y - clientY;
+```javascript
+// scale.js
+export default ({object, startPoint, mouse}) => {
+  let {objectX, objectY, clientX, clientY} = startPoint;
+  let width = startPoint.width + mouse.x - clientX;
+  let height = startPoint.height + mouse.y - clientY;
 
-      return {
-        ...object,
-        x: width > 0 ? objectX: objectX + width,
-        y: height > 0 ? objectY: objectY + height,
-        width: Math.abs(width),
-        height: Math.abs(height)
-      };
-    };
+  return {
+    ...object,
+    x: width > 0 ? objectX: objectX + width,
+    y: height > 0 ? objectY: objectY + height,
+    width: Math.abs(width),
+    height: Math.abs(height)
+  };
+};
+```
 
 #### Rotator
 Changes the rotation as degree of object. This action may needs some improvement, I'm calculating with a base value (45 degree) because of the rotator anchor is on the upper right corner of object.
 
-    // rotate.js
-    export default ({object, startPoint, mouse}) => {
-      let angle = Math.atan2(
-        startPoint.objectX + (object.width || 0) / 2 - mouse.x, 
-        startPoint.objectY + (object.height || 0) / 2 - mouse.y
-      );
+```javascript
+// rotate.js
+export default ({object, startPoint, mouse}) => {
+  let angle = Math.atan2(
+    startPoint.objectX + (object.width || 0) / 2 - mouse.x, 
+    startPoint.objectY + (object.height || 0) / 2 - mouse.y
+  );
 
-      let asDegree = angle * 180 / Math.PI;
-      let rotation = (asDegree + 45) * -1;
+  let asDegree = angle * 180 / Math.PI;
+  let rotation = (asDegree + 45) * -1;
 
-      return {
-        ...object,
-        rotate: rotation
-      };
-    };
+  return {
+    ...object,
+    rotate: rotation
+  };
+};
+```
 
 
 ### To-do
