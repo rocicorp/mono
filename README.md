@@ -24,7 +24,7 @@ Examples and demonstration:
 
 
 ## Usage
-All the entities are pure react components in react-designer except action strategies. I have tried to explain that. I'm starting with components.
+All the entities are pure react components except action strategies in react-designer. I have tried to explain that. I'm starting with components.
 
 ### Component: Designer
 
@@ -80,30 +80,32 @@ You can create an object type by subclassing `Vector` component. Each object typ
 
 Example implementation:
 
-    class MyRectangle extends Vector {
-      static meta = {
-        icon: <Icon icon={'rectangle'} size={30} />,
-        initial: {
-          width: 5,
-          height: 5,
-          strokeWidth: 0,
-          fill: "yellow",
-          radius: 5,
-          blendMode: "normal"
-        }
-      };
-
-      render() {
-        let {object, index} = this.props;
-        return (
-          <rect style={this.getStyle()}
-             {...this.getObjectAttributes()}
-             rx={object.radius}
-             width={object.width}
-             height={object.height} />
-        );
-      }
+```javascript
+class MyRectangle extends Vector {
+  static meta = {
+    icon: <Icon icon={'rectangle'} size={30} />,
+    initial: {
+      width: 5,
+      height: 5,
+      strokeWidth: 0,
+      fill: "yellow",
+      radius: 5,
+      blendMode: "normal"
     }
+  };
+
+  render() {
+    let {object, index} = this.props;
+    return (
+      <rect style={this.getStyle()}
+         {...this.getObjectAttributes()}
+         rx={object.radius}
+         width={object.width}
+         height={object.height} />
+    );
+  }
+}
+```
 
 You can register this object type in your `Designer` instance.
 
@@ -168,7 +170,7 @@ The parameters are same with Designer component, except the onUpdate callback is
 
 ### Action strategies
 
-The actions of `rotate`, `scale`, `drag` are pure functions. You can change this behaviours by passing your strategy. The action functions calling with the following object bundle.
+The actions of `rotate`, `scale`, `drag` are pure functions. You can change this actions by passing your strategy. The action functions calling with the following object bundle.
 
     {
       object, // the current object
