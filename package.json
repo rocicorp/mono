@@ -1,12 +1,13 @@
 {
   "name": "react-designer",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Easy to configure, lightweight, editable vector graphics in your react components.",
-  "main": "lib/Select.js",
+  "main": "./lib/index.js",
   "scripts": {
     "start": "node server.js",
     "deploy": "NODE_ENV=production webpack -p --config webpack.production.js",
-    "build": "babel -d lib/ src/"
+    "build": "babel -d lib/ src/",
+    "prepublish": "npm run clean && npm run build"
   },
   "repository": {
     "type": "git",
