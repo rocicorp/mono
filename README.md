@@ -264,13 +264,13 @@ Here is a todo list that in my mind. You could extend this list.
 - Add a key map to keep the ratio of objects when scaling
 - Implement theme support for UI
 
-### Contributors (You can add your name here in your pull-request)
-
-- Fatih Erikli <fatiherikli@gmail.com>
-
 ## Release Notes
 
 ### 1.0.6
 
   - `Designer` component exported as default now.
   - Added `insertMenu` prop to `Designer` component.
+
+### Contributors (You can add your name here in your pull-request)
+
+- Fatih Erikli <fatiherikli@gmail.com>
