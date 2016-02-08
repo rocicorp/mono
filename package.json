@@ -1,6 +1,6 @@
 {
   "name": "react-designer",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Easy to configure, lightweight, editable vector graphics in your react components.",
   "main": "lib/index.js",
   "scripts": {

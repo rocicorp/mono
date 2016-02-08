@@ -68,6 +68,7 @@ The `Designer` component expects the following parameters:
 | objects          | []                             | Your object set.  |
 | onUpdate         | []                             | Your update callback.  |
 | objectTypes      |  Text, Circle, Rectangle, Path | Mapping of object types. |
+| insertMenu       |  <InsertMenu>                  | Insert menu component. You can set null for hiding
 | snapToGrid       |  1                             | Snaps the objects accordingly this multipier. |
 | rotator          | rotate({object, mouse})        | The rotating strategy of objects
 | scale            | scale({object, mouse})         | The scaling strategy of objects
