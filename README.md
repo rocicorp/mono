@@ -268,3 +268,9 @@ Here is a todo list that in my mind. You could extend this list.
 
 - Fatih Erikli <fatiherikli@gmail.com>
 
+## Release Notes
+
+### 1.0.6
+
+  - `Designer` component exported as default now.
+  - Added `insertMenu` prop to `Designer` component.
