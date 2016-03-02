@@ -1,6 +1,8 @@
 React-designer
 ==============
 
+[![Join the chat at https://gitter.im/fatiherikli/react-designer](https://badges.gitter.im/fatiherikli/react-designer.svg)](https://gitter.im/fatiherikli/react-designer?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 Easy to configure, lightweight, editable vector graphics in your react components.
 
 - Supports polygon and shape designing (with bezier curves)
