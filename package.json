@@ -41,7 +41,9 @@
     "webpack": "^1.12.2",
     "webpack-dev-server": "^1.12.1",
     "react": "^0.14.7",
-    "react-dom": "^0.14.7"
+    "react-dom": "^0.14.7",
+    "webfontloader": "^1.6.24",
+    "react-autocomplete": "1.0.0-rc1"
   },
   "peerDependencies": {
   },
