@@ -43,7 +43,8 @@
     "react": "^0.14.7",
     "react-dom": "^0.14.7",
     "webfontloader": "^1.6.24",
-    "react-autocomplete": "1.0.0-rc1"
+    "react-autocomplete": "1.0.0-rc1",
+    "react-dropzone": "^3.3.1"
   },
   "peerDependencies": {
   },
