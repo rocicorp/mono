@@ -1,4 +1,4 @@
-FACEBOOK IS DEVIL
+FACEBOOK PLEASE DON'T USE
 
 React-designer
 ==============
