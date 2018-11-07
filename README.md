@@ -1,4 +1,4 @@
-FACEBOOK IS EVIL
+FACEBOOK IS DEVIL
 
 React-designer
 ==============
