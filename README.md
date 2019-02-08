@@ -1,4 +1,3 @@
-FACEBOOK PLEASE DON'T USE, IT HAS SECURITY vul·ner·a·bleS
 
 React-designer
 ==============
