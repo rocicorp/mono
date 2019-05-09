@@ -13,19 +13,19 @@ Easy to configure, lightweight, editable vector graphics in your react component
 - Custom object types and custom panels
 
 
-Examples and demonstration: 
+Examples and demonstration:
 <http://fatiherikli.github.io/react-designer>
 
 ![bezier editor](http://i.imgur.com/cqTleWB.gif)
 
 ## Keymap
 
-| Parameter                  | Default                         | 
-| :-------------             |:------------------------------- 
-| `del` or `back`            | Removes the current object      | 
-| `arrows`                   | Move the current object by 1px  | 
-| `shift` + `arrows`         | Move the currnet object by 10px | 
-| `enter`                    | Close the drawing path          | 
+| Parameter                  | Default                         |
+| :-------------             |:-------------------------------
+| `del` or `back`            | Removes the current object      |
+| `arrows`                   | Move the current object by 1px  |
+| `shift` + `arrows`         | Move the currnet object by 10px |
+| `enter`                    | Close the drawing path          |
 
 
 ## Usage
@@ -118,7 +118,7 @@ class MyRectangle extends Vector {
 You can register this object type in your `Designer` instance.
 
 ```javascript
-<Designer 
+<Designer
     objectTypes={{rectangle: MyRectangle}}
     width={500}
     height={500}
@@ -140,36 +140,6 @@ static panels = [
 ];
 ```
 
-### Component: Panel
-
-You can extend this component to create different panels instead of builtins. 
-
-It's a pure React component. The component have `object` and `onUpdate` props. You could reach the current state with `object`, and change this state with `onChange` callback. Let's create a dummy panel.
-
-```javascript
-class MyPanel extends Panel {
-  render() {
-    let {object, onChange} = this.props;
-    return (
-      <PropertyGroup>
-          <Columns label="Colors">
-            <Column>
-              <Button onClick={() => {onChange('color', 'blue')}}>
-                Make blue
-              </Button>
-            </Column>
-            <Column>
-              <Button onClick={() => {onChange('color', 'yellow')}}>
-                Make Yellow
-              </Button>
-            </Column>
-          </Columns>
-      </PropertyGroup>
-    );
-  }
-}
-```
-
 ### Component: Preview
 
 You can use `Preview` component to disable editing tool set and controllers. This component just renders the SVG output of your data. It may be useful for presenting edited or created graphic, instead of building a SVG file.
@@ -177,7 +147,7 @@ You can use `Preview` component to disable editing tool set and controllers. Thi
 The parameters are same with Designer component, except the onUpdate callback is not necessarry.
 
 ```javascript
-<Preview 
+<Preview
   objectTypes={{rectangle: MyRectangle}}
   objects={this.state.objects}
   height={500}
@@ -193,7 +163,7 @@ The actions of `rotate`, `scale`, `drag` are pure functions. You can change this
   object, // the current object
   mouse, // mouse coordinates bundle. it have x and y attribtues
   startPoint, // starting points of mouse and object bundles.
-  objectIndex, // the index of the object in the documen, 
+  objectIndex, // the index of the object in the documen,
   objectRefs, // DOM references of objects in the document
 }
 ```
@@ -241,7 +211,7 @@ Changes the rotation as degree of object. This action may needs some improvement
 // rotate.js
 export default ({object, startPoint, mouse}) => {
   let angle = Math.atan2(
-    startPoint.objectX + (object.width || 0) / 2 - mouse.x, 
+    startPoint.objectX + (object.width || 0) / 2 - mouse.x,
     startPoint.objectY + (object.height || 0) / 2 - mouse.y
   );
 
@@ -258,7 +228,7 @@ export default ({object, startPoint, mouse}) => {
 
 ### To-do
 
-I built this project to create user-designed areas in my side project. So, this was just a hobby project, there may be things missing for a svg editor. I'm open to pull requests and feedback, and I need help to maintain. 
+I built this project to create user-designed areas in my side project. So, this was just a hobby project, there may be things missing for a svg editor. I'm open to pull requests and feedback, and I need help to maintain.
 
 Here is a todo list that in my mind. You could extend this list.
 
