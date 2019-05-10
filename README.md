@@ -253,7 +253,7 @@ Here is a todo list that in my mind. You could extend this list.
 
 ### Contributors (You can add your name here in your pull-request)
 
-- Fatih Erikli <fatiherikli@gmail.com>
+- Fatih Erikli <fatiherikli@gmail.com> - [fatiherikli](https://github.com/fatiherikli/)
+- Wassim Gharbi <wassgha@gmail.com> - [wassgha](https://github.com/wassgha/)
 - [iamraffe](https://github.com/iamraffe/)
 - [thatneat](https://github.com/thatneat/)
-- [Wassim Gharbi](https://github.com/wassgha) <wassgha@gmail.com>
