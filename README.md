@@ -144,14 +144,15 @@ static panels = [
 
 You can use `Preview` component to disable editing tool set and controllers. This component just renders the SVG output of your data. It may be useful for presenting edited or created graphic, instead of building a SVG file.
 
-The parameters are same with Designer component, except the onUpdate callback is not necessarry.
+The parameters are same with Designer component, except for two: the onUpdate callback is not necessary and an additional `responsive` option can be added, which given the original `width` and `height` will expand the preview to cover the width and height of its parent component, scaling its SVG while keeping the original aspect ratio of elements. Note that the original `width` and `height` still need to be provided in order for the responsive `Preview` to work.
 
 ```javascript
 <Preview
   objectTypes={{rectangle: MyRectangle}}
   objects={this.state.objects}
   height={500}
-  width={500} />
+  width={500}
+  responsive />
 ```
 
 ### Action strategies
