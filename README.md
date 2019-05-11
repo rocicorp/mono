@@ -1,5 +1,4 @@
-### This project is no longer maintained.
-
+*This project is **back to being maintained**, redirect any new PRs and issues to [@wassgha](https://github.com/wassgha/)*
 
 React-designer
 ==============
