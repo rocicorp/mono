@@ -13,7 +13,7 @@ Easy to configure, lightweight, editable vector graphics in your react component
 
 
 Examples and demonstration:
-<http://fatiherikli.github.io/react-designer>
+<https://react-designer.github.io/react-designer/>
 
 ![bezier editor](http://i.imgur.com/cqTleWB.gif)
 
