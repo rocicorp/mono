@@ -40,10 +40,8 @@
     "react-hot-loader": "^4.8.4",
     "rimraf": "^2.6.3",
     "style-loader": "^0.23.1",
-    "superagent": "*",
     "svg-inline-loader": "^0.8.0",
     "url-loader": "^1.1.2",
-    "webfontloader": "^1.6.28",
     "webpack": "^4.30.0",
     "webpack-dev-server": "^3.3.1"
   },
@@ -53,6 +51,8 @@
     "lodash": ">=4.17.11",
     "react-color": "^2.17.3",
     "react-hotkeys": "^1.1.4",
-    "react-portal": "^4.2.0"
+    "react-portal": "^4.2.0",
+    "superagent": "*",
+    "webfontloader": "^1.6.28"
   }
 }
