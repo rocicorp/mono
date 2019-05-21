@@ -6,10 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "deploy": "NODE_ENV=production webpack -p --config webpack.production.js",
-    "build": "babel -d lib/ src/",
-    "install": "npm run clean && npm run build",
-    "clean": "rimraf lib",
-    "prepublish": "npm run clean && npm run build"
+    "prepare": "babel -d lib/ src/",
+    "clean": "rimraf lib"
   },
   "repository": {
     "type": "git",
@@ -26,6 +24,12 @@
     "@babel/core": "^7.4.4",
     "@babel/preset-env": "^7.4.4",
     "@babel/preset-react": "^7.0.0",
+    "@babel/cli": "^7.4.4",
+    "@babel/plugin-proposal-class-properties": "^7.4.4",
+    "@babel/plugin-proposal-export-default-from": "^7.2.0",
+    "babel-loader": "^8.0.5",
+    "babel-plugin-css-modules-transform": "^1.6.2",
+    "babel-plugin-webpack-loaders": "^0.9.0",
     "css-loader": "^2.1.1",
     "eslint-plugin-react": "^7.13.0",
     "file-loader": "^3.0.1",
@@ -36,25 +40,19 @@
     "react-hot-loader": "^4.8.4",
     "rimraf": "^2.6.3",
     "style-loader": "^0.23.1",
-    "superagent": "*",
     "svg-inline-loader": "^0.8.0",
     "url-loader": "^1.1.2",
-    "webfontloader": "^1.6.28",
     "webpack": "^4.30.0",
     "webpack-dev-server": "^3.3.1"
   },
   "peerDependencies": {},
   "dependencies": {
-    "@babel/cli": "^7.4.4",
-    "@babel/plugin-proposal-class-properties": "^7.4.4",
-    "@babel/plugin-proposal-export-default-from": "^7.2.0",
-    "babel-loader": "^8.0.5",
-    "babel-plugin-css-modules-transform": "^1.6.2",
-    "babel-plugin-webpack-loaders": "^0.9.0",
     "classnames": "^2.2.6",
     "lodash": ">=4.17.11",
     "react-color": "^2.17.3",
     "react-hotkeys": "^1.1.4",
-    "react-portal": "^4.2.0"
+    "react-portal": "^4.2.0",
+    "superagent": "*",
+    "webfontloader": "^1.6.28"
   }
 }
