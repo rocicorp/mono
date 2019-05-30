@@ -7,6 +7,9 @@
     "start": "node server.js",
     "deploy": "NODE_ENV=production webpack -p --config webpack.production.js",
     "prepare": "babel -d lib/ src/",
+    "build": "npm run prepare",
+    "install": "npm run clean && npm run build",
+    "prepublish": "npm run clean && npm run build",
     "clean": "rimraf lib"
   },
   "repository": {
