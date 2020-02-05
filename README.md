@@ -15,6 +15,7 @@
   * [Server Push](#server-push)
   * [Pokes](#pokes)
 * [Conflict Resolution](#conflict-resolution)
+* [Images and other BLOBs](#images-and-other-blobs)
 
 # Offline-First for Every Application
 
@@ -114,3 +115,74 @@ The Customer Server is a standard REST/GraphQL web service. In order to integrat
 * A mapping of ClientID/TransactOrdinal pairs
 
 Additionally each mutation API that Replicache can call must be modified to look for an `X-Replicache-TransactionID` header and manage this table. For additional details, see [Server Push](#server-push).
+
+# Synchronization
+
+TODO: Overview image
+
+## Client Sync
+
+The client invokes the `pull` API on the Replicache Server, passing the last confirmed `TransactionID` it has, along with the corresponding `checksum`.
+
+The server finds the correspondoing commit and checks that the checksum matches.
+
+The server the computes and returns a JSONPatch that will bring the client into alignment with the latest server.
+
+Client applies patch and re-runs any pending transactions.
+
+### Request
+
+* Basis: The last confirmed transaction ID the client has, which any new transactions are based atop
+* Checksum: The checksum client has for _basis_
+* Mutations: Zero or more mutations to apply to customer server, each having:
+  * TransactionID
+  * Path
+  * Payload
+
+### Response
+
+* TransactionID: The ID of the last transaction applied on the server
+* Patch: The patch to apply to client state to bring it to *TransactionID*
+* Checksum: Expected checksum to get over patched data
+
+## Server Push
+
+Periodically Replicache Server calls the *Offline View* API on customer server frequently on behalf of a particular user.
+
+TODO: How does the offline view get registered?
+TODO: Authentation
+
+The offline view returns a JSON object, up to 20MB uncompressed, contianing the offline state of the user as key/value pairs:
+
+### Request
+
+* Path
+* Payload
+* X-Replicache-TransactionID
+
+### Response
+
+Unused
+
+## Server Pull
+
+### Request
+
+Unused
+
+### Response
+
+```
+{
+  "transactionID": ["client17", 42],
+  "data": {
+    "key": "value",
+    "pairs": [
+      "arbitrary",
+      "JSON",
+      "for",
+      "values": {"foo", 42: "bar": false},
+    }
+  }
+}
+```
