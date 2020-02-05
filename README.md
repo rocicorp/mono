@@ -88,10 +88,12 @@ Replicache uses the [LtHash](https://engineering.fb.com/security/homomorphic-has
 
 The serialization fed into the hash is as follows:
 
-For each key/value pair in the state, in order:
-* length of key in bytes, little-endian
-* key bytes
-* length of value when serialized as [CanonicalJSON](http://gibson042.github.io/canonicaljson-spec/) in bytes, little-endian
+* The number of key/value pairs in the state, little-endian
+* For each key/value pair in the state, in order:
+  * length of key in bytes, little-endian
+  * key bytes
+  * length of value when serialized as [CanonicalJSON](http://gibson042.github.io/canonicaljson-spec/) in bytes, little-endian
+  * value as [CanonicalJSON](http://gibson042.github.io/canonicaljson-spec/)
 
 ## Replicache Client
 
