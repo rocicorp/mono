@@ -61,7 +61,7 @@ and can build arbitrarily complex data structures on this primitive that are sti
 
 ## Data Model
 
-Replicache is concerned with synchronizing updates to a user's *state*. The state is a set of key/value pairs. Keys are arbitrary byte strings, values are JSON.
+Replicache is concerned with synchronizing updates to a user's *state*. The state is a sorted map of key/value pairs. Keys are arbitrary byte strings, values are JSON.
 
 ## TransactionIDs
 
@@ -149,7 +149,7 @@ Data conceptually flows in unidirectional loop: from device to Replicache Server
 
 ## Client Sync
 
-The client invokes the `sync` API on the Replicache Server, passing any pending mutations and the last confirmed `TransactionID` it has, along with the corresponding `checksum`.
+The client invokes the `sync` API on the Replicache Server, passing its own ClientID, any pending mutations and the last confirmed `TransactionID` it has, along with the corresponding `checksum`.
 
 The Replicache Server applies the mutations (using `Server Push`), then obtains and stores a new snapshot (using `Server Pull`).
 
@@ -159,16 +159,18 @@ Client forks from basis `TransactionID`, applies the patch, checks the checksum,
 
 ### Request
 
-* `Basis`: The last confirmed transaction ID the client has, which any provided mutations are based on
-* `Checksum`: The checksum client has for _basis_
+* `ClientID` (optional): The client's ID, unless this is the first sync
+* `Basis` (optional): The last confirmed transaction ID the client has, if any
+* `Checksum` (optional): The checksum client has for _basis_
 * `Mutations`: Zero or more mutations to apply to customer server, each having:
-  * `TransactionID`
+  * `Ordinal`: The transaction ordinal for this mutation
   * `Path`: Path at customer server to invoke
   * `Payload`: Payload to supply in POST to customer server
 
 ### Response
 
-* `TransactionID`: The ID of the last transaction applied on the server
+* `ClientID` (optional): If the client didn't pass a ClientID, it is new, and the server returns an assigned ClientID here.
+* `TransactionID`: The ID of the last transaction applied on the server. This doesn't have to be a transaction from the requesting client.
 * `Patch`: The patch to apply to client state to bring it to *TransactionID*
 * `Checksum`: Expected checksum to get over patched data
 
@@ -176,12 +178,12 @@ Client forks from basis `TransactionID`, applies the patch, checks the checksum,
 
 Replicache Server applies mutations to Customer Server by invoking standard REST/GraphQL HTTP APIs.
 
-For each request, Replicache passes the custom HTTP header `X-Replicache-TransactionID`.
+For each request, Replicache additionally passes the custom HTTP header `X-Replicache-TransactionID`.
 
 Customer Server must:
 
 * Decode TransactionID into ClientID and TransactionOrdinal
-* Atomically, with no less than snapshot isolation:
+* Atomically, with no less than [snapshot isolation](https://jepsen.io/consistency/models/snapshot-isolation):
   * Read the last committed TransactionOrdinal for that client
   * If the last committed TransactionOrdinal is >= the supplied one:
     * Return HTTP 200 OK
@@ -200,12 +202,10 @@ Error handling details:
   * Success, but an informational message returned to caller and logged
 * HTTP 3xx
   * Redirects are followed by Replicache
-* HTTP 5xx:
-  * Replicache Server will retry until the request succeeds
-* HTTP 408 (Request Timeout), 429 (Too Many Requests) and 400 with `X-Replicache-OutOfOrderMutation`:
+* HTTP 5xx, 408 (Request Timeout), 429 (Too Many Requests) and 400 with `X-Replicache-OutOfOrderMutation`:
   * Replicache will wait and retry the request later with exponential backoff
 * All other HTTP 4xx:
-  * Replicache returns the error to caller and logs it, then continues
+  * Replicache returns the error to caller and logs it, then continues. That is for purposes of synchronization, this request has been handled.
     
 ### Response
 
@@ -239,6 +239,7 @@ Unused
 ## Pokes
 
 TODO: There should someday be some way for Customer Server to poke Replicache Server and/or client to tell it to sync.
+TODO: We should also consider whether there are any advantages to making this whole thing socket-based. I'm not sure given interaction with background sync on mobile devices. It feels like simplicity wins to me, but not sure.
 
 # Images and Other Blobs
 
