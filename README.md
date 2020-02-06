@@ -236,6 +236,10 @@ Unused
 }
 ```
 
+## Pokes
+
+TODO: There should someday be some way for Customer Server to poke Replicache Server and/or client to tell it to sync.
+
 # Images and Other Blobs
 
 The Replicache State should typically contain mutable structured data. But what about images, and other large immutable objects?
