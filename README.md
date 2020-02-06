@@ -14,7 +14,6 @@
   * [Server Push](#server-push)
   * [Server Pull](#server-pull)
   * [Pokes](#pokes)
-* [Conflict Resolution](#conflict-resolution)
 * [Images and other BLOBs](#images-and-other-blobs)
 
 # Spinner-Free Applications
@@ -236,3 +235,19 @@ Unused
   }
 }
 ```
+
+# Images and Other Blobs
+
+The Replicache State should typically contain mutable structured data. But what about images, and other large immutable objects?
+
+Values can reference blobs likes so:
+
+```
+{
+  "foo": {
+    "_replitype": "blob",
+    "url": "https://foo.com/bar.blob",
+  }
+```
+
+Replicache will download required blobs as part of sync and purge them when no longer needed as part of client-side GC.
