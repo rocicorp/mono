@@ -245,14 +245,4 @@ TODO: We should also consider whether there are any advantages to making this wh
 
 The Replicache State should typically contain mutable structured data. But what about images, and other large immutable objects?
 
-Values can reference blobs likes so:
-
-```
-{
-  "foo": {
-    "_replitype": "blob",
-    "url": "https://foo.com/bar.blob",
-  }
-```
-
-Replicache will download required blobs as part of sync and purge them when no longer needed as part of client-side GC.
+TODO: There needs to be some way to sync blobs. We might be able to require that they are immutable.
