@@ -316,7 +316,11 @@ TODO: We should also consider whether there are any advantages to making this wh
 
 TODO.
 
-Currently Replicant server has its own auth mechanism based on JWT. However, this is for authing with Replicant. We now need to auth with customer. Hm.
+Currently Replicant server has its own auth mechanism based on JWT. However, this is for authing with Replicant. We now need to auth with customer.
+
+Clients will still need to auth w/ Replicache Server, too, for various reasons (e.g., admin).
+
+Hm.
 
 ## Images and Other Blobs
 
