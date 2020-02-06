@@ -9,13 +9,17 @@
   * [Replicache Client](#replicache-client)
   * [Replicache Server](#replicache-service)
   * [Customer Server](#customer-service)
+* [Execution Model](#execution-model)
 * [Synchronization](#synchronization)
   * [Client Sync](#client-sync)
   * [Server Push](#server-push)
   * [Server Pull](#server-pull)
   * [Pokes](#pokes)
 * [Images and other BLOBs](#images-and-other-blobs)
-* [Auth](#auth)
+* [TODO](#todo)
+  * [Auth](#auth)
+  * [Images and other Bobs](#images-and-other-blobs)
+  * [Non-Bundle Transactions?](#non-bundle-transactions)
 
 # Spinner-Free Applications
 
@@ -142,6 +146,70 @@ The Customer Server is a standard REST/GraphQL web service. In order to integrat
 
 This table tracks the last applied transaction ordinal for every known client. This table grows with O(number of users) and cannot ever be pruned because it will stall sync of those users. The only recovery would be for those clients to give up and get new client ids.
 
+# API
+
+There are two APIs, the API available from the host language and the one available from JavaScript inside transactions:
+
+```
+// This is the subset of the API available inside JS transactions
+class ReplicacheJS {
+  ReplicacheJS()
+  bool has(String key)
+  JSON get(String key)
+  void put(String key, JSON value)
+  List<Entry> scan(ScanOptions options)
+}
+
+// The external API has everything the JS API has, plus:
+class Replicache extends ReplicacheJS {
+  Replicache(String accountID, String auth)
+  
+  // Bundle registration
+  Blob bundle();
+  void setBundle(Blob blob);
+
+  // Transaction invocation
+  JSON exec(String functionName, List<JSON> args);
+  Subscription subscribe(String functionName, List<JSON> args, void handler(JSON result));
+}
+
+struct Entry {
+  String key
+  JSON value
+}
+
+struct Subscription {
+  void function(JSON result) handler;
+  void cancel();
+}
+
+struct ScanOptions {
+  String prefix
+  ScanBound start
+  Limit int
+}
+
+struct ScanBound {
+  ScanID id
+  uint64 index
+}
+
+struct ScanID {
+  String value
+  bool exclusive
+}
+```
+
+... and the API available to JavaScript running inside transactions:
+
+# Execution Model
+
+Execution is entirely client-side. Clients register a bundle of JavaScript using `putBundle`, usually sourced from an asset packaged with the app.
+
+Clients make changes by calling `exec`, which executes one of the functions by name from the bundle, or `put`. This creates entries in the versioned key/value store.
+
+Clients read state by calling `get`, `has`, `exec`, or `subscribe`. Subscriptions can be implemented efficiently by recording the reads the transaction made and checking whether puts could have possibly changed them during write transactions.
+
 # Synchronization
 
 There are three continuous decoupled processes happening at all times. Any of these processes can stop or stall indefinitely without affecting correctness.
@@ -237,19 +305,27 @@ Unused
 }
 ```
 
+# TODO
+
 ## Pokes
 
 TODO: There should someday be some way for Customer Server to poke Replicache Server and/or client to tell it to sync.
 TODO: We should also consider whether there are any advantages to making this whole thing socket-based. I'm not sure given interaction with background sync on mobile devices. It feels like simplicity wins to me, but not sure.
 
-# Images and Other Blobs
+## Auth
+
+TODO.
+
+Currently Replicant server has its own auth mechanism based on JWT. However, this is for authing with Replicant. We now need to auth with customer. Hm.
+
+## Images and Other Blobs
 
 The Replicache State should typically contain mutable structured data. But what about images, and other large immutable objects?
 
 TODO: There needs to be some way to sync blobs. We might be able to require that they are immutable.
 
-# Auth
+## Non-JS Transactions
 
-TODO.
+The bundle concept is nice because it allows transactions to be run in an isolated environment that enforces determinism. It also allows code sharing between client platforms. However, Replicache does not *require* determinism for correctness of sync. And the bundle is a cost for developers -- especially those that aren't at home in JavaScript, and don't have JS build infrastructure already setup.
 
-Currently Replicant server has its own auth mechanism based on JWT. However, this is for authing with Replicant. We now need to auth with customer. Hm.
+Perhaps Replicache should enable transactions to be registered in the host language and run in the host environment.
