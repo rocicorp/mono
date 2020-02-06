@@ -15,6 +15,7 @@
   * [Server Pull](#server-pull)
   * [Pokes](#pokes)
 * [Images and other BLOBs](#images-and-other-blobs)
+* [Auth](#auth)
 
 # Spinner-Free Applications
 
@@ -246,3 +247,9 @@ TODO: We should also consider whether there are any advantages to making this wh
 The Replicache State should typically contain mutable structured data. But what about images, and other large immutable objects?
 
 TODO: There needs to be some way to sync blobs. We might be able to require that they are immutable.
+
+# Auth
+
+TODO.
+
+Currently Replicant server has its own auth mechanism based on JWT. However, this is for authing with Replicant. We now need to auth with customer. Hm.
