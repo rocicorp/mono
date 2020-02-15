@@ -1,25 +1,39 @@
 # Table of Contents
 
-* [Spinner-Free Applications](#spinner-free-applications)
-* [Introducing Replicache](#introducing-replicache)
-* [System Overview](#system-overview)
+- [Table of Contents](#table-of-contents)
+- [Spinner-Free Applications](#spinner-free-applications)
+- [Introducing Replicache](#introducing-replicache)
+- [System Overview](#system-overview)
   * [Data Model](#data-model)
-  * [Transaction IDs](#transaction-ids)
+  * [The Big Picture](#the-big-picture)
+- [Detailed Design](#detailed-design)
+  * [TransactionIDs](#transactionids)
   * [Checksums](#checksums)
   * [Replicache Client](#replicache-client)
-  * [Replicache Server](#replicache-service)
-  * [Customer Server](#customer-service)
-* [Execution Model](#execution-model)
-* [Synchronization](#synchronization)
-  * [Client Sync](#client-sync)
-  * [Server Push](#server-push)
-  * [Server Pull](#server-pull)
-* [Images and other BLOBs](#images-and-other-blobs)
-* [TODO](#todo)
+    + [Commits](#commits)
+    + [API Sketch](#api-sketch)
+  * [Replicache Server](#replicache-server)
+  * [Storage Layer](#storage-layer)
+- [Data Flow](#data-flow)
+  * [Sync](#sync)
+  * [Mutations outside the client](#mutations-outside-the-client)
+  * [Conflicts](#conflicts)
+- [Constraints](#constraints)
+- [Database properties TODO](#database-properties-todo)
+- [TODO](#todo)
   * [Pokes](#pokes)
   * [Auth](#auth)
-  * [Images and other Bobs](#images-and-other-blobs)
-  * [Non-Bundle Transactions?](#non-bundle-transactions)
+  * [Images and Other Blobs](#images-and-other-blobs)
+  * [Non-JS Transactions](#non-js-transactions)
+- [Specification](#specification)
+  * [Checksums](#checksums-1)
+    + [Request](#request)
+    + [Response](#response)
+  * [Server Push](#server-push)
+    + [Response](#response-1)
+  * [Server Pull](#server-pull)
+    + [Request](#request-1)
+    + [Response](#response-2)
 
 # Spinner-Free Applications
 
@@ -32,7 +46,7 @@ reliable than applications that are directly dependent upon servers. By using a 
 applications are instantaneously responsive and reliable in any network conditions.
 
 Unfortunately, offline-first applications are also really hard to build. Bidirectional
-sync is a famously difficult problem, and one which has elluded satisfying general
+sync is a famously difficult problem, and one which has eluded satisfying general
 solutions. Existing attempts to build general solutions (Apple CloudKit, Android Sync, Google Cloud Firestore, Realm, PouchDB) all have one or more of the following serious problems:
 
 * **Non-Convergence.** Many solutions do not guarantee that clients end up with a view of the state that is consistent with the server. It is up to developers to carefully construct a patch to send to clients that will bring them into the correct state. Client divergence is common and difficult to detect or fix.
@@ -40,42 +54,52 @@ solutions. Existing attempts to build general solutions (Apple CloudKit, Android
 * **No Atomic Transactions.** Some solutions claim automatic conflict resolution, but lack atomic transactions. Without transactions, automatic merge means that any two sequences of writes might interleave. This is analogous to multithreaded programming without locks.
 * **Difficult Integration with Existing Applications.** Some solutions effectively require a full committment to a non-standard or proprietary backend database or system design, which is not tractable for existing systems, and risky even for new systems.
 
-For these reasons, existing products are often not practical options for application developers, leaving them
-forced to develop their own sync protocol at the application layer if they want an offline-first app. Given how expensive and risky this is, most applications delay offline-first until the business is very large and successful. Even then, many attempts fail.
+For these reasons, existing products are often not practical options for application developers, leading them
+to develop their own sync protocol at the application layer if they want an offline-first app. Given how expensive and risky this is, most applications delay offline-first until the business is very large and successful. Even then, many attempts fail.
 
 # Introducing Replicache
 
-Replicache dramatically reduces the difficulty of building offline-first applications.
+Replicache dramatically reduces the difficulty of building offline-first applications. Replicache's goals are:
+1. a truly offline-first programming model that is natural and easy to reason about
+1. maximize compatability with existing application infrastructure and minimize the work to integrate
 
 The key features that contribute to Replicant's leap in usability are:
 
-* **Guaranteed Convegence**: Replicache guarantees that after each sync, a client will exactly match the state of the server. Developers do not need to manually track changes or construct diffs.
-* **Transactions**: Replicache models change in the system as full [ACID](https://en.wikipedia.org/wiki/ACID_(computer_science)) multikey read/write 
-transactions. On the server, transactions are expected to be implemented as REST or GraphQL APIs. On the client, transactions in Replicache are expressed as arbitrary functions, which are executed serially and isolated from 
-each other.
-* **Much Easier Conflict-Resolution**: Replicant is a [Convergent Causal Consistent](https://jepsen.io/consistency/models/causal) system: after synchronization, transactions are guaranteed to have run in the same order on all nodes, resulting in the same database state. This feature, combined with transaction atomicity,
-makes conflict resolution much easier. Conflicts do still happen, but in many cases resolution is a natural side-effect of serialized atomic transactions. In the remaining cases, reasoning about conflicts is made far simpler. These claims have been reviewed by independent Distributed Systems expert Kyle Kingsbury of Jepsen. See [Jepsen Summary](jepsen-summary.md) and [Jepsen Article](jepsen-article.pdf).
-* **Standard Data Model**: The Replicant data model is a standard document database. From an API perspective, it's
-very similar to Google Cloud Firestore, MongoDB, Couchbase, FaunaDB, and many others. You don't need to learn anything new, 
+* **Easy Integration**: Replicache runs alongside an existing server-side database. Its job is to provide bidirectional conflict-free sync between clients and servers. It does not take ownership of the data. This makes it very easy to adopt: you can try it for just a small piece of functionality, or a small slice of users, while leaving the rest of your application the same.
+* **Standard Data Model**: The Replicache data model is a standard document database. From an API perspective, it's
+very similar to Firestore, MongoDB, Couchbase, FaunaDB, and many others. You don't need to learn anything new, 
 and can build arbitrarily complex data structures on this primitive that are still conflict-free.
-* **Easy Integration**: Replicant is a simple primitive that runs along side any existing stack. Its only job is to provide bidirectional conflict-free sync between clients and servers. This makes it very easy to adopt: you can try it for just a small piece of functionality, or a small slice of users, while leaving the rest of your application the same.
+* **Guaranteed Convegence**: The existing database is the single source of truth and Replicache guarantees that after a client sync the client's state will exactly match that of the server. Developers do not need to manually track changes or construct diffs on either the client or the server.
+* **Transactions**: Replicache provides full [ACID](https://en.wikipedia.org/wiki/ACID_(computer_science)) multikey read/write transactions. On the server side, transactions are implemented as REST or GraphQL APIs. On the client, transactions are implemented as deterministic programmatic functions, which are executed serially and isolated from each other.
+* **Much Easier Conflict-Resolution**: Replicache is a [Convergent Causal Consistent](https://jepsen.io/consistency/models/causal) system: after synchronization, transactions are guaranteed to have run in the same order on all nodes, resulting in the same database state. This feature, combined with transaction atomicity,
+makes conflict resolution much easier. Conflicts do still happen, but in many cases resolution is a natural side-effect of serialized atomic transactions. In the remaining cases, reasoning about conflicts is made far simpler. These claims have been reviewed by independent Distributed Systems expert Kyle Kingsbury of Jepsen. See [Jepsen Summary](jepsen-summary.md) and [Jepsen Article](jepsen-article.pdf).
 
 # System Overview
+
+Replicache is a transaction synchronization, scheduling, and execution layer that runs in a mobile app and alongside an existing server-side key/value database. It takes a page from [academic](https://www.microsoft.com/en-us/research/publication/unbundling-transaction-services-in-the-cloud/) [research](http://cs.yale.edu/homes/thomson/publications/calvin-sigmod12.pdf) that separates the transaction layer from the data or physical storage layer. The piece in the mobile app is the *client* and the existing server-side database is the *storage layer*.
 
 ![Diagram](./diagram.png)
 
 ## Data Model
 
-Replicache is concerned with synchronizing updates to a user's *state*. The state is a sorted map of key/value pairs. Keys are arbitrary byte strings, values are JSON.
+Replicache synchronizes updates to per-user *state* across an arbitrary number of clients. The state is a sorted map of key/value pairs. Keys are byte strings, values are JSON.
+
+## The Big Picture
+
+The Replicache client maintains a local cache of the user's state against which the application runs read and write transactions. Both read and write transactions run immediately against the local state and write transactions are additionally queued as *pending* application on the server. Periodically the client *syncs* to a *Replicache server*, pushing pending transactions to be applied and pulling updated state. Transactions flow upstream, state changes flow downstream.
+
+The Replicache server is a proxy in front of the storage layer that makes sync more efficient. During sync the Replicache server applies the pending transactions received from the client to the storage layer and returns the resulting state from the storage layer. It diffs the new state with what the client has and sends the delta downstream to the client.
+
+A key feature that makes Replicache flexible and easy to adopt is that Replicache does not take ownership of the data. The storage layer owns the data and is the source of truth. Replicache runs alongside an existing document database (storage layer) and requires only minimal changes to it. Processes that Replicache knows nothing about can mutate state in the storage layer and Replicache clients will converge on the storage layer's canonical state and correctly apply client changes on top of it.
+
+# Detailed Design
 
 ## TransactionIDs
 
 Updates in Replicache are transactional: multiple keys can be modified atomically. Transactions are identified by a _TransactionID_, which has two parts:
 
-* A *Client ID*: A string generated by Replicache Server which uniquely identify clients.
-* A *Transaction Ordinal*: An incrementing integer uniquely identifying each transaction originating on a particular client.
-
-### TransactionID Serialization
+* A *Client ID*: A string generated by Replicache Server which uniquely identifies a client
+* A *Transaction Ordinal*: An incrementing integer uniquely identifying each write transaction originating on a particular client
 
 TransactionIDs are serialized as a JSON array with two elements:
 
@@ -88,87 +112,53 @@ In cases where TransactionIDs need to be sent as strings, the JSON serialization
 
 ## Checksums
 
-At various places in the Replicache protocol, checksums are used to verify two states are identical.
-
-Replicache uses the [LtHash](https://engineering.fb.com/security/homomorphic-hashing/) algorithm to enable efficient incremental computation of checksums.
-
-The serialization fed into the hash is as follows:
-
-* The number of key/value pairs in the state, little-endian
-* For each key/value pair in the state, in lexicographic order of key:
-  * length of key in bytes, little-endian
-  * key bytes
-  * length of value when serialized as [CanonicalJSON](http://gibson042.github.io/canonicaljson-spec/) in bytes, little-endian
-  * value as [CanonicalJSON](http://gibson042.github.io/canonicaljson-spec/)
+At various places in the Replicache protocol checksums are used to verify that two states are identical. The checksum is over the keys and values in key order. 
 
 ## Replicache Client
 
 The Replicache Client maintains:
 
-* The current client ID
-* A _bundle_ of JavaScript, provided by user code, containing _bundle functions_ which can be invoked to by user code to read or write data
-* A versioned, transactional key/value store
+* The client ID
+* The next transaction ordinal. This ordinal ensures local causal consistency and idempotence at the server.
+* A _bundle_ of JavaScript, provided by the app, containing _bundle functions_ implementing transactions which can be invoked by the app to read or write data.
+* A versioned, transactional, deterministically iterable key/value store that keeps the user's state
   * Versioned meaning that we can go back to any previous version
+  * It must also be possible to _fork_ from a version, apply many transactions, then reveal this new version atomically (like git branch and merge)
   * Transactional meaning that we can read and write many keys atomically
-  * It must also be possible to _fork_ from a historical state, apply many transactions, then commit those transactions atomically
 
-Each version in the key/value store is a _commit_. There are two types of commits:
-* *Snapshots* represent the current state received from server at some moment in time
-* *Mutations* represent a change made on the client-side not yet known to be confirmed by server
+### Commits
 
-Both transaction types contain:
-* An immutable snapshot of the state
-* The *TransactionID* of the transaction that created the state
+Each version of the user's state is represented as a _commit_ which has:
+* An immutable view of the user's state. In practice this might be a reference to the state (eg, a content hash) but conceptually each commit has the state.
 * A *Checksum* over the state
 
-Additionally, mutation commits contain:
-* The name of a JavaScript function plus arguments that was used to create this change
+Commits come in two flavors, those from the client and those from the server:
+* *Pending commits* represent a change made on the client that is not yet known to be applied on the server. Pending commits include the transaction that caused them so that they may be replayed on top of new confirmed commits from the server.
+* *Confirmed commits* represent a state received from the server. They carry a *State ID* uniquely identifying this version of the user's state.
 
-## Replicache Server
+### API Sketch
 
-Replicache Server is a multitenant distributed service, which maintains, for each connected client:
-
-* A history of recent snapshots
-
-Note: The history doesn't need to be complete. Missing history entries don't affect the correctness of the system, only sync performance.
-
-For each snapshot:
-
-* TransactionID
-* Checksum
-* State
-
-## Customer Server
-
-The Customer Server is a standard REST/GraphQL web service. In order to integrate with Replicache it has to maintain the following additional state:
-
-* A table mapping ClientID->TransactionOrdinal
-
-This table tracks the last applied transaction ordinal for every known client. This table grows with O(number of users) and cannot ever be pruned because it will stall sync of those users. The only recovery would be for those clients to give up and get new client ids.
-
-# API
-
-There are two APIs, the API available from the host language and the one available from JavaScript inside transactions:
+There are two primary APIs: one available within JavaScript transactions run by the client and the client interface that the app uses.
 
 ```
-// This is the subset of the API available inside JS transactions
-class ReplicacheJS {
-  ReplicacheJS()
+// KVStore is accessible to JavaScript implementing transactions.
+class KVStore {
+  KVStore()
   bool has(String key)
   JSON get(String key)
   void put(String key, JSON value)
   List<Entry> scan(ScanOptions options)
 }
 
-// The external API has everything the JS API has, plus:
-class Replicache extends ReplicacheJS {
-  Replicache(String accountID, String auth)
+// Replicache is the client interface, used by the app.
+class Replicache extends KVStore {
+  Replicache(AuthOpts authOpts)
   
   // Bundle registration
   Blob bundle();
-  void setBundle(Blob blob);
+  boolean setBundle(Blob blob);
 
-  // Transaction invocation
+  // Transaction invocation and result change notification.
   JSON exec(String functionName, List<JSON> args);
   Subscription subscribe(String functionName, List<JSON> args, void handler(JSON result));
 }
@@ -200,31 +190,115 @@ struct ScanID {
 }
 ```
 
-... and the API available to JavaScript running inside transactions:
+## Replicache Server
 
-# Execution Model
+Replicache Server is a multitenant distributed service. It proxies transactions from the client to the storage layer and sends state updates to the client in the form of deltas. The replicache server is an optimization that reduces upstream server round trips and downstream bandwidth; conceptually it is not required, though practically it is.
 
-Execution is entirely client-side. Clients register a bundle of JavaScript using `putBundle`, usually sourced from an asset packaged with the app.
+For each user the Replicache server maintains a *history* of previous states. Specifically it keeps the state, state id, and checksum. Note that this history need not be complete; missing entries only affect sync performance, not correctness. 
 
-Clients make changes by calling `exec`, which executes one of the functions by name from the bundle, or `put`. This creates entries in the versioned key/value store.
+The Replicache server provides three interfaces:
+* *NewClient*: generates a new client id for the client and inserts an entry for it in the storage layer (see below)
+* *Push*: accepts a batch of pending transactions from the client and applies them to the storage layer
+* *Pull*: accepts a state id from the client indicating the state in use, pulls the latest user state from the storage layer, computes the delta from what the client has, and returns it (if any)
 
-Clients read state by calling `get`, `has`, `exec`, or `subscribe`. Subscriptions can be implemented efficiently by recording the reads the transaction made and checking whether puts could have possibly changed them during write transactions.
+## Storage Layer
 
-# Synchronization
+The storage layer is a standard REST/GraphQL web service. In order to integrate Replicache the storage layer must:
+1. implement an interface for each transaction in the bundle
+1. maintain a mapping from client id to last confirmed transaction ordinal. The ordinal increases monotonically.
+1. implement an interface to insert a new record into the client id - ordinal mapping
+1. implement an interface to fetch a user's full state along with the client's latest confirmed transaction ordinal
 
-There are three continuous decoupled processes happening at all times. Any of these processes can stop or stall indefinitely without affecting correctness.
+Coupling between the replicache server and the storage layer is minimized, for example by constructing storage layer requests in the app, which can be execute nearly opaquely by the replicache server.
 
-Data conceptually flows in unidirectional loop: from device to Replicache Server, to Customer Server, back to Replicache Server, back to device.
+# Data Flow
 
-## Client Sync
+Data flows from the client up to the replicache server, into the storage layer, and back down from the storage layer to replicache server to the client. Transactions flow upstream while state updates flow downstream. Any of these processes can stop or stall indefinitely without affecting correctness.
 
-The client invokes the `sync` API on the Replicache Server, passing its own ClientID, any pending mutations and the last confirmed `TransactionID` it has, along with the corresponding `checksum`.
+The replicache client keeps a *head* commit pointer representing the current state of the local key-value database. Transactions run serially against head commit. The head commmit can change in two ways:
+1. write transactions: when the app runs a transaction that changes the database, the change goes into a pending commit on top of the existing head. This new pending commit becomes the new head.
+1. state updates: when a state update is pulled from the server replicache will:
+  1. fork a new branch from the previous state update (confirmed commit)
+  1. add a new confirmed commit with the latest state update to this branch
+  1. for each pending commit in order, re-run it on the new branch; this extends the new branch with a pending commit for each pending transaction
+  1. set head to the end of the new branch
 
-The Replicache Server applies the mutations (using `Server Push`), then obtains and stores a new snapshot (using `Server Pull`).
+## Sync
 
-Replicache Server then validates the checksum of the last confirmed `TransactionID` passed by the client. If the commit is unknown or the checksum doesn't match, Replicache Server logs an error and returns the entire state. Otherwise, it computes and returns a [JSONPatch](http://jsonpatch.com/) that will bring the client into alignment with the latest server.
+In order to sync, the client first calls Push on the replicache server, passing all its pending transactions. The replicache server plays the pending transactions serially in order against the storage layer. When the storage layer executes a transaction it increments the client's latest confirmed transaction as part of the same transaction. If a transaction's ordinal is less than the client's latest confirmed transaction ordinal or more than one more, the transaction is ignored. 
 
-Client forks from basis `TransactionID`, applies the patch, checks the checksum, then re-runs any pending transactions to create final local state.
+The client then calls Pull on the replicache server and passes the state id of the last confirmed commit. The replicache server retrieves the client's latest transaction ordinal and the *entire* state for the user from the storage layer. The replicache server then checks its history to see if it has a cached copy of the state the client has (identified by state id). If so the new and old states are diff'd and if there is a delta a new state id is assigned, the delta is returned to the client, and the new state stored in the replicache server's history by state id. In either case, the client's latest confirmed transaction ordinal is returned. 
+
+If Pull returns a state update to the client, the client forks from the old state, applies the delta and any pending transactions with ordinals greater than the latest confirmed transaction ordinal just received, and reveals it by setting head to the new state. The client can now forget about all transactions that have been confirmed.
+
+## Mutations outside the client
+
+There is nothing in the design that requires that changes to user data come through Replicache. In fact we expect there is great utility in mutating the user's state outside of clients, eg in batch jobs or in response to changes in other users' clients. So long as all transactions that mutate the user's data run at a proper isolation level and leave the database in a valid state, replicache will faithfully converge all clients to the new state. 
+
+## Conflicts
+
+Conflicts are a reality of disconnected operation. There is no built in conflict resolution or signaling of exceptional conditions in replicache. Transactions should be written to accommodate conflicts and any signaling that may be required takes place in the user's data. For example, a transaction that reserves an hour on a user's calendar could update a status for the request in the user's data. The transaction might successfully reserve the hour when running locally for the first time, setting the status to RESERVED. Later, if still pending, the transaction might be replayed on top of a state where that hour is unavailable, in which case the transaction would update the status to UNAVAILABLE. Later during Push when played against the storage layer it will settle on one value or the other, and the client will converge on the value in the storage layer. App code can rely on subscriptions to receive notifications about status changes. 
+
+# Constraints
+
+**Data size** A primary constraint is the size of user data. In fetching all a user's data from the storage layer during each pull, Replicache makes an explicit tradeoff of bandwidth for ease of implementation and integration. For this reason we are initially limiting user data to 20MB per user and recommend the replicache server be deployed as close to the storage layer as possible.
+
+A second concern with data size is that it might be infeasible to complete large state update downloads on unreliable or slow connections. We can imagine a variety of potential solutions to this problem but for simplicity's sake we are punting on the problem for now. (The size constraint above helps here as well.)
+
+**Blobs** Any truly offline first system must have first class bidirectional support for binary assets aka blobs (eg, profile pictures). Ideally these assets should be managed transactionally along with the user's data: either you get all the data and all the blobs it references or you get none of it. However there is presently no special support for blobs in replicache. Users who need blobs must manage the assets themselves or encode them to json strings in the user data. We would like to address this shortcoming in the future. 
+
+# Database properties TODO
+
+TODO techinical discussion here and ref to jepsen?
+
+# TODO
+
+## Pokes
+
+TODO: There should someday be some way for Customer Server to poke Replicache Server and/or client to tell it to sync.
+TODO: We should also consider whether there are any advantages to making this whole thing socket-based. I'm not sure given interaction with background sync on mobile devices. It feels like simplicity wins to me, but not sure.
+
+## Auth
+
+TODO.
+
+Currently Replicant server has its own auth mechanism based on JWT. However, this is for authing with Replicant. We now need to auth with customer.
+
+Clients will still need to auth w/ Replicache Server, too, for various reasons (e.g., admin).
+
+Hm.
+
+## Images and Other Blobs
+
+The Replicache State should typically contain mutable structured data. But what about images, and other large immutable objects?
+
+TODO: There needs to be some way to sync blobs. We might be able to require that they are immutable.
+
+## Non-JS Transactions
+
+The bundle concept is nice because it allows transactions to be run in an isolated environment that enforces determinism. It also allows code sharing between client platforms. However, Replicache does not *require* determinism for correctness of sync. And the bundle is a cost for developers -- especially those that aren't at home in JavaScript, and don't have JS build infrastructure already setup.
+
+Perhaps Replicache should enable transactions to be registered in the host language and run in the host environment.
+
+# Specification
+
+Here we collect some important but evolving implementation details.
+
+## Checksums
+
+Replicache currently uses the [LtHash](https://engineering.fb.com/security/homomorphic-hashing/) algorithm to enable efficient incremental computation of checksums.
+
+The serialization fed into the hash is as follows:
+
+* The number of key/value pairs in the state, little-endian
+* For each key/value pair in the state, in lexicographic order of key:
+  * length of key in bytes, little-endian
+  * key bytes
+  * length of value when serialized as [CanonicalJSON](http://gibson042.github.io/canonicaljson-spec/) in bytes, little-endian
+  * value as [CanonicalJSON](http://gibson042.github.io/canonicaljson-spec/)
+  
+  Probably we should namespace the user keys so that we could add in other information eg previous state if we wanted to.
+
 
 ### Request
 
@@ -304,32 +378,3 @@ Unused
   }
 }
 ```
-
-# TODO
-
-## Pokes
-
-TODO: There should someday be some way for Customer Server to poke Replicache Server and/or client to tell it to sync.
-TODO: We should also consider whether there are any advantages to making this whole thing socket-based. I'm not sure given interaction with background sync on mobile devices. It feels like simplicity wins to me, but not sure.
-
-## Auth
-
-TODO.
-
-Currently Replicant server has its own auth mechanism based on JWT. However, this is for authing with Replicant. We now need to auth with customer.
-
-Clients will still need to auth w/ Replicache Server, too, for various reasons (e.g., admin).
-
-Hm.
-
-## Images and Other Blobs
-
-The Replicache State should typically contain mutable structured data. But what about images, and other large immutable objects?
-
-TODO: There needs to be some way to sync blobs. We might be able to require that they are immutable.
-
-## Non-JS Transactions
-
-The bundle concept is nice because it allows transactions to be run in an isolated environment that enforces determinism. It also allows code sharing between client platforms. However, Replicache does not *require* determinism for correctness of sync. And the bundle is a cost for developers -- especially those that aren't at home in JavaScript, and don't have JS build infrastructure already setup.
-
-Perhaps Replicache should enable transactions to be registered in the host language and run in the host environment.
