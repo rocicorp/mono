@@ -98,22 +98,23 @@ A key feature that makes Replicache flexible and easy to adopt is that Replicach
 
 The Replicache Client maintains:
 
-* The client ID
-* The next transaction ordinal. Write transactions originating on a client are uniquely identified by ordinal which increases sequentially. This ordinal ensures local causal consistency and idempotence at the server. 
+* The client ID, a unique identifier for this client
+* The next transaction ordinal. Write transactions originating on a client are uniquely identified and ordered by an ordinal which increases sequentially. This ordinal ensures causal consistency with respect to the client and is used to determine which transactions the server has confirmed.
 * A _bundle_ of JavaScript, provided by the app, containing _bundle functions_ implementing transactions which can be invoked by the app to read or write data.
 * A versioned, transactional, deterministically iterable key/value store that keeps the user's state
-  * Versioned meaning that we can go back to any previous version and _fork_ from a version, apply many transactions, then reveal this new version atomically (like git branch and merge)
+  * Versioned meaning that we can go back to any previous version 
+  * Versioned also meaning that we can _fork_ from a version, apply many transactions, then reveal this new version atomically (like git branch and merge)
   * Transactional meaning that we can read and write many keys atomically
 
 ### Commits
 
 Each version of the user's state is represented as a _commit_ which has:
-* An immutable view of the user's state. In practice this might be a reference to the state (eg, a content hash) but conceptually each commit has the state.
+* An immutable view of the user's state
 * A *Checksum* over the state
 
 Commits come in two flavors, those from the client and those from the server:
 * *Pending commits* represent a change made on the client that is not yet known to be applied on the server. Pending commits include the transaction that caused them so that they may be replayed on top of new confirmed commits from the server.
-* *Confirmed commits* represent a state received from the server. They carry a *State ID* uniquely identifying this version of the user's state.
+* *Confirmed commits* represent a state update received from the server. They carry a *State ID* uniquely identifying this version of the user's state.
 
 ### API Sketch
 
@@ -178,15 +179,15 @@ For each user the Replicache server maintains a *history* of previous states. Sp
 The Replicache server provides three interfaces:
 * *NewClient*: generates a new client id for the client and inserts a last confirmed ordinal entry for it in the storage layer (see below)
 * *Push*: accepts a batch of pending transactions from the client and applies them to the storage layer
-* *Pull*: accepts a state id from the client indicating the state in use, pulls the latest user state from the storage layer, computes the delta from what the client has, and returns it (if any)
+* *Pull*: accepts a state id from the client indicating the last state it pulled from the server and pulls the latest user state from the storage layer, computes the delta from what the client has, and returns it (if any)
 
 ## Storage Layer
 
 The storage layer is a standard REST/GraphQL web service. In order to integrate Replicache the storage layer must:
-1. implement an interface for each transaction in the bundle
-1. maintain a mapping from client id to last confirmed transaction ordinal
-1. implement an interface to insert a new record into the last confirmed ordinal mapping
-1. implement an interface to fetch a user's full state along with the client's last confirmed transaction ordinal
+1. implement an interface for each transaction in the bundle (used in Push)
+1. maintain a mapping from client id to last confirmed transaction ordinal (used by Push and Pull)
+1. implement an interface to insert a new record into the last confirmed ordinal mapping (used by NewClient)
+1. implement an interface to fetch a user's full state along with the client's last confirmed transaction ordinal (used by Pull)
 
 Coupling between the replicache server and the storage layer is minimized, for example by constructing storage layer requests in the app, which can be execute nearly opaquely by the replicache server.
 
@@ -194,21 +195,22 @@ Coupling between the replicache server and the storage layer is minimized, for e
 
 Data flows from the client up to the replicache server, into the storage layer, and back down from the storage layer to replicache server to the client. Transactions flow upstream while state updates flow downstream. Any of these processes can stop or stall indefinitely without affecting correctness.
 
-The replicache client keeps a *head* commit pointer representing the current state of the local key-value database. Transactions run serially against the head commit. The head commmit can change in two ways:
-1. write transactions: when the app runs a transaction that changes the database, the change goes into a pending commit on top of the existing head. This new pending commit becomes the new head.
+The client tracks state changes in a git-like fashion. The replicache client keeps a *head* commit pointer representing the current state of the local key-value database. Transactions run serially against the state in the head commit. The head commmit can change in two ways:
+1. write transactions: when the app runs a transaction that changes the database, the change goes into a pending commit on top of the current head. This new pending commit becomes the new head.
 1. state updates: when a state update is pulled from the server replicache will:
-   1. fork a new branch from the previous state update (confirmed commit)
-   1. add a new confirmed commit with the latest state update to this branch
-   1. for each pending commit in order, re-run it on the new branch; this extends the new branch with a pending commit for each pending transaction
+   1. fork a new branch from the previous confirmed commit
+   1. add a new confirmed commit with the latest state update to this branch; the branch now has state identical to the server
+   1. filter all pending commits already seen by the server. That is, those with ordinals less than the last confirmed ordinal for this client
+   1. for each remaining pending commit in order, re-run it on the new branch; this extends the new branch with a pending commit for each pending transaction
    1. set head to the end of the new branch
 
 ## Sync
 
-In order to sync, the client first calls Push on the replicache server, passing all its pending transactions. The replicache server plays the pending transactions serially in order against the storage layer. When the storage layer executes a transaction it increments the client's latest confirmed transaction ordinal as part of the same transaction. If a transaction's ordinal is less than the client's last confirmed transaction ordinal or more than one more, the transaction is ignored. 
+In order to sync, the client first calls Push on the replicache server, passing all its pending transactions. The replicache server plays the pending transactions serially in order against the storage layer. When the storage layer executes a transaction it increments the client's latest confirmed transaction ordinal as part of the same transaction. If a transaction's ordinal is less than or equal to the client's last confirmed transaction ordinal or more than one more, the transaction is ignored. 
 
-The client then calls Pull on the replicache server, passing the state id of its last confirmed commit. The replicache server retrieves the client's last transaction ordinal and the *entire* state for the user from the storage layer. The replicache server then checks its history to see if it has a cached copy of the state the client has (as identified by state id). If so the new and old states are diff'd and if there is a delta a new state id is assigned, the delta is returned to the client, and the new state stored in the replicache server's history by state id. If the server doesn't have a copy of the client's data, the full user state is returned. In all cases, the client's last confirmed transaction ordinal is returned. 
+The client then calls Pull on the replicache server, passing the id of the latest server state it saw (this state id is found in its most recent confirmed commit). The replicache server retrieves the client's last transaction ordinal and the *entire* state for the user from the storage layer. The replicache server then checks its history to see if it has a cached copy of the state the client has (as identified by state id). If so the new and old states are diff'd and if there is a delta a new state id is assigned, the delta is returned to the client, and the new state stored in the replicache server's history by state id. If the server doesn't have a copy of the client's data, the full user state is returned. In all cases, the client's last confirmed transaction ordinal is returned. 
 
-If Pull returns a state update to the client, the client applies a state update as described above: it forks from the previous confirmed commit, applies the state update and any pending transactions with ordinals greater than the last confirmed transaction ordinal just received, and reveals it by setting head to the end of the new branch. The client can now forget about all transactions that have been confirmed, that is, all pending transactions with ordinals less than the last confirmed by the server.
+If Pull returns a state update to the client, the client applies a state update as described above: it forks from the previous confirmed commit, applies the state update and any pending transactions with ordinals greater than the last confirmed transaction ordinal just received, and reveals the new state by setting head to the end of the new branch. The client can now forget about all transactions that have been confirmed, that is, all pending transactions with ordinals less than or equal to the last confirmed by the server.
 
 ## Mutations outside the client
 
@@ -216,7 +218,7 @@ There is nothing in the design that requires that changes to user data must come
 
 ## Conflicts
 
-Conflicts are a reality of disconnected operation. There is no built in conflict resolution or signaling of exceptional conditions in replicache. Conflict resolution should be implemented in the transaction itself and any signaling that might need to take place (eg, 'this action failed, let the user know') should happen in the user data. For example, a transaction that reserves an hour on a user's calendar could keep a status for the reservation in the user's data. The transaction might successfully reserve the hour when running locally for the first time, setting the status to RESERVED. Later, if still pending, the transaction might be replayed on top of a state where that hour is unavailable. In this case the transaction might update the status to UNAVAILABLE. Later during Push when played against the storage layer the transaction will settle on one value or the other, and the client will converge on the value in the storage layer. App code can rely on subscriptions to receive notifications about status changes, eg to trigger notification of the user or some other kind of conequence.
+Conflicts are a reality of disconnected operation. There is no built in conflict resolution or signaling of exceptional conditions in replicache. Conflict resolution should be implemented in the transaction itself and any signaling that might need to take place (eg, 'this action failed, let the user know') should happen in the user data. For example, a transaction that reserves an hour on a user's calendar could keep a status for the reservation in the user's data. The transaction might successfully reserve the hour when running locally for the first time, setting the status to RESERVED. Later, if still pending, the transaction might be replayed on top of a state where that hour is unavailable. In this case the transaction might update the status to UNAVAILABLE. Later during Push when played against the storage layer the transaction will settle on one value or the other, and the client will converge on the value in the storage layer. App code can rely on subscriptions to receive notifications about changes to the status field, eg to trigger notification of the user or some other kind of followup such trying the next available slot.
 
 # Constraints
 
@@ -224,7 +226,9 @@ Conflicts are a reality of disconnected operation. There is no built in conflict
 
 A second concern with data size is that it might be infeasible to complete large state update downloads on unreliable or slow connections. We can imagine a variety of potential solutions to this problem but for simplicity's sake we are punting on the problem for now. (The size constraint above helps here as well.)
 
-**Blobs** Any truly offline first system must have first class bidirectional support for binary assets aka blobs (eg, profile pictures). In some cases these assets should be managed transactionally along with the user's data: either you get all the data and all the blobs it references or you get none of it. In any case, there is presently no special support for blobs in replicache. Users who need blobs must manage the assets themselves or encode them to json strings in the user data. We would like to address this shortcoming in the future. 
+**Blobs** Any truly offline first system must have first class bidirectional support for binary assets aka blobs (eg, profile pictures). In some cases these assets should be managed transactionally along with the user's data: either you get all the data and all the blobs it references or you get none of it. In any case, there is presently no special support for blobs in replicache. Users who need blobs must manage the assets themselves or encode them to json strings in the user data. We plan to address this shortcoming in the future. 
+
+**Duplicate transaction logic** You have to implement transactions twice, once in the client JavaScript and once in the storage layer. Bummer. We can imagine potential solutions to this problem but it's not clear if the benefit would be worth the cost, or widely usable.
 
 # Database properties TODO
 
@@ -233,7 +237,7 @@ TODO techinical discussion here and ref to jepsen?
 # TODO
 
 ## Pokes
-
+  
 TODO: There should someday be some way for Customer Server to poke Replicache Server and/or client to tell it to sync.
 TODO: We should also consider whether there are any advantages to making this whole thing socket-based. I'm not sure given interaction with background sync on mobile devices. It feels like simplicity wins to me, but not sure.
 
