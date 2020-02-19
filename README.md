@@ -18,12 +18,12 @@ The format of the offline view is just a JSON object, for example:
 
 ```json
 {
-  "/todo/1", {
+  "/todo/1": {
     "title": "Take out the trash",
     "description": "Don't forget to pull it to the curb.",
     "done": false,
   },
-  "/todo/2", {
+  "/todo/2": {
     "title": "Pick up milk",
     "description": "2%",
     "done": true,
