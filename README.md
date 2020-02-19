@@ -37,7 +37,7 @@ configure this in the client API.
 
 ## Step 3: Implement the Client
 
-* [Flutter Client Setup](flutter-setup.md)
+* [Flutter Client Setup](setup-flutter.md)
 * Swift Client Setup (TODO)
 * React Native Client Setup (TODO)
 * Web Client Setup (TODO)
