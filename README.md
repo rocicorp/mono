@@ -1,5 +1,4 @@
-# Offline First for an Existing App
-in 30 Minutes
+# Offline First for an Existing App in 30 Minutes
 
 ## Step 1: Create a Replicache Account
 
