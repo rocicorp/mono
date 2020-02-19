@@ -16,7 +16,7 @@ You will need to implement an *Offline View* endpoint  that returns the entire o
 
 The format of the offline view is just a JSON object, for example:
 
-```json
+```
 {
   "/todo/1": {
     "title": "Take out the trash",
