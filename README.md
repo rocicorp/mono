@@ -41,7 +41,3 @@ configure this in the client API.
 * Swift Client Setup (TODO)
 * React Native Client Setup (TODO)
 * Web Client Setup (TODO)
-
-## That's It!
-
-You're done, time for a beer 🍻!
