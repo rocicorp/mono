@@ -8,7 +8,7 @@ Download the `repl` CLI, then:
 repl account create
 ```
 
-This will walk you through creating an account and uploading a public key.
+This will walk you through Replicache account setup.
 
 ### Step 2: Implement Your Offline View
 
