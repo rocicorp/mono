@@ -75,8 +75,8 @@ type BatchResponse struct {
     TxNum   int
 
     // OK and FAIL are permanent. Replicache considers the request handled.
-    // See comments below to trigger retries.
-    Result  string // "OK" | "FAIL"
+    // RETRY can only be used on the final mutation entry.
+    Result  string // "OK" | "FAIL" | "RETRY"
 
     // Informational message. Saved to sync logs and printed to relevant client-side console.
     Message string
@@ -84,10 +84,10 @@ type BatchResponse struct {
 }
 ```
 
-Mutations in a particular batch should be processed **serially** to ensure proper causal consistency. If a request cannot be handled temporarily, just return less than the requested number of mutation result structs. Replicache will retry starting at the next unhandled mutation.
+Mutations in a particular batch must be processed **serially** to ensure proper causal consistency. If a request cannot be handled temporarily, return the status code "RETRY" or simply process fewer than the total number of provided entries. Replicache will retry starting at the next unhandled mutation.
 
 
-### Step 3: Implement the Client
+### Step 4: Implement the Client
 
 * [Flutter Client Setup](setup-flutter.md)
 * Swift Client Setup (TODO)
