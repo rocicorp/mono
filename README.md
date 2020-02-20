@@ -1,4 +1,4 @@
-# Offline First for Your Existing App in 30 Minutes
+# Offline First for Your Existing App in About an Hour
 
 ### Step 1: Create a Replicache Account
 
@@ -69,9 +69,11 @@ The response format is:
 type BatchResponse struct {
   // Must match corresponding ClientID from request.
   ClientID string
+
   Mutations []struct {
     // Must match corresponding TxNum from request.
     TxNum   int
+
     // OK and FAIL are permanent. Replicache considers the request handled.
     // See comments below to trigger retries.
     Result  string // "OK" | "FAIL"
@@ -82,7 +84,7 @@ type BatchResponse struct {
 }
 ```
 
-Mutations should generally be processed by the backend *in order* to ensure proper causal consistency. If a request cannot be handled temporarily, just return less than the requested number of mutation result structs. Replicache will retry starting at the request after the last handled one.
+Mutations in a particular batch should be processed **serially** to ensure proper causal consistency. If a request cannot be handled temporarily, just return less than the requested number of mutation result structs. Replicache will retry starting at the next unhandled mutation.
 
 
 ### Step 3: Implement the Client
