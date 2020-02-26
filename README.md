@@ -93,14 +93,14 @@ The payload of the batch request is JSON, of the form:
   "clientID": "CB94867E-94B7-48F3-A3C1-287871E1F7FD",
   "mutations": [
     {
+      "txID": 7,
       "path": "/api/todo/create",
-      "payload": "{\id\": \"AE2E880D-C4BD-473A-B5E0-29A4A9965EE9\", \"title\": \"Take out the trash\", ...",
-      "transactionID": 7,
+      "payload": "{\id\": \"AE2E880D-C4BD-473A-B5E0-29A4A9965EE9\", \"title\": \"Take out the trash\", ..."
     },
     {
+      "txID": 8,
       "path": "/api/todo/toggle-done",
-      "payload": "{\id\": \"AE2E880D-C4BD-473A-B5E0-29A4A9965EE9\", \"done\": true}",
-      "transactionID": 8,
+      "payload": "{\id\": \"AE2E880D-C4BD-473A-B5E0-29A4A9965EE9\", \"done\": true}"
     },
     ...
   ]
@@ -115,17 +115,17 @@ The response format is:
   "mutations": [
     {
       "txID": 7,
-      "result": "OK",
+      "result": "OK"
     },
     {
       "txID": 8,
       "result": "ERROR",
-      "message": "Invalid POST data: syntax error: ...",
+      "message": "Invalid POST data: syntax error: ..."
     },
     {
       "txID": 9,
       "result": "RETRY",
-      "message": "Backend unavailable",
+      "message": "Backend unavailable"
     },
   ]
 }
@@ -134,6 +134,7 @@ The response format is:
 Notes on correctly implementing the batch endpoint:
 
 * Mutations in a particular batch must be processed **serially** to ensure proper causal consistency.
+* Replicache can end up sending the same mutation multiple times. You **MUST** check whether the transaction has already been processed before doing so.
 * The tracked last transactionID state for a client **MUST** be updated if a transaction has been processed, whether or not the mutation was successful. Replicache will continue to send mutations until the server acknowledges the mutation, by returning an equal or higher `lastTxID` in the Client View request.
 * The tracked last transactionID state **MUST** be updated atomically with the rest of the changes caused by a mutation.
 * If a request cannot be handled temporarily, return the status code "RETRY". Replicache will retry starting at the next unhandled mutation.
@@ -149,6 +150,17 @@ let result = {
 for mutation in mutations:
   db.beginTransaction()
   try:
+    let rows = db.exec("SELECT LastTransactionID FROM ReplicacheClientTransactions WHERE ClientID=?", clientID)
+    if rows.empty:
+      db.exec("INSERT ReplicacheClientTransactions (ClientID, LastTransactionID) VALUES (?, ?), clientID, mutation.txID)
+    else:
+      if rows[0]["LastTransactionID"] >= mutation.txID:
+        result.mutations.push({
+        "txID": mutation.txID,
+        "result": "OK",
+      })
+      continue
+        
     db.exec("UPDATE ReplicacheClientTransactions SET LastTransactionID=? WHERE ClientID=?", mutation.txID, clientID)
     dispatchRequest(mutation.path, mutation.payload)
     db.commitTransaction()
