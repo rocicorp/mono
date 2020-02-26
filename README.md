@@ -1,5 +1,7 @@
 # Replicache Quick Start
 
+This document walks you through getting Replicache integrated with your existing backend in a basic way. It should take a few hours to a day, depending on the complexity of your system.
+
 ### Step 1: Create a Replicache Account
 
 Download the `repl` CLI, then:
@@ -169,7 +171,7 @@ def handleReplicacheBatch(request):
       db.rollbackTransaction()
       continue
   
-    # Handle each mutation here. Typically this will just dipatch to the existing endpoint at mutation.path.
+    # Handle each mutation here. Typically this will just dispatch to the handler for mutation.path.
     let err = handleMutation(mutation.path, mutation.payload)
 
     # For transient errors (e.g., some backend component down), stop processing the batch and tell Replicache
