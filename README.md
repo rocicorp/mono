@@ -1,4 +1,4 @@
-# Offline First for Your Existing App in About an Hour
+# Replicache Quick Start
 
 ### Step 1: Create a Replicache Account
 
@@ -10,86 +10,179 @@ repl account create
 
 This will walk you through Replicache account setup.
 
-### Step 2: Downstream Sync
+### Step 2: Implement Transaction ID Table
 
-You will need to implement an *Offline View* endpoint  that returns the entire offline state for each user. Replicache will frequently query this endpoint and calculate a diff to return to each client.
+Replicache mutations are identified by a _Transaction ID_, which is a per-client incrementing integer. It is your responsibility to return the highest processed transaction ID with each client view request.
 
-The format of the offline view is just a JSON object, for example:
+In order to correct implement 
+
+### Step 2: Downstream Sync (Server)
+
+You will need to implement a *Client View* endpoint  that returns the data that should be available locally on the client for each user. Replicache will frequently query this endpoint and calculate a diff to return to each client.
+
+The format of the client view is JSON of the form:
 
 ```
 {
-  "/todo/1": {
-    "title": "Take out the trash",
-    "description": "Don't forget to pull it to the curb.",
-    "done": false,
-  },
-  "/todo/2": {
-    "title": "Pick up milk",
-    "description": "2%",
-    "done": true,
-  },
-  ...
+  "clientID": "CB94867E-94B7-48F3-A3C1-287871E1F7FD",
+  // The last Replicache transaction ID that has been processed. You will be implementing this as part of upstream sync,
+  // but for now, just return 0.
+  "lastTxID": 0,
+  "view": {
+    "/todo/1": {
+      "title": "Take out the trash",
+      "description": "Don't forget to pull it to the curb.",
+      "done": false,
+    },
+    "/todo/2": {
+      "title": "Pick up milk",
+      "description": "2%",
+      "done": true,
+    },
+    ...
+  }
 }
 ```
 
 By default, Replicache looks for the offline view at `https://yourdomain.com/replicache-offline-view`, but you can
 configure this in the client API.
 
-### Step 3: Upstream Sync
+### Step 3: Setup the Client
 
-Replicache implements upstream sync by queuing calls to your existing server-side endpoints and invoking them later when
-there's connectivity in a batch. By default it posts them to `https://yourdomain.com/replicache-batch`, but you can configure this too.
-
-The payload of the request is:
-
-```
-type BatchRequest struct {
-  ClientID string
-  Mutations []struct {
-    // Path of query to invoke
-    Path    string
-
-    // POST payload
-    Payload []byte
-
-    // Authentation token
-    Auth    string
-
-    // Incrementing transaction number 
-    TxNum   int
-  }
-}
-```
-
-Note that Replicache may end up calling the batch endpoint with duplicate inputs: your mutation handlers must be idempotent. You can use your existing itempotency token in the payload, or use the provided `TxNum`.
-
-The response format is:
-
-```
-type BatchResponse struct {
-  // Must match corresponding ClientID from request.
-  ClientID string
-
-  Mutations []struct {
-    // Must match corresponding TxNum from request.
-    TxNum   int
-
-    // OK and FAIL are permanent. Replicache considers the request handled.
-    // RETRY can only be used on the final mutation entry.
-    Result  string // "OK" | "FAIL" | "RETRY"
-
-    // Informational message. Saved to sync logs and printed to relevant client-side console.
-    Message string
-  }
-}
-```
-
-Mutations in a particular batch must be processed **serially** to ensure proper causal consistency. If a request cannot be handled temporarily, return the status code "RETRY" or simply process fewer than the total number of provided entries. Replicache will retry starting at the next unhandled mutation.
-
-
-### Step 4: Implement the Client
+See the platform-specific setup instructions:
 
 * [Flutter Client Setup](setup-flutter.md)
 * Swift Client Setup (TODO)
 * React Native Client Setup (TODO)
 * Web Client Setup (TODO)
+
+### Step 4: Downstream Sync (client)
+
+* [Flutter Client Setup](setup-flutter.md)
+* Swift Client Setup (TODO)
+* React Native Client Setup (TODO)
+* Web Client Setup (TODO)
+
+### Step 5: Transaction IDs
+
+Replicache identifies mutations with a *Transaction ID*, which is a per-client incrementing integer.
+
+Your service must track the last processed transaction ID for each client, and return it in the Client View request.
+
+The exact mechanism to do this will vary based on how you've implemented your service, but if, for example, you are using a relational database, then a table of the following form would work:
+
+<table>
+  <tr>
+    <th colspan="2">ReplicacheClientTransactions</td>
+  </tr>
+  <tr>
+    <td>ClientID</td>
+    <td>CHAR(36)</td>
+  </tr>
+  <tr>
+    <td>LastTransactionID</td>
+    <td>uint64</td>
+  </tr>
+ </table>
+
+### Step 6: Upstream Sync (Server)
+
+Replicache implements upstream sync by queuing calls to your existing server-side endpoints and invoking them later when
+there's connectivity in a batch. By default Replicache posts the batch to `https://yourdomain.com/replicache-batch`.
+
+The payload of the batch request is JSON, of the form:
+
+```
+{
+  "clientID": "CB94867E-94B7-48F3-A3C1-287871E1F7FD",
+  "mutations": [
+    {
+      "path": "/api/todo/create",
+      "payload": "{\id\": \"AE2E880D-C4BD-473A-B5E0-29A4A9965EE9\", \"title\": \"Take out the trash\", ...",
+      "transactionID": 7,
+    },
+    {
+      "path": "/api/todo/toggle-done",
+      "payload": "{\id\": \"AE2E880D-C4BD-473A-B5E0-29A4A9965EE9\", \"done\": true}",
+      "transactionID": 8,
+    },
+    ...
+  ]
+}
+```
+
+The response format is:
+
+```json
+{
+  "clientID": "CB94867E-94B7-48F3-A3C1-287871E1F7FD",
+  "mutations": [
+    {
+      "txID": 7,
+      "result": "OK",
+    },
+    {
+      "txID": 8,
+      "result": "ERROR",
+      "message": "Invalid POST data: syntax error: ...",
+    },
+    {
+      "txID": 9,
+      "result": "RETRY",
+      "message": "Backend unavailable",
+    },
+  ]
+}
+```
+
+Notes on correctly implementing the batch endpoint:
+
+* Mutations in a particular batch must be processed **serially** to ensure proper causal consistency.
+* The tracked last transactionID state for a client **MUST** be updated if a transaction has been processed, whether or not the mutation was successful. Replicache will continue to send mutations until the server acknowledges the mutation, by returning an equal or higher `lastTxID` in the Client View request.
+* The tracked last transactionID state **MUST** be updated atomically with the rest of the changes caused by a mutation.
+* If a request cannot be handled temporarily, return the status code "RETRY". Replicache will retry starting at the next unhandled mutation.
+
+#### Batch Endpoint Psuedocode
+
+```
+let result = {
+  "clientID": clientID,
+  "mutations": [],
+}
+
+for mutation in mutations:
+  db.beginTransaction()
+  try:
+    db.exec("UPDATE ReplicacheClientTransactions SET LastTransactionID=? WHERE ClientID=?", mutation.txID, clientID)
+    dispatchRequest(mutation.path, mutation.payload)
+    db.commitTransaction()
+    result.mutations.push({
+      "txID": mutation.txID,
+      "result": "OK",
+    })
+  catch (ClientError e):
+    # The client has sent a bad request - consider the mutation processed and send the client an error.
+    db.commitTransaction();
+    result.mutations.push({
+      "txID": mutation.txID,
+      "result": "ERROR",
+      "message": e.toString(),
+    })
+  catch (ServerError e):
+    # Some kind of transient server error has occurred. The client should retry later.
+    result.mutations.push({
+      "txID": mutation.txID,
+      "result": "RETRY",
+      "message": e.toString(),
+    })
+    # no commit, the change to tracked txID state is not recorded
+    # don't process any more mutations in this batch
+    return result
+```
+
+### Step 7: Upstream Sync (Client)
+
+* [Flutter - Upstream Sync](setup-flutter.md#upstream)
+* Swift - Upstrem Sync (TODO)
+* React Native - Upstream Sync (TODO)
+* Web Client - Upstream Sync (TODO)
