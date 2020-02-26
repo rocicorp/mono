@@ -21,9 +21,9 @@ The format of the client view is JSON of the form:
 ```jsonc
 {
   "clientID": "CB94867E-94B7-48F3-A3C1-287871E1F7FD",
-  // This is the last Replicache transaction ID that you have processed.
+  // This is the last Replicache Mutation ID that you have processed.
   // You will implement this as part of Upstream Sync, but for now, just return zero.
-  "lastTxID": 0,
+  "lastMutationID": 0,
   "view": {
     "/todo/1": {
       "title": "Take out the trash",
@@ -40,7 +40,7 @@ The format of the client view is JSON of the form:
 }
 ```
 
-By default, Replicache looks for the offline view at `https://yourdomain.com/replicache-offline-view`, but you can
+By default, Replicache looks for the Client View at `https://yourdomain.com/replicache-clent-view`, but you can
 configure this in the client API.
 
 ### Step 3: Setup the Client
@@ -73,11 +73,11 @@ Next up: Writes.
 
 Replicache identifies each change (or *Mutation*) that originates on the Replicache Client with a *MutationID*.
 
-Your service must track the MutationID it has processed for each client, and return it to Replicache in the Client View response. This allows the Replicache client to know when it can discard the speculative version of that change from the client.
+Your service must track the last MutationID it has processed for each client, and return it to Replicache in the Client View response. This allows Replicache to know when it can discard the speculative version of that change from the client.
 
-Depending on how your service is built, storing MutationID can be done a number of ways. But typically you'll store them in the same database as your user data and update them transactionally as part of handling upstream sync.
+Depending on how your service is built, storing MutationIDs can be done a number of ways. But typically you'll store them in the same database as your user data and update them transactionally as part of each mutation.
 
-If you use e.g., Postgres for your user data, you might store Replicache Change IDs in a table like:
+If you use e.g., Postgres, for your user data, you might store Replicache Change IDs in a table like:
 
 <table>
   <tr>
@@ -89,7 +89,7 @@ If you use e.g., Postgres for your user data, you might store Replicache Change 
   </tr>
   <tr>
     <td>LastMutationID</td>
-    <td>uint64</td>
+    <td>INT64</td>
   </tr>
 </table>
 
@@ -146,7 +146,7 @@ Notes on correctly implementing the batch endpoint:
 
 * Replicache can end up sending the same mutation multiple times. You **MUST** ensure mutation handlers are [idempotent](https://en.wikipedia.org/wiki/Idempotence#Computer_science_meaning). We recommend that you use the provided MutationID for idempotency (see pseudocode below).
 * If a request cannot be handled temporarily (e.g., because some backend component is down), return the result `"RETRY"` and stop processing the batch. Replicache will retry the remainder of the batch later.
-* Once the batch endpoint returns `OK` for a mutation, that mutation **MUST** eventually be processed. In simple systems it will be processed immediately, in the same transaction. But it OK for processing to also be delayed, as long as it is eventually happens.
+* Once the batch endpoint returns `OK` for a mutation, that mutation **MUST** eventually be processed and reflected in the ClientView. In simple systems this will happen immediately. But it OK for processing to also be queued, as long as it does eventually happen.
 
 #### Simple Batch Endpoint Psuedocode
 
@@ -207,7 +207,13 @@ def markMutationProcessed(clientID, mutationID):
 
 ### Step 7: Include the Last Processed Mutation ID in the Client View
 
-Initially we hardcoded this to zero. Now we want to return the correct value. For our simple batch endpoint pseudocode above, this would just be `getLastMutationID()`.
+In Step 2, we hardcoded `lastMutationID` to zero.
+
+Now we're going to return the correct value so that the client can discard pending mutations that have been applied to the client view. For our simple batch endpoint pseudocode above, this would just be:
+
+```
+response.lastMutationID = getLastMutationID()
+```
 
 ### Step 8: Upstream Sync (Client)
 
