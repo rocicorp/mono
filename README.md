@@ -10,12 +10,6 @@ repl account create
 
 This will walk you through Replicache account setup.
 
-### Step 2: Implement Transaction ID Table
-
-Replicache mutations are identified by a _Transaction ID_, which is a per-client incrementing integer. It is your responsibility to return the highest processed transaction ID with each client view request.
-
-In order to correct implement 
-
 ### Step 2: Downstream Sync (Server)
 
 You will need to implement a *Client View* endpoint  that returns the data that should be available locally on the client for each user. Replicache will frequently query this endpoint and calculate a diff to return to each client.
