@@ -56,10 +56,10 @@ See the platform-specific setup instructions:
 
 Implement the client side of downstream sync:
 
-* [Flutter Client Setup](setup-flutter.md)
-* Swift Client Setup (TODO)
-* React Native Client Setup (TODO)
-* Web Client Setup (TODO)
+* [Flutter Client Setup - Reads](setup-flutter.md#4-read-data)
+* Swift Client Setup - Reads (TODO)
+* React Native Client Setup - Reads (TODO)
+* Web Client Setup - Reads (TODO)
 
 ### Step 4.5: Coffee Break
 
@@ -213,7 +213,7 @@ Initially we hardcoded this to zero. Now we want to return the correct value. Fo
 
 ### Step 8: Upstream Sync (Client)
 
-* [Flutter - Upstream Sync](setup-flutter.md#upstream)
-* Swift - Upstrem Sync (TODO)
-* React Native - Upstream Sync (TODO)
-* Web Client - Upstream Sync (TODO)
+* [Flutter - Writes](setup-flutter.md#5-write-data)
+* Swift - Writes (TODO)
+* React Native - Writes (TODO)
+* Web Client - Writes (TODO)
