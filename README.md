@@ -120,57 +120,12 @@ The response format is:
 Notes on correctly implementing the batch endpoint:
 
 * Mutations in a particular batch **MUST** be processed serially in order to ensure proper [causal consistency](https://jepsen.io/consistency/models/causal).
-* Replicache can end up sending the same mutation multiple times. You **MUST** ensure each transaction is processed only one time. If you have an existing idempotency token, you can send it as part of the payload of each mutation. Otherwise, you can use the `(clientID,txID)` pair as your idempotency token.
+* Replicache can end up sending the same mutation multiple times. You **MUST** ensure mutation handlers are [idempotent](https://en.wikipedia.org/wiki/Idempotence#Computer_science_meaning). If you have an existing idempotency token, you can send it as part of the payload of each mutation. Otherwise, you can use the `(clientID,txID)` pair as an idempotency token.
 * If a request cannot be handled temporarily, return the status code `"RETRY"` and stop processing the batch. Replicache will retry starting at the next unhandled mutation. Only the last record in the response can be marked `RETRY`.
 
 #### Batch Endpoint Psuedocode
 
-```
-let result = {
-  "clientID": clientID,
-  "mutations": [],
-}
-
-for mutation in mutations:
-  db.beginTransaction()
-  try:
-    let rows = db.exec("SELECT LastTransactionID FROM ReplicacheClientTransactions WHERE ClientID=?", clientID)
-    if rows.empty:
-      db.exec("INSERT ReplicacheClientTransactions (ClientID, LastTransactionID) VALUES (?, ?), clientID, mutation.txID)
-    else:
-      if rows[0]["LastTransactionID"] >= mutation.txID:
-        result.mutations.push({
-        "txID": mutation.txID,
-        "result": "OK",
-      })
-      continue
-        
-    db.exec("UPDATE ReplicacheClientTransactions SET LastTransactionID=? WHERE ClientID=?", mutation.txID, clientID)
-    dispatchRequest(mutation.path, mutation.payload)
-    db.commitTransaction()
-    result.mutations.push({
-      "txID": mutation.txID,
-      "result": "OK",
-    })
-  catch (ClientError e):
-    # The client has sent a bad request - consider the mutation processed and send the client an error.
-    db.commitTransaction();
-    result.mutations.push({
-      "txID": mutation.txID,
-      "result": "ERROR",
-      "message": e.toString(),
-    })
-  catch (ServerError e):
-    # Some kind of transient server error has occurred. The client should retry later.
-    result.mutations.push({
-      "txID": mutation.txID,
-      "result": "RETRY",
-      "message": e.toString(),
-    })
-    # no commit, the change to tracked txID state is not recorded
-    # don't process any more mutations in this batch
-    return result
-```
+TODO
 
 ### Step 7: Upstream Sync (Client)
 
