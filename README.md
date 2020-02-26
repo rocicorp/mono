@@ -16,7 +16,7 @@ Implement a *Client View* endpoint  that returns the data that should be availab
 
 The format of the client view is JSON of the form:
 
-```
+```json
 {
   "clientID": "CB94867E-94B7-48F3-A3C1-287871E1F7FD",
   // The last Replicache transaction ID that has been processed. You will be implementing this as part of upstream sync,
@@ -74,7 +74,7 @@ there's connectivity in a batch. By default Replicache posts the batch to `https
 
 The payload of the batch request is JSON, of the form:
 
-```
+```json
 {
   "clientID": "CB94867E-94B7-48F3-A3C1-287871E1F7FD",
   "mutations": [
