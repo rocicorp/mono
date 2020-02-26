@@ -61,13 +61,11 @@ Implement the client side of downstream sync:
 * React Native Client Setup - Reads (TODO)
 * Web Client Setup - Reads (TODO)
 
-### Step 4.5: Coffee Break
+### Step 4.5: Coffee Break ☕️ 🍵
 
-At this point, you have a read-only offline-first app. Woo!
+At this point, you have a read-only offline-first app. Woo! Time for a little break.
 
-Reads will always be instantaneous, because they are reading from local data that is synced via Replicache and the client view.
-
-Time for a little break ☕️ 🍵.
+Reads will always be instantaneous, because they are coming from local data that is synced via Replicache and the client view.
 
 ### Step 5: Mutation ID Storage
 
