@@ -12,16 +12,15 @@ This will walk you through Replicache account setup.
 
 ### Step 2: Downstream Sync (Server Side)
 
-Implement a *Client View* endpoint  that returns the data that should be available locally on the client for each user. Replicache will frequently query this endpoint and calculate a diff to return to each client.
+Implement a *Client View* endpoint  that returns the data that should be available locally on the client for each user. This endpoint should return the *entire* view (up to 20MB) every time.
+
+Replicache will frequently query this endpoint and calculate a diff to return to each client.
 
 The format of the client view is JSON of the form:
 
 ```jsonc
 {
   "clientID": "CB94867E-94B7-48F3-A3C1-287871E1F7FD",
-  // The last Replicache transaction ID that has been processed. You will be implementing this as part of upstream sync,
-  // but for now, just return 0.
-  "lastTxID": 0,
   "view": {
     "/todo/1": {
       "title": "Take out the trash",
@@ -65,12 +64,12 @@ At this point, you have a read-only offline-first app! Reads will always be inst
 
 Nice! Time for a little break. ☕️ 🍵
 
-Next up: Writes.
-
 ### Step 5: Upstream Sync (Server)
 
+Next up: Writes.
+
 Replicache implements upstream sync by queuing calls to your existing server-side endpoints. Queued calls are invoked when
-there's connectivity in a batch. By default Replicache posts the batch to `https://yourdomain.com/replicache-batch`.
+there's connectivity in batches. By default Replicache posts the batch to `https://yourdomain.com/replicache-batch`.
 
 The payload of the batch request is JSON, of the form:
 
@@ -97,7 +96,6 @@ The response format is:
 
 ```json
 {
-  "clientID": "CB94867E-94B7-48F3-A3C1-287871E1F7FD",
   "mutations": [
     {
       "txID": 7,
@@ -119,13 +117,52 @@ The response format is:
 
 Notes on correctly implementing the batch endpoint:
 
-* Mutations in a particular batch **MUST** be processed serially in order to ensure proper [causal consistency](https://jepsen.io/consistency/models/causal).
+* Mutations in a particular batch **MUST** be processed serially in order to ensure [causal consistency](https://jepsen.io/consistency/models/causal). Mutations from different batches can be processed concurrently.
 * Replicache can end up sending the same mutation multiple times. You **MUST** ensure mutation handlers are [idempotent](https://en.wikipedia.org/wiki/Idempotence#Computer_science_meaning). If you have an existing idempotency token, you can send it as part of the payload of each mutation. Otherwise, you can use the `(clientID,txID)` pair as an idempotency token.
-* If a request cannot be handled temporarily, return the status code `"RETRY"` and stop processing the batch. Replicache will retry starting at the next unhandled mutation. Only the last record in the response can be marked `RETRY`.
+* If a request cannot be handled temporarily (e.g., because some backend component is down), return the result `"RETRY"` and stop processing the batch. Replicache will retry the remainder of the batch later.
 
 #### Batch Endpoint Psuedocode
 
-TODO
+```
+let response = {
+  mutations: [],
+};
+
+for mutation in request.mutations:
+  let result = {
+    txID: mutation.txID,
+  }
+  response.mutations.add(result)
+
+  db.beginTransaction()
+  if mutationAlreadyProcessed(mutation):
+    result.result = "OK"
+    db.rollbackTransaction()
+    continue
+  
+  # Handle each mutation here. Typically this will just dipatch to the existing endpoint at mutation.path.
+  let err = handleMutation(mutation.path, mutation.payload)
+
+  # For transient errors (e.g., some backend component down), stop processing the batch and tell Replicache
+  # client to retry the remainder of batch later.
+  if err != nil && err is TemporaryError:
+    db.rollbackTransaction()
+    result.result = "RETRY"
+    result.message = err.Detail()
+    break
+
+  if err != nil:
+    result.result = "ERROR"
+    result.message = err.Detail()
+  else:
+    result.result = "OK"
+
+  markMutationProcessed(db, mutation)
+  db.commitTransaction()
+
+# Return the result as JSON to the Replicache client
+return result
+```
 
 ### Step 7: Upstream Sync (Client)
 
