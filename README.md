@@ -59,31 +59,17 @@ Implement the client side of downstream sync:
 * React Native Client Setup (TODO)
 * Web Client Setup (TODO)
 
-### Step 5: Transaction IDs
+### Step 4.5: Coffee Break
 
-Replicache identifies mutations with a *Transaction ID*, which is a per-client incrementing integer.
+At this point, you have a read-only offline-first app! Reads will always be instantaneous, because they are reading from local data that is synced via Replicache and the client view.
 
-Your service must track the last processed transaction ID for each client, and return it in the Client View request.
+Nice! Time for a little break. ☕️ 🍵
 
-The exact mechanism to do this will vary based on how you've implemented your service, but if, for example, you are using a relational database, then a table of the following form would work:
+Next up: Writes.
 
-<table>
-  <tr>
-    <th colspan="2">ReplicacheClientTransactions</td>
-  </tr>
-  <tr>
-    <td>ClientID</td>
-    <td>CHAR(36)</td>
-  </tr>
-  <tr>
-    <td>LastTransactionID</td>
-    <td>uint64</td>
-  </tr>
- </table>
+### Step 5: Upstream Sync (Server)
 
-### Step 6: Upstream Sync (Server)
-
-Replicache implements upstream sync by queuing calls to your existing server-side endpoints and invoking them later when
+Replicache implements upstream sync by queuing calls to your existing server-side endpoints. Queued calls are invoked when
 there's connectivity in a batch. By default Replicache posts the batch to `https://yourdomain.com/replicache-batch`.
 
 The payload of the batch request is JSON, of the form:
@@ -133,11 +119,9 @@ The response format is:
 
 Notes on correctly implementing the batch endpoint:
 
-* Mutations in a particular batch must be processed **serially** to ensure proper causal consistency.
-* Replicache can end up sending the same mutation multiple times. You **MUST** check whether the transaction has already been processed before doing so.
-* The tracked last transactionID state for a client **MUST** be updated if a transaction has been processed, whether or not the mutation was successful. Replicache will continue to send mutations until the server acknowledges the mutation, by returning an equal or higher `lastTxID` in the Client View request.
-* The tracked last transactionID state **MUST** be updated atomically with the rest of the changes caused by a mutation.
-* If a request cannot be handled temporarily, return the status code "RETRY". Replicache will retry starting at the next unhandled mutation.
+* Mutations in a particular batch **MUST** be processed serially in order to ensure proper [causal consistency](https://jepsen.io/consistency/models/causal).
+* Replicache can end up sending the same mutation multiple times. You **MUST** ensure each transaction is processed only one time. If you have an existing idempotency token, you can send it as part of the payload of each mutation. Otherwise, you can use the `(clientID,txID)` pair as your idempotency token.
+* If a request cannot be handled temporarily, return the status code `"RETRY"` and stop processing the batch. Replicache will retry starting at the next unhandled mutation. Only the last record in the response can be marked `RETRY`.
 
 #### Batch Endpoint Psuedocode
 
