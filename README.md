@@ -223,3 +223,10 @@ response.lastMutationID = getLastMutationID()
 * Swift - Writes (TODO)
 * React Native - Writes (TODO)
 * Web Client - Writes (TODO)
+
+### Step 9: 🎉🎉
+
+That's it! You now have a fully offline-first application. Reads and writes to the client will always be instantaneous, no
+matter what the internet connectivity.
+
+Happy hacking!
