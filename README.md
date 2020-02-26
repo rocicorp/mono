@@ -21,6 +21,9 @@ The format of the client view is JSON of the form:
 ```jsonc
 {
   "clientID": "CB94867E-94B7-48F3-A3C1-287871E1F7FD",
+  // This is the last Replicache transaction ID that you have processed.
+  // You will implement this as part of Upstream Sync, but for now, just return zero.
+  "lastTxID": 0,
   "view": {
     "/todo/1": {
       "title": "Take out the trash",
@@ -60,13 +63,39 @@ Implement the client side of downstream sync:
 
 ### Step 4.5: Coffee Break
 
-At this point, you have a read-only offline-first app! Reads will always be instantaneous, because they are reading from local data that is synced via Replicache and the client view.
+At this point, you have a read-only offline-first app. Woo!
 
-Nice! Time for a little break. ☕️ 🍵
+Reads will always be instantaneous, because they are reading from local data that is synced via Replicache and the client view.
 
-### Step 5: Upstream Sync (Server)
+Time for a little break ☕️ 🍵.
+
+### Step 5: Mutation ID Storage
 
 Next up: Writes.
+
+Replicache identifies each change (or *Mutation*) that originates on the Replicache Client with a *MutationID*.
+
+Your service must track the MutationID it has processed for each client, and return it to Replicache in the Client View response. This allows the Replicache client to know when it can discard the speculative version of that change from the client.
+
+Depending on how your service is built, storing MutationID can be done a number of ways. But typically you'll store them in the same database as your user data and update them transactionally as part of handling upstream sync.
+
+If you use e.g., Postgres for your user data, you might store Replicache Change IDs in a table like:
+
+<table>
+  <tr>
+    <th colspan=2>ReplicacheMutationIDs</th>
+  </tr>
+  <tr>
+    <td>ClientID</td>
+    <td>CHAR(32)</td>
+  </tr>
+  <tr>
+    <td>LastMutationID</td>
+    <td>uint64</td>
+  </tr>
+</table>
+
+### Step 6: Upstream Sync (Server)
 
 Replicache implements upstream sync by queuing calls to your existing server-side endpoints. Queued calls are invoked when
 there's connectivity in batches. By default Replicache posts the batch to `https://yourdomain.com/replicache-batch`.
@@ -78,12 +107,12 @@ The payload of the batch request is JSON, of the form:
   "clientID": "CB94867E-94B7-48F3-A3C1-287871E1F7FD",
   "mutations": [
     {
-      "txID": 7,
+      "id": 7,
       "path": "/api/todo/create",
       "payload": "{\"id\": \"AE2E880D-C4BD-473A-B5E0-29A4A9965EE9\", \"title\": \"Take out the trash\", ..."
     },
     {
-      "txID": 8,
+      "id": 8,
       "path": "/api/todo/toggle-done",
       "payload": "{\"id\": \"AE2E880D-C4BD-473A-B5E0-29A4A9965EE9\", \"done\": true}"
     },
@@ -98,16 +127,16 @@ The response format is:
 {
   "mutations": [
     {
-      "txID": 7,
+      "id": 7,
       "result": "OK"
     },
     {
-      "txID": 8,
+      "id": 8,
       "result": "ERROR",
       "message": "Invalid POST data: syntax error: ..."
     },
     {
-      "txID": 9,
+      "id": 9,
       "result": "RETRY",
       "message": "Backend unavailable"
     },
@@ -117,54 +146,72 @@ The response format is:
 
 Notes on correctly implementing the batch endpoint:
 
-* Mutations in a particular batch **MUST** be processed serially in order to ensure [causal consistency](https://jepsen.io/consistency/models/causal). Mutations from different batches can be processed concurrently.
-* Replicache can end up sending the same mutation multiple times. You **MUST** ensure mutation handlers are [idempotent](https://en.wikipedia.org/wiki/Idempotence#Computer_science_meaning). If you have an existing idempotency token, you can send it as part of the payload of each mutation. Otherwise, you can use the `(clientID,txID)` pair as an idempotency token.
+* Replicache can end up sending the same mutation multiple times. You **MUST** ensure mutation handlers are [idempotent](https://en.wikipedia.org/wiki/Idempotence#Computer_science_meaning). We recommend that you use the provided MutationID for idempotency (see pseudocode below).
 * If a request cannot be handled temporarily (e.g., because some backend component is down), return the result `"RETRY"` and stop processing the batch. Replicache will retry the remainder of the batch later.
+* Once the batch endpoint returns `OK` for a mutation, that mutation **MUST** eventually be processed. In simple systems it will be processed immediately, in the same transaction. But it OK for processing to also be delayed, as long as it is eventually happens.
 
-#### Batch Endpoint Psuedocode
+#### Simple Batch Endpoint Psuedocode
 
 ```
-let response = {
-  mutations: [],
-};
+def handleReplicacheBatch(request):
+  let response = {
+    mutations: [],
+  };
 
-for mutation in request.mutations:
-  let result = {
-    txID: mutation.txID,
-  }
-  response.mutations.add(result)
+  for mutation in request.mutations:
+    let result = {
+      txID: mutation.txID,
+    }
+    response.mutations.add(result)
 
-  db.beginTransaction()
-  if mutationAlreadyProcessed(mutation):
-    result.result = "OK"
-    db.rollbackTransaction()
-    continue
+    db.beginTransaction()
+    let lastMutationID = getLastMutationID(request.clientID)
+    if lastMutationID >= mutation.id:
+      result.result = "OK"
+      db.rollbackTransaction()
+      continue
   
-  # Handle each mutation here. Typically this will just dipatch to the existing endpoint at mutation.path.
-  let err = handleMutation(mutation.path, mutation.payload)
+    # Handle each mutation here. Typically this will just dipatch to the existing endpoint at mutation.path.
+    let err = handleMutation(mutation.path, mutation.payload)
 
-  # For transient errors (e.g., some backend component down), stop processing the batch and tell Replicache
-  # client to retry the remainder of batch later.
-  if err != nil && err is TemporaryError:
-    db.rollbackTransaction()
-    result.result = "RETRY"
-    result.message = err.Detail()
-    break
+    # For transient errors (e.g., some backend component down), stop processing the batch and tell Replicache
+    # client to retry the remainder of batch later.
+    if err != nil && err is TemporaryError:
+      db.rollbackTransaction()
+      result.result = "RETRY"
+      result.message = err.Detail()
+      break
 
-  if err != nil:
-    result.result = "ERROR"
-    result.message = err.Detail()
-  else:
-    result.result = "OK"
+    if err != nil:
+      result.result = "ERROR"
+      result.message = err.Detail()
+    else:
+      result.result = "OK"
 
-  markMutationProcessed(db, mutation)
-  db.commitTransaction()
+    markMutationProcessed(request.clientID, mutation.id)
+    db.commitTransaction()
 
-# Return the result as JSON to the Replicache client
-return result
+  # Return the result as JSON to the Replicache client
+  return result
+
+def getLastMutationID(clientID):
+  let res = db.exec("SELECT LastMutationID FROM ReplicacheMutationIDs WHERE ClientID = ?", clientID)
+  if res.rows == 0:
+    return NULL
+  return res.rows[0].LastMutationID
+
+def markMutationProcessed(clientID, mutationID):
+  let res = db.exec("UPDATE ReplicacheMutationIDs SET LastMutationID = ? WHERE ClientID = ?", mutationID, clientID)
+  if res.changedRowCount == 1:
+    return
+  db.exec("INSERT INTO ReplicacheMutationIDs (ClientID, LastMutationID) VALUE (?, ?)", clientID, mutationID)
 ```
 
-### Step 7: Upstream Sync (Client)
+### Step 7: Include the Last Processed Mutation ID in the Client View
+
+Initially we hardcoded this to zero. Now we want to return the correct value. For our simple batch endpoint pseudocode above, this would just be `getLastMutationID()`.
+
+### Step 8: Upstream Sync (Client)
 
 * [Flutter - Upstream Sync](setup-flutter.md#upstream)
 * Swift - Upstrem Sync (TODO)
