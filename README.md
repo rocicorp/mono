@@ -81,7 +81,7 @@ The payload of the batch request is JSON, of the form:
     {
       "txID": 7,
       "path": "/api/todo/create",
-      "payload": "{\id\": \"AE2E880D-C4BD-473A-B5E0-29A4A9965EE9\", \"title\": \"Take out the trash\", ..."
+      "payload": "{\"id\": \"AE2E880D-C4BD-473A-B5E0-29A4A9965EE9\", \"title\": \"Take out the trash\", ..."
     },
     {
       "txID": 8,
