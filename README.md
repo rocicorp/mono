@@ -10,9 +10,9 @@ repl account create
 
 This will walk you through Replicache account setup.
 
-### Step 2: Downstream Sync (Server)
+### Step 2: Downstream Sync (Server Side)
 
-You will need to implement a *Client View* endpoint  that returns the data that should be available locally on the client for each user. Replicache will frequently query this endpoint and calculate a diff to return to each client.
+Implement a *Client View* endpoint  that returns the data that should be available locally on the client for each user. Replicache will frequently query this endpoint and calculate a diff to return to each client.
 
 The format of the client view is JSON of the form:
 
@@ -50,7 +50,9 @@ See the platform-specific setup instructions:
 * React Native Client Setup (TODO)
 * Web Client Setup (TODO)
 
-### Step 4: Downstream Sync (client)
+### Step 4: Downstream Sync (Client Side)
+
+Implement the client side of downstream sync:
 
 * [Flutter Client Setup](setup-flutter.md)
 * Swift Client Setup (TODO)
