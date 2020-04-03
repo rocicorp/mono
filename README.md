@@ -41,11 +41,10 @@ The format of the client view is JSON of the form:
 
 ```jsonc
 {
-  "clientID": "CB94867E-94B7-48F3-A3C1-287871E1F7FD",
   // This is the last Replicache Mutation ID that you have processed.
   // You will implement this as part of Upstream Sync, but for now, just return zero.
   "lastMutationID": 0,
-  "view": {
+  "clientView": {
     "/todo/1": {
       "title": "Take out the trash",
       "description": "Don't forget to pull it to the curb.",
@@ -61,8 +60,7 @@ The format of the client view is JSON of the form:
 }
 ```
 
-By convention, the Client View endpoint is at `https://yourdomain.com/replicache-clent-view`, but you can
-set it to whatever you want when you create your account.
+By default, Replicache looks for the Client View at `https://yourdomain.com/replicache-clent-view`.
 
 ## Step 3: Test Downstream Sync
 
