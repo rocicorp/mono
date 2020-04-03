@@ -1,20 +1,39 @@
 # Replicache Quick Start
 
-This document walks you through getting Replicache integrated with your existing backend in a basic way. It should take a few hours to a day, depending on the complexity of your system.
+This document walks you through getting [Replicache](https://replicache.dev) integrated with your existing backend in a basic way. It should take a few hours to a day, depending on the complexity of your system.
 
-### Step 1: Create a Replicache Account
+# Overview
 
-Download the `repl` CLI, then:
+To integrate Replicache into an existing service, you're gonna make changes on both the client and the server.
 
+![Picture of Replicache Architecture](diagram.png)
+
+# Client Side
+
+On the client side, you'll link the Replicache Client SDK into your application and use it as your local storage layer.
+
+Choose the approriate quickstart for your platform to start:
+
+* [Flutter](https://github.com/rocicorp/replicache-sdk-flutter)
+* React Native - TODO
+* iOS - TODO
+* Android - TODO
+* Desktop - TODO
+* Web - TODO
+
+# Server Side
+
+## Step 1: Get the SDK
+
+Download the [Replicache SDK](https://github.com/rocicorp/replicache/releases/latest/download/replicache-sdk.tar.gz), then unzip it:
+
+```bash
+tar xvzf replicache-sdk.tar.gz
 ```
-repl account create
-```
 
-This will walk you through Replicache account setup.
+## Step 2: Downstream Sync
 
-### Step 2: Downstream Sync (Server Side)
-
-Implement a *Client View* endpoint  that returns the data that should be available locally on the client for each user. This endpoint should return the *entire* view (up to 20MB) every time.
+Implement a *Client View* endpoint on your service that returns the data that should be available locally on the client for each user. This endpoint should return the *entire* view every time it is requested.
 
 Replicache will frequently query this endpoint and calculate a diff to return to each client.
 
@@ -42,34 +61,23 @@ The format of the client view is JSON of the form:
 }
 ```
 
-By default, Replicache looks for the Client View at `https://yourdomain.com/replicache-clent-view`, but you can
-configure this in the client API.
+By convention, the Client View endpoint is at `https://yourdomain.com/replicache-clent-view`, but you can
+set it to whatever you want when you create your account.
 
-### Step 3: Setup the Client
+## Step 3: Test Downstream Sync
 
-See the platform-specific setup instructions:
+You can simulate the client syncing downstream with curl.
 
-* [Flutter Client Setup](setup-flutter.md#setup)
-* Swift Client Setup (TODO)
-* React Native Client Setup (TODO)
-* Web Client Setup (TODO)
+```bash
+# Choose whatever account ID you want on dev.
+diffs account create --account-id=42 --client-view='http://localhost:8000/replicache-client-view'
 
-### Step 4: Downstream Sync (Client Side)
+$ curl -d '{"accountID":"42", "clientID":"c1", "baseStateID":"00000000000000000000000000000000", "checksum":"00000000"}' http://localhost:7001/pull
+```
 
-Implement the client side of downstream sync:
+If you call `pull` with a zero `baseStateID` as above, you get the entire snapshot as a response. To test deltas, save the `stateID` from a response, change something in your data-layer, and call `pull` again with the new `baseStateID`.
 
-* [Flutter Client Setup - Reads](setup-flutter.md#read-data)
-* Swift Client Setup - Reads (TODO)
-* React Native Client Setup - Reads (TODO)
-* Web Client Setup - Reads (TODO)
-
-### Step 4.5: Coffee Break ☕️ 🍵
-
-At this point, you have a read-only offline-first app. Woo! Time for a little break.
-
-Reads will always be instantaneous, because they are coming from local data that is synced via Replicache and the client view.
-
-### Step 5: Mutation ID Storage
+## Step 4: Mutation ID Storage
 
 Next up: Writes.
 
@@ -95,7 +103,7 @@ If you use e.g., Postgres, for your user data, you might store Replicache Change
   </tr>
 </table>
 
-### Step 6: Upstream Sync (Server)
+## Step 5: Upstream Sync
 
 Replicache implements upstream sync by queuing calls to your existing server-side endpoints. Queued calls are invoked when
 there's connectivity in batches. By default Replicache posts the batch to `https://yourdomain.com/replicache-batch`.
@@ -150,7 +158,7 @@ Notes on correctly implementing the batch endpoint:
 * If a request cannot be handled temporarily (e.g., because some backend component is down), return the result `"RETRY"` and stop processing the batch. Replicache will retry the remainder of the batch later.
 * Once the batch endpoint returns `OK` for a mutation, that mutation **MUST** eventually be processed and reflected in the ClientView. In simple systems this will happen immediately. But it OK for processing to also be queued, as long as it does eventually happen.
 
-#### Simple Batch Endpoint Psuedocode
+### Simple Batch Endpoint Psuedocode
 
 ```
 def handleReplicacheBatch(request):
@@ -207,7 +215,7 @@ def markMutationProcessed(clientID, mutationID):
   db.exec("INSERT INTO ReplicacheMutationIDs (ClientID, LastMutationID) VALUE (?, ?)", clientID, mutationID)
 ```
 
-### Step 7: Include the Last Processed Mutation ID in the Client View
+## Step 6: Include the Last Processed Mutation ID in the Client View
 
 In Step 2, we hardcoded `lastMutationID` to zero.
 
@@ -217,16 +225,8 @@ Now we're going to return the correct value so that the client can discard pendi
 response.lastMutationID = getLastMutationID()
 ```
 
-### Step 8: Upstream Sync (Client)
+## Step 7: 🎉🎉
 
-* [Flutter - Writes](setup-flutter.md#write-data)
-* Swift - Writes (TODO)
-* React Native - Writes (TODO)
-* Web Client - Writes (TODO)
-
-### Step 9: 🎉🎉
-
-That's it! You now have a fully offline-first application. Reads and writes to the client will always be instantaneous, no
-matter what the internet connectivity.
+That's it! You're done with the backend integration. If you haven't yet, you'll need to do the [client integration](#client-side) next.
 
 Happy hacking!
