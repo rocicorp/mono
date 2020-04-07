@@ -2,6 +2,8 @@
 
 This document walks you through getting [Replicache](https://replicache.dev) integrated with your existing backend in a basic way. It should take a few hours to a day, depending on the complexity of your system.
 
+**Note:** This document assumes you already know what Replicache is, why you might need it, and broadly how it works. If that's not true, see the [Replicache homepage](https://replicache.dev) for an overview, or the [design document](design.md) for a detailed deep-dive.
+
 # Overview
 
 To integrate Replicache into an existing service, you're gonna make changes on both the client and the server.
@@ -12,14 +14,9 @@ To integrate Replicache into an existing service, you're gonna make changes on b
 
 On the client side, you'll link the Replicache Client SDK into your application and use it as your local storage layer.
 
-Choose the approriate quickstart for your platform to start:
+Currently we only support Flutter clients. See the [Replicache Flutter SDK](https://github.com/rocicorp/replicache-sdk-flutter) repo for setup instructions.
 
-* [Flutter](https://github.com/rocicorp/replicache-sdk-flutter)
-* React Native - TODO
-* iOS - TODO
-* Android - TODO
-* Desktop - TODO
-* Web - TODO
+SDKs for other environments, including native iOS/Android, React Native, and Desktop/Web coming soon.
 
 # Server Side
 
@@ -154,62 +151,7 @@ Notes on correctly implementing the batch endpoint:
 * If a request cannot be handled temporarily (e.g., because some backend component is down), return the result `"RETRY"` and stop processing the batch. Replicache will retry the remainder of the batch later.
 * Once the batch endpoint returns `OK` for a mutation, that mutation **MUST** eventually be processed and reflected in the ClientView. In simple systems this will happen immediately. But it OK for processing to also be queued, as long as it does eventually happen.
 
-### Simple Batch Endpoint Psuedocode
-
-```
-def handleReplicacheBatch(request):
-  let response = {
-    mutations: [],
-  };
-
-  for mutation in request.mutations:
-    let result = {
-      txID: mutation.txID,
-    }
-    response.mutations.add(result)
-
-    db.beginTransaction()
-    let lastMutationID = getLastMutationID(request.clientID)
-    if lastMutationID >= mutation.id:
-      result.result = "OK"
-      db.rollbackTransaction()
-      continue
-  
-    # Handle each mutation here. Typically this will just dispatch to the handler for mutation.path.
-    let err = handleMutation(mutation.path, mutation.payload)
-
-    # For transient errors (e.g., some backend component down), stop processing the batch and tell Replicache
-    # client to retry the remainder of batch later.
-    if err != nil && err is TemporaryError:
-      db.rollbackTransaction()
-      result.result = "RETRY"
-      result.message = err.Detail()
-      break
-
-    if err != nil:
-      result.result = "ERROR"
-      result.message = err.Detail()
-    else:
-      result.result = "OK"
-
-    markMutationProcessed(request.clientID, mutation.id)
-    db.commitTransaction()
-
-  # Return the result as JSON to the Replicache client
-  return result
-
-def getLastMutationID(clientID):
-  let res = db.exec("SELECT LastMutationID FROM ReplicacheMutationIDs WHERE ClientID = ?", clientID)
-  if res.rows == 0:
-    return NULL
-  return res.rows[0].LastMutationID
-
-def markMutationProcessed(clientID, mutationID):
-  let res = db.exec("UPDATE ReplicacheMutationIDs SET LastMutationID = ? WHERE ClientID = ?", mutationID, clientID)
-  if res.changedRowCount == 1:
-    return
-  db.exec("INSERT INTO ReplicacheMutationIDs (ClientID, LastMutationID) VALUE (?, ?)", clientID, mutationID)
-```
+TODO: Add some links to sample code here.
 
 ## Step 6: Include the Last Processed Mutation ID in the Client View
 
