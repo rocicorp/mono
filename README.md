@@ -63,9 +63,19 @@ By default, Replicache looks for the Client View at `https://yourdomain.com/repl
 
 You can simulate the client syncing downstream with curl.
 
+First start a development diff-server:
+
+```bash
+# The --clientview parameter should point to the Client View endpoint you implemented above.
+/path/to/replicache-sdk/<yourplatform>/diffs --db=/tmp/foo \
+  --clientview=http://localhost:8000/replicache-client-view
+```
+
+Then *pull* from that diff-server:
+
 ```bash
 # Choose whatever account ID you want on dev.
-$ curl -d '{"accountID":"42", "clientID":"c1", "baseStateID":"00000000000000000000000000000000", "checksum":"00000000", "client-view": "http://localhost:8000/replicache-client-view"}' http://localhost:7001/pull
+$ curl -d '{"accountID":"42", "clientID":"c1", "baseStateID":"00000000000000000000000000000000", "checksum":"00000000"}' http://localhost:7001/pull
 ```
 
 If you call `pull` with a zero `baseStateID` as above, you get the entire snapshot as a response. To test deltas, save the `stateID` from a response, change something in your data-layer, and call `pull` again with the new `baseStateID`.
