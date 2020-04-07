@@ -20,7 +20,7 @@ SDKs for other environments, including native iOS/Android, React Native, and Des
 
 # Server Side
 
-## Step 1: Get the SDK
+### Step 1: Get the SDK
 
 Download the [Replicache SDK](https://github.com/rocicorp/replicache/releases/latest/download/replicache-sdk.tar.gz), then unzip it:
 
@@ -28,7 +28,7 @@ Download the [Replicache SDK](https://github.com/rocicorp/replicache/releases/la
 tar xvzf replicache-sdk.tar.gz
 ```
 
-## Step 2: Downstream Sync
+### Step 2: Downstream Sync
 
 Implement a *Client View* endpoint on your service that returns the data that should be available locally on the client for each user. This endpoint should return the *entire* view every time it is requested.
 
@@ -59,7 +59,7 @@ The format of the client view is JSON of the form:
 
 By default, Replicache looks for the Client View at `https://yourdomain.com/replicache-clent-view`.
 
-## Step 3: Test Downstream Sync
+### Step 3: Test Downstream Sync
 
 You can simulate the client syncing downstream with curl.
 
@@ -80,7 +80,7 @@ $ curl -d '{"accountID":"42", "clientID":"c1", "baseStateID":"000000000000000000
 
 If you call `pull` with a zero `baseStateID` as above, you get the entire snapshot as a response. To test deltas, save the `stateID` from a response, change something in your data-layer, and call `pull` again with the new `baseStateID`.
 
-## Step 4: Mutation ID Storage
+### Step 4: Mutation ID Storage
 
 Next up: Writes.
 
@@ -106,7 +106,7 @@ If you use e.g., Postgres, for your user data, you might store Replicache Change
   </tr>
 </table>
 
-## Step 5: Upstream Sync
+### Step 5: Upstream Sync
 
 Replicache implements upstream sync by queuing calls to your existing server-side endpoints. Queued calls are invoked when
 there's connectivity in batches. By default Replicache posts the batch to `https://yourdomain.com/replicache-batch`.
@@ -163,7 +163,7 @@ Notes on correctly implementing the batch endpoint:
 
 TODO: Add some links to sample code here.
 
-## Step 6: Include the Last Processed Mutation ID in the Client View
+### Step 6: Include the Last Processed Mutation ID in the Client View
 
 In Step 2, we hardcoded `lastMutationID` to zero.
 
@@ -173,7 +173,7 @@ Now we're going to return the correct value so that the client can discard pendi
 response.lastMutationID = getLastMutationID()
 ```
 
-## Step 7: 🎉🎉
+### Step 7: 🎉🎉
 
 That's it! You're done with the backend integration. If you haven't yet, you'll need to do the [client integration](#client-side) next.
 
