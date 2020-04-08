@@ -105,7 +105,7 @@ The payload of `pull` must match the JSON Schema:
     // within a single account. You can specify any client ID you want while testing.
     "clientID": {
       "type": "string",
-      "regex": "[a-zA-Z0-9\-_/]+"
+      "regex": "[a-zA-Z0-9\\-_/]+"
     },
     // The baseStateID is the last state ID the requesting client has. diff-server will return a diff
     // with respect to this state.
