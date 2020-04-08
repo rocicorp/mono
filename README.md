@@ -207,7 +207,42 @@ If you use e.g., Postgres, for your user data, you might store Replicache Change
 Replicache implements upstream sync by queuing calls to your existing server-side endpoints. Queued calls are invoked when
 there's connectivity in batches. By default Replicache posts the batch to `https://yourdomain.com/replicache-batch`.
 
-The payload of the batch request is JSON, of the form:
+The payload of the batch request is JSON matching the JSON Schema:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "clientID": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mutations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "int",
+            "minimum": 0
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "payload": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "path", "payload"]
+      }
+    }
+  },
+  "required": ["clientID", "mutations"]
+}
+```
+
+For example, here is an example POST to our TODO example app backend.
 
 ```json
 {
@@ -228,7 +263,36 @@ The payload of the batch request is JSON, of the form:
 }
 ```
 
-The response format is:
+The response format matches the schema:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "mutations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type: "int",
+            "minimium": 0,
+          },
+          "result": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "result", "message"]
+      }
+    }
+  }
+  "required": ["mutations"]
+```
+
+For example:
 
 ```json
 {
