@@ -2,9 +2,8 @@
 
 This document walks you through getting [Replicache](https://replicache.dev) integrated with your existing backend in a basic way. It should take a few hours to a day, depending on the complexity of your system.
 
-You can also check out our fully-functional [TODO sample application](https://github.com/rocicorp/replicache-sample-todo).
-
-Questions? Comments? We'd love to help you evaluate Replicache — [Join us on Slack](https://join.slack.com/t/rocicorp/shared_invite/zt-dcez2xsi-nAhW1Lt~32Y3~~y54pMV0g).
+Questions? Comments? We'd love to help you evaluate Replicache — [Join us on Slack](https://join.slack.com/t/rocicorp/shared_invite/zt-dcez2xsi-nAhW1Lt~32Y3~~y54pMV0g). 
+You can also refer to our fully-functional [TODO sample application](https://github.com/rocicorp/replicache-sample-todo).
 
 **Note:** This document assumes you already know what Replicache is, why you might need it, and broadly how it works. If that's not true, see the [Replicache homepage](https://replicache.dev) for an overview, or the [design document](design.md) for a detailed deep-dive.
 
