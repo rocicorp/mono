@@ -2,7 +2,9 @@
 
 This document walks you through getting [Replicache](https://replicache.dev) integrated with your existing backend in a basic way. It should take a few hours to a day, depending on the complexity of your system.
 
-Questions? Comments? [Join us on Slack](https://join.slack.com/t/rocicorp/shared_invite/zt-dcez2xsi-nAhW1Lt~32Y3~~y54pMV0g).
+You can also check out our fully-functional [TODO sample application](https://github.com/rocicorp/replicache-sample-todo).
+
+Questions? Comments? We'd love to help you evaluate Replicache — [Join us on Slack](https://join.slack.com/t/rocicorp/shared_invite/zt-dcez2xsi-nAhW1Lt~32Y3~~y54pMV0g).
 
 **Note:** This document assumes you already know what Replicache is, why you might need it, and broadly how it works. If that's not true, see the [Replicache homepage](https://replicache.dev) for an overview, or the [design document](design.md) for a detailed deep-dive.
 
@@ -16,15 +18,15 @@ To integrate Replicache into an existing service, you're gonna make changes on b
 
 On the client side, you'll link the Replicache Client SDK into your application and use it as your local storage layer.
 
-Currently we only support Flutter clients. See the [Replicache Flutter SDK](https://github.com/rocicorp/replicache-sdk-flutter) repo for setup instructions.
-
-[Let us know on Slack](https://join.slack.com/t/rocicorp/shared_invite/zt-dcez2xsi-nAhW1Lt~32Y3~~y54pMV0g) which client environment you'd like us to add support fo rnext.
+Currently we only support Flutter clients. See the [Replicache Flutter SDK](https://github.com/rocicorp/replicache-sdk-flutter) repo for the client-side setup instructions.
 
 # Server Side
 
+On the server-side you will add two custom endpoints that Replicache will call to synchronize with your service.
+
 ### Step 1: Get the SDK
 
-Download the [Replicache SDK](https://github.com/rocicorp/replicache/releases/latest/download/replicache-sdk.tar.gz), then unzip it:
+Download the Replicache SDK, then unzip it:
 
 ```bash
 curl -o replicache-sdk.tar.gz -L https://github.com/rocicorp/replicache/releases/latest/download/replicache-sdk.tar.gz
@@ -35,9 +37,9 @@ tar xvzf replicache-sdk.tar.gz
 
 Implement a *Client View* endpoint on your service that returns the data that should be available locally on the client for each user. This endpoint should return the *entire* view every time it is requested.
 
-Replicache will frequently query this endpoint and calculate a diff to return to each client.
+Replicache will frequently query this endpoint and calculate a diff to send to each client.
 
-The format of the client view is JSON that matches the following [JSON Schema](https://json-schema.org/):
+The format of the Client View is JSON that matches the following [JSON Schema](https://json-schema.org/):
 
 ```jsonschema
 {
@@ -46,7 +48,7 @@ The format of the client view is JSON that matches the following [JSON Schema](h
     // The last Replicache Mutation ID that your service has processed.
     "lastMutationID": {"type": "integer", "minimum": 0},
 
-    // An arbitrary map of key/value pairs. Any JSON value is legal for values.
+    // An arbitrary map of key/value pairs. Any JSON type is legal for each value.
     // This is the data that will be available on the client side.
     "clientView": {"type": "object"}
   },
@@ -54,7 +56,7 @@ The format of the client view is JSON that matches the following [JSON Schema](h
 }
 ```
 
-For example, a hypothetical TODO app might return the following Client View:
+For example, [sample TODO app](https://github.com/rocicorp/replicache-sample-todo) returns a Client View like this:
 
 ```jsonc
 {
@@ -75,11 +77,15 @@ For example, a hypothetical TODO app might return the following Client View:
 }
 ```
 
-To authenticate users, use the `Authorization` HTTP header as normal.
+The key/value pairs you return are up to you — Replicache just makes sure they get to the client.
+
+#### Authentication
+
+Most applications return a Client View that is specific to the calling user. Replicache supports sending user credentials through the standard `Authorization` HTTP header.
 
 ### Step 3: Test Downstream Sync
 
-You can simulate the client syncing downstream with curl.
+You can simulate the client syncing downstream with `curl`.
 
 First start a development diff-server:
 
@@ -92,7 +98,8 @@ First start a development diff-server:
 Then *pull* from that diff-server:
 
 ```bash
-curl -H "Authorization:sandbox" -d '{"clientID":"c1", "baseStateID":"00000000000000000000000000000000", "checksum":"00000000"}' http://localhost:7001/pull
+curl -H "Authorization:sandbox" -d '{"clientID":"c1", "baseStateID":"00000000000000000000000000000000", "checksum":"00000000"}' \
+http://localhost:7001/pull
 ```
 
 The payload of `pull` must match the JSON Schema:
@@ -129,7 +136,7 @@ The payload of `pull` must match the JSON Schema:
 
 #### Incremental Sync Example
 
-Here's a complete example of doing an initial sync then an incremental sync against our [sample TODO app](https://github.com/rocicorp/replicache-sample-todo):
+Here's a complete example of an initial sync followed by an incremental sync against our [sample TODO app](https://github.com/rocicorp/replicache-sample-todo):
 
 ```bash
 CLIENT_VIEW=https://replicache-sample-todo.now.sh/serve/client-view
