@@ -85,7 +85,7 @@ First start a development diff-server:
 
 ```bash
 # The --client-view parameter should point to the Client View endpoint you implemented above.
-build/out/<your-platform>/diffs --db=/tmp/foo serve \
+./<your-platform>/diffs --db=/tmp/foo serve \
   --client-view=http://localhost:8000/replicache-client-view
 ```
 
@@ -137,7 +137,7 @@ NEW_USER_EMAIL=$RANDOM@foo.com
 PLATFORM=darwin-amd64 # or linux-amd64
 
 # Start diffs talking to TODO service
-./build/out/$PLATFORM/diffs --db=/tmp/foo serve --client-view=$CLIENT_VIEW &
+./$PLATFORM/diffs --db=/tmp/foo serve --client-view=$CLIENT_VIEW &
 
 # Create a new user
 curl -d "{\"email\":\"$NEW_USER_EMAIL\"}" https://replicache-sample-todo.now.sh/serve/login
