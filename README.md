@@ -37,12 +37,27 @@ Implement a *Client View* endpoint on your service that returns the data that sh
 
 Replicache will frequently query this endpoint and calculate a diff to return to each client.
 
-The format of the client view is JSON of the form:
+The format of the client view is JSON that matches the following [JSON Schema](https://json-schema.org/):
+
+```jsonschema
+{
+  "type": "object",
+  "properties": {
+    // The last Replicache Mutation ID that your service has processed.
+    "lastMutationID": {"type": "integer", "minimum": 0},
+
+    // An arbitrary map of key/value pairs. Any JSON value is legal for values.
+    // This is the data that will be available on the client side.
+    "clientView": {"type": "object"}
+  },
+  "required": ["lastMutationID", "clientView"]
+}
+```
+
+For example, a hypothetical TODO app might return the following Client View:
 
 ```jsonc
 {
-  // This is the last Replicache Mutation ID that you have processed.
-  // You will implement this as part of Upstream Sync, but for now, just return zero.
   "lastMutationID": 0,
   "clientView": {
     "/todo/1": {
@@ -60,7 +75,7 @@ The format of the client view is JSON of the form:
 }
 ```
 
-By default, Replicache looks for the Client View at `https://yourdomain.com/replicache-clent-view`.
+To authenticate users, use the `Authorization` HTTP header as normal.
 
 ### Step 3: Test Downstream Sync
 
@@ -70,18 +85,90 @@ First start a development diff-server:
 
 ```bash
 # The --clientview parameter should point to the Client View endpoint you implemented above.
-/path/to/replicache-sdk/<yourplatform>/diffs --db=/tmp/foo \
+build/out/<your-platform>/diffs --db=/tmp/foo serve \
   --clientview=http://localhost:8000/replicache-client-view
 ```
 
 Then *pull* from that diff-server:
 
 ```bash
-# Choose whatever account ID you want on dev.
-$ curl -d '{"accountID":"42", "clientID":"c1", "baseStateID":"00000000000000000000000000000000", "checksum":"00000000"}' http://localhost:7001/pull
+curl -H "Authorization:sandbox" -d '{"clientID":"c1", "baseStateID":"00000000000000000000000000000000", "checksum":"00000000"}' http://localhost:7001/pull
 ```
 
-If you call `pull` with a zero `baseStateID` as above, you get the entire snapshot as a response. To test deltas, save the `stateID` from a response, change something in your data-layer, and call `pull` again with the new `baseStateID`.
+The payload of `pull` must match the JSON Schema:
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    // The clientID is a string that uniquely identifies a client device that is syncing via Replicache
+    // within a single account. You can specify any client ID you want while testing.
+    "clientID": {
+      "type": "string",
+      "regex": "[a-zA-Z0-9\-_/]+"
+    },
+    // The baseStateID is the last state ID the requesting client has. diff-server will return a diff
+    // with respect to this state.
+    "baseStateID": {
+      "type": "string"
+    },
+    // The checksum of baseStateID. diff-server checks that this checksum matches its records, and only
+    // returns an incremental diff if so.
+    "checksum": {
+      "type": "string"
+    },
+    // The "Authorization" HTTP Header diff-server will send with the request to clientView. Use this
+    // to authenticate the requesting user of your service.
+    "clientViewAuth": {
+      "type": "string"
+    }
+  },
+  "required": ["clientID", "baseStateID", "checksum"]
+}
+```
+
+#### Incremental Sync Example
+
+Here's a complete example of doing an initial sync then an incremental sync against our [sample TODO app](https://github.com/rocicorp/replicache-sample-todo):
+
+```bash
+CLIENT_VIEW=https://replicache-sample-todo.now.sh/serve/client-view
+NEW_USER_EMAIL=$RANDOM@foo.com
+PLATFORM=darwin-amd64 # or linux-amd64
+
+# Start diffs talking to TODO service
+./build/out/$PLATFORM/diffs --db=/tmp/foo serve --clientview=$CLIENT_VIEW &
+
+# Create a new user
+curl -d "{\"email\":\"$NEW_USER_EMAIL\"}" https://replicache-sample-todo.now.sh/serve/login
+
+USER_ID=<user-id-from-prev-cmd>
+LIST_ID=$RANDOM
+TODO_ID=$RANDOM
+
+# Create a first TODO
+curl -H "Authorization:$USER_ID" -d "{\"id\": $TODO_ID, \"listID\": $LIST_ID, \"text\": \"Take out the trash\", \"complete\": true, \"order\": 0.5}" \
+https://replicache-sample-todo.now.sh/serve/todo-create
+
+# Do an initial pull from diff-server
+curl -H "Authorization:sandbox" -d "{\"clientID\":\"c1\", \"baseStateID\":\"00000000000000000000000000000000\", \"checksum\":\"00000000\", \"clientViewAuth\": \"$USER_ID\"}" \
+http://localhost:7001/pull
+
+BASE_STATE_ID=<stateID from prev response>
+CHECKSUM=<checksum from prev response>
+
+# Create a second TODO
+TODO_ID=$RANDOM
+curl -H "Authorization:$USER_ID" -d "{\"id\": $TODO_ID, \"listID\": $LIST_ID, \"text\": \"Walk the dog\", \"complete\": false, \"order\": 0.75}" \
+https://replicache-sample-todo.now.sh/serve/todo-create
+
+# Do an incremental pull from diff-server
+# Note that only the second todo is returned
+curl -H "Authorization:sandbox" -d "{\"clientID\":\"c1\", \"baseStateID\":\"$BASE_STATE_ID\", \"checksum\":\"$CHECKSUM\", \"clientViewAuth\": \"$USER_ID\"}" \
+http://localhost:7001/pull
+
+fg
+```
 
 ### Step 4: Mutation ID Storage
 
