@@ -288,7 +288,7 @@ The response format matches the schema:
         "required": ["id", "result", "message"]
       }
     }
-  }
+  },
   "required": ["mutations"]
 ```
 
