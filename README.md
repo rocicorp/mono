@@ -1,6 +1,10 @@
 # Replicache Quick Start
 
-This document walks you through getting [Replicache](https://replicache.dev) integrated with your existing backend in a basic way. It should take a few hours to a day, depending on the complexity of your system.
+This document walks you through a simple [Replicache](https://replicache.dev) integration. Specifically, we're going to be building an offline-first Todo app. You can use this as a basis for adding Replicache to your own service.
+
+Though simple, this sample app includes the main challenges common to SaaS applications that want to add offline-first: it's a multitenant web service, where users are authenticated and can share data with each other. It's already written in a classic JSON/REST architecture that we don't want to change, and it has its own backend storage that needs to remain authoratative. 
+
+This walkthrough will show how Replicache makes it easy to add offline-first to these types of apps. It should take a few hours to work through, and another half day to a day or so to start to apply to your own system.
 
 Questions? Comments? We'd love to help you evaluate Replicache — [Join us on Slack](https://join.slack.com/t/rocicorp/shared_invite/zt-dcez2xsi-nAhW1Lt~32Y3~~y54pMV0g). 
 You can also refer to our fully-functional [TODO sample application](https://github.com/rocicorp/replicache-sample-todo).
