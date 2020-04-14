@@ -13,9 +13,9 @@ You can also refer to our fully-functional [TODO sample application](https://git
 
 # Overview
 
-To integrate Replicache into an existing service, you're gonna make changes on both the client and the server.
-
 ![Picture of Replicache Architecture](diagram.png)
+
+Replicache is a per-user cache that sits between your backend and client. To integrate Replicache, you will make changes to both your backend and your client.
 
 # Client Side
 
