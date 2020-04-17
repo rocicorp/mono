@@ -84,7 +84,11 @@ The key/value pairs you return are up to you — Replicache just makes sure they
 
 #### Authentication
 
-Most applications return a Client View that is specific to the calling user. Replicache supports sending user credentials through the standard `Authorization` HTTP header.
+Most applications return a Client View that is specific to the calling user. Replicache supports sending user credentials through the standard `Authorization` HTTP header. If authorization fails, the Client View should return HTTP 401 (Unauthorized). The Replicache client will prompt user code to reauthenticate in that case.
+
+#### Errors
+
+All responses other than HTTP 200 with a valid JSON Client View and HTTP 401 are treated as errors by the Diff Server. The Client View response is ignored and the app is sent the last known state instead.
 
 ### Step 3: Test Downstream Sync
 
