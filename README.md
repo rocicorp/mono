@@ -109,39 +109,7 @@ curl -H "Authorization:sandbox" -d '{"clientID":"c1", "baseStateID":"00000000000
 http://localhost:7001/pull
 ```
 
-The payload of `pull` must match the JSON Schema:
-
-```jsonc
-{
-  "type": "object",
-  "properties": {
-    // The clientID is a string that uniquely identifies a client device that is syncing via Replicache
-    // within a single account. You can specify any client ID you want while testing.
-    "clientID": {
-      "type": "string",
-      "regex": "[a-zA-Z0-9\\-_/]+"
-    },
-    // The baseStateID is the last state ID the requesting client has. diff-server will return a diff
-    // with respect to this state.
-    "baseStateID": {
-      "type": "string"
-    },
-    // The checksum of baseStateID. diff-server checks that this checksum matches its records, and only
-    // returns an incremental diff if so.
-    "checksum": {
-      "type": "string"
-    },
-    // The "Authorization" HTTP Header diff-server will send with the request to clientView. Use this
-    // to authenticate the requesting user of your service.
-    "clientViewAuth": {
-      "type": "string"
-    }
-  },
-  "required": ["clientID", "baseStateID", "checksum"]
-}
-```
-
-#### Incremental Sync Example
+#### Example
 
 Here's a complete example of an initial sync followed by an incremental sync against our [sample TODO app](https://github.com/rocicorp/replicache-sample-todo):
 
