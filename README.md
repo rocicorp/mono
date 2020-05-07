@@ -109,48 +109,17 @@ curl -H "Authorization:sandbox" -d '{"clientID":"c1", "baseStateID":"00000000000
 http://localhost:7001/pull
 ```
 
-#### Example
+Take note of the returned `stateID` and `checksum`. Then make a change to your server and pull again, but specifying a `baseStateID` and `checksum` like so:
 
-Here's a complete example of an initial sync followed by an incremental sync against our [sample TODO app](https://github.com/rocicorp/replicache-sample-todo):
 
 ```bash
-CLIENT_VIEW=https://replicache-sample-todo.now.sh/serve/client-view
-NEW_USER_EMAIL=$RANDOM@foo.com
-PLATFORM=darwin-amd64 # or linux-amd64
-
-# Start diffs talking to TODO service
-./$PLATFORM/diffs --db=/tmp/foo serve --client-view=$CLIENT_VIEW &
-
-# Create a new user
-curl -d "{\"email\":\"$NEW_USER_EMAIL\"}" https://replicache-sample-todo.now.sh/serve/login
-
-USER_ID=<user-id-from-prev-cmd>
-LIST_ID=$RANDOM
-TODO_ID=$RANDOM
-
-# Create a first TODO
-curl -H "Authorization:$USER_ID" -d "{\"id\": $TODO_ID, \"listID\": $LIST_ID, \"text\": \"Take out the trash\", \"complete\": true, \"order\": 0.5}" \
-https://replicache-sample-todo.now.sh/serve/todo-create
-
-# Do an initial pull from diff-server
-curl -H "Authorization:sandbox" -d "{\"clientID\":\"c1\", \"baseStateID\":\"00000000000000000000000000000000\", \"checksum\":\"00000000\", \"clientViewAuth\": \"$USER_ID\"}" \
+BASE_STATE_ID=<stateid-from-previous-response>
+CHECKSUM=<checksum-from-previous-reseponse>
+curl -H "Authorization:sandbox" -d '{"clientID":"c1", "baseStateID":"$BASE_STATE_ID", "checksum":"$CHECKSUM"}' \
 http://localhost:7001/pull
-
-BASE_STATE_ID=<stateID from prev response>
-CHECKSUM=<checksum from prev response>
-
-# Create a second TODO
-TODO_ID=$RANDOM
-curl -H "Authorization:$USER_ID" -d "{\"id\": $TODO_ID, \"listID\": $LIST_ID, \"text\": \"Walk the dog\", \"complete\": false, \"order\": 0.75}" \
-https://replicache-sample-todo.now.sh/serve/todo-create
-
-# Do an incremental pull from diff-server
-# Note that only the second todo is returned
-curl -H "Authorization:sandbox" -d "{\"clientID\":\"c1\", \"baseStateID\":\"$BASE_STATE_ID\", \"checksum\":\"$CHECKSUM\", \"clientViewAuth\": \"$USER_ID\"}" \
-http://localhost:7001/pull
-
-fg
 ```
+
+You'll get a response that includes only the diff!
 
 ### Step 4: Mutation ID Storage
 
@@ -158,7 +127,7 @@ Next up: Writes.
 
 Replicache identifies each change (or *Mutation*) that originates on the Replicache Client with a *MutationID*.
 
-Your service must track the last MutationID it has processed for each client, and return it to Replicache in the Client View response. This allows Replicache to know when it can discard the speculative version of that change from the client.
+Your service must store the last MutationID it has processed for each client, and return it to Replicache in the Client View response. This allows Replicache to know when it can discard the speculative version of that change from the client.
 
 Depending on how your service is built, storing MutationIDs can be done a number of ways. But typically you'll store them in the same database as your user data and update them transactionally as part of each mutation.
 
@@ -215,7 +184,7 @@ The payload of the batch request is JSON matching the JSON Schema:
 }
 ```
 
-For example, here is an example POST to our TODO example app backend.
+Here is an example batch request to our TODO example app backend.
 
 ```json
 {
@@ -287,22 +256,110 @@ For example:
 }
 ```
 
-The response to the batch endpoint is **completely informational**. It is not used programmatically by Replicache. However, Replicache does dump it to the developer console for debugging purposes.
+You do not ever need to return any `mutationInfos`. They are **completely informational** and not used programmatically by Replicache. However, Replicache does dump this response to the developer console for debugging purposes.
 
 #### Implementing the Batch Endpoint
 
-The batch endpoint receives a batch of mutation requests and applies them one by one, reporting any errors back to the client. There are some sublteties to be aware of, though:
+Conceptually, the batch endpoint receives an ordered batch of mutation requests and applies them in sequence, reporting any errors back to the client. There are some sublteties to be aware of, though:
 
-* Replicache can send duplicate mutations — this is common when the network is spotty. This is why you are storing the last processed mutation ID: You **MUST** skip mutations you have already seen.
-* Generally, mutations for a given client **SHOULD** be processed serially and in-order to achieve causal consistency. However if you have special knowledge that pairs of mutations are commutative, you can process them in parallel.
+* Replicache can send mutations that have already been processed. This is in fact common when the network is spotty. This is why you need to [store the last processed mutation ID](#step-4-mutation-id-storage): You **MUST** skip mutations you have already seen.
+* Generally, mutations for a given client **SHOULD** be processed serially and in-order to achieve [causal consistency](https://jepsen.io/consistency/models/causal). However if you have special knowledge that pairs of mutations are commutative, you can process them in parallel.
 * Each mutation **MUST** eventually be acknowledged by your service, by updating the stored `lastMutationID` value for the client and returning it in the client view.
-  * If a mutation can't be processed temporarily, simply return early from the batch without updating `lastMutationID`. Replicache will retry the mutation later.
-  * If a mutation can't be processed permanently (e.g., the request is invalid), mark the mutation processed by udpating the stored `lastMutationID`, then continue with other mutations.
-* You must update `lastMutationID` atomically with handling the mutation, otherwise the state reported to the client can be inconsistent.
+  * If a mutation can't be processed temporarily (e.g., some server-side resource is temporarily unavailable), simply return early from the batch without updating `lastMutationID`. Replicache will retry the mutation later.
+  * If a mutation can't be processed permanently (e.g., the request is invalid), mark the mutation processed by updating the stored `lastMutationID`, then continue with other mutations.
+* You **MUST** update `lastMutationID` atomically with handling the mutation, otherwise the state reported to the client can be inconsistent.
 
 A sample batch endpoint for Go is available in our [TODO sample app](https://github.com/rocicorp/replicache-sample-todo/blob/master/serve/handlers/batch/batch.go).
 
-### Step 6: 🎉🎉
+### Step 6: Example
+
+Here's a bash transcript demonstrating a series of requests Replicache might make against our [sample TODO app](https://github.com/rocicorp/replicache-sample-todo):
+
+```bash
+BATCH=https://replicache-sample-todo.now.sh/serve/replicache-batch
+CLIENT_VIEW=https://replicache-sample-todo.now.sh/serve/replicache-client-view
+NEW_USER_EMAIL=$RANDOM@foo.com
+PLATFORM=darwin-amd64 # or linux-amd64
+
+# Start diffs talking to TODO service
+./$PLATFORM/diffs --db=/tmp/foo serve --client-view=$CLIENT_VIEW &
+
+# Create a new user
+curl -d "{\"email\":\"$NEW_USER_EMAIL\"}" https://replicache-sample-todo.now.sh/serve/login
+
+USER_ID=<user-id-from-prev-cmd>
+CLIENT_ID=$RANDOM
+LIST_ID=$RANDOM
+TODO_ID=$RANDOM
+
+# Create a first list and todo
+curl -H "Authorization:$USER_ID" 'https://replicache-sample-todo.now.sh/serve/replicache-batch' --data-binary @- << EOF
+{
+    "clientID": "$CLIENT_ID",
+    "mutations": [
+        {
+            "id": 1,
+            "name": "createList",
+            "args": {
+                "id": $LIST_ID
+            }
+        },
+        {
+            "id": 2,
+            "name": "createTodo",
+            "args": {
+                "id": $TODO_ID,
+                "listID": $LIST_ID,
+                "text": "Walk the dog",
+                "order": 0.5,
+                "complete": false
+            }
+        }
+    ]
+}
+EOF
+
+# Do an initial pull from diff-server
+curl -H "Authorization:sandbox" http://localhost:7001/pull --data-binary @- << EOF
+{
+  "clientID":"$CLIENT_ID",
+  "baseStateID":"00000000000000000000000000000000",
+  "checksum":"00000000",
+  "clientViewAuth": "$USER_ID"
+}
+EOF
+
+BASE_STATE_ID=<stateID from prev response>
+CHECKSUM=<checksum from prev response>
+
+# Create a second TODO
+# Do this one via the classic REST API, circumventing Replicache entirely
+TODO_ID=$RANDOM
+curl -H "Authorization:$USER_ID" https://replicache-sample-todo.now.sh/serve/todo-create --data-binary @- << EOF
+{
+  "id": $TODO_ID,
+  "listID": $LIST_ID,
+  "text": "Take out the trash",
+  "complete": false,
+  "order": 0.75
+}
+EOF
+
+# Do an incremental pull from diff-server
+# Note that only the second todo is returned
+curl -H "Authorization:sandbox" http://localhost:7001/pull --data-binary @- << EOF
+{
+  "clientID":"$CLIENT_ID",
+  "baseStateID":"$BASE_STATE_ID",
+  "checksum":"$CHECKSUM",
+  "clientViewAuth": "$USER_ID"
+}
+EOF
+
+fg
+```
+
+### Step 7: 🎉🎉
 
 That's it! You're done with the backend integration. If you haven't yet, you'll need to do the [client integration](#client-side) next.
 
