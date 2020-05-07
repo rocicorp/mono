@@ -48,7 +48,7 @@ The format of the Client View is JSON that matches the following [JSON Schema](h
 {
   "type": "object",
   "properties": {
-    // The last Replicache Mutation ID that your service has processed.
+    // The last Replicache Mutation ID that your service has processed. See Step 4 and 5 for more information.
     "lastMutationID": {"type": "integer", "minimum": 0},
 
     // An arbitrary map of key/value pairs. Any JSON type is legal for each value.
@@ -180,8 +180,7 @@ If you use e.g., Postgres, for your user data, you might store Replicache Change
 
 ### Step 5: Upstream Sync
 
-Replicache implements upstream sync by queuing calls to your existing server-side endpoints. Queued calls are invoked when
-there's connectivity in batches. By default Replicache posts the batch to `https://yourdomain.com/replicache-batch`.
+Replicache implements upstream sync by queuing calls to your service on the client-side and uploading them in batches. By default Replicache posts these batches to `https://yourdomain.com/replicache-batch`.
 
 The payload of the batch request is JSON matching the JSON Schema:
 
@@ -288,25 +287,22 @@ For example:
 }
 ```
 
-Notes on correctly implementing the batch endpoint:
+The response to the batch endpoint is **completely informational**. It is not used programmatically by Replicache. However, Replicache does dump it to the developer console for debugging purposes.
 
-* Replicache can end up sending the same mutation multiple times. You **MUST** ensure mutation handlers are [idempotent](https://en.wikipedia.org/wiki/Idempotence#Computer_science_meaning). We recommend that you use the provided MutationID for idempotency (see pseudocode below).
-* If a request cannot be handled temporarily (e.g., because some backend component is down), return the result `"RETRY"` and stop processing the batch. Replicache will retry the remainder of the batch later.
-* Once the batch endpoint returns `OK` for a mutation, that mutation **MUST** eventually be processed and reflected in the ClientView. In simple systems this will happen immediately. But it OK for processing to also be queued, as long as it does eventually happen.
+#### Implementing the Batch Endpoint
 
-TODO: Add some links to sample code here.
+The batch endpoint receives a batch of mutation requests and applies them one by one, reporting any errors back to the client. There are some sublteties to be aware of, though:
 
-### Step 6: Include the Last Processed Mutation ID in the Client View
+* Replicache can send duplicate mutations — this is common when the network is spotty. This is why you are storing the last processed mutation ID: You **MUST** skip mutations you have already seen.
+* Generally, mutations for a given client **SHOULD** be processed serially and in-order to achieve causal consistency. However if you have special knowledge that pairs of mutations are commutative, you can process them in parallel.
+* Each mutation **MUST** eventually be acknowledged by your service, by updating the stored `lastMutationID` value for the client and returning it in the client view.
+  * If a mutation can't be processed temporarily, simply return early from the batch without updating `lastMutationID`. Replicache will retry the mutation later.
+  * If a mutation can't be processed permanently (e.g., the request is invalid), mark the mutation processed by udpating the stored `lastMutationID`, then continue with other mutations.
+* You must update `lastMutationID` atomically with handling the mutation, otherwise the state reported to the client can be inconsistent.
 
-In Step 2, we hardcoded `lastMutationID` to zero.
+A sample batch endpoint for Go is available in our [TODO sample app](https://github.com/rocicorp/replicache-sample-todo/blob/master/serve/handlers/batch/batch.go).
 
-Now we're going to return the correct value so that the client can discard pending mutations that have been applied to the client view. For our simple batch endpoint pseudocode above, this would just be:
-
-```
-response.lastMutationID = getLastMutationID()
-```
-
-### Step 7: 🎉🎉
+### Step 6: 🎉🎉
 
 That's it! You're done with the backend integration. If you haven't yet, you'll need to do the [client integration](#client-side) next.
 
