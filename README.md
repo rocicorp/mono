@@ -199,18 +199,16 @@ The payload of the batch request is JSON matching the JSON Schema:
         "type": "object",
         "properties": {
           "id": {
-            "type": "int",
-            "minimum": 0
+            "type": "integer",
+            "minimum": 1
           },
-          "path": {
+          "name": {
             "type": "string",
             "minLength": 1
           },
-          "payload": {
-            "type": "string"
-          }
+          "args": {},
         },
-        "required": ["id", "path", "payload"]
+        "required": ["id", "name", "args"]
       }
     }
   },
@@ -226,13 +224,21 @@ For example, here is an example POST to our TODO example app backend.
   "mutations": [
     {
       "id": 7,
-      "path": "/api/todo/create",
-      "payload": "{\"id\": \"AE2E880D-C4BD-473A-B5E0-29A4A9965EE9\", \"title\": \"Take out the trash\", ..."
+      "name": "todoCreate",
+      "args": {
+        "id": "AE2E880D-C4BD-473A-B5E0-29A4A9965EE9",
+        "text": "Take out the trash",
+        "order": 0.5,
+        "complete": false
+      }
     },
     {
       "id": 8,
-      "path": "/api/todo/toggle-done",
-      "payload": "{\"id\": \"AE2E880D-C4BD-473A-B5E0-29A4A9965EE9\", \"done\": true}"
+      "name": "todoUpdate",
+      "args": {
+        "id": "AE2E880D-C4BD-473A-B5E0-29A4A9965EE9",
+        "complete": true
+      }
     },
     ...
   ]
@@ -243,9 +249,9 @@ The response format matches the schema:
 
 ```json
 {
-  "type": "object",
+  "type": "array",
   "properties": {
-    "mutations": {
+    "mutationInfos": {
       "type": "array",
       "items": {
         "type": "object",
@@ -254,39 +260,30 @@ The response format matches the schema:
             "type": "int",
             "minimium": 0,
           },
-          "result": {
-            "type": "string"
-          },
-          "message": {
+          "error": {
             "type": "string"
           }
         },
-        "required": ["id", "result", "message"]
+        "required": ["id"]
       }
     }
   },
-  "required": ["mutations"]
+  "required": ["mutationInfos"]
 ```
 
 For example:
 
 ```json
 {
-  "mutations": [
-    {
-      "id": 7,
-      "result": "OK"
-    },
+  "mutationInfos": [
     {
       "id": 8,
-      "result": "ERROR",
-      "message": "Invalid POST data: syntax error: ..."
+      "error": "Invalid POST data: syntax error: ..."
     },
     {
       "id": 9,
-      "result": "RETRY",
-      "message": "Backend unavailable"
-    },
+      "error": "Backend unavailable"
+    }
   ]
 }
 ```
