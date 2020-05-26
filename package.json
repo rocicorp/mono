@@ -1,0 +1,25 @@
+{
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "format": "prettier --write 'src/**/*.ts'",
+    "lint": "eslint",
+    "doc": "typedoc --name Replicache --mode modules --exclude node_modules --exclude src/*.test.ts --excludeNotExported --excludePrivate --out docs --excludeExternals src/replicache.ts",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "build:cjs": "txc --outDir out.cjs --module CommonJS"
+  },
+  "devDependencies": {
+    "@types/jest": "^25.2.3",
+    "@typescript-eslint/eslint-plugin": "^3.0.2",
+    "@typescript-eslint/parser": "^3.0.2",
+    "eslint": "^7.1.0",
+    "jest": "^26.0.1",
+    "node-fetch": "^2.6.0",
+    "prettier": "^2.0.0",
+    "ts-jest": "^26.0.0",
+    "typedoc": "^0.17.7",
+    "typescript": "^3.9.3",
+    "@types/node-fetch": "^2.5.7"
+  }
+}

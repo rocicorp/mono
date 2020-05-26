@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "isolatedModules": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+
+    "importsNotUsedAsValues": "error",
+
+    "declaration": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "outDir": "out"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist/**/*", "build/**/*"]
+}
