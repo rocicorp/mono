@@ -6,7 +6,7 @@ Though simple, this sample app includes the main challenges common to SaaS appli
 
 This walkthrough will show how Replicache makes it easy to add offline-first to these types of apps. It should take a few hours to work through, and another half day to a day or so to start to apply to your own system.
 
-Questions? Comments? We'd love to help you evaluate Replicache — [Join us on Slack](https://join.slack.com/t/rocicorp/shared_invite/zt-dcez2xsi-nAhW1Lt~32Y3~~y54pMV0g). 
+Questions? Comments? We'd love to help you evaluate Replicache — [Join us on Slack](https://join.slack.com/t/rocicorp/shared_invite/zt-ekh3oxbq-FzzB7qP9lwqdTvBjxXU2oA). 
 You can also refer to our fully-functional [TODO sample application](https://github.com/rocicorp/replicache-sample-todo). For information about contributing, see our [contributing guide](contributing.md).
 
 **Note:** This document assumes you already know what Replicache is, why you might need it, and broadly how it works. If that's not true, see the [Replicache homepage](https://replicache.dev) for an overview, or the [design document](design.md) for a detailed deep-dive.
