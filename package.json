@@ -1,4 +1,6 @@
 {
+  "name": "replicache",
+  "version": "0.0.1",
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",
@@ -21,5 +23,7 @@
     "typedoc": "^0.17.7",
     "typescript": "^3.9.3",
     "@types/node-fetch": "^2.5.7"
-  }
+  },
+  "module": "out/mod.js",
+  "main": "out.cjs/mod.js"
 }
