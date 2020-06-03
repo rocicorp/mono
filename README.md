@@ -27,16 +27,7 @@ Currently we only support Flutter clients. See the [Replicache Flutter SDK](http
 
 On the server-side you will add two custom endpoints that Replicache will call to synchronize with your service.
 
-### Step 1: Get the SDK
-
-Download the Replicache SDK, then unzip it:
-
-```bash
-curl -o replicache-sdk.tar.gz -L https://github.com/rocicorp/replicache/releases/latest/download/replicache-sdk.tar.gz
-tar xvzf replicache-sdk.tar.gz
-```
-
-### Step 2: Downstream Sync
+### Step 1: Downstream Sync
 
 Implement a *Client View* endpoint on your service that returns the data that should be available locally on the client for each user. This endpoint should return the *entire* view every time it is requested.
 
@@ -90,11 +81,21 @@ Most applications return a Client View that is specific to the calling user. Rep
 
 All responses other than HTTP 200 with a valid JSON Client View and HTTP 401 are treated as errors by the Diff Server. The Client View response is ignored and the app is sent the last known state instead.
 
-### Step 3: Test Downstream Sync
+### Step 2: Test Downstream Sync
 
-You can simulate the client syncing downstream with `curl`.
+Download diff-server:
 
-First start a development diff-server:
+```bash
+# For OSX
+curl -o diffs -L https://github.com/rocicorp/diff-server/releases/latest/download/diffs-osx
+chmod u+x diffs
+
+# For Linux
+curl -o diffs -L https://github.com/rocicorp/diff-server/releases/latest/download/diffs-linux
+chmod u+x diffs
+```
+
+Run it:
 
 ```bash
 # The --client-view parameter should point to the Client View endpoint you implemented above.
@@ -121,7 +122,7 @@ http://localhost:7001/pull
 
 You'll get a response that includes only the diff!
 
-### Step 4: Mutation ID Storage
+### Step 3: Mutation ID Storage
 
 Next up: Writes.
 
@@ -147,7 +148,7 @@ If you use e.g., Postgres, for your user data, you might store Replicache Change
   </tr>
 </table>
 
-### Step 5: Upstream Sync
+### Step 4: Upstream Sync
 
 Replicache implements upstream sync by queuing calls to your service on the client-side and uploading them in batches. By default Replicache posts these batches to `https://yourdomain.com/replicache-batch`.
 
@@ -271,7 +272,7 @@ Conceptually, the batch endpoint receives an ordered batch of mutation requests 
 
 A sample batch endpoint for Go is available in our [TODO sample app](https://github.com/rocicorp/replicache-sample-todo/blob/master/serve/handlers/batch/batch.go).
 
-### Step 6: Example
+### Step 5: Example
 
 Here's a bash transcript demonstrating a series of requests Replicache might make against our [sample TODO app](https://github.com/rocicorp/replicache-sample-todo):
 
@@ -359,7 +360,7 @@ EOF
 fg
 ```
 
-### Step 7: 🎉🎉
+### Step 6: 🎉🎉
 
 That's it! You're done with the backend integration. If you haven't yet, you'll need to do the [client integration](#client-side) next.
 
