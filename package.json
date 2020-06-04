@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "@types/jest": "^25.2.3",
+    "@types/node-fetch": "^2.5.7",
     "@typescript-eslint/eslint-plugin": "^3.0.2",
     "@typescript-eslint/parser": "^3.0.2",
     "eslint": "^7.1.0",
@@ -22,7 +23,7 @@
     "ts-jest": "^26.0.0",
     "typedoc": "^0.17.7",
     "typescript": "^3.9.3",
-    "@types/node-fetch": "^2.5.7"
+    "web-streams-polyfill": "^2.1.1"
   },
   "module": "out/mod.js",
   "main": "out.cjs/mod.js"
