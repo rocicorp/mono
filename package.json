@@ -9,7 +9,9 @@
     "doc": "typedoc --name Replicache --mode modules --exclude node_modules --exclude src/*.test.ts --excludeNotExported --excludePrivate --out docs --excludeExternals src/replicache.ts",
     "build": "tsc",
     "build:watch": "tsc --watch",
-    "build:cjs": "txc --outDir out.cjs --module CommonJS"
+    "build:cjs": "txc --outDir out.cjs --module CommonJS",
+    "build:testServer": "tool/build.sh",
+    "start:testServer": "build/replicache-client/test_server"
   },
   "devDependencies": {
     "@types/jest": "^25.2.3",
