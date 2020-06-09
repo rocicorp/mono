@@ -12,6 +12,10 @@ Eventually you will be able to `npm install` but until then...
 
 ## Building the code
 
+### Get the Code
+
+Download the [latest release](https://github.com/rocicorp/replicache-sdk-js/releases) from Github. It's important to get the typescript and binary from a release to ensure you have the correct version of the binary.
+
 ### Build the JS
 
 Replicache JS SDK is written in TypeScript. Run `npm run build` to generate the JS source code (JS source is outputted in `out/`). By default we generate browser compatible JS but you can also build CommonJS modules by running `npm run build:cjs`. Let us know what your needs are.
