@@ -28,5 +28,6 @@
     "web-streams-polyfill": "^2.1.1"
   },
   "module": "out/mod.js",
-  "main": "out.cjs/mod.js"
+  "main": "out.cjs/mod.js",
+  "dependencies": {}
 }
