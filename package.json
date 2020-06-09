@@ -6,7 +6,7 @@
     "test:watch": "jest --watch",
     "format": "prettier --write 'src/**/*.ts'",
     "lint": "eslint --ext .ts src/",
-    "doc": "typedoc --name Replicache --mode library --exclude node_modules --exclude src/*.test.ts --excludeNotExported --excludePrivate --out docs --excludeExternals src/mod.ts",
+    "doc": "typedoc --name Replicache --mode library --exclude node_modules --exclude src/*.test.ts --excludeNotExported --excludePrivate --excludeProtected --out docs --excludeExternals src/mod.ts",
     "build": "tsc",
     "build:watch": "tsc --watch",
     "build:cjs": "txc --outDir out.cjs --module CommonJS",
