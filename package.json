@@ -6,7 +6,7 @@
     "test:watch": "jest --watch",
     "format": "prettier --write 'src/**/*.ts'",
     "lint": "eslint --ext .ts src/",
-    "doc": "typedoc --name Replicache --mode modules --exclude node_modules --exclude src/*.test.ts --excludeNotExported --excludePrivate --out docs --excludeExternals --excludeProtected src/replicache.ts",
+    "doc": "typedoc --name Replicache --mode library --exclude node_modules --exclude src/*.test.ts --excludeNotExported --excludePrivate --out docs --excludeExternals src/mod.ts",
     "build": "tsc",
     "build:watch": "tsc --watch",
     "build:cjs": "txc --outDir out.cjs --module CommonJS",
@@ -23,7 +23,7 @@
     "node-fetch": "^2.6.0",
     "prettier": "^2.0.0",
     "ts-jest": "^26.0.0",
-    "typedoc": "^0.17.7",
+    "typedoc": "^0.17.0-3",
     "typescript": "^3.9.3",
     "web-streams-polyfill": "^2.1.1"
   },
