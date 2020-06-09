@@ -9,7 +9,7 @@
     "doc": "typedoc --name Replicache --mode library --exclude node_modules --exclude src/*.test.ts --excludeNotExported --excludePrivate --excludeProtected --out docs --excludeExternals src/mod.ts",
     "build": "tsc",
     "build:watch": "tsc --watch",
-    "build:cjs": "txc --outDir out.cjs --module CommonJS",
+    "build:cjs": "tsc --outDir out.cjs --module CommonJS",
     "build:testServer": "tool/build.sh",
     "start:testServer": "build/replicache-client/test_server"
   },
