@@ -44,10 +44,16 @@ To use `Replicache` you currently have to tell it how to invoke the **Rep**licac
 
 ```js
 const diffServerURL = 'https://serve.replicache.dev/pull';
+const diffServerAuth = '<your diff-server account ID>';
+const batchURL = 'https://youservice.com/replicache-batch';
+const dataLayerAuth = '<your data-layer auth token>';
 const repmInvoker = new REPMHTTPInvoker('http://localhost:7002');
 const repmInvoke = repmInvoker.invoke;
 const replicache = new Replicache({
   diffServerURL,
+  diffServerAuth,
+  batchURL,
+  dataLayerAuth,
   repmInvoke,
 });
 await replicache.query(async tx => {
