@@ -9,7 +9,7 @@
     "doc": "typedoc --name Replicache --mode library --exclude node_modules --exclude src/*.test.ts --excludeNotExported --excludePrivate --excludeProtected --out docs --excludeExternals src/mod.ts",
     "build": "tsc",
     "build:watch": "tsc --watch",
-    "build:cjs": "tsc --outDir out.cjs --module CommonJS --target ES2018",
+    "build:cjs": "tsc --outDir out.cjs --module CommonJS",
     "build:testServer": "tool/build.sh",
     "start:testServer": "build/replicache-client/test_server"
   },
@@ -24,8 +24,7 @@
     "prettier": "^2.0.0",
     "ts-jest": "^26.0.0",
     "typedoc": "^0.17.0-3",
-    "typescript": "^3.9.3",
-    "web-streams-polyfill": "^2.1.1"
+    "typescript": "^3.9.3"
   },
   "module": "out/mod.js",
   "main": "out.cjs/mod.js",
