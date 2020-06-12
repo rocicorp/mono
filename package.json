@@ -10,8 +10,8 @@
     "build": "tsc",
     "build:watch": "tsc --watch",
     "build:cjs": "tsc --outDir out.cjs --module CommonJS",
-    "build:testServer": "tool/build.sh",
-    "start:testServer": "build/replicache-client/test_server"
+    "build:test-server": "tool/build.sh",
+    "start:test-server": "./test-server --no-fake-time"
   },
   "devDependencies": {
     "@types/jest": "^25.2.3",

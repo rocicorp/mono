@@ -12,25 +12,26 @@ Eventually you will be able to `npm install` but until then...
 
 ## Building the code
 
-### Get the Code
-
-Download the [latest release](https://github.com/rocicorp/replicache-sdk-js/releases) from Github. It's important to get the typescript and binary from a release to ensure you have the correct version of the binary.
-
 ### Build the JS
 
 Replicache JS SDK is written in TypeScript. Run `npm run build` to generate the JS source code (JS source is outputted in `out/`). By default we generate browser compatible JS but you can also build CommonJS modules by running `npm run build:cjs`. Let us know what your needs are.
 
-## Run the binary
+### Get `test-server`
 
-The Replicache Client binary was originally developed as a quick way to test the Replicache Client API. Eventually we will use a WASM version or have Electron/NodeJS start the binary automatically. But for now we need to manually start it.
+The Replicache JS SDK currently relies on a native local binary, 
+`test-server`. This is a temporary limitation and will be fixed. Fetch 
+the corect version of the binary with: `npm run build:test-server`. 
+Re-run this whenever you update the SDK code.
+
+## Run `test-server`
+
+You'll need to leave this running in a tab while you're using the SDK:
 
 ```sh
-./repm-{arch}-{platform} --no-fake-time
+npm run start:test-server
 ```
 
-This starts an HTTP server on port 7002 (by default, use `--port` to change.)
-
-We need to use the `--no-fake-time` flag for now or all the timestamps will be using a fake time.
+This starts an HTTP server on port 7002.
 
 # Including the JS
 
