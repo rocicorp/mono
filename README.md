@@ -46,7 +46,7 @@ running in a tab:
 ```bash
 # The --client-view flag should point to the Client View endpoint
 # on your development data layer.
-npm run start:diff-server --client-view="http://localhost:3000/replicache-client-view"
+npm run start:diff-server -- --client-view="http://localhost:3000/replicache-client-view"
 ```
 
 ### Including the JS
