@@ -3,3 +3,6 @@ node_modules
 out
 out.cjs
 build
+test-server
+diff-server
+

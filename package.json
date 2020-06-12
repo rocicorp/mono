@@ -10,8 +10,9 @@
     "build": "tsc",
     "build:watch": "tsc --watch",
     "build:cjs": "tsc --outDir out.cjs --module CommonJS",
-    "build:test-server": "tool/build.sh",
-    "start:test-server": "./test-server --no-fake-time"
+    "build:binaries": "tool/build.sh",
+    "start:test-server": "./test-server --no-fake-time",
+    "start:diff-server": "./diff-server --db=/tmp/db serve"
   },
   "devDependencies": {
     "@types/jest": "^25.2.3",
