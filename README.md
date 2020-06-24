@@ -23,4 +23,4 @@ Things that do matter:
 
 ### Why is a project called "repc" written in Rust?
 
-Yeah. It standard for "Replicache Client". Eventually, this project will probably just be renamed to "replicache" and take over the root repository.
+Yeah. It stands for "Replicache Client". Eventually, this project will probably just be renamed to "replicache" and take over the root repository.
