@@ -2,7 +2,7 @@
 
 This is a Rust port of [replicache-client](https://github.com/rocicorp/replicache-client).
 
-# Initial Goals
+## Initial Goals
 
 The initial strategy is to move fast and get all the way through to a drop-in replacement to replicache-client as quickly as possible.
 
@@ -18,3 +18,9 @@ Things that do matter:
  * Continuous tests
  * Basic Perf Benchmarks (just so we know where we are, espec relative to Go)
  * Monitoring of WASM bundle size
+
+## FAQ
+
+### Why is a project called "repc" written in Rust?
+
+Yeah. It standard for "Replicache Client". Eventually, this project will probably just be renamed to "replicache" and take over the root repository.
