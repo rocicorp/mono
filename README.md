@@ -26,7 +26,12 @@ implements the guts of the sync protocol on the client side. This is
 temporary and will be removed.
 
 For now, you must have this server running whenever you are working
-with the SDK: `npm run start:test-server`.
+with the SDK:
+
+```
+mkdir ~/.repm
+npm run start:test-server -- --storage-dir=$HOME/.repm
+```
 
 ### Start your Data Layer
 

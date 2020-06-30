@@ -12,7 +12,7 @@
     "build:cjs": "tsc --outDir out.cjs --module CommonJS",
     "build:binaries": "tool/build.sh",
     "start:test-server": "./test-server --no-fake-time",
-    "start:diff-server": "./diff-server --db=/tmp/db serve"
+    "start:diff-server": "./diff-server --db=/tmp/diffs serve"
   },
   "devDependencies": {
     "@types/jest": "^25.2.3",
