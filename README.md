@@ -4,7 +4,7 @@
 
 ## Development Instructions
 
-Eventually you will be able to `npm install` but until then...
+At the moment we haven't published this to npm. Until then you can add a `file:` or as a github dependency.
 
 ### Get the Code
 
