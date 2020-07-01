@@ -37,6 +37,7 @@
   "dependencies": {},
   "files": [
     "out",
-    "out.cjs"
+    "out.cjs",
+    "tool/build.sh"
   ]
 }
