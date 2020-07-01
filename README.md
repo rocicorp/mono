@@ -4,11 +4,11 @@
 
 ## Development Instructions
 
-Eventually you will be able to `npm install` but until then...
+At the moment we haven't published this to npm. Until then you can `git clone` `replicache-sdk-js` and add a `file:` dependency.
 
 ### Get the Code
 
-Either by `npm install`'ing the git repo, cloning it, or downloading a 
+Either by `npm install`'ing the git repo, cloning it, or downloading a
 release.
 
 ### Build the JS
@@ -17,7 +17,7 @@ Replicache JS SDK is written in TypeScript. Run `npm run build` to generate the 
 
 ### Get Binaries
 
-Download required helper binaries: `npm run build:binaries`. Do this again whenever you update the SDK.
+The binaries are downloaded when you do `npm install`. If for some reason you need to redownload these you can manually run `tool/build.sh`. Do this again whenever you update the SDK.
 
 ### Run `test-server`
 
@@ -30,7 +30,7 @@ with the SDK:
 
 ```
 mkdir ~/.repm
-npm run start:test-server -- --storage-dir=$HOME/.repm
+npx test-server --storage-dir=$HOME/.repm
 ```
 
 ### Start your Data Layer
@@ -44,22 +44,22 @@ running on `localhost:3000`.
 
 In production, your app will talk to the production Replicache diff-server at https://serve.replicache.dev/.
 
-During development, that sever can't reach your workstation, so we
+During development, that server can't reach your workstation, so we
 provide a development instance to work against instead. Leave this
 running in a tab:
 
 ```bash
 # The --client-view flag should point to the Client View endpoint
 # on your development data layer.
-npm run start:diff-server -- --client-view="http://localhost:3000/replicache-client-view"
+npx diff-server --client-view="http://localhost:3000/replicache-client-view"
 ```
 
 ### Including the JS
 
-By default we only compile the TS to an ES module.
+It is recommended to use ES modules (but we also include CommonJS for backwards compat).
 
 ```js
-import Replicache, {REPMHTTPInvoker} from './out/mod.js';
+import Replicache, {REPMHTTPInvoker} from 'replicache';
 ```
 
 To use `Replicache` you currently have to tell it how to invoke the **Rep**licache Client API **M**odule (REPM).
@@ -78,7 +78,6 @@ const replicache = new Replicache({
   dataLayerAuth,
   repmInvoke,
 });
-await replicache.query(async tx => {
-  console.log(await tx.get('/hello'));
-});
+const value = await replicache.query(tx => tx.get('/hello'));
+console.log(value);
 ```
