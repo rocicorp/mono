@@ -17,7 +17,7 @@ Replicache JS SDK is written in TypeScript. Run `npm run build` to generate the 
 
 ### Get Binaries
 
-Download required helper binaries: `npm run build:binaries`. Do this again whenever you update the SDK.
+The binaries are downloaded when you do `npm install`. If for some reason you need to redownload these you can manully run `tool/build.sh`. Do this again whenever you update the SDK.
 
 ### Run `test-server`
 
@@ -44,7 +44,7 @@ running on `localhost:3000`.
 
 In production, your app will talk to the production Replicache diff-server at https://serve.replicache.dev/.
 
-During development, that sever can't reach your workstation, so we
+During development, that server can't reach your workstation, so we
 provide a development instance to work against instead. Leave this
 running in a tab:
 
@@ -56,10 +56,10 @@ npx diff-server --client-view="http://localhost:3000/replicache-client-view"
 
 ### Including the JS
 
-By default we only compile the TS to an ES module.
+It is recommended to use ES modules (but we also include CommonJS for backwards compat).
 
 ```js
-import Replicache, {REPMHTTPInvoker} from './out/mod.js';
+import Replicache, {REPMHTTPInvoker} from 'replicache';
 ```
 
 To use `Replicache` you currently have to tell it how to invoke the **Rep**licache Client API **M**odule (REPM).
@@ -78,7 +78,6 @@ const replicache = new Replicache({
   dataLayerAuth,
   repmInvoke,
 });
-await replicache.query(async tx => {
-  console.log(await tx.get('/hello'));
-});
+const value = await replicache.query(tx => tx.get('/hello'));
+console.log(value);
 ```
