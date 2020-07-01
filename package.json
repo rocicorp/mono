@@ -13,7 +13,7 @@
     "start:test-server": "bin/test-server --no-fake-time",
     "start:diff-server": "bin/diff-server --db=/tmp/diffs serve",
     "postinstall": "tool/build.sh",
-    "prepublish": "tool/prepublish.js && npm run lint && npm run test && rm -rf out && npm run build && rm -rf out.cjs && npm run build:cjs"
+    "prepare": "tool/prepare.js && npm run lint && npm run test && rm -rf out && npm run build && rm -rf out.cjs && npm run build:cjs"
   },
   "bin": {
     "test-server": "bin/test-server",

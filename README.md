@@ -4,7 +4,7 @@
 
 ## Development Instructions
 
-At the moment we haven't published this to npm. Until then you can add a `file:` or as a github dependency.
+At the moment we haven't published this to npm. Until then you can `git clone` `replicache-sdk-js` and add a `file:` dependency.
 
 ### Get the Code
 
@@ -17,7 +17,7 @@ Replicache JS SDK is written in TypeScript. Run `npm run build` to generate the 
 
 ### Get Binaries
 
-The binaries are downloaded when you do `npm install`. If for some reason you need to redownload these you can manully run `tool/build.sh`. Do this again whenever you update the SDK.
+The binaries are downloaded when you do `npm install`. If for some reason you need to redownload these you can manually run `tool/build.sh`. Do this again whenever you update the SDK.
 
 ### Run `test-server`
 
