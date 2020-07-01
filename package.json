@@ -10,9 +10,14 @@
     "build": "tsc",
     "build:watch": "tsc --watch",
     "build:cjs": "tsc --outDir out.cjs --module CommonJS",
-    "build:binaries": "tool/build.sh",
-    "start:test-server": "./test-server --no-fake-time",
-    "start:diff-server": "./diff-server --db=/tmp/diffs serve"
+    "start:test-server": "bin/test-server --no-fake-time",
+    "start:diff-server": "bin/diff-server --db=/tmp/diffs serve",
+    "postinstall": "tool/build.sh",
+    "prepack": "tool/prepack.js && npm run lint && npm run test && npm run build && npm run build:cjs"
+  },
+  "bin": {
+    "test-server": "bin/test-server",
+    "diff-server": "bin/diff-server"
   },
   "devDependencies": {
     "@types/jest": "^25.2.3",
@@ -29,5 +34,9 @@
   },
   "module": "out/mod.js",
   "main": "out.cjs/mod.js",
-  "dependencies": {}
+  "dependencies": {},
+  "files": [
+    "out",
+    "out.cjs"
+  ]
 }

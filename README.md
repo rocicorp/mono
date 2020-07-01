@@ -8,7 +8,7 @@ Eventually you will be able to `npm install` but until then...
 
 ### Get the Code
 
-Either by `npm install`'ing the git repo, cloning it, or downloading a 
+Either by `npm install`'ing the git repo, cloning it, or downloading a
 release.
 
 ### Build the JS
@@ -30,7 +30,7 @@ with the SDK:
 
 ```
 mkdir ~/.repm
-npm run start:test-server -- --storage-dir=$HOME/.repm
+npx test-server --storage-dir=$HOME/.repm
 ```
 
 ### Start your Data Layer
@@ -51,7 +51,7 @@ running in a tab:
 ```bash
 # The --client-view flag should point to the Client View endpoint
 # on your development data layer.
-npm run start:diff-server -- --client-view="http://localhost:3000/replicache-client-view"
+npx diff-server --client-view="http://localhost:3000/replicache-client-view"
 ```
 
 ### Including the JS
