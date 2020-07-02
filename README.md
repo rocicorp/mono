@@ -1,52 +1,53 @@
 # Replicache JS SDK
 
+### Offline-First for Every Application
+
 ![Node.js CI](https://github.com/rocicorp/replicache-sdk-js/workflows/Node.js%20CI/badge.svg)
 
-## Development Instructions
+## Installation
 
-At the moment we haven't published this to npm. Until then you can `git clone` `replicache-sdk-js` and add a `file:` dependency.
+You can install Replicache JS SDK from npm.
 
-### Get the Code
+```
+npm install replicache
+```
 
-Either by `npm install`'ing the git repo, cloning it, or downloading a
-release.
+## Get Binaries
 
-### Build the JS
+The binaries are downloaded when you do `npm install`. If for some reason you
+need to redownload these you can manually run `tool/build.sh`. Do this again
+whenever you update the SDK.
 
-Replicache JS SDK is written in TypeScript. Run `npm run build` to generate the JS source code (JS source is outputted in `out/`). By default we generate browser compatible JS but you can also build CommonJS modules by running `npm run build:cjs`. Let us know what your needs are.
+## Run `test-server`
 
-### Get Binaries
+Currently, the JavaScript SDK relies on a native local server that implements
+the guts of the sync protocol on the client side. This is temporary and will be
+removed.
 
-The binaries are downloaded when you do `npm install`. If for some reason you need to redownload these you can manually run `tool/build.sh`. Do this again whenever you update the SDK.
-
-### Run `test-server`
-
-Currently, the JavaScript SDK relies on a native local server that
-implements the guts of the sync protocol on the client side. This is
-temporary and will be removed.
-
-For now, you must have this server running whenever you are working
-with the SDK:
+For now, you must have this server running whenever you are working with the
+SDK:
 
 ```
 mkdir ~/.repm
 npx test-server --storage-dir=$HOME/.repm
 ```
 
-### Start your Data Layer
+## Start your Data Layer
 
-See [Replicache Server Setup](https://github.com/rocicorp/replicache#server-side) for server-side instructions.
+See [Replicache Server
+Setup](https://github.com/rocicorp/replicache#server-side) for server-side
+instructions.
 
-For the rest of these instructions we will assume your data layer is
-running on `localhost:3000`.
+For the rest of these instructions we will assume your data layer is running on
+`localhost:3000`.
 
-### Start Diff-Server
+## Start Diff-Server
 
-In production, your app will talk to the production Replicache diff-server at https://serve.replicache.dev/.
+In production, your app will talk to the production Replicache diff-server at
+https://serve.replicache.dev/.
 
-During development, that server can't reach your workstation, so we
-provide a development instance to work against instead. Leave this
-running in a tab:
+During development, that server can't reach your workstation, so we provide a
+development instance to work against instead. Leave this running in a tab:
 
 ```bash
 # The --client-view flag should point to the Client View endpoint
@@ -54,15 +55,17 @@ running in a tab:
 npx diff-server --client-view="http://localhost:3000/replicache-client-view"
 ```
 
-### Including the JS
+## Including the JS
 
-It is recommended to use ES modules (but we also include CommonJS for backwards compat).
+It is recommended to use ES modules (but we also include CommonJS for backwards
+compat).
 
 ```js
 import Replicache, {REPMHTTPInvoker} from 'replicache';
 ```
 
-To use `Replicache` you currently have to tell it how to invoke the **Rep**licache Client API **M**odule (REPM).
+To use `Replicache` you currently have to tell it how to invoke the
+**Rep**licache Client API **M**odule (REPM). This implementation detail will be hidden/removed in the future.
 
 ```js
 const diffServerURL = 'https://serve.replicache.dev/pull';
