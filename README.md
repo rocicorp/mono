@@ -1,3 +1,5 @@
+![Go](https://github.com/rocicorp/repc/workflows/Rust/badge.svg)
+
 # repc
 
 This is a Rust port of [replicache-client](https://github.com/rocicorp/replicache-client).
