@@ -4,3 +4,5 @@ out
 out.cjs
 build
 .DS_Store
+repc
+src/wasm
