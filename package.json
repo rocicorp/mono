@@ -14,7 +14,7 @@
     "build:cjs": "tsc --outDir out.cjs --module CommonJS && rm -rf out/wasm && mkdir out/wasm && cp -R src/wasm/* out/wasm",
     "start:test-server": "bin/test-server --no-fake-time",
     "start:diff-server": "bin/diff-server --db=/tmp/diffs serve",
-    "postinstall": "tool/build.sh",
+    "postinstall": "tool/get-deps.sh",
     "prepublishOnly": "tool/validate-binaries-for-publish.js && npm run lint && npm run test && rm -rf out && npm run build && rm -rf out.cjs && npm run build:cjs"
   },
   "bin": {
@@ -41,6 +41,6 @@
   "files": [
     "out",
     "out.cjs",
-    "tool/build.sh"
+    "tool/get-deps.sh"
   ]
 }

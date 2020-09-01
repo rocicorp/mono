@@ -15,7 +15,7 @@ npm install replicache
 ## Get Binaries
 
 The binaries are downloaded when you do `npm install`. If for some reason you
-need to redownload these you can manually run `tool/build.sh`. Do this again
+need to redownload these you can manually run `tool/get-deps.sh`. Do this again
 whenever you update the SDK.
 
 ## Run `test-server`
