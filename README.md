@@ -20,7 +20,7 @@ npm install replicache
 
 ## 🚴🏿‍♀️ Instantiate
 
-Replicache ships with both ES6 and CommonJS modules. For simplicity, these examples use ES6.
+Replicache ships with both ES6 and CommonJS modules. For simplicity, these examples use ES6. Note that it is a good idea to [enable console persistence](http://devtoolsecrets.com/secret/console-persistent-console.html) across navigation for debugging purposes.
 
 ```html
 <script type='module'>
