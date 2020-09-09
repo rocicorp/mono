@@ -8,6 +8,8 @@
 
 This tutorial walks through creating a basic offline-first todo app with [Replicache](https://replicache.dev/). If you have any problems or questions, please [join us on Slack](https://join.slack.com/t/rocicorp/shared_invite/zt-h8ygwu8j-RVniv5XsBps0Q9oJXdMyoA). We'd be happy to help.
 
+You can also skip to the end and [check out the full working version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal).
+
 **Note:** This document assumes you already know what Replicache is, why you might need it, and broadly how it works. If that's not true check out the [design document](https://github.com/rocicorp/replicache/blob/master/design.md) for a detailed deep-dive.
 
 ## 🏃‍♂️ Install
@@ -91,6 +93,7 @@ const handleCheckbox = async (id, e) => {
 
 That's it! You've built a fully-functioning offline-first todo app against our sample backend. What will you do next?
 
+* [Check out the full version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/lit-todo)
 * [Learn how to build your own backend integration](https://github.com/rocicorp/replicache#server-side)
 * [Check out the richer React/Babel/GCal sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal)
 * [Browse the full JS documentation](https://replicache-sdk-js.now.sh/)
