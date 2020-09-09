@@ -32,7 +32,7 @@ Replicache ships with both ES6 and CommonJS modules. For simplicity, these examp
         // https://github.com/rocicorp/replicache#server-side for more
         // information on setting up your client view.
         diffServerURL: 'https://serve.replicache.dev/pull',
-        
+
         // Auth token for the diff server, if any.
         diffServerAuth: '1',
 
@@ -58,10 +58,10 @@ rep.subscribe(async tx => {
         // Using lit-html, but the principle is the same in any UI framework.
         // See https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal
         // for an example using React.
-        const toggle = complete => html`<td><input type=checkbox checked=${complete}/></td>`;
+        const toggle = complete => html`<td><input type=checkbox .checked=${complete}></td>`;
         const title = text => html`<td>${text}</td>`;
         const row = todo => html`<tr>${toggle(todo.complete)}${title(todo.text)}</tr>`;
-        return html`<table>${data.map(row)}</table>`;
+        render(html`<table>${result.map(row)}</table>`, document.body);
     },
 });
 ```
