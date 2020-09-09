@@ -4,83 +4,93 @@
 
 ![Node.js CI](https://github.com/rocicorp/replicache-sdk-js/workflows/Node.js%20CI/badge.svg)
 
-## Installation
+## 👋 Quickstart
 
-You can install Replicache JS SDK from npm.
+This tutorial walks through creating a basic offline-first todo app with [Replicache](https://replicache.dev/). If you have any problems or questions, please [join us on Slack](https://join.slack.com/t/rocicorp/shared_invite/zt-h8ygwu8j-RVniv5XsBps0Q9oJXdMyoA). We'd be happy to help.
+
+**Note:** This document assumes you already know what Replicache is, why you might need it, and broadly how it works. If that's not true check out the [design document](https://github.com/rocicorp/replicache/blob/master/design.md) for a detailed deep-dive.
+
+## 🏃‍♂️ Install
 
 ```
 npm install replicache
 ```
 
-## Get Binaries
+## 🚴🏿‍♀️ Instantiate
 
-The binaries are downloaded when you do `npm install`. If for some reason you
-need to redownload these you can manually run `tool/get-deps.sh`. Do this again
-whenever you update the SDK.
+Replicache ships with both ES6 and CommonJS modules. For simplicity, these examples use ES6.
 
-## Run `test-server`
+```html
+<script type='module'>
+    import Replicache from './node_modules/replicache/out/mod.js';
 
-Currently, the JavaScript SDK relies on a native local server that implements
-the guts of the sync protocol on the client side. This is temporary and will be
-removed.
+    var rep = new Replicache({
+        // URL of the diff server to use. The diff server periodically fetches
+        // the "client view" from your service and forwards any delta to the
+        // client. You can use our hosted diff server (as here) or a local diff
+        // server, which is useful during development. See
+        // https://github.com/rocicorp/replicache#server-side for more
+        // information on setting up your client view.
+        diffServerURL: 'https://serve.replicache.dev/pull',
+        
+        // Auth token for the diff server, if any.
+        diffServerAuth: '1',
 
-For now, you must have this server running whenever you are working with the
-SDK:
+        // URL of your service's Replicache batch endpoint. Replicache
+        // will send batches of mutations here for application.
+        batchURL: 'https://replicache-sample-todo.now.sh/serve/replicache-batch',
 
-```
-mkdir ~/.repm
-npx test-server --storage-dir=$HOME/.repm
-```
-
-## Start your Data Layer
-
-See [Replicache Server
-Setup](https://github.com/rocicorp/replicache#server-side) for server-side
-instructions.
-
-For the rest of these instructions we will assume your data layer is running on
-`localhost:3000`.
-
-## Start Diff-Server
-
-In production, your app will talk to the production Replicache diff-server at
-https://serve.replicache.dev/.
-
-During development, that server can't reach your workstation, so we provide a
-development instance to work against instead. Leave this running in a tab:
-
-```bash
-# The --client-view flag should point to the Client View endpoint
-# on your development data layer.
-npx diff-server --client-view="http://localhost:3000/replicache-client-view"
+        // Auth token for your client view and batch endpoints, if any.
+        dataLayerAuth: '2',
+    });
+</script>
 ```
 
-## Including the JS
+## 🚗 Render UI
 
-It is recommended to use ES modules (but we also include CommonJS for backwards
-compat).
+Use `subscribe()` to open standing queries. Replicache fires `onData` whenever the result of the query changes, either because of local changes or sync.
 
 ```js
-import Replicache, {REPMHTTPInvoker} from 'replicache';
-```
-
-To use `Replicache` you currently have to tell it how to invoke the
-**Rep**licache Client API **M**odule (REPM). This implementation detail will be hidden/removed in the future.
-
-```js
-const diffServerURL = 'https://serve.replicache.dev/pull';
-const diffServerAuth = '<your diff-server account ID>';
-const batchURL = 'https://youservice.com/replicache-batch';
-const dataLayerAuth = '<your data-layer auth token>';
-const repmInvoker = new REPMHTTPInvoker('http://localhost:7002');
-const repmInvoke = repmInvoker.invoke;
-const replicache = new Replicache({
-  diffServerURL,
-  diffServerAuth,
-  batchURL,
-  dataLayerAuth,
-  repmInvoke,
+rep.subscribe(async tx => {
+    return await toArray(tx.scan({ prefix: '/todo/' }));
+}, {
+    onData: result => {
+        // Using lit-html, but the principle is the same in any UI framework.
+        // See https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal
+        // for an example using React.
+        const toggle = complete => html`<td><input type=checkbox checked=${complete}/></td>`;
+        const title = text => html`<td>${text}</td>`;
+        const row = todo => html`<tr>${toggle(todo.complete)}${title(todo.text)}</tr>`;
+        return html`<table>${data.map(row)}</table>`;
+    },
 });
-const value = await replicache.query(tx => tx.get('/hello'));
-console.log(value);
 ```
+
+## 🏎 Mutate Data
+
+Register client-side *mutators* using `register()`.
+
+Mutators run completely locally, without waiting on the server — online, offline, whatever! A record of the mutation is queued and sent to your service's batch endpoint when possible.
+
+Replicache also invokes mutators itself, during sync, to replay unacknowledged changes on top of newly received server state.
+
+```js
+const updateTodo = rep.register('updateTodo', async (tx, { id, complete }) => {
+    const key = `/todo/${id}`;
+    const todo = await tx.get(key);
+    todo.complete = complete;
+    await tx.put(key, todo);
+});
+
+const handleCheckbox = async (id, e) => {
+    await updateTodo({ id, complete: e.srcElement.checked });
+}
+```
+
+## 🚀 Next Steps
+
+That's it! You've built a fully-functioning offline-first todo app against our sample backend. What will you do next?
+
+* [Learn how to build your own backend integration](https://github.com/rocicorp/replicache#server-side)
+* [Check out the richer React/Babel/GCal sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal)
+* [Browse the full JS documentation](https://replicache-sdk-js.now.sh/)
