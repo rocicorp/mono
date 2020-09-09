@@ -20,7 +20,7 @@ npm install replicache
 
 ## 🚴🏿‍♀️ Instantiate
 
-Replicache ships with both ES6 and CommonJS modules. For simplicity, these examples use ES6. Note that it is a good idea to [enable console persistence](http://devtoolsecrets.com/secret/console-persistent-console.html) across navigation for debugging purposes.
+Replicache ships with both ES6 and CommonJS modules. For simplicity, these examples use ES6.
 
 ```html
 <script type='module'>
@@ -88,6 +88,10 @@ const handleCheckbox = async (id, e) => {
     await updateTodo({ id, complete: e.srcElement.checked });
 }
 ```
+
+## 🛫 Tips
+
+*  We recommend [enabling console persistence](https://stackoverflow.com/questions/5327955/how-to-make-google-chrome-javascript-console-persistent) while developing replicache-enabled apps to make debugging easier.
 
 ## 🚀 Next Steps
 
