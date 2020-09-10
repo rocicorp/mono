@@ -6,7 +6,7 @@
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",
-    "format": "prettier --write 'src/**/*.ts'",
+    "format": "prettier --write '{src,sample}/**/*.{js,jsx,json,ts,tsx,html,css}'",
     "lint": "eslint --ext .ts src/",
     "doc": "typedoc --name Replicache --mode library --exclude node_modules --exclude src/*.test.ts --excludeNotExported --excludePrivate --excludeProtected --out docs --excludeExternals src/mod.ts",
     "build": "tsc && rm -rf out/wasm && mkdir out/wasm && cp -R src/wasm/* out/wasm",

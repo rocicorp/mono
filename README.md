@@ -23,28 +23,28 @@ npm install replicache
 Replicache ships with both ES6 and CommonJS modules. For simplicity, these examples use ES6.
 
 ```html
-<script type='module'>
-    import Replicache from './node_modules/replicache/out/mod.js';
+<script type="module">
+  import Replicache from './node_modules/replicache/out/mod.js';
 
-    var rep = new Replicache({
-        // URL of the diff server to use. The diff server periodically fetches
-        // the "client view" from your service and forwards any delta to the
-        // client. You can use our hosted diff server (as here) or a local diff
-        // server, which is useful during development. See
-        // https://github.com/rocicorp/replicache#server-side for more
-        // information on setting up your client view.
-        diffServerURL: 'https://serve.replicache.dev/pull',
+  var rep = new Replicache({
+    // URL of the diff server to use. The diff server periodically fetches
+    // the "client view" from your service and forwards any delta to the
+    // client. You can use our hosted diff server (as here) or a local diff
+    // server, which is useful during development. See
+    // https://github.com/rocicorp/replicache#server-side for more
+    // information on setting up your client view.
+    diffServerURL: 'https://serve.replicache.dev/pull',
 
-        // Auth token for the diff server, if any.
-        diffServerAuth: '1',
+    // Auth token for the diff server, if any.
+    diffServerAuth: '1',
 
-        // URL of your service's Replicache batch endpoint. Replicache
-        // will send batches of mutations here for application.
-        batchURL: 'https://replicache-sample-todo.now.sh/serve/replicache-batch',
+    // URL of your service's Replicache batch endpoint. Replicache
+    // will send batches of mutations here for application.
+    batchURL: 'https://replicache-sample-todo.now.sh/serve/replicache-batch',
 
-        // Auth token for your client view and batch endpoints, if any.
-        dataLayerAuth: '2',
-    });
+    // Auth token for your client view and batch endpoints, if any.
+    dataLayerAuth: '2',
+  });
 </script>
 ```
 
@@ -53,51 +53,63 @@ Replicache ships with both ES6 and CommonJS modules. For simplicity, these examp
 Use `subscribe()` to open standing queries. Replicache fires `onData` whenever the result of the query changes, either because of local changes or sync.
 
 ```js
-rep.subscribe(async tx => {
-    return await toArray(tx.scan({ prefix: '/todo/' }));
-}, {
+rep.subscribe(
+  async tx => {
+    return await toArray(tx.scan({prefix: '/todo/'}));
+  },
+  {
     onData: result => {
-        // Using lit-html, but the principle is the same in any UI framework.
-        // See https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal
-        // for an example using React.
-        const toggle = complete => html`<td><input type=checkbox .checked=${complete}></td>`;
-        const title = text => html`<td>${text}</td>`;
-        const row = todo => html`<tr>${toggle(todo.complete)}${title(todo.text)}</tr>`;
-        render(html`<table>${result.map(row)}</table>`, document.body);
+      // Using lit-html, but the principle is the same in any UI framework.
+      // See https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal
+      // for an example using React.
+      const toggle = complete =>
+        html`<td><input type="checkbox" .checked=${complete} /></td>`;
+      const title = text => html`<td>${text}</td>`;
+      const row = todo =>
+        html`<tr>
+          ${toggle(todo.complete)}${title(todo.text)}
+        </tr>`;
+      render(
+        html`<table>
+          ${result.map(row)}
+        </table>`,
+        document.body,
+      );
     },
-});
+  },
+);
 ```
 
 ## 🏎 Mutate Data
 
-Register client-side *mutators* using `register()`.
+Register client-side _mutators_ using `register()`.
 
 Mutators run completely locally, without waiting on the server — online, offline, whatever! A record of the mutation is queued and sent to your service's batch endpoint when possible.
 
 Replicache also invokes mutators itself, during sync, to replay unacknowledged changes on top of newly received server state.
 
 ```js
-const updateTodo = rep.register('updateTodo', async (tx, { id, complete }) => {
-    const key = `/todo/${id}`;
-    const todo = await tx.get(key);
-    todo.complete = complete;
-    await tx.put(key, todo);
+const updateTodo = rep.register('updateTodo', async (tx, {id, complete}) => {
+  const key = `/todo/${id}`;
+  const todo = await tx.get(key);
+  todo.complete = complete;
+  await tx.put(key, todo);
 });
 
 const handleCheckbox = async (id, e) => {
-    await updateTodo({ id, complete: e.srcElement.checked });
-}
+  await updateTodo({id, complete: e.srcElement.checked});
+};
 ```
 
 ## 🛫 Tips
 
-*  We recommend [enabling console persistence](https://stackoverflow.com/questions/5327955/how-to-make-google-chrome-javascript-console-persistent) while developing replicache-enabled apps to make debugging easier.
+- We recommend [enabling console persistence](https://stackoverflow.com/questions/5327955/how-to-make-google-chrome-javascript-console-persistent) while developing replicache-enabled apps to make debugging easier.
 
 ## 🚀 Next Steps
 
 That's it! You've built a fully-functioning offline-first todo app against our sample backend. What will you do next?
 
-* [Check out the full version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/lit-todo)
-* [Learn how to build your own backend integration](https://github.com/rocicorp/replicache#server-side)
-* [Check out the richer React/Babel/GCal sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal)
-* [Browse the full JS documentation](https://replicache-sdk-js.now.sh/)
+- [Check out the full version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/lit-todo)
+- [Learn how to build your own backend integration](https://github.com/rocicorp/replicache#server-side)
+- [Check out the richer React/Babel/GCal sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal)
+- [Browse the full JS documentation](https://replicache-sdk-js.now.sh/)
