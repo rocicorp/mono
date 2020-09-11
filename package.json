@@ -1,7 +1,7 @@
 {
   "name": "replicache",
   "description": "Offline-First for Every Application",
-  "version": "0.0.7",
+  "version": "0.1.0",
   "repository": "github:rocicorp/replicache-sdk-js",
   "scripts": {
     "test": "jest",
