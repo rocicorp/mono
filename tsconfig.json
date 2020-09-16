@@ -16,7 +16,8 @@
     "declaration": true,
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "node",
-    "outDir": "out"
+    "outDir": "out",
+    "allowJs": true
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist/**/*", "build/**/*"]
