@@ -17,7 +17,6 @@
     "prepublishOnly": "tool/validate-binaries-for-publish.js && npm run lint && npm run test && rm -rf out && npm run build && rm -rf out.cjs && npm run build:cjs"
   },
   "bin": {
-    "test-server": "bin/test-server",
     "diff-server": "bin/diff-server"
   },
   "devDependencies": {
