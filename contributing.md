@@ -13,7 +13,11 @@ to how to work together.
 
 * We subscribe heavily to the practice of [talk, then code](https://dave.cheney.net/2019/02/18/talk-then-code).
    * Foundational, tricky, or wide-reaching changes should be discussed ahead of time on an issue in order to maximize the chances that they land well. Typically this involves a discussion of requirements and constraints and a design sketch showing major interfaces and logic. ([example](https://github.com/rocicorp/replicache/issues/27), [example](https://github.com/rocicorp/replicache/issues/30))
-* We sometimes use [tags with these meanings](https://news.ycombinator.com/item?id=23027988) in code reviews
+* Code review
+   * Rocicorp partners prefer to get async after-merge code reviews. 
+      * Reviewer should review within 3 days.
+      * Reviewee should respond within 7 days.
+   * We sometimes use [tags with these meanings](https://news.ycombinator.com/item?id=23027988) in code reviews
 
 ### Legal
 
