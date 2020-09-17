@@ -7,6 +7,7 @@
     "test": "web-test-runner src/replicache.test.ts --playwright --browsers chromium firefox",
     "test:watch": "web-test-runner src/replicache.test.ts --playwright --browsers chromium firefox --watch",
     "format": "prettier --write '{src,sample}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
+    "check-format": "prettier --check '{src,sample}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts src/",
     "doc": "typedoc --name Replicache --mode library --exclude node_modules --exclude src/*.test.ts --excludeNotExported --excludePrivate --excludeProtected --out docs --excludeExternals src/mod.ts",
     "build": "tsc && rm -rf out/wasm && mkdir out/wasm && cp -R src/wasm/* out/wasm",
