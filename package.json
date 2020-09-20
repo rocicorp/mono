@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "repository": "github:rocicorp/replicache-sdk-js",
   "scripts": {
-    "test": "web-test-runner src/replicache.test.ts --playwright --browsers chromium",
+    "test": "web-test-runner src/replicache.test.ts --playwright --browsers chromium firefox",
     "test:watch": "web-test-runner src/replicache.test.ts --playwright --browsers chromium firefox webkit --watch",
     "format": "prettier --write '{src,sample}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check '{src,sample}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
@@ -14,7 +14,7 @@
     "build:watch": "tsc --watch",
     "build:cjs": "tsc --outDir out.cjs --module CommonJS && rm -rf out.cjs/wasm && mkdir out.cjs/wasm && cp -R src/wasm/* out.cjs/wasm",
     "start:diff-server": "bin/diff-server --db=/tmp/diffs serve",
-    "postinstall": "tool/get-deps.sh",
+    "postinstall": "rm -f node_modules/fetch-mock/esm/client.d.ts && tool/get-deps.sh",
     "prepublishOnly": "tool/validate-binaries-for-publish.js && npm run lint && npm run test && rm -rf out && npm run build && rm -rf out.cjs && npm run build:cjs"
   },
   "bin": {
@@ -30,6 +30,7 @@
     "@web/test-runner": "^0.7.23",
     "@web/test-runner-playwright": "^0.5.6",
     "eslint": "^7.1.0",
+    "fetch-mock": "^9.10.7",
     "prettier": "^2.0.0",
     "sinon": "^9.0.3",
     "typedoc": "^0.17.0-3",
