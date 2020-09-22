@@ -29,7 +29,7 @@ All contributors must sign a contributor agreement, either for an <a href="https
   * For our client-side software, this is bad practice because we frequently run in-process with our users and we will crash them too!
   * For our server-side software, this is bad practice because we will lose any other requests that were also in-flight on that server.
   * There are other types of software in which crashing early and often may be more appropriate, but for consistency and code reuse reasons we generally avoid crashing everywhere.
-* Use log levels consistently:
+* We use three log levels. Please employ them in a way that's consistent with the following semantics:
    * **ERROR**: something truly unexpected has happened **and a developer should go look**.
       * Examples that might be ERRORs:
          * an important invariant has been violated
@@ -49,6 +49,7 @@ All contributors must sign a contributor agreement, either for an <a href="https
       * Examples that probably are DEBUGs:
          * request and response content
          * some process is starting
+   * We do not use a warning level because warnings are typically not actionable and are mostly ignored. We prefer the developer to take a position: does the thing rise to the level that a developer should go do something about it or not? We do not use a trace level because we haven't yet found a use for it, and extra log levels are just confusing.
 
 ### Style (Go-specific)
 
