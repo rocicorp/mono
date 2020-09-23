@@ -104,6 +104,7 @@ const handleCheckbox = async (id, e) => {
 ## 🛫 Tips
 
 - We recommend [enabling console persistence](https://stackoverflow.com/questions/5327955/how-to-make-google-chrome-javascript-console-persistent) while developing replicache-enabled apps to make debugging easier.
+- Remember that data changes can happen "underneath" you and cause `subscribe()` to re-fire at any time. These changes can come from the server or from a different tab. If your UI is not reactive (driven solely by the data model) you need to take extra steps to ensure the UI is in sync with the data.
 
 ## 🚀 Next Steps
 
