@@ -4,8 +4,6 @@
 
 ![Node.js CI](https://github.com/rocicorp/replicache-sdk-js/workflows/Node.js%20CI/badge.svg)
 
-[Perf Data](https://raw.githack.com/rocicorp/replicache-sdk-js/perf-data/dev/bench/index.html)
-
 ## 👋 Quickstart
 
 This tutorial walks through creating a basic offline-first todo app with [Replicache](https://replicache.dev/). If you have any problems or questions, please [join us on Slack](https://join.slack.com/t/rocicorp/shared_invite/zt-h8ygwu8j-RVniv5XsBps0Q9oJXdMyoA). We'd be happy to help.
