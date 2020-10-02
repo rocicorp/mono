@@ -21,6 +21,17 @@ Things that do matter:
  * Basic Perf Benchmarks (just so we know where we are, espec relative to Go)
  * Monitoring of WASM bundle size
 
+
+## Release
+
+```
+go tag v<newsemver>
+go push origin <vnewsemver>
+./tool/release.sh
+# Github automatically shows the new tag at https://github.com/rocicorp/repc/releases
+# Edit that release, add a description, and upload the objects
+```
+
 ## FAQ
 
 ### Why is a project called "repc" written in Rust?
