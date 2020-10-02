@@ -13,9 +13,13 @@
     "build": "tsc && rm -rf out/wasm && mkdir out/wasm && cp -R src/wasm/* out/wasm",
     "build:watch": "tsc --watch",
     "build:cjs": "tsc --outDir out.cjs --module CommonJS && rm -rf out.cjs/wasm && mkdir out.cjs/wasm && cp -R src/wasm/* out.cjs/wasm",
+    "start:diff-server": "bin/diff-server --db=/tmp/diffs serve",
     "postinstall": "rm -f node_modules/fetch-mock/esm/client.d.ts && tool/get-deps.sh",
-    "prepublishOnly": "npm run lint && npm run test && rm -rf out && npm run build && rm -rf out.cjs && npm run build:cjs",
+    "prepublishOnly": "tool/validate-binaries-for-publish.js && npm run lint && npm run test && rm -rf out && npm run build && rm -rf out.cjs && npm run build:cjs",
     "perf": "node perf/runner.mjs"
+  },
+  "bin": {
+    "diff-server": "bin/diff-server"
   },
   "devDependencies": {
     "@esm-bundle/chai": "^4.1.5",
