@@ -21,7 +21,7 @@ Replicache is a per-user cache that sits between your backend and client. To int
 
 On the client side, you'll link the Replicache Client SDK into your application and use it as your local storage layer.
 
-Currently we only support Flutter clients. See the [Replicache Flutter SDK](https://github.com/rocicorp/replicache-sdk-flutter) repo for the client-side setup instructions.
+Currently we only support web/js clients. See the [Replicache JS SDK](https://github.com/rocicorp/replicache-sdk-js) repo for the client-side setup instructions.
 
 # Server Side
 
