@@ -1,7 +1,7 @@
 {
   "name": "replicache",
   "description": "Offline-First for Every Application",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "repository": "github:rocicorp/replicache-sdk-js",
   "scripts": {
     "test": "web-test-runner src/replicache.test.ts --playwright --browsers chromium firefox",
