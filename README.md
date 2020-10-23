@@ -10,24 +10,27 @@ The initial strategy is to move fast and get all the way through to a drop-in re
 
 Things that don't matter for this initial pass:
 
- * Optimizing, at all (as long as we think the general approach can be optimized)
- * Clients other than https://github.com/rocicorp/replicache-sdk-js
- * Environments other than wasm
- * Idiomatic-ness (we are learning Rust at same time, so removing this from worry list will make us go waaaay faster)
+- Optimizing, at all (as long as we think the general approach can be optimized)
+- Clients other than https://github.com/rocicorp/replicache-sdk-js
+- Environments other than wasm
+- Idiomatic-ness (we are learning Rust at same time, so removing this from worry list will make us go waaaay faster)
 
 Things that do matter:
 
- * Continuous tests
- * Basic Perf Benchmarks (just so we know where we are, espec relative to Go)
- * Monitoring of WASM bundle size
-
+- Continuous tests
+- Basic Perf Benchmarks (just so we know where we are, espec relative to Go)
+- Monitoring of WASM bundle size
 
 ## Release
 
 ```
-go tag v<newsemver>
-go push origin <vnewsemver>
+go run ./tool/bump <newver>
+git push origin
+<land pr>
+<fetch master>
+git tag v<newver>
 ./tool/release.sh
+git push origin v<newver>
 # Github automatically shows the new tag at https://github.com/rocicorp/repc/releases
 # Edit that release, add a description, and upload the objects
 ```
