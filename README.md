@@ -15,4 +15,4 @@ There's not much here. You probably want either:
     * [Indexing](https://github.com/rocicorp/repc/issues/201)
     * [Storage interface](https://github.com/rocicorp/repc/issues/2)
     * [Repc client architecture](https://github.com/rocicorp/repc/issues/3)
-    
+    * [Streaming construction of Prolly Trees](https://github.com/rocicorp/repc/issues/37#issuecomment-661308785)
