@@ -12,10 +12,9 @@
     "doc": "typedoc --name Replicache --mode library --exclude node_modules --exclude src/*.test.ts --excludeNotExported --excludePrivate --excludeProtected --out docs --excludeExternals src/mod.ts",
     "build": "tsc && rm -rf out/wasm && mkdir out/wasm && cp -R src/wasm/* out/wasm",
     "build:watch": "tsc --watch",
-    "build:cjs": "tsc --outDir out.cjs --module CommonJS && rm -rf out.cjs/wasm && mkdir out.cjs/wasm && cp -R src/wasm/* out.cjs/wasm",
     "start:diff-server": "bin/diff-server --db=/tmp/diffs serve",
     "postinstall": "rm -f node_modules/fetch-mock/esm/client.d.ts && tool/get-deps.sh",
-    "prepublishOnly": "tool/validate-binaries-for-publish.js && npm run lint && npm run test && rm -rf out && npm run build && rm -rf out.cjs && npm run build:cjs",
+    "prepublishOnly": "tool/validate-binaries-for-publish.js && npm run lint && npm run test && rm -rf out && npm run build",
     "perf": "node perf/runner.mjs"
   },
   "bin": {
@@ -42,12 +41,10 @@
     "typescript": "^4.0.3"
   },
   "module": "out/mod.js",
-  "main": "out.cjs/mod.js",
   "types": "out/mod.js",
   "dependencies": {},
   "files": [
     "out",
-    "out.cjs",
     "tool/get-deps.sh"
   ]
 }
