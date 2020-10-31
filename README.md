@@ -10,7 +10,7 @@ This tutorial walks through creating the UI for a basic [Replicache](https://rep
 
 It relies on the [replicache-sample-todo](https://github.com/rocicorp/replicache-sample-todo) backend. To learn how to setup you own Replicache backend, see [Server Side Setup](https://github.com/rocicorp/replicache#server-side).
 
-If you have any problems or questions, please [join us on Slack](https://join.slack.com/t/rocicorp/shared_invite/zt-h8ygwu8j-RVniv5XsBps0Q9oJXdMyoA). We'd be happy to help.
+If you have any problems or questions, please [join us on Slack](https://slack.replicache.dev/). We'd be happy to help.
 
 You can also skip to the end and [check out the full working version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal).
 
