@@ -9,7 +9,8 @@ It gets compiled to wasm and embedded by [replicache-sdk-js](https://github.com/
 ## Release
 
 ```
-go run ./tool/bump <newver>
+cd tool/bump
+go run . repc <newver with no v> --root ../..
 git push origin
 <land pr>
 <fetch master>
