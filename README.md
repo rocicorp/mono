@@ -28,7 +28,7 @@ Replicache ships with both ES6 and CommonJS modules. For simplicity, these examp
 
 ```html
 <script type="module">
-  import Replicache from './node_modules/replicache/out/mod.js';
+  import Replicache from 'replicache';
 
   var rep = new Replicache({
     // URL of the diff server to use. The diff server periodically fetches
