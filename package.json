@@ -1,7 +1,7 @@
 {
   "name": "replicache",
   "description": "Offline-First for Every Application",
-  "version": "2.0.2",
+  "version": "3.0.0",
   "repository": "github:rocicorp/replicache-sdk-js",
   "license": "BSL-1.1",
   "scripts": {
