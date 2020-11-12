@@ -3,6 +3,7 @@
   "description": "Offline-First for Every Application",
   "version": "2.0.2",
   "repository": "github:rocicorp/replicache-sdk-js",
+  "license": "BSL-1.1",
   "scripts": {
     "test": "web-test-runner src/replicache.test.ts --playwright --browsers chromium firefox",
     "test:watch": "web-test-runner src/replicache.test.ts --playwright --browsers chromium firefox webkit --watch",
