@@ -24,8 +24,6 @@ npm install replicache
 
 ## 🚴🏿‍♀️ Instantiate
 
-Replicache ships with both ES6 and CommonJS modules. For simplicity, these examples use ES6.
-
 ```html
 <script type="module">
   import Replicache from 'replicache'; // Replace with a real module path as needed...
@@ -54,7 +52,7 @@ Replicache ships with both ES6 and CommonJS modules. For simplicity, these examp
 
 ## 🚗 Render UI
 
-Use `subscribe()` to open standing queries. Replicache fires `onData` whenever the result of the query changes, either because of local changes or sync.
+Use `subscribe()` to open standing queries. Replicache calls `onData` whenever the result of the query changes, either because of local changes or sync.
 
 ```js
 rep.subscribe(
