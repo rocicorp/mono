@@ -7,8 +7,8 @@
   "scripts": {
     "test": "web-test-runner src/replicache.test.ts --playwright --browsers chromium firefox",
     "test:watch": "web-test-runner src/replicache.test.ts --playwright --browsers chromium firefox webkit --watch",
-    "format": "prettier --write '{src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md,mjs}' '*.{js,jsx,json,ts,tsx,html,css,md,mjs}'",
-    "check-format": "prettier --check '{src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md,mjs}' '*.{js,jsx,json,ts,tsx,html,css,md,mjs}'",
+    "format": "prettier --write '{src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
+    "check-format": "prettier --check '{src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts src/",
     "doc": "typedoc --name Replicache --mode library --exclude node_modules --exclude src/*.test.ts --excludeNotExported --excludePrivate --excludeProtected --out docs --excludeExternals src/mod.ts",
     "build": "rollup --config rollup.config.js",
@@ -18,7 +18,7 @@
     "postinstall": "rm -f node_modules/fetch-mock/esm/client.d.ts && tool/get-deps.sh",
     "prepublishOnly": "tool/validate-binaries-for-publish.js && npm run lint && npm run test && rm -rf out && npm run build && npm run build-dev",
     "prepack": "npm run prepublishOnly",
-    "perf": "node perf/runner.mjs"
+    "perf": "node perf/runner.js"
   },
   "bin": {
     "diff-server": "bin/diff-server"
@@ -48,6 +48,7 @@
     "typedoc": "^0.17.0-3",
     "typescript": "^4.0.3"
   },
+  "type": "module",
   "module": "out/replicache.js",
   "types": "out/replicache.js",
   "dependencies": {},
