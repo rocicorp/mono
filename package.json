@@ -9,7 +9,7 @@
     "test:watch": "web-test-runner src/replicache.test.ts --playwright --browsers chromium firefox webkit --watch",
     "format": "prettier --write '{src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check '{src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
-    "lint": "eslint --ext .ts src/",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
     "doc": "typedoc --name Replicache --mode library --exclude node_modules --exclude src/*.test.ts --excludeNotExported --excludePrivate --excludeProtected --out docs --excludeExternals src/mod.ts",
     "build": "rollup --config rollup.config.js",
     "build-dev": "DEV=1 rollup --config rollup.config.js",
