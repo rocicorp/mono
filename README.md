@@ -15,6 +15,7 @@ git push origin
 <land pr>
 <fetch master>
 git tag v<newver>
+cd ../..
 ./tool/release.sh
 git push origin v<newver>
 # Github automatically shows the new tag at https://github.com/rocicorp/repc/releases
