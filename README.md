@@ -8,7 +8,7 @@
 
 This tutorial walks through creating the UI for a basic [Replicache](https://replicache.dev/)-powered todo list.
 
-It relies on the [replicache-sample-todo](https://github.com/rocicorp/replicache-sample-todo) backend. To learn how to setup you own Replicache backend, see [Server Side Setup](https://github.com/rocicorp/replicache#server-side).
+It relies on the [replicache-sample-todo](https://github.com/rocicorp/replicache-sample-todo) backend. To learn how to setup you own Replicache backend, see [Server Side Setup](https://github.com/rocicorp/replicache/blob/master/SERVER_SETUP.md).
 
 If you have any problems or questions, please [join us on Slack](https://slack.replicache.dev/). We'd be happy to help.
 
