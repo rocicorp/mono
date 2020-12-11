@@ -17,7 +17,9 @@
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "node",
     "outDir": "out",
-    "allowJs": true
+    "allowJs": true,
+    // esnext for Object.fromEntries
+    "lib": ["dom", "esnext"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist/**/*", "build/**/*"]
