@@ -28,7 +28,12 @@ npm install replicache
 <script type="module">
   import Replicache from 'replicache'; // Replace with a real module path as needed...
 
-  var rep = new Replicache({
+  const rep = new Replicache({
+    // URL of your server endpoint that serves the client view. This is used
+    // by the diff server...
+    clientViewURL:
+      'https://replicache-sample-todo.now.sh/serve/replicache-client-view',
+
     // URL of the diff server to use. The diff server periodically fetches
     // the "client view" from your service and forwards any delta to the
     // client. You can use our hosted diff server (as here) or a local diff
