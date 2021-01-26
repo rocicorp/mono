@@ -113,6 +113,6 @@ const handleCheckbox = async (id, e) => {
 That's it! You've built a fully-functioning offline-first todo app against our sample backend. What will you do next?
 
 - [Check out the full version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/lit-todo)
-- [Learn how to add Replicache support to your own backend service](https://github.com/rocicorp/replicache#server-side)
+- [Learn how to add Replicache support to your own backend service](https://github.com/rocicorp/replicache/blob/main/SERVER_SETUP.md)
 - [Check out the richer React/Babel/GCal sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal)
 - [Browse the full JS documentation](https://replicache-sdk-js.now.sh/)
