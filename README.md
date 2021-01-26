@@ -33,7 +33,7 @@ npm install replicache
     // the "client view" from your service and forwards any delta to the
     // client. You can use our hosted diff server (as here) or a local diff
     // server, which is useful during development. See
-    // https://github.com/rocicorp/replicache#server-side for more
+    // https://github.com/rocicorp/replicache/blob/main/SERVER_SETUP.md for more
     // information on setting up your client view.
     diffServerURL: 'https://serve.replicache.dev/pull',
 
