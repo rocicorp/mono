@@ -12,7 +12,7 @@ It relies on the [replicache-sample-todo](https://github.com/rocicorp/replicache
 
 If you have any problems or questions, please [join us on Slack](https://slack.replicache.dev/). We'd be happy to help.
 
-You can also skip to the end and [check out the full working version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/main/sample/cal).
+You can also skip to the end and [check out the full working version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/main/sample/lit-todo).
 
 **Note:** This document assumes you already know what Replicache is, why you might need it, and broadly how it works. If that's not true check out the [design document](https://github.com/rocicorp/replicache/blob/main/design.md) for a detailed deep-dive.
 
