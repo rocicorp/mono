@@ -8,13 +8,13 @@
 
 This tutorial walks through creating the UI for a basic [Replicache](https://replicache.dev/)-powered todo list.
 
-It relies on the [replicache-sample-todo](https://github.com/rocicorp/replicache-sample-todo) backend. To learn how to setup you own Replicache backend, see [Server Side Setup](https://github.com/rocicorp/replicache/blob/master/SERVER_SETUP.md).
+It relies on the [replicache-sample-todo](https://github.com/rocicorp/replicache-sample-todo) backend. To learn how to setup you own Replicache backend, see [Server Side Setup](https://github.com/rocicorp/replicache/blob/main/SERVER_SETUP.md).
 
 If you have any problems or questions, please [join us on Slack](https://slack.replicache.dev/). We'd be happy to help.
 
-You can also skip to the end and [check out the full working version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal).
+You can also skip to the end and [check out the full working version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/main/sample/cal).
 
-**Note:** This document assumes you already know what Replicache is, why you might need it, and broadly how it works. If that's not true check out the [design document](https://github.com/rocicorp/replicache/blob/master/design.md) for a detailed deep-dive.
+**Note:** This document assumes you already know what Replicache is, why you might need it, and broadly how it works. If that's not true check out the [design document](https://github.com/rocicorp/replicache/blob/main/design.md) for a detailed deep-dive.
 
 ## 🏃‍♂️ Install
 
@@ -62,7 +62,7 @@ rep.subscribe(
   {
     onData: result => {
       // Using lit-html, but the principle is the same in any UI framework.
-      // See https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal
+      // See https://github.com/rocicorp/replicache-sdk-js/tree/main/sample/cal
       // for an example using React.
       const toggle = complete =>
         html`<td><input type="checkbox" .checked=${complete} /></td>`;
@@ -112,7 +112,7 @@ const handleCheckbox = async (id, e) => {
 
 That's it! You've built a fully-functioning offline-first todo app against our sample backend. What will you do next?
 
-- [Check out the full version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/lit-todo)
+- [Check out the full version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/main/sample/lit-todo)
 - [Learn how to add Replicache support to your own backend service](https://github.com/rocicorp/replicache/blob/main/SERVER_SETUP.md)
-- [Check out the richer React/Babel/GCal sample](https://github.com/rocicorp/replicache-sdk-js/tree/master/sample/cal)
+- [Check out the richer React/Babel/GCal sample](https://github.com/rocicorp/replicache-sdk-js/tree/main/sample/cal)
 - [Browse the full JS documentation](https://replicache-sdk-js.now.sh/)
