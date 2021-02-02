@@ -29,27 +29,33 @@ npm install replicache
   import Replicache from 'replicache'; // Replace with a real module path as needed...
 
   const rep = new Replicache({
-    // URL of your server endpoint that serves the client view. This is used
-    // by the diff server...
+    // URL that serves the Client View. The Diff Server pulls new Client Views
+    // from this URL. See
+    // https://github.com/rocicorp/replicache/blob/main/SERVER_SETUP.md for more
+    // information on setting up your Client View.
     clientViewURL:
       'https://replicache-sample-todo.now.sh/serve/replicache-client-view',
 
-    // URL of the diff server to use. The diff server periodically fetches
-    // the "client view" from your service and forwards any delta to the
-    // client. You can use our hosted diff server (as here) or a local diff
-    // server, which is useful during development. See
+    // URL of the Diff Server to use. The Replicache client periodically fetches
+    // the Client View from your service through the Diff Server, which returns
+    // a delta to the client. You can use our hosted Diff Server (as here) or
+    // a local Diff Server, which can be useful during development. See
     // https://github.com/rocicorp/replicache/blob/main/SERVER_SETUP.md for more
-    // information on setting up your client view.
+    // information on setting up your Client View or a local Diff Server.
     diffServerURL: 'https://serve.replicache.dev/pull',
 
-    // Auth token for the diff server, if any.
+    // Auth token for the Diff Server. When running against the
+    // replicache-sample-todo backend as here, this value should be '1'. To run
+    // against your own backend, replace this value with the Account ID assigned
+    // when creating a Replicache account at https://serve.replicache.dev/signup.
     diffServerAuth: '1',
 
     // URL of your service's Replicache batch endpoint. Replicache
     // will send batches of mutations here for application.
     batchURL: 'https://replicache-sample-todo.now.sh/serve/replicache-batch',
 
-    // Auth token for your client view and batch endpoints, if any.
+    // Auth token for your client view and batch endpoints. You can use this value
+    // '2' when running against the replicache-sample-todo backend.
     dataLayerAuth: '2',
   });
 </script>
