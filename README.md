@@ -1,129 +1,18 @@
 # Replicache JS SDK
 
-### Offline-First for Every Application
+### Realtime Sync for Any Backend Stack
 
 ![Node.js CI](https://github.com/rocicorp/replicache-sdk-js/workflows/Node.js%20CI/badge.svg)
 
-## 👋 Quickstart
+👋🏼 Hi, and welcome to Replicache. Please choose your adventure:
 
-This tutorial walks through creating the UI for a basic [Replicache](https://replicache.dev/)-powered todo list.
+- [Quickstart](https://github.com/rocicorp/replicache-sdk-js/blob/main/QUICKSTART.md): Get Replicache setup inside your application as quickly as possible.
+- [API Reference](https://replicache-sdk-js.now.sh/): Complete details for the JavaScript SDK
+- [Redo sample](https://github.com/rocicorp/replicache-sdk-js/tree/main/sample/redo): A simple todo app built with React and a Golang/Postgres backend
+- [Lit-Todo Sample](https://github.com/rocicorp/replicache-sdk-js/tree/main/sample/lit-todo): A simple todo app built on lit-html and a Golang/Postgres backend
+- [Server Setup](https://github.com/rocicorp/replicache/blob/main/SERVER_SETUP.md): Detailed instructions to the server-side integration with Replicache
+- [Detailed Design Doc](https://github.com/rocicorp/replicache/blob/main/design.md): The complete design of Replicache, including the sync protocol and conflict resolution.
 
-It relies on the [replicache-sample-todo](https://github.com/rocicorp/replicache-sample-todo) backend. To learn how to setup you own Replicache backend, see [Server Side Setup](https://github.com/rocicorp/replicache/blob/main/SERVER_SETUP.md).
+Not seeing what you're looking for? [Contact us](https://replicache.dev/#contact) — we'd be happy to help.
 
-If you have any problems or questions, please [join us on Slack](https://slack.replicache.dev/). We'd be happy to help.
-
-You can also skip to the end and [check out the full working version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/main/sample/lit-todo).
-
-**Note:** This document assumes you already know what Replicache is, why you might need it, and broadly how it works. If that's not true check out the [design document](https://github.com/rocicorp/replicache/blob/main/design.md) for a detailed deep-dive.
-
-## 🏃‍♂️ Install
-
-```
-npm install replicache
-```
-
-## 🚴🏿‍♀️ Instantiate
-
-```html
-<script type="module">
-  import Replicache from 'replicache'; // Replace with a real module path as needed...
-
-  const rep = new Replicache({
-    // URL that serves the Client View. The Diff Server pulls new Client Views
-    // from this URL. See
-    // https://github.com/rocicorp/replicache/blob/main/SERVER_SETUP.md for more
-    // information on setting up your Client View.
-    clientViewURL:
-      'https://replicache-sample-todo.now.sh/serve/replicache-client-view',
-
-    // URL of the Diff Server to use. The Replicache client periodically fetches
-    // the Client View from your service through the Diff Server, which returns
-    // a delta to the client. You can use our hosted Diff Server (as here) or
-    // a local Diff Server, which can be useful during development. See
-    // https://github.com/rocicorp/replicache/blob/main/SERVER_SETUP.md for more
-    // information on setting up your Client View or a local Diff Server.
-    diffServerURL: 'https://serve.replicache.dev/pull',
-
-    // Auth token for the Diff Server. When running against the
-    // replicache-sample-todo backend as here, this value should be '1'. To run
-    // against your own backend, replace this value with the Account ID assigned
-    // when creating a Replicache account at https://serve.replicache.dev/signup.
-    diffServerAuth: '1',
-
-    // URL of your service's Replicache batch endpoint. Replicache
-    // will send batches of mutations here for application.
-    batchURL: 'https://replicache-sample-todo.now.sh/serve/replicache-batch',
-
-    // Auth token for your client view and batch endpoints. You can use this value
-    // '2' when running against the replicache-sample-todo backend.
-    dataLayerAuth: '2',
-  });
-</script>
-```
-
-## 🚗 Render UI
-
-Use `subscribe()` to open standing queries. Replicache calls `onData` whenever the result of the query changes, either because of local changes or sync.
-
-```js
-rep.subscribe(
-  async tx => {
-    return await toArray(tx.scan({prefix: '/todo/'}));
-  },
-  {
-    onData: result => {
-      // Using lit-html, but the principle is the same in any UI framework.
-      // See https://github.com/rocicorp/replicache-sdk-js/tree/main/sample/cal
-      // for an example using React.
-      const toggle = complete =>
-        html`<td><input type="checkbox" .checked=${complete} /></td>`;
-      const title = text => html`<td>${text}</td>`;
-      const row = todo =>
-        html`<tr>
-          ${toggle(todo.complete)}${title(todo.text)}
-        </tr>`;
-      render(
-        html`<table>
-          ${result.map(row)}
-        </table>`,
-        document.body,
-      );
-    },
-  },
-);
-```
-
-## 🏎 Mutate Data
-
-Register client-side _mutators_ using `register()`.
-
-Mutators run completely locally, without waiting on the server — online, offline, whatever! A record of the mutation is queued and sent to your service's batch endpoint when possible.
-
-Replicache also invokes mutators itself, during sync, to replay unacknowledged changes on top of newly received server state.
-
-```js
-const updateTodo = rep.register('updateTodo', async (tx, {id, complete}) => {
-  const key = `/todo/${id}`;
-  const todo = await tx.get(key);
-  todo.complete = complete;
-  await tx.put(key, todo);
-});
-
-const handleCheckbox = async (id, e) => {
-  await updateTodo({id, complete: e.srcElement.checked});
-};
-```
-
-## 🛫 Tips
-
-- We recommend [enabling console persistence](https://stackoverflow.com/questions/5327955/how-to-make-google-chrome-javascript-console-persistent) while developing replicache-enabled apps to make debugging easier.
-- Remember that data changes can happen "underneath" you and cause `subscribe()` to re-fire at any time. These changes can come from the server or from a different tab. If your UI is not reactive (driven solely by the data model) you need to take extra steps to ensure the UI is in sync with the data.
-
-## 🚀 Next Steps
-
-That's it! You've built a fully-functioning offline-first todo app against our sample backend. What will you do next?
-
-- [Check out the full version of this sample](https://github.com/rocicorp/replicache-sdk-js/tree/main/sample/lit-todo)
-- [Learn how to add Replicache support to your own backend service](https://github.com/rocicorp/replicache/blob/main/SERVER_SETUP.md)
-- [Check out the richer React/Babel/GCal sample](https://github.com/rocicorp/replicache-sdk-js/tree/main/sample/cal)
-- [Browse the full JS documentation](https://replicache-sdk-js.now.sh/)
+Confused? Not sure if Replicache is the right thing? [Start here](https://replicache.dev).
