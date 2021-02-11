@@ -1,3 +1,3 @@
-# Replidraw — A Multiplayer Figma-like Graphics Editor, built with Replicache
+# Replidraw
 
-This is a collaborative vector graphics editor powered by [Next.js](https://nextjs.org/), [Replicache](https://replicache.dev), [React Designer](https://react-designer.github.io/react-designer/).
+A Multiplayer Figma-like Graphics Editor, built with [Replicache](https://replicache.dev), [Next.js](https://nextjs.org/), and [React Designer](https://react-designer.github.io/react-designer/).
