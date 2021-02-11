@@ -18,12 +18,18 @@
     "react-dropzone": "^10.1.4",
     "react-hotkeys": "^1.1.4",
     "react-portal": "^4.2.0",
+    "replicache": "^5.1.0",
     "superagent": "*",
     "webfontloader": "^1.6.28"
   },
   "devDependencies": {
+    "@babel/cli": "^7.4.4",
+    "@babel/core": "^7.4.4",
     "@babel/plugin-proposal-class-properties": "^7.4.4",
     "@babel/plugin-proposal-export-default-from": "^7.2.0",
     "babel-plugin-css-modules-transform": "^1.6.2"
+  },
+  "resolutions": {
+    "webpack": "^5.0.0-beta.30"
   }
 }
