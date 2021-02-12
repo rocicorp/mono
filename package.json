@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "classnames": "^2.2.6",
+    "faunadb": "^4.0.3",
     "lodash": ">=4.17.11",
     "next": "10.0.5",
     "react": "17.0.1",
