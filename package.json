@@ -12,6 +12,8 @@
     "faunadb": "^4.0.3",
     "lodash": ">=4.17.11",
     "next": "10.0.5",
+    "pusher": "^4.0.2",
+    "pusher-js": "^7.0.3",
     "react": "17.0.1",
     "react-autocomplete": "1.8.1",
     "react-color": "^2.17.3",
