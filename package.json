@@ -21,7 +21,7 @@
     "react-dropzone": "^10.1.4",
     "react-hotkeys": "^1.1.4",
     "react-portal": "^4.2.0",
-    "replicache": "npm:replicache-mem@^5.1.0",
+    "replicache": "5.2.0",
     "replicache-react-util": "^1.1.0",
     "superagent": "*",
     "webfontloader": "^1.6.28"
