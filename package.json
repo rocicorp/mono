@@ -8,31 +8,18 @@
     "start": "next start"
   },
   "dependencies": {
-    "classnames": "^2.2.6",
     "faunadb": "^4.0.3",
-    "lodash": ">=4.17.11",
     "next": "10.0.5",
     "pusher": "^4.0.2",
     "pusher-js": "^7.0.3",
     "react": "17.0.1",
-    "react-autocomplete": "1.8.1",
-    "react-color": "^2.17.3",
     "react-dom": "17.0.1",
-    "react-dropzone": "^10.1.4",
     "react-hotkeys": "^1.1.4",
-    "react-portal": "^4.2.0",
     "replicache": "5.2.0",
-    "replicache-react-util": "^1.1.0",
-    "superagent": "*",
-    "webfontloader": "^1.6.28"
+    "replicache-react-util": "^1.1.0"
   },
   "devDependencies": {
-    "@babel/cli": "^7.4.4",
-    "@babel/core": "^7.4.4",
-    "@babel/plugin-proposal-class-properties": "^7.4.4",
-    "@babel/plugin-proposal-export-default-from": "^7.2.0",
     "@types/react": "^17.0.2",
-    "babel-plugin-css-modules-transform": "^1.6.2",
     "typescript": "^4.1.5"
   },
   "resolutions": {
