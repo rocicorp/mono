@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^1.3.4",
     "faunadb": "^4.0.3",
     "next": "10.0.5",
     "pusher": "^4.0.2",
