@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'"
   },
   "dependencies": {
     "@aws-sdk/client-rds-data": "^3.6.1",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@types/react": "^17.0.2",
+    "prettier": "^2.2.1",
     "typescript": "^4.1.5"
   },
   "resolutions": {
