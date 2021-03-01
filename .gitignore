@@ -11,6 +11,7 @@
 # next.js
 /.next/
 /out/
+/public/*.wasm
 
 # production
 /build
@@ -35,3 +36,4 @@ yarn-error.log*
 
 # react-designer
 lib
+

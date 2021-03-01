@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'"
+    "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
+    "postinstall": "mkdir -p public; cp node_modules/replicache/out/*.wasm public/"
   },
   "dependencies": {
     "@aws-sdk/client-rds-data": "^3.6.1",
