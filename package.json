@@ -16,7 +16,7 @@
     "build:watch": "rollup --config rollup.config.js --watch",
     "start:diff-server": "bin/diff-server --db=/tmp/diffs serve",
     "postinstall": "rm -f node_modules/fetch-mock/esm/client.d.ts && tool/get-deps.sh",
-    "prepublishOnly": "tool/validate-binaries-for-publish.cjs && npm run lint && npm run test && rm -rf out && npm run build && npm run build-dev",
+    "prepublishOnly": "rm -rf out && npm run build && npm run build-dev",
     "prepack": "npm run prepublishOnly",
     "perf": "node perf/runner.js",
     "get-repc": "tool/get-deps.sh && git restore bin/diff-server"
