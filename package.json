@@ -19,7 +19,7 @@
     "react": "17.0.1",
     "react-dom": "17.0.1",
     "react-hotkeys": "^1.1.4",
-    "replicache": "5.2.0",
+    "replicache": "6.0.0-beta.0",
     "replicache-react-util": "^1.1.0"
   },
   "devDependencies": {
