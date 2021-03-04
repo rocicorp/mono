@@ -19,7 +19,8 @@
     "outDir": "out",
     "allowJs": true,
     // esnext for Object.fromEntries
-    "lib": ["dom", "esnext"]
+    "lib": ["dom", "esnext"],
+    "preserveSymlinks": true
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist/**/*", "build/**/*"]
