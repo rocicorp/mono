@@ -15,7 +15,7 @@
     "build-dev": "DEV=1 rollup --config rollup.config.js",
     "build:watch": "rollup --config rollup.config.js --watch",
     "postinstall": "rm -f node_modules/fetch-mock/esm/client.d.ts && tool/get-deps.sh",
-    "prepublishOnly": "tool/validate-binaries-for-publish.cjs && npm run lint && npm run get-repc && npm run test && rm -rf out && npm run build && npm run build-dev",
+    "prepublishOnly": "npm run lint && npm run get-repc && npm run test && rm -rf out && npm run build && npm run build-dev",
     "prepack": "npm run prepublishOnly",
     "perf": "node perf/runner.js",
     "get-repc": "tool/get-deps.sh"
