@@ -1,8 +1,6 @@
 coverage
 node_modules
-out
-build
 .DS_Store
-repc
 src/wasm
 docs
+out

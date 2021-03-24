@@ -11,14 +11,13 @@
     "check-format": "prettier --check '{src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
     "doc": "typedoc src/mod.ts",
-    "build": "rollup --config rollup.config.js",
-    "build-dev": "DEV=1 rollup --config rollup.config.js",
+    "build": "rollup --config rollup.config.js && CJS=1 rollup --config rollup.config.js ",
     "build:watch": "rollup --config rollup.config.js --watch",
-    "postinstall": "rm -f node_modules/fetch-mock/esm/client.d.ts && tool/get-deps.sh",
-    "prepublishOnly": "npm run lint && npm run get-repc && npm run test && rm -rf out && npm run build && npm run build-dev",
+    "postinstall": "rm -f node_modules/fetch-mock/esm/client.d.ts",
+    "prepublishOnly": "npm run lint && tool/get-deps.sh && npm run test && rm -rf out && npm run build",
     "prepack": "npm run prepublishOnly",
-    "perf": "node perf/runner.js",
-    "get-repc": "tool/get-deps.sh"
+    "prepare": "tool/get-deps.sh",
+    "perf": "node perf/runner.js"
   },
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.0",
@@ -46,15 +45,12 @@
     "typedoc-plugin-sourcefile-url": "^1.0.6",
     "typescript": "^4.2.3"
   },
-  "type": "module",
-  "module": "out/replicache.js",
-  "types": "out/replicache.js",
+  "main": "out/replicache.js",
+  "types": "out/replicache.d.js",
   "files": [
-    "out",
-    "tool/get-deps.sh"
-  ],
-  "exports": {
-    ".": "./out/replicache.js",
-    "./dev": "./out/replicache.dev.js"
-  }
+    "out/replicache.js",
+    "out/replicache.mjs",
+    "out/replicache.wasm",
+    "out/replicache.dev.wasm"
+  ]
 }
