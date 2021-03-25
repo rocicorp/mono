@@ -6,10 +6,10 @@
 
 👋🏼 Hi, and welcome to Replicache. Please choose your adventure:
 
-- [Quickstart](https://github.com/rocicorp/replicache-sdk-js/blob/stable/QUICKSTART.md): Get Replicache setup inside your application as quickly as possible
+- [Quickstart](https://github.com/rocicorp/replicache-sdk-js/blob/stable/doc/setup.md): Step-by-step walkthrough to building a Replicache-enabled application
+- [Replidraw](https://github.com/rocicorp/replidraw): A Figma-esque collaborative drawing sample, built with Replicache and MySQL
 - [API Reference](https://js.replicache.dev/classes/default.html): Complete details for the JavaScript SDK
-- [Server Setup](https://github.com/rocicorp/replicache/blob/stable/SERVER_SETUP.md): Detailed instructions to the server-side integration with Replicache
-- [Detailed Design Doc](https://github.com/rocicorp/replicache/blob/stable/design.md): The complete design of Replicache, including the sync protocol and conflict resolution.
+- [Design Document](https://github.com/rocicorp/replicache/blob/stable/design.md): The complete design of Replicache, including the sync protocol and conflict resolution.
 
 Not seeing what you're looking for? [Contact us](https://replicache.dev/#contact) — we'd be happy to help.
 
