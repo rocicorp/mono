@@ -4,7 +4,7 @@
 
 This is the core [Replicache](https://github.com/rocicorp/replicache) client.
 
-It gets compiled to wasm and embedded by [replicache-sdk-js](https://github.com/rocicorp/replicache-sdk-js). In the future it will also be used in iOS, Android, and other SDKs.
+It gets compiled to wasm and embedded by [replicache](https://github.com/rocicorp/replicache). In the future it could also be used in iOS, Android, and other SDKs.
 
 ## Release
 
@@ -26,4 +26,4 @@ git push origin v<newver>
 
 ### Why is a project called "repc" written in Rust?
 
-Yeah. It stands for "Replicache Client". Eventually, this project will probably just be renamed to "replicache" and take over the root repository.
+Yeah. It stands for "Replicache Client". Maybe it should have been rep-rs, or something. Oh well.
