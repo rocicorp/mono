@@ -9,6 +9,7 @@
 - [API Reference](https://js.replicache.dev/classes/default.html): Complete details for the JavaScript SDK
 - [Design Document](https://github.com/rocicorp/replicache/blob/stable/doc/design.md): The complete design of Replicache, including the sync protocol and conflict resolution.
 - [Freqently Asked Questions](https://github.com/rocicorp/replicache/blob/stable/doc/faq.md)
+- [Launch Checklist](https://github.com/rocicorp/replicache/blob/stable/doc/launch-checklist.md)
 
 Not seeing what you're looking for? [Contact us](https://replicache.dev/#contact) — we'd be happy to help.
 
