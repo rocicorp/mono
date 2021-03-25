@@ -1,6 +1,4 @@
-# Replicache JS SDK
-
-### Realtime Sync for Any Backend Stack
+# Realtime Sync for Any Backend Stack
 
 ![Node.js CI](https://github.com/rocicorp/replicache-sdk-js/workflows/Node.js%20CI/badge.svg)
 
