@@ -2,7 +2,7 @@
   "name": "replicache",
   "description": "Realtime sync for any backend stack",
   "version": "6.0.0",
-  "repository": "github:rocicorp/replicache-sdk-js",
+  "repository": "github:rocicorp/replicache",
   "license": "BSL-1.1",
   "scripts": {
     "test": "web-test-runner src/*.test.ts --playwright --browsers chromium firefox",
