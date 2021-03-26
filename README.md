@@ -6,7 +6,7 @@
 
 - [Quickstart](https://github.com/rocicorp/replicache/blob/stable/doc/setup.md): Step-by-step walkthrough to building a Replicache-enabled application
 - [Replidraw](https://github.com/rocicorp/replidraw): A Figma-esque collaborative drawing sample application, built with Replicache and Postgres
-- [API Reference](https://js.replicache.dev/classes/default.html): Complete details for the JavaScript SDK
+- [API Reference](https://js.replicache.dev/classes/replicache.html): Complete details for the JavaScript SDK
 - [Detailed Design Document](https://github.com/rocicorp/replicache/blob/stable/doc/design.md): The complete design of Replicache, including the sync protocol and conflict resolution.
 - [Freqently Asked Questions](https://github.com/rocicorp/replicache/blob/stable/doc/faq.md)
 - [Launch Checklist](https://github.com/rocicorp/replicache/blob/stable/doc/launch-checklist.md)
