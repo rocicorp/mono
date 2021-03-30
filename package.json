@@ -48,6 +48,7 @@
   "main": "out/replicache.js",
   "types": "out/replicache.d.js",
   "files": [
+    "out/replicache.d.ts",
     "out/replicache.js",
     "out/replicache.mjs",
     "out/replicache.wasm",
