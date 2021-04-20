@@ -4,9 +4,10 @@
 
 👋🏼 Hi, and welcome. This repo contains the JavaScript bindings for [Replicache](https://replicache.dev).
 
-**To get started *using* Replicache, see [doc.replicache.dev](https://doc.replicache.dev)**.
+**To get started _using_ Replicache, see [doc.replicache.dev](https://doc.replicache.dev)**.
 
 Other points of interest:
+
 - [Detailed Design Document](./doc/docs/design.md): The complete design of Replicache, including the sync protocol and conflict resolution.
 - [Replidraw](https://github.com/rocicorp/replidraw): A Figma-esque collaborative drawing sample application, built with Replicache and Postgres
 
