@@ -5,8 +5,8 @@
   "repository": "github:rocicorp/replicache",
   "license": "BSL-1.1",
   "scripts": {
-    "test": "web-test-runner src/*.test.ts --playwright --browsers chromium firefox",
-    "test:watch": "web-test-runner src/*.test.ts --playwright --browsers chromium firefox --watch",
+    "test": "web-test-runner",
+    "test:watch": "web-test-runner --watch",
     "format": "prettier --write '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
