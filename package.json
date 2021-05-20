@@ -10,10 +10,9 @@
     "format": "prettier --write '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
-    "build": "rollup --config rollup.config.js && CJS=1 rollup --config rollup.config.js ",
+    "build": "rm -rf out && rollup --config rollup.config.js && CJS=1 rollup --config rollup.config.js ",
     "build:watch": "rollup --config rollup.config.js --watch",
-    "prepublishOnly": "npm run lint && tool/get-deps.sh && npm run test && rm -rf out && npm run build",
-    "prepack": "npm run prepublishOnly",
+    "prepack": "npm run lint && npm run test && npm run build",
     "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts && tool/get-deps.sh",
     "perf": "node perf/runner.js"
   },
