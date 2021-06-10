@@ -4,3 +4,4 @@ node_modules
 doc/docs/api
 src/wasm
 out
+docs/
