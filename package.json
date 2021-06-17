@@ -39,7 +39,7 @@
     "rollup": "^2.51.2",
     "rollup-plugin-copy": "^3.4.0",
     "sinon": "^11.1.1",
-    "typedoc": "^0.20.36",
+    "typedoc": "^0.21.0-beta.4",
     "typedoc-plugin-sourcefile-url": "^1.0.6",
     "typescript": "^4.3.2",
     "xbytes": "^1.7.0"
