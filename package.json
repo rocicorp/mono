@@ -45,7 +45,13 @@
     "xbytes": "^1.7.0"
   },
   "main": "out/replicache.js",
+  "module": "out/replicache.mjs",
   "types": "out/replicache.d.js",
+  "exports": {
+    "module": "./out/replicache.mjs",
+    "require": "./out/replicache.js",
+    "default": "./out/replicache.mjs"
+  },
   "files": [
     "out/replicache.d.ts",
     "out/replicache.js",
