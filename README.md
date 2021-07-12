@@ -14,5 +14,3 @@ Other points of interest:
 Not seeing what you're looking for? [Contact us](https://replicache.dev/#contact) — we'd be happy to help.
 
 Confused? Not sure if Replicache is the right thing? [Start here](https://replicache.dev).
-
-<!-- touch -->
