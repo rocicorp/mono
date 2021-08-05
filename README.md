@@ -16,7 +16,7 @@ git push origin
 <fetch master>
 git tag v<newver>
 cd ../..
-./tool/release.sh
+# Our GH action builds and uploads repc.zip
 git push origin v<newver>
 # Github automatically shows the new tag at https://github.com/rocicorp/repc/releases
 # Edit that release, add a description, and upload the objects
