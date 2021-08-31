@@ -10,17 +10,17 @@
     "format": "prettier --write '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
-    "build": "rm -rf out && rollup --config rollup.config.js && CJS=1 rollup --config rollup.config.js ",
-    "build:watch": "rollup --config rollup.config.js --watch",
+    "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
+    "build-mjs": "esbuild --bundle --target=es2020 --outfile=out/replicache.mjs --format=esm src/mod.ts",
+    "build-cjs": "esbuild --bundle --target=es2020 --outfile=out/replicache.js --format=cjs src/mod.ts",
+    "build": "rm -rf out && npm run build-dts && npm run build-mjs && npm run build-cjs",
     "prepack": "npm run lint && npm run test && npm run build",
-    "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts && tool/get-deps.sh",
+    "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts",
     "perf": "node perf/runner.js"
   },
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4",
-    "@rollup/plugin-alias": "^3.1.5",
-    "@rollup/plugin-replace": "^3.0.0",
-    "@types/mocha": "^9.0.0",
+    "@types/mocha": "^8.2.2",
     "@types/sinon": "^10.0.2",
     "@typescript-eslint/eslint-plugin": "^4.29.1",
     "@typescript-eslint/parser": "^4.29.1",
@@ -35,9 +35,8 @@
     "idb": "^6.1.2",
     "playwright": "^1.13.1",
     "prettier": "^2.3.2",
-    "rollup": "^2.56.2",
-    "rollup-plugin-copy": "^3.4.0",
-    "rollup-plugin-ts": "^1.4.0",
+    "rollup": "^2.56.3",
+    "rollup-plugin-dts": "^3.0.2",
     "sinon": "^11.1.2",
     "typedoc": "^0.21.5",
     "typedoc-plugin-sourcefile-url": "^1.0.6",
@@ -58,5 +57,9 @@
     "out/replicache.mjs",
     "out/replicache.wasm",
     "out/replicache.dev.wasm"
-  ]
+  ],
+  "dependencies": {
+    "flatbuffers": "^2.0.3",
+    "hash-wasm": "^4.9.0"
+  }
 }
