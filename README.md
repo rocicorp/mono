@@ -1,3 +1,11 @@
+# This repo is old
+
+Replicache has moved to pure JS, this repo is now archived.
+
+See https://github.com/rocicorp/replicache.
+
+<hr>
+
 ![Go](https://github.com/rocicorp/repc/workflows/Rust/badge.svg)
 
 # repc
