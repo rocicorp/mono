@@ -59,7 +59,9 @@
     "out/replicache.dev.wasm"
   ],
   "dependencies": {
+    "@types/lodash-es": "^4.17.4",
     "flatbuffers": "^2.0.3",
-    "hash-wasm": "^4.9.0"
+    "hash-wasm": "^4.9.0",
+    "lodash-es": "^4.17.21"
   }
 }
