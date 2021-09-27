@@ -7,7 +7,7 @@ to how to work together.
 
 - File all Replicache issues in the Replicache repo https://github.com/rocicorp/replicache/issues.
   - This simplifies our view of what's in flight and doesn't require anyone to understand how our repos are organized.
-- Join our [Slack channel](https://join.slack.com/t/rocicorp/shared_invite/zt-dcez2xsi-nAhW1Lt~32Y3~~y54pMV0g) for realtime help or discussion.
+- Join our [Discord](https://discord.replicache.dev/) for realtime help or discussion.
 
 ### Making changes
 
