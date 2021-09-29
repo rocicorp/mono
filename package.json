@@ -66,7 +66,6 @@
   ],
   "dependencies": {
     "flatbuffers": "^2.0.3",
-    "hash-wasm": "^4.9.0",
-    "lodash-es": "^4.17.21"
+    "hash-wasm": "^4.9.0"
   }
 }
