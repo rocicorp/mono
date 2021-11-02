@@ -20,7 +20,6 @@
   },
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4",
-    "@types/lodash-es": "^4.17.5",
     "@types/mocha": "^8.2.2",
     "@types/sinon": "^10.0.3",
     "@types/web-locks-api": "^0.0.1",
