@@ -25,10 +25,6 @@ All contributors must sign a contributor agreement, either for an <a href="https
 
 ### Style (General)
 
-- If possible, do not intentionally crash processes (eg, by `panic`ing on unexpected conditions).
-  - For our client-side software, this is bad practice because we frequently run in-process with our users and we will crash them too!
-  - For our server-side software, this is bad practice because we will lose any other requests that were also in-flight on that server.
-  - There are other types of software in which crashing early and often may be more appropriate, but for consistency and code reuse reasons we generally avoid crashing everywhere.
 - We use three log levels. Please employ them in a way that's consistent with the following semantics:
   - **ERROR**: something truly unexpected has happened **and a developer should go look**.
     - Examples that might be ERRORs:
