@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4",
+    "@types/lodash-es": "^4.17.5",
     "@types/mocha": "^8.2.2",
     "@types/sinon": "^10.0.3",
     "@types/web-locks-api": "^0.0.1",
@@ -37,6 +38,7 @@
     "fetch-mock": "^9.11.0",
     "get-port": "^5.1.1",
     "idb": "^6.1.4",
+    "lodash-es": "^4.17.21",
     "navigator.locks": "^0.8.1",
     "playwright": "^1.15.0",
     "prettier": "^2.4.1",
