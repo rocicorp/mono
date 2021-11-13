@@ -6,4 +6,4 @@ Built with [Replicache](https://replicache.dev), [Next.js](https://nextjs.org/),
 [MySQL](https://mysql.com/), and [React
 Designer](https://react-designer.github.io/react-designer/).
 
-Running live at replidraw.herokuapp.com.
+Running live at [replidraw.herokuapp.com](https://replidraw.herokuapp.com/).
