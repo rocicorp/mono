@@ -22,7 +22,6 @@
     "@esm-bundle/chai": "^4.3.4",
     "@types/mocha": "^8.2.2",
     "@types/sinon": "^10.0.3",
-    "@types/web-locks-api": "^0.0.1",
     "@typescript-eslint/eslint-plugin": "^4.31.2",
     "@typescript-eslint/parser": "^4.31.2",
     "@web/dev-server": "0.1.23",
