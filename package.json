@@ -9,6 +9,9 @@
     "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "test": "env TS_NODE_COMPILER_OPTIONS='{\"module\": \"commonjs\" }' mocha -r ts-node/register 'backend/**/*.test.ts'"
   },
+  "engines": {
+    "node": "17.x"
+  },
   "dependencies": {
     "bootstrap": "^4.6.0",
     "commander": "^8.3.0",
