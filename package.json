@@ -13,7 +13,8 @@
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "build-mjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.mjs --format=esm src/mod.ts",
     "build-cjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.js --format=cjs src/mod.ts",
-    "build": "rm -rf out && npm run build-dts && npm run build-mjs && npm run build-cjs",
+    "build-min-mjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.min.mjs --format=esm src/mod.ts --minify",
+    "build": "rm -rf out && npm run build-dts && npm run build-mjs && npm run build-cjs && npm run build-min-mjs",
     "prepack": "npm run lint && npm run test && npm run build",
     "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts",
     "perf": "node perf/runner.js"
