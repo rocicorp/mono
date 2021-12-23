@@ -28,6 +28,7 @@
     "react-hotkeys": "^1.1.4",
     "replicache": "file:replicache-8.0.0.tgz",
     "replicache-react": "^2.4.0",
+    "tdigest": "^0.1.1",
     "ws": "^8.2.3",
     "zod": "^3.11.6"
   },
