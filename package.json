@@ -48,6 +48,7 @@
     "typedoc": "^0.22.10",
     "typedoc-plugin-sourcefile-url": "^1.0.6",
     "typescript": "^4.5.2",
+    "hash-wasm": "^4.9.0",
     "xbytes": "^1.7.0"
   },
   "main": "out/replicache.js",
@@ -65,7 +66,5 @@
     "out/replicache.wasm",
     "out/replicache.dev.wasm"
   ],
-  "dependencies": {
-    "hash-wasm": "^4.9.0"
-  }
+  "dependencies": {}
 }
