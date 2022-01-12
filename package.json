@@ -11,7 +11,7 @@
     "build-mjs": "esbuild --bundle --target=es2018 --platform=node --external:pg-native --outfile=out/reps.mjs --format=esm src/mod.ts",
     "build-cjs": "esbuild --bundle --target=es2018 --platform=node --external:pg-native --outfile=out/reps.js --format=cjs src/mod.ts",
     "build": "rm -rf out && npm run build-dts && npm run build-mjs && npm run build-cjs",
-    "prepack": "npm run lint && npm run test && npm run build"
+    "prepack": "npm run lint && npm run build"
   },
   "dependencies": {
     "nanoid": "^3.1.31",
