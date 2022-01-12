@@ -12,13 +12,6 @@
     "resolveJsonModule": true,
     "incremental": true
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts"
-  ],
-  "exclude": [
-    "dist",
-    "node_modules",
-    "out"
-  ]
+  "include": ["next-env.d.ts", "**/*.ts"],
+  "exclude": ["dist", "node_modules", "out"]
 }
