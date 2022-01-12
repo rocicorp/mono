@@ -7,10 +7,15 @@
     "format": "prettier --write 'src/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check '**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
-    "build-mjs": "esbuild --bundle --target=es2018 --platform=node --external:pg-native --outfile=out/reps.mjs --format=esm src/mod.ts",
-    "build-cjs": "esbuild --bundle --target=es2018 --platform=node --external:pg-native --outfile=out/reps.js --format=cjs src/mod.ts",
-    "build": "rm -rf out && npm run build-dts && npm run build-mjs && npm run build-cjs",
+    "build-reps-dts": "tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup-reps.config.js",
+    "build-reps-mjs": "esbuild --bundle --target=es2018 --platform=node --external:pg-native --outfile=out/reps.mjs --format=esm src/reps.ts",
+    "build-reps-cjs": "esbuild --bundle --target=es2018 --platform=node --external:pg-native --outfile=out/reps.js --format=cjs src/reps.ts",
+    "build-client-dts": "tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup-client.config.js",
+    "build-client-mjs": "esbuild --bundle --target=es2018 --platform=node --external:pg-native --outfile=out/client.mjs --format=esm src/client.ts",
+    "build-client-cjs": "esbuild --bundle --target=es2018 --platform=node --external:pg-native --outfile=out/client.js --format=cjs src/client.ts",
+    "build-reps": "npm run build-reps-dts && npm run build-reps-mjs && npm run build-reps-cjs",
+    "build-client": "npm run build-client-dts && npm run build-client-mjs && npm run build-client-cjs",
+    "build": "rm -rf out && npm run build-reps && npm run build-client",
     "prepack": "npm run lint && npm run build"
   },
   "dependencies": {
@@ -26,7 +31,7 @@
     "@esm-bundle/chai": "^4.3.4",
     "@types/chai": "^4.2.22",
     "@types/mocha": "^9.0.0",
-    "@types/node": "^14.14.37",
+    "@types/node": "^14.18.5",
     "@types/pg": "^8.6.1",
     "@types/ws": "^8.2.0",
     "@typescript-eslint/eslint-plugin": "^5.5.0",
@@ -44,13 +49,23 @@
   "module": "out/reps.mjs",
   "types": "out/reps.d.ts",
   "exports": {
-    "module": "./out/reps.mjs",
-    "require": "./out/reps.js",
-    "default": "./out/reps.mjs"
+    ".": {
+      "module": "./out/reps.mjs",
+      "require": "./out/reps.js",
+      "default": "./out/reps.mjs"
+    },
+    "./out/client": {
+      "module": "./out/client.mjs",
+      "require": "./out/client.js",
+      "default": "./out/client.mjs"
+    }
   },
   "files": [
     "out/reps.d.ts",
     "out/reps.js",
-    "out/reps.mjs"
+    "out/reps.mjs",
+    "out/client.d.ts",
+    "out/client.js",
+    "out/client.mjs"
   ]
 }
