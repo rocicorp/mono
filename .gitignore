@@ -11,3 +11,7 @@
 
 # debug
 npm-debug.log*
+
+# pack output
+reps-*.tgz
+
