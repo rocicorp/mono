@@ -18,6 +18,9 @@
     "build": "rm -rf out && npm run build-reps && npm run build-client",
     "prepack": "npm run lint && npm run build"
   },
+  "engines": {
+    "node": ">=16.0.0"
+  },
   "dependencies": {
     "nanoid": "^3.1.31",
     "pg": "^8.7.1",
