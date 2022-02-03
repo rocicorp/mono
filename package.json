@@ -13,7 +13,7 @@
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "build-mjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.mjs --format=esm src/mod.ts",
     "build-cjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.js --format=cjs src/mod.ts",
-    "build-min-mjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.min.mjs --format=esm src/mod.ts --minify",
+    "build-min-mjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.min.mjs --format=esm src/mod.ts --minify --mangle-props=^_",
     "build": "rm -rf out && npm run build-dts && npm run build-mjs && npm run build-cjs && npm run build-min-mjs",
     "prepack": "npm run lint && npm run test && npm run build",
     "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts",
@@ -33,10 +33,11 @@
     "benchmark": "^2.1.4",
     "command-line-args": "^5.2.0",
     "command-line-usage": "^6.1.1",
-    "esbuild": "~0.14.11",
+    "esbuild": "^0.14.18",
     "eslint": "^8.3.0",
     "fetch-mock": "^9.11.0",
     "get-port": "^6.0.0",
+    "hash-wasm": "^4.9.0",
     "idb": "^7.0.0",
     "lodash-es": "^4.17.21",
     "navigator.locks": "^0.8.1",
@@ -46,7 +47,6 @@
     "rollup-plugin-dts": "^4.1.0",
     "sinon": "^12.0.1",
     "typescript": "^4.5.4",
-    "hash-wasm": "^4.9.0",
     "xbytes": "^1.7.0"
   },
   "main": "out/replicache.js",
@@ -63,6 +63,5 @@
     "out/replicache.mjs",
     "out/replicache.wasm",
     "out/replicache.dev.wasm"
-  ],
-  "dependencies": {}
+  ]
 }
