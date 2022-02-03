@@ -1,16 +1,29 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
-    "target": "es2017",
-    "lib": ["dom", "esnext"],
-    "declaration": true,
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "esModuleInterop": true,
+    "target": "esnext",
     "module": "esnext",
+
+    "strict": true,
+    "noUnusedLocals": true,
+
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+
+    "importsNotUsedAsValues": "error",
+
+    "declaration": true,
+    "forceConsistentCasingInFileNames": true,
     "moduleResolution": "node",
+    "outDir": "out",
+    "allowJs": true,
+    "lib": ["esnext"],
+
     "resolveJsonModule": true,
-    "incremental": true
+    "incremental": true,
+    "baseUrl": ".",
+    "types": ["@cloudflare/workers-types", "jest"]
   },
   "include": ["next-env.d.ts", "**/*.ts"],
   "exclude": ["dist", "node_modules", "out"]
