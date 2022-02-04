@@ -4,7 +4,7 @@
 **/node_modules
 
 # build output
-**/dist
+**/out
 
 # misc
 .DS_Store
