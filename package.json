@@ -12,7 +12,8 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "test": "web-test-runner",
     "test:watch": "web-test-runner --watch",
-    "types:check": "tsc --noEmit"
+    "types:check": "tsc --noEmit",
+    "prepack": "npm run build"
   },
   "repository": {
     "type": "git",
