@@ -2,7 +2,8 @@
   "name": "reps-client",
   "version": "0.0.1",
   "description": "",
-  "main": "index.js",
+  "main": "out/index.js",
+  "types": "out/index.d.ts",
   "type": "module",
   "scripts": {
     "build": "tsc",
@@ -40,5 +41,12 @@
     "replicache": "^9.0.0-beta.0",
     "tdigest": "^0.1.1",
     "zod": "^3.11.6"
-  }
+  },
+  "exports": {
+    ".": "./out/index.js"
+  },
+  "files": [
+    "out/",
+    "!out/**/*.test.*"
+  ]
 }
