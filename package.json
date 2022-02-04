@@ -1,5 +1,5 @@
 {
-  "name": "reps",
+  "name": "reps-do",
   "description": "Multiplayer server for Replicache",
   "version": "0.0.1",
   "repository": "github:rocicorp/reps-do",
@@ -48,8 +48,7 @@
     }
   },
   "files": [
-    "out/reps.d.ts",
-    "out/reps.js",
-    "out/reps.mjs"
+    "out/",
+    "!out/**/*.test.*"
   ]
 }
