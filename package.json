@@ -42,9 +42,7 @@
   "types": "out/reps.d.ts",
   "exports": {
     ".": {
-      "module": "./out/reps.mjs",
-      "require": "./out/reps.js",
-      "default": "./out/reps.mjs"
+      "module": "./out/index.js"
     }
   },
   "files": [
