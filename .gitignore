@@ -15,3 +15,4 @@ npm-debug.log*
 # pack output
 reps-do-*.tgz
 
+tsconfig.tsbuildinfo
