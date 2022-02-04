@@ -13,7 +13,7 @@
     "dev": "miniflare --live-reload --debug",
     "test": "npm run build && node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "types:check": "tsc && tsc -p test/tsconfig.json",
-    "prepack": "npm run build-dts && npm run build"
+    "prepack": "rm -rf out && npm run build-dts && npm run build"
   },
   "engines": {
     "node": ">=16.0.0"
@@ -38,11 +38,12 @@
   "dependencies": {
     "replicache": "^9.0.0-beta.0"
   },
-  "main": "out/reps.js",
-  "types": "out/reps.d.ts",
+  "main": "out/index.js",
+  "types": "out/index.d.ts",
   "exports": {
     ".": {
-      "module": "./out/index.js"
+      "import": "./out/index.mjs",
+      "require": "./out/index.js"
     }
   },
   "files": [
