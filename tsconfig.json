@@ -21,6 +21,11 @@
     "lib": ["dom", "esnext"],
     "preserveSymlinks": true
   },
-  "include": ["src/**/*.ts", "perf/**/*.ts", "perf/**/*.js"],
+  "include": [
+    "src/**/*.ts",
+    "perf/**/*.ts",
+    "perf/**/*.js",
+    "node_modules/@phritz/licensing/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist/**/*", "build/**/*"]
 }
