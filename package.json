@@ -10,17 +10,19 @@
     "format": "prettier --write '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
+    "build-get-license": "esbuild --bundle --target=es2018 --external:'node:*' --outfile=out/get-license.mjs --format=esm tool/get-license.ts",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "build-mjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.mjs --format=esm src/mod.ts",
     "build-cjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.js --format=cjs src/mod.ts",
     "build-min-mjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.min.mjs --format=esm src/mod.ts --minify --mangle-props=^_",
-    "build": "rm -rf out && npm run build-dts && npm run build-mjs && npm run build-cjs && npm run build-min-mjs",
+    "build": "rm -rf out && npm run build-dts && npm run build-mjs && npm run build-cjs && npm run build-min-mjs && npm run build-get-license",
     "prepack": "npm run lint && npm run test && npm run build",
     "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts",
     "perf": "node perf/runner.js"
   },
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4",
+    "@rocicorp/licensing": "^1.0.0",
     "@types/lodash-es": "^4.17.5",
     "@types/mocha": "^9.0.0",
     "@types/sinon": "^10.0.6",
@@ -52,16 +54,23 @@
   "main": "out/replicache.js",
   "module": "out/replicache.mjs",
   "types": "out/replicache.d.ts",
+  "bin": {
+    "get-license": "./out/get-license.mjs"
+  },
   "exports": {
     "module": "./out/replicache.mjs",
     "require": "./out/replicache.js",
     "default": "./out/replicache.mjs"
   },
   "files": [
+    "out/get-license.mjs",
     "out/replicache.d.ts",
     "out/replicache.js",
     "out/replicache.mjs",
     "out/replicache.wasm",
     "out/replicache.dev.wasm"
-  ]
+  ],
+  "dependencies": {
+    "node-fetch": "^3.0.0"
+  }
 }
