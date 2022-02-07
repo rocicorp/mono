@@ -26,5 +26,5 @@
     "types": ["@cloudflare/workers-types", "jest"]
   },
   "include": ["next-env.d.ts", "**/*.ts"],
-  "exclude": ["dist", "node_modules", "out"]
+  "exclude": ["node_modules", "out"]
 }
