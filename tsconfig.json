@@ -18,13 +18,15 @@
     "moduleResolution": "node",
     "outDir": "out",
     "allowJs": true,
+
+    "types": ["@cloudflare/workers-types"],
     "lib": ["esnext"],
+    "skipLibCheck": true,
 
     "resolveJsonModule": true,
     "incremental": true,
-    "baseUrl": ".",
-    "types": ["@cloudflare/workers-types", "jest"]
+    "baseUrl": "."
   },
-  "include": ["next-env.d.ts", "**/*.ts"],
+  "include": ["**/*.ts"],
   "exclude": ["node_modules", "out"]
 }
