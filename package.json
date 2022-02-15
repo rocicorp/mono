@@ -12,7 +12,7 @@
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "dev": "miniflare --live-reload --debug",
     "test": "npm run build && node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "types:check": "tsc && tsc -p test/tsconfig.json",
+    "types:check": "tsc --noEmit",
     "prepack": "rm -rf out && npm run build-dts && npm run build"
   },
   "engines": {
