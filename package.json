@@ -1,7 +1,7 @@
 {
   "name": "reps-do",
   "description": "Multiplayer server for Replicache",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "repository": "github:rocicorp/reps-do",
   "type": "module",
   "scripts": {
