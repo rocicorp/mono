@@ -1,6 +1,6 @@
 {
   "name": "reps-client",
-  "version": "1.0.2",
+  "version": "0.1.0",
   "description": "",
   "main": "out/index.js",
   "types": "out/index.d.ts",
