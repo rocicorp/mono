@@ -13,6 +13,6 @@
 npm-debug.log*
 
 # pack output
-reps-do-*.tgz
+reflect-*.tgz
 
 tsconfig.tsbuildinfo

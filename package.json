@@ -1,8 +1,8 @@
 {
-  "name": "reps-do",
+  "name": "reflect",
   "description": "Multiplayer server for Replicache",
   "version": "0.2.0",
-  "repository": "github:rocicorp/reps-do",
+  "repository": "github:rocicorp/reflect",
   "type": "module",
   "scripts": {
     "format": "prettier --write 'src/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
