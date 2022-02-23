@@ -1,5 +1,5 @@
 {
-  "name": "reps-client",
+  "name": "reflect-client",
   "version": "0.1.0",
   "description": "",
   "main": "out/index.js",
@@ -17,15 +17,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rocicorp/reps-client.git"
+    "url": "git+https://github.com/rocicorp/reflect-client.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/rocicorp/reps-client/issues"
+    "url": "https://github.com/rocicorp/reflect-client/issues"
   },
-  "homepage": "https://github.com/rocicorp/reps-client#readme",
+  "homepage": "https://github.com/rocicorp/reflect-client#readme",
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4-fix.0",
     "@types/sinon": "^10.0.11",
