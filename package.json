@@ -69,8 +69,5 @@
     "out/replicache.mjs",
     "out/replicache.wasm",
     "out/replicache.dev.wasm"
-  ],
-  "dependencies": {
-    "node-fetch": "^3.0.0"
-  }
+  ]
 }
