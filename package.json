@@ -23,7 +23,8 @@
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4",
     "@rocicorp/licensing": "^2.0.0",
-    "@rocicorp/lock": "^1.0.0",
+    "@rocicorp/lock": "^1.0.1",
+    "@rocicorp/resolver": "^1.0.0",
     "@types/lodash-es": "^4.17.5",
     "@types/mocha": "^9.0.0",
     "@types/sinon": "^10.0.6",
