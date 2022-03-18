@@ -36,6 +36,7 @@
     "typescript": "^4.6.2"
   },
   "dependencies": {
+    "@rocicorp/lock": "^1.0.1",
     "replicache": "^9.0.0"
   },
   "main": "out/index.js",
