@@ -10,7 +10,7 @@
     "format": "prettier --write '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
-    "build-get-license": "esbuild --bundle --target=es2018 --external:'node:*' --outfile=out/get-license.mjs --format=esm tool/get-license.ts",
+    "build-get-license": "esbuild --bundle --platform=node --target=es2018 --external:'node:*' --outfile=out/get-license.cjs --format=cjs tool/get-license.ts",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "build-mjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.mjs --format=esm src/mod.ts",
     "build-cjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.js --format=cjs src/mod.ts",
@@ -22,9 +22,9 @@
   },
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4",
-    "@rocicorp/licensing": "^2.0.0",
+    "@rocicorp/licensing": "^4.0.0-beta.0",
     "@rocicorp/lock": "^1.0.1",
-    "@rocicorp/logger": "^1.1.1",
+    "@rocicorp/logger": "^2.1.1",
     "@rocicorp/resolver": "^1.0.0",
     "@types/lodash-es": "^4.17.5",
     "@types/mocha": "^9.0.0",
@@ -58,7 +58,7 @@
   "module": "out/replicache.mjs",
   "types": "out/replicache.d.ts",
   "bin": {
-    "get-license": "./out/get-license.mjs"
+    "get-license": "./out/get-license.cjs"
   },
   "exports": {
     "module": "./out/replicache.mjs",
