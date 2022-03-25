@@ -16,7 +16,7 @@
     "prepack": "rm -rf out && npm run build-dts && npm run build"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=16.14.0 <16.14.1 || >=17.1 <17.5"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^3.4.0",
