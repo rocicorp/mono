@@ -1,7 +1,7 @@
 {
   "name": "reflect",
   "description": "Multiplayer server for Replicache",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "repository": "github:rocicorp/reflect",
   "type": "module",
   "scripts": {
@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@rocicorp/lock": "^1.0.1",
-    "replicache": "^9.0.0"
+    "replicache": "9.0.0-beta.0"
   },
   "main": "out/index.js",
   "types": "out/index.d.ts",
