@@ -58,7 +58,7 @@
   "module": "out/replicache.mjs",
   "types": "out/replicache.d.ts",
   "bin": {
-    "get-license": "./out/get-license.cjs"
+    "get-replicache-license": "./out/get-license.cjs"
   },
   "exports": {
     "module": "./out/replicache.mjs",
