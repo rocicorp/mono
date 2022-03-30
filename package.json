@@ -10,12 +10,12 @@
     "format": "prettier --write '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
-    "build-get-license": "esbuild --bundle --platform=node --target=es2018 --external:'node:*' --outfile=out/get-license.cjs --format=cjs tool/get-license.ts",
+    "build-cli": "esbuild --bundle --platform=node --target=es2018 --external:'node:*' --outfile=out/cli.cjs --format=cjs tool/cli.ts",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "build-mjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.mjs --format=esm src/mod.ts",
     "build-cjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.js --format=cjs src/mod.ts",
     "build-min-mjs": "esbuild --bundle --target=es2018 --outfile=out/replicache.min.mjs --format=esm src/mod.ts --minify --mangle-props=^_",
-    "build": "rm -rf out && npm run build-dts && npm run build-mjs && npm run build-cjs && npm run build-min-mjs && npm run build-get-license",
+    "build": "rm -rf out && npm run build-dts && npm run build-mjs && npm run build-cjs && npm run build-min-mjs && npm run build-cli",
     "prepack": "npm run lint && npm run test && npm run build",
     "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts",
     "perf": "node perf/runner.js"
@@ -58,7 +58,7 @@
   "module": "out/replicache.mjs",
   "types": "out/replicache.d.ts",
   "bin": {
-    "get-replicache-license": "./out/get-license.cjs"
+    "replicache": "./out/cli.cjs"
   },
   "exports": {
     "module": "./out/replicache.mjs",
@@ -66,7 +66,7 @@
     "default": "./out/replicache.mjs"
   },
   "files": [
-    "out/get-license.mjs",
+    "out/cli.mjs",
     "out/replicache.d.ts",
     "out/replicache.js",
     "out/replicache.mjs",
