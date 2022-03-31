@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@rocicorp/lock": "^1.0.1",
+    "@rocicorp/logger": "^2.2.0",
     "replicache": "9.0.0-beta.0"
   },
   "main": "out/index.js",
