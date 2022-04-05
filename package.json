@@ -3,17 +3,21 @@
   "description": "Multiplayer server for Replicache",
   "version": "0.8.0",
   "repository": "github:rocicorp/reflect",
+  "license": "SEE LICENSE IN https://roci.dev/terms.html",
+  "main": "out/reflect.mjs",
+  "module": "out/reflect.mjs",
+  "types": "out/reflect.d.ts",
   "type": "module",
   "scripts": {
     "format": "prettier --write 'src/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check '**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "build": "node build.js",
+    "build": "rm -rf out && npm run build-dts && node build.js",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "dev": "miniflare --live-reload --debug",
     "test": "npm run build && node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "types:check": "tsc --noEmit",
-    "prepack": "rm -rf out && npm run build-dts && npm run build"
+    "prepack": "npm run lint && npm run test && npm run build"
   },
   "engines": {
     "node": ">=16.14.0 <16.14.1 || >=17.1 <17.5"
@@ -40,16 +44,8 @@
     "@rocicorp/logger": "^2.2.0",
     "replicache": "9.0.0-beta.0"
   },
-  "main": "out/index.js",
-  "types": "out/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./out/index.mjs",
-      "require": "./out/index.js"
-    }
-  },
   "files": [
-    "out/",
-    "!out/**/*.test.*"
+    "out/reflect.d.ts",
+    "out/reflect.mjs"
   ]
 }
