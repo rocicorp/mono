@@ -4,8 +4,8 @@
   "version": "0.8.0",
   "repository": "github:rocicorp/reflect",
   "license": "SEE LICENSE IN https://roci.dev/terms.html",
-  "main": "out/reflect.mjs",
-  "module": "out/reflect.mjs",
+  "main": "out/reflect.js",
+  "module": "out/reflect.js",
   "types": "out/reflect.d.ts",
   "type": "module",
   "scripts": {
@@ -46,6 +46,6 @@
   },
   "files": [
     "out/reflect.d.ts",
-    "out/reflect.mjs"
+    "out/reflect.js"
   ]
 }
