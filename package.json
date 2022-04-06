@@ -7,8 +7,8 @@
     "url": "git+https://github.com/rocicorp/reflect-client.git"
   },
   "license": "SEE LICENSE IN https://roci.dev/terms.html",
-  "main": "out/reflect-client.mjs",
-  "module": "out/reflect-client.mjs",
+  "main": "out/reflect-client.js",
+  "module": "out/reflect-client.js",
   "types": "out/reflect-client.d.ts",
   "type": "module",
   "scripts": {
@@ -19,8 +19,8 @@
     "test:watch": "web-test-runner --watch",
     "types:check": "tsc --noEmit",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
-    "build-min-mjs": "esbuild --bundle --target=es2018 --outfile=out/reflect-client.mjs --format=esm src/mod.ts --minify --mangle-props=^_",
-    "build": "rm -rf out && npm run build-dts && npm run build-min-mjs",
+    "build-min": "esbuild --bundle --target=es2018 --outfile=out/reflect-client.js --format=esm src/mod.ts --minify --mangle-props=^_",
+    "build": "rm -rf out && npm run build-dts && npm run build-min",
     "prepack": "npm run lint && npm run test && npm run build"
   },
   "devDependencies": {
@@ -47,6 +47,6 @@
   },
   "files": [
     "out/reflect-client.d.ts",
-    "out/reflect-client.mjs"
+    "out/reflect-client.js"
   ]
 }
