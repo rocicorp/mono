@@ -37,9 +37,7 @@
     "rollup-plugin-dts": "^4.2.0",
     "superstruct": "^0.15.4",
     "ts-jest": "^27.1.3",
-    "typescript": "^4.6.2"
-  },
-  "dependencies": {
+    "typescript": "^4.6.2",
     "@rocicorp/lock": "^1.0.1",
     "@rocicorp/logger": "^2.2.0",
     "replicache": "9.0.0-beta.0"
