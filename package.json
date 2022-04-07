@@ -1,12 +1,12 @@
 {
-  "name": "reflect",
+  "name": "reflect-server",
   "description": "Multiplayer server for Replicache",
   "version": "0.8.0",
-  "repository": "github:rocicorp/reflect",
+  "repository": "github:rocicorp/reflect-server",
   "license": "SEE LICENSE IN https://roci.dev/terms.html",
-  "main": "out/reflect.js",
-  "module": "out/reflect.js",
-  "types": "out/reflect.d.ts",
+  "main": "out/reflect-server.js",
+  "module": "out/reflect-server.js",
+  "types": "out/reflect-server.d.ts",
   "type": "module",
   "scripts": {
     "format": "prettier --write 'src/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
@@ -43,7 +43,7 @@
     "replicache": "9.0.0-beta.0"
   },
   "files": [
-    "out/reflect.d.ts",
-    "out/reflect.js"
+    "out/reflect-server.d.ts",
+    "out/reflect-server.js"
   ]
 }
