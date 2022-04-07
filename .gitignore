@@ -1,4 +1,4 @@
 node_modules
 .DS_Store
 out
-reflect-client-*.tgz
+reflect-*.tgz
