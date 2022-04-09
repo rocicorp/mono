@@ -1,5 +1,5 @@
 {
-  "name": "reflect-server",
+  "name": "@rocicorp/reflect-server",
   "description": "Multiplayer server for Replicache",
   "version": "0.8.0",
   "repository": "github:rocicorp/reflect-server",
