@@ -24,6 +24,8 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^3.4.0",
+    "@rocicorp/lock": "^1.0.1",
+    "@rocicorp/logger": "^2.2.0",
     "@types/jest": "^27.4.1",
     "@typescript-eslint/eslint-plugin": "^5.14.0",
     "@typescript-eslint/parser": "^5.14.0",
@@ -33,14 +35,12 @@
     "jest-environment-miniflare": "^2.3.0",
     "miniflare": "^2.3.0",
     "prettier": "^2.5.1",
+    "replicache": "^10.0.0-alpha.2",
     "rollup": "^2.70.0",
     "rollup-plugin-dts": "^4.2.0",
     "superstruct": "^0.15.4",
     "ts-jest": "^27.1.3",
-    "typescript": "^4.6.2",
-    "@rocicorp/lock": "^1.0.1",
-    "@rocicorp/logger": "^2.2.0",
-    "replicache": "9.0.0-beta.0"
+    "typescript": "^4.6.2"
   },
   "files": [
     "out/reflect-server.d.ts",
