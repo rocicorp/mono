@@ -13,10 +13,11 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "build": "rm -rf out && npm run build-dts && node tool/build.mjs",
+    "build-perf": "node tool/build.mjs --perf",
     "build-bundle-sizes": "rm -rf out && npm run build-dts && node tool/build.mjs --bundle-sizes",
     "prepack": "npm run lint && npm run test && npm run build",
     "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts",
-    "perf": "node perf/runner.js"
+    "perf": "npm run build-perf && node perf/runner.js"
   },
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4",
