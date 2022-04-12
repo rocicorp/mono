@@ -9,6 +9,7 @@
     "test:watch": "web-test-runner --watch",
     "format": "prettier --write '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
+    "check-types": "tsc --noEmit && tsc --noEmit tool/cli.ts",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
     "build-cli": "esbuild --bundle --platform=node --target=es2018 --external:'node:*' --outfile=out/cli.cjs --format=cjs tool/cli.ts",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
