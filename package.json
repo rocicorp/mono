@@ -32,7 +32,7 @@
     "@types/sinon": "^10.0.11",
     "@typescript-eslint/eslint-plugin": "^5.18.0",
     "@typescript-eslint/parser": "^5.18.0",
-    "@web/dev-server": "0.1.30",
+    "@web/dev-server": "0.1.29",
     "@web/dev-server-esbuild": "^0.3.0",
     "@web/test-runner": "^0.13.27",
     "@web/test-runner-playwright": "^0.8.8",
