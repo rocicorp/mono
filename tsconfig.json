@@ -21,6 +21,6 @@
     "lib": ["dom", "esnext"],
     "preserveSymlinks": true
   },
-  "include": ["src/**/*.ts", "perf/**/*.ts", "perf/**/*.js"],
-  "exclude": ["node_modules", "dist/**/*", "build/**/*"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "out/**/*"]
 }
