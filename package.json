@@ -3,7 +3,7 @@
   "description": "Realtime sync for any backend stack",
   "version": "10.0.0-alpha.4",
   "repository": "github:rocicorp/replicache",
-  "license": "BSL-1.1",
+  "license": "https://roci.dev/terms.html",
   "scripts": {
     "test": "web-test-runner",
     "test:watch": "web-test-runner --watch",
