@@ -35,7 +35,7 @@
     "jest-environment-miniflare": "^2.4.0",
     "miniflare": "^2.4.0",
     "prettier": "^2.6.2",
-    "replicache": "^10.0.0-alpha.2",
+    "replicache": "^10.0.0",
     "rollup": "^2.71.1",
     "rollup-plugin-dts": "^4.2.1",
     "superstruct": "^0.15.4",
