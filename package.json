@@ -69,6 +69,8 @@
     "out/replicache.js",
     "out/replicache.mjs",
     "out/replicache.wasm",
-    "out/replicache.dev.wasm"
+    "out/replicache.dev.wasm",
+    "out/replicache.mjs.map",
+    "out/replicache.js.map"
   ]
 }
