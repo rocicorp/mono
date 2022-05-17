@@ -67,8 +67,6 @@
     "out/cli.mjs",
     "out/replicache.d.ts",
     "out/replicache.js",
-    "out/replicache.mjs",
-    "out/replicache.wasm",
-    "out/replicache.dev.wasm"
+    "out/replicache.mjs"
   ]
 }
