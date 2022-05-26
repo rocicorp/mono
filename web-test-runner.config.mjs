@@ -38,17 +38,8 @@ const config = {
       retries: process.env.CI ? 3 : 0, // Firefox is flaky
     },
   },
-  files: [
-    'src/*.test.ts',
-    'src/dag/*.test.ts',
-    'src/db/*.test.ts',
-    'src/kv/*.test.ts',
-    'src/sync/*.test.ts',
-    'src/migrate/*.test.ts',
-    'src/btree/*.test.ts',
-    'src/persist/*.test.ts',
-  ],
-  browsers: [firefox, chromium, webkit],
+  files: ['src/db/viewer.test.ts'],
+  browsers: [chromium],
 };
 
 export {config as default};

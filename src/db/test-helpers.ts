@@ -30,10 +30,14 @@ export async function createGenesis(store: dag.Store): Promise<Commit<Meta>> {
 
 // Local commit has mutator name and args according to its index in the
 // chain.
-export async function addLocal(chain: Chain, store: dag.Store): Promise<Chain> {
+export async function addLocal(
+  chain: Chain,
+  store: dag.Store,
+  entries?: [string, JSONValue][],
+): Promise<Chain> {
   expect(chain).to.have.length.greaterThan(0);
   const i = chain.length;
-  const commit = await createLocal([[`local`, `${i}`]], store, i);
+  const commit = await createLocal(entries ?? [[`local`, `${i}`]], store, i);
 
   chain.push(commit);
   return chain;
