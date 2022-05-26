@@ -69,5 +69,8 @@
     "out/replicache.d.ts",
     "out/replicache.js",
     "out/replicache.mjs"
-  ]
+  ],
+  "dependencies": {
+    "ts-graphviz": "^0.16.0"
+  }
 }

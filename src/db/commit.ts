@@ -415,3 +415,22 @@ function validateChunk(
     seen.add(name);
   }
 }
+
+export function getMetaTypedDisplayName(type: MetaTyped): string {
+  let displayName = undefined;
+  switch (type) {
+    case MetaTyped.IndexChange:
+      displayName = 'IndexChange';
+      break;
+    case MetaTyped.Local:
+      displayName = 'Local';
+      break;
+    case MetaTyped.Snapshot:
+      displayName = 'Snapshot';
+      break;
+  }
+  if (displayName === undefined) {
+    throw new Error(`MetaTyped display name not found for type ${type}`);
+  }
+  return displayName;
+}
