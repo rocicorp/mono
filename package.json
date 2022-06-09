@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4-fix.0",
+    "@rocicorp/logger": "^2.2.0",
     "@types/sinon": "^10.0.11",
     "@typescript-eslint/eslint-plugin": "^5.12.0",
     "@web/dev-server-esbuild": "^0.2.16",
