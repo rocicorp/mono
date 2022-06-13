@@ -59,6 +59,9 @@
   "bin": {
     "replicache": "./out/cli.cjs"
   },
+  "engines": {
+    "node": ">=14.8.0"
+  },
   "exports": {
     "module": "./out/replicache.mjs",
     "require": "./out/replicache.js",
