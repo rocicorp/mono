@@ -4,13 +4,13 @@ import * as db from '../db/mod';
 import type {ReadonlyJSONValue} from '../json';
 import {
   assertPullResponse,
-  isClientStateNotFoundResponse,
   Puller,
   PullerResult,
   PullError,
   PullResponse,
   PullResponseOK,
 } from '../puller';
+import {isClientStateNotFoundResponse} from './errors';
 import {assertHTTPRequestInfo, HTTPRequestInfo} from '../http-request-info';
 import {callJSRequest} from './js-request';
 import {SYNC_HEAD_NAME} from './sync-head-name';

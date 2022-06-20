@@ -4,12 +4,7 @@ import {Lock} from '@rocicorp/lock';
 import type {ReadonlyJSONValue} from './json';
 import type {JSONValue} from './json';
 import {Pusher, PushError} from './pusher';
-import {
-  isClientStateNotFoundResponse,
-  Puller,
-  PullError,
-  PullResponse,
-} from './puller';
+import {Puller, PullError, PullResponse} from './puller';
 import {
   IndexTransactionImpl,
   ReadTransactionImpl,
@@ -70,6 +65,7 @@ import {
   toInternalValue,
   ToInternalValueReason,
 } from './internal-value.js';
+import {isClientStateNotFoundResponse} from './sync/errors';
 
 export type BeginPullResult = {
   requestID: string;

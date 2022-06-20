@@ -1,9 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {
-  isClientStateNotFoundResponse,
-  PullResponse,
-  PullResponseOK,
-} from './puller';
+import type {PullResponse, PullResponseOK} from './puller';
 import * as dag from './dag/mod';
 import * as db from './db/mod';
 import * as persist from './persist/mod';
@@ -18,6 +14,7 @@ import {
 } from './replicache';
 import type {Replicache} from './replicache';
 import {IDBStore} from './kv/idb-store.js';
+import {isClientStateNotFoundResponse} from './sync/errors';
 
 const MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 10 * 2 ** 20; // 10 MB
 

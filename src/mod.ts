@@ -44,10 +44,10 @@ export type {
   Puller,
   PullResponse,
   PullResponseOK,
-  ClientStateNotFoundResponse,
   PullerResult,
   PullError,
 } from './puller';
+export type {ClientStateNotFoundResponse} from './sync/errors';
 export type {Pusher, PushError} from './pusher';
 
 export type {

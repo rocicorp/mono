@@ -2,6 +2,10 @@ import {assertArray, assertNumber, assertObject, assertString} from './asserts';
 import {httpRequest} from './http-request';
 import {assertJSONValue, JSONValue, ReadonlyJSONValue} from './json';
 import type {HTTPRequestInfo} from './http-request-info';
+import {
+  ClientStateNotFoundResponse,
+  isClientStateNotFoundResponse,
+} from './sync/errors';
 
 export type PullerResult = {
   response?: PullResponse;
@@ -24,29 +28,10 @@ export type PullResponseOK = {
 };
 
 /**
- * In certain scenarios the server can signal that it does not know about the
- * client. For example, the server might have deleted the client.
- */
-export type ClientStateNotFoundResponse = {
-  error: 'ClientStateNotFound';
-};
-
-/**
  * PullResponse defines the shape and type of the response of a pull. This is
  * the JSON you should return from your pull server endpoint.
  */
 export type PullResponse = PullResponseOK | ClientStateNotFoundResponse;
-
-export function isClientStateNotFoundResponse(
-  result: unknown,
-): result is ClientStateNotFoundResponse {
-  return (
-    typeof result === 'object' &&
-    result !== null &&
-    (result as Partial<ClientStateNotFoundResponse>).error ===
-      'ClientStateNotFound'
-  );
-}
 
 export function assertPullResponse(v: unknown): asserts v is PullResponse {
   if (typeof v !== 'object' || v === null) {
