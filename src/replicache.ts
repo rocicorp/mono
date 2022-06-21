@@ -1057,7 +1057,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
               this.auth,
               this.schemaVersion,
             );
-            return {result: pushResponse, httpRequestInfo: pushResponse};
+            return {
+              result: pushResponse,
+              httpRequestInfo: pushResponse?.httpRequestInfo,
+            };
           } finally {
             this._changeSyncCounters(-1, 0);
           }
@@ -1065,9 +1068,21 @@ export class Replicache<MD extends MutatorDefs = {}> {
         'push',
         this.pushURL,
       );
+
+      if (
+        pushResponse?.response &&
+        isClientStateNotFoundResponse(pushResponse.response)
+      ) {
+        const clientID = await this._clientIDPromise;
+        this._fireOnClientStateNotFound(clientID, reasonServer);
+      }
+
       // No pushResponse means we didn't do a push because there were no
       // pending mutations.
-      return pushResponse === undefined || pushResponse.httpStatusCode === 200;
+      return (
+        pushResponse === undefined ||
+        pushResponse?.httpRequestInfo.httpStatusCode === 200
+      );
     }, 'Push');
   }
 

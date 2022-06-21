@@ -10,10 +10,9 @@ import {
   addSnapshot,
   Chain,
 } from '../db/test-helpers';
-import type {HTTPRequestInfo} from '../http-request-info';
 import {SYNC_HEAD_NAME} from './sync-head-name';
 import {push, PushRequest, PUSH_VERSION} from './push';
-import type {Pusher} from '../pusher';
+import type {Pusher, PusherResult} from '../pusher';
 import {toInternalValue, ToInternalValueReason} from '../internal-value.js';
 
 type FakePusherArgs = {
@@ -26,7 +25,7 @@ type FakePusherArgs = {
 };
 
 function makeFakePusher(options: FakePusherArgs): Pusher {
-  return async (req: Request): Promise<HTTPRequestInfo> => {
+  return async (req: Request): Promise<PusherResult> => {
     expect(options.expPush).to.be.true;
 
     const pushReq = await req.json();
@@ -45,8 +44,11 @@ function makeFakePusher(options: FakePusherArgs): Pusher {
     if (options.err) {
       if (options.err === 'FetchNotOk(500)') {
         return {
-          httpStatusCode: 500,
-          errorMessage: 'Fetch not OK',
+          httpRequestInfo: {
+            httpStatusCode: 500,
+            errorMessage: 'Fetch not OK',
+          },
+          response: {},
         };
       } else {
         throw new Error('not implented');
@@ -54,8 +56,11 @@ function makeFakePusher(options: FakePusherArgs): Pusher {
     }
 
     return {
-      httpStatusCode: 200,
-      errorMessage: '',
+      httpRequestInfo: {
+        httpStatusCode: 200,
+        errorMessage: '',
+      },
+      response: {},
     };
   };
 }
@@ -87,7 +92,7 @@ test('try push', async () => {
     numPendingMutations: number;
     expPushReq: PushRequest | undefined;
     pushResult: undefined | 'ok' | {error: string};
-    expBatchPushInfo: HTTPRequestInfo | undefined;
+    expBatchPushInfo: PusherResult | undefined;
   };
   const cases: Case[] = [
     {
@@ -116,8 +121,11 @@ test('try push', async () => {
       },
       pushResult: 'ok',
       expBatchPushInfo: {
-        httpStatusCode: 200,
-        errorMessage: '',
+        httpRequestInfo: {
+          httpStatusCode: 200,
+          errorMessage: '',
+        },
+        response: {},
       },
     },
     {
@@ -148,8 +156,11 @@ test('try push', async () => {
       },
       pushResult: 'ok',
       expBatchPushInfo: {
-        httpStatusCode: 200,
-        errorMessage: '',
+        httpRequestInfo: {
+          httpStatusCode: 200,
+          errorMessage: '',
+        },
+        response: {},
       },
     },
     {
@@ -180,8 +191,11 @@ test('try push', async () => {
       },
       pushResult: {error: 'FetchNotOk(500)'},
       expBatchPushInfo: {
-        httpStatusCode: 500,
-        errorMessage: 'Fetch not OK',
+        httpRequestInfo: {
+          httpStatusCode: 500,
+          errorMessage: 'Fetch not OK',
+        },
+        response: {},
       },
     },
   ];

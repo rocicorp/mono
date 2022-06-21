@@ -250,12 +250,15 @@ export class MutationRecovery<M extends MutatorDefs> {
               delegate.auth,
               database.schemaVersion,
             );
-            return {result: pushResponse, httpRequestInfo: pushResponse};
+            return {
+              result: pushResponse,
+              httpRequestInfo: pushResponse?.httpRequestInfo,
+            };
           },
           pushDescription,
           delegate.pushURL,
         );
-        return !!pushResponse && pushResponse.httpStatusCode === 200;
+        return pushResponse?.httpRequestInfo?.httpStatusCode === 200;
       }, pushDescription);
       if (!pushSucceeded) {
         lc.debug?.(

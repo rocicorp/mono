@@ -417,13 +417,8 @@ async function callPuller(
   }
 }
 
-type Result = {
-  response?: PullResponse;
-  httpRequestInfo: HTTPRequestInfo;
-};
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function assertResult(v: any): asserts v is Result {
+function assertResult(v: any): asserts v is PullerResult {
   if (typeof v !== 'object' || v === null) {
     throw new Error('Expected result to be an object');
   }

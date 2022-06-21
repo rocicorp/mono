@@ -1,11 +1,15 @@
 import type {LogContext} from '@rocicorp/logger';
 import * as db from '../db/mod';
 import type * as dag from '../dag/mod';
-import {assertHTTPRequestInfo, HTTPRequestInfo} from '../http-request-info';
-import {Pusher, PushError} from '../pusher';
+import {assertHTTPRequestInfo} from '../http-request-info';
+import {Pusher, PusherResult, PushError} from '../pusher';
 import {callJSRequest} from './js-request';
 import {toError} from '../to-error';
 import type {InternalValue} from '../internal-value.js';
+import {
+  ClientStateNotFoundResponse,
+  isClientStateNotFoundResponse,
+} from './errors';
 
 export const PUSH_VERSION = 0;
 
@@ -23,6 +27,27 @@ export type PushRequest = {
   // of mutator args).
   schemaVersion: string;
 };
+
+/**
+ * The response to a push requests can either be completely empty, or JSON
+ * with the application/json content type. If the latter, these are the
+ * supported shapes.
+ */
+export type PushResponse = PushResponseOK | ClientStateNotFoundResponse;
+
+export type PushResponseOK = Record<string, never>;
+
+export function assertPushResponse(v: unknown): asserts v is PushResponse {
+  if (typeof v !== 'object' || v === null) {
+    throw new Error('PushResponse must be an object');
+  }
+  if (isClientStateNotFoundResponse(v)) {
+    return;
+  }
+  // TODO: If push ever has fields in the success case, validiating them goes
+  // here.
+  return;
+}
 
 /**
  * Mutation describes a single mutation done on the client.
@@ -53,7 +78,7 @@ export async function push(
   pushURL: string,
   auth: string,
   schemaVersion: string,
-): Promise<HTTPRequestInfo | undefined> {
+): Promise<PusherResult | undefined> {
   // Find pending commits between the base snapshot and the main head and push
   // them to the data layer.
   const pending = await store.withRead(async dagRead => {
@@ -68,7 +93,7 @@ export async function push(
   // want tail first (in mutation id order).
   pending.reverse();
 
-  let httpRequestInfo: HTTPRequestInfo | undefined = undefined;
+  let result: PusherResult | undefined = undefined;
   if (pending.length > 0) {
     const pushMutations: Mutation[] = [];
     for (const commit of pending) {
@@ -87,17 +112,11 @@ export async function push(
     };
     lc.debug?.('Starting push...');
     const pushStart = Date.now();
-    httpRequestInfo = await callPusher(
-      pusher,
-      pushURL,
-      pushReq,
-      auth,
-      requestID,
-    );
+    result = await callPusher(pusher, pushURL, pushReq, auth, requestID);
     lc.debug?.('...Push complete in ', Date.now() - pushStart, 'ms');
   }
 
-  return httpRequestInfo;
+  return result;
 }
 
 async function callPusher(
@@ -106,12 +125,30 @@ async function callPusher(
   body: PushRequest,
   auth: string,
   requestID: string,
-): Promise<HTTPRequestInfo> {
+): Promise<PusherResult> {
   try {
-    const res = await callJSRequest(pusher, url, body, auth, requestID);
-    assertHTTPRequestInfo(res);
+    let res = await callJSRequest(pusher, url, body, auth, requestID);
+    if (!('httpRequestInfo' in res)) {
+      res = {
+        httpRequestInfo: res,
+      };
+    }
+    assertResult(res);
     return res;
   } catch (e) {
     throw new PushError(toError(e));
   }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function assertResult(v: any): asserts v is PusherResult {
+  if (typeof v !== 'object' || v === null) {
+    throw new Error('Expected result to be an object');
+  }
+
+  if (v.response !== undefined) {
+    assertPushResponse(v.response);
+  }
+
+  assertHTTPRequestInfo(v.httpRequestInfo);
 }
