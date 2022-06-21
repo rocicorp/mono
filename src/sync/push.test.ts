@@ -12,56 +12,31 @@ import {
 } from '../db/test-helpers';
 import {SYNC_HEAD_NAME} from './sync-head-name';
 import {push, PushRequest, PUSH_VERSION} from './push';
-import type {Pusher, PusherResult} from '../pusher';
-import {toInternalValue, ToInternalValueReason} from '../internal-value.js';
+import type {LegacyPusherResult, Pusher, PusherResult} from '../pusher';
+import { toInternalValue, ToInternalValueReason } from '../internal-value';
 
 type FakePusherArgs = {
-  expPush: boolean;
   expPushReq?: PushRequest;
   expPushURL: string;
   expAuth: string;
   expRequestID: string;
-  err?: string;
+  pusherResult: unknown;
 };
 
 function makeFakePusher(options: FakePusherArgs): Pusher {
-  return async (req: Request): Promise<PusherResult> => {
-    expect(options.expPush).to.be.true;
-
+  return async (req: Request): Promise<LegacyPusherResult | PusherResult> => {
     const pushReq = await req.json();
 
-    if (options.expPushReq) {
-      expect(options.expPushReq).to.deep.equal(pushReq);
-      expect(new URL(options.expPushURL, location.href).toString()).to.equal(
-        req.url,
-      );
-      expect(options.expAuth).to.equal(req.headers.get('Authorization'));
-      expect(options.expRequestID).to.equal(
-        req.headers.get('X-Replicache-RequestID'),
-      );
-    }
+    expect(options.expPushReq).to.deep.equal(pushReq);
+    expect(new URL(options.expPushURL, location.href).toString()).to.equal(
+      req.url,
+    );
+    expect(options.expAuth).to.equal(req.headers.get('Authorization'));
+    expect(options.expRequestID).to.equal(
+      req.headers.get('X-Replicache-RequestID'),
+    );
 
-    if (options.err) {
-      if (options.err === 'FetchNotOk(500)') {
-        return {
-          httpRequestInfo: {
-            httpStatusCode: 500,
-            errorMessage: 'Fetch not OK',
-          },
-          response: {},
-        };
-      } else {
-        throw new Error('not implented');
-      }
-    }
-
-    return {
-      httpRequestInfo: {
-        httpStatusCode: 200,
-        errorMessage: '',
-      },
-      response: {},
-    };
+    return options.pusherResult as LegacyPusherResult | PusherResult;
   };
 }
 
@@ -85,22 +60,32 @@ test('try push', async () => {
   const pushURL = 'push_url';
   const pushSchemaVersion = 'pushSchemaVersion';
 
+  function pushResult(code: number, errorMessage: string, response: unknown) {
+    return {
+      httpRequestInfo: {
+        httpStatusCode: code,
+        errorMessage,
+      },
+      response,
+    } as PusherResult
+  }
+
   type Case = {
     name: string;
 
     // Push expectations.
     numPendingMutations: number;
     expPushReq: PushRequest | undefined;
-    pushResult: undefined | 'ok' | {error: string};
-    expBatchPushInfo: PusherResult | undefined;
+    pusherResult: unknown;
+    expPushResult: PusherResult | undefined;
   };
   const cases: Case[] = [
     {
       name: '0 pending',
       numPendingMutations: 0,
       expPushReq: undefined,
-      pushResult: undefined,
-      expBatchPushInfo: undefined,
+      pusherResult: undefined,
+      expPushResult: undefined,
     },
     {
       name: '1 pending',
@@ -119,14 +104,8 @@ test('try push', async () => {
         pushVersion: PUSH_VERSION,
         schemaVersion: pushSchemaVersion,
       },
-      pushResult: 'ok',
-      expBatchPushInfo: {
-        httpRequestInfo: {
-          httpStatusCode: 200,
-          errorMessage: '',
-        },
-        response: {},
-      },
+      pusherResult: pushResult(200, '', {}),
+      expPushResult: pushResult(200, '', {}),
     },
     {
       name: '2 pending',
@@ -154,14 +133,8 @@ test('try push', async () => {
         pushVersion: PUSH_VERSION,
         schemaVersion: pushSchemaVersion,
       },
-      pushResult: 'ok',
-      expBatchPushInfo: {
-        httpRequestInfo: {
-          httpStatusCode: 200,
-          errorMessage: '',
-        },
-        response: {},
-      },
+      pusherResult: pushResult(200, '', {}),
+      expPushResult: pushResult(200, '', {}),
     },
     {
       name: '2 mutations to push, push errors',
@@ -189,14 +162,8 @@ test('try push', async () => {
         pushVersion: PUSH_VERSION,
         schemaVersion: pushSchemaVersion,
       },
-      pushResult: {error: 'FetchNotOk(500)'},
-      expBatchPushInfo: {
-        httpRequestInfo: {
-          httpStatusCode: 500,
-          errorMessage: 'Fetch not OK',
-        },
-        response: {},
-      },
+      pusherResult: pushResult(500, 'Fetch not OK', {}),
+      expPushResult: pushResult(500, 'Fetch not OK', {}),
     },
   ];
 
@@ -234,26 +201,12 @@ test('try push', async () => {
       });
     }
 
-    // See explanation in FakePusher for why we do this dance with the
-    // push_result.
-    const [expPush, pushErr] = (() => {
-      switch (c.pushResult) {
-        case undefined:
-          return [false, undefined] as const;
-        case 'ok':
-          return [true, undefined] as const;
-        default:
-          return [true, c.pushResult.error] as const;
-      }
-    })();
-
     const pusher = makeFakePusher({
-      expPush,
       expPushReq: c.expPushReq,
       expPushURL: pushURL,
       expAuth: auth,
       expRequestID: requestID,
-      err: pushErr,
+      pusherResult: c.pusherResult,
     });
 
     const clientID = 'test_client_id';
@@ -269,6 +222,6 @@ test('try push', async () => {
       pushSchemaVersion,
     );
 
-    expect(batchPushInfo).to.deep.equal(c.expBatchPushInfo, `name: ${c.name}`);
+    expect(batchPushInfo).to.deep.equal(c.expPushResult, `name: ${c.name}`);
   }
 });
