@@ -133,7 +133,11 @@ async function callPusher(
 ): Promise<PusherResult> {
   try {
     let res = await callJSRequest(pusher, url, body, auth, requestID);
-    if (!('httpRequestInfo' in res)) {
+    if (
+      typeof res === 'object' &&
+      res !== null &&
+      !('httpRequestInfo' in res)
+    ) {
       res = {
         httpRequestInfo: res,
         response: {},

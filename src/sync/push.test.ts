@@ -13,7 +13,7 @@ import {
 import {SYNC_HEAD_NAME} from './sync-head-name';
 import {push, PushRequest, PUSH_VERSION} from './push';
 import type {LegacyPusherResult, Pusher, PusherResult} from '../pusher';
-import { toInternalValue, ToInternalValueReason } from '../internal-value';
+import {toInternalValue, ToInternalValueReason} from '../internal-value';
 
 type FakePusherArgs = {
   expPushReq?: PushRequest;
@@ -60,14 +60,18 @@ test('try push', async () => {
   const pushURL = 'push_url';
   const pushSchemaVersion = 'pushSchemaVersion';
 
+  function httpRequestInfo(code: number, errorMessage: string) {
+    return {
+      httpStatusCode: code,
+      errorMessage,
+    };
+  }
+
   function pushResult(code: number, errorMessage: string, response: unknown) {
     return {
-      httpRequestInfo: {
-        httpStatusCode: code,
-        errorMessage,
-      },
+      httpRequestInfo: httpRequestInfo(code, errorMessage),
       response,
-    } as PusherResult
+    } as PusherResult;
   }
 
   type Case = {
@@ -77,7 +81,8 @@ test('try push', async () => {
     numPendingMutations: number;
     expPushReq: PushRequest | undefined;
     pusherResult: unknown;
-    expPushResult: PusherResult | undefined;
+    expPushResult?: PusherResult;
+    expPushErrorCause?: string;
   };
   const cases: Case[] = [
     {
@@ -106,6 +111,46 @@ test('try push', async () => {
       },
       pusherResult: pushResult(200, '', {}),
       expPushResult: pushResult(200, '', {}),
+    },
+    {
+      name: '1 pending - legacy pusher response',
+      numPendingMutations: 1,
+      expPushReq: {
+        profileID,
+        clientID,
+        mutations: [
+          {
+            id: 2,
+            name: 'mutator_name_3',
+            args: toInternalValue([3], ToInternalValueReason.Test),
+            timestamp: 42,
+          },
+        ],
+        pushVersion: PUSH_VERSION,
+        schemaVersion: pushSchemaVersion,
+      },
+      pusherResult: httpRequestInfo(200, ''),
+      expPushResult: pushResult(200, '', {}),
+    },
+    {
+      name: '1 pending - invalid pusher response',
+      numPendingMutations: 1,
+      expPushReq: {
+        profileID,
+        clientID,
+        mutations: [
+          {
+            id: 2,
+            name: 'mutator_name_3',
+            args: toInternalValue([3], ToInternalValueReason.Test),
+            timestamp: 42,
+          },
+        ],
+        pushVersion: PUSH_VERSION,
+        schemaVersion: pushSchemaVersion,
+      },
+      pusherResult: 'bonk',
+      expPushErrorCause: 'Error: Expected result to be an object',
     },
     {
       name: '2 pending',
@@ -210,18 +255,23 @@ test('try push', async () => {
     });
 
     const clientID = 'test_client_id';
-    const batchPushInfo = await push(
-      requestID,
-      store,
-      lc,
-      profileID,
-      clientID,
-      pusher,
-      pushURL,
-      auth,
-      pushSchemaVersion,
-    );
-
-    expect(batchPushInfo).to.deep.equal(c.expPushResult, `name: ${c.name}`);
+    try {
+      const batchPushInfo = await push(
+        requestID,
+        store,
+        lc,
+        profileID,
+        clientID,
+        pusher,
+        pushURL,
+        auth,
+        pushSchemaVersion,
+      );
+      expect(batchPushInfo).to.deep.equal(c.expPushResult, `name: ${c.name}`);
+      expect(c.expPushErrorCause).undefined;
+    } catch (e) {
+      const cause = String((e as {causedBy: unknown}).causedBy);
+      expect(cause).equal(c.expPushErrorCause);
+    }
   }
 });
