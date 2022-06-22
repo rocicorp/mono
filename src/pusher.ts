@@ -2,6 +2,9 @@ import {httpRequest} from './http-request';
 import type {HTTPRequestInfo} from './http-request-info';
 import type {PushResponse} from './sync/push';
 
+/**
+ * @deprecated Use `PusherResult` instead.
+ */
 export type LegacyPusherResult = HTTPRequestInfo;
 export type PusherResult = {
   response: PushResponse;
@@ -11,6 +14,9 @@ export type PusherResult = {
 /**
  * Pusher is the function type used to do the fetch part of a push. The request
  * is a POST request where the body is JSON with the type [[PushRequest]].
+ *
+ * Implementations can return [[LegacyPusherResult]], but it's recommended to
+ * return [[PusherResult]] as that will become required in the future.
  */
 export type Pusher = (
   request: Request,
