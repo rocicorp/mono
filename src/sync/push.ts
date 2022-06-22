@@ -68,6 +68,11 @@ export function convert(lm: db.LocalMeta): Mutation {
   };
 }
 
+/**
+ * Sends a push request via the configured `pusher`. An undefined response means
+ * the push was not sent because no pending mutations. HTTP errors are indicated
+ * via the httpRequestInfo.status property.
+ */
 export async function push(
   requestID: string,
   store: dag.Store,
@@ -131,6 +136,7 @@ async function callPusher(
     if (!('httpRequestInfo' in res)) {
       res = {
         httpRequestInfo: res,
+        response: {},
       };
     }
     assertResult(res);

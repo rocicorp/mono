@@ -4,7 +4,7 @@ import type {PushResponse} from './sync/push';
 
 export type LegacyPusherResult = HTTPRequestInfo;
 export type PusherResult = {
-  response?: PushResponse;
+  response: PushResponse;
   httpRequestInfo: HTTPRequestInfo;
 };
 
@@ -21,6 +21,7 @@ export const defaultPusher: Pusher = async request => {
   if (httpRequestInfo.httpStatusCode !== 200) {
     return {
       httpRequestInfo,
+      response: {},
     };
   }
   if (response.headers.get('content-type') === 'application/json') {
@@ -31,7 +32,7 @@ export const defaultPusher: Pusher = async request => {
   }
   return {
     httpRequestInfo,
-    response: undefined,
+    response: {},
   };
 };
 
