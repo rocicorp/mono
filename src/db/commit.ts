@@ -59,7 +59,13 @@ export class Commit<M extends Meta> {
     const {meta} = this;
     switch (meta.type) {
       case MetaType.IndexChange:
-        return meta.lastMutationID;
+        if (DD31) {
+          const {basisHash} = meta;
+          const basisCommit = await fromHash(basisHash, dagRead);
+          return basisCommit.getMutationID(clientID, dagRead);
+        } else {
+          return meta.lastMutationID;
+        }
       case MetaType.Snapshot: {
         if (DD31) {
           assertSnapshotMetaDD31(meta);
@@ -119,6 +125,44 @@ export async function localMutations(
   const commits = await chain(fromCommitHash, dagRead);
   // Filter does not deal with type narrowing.
   return commits.filter(c => c.isLocal()) as Commit<LocalMeta>[];
+}
+
+export async function localMutationsGreaterThan(
+  fromCommitHash: Hash,
+  mutationIDLimits: Record<ClientID, number>,
+  dagRead: dag.Read,
+): Promise<Commit<LocalMeta>[]> {
+  if (DD31) {
+    let commit = await fromHash(fromCommitHash, dagRead);
+    const commits: Commit<LocalMeta>[] = [];
+    const remainingMutationIDLimits = {...mutationIDLimits};
+    while (
+      !commit.isSnapshot() &&
+      Object.keys(remainingMutationIDLimits).length > 0
+    ) {
+      if (commit.isLocal()) {
+        const {meta} = commit;
+        const {mutationID} = meta;
+        assertLocalMetaDD31(meta);
+        const mutationIDLowerLimit = remainingMutationIDLimits[meta.clientID];
+        if (mutationIDLowerLimit !== undefined) {
+          if (mutationID <= mutationIDLowerLimit) {
+            delete remainingMutationIDLimits[meta.clientID];
+          } else {
+            commits.push(commit);
+          }
+        }
+      }
+      const {basisHash} = commit.meta;
+      if (basisHash === null) {
+        throw new Error(`Commit ${commit.chunk.hash} has no basis`);
+      }
+      commit = await fromHash(basisHash, dagRead);
+    }
+    return commits;
+  } else {
+    throw new Error('localMutationsGreaterThan should only be called in DD31');
+  }
 }
 
 export async function baseSnapshot(

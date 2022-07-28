@@ -18,6 +18,7 @@ import {
   assertSnapshotMetaDD31,
   assertSnapshotMeta,
   SnapshotMetaDD31,
+  localMutationsGreaterThan,
 } from './commit';
 import {
   addGenesis,
@@ -99,6 +100,93 @@ test('local mutations', async () => {
   expect(commits).to.have.lengthOf(2);
   expect(commits[0]).to.deep.equal(chain[3]);
   expect(commits[1]).to.deep.equal(chain[1]);
+});
+
+test.only('local mutations greater than', async () => {
+  if (DD31) {
+    const clientID1 = 'client-id-1';
+    const clientID2 = 'client-id-2';
+    const store = new dag.TestStore();
+    const chain: Chain = [];
+    await addGenesis(chain, store, clientID1);
+    const genesisHash = chain[0].chunk.hash;
+    await store.withRead(async dagRead => {
+      expect(
+        await localMutationsGreaterThan(
+          genesisHash,
+          {[clientID1]: 0, [clientID2]: 0},
+          dagRead,
+        ),
+      ).to.have.lengthOf(0);
+    });
+    await addLocal(chain, store, clientID1);
+    await addIndexChange(chain, store, clientID1);
+    await addLocal(chain, store, clientID2);
+    await addIndexChange(chain, store, clientID2);
+    await addLocal(chain, store, clientID2);
+    await addIndexChange(chain, store, clientID2);
+    await addLocal(chain, store, clientID1);
+    await addIndexChange(chain, store, clientID1);
+    await addLocal(chain, store, clientID1);
+    await addIndexChange(chain, store, clientID1);
+    const headHash = chain[chain.length - 1].chunk.hash;
+
+    expect(
+      await store.withRead(async dagRead => {
+        return await localMutationsGreaterThan(headHash, {}, dagRead);
+      }),
+    ).to.deep.equal([]);
+
+    expect(
+      await store.withRead(async dagRead => {
+        return await localMutationsGreaterThan(
+          headHash,
+          {[clientID1]: 0, [clientID2]: 0},
+          dagRead,
+        );
+      }),
+    ).to.deep.equal([chain[9], chain[7], chain[5], chain[3], chain[1]]);
+
+    expect(
+      await store.withRead(async dagRead => {
+        return await localMutationsGreaterThan(
+          headHash,
+          {[clientID1]: 1, [clientID2]: 1},
+          dagRead,
+        );
+      }),
+    ).to.deep.equal([chain[9], chain[7], chain[5]]);
+
+    expect(
+      await store.withRead(async dagRead => {
+        return await localMutationsGreaterThan(
+          headHash,
+          {[clientID1]: 2, [clientID2]: 1},
+          dagRead,
+        );
+      }),
+    ).to.deep.equal([chain[9], chain[5]]);
+
+    expect(
+      await store.withRead(async dagRead => {
+        return await localMutationsGreaterThan(
+          headHash,
+          {[clientID2]: 1},
+          dagRead,
+        );
+      }),
+    ).to.deep.equal([chain[5]]);
+
+    expect(
+      await store.withRead(async dagRead => {
+        return await localMutationsGreaterThan(
+          headHash,
+          {[clientID1]: 3, [clientID2]: 2},
+          dagRead,
+        );
+      }),
+    ).to.deep.equal([]);
+  }
 });
 
 test('chain', async () => {
