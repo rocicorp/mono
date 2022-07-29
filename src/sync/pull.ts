@@ -54,7 +54,6 @@ export type BeginPullRequest = {
   pullURL: string;
   pullAuth: string;
   schemaVersion: string;
-  puller: Puller;
 };
 
 export type BeginPullResponse = {

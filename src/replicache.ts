@@ -1136,13 +1136,12 @@ export class Replicache<MD extends MutatorDefs = {}> {
           pullAuth: this.auth,
           pullURL: this.pullURL,
           schemaVersion: this.schemaVersion,
-          puller: this.puller,
         };
         const beginPullResponse = await sync.beginPull(
           profileID,
           clientID,
           req,
-          req.puller,
+          this.puller,
           requestID,
           this._memdag,
           requestLc,

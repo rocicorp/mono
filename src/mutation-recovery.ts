@@ -293,13 +293,12 @@ export class MutationRecovery<M extends MutatorDefs> {
               pullAuth: delegate.auth,
               pullURL,
               schemaVersion: database.schemaVersion,
-              puller,
             };
             const beginPullResponse = await sync.beginPull(
               await delegate.profileID,
               clientID,
               beginPullRequest,
-              beginPullRequest.puller,
+              puller,
               requestID,
               dagForOtherClient,
               requestLc,

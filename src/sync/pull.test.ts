@@ -447,10 +447,6 @@ test('begin try pull', async () => {
       pullURL,
       pullAuth,
       schemaVersion,
-      puller: () => {
-        // not used with fake puller
-        throw new Error('unreachable');
-      },
     };
 
     let result: BeginPullResponse | string;
@@ -852,10 +848,6 @@ test('changed keys', async () => {
       pullURL,
       pullAuth,
       schemaVersion,
-      puller: () => {
-        // not used with fake puller
-        throw new Error('unreachable');
-      },
     };
 
     const pullResult = await beginPull(
