@@ -389,6 +389,9 @@ test('begin try pull', async () => {
   ];
 
   for (const c of cases) {
+    console.log('');
+    console.log('');
+    console.log(c.name);
     // Reset state of the store.
     chain.length = startingNumCommits;
     await store.withWrite(async w => {
@@ -423,6 +426,14 @@ test('begin try pull', async () => {
         expect(got, c.name).to.be.true;
       });
     }
+    await store.withRead(async read => {
+      const defaultHeadHash = await read.getHead(DEFAULT_HEAD_NAME);
+      assertString(defaultHeadHash);
+      const chunk = await read.getChunk(defaultHeadHash);
+      assertNotUndefined(chunk);
+      const defaultHead = db.fromChunk(chunk);
+      console.log(JSON.stringify(defaultHead.indexes));
+    });
 
     // See explanation in FakePuller for why we do this dance with the pull_result.
     let pullResp;
@@ -491,6 +502,7 @@ test('begin try pull', async () => {
         expValueMap.sort((a, b) => stringCompare(a[0], b[0]));
         expect(expValueMap.length).to.equal(gotValueMap.length);
 
+        console.log(JSON.stringify(syncHead.indexes));
         // Check we have the expected index definitions.
         const indexes: string[] = syncHead.indexes.map(i => i.definition.name);
         expect(expSyncHead.indexes.length).to.equal(
