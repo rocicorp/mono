@@ -2648,6 +2648,33 @@ test('scan in write transaction', async () => {
   expect(x).to.equal(1);
 });
 
+test.only('scan index in write transaction', async () => {
+  let x = 0;
+  const rep = await replicacheForTesting('scan-before-commit', {
+    mutators: {
+      async test(tx, v: number) {
+        await tx.put('a', {name: v});
+        await tx.put('b', {name: v});
+        console.log(await tx.scan({indexName: 'idx1'}).toArray());
+        x++;
+      },
+    },
+  });
+
+  await rep.createIndex({
+    name: 'idx1',
+    jsonPointer: '/name',
+  });
+
+  await rep.mutate.test(42);
+  const result = await rep.query(async read => {
+    return await read.scan({indexName: 'idx1'}).toArray();
+  });
+  console.log(result);
+
+  expect(x).to.equal(1);
+});
+
 test('scan mutate', async () => {
   const log: unknown[] = [];
   const rep = await replicacheForTesting('scan-mutate', {
@@ -2767,7 +2794,7 @@ test('index scan mutate', async () => {
   ]);
 });
 
-test.only('concurrent puts and gets', async () => {
+test('concurrent puts and gets', async () => {
   const rep = await replicacheForTesting('concurrent-puts', {
     mutators: {
       async insert(tx, args: Record<string, number>) {

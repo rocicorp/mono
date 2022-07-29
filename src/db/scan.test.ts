@@ -175,3 +175,24 @@ test('scan index startKey', async () => {
     ],
   );
 });
+
+test('scan index startKey', async () => {
+  const dagStore = new dag.TestStore();
+
+  await dagStore.withWrite(async dagWrite => {
+    const map = await makeBTreeWrite(dagWrite, entries);
+    await map.flush();
+
+    const fromKey = fromKeyForIndexScanInternal({
+      start: {key: [startSecondaryKey, startPrimaryKey]},
+      indexName: 'dummy',
+    });
+    const actual = [];
+    for await (const entry of map.scan(fromKey)) {
+      const [secondaryKey, primaryKey] = decodeIndexKey(entry[0]);
+      actual.push({primaryKey, secondaryKey, val: entry[1]});
+    }
+
+    expect(actual).to.deep.equal(expected);
+  });
+});
