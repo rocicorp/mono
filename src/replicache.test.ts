@@ -1911,6 +1911,116 @@ test('pull and index update', async () => {
   });
 });
 
+test.only('pull and index add', async () => {
+  const pullURL = 'https://pull.com/rep';
+  const rep = await replicacheForTesting('pull-and-index-update', {
+    pullURL,
+    mutators: {addData},
+  });
+
+  const indexName = 'idx1';
+
+  async function testPull(opt: {
+    patch: PatchOperation[];
+    expectedResult: JSONValue;
+  }) {
+    let pullDone = false;
+    fetchMock.post(pullURL, () => {
+      pullDone = true;
+      return {
+        lastMutationID: 0,
+        patch: opt.patch,
+      };
+    });
+
+    rep.pull();
+
+    await tickUntil(() => pullDone);
+    await tickAFewTimes();
+
+    const actualResult = await rep.query(tx =>
+      tx.scan({indexName}).entries().toArray(),
+    );
+    expect(actualResult).to.deep.equal(opt.expectedResult);
+  }
+
+  await rep.createIndex({name: indexName, jsonPointer: '/id'});
+
+  await testPull({patch: [], expectedResult: []});
+
+  await rep.mutate.addData({foo: {name: 'bar'}});
+
+  await rep.createIndex({name: 'idx2', jsonPointer: '/name'});
+
+  console.log('here');
+
+  await rep.query(async read => {
+    for await (const f of read.scan({
+      indexName: 'idx2',
+    })) {
+      console.log(f);
+    }
+  });
+
+  await testPull({
+    patch: [
+      {
+        op: 'put',
+        key: 'a1',
+        value: {id: 'a-1', x: 1},
+      },
+    ],
+    expectedResult: [
+      [
+        ['a-1', 'a1'],
+        {
+          id: 'a-1',
+          x: 1,
+        },
+      ],
+    ],
+  });
+
+  await rep.query(async read => {
+    for await (const f of read.scan({
+      indexName: 'idx2',
+    })) {
+      console.log(f);
+    }
+  });
+
+  // Change value for existing key
+  await testPull({
+    patch: [
+      {
+        op: 'put',
+        key: 'a1',
+        value: {id: 'a-1', x: 2},
+      },
+    ],
+    expectedResult: [
+      [
+        ['a-1', 'a1'],
+        {
+          id: 'a-1',
+          x: 2,
+        },
+      ],
+    ],
+  });
+
+  // Del
+  await testPull({
+    patch: [
+      {
+        op: 'del',
+        key: 'a1',
+      },
+    ],
+    expectedResult: [],
+  });
+});
+
 async function tickUntilTimeIs(time: number, tick = 10) {
   while (Date.now() < time) {
     await clock.tickAsync(tick);
