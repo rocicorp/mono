@@ -201,8 +201,8 @@ export async function handlePullResponse(
 
     // We are going to need to adjust the indexes. Imagine we have just pulled:
     //
-    // S1 - M1 - main
-    //    \ S2 - sync
+    // S1(C1: , C2: 0) - MC1-1 - I1 - MC2-1 - I2 - MC1-2 - main
+    //    \ S2 (C1: 2, C2: 0) - MC2-1 - sync
     //
     // Let's say S2 says that it contains up to M1. Are we safe at this moment
     // to set main to S2?

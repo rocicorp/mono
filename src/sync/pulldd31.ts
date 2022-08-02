@@ -9,7 +9,6 @@ import {
   PullerResultDD31,
   PullError,
   PullResponseDD31,
-  PullResponseOK,
   PullResponseOKDD31,
 } from '../puller';
 import {assertHTTPRequestInfo, HTTPRequestInfo} from '../http-request-info';
@@ -236,24 +235,27 @@ export async function handlePullResponse(
       return emptyHash;
     }
 
-    // Indexes need to be created for the new snapshot. To create,
-    // diff the main map in the base snapshot against the main map in
-    // the new snapshot, and apply any changes to the indexes of the base
-    // snapshot.
-
+    // Indexes need to be created for the new snapshot. To create, start
+    // with the indexes of the the main head commit, then
+    // diff the value map of the main head commit against the value map of
+    // the new snapshot, and apply changes to the indexes.
+    // Note: with this approach we won't lose any indexes, however
+    // rebased mutations may see indexes which did not exist when
+    // they were first executed.
+    const mainHeadCommit = await db.commitFromHash(mainHead, dagRead);
     const dbWrite = await db.newWriteSnapshotDD31(
       db.whenceHash(baseSnapshot.chunk.hash),
       response.lastMutationIDs,
       internalCookie,
       dagWrite,
-      db.readIndexesForWrite(baseSnapshot, dagWrite),
+      db.readIndexesForWrite(mainHeadCommit, dagWrite),
       clientID,
     );
     await patch.apply(lc, dbWrite, response.patch);
 
-    const baseSnapshotMap = new BTreeRead(dagRead, baseSnapshot.valueHash);
+    const mainHeadMap = new BTreeRead(dagRead, mainHeadCommit.valueHash);
 
-    for await (const change of dbWrite.map.diff(baseSnapshotMap)) {
+    for await (const change of dbWrite.map.diff(mainHeadMap)) {
       await updateIndexes(
         lc,
         dbWrite.indexes,
@@ -327,11 +329,13 @@ export async function maybeEndPull(
     // of them if any need to be replayed.
     const syncHead = await db.commitFromHash(syncHeadHash, dagRead);
     const pending = [];
-    const syncHeadMutationID = await syncHead.getMutationID(clientID, dagRead);
     const localMutations = await db.localMutations(mainHeadHash, dagRead);
     for (const commit of localMutations) {
+      const {meta} = commit;
+      assertLocalMetaDD31(meta);
       if (
-        (await commit.getMutationID(clientID, dagRead)) > syncHeadMutationID
+        (await commit.getMutationID(meta.clientID, dagRead)) >
+        (await syncHead.getMutationID(meta.clientID, dagRead))
       ) {
         pending.push(commit);
       }

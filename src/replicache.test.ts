@@ -1911,7 +1911,7 @@ test('pull and index update', async () => {
   });
 });
 
-test.only('pull and index add', async () => {
+test('pull and index add', async () => {
   const pullURL = 'https://pull.com/rep';
   const rep = await replicacheForTesting('pull-and-index-update', {
     pullURL,
@@ -2653,9 +2653,20 @@ test.only('scan index in write transaction', async () => {
   const rep = await replicacheForTesting('scan-before-commit', {
     mutators: {
       async test(tx, v: number) {
-        await tx.put('a', {name: v});
-        await tx.put('b', {name: v});
-        console.log(await tx.scan({indexName: 'idx1'}).toArray());
+        console.log('in mutator before puts');
+        console.log(
+          (await asyncIterableToArray(tx.scan({indexName: 'idx1'}).entries()))
+            .length,
+        );
+        console.log((await asyncIterableToArray(tx.scan().entries())).length);
+        await tx.put('a' + v, {name: `${v}`});
+        await tx.put('b' + v, {name: `${v + 1}`});
+        await tx.put('c' + v, {hello: `${v + 2}`});
+        console.log('in mutator after puts');
+        console.log(
+          await asyncIterableToArray(tx.scan({indexName: 'idx1'}).entries()),
+        );
+        console.log(await asyncIterableToArray(tx.scan().entries()));
         x++;
       },
     },
@@ -2664,13 +2675,19 @@ test.only('scan index in write transaction', async () => {
   await rep.createIndex({
     name: 'idx1',
     jsonPointer: '/name',
+    allowEmpty: true,
   });
 
-  await rep.mutate.test(42);
-  const result = await rep.query(async read => {
-    return await read.scan({indexName: 'idx1'}).toArray();
+  await rep.mutate.test(10);
+  await rep.mutate.test(20);
+
+  console.log('after mutator');
+  await rep.query(async read => {
+    console.log(
+      await asyncIterableToArray(read.scan({indexName: 'idx1'}).entries()),
+    );
+    console.log(await asyncIterableToArray(read.scan().entries()));
   });
-  console.log(result);
 
   expect(x).to.equal(1);
 });
