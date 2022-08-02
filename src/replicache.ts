@@ -5,6 +5,7 @@ import type {ReadonlyJSONValue} from './json';
 import type {JSONValue} from './json';
 import {Pusher, PushError} from './pusher';
 import {
+  defaultPullerDD31,
   isClientStateNotFoundResponse,
   Puller,
   PullError,
@@ -829,12 +830,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
       const lc = this._lc
         .addContext('maybeEndPull')
         .addContext('request_id', requestID);
-      const {replayMutations, diffs} = await sync.maybeEndPull(
-        this._memdag,
-        lc,
-        syncHead,
-        clientID,
-      );
+      const {replayMutations, diffs} = DD31
+        ? await sync.maybeEndPullDD31(this._memdag, lc, syncHead, clientID)
+        : await sync.maybeEndPull(this._memdag, lc, syncHead, clientID);
 
       if (!replayMutations || replayMutations.length === 0) {
         // All done.
@@ -1138,16 +1136,16 @@ export class Replicache<MD extends MutatorDefs = {}> {
           schemaVersion: this.schemaVersion,
         };
         const beginPullResponse = DD31
-          ? await sync.beginPull(
+          ? await sync.beginPullDD31(
               profileID,
               clientID,
               req,
-              this.puller,
+              defaultPullerDD31,
               requestID,
               this._memdag,
               requestLc,
             )
-          : await sync.beginPullDD31(
+          : await sync.beginPull(
               profileID,
               clientID,
               req,

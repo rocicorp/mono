@@ -129,13 +129,16 @@ export const defaultPuller: Puller = async request => {
   };
 };
 
-export const defaultPullerDD31: Puller = async request => {
+export const defaultPullerDD31: PullerDD31 = async request => {
   const {httpRequestInfo, response} = await httpRequest(request);
   if (httpRequestInfo.httpStatusCode !== 200) {
     return {
       httpRequestInfo,
     };
   }
+  // TODO(greg): Should this assertPullResponseDD31, we also assert
+  // in pull.ts/pulldd31.ts (since it may be a non default puller
+  // that doesnt assert itself)
   return {
     response: await response.json(),
     httpRequestInfo,
