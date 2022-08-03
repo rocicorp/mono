@@ -97,6 +97,7 @@ export const enum FromInternalValueReason {
   WriteTransactionGet,
   WriteTransactionMutateArgs,
   PendingMutationGet,
+  PersistCompareCookies,
 
   // The rest skip the clone in release mode (controlled by
   // `skipCloneReadTransactionReturnValue`)

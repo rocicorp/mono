@@ -1,7 +1,8 @@
 import {assert} from './asserts';
-import {encode} from './base32-encode';
+// import {encode} from './base32-encode';
 import type {ReadonlyJSONValue} from './json';
-import * as utf8 from './utf8';
+// import * as utf8 from './utf8';
+import {uuid} from './uuid';
 
 export const BYTE_LENGTH = 20;
 
@@ -27,17 +28,17 @@ declare const hashTag: unique symbol;
  */
 export type Hash = {[hashTag]: true};
 
-const hashRe = /^[0-9a-v]{32}$/;
+const hashRe = /^[0-9a-f-]{36}$/;
 const tempHashRe = /^t\/[0-9a-v]{30}$/;
 
 /**
  * Computes a SHA512 hash of the given data.
  */
-export async function hashOf(value: ReadonlyJSONValue): Promise<Hash> {
-  const typedArray = utf8.encode(JSON.stringify(value));
-  const buf = await crypto.subtle.digest('SHA-512', typedArray);
-  const buf2 = new Uint8Array(buf, 0, BYTE_LENGTH);
-  return encode(buf2) as unknown as Hash;
+export function hashOf(_value: ReadonlyJSONValue): Hash {
+  // const typedArray = utf8.encode(JSON.stringify(value));
+  // const buf = await crypto.subtle.digest('SHA-512', typedArray);
+  // const buf2 = new Uint8Array(buf, 0, BYTE_LENGTH);
+  return uuid() as unknown as Hash;
 }
 
 export function parse(s: string): Hash {

@@ -330,6 +330,7 @@ export async function maybeEndPull(
     const syncHead = await db.commitFromHash(syncHeadHash, dagRead);
     const pending = [];
     const localMutations = await db.localMutations(mainHeadHash, dagRead);
+    // maybe use localMutationsGreaterThan
     for (const commit of localMutations) {
       const {meta} = commit;
       assertLocalMetaDD31(meta);

@@ -24,6 +24,7 @@ export async function rebaseMutation(
   // TODO(greg): mutationClientID can be retrieved from mutation if LocalMeta
   // is a LocalMetaDD31.  As part of DD31 cleanup we can remove this arg.
   mutationClientID: ClientID,
+  commitDagWrite = true,
 ): Promise<Hash> {
   const localMeta = mutation.meta;
   const name = localMeta.mutatorName;
@@ -80,6 +81,6 @@ export async function rebaseMutation(
 
   const tx = new WriteTransactionImpl(mutationClientID, dbWrite, lc);
   await mutatorImpl(tx, jsonArgs);
-  const [ref] = await tx.commit(false);
+  const [ref] = await tx.commit(false, commitDagWrite);
   return ref;
 }

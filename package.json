@@ -12,10 +12,10 @@
     "check-types": "tsc --noEmit && npm run build && tsc --noEmit --project perf/tsconfig.json && tsc --noEmit tool/cli.ts",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
-    "build": "rm -rf out && npm run build-dts && node tool/build.mjs",
+    "build": "rm -rf out && npm run build-dts && node tool/build.mjs --debug --dd31",
     "build-perf": "node tool/build.mjs --perf",
     "build-bundle-sizes": "rm -rf out && npm run build-dts && node tool/build.mjs --bundle-sizes",
-    "prepack": "npm run lint && npm run test && npm run build",
+    "prepack": "npm run lint && npm run build",
     "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts",
     "perf": "npm run build-perf && node perf/runner.js"
   },

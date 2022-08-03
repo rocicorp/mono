@@ -177,22 +177,132 @@ test('scan index startKey', async () => {
 });
 
 test('scan index startKey', async () => {
-  const dagStore = new dag.TestStore();
+  const t = async (
+    entries: Iterable<[string, string]>,
+    {
+      startSecondaryKey,
+      startPrimaryKey,
+    }: {
+      startSecondaryKey: string;
+      startPrimaryKey?: string;
+    },
+    expected: ScanItem[],
+  ) => {
+    const dagStore = new dag.TestStore();
 
-  await dagStore.withWrite(async dagWrite => {
-    const map = await makeBTreeWrite(dagWrite, entries);
-    await map.flush();
+    await dagStore.withWrite(async dagWrite => {
+      const map = await makeBTreeWrite(dagWrite, entries);
+      await map.flush();
 
-    const fromKey = fromKeyForIndexScanInternal({
-      start: {key: [startSecondaryKey, startPrimaryKey]},
-      indexName: 'dummy',
+      const fromKey = fromKeyForIndexScanInternal({
+        start: {key: [startSecondaryKey, startPrimaryKey]},
+        indexName: 'dummy',
+      });
+      const actual = [];
+      for await (const entry of map.scan(fromKey)) {
+        const [secondaryKey, primaryKey] = decodeIndexKey(entry[0]);
+        actual.push({primaryKey, secondaryKey, val: entry[1]});
+      }
+
+      expect(actual).to.deep.equal(expected);
     });
-    const actual = [];
-    for await (const entry of map.scan(fromKey)) {
-      const [secondaryKey, primaryKey] = decodeIndexKey(entry[0]);
-      actual.push({primaryKey, secondaryKey, val: entry[1]});
-    }
+  };
 
-    expect(actual).to.deep.equal(expected);
-  });
+  await t(
+    [
+      ['\u{0000}as\u{0000}ap', '1'],
+      ['\u{0000}bs\u{0000}bp', '2'],
+      ['\u{0000}cs\u{0000}cp', '3'],
+    ],
+    {
+      startSecondaryKey: 'bs',
+      startPrimaryKey: undefined,
+    },
+    [
+      {
+        primaryKey: 'bp',
+        secondaryKey: 'bs',
+        val: '2',
+      },
+      {
+        primaryKey: 'cp',
+        secondaryKey: 'cs',
+        val: '3',
+      },
+    ],
+  );
+
+  await t(
+    [
+      ['\u{0000}as\u{0000}ap', '1'],
+      ['\u{0000}bs\u{0000}bp', '2'],
+      ['\u{0000}cs\u{0000}cp', '3'],
+    ],
+    {
+      startSecondaryKey: 'bs',
+      startPrimaryKey: undefined,
+    },
+    [
+      {
+        primaryKey: 'bp',
+        secondaryKey: 'bs',
+        val: '2',
+      },
+      {
+        primaryKey: 'cp',
+        secondaryKey: 'cs',
+        val: '3',
+      },
+    ],
+  );
+
+  await t(
+    [
+      ['\u{0000}as\u{0000}ap', '1'],
+      ['\u{0000}bs\u{0000}bp1', '2'],
+      ['\u{0000}bs\u{0000}bp2', '3'],
+      ['\u{0000}cs\u{0000}cp', '4'],
+    ],
+    {
+      startSecondaryKey: 'bs',
+      startPrimaryKey: 'bp2',
+    },
+    [
+      {
+        primaryKey: 'bp2',
+        secondaryKey: 'bs',
+        val: '3',
+      },
+      {
+        primaryKey: 'cp',
+        secondaryKey: 'cs',
+        val: '4',
+      },
+    ],
+  );
+
+  await t(
+    [
+      ['\u{0000}as\u{0000}ap', '1'],
+      ['\u{0000}bs\u{0000}bp1', '2'],
+      ['\u{0000}bs\u{0000}bp2', '3'],
+      ['\u{0000}cs\u{0000}cp', '4'],
+    ],
+    {
+      startSecondaryKey: 'bs',
+      startPrimaryKey: 'bp2',
+    },
+    [
+      {
+        primaryKey: 'bp2',
+        secondaryKey: 'bs',
+        val: '3',
+      },
+      {
+        primaryKey: 'cp',
+        secondaryKey: 'cs',
+        val: '4',
+      },
+    ],
+  );
 });

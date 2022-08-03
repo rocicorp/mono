@@ -6,6 +6,7 @@ import {Pusher, PushError} from '../pusher';
 import {callJSRequest} from './js-request';
 import {toError} from '../to-error';
 import type {InternalValue} from '../internal-value.js';
+import {assertLocalMetaDD31} from '../db/commit';
 
 export const PUSH_VERSION = 0;
 
@@ -34,8 +35,45 @@ export type Mutation = {
   readonly timestamp: number;
 };
 
+/**
+ * The JSON value used as the body when doing a POST to the [push
+ * endpoint](/server-push).
+ */
+export type PushRequestDD31 = {
+  profileID: string;
+  clientID: string;
+  mutations: MutationDD31[];
+  pushVersion: number;
+  // schema_version can optionally be used to specify to the push endpoint
+  // version information about the mutators the app is using (e.g., format
+  // of mutator args).
+  schemaVersion: string;
+};
+
+/**
+ * Mutation describes a single mutation done on the client.
+ */
+export type MutationDD31 = {
+  readonly clientID: string;
+  readonly id: number;
+  readonly name: string;
+  readonly args: InternalValue;
+  readonly timestamp: number;
+};
+
 export function convert(lm: db.LocalMeta): Mutation {
   return {
+    id: lm.mutationID,
+    name: lm.mutatorName,
+    args: lm.mutatorArgsJSON,
+    timestamp: lm.timestamp,
+  };
+}
+
+export function convertDD31(lm: db.LocalMeta): MutationDD31 {
+  assertLocalMetaDD31(lm);
+  return {
+    clientID: lm.clientID,
     id: lm.mutationID,
     name: lm.mutatorName,
     args: lm.mutatorArgsJSON,
@@ -70,21 +108,40 @@ export async function push(
 
   let httpRequestInfo: HTTPRequestInfo | undefined = undefined;
   if (pending.length > 0) {
-    const pushMutations: Mutation[] = [];
-    for (const commit of pending) {
-      if (commit.isLocal()) {
-        pushMutations.push(convert(commit.meta));
-      } else {
-        throw new Error('Internal non local pending commit');
+    let pushReq: PushRequest | PushRequestDD31;
+    if (DD31) {
+      const pushMutations: MutationDD31[] = [];
+      for (const commit of pending) {
+        if (commit.isLocal()) {
+          pushMutations.push(convertDD31(commit.meta));
+        } else {
+          throw new Error('Internal non local pending commit');
+        }
       }
+      pushReq = {
+        profileID,
+        clientID,
+        mutations: pushMutations,
+        pushVersion: PUSH_VERSION,
+        schemaVersion,
+      };
+    } else {
+      const pushMutations: Mutation[] = [];
+      for (const commit of pending) {
+        if (commit.isLocal()) {
+          pushMutations.push(convert(commit.meta));
+        } else {
+          throw new Error('Internal non local pending commit');
+        }
+      }
+      pushReq = {
+        profileID,
+        clientID,
+        mutations: pushMutations,
+        pushVersion: PUSH_VERSION,
+        schemaVersion,
+      };
     }
-    const pushReq = {
-      profileID,
-      clientID,
-      mutations: pushMutations,
-      pushVersion: PUSH_VERSION,
-      schemaVersion,
-    };
     lc.debug?.('Starting push...');
     const pushStart = Date.now();
     httpRequestInfo = await callPusher(
@@ -103,7 +160,7 @@ export async function push(
 async function callPusher(
   pusher: Pusher,
   url: string,
-  body: PushRequest,
+  body: PushRequest | PushRequestDD31,
   auth: string,
   requestID: string,
 ): Promise<HTTPRequestInfo> {

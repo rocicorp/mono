@@ -95,6 +95,9 @@ export class MutationRecovery<M extends MutatorDefs> {
     const {_lc: lc} = this;
     const delegate = this._replicache;
 
+    if (DD31) {
+      return false;
+    }
     if (
       !this._enableMutationRecovery ||
       this._recoveringMutations ||

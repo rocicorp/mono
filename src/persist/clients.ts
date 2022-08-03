@@ -30,6 +30,11 @@ export type Client = {
    */
   readonly headHash: Hash;
   /**
+   * The hash of the commit in the perdag this client last persisted.
+   * Should only be updated by the client represented by this structure.
+   */
+  readonly tempRefreshHash?: Hash;
+  /**
    * The mutationID of the commit at headHash (mutationID if it is a
    * local commit, lastMutationID if it is an index change or snapshot commit).
    * Should only be updated by the client represented by this structure.
@@ -247,9 +252,67 @@ export async function initClient(
   return [newClientID, newClient, updatedClients];
 }
 
+export async function initClientDD31(
+  dagStore: dag.Store,
+): Promise<[sync.ClientID, Client, ClientMap]> {
+  const newClientID = makeUuid();
+  const updatedClients = await updateClients(async clients => {
+    const bootstrapCommitHash = await dagStore.withRead(async dagRead => {
+      return dagRead.getHead(db.DEFAULT_HEAD_NAME);
+    });
+    let newClientHeadHash;
+    const chunksToPut = [];
+    if (bootstrapCommitHash) {
+      newClientHeadHash = bootstrapCommitHash;
+    } else {
+      // No existing snapshot to bootstrap from. Create empty snapshot.
+      const emptyBTreeChunk = await dag.createChunkWithNativeHash(
+        btree.emptyDataNode,
+        [],
+      );
+      chunksToPut.push(emptyBTreeChunk);
+
+      const newClientCommitData = DD31
+        ? newSnapshotCommitDataDD31(
+            null,
+            {[newClientID]: 0},
+            null,
+            emptyBTreeChunk.hash,
+            [],
+          )
+        : newSnapshotCommitData(
+            null /* basisHash */,
+            0 /* lastMutationID */,
+            null /* cookie */,
+            emptyBTreeChunk.hash,
+            [] /* indexes */,
+          );
+      const chunk = await dag.createChunkWithNativeHash(
+        newClientCommitData,
+        getRefs(newClientCommitData),
+      );
+      chunksToPut.push(chunk);
+      newClientHeadHash = chunk.hash;
+    }
+
+    return {
+      clients: new Map(clients).set(newClientID, {
+        heartbeatTimestampMs: Date.now(),
+        headHash: newClientHeadHash,
+        mutationID: 0,
+        lastServerAckdMutationID: 0,
+      }),
+      chunksToPut,
+    };
+  }, dagStore);
+  const newClient = updatedClients.get(newClientID);
+  assertNotUndefined(newClient);
+  return [newClientID, newClient, updatedClients];
+}
+
 function hashOfClients(clients: ClientMap): Promise<Hash> {
   const data = clientMapToChunkDataNoHashValidation(clients);
-  return hashOf(data);
+  return Promise.resolve(hashOf(data));
 }
 
 export const noUpdates = Symbol();
@@ -260,6 +323,29 @@ export type ClientsUpdate = (
 ) => MaybePromise<
   {clients: ClientMap; chunksToPut?: Iterable<dag.Chunk>} | NoUpdates
 >;
+
+export async function updateClientsDD31(
+  updatedClients: ClientMap,
+  dagWrite: dag.Write,
+): Promise<void> {
+  const updatedClientsChunkData = clientMapToChunkData(
+    updatedClients,
+    dagWrite,
+  );
+  const updateClientsRefs = [...updatedClients.values()].flatMap(client =>
+    client.tempRefreshHash
+      ? [client.headHash, client.tempRefreshHash]
+      : [client.headHash],
+  );
+  const updateClientsChunk = dagWrite.createChunk(
+    updatedClientsChunkData,
+    updateClientsRefs,
+  );
+  await Promise.all([
+    dagWrite.putChunk(updateClientsChunk),
+    dagWrite.setHead(CLIENTS_HEAD, updateClientsChunk.hash),
+  ]);
+}
 
 export async function updateClients(
   update: ClientsUpdate,
@@ -299,9 +385,10 @@ async function updateClientsInternal(
       updatedClients,
       dagWrite,
     );
-    const updateClientsRefs = Array.from(
-      updatedClients.values(),
-      client => client.headHash,
+    const updateClientsRefs = [...updatedClients.values()].flatMap(client =>
+      client.tempRefreshHash
+        ? [client.headHash, client.tempRefreshHash]
+        : [client.headHash],
     );
     const updateClientsChunk = dag.createChunkWithHash(
       updatedClientsHash,

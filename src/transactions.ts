@@ -294,14 +294,18 @@ export class WriteTransactionImpl
     return await this.dbtx.del(this._lc, key);
   }
 
-  async commit(generateDiffs: boolean): Promise<[Hash, sync.DiffsMap]> {
+  async commit(
+    generateDiffs: boolean,
+    commitDagWrite = true,
+  ): Promise<[Hash, sync.DiffsMap]> {
     const txn = this.dbtx;
     throwIfClosed(txn);
 
+    // this auto updating of heads on commit needs to be changed
     const headName = txn.isRebase()
       ? sync.SYNC_HEAD_NAME
       : db.DEFAULT_HEAD_NAME;
-    return await txn.commitWithDiffs(headName, generateDiffs);
+    return await txn.commitWithDiffs(headName, generateDiffs, commitDagWrite);
   }
 }
 

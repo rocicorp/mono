@@ -447,7 +447,7 @@ function assertResult(v: any): asserts v is Result {
   assertHTTPRequestInfo(v.httpRequestInfo);
 }
 
-async function addDiffsForIndexes(
+export async function addDiffsForIndexes(
   mainCommit: db.Commit<Meta>,
   syncCommit: db.Commit<Meta>,
   read: dag.Read,

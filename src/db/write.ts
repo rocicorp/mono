@@ -182,12 +182,13 @@ export class Write extends Read {
 
   // Return value is the hash of the new commit.
   async commit(headName: string): Promise<Hash> {
-    return (await this.commitWithDiffs(headName, false))[0];
+    return (await this.commitWithDiffs(headName, false, true))[0];
   }
 
   async commitWithDiffs(
     headName: string,
     generateDiffs: boolean,
+    commitDagWrite: boolean,
   ): Promise<[Hash, DiffsMap]> {
     const valueHash = await this.map.flush();
     let valueDiff: InternalDiff = [];
@@ -326,7 +327,9 @@ export class Write extends Read {
       this._dagWrite.setHead(headName, commit.chunk.hash),
     ]);
 
-    await this._dagWrite.commit();
+    if (commitDagWrite) {
+      await this._dagWrite.commit();
+    }
 
     return [commit.chunk.hash, diffMap];
   }

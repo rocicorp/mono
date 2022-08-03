@@ -1,7 +1,8 @@
-export {persist} from './persist';
+export {persist, refresh} from './persist';
 export {startHeartbeats} from './heartbeat';
 export {
   initClient,
+  initClientDD31,
   getClient,
   getClients,
   updateClients,

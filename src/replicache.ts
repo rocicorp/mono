@@ -46,6 +46,7 @@ import {
   assertNotTempHash,
   emptyHash,
   Hash,
+  hashOf,
   newTempHash,
 } from './hash';
 import * as persist from './persist/mod';
@@ -396,11 +397,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     );
 
     const perKvStore = experimentalKVStore || new IDBStore(this.idbName);
-    this._perdag = new dag.StoreImpl(
-      perKvStore,
-      dag.throwChunkHasher,
-      assertNotTempHash,
-    );
+    this._perdag = new dag.StoreImpl(perKvStore, hashOf, assertNotTempHash);
     this._memdag = new dag.LazyStore(
       this._perdag,
       LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
@@ -482,7 +479,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
     await closingInstances.get(this.name);
     await this._idbDatabases.getProfileID().then(profileIDResolver);
     await this._idbDatabases.putDatabase(this._idbDatabase);
-    const [clientID, client, clients] = await persist.initClient(this._perdag);
+    const [clientID, client, clients] = DD31
+      ? await persist.initClientDD31(this._perdag)
+      : await persist.initClient(this._perdag);
     resolveClientID(clientID);
     await this._memdag.withWrite(async write => {
       await write.setHead(db.DEFAULT_HEAD_NAME, client.headHash);
@@ -521,6 +520,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
       signal,
     );
     void this._recoverMutations(clients);
+
+    setIntervalWithSignal(() => this._schedulePersist(), 2000, signal);
 
     getDocument()?.addEventListener(
       'visibilitychange',
@@ -1182,14 +1183,28 @@ export class Replicache<MD extends MutatorDefs = {}> {
     await this._ready;
     const clientID = await this.clientID;
     try {
-      await this._persistPullLock.withLock(() =>
-        persist.persist(
+      await this._persistPullLock.withLock(async () => {
+        await persist.persist(
           clientID,
           this._memdag,
           this._perdag,
+          this._mutatorRegistry,
+          this._lc,
+          (c1, c2) => (c1 as number) - (c2 as number),
           () => this.closed,
-        ),
-      );
+        );
+        const result = await persist.refresh(
+          clientID,
+          this._memdag,
+          this._perdag,
+          this._mutatorRegistry,
+          this._lc,
+        );
+        if (result) {
+          const {newHead, diffs} = result;
+          await this._checkChange(newHead, diffs);
+        }
+      });
     } catch (e) {
       if (e instanceof persist.ClientStateNotFoundError) {
         this._fireOnClientStateNotFound(clientID, reasonClient);
