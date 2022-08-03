@@ -296,6 +296,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
   // ConnectionLoop.
   private readonly _persistPullLock = new Lock();
   private _persistIsScheduled = false;
+  private _lastPersistFinishedAt = 0;
 
   private readonly _enableLicensing: boolean;
 
@@ -521,7 +522,14 @@ export class Replicache<MD extends MutatorDefs = {}> {
     );
     void this._recoverMutations(clients);
 
-    setIntervalWithSignal(() => this._schedulePersist(), 2000, signal);
+    setIntervalWithSignal(
+      () => {
+        if (Date.now() - this._lastPersistFinishedAt > 2000)
+          this._schedulePersist();
+      },
+      2000,
+      signal,
+    );
 
     getDocument()?.addEventListener(
       'visibilitychange',
@@ -1204,6 +1212,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           const {newHead, diffs} = result;
           await this._checkChange(newHead, diffs);
         }
+        this._lastPersistFinishedAt = Date.now();
       });
     } catch (e) {
       if (e instanceof persist.ClientStateNotFoundError) {
