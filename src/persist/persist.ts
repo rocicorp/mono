@@ -93,6 +93,7 @@ export async function persist(
       ),
     ) > 0
   ) {
+    console.log('might need to persist snapshot');
     // Might need to perist snapshot
     // 1. Gather all temp chunks from base snapshot on the memdag.
     const [gatheredChunks, memdagBaseSnapshotTempHash] = await gatherTempChunks(
@@ -137,6 +138,7 @@ export async function persist(
           ),
         ) > 0
       ) {
+        console.log('persisting snapshot');
         const chunksToPutPromises: Promise<void>[] = [];
         if (gatheredChunks) {
           for (const chunk of fixedChunks.values()) {
@@ -144,9 +146,6 @@ export async function persist(
           }
         }
         await Promise.all([...chunksToPutPromises]);
-        console.log('here1');
-        await write.setHead('foo', memdagBaseSnapshotHash);
-        console.log('here2');
         newMainHeadHash = memdagBaseSnapshotHash;
         if (mainHeadHash !== undefined) {
           const localMutations = await db.localMutations(mainHeadHash, write);
@@ -161,6 +160,7 @@ export async function persist(
       } else {
         newMainHeadHash = mainHeadHash;
       }
+      console.log('persisting new mutations', newMutations.length);
       newMainHeadHash = await rebase(
         newMutations,
         newMainHeadHash,
@@ -172,6 +172,10 @@ export async function persist(
       await write.commit();
     });
   } else {
+    console.log(
+      'no need to persist snapshot, persisting new mutations',
+      newMutations.length,
+    );
     await perdag.withWrite(async write => {
       const mainHeadHash = await write.getHead(db.DEFAULT_HEAD_NAME);
       assertNotUndefined(mainHeadHash);
@@ -314,29 +318,35 @@ export async function refresh(
   perdag: dag.Store,
   mutators: MutatorDefs,
   lc: LogContext,
+  compareCookies: (c1: ReadonlyJSONValue, c2: ReadonlyJSONValue) => number,
 ): Promise<{newHead: Hash; diffs: DiffsMap} | undefined> {
   console.log('refresh');
-  const [perdagMainHead, perdagLMID] = await perdag.withWrite(async write => {
-    const perdagMainHead = await write.getHead(db.DEFAULT_HEAD_NAME);
-    if (perdagMainHead === undefined) {
-      return [undefined, 0];
-    }
-    const perdagLMID = await (
-      await db.commitFromHash(perdagMainHead, write)
-    ).getMutationID(clientID, write);
-    const clients = await getClients(write);
-    const newClients = new Map(clients);
-    const client = clients.get(clientID);
-    assertNotUndefined(client); // should throw client not found
-    const updatedClient = {
-      ...client,
-      tempRefreshHash: perdagMainHead,
-    };
-    newClients.set(clientID, updatedClient);
-    await updateClientsDD31(newClients, write);
-    await write.commit();
-    return [perdagMainHead, perdagLMID];
-  });
+  const [perdagMainHead, perdagLMID, perdagBaseSnapshot] =
+    await perdag.withWrite(async write => {
+      const perdagMainHead = await write.getHead(db.DEFAULT_HEAD_NAME);
+      if (perdagMainHead === undefined) {
+        return [undefined, 0];
+      }
+      const perdagLMID = await (
+        await db.commitFromHash(perdagMainHead, write)
+      ).getMutationID(clientID, write);
+      const clients = await getClients(write);
+      const newClients = new Map(clients);
+      const client = clients.get(clientID);
+      assertNotUndefined(client); // should throw client not found
+      const updatedClient = {
+        ...client,
+        tempRefreshHash: perdagMainHead,
+      };
+      newClients.set(clientID, updatedClient);
+      await updateClientsDD31(newClients, write);
+      await write.commit();
+      return [
+        perdagMainHead,
+        perdagLMID,
+        await db.baseSnapshot(perdagMainHead, write),
+      ];
+    });
   if (perdagMainHead === undefined) {
     return undefined;
   }
@@ -345,15 +355,31 @@ export async function refresh(
   // perdag moves forward while we're rebasing in memdag. Can't use client
   // headHash until our rebase in memdag is complete, because if rebase fails,
   // then nothing is keeping client's main alive in perdag.
-  const [newHead, diffs] = await memdag.withWrite(async write => {
+  const result = await memdag.withWrite(async write => {
     const currMemdagHead = await write.getHead(db.DEFAULT_HEAD_NAME);
     assertNotUndefined(currMemdagHead);
+    if (
+      compareCookies(
+        fromInternalValue(
+          (await db.baseSnapshot(currMemdagHead, write)).meta.cookieJSON,
+          FromInternalValueReason.PersistCompareCookies,
+        ),
+        fromInternalValue(
+          perdagBaseSnapshot.meta.cookieJSON,
+          FromInternalValueReason.PersistCompareCookies,
+        ),
+      ) > 0
+    ) {
+      console.log('skipping refresh because perdag snapshot is older');
+      return undefined;
+    }
     const newMutations = await localMutationsGreaterThan(
       currMemdagHead,
       {[clientID]: perdagLMID},
       write,
     );
 
+    console.log('refreshing new mutations', newMutations.length);
     const newMemdagHead = await rebase(
       newMutations,
       perdagMainHead,
@@ -375,11 +401,15 @@ export async function refresh(
       diffs.set('', valueDiff);
     }
     await addDiffsForIndexes(currCommit, newCommit, write, diffs);
+    console.log('refresh diffs', diffs);
     await write.setHead(db.DEFAULT_HEAD_NAME, newMemdagHead);
     await write.commit();
-    return [newMemdagHead, diffs];
+    return {newHead: newMemdagHead, diffs};
   });
 
+  if (result === undefined) {
+    return undefined;
+  }
   // If this delete never happens, it's no big deal, some data will stay
   // alive longer but next refresh will move it.
   await perdag.withWrite(async write => {
@@ -397,5 +427,5 @@ export async function refresh(
     await write.commit();
   });
 
-  return {newHead, diffs};
+  return result;
 }
