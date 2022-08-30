@@ -102,6 +102,11 @@ export class ReplicacheTest<
     // @ts-expect-error Property '_persistIsScheduled' is private
     return this._persistIsScheduled;
   }
+
+  get rootHash() {
+    // @ts-expect-error Property '_root' is private
+    return this._root;
+  }
 }
 
 export const reps: Set<ReplicacheTest> = new Set();

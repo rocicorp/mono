@@ -3,10 +3,11 @@ import {
   replicacheForTesting,
   tickAFewTimes,
 } from './test-util';
-import type {WriteTransaction} from './mod';
+import {ExperimentalWatchHashInitialRun, WriteTransaction} from './mod';
 import type {JSONValue} from './json';
 import {expect} from '@esm-bundle/chai';
 import * as sinon from 'sinon';
+import type {Hash} from './hash';
 
 initReplicacheTesting();
 
@@ -14,6 +15,17 @@ async function addData(tx: WriteTransaction, data: {[key: string]: JSONValue}) {
   for (const [key, value] of Object.entries(data)) {
     await tx.put(key, value);
   }
+}
+
+function expectWatchCallbackArgs(
+  args: unknown[],
+  expectedDiff: unknown[],
+  rootHash?: Hash | undefined,
+) {
+  expect(args).to.deep.equal([
+    expectedDiff,
+    rootHash ?? ExperimentalWatchHashInitialRun,
+  ]);
 }
 
 test('watch', async () => {
@@ -27,7 +39,8 @@ test('watch', async () => {
   await rep.mutate.addData({a: 1, b: 2});
 
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'add',
@@ -40,7 +53,8 @@ test('watch', async () => {
         newValue: 2,
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   spy.resetHistory();
   await rep.mutate.addData({a: 1, b: 2});
@@ -48,7 +62,8 @@ test('watch', async () => {
 
   await rep.mutate.addData({a: 11});
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'change',
@@ -57,12 +72,14 @@ test('watch', async () => {
         oldValue: 1,
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   spy.resetHistory();
   await rep.mutate.del('b');
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'del',
@@ -70,7 +87,8 @@ test('watch', async () => {
         oldValue: 2,
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   unwatch();
 
@@ -90,7 +108,8 @@ test('watch with prefix', async () => {
   await rep.mutate.addData({a: 1, b: 2});
 
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'add',
@@ -98,7 +117,8 @@ test('watch with prefix', async () => {
         newValue: 2,
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   spy.resetHistory();
   await rep.mutate.addData({a: 1, b: 2});
@@ -109,7 +129,8 @@ test('watch with prefix', async () => {
 
   await rep.mutate.addData({b: 3, b1: 4, c: 5});
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'change',
@@ -123,12 +144,14 @@ test('watch with prefix', async () => {
         newValue: 4,
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   spy.resetHistory();
   await rep.mutate.del('b');
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'del',
@@ -136,7 +159,8 @@ test('watch with prefix', async () => {
         oldValue: 3,
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   unwatch();
 
@@ -154,7 +178,7 @@ test('watch and initial callback with no data', async () => {
   const unwatch = rep.experimentalWatch(spy, {initialValuesInFirstDiff: true});
   await tickAFewTimes();
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([[]]);
+  expectWatchCallbackArgs(spy.lastCall.args, []);
   spy.resetHistory();
 
   unwatch();
@@ -171,19 +195,17 @@ test('watch and initial callback with data', async () => {
   const unwatch = rep.experimentalWatch(spy, {initialValuesInFirstDiff: true});
   await tickAFewTimes();
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
-    [
-      {
-        op: 'add',
-        key: 'a',
-        newValue: 1,
-      },
-      {
-        op: 'add',
-        key: 'b',
-        newValue: 2,
-      },
-    ],
+  expectWatchCallbackArgs(spy.lastCall.args, [
+    {
+      op: 'add',
+      key: 'a',
+      newValue: 1,
+    },
+    {
+      op: 'add',
+      key: 'b',
+      newValue: 2,
+    },
   ]);
 
   spy.resetHistory();
@@ -206,13 +228,14 @@ test('watch with prefix and initial callback no data', async () => {
 
   // Initial callback should always be called even with no data.
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([[]]);
+  expectWatchCallbackArgs(spy.lastCall.args, []);
   spy.resetHistory();
 
   await rep.mutate.addData({a: 1, b: 2});
 
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'add',
@@ -220,7 +243,8 @@ test('watch with prefix and initial callback no data', async () => {
         newValue: 2,
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   unwatch();
 });
@@ -241,14 +265,12 @@ test('watch with prefix and initial callback and data', async () => {
   await tickAFewTimes();
 
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
-    [
-      {
-        op: 'add',
-        key: 'b',
-        newValue: 2,
-      },
-    ],
+  expectWatchCallbackArgs(spy.lastCall.args, [
+    {
+      op: 'add',
+      key: 'b',
+      newValue: 2,
+    },
   ]);
 
   unwatch();
@@ -270,7 +292,8 @@ test('watch on index', async () => {
   await rep.mutate.addData({a: {id: 'aaa'}, b: {id: 'bbb'}});
 
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'add',
@@ -283,12 +306,14 @@ test('watch on index', async () => {
         newValue: {id: 'bbb'},
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   spy.resetHistory();
   await rep.mutate.addData({b: {id: 'bbb', more: 42}});
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'change',
@@ -297,12 +322,14 @@ test('watch on index', async () => {
         oldValue: {id: 'bbb'},
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   spy.resetHistory();
   await rep.mutate.del('a');
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'del',
@@ -310,7 +337,8 @@ test('watch on index', async () => {
         oldValue: {id: 'aaa'},
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   unwatch();
 });
@@ -332,7 +360,8 @@ test('watch on index with prefix', async () => {
   await rep.mutate.addData({a: {id: 'aaa'}, b: {id: 'bbb'}});
 
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'add',
@@ -340,12 +369,14 @@ test('watch on index with prefix', async () => {
         newValue: {id: 'bbb'},
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   spy.resetHistory();
   await rep.mutate.addData({b: {id: 'bbb', more: 42}});
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'change',
@@ -354,12 +385,14 @@ test('watch on index with prefix', async () => {
         oldValue: {id: 'bbb'},
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   spy.resetHistory();
   await rep.mutate.addData({a: {id: 'baa'}});
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'add',
@@ -367,7 +400,8 @@ test('watch on index with prefix', async () => {
         newValue: {id: 'baa'},
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   spy.resetHistory();
   await rep.mutate.addData({c: {id: 'abaa'}});
@@ -376,7 +410,8 @@ test('watch on index with prefix', async () => {
   spy.resetHistory();
   await rep.mutate.del('b');
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expectWatchCallbackArgs(
+    spy.lastCall.args,
     [
       {
         op: 'del',
@@ -384,7 +419,8 @@ test('watch on index with prefix', async () => {
         oldValue: {id: 'bbb', more: 42},
       },
     ],
-  ]);
+    await rep.rootHash,
+  );
 
   unwatch();
 });
@@ -404,7 +440,7 @@ test('watch with index and initial callback with no data', async () => {
 
   // Initial callback should always be called even with no data.
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([[]]);
+  expectWatchCallbackArgs(spy.lastCall.args, []);
   spy.resetHistory();
 
   unwatch();
@@ -425,19 +461,17 @@ test('watch and initial callback with data', async () => {
   });
   await tickAFewTimes();
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
-    [
-      {
-        op: 'add',
-        key: ['aaa', 'a'],
-        newValue: {id: 'aaa'},
-      },
-      {
-        op: 'add',
-        key: ['bbb', 'b'],
-        newValue: {id: 'bbb'},
-      },
-    ],
+  expectWatchCallbackArgs(spy.lastCall.args, [
+    {
+      op: 'add',
+      key: ['aaa', 'a'],
+      newValue: {id: 'aaa'},
+    },
+    {
+      op: 'add',
+      key: ['bbb', 'b'],
+      newValue: {id: 'bbb'},
+    },
   ]);
 
   unwatch();
@@ -461,14 +495,12 @@ test('watch with index and prefix and initial callback and data', async () => {
   await tickAFewTimes();
 
   expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
-    [
-      {
-        op: 'add',
-        key: ['bbb', 'b'],
-        newValue: {id: 'bbb'},
-      },
-    ],
+  expectWatchCallbackArgs(spy.lastCall.args, [
+    {
+      op: 'add',
+      key: ['bbb', 'b'],
+      newValue: {id: 'bbb'},
+    },
   ]);
 
   unwatch();

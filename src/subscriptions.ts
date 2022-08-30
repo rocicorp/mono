@@ -37,7 +37,7 @@ interface Subscription<R, E> {
     scans: ReadonlyArray<Readonly<ScanSubscriptionInfo>>,
   ): void;
 
-  readonly onData: (result: R) => void;
+  readonly onData: (result: R, rootHash: WatchHash) => void;
   readonly onError: ((error: E) => void) | undefined;
   readonly onDone: (() => void) | undefined;
 }
@@ -46,7 +46,7 @@ const emptySet: ReadonlySet<string> = new Set();
 
 class SubscriptionImpl<R, E> implements Subscription<R, E> {
   private readonly _body: (tx: ReadTransaction) => Promise<R>;
-  private readonly _onData: (result: R) => void;
+  private readonly _onData: (result: R, rootHash: WatchHash) => void;
   private _skipEqualsCheck = true;
   private _lastValue: R | undefined = undefined;
   private _keys = emptySet;
@@ -57,7 +57,7 @@ class SubscriptionImpl<R, E> implements Subscription<R, E> {
 
   constructor(
     body: (tx: ReadTransaction) => Promise<R>,
-    onData: (result: R) => void,
+    onData: (result: R, rootHash: WatchHash) => void,
     onError: ((error: E) => void) | undefined,
     onDone: (() => void) | undefined,
   ) {
@@ -93,14 +93,24 @@ class SubscriptionImpl<R, E> implements Subscription<R, E> {
     this._scans = scans;
   }
 
-  onData(result: R): void {
+  onData(result: R, rootHash: WatchHash): void {
     if (this._skipEqualsCheck || !deepEqual(result, this._lastValue)) {
       this._lastValue = result;
       this._skipEqualsCheck = false;
-      this._onData(result);
+      this._onData(result, rootHash);
     }
   }
 }
+
+/**
+ * Opaque value representing the state of the client view when a watch
+ * callback fires.  Will be an empty string the first time the callback fires
+ * with with `initialValuesInFirstDiff` option set to true.
+ *
+ * @experimental This type is experimental and may change in the future.
+ */
+export type WatchHash = string;
+export const WatchHashInitialRun = '';
 
 /**
  * Function that gets passed into [[Replicache.experimentalWatch]] and gets
@@ -108,7 +118,10 @@ class SubscriptionImpl<R, E> implements Subscription<R, E> {
  *
  * @experimental This type is experimental and may change in the future.
  */
-export type WatchNoIndexCallback = (diff: NoIndexDiff) => void;
+export type WatchNoIndexCallback = (
+  diff: NoIndexDiff,
+  rootHash: WatchHash,
+) => void;
 
 export type WatchCallbackForOptions<Options extends WatchOptions> =
   Options extends WatchIndexOptions ? WatchIndexCallback : WatchNoIndexCallback;
@@ -120,7 +133,7 @@ export type WatchCallbackForOptions<Options extends WatchOptions> =
  *
  * @experimental This type is experimental and may change in the future.
  */
-export type WatchIndexCallback = (diff: IndexDiff) => void;
+export type WatchIndexCallback = (diff: IndexDiff, rootHash: WatchHash) => void;
 
 export type CallbackEntry = {
   cb: WatchIndexCallback | WatchNoIndexCallback;
@@ -165,7 +178,7 @@ export type WatchNoIndexOptions = {
   initialValuesInFirstDiff?: boolean;
 };
 
-export type WatchCallback = (diff: Diff) => void;
+export type WatchCallback = (diff: Diff, rootHash: WatchHash) => void;
 
 class WatchImpl implements Subscription<Diff | undefined, unknown> {
   private readonly _callback: WatchCallback;
@@ -183,9 +196,9 @@ class WatchImpl implements Subscription<Diff | undefined, unknown> {
     this._initialValuesInFirstDiff = options.initialValuesInFirstDiff ?? false;
   }
 
-  onData(result: Diff | undefined): void {
+  onData(result: Diff | undefined, rootHash: WatchHash): void {
     if (result !== undefined) {
-      this._callback(result);
+      this._callback(result, rootHash);
     }
   }
 
@@ -394,15 +407,21 @@ export class SubscriptionsManager {
     this._subscriptions.clear();
   }
 
-  async fire(diffs: sync.DiffsMap): Promise<void> {
+  async fire(diffs: sync.DiffsMap, rootHash: WatchHash): Promise<void> {
     const subscriptions = subscriptionsForDiffs(this._subscriptions, diffs);
-    await this._fireSubscriptions(subscriptions, InvokeKind.Regular, diffs);
+    await this._fireSubscriptions(
+      subscriptions,
+      InvokeKind.Regular,
+      diffs,
+      rootHash,
+    );
   }
 
   private async _fireSubscriptions(
     subscriptions: Iterable<UnknownSubscription>,
     kind: InvokeKind,
     diffs: sync.DiffsMap | undefined,
+    rootHash: WatchHash,
   ) {
     const subs = [...subscriptions] as readonly Subscription<
       unknown,
@@ -432,7 +451,7 @@ export class SubscriptionsManager {
       const s = subs[i];
       const result = results[i];
       if (result.status === 'fulfilled') {
-        s.onData(result.value);
+        s.onData(result.value, rootHash);
       } else {
         if (s.onError) {
           s.onError(result.reason);
@@ -445,7 +464,6 @@ export class SubscriptionsManager {
 
   private async _scheduleInitialSubscriptionRun(s: UnknownSubscription) {
     this._pendingSubscriptions.add(s);
-
     if (!this.hasPendingSubscriptionRuns) {
       this.hasPendingSubscriptionRuns = true;
       await Promise.resolve();
@@ -456,6 +474,7 @@ export class SubscriptionsManager {
         subscriptions,
         InvokeKind.InitialRun,
         undefined,
+        WatchHashInitialRun,
       );
     }
   }
