@@ -31,8 +31,6 @@ import {
   WatchOptions,
   WatchCallbackForOptions,
   WatchCallback,
-  WatchHashInitialRun,
-  WatchHash,
 } from './subscriptions';
 import {IDBStore} from './kv/mod';
 import * as dag from './dag/mod';
@@ -791,7 +789,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const currentRoot = await this._root; // instantaneous except maybe first time
     if (root !== undefined && root !== currentRoot) {
       this._root = Promise.resolve(root);
-      await this._subscriptions.fire(diffs, root as unknown as WatchHash);
+      await this._subscriptions.fire(diffs, root);
     }
   }
 

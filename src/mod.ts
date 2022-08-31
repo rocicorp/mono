@@ -84,7 +84,6 @@ export {mergeAsyncIterables} from './merge-async-iterables';
 export {filterAsyncIterable} from './filter-async-iterable';
 export {deleteAllReplicacheData} from './persist/mod';
 export type {IterableUnion} from './iterable-union';
-export {WatchHashInitialRun as ExperimentalWatchHashInitialRun} from './subscriptions';
 
 export {version} from './version';
 

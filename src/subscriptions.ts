@@ -17,6 +17,7 @@ import type {QueryInternal} from './replicache';
 import type {LogContext} from '@rocicorp/logger';
 import {binarySearch} from './binary-search';
 import {fromInternalValue, FromInternalValueReason} from './internal-value.js';
+import type {Hash} from './hash';
 
 const enum InvokeKind {
   InitialRun,
@@ -37,7 +38,7 @@ interface Subscription<R, E> {
     scans: ReadonlyArray<Readonly<ScanSubscriptionInfo>>,
   ): void;
 
-  readonly onData: (result: R, rootHash: WatchHash) => void;
+  readonly onData: (result: R, rootHash: Hash | undefined) => void;
   readonly onError: ((error: E) => void) | undefined;
   readonly onDone: (() => void) | undefined;
 }
@@ -93,19 +94,21 @@ class SubscriptionImpl<R, E> implements Subscription<R, E> {
     this._scans = scans;
   }
 
-  onData(result: R, rootHash: WatchHash): void {
+  onData(result: R, rootHash: Hash | undefined): void {
     if (this._skipEqualsCheck || !deepEqual(result, this._lastValue)) {
       this._lastValue = result;
       this._skipEqualsCheck = false;
-      this._onData(result, rootHash);
+      this._onData(
+        result,
+        rootHash ? (rootHash as unknown as WatchHash) : WatchHashInitialRun,
+      );
     }
   }
 }
 
 /**
  * Opaque value representing the state of the client view when a watch
- * callback fires.  Will be an empty string the first time the callback fires
- * with with `initialValuesInFirstDiff` option set to true.
+ * callback fires.
  *
  * @experimental This type is experimental and may change in the future.
  */
@@ -196,9 +199,12 @@ class WatchImpl implements Subscription<Diff | undefined, unknown> {
     this._initialValuesInFirstDiff = options.initialValuesInFirstDiff ?? false;
   }
 
-  onData(result: Diff | undefined, rootHash: WatchHash): void {
+  onData(result: Diff | undefined, rootHash: Hash | undefined): void {
     if (result !== undefined) {
-      this._callback(result, rootHash);
+      this._callback(
+        result,
+        rootHash ? (rootHash as unknown as WatchHash) : WatchHashInitialRun,
+      );
     }
   }
 
@@ -407,7 +413,7 @@ export class SubscriptionsManager {
     this._subscriptions.clear();
   }
 
-  async fire(diffs: sync.DiffsMap, rootHash: WatchHash): Promise<void> {
+  async fire(diffs: sync.DiffsMap, rootHash: Hash): Promise<void> {
     const subscriptions = subscriptionsForDiffs(this._subscriptions, diffs);
     await this._fireSubscriptions(
       subscriptions,
@@ -421,7 +427,7 @@ export class SubscriptionsManager {
     subscriptions: Iterable<UnknownSubscription>,
     kind: InvokeKind,
     diffs: sync.DiffsMap | undefined,
-    rootHash: WatchHash,
+    rootHash: Hash | undefined,
   ) {
     const subs = [...subscriptions] as readonly Subscription<
       unknown,
@@ -474,7 +480,7 @@ export class SubscriptionsManager {
         subscriptions,
         InvokeKind.InitialRun,
         undefined,
-        WatchHashInitialRun,
+        undefined,
       );
     }
   }
