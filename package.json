@@ -25,6 +25,7 @@
     "@rocicorp/licensing": "^4.0.0",
     "@rocicorp/lock": "^1.0.1",
     "@rocicorp/logger": "^2.2.0",
+    "@rocicorp/prettier-config": "^0.1.1",
     "@rocicorp/resolver": "^1.0.0",
     "@types/lodash-es": "^4.17.6",
     "@types/mocha": "^9.1.0",
@@ -44,7 +45,6 @@
     "idb": "^7.0.1",
     "navigator.locks": "^0.8.5",
     "playwright": "^1.17.2",
-    "prettier": "^2.6.2",
     "rollup": "^2.70.1",
     "rollup-plugin-dts": "^4.2.0",
     "sinon": "^13.0.1",
@@ -73,5 +73,6 @@
   ],
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
-  }
+  },
+  "prettier": "@rocicorp/prettier-config"
 }
