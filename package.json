@@ -22,6 +22,7 @@
   "engines": {
     "node": ">=16.14.0 || >=17.1"
   },
+  "//1": "Note: we need thse precise versions of miniflare and jest-environment-miniflare due to: https://github.com/rocicorp/reflect-server/issues/148",
   "devDependencies": {
     "@cloudflare/workers-types": "^3.8.0",
     "@rocicorp/lock": "^1.0.1",
@@ -33,8 +34,8 @@
     "esbuild": "^0.14.38",
     "eslint": "^8.14.0",
     "jest": "^28.0.3",
-    "jest-environment-miniflare": "^2.6.0",
-    "miniflare": "^2.6.0",
+    "jest-environment-miniflare": "2.6.0",
+    "miniflare": "2.6.0",
     "prettier": "^2.6.2",
     "replicache": "^10.0.0",
     "rollup": "^2.71.1",
@@ -43,10 +44,9 @@
     "ts-jest": "^28.0.1",
     "typescript": "^4.6.4"
   },
-  "//": "These are the versions of wrangler/miniflare we've tested with. Different versions may not work.",
+  "//2": "Note: we need this precise version of wrangler due to: https://github.com/rocicorp/reflect-server/issues/148",
   "peerDependencies": {
-    "wrangler": "2.0.24",
-    "miniflare": "2.6.0"
+    "wrangler": "2.0.24"
   },
   "files": [
     "out/reflect-server.d.ts",
