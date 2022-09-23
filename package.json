@@ -1,7 +1,7 @@
 {
   "name": "@rocicorp/reflect",
   "description": "",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rocicorp/reflect.git"
@@ -36,7 +36,7 @@
     "mocha": "^9.2.1",
     "nanoid": "^3.3.1",
     "prettier": "^2.5.1",
-    "replicache": "^10.0.0",
+    "replicache": "^11.2.0",
     "rollup": "^2.70.1",
     "rollup-plugin-dts": "^4.2.0",
     "sinon": "^13.0.1",
