@@ -23,15 +23,13 @@ import {Lock} from '../util/lock.js';
 import {resolver} from '../util/resolver.js';
 import {sleep} from '../util/sleep.js';
 import type {ReflectOptions} from './options.js';
+import {PokeSetProcessor} from './poke-set-processor.js';
 
 export const enum ConnectionState {
   Disconnected,
   Connecting,
   Connected,
 }
-
-const POKE_BATCH_DEBOUNCE_MS = 20;
-const JIFFY_MS = 20;
 
 export class Reflect<MD extends MutatorDefs> {
   private readonly _rep: Replicache<MD>;
@@ -44,11 +42,9 @@ export class Reflect<MD extends MutatorDefs> {
   // can cause out of order poke errors.
   private readonly _pokeLock = new Lock();
 
-  // A batch of pokes is a series of pokes received within POKE_RECV_DEBOUNCE_MS
-  private readonly _pokeBatch: PokeBody[] = [];
-  private _batchStartFrame = 0; // server frame
-  private _processPokeBatchStartTime = 0; // client time
-  private _processingPokeBatch = false;
+  private readonly _pokeSetProcessor = new PokeSetProcessor((poke: PokeBody) =>
+    this._handlePoke(this._l, poke),
+  );
 
   private readonly _pushTracker: GapTracker;
   private readonly _updateTracker: GapTracker;
@@ -295,14 +291,17 @@ export class Reflect<MD extends MutatorDefs> {
       return;
     }
 
+    if (downMessage[0] === 'pokeset') {
+      this._pokeSetProcessor.add(downMessage[1]);
+      return;
+    }
+
     if (downMessage[0] !== 'poke') {
       throw new Error(`Unexpected message: ${downMessage}`);
     }
 
     const pokeBody = downMessage[1];
-
-    this._pokeBatch.push(pokeBody);
-    void this._processPokeBatch();
+    void this._handlePoke(l, pokeBody);
   };
 
   private _onClose = (e: CloseEvent) => {
@@ -412,54 +411,6 @@ export class Reflect<MD extends MutatorDefs> {
       errorMessage: '',
       httpStatusCode: 200,
     };
-  }
-
-  // this will apply the current poke batch over time
-  private async _processPokeBatch() {
-    if (this._processingPokeBatch) {
-      return;
-    }
-
-    this._processingPokeBatch = true;
-
-    await sleep(POKE_BATCH_DEBOUNCE_MS);
-
-    // ! overloading timestamp field to store the frame number
-    this._batchStartFrame = this._pokeBatch[0].timestamp;
-    this._processPokeBatchStartTime = performance.now();
-
-    void this._applyPokeBatch();
-  }
-
-  private async _applyPokeBatch() {
-    const dt = performance.now() - this._processPokeBatchStartTime;
-
-    // wrongly assumes that successive frames are approx JIFFY_MS apart
-    while (this._pokeBatch.length > 0) {
-      const curPoke = this._pokeBatch[0];
-
-      // ! overloading timestamp field to store the frame number
-      const frame = curPoke.timestamp;
-
-      const pokeApplyTime = (frame - this._batchStartFrame) * JIFFY_MS;
-
-      if (pokeApplyTime > dt) {
-        break;
-      }
-
-      await this._handlePoke(this._l, curPoke);
-      this._pokeBatch.shift();
-    }
-
-    if (this._pokeBatch.length === 0) {
-      this._processingPokeBatch = false;
-      // console.log('exiting poke loop');
-      return;
-    }
-
-    requestAnimationFrame(() => {
-      void this._applyPokeBatch();
-    });
   }
 
   private async _watchdog() {

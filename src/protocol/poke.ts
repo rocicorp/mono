@@ -16,7 +16,7 @@ const delOpSchema = z.object({
 const patchOpSchema = z.union([putOpSchema, delOpSchema]);
 const patchSchema = z.array(patchOpSchema);
 
-const pokeBodySchema = z.object({
+export const pokeBodySchema = z.object({
   // We always specify a Version as our cookie, but Replicache starts clients
   // with initial cookie `null`, before the first request. So we have to be
   // able to send a base cookie with value `null` to match that state.
