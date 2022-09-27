@@ -1,7 +1,7 @@
 {
   "name": "replicache",
   "description": "Realtime sync for any backend stack",
-  "version": "11.3.0",
+  "version": "11.3.1",
   "repository": "github:rocicorp/replicache",
   "license": "https://roci.dev/terms.html",
   "scripts": {
