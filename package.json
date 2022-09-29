@@ -34,8 +34,8 @@
     "esbuild": "^0.14.38",
     "eslint": "^8.14.0",
     "jest": "^28.0.3",
-    "jest-environment-miniflare": "2.6.0",
-    "miniflare": "2.6.0",
+    "jest-environment-miniflare": "2.9.0",
+    "miniflare": "2.9.0",
     "prettier": "^2.6.2",
     "replicache": "^10.0.0",
     "rollup": "^2.71.1",
@@ -46,7 +46,7 @@
   },
   "//2": "Note: we need this precise version of wrangler due to: https://github.com/rocicorp/reflect-server/issues/148",
   "peerDependencies": {
-    "wrangler": "2.0.24"
+    "wrangler": "2.1.9"
   },
   "files": [
     "out/reflect-server.d.ts",
