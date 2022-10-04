@@ -23,6 +23,7 @@ import {Lock} from '../util/lock.js';
 import {resolver} from '../util/resolver.js';
 import {sleep} from '../util/sleep.js';
 import type {ReflectOptions} from './options.js';
+import {PokeSetProcessor} from './poke-set-processor.js';
 
 export const enum ConnectionState {
   Disconnected,
@@ -40,10 +41,12 @@ export class Reflect<MD extends MutatorDefs> {
   // Protects _handlePoke. We need pokes to be serialized, otherwise we
   // can cause out of order poke errors.
   private readonly _pokeLock = new Lock();
+  private readonly _pokeSetProcessor = new PokeSetProcessor(
+    async (poke: PokeBody) => await this._handlePoke(this._l, poke),
+  );
 
   private readonly _pushTracker: GapTracker;
   private readonly _updateTracker: GapTracker;
-  private readonly _timestampTracker: GapTracker;
 
   private _lastMutationIDSent = -1;
   private _onPong: () => void = () => undefined;
@@ -126,7 +129,6 @@ export class Reflect<MD extends MutatorDefs> {
 
     this._pushTracker = new GapTracker('push', this._l);
     this._updateTracker = new GapTracker('update', this._l);
-    this._timestampTracker = new GapTracker('timestamp', this._l);
     void this._watchdog();
   }
 
@@ -290,8 +292,9 @@ export class Reflect<MD extends MutatorDefs> {
       throw new Error(`Unexpected message: ${downMessage}`);
     }
 
-    const pokeBody = downMessage[1];
-    void this._handlePoke(l, pokeBody);
+    this._pokeSetProcessor.add(downMessage[1]);
+    // const pokeBody = downMessage[1];
+    // void this._handlePoke(l, pokeBody);
   };
 
   private _onClose = (e: CloseEvent) => {
@@ -348,7 +351,6 @@ export class Reflect<MD extends MutatorDefs> {
       l.debug?.('Applying poke', pokeBody);
 
       this._updateTracker.push(performance.now());
-      this._timestampTracker.push(pokeBody.timestamp);
 
       const {lastMutationID, baseCookie, patch, cookie} = pokeBody;
       this._lastMutationIDReceived = lastMutationID;
@@ -389,7 +391,11 @@ export class Reflect<MD extends MutatorDefs> {
 
         const msg: PushMessage = [
           'push',
-          {...pushBody, mutations: [m], timestamp: performance.now()},
+          {
+            ...pushBody,
+            mutations: [m],
+            timestamp: Date.now(),
+          },
         ];
 
         this._pushTracker.push(performance.now());
@@ -420,7 +426,7 @@ export class Reflect<MD extends MutatorDefs> {
     l.debug?.('pinging');
     const {promise, resolve} = resolver();
     this._onPong = resolve;
-    const pingMessage: PingMessage = ['ping', {}];
+    const pingMessage: PingMessage = ['ping', {ts: Date.now()}];
     const t0 = performance.now();
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     this._socket!.send(JSON.stringify(pingMessage));
@@ -474,7 +480,7 @@ export function createSocket(
   searchParams.set('clientID', clientID);
   searchParams.set('roomID', roomID);
   searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));
-  searchParams.set('ts', String(performance.now()));
+  searchParams.set('ts', String(Date.now()));
   searchParams.set('lmid', String(lmid));
   // Pass auth to the server via the `Sec-WebSocket-Protocol` header by passing
   // it as a `protocol` to the `WebSocket` constructor.  The empty string is an
