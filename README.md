@@ -82,7 +82,6 @@ git push origin $NEW_TAG
 
 The following have peerDependencies that should to be updated to the new Replicache version:
 
-- `replicache-react`
 - `replicache-nextjs`
 - `rails`
 
