@@ -1,11 +1,9 @@
 import {assert} from '../asserts';
-import * as dag from '../dag/mod';
+import type * as dag from '../dag/mod';
 import * as db from '../db/mod';
-import * as sync from '../sync/mod';
+import type * as sync from '../sync/mod';
 import {assertHasClientState, getMainBranchID} from './clients';
-import {ComputeHashTransformer, FixedChunks} from './compute-hash-transformer';
 import {GatherVisitor} from './gather-visitor';
-import {FixupTransformer} from './fixup-transformer';
 import type {MutatorDefs} from '../replicache';
 import type {Hash} from '../hash';
 import type {LogContext} from '@rocicorp/logger';
@@ -34,11 +32,12 @@ import {Branch, getBranch, setBranch} from './branches';
 export async function persistDD31(
   lc: LogContext,
   clientID: sync.ClientID,
+  chunkLocationTracker: dag.ChunkLocationTracker,
   memdag: dag.Store,
   perdag: dag.Store,
   mutators: MutatorDefs,
   closed: () => boolean,
-  onGatherTempChunksForTest = async () => {
+  onGatherMemOnlyChunksForTest = async () => {
     return;
   },
 ): Promise<void> {
@@ -88,23 +87,17 @@ export async function persistDD31(
   if (
     db.compareCookiesForSnapshots(memdagBaseSnapshot, perdagBaseSnapshot) > 0
   ) {
-    await onGatherTempChunksForTest();
+    await onGatherMemOnlyChunksForTest();
     // Might need to perist snapshot, we will have to double check
     // after gathering the snapshot chunks from memdag
-    const memdagBaseSnapshotTempHash = memdagBaseSnapshot.chunk.hash;
-    // Gather all temp chunks from base snapshot on the memdag.
-    const gatheredChunks = await gatherTempChunks(
+    const memdagBaseSnapshotHash = memdagBaseSnapshot.chunk.hash;
+    // Gather all memory only chunks from base snapshot on the memdag.
+    const gatheredChunks = await gatherMemOnlyChunks(
+      chunkLocationTracker,
       memdag,
-      memdagBaseSnapshotTempHash,
+      memdagBaseSnapshotHash,
     );
-
-    // Compute the hashes for these gathered chunks.
-    const [fixedChunks, mappings, memdagBaseSnapshotHash] = await computeHashes(
-      gatheredChunks,
-      memdagBaseSnapshotTempHash,
-    );
-
-    let memdagSnapshotPersisted = false;
+    let memdagBaseSnapshotPersisted = false;
     await perdag.withWrite(async perdagWrite => {
       // check if memdag snapshot still newer than perdag snapshot
       const [mainBranch, latestPerdagMainBranchHeadCommit] =
@@ -124,10 +117,10 @@ export async function persistDD31(
         ) > 0
       ) {
         // still newer, persist memdag snapshot by writing chunks
-        memdagSnapshotPersisted = true;
         await Promise.all(
-          Array.from(fixedChunks.values(), c => perdagWrite.putChunk(c)),
+          Array.from(gatheredChunks.values(), c => perdagWrite.putChunk(c)),
         );
+        memdagBaseSnapshotPersisted = true;
         // Rebase local mutations from perdag main branch onto new snapshot
         newMainBranchHeadHash = memdagBaseSnapshotHash;
         const mainBranchLocalMutations = await db.localMutations(
@@ -151,6 +144,10 @@ export async function persistDD31(
         mutationIDs = {...mainBranch.mutationIDs};
       }
 
+      if (memdagBaseSnapshotPersisted) {
+        await chunkLocationTracker.chunksPersisted(gatheredChunks.keys());
+      }
+
       // persist new memdag mutations
       newMainBranchHeadHash = await rebase(
         newMemdagMutations,
@@ -172,10 +169,6 @@ export async function persistDD31(
       );
       await perdagWrite.commit();
     });
-    if (memdagSnapshotPersisted) {
-      // fixup the memdag with the new hashes.
-      await fixupMemdagWithNewHashes(memdag, mappings);
-    }
   } else {
     // no need to persist snapshot, persist new memdag mutations
     await perdag.withWrite(async perdagWrite => {
@@ -213,50 +206,16 @@ async function getMainBranchInfo(
   return [mainBranch, await db.commitFromHash(mainBranch.headHash, perdagRead)];
 }
 
-async function gatherTempChunks(
+async function gatherMemOnlyChunks(
+  chunkLocationTracker: dag.ChunkLocationTracker,
   memdag: dag.Store,
-  headHash: Hash,
+  baseSnapshotHash: Hash,
 ): Promise<ReadonlyMap<Hash, dag.Chunk>> {
   return await memdag.withRead(async dagRead => {
-    assert(headHash);
-    const visitor = new GatherVisitor(dagRead);
-    await visitor.visitCommit(headHash);
+    assert(baseSnapshotHash);
+    const visitor = new GatherVisitor(chunkLocationTracker, dagRead);
+    await visitor.visitCommit(baseSnapshotHash);
     return visitor.gatheredChunks;
-  });
-}
-
-async function computeHashes(
-  gatheredChunks: ReadonlyMap<Hash, dag.Chunk>,
-  mainHeadTempHash: Hash,
-): Promise<[FixedChunks, ReadonlyMap<Hash, Hash>, Hash]> {
-  const transformer = new ComputeHashTransformer(
-    gatheredChunks,
-    dag.uuidChunkHasher,
-  );
-  const mainHeadHash = await transformer.transformCommit(mainHeadTempHash);
-  const {fixedChunks, mappings} = transformer;
-  return [fixedChunks, mappings, mainHeadHash];
-}
-
-async function fixupMemdagWithNewHashes(
-  memdag: dag.Store,
-  mappings: ReadonlyMap<Hash, Hash>,
-) {
-  await memdag.withWrite(async dagWrite => {
-    for (const headName of [db.DEFAULT_HEAD_NAME, sync.SYNC_HEAD_NAME]) {
-      const headHash = await dagWrite.getHead(headName);
-      if (!headHash) {
-        if (headName === sync.SYNC_HEAD_NAME) {
-          // It is OK to not have a sync head.
-          break;
-        }
-        throw new Error(`No head found for ${headName}`);
-      }
-      const transformer = new FixupTransformer(dagWrite, mappings);
-      const newHeadHash = await transformer.transformCommit(headHash);
-      await dagWrite.setHead(headName, newHeadHash);
-    }
-    await dagWrite.commit();
   });
 }
 

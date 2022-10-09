@@ -10,7 +10,7 @@ import {
   SnapshotMeta,
   SnapshotMetaDD31,
 } from '../db/commit';
-import {assertHash, fakeHash, newTempHash, newUUIDHash} from '../hash';
+import {assertHash, fakeHash, newUUIDHash} from '../hash';
 import {
   assertClientDD31,
   Client,
@@ -298,54 +298,6 @@ test('getClient', async () => {
   await dagStore.withRead(async (read: dag.Read) => {
     const readClient1 = await getClient('client1', read);
     expect(readClient1).to.deep.equal(client1);
-  });
-});
-
-test('updateClients throws error if any client headHash is a temp hash', async () => {
-  const dagStore = new dag.TestStore();
-  const client1 = makeClient({
-    heartbeatTimestampMs: 1000,
-    headHash: headClient1Hash,
-  });
-  const client2 = makeClient({
-    heartbeatTimestampMs: 3000,
-    headHash: headClient2Hash,
-  });
-  const clientMap = new Map(
-    Object.entries({
-      client1,
-      client2,
-    }),
-  );
-
-  await setClientsForTesting(clientMap, dagStore);
-
-  await dagStore.withRead(async (read: dag.Read) => {
-    const readClientMap = await getClients(read);
-    expect(readClientMap).to.deep.equal(clientMap);
-  });
-
-  const clientMapWTempHash = new Map(
-    Object.entries({
-      client1,
-      client2: makeClient({
-        heartbeatTimestampMs: 3000,
-        headHash: newTempHash(),
-      }),
-    }),
-  );
-
-  let e;
-  try {
-    await setClientsForTesting(clientMapWTempHash, dagStore);
-  } catch (ex) {
-    e = ex;
-  }
-  expect(e).to.be.instanceOf(Error);
-
-  await dagStore.withRead(async (read: dag.Read) => {
-    const readClientMap = await getClients(read);
-    expect(readClientMap).to.deep.equal(clientMap);
   });
 });
 

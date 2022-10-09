@@ -1,7 +1,7 @@
 import {compareUTF8} from 'compare-utf8';
 import {assertJSONValue, JSONValue, ReadonlyJSONValue} from '../json';
 import {assert, assertArray, assertNumber, assertString} from '../asserts';
-import {Hash, emptyHash, newTempHash} from '../hash';
+import {Hash, emptyHash, newUUIDHash} from '../hash';
 import type {BTreeRead} from './read';
 import type {BTreeWrite} from './write';
 import {skipBTreeNodeAsserts, skipInternalValueAsserts} from '../config';
@@ -566,7 +566,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
     const {level} = this;
 
     if (length === 0) {
-      return new InternalNodeImpl([], newTempHash(), level - 1, true);
+      return new InternalNodeImpl([], newUUIDHash(), level - 1, true);
     }
 
     const output = await this.getChildren(start, start + length, tree);
@@ -576,7 +576,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
       for (const child of output as InternalNodeImpl[]) {
         entries.push(...child.entries);
       }
-      return new InternalNodeImpl(entries, newTempHash(), level - 1, true);
+      return new InternalNodeImpl(entries, newUUIDHash(), level - 1, true);
     }
 
     assert(level === 1);
@@ -584,7 +584,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
     for (const child of output as DataNodeImpl[]) {
       entries.push(...child.entries);
     }
-    return new DataNodeImpl(entries, newTempHash(), true);
+    return new DataNodeImpl(entries, newUUIDHash(), true);
   }
 }
 

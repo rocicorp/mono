@@ -1,7 +1,6 @@
 import * as kv from '../kv/mod';
 import * as dag from '../dag/mod';
 import {ClientMap, getClients} from './clients.js';
-import {assertNotTempHash} from '../hash.js';
 import {dropStore} from '../kv/idb-store.js';
 import {IDBDatabasesStore} from './idb-databases-store';
 import type {IndexedDBDatabase} from './idb-databases-store';
@@ -10,6 +9,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {sleep} from '../sleep.js';
 import {AbortError} from '../abort-error.js';
 import {REPLICACHE_FORMAT_VERSION} from '../replicache.js';
+import {assertHash} from '../hash';
 
 // How frequently to try to collect
 const COLLECT_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -123,7 +123,7 @@ async function dropDatabases(
 
 function defaultNewDagStore(name: string): dag.Store {
   const perKvStore = new kv.IDBStore(name);
-  return new dag.StoreImpl(perKvStore, dag.uuidChunkHasher, assertNotTempHash);
+  return new dag.StoreImpl(perKvStore, dag.uuidChunkHasher, assertHash);
 }
 
 async function canCollectDatabase(

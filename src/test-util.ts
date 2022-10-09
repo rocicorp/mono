@@ -10,7 +10,7 @@ import * as persist from './persist/mod';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import * as sinon from 'sinon';
 import type {JSONValue, ReadonlyJSONValue} from './json';
-import {Hash, makeNewTempHashFunction} from './hash';
+import {Hash, makeNewFakeHashFunction} from './hash';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -28,7 +28,7 @@ export class ReplicacheTest<
   // eslint-disable-next-line @typescript-eslint/ban-types
   MD extends MutatorDefs = {},
 > extends Replicache<MD> {
-  private _internalAPI!: ReplicacheInternalAPI;
+  private readonly _internalAPI!: ReplicacheInternalAPI;
 
   constructor(options: ReplicacheOptions<MD>) {
     let internalAPI!: ReplicacheInternalAPI;
@@ -51,10 +51,6 @@ export class ReplicacheTest<
 
   invokePush(): Promise<boolean> {
     return super._invokePush();
-  }
-
-  protected override _memdagHashFunction(): () => Hash {
-    return makeNewTempHashFunction();
   }
 
   protected override _invokePush(): Promise<boolean> {

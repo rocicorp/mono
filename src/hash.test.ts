@@ -1,19 +1,14 @@
 import {expect} from '@esm-bundle/chai';
 import {
-  assertNotTempHash,
   emptyHash,
   isHash,
-  isTempHash,
-  newTempHash,
   parse,
   newUUIDHash,
   isUUIDHash,
   makeNewFakeHashFunction,
   fakeHash,
   STRING_LENGTH,
-  makeNewTempHashFunction,
   Hash,
-  assertHash,
 } from './hash';
 
 const emptyUUID = '00000000-0000-4000-8000-000000000000';
@@ -22,14 +17,8 @@ function hashes() {
   return [
     emptyUUID,
     newUUIDHash(),
-    newTempHash(),
     fakeHash(''),
     fakeHash('a'),
-
-    // Old temp hashes
-    't/000000000000000000000000000000',
-    't/000000000000000000000000001234',
-
     // old native hashes
     '0123456789abcdefghijklmnopqrstuv',
   ];
@@ -54,51 +43,9 @@ test('parse', () => {
   }
 });
 
-test('temp hash', () => {
-  const t = newTempHash();
-  const c = fakeHash('c');
-
-  expect(String(t).length, 'temp hash length').to.equal(String(c).length);
-  expect(isTempHash(t)).true;
-  expect(isTempHash(c)).false;
-
-  expect(() => assertNotTempHash(t)).to.throw();
-
-  const f = fakeHash('a');
-  const f2 = fakeHash('');
-  expect(isTempHash(f)).false;
-  expect(isTempHash(f2)).false;
-
-  // Old format
-  expect(isTempHash('t/000000000000000000000000000000')).true;
-  expect(isTempHash('t/000000000000000000000000001234')).true;
-
-  // Old format
-  expect(isTempHash('00000000000000000000000000000000')).false;
-  expect(isTempHash('00000000000000000000000000001234')).false;
-});
-
-test('makeNewTempHashFunction', () => {
-  const f = makeNewTempHashFunction();
-  expect(f()).equal('t/0000000000000000000000000000000000');
-  expect(f()).equal('t/0000000000000000000000000000000001');
-  expect(f()).equal('t/0000000000000000000000000000000002');
-  expect(f()).equal('t/0000000000000000000000000000000003');
-});
-
 test.skip('type checking only', () => {
   {
     const h = newUUIDHash();
-    // @ts-expect-error Should be an error
-    const s: string = h;
-    console.log(s);
-
-    // @ts-expect-error Should be an error
-    const h2: Hash = 'abc';
-    console.log(h2);
-  }
-  {
-    const h = newTempHash();
     // @ts-expect-error Should be an error
     const s: string = h;
     console.log(s);
@@ -115,8 +62,6 @@ test('uuid hash', () => {
   expect(h1).to.not.equal(h2);
   expect(isHash(h1)).to.be.true;
   expect(isHash(h2)).to.be.true;
-  assertNotTempHash(h1);
-  assertNotTempHash(h2);
   expect(isUUIDHash(h1)).to.be.true;
   expect(isUUIDHash(h2)).to.be.true;
 });
@@ -154,18 +99,4 @@ test('fakeHash', () => {
   expect(String(fakeHash('aa')).length).to.equal(STRING_LENGTH);
   expect(fakeHash('aa')).to.equal(fakeHash('aa'));
   expect(fakeHash('aa')).to.equal('face0000-0000-4000-8000-0000000000aa');
-});
-
-test('assertNotTempHash', () => {
-  expect(() => assertNotTempHash(newTempHash())).to.throw();
-  assertNotTempHash(newUUIDHash());
-  assertNotTempHash(fakeHash(''));
-  assertNotTempHash(fakeHash('a'));
-
-  // Old format
-  assertHash('t'.repeat(32) as unknown as Hash);
-  assertNotTempHash('t'.repeat(32) as unknown as Hash);
-  expect(() =>
-    assertNotTempHash(('t/' + '0'.repeat(30)) as unknown as Hash),
-  ).to.throw();
 });

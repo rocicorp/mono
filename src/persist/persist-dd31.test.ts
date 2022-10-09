@@ -8,13 +8,7 @@ import {
   createMutatorName,
   getChunkSnapshot,
 } from '../db/test-helpers';
-import {
-  assertHash,
-  assertNotTempHash,
-  Hash,
-  makeNewFakeHashFunction,
-  makeNewTempHashFunction,
-} from '../hash';
+import {assertHash, Hash, makeNewFakeHashFunction} from '../hash';
 import {
   initClient,
   assertClientDD31,
@@ -37,7 +31,7 @@ suite('persistDD31', () => {
   if (!DD31) {
     return;
   }
-  let memdag: dag.TestStore,
+  let memdag: dag.LazyStore,
     perdag: dag.TestStore,
     memdagChainBuilder: ChainBuilder,
     perdagBranchChainBuilder: ChainBuilder,
@@ -246,6 +240,7 @@ suite('persistDD31', () => {
       new LogContext(),
       clients[0].clientID,
       memdag,
+      memdag,
       perdag,
       mutators,
       () => false,
@@ -279,6 +274,7 @@ suite('persistDD31', () => {
     await persistDD31(
       new LogContext(),
       clients[0].clientID,
+      memdag,
       memdag,
       perdag,
       mutators,
@@ -343,6 +339,7 @@ suite('persistDD31', () => {
       new LogContext(),
       clients[0].clientID,
       memdag,
+      memdag,
       perdag,
       mutators,
       () => false,
@@ -379,6 +376,7 @@ suite('persistDD31', () => {
     await persistDD31(
       new LogContext(),
       clients[0].clientID,
+      memdag,
       memdag,
       perdag,
       mutators,
@@ -463,6 +461,7 @@ suite('persistDD31', () => {
       new LogContext(),
       clients[0].clientID,
       memdag,
+      memdag,
       perdag,
       mutators,
       () => false,
@@ -506,6 +505,7 @@ suite('persistDD31', () => {
     await persistDD31(
       new LogContext(),
       clients[0].clientID,
+      memdag,
       memdag,
       perdag,
       mutators,
@@ -579,6 +579,7 @@ suite('persistDD31', () => {
     await persistDD31(
       new LogContext(),
       clients[0].clientID,
+      memdag,
       memdag,
       perdag,
       mutators,
@@ -725,6 +726,7 @@ suite('persistDD31', () => {
       new LogContext(),
       clients[0].clientID,
       memdag,
+      memdag,
       perdag,
       mutators,
       () => false,
@@ -803,6 +805,7 @@ suite('persistDD31', () => {
         new LogContext(),
         clients[0].clientID,
         memdag,
+        memdag,
         perdag,
         mutators,
         () => false,
@@ -817,15 +820,13 @@ suite('persistDD31', () => {
 });
 
 async function setupPersistTest() {
-  const memdag = new dag.TestStore(
-    undefined,
-    makeNewTempHashFunction(),
+  const hashFunction = makeNewFakeHashFunction();
+  const perdag = new dag.TestStore(undefined, hashFunction);
+  const memdag = new dag.LazyStore(
+    perdag,
+    100 * 2 ** 20, // 100 MB,
+    hashFunction,
     assertHash,
-  );
-  const perdag = new dag.TestStore(
-    undefined,
-    makeNewFakeHashFunction('eda'),
-    assertNotTempHash,
   );
 
   const mutatorNames = Array.from({length: 10}, (_, index) => {

@@ -15,7 +15,7 @@ import * as dag from './dag/mod';
 import * as persist from './persist/mod';
 import * as kv from './kv/mod';
 import type * as sync from './sync/mod';
-import {assertHash, assertNotTempHash, makeNewTempHashFunction} from './hash';
+import {assertHash, Hash} from './hash';
 import {assertNotUndefined} from './asserts';
 import {expect} from '@esm-bundle/chai';
 import {uuid} from './uuid';
@@ -57,7 +57,7 @@ async function createPerdag(args: {
   } finally {
     await idbDatabases.close();
   }
-  const perdag = new dag.StoreImpl(idb, dag.uuidChunkHasher, assertNotTempHash);
+  const perdag = new dag.StoreImpl(idb, dag.uuidChunkHasher, assertHash);
   return perdag;
 }
 
@@ -66,11 +66,7 @@ async function createAndPersistClientWithPendingLocal(
   perdag: dag.Store,
   numLocal: number,
 ): Promise<db.LocalMetaSDD[]> {
-  const testMemdag = new dag.TestStore(
-    undefined,
-    makeNewTempHashFunction(),
-    assertHash,
-  );
+  const testMemdag = new dag.TestStore();
   const chain: Chain = [];
   await addGenesis(chain, testMemdag, clientID);
   await addSnapshot(chain, testMemdag, [['unique', uuid()]], clientID);
@@ -85,6 +81,14 @@ async function createAndPersistClientWithPendingLocal(
   await persist.persist(
     new LogContext(),
     clientID,
+    {
+      async isMemOnlyChunkHash(_chunkHash: Hash): Promise<boolean> {
+        return true;
+      },
+      async chunksPersisted(_chunkHashes: Iterable<Hash>): Promise<void> {
+        return undefined;
+      },
+    },
     testMemdag,
     perdag,
     {},

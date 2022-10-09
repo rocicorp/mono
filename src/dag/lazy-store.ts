@@ -1,5 +1,5 @@
 import {RWLock} from '@rocicorp/lock';
-import {Hash, isTempHash} from '../hash';
+import type {Hash} from '../hash';
 import {Chunk, ChunkHasher, createChunk} from './chunk';
 import {Store, Read, Write, mustGetChunk} from './store';
 import {getSizeOfValue as defaultGetSizeOfValue} from '../json';
@@ -9,6 +9,11 @@ import {
   HeadChange,
 } from './gc';
 import {assert, assertNotUndefined} from '../asserts';
+
+export interface ChunkLocationTracker {
+  isMemOnlyChunkHash(chunkHash: Hash): Promise<boolean>;
+  chunksPersisted(chunkHashes: Iterable<Hash>): Promise<void>;
+}
 
 /**
  * Dag Store which lazily loads values from a source store and then caches
@@ -54,7 +59,7 @@ import {assert, assertNotUndefined} from '../asserts';
  * hashes do not count towards cache size.
  * @param getSizeOfValue Function for measuring the size in bytes of a value.
  */
-export class LazyStore implements Store {
+export class LazyStore implements Store, ChunkLocationTracker {
   /**
    * This lock is used to ensure correct isolation of Reads and Writes.
    * Multiple Reads are allowed in parallel but only a single Write.  Reads and
@@ -67,29 +72,30 @@ export class LazyStore implements Store {
    *
    * Code must have a read or write lock to
    * - read `heads`
-   * - read `tempChunks`
+   * - read `_memOnlyChunks`
    * - read `_sourceStore`
    * - read and write `_sourceChunksCache`
    * - read and write `_refCounts`
    * and must have a write lock to
    * - write `heads`
-   * - write `tempChunks`
+   * - write `memOnlyChunks`
    */
   private readonly _rwLock = new RWLock();
   private readonly _heads = new Map<string, Hash>();
-  private readonly _tempChunks = new Map<Hash, Chunk>();
+  private readonly _memOnlyChunkHashes = new Set<Hash>();
+  private readonly _memOnlyChunks = new Map<Hash, Chunk>();
   private readonly _sourceChunksCache: ChunksCache;
   private readonly _sourceStore: Store;
   /**
    * These ref counts are independent from `this._sourceStore`'s ref counts.
    * These ref counts are based on reachability from `this._heads`.
    * The ref count for a hash is the number of unique heads or chunks in
-   * `this._tempChunks` or `this._sourceChunksCache` that reference this
+   * `this._memOnlyChunks` or `this._sourceChunksCache` that reference this
    * hash.  That is, a chunk with a positive ref count is reachable from a head
-   * via traversing chunk refs of chunks in `this._tempChunks` or
+   * via traversing chunk refs of chunks in `this._memOnlyChunks` or
    * `this._sourceChunksCache` .
    *
-   * Invariant: all chunks in `this._tempChunks` or `this._sourceChunksCache`
+   * Invariant: all chunks in `this._memOnlyChunks` or `this._sourceChunksCache`
    * have a positive ref count in `this._refCounts`.
    *
    * A hash's ref count can be changed in two ways:
@@ -100,8 +106,8 @@ export class LazyStore implements Store {
    * evicted from (decreasing ref count) this `this._sourceChunksCache`.
    *
    * Note: A chunk's hash may have an entry in `this._refCounts` without that
-   * chunk being in `this._tempChunks` or `this._sourceChunksCache`.  This is
-   * the case when a head or chunk in `this._tempChunks` or
+   * chunk being in `this._memOnlyChunks` or `this._sourceChunksCache`.  This is
+   * the case when a head or chunk in `this._memOnlyChunks` or
    * `this._sourceChunksCache`references a chunk which is not currently cached
    * (either because it has not been read, or because it has been evicted).
    */
@@ -130,7 +136,8 @@ export class LazyStore implements Store {
     const release = await this._rwLock.read();
     return new LazyRead(
       this._heads,
-      this._tempChunks,
+      this._memOnlyChunkHashes,
+      this._memOnlyChunks,
       this._sourceChunksCache,
       this._sourceStore,
       release,
@@ -151,7 +158,8 @@ export class LazyStore implements Store {
     const release = await this._rwLock.write();
     return new LazyWrite(
       this._heads,
-      this._tempChunks,
+      this._memOnlyChunkHashes,
+      this._memOnlyChunks,
       this._sourceChunksCache,
       this._sourceStore,
       this._refCounts,
@@ -177,11 +185,37 @@ export class LazyStore implements Store {
   get refCountsSnapshot(): ReadonlyMap<Hash, number> {
     return new Map(this._refCounts);
   }
+
+  async isMemOnlyChunkHash(chunkHash: Hash): Promise<boolean> {
+    const release = await this._rwLock.read();
+    try {
+      return this._memOnlyChunkHashes.has(chunkHash);
+    } finally {
+      release();
+    }
+  }
+
+  async chunksPersisted(chunkHashes: Iterable<Hash>): Promise<void> {
+    const release = await this._rwLock.write();
+    try {
+      for (const chunkHash of chunkHashes) {
+        this._memOnlyChunkHashes.delete(chunkHash);
+        const chunk = this._memOnlyChunks.get(chunkHash);
+        if (chunk) {
+          this._memOnlyChunkHashes.delete(chunkHash);
+          this._sourceChunksCache.put(chunk);
+        }
+      }
+    } finally {
+      release();
+    }
+  }
 }
 
 export class LazyRead implements Read {
-  protected readonly _heads: Map<string, Hash> = new Map();
-  protected readonly _tempChunks: Map<Hash, Chunk> = new Map();
+  protected readonly _heads: Map<string, Hash>;
+  protected readonly _memOnlyChunkHashes: Set<Hash>;
+  protected readonly _memOnlyChunks: Map<Hash, Chunk>;
   protected readonly _sourceChunksCache: ChunksCache;
   protected readonly _sourceStore: Store;
   private _sourceRead: Promise<Read> | undefined = undefined;
@@ -191,14 +225,16 @@ export class LazyRead implements Read {
 
   constructor(
     heads: Map<string, Hash>,
-    tempChunks: Map<Hash, Chunk>,
+    memOnlyChunkHashes: Set<Hash>,
+    memOnlyChunks: Map<Hash, Chunk>,
     sourceChunksCache: ChunksCache,
     sourceStore: Store,
     release: () => void,
     assertValidHash: (hash: Hash) => void,
   ) {
     this._heads = heads;
-    this._tempChunks = tempChunks;
+    this._memOnlyChunkHashes = memOnlyChunkHashes;
+    this._memOnlyChunks = memOnlyChunks;
     this._sourceChunksCache = sourceChunksCache;
     this._sourceStore = sourceStore;
     this._release = release;
@@ -210,8 +246,8 @@ export class LazyRead implements Read {
   }
 
   async getChunk(hash: Hash): Promise<Chunk | undefined> {
-    if (isTempHash(hash)) {
-      return this._tempChunks.get(hash);
+    if (this._memOnlyChunkHashes.has(hash)) {
+      return this._memOnlyChunks.get(hash);
     }
     let chunk = this._sourceChunksCache.get(hash);
     if (chunk === undefined) {
@@ -262,7 +298,8 @@ export class LazyWrite
 
   constructor(
     heads: Map<string, Hash>,
-    tempChunks: Map<Hash, Chunk>,
+    memOnlyChunkHashes: Set<Hash>,
+    memOnlyChunks: Map<Hash, Chunk>,
     sourceChunksCache: ChunksCache,
     sourceStore: Store,
     refCounts: Map<Hash, number>,
@@ -272,7 +309,8 @@ export class LazyWrite
   ) {
     super(
       heads,
-      tempChunks,
+      memOnlyChunkHashes,
+      memOnlyChunks,
       sourceChunksCache,
       sourceStore,
       release,
@@ -281,8 +319,11 @@ export class LazyWrite
     this._refCounts = refCounts;
     this._chunkHasher = chunkHasher;
   }
-  createChunk = <V>(data: V, refs: readonly Hash[]): Chunk<V> =>
-    createChunk(data, refs, this._chunkHasher);
+  createChunk = <V>(data: V, refs: readonly Hash[]): Chunk<V> => {
+    const chunk = createChunk(data, refs, this._chunkHasher);
+    this._memOnlyChunkHashes.add(chunk.hash);
+    return chunk;
+  };
 
   async putChunk<V>(c: Chunk<V>): Promise<void> {
     const {hash, meta} = c;
@@ -344,8 +385,8 @@ export class LazyWrite
       if (count === 0) {
         this._refCounts.delete(hash);
         this._pendingChunks.delete(hash);
-        if (isTempHash(hash)) {
-          this._tempChunks.delete(hash);
+        if (this._memOnlyChunkHashes.has(hash)) {
+          this._memOnlyChunks.delete(hash);
         } else {
           cacheHashesToDelete.push(hash);
         }
@@ -355,8 +396,8 @@ export class LazyWrite
     }
 
     for (const [hash, chunk] of this._pendingChunks) {
-      if (isTempHash(hash)) {
-        this._tempChunks.set(hash, chunk);
+      if (this._memOnlyChunkHashes.has(hash)) {
+        this._memOnlyChunks.set(hash, chunk);
       } else {
         cacheChunksToPut.push(chunk);
       }
@@ -388,8 +429,8 @@ export class LazyWrite
     if (pendingChunk) {
       return pendingChunk.meta;
     }
-    if (isTempHash(hash)) {
-      return this._tempChunks.get(hash)?.meta;
+    if (this._memOnlyChunkHashes.has(hash)) {
+      return this._memOnlyChunks.get(hash)?.meta;
     }
     return this._sourceChunksCache.getWithoutUpdatingLRU(hash)?.meta;
   }

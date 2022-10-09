@@ -25,12 +25,8 @@ export type Hash = {[hashTag]: true};
 
 // We are no longer using hashes but due to legacy reason we still refer to
 // them as hashes. We use UUID and counters instead.
-
 const oldHashRe = /^[0-9a-v]{32}$/;
-const oldTempHashRe = /^t\/[0-9a-v]{30}$/;
-
 const uuidRe = /^[0-9a-f-]{36}$/;
-const newTempHashRe = /^t\/[0-9a-z]{34}$/;
 
 export function parse(s: string): Hash {
   assertHash(s);
@@ -38,21 +34,7 @@ export function parse(s: string): Hash {
 }
 
 const emptyUUID = '00000000-0000-4000-8000-000000000000';
-const emptyTempHashTemplate = '0'.repeat(STRING_LENGTH);
 export const emptyHash = emptyUUID as unknown as Hash;
-
-// Temp hashes needs to have the same length as non temp hashes. This is
-// important because we split B+Tree nodes based on the size and we want the
-// size to be the same independent of whether the hash is temp or not.
-
-export const newTempHash = makeNewTempHashFunction();
-
-/**
- * Creates a new temp hash function.
- */
-export function makeNewTempHashFunction(): () => Hash {
-  return makeNewFakeHashFunctionInternal('t/', emptyTempHashTemplate);
-}
 
 /**
  * Creates a new "Hash" that is a UUID.
@@ -102,29 +84,11 @@ export function fakeHash(word: string): Hash {
 }
 
 export function isHash(v: unknown): v is Hash {
-  return (
-    typeof v === 'string' &&
-    (uuidRe.test(v) ||
-      newTempHashRe.test(v) ||
-      oldHashRe.test(v) ||
-      oldTempHashRe.test(v))
-  );
-}
-
-export function isTempHash(v: unknown): v is Hash {
-  return (
-    typeof v === 'string' && (newTempHashRe.test(v) || oldTempHashRe.test(v))
-  );
+  return typeof v === 'string' && (uuidRe.test(v) || oldHashRe.test(v));
 }
 
 export function isUUIDHash(v: unknown): v is Hash {
   return typeof v === 'string' && uuidRe.test(v);
-}
-
-export function assertNotTempHash(hash: Hash): void {
-  if (isTempHash(hash)) {
-    throw new Error('Unexpected temp hash');
-  }
 }
 
 export function assertHash(v: unknown): asserts v is Hash {

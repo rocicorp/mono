@@ -1,7 +1,7 @@
 import {Lock} from '@rocicorp/lock';
 import type {ReadonlyJSONValue} from '../json';
 import type * as dag from '../dag/mod';
-import {Hash, emptyHash, newTempHash} from '../hash';
+import {Hash, emptyHash, newUUIDHash} from '../hash';
 import {BTreeRead} from './read';
 import {
   DataNodeImpl,
@@ -79,7 +79,7 @@ export class BTreeWrite extends BTreeRead {
   updateNode(node: DataNodeImpl | InternalNodeImpl): void {
     assert(node.isMutable);
     this._modified.delete(node.hash);
-    node.hash = newTempHash();
+    node.hash = newUUIDHash();
     this._addToModified(node);
   }
 
@@ -87,7 +87,7 @@ export class BTreeWrite extends BTreeRead {
     entries: Array<EntryWithOptionalSize<Hash>>,
     level: number,
   ): InternalNodeImpl {
-    const n = new InternalNodeImpl(entries, newTempHash(), level, true);
+    const n = new InternalNodeImpl(entries, newUUIDHash(), level, true);
     this._addToModified(n);
     return n;
   }
@@ -95,7 +95,7 @@ export class BTreeWrite extends BTreeRead {
   newDataNodeImpl(
     entries: EntryWithOptionalSize<InternalValue>[],
   ): DataNodeImpl {
-    const n = new DataNodeImpl(entries, newTempHash(), true);
+    const n = new DataNodeImpl(entries, newUUIDHash(), true);
     this._addToModified(n);
     return n;
   }
@@ -120,7 +120,7 @@ export class BTreeWrite extends BTreeRead {
       | EntryWithOptionalSize<InternalValue>[],
     level: number,
   ): InternalNodeImpl | DataNodeImpl {
-    const n = newNodeImpl(entries, newTempHash(), level, true);
+    const n = newNodeImpl(entries, newUUIDHash(), level, true);
     this._addToModified(n);
     return n;
   }

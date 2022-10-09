@@ -41,7 +41,6 @@ export {getRoot} from './root';
 export {decodeIndexKey, encodeIndexKey} from './index';
 export type {IndexKey} from './index';
 export {Visitor} from './visitor';
-export {BaseTransformer, Transformer} from './transformer';
 export {rebaseMutationAndCommit, rebaseMutationAndPutCommit} from './rebase';
 
 export type {

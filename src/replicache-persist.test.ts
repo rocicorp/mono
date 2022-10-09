@@ -17,12 +17,12 @@ import fetchMock from 'fetch-mock/esm/client';
 import * as kv from './kv/mod';
 import * as dag from './dag/mod';
 import * as persist from './persist/mod';
-import {assertNotTempHash} from './hash';
 import {assert, assertNotUndefined} from './asserts';
 import {deleteClientForTesting} from './persist/clients-test-helpers';
 import {assertClientDD31} from './persist/clients';
 import type {MutatorDefs, WriteTransaction} from './mod';
 import {deleteBranch} from './persist/branches';
+import {assertHash} from './hash';
 
 initReplicacheTesting();
 
@@ -41,7 +41,7 @@ test('basic persist & load', async () => {
   perdag = new dag.StoreImpl(
     new kv.IDBStore(rep.idbName),
     dag.uuidChunkHasher,
-    assertNotTempHash,
+    assertHash,
   );
 
   const clientBeforePull = await perdag.withRead(read =>

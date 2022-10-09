@@ -1,6 +1,6 @@
 import {expect} from '@esm-bundle/chai';
 import * as dag from '../dag/mod';
-import {makeNewTempHashFunction, newTempHash} from '../hash';
+import {Hash, makeNewFakeHashFunction} from '../hash';
 import {
   addGenesis,
   addIndexChange,
@@ -13,9 +13,20 @@ import {TestMemStore} from '../kv/test-mem-store';
 import {sortByHash} from '../dag/test-store';
 import type {JSONObject} from '../json.js';
 
+class TestChunkLocationTracker implements dag.ChunkLocationTracker {
+  readonly memOnlyChunkHashes = new Set<Hash>();
+  async isMemOnlyChunkHash(chunkHash: Hash): Promise<boolean> {
+    return this.memOnlyChunkHashes.has(chunkHash);
+  }
+  async chunksPersisted(_chunkHashes: Iterable<Hash>): Promise<void> {
+    throw new Error('Unexpected call to chunksPersisted');
+  }
+}
+
 test('dag with no temp hashes gathers nothing', async () => {
   const clientID = 'client-id';
   const dagStore = new dag.TestStore();
+  const chunkLocationTracker = new TestChunkLocationTracker();
 
   const chain: Chain = [];
   await addGenesis(chain, dagStore, clientID);
@@ -27,7 +38,7 @@ test('dag with no temp hashes gathers nothing', async () => {
 
   await dagStore.withRead(async dagRead => {
     for (const commit of chain) {
-      const visitor = new GatherVisitor(dagRead);
+      const visitor = new GatherVisitor(chunkLocationTracker, dagRead);
       await visitor.visitCommit(commit.chunk.hash);
       expect(visitor.gatheredChunks).to.be.empty;
     }
@@ -36,7 +47,7 @@ test('dag with no temp hashes gathers nothing', async () => {
   await addSnapshot(chain, dagStore, undefined, clientID);
 
   await dagStore.withRead(async dagRead => {
-    const visitor = new GatherVisitor(dagRead);
+    const visitor = new GatherVisitor(chunkLocationTracker, dagRead);
     await visitor.visitCommit(chain[chain.length - 1].chunk.hash);
     expect(visitor.gatheredChunks).to.be.empty;
   });
@@ -44,13 +55,23 @@ test('dag with no temp hashes gathers nothing', async () => {
 
 test('dag with only temp hashes gathers everything', async () => {
   const clientID = 'client-id';
+  const chunkLocationTracker = new TestChunkLocationTracker();
   const kvStore = new TestMemStore();
-  const dagStore = new dag.TestStore(kvStore, newTempHash, () => void 0);
+  const hashFunc = makeNewFakeHashFunction();
+  const dagStore = new dag.TestStore(
+    kvStore,
+    () => {
+      const hash = hashFunc();
+      chunkLocationTracker.memOnlyChunkHashes.add(hash);
+      return hash;
+    },
+    () => void 0,
+  );
   const chain: Chain = [];
 
   const testGatheredChunks = async () => {
     await dagStore.withRead(async dagRead => {
-      const visitor = new GatherVisitor(dagRead);
+      const visitor = new GatherVisitor(chunkLocationTracker, dagRead);
       await visitor.visitCommit(chain[chain.length - 1].chunk.hash);
       expect(dagStore.chunks()).to.deep.equal(
         sortByHash(visitor.gatheredChunks.values()),
@@ -74,29 +95,35 @@ test('dag with only temp hashes gathers everything', async () => {
 
 test('dag with some permanent hashes and some temp hashes on top', async () => {
   const clientID = 'client-id';
+  const chunkLocationTracker = new TestChunkLocationTracker();
+  const hashFunc = makeNewFakeHashFunction();
   const kvStore = new TestMemStore();
-  const perdag = new dag.TestStore(kvStore);
+  const perdag = new dag.TestStore(kvStore, hashFunc);
   const chain: Chain = [];
 
   await addGenesis(chain, perdag, clientID);
   await addLocal(chain, perdag, clientID);
 
   await perdag.withRead(async dagRead => {
-    const visitor = new GatherVisitor(dagRead);
+    const visitor = new GatherVisitor(chunkLocationTracker, dagRead);
     await visitor.visitCommit(chain[chain.length - 1].chunk.hash);
     expect(visitor.gatheredChunks).to.be.empty;
   });
 
   const memdag = new dag.TestStore(
     kvStore,
-    makeNewTempHashFunction(),
+    () => {
+      const hash = hashFunc();
+      chunkLocationTracker.memOnlyChunkHashes.add(hash);
+      return hash;
+    },
     () => void 0,
   );
 
   await addLocal(chain, memdag, clientID);
 
   await memdag.withRead(async dagRead => {
-    const visitor = new GatherVisitor(dagRead);
+    const visitor = new GatherVisitor(chunkLocationTracker, dagRead);
     await visitor.visitCommit(chain[chain.length - 1].chunk.hash);
     const meta: JSONObject = {
       basisHash: 'face0000-0000-4000-8000-000000000003',
@@ -111,20 +138,20 @@ test('dag with some permanent hashes and some temp hashes on top', async () => {
       meta.clientID = clientID;
     }
     expect(Object.fromEntries(visitor.gatheredChunks)).to.deep.equal({
-      't/0000000000000000000000000000000000': {
+      'face0000-0000-4000-8000-000000000004': {
         data: [0, [['local', '2']]],
-        hash: 't/0000000000000000000000000000000000',
+        hash: 'face0000-0000-4000-8000-000000000004',
         meta: [],
       },
-      't/0000000000000000000000000000000001': {
+      'face0000-0000-4000-8000-000000000005': {
         data: {
           indexes: [],
           meta,
-          valueHash: 't/0000000000000000000000000000000000',
+          valueHash: 'face0000-0000-4000-8000-000000000004',
         },
-        hash: 't/0000000000000000000000000000000001',
+        hash: 'face0000-0000-4000-8000-000000000005',
         meta: [
-          't/0000000000000000000000000000000000',
+          'face0000-0000-4000-8000-000000000004',
           'face0000-0000-4000-8000-000000000003',
         ],
       },
@@ -163,12 +190,12 @@ test('dag with some permanent hashes and some temp hashes on top', async () => {
   }
 
   await memdag.withRead(async dagRead => {
-    const visitor = new GatherVisitor(dagRead);
+    const visitor = new GatherVisitor(chunkLocationTracker, dagRead);
     await visitor.visitCommit(chain[chain.length - 1].chunk.hash);
     expect(Object.fromEntries(visitor.gatheredChunks)).to.deep.equal(
       DD31
         ? {
-            't/0000000000000000000000000000000002': {
+            'face0000-0000-4000-8000-000000000009': {
               data: {
                 indexes: [
                   {
@@ -178,11 +205,11 @@ test('dag with some permanent hashes and some temp hashes on top', async () => {
                       name: '4',
                       prefix: 'local',
                     },
-                    valueHash: 'face0000-0000-4000-8000-000000000004',
+                    valueHash: 'face0000-0000-4000-8000-000000000006',
                   },
                 ],
                 meta: {
-                  basisHash: 'face0000-0000-4000-8000-000000000006',
+                  basisHash: 'face0000-0000-4000-8000-000000000008',
                   clientID: 'client-id',
                   mutationID: 4,
                   mutatorArgsJSON: [4],
@@ -191,23 +218,23 @@ test('dag with some permanent hashes and some temp hashes on top', async () => {
                   timestamp: 42,
                   type: 2,
                 },
-                valueHash: 'face0000-0000-4000-8000-000000000005',
+                valueHash: 'face0000-0000-4000-8000-000000000007',
               },
-              hash: 't/0000000000000000000000000000000002',
+              hash: 'face0000-0000-4000-8000-000000000009',
               meta: [
-                'face0000-0000-4000-8000-000000000005',
+                'face0000-0000-4000-8000-000000000007',
+                'face0000-0000-4000-8000-000000000008',
                 'face0000-0000-4000-8000-000000000006',
-                'face0000-0000-4000-8000-000000000004',
               ],
             },
           }
         : {
-            't/0000000000000000000000000000000002': {
+            'face0000-0000-4000-8000-000000000008': {
               data: [0, [['\u00002\u0000local', '2']]],
-              hash: 't/0000000000000000000000000000000002',
+              hash: 'face0000-0000-4000-8000-000000000008',
               meta: [],
             },
-            't/0000000000000000000000000000000003': {
+            'face0000-0000-4000-8000-000000000009': {
               data: {
                 indexes: [
                   {
@@ -217,21 +244,21 @@ test('dag with some permanent hashes and some temp hashes on top', async () => {
                       name: '4',
                       allowEmpty: false,
                     },
-                    valueHash: 't/0000000000000000000000000000000002',
+                    valueHash: 'face0000-0000-4000-8000-000000000008',
                   },
                 ],
                 meta: {
-                  basisHash: 'face0000-0000-4000-8000-000000000005',
+                  basisHash: 'face0000-0000-4000-8000-000000000007',
                   lastMutationID: 3,
                   type: 1,
                 },
-                valueHash: 'face0000-0000-4000-8000-000000000004',
+                valueHash: 'face0000-0000-4000-8000-000000000006',
               },
-              hash: 't/0000000000000000000000000000000003',
+              hash: 'face0000-0000-4000-8000-000000000009',
               meta: [
-                'face0000-0000-4000-8000-000000000004',
-                'face0000-0000-4000-8000-000000000005',
-                't/0000000000000000000000000000000002',
+                'face0000-0000-4000-8000-000000000006',
+                'face0000-0000-4000-8000-000000000007',
+                'face0000-0000-4000-8000-000000000008',
               ],
             },
           },

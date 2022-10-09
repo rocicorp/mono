@@ -38,13 +38,7 @@ import {IDBStore} from './kv/mod';
 import * as dag from './dag/mod';
 import * as db from './db/mod';
 import * as sync from './sync/mod';
-import {
-  assertHash,
-  assertNotTempHash,
-  emptyHash,
-  Hash,
-  newTempHash,
-} from './hash';
+import {assertHash, emptyHash, Hash} from './hash';
 import * as persist from './persist/mod';
 import {requestIdle} from './request-idle';
 import type {HTTPRequestInfo} from './http-request-info';
@@ -300,7 +294,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
   private readonly _licenseKey: string | undefined;
 
-  private readonly _memdag: dag.Store;
+  private readonly _memdag: dag.LazyStore;
   private readonly _perdag: dag.Store;
   private readonly _idbDatabases: persist.IDBDatabasesStore =
     new persist.IDBDatabasesStore();
@@ -413,17 +407,16 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this._queryInternal,
       this._lc,
     );
-
     const perKvStore = experimentalKVStore || new IDBStore(this.idbName);
     this._perdag = new dag.StoreImpl(
       perKvStore,
       dag.uuidChunkHasher,
-      assertNotTempHash,
+      assertHash,
     );
     this._memdag = new dag.LazyStore(
       this._perdag,
       LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
-      this._memdagHashFunction(),
+      dag.uuidChunkHasher,
       assertHash,
     );
 
@@ -486,10 +479,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
       licenseCheckResolver.resolve,
       licenseActiveResolver.resolve,
     );
-  }
-
-  protected _memdagHashFunction(): () => Hash {
-    return newTempHash;
   }
 
   private async _open(
@@ -1239,6 +1228,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       await persist.persist(
         this._lc,
         clientID,
+        this._memdag,
         this._memdag,
         this._perdag,
         this._mutatorRegistry,

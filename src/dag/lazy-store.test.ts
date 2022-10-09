@@ -1,12 +1,5 @@
 import {expect} from '@esm-bundle/chai';
-import {
-  assertHash,
-  assertNotTempHash,
-  isTempHash,
-  makeNewFakeHashFunction,
-  makeNewTempHashFunction,
-  newTempHash,
-} from '../hash';
+import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash';
 import {LazyStore} from './lazy-store';
 import {TestStore} from './test-store';
 
@@ -29,10 +22,11 @@ function createLazyStoreForTest(
 ) {
   const {cacheSizeLimit = DEFAULT_CACHE_SIZE_LIMIT} = options;
   const sourceStoreChunkHasher = makeNewFakeHashFunction('50ce');
+  const lazyStoreChunkHasher = makeNewFakeHashFunction('feed');
   const sourceStore = new TestStore(
     undefined,
     sourceStoreChunkHasher,
-    assertNotTempHash,
+    assertHash,
   );
   return {
     sourceStore,
@@ -40,7 +34,7 @@ function createLazyStoreForTest(
     lazyStore: new LazyStore(
       sourceStore,
       cacheSizeLimit,
-      makeNewTempHashFunction(),
+      lazyStoreChunkHasher,
       assertHash,
       getSizeOfValueForTest,
     ),
@@ -105,36 +99,6 @@ test('chunks with non-temp hashes are loaded from source store but not cached if
   });
 });
 
-// Source store is never expected to contain temp-hashes, so no attempt
-// is made to load them from the source store
-test('chunks with temp hashes are not loaded from source store', async () => {
-  // For this tests we create a source store that can contain temp hashes
-  const sourceStore = new TestStore(
-    undefined,
-    makeNewTempHashFunction(),
-    assertHash,
-  );
-  const lazyStore = new LazyStore(
-    sourceStore,
-    DEFAULT_CACHE_SIZE_LIMIT,
-    makeNewTempHashFunction(),
-    assertHash,
-    getSizeOfValueForTest,
-  );
-  const testValue1Chunk = await sourceStore.withWrite(async write => {
-    const testValue1 = 'testValue1';
-    const testValue1Chunk = write.createChunk(testValue1, []);
-    await write.putChunk(testValue1Chunk);
-    await write.setHead('testHeadSource', testValue1Chunk.hash);
-    await write.commit();
-    return testValue1Chunk;
-  });
-  expect(isTempHash(testValue1Chunk.hash)).to.be.true;
-  await lazyStore.withRead(async read => {
-    expect(await read.getChunk(testValue1Chunk.hash)).to.be.undefined;
-  });
-});
-
 test('heads are *not* loaded from source store', async () => {
   const {sourceStore, sourceStoreChunkHasher, lazyStore} =
     createLazyStoreForTest();
@@ -159,13 +123,13 @@ test('setHead stores head in memory but does not write through to source store',
   await lazyStore.withRead(async read => {
     expect(await read.getHead('testHead1')).to.be.undefined;
   });
-  const tempHash1 = newTempHash();
+  const fakeHash1 = fakeHash('face');
   await lazyStore.withWrite(async write => {
-    await write.setHead('testHead1', tempHash1);
+    await write.setHead('testHead1', fakeHash1);
     await write.commit();
   });
   await lazyStore.withRead(async read => {
-    expect(await read.getHead('testHead1')).to.equal(tempHash1);
+    expect(await read.getHead('testHead1')).to.equal(fakeHash1);
   });
   await sourceStore.withRead(async read => {
     expect(await read.getHead('testHead1')).to.be.undefined;
@@ -178,9 +142,9 @@ test('removeHead removes head from memory but does not write through to source s
   await lazyStore.withRead(async read => {
     expect(await read.getHead('testHead1')).to.be.undefined;
   });
-  const tempHash1 = newTempHash();
+  const fakeHash1 = fakeHash('face');
   await lazyStore.withWrite(async write => {
-    await write.setHead('testHead1', tempHash1);
+    await write.setHead('testHead1', fakeHash1);
     await write.commit();
   });
   const testValue1Hash = sourceStoreChunkHasher();
@@ -189,7 +153,7 @@ test('removeHead removes head from memory but does not write through to source s
     await write.commit();
   });
   await lazyStore.withRead(async read => {
-    expect(await read.getHead('testHead1')).to.equal(tempHash1);
+    expect(await read.getHead('testHead1')).to.equal(fakeHash1);
   });
   await sourceStore.withRead(async read => {
     expect(await read.getHead('testHead1')).to.equal(testValue1Hash);
@@ -236,7 +200,7 @@ test('putChunk with temp hashes updates memory but does not write through to sou
   const testValue1Chunk = await lazyStore.withWrite(async write => {
     return write.createChunk(testValue1, []);
   });
-  expect(isTempHash(testValue1Chunk.hash)).to.be.true;
+  expect(await lazyStore.isMemOnlyChunkHash(testValue1Chunk.hash)).to.be.true;
   // Set a head to testValue1Chunk's hash so that if it was written through to source it wouldn't
   // be gc'd
   await sourceStore.withWrite(async write => {

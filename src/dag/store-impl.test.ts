@@ -4,15 +4,7 @@ import {createChunk, createChunkWithHash} from './chunk';
 import {StoreImpl, ReadImpl, WriteImpl} from './store-impl';
 import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key';
 import type * as kv from '../kv/mod';
-import {
-  assertHash,
-  assertNotTempHash,
-  fakeHash,
-  Hash,
-  isTempHash,
-  makeNewFakeHashFunction,
-  newTempHash,
-} from '../hash';
+import {assertHash, fakeHash, Hash, makeNewFakeHashFunction} from '../hash';
 import {assert} from '../asserts';
 import {TestStore} from './test-store';
 import {ChunkNotFoundError} from './store';
@@ -29,7 +21,7 @@ suite('read', () => {
       });
 
       await kv.withRead(async kvr => {
-        const r = new ReadImpl(kvr, assertNotTempHash);
+        const r = new ReadImpl(kvr, assertHash);
         expect(await r.hasChunk(hash)).to.equal(expectHas);
       });
     };
@@ -56,7 +48,7 @@ suite('read', () => {
       });
 
       await kv.withRead(async kvr => {
-        const r = new ReadImpl(kvr, assertNotTempHash);
+        const r = new ReadImpl(kvr, assertHash);
         let expected = undefined;
         let chunkHash: Hash;
         if (getSameChunk) {
@@ -90,7 +82,7 @@ suite('write', () => {
     const t = async (data: ReadonlyJSONValue, refs: Hash[]) => {
       const kv = new MemStore();
       await kv.withWrite(async kvw => {
-        const w = new WriteImpl(kvw, chunkHasher, assertNotTempHash);
+        const w = new WriteImpl(kvw, chunkHasher, assertHash);
         const c = w.createChunk(data, refs);
         await w.putChunk(c);
 
@@ -137,7 +129,7 @@ suite('write', () => {
     const chunkHasher = makeNewFakeHashFunction();
     const t = async (kv: kv.Store, name: string, hash: Hash | undefined) => {
       await kv.withWrite(async kvw => {
-        const w = new WriteImpl(kvw, chunkHasher, assertNotTempHash);
+        const w = new WriteImpl(kvw, chunkHasher, assertHash);
         await (hash === undefined ? w.removeHead(name) : w.setHead(name, hash));
         if (hash !== undefined) {
           const h = await kvw.get(headKey(name));
@@ -205,7 +197,7 @@ suite('write', () => {
         await kvw.commit();
       });
       await kv.withWrite(async kvw => {
-        const w = new WriteImpl(kvw, chunkHasher, assertNotTempHash);
+        const w = new WriteImpl(kvw, chunkHasher, assertHash);
         let err;
         try {
           await w.setHead('fakehead', h);
@@ -251,7 +243,7 @@ suite('write', () => {
       let key: string;
       const kv = new MemStore();
       await kv.withWrite(async kvw => {
-        const w = new WriteImpl(kvw, chunkHasher, assertNotTempHash);
+        const w = new WriteImpl(kvw, chunkHasher, assertHash);
         const c = w.createChunk([0, 1], []);
         await w.putChunk(c);
 
@@ -287,7 +279,7 @@ suite('write', () => {
       const hash = chunkHasher();
       const c = createChunkWithHash(hash, data, refs);
       await kv.withWrite(async kvw => {
-        const w = new WriteImpl(kvw, chunkHasher, assertNotTempHash);
+        const w = new WriteImpl(kvw, chunkHasher, assertHash);
         await w.putChunk(c);
         await w.setHead(name, c.hash);
 
@@ -301,7 +293,7 @@ suite('write', () => {
 
       // Read the changes outside the tx.
       await kv.withRead(async kvr => {
-        const r = new ReadImpl(kvr, assertNotTempHash);
+        const r = new ReadImpl(kvr, assertHash);
         const c2 = await r.getChunk(c.hash);
         const h = await r.getHead(name);
         expect(c2).to.deep.equal(c);
@@ -360,20 +352,7 @@ suite('write', () => {
       };
 
       await t(hasher, testHash);
-      await t(chunkHasher, assertNotTempHash);
-      await t(newTempHash, (h: Hash) => {
-        assert(isTempHash(h));
-      });
-
-      let err;
-      try {
-        await t(newTempHash, assertNotTempHash);
-      } catch (e) {
-        err = e;
-      }
-      expect(err)
-        .to.be.instanceof(Error)
-        .with.property('message', 'Unexpected temp hash');
+      await t(chunkHasher, assertHash);
     }
   });
 

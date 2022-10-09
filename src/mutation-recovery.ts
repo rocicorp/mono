@@ -11,7 +11,7 @@ import * as dag from './dag/mod';
 import * as db from './db/mod';
 import * as persist from './persist/mod';
 import * as sync from './sync/mod';
-import {assertHash, assertNotTempHash} from './hash';
+import {assertHash} from './hash';
 import {assertNotUndefined} from './asserts';
 import type {HTTPRequestInfo} from './http-request-info';
 import {MaybePromise, REPLICACHE_FORMAT_VERSION} from './replicache';
@@ -371,11 +371,7 @@ async function recoverMutationsWithNewPerdag(
   preReadClientMap: persist.ClientMap | undefined,
 ) {
   const perKvStore = new IDBStore(database.name);
-  const perdag = new dag.StoreImpl(
-    perKvStore,
-    dag.uuidChunkHasher,
-    assertNotTempHash,
-  );
+  const perdag = new dag.StoreImpl(perKvStore, dag.uuidChunkHasher, assertHash);
   try {
     await recoverMutationsFromPerdag(
       database,
