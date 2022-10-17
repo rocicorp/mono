@@ -65,7 +65,7 @@ export type Branch = {
   readonly lastServerAckdMutationIDs: Record<sync.ClientID, number>;
 };
 
-const BRANCHES_HEAD_NAME = 'branches';
+export const BRANCHES_HEAD_NAME = 'branches';
 
 function assertBranch(value: unknown): asserts value is Branch {
   assertObject(value);

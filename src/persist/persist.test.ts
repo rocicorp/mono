@@ -1,6 +1,7 @@
 import {expect} from '@esm-bundle/chai';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {assert} from '../asserts';
+import type * as sync from '../sync/mod';
 import * as dag from '../dag/mod';
 import * as db from '../db/mod';
 import {
@@ -11,14 +12,20 @@ import {
   Chain,
   getChunkSnapshot,
 } from '../db/test-helpers';
-import {assertHash, makeNewFakeHashFunction} from '../hash';
-import {getClient, ClientStateNotFoundError, assertClientSDD} from './clients';
+import {assertHash, Hash, makeNewFakeHashFunction} from '../hash';
+import {
+  getClient,
+  ClientStateNotFoundError,
+  assertClientSDD,
+  CLIENTS_HEAD_NAME,
+} from './clients';
 import {addSyncSnapshot} from '../sync/test-helpers';
 import {persist} from './persist';
 import {gcClients} from './client-gc.js';
 import {initClientWithClientID} from './clients-test-helpers.js';
 import {assertSnapshotMeta} from '../db/commit.js';
 import {LogContext} from '@rocicorp/logger';
+import sinon from 'sinon';
 
 let clock: SinonFakeTimers;
 setup(() => {
@@ -127,7 +134,7 @@ suite('persist on top of different kinds of commits', () => {
     await addLocal(chain, memdag, clientID);
   });
 
-  test('local on to of a persisted local', async () => {
+  test('local on top of a persisted local', async () => {
     await addLocal(chain, memdag, clientID);
     await testPersist();
     await addLocal(chain, memdag, clientID);
@@ -203,11 +210,14 @@ function setupPersistTest() {
     hashFunction,
     assertHash,
   );
+  const chunksPersistedSpy = sinon.spy(memdag, 'chunksPersisted');
 
   const clientID = 'client-id';
   const chain: Chain = [];
 
   const testPersist = async () => {
+    const chunksPersistedSpyCountPrePersist = chunksPersistedSpy.callCount;
+    const perdagChunkHashesPrePersist = perdag.chunkHashes();
     await persist(
       new LogContext(),
       clientID,
@@ -217,8 +227,24 @@ function setupPersistTest() {
       {},
       () => false,
     );
+
     await assertSameDagData(clientID, memdag, perdag);
     await assertClientMutationIDsCorrect(clientID, perdag);
+    const persistedChunkHashes = new Set<Hash>();
+    const clientsHeadHash = await perdag.withRead(read => {
+      return read.getHead(CLIENTS_HEAD_NAME);
+    });
+    for (const hash of perdag.chunkHashes()) {
+      if (!perdagChunkHashesPrePersist.has(hash) && hash !== clientsHeadHash) {
+        persistedChunkHashes.add(hash);
+      }
+    }
+    expect(chunksPersistedSpy.callCount).to.equal(
+      chunksPersistedSpyCountPrePersist + 1,
+    );
+    expect(new Set(chunksPersistedSpy.lastCall.args[0])).to.deep.equal(
+      persistedChunkHashes,
+    );
   };
-  return {memdag, perdag, chain, testPersist, clientID};
+  return {memdag, perdag, chain, testPersist, clientID, chunksPersistedSpy};
 }

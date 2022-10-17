@@ -32,6 +32,17 @@ export class TestStore extends StoreImpl {
     return sortByHash(rv);
   }
 
+  chunkHashes(): Set<Hash> {
+    const hashes = new Set<Hash>();
+    for (const [key] of this.kvStore.entries()) {
+      const pk = parseKey(key);
+      if (pk.type === KeyType.ChunkData) {
+        hashes.add(pk.hash);
+      }
+    }
+    return hashes;
+  }
+
   clear(): void {
     this.kvStore.clear();
   }

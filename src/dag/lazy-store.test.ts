@@ -41,6 +41,54 @@ function createLazyStoreForTest(
   };
 }
 
+test('isMemOnlyChunkHash', async () => {
+  const {sourceStore, lazyStore} = createLazyStoreForTest();
+  const testValue1 = 'testValue1';
+  const testValue1SourceChunk = await sourceStore.withWrite(async write => {
+    return write.createChunk(testValue1, []);
+  });
+  expect(await lazyStore.isMemOnlyChunkHash(testValue1SourceChunk.hash)).to.be
+    .false;
+  const testValue1MemOnlyChunk = await lazyStore.withWrite(async write => {
+    return write.createChunk(testValue1, []);
+  });
+  expect(await lazyStore.isMemOnlyChunkHash(testValue1MemOnlyChunk.hash)).to.be
+    .true;
+});
+
+test('chunksPersisted', async () => {
+  const {lazyStore} = createLazyStoreForTest();
+  const [
+    testValue1MemOnlyChunk,
+    testValue2MemOnlyChunk,
+    testValue3MemOnlyChunk,
+  ] = await lazyStore.withWrite(async write => {
+    return [
+      write.createChunk('testValue1', []),
+      write.createChunk('testValue2', []),
+      write.createChunk('testValue3', []),
+    ];
+  });
+  expect(await lazyStore.isMemOnlyChunkHash(testValue1MemOnlyChunk.hash)).to.be
+    .true;
+  expect(await lazyStore.isMemOnlyChunkHash(testValue2MemOnlyChunk.hash)).to.be
+    .true;
+  expect(await lazyStore.isMemOnlyChunkHash(testValue3MemOnlyChunk.hash)).to.be
+    .true;
+
+  await lazyStore.chunksPersisted([
+    testValue1MemOnlyChunk.hash,
+    testValue3MemOnlyChunk.hash,
+  ]);
+
+  expect(await lazyStore.isMemOnlyChunkHash(testValue1MemOnlyChunk.hash)).to.be
+    .false;
+  expect(await lazyStore.isMemOnlyChunkHash(testValue2MemOnlyChunk.hash)).to.be
+    .true;
+  expect(await lazyStore.isMemOnlyChunkHash(testValue3MemOnlyChunk.hash)).to.be
+    .false;
+});
+
 test('chunks with non-memory-only hashes are loaded from source store and cached if reachable from a LazyStore head', async () => {
   const {sourceStore, lazyStore} = createLazyStoreForTest();
   const testValue1 = 'testValue1';
@@ -170,7 +218,7 @@ test('removeHead removes head from memory but does not write through to source s
   });
 });
 
-test('putChunk with non-temp hashes updates memory but does not write through to source store', async () => {
+test('putChunk with non-memory-only hashes updates memory but does not write through to source store', async () => {
   const {sourceStore, lazyStore} = createLazyStoreForTest();
   const testValue1 = 'testValue1';
   const testValue1Chunk = await sourceStore.withWrite(async write => {
@@ -194,7 +242,7 @@ test('putChunk with non-temp hashes updates memory but does not write through to
   });
 });
 
-test('putChunk with temp hashes updates memory but does not write through to source store', async () => {
+test('putChunk with memory-only hashes updates memory but does not write through to source store', async () => {
   const {sourceStore, lazyStore} = createLazyStoreForTest();
   const testValue1 = 'testValue1';
   const testValue1Chunk = await lazyStore.withWrite(async write => {
@@ -974,7 +1022,7 @@ test('cache eviction updates ref counts and removes cache chunks when their ref 
   });
 });
 
-test('temp chunks are not evicted when cache size is exceeded', async () => {
+test('memory-only chunks are not evicted when cache size is exceeded', async () => {
   const {sourceStore, lazyStore} = createLazyStoreForTest();
   const testValue1 = 'testValue1',
     testValue2 = 'testValue2',
@@ -1026,7 +1074,8 @@ test('temp chunks are not evicted when cache size is exceeded', async () => {
     expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
       testValue2,
     );
-    // over cache size limit, should evict testValue1Chunk, but not any temp chunks
+    // over cache size limit, should evict testValue1Chunk, but not any
+    // memory-only chunks
     expect((await read.getChunk(testValue3Chunk.hash))?.data).to.equal(
       testValue3,
     );
@@ -1041,7 +1090,7 @@ test('temp chunks are not evicted when cache size is exceeded', async () => {
   });
 
   await lazyStore.withRead(async read => {
-    // temp chunks were not evicted
+    // memory-only chunks were not evicted
     expect((await read.getChunk(tempValue1Chunk.hash))?.data).to.equal(
       tempValue1,
     );
@@ -1059,7 +1108,7 @@ test('temp chunks are not evicted when cache size is exceeded', async () => {
   });
 });
 
-test('[all temp chunks] chunk ref counts are updated on commit and are deleted when their ref count goes to zero', async () => {
+test('[all memory-only chunks] chunk ref counts are updated on commit and are deleted when their ref count goes to zero', async () => {
   const {lazyStore} = createLazyStoreForTest();
 
   //    R
@@ -1212,7 +1261,7 @@ test('[all cached chunks] chunk ref counts are updated on commit and are deleted
   });
 });
 
-test('[mix of temp and cached chunks] chunk ref counts are updated on commit and are deleted when their ref count goes to zero', async () => {
+test('[mix of memory-only and cached chunks] chunk ref counts are updated on commit and are deleted when their ref count goes to zero', async () => {
   // Make cache size large enough that eviction does not occur
   // during test
   const {sourceStore, lazyStore} = createLazyStoreForTest({

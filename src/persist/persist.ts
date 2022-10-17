@@ -11,13 +11,11 @@ import type {LogContext} from '@rocicorp/logger';
 import type {MutatorDefs} from '../replicache';
 
 /**
- * Computes permanent hashes from all temp chunks in `memdag` and writes them
- * to `perdag`.  Replaces in `memdag` all temp chunks written with chunks with
- * permanent hashes.
+ * Persists the client's 'main' head memdag state to the perdag.
  *
  * @param clientID
- * @param memdag Dag to gather temp chunks from.
- * @param perdag Dag to write gathered temp chunks to.
+ * @param memdag Dag to gather memory-only chunks from.
+ * @param perdag Dag to write gathered memory-only chunks to.
  * @returns A promise that is fulfilled when persist completes successfully,
  * or is rejected if the persist fails.
  */
@@ -76,7 +74,7 @@ export async function persist(
     mutationID,
     lastMutationID,
   );
-  await chunkLocationTracker.chunksPersisted(gatheredChunks.keys());
+  await chunkLocationTracker.chunksPersisted([...gatheredChunks.keys()]);
 }
 
 async function gatherMemOnlyChunks(

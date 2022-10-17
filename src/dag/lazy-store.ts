@@ -12,7 +12,7 @@ import {assert, assertNotUndefined} from '../asserts';
 
 export interface ChunkLocationTracker {
   isMemOnlyChunkHash(chunkHash: Hash): Promise<boolean>;
-  chunksPersisted(chunkHashes: Iterable<Hash>): Promise<void>;
+  chunksPersisted(chunkHashes: Hash[]): Promise<void>;
 }
 
 /**
@@ -25,11 +25,12 @@ export interface ChunkLocationTracker {
  * This store's heads are independent from the heads of source store, and are
  * only stored in memory.
  *
- * Chunks which are put with a temp hash (see {@linkcode isTempHash}) are assumed
- * to not be persisted to the source store and thus are cached separately from
- * the source store chunks.  These temp chunks will not be evicted, and their
- * sizes are not counted towards the source chunk cache size.  A temp chunk will
- * be deleted if it is no longer reachable from one of this store's heads.
+ * Chunks which are created via this store's {@link Write} transaction's
+ * {@link createChunk} method are assumed to not be persisted to the source
+ * store and thus are cached separately from the source store chunks.  These
+ * memory-only chunks will not be evicted, and their sizes are not counted
+ * towards the source chunk cache size.  A memory-only chunk will be deleted if
+ * it is no longer reachable from one of this store's heads.
  *
  * Writes only manipulate the in memory state of this store and do not alter the
  * source store.  Thus values must be written to the source store through a
@@ -39,18 +40,17 @@ export interface ChunkLocationTracker {
  * 1. source store is the 'perdag', a slower persistent store (i.e.
  *    dag.StoreImpl using a kv.IDBStore)
  * 2. this store's 'main' head is initialized to the hash of a chunk containing
- *    a snapshot commit in the source store
+ *    a commit in the source store
  * 3. reads lazily read chunks from the source store and cache them
- * 3. writes are initially made to this store with temp hashes (i.e. temp
- *    chunks)
+ * 3. writes are initially made to this store with memory-only chunks
  * 4. writes are asynchronously persisted to the source store through a separate
- *    process (see {@link persist}}. This process gathers all temp chunks from
- *    this store, computes real hashes for them and then writes them to the
- *    source store.  It then replaces in this dag all the temp chunks written to
- *    the source with chunks with permanent hashes and updates heads to
- *    reference these permanent hashes instead of the temp hashes.  This results
- *    in the temp chunks being deleted from this store and the chunks with
- *    permanent hashes being placed in this store's LRU cache of source chunks.
+ *    process (see {@link persist}}. This process gathers all memory-only chunks
+ *    from this store reachable from the 'main' head and then writes them to the
+ *    source store.  It then informs this store of that these chunks
+ *    are no longer memory-only by calling
+ *    {@link ChunkLocationTracker#chunksPersisted}, which move these chunks
+ *    to this store's LRU cache of source chunks (making them eligible for
+ *    evicition).
  *
  * @param sourceStore Store to lazy load and cache values from.
  * @param sourceCacheSizeLimit Size limit in bytes for cache of chunks loaded
@@ -71,14 +71,16 @@ export class LazyStore implements Store, ChunkLocationTracker {
    * Write is created and held til it is committed or closed.
    *
    * Code must have a read or write lock to
-   * - read `heads`
+   * - read `_heads`
    * - read `_memOnlyChunks`
+   * - read `_memOnlyChunkHashes`
    * - read `_sourceStore`
    * - read and write `_sourceChunksCache`
    * - read and write `_refCounts`
    * and must have a write lock to
-   * - write `heads`
-   * - write `memOnlyChunks`
+   * - write `_heads`
+   * - write `_memOnlyChunks`
+   * - write `_memOnlyChunkHashes`
    */
   private readonly _rwLock = new RWLock();
   private readonly _heads = new Map<string, Hash>();
@@ -195,7 +197,7 @@ export class LazyStore implements Store, ChunkLocationTracker {
     }
   }
 
-  async chunksPersisted(chunkHashes: Iterable<Hash>): Promise<void> {
+  async chunksPersisted(chunkHashes: Array<Hash>): Promise<void> {
     const release = await this._rwLock.write();
     try {
       for (const chunkHash of chunkHashes) {

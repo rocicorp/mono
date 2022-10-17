@@ -15,12 +15,11 @@ import {Branch, getBranch, setBranch} from './branches';
  *
  * Persists the base snapshot from memdag to the client's perdag branch,
  * but only if it’s newer than the client's perdag branch’s base snapshot. The
- * base snapshot is persisted by computing permanent hashes for all temp chunks
- * in the dag subgraph rooted at the base snapshot's commit and writing them to
- * the perdag, and then replacing in memdag all temp chunks written
- * with chunks with permanent hashes.  Once the base snapshot is persisted,
- * rebases onto this new base snapshot all local commits from the client's
- * perdag branch that are not already reflected in the base snapshot.
+ * base snapshot is persisted by gathering all memory-only chunks in the dag
+ * subgraph rooted at the base snapshot's commit and writing them to
+ * the perdag.  Once the base snapshot is persisted, rebases onto this new base
+ * snapshot all local commits from the client's perdag branch that are not
+ * already reflected in the base snapshot.
  *
  * Whether or not the base snapshot is persisted, rebases onto the client's
  * perdag branch all memdag local commits not already in the client's perdag
@@ -145,7 +144,7 @@ export async function persistDD31(
       }
 
       if (memdagBaseSnapshotPersisted) {
-        await chunkLocationTracker.chunksPersisted(gatheredChunks.keys());
+        await chunkLocationTracker.chunksPersisted([...gatheredChunks.keys()]);
       }
 
       // persist new memdag mutations
