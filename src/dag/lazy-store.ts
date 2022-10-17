@@ -204,7 +204,7 @@ export class LazyStore implements Store, ChunkLocationTracker {
         this._memOnlyChunkHashes.delete(chunkHash);
         const chunk = this._memOnlyChunks.get(chunkHash);
         if (chunk) {
-          this._memOnlyChunkHashes.delete(chunkHash);
+          this._memOnlyChunks.delete(chunkHash);
           this._sourceChunksCache.put(chunk);
         }
       }
