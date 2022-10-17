@@ -41,7 +41,7 @@ function createLazyStoreForTest(
   };
 }
 
-test('chunks with non-temp hashes are loaded from source store and cached if reachable from a LazyStore head', async () => {
+test('chunks with non-memory-only hashes are loaded from source store and cached if reachable from a LazyStore head', async () => {
   const {sourceStore, lazyStore} = createLazyStoreForTest();
   const testValue1 = 'testValue1';
   const testValue1Hash = await sourceStore.withWrite(async write => {
@@ -73,7 +73,7 @@ test('chunks with non-temp hashes are loaded from source store and cached if rea
   });
 });
 
-test('chunks with non-temp hashes are loaded from source store but not cached if not reachable from a LazyStore head', async () => {
+test('chunks with non-memory-only hashes are loaded from source store but not cached if not reachable from a LazyStore head', async () => {
   const {sourceStore, lazyStore} = createLazyStoreForTest();
   const testValue1 = 'testValue1';
   const testValue1Hash = await sourceStore.withWrite(async write => {
