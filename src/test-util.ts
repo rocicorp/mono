@@ -10,7 +10,6 @@ import * as persist from './persist/mod';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import * as sinon from 'sinon';
 import type {JSONValue, ReadonlyJSONValue} from './json';
-import {Hash, makeNewFakeHashFunction} from './hash';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
