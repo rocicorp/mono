@@ -396,7 +396,9 @@ export class Reflect<MD extends MutatorDefs> {
           'push',
           {
             ...pushBody,
-            mutations: [{...m, timestamp: Date.now()}],
+            mutations: [
+              {...m, timestamp: Date.now() - (performance.now() - m.timestamp)},
+            ],
             timestamp: Date.now(),
           },
         ];
