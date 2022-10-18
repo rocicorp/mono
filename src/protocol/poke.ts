@@ -24,7 +24,8 @@ const pokeBodySchema = z.object({
   cookie: versionSchema,
   lastMutationID: z.number(),
   patch: patchSchema,
-  timestamp: z.number(),
+  epoch: z.number(),
+  frame: z.number(),
 });
 
 export const pokeMessageSchema = z.tuple([z.literal('poke'), pokeBodySchema]);

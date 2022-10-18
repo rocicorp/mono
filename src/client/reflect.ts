@@ -47,7 +47,6 @@ export class Reflect<MD extends MutatorDefs> {
 
   private readonly _pushTracker: GapTracker;
   private readonly _updateTracker: GapTracker;
-  private readonly _timestampTracker: GapTracker;
 
   private _lastMutationIDSent = -1;
   private _onPong: () => void = () => undefined;
@@ -130,7 +129,6 @@ export class Reflect<MD extends MutatorDefs> {
 
     this._pushTracker = new GapTracker('push', this._l);
     this._updateTracker = new GapTracker('update', this._l);
-    this._timestampTracker = new GapTracker('timestamp', this._l);
     void this._watchdog();
   }
 
@@ -353,7 +351,6 @@ export class Reflect<MD extends MutatorDefs> {
       l.debug?.('Applying poke', pokeBody);
 
       this._updateTracker.push(performance.now());
-      this._timestampTracker.push(pokeBody.timestamp);
 
       const {lastMutationID, baseCookie, patch, cookie} = pokeBody;
       this._lastMutationIDReceived = lastMutationID;
