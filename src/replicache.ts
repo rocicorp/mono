@@ -65,7 +65,7 @@ import {
 import type {IndexDefinitions} from './index-defs';
 import {assertClientDD31} from './persist/clients.js';
 import {throwIfClosed} from './transaction-closed-error.js';
-import {version} from './version';
+import {Lock} from '@rocicorp/lock';
 
 export type BeginPullResult = {
   requestID: string;
@@ -303,6 +303,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
   private readonly _closeAbortController = new AbortController();
 
   private _persistIsScheduled = false;
+  private _persistLock = new Lock();
 
   private readonly _enableLicensing: boolean;
 
@@ -398,10 +399,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const logSink =
       logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
     this._lc = new LogContext(logLevel, logSink).addContext('name', name);
-    this._lc.debug?.('Constructing Replicache', {
-      name,
-      'replicache version': version,
-    });
 
     this._subscriptions = new SubscriptionsManager(
       this._queryInternal,
@@ -1227,24 +1224,26 @@ export class Replicache<MD extends MutatorDefs = {}> {
     }
     await this._ready;
     const clientID = await this.clientID;
-    try {
-      await persist.persist(
-        this._lc,
-        clientID,
-        this._memdag,
-        this._perdag,
-        this._mutatorRegistry,
-        () => this.closed,
-      );
-    } catch (e) {
-      if (e instanceof persist.ClientStateNotFoundError) {
-        this._fireOnClientStateNotFound(clientID, reasonClient);
-      } else if (this._closed) {
-        this._lc.debug?.('Exception persisting during close', e);
-      } else {
-        throw e;
+    await this._persistLock.withLock(async () => {
+      try {
+        await persist.persist(
+          this._lc,
+          clientID,
+          this._memdag,
+          this._perdag,
+          this._mutatorRegistry,
+          () => this.closed,
+        );
+      } catch (e) {
+        if (e instanceof persist.ClientStateNotFoundError) {
+          this._fireOnClientStateNotFound(clientID, reasonClient);
+        } else if (this._closed) {
+          this._lc.debug?.('Exception persisting during close', e);
+        } else {
+          throw e;
+        }
       }
-    }
+    });
   }
   private _fireOnClientStateNotFound(
     clientID: sync.ClientID,
