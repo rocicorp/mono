@@ -39,8 +39,15 @@ export const emptyHash = emptyUUID as unknown as Hash;
 /**
  * Creates a new "Hash" that is a UUID.
  */
-export function newUUIDHash(): Hash {
-  return uuid() as unknown as Hash;
+export const newUUIDHash = createUUIDHashFn();
+
+function createUUIDHashFn() {
+  const uuidPrefix = uuid().substring(0, 24);
+  let counter = 0;
+  return () => {
+    const c = String(counter++);
+    return uuidPrefix + '000000000000'.slice(0, -c.length) + c;
+  };
 }
 
 /**
