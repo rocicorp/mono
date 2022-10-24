@@ -1,5 +1,6 @@
 import {mergePokeBodies} from './merge-pokes.js';
 import type {PokeBody} from '../protocol/poke';
+import {assertNumber} from '../util/asserts.js';
 
 const PLAYBACK_BUFFER_MS = 250;
 
@@ -15,62 +16,72 @@ export class PokeSetProcessor {
     this._applyPoke = applyPoke;
   }
 
-  add(pokeBody: PokeBody): void {
-    this._pokes.push(pokeBody);
-    void this._startLoop();
-  }
+  add(poke: PokeBody): void {
+    this._pokes.push(poke);
+    this._setEpochOffset(poke, performance.now());
 
-  private _startLoop() {
-    if (this._isProcessing) {
-      return;
+    if (!this._isProcessing) {
+      this._isProcessing = true;
+      requestAnimationFrame(async () => await this._loop());
     }
-
-    this._isProcessing = true;
-    void this._loop();
   }
 
   private async _loop() {
     const pokes = this._pokes;
+
     if (pokes.length === 0) {
       this._isProcessing = false;
       return;
     }
 
-    const pokesToApply: PokeBody[] = [];
-    while (pokes.length > 0) {
-      const now = performance.now();
-      const poke = pokes[0];
+    const now = performance.now();
 
-      let applyTime: number;
-      // special handling of FF pokes
-      if (poke.frame === 0) {
-        applyTime = now;
-      } else {
-        let epochOffset = this._epochOffsets.get(poke.epoch);
-        if (epochOffset === undefined) {
-          // TODO: this is probably wrong, for instance if there is a poke at the very end of a turn, and
-          // nothing else in between, then we are probably playing it back too soon, and pokes need to be
-          // interleaved and played back in order.
-          // initialize epochOffset so that it simply plays back now
-          epochOffset = now - poke.frame;
-          this._epochOffsets.set(poke.epoch, epochOffset);
-        }
+    // find the last index of pokes that are ready to be applied
+    let lastIndex = -1;
+    for (let i = pokes.length - 1; i >= 0; i--) {
+      const {epoch, frame} = pokes[i];
 
-        applyTime = poke.frame + epochOffset + PLAYBACK_BUFFER_MS;
-      }
+      const epochOffset = this._epochOffsets.get(epoch);
+      assertNumber(epochOffset);
 
-      if (applyTime > now) {
+      const applyTime = frame + epochOffset + PLAYBACK_BUFFER_MS;
+      if (applyTime <= now) {
+        lastIndex = i;
         break;
       }
-      pokesToApply.push(poke);
-      pokes.shift();
     }
 
-    if (pokesToApply.length > 0) {
+    if (lastIndex !== -1) {
+      const pokesToApply = this._pokes.slice(0, lastIndex + 1);
+
+      if (pokesToApply.length > 2) {
+        console.log(
+          `applying pokes ${pokesToApply.length} / ${this._pokes.length}`,
+        );
+      }
+      this._pokes.splice(0, lastIndex + 1);
       const merged = mergePokeBodies(pokesToApply);
-      await this._applyPoke(merged);
+      this._applyPoke(merged);
     }
 
     requestAnimationFrame(async () => await this._loop());
+  }
+
+  private _setEpochOffset(poke: PokeBody, now: number) {
+    const pokeOffset = now - poke.frame;
+    let epochOffset = this._epochOffsets.get(poke.epoch);
+
+    if (
+      epochOffset === undefined ||
+      // TODO: threshold here is chosen randomly; find a better value
+      Math.abs(pokeOffset - epochOffset) > PLAYBACK_BUFFER_MS
+    ) {
+      // TODO: this is probably wrong, for instance if there is a poke at the very end of a turn, and
+      // nothing else in between, then we are probably playing it back too soon, and pokes need to be
+      // interleaved and played back in order.
+      // initialize epochOffset so that it simply plays back now
+      this._epochOffsets.set(poke.epoch, pokeOffset);
+      epochOffset = pokeOffset;
+    }
   }
 }
