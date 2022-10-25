@@ -117,6 +117,7 @@ class ReplicacheWithPersist<MD extends MutatorDefs> extends Replicache<MD> {
   }
 
   async persist(): Promise<void> {
+    console.log('persist');
     return this._internalAPI.persist();
   }
 }
@@ -173,7 +174,8 @@ export function benchmarkStartupUsingBasicReadsFromPersistedData(opts: {
   numKeysPersisted: number;
   numKeysToRead: number;
 }): Benchmark {
-  const repName = makeRepName();
+  const repName =
+    'benchmarkStartupUsingBasicReadsFromPersistedData' + makeRepName();
   let repToClose: Replicache | undefined;
   return {
     name: `startup read ${valSize}x${opts.numKeysToRead} from ${valSize}x${opts.numKeysPersisted} stored`,
@@ -614,49 +616,49 @@ async function closeAndCleanupRep(rep: Replicache | undefined): Promise<void> {
 
 export function benchmarks(): Benchmark[] {
   return [
-    // write/sub/read 1mb
-    benchmarkWriteSubRead({
-      valueSize: 1024,
-      numSubsTotal: 64,
-      keysPerSub: 16,
-      keysWatchedPerSub: 16,
-      numSubsDirty: 5,
-    }),
-    // write/sub/read 4mb
-    benchmarkWriteSubRead({
-      valueSize: 1024,
-      numSubsTotal: 128,
-      keysPerSub: 32,
-      keysWatchedPerSub: 16,
-      numSubsDirty: 5,
-    }),
-    // write/sub/read 16mb
-    benchmarkWriteSubRead({
-      valueSize: 1024,
-      numSubsTotal: 128,
-      keysPerSub: 128,
-      keysWatchedPerSub: 16,
-      numSubsDirty: 5,
-    }),
-    // write/sub/read 64mb
-    benchmarkWriteSubRead({
-      valueSize: 1024,
-      numSubsTotal: 128,
-      keysPerSub: 512,
-      keysWatchedPerSub: 16,
-      numSubsDirty: 5,
-    }),
-    // 128 mb is unusable
-    benchmarkPopulate({numKeys: 1000, clean: true}),
-    benchmarkPopulate({numKeys: 1000, clean: true, indexes: 1}),
-    benchmarkPopulate({numKeys: 1000, clean: true, indexes: 2}),
-    benchmarkPopulate({numKeys: 10000, clean: true}),
-    benchmarkPopulate({numKeys: 10000, clean: true, indexes: 1}),
-    benchmarkPopulate({numKeys: 10000, clean: true, indexes: 2}),
-    benchmarkScan({numKeys: 1000}),
-    benchmarkScan({numKeys: 10_000}),
-    benchmarkCreateIndex({numKeys: 5000}),
-    benchmarkCreateIndexDeprecated({numKeys: 5000}),
+    // // write/sub/read 1mb
+    // benchmarkWriteSubRead({
+    //   valueSize: 1024,
+    //   numSubsTotal: 64,
+    //   keysPerSub: 16,
+    //   keysWatchedPerSub: 16,
+    //   numSubsDirty: 5,
+    // }),
+    // // write/sub/read 4mb
+    // benchmarkWriteSubRead({
+    //   valueSize: 1024,
+    //   numSubsTotal: 128,
+    //   keysPerSub: 32,
+    //   keysWatchedPerSub: 16,
+    //   numSubsDirty: 5,
+    // }),
+    // // write/sub/read 16mb
+    // benchmarkWriteSubRead({
+    //   valueSize: 1024,
+    //   numSubsTotal: 128,
+    //   keysPerSub: 128,
+    //   keysWatchedPerSub: 16,
+    //   numSubsDirty: 5,
+    // }),
+    // // write/sub/read 64mb
+    // benchmarkWriteSubRead({
+    //   valueSize: 1024,
+    //   numSubsTotal: 128,
+    //   keysPerSub: 512,
+    //   keysWatchedPerSub: 16,
+    //   numSubsDirty: 5,
+    // }),
+    // // 128 mb is unusable
+    // benchmarkPopulate({numKeys: 1000, clean: true}),
+    // benchmarkPopulate({numKeys: 1000, clean: true, indexes: 1}),
+    // benchmarkPopulate({numKeys: 1000, clean: true, indexes: 2}),
+    // benchmarkPopulate({numKeys: 10000, clean: true}),
+    // benchmarkPopulate({numKeys: 10000, clean: true, indexes: 1}),
+    // benchmarkPopulate({numKeys: 10000, clean: true, indexes: 2}),
+    // benchmarkScan({numKeys: 1000}),
+    // benchmarkScan({numKeys: 10_000}),
+    // benchmarkCreateIndex({numKeys: 5000}),
+    // benchmarkCreateIndexDeprecated({numKeys: 5000}),
     benchmarkStartupUsingBasicReadsFromPersistedData({
       numKeysPersisted: 100000,
       numKeysToRead: 100,

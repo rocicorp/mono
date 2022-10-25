@@ -28,6 +28,7 @@ export async function computeRefCountUpdates(
   headChanges: Iterable<HeadChange>,
   putChunks: ReadonlySet<Hash>,
   delegate: GarbageCollectionDelegate,
+  newCacheReadonly?: ReadonlySet<Hash>,
 ): Promise<RefCountUpdates> {
   const newHeads: Hash[] = [];
   const oldHeads: Hash[] = [];
@@ -43,6 +44,7 @@ export async function computeRefCountUpdates(
   // Once it is loaded we only operate on a cache of the ref counts.
   const loadedRefCountPromises: LoadedRefCountPromises = new Map();
 
+  const newCache = new Set(newCacheReadonly);
   for (const n of newHeads) {
     await changeRefCount(
       n,
@@ -50,8 +52,46 @@ export async function computeRefCountUpdates(
       refCountUpdates,
       loadedRefCountPromises,
       delegate,
+      newCache,
     );
   }
+
+  await Promise.all(
+    Array.from(newCache.values(), hash =>
+      ensureRefCountLoaded(
+        hash,
+        refCountUpdates,
+        loadedRefCountPromises,
+        delegate,
+      ),
+    ),
+  );
+
+  let refCountUpdated;
+  do {
+    refCountUpdated = false;
+    for (const hash of newCache.values()) {
+      if (refCountUpdates.get(hash) !== 0) {
+        newCache.delete(hash);
+        const refs = await delegate.getRefs(hash);
+        if (refs !== undefined) {
+          const ps = refs.map(ref =>
+            changeRefCount(
+              ref,
+              1,
+              refCountUpdates,
+              loadedRefCountPromises,
+              delegate,
+              newCache,
+            ),
+          );
+          await Promise.all(ps);
+          refCountUpdated = true;
+          break;
+        }
+      }
+    }
+  } while (refCountUpdated);
 
   for (const o of oldHeads) {
     await changeRefCount(
@@ -85,6 +125,7 @@ async function changeRefCount(
   refCountUpdates: RefCountUpdates,
   loadedRefCountPromises: LoadedRefCountPromises,
   delegate: GarbageCollectionDelegate,
+  newCache?: Set<Hash>,
 ): Promise<void> {
   // First make sure that we have the ref count in the cache. This is async
   // because it might need to load the ref count from the store (via the delegate).
@@ -99,6 +140,7 @@ async function changeRefCount(
   );
 
   if (updateRefCount(hash, delta, refCountUpdates)) {
+    newCache?.delete(hash);
     const refs = await delegate.getRefs(hash);
     if (refs !== undefined) {
       const ps = refs.map(ref =>
@@ -108,6 +150,7 @@ async function changeRefCount(
           refCountUpdates,
           loadedRefCountPromises,
           delegate,
+          newCache,
         ),
       );
       await Promise.all(ps);

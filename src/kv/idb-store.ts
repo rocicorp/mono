@@ -2,7 +2,6 @@ import {deleteSentinel, WriteImplBase} from './write-impl-base';
 import type {Read, Store, Value, Write} from './store';
 import {resolver} from '@rocicorp/resolver';
 import {assertNotNull} from '../asserts';
-import {wrap} from './idb-util';
 
 const RELAXED = {durability: 'relaxed'};
 const OBJECT_STORE = 'chunks';
@@ -220,4 +219,15 @@ function openDatabase(name: string): Promise<IDBDatabase> {
     db.onversionchange = () => db.close();
     return db;
   });
+}
+
+function wrap<T>(req: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function dropStore(name: string): Promise<void> {
+  await wrap(indexedDB.deleteDatabase(name));
 }

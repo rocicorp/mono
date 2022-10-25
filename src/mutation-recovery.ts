@@ -82,7 +82,14 @@ export class MutationRecovery {
   ): Promise<boolean> {
     const {lc, enableMutationRecovery, isPushDisabled, delegate} =
       this._options;
-
+    console.log(
+      'recoverMutations',
+      !enableMutationRecovery,
+      this._recoveringMutations,
+      !delegate.online,
+      delegate.closed,
+      isPushDisabled(),
+    );
     if (
       !enableMutationRecovery ||
       this._recoveringMutations ||
@@ -370,6 +377,7 @@ async function recoverMutationsWithNewPerdag(
   options: MutationRecoveryOptions,
   preReadClientMap: persist.ClientMap | undefined,
 ) {
+  console.log('recoverMutationsWithNewPerdag ', database);
   const perKvStore = new IDBStore(database.name);
   const perdag = new dag.StoreImpl(perKvStore, dag.uuidChunkHasher, assertHash);
   try {
@@ -390,6 +398,7 @@ async function recoverMutationsFromPerdag(
   perdag: dag.Store,
   preReadClientMap: persist.ClientMap | undefined,
 ): Promise<void> {
+  console.log('recoverMutationsFromPerdag ', database);
   const {delegate, lc} = options;
   const stepDescription = `Recovering mutations from db ${database.name}.`;
   lc.debug?.('Start:', stepDescription);
@@ -405,6 +414,7 @@ async function recoverMutationsFromPerdag(
           lc.debug?.('Exiting early due to close:', stepDescription);
           return;
         }
+        console.log('recoverMutationsFromPerdag', database, clientID);
         if (!clientIDsVisited.has(clientID)) {
           clientIDsVisited.add(clientID);
           newClientMap = await recoverMutationsOfClient(

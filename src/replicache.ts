@@ -1226,6 +1226,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const clientID = await this.clientID;
     await this._persistLock.withLock(async () => {
       try {
+        console.log('_persist', this);
         await persist.persist(
           this._lc,
           clientID,
@@ -1245,6 +1246,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       }
     });
   }
+
   private _fireOnClientStateNotFound(
     clientID: sync.ClientID,
     reason: ClientStateNotFoundReason,

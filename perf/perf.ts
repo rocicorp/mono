@@ -56,6 +56,7 @@ async function runBenchmark(
   const maxTotalTime = 5000;
   const times: number[] = [];
   let sum = 0;
+  console.log(benchmark.name);
 
   if (benchmark.skip && (await benchmark.skip())) {
     return;

@@ -46,11 +46,11 @@ export async function persist(
   const [gatheredChunks, mainHeadHash, mutationID, lastMutationID] =
     await gatherMemOnlyChunks(memdag, clientID);
 
+  console.log(gatheredChunks.size);
+
   await clientExistsCheckP;
 
   if (gatheredChunks.size === 0) {
-    // Nothing to persist
-    console.log('nothing to persist');
     return;
   }
 

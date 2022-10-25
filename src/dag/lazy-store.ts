@@ -107,6 +107,7 @@ export class LazyStore implements Store {
   private readonly _refCounts = new Map<Hash, number>();
   private readonly _chunkHasher: ChunkHasher;
   private readonly _assertValidHash: (hash: Hash) => void;
+  private _closed = false;
 
   constructor(
     sourceStore: Store,
@@ -134,6 +135,7 @@ export class LazyStore implements Store {
       this._sourceStore,
       release,
       this._assertValidHash,
+      () => this._closed,
     );
   }
 
@@ -157,6 +159,7 @@ export class LazyStore implements Store {
       release,
       this._chunkHasher,
       this._assertValidHash,
+      () => this._closed,
     );
   }
 
@@ -170,6 +173,7 @@ export class LazyStore implements Store {
   }
 
   async close(): Promise<void> {
+    this._closed = true;
     return;
   }
 
@@ -183,13 +187,22 @@ export class LazyStore implements Store {
 
   async chunksPersisted(chunkHashes: Array<Hash>): Promise<void> {
     await this.withWrite(() => {
+      console.log('chunks persisted');
+      console.log(this._memOnlyChunks);
+      console.log(this._sourceChunksCache._cacheEntries);
+      const chunksToCache = [];
       for (const chunkHash of chunkHashes) {
         const chunk = this._memOnlyChunks.get(chunkHash);
         if (chunk) {
           this._memOnlyChunks.delete(chunkHash);
-          this._sourceChunksCache.put(chunk);
+          chunksToCache.push(chunk);
         }
       }
+      console.log(chunksToCache);
+      this._sourceChunksCache.updateForCommit(chunksToCache, []);
+      console.log('after chunks persisted');
+      console.log(this._memOnlyChunks);
+      console.log(this._sourceChunksCache._cacheEntries);
     });
   }
 }
@@ -202,6 +215,7 @@ export class LazyRead implements Read {
   private _sourceRead: Promise<Read> | undefined = undefined;
   private readonly _release: () => void;
   private _closed = false;
+  protected readonly _isClosed: () => boolean;
   readonly assertValidHash: (hash: Hash) => void;
 
   constructor(
@@ -211,6 +225,7 @@ export class LazyRead implements Read {
     sourceStore: Store,
     release: () => void,
     assertValidHash: (hash: Hash) => void,
+    isClosed: () => boolean,
   ) {
     this._heads = heads;
     this._memOnlyChunks = memOnlyChunks;
@@ -218,6 +233,7 @@ export class LazyRead implements Read {
     this._sourceStore = sourceStore;
     this._release = release;
     this.assertValidHash = assertValidHash;
+    this._isClosed = isClosed;
   }
 
   isMemOnlyChunkHash(hash: Hash): boolean {
@@ -229,6 +245,10 @@ export class LazyRead implements Read {
   }
 
   async getChunk(hash: Hash): Promise<Chunk | undefined> {
+    if (this._isClosed()) {
+      console.log(this._memOnlyChunks);
+      console.log(this._sourceChunksCache._cacheEntries);
+    }
     const memOnlyChunk = this._memOnlyChunks.get(hash);
     if (memOnlyChunk !== undefined) {
       return memOnlyChunk;
@@ -291,6 +311,7 @@ export class LazyWrite
     release: () => void,
     chunkHasher: ChunkHasher,
     assertValidHash: (hash: Hash) => void,
+    isClosed: () => boolean,
   ) {
     super(
       heads,
@@ -299,6 +320,7 @@ export class LazyWrite
       sourceStore,
       release,
       assertValidHash,
+      isClosed,
     );
     this._refCounts = refCounts;
     this._chunkHasher = chunkHasher;
@@ -386,6 +408,7 @@ export class LazyWrite
         ...this._pendingCachedChunks.keys(),
       ]),
       this,
+      new Set(this._pendingCachedChunks.keys()),
     );
 
     const cacheHashesToDelete: Array<Hash> = [];
@@ -455,7 +478,7 @@ class ChunksCache {
   /**
    * Iteration order is from least to most recently used.
    */
-  private readonly _cacheEntries = new Map<Hash, CacheEntry>();
+  readonly _cacheEntries = new Map<Hash, CacheEntry>();
   private _size = 0;
 
   constructor(
