@@ -8,7 +8,7 @@ import {
   GarbageCollectionDelegate,
   HeadChange,
 } from './gc';
-import {assert, assertNotUndefined} from '../asserts';
+import {assert} from '../asserts';
 
 /**
  * Dag Store which lazily loads values from a source store and then caches
@@ -274,7 +274,11 @@ export class LazyRead implements Read {
   close(): void {
     if (!this._closed) {
       this._release();
-      void this._sourceRead?.then(read => read.close());
+      this._sourceRead
+        ?.then(read => read.close())
+        .catch(e => {
+          console.log('is this the shiz', e);
+        });
       this._closed = true;
     }
   }
@@ -545,33 +549,14 @@ class ChunksCache {
       if (this._size <= this._cacheSizeLimit) {
         break;
       }
-      this.delete(entry[1]);
+      this.evict(entry[1]);
     }
   }
 
-  delete(cacheEntry: CacheEntry): void {
+  evict(cacheEntry: CacheEntry): void {
     const {hash} = cacheEntry.chunk;
     this._size -= cacheEntry.size;
     this._cacheEntries.delete(hash);
-    for (const refHash of cacheEntry.chunk.meta) {
-      const oldCount = this._refCounts.get(refHash);
-      assertNotUndefined(oldCount);
-      assert(oldCount > 0);
-      const newCount = oldCount - 1;
-      if (newCount === 0) {
-        this._refCounts.delete(refHash);
-        const refCacheEntry = this._cacheEntries.get(refHash);
-        if (refCacheEntry) {
-          assert(
-            cacheEntry.chunk.hash !== refHash,
-            'Found a chunk that references itself',
-          );
-          this.delete(refCacheEntry);
-        }
-      } else {
-        this._refCounts.set(refHash, newCount);
-      }
-    }
   }
 
   updateForCommit(
@@ -618,7 +603,7 @@ class ChunksCache {
     // evicting entries trying to make room for these values which should not be
     // cached.
     for (const cacheEntry of cacheEntriesLargerThanLimit) {
-      this.delete(cacheEntry);
+      this.evict(cacheEntry);
     }
 
     this._ensureCacheSizeLimit();

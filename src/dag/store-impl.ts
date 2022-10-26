@@ -29,7 +29,8 @@ export class StoreImpl implements Store {
   }
 
   async read(): Promise<Read> {
-    return new ReadImpl(await this._kv.read(), this._assertValidHash);
+    const kvRead = await this._kv.read();
+    return new ReadImpl(kvRead, this._assertValidHash);
   }
 
   async withRead<R>(fn: (read: Read) => R | Promise<R>): Promise<R> {

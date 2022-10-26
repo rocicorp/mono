@@ -21,7 +21,7 @@ export class IDBStore implements Store {
   }
 
   async read(): Promise<Read> {
-    return await this._withReopen(readImpl);
+    return this._withReopen(readImpl);
   }
 
   async withRead<R>(fn: (read: Read) => R | Promise<R>): Promise<R> {
@@ -34,7 +34,7 @@ export class IDBStore implements Store {
   }
 
   async write(): Promise<Write> {
-    return await this._withReopen(writeImpl);
+    return this._withReopen(writeImpl);
   }
 
   async withWrite<R>(fn: (write: Write) => R | Promise<R>): Promise<R> {
@@ -83,7 +83,7 @@ export class IDBStore implements Store {
           );
         }
       }
-      throw e;
+      throw new Error('WTF');
     }
   }
 }

@@ -24,9 +24,9 @@ declare const hashTag: unique symbol;
 export type Hash = {[hashTag]: true};
 
 // We are no longer using hashes but due to legacy reason we still refer to
-// them as hashes. We use UUID and counters instead.
+// them as hashes. We use UUID instead.
 const oldHashRe = /^[0-9a-v]{32}$/;
-const uuidRe = /^[0-9a-f-]{36}$/;
+const uuidRe = /^[0-9a-f-]{44}$/;
 
 export function parse(s: string): Hash {
   assertHash(s);
@@ -42,11 +42,12 @@ export const emptyHash = emptyUUID as unknown as Hash;
 export const newUUIDHash = createUUIDHashFn();
 
 function createUUIDHashFn() {
-  const uuidPrefix = uuid().substring(0, 24);
+  const uuidPrefix = uuid().replaceAll('-', '');
   let counter = 0;
   return () => {
-    const c = String(counter++);
-    return uuidPrefix + '000000000000'.slice(0, -c.length) + c;
+    const tail = String(counter++);
+    assert(tail.length <= 12);
+    return uuidPrefix + '000000000000'.slice(0, -tail.length) + tail;
   };
 }
 

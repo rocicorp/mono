@@ -194,7 +194,7 @@ async function main() {
 
     page.on('pageerror', e => {
       console.error(e);
-      process.exit(1);
+      //process.exit(1);
     });
 
     await page.goto(`http://127.0.0.1:${port}/perf/index.html`);

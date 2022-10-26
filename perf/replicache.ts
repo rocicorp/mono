@@ -201,6 +201,7 @@ export function benchmarkStartupUsingBasicReadsFromPersistedData(opts: {
         name: repName,
         pullInterval: null,
       }));
+      console.log(JSON.stringify(rep));
       let getCount = 0;
       await rep.query(async (tx: ReadTransaction) => {
         for (const randomKey of randomKeysToRead) {

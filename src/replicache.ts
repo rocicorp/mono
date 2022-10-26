@@ -1239,8 +1239,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
         if (e instanceof persist.ClientStateNotFoundError) {
           this._fireOnClientStateNotFound(clientID, reasonClient);
         } else if (this._closed) {
+          console.log('Exception persisting during close', e, this);
           this._lc.debug?.('Exception persisting during close', e);
         } else {
+          console.log('Other exception in persist', e, this);
           throw e;
         }
       }
