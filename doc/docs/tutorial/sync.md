@@ -3,7 +3,7 @@ title: Sync
 slug: /tutorial/sync
 ---
 
-   <iframe src="https://codesandbox.io/embed/replicache-sync-qyr7ji?autoresize=1&fontsize=12&hidenavigation=0&theme=light&codemirror=1&view=split&forcerefresh=1"
+<iframe src="https://codesandbox.io/embed/replicache-sync-static-dj7z0q?module=%2Findex.js&autoresize=1&fontsize=12&hidenavigation=0&theme=light&codemirror=1&view=split&forcerefresh=1"
      style={{'width':'100%','height':'350px', 'border':'1px solid rgb(222,221,221)', 'overflow':'hidden'}}
      title="constructing-replicache"
      allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
