@@ -11,7 +11,7 @@ module.exports = {
             'tutorial/constructing-replicache',
             'tutorial/adding-mutators',
             'tutorial/subscriptions',
-            'tutorial/sync',
+            'tutorial/sync-mdx',
             'tutorial/next-steps',
           ],
         },

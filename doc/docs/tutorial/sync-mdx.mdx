@@ -1,0 +1,147 @@
+---
+title: Sync
+slug: /tutorial/sync
+---
+
+
+<CodeEditor >
+
+```js src/index.js
+import { Replicache, TEST_LICENSE_KEY } from "replicache";
+import { initSpace } from "./space.js";
+
+const serverURL = "https://replicache-counter.onrender.com";
+
+async function initReplicache() {
+  const spaceID = await initSpace(serverURL);
+
+    const rep = window.rep ? window.rep.close() : new Replicache({
+    name: spaceID,
+    licenseKey: TEST_LICENSE_KEY,
+    pushURL: `${serverURL}/api/replicache/push?spaceID=${spaceID}`,
+    pullURL: `${serverURL}/api/replicache/pull?spaceID=${spaceID}`,
+    mutators: {
+      increment: async (tx, delta) => {
+        const prev = (await tx.get("count")) || 0;
+        const next = prev + delta;
+        await tx.put("count", next);
+      }
+    }
+  });
+    
+
+  // Implements a Replicache poke using Server-Sent Events.
+  // If a "poke" message is received, it will pull from the server.
+  const ev = new EventSource(
+    `${serverURL}/api/replicache/poke?spaceID=${spaceID}`,
+    {
+      withCredentials: false
+    }
+  );
+  ev.onmessage = async (event) => {
+    if (event.data === "poke") {
+      await rep.pull();
+    }
+  };
+
+  const button = document.querySelector("#increment");
+
+  button.onclick = async () => {
+    rep.mutate.increment(1);
+  };
+
+  rep.subscribe(async (tx) => (await tx.get("count")) || 0, {
+    onData: (count) => {
+      button.textContent = `Button clicked ${count} times`;
+    }
+  });
+}
+
+initReplicache();
+```
+
+```js src/space.js
+export async function initSpace(serverURL) {
+  const { pathname } = window.location;
+  const paths = pathname.split("/");
+  const [, spaceDir, spaceID] = paths;
+
+  if (spaceDir === "space" && spaceID) {
+    if (await spaceExists(serverURL, spaceID)) {
+      return spaceID;
+    }
+  }
+
+  const newSpaceID = await createSpace(serverURL);
+  window.history.pushState(null, "", `/space/${newSpaceID}`);
+  return newSpaceID;
+}
+
+async function spaceExists(serverURL, spaceID) {
+  const spaceExistRes = await fetchJSON(serverURL, "spaceExists", spaceID);
+  return spaceExistRes.spaceExists;
+}
+
+async function createSpace(serverURL) {
+  const createSpaceRes = await fetchJSON(serverURL, "createSpace");
+  return createSpaceRes.spaceID;
+}
+
+async function fetchJSON(serverURL, apiName, spaceID) {
+  const res = await fetch(`${serverURL}/api/replicache/${apiName}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      spaceID
+    })
+  });
+  return await res.json();
+}
+
+```
+
+```html index.html
+<!DOCTYPE html>
+<html>
+  <link rel="stylesheet" type="text/css" href="src/styles.css" />
+  <script src="src/index.js"></script>
+  <body>
+    <h1>Hello, Replicache!</h1>
+    <button id="increment" style="padding: 0 1em; font-size: 1.1em;">
+      Button clicked 0 times
+    </button>
+  </body>
+</html>
+```
+
+</CodeEditor>
+
+Finally, let’s start syncing our changes to the server!
+
+Replicache can sync with any server that implements the Replicache sync protocol. You can learn how to build such a server in the [BYOB Tutorial](/byob/intro). For now, we’ll just connect to an existing server by adding `pushURL` and `pullURL` parameters to the constructor.
+
+**Copy the preview URL (i.e. xxxxx.csb.app/space/123) into a different tab or browser, and click increment to see the two tabs sync.**
+
+:::tip Spaces
+
+What's that `initSpace()` call?
+
+For each run of this demo, we create a new _space_ on the server to store data in. Spaces are how Replicache data is partitioned server-side. Each space syncs separately from any others.
+
+We use this feature here so that each visitor to this demo sees only their own counts and isn't confused by seeing other users incrementing the count at the same time.
+
+:::
+
+To support realtime updates, most Replicache server support an optional _poke channel_. Replicache _pokes_ are zero-length messages that serve as a hint from server to clients that a space has changed and that the clients should pull again soon. This sample server implements a poke channel using [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events).
+
+<h2>Challenge</h2>
+
+Replicache mutators are not required to compute the same result on the client as the server.
+
+This is a feature! The server can have different or better information than the client. Also, this prevents clients from lying or cheating.
+
+Try modifying your increment mutator to compute an incorrect result. You will see the incorrect result momentarily on the client or for as long as you are offline. But after sync, the clients snaps into alignment with the correct answer from the server automatically.
+
+<div style={{fontSize:"1.2em", fontWeight:"bold", marginTop:"3em"}}><a href="/tutorial/next-steps">Next: Next Steps &rarr;</a></div>
