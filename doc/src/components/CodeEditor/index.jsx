@@ -1,5 +1,5 @@
 import React from 'react';
-import {nightOwlTheme, Sandpack} from '@codesandbox/sandpack-react';
+import {Sandpack} from '@codesandbox/sandpack-react';
 import extractFiles from './file';
 
 export default function CodeEditor(props) {
@@ -13,7 +13,6 @@ export default function CodeEditor(props) {
   return (
     <Sandpack
       template={template}
-      theme={nightOwlTheme}
       files={files}
       customSetup={{
         dependencies: {replicache: 'latest'},

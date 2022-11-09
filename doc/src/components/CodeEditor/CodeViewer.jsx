@@ -1,14 +1,17 @@
 import React from 'react';
 import {
   SandpackProvider,
-  SandpackCodeViewer,
+  SandpackCodeEditor,
   SandpackLayout,
-  nightOwlTheme,
+  SandpackPreview,
+  useSandpack,
 } from '@codesandbox/sandpack-react';
+
 import extractFiles from './file.js';
+import {useEffect} from 'react';
 
 export default function CodeEditor(props) {
-  let {children, template = 'react', externalResources = []} = props;
+  let {children, template = 'vanilla'} = props;
 
   // convert the children to an array
   let codeSnippets = React.Children.toArray(children);
@@ -21,13 +24,34 @@ export default function CodeEditor(props) {
     <SandpackProvider
       key="sandpack-provider"
       template={template}
+      files={files}
       customSetup={{
-        files,
+        dependencies: {replicache: 'latest'},
+        configurations: {},
       }}
     >
-      <SandpackLayout theme={nightOwlTheme}>
-        <SandpackCodeViewer showTabs showLineNumbers={true} showInlineErrors />
+      <SandpackLayout>
+        <SandpackCodeEditor showTabs showLineNumbers={true} showInlineErrors />
+        <SandpackPreview></SandpackPreview>
+        <ListenerIframeMessage />
       </SandpackLayout>
     </SandpackProvider>
   );
 }
+
+const ListenerIframeMessage = () => {
+  const {sandpack} = useSandpack();
+
+  const sender = () => {
+    Object.values(sandpack.clients).forEach(client => {
+      console.log('client', client);
+      client.iframe.contentWindow.postMessage('Hello World', '*');
+    });
+  };
+
+  useEffect(() => {
+    sender();
+  });
+
+  return null;
+};
