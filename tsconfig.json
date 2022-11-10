@@ -14,7 +14,7 @@
 
     "declaration": true,
     "forceConsistentCasingInFileNames": true,
-    "moduleResolution": "node",
+    "moduleResolution": "Node16",
     "outDir": "out",
     "allowJs": true,
     // esnext for Object.fromEntries

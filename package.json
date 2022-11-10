@@ -12,9 +12,9 @@
     "check-types": "tsc --noEmit && npm run build && tsc --noEmit --project perf/tsconfig.json && tsc --noEmit tool/cli.ts",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
-    "build": "rm -rf out && npm run build-dts && node tool/build.mjs",
-    "build-perf": "node tool/build.mjs --perf",
-    "build-bundle-sizes": "rm -rf out && npm run build-dts && node tool/build.mjs --bundle-sizes",
+    "build": "rm -rf out && npm run build-dts && node tool/build.js",
+    "build-perf": "node tool/build.js --perf",
+    "build-bundle-sizes": "rm -rf out && npm run build-dts && node tool/build.js --bundle-sizes",
     "prepack": "npm run lint && npm run test && npm run build",
     "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts",
     "perf": "npm run build-perf && node perf/runner.js"
@@ -52,8 +52,9 @@
     "typescript": "^4.8.3",
     "xbytes": "^1.7.0"
   },
-  "main": "out/replicache.js",
-  "module": "out/replicache.mjs",
+  "type": "module",
+  "main": "out/replicache.cjs",
+  "module": "out/replicache.js",
   "types": "out/replicache.d.ts",
   "bin": {
     "replicache": "./out/cli.cjs"
@@ -62,15 +63,15 @@
     "node": ">=14.8.0"
   },
   "exports": {
-    "module": "./out/replicache.mjs",
-    "require": "./out/replicache.js",
-    "default": "./out/replicache.mjs"
+    "module": "./out/replicache.js",
+    "require": "./out/replicache.cjs",
+    "default": "./out/replicache.js"
   },
   "files": [
-    "out/cli.mjs",
+    "out/cli.js",
     "out/replicache.d.ts",
-    "out/replicache.js",
-    "out/replicache.mjs"
+    "out/replicache.cjs",
+    "out/replicache.js"
   ],
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
