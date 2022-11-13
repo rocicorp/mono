@@ -27,6 +27,19 @@ To test that a release works before creating the release we use a tarball depend
 npm pack
 ```
 
+### create-replicache-app
+
+```bash
+npx create-replicache-app my-app react
+cd my-app/client/react
+# edit package.json and change "replicache" value to "file:/path/to/replicache-version.tgz"
+cd -
+npm install
+npm run watch --ws
+```
+
+Do the same for `npx create-replicache-app my-app ts-web-component`
+
 ### Replidraw
 
 Check out [rocicorp/replidraw](https://github.com/rocicorp/replidraw)
