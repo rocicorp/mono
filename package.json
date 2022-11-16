@@ -36,6 +36,7 @@
     "compare-utf8": "^0.1.0",
     "esbuild": "^0.14.38",
     "eslint": "^8.14.0",
+    "itty-router": "^2.6.6",
     "jest": "^28.0.3",
     "jest-environment-miniflare": "2.9.0",
     "miniflare": "2.9.0",
@@ -55,8 +56,5 @@
     "out/reflect-server.d.ts",
     "out/reflect-server.js",
     "out/cli.ts"
-  ],
-  "dependencies": {
-    "itty-router": "^2.6.6"
-  }
+  ]
 }
