@@ -55,6 +55,6 @@
   "files": [
     "out/reflect-server.d.ts",
     "out/reflect-server.js",
-    "out/cli.ts"
+    "out/cli.js"
   ]
 }
