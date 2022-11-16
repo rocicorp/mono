@@ -53,7 +53,8 @@
   },
   "files": [
     "out/reflect-server.d.ts",
-    "out/reflect-server.js"
+    "out/reflect-server.js",
+    "out/cli.ts"
   ],
   "dependencies": {
     "itty-router": "^2.6.6"
