@@ -22,7 +22,7 @@
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4",
     "@rocicorp/eslint-config": "^0.2.0",
-    "@rocicorp/licensing": "^4.0.0",
+    "@rocicorp/licensing": "^4.1.0",
     "@rocicorp/lock": "^1.0.1",
     "@rocicorp/logger": "^2.2.0",
     "@rocicorp/prettier-config": "^0.1.1",
@@ -30,6 +30,7 @@
     "@types/command-line-usage": "^5.0.2",
     "@types/lodash-es": "^4.17.6",
     "@types/mocha": "^9.1.0",
+    "@types/node": "^18.11.9",
     "@types/sinon": "^10.0.11",
     "@web/dev-server": "0.1.29",
     "@web/dev-server-esbuild": "^0.2.16",
