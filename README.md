@@ -11,12 +11,9 @@ Look through the changes since the last tag.
 ## Build the release
 
 ```
-export NEW_VERSION="<new_version>"
 git branch -D release
 git checkout -b release HEAD
-jq ".version = \"$NEW_VERSION\"" package.json | sponge package.json
-npm install
-git commit -a -m "Bump version to $NEW_VERSION."
+npm version major # or minor or patch
 ```
 
 ## Manual Testing
@@ -32,9 +29,7 @@ npm pack
 ```bash
 npx create-replicache-app my-app react
 cd my-app/client/react
-# edit package.json and change "replicache" value to "file:/path/to/replicache-version.tgz"
-cd -
-npm install
+npm add /path/to/replicache-<version>.tgz
 npm run watch --ws
 ```
 
