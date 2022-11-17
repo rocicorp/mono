@@ -22,7 +22,7 @@
   "engines": {
     "node": ">=16.14.0 || >=17.1"
   },
-  "commands": {
+  "bin": {
     "reflect": "out/cli.js"
   },
   "//1": "Note: we need thse precise versions of miniflare and jest-environment-miniflare due to: https://github.com/rocicorp/reflect-server/issues/148",
