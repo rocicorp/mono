@@ -13,7 +13,7 @@ Look through the changes since the last tag.
 ```
 git branch -D release
 git checkout -b release HEAD
-npm version major # or minor or patch
+npm version major # or minor or patch v12.0.0-beta.0
 ```
 
 ## Manual Testing
