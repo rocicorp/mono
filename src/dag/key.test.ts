@@ -59,10 +59,6 @@ test('parse', () => {
   invalid('c/abc/', `Invalid key: 'c/abc/'`);
   invalid('c/abc/x', `Invalid key: 'c/abc/x'`);
 
-  invalid('c/abc/d', `Invalid hash: 'abc'`);
-  invalid('c/abc/m', `Invalid hash: 'abc'`);
-  invalid('c/abc/r', `Invalid hash: 'abc'`);
-
   invalid('c//d', `Invalid hash: ''`);
   invalid('c//m', `Invalid hash: ''`);
   invalid('c//r', `Invalid hash: ''`);

@@ -27,8 +27,11 @@ declare const hashTag: unique symbol;
  */
 export type Hash = {[hashTag]: true};
 
-const hashRe = /^[0-9a-v]{32}$/;
-const tempHashRe = /^t\/[0-9a-v]{30}$/;
+// This regexp is intentionally very forgiving. It makes it easier to change
+// these without requiring a new REPLICACHE_FORMAT_VERSION.
+const hashRe = /^[0-9a-v-]+$/;
+
+const tempHashRe = /^t\//;
 
 /**
  * Computes a SHA512 hash of the given data.

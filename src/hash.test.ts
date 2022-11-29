@@ -33,16 +33,12 @@ test('isHash', async () => {
 
   const h = await hashOf('abc');
   expect(isHash(h)).to.be.true;
-  expect(isHash(h + 'a')).to.be.false;
-  expect(isHash(String(h).slice(0, -1))).to.be.false;
 });
 
 test('parse', async () => {
   const h = await hashOf('abc');
   expect(parse(String(emptyHash))).to.equal(emptyHash);
   expect(parse(String(h))).to.equal(h);
-  expect(() => parse(h + 'a')).to.throw(Error);
-  expect(() => parse(String(h).slice(0, -1))).to.throw(Error);
 });
 
 test('temp hash', async () => {
