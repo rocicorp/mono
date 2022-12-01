@@ -13,7 +13,7 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "build": "rm -rf out && npm run build-dts && node tool/build.js",
-    "build-perf": "node tool/build.js --perf",
+    "build-perf": "node tool/build.js --perf --dd31",
     "build-bundle-sizes": "rm -rf out && npm run build-dts && node tool/build.js --bundle-sizes",
     "prepack": "npm run lint && npm run test && npm run build",
     "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts",
