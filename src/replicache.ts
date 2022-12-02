@@ -107,7 +107,7 @@ export function assertPokeSDD(
 
 export const httpStatusUnauthorized = 401;
 
-export const REPLICACHE_FORMAT_VERSION_SDD = 4;
+export const REPLICACHE_FORMAT_VERSION_SDD = 5;
 export const REPLICACHE_FORMAT_VERSION_DD31 = 5;
 
 export const REPLICACHE_FORMAT_VERSION = DD31
