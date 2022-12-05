@@ -1,6 +1,7 @@
 const isProd = process.env.NODE_ENV === 'production';
 
 export {
+  isProd,
   isProd as skipCommitDataAsserts,
   isProd as skipAssertJSONValue,
   isProd as skipBTreeNodeAsserts,
