@@ -1,21 +1,22 @@
-const isReleaseBuild = process.env.NODE_ENV === 'production';
+const isProd = process.env.NODE_ENV === 'production';
+const buildMode = isProd ? 'release' : 'debug';
 
 export {
-  isReleaseBuild,
-  isReleaseBuild as skipCommitDataAsserts,
-  isReleaseBuild as skipAssertJSONValue,
-  isReleaseBuild as skipBTreeNodeAsserts,
-  isReleaseBuild as skipGCAsserts,
+  buildMode,
+  isProd as skipCommitDataAsserts,
+  isProd as skipAssertJSONValue,
+  isProd as skipBTreeNodeAsserts,
+  isProd as skipGCAsserts,
 
   /**
    * In debug mode we assert that chunks and BTree data is deeply frozen. In
    * release mode we skip these asserts.
    */
-  isReleaseBuild as skipFrozenAsserts,
+  isProd as skipFrozenAsserts,
 
   /**
    * In debug mode we deeply freeze the values we read out of the IDB store and we
    * deeply freeze the values we put into the stores.
    */
-  isReleaseBuild as skipFreeze,
+  isProd as skipFreeze,
 };

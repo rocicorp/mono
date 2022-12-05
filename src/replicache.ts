@@ -74,7 +74,7 @@ import {
   isVersionNotSupportedResponse,
   VersionNotSupportedResponse,
 } from './error-responses.js';
-import {isReleaseBuild} from './config.js';
+import {buildMode} from './config.js';
 
 export type BeginPullResult = {
   requestID: string;
@@ -445,6 +445,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
   getAuth: (() => MaybePromise<string | null | undefined>) | null | undefined =
     null;
 
+  readonly version = version;
+  readonly buildMode = buildMode;
+
   constructor(options: ReplicacheOptions<MD>) {
     const {
       name,
@@ -498,9 +501,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
       logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
     this._lc = new LogContext(logLevel, logSink).addContext('name', name);
     this._lc.debug?.('Constructing Replicache', {
-      name,
-      'replicache version': version,
-      'build mode': isReleaseBuild ? 'release' : 'debug',
+      'replicache version': this.version,
+      'build mode': this.buildMode,
     });
 
     this._subscriptions = new SubscriptionsManager(
