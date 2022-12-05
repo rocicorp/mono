@@ -74,7 +74,7 @@ import {
   isVersionNotSupportedResponse,
   VersionNotSupportedResponse,
 } from './error-responses.js';
-import {isProd} from './config.js';
+import {isReleaseBuild} from './config.js';
 
 export type BeginPullResult = {
   requestID: string;
@@ -500,7 +500,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     this._lc.debug?.('Constructing Replicache', {
       name,
       'replicache version': version,
-      'mode': isProd ? 'production' : 'development',
+      'build mode': isReleaseBuild ? 'release' : 'debug',
     });
 
     this._subscriptions = new SubscriptionsManager(
