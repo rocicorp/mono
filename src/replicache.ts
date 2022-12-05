@@ -856,6 +856,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
     return this._clientIDPromise;
   }
 
+  get clientGroupID(): Promise<string> {
+    return this._clientGroupIDPromise as unknown as Promise<string>;
+  }
+
   /**
    * `onOnlineChange` is called when the {@link online} property changes. See
    * {@link online} for more details.
@@ -1022,6 +1026,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         if (this._subscriptions.hasPendingSubscriptionRuns) {
           await Promise.resolve();
         }
+        const {meta} = mutation;
         syncHead = await this._memdag.withWrite(dagWrite =>
           db.rebaseMutationAndCommit(
             mutation,
@@ -1030,7 +1035,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
             sync.SYNC_HEAD_NAME,
             this._mutatorRegistry,
             lc,
-            clientID,
+            db.isLocalMetaDD31(meta) ? meta.clientID : clientID,
           ),
         );
       }
