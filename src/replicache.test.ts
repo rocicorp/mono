@@ -33,7 +33,7 @@ import * as db from './db/mod.js';
 import {TestMemStore} from './kv/test-mem-store.js';
 import type {PullResponse} from './puller.js';
 import {version} from './version.js';
-import { buildMode } from './config.js';
+import {buildMode} from './config.js';
 import {
   PROD_LICENSE_SERVER_URL,
   TEST_LICENSE_KEY,
@@ -76,13 +76,13 @@ test('version is present', async () => {
   const rep = await replicacheForTesting('test');
   expect(rep.version).to.not.be.empty;
   expect(rep.version).to.equal(version);
-})
+});
 
 test('buildMode is present', async () => {
   const rep = await replicacheForTesting('test');
   expect(rep.buildMode).to.not.be.empty;
   expect(rep.buildMode).to.equal(buildMode);
-})
+});
 
 test('get, has, scan on empty db', async () => {
   const rep = await replicacheForTesting('test2');
