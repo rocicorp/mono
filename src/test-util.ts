@@ -387,6 +387,6 @@ export function waitForSync(rep: {
 export const disableAllBackgroundProcesses = {
   enableLicensing: false,
   enableMutationRecovery: false,
-  enableRefresh: false,
+  enableScheduledRefresh: false,
   enableScheduledPersist: false,
 };

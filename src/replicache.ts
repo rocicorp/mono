@@ -362,7 +362,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
   private _persistIsRunning = false;
   private readonly _enableScheduledPersist: boolean;
-  private readonly _enableRefresh: boolean;
+  private readonly _enableScheduledRefresh: boolean;
   private _persistScheduler = new ProcessScheduler(
     () => this._persist(),
     PERSIST_IDLE_TIMEOUT_MS,
@@ -481,15 +481,16 @@ export class Replicache<MD extends MutatorDefs = {}> {
       enableLicensing = true,
       enableMutationRecovery = true,
       enableScheduledPersist = true,
-      enableRefresh = true,
+      enableScheduledRefresh = true,
     } = internalOptions;
     this._enableLicensing = enableLicensing;
     this._enableScheduledPersist = enableScheduledPersist;
-    this._enableRefresh = enableRefresh;
+    this._enableScheduledRefresh = enableScheduledRefresh;
 
     if (internalOptions.exposeInternalAPI) {
       internalOptions.exposeInternalAPI({
         persist: () => this._persist(),
+        refresh: () => this._refresh(),
       });
     }
 
@@ -1437,7 +1438,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
   }
 
   private async _refresh(): Promise<void> {
-    if (DD31 && this._enableRefresh) {
+    if (DD31) {
       await this._ready;
       const clientID = await this.clientID;
       if (this._closed) {
@@ -1520,6 +1521,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
   }
 
   private async _scheduleRefresh(): Promise<void> {
+    if (!this._enableScheduledRefresh) {
+      return;
+    }
     await this._schedule('refresh from storage', this._refreshScheduler);
   }
 

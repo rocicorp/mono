@@ -1,5 +1,6 @@
 import {
   addData,
+  disableAllBackgroundProcesses,
   expectLogContext,
   initReplicacheTesting,
   makePullResponse,
@@ -300,10 +301,7 @@ test('Persist throws if idb dropped', async () => {
     'called-in-persist-dropped',
     {
       mutators: {addData},
-      enableLicensing: false,
-      enableMutationRecovery: false,
-      enableRefresh: false,
-      enableScheduledPersist: false,
+      ...disableAllBackgroundProcesses,
     },
     {useUniqueName: false},
   );

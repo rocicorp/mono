@@ -240,7 +240,7 @@ export type ReplicacheInternalOptions = {
   /**
    * Defaults to true.
    */
-  enableRefresh?: boolean;
+  enableScheduledRefresh?: boolean | undefined;
 
   /**
    * Allows exposing parts of the internal API to a subclass. This works when
@@ -251,4 +251,5 @@ export type ReplicacheInternalOptions = {
 
 export interface ReplicacheInternalAPI {
   persist(): Promise<void>;
+  refresh(): Promise<void>;
 }

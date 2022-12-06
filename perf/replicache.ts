@@ -8,9 +8,11 @@ import {
   ReadTransaction,
   Replicache,
   ReplicacheOptions,
+  TEST_LICENSE_KEY,
   WriteTransaction,
   IndexDefinitions,
   JSONValue,
+  UpdateNeededReason,
 } from '../out/replicache.js';
 import {
   jsonArrayTestData,
@@ -21,7 +23,6 @@ import {
 import type {Bencher, Benchmark} from './perf.js';
 import {dropStore as dropIDBStore} from '../src/kv/idb-util.js';
 import {uuid} from '../src/uuid.js';
-import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
 import type {ReplicacheInternalAPI} from '../src/replicache-options.js';
 
 const valSize = 1024;
@@ -44,14 +45,9 @@ export function benchmarkPopulate(opts: {
       await closeAndCleanupRep(repToClose);
     },
     async run(bencher: Bencher) {
-      const indexes: Writable<IndexDefinitions> = {};
-      if (opts.indexes) {
-        for (let i = 0; i < opts.indexes; i++) {
-          indexes[`idx${i}`] = {
-            jsonPointer: '/ascii',
-          };
-        }
-      }
+      const indexes: IndexDefinitions = createIndexDefinitions(
+        opts.indexes ?? 0,
+      );
       const rep = (repToClose = makeRepWithPopulate({indexes}));
 
       // Wait for init.
@@ -86,14 +82,9 @@ export function benchmarkPersist(opts: {
       await closeAndCleanupRep(repToClose);
     },
     async run(bencher: Bencher) {
-      const indexes: Writable<IndexDefinitions> = {};
-      if (opts.indexes) {
-        for (let i = 0; i < opts.indexes; i++) {
-          indexes[`idx${i}`] = {
-            jsonPointer: '/ascii',
-          };
-        }
-      }
+      const indexes: IndexDefinitions = createIndexDefinitions(
+        opts.indexes ?? 0,
+      );
       const rep = (repToClose = makeRepWithPopulate({indexes}));
       const randomValues = jsonArrayTestData(opts.numKeys, valSize);
       await rep.mutate.populate({numKeys: opts.numKeys, randomValues});
@@ -104,28 +95,158 @@ export function benchmarkPersist(opts: {
   };
 }
 
-class ReplicacheWithPersist<MD extends MutatorDefs> extends Replicache<MD> {
+export function benchmarkRefreshSimple(opts: {
+  numKeys: number;
+  indexes?: number;
+}): Benchmark {
+  const repName = makeRepName();
+  let repToClose: Replicache;
+  return {
+    name: `refresh simple ${valSize}x${opts.numKeys} (${`indexes: ${
+      opts.indexes ?? 0
+    }`})`,
+    group: 'replicache',
+    byteSize: opts.numKeys * valSize * ((opts.indexes ?? 0) + 1),
+    async teardownEach() {
+      if (repToClose) {
+        await closeAndCleanupRep(repToClose);
+      }
+    },
+    async run(bencher: Bencher) {
+      const indexes = createIndexDefinitions(opts.indexes ?? 0);
+      const rep = (repToClose = new ReplicachePerfTest({
+        name: repName,
+        pullInterval: null,
+        indexes,
+      }));
+
+      await setupPersistedData(repName, opts.numKeys, indexes);
+
+      const initialScanResolver = resolver<void>();
+      rep.subscribe(async tx => (await tx.get('key0')) ?? {}, {
+        onData: r => {
+          if (r) {
+            initialScanResolver.resolve();
+          }
+        },
+      });
+      await initialScanResolver.promise;
+      bencher.reset();
+      await rep.refresh();
+      bencher.stop();
+    },
+  };
+}
+
+export function benchmarkRefresh(opts: {
+  numKeysPersisted: number;
+  numKeysPerMutation: number;
+  numMutationsRefreshed: number;
+  numMutationsRebased: number;
+  indexes?: number;
+}): Benchmark {
+  assert(opts.numKeysPerMutation < opts.numKeysPersisted);
+  const repName = makeRepName();
+  const repsToClose: Replicache[] = [];
+  return {
+    name: `refresh, ${valSize}x${opts.numKeysPersisted} (${`indexes: ${
+      opts.indexes || 0
+    }`}) existing, refreshing ${
+      opts.numMutationsRefreshed
+    } mutations, rebasing ${
+      opts.numMutationsRebased
+    } mutations, with ${valSize}x${opts.numKeysPerMutation} per mutation`,
+    group: 'replicache',
+    async teardownEach() {
+      for (const reps of repsToClose) {
+        await closeAndCleanupRep(reps);
+      }
+    },
+    async run(bencher: Bencher) {
+      const indexes = createIndexDefinitions(opts.indexes ?? 0);
+      await setupPersistedData(repName, 10000, indexes);
+      const repA = new ReplicachePerfTest({
+        name: repName,
+        pullInterval: null,
+        mutators: {putMap},
+        indexes,
+      });
+      const repB = new ReplicachePerfTest({
+        name: repName,
+        pullInterval: null,
+        mutators: {putMap},
+        indexes,
+      });
+
+      repsToClose.push(repA);
+      repsToClose.push(repB);
+
+      async function putMapMutations(rep: typeof repA, num: number) {
+        for (let i = 0; i < num; i++) {
+          const entries = sampleSize(
+            range(opts.numKeysPersisted),
+            opts.numKeysPerMutation,
+          ).map(i => [`key${i}`, jsonObjectTestData(valSize)]);
+          await rep.mutate.putMap(Object.fromEntries(entries));
+        }
+      }
+
+      await putMapMutations(repB, opts.numMutationsRefreshed);
+      await repB.persist();
+
+      await putMapMutations(repA, opts.numMutationsRebased);
+
+      const initialScanResolver = resolver<void>();
+      repA.subscribe(async tx => await tx.scan({prefix: 'key'}).toArray(), {
+        onData: r => {
+          if (r) {
+            initialScanResolver.resolve();
+          }
+        },
+      });
+      await initialScanResolver.promise;
+
+      bencher.reset();
+      await repA.refresh();
+      bencher.stop();
+    },
+  };
+}
+
+class ReplicachePerfTest<MD extends MutatorDefs> extends Replicache<MD> {
   private readonly _internalAPI: ReplicacheInternalAPI;
-  constructor(options: ReplicacheOptions<MD>) {
+  constructor(options: Omit<ReplicacheOptions<MD>, 'licenseKey'>) {
     let internalAPI!: ReplicacheInternalAPI;
     super({
       ...options,
+      licenseKey: TEST_LICENSE_KEY,
       exposeInternalAPI: (api: ReplicacheInternalAPI) => {
         internalAPI = api;
       },
+      enableLicensing: false,
+      enableMutationRecovery: false,
+      enableScheduledRefresh: false,
       enableScheduledPersist: false,
     } as ReplicacheOptions<MD>);
     this._internalAPI = internalAPI;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null = () => {};
+
   persist(): Promise<void> {
     return this._internalAPI.persist();
+  }
+
+  refresh(): Promise<void> {
+    return this._internalAPI.refresh();
   }
 }
 
 async function setupPersistedData(
   replicacheName: string,
   numKeys: number,
+  indexes: IndexDefinitions = {},
 ): Promise<void> {
   const randomValues = jsonArrayTestData(numKeys, valSize);
   const patch: PatchOperation[] = [];
@@ -142,9 +263,9 @@ async function setupPersistedData(
     // populate store using pull (as opposed to mutators)
     // so that a snapshot commit is created, which new clients
     // can use to bootstrap.
-    const rep = (repToClose = new ReplicacheWithPersist({
-      licenseKey: TEST_LICENSE_KEY,
+    const rep = (repToClose = new ReplicachePerfTest({
       name: replicacheName,
+      indexes,
       pullInterval: null,
       // eslint-disable-next-line require-await
       puller: (async (_: Request) => {
@@ -198,8 +319,7 @@ export function benchmarkStartupUsingBasicReadsFromPersistedData(opts: {
         opts.numKeysToRead,
       ).map(i => `key${i}`);
       bencher.reset();
-      const rep = (repToClose = new Replicache({
-        licenseKey: TEST_LICENSE_KEY,
+      const rep = (repToClose = new ReplicachePerfTest({
         name: repName,
         pullInterval: null,
       }));
@@ -248,8 +368,7 @@ export function benchmarkStartupUsingScanFromPersistedData(opts: {
       const sortedKeys = keys.sort();
       const randomStartKey = sortedKeys[randomIndex];
       bencher.reset();
-      const rep = (repToClose = new Replicache({
-        licenseKey: TEST_LICENSE_KEY,
+      const rep = (repToClose = new ReplicachePerfTest({
         name: repName,
         pullInterval: null,
       }));
@@ -413,30 +532,19 @@ export function benchmarkWriteSubRead(opts: {
     async run(bencher: Bencher) {
       const keys = Array.from({length: numKeys}, (_, index) => makeKey(index));
       const sortedKeys = keys.sort();
-      const data: Map<string, TestDataObject> = new Map(
-        keys.map(key => [key, jsonObjectTestData(valueSize)]),
-      );
+      const initData: Readonly<Record<string, TestDataObject>> =
+        Object.fromEntries(
+          keys.map(key => [key, jsonObjectTestData(valueSize)]),
+        );
+      const dataFromSubscribe: Record<string, TestDataObject> = {};
 
       const rep = (repToClose = makeRep({
         mutators: {
-          // Create `numKeys` key/value pairs, each holding `valueSize` data
-          async init(tx: WriteTransaction) {
-            for (const [key, value] of data) {
-              await tx.put(key, value);
-            }
-          },
-          async invalidate(
-            tx: WriteTransaction,
-            changes: Map<string, TestDataObject>,
-          ) {
-            for (const [key, value] of changes) {
-              await tx.put(key, value);
-            }
-          },
+          putMap,
         },
       }));
 
-      await rep.mutate.init();
+      await rep.mutate.putMap(initData);
       let onDataCallCount = 0;
 
       const subs = Array.from({length: numSubsTotal}, (_, i) => {
@@ -456,7 +564,7 @@ export function benchmarkWriteSubRead(opts: {
               onDataCallCount++;
               const vals = v as TestDataObject[];
               for (const [j, val] of vals.entries()) {
-                data.set(sortedKeys[startKeyIndex + j], val);
+                dataFromSubscribe[sortedKeys[startKeyIndex + j]] = val;
               }
             },
           },
@@ -470,7 +578,7 @@ export function benchmarkWriteSubRead(opts: {
 
       // Build our random changes ahead of time, outside the timed window.
       // invalidate numSubsDirty different subscriptions by writing to the first key each is scanning.
-      const changes = new Map(
+      const changes = Object.fromEntries(
         sampleSize(range(numSubsTotal), numSubsDirty).map(v => [
           sortedKeys[v * keysPerSub],
           jsonObjectTestData(valueSize),
@@ -481,15 +589,15 @@ export function benchmarkWriteSubRead(opts: {
       bencher.reset();
 
       // In a single transaction, invalidate numSubsDirty subscriptions.
-      await rep.mutate.invalidate(changes);
+      await rep.mutate.putMap(changes);
 
       bencher.stop();
 
       subs.forEach(c => c());
 
       assert(onDataCallCount === numSubsTotal + numSubsDirty);
-      for (const [changeKey, changeValue] of changes) {
-        assert(deepEqual(changeValue, data.get(changeKey)));
+      for (const [changeKey, changeValue] of Object.entries(changes)) {
+        assert(deepEqual(changeValue, dataFromSubscribe[changeKey]));
       }
     },
   };
@@ -548,8 +656,7 @@ function makeRep<MD extends MutatorDefs>(
   } = {},
 ) {
   const name = makeRepName();
-  return new ReplicacheWithPersist<MD>({
-    licenseKey: TEST_LICENSE_KEY,
+  return new ReplicachePerfTest<MD>({
     name,
     pullInterval: null,
     ...options,
@@ -560,7 +667,7 @@ type PopulateMutatorDefs = {
   populate: typeof populate;
 };
 
-type ReplicacheWithPopulate = ReplicacheWithPersist<PopulateMutatorDefs>;
+type ReplicacheWithPopulate = ReplicachePerfTest<PopulateMutatorDefs>;
 
 async function populate(
   tx: WriteTransaction,
@@ -574,6 +681,15 @@ async function populate(
   }
 }
 
+async function putMap(
+  tx: WriteTransaction,
+  map: Record<string, TestDataObject>,
+) {
+  for (const [key, value] of Object.entries(map)) {
+    await tx.put(key, value);
+  }
+}
+
 function makeRepWithPopulate<MD extends PopulateMutatorDefs>(
   options: Partial<ReplicacheOptions<MD>> = {},
 ) {
@@ -581,6 +697,16 @@ function makeRepWithPopulate<MD extends PopulateMutatorDefs>(
     ...options,
     mutators: {...(options.mutators ?? {}), populate},
   });
+}
+
+function createIndexDefinitions(numIndexes: number): IndexDefinitions {
+  const indexes: Writable<IndexDefinitions> = {};
+  for (let i = 0; i < numIndexes; i++) {
+    indexes[`idx${i}`] = {
+      jsonPointer: '/ascii',
+    };
+  }
+  return indexes;
 }
 
 async function closeAndCleanupRep(rep: Replicache | undefined): Promise<void> {
@@ -649,6 +775,40 @@ export function benchmarks(): Benchmark[] {
     benchmarkPersist({numKeys: 10000}),
     benchmarkPersist({numKeys: 10000, indexes: 1}),
     benchmarkPersist({numKeys: 10000, indexes: 2}),
+
+    benchmarkRefreshSimple({numKeys: 1000}),
+    benchmarkRefreshSimple({numKeys: 1000, indexes: 1}),
+    benchmarkRefreshSimple({numKeys: 1000, indexes: 2}),
+    benchmarkRefreshSimple({numKeys: 10000}),
+    benchmarkRefreshSimple({numKeys: 10000, indexes: 1}),
+    benchmarkRefreshSimple({numKeys: 10000, indexes: 2}),
+
+    benchmarkRefresh({
+      numKeysPersisted: 1000,
+      numKeysPerMutation: 10,
+      numMutationsRefreshed: 10,
+      numMutationsRebased: 10,
+    }),
+    benchmarkRefresh({
+      numKeysPersisted: 1000,
+      numKeysPerMutation: 10,
+      numMutationsRefreshed: 10,
+      numMutationsRebased: 10,
+      indexes: 1,
+    }),
+    benchmarkRefresh({
+      numKeysPersisted: 1000,
+      numKeysPerMutation: 10,
+      numMutationsRefreshed: 100,
+      numMutationsRebased: 100,
+    }),
+    benchmarkRefresh({
+      numKeysPersisted: 1000,
+      numKeysPerMutation: 10,
+      numMutationsRefreshed: 100,
+      numMutationsRebased: 100,
+      indexes: 1,
+    }),
 
     benchmarkTmcw('populate'),
     benchmarkTmcw('persist'),
