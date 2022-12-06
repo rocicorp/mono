@@ -856,10 +856,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
     return this._clientIDPromise;
   }
 
-  get clientGroupID(): Promise<string> {
-    return this._clientGroupIDPromise as unknown as Promise<string>;
-  }
-
   /**
    * `onOnlineChange` is called when the {@link online} property changes. See
    * {@link online} for more details.
