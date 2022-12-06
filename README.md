@@ -63,7 +63,7 @@ Same as Replidraw test.
 
 ### Integration Guide
 
-Walk through [the integration guide](https://doc.replicache.dev/guide/intro) and make sure things still work.
+Walk through [the integration guide](https://doc.replicache.dev/byob/intro) and make sure things still work.
 
 ## Check for API Changes
 
