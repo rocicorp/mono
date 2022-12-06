@@ -238,7 +238,6 @@ suite('DD31', () => {
         profileID,
         clientGroupID: client1.clientGroupID,
         cookie: 1,
-        isNewClientGroup: false,
         pullVersion: PULL_VERSION_DD31,
         schemaVersion: schemaVersionOfClientWPendingMutations,
       };
@@ -668,7 +667,6 @@ suite('DD31', () => {
       profileID,
       schemaVersion: schemaVersionOfClients1Thru3AndClientRecoveringMutations,
       cookie: 1,
-      isNewClientGroup: false,
       pullVersion: 1,
     });
     expect(pullRequestJsonBodies[1]).to.deep.equal({
@@ -676,7 +674,6 @@ suite('DD31', () => {
       profileID,
       schemaVersion: schemaVersionOfClients1Thru3AndClientRecoveringMutations,
       cookie: 3,
-      isNewClientGroup: false,
       pullVersion: 1,
     });
     expect(pullRequestJsonBodies[2]).to.deep.equal({
@@ -684,7 +681,6 @@ suite('DD31', () => {
       clientGroupID: client4.clientGroupID,
       schemaVersion: schemaVersionOfClient4,
       cookie: 4,
-      isNewClientGroup: false,
       pullVersion: 1,
     });
 
@@ -919,7 +915,6 @@ suite('DD31', () => {
       clientGroupID: client1.clientGroupID,
       schemaVersion,
       cookie: 1,
-      isNewClientGroup: false,
       pullVersion: 1,
     });
     expect(pullRequestJsonBodies[1]).to.deep.equal({
@@ -927,7 +922,6 @@ suite('DD31', () => {
       clientGroupID: client3.clientGroupID,
       schemaVersion,
       cookie: 3,
-      isNewClientGroup: false,
       pullVersion: 1,
     });
 
@@ -1116,7 +1110,6 @@ suite('DD31', () => {
       clientGroupID: client1.clientGroupID,
       schemaVersion,
       cookie: 1,
-      isNewClientGroup: false,
       pullVersion: 1,
     });
     expect(pullRequestJsonBodies[1]).to.deep.equal({
@@ -1124,7 +1117,6 @@ suite('DD31', () => {
       clientGroupID: client3.clientGroupID,
       schemaVersion,
       cookie: 3,
-      isNewClientGroup: false,
       pullVersion: 1,
     });
 
@@ -1291,7 +1283,6 @@ suite('DD31', () => {
       profileID,
       schemaVersion: schemaVersionOfClient2,
       cookie: 2,
-      isNewClientGroup: false,
       pullVersion: PULL_VERSION_DD31,
     });
 
@@ -1784,7 +1775,6 @@ suite('DD31', () => {
         profileID,
         pullVersion: PULL_VERSION_DD31,
         schemaVersion: schemaVersion2,
-        isNewClientGroup: false,
       };
       expectRequestBodies(pullRequestJSONBodies, [
         pullRequestBody2,

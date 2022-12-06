@@ -634,7 +634,6 @@ test('begin try pull DD31', async () => {
     // BeginPull expectations.
     expNewSyncHead: ExpCommit | undefined;
     expBeginPullResult: BeginPullResponseDD31 | string;
-    isNewClientGroup?: true;
   };
 
   const expPullReq: PullRequestDD31 = {
@@ -643,7 +642,6 @@ test('begin try pull DD31', async () => {
     cookie: baseCookie,
     pullVersion: PULL_VERSION_DD31,
     schemaVersion,
-    isNewClientGroup: false,
   };
 
   const cases: Case[] = [
@@ -1471,7 +1469,6 @@ test('changed keys', async () => {
           // lastMutationID: baseLastMutationID,
           pullVersion: PULL_VERSION_DD31,
           schemaVersion,
-          isNewClientGroup: false,
         }
       : {
           profileID,
@@ -1746,77 +1743,6 @@ test('changed keys', async () => {
   );
 });
 
-test('pull isNewClientGroup for empty client', async () => {
-  if (!DD31) {
-    return;
-  }
-
-  const profileID = 'test-profile-id';
-  const requestID = 'test-request-id';
-  const clientID1 = 'test-client-id-1';
-  const clientID2 = 'test-client-id-2';
-  const clientGroupID = 'test-client-group-id';
-  const pullAuth = 'test-pull-auth';
-  const schemaVersion = 'test-schema-version';
-
-  const store = new dag.TestStore();
-  const lc = new LogContext();
-
-  const pullResponse = {
-    cookie: 1,
-    lastMutationIDChanges: {
-      [clientID1]: 11,
-      [clientID2]: 21,
-    },
-    patch: [],
-  };
-
-  const puller = makeFakePullerDD31({
-    expPullAuth: pullAuth,
-    expPullReq: {
-      clientGroupID,
-      cookie: null,
-      isNewClientGroup: true,
-      profileID,
-      pullVersion: PULL_VERSION_DD31,
-      schemaVersion,
-    },
-    expPullURL: '',
-    expRequestID: requestID,
-    resp: pullResponse,
-  });
-
-  const beginPullRequest: BeginPullRequestDD31 = {
-    pullAuth,
-    pullURL: '',
-    schemaVersion,
-  };
-
-  const b = new ChainBuilder(store);
-  await b.addGenesis(clientID1);
-
-  const response: BeginPullResponseDD31 = await beginPullDD31(
-    profileID,
-    clientID1,
-    clientGroupID,
-    beginPullRequest,
-    puller,
-    requestID,
-    store,
-    lc,
-    false,
-  );
-
-  expect(response).to.deep.equal({
-    httpRequestInfo: {
-      errorMessage: '',
-      httpStatusCode: 200,
-    },
-    pullResponse,
-    syncHead: emptyHash,
-  });
-});
-
 test('pull for client group with multiple client local changes', async () => {
   if (!DD31) {
     return;
@@ -1847,7 +1773,6 @@ test('pull for client group with multiple client local changes', async () => {
     expPullReq: {
       clientGroupID,
       cookie: 1,
-      isNewClientGroup: false,
       profileID,
       pullVersion: PULL_VERSION_DD31,
       schemaVersion,
@@ -1902,7 +1827,6 @@ suite('beginPull DD31', () => {
 
   const profileID = 'test-profile-id';
   const clientID1 = 'test-client-id-1';
-  const clientID2 = 'test-client-id-2';
   const clientGroupID1 = 'test-client-group-id-1';
   const requestID = 'test-request-id';
   const lc = new LogContext();
@@ -1924,7 +1848,6 @@ suite('beginPull DD31', () => {
       expPullReq: {
         clientGroupID: clientGroupID1,
         cookie: null,
-        isNewClientGroup: true,
         profileID,
         pullVersion: PULL_VERSION_DD31,
         schemaVersion: 'test-schema-version',
@@ -1952,74 +1875,6 @@ suite('beginPull DD31', () => {
         httpStatusCode: 200,
       },
       syncHead: '00000000-0000-4000-8000-000000000000',
-    });
-  });
-
-  const testIsNewClientGroup = async (
-    expectedIsNewClientGroup: boolean,
-    setupChain?: (b: ChainBuilder) => Promise<unknown>,
-  ) => {
-    const store = new dag.TestStore();
-
-    const b = new ChainBuilder(store);
-    await b.addGenesis(clientID1);
-    await setupChain?.(b);
-
-    const beginPullRequest: BeginPullRequestDD31 = {
-      pullAuth: 'test-pull-auth',
-      pullURL: 'pull-url',
-      schemaVersion: 'test-schema-version',
-    };
-
-    let actualIsNewClientGroup;
-    const puller: PullerDD31 = async req => {
-      const reqBody = await req.json();
-      assertObject(reqBody);
-      actualIsNewClientGroup = reqBody.isNewClientGroup;
-      //
-      return {httpRequestInfo: {errorMessage: '', httpStatusCode: 200}};
-    };
-
-    await beginPullDD31(
-      profileID,
-      clientID1,
-      clientGroupID1,
-      beginPullRequest,
-      puller,
-      requestID,
-      store,
-      lc,
-    );
-
-    expect(actualIsNewClientGroup, 'isNewClientGroup').equals(
-      expectedIsNewClientGroup,
-    );
-  };
-
-  suite('isNewClientGroup', () => {
-    test('all we got is a genesis', async () => {
-      await testIsNewClientGroup(true);
-    });
-
-    test('we got a snapshot but there are no clients in the lastMutationIDs', async () => {
-      await testIsNewClientGroup(true, b =>
-        b.addSnapshot([], clientID1, 1, {}),
-      );
-    });
-
-    test('we got a snapshot with matching client(s) the lastMutationIDs', async () => {
-      await testIsNewClientGroup(false, b =>
-        b.addSnapshot([], clientID1, 1, {[clientID1]: 10}),
-      );
-      await testIsNewClientGroup(false, b =>
-        b.addSnapshot([], clientID1, 1, {[clientID1]: 10, [clientID2]: 20}),
-      );
-    });
-
-    test('we got a snapshot with other client(s)', async () => {
-      await testIsNewClientGroup(false, b =>
-        b.addSnapshot([], clientID1, 1, {[clientID2]: 20}),
-      );
     });
   });
 });

@@ -75,7 +75,6 @@ export type PullRequestDD31<Cookie = ReadonlyJSONValue> = {
   profileID: string;
   clientGroupID: ClientGroupID;
   cookie: Cookie;
-  isNewClientGroup: boolean;
   pullVersion: typeof PULL_VERSION_DD31;
   // schemaVersion can optionally be used by the customer's app
   // to indicate to the data layer what format of Client View the
@@ -246,7 +245,7 @@ export async function beginPullDD31(
   assert(clientGroupID);
   const {pullURL, pullAuth, schemaVersion} = beginPullReq;
 
-  const [baseCookie, isNewClientGroup] = await store.withRead(async dagRead => {
+  const baseCookie = await store.withRead(async dagRead => {
     const mainHeadHash = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
     if (!mainHeadHash) {
       throw new Error('Internal no main head found');
@@ -255,10 +254,8 @@ export async function beginPullDD31(
     const baseSnapshotMeta = baseSnapshot.meta;
     const baseCookie = baseSnapshotMeta.cookieJSON;
     assertSnapshotMetaDD31(baseSnapshotMeta);
-    const isNewClientGroup =
-      Object.keys(baseSnapshotMeta.lastMutationIDs).length === 0;
 
-    return [baseCookie, isNewClientGroup];
+    return baseCookie;
   });
 
   const pullReq: PullRequestDD31<ReadonlyJSONValue> = {
@@ -267,7 +264,6 @@ export async function beginPullDD31(
     cookie: baseCookie,
     pullVersion: PULL_VERSION_DD31,
     schemaVersion,
-    isNewClientGroup,
   };
   lc.debug?.('Starting pull...');
   const pullStart = Date.now();
