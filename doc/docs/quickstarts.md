@@ -13,7 +13,7 @@ cd my-app
 npm install
 
 # Get a license if you don't have one already:
-# https://doc.replicache.dev/licensing
+# https://doc.replicache.dev/howto/licensing
 
 VITE_REPLICACHE_LICENSE_KEY=<your-license> npm run watch --ws
 ```
@@ -26,7 +26,7 @@ cd my-app
 npm install
 
 # Get a license if you don't have one already:
-# https://doc.replicache.dev/licensing
+# https://doc.replicache.dev/howto/licensing
 
 VITE_REPLICACHE_LICENSE_KEY=<your-license> npm run watch --ws
 ```
@@ -39,7 +39,7 @@ cd my-app
 npm install
 
 # Get a license if you don't have one already:
-# https://doc.replicache.dev/licensing
+# https://doc.replicache.dev/howto/licensing
 
 NEXT_PUBLIC_REPLICACHE_LICENSE_KEY=<your-license> npm run dev
 
