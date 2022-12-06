@@ -8,7 +8,7 @@ Templates to get you up and running quickly with a variety of frameworks.
 ## React/TypeScript/Express
 
 ```bash
-npx create-replicache-app my-app react
+npx degit rocicorp/todo-react my-app
 cd my-app
 npm install
 
@@ -21,7 +21,7 @@ VITE_REPLICACHE_LICENSE_KEY=<your-license> npm run watch --ws
 ## Web Components/TypeScript/Express
 
 ```bash
-npx create-replicache-app my-app ts-web-component
+npx degit rocicorp/todo-wc my-app
 cd my-app
 npm install
 
