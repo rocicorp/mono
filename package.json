@@ -13,7 +13,7 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "build": "rm -rf out && npm run build-dts && node tool/build.js",
-    "build-perf": "node tool/build.js --perf --dd31",
+    "build-perf": "node tool/build.js --perf",
     "build-bundle-sizes": "rm -rf out && npm run build-dts && node tool/build.js --bundle-sizes",
     "prepack": "npm run lint && npm run test && npm run build && mv README.md README-org.md && mv README-external.md README.md",
     "postpack": "mv README.md README-external.md && mv README-org.md README.md",
