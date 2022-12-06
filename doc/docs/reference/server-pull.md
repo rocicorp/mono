@@ -5,7 +5,7 @@ slug: /reference/server-pull
 
 The Pull Endpoint serves the Client View for a particular Replicache client.
 
-For more information, see [How Replicache Works — Pull](/concepts/how-it-works#%E2%91%A0-pull).
+For more information, see [How Replicache Works — Pull](/concepts/how-it-works#pull).
 
 ## Configuration
 

@@ -15,7 +15,7 @@ const config = {
     esbuildPlugin({
       ts: true,
       target: 'esnext',
-      define: await makeDefine('debug', process.env.DD31 === 'true'),
+      define: await makeDefine('debug', process.env.DD31 === 'false'),
     }),
   ],
   staticLogging: !!process.env.CI,

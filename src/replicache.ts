@@ -682,6 +682,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     await this._startLicenseActive(resolveLicenseActive, this._lc, signal);
   }
+
   private async _syncIndexes(indexes: IndexDefinitions): Promise<void> {
     assert(!DD31);
     // Do not wait for _ready here since this needs to be done before we

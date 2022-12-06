@@ -157,7 +157,7 @@ async function main() {
         esbuildPlugin({
           ts: true,
           target: 'esnext',
-          define: await makeDefine('release', false),
+          define: await makeDefine('release', true),
         }),
       ],
     },

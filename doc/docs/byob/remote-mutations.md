@@ -69,7 +69,7 @@ async function handlePush(req, res) {
         // This is allowed in Replicache because mutators don't have to be
         // deterministic!:
         //
-        // https://doc.replicache.dev/how-it-works#speculative-execution-and-confirmation
+        // https://doc.replicache.dev/concepts/how-it-works#speculative-execution-and-confirmation
         await tx(t =>
           processMutation(t, push.clientID, defaultSpaceID, mutation, e),
         );

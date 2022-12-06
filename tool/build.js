@@ -6,7 +6,7 @@ import {makeDefine} from './make-define.js';
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
 const perf = process.argv.includes('--perf');
 const debug = process.argv.includes('--debug');
-const dd31 = process.argv.includes('--dd31');
+const dd31 = !process.argv.includes('--no-dd31');
 
 /**
  * @param {boolean} minify
