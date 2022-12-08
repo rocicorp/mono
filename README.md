@@ -2,6 +2,6 @@
 
 Package for running Reflect Multiplayer Server on Cloudflare Workers.
 
-See [example](example/index.ts).
+See [example](example/index.ts), or better yet, the [reflect-todo](https://github.com/rocicorp/reflect-todo) sample app.
 
-See [Server API](doc/server-api.md) for the API that Reflect Server exposes. (There is also a more advanced [Server dev API](doc/server-dev-api.md) that can be handy for development or migration.)
+Canonical documentaiton found at [reflect-todo](https://github.com/rocicorp/reflect-todo), in particular the [Server API](https://github.com/rocicorp/reflect-todo/blob/main/doc/server-api.md).
