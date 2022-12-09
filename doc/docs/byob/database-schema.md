@@ -58,14 +58,14 @@ export default async function init(_, res) {
       space_id text not null references space(key),
       sender varchar(255) not null,
       content text not null,
-      ord bigint not null,
+      ord integer not null,
       deleted boolean not null,
-      version bigint not null)`);
+      version integer not null)`);
 
     // Stores last mutationID processed for each Replicache client.
     await t.none(`create table replicache_client (
       id varchar(36) primary key not null,
-      last_mutation_id bigint not null)`);
+      last_mutation_id integer not null)`);
   });
   res.send('ok');
 }
