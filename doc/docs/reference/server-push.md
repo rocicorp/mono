@@ -184,7 +184,7 @@ mutation later.
 
 - Ensure that the `lastMutationID` for a client is updated transactionally along
   with the pushed mutations' effects.
-- All mutations with `id`s less than the client's current `lastMutationID` must
+- All mutations with `id`s less than or equal to the client's current `lastMutationID` must
   be ignored.
 - All mutations with `id`s greater than the client's current `lastMutationID+1`
   must be ignored.
