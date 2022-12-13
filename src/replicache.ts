@@ -1407,15 +1407,33 @@ export class Replicache<MD extends MutatorDefs = {}> {
   }
 
   /**
-   * Subscribe to changes to the underlying data. Every time the underlying data
-   * changes `body` is called and if the result of `body` changes compared to
-   * last time `onData` is called. The function is also called once the first
-   * time the subscription is added.
+   * Subscribe to the result of a {@link query}. The `body` function is
+   * evaluated once and its results are returned via `onData`.
    *
-   * This returns a function that can be used to cancel the subscription.
+   * Thereafter, each time the the result of `body` changes, `onData`
+   * is fired again with the new result.
+   *
+   * `subscribe()` goes to significant effort to avoid extraneous work
+   * re-evaluating subscriptions:
+   *
+   * 1. subscribe tracks the keys that `body` accesses each time it
+   *    runs. `body` is only re-evaluated when those keys change.
+   * 2. subscribe only re-fires `onData` in the case that a result
+   *    changes by way of `deepEquals`.
+   *
+   * Because of (1), `body` must be a pure function of the data in
+   * Replicache. `body` must not access anything other than the `tx`
+   * parameter passed to it.
+   *
+   * Although subscribe is as efficient as it can be, it is somewhat
+   * constrained by the goal of returning an arbitrary computation of the
+   * cache. For even better performance (but worse dx), see
+   * {@link experimentalWatch}.
    *
    * If an error occurs in the `body` the `onError` function is called if
    * present. Otherwise, the error is thrown.
+   *
+   * To cancel the subscription, call the returned function.
    */
   subscribe<R extends ReadonlyJSONValue | undefined>(
     body: (tx: ReadTransaction) => Promise<R>,
