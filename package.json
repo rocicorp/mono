@@ -9,7 +9,7 @@
   "types": "out/reflect-server.d.ts",
   "type": "module",
   "scripts": {
-    "format": "prettier --write 'src/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
+    "format": "prettier --write '**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check '**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "build": "rm -rf out && npm run build-dts && node build.js",
@@ -30,6 +30,7 @@
     "@cloudflare/workers-types": "^3.8.0",
     "@rocicorp/lock": "^1.0.1",
     "@rocicorp/logger": "^2.2.0",
+    "@rocicorp/prettier-config": "^0.1.1",
     "@types/jest": "^27.5.0",
     "@typescript-eslint/eslint-plugin": "^5.22.0",
     "@typescript-eslint/parser": "^5.22.0",
@@ -40,7 +41,6 @@
     "jest": "^28.0.3",
     "jest-environment-miniflare": "2.9.0",
     "miniflare": "2.9.0",
-    "prettier": "^2.6.2",
     "replicache": "file:replicache-12.0.1.tgz",
     "rollup": "^2.71.1",
     "rollup-plugin-dts": "^4.2.1",
@@ -56,5 +56,6 @@
     "out/reflect-server.d.ts",
     "out/reflect-server.js",
     "out/cli.js"
-  ]
+  ],
+  "prettier": "@rocicorp/prettier-config"
 }
