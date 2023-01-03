@@ -42,7 +42,7 @@
     "replicache": "file:replicache-12.0.1.tgz",
     "rollup": "^2.71.1",
     "rollup-plugin-dts": "^4.2.1",
-    "superstruct": "^0.15.4",
+    "superstruct": "^0.16.7",
     "ts-jest": "^28.0.1",
     "typescript": "^4.6.4"
   },
