@@ -93,12 +93,34 @@ The following have peerDependencies that should to be updated to the new Replica
 - `replicache-nextjs`
 - `rails`
 
-## Push the Release
+## Publish the Release
 
 ```
-# note: this will push the release to the "latest" tag, which means it's what
+# note: this will publish the release to the "latest" tag, which means it's what
 # people will get when they `npm install`. If this is a beta release, you should
-# add the `--tag=beta` flag to this command.
+# add the `--tag=beta` flag to this command but also make sure the semver has
+# beta in it.
+npm publish
+```
+
+## Publish the Private Release
+
+We also publish a private release with the name `@rocicorp/replicache` to
+[npmjs.org](https://www.npmjs.com/package/@rocicorp/replicache) which does not
+minimize the code and includes the sourcemaps. This npm package may be used by
+paying customers to make it easier to debug their code.
+
+```bash
+git checkout rocicorp-replicache
+
+# Make sure all the changes from main are included.
+git merge main
+
+# Verify that the only diff is the name and the sourcemap
+git diff main
+
+git push
+
 npm publish
 ```
 
