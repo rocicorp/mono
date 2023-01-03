@@ -41,7 +41,7 @@
     "command-line-args": "^5.2.1",
     "command-line-usage": "^6.1.2",
     "compare-utf8": "^0.1.0",
-    "esbuild": "^0.16.2",
+    "esbuild": "^0.16.13",
     "fetch-mock": "^9.11.0",
     "get-port": "^6.1.2",
     "hash-wasm": "^4.9.0",
