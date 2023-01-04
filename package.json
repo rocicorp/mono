@@ -25,16 +25,15 @@
   },
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4-fix.0",
+    "@rocicorp/eslint-config": "^0.2.0",
     "@rocicorp/logger": "^2.2.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/node": "^18.11.18",
     "@types/sinon": "^10.0.11",
-    "@typescript-eslint/eslint-plugin": "^5.12.0",
     "@web/dev-server-esbuild": "^0.3.3",
     "@web/test-runner": "^0.15.0",
     "@web/test-runner-playwright": "^0.9.0",
     "esbuild": "^0.16.2",
-    "eslint": "^8.9.0",
     "mocha": "^9.2.1",
     "nanoid": "^3.3.1",
     "replicache": "^12.0.1",
@@ -48,5 +47,8 @@
     "out/reflect.d.ts",
     "out/reflect.js"
   ],
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
   "prettier": "@rocicorp/prettier-config"
 }
