@@ -12,8 +12,8 @@
   "types": "out/reflect.d.ts",
   "type": "module",
   "scripts": {
-    "format": "prettier --write 'src/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
-    "check-format": "prettier --check 'src/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
+    "format": "prettier --write '**/*.{js,jsx,json,ts,tsx,html,css,md,yml}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md,yml}'",
+    "check-format": "prettier --check '**/*.{js,jsx,json,ts,tsx,html,css,md,yml}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md,yml}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "test": "web-test-runner",
     "test:watch": "web-test-runner --watch",
@@ -26,6 +26,7 @@
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4-fix.0",
     "@rocicorp/logger": "^2.2.0",
+    "@rocicorp/prettier-config": "^0.1.1",
     "@types/node": "^18.11.18",
     "@types/sinon": "^10.0.11",
     "@typescript-eslint/eslint-plugin": "^5.12.0",
@@ -36,7 +37,6 @@
     "eslint": "^8.9.0",
     "mocha": "^9.2.1",
     "nanoid": "^3.3.1",
-    "prettier": "^2.5.1",
     "replicache": "^12.0.1",
     "rollup": "^2.70.1",
     "rollup-plugin-dts": "^4.2.0",
@@ -47,5 +47,6 @@
   "files": [
     "out/reflect.d.ts",
     "out/reflect.js"
-  ]
+  ],
+  "prettier": "@rocicorp/prettier-config"
 }
