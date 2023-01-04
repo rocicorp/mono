@@ -40,7 +40,6 @@
     "rollup": "^2.70.1",
     "rollup-plugin-dts": "^4.2.0",
     "sinon": "^13.0.1",
-    "tdigest": "rocicorp/tdigest#v0.2.0",
     "typescript": "^4.5.5",
     "zod": "^3.11.6"
   },
