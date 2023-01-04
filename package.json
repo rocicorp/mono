@@ -26,6 +26,7 @@
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4-fix.0",
     "@rocicorp/logger": "^2.2.0",
+    "@types/node": "^18.11.18",
     "@types/sinon": "^10.0.11",
     "@typescript-eslint/eslint-plugin": "^5.12.0",
     "@web/dev-server-esbuild": "^0.3.3",
@@ -40,8 +41,8 @@
     "rollup": "^2.70.1",
     "rollup-plugin-dts": "^4.2.0",
     "sinon": "^13.0.1",
-    "typescript": "^4.5.5",
-    "zod": "^3.11.6"
+    "typescript": "^4.9.4",
+    "zod": "^3.20.2"
   },
   "files": [
     "out/reflect.d.ts",
