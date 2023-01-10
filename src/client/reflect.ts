@@ -14,7 +14,7 @@ import {
 } from 'replicache';
 import type {Downstream} from '../protocol/down.js';
 import type {PingMessage} from '../protocol/ping.js';
-import type {PokeBody} from '../protocol/poke.js';
+import type {Patch, PokeBody} from '../protocol/poke.js';
 import type {PushBody, PushMessage} from '../protocol/push.js';
 import {NullableVersion, nullableVersionSchema} from '../types/version.js';
 import {assert} from '../util/asserts.js';
@@ -29,16 +29,51 @@ export const enum ConnectionState {
   Connected,
 }
 
+(globalThis as any)['frameOffsetHistogram'] = new Map();
+(globalThis as any)['logFrameOffsetHistogram'] = function () {
+  // eslint-disable-next-line prefer-destructuring
+  const frameOffsetHistogram: Map<number, number> = (globalThis as any)[
+    'frameOffsetHistogram'
+  ];
+  console.log(
+    JSON.stringify(
+      [...frameOffsetHistogram.entries()].sort((a, b) => a[0] - b[0]),
+    ),
+  );
+  let totalFrames = 0;
+  let missedFrames = 0;
+  for (const [offset, count] of frameOffsetHistogram) {
+    totalFrames += count;
+    if (offset > 16) {
+      missedFrames += count;
+    }
+  }
+  console.log(
+    'missed',
+    missedFrames,
+    'of',
+    totalFrames,
+    'miss %',
+    (missedFrames / totalFrames) * 100,
+  );
+};
+
 export class Reflect<MD extends MutatorDefs> {
   private readonly _rep: Replicache<MD>;
   private readonly _socketOrigin: string;
   readonly userID: string;
   readonly roomID: string;
   private _l: Promise<LogContext>;
+  private _start: number = performance.now();
+  private readonly _buffer: number;
+  private readonly _maxRandomPushLatency: number;
 
   // Protects _handlePoke. We need pokes to be serialized, otherwise we
   // can cause out of order poke errors.
   private readonly _pokeLock = new Lock();
+  private readonly _pokeBuffer: PokeBody[] = [];
+  private _pokePlaybackLoopRunning = false;
+  private readonly _clientTimestampOffsets: Map<string, number> = new Map();
 
   private _lastMutationIDSent = -1;
   private _onPong: () => void = () => undefined;
@@ -63,7 +98,7 @@ export class Reflect<MD extends MutatorDefs> {
     if (options.userID === '') {
       throw new Error('ReflectOptions.userID must not be empty.');
     }
-    const {socketOrigin} = options;
+    const {socketOrigin, buffer, maxRandomPushLatency} = options;
     if (socketOrigin) {
       if (
         !socketOrigin.startsWith('ws://') &&
@@ -74,6 +109,8 @@ export class Reflect<MD extends MutatorDefs> {
         );
       }
     }
+    this._buffer = buffer ?? 250;
+    this._maxRandomPushLatency = maxRandomPushLatency ?? 0;
 
     if (options.onOnlineChange) {
       this.onOnlineChange = options.onOnlineChange;
@@ -193,7 +230,7 @@ export class Reflect<MD extends MutatorDefs> {
    * If an error occurs in the `body` the `onError` function is called if
    * present. Otherwise, the error is thrown.
    */
-  subscribe<R extends ReadonlyJSONValue | undefined>(
+  subscribe<R extends ReadonlyJSONValue | undefined, E>(
     body: (tx: ReadTransaction) => Promise<R>,
     {
       onData,
@@ -201,7 +238,7 @@ export class Reflect<MD extends MutatorDefs> {
       onDone,
     }: {
       onData: (result: R) => void;
-      onError?: (error: unknown) => void;
+      onError?: (error: E) => void;
       onDone?: () => void;
     },
   ): () => void {
@@ -288,7 +325,7 @@ export class Reflect<MD extends MutatorDefs> {
     }
 
     const pokeBody = downMessage[1];
-    void this._handlePoke(l, pokeBody);
+    void this._handlePoke(l, Array.isArray(pokeBody) ? pokeBody : [pokeBody]);
   };
 
   private _onClose = async (e: CloseEvent) => {
@@ -348,20 +385,90 @@ export class Reflect<MD extends MutatorDefs> {
     this._socket?.close();
     this._socket = undefined;
     this._lastMutationIDSent = -1;
+    this._pokeBuffer.length = 0;
   }
 
-  private async _handlePoke(l: LogContext, pokeBody: PokeBody) {
-    await this._pokeLock.withLock(async () => {
-      l.debug?.('Applying poke', JSON.stringify(pokeBody));
+  private async _handlePoke(l: LogContext, pokeBodies: PokeBody[]) {
+    this._pokeBuffer.push(...pokeBodies);
+    if (!this._pokePlaybackLoopRunning) {
+      l.info?.('!!!! starting playback loop');
+      this._pokePlaybackLoopRunning = true;
+      const rafCallback = async () => {
+        const rafAt = performance.now() - this._start;
+        const lc = l.addContext('rafAt', rafAt);
+        lc.info?.('raf');
+        if (this._pokeBuffer.length === 0) {
+          l.info?.('!!!! stopping playback loop');
+          this._pokePlaybackLoopRunning = false;
+          return;
+        }
+        requestAnimationFrame(rafCallback);
+        const start = performance.now();
+        await this._processPokes(lc);
+        lc.info?.('process pokes took', performance.now() - start);
+      };
+      requestAnimationFrame(rafCallback);
+    }
+  }
 
-      const {lastMutationID, baseCookie, patch, cookie} = pokeBody;
-      this._lastMutationIDReceived = lastMutationID;
+  private async _processPokes(l: LogContext) {
+    await this._pokeLock.withLock(async () => {
+      l.info?.('got poke lock at', performance.now() - this._start);
+      const toMerge: PokeBody[] = [];
+      const now = performance.now();
+      while (this._pokeBuffer.length) {
+        const headPoke = this._pokeBuffer[0];
+        const {clientID, timestamp} = headPoke;
+        if (clientID !== undefined) {
+          let clientTimestampOffset =
+            this._clientTimestampOffsets.get(clientID);
+          if (clientTimestampOffset === undefined) {
+            clientTimestampOffset = now - timestamp;
+            this._clientTimestampOffsets.set(clientID, clientTimestampOffset);
+          }
+          if (clientTimestampOffset + timestamp + this._buffer > now) {
+            break;
+          }
+          const frameOffset = Math.floor(
+            -(clientTimestampOffset + timestamp + this._buffer - now),
+          );
+          const frameOffsetMap: Map<number, number> = (globalThis as any)[
+            'frameOffsetHistogram'
+          ];
+          frameOffsetMap.set(
+            frameOffset,
+            (frameOffsetMap.get(frameOffset) ?? 0) + 1,
+          );
+          if (frameOffset > 16) {
+            l.info?.('************* Missed by ', frameOffset);
+          }
+        }
+        const pokeBody = this._pokeBuffer.shift();
+        if (pokeBody) {
+          toMerge.push(pokeBody);
+        }
+      }
+      console.log(
+        'merging',
+        toMerge.length,
+        'remaining buffer',
+        this._pokeBuffer.length,
+      );
+      if (toMerge.length === 0) {
+        return;
+      }
+
+      const mergedPatch: Patch = [];
+      for (const pokeBody of toMerge) {
+        mergedPatch.push(...pokeBody.patch);
+      }
+
       const p: Poke = {
-        baseCookie,
+        baseCookie: toMerge[0].baseCookie,
         pullResponse: {
-          lastMutationID,
-          patch,
-          cookie,
+          lastMutationID: toMerge[toMerge.length - 1].lastMutationID,
+          patch: mergedPatch,
+          cookie: toMerge[toMerge.length - 1].cookie,
         },
       };
 
@@ -385,8 +492,10 @@ export class Reflect<MD extends MutatorDefs> {
 
     const socket = await this._connectResolver.promise;
 
+    if (this._maxRandomPushLatency) {
+      await sleep(Math.random() * this._maxRandomPushLatency);
+    }
     const pushBody = (await req.json()) as PushBody;
-
     for (const m of pushBody.mutations) {
       if (m.id > this._lastMutationIDSent) {
         this._lastMutationIDSent = m.id;

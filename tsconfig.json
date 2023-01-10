@@ -4,7 +4,7 @@
     "module": "ES2022",
 
     "strict": true,
-    "exactOptionalPropertyTypes": true,
+    "exactOptionalPropertyTypes": false,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
@@ -15,7 +15,7 @@
 
     "declaration": true,
     "forceConsistentCasingInFileNames": true,
-    "moduleResolution": "NodeNext",
+    "moduleResolution": "Node",
     "outDir": "out",
     "allowJs": true,
     // esnext for Object.fromEntries

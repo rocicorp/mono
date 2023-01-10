@@ -24,10 +24,14 @@ const pokeBodySchema = z.object({
   cookie: versionSchema,
   lastMutationID: z.number(),
   patch: patchSchema,
+  clientID: z.optional(z.string()),
   timestamp: z.number(),
 });
 
-export const pokeMessageSchema = z.tuple([z.literal('poke'), pokeBodySchema]);
+export const pokeMessageSchema = z.tuple([
+  z.literal('poke'),
+  z.union([pokeBodySchema, z.array(pokeBodySchema)]),
+]);
 
 export type PutOp = z.infer<typeof putOpSchema>;
 export type DelOp = z.infer<typeof delOpSchema>;

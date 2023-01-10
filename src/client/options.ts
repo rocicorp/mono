@@ -164,4 +164,8 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * `onOnlineChange` is called when the Reflect instance's online status changes
    */
   onOnlineChange?: (online: boolean) => void;
+
+  buffer?: number;
+
+  maxRandomPushLatency?: number;
 }
