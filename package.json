@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4-fix.0",
-    "@rocicorp/eslint-config": "^0.2.0",
+    "@rocicorp/eslint-config": "^0.3.0",
     "@rocicorp/logger": "^2.2.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/node": "^18.11.18",
