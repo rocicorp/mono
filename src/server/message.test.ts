@@ -11,6 +11,7 @@ import {handleMessage} from '../../src/server/message.js';
 import {assert} from '../util/asserts.js';
 import {randomID} from '../util/rand.js';
 import {ErrorKind} from '../protocol/error.js';
+import {TurnBuffer} from './turn-buffer.js';
 
 describe('handleMessage', () => {
   type Case = {
@@ -66,6 +67,7 @@ describe('handleMessage', () => {
           pushVersion: 1,
           schemaVersion: '',
           timestamp: 42,
+          unixTimestamp: 42,
         },
       ]),
       // This error message is not great
@@ -116,6 +118,7 @@ describe('handleMessage', () => {
         clientID,
         c.data,
         s1,
+        new TurnBuffer(),
         () => undefined,
       );
 

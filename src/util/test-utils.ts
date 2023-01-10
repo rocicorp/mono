@@ -25,7 +25,7 @@ export function client(
     id,
     {
       clockBehindByMs,
-      pending: mutations,
+      pending: mutations.map(m => ({...m, receivedTimestamp: 0})),
       socket,
       userData: {userID},
     },
@@ -37,12 +37,14 @@ export function mutation(
   name = 'foo',
   args: JSONType = [],
   timestamp = 1,
+  unixTimestamp = 1,
 ): Mutation {
   return {
     id,
     name,
     args,
     timestamp,
+    unixTimestamp,
   };
 }
 

@@ -26,6 +26,8 @@ test('sets roomID in createRoom', async () => {
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
+    turnDuration: null,
+    maxRandomLatency: 0,
   });
   const createRoomRequest = newCreateRoomRequest(
     'http://example.com/',
@@ -58,6 +60,8 @@ test('deleteAllData deletes all data', async () => {
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
+    turnDuration: null,
+    maxRandomLatency: 0,
   });
   const createRoomRequest = newCreateRoomRequest(
     'http://example.com/',
@@ -95,6 +99,8 @@ test('after deleteAllData the roomDO just 410s', async () => {
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
+    turnDuration: null,
+    maxRandomLatency: 0,
   });
   const createRoomRequest = newCreateRoomRequest(
     'http://example.com/',
@@ -120,8 +126,30 @@ test('after deleteAllData the roomDO just 410s', async () => {
   expect(response4.status).toBe(410);
 });
 
+<<<<<<< HEAD
 test('401s if wrong auth api key', async () => {
   const wrongApiKey = 'WRONG KEY';
+=======
+test('deleteAllData 401s if wrong auth api key', async () => {
+  const testLogSink = new TestLogSink();
+  const doID = new TestDurableObjectId('test-do-id');
+  const storage = await getMiniflareDurableObjectStorage(doID);
+
+  const roomDO = new BaseRoomDO({
+    mutators: {},
+    disconnectHandler: () => Promise.resolve(),
+    state: {
+      id: doID,
+      storage,
+    } as unknown as DurableObjectState,
+    authApiKey: 'API KEY',
+    logSink: testLogSink,
+    logLevel: 'info',
+    allowUnconfirmedWrites: true,
+    turnDuration: null,
+    maxRandomLatency: 0,
+  });
+>>>>>>> 2f44467 (60fps proto)
   const deleteRequest = newDeleteRoomRequest(
     'http://example.com/',
     wrongApiKey,
@@ -200,6 +228,8 @@ test('Logs version during construction', () => {
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
+    turnDuration: null,
+    maxRandomLatency: 0,
   });
   expect(testLogSink.messages).toEqual([
     ['info', 'RoomDO', 'doID=test-do-id', 'Starting server'],
@@ -226,6 +256,8 @@ test('Sets turn duration based on allowUnconfirmedWrites flag', () => {
       logSink: testLogSink,
       logLevel: 'info',
       allowUnconfirmedWrites: allowUnconfirmed,
+      turnDuration: null,
+      maxRandomLatency: 0,
     });
 
     // @ts-expect-error: private field

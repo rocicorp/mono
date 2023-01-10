@@ -19,7 +19,7 @@ export type ClientState = {
   // lastMutationID and de-duplicated. The timestamps in these mutations
   // are in the server's timeframe. Note that they will generally increase
   // with respect to mutationID but that is not guaranteed.
-  pending: Mutation[];
+  pending: (Mutation & {receivedTimestamp: number})[];
 
   // How long is the client's timestamp behind the local timestamp?
   // This is initialized in the first push message from the client, not

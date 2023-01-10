@@ -6,6 +6,7 @@ export const mutationSchema = s.type({
   name: s.string(),
   args: jsonSchema,
   timestamp: s.number(),
+  unixTimestamp: s.number(),
 });
 
 export const pushBodySchema = s.type({
@@ -15,6 +16,7 @@ export const pushBodySchema = s.type({
   schemaVersion: s.string(),
   timestamp: s.number(),
   requestID: s.string(),
+  unixTimestamp: s.number(),
 });
 
 export const pushMessageSchema = s.tuple([s.literal('push'), pushBodySchema]);

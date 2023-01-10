@@ -6,6 +6,7 @@ import {handlePush, type ProcessUntilDone} from './push.js';
 import {handlePing} from './ping.js';
 import {superstructAssert} from '../util/superstruct.js';
 import {ErrorKind} from '../protocol/error.js';
+import type {TurnBuffer} from './turn-buffer.js';
 
 /**
  * Handles an upstream message coming into the server by dispatching to the
@@ -17,6 +18,7 @@ export function handleMessage(
   clientID: ClientID,
   data: string,
   ws: Socket,
+  turnBuffer: TurnBuffer,
   processUntilDone: ProcessUntilDone,
 ) {
   let message;
@@ -41,7 +43,15 @@ export function handleMessage(
       handlePing(lc, ws);
       break;
     case 'push':
-      handlePush(lc, client, message[1], () => Date.now(), processUntilDone);
+      handlePush(
+        lc,
+        clientID,
+        client,
+        message[1],
+        turnBuffer,
+        () => Date.now(),
+        processUntilDone,
+      );
       break;
     default:
       throw new Error(`Unknown message type: ${message[0]}`);

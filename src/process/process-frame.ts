@@ -29,22 +29,46 @@ export async function processFrame(
   lc.debug?.('processing frame - clients', clients);
 
   const cache = new EntryCache(storage);
-  const prevVersion = must(await getVersion(cache));
-  const nextVersion = (prevVersion ?? 0) + 1;
+  let prevVersion = must(await getVersion(cache));
+  let nextVersion = (prevVersion ?? 0) + 1;
 
   lc.debug?.('prevVersion', prevVersion, 'nextVersion', nextVersion);
 
+  const ret: ClientPokeBody[] = [];
   for (const mutation of mutations) {
-    await processMutation(lc, mutation, mutators, cache, nextVersion);
+    const mutationCache = new EntryCache(cache);
+    await processMutation(lc, mutation, mutators, mutationCache, nextVersion);
+    // If version has not changed, then there should not be any patch or pokes to
+    // send. But processDisconnects still makes other changes to cache that need
+    // to be flushed.
+    if (must(await getVersion(mutationCache)) !== prevVersion) {
+      const patch = unwrapPatch(mutationCache.pending());
+      await mutationCache.flush();
+      for (const clientID of clients) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const clientRecord = (await getClientRecord(clientID, cache))!;
+        clientRecord.baseCookie = nextVersion;
+        await putClientRecord(clientID, clientRecord, cache);
+        const poke: ClientPokeBody = {
+          clientID,
+          poke: {
+            baseCookie: prevVersion,
+            cookie: nextVersion,
+            lastMutationID: clientRecord.lastMutationID,
+            patch,
+            clientID: mutation.clientID,
+            timestamp: mutation.timestamp,
+            unixTimestamp: mutation.old ? undefined : mutation.unixTimestamp,
+          },
+        };
+        ret.push(poke);
+      }
+      prevVersion = nextVersion;
+      nextVersion = prevVersion + 1;
+    }
   }
 
   await processDisconnects(lc, disconnectHandler, clients, cache, nextVersion);
-
-  const ret: ClientPokeBody[] = [];
-
-  // If version has not changed, then there should not be any patch or pokes to
-  // send. But processDisconnects still makes other changes to cache that need
-  // to be flushed.
   if (must(await getVersion(cache)) !== prevVersion) {
     const patch = unwrapPatch(cache.pending());
     for (const clientID of clients) {

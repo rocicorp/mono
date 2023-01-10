@@ -35,6 +35,8 @@ export interface ReflectServerOptions<
    * Default is false.
    */
   allowUnconfirmedWrites?: boolean | undefined;
+  turnDuration?: number | null;
+  maxRandomLatency?: number;
 }
 
 function combineLogSinks(sinks: LogSink[]): LogSink {
@@ -119,6 +121,8 @@ function getOptionsWithDefaults<
     getLogSinks = _env => [consoleLogSink],
     getLogLevel = _env => 'debug',
     allowUnconfirmedWrites = false,
+    turnDuration = null,
+    maxRandomLatency = 0,
   } = options;
   return {
     ...options,
@@ -126,6 +130,8 @@ function getOptionsWithDefaults<
     getLogSinks,
     getLogLevel,
     allowUnconfirmedWrites,
+    turnDuration,
+    maxRandomLatency,
   };
 }
 
@@ -139,6 +145,8 @@ function createRoomDOClass<
     getLogSinks,
     getLogLevel,
     allowUnconfirmedWrites,
+    turnDuration,
+    maxRandomLatency,
   } = optionsWithDefaults;
   return class extends BaseRoomDO<MD> {
     constructor(state: DurableObjectState, env: Env) {
@@ -150,6 +158,8 @@ function createRoomDOClass<
         logSink: combineLogSinks(getLogSinks(env)),
         logLevel: getLogLevel(env),
         allowUnconfirmedWrites,
+        turnDuration,
+        maxRandomLatency,
       });
     }
   };

@@ -24,14 +24,19 @@ export const pokeBodySchema = s.type({
   cookie: versionSchema,
   lastMutationID: s.number(),
   patch: patchSchema,
+  clientID: s.optional(s.string()),
   timestamp: s.number(),
 
   // When we change to multiple pokes per WS message we should only have one
   // requestID per message.
   requestID: s.string(),
+  unixTimestamp: s.optional(s.number()),
 });
 
-export const pokeMessageSchema = s.tuple([s.literal('poke'), pokeBodySchema]);
+export const pokeMessageSchema = s.tuple([
+  s.literal('poke'),
+  s.union([pokeBodySchema, s.array(pokeBodySchema)]),
+]);
 
 export type PutOp = s.Infer<typeof putOpSchema>;
 export type DelOp = s.Infer<typeof delOpSchema>;

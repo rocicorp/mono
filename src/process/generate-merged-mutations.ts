@@ -7,19 +7,21 @@ import type {ClientMutation} from '../types/client-mutation.js';
 import type {ClientMap} from '../types/client-state.js';
 import {PeekIterator} from '../util/peek-iterator.js';
 
+type ClientMutationWReceived = ClientMutation & {receivedTimestamp: number};
+
 // - we merge sort those lists, but the merge function is the server timestamp
 export function* generateMergedMutations(clients: ClientMap) {
   // Build a list of mutation iterators sorted by next val's timestamp
-  const iterators: PeekIterator<ClientMutation>[] = [];
+  const iterators: PeekIterator<ClientMutationWReceived>[] = [];
 
-  const insertIterator = (ins: PeekIterator<ClientMutation>) => {
+  const insertIterator = (ins: PeekIterator<ClientMutationWReceived>) => {
     const {value, done} = ins.peek();
     if (done) {
       return;
     }
     const pos = iterators.findIndex(
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      it => it.peek().value!.timestamp > value!.timestamp,
+      it => it.peek().value!.receivedTimestamp > value!.receivedTimestamp,
     );
     iterators.splice(pos === -1 ? iterators.length : pos, 0, ins);
   };

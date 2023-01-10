@@ -10,9 +10,9 @@ import {getClientRecord, putClientRecord} from '../types/client-record.js';
 import type {ClientID, ClientMap} from '../types/client-state.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {must} from '../util/must.js';
-import {generateMergedMutations} from './generate-merged-mutations.js';
 import {processFrame} from './process-frame.js';
 import type {MutatorMap} from './process-mutation.js';
+import type {TurnBuffer} from '../server/turn-buffer.js';
 
 export const FRAME_LENGTH_MS = 1000 / 60;
 
@@ -27,6 +27,7 @@ export async function processRoom(
   lc: LogContext,
   clients: ClientMap,
   mutators: MutatorMap,
+  turnBuffer: TurnBuffer,
   disconnectHandler: DisconnectHandler,
   storage: DurableStorage,
   timestamp: number,
@@ -66,7 +67,7 @@ export async function processRoom(
     await putClientRecord(poke.clientID, cr, cache);
   }
 
-  const mergedMutations = generateMergedMutations(clients);
+  const mergedMutations = turnBuffer.dequeueTurn();
   pokes.push(
     ...(await processFrame(
       lc,

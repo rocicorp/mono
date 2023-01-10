@@ -20,6 +20,7 @@ import {
   mutation,
 } from '../util/test-utils.js';
 import {processPending} from '../../src/process/process-pending.js';
+import {TurnBuffer} from 'src/server/turn-buffer.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -248,6 +249,7 @@ test('processPending', async () => {
       storage,
       c.clients,
       mutators,
+      new TurnBuffer(),
       () => Promise.resolve(),
       startTime,
     );

@@ -19,6 +19,7 @@ import {
   mutation,
 } from '../util/test-utils.js';
 import {processRoom} from '../process/process-room.js';
+import {TurnBuffer} from '../server/turn-buffer.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -213,6 +214,7 @@ test('processRoom', async () => {
       createSilentLogContext(),
       c.clients,
       mutators,
+      new TurnBuffer(),
       () => Promise.resolve(),
       storage,
       startTime,

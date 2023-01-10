@@ -34,6 +34,8 @@ import {
   withBody,
 } from './router.js';
 import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
+import {sleep} from 'src/util/sleep.js';
+import {TurnBuffer} from './turn-buffer.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -46,6 +48,8 @@ export interface RoomDOOptions<MD extends MutatorDefs> {
   logSink: LogSink;
   logLevel: LogLevel;
   allowUnconfirmedWrites: boolean;
+  turnDuration: number | null;
+  maxRandomLatency: number;
 }
 
 export const ROOM_ROUTES = {
@@ -63,6 +67,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   private readonly _lock = new Lock();
   private readonly _mutators: MutatorMap;
   private readonly _disconnectHandler: DisconnectHandler;
+  private readonly _maxRandomLatency: number;
   private _lcHasRoomIdContext = false;
   private _lc: LogContext;
   private readonly _storage: DurableStorage;
@@ -70,13 +75,23 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   private _turnTimerID: ReturnType<typeof setInterval> | 0 = 0;
   private readonly _turnDuration: number;
   private _router: Router;
+  private readonly _turnBuffer = new TurnBuffer();
 
   constructor(options: RoomDOOptions<MD>) {
-    const {mutators, disconnectHandler, state, authApiKey, logSink, logLevel} =
-      options;
+    const {
+      mutators,
+      disconnectHandler,
+      state,
+      authApiKey,
+      logSink,
+      logLevel,
+      turnDuration,
+      maxRandomLatency,
+    } = options;
 
     this._mutators = new Map([...Object.entries(mutators)]) as MutatorMap;
     this._disconnectHandler = disconnectHandler;
+    this._maxRandomLatency = maxRandomLatency;
     this._storage = new DurableStorage(
       state.storage,
       options.allowUnconfirmedWrites,
@@ -84,8 +99,8 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
     this._router = new Router();
     this._initRoutes();
-
-    this._turnDuration = 1000 / (options.allowUnconfirmedWrites ? 60 : 15);
+    this._turnDuration =
+      turnDuration ?? 1000 / (options.allowUnconfirmedWrites ? 60 : 15);
     this._authApiKey = authApiKey;
     this._lc = new LogContext(logLevel, logSink)
       .addContext('RoomDO')
@@ -321,14 +336,32 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     data: string,
     ws: Socket,
   ): Promise<void> => {
-    lc = lc.addContext('msg', randomID());
+    const nowTimestamp = Date.now();
+    lc = this._lc.addContext('msg', randomID()).addContext('client', clientID);
+    lc.info?.('handleMessage', nowTimestamp, data.substring(0, 20));
+    const value = JSON.parse(data);
+    if (value[0] === 'push') {
+      lc.info?.(
+        'handle message push timing',
+        nowTimestamp,
+        '-',
+        value[1].unixTimestamp,
+        '=',
+        nowTimestamp - value[1].unixTimestamp,
+      );
+    }
     lc.debug?.('handling message', data, 'waiting for lock');
-
     try {
       await this._lock.withLock(() => {
         lc.debug?.('received lock');
-        handleMessage(lc, this._clients, clientID, data, ws, () =>
-          this._processUntilDone(lc),
+        handleMessage(
+          lc,
+          this._clients,
+          clientID,
+          data,
+          ws,
+          this._turnBuffer,
+          () => this._processUntilDone(lc),
         );
       });
     } catch (e) {
@@ -362,7 +395,14 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
           break;
         }
       }
-      if (!hasPendingMutations(this._clients) && !hasDisconnectsToProcess) {
+      const hasPending = hasPendingMutations(this._clients, this._turnBuffer);
+      console.log(
+        'hasPending',
+        hasPending,
+        'hasDisconnectsToProcess',
+        hasDisconnectsToProcess,
+      );
+      if (!hasPending && !hasDisconnectsToProcess) {
         lc.debug?.('No pending mutations or disconnects to process, exiting');
         if (this._turnTimerID) {
           clearInterval(this._turnTimerID);
@@ -370,12 +410,13 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         }
         return;
       }
-
+      await sleep(Math.random() * this._maxRandomLatency);
       await processPending(
         lc,
         this._storage,
         this._clients,
         this._mutators,
+        this._turnBuffer,
         this._disconnectHandler,
         Date.now(),
       );
@@ -409,13 +450,13 @@ function addWebSocketIDToLogContext(lc: LogContext, url: string): LogContext {
   );
 }
 
-function hasPendingMutations(clients: ClientMap) {
-  for (const clientState of clients.values()) {
-    if (clientState.pending.length > 0) {
-      return true;
-    }
-  }
-  return false;
+function hasPendingMutations(_clients: ClientMap, turnBuffer: TurnBuffer) {
+  // for (const clientState of clients.values()) {
+  //   if (clientState.pending.length > 0) {
+  //     return true;
+  //   }
+  // }
+  return !turnBuffer.isEmpty();
 }
 
 /**
