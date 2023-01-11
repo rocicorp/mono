@@ -29,32 +29,46 @@ export const enum ConnectionState {
   Connected,
 }
 
-(globalThis as any)['frameOffsetHistogram'] = new Map();
-(globalThis as any)['logFrameOffsetHistogram'] = function () {
+(globalThis as any)['mutationOffsetHistogram'] = new Map();
+(globalThis as any)['frameCount'] = 0;
+(globalThis as any)['frameWithMissCount'] = 0;
+(globalThis as any)['mutationOffsetHistogram'] = function () {
   // eslint-disable-next-line prefer-destructuring
-  const frameOffsetHistogram: Map<number, number> = (globalThis as any)[
-    'frameOffsetHistogram'
+  const mutationOffsetHistogram: Map<number, number> = (globalThis as any)[
+    'mutationOffsetHistogram'
   ];
   console.log(
     JSON.stringify(
-      [...frameOffsetHistogram.entries()].sort((a, b) => a[0] - b[0]),
+      [...mutationOffsetHistogram.entries()].sort((a, b) => a[0] - b[0]),
     ),
   );
-  let totalFrames = 0;
-  let missedFrames = 0;
-  for (const [offset, count] of frameOffsetHistogram) {
-    totalFrames += count;
+  let totalMutations = 0;
+  let missedMutations = 0;
+  for (const [offset, count] of mutationOffsetHistogram) {
+    totalMutations += count;
     if (offset > 16) {
-      missedFrames += count;
+      missedMutations += count;
     }
   }
   console.log(
-    'missed',
-    missedFrames,
+    'mutations: missed',
+    missedMutations,
     'of',
-    totalFrames,
+    totalMutations,
     'miss %',
-    (missedFrames / totalFrames) * 100,
+    (missedMutations / totalMutations) * 100,
+  );
+  // eslint-disable-next-line prefer-destructuring
+  const frameCount: number = (globalThis as any)['frameCount'];
+  // eslint-disable-next-line prefer-destructuring
+  const frameWithMissCount: number = (globalThis as any)['frameWithMissCount'];
+  console.log(
+    'frames: w miss',
+    frameWithMissCount,
+    'of',
+    frameCount,
+    'miss %',
+    (frameWithMissCount / frameCount) * 100,
   );
 };
 
@@ -416,6 +430,7 @@ export class Reflect<MD extends MutatorDefs> {
       l.info?.('got poke lock at', performance.now() - this._start);
       const toMerge: PokeBody[] = [];
       const now = performance.now();
+      let hasMiss = false;
       while (this._pokeBuffer.length) {
         const headPoke = this._pokeBuffer[0];
         const {clientID, timestamp} = headPoke;
@@ -441,6 +456,7 @@ export class Reflect<MD extends MutatorDefs> {
           );
           if (frameOffset > 16) {
             l.info?.('************* Missed by ', frameOffset);
+            hasMiss = true;
           }
         }
         const pokeBody = this._pokeBuffer.shift();
@@ -456,6 +472,10 @@ export class Reflect<MD extends MutatorDefs> {
       );
       if (toMerge.length === 0) {
         return;
+      }
+      (globalThis as any)['frameCount']++;
+      if (hasMiss) {
+        (globalThis as any)['frameWithMissCount']++;
       }
 
       const mergedPatch: Patch = [];
