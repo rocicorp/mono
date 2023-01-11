@@ -444,18 +444,19 @@ export class Reflect<MD extends MutatorDefs> {
           if (clientTimestampOffset + timestamp + this._buffer > now) {
             break;
           }
-          const frameOffset = Math.floor(
+          const mutationOffset = Math.floor(
             -(clientTimestampOffset + timestamp + this._buffer - now),
           );
-          const frameOffsetMap: Map<number, number> = (globalThis as any)[
-            'frameOffsetHistogram'
-          ];
-          frameOffsetMap.set(
-            frameOffset,
-            (frameOffsetMap.get(frameOffset) ?? 0) + 1,
+          // eslint-disable-next-line prefer-destructuring
+          const mutationOffsetHistogram: Map<number, number> = (
+            globalThis as any
+          )['mutationOffsetHistogram'];
+          mutationOffsetHistogram.set(
+            mutationOffset,
+            (mutationOffsetHistogram.get(mutationOffset) ?? 0) + 1,
           );
-          if (frameOffset > 16) {
-            l.info?.('************* Missed by ', frameOffset);
+          if (mutationOffset > 16) {
+            l.info?.('************* Missed by ', mutationOffset);
             hasMiss = true;
           }
         }
