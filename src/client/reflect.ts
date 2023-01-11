@@ -63,7 +63,7 @@ export const enum ConnectionState {
   // eslint-disable-next-line prefer-destructuring
   const frameWithMissCount: number = (globalThis as any)['frameWithMissCount'];
   console.log(
-    'frames: w miss',
+    'frames: missed',
     frameWithMissCount,
     'of',
     frameCount,
