@@ -32,7 +32,7 @@ export const enum ConnectionState {
 (globalThis as any)['mutationOffsetHistogram'] = new Map();
 (globalThis as any)['frameCount'] = 0;
 (globalThis as any)['frameWithMissCount'] = 0;
-(globalThis as any)['mutationOffsetHistogram'] = function () {
+(globalThis as any)['logFrameHistogram'] = function () {
   // eslint-disable-next-line prefer-destructuring
   const mutationOffsetHistogram: Map<number, number> = (globalThis as any)[
     'mutationOffsetHistogram'
