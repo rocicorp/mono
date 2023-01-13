@@ -17,7 +17,7 @@ import type {PingMessage} from '../protocol/ping.js';
 import type {Patch, PokeBody} from '../protocol/poke.js';
 import type {PushBody, PushMessage} from '../protocol/push.js';
 import {NullableVersion, nullableVersionSchema} from '../types/version.js';
-import {assert} from '../util/asserts.js';
+import {assert, assertNumber} from '../util/asserts.js';
 import {Lock} from '../util/lock.js';
 import {resolver} from '../util/resolver.js';
 import {sleep} from '../util/sleep.js';
@@ -29,15 +29,27 @@ export const enum ConnectionState {
   Connected,
 }
 
+(globalThis as any)['rafOffsetHistogram'] = new Map();
 (globalThis as any)['mutationOffsetHistogram'] = new Map();
 (globalThis as any)['frameCount'] = 0;
 (globalThis as any)['frameWithMissCount'] = 0;
 (globalThis as any)['logFrameHistogram'] = function () {
   // eslint-disable-next-line prefer-destructuring
+  const rafOffsetHistogram: Map<number, number> = (globalThis as any)[
+    'rafOffsetHistogram'
+  ];
+  console.log(
+    'raf offset histogram',
+    JSON.stringify(
+      [...rafOffsetHistogram.entries()].sort((a, b) => a[0] - b[0]),
+    ),
+  );
+  // eslint-disable-next-line prefer-destructuring
   const mutationOffsetHistogram: Map<number, number> = (globalThis as any)[
     'mutationOffsetHistogram'
   ];
   console.log(
+    'mutation offset histogram',
     JSON.stringify(
       [...mutationOffsetHistogram.entries()].sort((a, b) => a[0] - b[0]),
     ),
@@ -87,7 +99,11 @@ export class Reflect<MD extends MutatorDefs> {
   private readonly _pokeLock = new Lock();
   private readonly _pokeBuffer: PokeBody[] = [];
   private _pokePlaybackLoopRunning = false;
+  private _lastRafTimestamp = 0;
   private readonly _clientTimestampOffsets: Map<string, number> = new Map();
+  private readonly _clientsPlayedBack: Set<string> = new Set();
+  private readonly _clientTimestampOffsetsHistory: Map<string, number[]> =
+    new Map();
 
   private _lastMutationIDSent = -1;
   private _onPong: () => void = () => undefined;
@@ -403,17 +419,48 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   private async _handlePoke(l: LogContext, pokeBodies: PokeBody[]) {
+    const now = performance.now();
+    for (const pokeBody of pokeBodies) {
+      const {clientID, timestamp} = pokeBody;
+      if (clientID) {
+        const clientTimestampOffset = now - timestamp;
+        if (!this._clientTimestampOffsets.has(clientID)) {
+          l.info?.('new client', clientID);
+          this._clientTimestampOffsets.set(clientID, clientTimestampOffset);
+        }
+        let history = this._clientTimestampOffsetsHistory.get(clientID);
+        if (!history) {
+          history = [];
+          this._clientTimestampOffsetsHistory.set(clientID, history);
+        }
+        history.push(clientTimestampOffset);
+      }
+    }
     this._pokeBuffer.push(...pokeBodies);
     if (!this._pokePlaybackLoopRunning) {
       l.info?.('!!!! starting playback loop');
       this._pokePlaybackLoopRunning = true;
       const rafCallback = async () => {
-        const rafAt = performance.now() - this._start;
+        const now = performance.now();
+        if (this._lastRafTimestamp !== 0) {
+          const rafOffset = Math.floor(now - this._lastRafTimestamp);
+          // eslint-disable-next-line prefer-destructuring
+          const rafOffsetHistogram: Map<number, number> = (globalThis as any)[
+            'rafOffsetHistogram'
+          ];
+          rafOffsetHistogram.set(
+            rafOffset,
+            (rafOffsetHistogram.get(rafOffset) ?? 0) + 1,
+          );
+        }
+        this._lastRafTimestamp = now;
+        const rafAt = now - this._start;
         const lc = l.addContext('rafAt', rafAt);
         lc.info?.('raf');
         if (this._pokeBuffer.length === 0) {
           l.info?.('!!!! stopping playback loop');
           this._pokePlaybackLoopRunning = false;
+          this._lastRafTimestamp = 0;
           return;
         }
         requestAnimationFrame(rafCallback);
@@ -428,6 +475,7 @@ export class Reflect<MD extends MutatorDefs> {
   private async _processPokes(l: LogContext) {
     await this._pokeLock.withLock(async () => {
       l.info?.('got poke lock at', performance.now() - this._start);
+      const thisClientID = await this.clientID;
       const toMerge: PokeBody[] = [];
       const now = performance.now();
       let hasMiss = false;
@@ -435,18 +483,25 @@ export class Reflect<MD extends MutatorDefs> {
         const headPoke = this._pokeBuffer[0];
         const {clientID, timestamp} = headPoke;
         if (clientID !== undefined) {
-          let clientTimestampOffset =
+          const clientTimestampOffset =
             this._clientTimestampOffsets.get(clientID);
-          if (clientTimestampOffset === undefined) {
-            clientTimestampOffset = now - timestamp;
-            this._clientTimestampOffsets.set(clientID, clientTimestampOffset);
-          }
-          if (clientTimestampOffset + timestamp + this._buffer > now) {
+          assertNumber(clientTimestampOffset);
+          if (
+            clientID !== thisClientID &&
+            clientTimestampOffset + timestamp + this._buffer > now
+          ) {
             break;
           }
-          const mutationOffset = Math.floor(
+          const newClient = !this._clientsPlayedBack.has(clientID);
+          if (newClient) {
+            l.info?.('new client playback', clientID);
+            this._clientsPlayedBack.add(clientID);
+          }
+          let mutationOffset = Math.floor(
             -(clientTimestampOffset + timestamp + this._buffer - now),
           );
+          assert(mutationOffset >= 0 || clientID === thisClientID);
+          mutationOffset = Math.max(mutationOffset, 0);
           // eslint-disable-next-line prefer-destructuring
           const mutationOffsetHistogram: Map<number, number> = (
             globalThis as any
@@ -465,7 +520,7 @@ export class Reflect<MD extends MutatorDefs> {
           toMerge.push(pokeBody);
         }
       }
-      console.log(
+      l.info?.(
         'merging',
         toMerge.length,
         'remaining buffer',
