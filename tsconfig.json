@@ -24,8 +24,7 @@
     "skipLibCheck": true,
 
     "resolveJsonModule": true,
-    "incremental": true,
-    "baseUrl": "."
+    "incremental": true
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "out"]
