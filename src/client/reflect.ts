@@ -29,31 +29,21 @@ export const enum ConnectionState {
   Connected,
 }
 
-(globalThis as any)['rafOffsetHistogram'] = new Map();
-(globalThis as any)['mutationOffsetHistogram'] = new Map();
-(globalThis as any)['frameCount'] = 0;
-(globalThis as any)['frameWithMissCount'] = 0;
-(globalThis as any)['logFrameHistogram'] = function () {
-  // eslint-disable-next-line prefer-destructuring
-  const rafOffsetHistogram: Map<number, number> = (globalThis as any)[
-    'rafOffsetHistogram'
-  ];
-  console.log(
-    'raf offset histogram',
-    JSON.stringify(
-      [...rafOffsetHistogram.entries()].sort((a, b) => a[0] - b[0]),
-    ),
-  );
-  // eslint-disable-next-line prefer-destructuring
-  const mutationOffsetHistogram: Map<number, number> = (globalThis as any)[
-    'mutationOffsetHistogram'
-  ];
+const rafOffsetHistogram: Map<number, number> = new Map();
+const latencyHistogram: Map<number, number> = new Map();
+const mutationOffsetHistogram: Map<number, number> = new Map();
+let frameCount = 0;
+let frameWithMissCount = 0;
+function stringifyHistogram(histogram: Map<number, number>) {
+  return JSON.stringify([...histogram.entries()].sort((a, b) => a[0] - b[0]));
+}
+function logFrameHistogram() {
+  console.log('raf offset histogram', stringifyHistogram(rafOffsetHistogram));
   console.log(
     'mutation offset histogram',
-    JSON.stringify(
-      [...mutationOffsetHistogram.entries()].sort((a, b) => a[0] - b[0]),
-    ),
+    stringifyHistogram(mutationOffsetHistogram),
   );
+  console.log('latency histogram', stringifyHistogram(latencyHistogram));
   let totalMutations = 0;
   let missedMutations = 0;
   for (const [offset, count] of mutationOffsetHistogram) {
@@ -70,10 +60,6 @@ export const enum ConnectionState {
     'miss %',
     (missedMutations / totalMutations) * 100,
   );
-  // eslint-disable-next-line prefer-destructuring
-  const frameCount: number = (globalThis as any)['frameCount'];
-  // eslint-disable-next-line prefer-destructuring
-  const frameWithMissCount: number = (globalThis as any)['frameWithMissCount'];
   console.log(
     'frames: missed',
     frameWithMissCount,
@@ -82,7 +68,8 @@ export const enum ConnectionState {
     'miss %',
     (frameWithMissCount / frameCount) * 100,
   );
-};
+}
+(globalThis as any)['logFrameHistogram'] = logFrameHistogram;
 
 export class Reflect<MD extends MutatorDefs> {
   private readonly _rep: Replicache<MD>;
@@ -444,10 +431,6 @@ export class Reflect<MD extends MutatorDefs> {
         const now = performance.now();
         if (this._lastRafTimestamp !== 0) {
           const rafOffset = Math.floor(now - this._lastRafTimestamp);
-          // eslint-disable-next-line prefer-destructuring
-          const rafOffsetHistogram: Map<number, number> = (globalThis as any)[
-            'rafOffsetHistogram'
-          ];
           rafOffsetHistogram.set(
             rafOffset,
             (rafOffsetHistogram.get(rafOffset) ?? 0) + 1,
@@ -482,14 +465,11 @@ export class Reflect<MD extends MutatorDefs> {
       while (this._pokeBuffer.length) {
         const headPoke = this._pokeBuffer[0];
         const {clientID, timestamp} = headPoke;
-        if (clientID !== undefined) {
+        if (clientID !== undefined && clientID !== thisClientID) {
           const clientTimestampOffset =
             this._clientTimestampOffsets.get(clientID);
           assertNumber(clientTimestampOffset);
-          if (
-            clientID !== thisClientID &&
-            clientTimestampOffset + timestamp + this._buffer > now
-          ) {
+          if (clientTimestampOffset + timestamp + this._buffer > now) {
             break;
           }
           const newClient = !this._clientsPlayedBack.has(clientID);
@@ -502,13 +482,14 @@ export class Reflect<MD extends MutatorDefs> {
           );
           assert(mutationOffset >= 0 || clientID === thisClientID);
           mutationOffset = Math.max(mutationOffset, 0);
-          // eslint-disable-next-line prefer-destructuring
-          const mutationOffsetHistogram: Map<number, number> = (
-            globalThis as any
-          )['mutationOffsetHistogram'];
           mutationOffsetHistogram.set(
             mutationOffset,
             (mutationOffsetHistogram.get(mutationOffset) ?? 0) + 1,
+          );
+          const latency = now - timestamp;
+          latencyHistogram.set(
+            latency,
+            (latencyHistogram.get(latency) ?? 0) + 1,
           );
           if (mutationOffset > 16) {
             l.info?.('************* Missed by ', mutationOffset);
@@ -529,9 +510,9 @@ export class Reflect<MD extends MutatorDefs> {
       if (toMerge.length === 0) {
         return;
       }
-      (globalThis as any)['frameCount']++;
+      frameCount++;
       if (hasMiss) {
-        (globalThis as any)['frameWithMissCount']++;
+        frameWithMissCount++;
       }
 
       const mergedPatch: Patch = [];
