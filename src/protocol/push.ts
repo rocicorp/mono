@@ -6,6 +6,7 @@ export const mutationSchema = z.object({
   name: z.string(),
   args: jsonSchema,
   timestamp: z.number(),
+  unixTimestamp: z.number(),
 });
 
 export const pushBodySchema = z.object({

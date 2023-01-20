@@ -225,12 +225,15 @@ test('pusher sends one mutation per push message', async () => {
   };
 
   await t([], 0);
-  await t([{id: 1, name: 'mut1', args: {d: 1}, timestamp: 1}], 1);
+  await t(
+    [{id: 1, name: 'mut1', args: {d: 1}, timestamp: 1, unixTimestamp: 1}],
+    1,
+  );
   await t(
     [
-      {id: 1, name: 'mut1', args: {d: 1}, timestamp: 1},
-      {id: 2, name: 'mut1', args: {d: 2}, timestamp: 2},
-      {id: 3, name: 'mut1', args: {d: 3}, timestamp: 3},
+      {id: 1, name: 'mut1', args: {d: 1}, timestamp: 1, unixTimestamp: 1},
+      {id: 2, name: 'mut1', args: {d: 2}, timestamp: 2, unixTimestamp: 2},
+      {id: 3, name: 'mut1', args: {d: 3}, timestamp: 3, unixTimestamp: 3},
     ],
     3,
   );
@@ -238,8 +241,8 @@ test('pusher sends one mutation per push message', async () => {
   // skips ids already seen
   await t(
     [
-      {id: 1, name: 'mut1', args: {d: 1}, timestamp: 1},
-      {id: 1, name: 'mut1', args: {d: 2}, timestamp: 1},
+      {id: 1, name: 'mut1', args: {d: 1}, timestamp: 1, unixTimestamp: 1},
+      {id: 1, name: 'mut1', args: {d: 2}, timestamp: 1, unixTimestamp: 1},
     ],
     1,
   );

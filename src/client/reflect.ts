@@ -30,12 +30,17 @@ export const enum ConnectionState {
 }
 
 const rafOffsetHistogram: Map<number, number> = new Map();
-const latencyHistogram: Map<number, number> = new Map();
+const receiveLatencyHistogram: Map<number, number> = new Map();
+const playbackLatencyHistogram: Map<number, number> = new Map();
 const mutationOffsetHistogram: Map<number, number> = new Map();
+const mutationSendLatencyHistogram: Map<number, number> = new Map();
 let frameCount = 0;
 let frameWithMissCount = 0;
 function stringifyHistogram(histogram: Map<number, number>) {
   return JSON.stringify([...histogram.entries()].sort((a, b) => a[0] - b[0]));
+}
+function histogramInc(histogram: Map<number, number>, value: number) {
+  histogram.set(value, (histogram.get(value) ?? 0) + 1);
 }
 function logFrameHistogram() {
   console.log('raf offset histogram', stringifyHistogram(rafOffsetHistogram));
@@ -43,7 +48,18 @@ function logFrameHistogram() {
     'mutation offset histogram',
     stringifyHistogram(mutationOffsetHistogram),
   );
-  console.log('latency histogram', stringifyHistogram(latencyHistogram));
+  console.log(
+    'receive latency histogram',
+    stringifyHistogram(receiveLatencyHistogram),
+  );
+  console.log(
+    'playback latency histogram',
+    stringifyHistogram(playbackLatencyHistogram),
+  );
+  console.log(
+    'mutation send latency histogram',
+    stringifyHistogram(mutationSendLatencyHistogram),
+  );
   let totalMutations = 0;
   let missedMutations = 0;
   for (const [offset, count] of mutationOffsetHistogram) {
@@ -407,9 +423,11 @@ export class Reflect<MD extends MutatorDefs> {
 
   private async _handlePoke(l: LogContext, pokeBodies: PokeBody[]) {
     const now = performance.now();
+    const unixNow = Date.now();
     for (const pokeBody of pokeBodies) {
-      const {clientID, timestamp} = pokeBody;
+      const {clientID, timestamp, unixTimestamp} = pokeBody;
       if (clientID) {
+        histogramInc(receiveLatencyHistogram, unixNow - unixTimestamp);
         const clientTimestampOffset = now - timestamp;
         if (!this._clientTimestampOffsets.has(clientID)) {
           l.info?.('new client', clientID);
@@ -431,10 +449,7 @@ export class Reflect<MD extends MutatorDefs> {
         const now = performance.now();
         if (this._lastRafTimestamp !== 0) {
           const rafOffset = Math.floor(now - this._lastRafTimestamp);
-          rafOffsetHistogram.set(
-            rafOffset,
-            (rafOffsetHistogram.get(rafOffset) ?? 0) + 1,
-          );
+          histogramInc(rafOffsetHistogram, rafOffset);
         }
         this._lastRafTimestamp = now;
         const rafAt = now - this._start;
@@ -458,13 +473,18 @@ export class Reflect<MD extends MutatorDefs> {
   private async _processPokes(l: LogContext) {
     await this._pokeLock.withLock(async () => {
       l.info?.('got poke lock at', performance.now() - this._start);
+      l.info?.(
+        'clientTimestampOffsetHistory',
+        this._clientTimestampOffsetsHistory,
+      );
       const thisClientID = await this.clientID;
       const toMerge: PokeBody[] = [];
       const now = performance.now();
+      const localUnixTimestamp = Date.now();
       let hasMiss = false;
       while (this._pokeBuffer.length) {
         const headPoke = this._pokeBuffer[0];
-        const {clientID, timestamp} = headPoke;
+        const {clientID, timestamp, unixTimestamp} = headPoke;
         if (clientID !== undefined && clientID !== thisClientID) {
           const clientTimestampOffset =
             this._clientTimestampOffsets.get(clientID);
@@ -482,15 +502,9 @@ export class Reflect<MD extends MutatorDefs> {
           );
           assert(mutationOffset >= 0 || clientID === thisClientID);
           mutationOffset = Math.max(mutationOffset, 0);
-          mutationOffsetHistogram.set(
-            mutationOffset,
-            (mutationOffsetHistogram.get(mutationOffset) ?? 0) + 1,
-          );
-          const latency = now - timestamp;
-          latencyHistogram.set(
-            latency,
-            (latencyHistogram.get(latency) ?? 0) + 1,
-          );
+          histogramInc(mutationOffsetHistogram, mutationOffset);
+          const latency = localUnixTimestamp - unixTimestamp;
+          histogramInc(playbackLatencyHistogram, latency);
           if (mutationOffset > 16) {
             l.info?.('************* Missed by ', mutationOffset);
             hasMiss = true;
@@ -506,6 +520,8 @@ export class Reflect<MD extends MutatorDefs> {
         toMerge.length,
         'remaining buffer',
         this._pokeBuffer.length,
+        'buffer',
+        this._buffer,
       );
       if (toMerge.length === 0) {
         return;
@@ -543,8 +559,9 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   private async _pusher(req: Request) {
+    const lc = await this._l;
     if (!this._socket) {
-      void this._connect(await this._l);
+      void this._connect(lc);
     }
 
     const socket = await this._connectResolver.promise;
@@ -555,11 +572,19 @@ export class Reflect<MD extends MutatorDefs> {
     const pushBody = (await req.json()) as PushBody;
     for (const m of pushBody.mutations) {
       if (m.id > this._lastMutationIDSent) {
+        const now = performance.now();
+        const sendLatency = Math.ceil(now - m.timestamp);
+        histogramInc(mutationSendLatencyHistogram, sendLatency);
+        const unixTimestamp = Date.now() - sendLatency;
         this._lastMutationIDSent = m.id;
 
         const msg: PushMessage = [
           'push',
-          {...pushBody, mutations: [m], timestamp: performance.now()},
+          {
+            ...pushBody,
+            mutations: [{...m, unixTimestamp}],
+            timestamp: performance.now(),
+          },
         ];
 
         socket.send(JSON.stringify(msg));
