@@ -204,6 +204,7 @@ test('pusher sends one mutation per push message', async () => {
       schemaVersion: '1',
       mutations,
       timestamp: overwrittenAndNotUsedLol,
+      unixTimestamp: overwrittenAndNotUsedLol,
     };
 
     const req = new Request('http://example.com/push', {

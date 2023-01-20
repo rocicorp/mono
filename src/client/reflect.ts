@@ -585,15 +585,17 @@ export class Reflect<MD extends MutatorDefs> {
         const now = performance.now();
         const sendLatency = Math.ceil(now - m.timestamp);
         histogramInc(mutationSendLatencyHistogram, sendLatency);
-        const unixTimestamp = Date.now() - sendLatency;
+        const unixTimestamp = Date.now();
+        const mUnixTimestamp = unixTimestamp - sendLatency;
         this._lastMutationIDSent = m.id;
 
         const msg: PushMessage = [
           'push',
           {
             ...pushBody,
-            mutations: [{...m, unixTimestamp}],
+            mutations: [{...m, unixTimestamp: mUnixTimestamp}],
             timestamp: performance.now(),
+            unixTimestamp,
           },
         ];
 
