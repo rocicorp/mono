@@ -42,7 +42,14 @@ function stringifyHistogram(histogram: Map<number, number>) {
 function histogramInc(histogram: Map<number, number>, value: number) {
   histogram.set(value, (histogram.get(value) ?? 0) + 1);
 }
-function logFrameHistogram() {
+function clearHistograms() {
+  rafOffsetHistogram.clear();
+  receiveLatencyHistogram.clear();
+  playbackLatencyHistogram.clear();
+  mutationOffsetHistogram.clear();
+  mutationSendLatencyHistogram.clear();
+}
+function logHistograms() {
   console.log('raf offset histogram', stringifyHistogram(rafOffsetHistogram));
   console.log(
     'mutation offset histogram',
@@ -85,7 +92,8 @@ function logFrameHistogram() {
     (frameWithMissCount / frameCount) * 100,
   );
 }
-(globalThis as any)['logFrameHistogram'] = logFrameHistogram;
+(globalThis as any)['clearHistograms'] = clearHistograms;
+(globalThis as any)['logHistograms'] = logHistograms;
 
 export class Reflect<MD extends MutatorDefs> {
   private readonly _rep: Replicache<MD>;
