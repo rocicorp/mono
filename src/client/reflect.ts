@@ -48,6 +48,8 @@ function clearHistograms() {
   playbackLatencyHistogram.clear();
   mutationOffsetHistogram.clear();
   mutationSendLatencyHistogram.clear();
+  frameCount = 0;
+  frameWithMissCount = 0;
 }
 function logHistograms() {
   console.log('raf offset histogram', stringifyHistogram(rafOffsetHistogram));
