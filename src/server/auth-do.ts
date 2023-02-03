@@ -178,7 +178,7 @@ export class BaseAuthDO implements DurableObject {
         const roomIDToRecords = await this._roomRecordLock.withRead(() =>
           roomRecords(this._durableStorage),
         );
-        return Array.from(roomIDToRecords.values());
+        return Array.from(roomIDToRecords);
       }),
     ),
   );

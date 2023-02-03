@@ -341,6 +341,13 @@ test('withRoomID', async () => {
     },
     {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      parsedURL: new URLPattern({pathname: '/room/:roomID'}).exec(
+        'https://roci.dev/room/%24',
+      )!,
+      expected: {result: {text: 'roomID:$', status: 200}},
+    },
+    {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       parsedURL: new URLPattern({pathname: '/room/:otherThing'}).exec(
         'https://roci.dev/room/monkey',
       )!,

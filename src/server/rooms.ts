@@ -77,10 +77,9 @@ export async function createRoom(
   // authApiKey here.
   const {roomID} = validatedBody;
 
-  if (!validRoomID(roomID)) {
-    return new Response('Invalid roomID (must match [A-Za-z0-9_-]+)', {
-      status: 400,
-    });
+  const invalidResponse = validateRoomID(roomID);
+  if (invalidResponse) {
+    return invalidResponse;
   }
 
   // Check if the room already exists.
@@ -238,10 +237,9 @@ export async function createRoomRecordForLegacyRoom(
   storage: DurableStorage,
   roomID: string,
 ): Promise<Response> {
-  if (!validRoomID(roomID)) {
-    return new Response('Invalid roomID (must match [A-Za-z0-9_-]+)', {
-      status: 400,
-    });
+  const invalidResponse = validateRoomID(roomID);
+  if (invalidResponse) {
+    return invalidResponse;
   }
 
   const objectID = await roomDO.idFromName(roomID);
@@ -261,8 +259,15 @@ export async function createRoomRecordForLegacyRoom(
   return new Response('ok');
 }
 
-function validRoomID(roomID: string): boolean {
-  return roomID.match(/^[A-Za-z0-9_-]+$/) !== null;
+const roomIDRegex = /^[A-Za-z0-9_\-/]+$/;
+
+function validateRoomID(roomID: string) {
+  if (!roomIDRegex.test(roomID)) {
+    return new Response(`Invalid roomID (must match ${roomIDRegex})`, {
+      status: 400,
+    });
+  }
+  return undefined;
 }
 
 // Caller must enforce no other concurrent calls to
@@ -304,8 +309,9 @@ export async function roomRecordByObjectIDForTest(
   return undefined;
 }
 
-export function roomRecords(storage: DurableStorage) {
-  return storage.list({prefix: ROOM_KEY_PREFIX}, roomRecordSchema);
+export async function roomRecords(storage: DurableStorage) {
+  const map = await storage.list({prefix: ROOM_KEY_PREFIX}, roomRecordSchema);
+  return map.values();
 }
 
 // Storage key types are intentionally not exported so that other modules
