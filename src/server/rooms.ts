@@ -78,10 +78,9 @@ export async function createRoom(
   // authApiKey here.
   const { roomID } = validatedBody;
 
-  if (!validRoomID(roomID)) {
-    return new Response("Invalid roomID (must match [A-Za-z0-9_-]+)", {
-      status: 400,
-    });
+  const invalidResponse = validateRoomID(roomID);
+  if (invalidResponse) {
+    return invalidResponse;
   }
 
   // Check if the room already exists.
@@ -135,7 +134,8 @@ export async function closeRoom(
   storage: DurableStorage,
   request: RociRequest
 ): Promise<Response> {
-  const roomID = request.params?.roomID;
+  const roomID =
+    request.params?.roomID && decodeURIComponent(request.params.roomID);
   if (roomID === undefined) {
     return new Response("Missing roomID", { status: 400 });
   }
@@ -171,7 +171,8 @@ export async function deleteRoom(
   storage: DurableStorage,
   request: RociRequest
 ): Promise<Response> {
-  const roomID = request.params?.roomID;
+  const roomID =
+    request.params?.roomID && decodeURIComponent(request.params.roomID);
   if (roomID === undefined) {
     return new Response("Missing roomID", { status: 400 });
   }
@@ -220,7 +221,8 @@ export async function deleteRoomRecord(
   storage: DurableStorage,
   request: RociRequest
 ): Promise<Response> {
-  const roomID = request.params?.roomID;
+  const roomID =
+    request.params?.roomID && decodeURIComponent(request.params.roomID);
   if (roomID === undefined) {
     return new Response("Missing roomID", { status: 400 });
   }
@@ -252,15 +254,15 @@ export async function createRoomRecordForLegacyRoom(
   storage: DurableStorage,
   request: RociRequest
 ): Promise<Response> {
-  const roomID = request.params?.roomID;
+  const roomID =
+    request.params?.roomID && decodeURIComponent(request.params.roomID);
   if (roomID === undefined) {
     return new Response("Missing roomID", { status: 400 });
   }
 
-  if (!validRoomID(roomID)) {
-    return new Response("Invalid roomID (must match [A-Za-z0-9_-]+)", {
-      status: 400,
-    });
+  const invalidResponse = validateRoomID(roomID);
+  if (invalidResponse) {
+    return invalidResponse;
   }
 
   const objectID = await roomDO.idFromName(roomID);
@@ -280,8 +282,15 @@ export async function createRoomRecordForLegacyRoom(
   return new Response("ok");
 }
 
-function validRoomID(roomID: string): boolean {
-  return roomID.match(/^[A-Za-z0-9_-]+$/) !== null;
+const roomIDRegex = /^[A-Za-z0-9_\-/]+$/;
+
+function validateRoomID(roomID: string) {
+  if (!roomIDRegex.test(roomID)) {
+    return new Response(`Invalid roomID (must match ${roomIDRegex})`, {
+      status: 400,
+    });
+  }
+  return undefined;
 }
 
 // Caller must enforce no other concurrent calls to
@@ -327,7 +336,8 @@ export async function roomRecordByObjectIDForTest(
 }
 
 export async function roomRecords(storage: DurableStorage) {
-  return storage.list({ prefix: ROOM_KEY_PREFIX }, roomRecordSchema);
+  const map = await storage.list({ prefix: ROOM_KEY_PREFIX }, roomRecordSchema);
+  return map.values();
 }
 
 // Storage key types are intentionally not exported so that other modules

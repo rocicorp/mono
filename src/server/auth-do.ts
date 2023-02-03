@@ -124,7 +124,8 @@ export class BaseAuthDO implements DurableObject {
   }
 
   async roomStatusByRoomID(request: RociRequest) {
-    const roomID = request.params?.roomID;
+    const roomID =
+      request.params?.roomID && decodeURIComponent(request.params.roomID);
     if (roomID === undefined) {
       return new Response("Missing roomID", { status: 400 });
     }
@@ -141,7 +142,7 @@ export class BaseAuthDO implements DurableObject {
     const roomIDToRecords = await this._roomRecordLock.withRead(async () => {
       return roomRecords(this._durableStorage);
     });
-    const records = Array.from(roomIDToRecords.values());
+    const records = Array.from(roomIDToRecords);
     return newJSONResponse(records);
   }
 

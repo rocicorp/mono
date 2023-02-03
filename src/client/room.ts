@@ -106,7 +106,10 @@ export function newRoomStatusRequest(
   authApiKey: string,
   roomID: string
 ) {
-  const path = roomStatusByRoomIDPath.replace(":roomID", roomID);
+  const path = roomStatusByRoomIDPath.replace(
+    ":roomID",
+    encodeURIComponent(roomID)
+  );
   const url = new URL(path, reflectServerURL);
   return new Request(url.toString(), {
     method: "get",

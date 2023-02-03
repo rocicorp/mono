@@ -130,6 +130,42 @@ test("createRoom creates a room and doesn't allow it to be re-created", async ()
   expect(roomDOcreateRoomCounts.size).toEqual(1);
 });
 
+test("createRoom allows slashes in roomIDs", async () => {
+  const { testRoomDO, state } = await createCreateRoomTestFixture();
+
+  const authDO = new BaseAuthDO({
+    roomDO: testRoomDO,
+    state,
+    authHandler: () => Promise.reject("should not be called"),
+    authApiKey: TEST_AUTH_API_KEY,
+    logSink: new TestLogSink(),
+    logLevel: "debug",
+  });
+
+  const testRequest = newCreateRoomRequest(
+    "https://test.roci.dev",
+    TEST_AUTH_API_KEY,
+    "/"
+  );
+  let response = await authDO.fetch(testRequest);
+  expect(response.status).toEqual(200);
+
+  response = await authDO.fetch(newRoomRecordsRequest());
+  expect(await response.json()).toEqual([
+    {
+      jurisdiction: "",
+      objectIDString: "unique-room-do-0",
+      roomID: "/",
+      status: "open",
+    },
+  ]);
+
+  response = await authDO.fetch(
+    newRoomStatusRequest("https://teset.roci.dev/", TEST_AUTH_API_KEY, "/")
+  );
+  expect(await response.json()).toEqual({ status: "open" });
+});
+
 test("createRoom requires roomIDs to not contain weird characters", async () => {
   const { testRoomID, testRoomDO, state } = await createCreateRoomTestFixture();
 
@@ -144,7 +180,7 @@ test("createRoom requires roomIDs to not contain weird characters", async () => 
     logLevel: "debug",
   });
 
-  const roomIDs = ["", " ", "foo/", testRoomID + "!", "$", " foo ", "🤷"];
+  const roomIDs = ["", " ", testRoomID + "!", "$", " foo ", "🤷"];
   for (const roomID of roomIDs) {
     const testRequest = newCreateRoomRequest(
       "https://test.roci.dev",
