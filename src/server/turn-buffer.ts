@@ -1,6 +1,6 @@
-import type {ClientID} from '../types/client-state';
-import type {Mutation} from '../protocol/push';
-import type {ClientMutation} from '../types/client-mutation';
+import type {ClientID} from '../types/client-state.js';
+import type {Mutation} from '../protocol/push.js';
+import type {ClientMutation} from '../types/client-mutation.js';
 
 export class TurnBuffer {
   private readonly _turns: ClientMutation[][];

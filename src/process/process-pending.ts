@@ -11,7 +11,7 @@ import {processRoom} from './process-room.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {send} from '../util/socket.js';
-import type {TurnBuffer} from 'src/server/turn-buffer.js';
+import type {TurnBuffer} from '../server/turn-buffer.js';
 
 /**
  * Processes all mutations in all rooms for a time range, and send relevant pokes.
