@@ -34,7 +34,7 @@ import {
   withBody,
 } from './router.js';
 import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
-import {sleep} from 'src/util/sleep.js';
+import {sleep} from '../util/sleep.js';
 import {TurnBuffer} from './turn-buffer.js';
 
 const roomIDKey = '/system/roomID';

@@ -1,7 +1,7 @@
 import {test, expect} from '@jest/globals';
 import type {WriteTransaction} from 'replicache';
 import {DurableStorage} from '../storage/durable-storage.js';
-import type {ClientPokeBody} from '../types/client-poke-body.js';
+import type {ClientPoke} from '../types/client-poke.js';
 import {
   ClientRecord,
   getClientRecord,
@@ -33,7 +33,7 @@ test('processRoom', async () => {
     headVersion: Version;
     clients: ClientMap;
     expectedError?: string;
-    expectedPokes?: ClientPokeBody[];
+    expectedPokes?: ClientPoke[];
     expectedUserValues?: Map<string, UserValue>;
     expectedClientRecords?: Map<string, ClientRecord>;
     expectedVersion: Version;
@@ -68,7 +68,6 @@ test('processRoom', async () => {
             lastMutationID: 1,
             patch: [],
             timestamp: 100,
-            requestID: '4fxcm49g2j9',
           },
         },
         {
@@ -79,7 +78,6 @@ test('processRoom', async () => {
             lastMutationID: 1,
             patch: [],
             timestamp: 100,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],
@@ -107,7 +105,6 @@ test('processRoom', async () => {
             lastMutationID: 1,
             patch: [],
             timestamp: 100,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],
@@ -140,7 +137,6 @@ test('processRoom', async () => {
               },
             ],
             timestamp: 100,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],
@@ -180,7 +176,6 @@ test('processRoom', async () => {
               },
             ],
             timestamp: 100,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],

@@ -5,7 +5,7 @@ import type {DisconnectHandler} from '../server/disconnect.js';
 import {fastForwardRoom} from '../ff/fast-forward.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {EntryCache} from '../storage/entry-cache.js';
-import type {ClientPokeBody} from '../types/client-poke-body.js';
+import type {ClientPoke} from '../types/client-poke.js';
 import {getClientRecord, putClientRecord} from '../types/client-record.js';
 import type {ClientID, ClientMap} from '../types/client-state.js';
 import {getVersion, putVersion} from '../types/version.js';
@@ -31,7 +31,7 @@ export async function processRoom(
   disconnectHandler: DisconnectHandler,
   storage: DurableStorage,
   timestamp: number,
-): Promise<ClientPokeBody[]> {
+): Promise<ClientPoke[]> {
   const cache = new EntryCache(storage);
 
   // TODO: can/should we pass `clients` to fastForward instead?
@@ -52,7 +52,7 @@ export async function processRoom(
   }
   lc.debug?.('currentVersion', currentVersion);
 
-  const pokes: ClientPokeBody[] = await fastForwardRoom(
+  const pokes: ClientPoke[] = await fastForwardRoom(
     clientIDs,
     gcr,
     currentVersion,

@@ -2,8 +2,8 @@
 // processed in one or more frames, up to [[endTime]] and sends necessary
 
 import type {ClientID, ClientMap} from '../types/client-state.js';
-import type {PokeBody, PokeMessage} from '../protocol/poke.js';
-import type {ClientPokeBody} from '../types/client-poke-body.js';
+import type {Poke, PokeMessage} from '../protocol/poke.js';
+import type {ClientPoke} from '../types/client-poke.js';
 import type {LogContext} from '@rocicorp/logger';
 import {must} from '../util/must.js';
 import type {MutatorMap} from './process-mutation.js';
@@ -12,6 +12,7 @@ import type {DisconnectHandler} from '../server/disconnect.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {send} from '../util/socket.js';
 import type {TurnBuffer} from '../server/turn-buffer.js';
+import {randomID} from '../util/rand.js';
 
 /**
  * Processes all mutations in all rooms for a time range, and send relevant pokes.
@@ -47,12 +48,8 @@ export async function processPending(
   }
 }
 
-function sendPokes(
-  lc: LogContext,
-  pokes: ClientPokeBody[],
-  clients: ClientMap,
-) {
-  const pokesByClientID = new Map<ClientID, PokeBody[]>();
+function sendPokes(lc: LogContext, pokes: ClientPoke[], clients: ClientMap) {
+  const pokesByClientID = new Map<ClientID, Poke[]>();
   for (const pokeBody of pokes) {
     let arr = pokesByClientID.get(pokeBody.clientID);
     if (!arr) {
@@ -65,7 +62,10 @@ function sendPokes(
     const client = must(clients.get(clientID));
     const poke: PokeMessage = [
       'poke',
-      pokeArr.length === 1 ? pokeArr[0] : pokeArr,
+      {
+        requestID: randomID(),
+        pokes: pokeArr,
+      },
     ];
     lc.debug?.('sending client', clientID, 'poke', poke);
     send(client.socket, poke);
@@ -74,7 +74,7 @@ function sendPokes(
 
 function clearPendingMutations(
   lc: LogContext,
-  pokes: ClientPokeBody[],
+  pokes: ClientPoke[],
   clients: ClientMap,
 ) {
   lc.debug?.('clearing pending mutations');

@@ -1,12 +1,11 @@
 import type {ClientRecord} from '../types/client-record.js';
 import type {ClientID} from '../types/client-state.js';
 import type {NullableVersion, Version} from '../types/version.js';
-import type {ClientPokeBody} from '../types/client-poke-body.js';
+import type {ClientPoke} from '../types/client-poke.js';
 import {getPatch} from './get-patch.js';
 import type {Patch} from '../protocol/poke.js';
 import {must} from '../util/must.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
-import {randomID} from '../util/rand.js';
 
 export type GetClientRecord = (clientID: ClientID) => Promise<ClientRecord>;
 
@@ -25,7 +24,7 @@ export async function fastForwardRoom(
   currentVersion: Version,
   storage: DurableStorage,
   timestamp: number,
-): Promise<ClientPokeBody[]> {
+): Promise<ClientPoke[]> {
   // Load all the client records in parallel
   const getMapEntry = async (clientID: ClientID) =>
     [clientID, await getClientRecord(clientID)] as [ClientID, ClientRecord];
@@ -50,14 +49,14 @@ export async function fastForwardRoom(
     await Promise.all([...distinctBaseCookies].map(getPatchEntry)),
   );
 
-  const ret: ClientPokeBody[] = [];
+  const ret: ClientPoke[] = [];
   for (const clientID of clients) {
     const record = must(records.get(clientID));
     if (record.baseCookie === currentVersion) {
       continue;
     }
     const patch = must(distinctPatches.get(record.baseCookie));
-    const poke: ClientPokeBody = {
+    const poke: ClientPoke = {
       clientID,
       poke: {
         baseCookie: record.baseCookie,
@@ -65,7 +64,6 @@ export async function fastForwardRoom(
         lastMutationID: record.lastMutationID,
         timestamp,
         patch,
-        requestID: randomID(),
       },
     };
     ret.push(poke);

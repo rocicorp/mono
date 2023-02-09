@@ -1,6 +1,6 @@
 import {test, expect} from '@jest/globals';
 import {DurableStorage} from '../storage/durable-storage.js';
-import type {ClientPokeBody} from '../types/client-poke-body.js';
+import type {ClientPoke} from '../types/client-poke.js';
 import {
   ClientRecord,
   getClientRecord,
@@ -25,7 +25,7 @@ test('fastForward', async () => {
     clients: ClientID[];
     timestamp: number;
     expectedError?: string;
-    expectedPokes?: ClientPokeBody[];
+    expectedPokes?: ClientPoke[];
   };
 
   const cases: Case[] = [
@@ -52,7 +52,6 @@ test('fastForward', async () => {
             lastMutationID: 1,
             patch: [],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],
@@ -93,7 +92,6 @@ test('fastForward', async () => {
               },
             ],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],
@@ -129,7 +127,6 @@ test('fastForward', async () => {
               },
             ],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
         {
@@ -145,7 +142,6 @@ test('fastForward', async () => {
               },
             ],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],
@@ -181,7 +177,6 @@ test('fastForward', async () => {
               },
             ],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],

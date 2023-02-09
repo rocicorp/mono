@@ -1,11 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
-import {randomID} from '../util/rand.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {unwrapPatch} from '../storage/replicache-transaction.js';
 import type {Storage} from '../storage/storage.js';
 import type {ClientMutation} from '../types/client-mutation.js';
-import type {ClientPokeBody} from '../types/client-poke-body.js';
+import type {ClientPoke} from '../types/client-poke.js';
 import {getClientRecord, putClientRecord} from '../types/client-record.js';
 import type {ClientID} from '../types/client-state.js';
 import {getVersion} from '../types/version.js';
@@ -25,7 +24,7 @@ export async function processFrame(
   clients: ClientID[],
   storage: Storage,
   timestamp: number,
-): Promise<ClientPokeBody[]> {
+): Promise<ClientPoke[]> {
   lc.debug?.('processing frame - clients', clients);
 
   const cache = new EntryCache(storage);
@@ -34,7 +33,7 @@ export async function processFrame(
 
   lc.debug?.('prevVersion', prevVersion, 'nextVersion', nextVersion);
 
-  const ret: ClientPokeBody[] = [];
+  const ret: ClientPoke[] = [];
   for (const mutation of mutations) {
     const mutationCache = new EntryCache(cache);
     await processMutation(lc, mutation, mutators, mutationCache, nextVersion);
@@ -49,7 +48,7 @@ export async function processFrame(
         const clientRecord = (await getClientRecord(clientID, cache))!;
         clientRecord.baseCookie = nextVersion;
         await putClientRecord(clientID, clientRecord, cache);
-        const poke: ClientPokeBody = {
+        const poke: ClientPoke = {
           clientID,
           poke: {
             baseCookie: prevVersion,
@@ -77,7 +76,7 @@ export async function processFrame(
       clientRecord.baseCookie = nextVersion;
       await putClientRecord(clientID, clientRecord, cache);
 
-      const poke: ClientPokeBody = {
+      const poke: ClientPoke = {
         clientID,
         poke: {
           baseCookie: prevVersion,
@@ -85,7 +84,6 @@ export async function processFrame(
           lastMutationID: clientRecord.lastMutationID,
           patch,
           timestamp,
-          requestID: randomID(),
         },
       };
       ret.push(poke);
