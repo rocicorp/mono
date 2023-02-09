@@ -525,7 +525,7 @@ export class BaseAuthDO implements DurableObject {
             objectIDByRoomID(this._durableStorage, this._roomDO, roomID),
           );
           if (roomObjectID === undefined) {
-            lc.error?.(`Can't find room ${roomID}, skipping`);
+            lc.info?.(`Can't find room ${roomID}, skipping`);
             return;
           }
           const stub = this._roomDO.get(roomObjectID);
