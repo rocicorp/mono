@@ -17,7 +17,7 @@ import type {PingMessage} from '../protocol/ping.js';
 import type {Patch, PokeBody} from '../protocol/poke.js';
 import type {PushBody, PushMessage} from '../protocol/push.js';
 import {NullableVersion, nullableVersionSchema} from '../types/version.js';
-import {assert, assertNumber} from '../util/asserts.js';
+import {assert} from '../util/asserts.js';
 import {Lock} from '../util/lock.js';
 import {resolver} from '../util/resolver.js';
 import {sleep} from '../util/sleep.js';
@@ -113,10 +113,9 @@ export class Reflect<MD extends MutatorDefs> {
   private readonly _pokeBuffer: PokeBody[] = [];
   private _pokePlaybackLoopRunning = false;
   private _lastRafTimestamp = 0;
-  private readonly _clientTimestampOffsets: Map<string, number> = new Map();
+  private _playbackOffset = -1;
   private readonly _clientsPlayedBack: Set<string> = new Set();
-  private readonly _clientTimestampOffsetsHistory: Map<string, number[]> =
-    new Map();
+  private readonly _offsetHistory: number[] = [];
 
   private _lastMutationIDSent = -1;
   private _onPong: () => void = () => undefined;
@@ -429,26 +428,25 @@ export class Reflect<MD extends MutatorDefs> {
     this._socket = undefined;
     this._lastMutationIDSent = -1;
     this._pokeBuffer.length = 0;
+    this._playbackOffset = -1;
   }
 
   private async _handlePoke(l: LogContext, pokeBodies: PokeBody[]) {
-    const now = performance.now();
+    //const now = performance.now();
     const unixNow = Date.now();
     for (const pokeBody of pokeBodies) {
-      const {clientID, timestamp, unixTimestamp} = pokeBody;
-      if (clientID) {
+      const {unixTimestamp} = pokeBody;
+      if (unixTimestamp !== undefined) {
         histogramInc(receiveLatencyHistogram, unixNow - unixTimestamp);
-        const clientTimestampOffset = now - timestamp;
-        if (!this._clientTimestampOffsets.has(clientID)) {
-          l.info?.('new client', clientID);
-          this._clientTimestampOffsets.set(clientID, clientTimestampOffset);
+        const timestampOffset = unixNow - unixTimestamp;
+        if (this._playbackOffset === -1) {
+          this._playbackOffset = timestampOffset;
+          l.info?.('new playback offset', timestampOffset);
         }
-        let history = this._clientTimestampOffsetsHistory.get(clientID);
-        if (!history) {
-          history = [];
-          this._clientTimestampOffsetsHistory.set(clientID, history);
+        this._offsetHistory.push(timestampOffset);
+        if (this._offsetHistory.length > 100) {
+          this._offsetHistory.shift();
         }
-        history.push(clientTimestampOffset);
       }
     }
     this._pokeBuffer.push(...pokeBodies);
@@ -483,23 +481,22 @@ export class Reflect<MD extends MutatorDefs> {
   private async _processPokes(l: LogContext) {
     await this._pokeLock.withLock(async () => {
       l.info?.('got poke lock at', performance.now() - this._start);
-      l.info?.(
-        'clientTimestampOffsetHistory',
-        this._clientTimestampOffsetsHistory,
-      );
+      l.info?.('playback offset', this._playbackOffset);
       const thisClientID = await this.clientID;
       const toMerge: PokeBody[] = [];
-      const now = performance.now();
-      const localUnixTimestamp = Date.now();
+      const unixNow = Date.now();
       let hasMiss = false;
       while (this._pokeBuffer.length) {
         const headPoke = this._pokeBuffer[0];
-        const {clientID, timestamp, unixTimestamp} = headPoke;
-        if (clientID !== undefined && clientID !== thisClientID) {
-          const clientTimestampOffset =
-            this._clientTimestampOffsets.get(clientID);
-          assertNumber(clientTimestampOffset);
-          if (clientTimestampOffset + timestamp + this._buffer > now) {
+        const {clientID, unixTimestamp} = headPoke;
+        if (
+          clientID !== undefined &&
+          unixTimestamp !== undefined &&
+          clientID !== thisClientID
+        ) {
+          const playbackOffset = this._playbackOffset;
+          assert(playbackOffset !== -1);
+          if (playbackOffset + unixTimestamp + this._buffer > unixNow) {
             break;
           }
           const newClient = !this._clientsPlayedBack.has(clientID);
@@ -508,12 +505,12 @@ export class Reflect<MD extends MutatorDefs> {
             this._clientsPlayedBack.add(clientID);
           }
           let mutationOffset = Math.floor(
-            -(clientTimestampOffset + timestamp + this._buffer - now),
+            -(playbackOffset + unixTimestamp + this._buffer - unixNow),
           );
           assert(mutationOffset >= 0 || clientID === thisClientID);
           mutationOffset = Math.max(mutationOffset, 0);
           histogramInc(mutationOffsetHistogram, mutationOffset);
-          const latency = localUnixTimestamp - unixTimestamp;
+          const latency = unixNow - unixTimestamp;
           histogramInc(playbackLatencyHistogram, latency);
           if (mutationOffset > 16) {
             l.info?.('************* Missed by ', mutationOffset);
@@ -556,7 +553,9 @@ export class Reflect<MD extends MutatorDefs> {
       };
 
       try {
+        const start = performance.now();
         await this._rep.poke(p);
+        l.info?.('this._rep.poke took', performance.now() - start);
       } catch (e) {
         if (String(e).indexOf('unexpected base cookie for poke') > -1) {
           l.info?.('out of order poke, disconnecting');

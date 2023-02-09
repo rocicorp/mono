@@ -26,7 +26,7 @@ const pokeBodySchema = z.object({
   patch: patchSchema,
   clientID: z.optional(z.string()),
   timestamp: z.number(),
-  unixTimestamp: z.number(),
+  unixTimestamp: z.optional(z.number()),
 });
 
 export const pokeMessageSchema = z.tuple([
