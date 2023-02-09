@@ -1,6 +1,5 @@
 import {assert, assertNumber, assertObject, assertString} from '../asserts.js';
 import {deepFreeze} from '../json.js';
-import {IDBStore} from '../kv/idb-store.js';
 import type * as kv from '../kv/mod.js';
 import {uuid} from '../uuid.js';
 import {getIDBDatabasesDBName} from './idb-databases-store-db-name.js';
@@ -50,9 +49,7 @@ function assertIndexedDBDatabase(
 export class IDBDatabasesStore {
   private readonly _kvStore: kv.Store;
 
-  constructor(
-    createKVStore: (name: string) => kv.Store = name => new IDBStore(name),
-  ) {
+  constructor(createKVStore: kv.CreateStore) {
     this._kvStore = createKVStore(getIDBDatabasesDBName());
   }
 

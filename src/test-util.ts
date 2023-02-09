@@ -31,6 +31,7 @@ import {
 import {resolver} from '@rocicorp/resolver';
 import type {Cookie} from './cookies.js';
 import type {PatchOperation} from './patch-operation.js';
+import {NamedMemStore} from './kv/named-mem-store.js';
 
 export class ReplicacheTest<
   // eslint-disable-next-line @typescript-eslint/ban-types
@@ -237,10 +238,14 @@ export async function tickUntil(f: () => boolean, msPerTest = 10) {
 }
 
 export class MemStoreWithCounters implements kv.Store {
-  readonly store = new kv.TestMemStore();
+  readonly store: kv.Store;
   readCount = 0;
   writeCount = 0;
   closeCount = 0;
+
+  constructor(name: string) {
+    this.store = new NamedMemStore(name);
+  }
 
   resetCounters() {
     this.readCount = 0;

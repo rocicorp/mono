@@ -1,15 +1,46 @@
 import {RWLock} from '@rocicorp/lock';
 import type {FrozenJSONValue} from '../json.js';
 import {promiseVoid} from '../resolved-promises.js';
-import {stringCompare} from '../string-compare.js';
-import {WriteImpl} from './write-impl.js';
 import {ReadImpl} from './read-impl.js';
 import type {Read, Store, Write} from './store.js';
+import {WriteImpl} from './write-impl.js';
 
-export class TestMemStore implements Store {
-  private readonly _map: Map<string, FrozenJSONValue> = new Map();
-  private readonly _rwLock = new RWLock();
+type StorageMap = Map<string, FrozenJSONValue>;
+
+type Value = {readonly lock: RWLock; readonly map: StorageMap};
+
+const stores = new Map<string, Value>();
+
+export function clearAllNamedMemStoresForTesting(): void {
+  stores.clear();
+}
+
+/**
+ * A named in-memory Store implementation.
+ *
+ * Two (or more) named memory stores with the same name will share the same
+ * underlying storage. They will also share the same read/write locks, so that
+ * only one write transaction can be running at the same time.
+ */
+export class NamedMemStore implements Store {
+  private readonly _map: StorageMap;
+  private readonly _rwLock: RWLock;
   private _closed = false;
+
+  constructor(name: string) {
+    const entry = stores.get(name);
+    let lock: RWLock;
+    let map: StorageMap;
+    if (entry) {
+      ({lock, map} = entry);
+    } else {
+      lock = new RWLock();
+      map = new Map();
+      stores.set(name, {lock, map});
+    }
+    this._rwLock = lock;
+    this._map = map;
+  }
 
   async read(): Promise<Read> {
     const release = await this._rwLock.read();
@@ -46,34 +77,5 @@ export class TestMemStore implements Store {
 
   get closed(): boolean {
     return this._closed;
-  }
-
-  snapshot(): Record<string, FrozenJSONValue> {
-    const entries = [...this._map.entries()];
-    entries.sort((a, b) => stringCompare(a[0], b[0]));
-    return Object.fromEntries(entries);
-  }
-
-  restoreSnapshot(snapshot: Record<string, FrozenJSONValue>): void {
-    this._map.clear();
-
-    for (const [k, v] of Object.entries(snapshot)) {
-      this._map.set(k, v);
-    }
-  }
-
-  /**
-   * This exposes the underlying map for testing purposes.
-   */
-  entries(): IterableIterator<[string, FrozenJSONValue]> {
-    return this._map.entries();
-  }
-
-  map(): Map<string, FrozenJSONValue> {
-    return this._map;
-  }
-
-  clear(): void {
-    this._map.clear();
   }
 }

@@ -25,6 +25,7 @@ import {
 } from '../replicache.js';
 import {ClientGroupMap, setClientGroups} from './client-groups.js';
 import {makeClientGroupMap} from './client-groups.test.js';
+import {IDBStore} from '../kv/idb-store.js';
 
 suite('collectIDBDatabases', () => {
   let clock: SinonFakeTimers;
@@ -332,7 +333,8 @@ suite('collectIDBDatabases', () => {
 });
 
 test('deleteAllReplicacheData', async () => {
-  const store = new IDBDatabasesStore();
+  const createKVStore = (name: string) => new IDBStore(name);
+  const store = new IDBDatabasesStore(createKVStore);
   const numDbs = 10;
 
   for (let i = 0; i < numDbs; i++) {
@@ -348,7 +350,7 @@ test('deleteAllReplicacheData', async () => {
 
   expect(Object.values(await store.getDatabases())).to.have.length(numDbs);
 
-  const result = await deleteAllReplicacheData();
+  const result = await deleteAllReplicacheData(createKVStore);
 
   expect(Object.values(await store.getDatabases())).to.have.length(0);
   expect(result.dropped).to.have.length(numDbs);

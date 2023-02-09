@@ -12,7 +12,6 @@ import {
   REPLICACHE_FORMAT_VERSION_DD31,
   REPLICACHE_FORMAT_VERSION_SDD,
 } from './replicache.js';
-import {IDBStore} from './kv/idb-store.js';
 import {assertClientSDD, setClients} from './persist/clients.js';
 import type {ClientID, ClientGroupID} from './sync/ids.js';
 import type {Pusher} from './pusher.js';
@@ -21,6 +20,7 @@ import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from './error-responses.js';
+import type {CreateStore} from './kv/store.js';
 
 const MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 10 * 2 ** 20; // 10 MB
 
@@ -78,6 +78,7 @@ export class MutationRecovery {
     perdag: dag.Store,
     idbDatabase: persist.IndexedDBDatabase,
     idbDatabases: persist.IDBDatabasesStore,
+    createStore: CreateStore,
   ): Promise<boolean> {
     const {lc, enableMutationRecovery, isPushDisabled, delegate} =
       this._options;
@@ -118,6 +119,7 @@ export class MutationRecovery {
                 database,
                 this._options,
                 undefined,
+                createStore,
               );
           }
         }
@@ -361,8 +363,9 @@ async function recoverMutationsWithNewPerdag(
   database: persist.IndexedDBDatabase,
   options: MutationRecoveryOptions,
   preReadClientMap: persist.ClientMap | undefined,
+  createStore: CreateStore,
 ) {
-  const perKvStore = new IDBStore(database.name);
+  const perKvStore = createStore(database.name);
   const perdag = new dag.StoreImpl(perKvStore, dag.uuidChunkHasher, assertHash);
   try {
     await recoverMutationsFromPerdag(

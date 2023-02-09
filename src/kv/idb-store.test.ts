@@ -1,4 +1,4 @@
-import {runAll, TestStore} from './store-test-util.js';
+import {runAll} from './store-test-util.js';
 import {IDBNotFoundError, IDBStore} from './idb-store.js';
 import {dropStore} from './idb-util.js';
 import {expect} from '@esm-bundle/chai';
@@ -14,8 +14,7 @@ runAll('idbstore', newRandomIDBStore);
 test('dropStore', async () => {
   const name = `drop-store-${Math.random()}`;
   await dropStore(name);
-  let idb = new IDBStore(name);
-  let store = new TestStore(idb);
+  let store = new IDBStore(name);
 
   // Write a value.
   await store.withWrite(async wt => {
@@ -33,8 +32,7 @@ test('dropStore', async () => {
   await dropStore(name);
 
   // Reopen store, verify data is gone
-  idb = new IDBStore(name);
-  store = new TestStore(idb);
+  store = new IDBStore(name);
   await store.withRead(async rt => {
     expect(await rt.has('foo')).to.be.false;
   });

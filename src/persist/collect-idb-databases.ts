@@ -192,11 +192,13 @@ function allClientsOlderThan(
  * Returns an object with the names of the successfully dropped databases
  * and any errors encountered while dropping.
  */
-export async function deleteAllReplicacheData(): Promise<{
+export async function deleteAllReplicacheData(
+  createKVStore: kv.CreateStore,
+): Promise<{
   dropped: string[];
   errors: unknown[];
 }> {
-  const store = new IDBDatabasesStore();
+  const store = new IDBDatabasesStore(createKVStore);
   const databases = await store.getDatabases();
   const dbNames = Object.values(databases).map(db => db.name);
 

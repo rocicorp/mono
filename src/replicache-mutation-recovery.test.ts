@@ -53,7 +53,8 @@ export async function createPerdag(args: {
   closeablesToClose.add(idb);
   dbsToDrop.add(idbName);
 
-  const idbDatabases = new persist.IDBDatabasesStore();
+  const createKVStore = (name: string) => new kv.IDBStore(name);
+  const idbDatabases = new persist.IDBDatabasesStore(createKVStore);
   try {
     await idbDatabases.putDatabase({
       name: idbName,

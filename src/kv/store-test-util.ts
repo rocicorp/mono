@@ -2,7 +2,7 @@ import {expect} from '@esm-bundle/chai';
 import type {FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
 import type {Read, Store, Write} from './store.js';
 
-export class TestStore implements Store {
+class TestStore implements Store {
   private readonly _store: Store;
 
   constructor(store: Store) {

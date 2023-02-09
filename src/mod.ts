@@ -63,6 +63,7 @@ export type {
   Store as ExperimentalKVStore,
   Read as ExperimentalKVRead,
   Write as ExperimentalKVWrite,
+  CreateStore as ExperimentalCreateKVStore,
 } from './kv/store.js';
 
 export type {

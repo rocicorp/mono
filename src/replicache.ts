@@ -26,7 +26,7 @@ import {
   WatchCallbackForOptions,
   WatchCallback,
 } from './subscriptions.js';
-import {IDBStore} from './kv/mod.js';
+import {IDBStore, type CreateStore} from './kv/mod.js';
 import * as dag from './dag/mod.js';
 import * as db from './db/mod.js';
 import * as sync from './sync/mod.js';
@@ -181,7 +181,7 @@ export interface RequestOptions {
 }
 
 /**
- * The reason [[onUpdateNeeded]] was called.
+ * The reason {@link onUpdateNeeded} was called.
  */
 export type UpdateNeededReason =
   | {
@@ -233,6 +233,12 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * A disabled client group prevents the client from pushing and pulling.
    */
   private _isClientGroupDisabled = false;
+
+  /**
+   * Factory function to create the persisted stores. Defaults to use `new
+   * IDBStore(name)`.
+   */
+  private readonly _createStore: CreateStore;
 
   /**
    * This is the name Replicache uses for the IndexedDB database where data is
@@ -311,8 +317,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
   private readonly _memdag: dag.LazyStore;
   private readonly _perdag: dag.Store;
-  private readonly _idbDatabases: persist.IDBDatabasesStore =
-    new persist.IDBDatabasesStore();
+  private readonly _idbDatabases: persist.IDBDatabasesStore;
   private readonly _lc: LogContext;
 
   private readonly _closeAbortController = new AbortController();
@@ -416,7 +421,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       puller,
       pusher,
       licenseKey,
-      experimentalKVStore,
+      experimentalCreateKVStore: createStore = name => new IDBStore(name),
       indexes = {},
     } = options;
     this.auth = auth ?? '';
@@ -462,7 +467,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this._queryInternal,
       this._lc,
     );
-    const perKvStore = experimentalKVStore || new IDBStore(this.idbName);
+
+    this._createStore = createStore;
+    this._idbDatabases = new persist.IDBDatabasesStore(createStore);
+    const perKvStore = createStore(this.idbName);
     this._perdag = new dag.StoreImpl(
       perKvStore,
       dag.uuidChunkHasher,
@@ -1620,6 +1628,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this._perdag,
       this._idbDatabase,
       this._idbDatabases,
+      this._createStore,
     );
   }
 
