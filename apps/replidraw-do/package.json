@@ -1,0 +1,38 @@
+{
+  "name": "replidraw-do",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev-worker": "wrangler dev",
+    "build": "rm -rf dist && next build",
+    "start": "next start",
+    "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
+    "check-types": "tsc -p tsconfig.json --noEmit && tsc -p worker/tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/workers-types": "^3.11.0",
+    "@datadog/browser-logs": "^4.11.3",
+    "@rocicorp/logger": "^2.2.0",
+    "@rocicorp/reflect": "^0.9.0",
+    "@rocicorp/reflect-server": "^0.17.0",
+    "@types/node": "^17.0.16",
+    "@types/react": "^17.0.39",
+    "@types/react-dom": "^17.0.11",
+    "bootstrap": "^4.6.0",
+    "nanoid": "^3.2.0",
+    "next": "^12.1.6",
+    "prettier": "^2.5.1",
+    "react": "17.0.2",
+    "react-bootstrap": "^1.5.2",
+    "react-dom": "^17.0.2",
+    "react-draggable": "^4.4.4",
+    "react-hotkeys": "^1.1.4",
+    "replicache-react": "^2.10.0",
+    "typescript": "^4.5.5",
+    "zod": "^3.11.6"
+  },
+  "devDependencies": {
+    "wrangler": "^2.1.9"
+  }
+}
