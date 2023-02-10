@@ -1,0 +1,30 @@
+name = "reps"
+type = "javascript"
+
+account_id = ""
+workers_dev = true
+# route = ""
+# zone_id = ""
+
+compatibility_date = "2021-11-15"
+compatibility_flags = []
+
+[durable_objects]
+bindings = [
+  { name = "server", class_name = "Server" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["Server"]
+
+[build]
+command = "npm run build"
+
+[build.upload]
+format = "modules"
+dir = "dist"
+main = "./index.mjs"
+
+[miniflare]
+durable_objects_persist = true
