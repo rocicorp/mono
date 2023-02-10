@@ -50,7 +50,7 @@
     "playwright": "^1.28.1",
     "rollup": "^2.70.1",
     "rollup-plugin-dts": "^4.2.0",
-    "sinon": "^13.0.1",
+    "sinon": "13.0.1",
     "typescript": "^4.9.4",
     "xbytes": "^1.7.0"
   },
