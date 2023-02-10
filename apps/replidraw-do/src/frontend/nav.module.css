@@ -1,0 +1,50 @@
+.nav {
+  display: flex;
+  background: rgb(44, 44, 44);
+  flex: 0 0 auto;
+}
+
+.button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 40px;
+  opacity: "0.8";
+  fill: "white";
+  stroke-width: 0;
+  color: white;
+  font-size: 13px;
+  font-weight: 400;
+  padding: 0 10px;
+}
+
+.button:hover {
+  background-color: rgb(75, 158, 244);
+  opacity: 1;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.about {
+  display: flex;
+  margin: auto 12px 0 auto;
+  width: auto;
+  align-items: center;
+}
+
+.user {
+  color: white;
+  display: flex;
+  margin: auto 12px auto auto;
+  padding: 0 10px;
+  height: 25px;
+  align-items: center;
+  font-family: "Inter", sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  border-radius: 6px;
+  line-height: 1em;
+}
