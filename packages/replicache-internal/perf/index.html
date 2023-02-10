@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<script type="module">
+  import * as m from './perf.ts';
+  import {benchmarks, runAll} from './perf.ts';
+
+  // export all as globals
+  for (const [n, v] of Object.entries(m)) {
+    globalThis[n] = v;
+  }
+
+  const selected = window.location.search
+    .substr(1)
+    .split('&')
+    .map(kv => kv.split('='))
+    .filter(([k]) => k == 'group')
+    .map(([, v]) => v);
+
+  window.onload = () => {
+    const form = document.querySelector('#group-form');
+    [...new Set(benchmarks.map(b => b.group))].forEach(group => {
+      var label = document.createElement('label');
+      var input = document.createElement('input');
+      input.type = 'checkbox';
+      input.name = 'group';
+      input.value = group;
+      input.checked = selected.indexOf(group) > -1;
+      input.onchange = () => form.submit();
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(group));
+      form.appendChild(label);
+
+      document.querySelector('button').onclick = () => runAll(selected);
+    });
+  };
+</script>
+
+<form id="group-form" method="GET"></form>
+<button>Go</button>
+<pre id="out"></pre>

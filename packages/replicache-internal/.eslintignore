@@ -1,0 +1,11 @@
+node_modules
+coverage
+out
+tool
+bin
+src/wasm
+*_generated.ts
+src/*/generated/
+.eslintrc.cjs
+web-test-runner.config.mjs
+rollup.config.js

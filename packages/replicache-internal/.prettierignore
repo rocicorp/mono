@@ -1,0 +1,5 @@
+out/
+src/wasm/
+doc/build/
+doc/docs/api
+doc/.docusaurus/
