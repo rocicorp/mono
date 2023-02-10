@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script type="module">
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabId = urlParams.get('tabId');
+      const initialize = async event => {
+        removeEventListener('storage', initialize, false);
+        if (!event.key?.startsWith(tabId)) {
+          return;
+        }
+        const testutil = await import('/src/test-util.ts');
+        await testutil.initializeNewTab(tabId, urlParams.get('path'), event);
+      };
+      addEventListener('storage', initialize, false);
+    </script>
+  </head>
+</html>

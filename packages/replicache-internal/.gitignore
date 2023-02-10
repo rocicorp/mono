@@ -1,0 +1,10 @@
+coverage
+node_modules
+.DS_Store
+doc/docs/api
+out
+/docs/
+perf/index.js.map
+perf/index.js
+tool/bump/bump
+.vscode/launch.json

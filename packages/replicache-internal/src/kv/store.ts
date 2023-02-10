@@ -1,0 +1,59 @@
+import type {ReadonlyJSONValue} from '../json.js';
+
+/**
+ * Store defines a transactional key/value store that Replicache stores all data
+ * within.
+ *
+ * For correct operation of Replicache, implementations of this interface must
+ * provide [strict
+ * serializable](https://jepsen.io/consistency/models/strict-serializable)
+ * transactions.
+ *
+ * Informally, read and write transactions must behave like a ReadWrite Lock -
+ * multiple read transactions are allowed in parallel, or one write.
+ * Additionally writes from a transaction must appear all at one, atomically.
+ *
+ * @experimental This interface is experimental and might be removed or changed
+ * in the future without following semver versioning. Please be cautious.
+ */
+export interface Store {
+  read(): Promise<Read>;
+  withRead<R>(f: (read: Read) => R | Promise<R>): Promise<R>;
+  write(): Promise<Write>;
+  withWrite<R>(f: (write: Write) => R | Promise<R>): Promise<R>;
+  close(): Promise<void>;
+  closed: boolean;
+}
+
+/**
+ * This interface is used so that we can release the lock when the transaction
+ * is done.
+ *
+ * @experimental This interface is experimental and might be removed or changed
+ * in the future without following semver versioning. Please be cautious.
+ */
+interface Release {
+  release(): void;
+}
+
+/**
+ * @experimental This interface is experimental and might be removed or changed
+ * in the future without following semver versioning. Please be cautious.
+ */
+export interface Read extends Release {
+  has(key: string): Promise<boolean>;
+  // This returns ReadonlyJSONValue instead of FrozenJSONValue because we don't
+  // want to FrozenJSONValue to be part of our public API. Our implementations
+  // really return FrozenJSONValue but it is not required by the interface.
+  get(key: string): Promise<ReadonlyJSONValue | undefined>;
+  closed: boolean;
+}
+
+/**
+ * @experimental
+ */
+export interface Write extends Read {
+  put(key: string, value: ReadonlyJSONValue): Promise<void>;
+  del(key: string): Promise<void>;
+  commit(): Promise<void>;
+}
