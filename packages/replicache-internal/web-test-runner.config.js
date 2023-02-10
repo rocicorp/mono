@@ -9,6 +9,7 @@ const firefox = playwrightLauncher({product: 'firefox'});
 
 /** @type {import('@web/test-runner').TestRunnerConfig} */
 const config = {
+  port: 3001,
   concurrentBrowsers: 3,
   nodeResolve: true,
   plugins: [

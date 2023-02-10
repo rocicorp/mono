@@ -15,7 +15,7 @@
     "build": "rm -rf out && npm run build-dts && node build.js",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "dev": "miniflare --live-reload --debug",
-    "test": "npm run build && node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test": "npm run build && node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
     "test:watch": "npm run build && node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "types:check": "tsc --noEmit",
     "prepack": "npm run lint && npm run test && npm run build"
