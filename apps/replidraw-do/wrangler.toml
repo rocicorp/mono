@@ -1,0 +1,26 @@
+name = "replidraw-offline"
+main = "worker/index.ts"
+compatibility_date = "2022-06-03"
+
+
+[durable_objects]
+bindings = [
+  { name = "roomDO", class_name = "RoomDO" },
+  { name = "authDO", class_name = "AuthDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["Server"]
+
+[[migrations]]
+tag = "v2"
+renamed_classes = [{from = "Server", to = "RoomDO" }]
+new_classes = ["AuthDO"]
+
+[triggers]
+crons = [ "*/5 * * * *" ] # ever 5 mins for AuthDO connection revalidation
+
+#[secrets]
+#DATADOG_API_KEY
+#REFLECT_AUTH_API_KEY
