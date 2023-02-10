@@ -1,0 +1,26 @@
+{
+  "name": "@rocicorp/mono",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.1.2",
+    "@rocicorp/prettier-config": "^0.1.1",
+    "turbo": "^1.7.4"
+  },
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config",
+  "packageManager": "npm@8.11.0"
+}
