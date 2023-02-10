@@ -1,0 +1,12 @@
+{
+  "deno.enable": false,
+  "editor.tabSize": 2,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  },
+  "prettier.arrowParens": "avoid",
+  "prettier.bracketSpacing": false,
+  "prettier.singleQuote": true,
+  "prettier.trailingComma": "all",
+  "typescript.tsdk": "node_modules/typescript/lib"
+}
