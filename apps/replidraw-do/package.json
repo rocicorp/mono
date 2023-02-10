@@ -1,0 +1,30 @@
+{
+  "name": "replidraw-do",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "rm -rf dist && next build && tsc --project tsconfig.json",
+    "start": "next start",
+    "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'"
+  },
+  "devDependencies": {
+    "@types/node": "^17.0.13",
+    "@types/react": "^17.0.11",
+    "@types/react-dom": "^17.0.11",
+    "bootstrap": "^4.6.0",
+    "nanoid": "^3.1.23",
+    "next": "^12.0.9",
+    "prettier": "^2.2.1",
+    "react": "17.0.2",
+    "react-bootstrap": "^1.5.2",
+    "react-dom": "^17.0.2",
+    "react-draggable": "^4.4.3",
+    "react-hotkeys": "^1.1.4",
+    "replicache": "^9.0.0-beta.0",
+    "replicache-react": "^2.5.0",
+    "tdigest": "^0.1.1",
+    "typescript": "^4.1.5",
+    "zod": "^3.11.6"
+  }
+}
