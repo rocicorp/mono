@@ -1,0 +1,82 @@
+{
+  "name": "replicache",
+  "description": "Realtime sync for any backend stack",
+  "version": "12.0.1",
+  "repository": "github:rocicorp/replicache",
+  "license": "https://roci.dev/terms.html",
+  "scripts": {
+    "test": "web-test-runner",
+    "test:watch": "web-test-runner --watch",
+    "format": "prettier --write '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
+    "check-format": "prettier --check '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
+    "check-types": "tsc --noEmit && npm run build && tsc --noEmit --project perf/tsconfig.json && tsc --noEmit tool/cli.ts",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
+    "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
+    "build": "rm -rf out && npm run build-dts && node tool/build.js",
+    "build-perf": "node tool/build.js --perf",
+    "build-bundle-sizes": "rm -rf out && npm run build-dts && node tool/build.js --bundle-sizes",
+    "prepack": "npm run lint && npm run test && npm run build && mv README.md README-org.md && mv README-external.md README.md",
+    "postpack": "mv README.md README-external.md && mv README-org.md README.md",
+    "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts",
+    "perf": "npm run build-perf && node perf/runner.js"
+  },
+  "devDependencies": {
+    "@esm-bundle/chai": "^4.3.4",
+    "@rocicorp/eslint-config": "^0.2.0",
+    "@rocicorp/licensing": "^4.1.0",
+    "@rocicorp/lock": "^1.0.1",
+    "@rocicorp/logger": "^2.2.0",
+    "@rocicorp/prettier-config": "^0.1.1",
+    "@rocicorp/resolver": "^1.0.0",
+    "@types/command-line-usage": "^5.0.2",
+    "@types/lodash-es": "^4.17.6",
+    "@types/mocha": "^9.1.0",
+    "@types/node": "^18.11.9",
+    "@types/sinon": "^10.0.11",
+    "@web/dev-server": "^0.1.35",
+    "@web/dev-server-esbuild": "^0.3.3",
+    "@web/test-runner": "^0.15.0",
+    "@web/test-runner-playwright": "^0.9.0",
+    "benchmark": "^2.1.4",
+    "command-line-args": "^5.2.1",
+    "command-line-usage": "^6.1.2",
+    "compare-utf8": "^0.1.0",
+    "esbuild": "^0.16.13",
+    "fetch-mock": "^9.11.0",
+    "get-port": "^6.1.2",
+    "hash-wasm": "^4.9.0",
+    "idb": "^7.0.1",
+    "navigator.locks": "^0.8.5",
+    "playwright": "^1.28.1",
+    "rollup": "^2.70.1",
+    "rollup-plugin-dts": "^4.2.0",
+    "sinon": "^13.0.1",
+    "typescript": "^4.9.4",
+    "xbytes": "^1.7.0"
+  },
+  "type": "module",
+  "main": "out/replicache.cjs",
+  "module": "out/replicache.js",
+  "types": "out/replicache.d.ts",
+  "bin": {
+    "replicache": "./out/cli.cjs"
+  },
+  "engines": {
+    "node": ">=14.8.0"
+  },
+  "exports": {
+    "module": "./out/replicache.js",
+    "require": "./out/replicache.cjs",
+    "default": "./out/replicache.js"
+  },
+  "files": [
+    "out/cli.js",
+    "out/replicache.d.ts",
+    "out/replicache.cjs",
+    "out/replicache.js"
+  ],
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}
