@@ -1,0 +1,698 @@
+import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
+import {nanoid} from 'nanoid';
+import {
+  MutatorDefs,
+  Poke,
+  PullerResult,
+  ReadonlyJSONValue,
+  ReadTransaction,
+  Replicache,
+  ReplicacheOptions,
+  ExperimentalWatchNoIndexCallback,
+  ExperimentalWatchOptions,
+  ExperimentalWatchCallbackForOptions,
+} from 'replicache';
+import type {Downstream} from '../protocol/down.js';
+import type {PingMessage} from '../protocol/ping.js';
+import type {Patch, PokeBody} from '../protocol/poke.js';
+import type {PushBody, PushMessage} from '../protocol/push.js';
+import {NullableVersion, nullableVersionSchema} from '../types/version.js';
+import {assert} from '../util/asserts.js';
+import {Lock} from '../util/lock.js';
+import {resolver} from '../util/resolver.js';
+import {sleep} from '../util/sleep.js';
+import type {ReflectOptions} from './options.js';
+
+export const enum ConnectionState {
+  Disconnected,
+  Connecting,
+  Connected,
+}
+
+const rafOffsetHistogram: Map<number, number> = new Map();
+const receiveLatencyHistogram: Map<number, number> = new Map();
+const playbackLatencyHistogram: Map<number, number> = new Map();
+const mutationOffsetHistogram: Map<number, number> = new Map();
+const mutationSendLatencyHistogram: Map<number, number> = new Map();
+let frameCount = 0;
+let frameWithMissCount = 0;
+function stringifyHistogram(histogram: Map<number, number>) {
+  return JSON.stringify([...histogram.entries()].sort((a, b) => a[0] - b[0]));
+}
+function histogramInc(histogram: Map<number, number>, value: number) {
+  histogram.set(value, (histogram.get(value) ?? 0) + 1);
+}
+function clearHistograms() {
+  rafOffsetHistogram.clear();
+  receiveLatencyHistogram.clear();
+  playbackLatencyHistogram.clear();
+  mutationOffsetHistogram.clear();
+  mutationSendLatencyHistogram.clear();
+  frameCount = 0;
+  frameWithMissCount = 0;
+}
+function logHistograms() {
+  console.log('raf offset histogram', stringifyHistogram(rafOffsetHistogram));
+  console.log(
+    'mutation offset histogram',
+    stringifyHistogram(mutationOffsetHistogram),
+  );
+  console.log(
+    'receive latency histogram',
+    stringifyHistogram(receiveLatencyHistogram),
+  );
+  console.log(
+    'playback latency histogram',
+    stringifyHistogram(playbackLatencyHistogram),
+  );
+  console.log(
+    'mutation send latency histogram',
+    stringifyHistogram(mutationSendLatencyHistogram),
+  );
+  let totalMutations = 0;
+  let missedMutations = 0;
+  for (const [offset, count] of mutationOffsetHistogram) {
+    totalMutations += count;
+    if (offset > 16) {
+      missedMutations += count;
+    }
+  }
+  console.log(
+    'mutations: missed',
+    missedMutations,
+    'of',
+    totalMutations,
+    'miss %',
+    (missedMutations / totalMutations) * 100,
+  );
+  console.log(
+    'frames: missed',
+    frameWithMissCount,
+    'of',
+    frameCount,
+    'miss %',
+    (frameWithMissCount / frameCount) * 100,
+  );
+}
+(globalThis as any)['clearHistograms'] = clearHistograms;
+(globalThis as any)['logHistograms'] = logHistograms;
+
+export class Reflect<MD extends MutatorDefs> {
+  private readonly _rep: Replicache<MD>;
+  private readonly _socketOrigin: string;
+  readonly userID: string;
+  readonly roomID: string;
+  private _l: Promise<LogContext>;
+  private _start: number = performance.now();
+  private readonly _buffer: number;
+  private readonly _maxRandomPushLatency: number;
+
+  // Protects _handlePoke. We need pokes to be serialized, otherwise we
+  // can cause out of order poke errors.
+  private readonly _pokeLock = new Lock();
+  private readonly _pokeBuffer: PokeBody[] = [];
+  private _pokePlaybackLoopRunning = false;
+  private _lastRafTimestamp = 0;
+  private _playbackOffset = -1;
+  private readonly _clientsPlayedBack: Set<string> = new Set();
+  private readonly _offsetHistory: number[] = [];
+
+  private _lastMutationIDSent = -1;
+  private _onPong: () => void = () => undefined;
+
+  /**
+   * `onOnlineChange` is called when the Reflect instance's online status
+   * changes.
+   */
+  onOnlineChange: ((online: boolean) => void) | null = null;
+
+  private _connectResolver = resolver<WebSocket>();
+  private _lastMutationIDReceived = 0;
+
+  protected _WSClass = WebSocket;
+  protected _socket: WebSocket | undefined = undefined;
+  protected _state: ConnectionState = ConnectionState.Disconnected;
+
+  /**
+   * Constructs a new Reflect client.
+   */
+  constructor(options: ReflectOptions<MD>) {
+    if (options.userID === '') {
+      throw new Error('ReflectOptions.userID must not be empty.');
+    }
+    const {socketOrigin, buffer, maxRandomPushLatency} = options;
+    if (socketOrigin) {
+      if (
+        !socketOrigin.startsWith('ws://') &&
+        !socketOrigin.startsWith('wss://')
+      ) {
+        throw new Error(
+          "ReflectOptions.socketOrigin must use the 'ws' or 'wss' scheme.",
+        );
+      }
+    }
+    this._buffer = buffer ?? 250;
+    this._maxRandomPushLatency = maxRandomPushLatency ?? 0;
+
+    if (options.onOnlineChange) {
+      this.onOnlineChange = options.onOnlineChange;
+    }
+
+    const replicacheOptions: ReplicacheOptions<MD> = {
+      auth: options.auth,
+      schemaVersion: options.schemaVersion,
+      logLevel: options.logLevel,
+      logSinks: options.logSinks,
+      mutators: options.mutators,
+      name: `reflect-${options.userID}-${options.roomID}`,
+      pusher: (req: Request) => this._pusher(req),
+      // TODO: Do we need these?
+      // TODO: figure out backoff?
+      pushDelay: 0,
+      requestOptions: {
+        maxDelayMs: 0,
+        minDelayMs: 0,
+      },
+      licenseKey: 'reflect-client-static-key',
+    };
+    const replicacheInternalOptions = {
+      enableLicensing: false,
+      enableMutationRecovery: false,
+    };
+
+    this._rep = new Replicache({
+      ...replicacheOptions,
+      ...replicacheInternalOptions,
+    });
+    this._rep.getAuth = options.getAuth;
+    this._socketOrigin = options.socketOrigin;
+    this.roomID = options.roomID;
+    this.userID = options.userID;
+
+    const {logSinks = [consoleLogSink]} = options;
+    const logSink =
+      logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
+    this._l = (async (rep: Replicache<MutatorDefs>) => {
+      return new LogContext(options.logLevel, logSink)
+        .addContext('roomID', options.roomID)
+        .addContext('clientID', await rep.clientID);
+    })(this._rep);
+
+    void this._watchdog();
+  }
+
+  /**
+   * The name of the IndexedDB database in which the data of this
+   * instance of Reflect is stored.
+   */
+  get idbName(): string {
+    return this._rep.idbName;
+  }
+
+  /**
+   * The schema version of the data understood by this application.
+   * See [[ReflectOptions.schemaVersion]].
+   */
+  get schemaVersion(): string {
+    return this._rep.schemaVersion;
+  }
+
+  /**
+   * The client ID for this instance of Reflect. Each instance
+   * gets a unique client ID.
+   */
+  get clientID(): Promise<string> {
+    return this._rep.clientID;
+  }
+
+  /**
+   * The authorization token used when opening a WebSocket connection to
+   * the Reflect server.
+   */
+  get auth(): string {
+    return this._rep.auth;
+  }
+
+  /**
+   * The registered mutators (see [[ReflectOptions.mutators]]).
+   */
+  get mutate() {
+    return this._rep.mutate;
+  }
+
+  /**
+   * Whether this Reflect instance has been closed. Once a Reflect instance has
+   * been closed it no longer syncs and you can no longer read or write data out
+   * of it. After it has been closed it is pretty much useless and should not be
+   * used any more.
+   */
+  get closed(): boolean {
+    return this._rep.closed;
+  }
+
+  /**
+   * Closes this Reflect instance.
+   *
+   * When closed all subscriptions end and no more read or writes are allowed.
+   */
+  async close(): Promise<void> {
+    const l = await this._getRequestLogger();
+    this._disconnect(l);
+    return this._rep.close();
+  }
+
+  /**
+   * Subscribe to changes to Reflect data. Every time the underlying data
+   * changes `body` is called and if the result of `body` changes compared to
+   * last time `onData` is called. The function is also called once the first
+   * time the subscription is added.
+   *
+   * This returns a function that can be used to cancel the subscription.
+   *
+   * If an error occurs in the `body` the `onError` function is called if
+   * present. Otherwise, the error is thrown.
+   */
+  subscribe<R extends ReadonlyJSONValue | undefined, E>(
+    body: (tx: ReadTransaction) => Promise<R>,
+    {
+      onData,
+      onError,
+      onDone,
+    }: {
+      onData: (result: R) => void;
+      onError?: (error: E) => void;
+      onDone?: () => void;
+    },
+  ): () => void {
+    return this._rep.subscribe(body, {
+      onData,
+      onError,
+      onDone,
+    });
+  }
+
+  /**
+   * Transactionally read Reflect data.
+   */
+  async query<R>(body: (tx: ReadTransaction) => Promise<R> | R): Promise<R> {
+    return this._rep.query(body);
+  }
+
+  /**
+   * Watches Reflect for changes.
+   *
+   * The `callback` gets called whenever the underlying data changes and the
+   * `key` changes matches the
+   * [[ExperimentalWatchNoIndexOptions|ExperimentalWatchOptions.prefix]]
+   * if present. If a change occurs to the data but the change does not impact
+   * the key space the callback is not called. In other words, the callback is
+   * never called with an empty diff.
+   *
+   * This gets called after commit (a mutation or a rebase).
+   *
+   * @experimental This method is under development and its semantics will
+   * change.
+   */
+  experimentalWatch(callback: ExperimentalWatchNoIndexCallback): () => void;
+  experimentalWatch<Options extends ExperimentalWatchOptions>(
+    callback: ExperimentalWatchCallbackForOptions<Options>,
+    options?: Options,
+  ): () => void;
+  experimentalWatch<Options extends ExperimentalWatchOptions>(
+    callback: ExperimentalWatchCallbackForOptions<Options>,
+    options?: Options,
+  ): () => void {
+    return this._rep.experimentalWatch(callback, options);
+  }
+
+  private _onMessage = async (e: MessageEvent<string>) => {
+    // TODO: The req context should really come from the poke so that we can
+    // tie receive-side changes to the server and even to the source client.
+    const l = await this._getRequestLogger();
+    l.debug?.('received message', e.data);
+    if (this.closed) {
+      l.debug?.('ignoring message because already closed');
+      return;
+    }
+
+    const data = JSON.parse(e.data);
+    const downMessage = data as Downstream; //downstreamSchema.parse(data);
+
+    if (downMessage[0] === 'connected') {
+      l.info?.(
+        'Connected',
+        JSON.stringify({navigatorOnline: navigator.onLine}),
+      );
+
+      this._state = ConnectionState.Connected;
+      this._lastMutationIDSent = -1;
+      assert(this._socket);
+      this._connectResolver.resolve(this._socket);
+      this.onOnlineChange?.(true);
+      return;
+    }
+
+    if (downMessage[0] === 'error') {
+      l.error?.(`Socket error: ${downMessage[1]}`);
+      throw new Error(downMessage[1]);
+    }
+
+    if (downMessage[0] === 'pong') {
+      this._onPong();
+      return;
+    }
+
+    if (downMessage[0] !== 'poke') {
+      throw new Error(`Unexpected message: ${downMessage}`);
+    }
+
+    const pokeBody = downMessage[1];
+    void this._handlePoke(l, Array.isArray(pokeBody) ? pokeBody : [pokeBody]);
+  };
+
+  private _onClose = async (e: CloseEvent) => {
+    const l = await this._getRequestLogger();
+    const {code, reason, wasClean} = e;
+    l.info?.(
+      'got socket close event',
+      JSON.stringify({code, reason, wasClean}),
+    );
+    this._disconnect(l);
+  };
+
+  private async _connect(l: LogContext) {
+    if (this._state === ConnectionState.Connecting) {
+      l.debug?.('Skipping duplicate connect request');
+      return;
+    }
+    l.info?.(
+      'Connecting...',
+      JSON.stringify({navigatorOnline: navigator.onLine}),
+    );
+
+    this._state = ConnectionState.Connecting;
+
+    const baseCookie = await getBaseCookie(this._rep);
+    // TODO if connection fails with 401 use this._rep.getAuth to
+    // try to refresh this._rep.auth and then retry connection
+    const ws = createSocket(
+      this._socketOrigin,
+      baseCookie,
+      await this._rep.clientID,
+      this.roomID,
+      this._rep.auth,
+      this._lastMutationIDReceived,
+      this._WSClass,
+    );
+
+    ws.addEventListener('message', this._onMessage);
+    ws.addEventListener('close', this._onClose);
+    this._socket = ws;
+  }
+
+  private _disconnect(l: LogContext) {
+    l.info?.(
+      'disconnecting',
+      JSON.stringify({navigatorOnline: navigator.onLine}),
+    );
+    if (this._state === ConnectionState.Connected) {
+      // Only create a new resolver if the one we have was previously resolved,
+      // which happens when the socket became connected.
+      this._connectResolver = resolver();
+      this.onOnlineChange?.(false);
+    }
+    this._state = ConnectionState.Disconnected;
+    this._socket?.removeEventListener('message', this._onMessage);
+    this._socket?.removeEventListener('close', this._onClose);
+    this._socket?.close();
+    this._socket = undefined;
+    this._lastMutationIDSent = -1;
+    this._pokeBuffer.length = 0;
+    this._playbackOffset = -1;
+  }
+
+  private async _handlePoke(l: LogContext, pokeBodies: PokeBody[]) {
+    //const now = performance.now();
+    const unixNow = Date.now();
+    for (const pokeBody of pokeBodies) {
+      const {unixTimestamp} = pokeBody;
+      if (unixTimestamp !== undefined) {
+        histogramInc(receiveLatencyHistogram, unixNow - unixTimestamp);
+        const timestampOffset = unixNow - unixTimestamp;
+        if (this._playbackOffset === -1) {
+          this._playbackOffset = timestampOffset;
+          l.info?.('new playback offset', timestampOffset);
+        }
+        this._offsetHistory.push(timestampOffset);
+        if (this._offsetHistory.length > 100) {
+          this._offsetHistory.shift();
+        }
+      }
+    }
+    this._pokeBuffer.push(...pokeBodies);
+    if (!this._pokePlaybackLoopRunning) {
+      l.info?.('!!!! starting playback loop');
+      this._pokePlaybackLoopRunning = true;
+      const rafCallback = async () => {
+        const now = performance.now();
+        if (this._lastRafTimestamp !== 0) {
+          const rafOffset = Math.floor(now - this._lastRafTimestamp);
+          histogramInc(rafOffsetHistogram, rafOffset);
+        }
+        this._lastRafTimestamp = now;
+        const rafAt = now - this._start;
+        const lc = l.addContext('rafAt', rafAt);
+        lc.info?.('raf');
+        if (this._pokeBuffer.length === 0) {
+          l.info?.('!!!! stopping playback loop');
+          this._pokePlaybackLoopRunning = false;
+          this._lastRafTimestamp = 0;
+          return;
+        }
+        requestAnimationFrame(rafCallback);
+        const start = performance.now();
+        await this._processPokes(lc);
+        lc.info?.('process pokes took', performance.now() - start);
+      };
+      requestAnimationFrame(rafCallback);
+    }
+  }
+
+  private async _processPokes(l: LogContext) {
+    await this._pokeLock.withLock(async () => {
+      l.info?.('got poke lock at', performance.now() - this._start);
+      l.info?.('playback offset', this._playbackOffset);
+      const thisClientID = await this.clientID;
+      const toMerge: PokeBody[] = [];
+      const unixNow = Date.now();
+      let hasMiss = false;
+      while (this._pokeBuffer.length) {
+        const headPoke = this._pokeBuffer[0];
+        const {clientID, unixTimestamp} = headPoke;
+        if (
+          clientID !== undefined &&
+          unixTimestamp !== undefined &&
+          clientID !== thisClientID
+        ) {
+          const playbackOffset = this._playbackOffset;
+          assert(playbackOffset !== -1);
+          if (playbackOffset + unixTimestamp + this._buffer > unixNow) {
+            break;
+          }
+          const newClient = !this._clientsPlayedBack.has(clientID);
+          if (newClient) {
+            l.info?.('new client playback', clientID);
+            this._clientsPlayedBack.add(clientID);
+          }
+          let mutationOffset = Math.floor(
+            -(playbackOffset + unixTimestamp + this._buffer - unixNow),
+          );
+          assert(mutationOffset >= 0 || clientID === thisClientID);
+          mutationOffset = Math.max(mutationOffset, 0);
+          histogramInc(mutationOffsetHistogram, mutationOffset);
+          const latency = unixNow - unixTimestamp;
+          histogramInc(playbackLatencyHistogram, latency);
+          if (mutationOffset > 16) {
+            l.info?.('************* Missed by ', mutationOffset);
+            hasMiss = true;
+          }
+        }
+        const pokeBody = this._pokeBuffer.shift();
+        if (pokeBody) {
+          toMerge.push(pokeBody);
+        }
+      }
+      l.info?.(
+        'merging',
+        toMerge.length,
+        'remaining buffer',
+        this._pokeBuffer.length,
+        'buffer',
+        this._buffer,
+      );
+      if (toMerge.length === 0) {
+        return;
+      }
+      frameCount++;
+      if (hasMiss) {
+        frameWithMissCount++;
+      }
+
+      const mergedPatch: Patch = [];
+      for (const pokeBody of toMerge) {
+        mergedPatch.push(...pokeBody.patch);
+      }
+
+      const p: Poke = {
+        baseCookie: toMerge[0].baseCookie,
+        pullResponse: {
+          lastMutationID: toMerge[toMerge.length - 1].lastMutationID,
+          patch: mergedPatch,
+          cookie: toMerge[toMerge.length - 1].cookie,
+        },
+      };
+
+      try {
+        const start = performance.now();
+        await this._rep.poke(p);
+        l.info?.('this._rep.poke took', performance.now() - start);
+      } catch (e) {
+        if (String(e).indexOf('unexpected base cookie for poke') > -1) {
+          l.info?.('out of order poke, disconnecting');
+          this._disconnect(l);
+          return;
+        }
+        throw e;
+      }
+    });
+  }
+
+  private async _pusher(req: Request) {
+    const lc = await this._l;
+    if (!this._socket) {
+      void this._connect(lc);
+    }
+
+    const socket = await this._connectResolver.promise;
+
+    if (this._maxRandomPushLatency) {
+      await sleep(Math.random() * this._maxRandomPushLatency);
+    }
+    const pushBody = (await req.json()) as PushBody;
+    for (const m of pushBody.mutations) {
+      if (m.id > this._lastMutationIDSent) {
+        const now = performance.now();
+        const sendLatency = Math.ceil(now - m.timestamp);
+        histogramInc(mutationSendLatencyHistogram, sendLatency);
+        const unixTimestamp = Date.now();
+        const mUnixTimestamp = unixTimestamp - sendLatency;
+        this._lastMutationIDSent = m.id;
+
+        const msg: PushMessage = [
+          'push',
+          {
+            ...pushBody,
+            mutations: [{...m, unixTimestamp: mUnixTimestamp}],
+            timestamp: performance.now(),
+            unixTimestamp,
+          },
+        ];
+
+        socket.send(JSON.stringify(msg));
+      }
+    }
+
+    return {
+      errorMessage: '',
+      httpStatusCode: 200,
+    };
+  }
+
+  private async _watchdog() {
+    while (!this.closed) {
+      const l = await this._getRequestLogger();
+      l.debug?.('watchdog fired');
+      if (this._state === ConnectionState.Connected) {
+        await this._ping(l);
+      } else {
+        void this._connect(l);
+      }
+      await sleep(5000);
+    }
+  }
+
+  private async _ping(l: LogContext) {
+    l.debug?.('pinging');
+    const {promise, resolve} = resolver();
+    this._onPong = resolve;
+    const pingMessage: PingMessage = ['ping', {}];
+    const t0 = performance.now();
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    this._socket!.send(JSON.stringify(pingMessage));
+    const connected = await Promise.race([
+      promise.then(() => true),
+      sleep(2000).then(() => false),
+    ]);
+    if (this._state !== ConnectionState.Connected) {
+      return;
+    }
+    const delta = performance.now() - t0;
+    if (connected) {
+      l.debug?.('ping succeeded in', delta, 'ms');
+    } else {
+      l.info?.('ping failed in', delta, 'ms - disconnecting');
+      this._disconnect(l);
+    }
+  }
+
+  private async _getRequestLogger() {
+    const l = await this._l;
+    return l.addContext('req', nanoid());
+  }
+}
+
+// Total hack to get base cookie
+async function getBaseCookie(rep: Replicache) {
+  const {promise, resolve} = resolver<NullableVersion>();
+  rep.puller = async (req): Promise<PullerResult> => {
+    const val = await req.json();
+    const parsed = nullableVersionSchema.parse(val.cookie);
+    resolve(parsed);
+    return {
+      httpRequestInfo: {
+        errorMessage: '',
+        httpStatusCode: 200,
+      },
+    };
+  };
+  rep.pull();
+  return await promise;
+}
+
+export function createSocket(
+  socketOrigin: string,
+  baseCookie: NullableVersion,
+  clientID: string,
+  roomID: string,
+  auth: string,
+  lmid: number,
+  wsClass: typeof WebSocket,
+): WebSocket {
+  const url = new URL(socketOrigin);
+  url.pathname = '/connect';
+  const {searchParams} = url;
+  searchParams.set('clientID', clientID);
+  searchParams.set('roomID', roomID);
+  searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));
+  searchParams.set('ts', String(performance.now()));
+  searchParams.set('lmid', String(lmid));
+  // Pass auth to the server via the `Sec-WebSocket-Protocol` header by passing
+  // it as a `protocol` to the `WebSocket` constructor.  The empty string is an
+  // invalid `protocol`, and will result in an exception, so pass undefined
+  // instead.  encodeURIComponent to ensure it only contains chars allowed
+  // for a `protocol`.
+  return new wsClass(
+    url.toString(),
+    auth === '' ? undefined : encodeURIComponent(auth),
+  );
+}
