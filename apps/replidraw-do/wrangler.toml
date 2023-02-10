@@ -1,0 +1,33 @@
+name = "replidraw"
+type = "javascript"
+
+account_id = ""
+workers_dev = true
+# route = ""
+# zone_id = ""
+
+compatibility_date = "2022-02-10"
+compatibility_flags = []
+
+[durable_objects]
+bindings = [
+  { name = "server", class_name = "Server" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["Server"]
+
+[build]
+command = "npm run build-worker"
+
+[build.upload]
+format = "modules"
+dir = "dist"
+main = "./index.mjs"
+
+[miniflare]
+durable_objects_persist = true
+
+#[secrets]
+#DATADOG_API_KEY
