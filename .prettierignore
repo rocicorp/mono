@@ -1,0 +1,4 @@
+/.next
+/.vercel
+/renderer
+!/renderer/src/constants.ts
