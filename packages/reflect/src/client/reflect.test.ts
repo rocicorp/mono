@@ -15,6 +15,7 @@ import {
   ConnectionState,
   CONNECT_TIMEOUT_MS,
   createSocket,
+  HIDDEN_INTERVAL_MS,
   MAX_RUN_LOOP_INTERVAL_MS,
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
@@ -1048,6 +1049,46 @@ test('Protocol mismatch', async () => {
   r.onUpdateNeeded = null;
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
   expect(fake.called).false;
+
+  await r.close();
+});
+
+test('Disconnect on hide', async () => {
+  let visibilityState = 'visible';
+  sinon.stub(document, 'visibilityState').get(() => visibilityState);
+
+  const r = reflectForTest();
+  await r.triggerConnected();
+  expect(r.connectionState).to.equal(ConnectionState.Connected);
+
+  visibilityState = 'hidden';
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(r.connectionState).to.equal(ConnectionState.Connected);
+
+  let sleep = HIDDEN_INTERVAL_MS;
+  if (PING_INTERVAL_MS < HIDDEN_INTERVAL_MS) {
+    // We need a ping before PING_INTERVAL_MS to not get disconnected.
+    await clock.tickAsync(PING_INTERVAL_MS - 10);
+    await r.triggerPong();
+    sleep = HIDDEN_INTERVAL_MS - PING_INTERVAL_MS + 10;
+  }
+  await clock.tickAsync(sleep);
+
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+
+  // Stays disconnected as long as we are hidden.
+  while (Date.now() < 100_000) {
+    await clock.tickAsync(1_000);
+    expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+    expect(document.visibilityState).to.equal('hidden');
+  }
+
+  visibilityState = 'visible';
+  document.dispatchEvent(new Event('visibilitychange'));
+
+  await r.waitForConnectionState(ConnectionState.Connecting);
+  await r.triggerConnected();
+  expect(r.connectionState).to.equal(ConnectionState.Connected);
 
   await r.close();
 });
