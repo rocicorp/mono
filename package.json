@@ -3,24 +3,52 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
+    "dev-next": "./keepalive.sh NODE_ENV=development vercel dev",
+    "dev-worker": "./keepalive.sh wrangler dev",
+    "build-wasm": "cd renderer && rm -rf pkg && wasm-pack build --target web",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
+    "check-types": "npm run build-wasm && tsc -p tsconfig.json --noEmit && tsc -p demo/worker/tsconfig.json --noEmit",
+    "test": "mocha",
+    "test-wasm": "cd renderer && wasm-pack test --chrome --headless"
   },
   "dependencies": {
+    "@rocicorp/logger": "^2.2.0",
+    "@rocicorp/reflect": "^0.12.1",
+    "@rocicorp/reflect-server": "^0.21.1",
+    "base-64": "^1.0.0",
+    "nanoid": "^3.3.4"
+  },
+  "devDependencies": {
+    "@babylonjs/core": "5.46.0",
+    "@babylonjs/inspector": "^5.46.0",
+    "@babylonjs/loaders": "5.46.0",
+    "@cloudflare/workers-types": "^3.11.0",
+    "@datadog/browser-logs": "^4.11.3",
     "@next/font": "13.1.5",
     "@rocicorp/eslint-config": "^0.2.0",
     "@rocicorp/prettier-config": "^0.1.1",
+    "@rocicorp/resolver": "^1.0.0",
+    "@types/base-64": "^1.0.0",
     "@types/react": "18.0.27",
     "@types/react-dom": "18.0.10",
+    "@vercel/node": "^2.8.13",
+    "buffer": "^5.7.1",
     "eslint": "8.32.0",
     "eslint-config-next": "13.1.5",
+    "mocha": "^10.1.0",
+    "netlify-cli": "^12.1.0",
     "next": "13.1.5",
+    "path-browserify": "^1.0.1",
+    "prettier": "^2.5.1",
+    "process": "^0.11.10",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "typescript": "4.9.4"
+    "ts-node": "^10.9.1",
+    "typescript": "^4.9.4",
+    "vercel": "^28.12.7",
+    "wrangler": "^2.1.9"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
