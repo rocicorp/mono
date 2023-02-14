@@ -30,6 +30,7 @@
     "@rocicorp/eslint-config": "^0.2.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "@rocicorp/resolver": "^1.0.0",
+    "@types/base-64": "^1.0.0",
     "@types/react": "18.0.27",
     "@types/react-dom": "18.0.10",
     "@vercel/node": "^2.8.13",
