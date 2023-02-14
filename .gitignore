@@ -35,6 +35,7 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+*.blend1
 
 # local env files
 .env
