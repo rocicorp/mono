@@ -24,6 +24,7 @@
     "prepack": "npm run lint && npm run test && npm run build"
   },
   "devDependencies": {
+    "@datadog/browser-logs": "^4.34.0",
     "@esm-bundle/chai": "^4.3.4-fix.0",
     "@rocicorp/datadog-util": "^0.6.0",
     "@rocicorp/eslint-config": "^0.3.0",
