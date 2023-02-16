@@ -21,6 +21,7 @@
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "build-min": "esbuild --bundle --target=es2018 --outfile=out/reflect.js --format=esm src/mod.ts --minify --mangle-props=^_",
     "build": "rm -rf out && npm run build-dts && npm run build-min",
+    "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts",
     "prepack": "npm run lint && npm run test && npm run build"
   },
   "devDependencies": {
@@ -38,9 +39,10 @@
     "@web/test-runner": "^0.15.0",
     "@web/test-runner-playwright": "^0.9.0",
     "esbuild": "^0.16.2",
+    "fetch-mock": "^9.11.0",
     "mocha": "^9.2.1",
     "nanoid": "^3.3.1",
-    "replicache": "^12.2.0",
+    "replicache": "file:replicache-12.0.1.tgz",
     "rollup": "^2.70.1",
     "rollup-plugin-dts": "^4.2.0",
     "sinon": "^13.0.1",
