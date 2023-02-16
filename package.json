@@ -14,6 +14,7 @@
     "test-wasm": "cd renderer && wasm-pack test --chrome --headless"
   },
   "dependencies": {
+    "@dimforge/rapier3d-inject": "file:../rapier.js/rapier-inject/pkg3d",
     "@rocicorp/logger": "^2.2.0",
     "@rocicorp/reflect": "^0.12.1",
     "@rocicorp/reflect-server": "^0.21.1",
@@ -26,11 +27,13 @@
     "@babylonjs/loaders": "5.46.0",
     "@cloudflare/workers-types": "^3.11.0",
     "@datadog/browser-logs": "^4.11.3",
+    "@dimforge/rapier3d": "^0.11.1",
     "@next/font": "13.1.5",
     "@rocicorp/eslint-config": "^0.2.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "@rocicorp/resolver": "^1.0.0",
     "@types/base-64": "^1.0.0",
+    "@types/mocha": "^10.0.1",
     "@types/react": "18.0.27",
     "@types/react-dom": "18.0.10",
     "@types/react-scroll": "^1.8.6",
