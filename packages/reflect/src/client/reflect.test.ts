@@ -1,5 +1,4 @@
 import {assert, expect} from '@esm-bundle/chai';
-import {DatadogSeries, gaugeValue, Metrics} from '@rocicorp/datadog-util';
 import {resolver} from '@rocicorp/resolver';
 import type {NullableVersion} from 'reflect-protocol';
 import {ErrorKind, Mutation, pushMessageSchema} from 'reflect-protocol';
@@ -13,9 +12,7 @@ import type {
 } from 'replicache';
 import * as valita from 'shared/valita.js';
 import * as sinon from 'sinon';
-import {camelToSnake, DID_NOT_CONNECT_VALUE, Metric} from './metrics.js';
 import {
-  CloseKind,
   ConnectionState,
   CONNECT_TIMEOUT_MS,
   createSocket,
@@ -689,108 +686,6 @@ test('poke log context includes requestID', async () => {
   const foundRequestID = await foundRequestIDFromLogPromise;
   expect(foundRequestID).to.equal('test-request-id-poke');
 });
-
-test('metrics updated when connected', async () => {
-  const m = new Metrics();
-  const ttc = m.gauge(Metric.TimeToConnectMs);
-  const lce = m.state(Metric.LastConnectError);
-  clock.setSystemTime(1000 * 1000);
-  const r = reflectForTest({
-    metrics: m,
-  });
-  expect(val(ttc)?.value).to.equal(DID_NOT_CONNECT_VALUE);
-  expect(val(lce)).to.be.undefined;
-
-  await r.waitForConnectionState(ConnectionState.Connecting);
-
-  const start = asNumber(r.connectingStart);
-
-  clock.setSystemTime(start + 42 * 1000);
-  await r.triggerConnected();
-  await r.waitForConnectionState(ConnectionState.Connected);
-
-  expect(val(ttc)?.value).to.equal(42 * 1000);
-  expect(val(lce)).to.be.undefined;
-
-  // Ensure TimeToConnect gets set when we reconnect.
-  await r.triggerClose();
-  await r.waitForConnectionState(ConnectionState.Disconnected);
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
-  await r.waitForConnectionState(ConnectionState.Connecting);
-  expect(r.connectionState).to.equal(ConnectionState.Connecting);
-
-  const restart = asNumber(r.connectingStart);
-  clock.setSystemTime(restart + 666 * 1000);
-  await r.triggerConnected();
-  await r.waitForConnectionState(ConnectionState.Connected);
-  // Gauge value is in seconds.
-  expect(val(ttc)?.value).to.equal(666 * 1000);
-  expect(val(lce)).to.be.undefined;
-});
-
-function val(g: {flush(): DatadogSeries | undefined}):
-  | {
-      metric: string;
-      tsSec: number;
-      value: number;
-    }
-  | undefined {
-  const series = g.flush();
-  return series && gaugeValue(series);
-}
-
-test('metrics when connect fails', async () => {
-  const m = new Metrics();
-  const ttc = m.gauge(Metric.TimeToConnectMs);
-  const lce = m.state(Metric.LastConnectError);
-  clock.setSystemTime(1000 * 1000);
-  const r = reflectForTest({
-    metrics: m,
-  });
-
-  // Trigger a close while still connecting.
-  await r.waitForConnectionState(ConnectionState.Connecting);
-  await r.triggerClose();
-  await tickAFewTimes(clock, RUN_LOOP_INTERVAL_MS);
-  expect(r.connectionState).to.equal(ConnectionState.Connecting);
-  expect(val(ttc)?.value).to.equal(DID_NOT_CONNECT_VALUE);
-  let gotLceVal = val(lce);
-  expect(gotLceVal?.metric).to.equal(
-    [
-      camelToSnake(Metric.LastConnectError),
-      camelToSnake(CloseKind.AbruptClose),
-    ].join('_'),
-  );
-  expect(gotLceVal?.value).to.equal(1);
-
-  // Trigger an error while still connecting.
-  const start = asNumber(r.connectingStart);
-  clock.setSystemTime(start + 42 * 1000);
-  await r.triggerError(ErrorKind.Unauthorized, 'boom');
-  await tickAFewTimes(clock);
-  expect(val(ttc)?.value).to.equal(DID_NOT_CONNECT_VALUE);
-  gotLceVal = val(lce);
-  expect(gotLceVal?.metric).to.equal(
-    [
-      camelToSnake(Metric.LastConnectError),
-      camelToSnake(ErrorKind.Unauthorized),
-    ].join('_'),
-  );
-
-  // Ensure LastConnectError gets cleared when we successfully reconnect.
-  await tickAFewTimes(clock, RUN_LOOP_INTERVAL_MS);
-  expect(r.connectionState).to.equal(ConnectionState.Connecting);
-  await r.triggerConnected();
-  await tickAFewTimes(clock);
-  expect(val(lce)).to.be.undefined;
-});
-
-function asNumber(v: unknown): number {
-  if (typeof v !== 'number') {
-    throw new Error('not a number');
-  }
-  return v;
-}
 
 test('Authentication', async () => {
   const log: number[] = [];

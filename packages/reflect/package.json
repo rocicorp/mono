@@ -24,7 +24,6 @@
     "prepack": "npm run lint && npm run test && npm run build"
   },
   "dependencies": {
-    "@rocicorp/datadog-util": "^0.6.0",
     "@rocicorp/lock": "^1.0.1",
     "@rocicorp/logger": "^4.1.0",
     "@rocicorp/resolver": "^1.0.0"
