@@ -1,11 +1,5 @@
-import {
-  DD_AUTH_HEADER_NAME,
-  DD_DISTRIBUTION_METRIC_URL,
-  report,
-} from '@rocicorp/datadog-util';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import {assert} from 'shared/asserts.js';
-import {reportMetricsSchema} from '../types/report-metrics.js';
+import {reportMetricsSchema, Series} from '../types/report-metrics.js';
 import {randomID} from '../util/rand.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {
@@ -24,30 +18,32 @@ import {
   WithLogContext,
 } from './router.js';
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import type {MaybePromise} from 'replicache';
+
+export type MetricsSink = (allSeries: Series[]) => MaybePromise<void>;
 
 export interface WorkerOptions {
   logSink: LogSink;
   logLevel: LogLevel;
+  metricsSink?: MetricsSink | undefined;
 }
 
 export interface BaseWorkerEnv {
   authDO: DurableObjectNamespace;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   REFLECT_AUTH_API_KEY?: string;
-  /**
-   * If not bound the reportMetrics API will return a 5xx.
-   */
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  REFLECT_DATADOG_API_KEY?: string;
 }
 
 type WithEnv = {
   env: BaseWorkerEnv;
 };
 
-type WorkerContext = BaseContext & WithEnv;
+type WorkerContext = BaseContext &
+  WithEnv & {
+    metricsSink?: MetricsSink | undefined;
+  };
 
-type WorkerRouter = Router<WithLogContext & WithEnv>;
+type WorkerRouter = Router<WorkerContext>;
 
 /**
  * Registers routes that are not handled by dispatch.
@@ -77,36 +73,31 @@ function registerRoutes(router: WorkerRouter) {
 // - maybe authenticate requests (but not just utilizing the auth
 //    handler: we want to be able to report metrics for a logged
 //    out user as well)
-const reportMetrics = post(
-  requireDataDogApiEnv(
-    withBody(reportMetricsSchema, async ctx => {
-      const {body, env} = ctx;
+const reportMetrics = post<WorkerContext, Response>(
+  withBody(reportMetricsSchema, async ctx => {
+    const {lc, body, metricsSink} = ctx;
 
-      if (body.series.length === 0) {
-        return new Response('ok');
-      }
-
-      assert(env.REFLECT_DATADOG_API_KEY);
-      const resp = await report(
-        DD_DISTRIBUTION_METRIC_URL,
-        {
-          [DD_AUTH_HEADER_NAME]: env.REFLECT_DATADOG_API_KEY,
-        },
-        body.series,
-      );
-      if (resp.ok) {
-        ctx.lc.debug?.(
-          `Successfully proxied metrics report to Datadog: ${resp.status} ${resp.statusText}.`,
-        );
-      } else {
-        ctx.lc.info?.(
-          `Failed to report metrics to Datadog: ${resp.status} ${resp.statusText}.`,
-          'Dropping metrics on the floor.',
-        );
-      }
+    if (!metricsSink) {
+      lc.debug?.('No metricsSink configured, dropping metrics.');
       return new Response('ok');
-    }),
-  ),
+    }
+
+    if (body.series.length === 0) {
+      return new Response('ok');
+    }
+
+    try {
+      await metricsSink(body.series);
+      lc.debug?.('Successfully sent metrics to Datadog.');
+    } catch (e) {
+      lc.error?.(
+        'Failed to send metrics to Datadog. Dropping metrics on floor.',
+        e,
+      );
+    }
+
+    return new Response('ok');
+  }),
 );
 
 function requireAPIKeyMatchesEnv(next: Handler<WorkerContext, Response>) {
@@ -119,18 +110,6 @@ function requireAPIKeyMatchesEnv(next: Handler<WorkerContext, Response>) {
   };
 }
 
-function requireDataDogApiEnv(next: Handler<WorkerContext, Response>) {
-  return (ctx: WorkerContext, req: Request) => {
-    if (ctx.env.REFLECT_DATADOG_API_KEY === undefined) {
-      ctx.lc.debug?.('reportMetrics: proxy metrics not enabled');
-      return new Response('metrics not enabled', {
-        status: 503,
-      });
-    }
-    return next(ctx, req);
-  };
-}
-
 export function createWorker<Env extends BaseWorkerEnv>(
   getOptions: (env: Env) => WorkerOptions,
 ): ExportedHandler<Env> {
@@ -138,12 +117,14 @@ export function createWorker<Env extends BaseWorkerEnv>(
   registerRoutes(router);
   return {
     fetch: (request: Request, env: Env, ctx: ExecutionContext) => {
-      const {logSink, logLevel} = getOptions(env);
+      const {logSink, logLevel, metricsSink} = getOptions(env);
       return withLogContext(
         ctx,
         logSink,
         logLevel,
-        withUnhandledRejectionHandler(lc => fetch(request, env, router, lc)),
+        withUnhandledRejectionHandler(lc =>
+          fetch(request, env, router, lc, metricsSink),
+        ),
       );
     },
     scheduled: (
@@ -190,6 +171,7 @@ async function fetch(
   env: BaseWorkerEnv,
   router: WorkerRouter,
   lc: LogContext,
+  metricsSink: MetricsSink | undefined,
 ): Promise<Response> {
   // TODO: pass request id through so request can be traced across
   // worker and DOs.
@@ -199,7 +181,7 @@ async function fetch(
     const resp = await withAllowAllCORS(
       request,
       async (request: Request) =>
-        (await router.dispatch(request, {lc, env})) ??
+        (await router.dispatch(request, {lc, env, metricsSink})) ??
         new Response(null, {
           status: 404,
         }),

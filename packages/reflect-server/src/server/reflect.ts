@@ -5,7 +5,7 @@ import type {AuthHandler} from './auth.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {createNoAuthDOWorker} from './no-auth-do-worker.js';
 import {BaseRoomDO} from './room-do.js';
-import {createWorker} from './worker.js';
+import {createWorker, MetricsSink} from './worker.js';
 
 export interface ReflectServerOptions<MD extends MutatorDefs> {
   mutators: MD;
@@ -14,16 +14,20 @@ export interface ReflectServerOptions<MD extends MutatorDefs> {
   disconnectHandler?: DisconnectHandler | undefined;
 
   /**
-   * The log sinks. If you need access to the `Env` you can use a function form
-   * when calling {@link createReflectServer}.
+   * Where to send logs. By default logs are sent to `console.log`.
    */
   logSinks?: LogSink[] | undefined;
 
   /**
-   * The level to log at. If you need access to the `Env` you can use a function
-   * form when calling {@link createReflectServer}.
+   * The level to log at. By default the level is 'info'.
    */
   logLevel?: LogLevel | undefined;
+
+  /**
+   * Where to send metrics. By default metrics are sent nowhere. A Datadog implementation
+   * exists at {@link createDatadogMetricsSink}.
+   */
+  metricsSink?: MetricsSink | undefined;
 
   /**
    * If `true`, outgoing network messages are sent before the writes they
@@ -45,6 +49,7 @@ export type NormalizedOptions<MD extends MutatorDefs> = {
   disconnectHandler: DisconnectHandler;
   logSink: LogSink;
   logLevel: LogLevel;
+  metricsSink?: MetricsSink | undefined;
   allowUnconfirmedWrites: boolean;
 };
 

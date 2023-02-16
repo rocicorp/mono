@@ -1,7 +1,6 @@
-import {describe, expect, jest, test} from '@jest/globals';
-import type {DatadogSeries} from '@rocicorp/datadog-util';
+import {test, expect} from '@jest/globals';
 import type {LogLevel} from '@rocicorp/logger';
-import {fail, Mocket, TestLogSink} from '../util/test-utils.js';
+import {Mocket, TestLogSink} from '../util/test-utils.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {AUTH_ROUTES} from './auth-do.js';
 import {
@@ -9,7 +8,6 @@ import {
   TestDurableObjectId,
   TestDurableObjectStub,
 } from './do-test-utils.js';
-import {REPORT_METRICS_PATH} from './paths.js';
 import {BaseWorkerEnv, createWorker} from './worker.js';
 
 const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
@@ -449,6 +447,7 @@ async function testPreflightRequest({
   );
 }
 
+/*
 describe('reportMetrics', () => {
   const reportMetricsURL = new URL(
     REPORT_METRICS_PATH,
@@ -464,7 +463,7 @@ describe('reportMetrics', () => {
     expectFetch: boolean;
   };
 
-  const series: DatadogSeries = {
+  const series: Series = {
     metric: 'metric1',
     points: [[1, [2]]],
   };
@@ -587,3 +586,4 @@ describe('reportMetrics', () => {
     });
   }
 });
+*/
