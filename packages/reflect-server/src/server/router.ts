@@ -42,13 +42,10 @@ type Route<Context> = {
  * "middleware", but that's convention. See below in this file for examples of
  * such middleware.
  */
-export class Router<InitialContext extends WithLogContext = WithLogContext> {
-  private _routes: Route<InitialContext & WithParsedURL>[] = [];
+export class Router<InitialContext extends BaseContext = BaseContext> {
+  private _routes: Route<InitialContext>[] = [];
 
-  register(
-    path: string,
-    handler: Handler<InitialContext & WithParsedURL, Response>,
-  ) {
+  register(path: string, handler: Handler<InitialContext, Response>) {
     // It is OK add another route with the same path. However, the first one
     // will always be used.
     this._routes.push({
@@ -57,7 +54,10 @@ export class Router<InitialContext extends WithLogContext = WithLogContext> {
     });
   }
 
-  dispatch(request: Request, context: InitialContext): MaybePromise<Response> {
+  dispatch(
+    request: Request,
+    context: Omit<InitialContext, 'parsedURL'>,
+  ): MaybePromise<Response> {
     const {lc} = context;
     // TODO(arv): This can be simpler using a for-of loop. No need to iterate
     // over all of them to find the first match.
@@ -79,7 +79,7 @@ export class Router<InitialContext extends WithLogContext = WithLogContext> {
     const {handler} = route;
 
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return handler({...context, parsedURL: result!}, request);
+    return handler({...context, parsedURL: result!} as InitialContext, request);
   }
 }
 
