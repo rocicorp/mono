@@ -17,7 +17,6 @@
     "publish-worker": "CF_ACCOUNT_ID=085f6d8eb08e5b23debfb08b21bda1eb wrangler publish"
   },
   "dependencies": {
-    "@dimforge/rapier3d-inject": "./vendor/dimforge-rapier3d-inject-0.10.0.tgz",
     "@rocicorp/logger": "^2.2.0",
     "@rocicorp/reflect": "^0.12.1",
     "@rocicorp/reflect-server": "^0.21.1",
@@ -30,7 +29,6 @@
     "@babylonjs/loaders": "5.46.0",
     "@cloudflare/workers-types": "^3.11.0",
     "@datadog/browser-logs": "^4.11.3",
-    "@dimforge/rapier3d": "^0.11.1",
     "@next/font": "13.1.5",
     "@rocicorp/eslint-config": "^0.2.0",
     "@rocicorp/prettier-config": "^0.1.1",
