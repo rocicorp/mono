@@ -1,0 +1,38 @@
+name = "reflect"
+type = "javascript"
+
+account_id = ""
+workers_dev = true
+# route = ""
+# zone_id = ""
+
+compatibility_date = "2021-11-15"
+compatibility_flags = []
+
+[durable_objects]
+bindings = [
+  { name = "roomDO", class_name = "RoomDO" },
+  { name = "authDO", class_name = "AuthDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["RoomDO", "AuthDO"]
+
+[triggers]
+crons = [ "*/5 * * * *" ] # ever 5 mins for AuthDO connection revalidation
+
+[build]
+command = "npm run build"
+
+[build.upload]
+format = "modules"
+dir = "out"
+main = "./example/index.js"
+
+[miniflare]
+durable_objects_persist = true
+
+#[secrets]
+#REFLECT_AUTH_API_KEY
+#REFLECT_DATADOG_API_KEY

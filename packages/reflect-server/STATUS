@@ -1,0 +1,30 @@
+# Now
+
+- connection management
+- factor out server library
+- reboot server when it crashes
+- fix unit tests
+- complete unit tests
+- continuous deploy
+- factor client changes down into replicache
+- new tweet + make public? :)
+
+# Next
+
+- generally speaking the interface to replicache needs to be reworked:
+  - need a proper "connect" message or a way to get the cookie other than faking the puller
+  - need to get rid of backoff or be able to bypass
+  - need pusher to only send new items
+  - (not needed for this but useful) - pusher should be already parsed
+  - poke needs support for delay
+- make log levels per fritz doc
+- make log level configurable
+- idea for refactoring top level
+  - make main basically be an infinite loop that is reading off a generator which is
+    merging the pending queues
+  - each time we receive a push, the delay gets reset
+  - need to rework how peek() works
+
+# Later
+
+- undo?
