@@ -1,0 +1,60 @@
+{
+  "name": "@rocicorp/reflect",
+  "description": "",
+  "version": "0.12.2",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rocicorp/reflect.git"
+  },
+  "license": "SEE LICENSE IN https://roci.dev/terms.html",
+  "main": "out/reflect.js",
+  "module": "out/reflect.js",
+  "types": "out/reflect.d.ts",
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write '**/*.{js,jsx,json,ts,tsx,html,css,md,yml}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md,yml}'",
+    "check-format": "prettier --check '**/*.{js,jsx,json,ts,tsx,html,css,md,yml}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md,yml}'",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "test": "web-test-runner",
+    "test:watch": "web-test-runner --watch",
+    "types:check": "tsc --noEmit",
+    "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
+    "build-min": "esbuild --bundle --target=es2018 --outfile=out/reflect.js --format=esm src/mod.ts --minify --mangle-props=^_",
+    "build": "rm -rf out && npm run build-dts && npm run build-min",
+    "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts",
+    "prepack": "npm run lint && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@datadog/browser-logs": "^4.34.0",
+    "@esm-bundle/chai": "^4.3.4-fix.0",
+    "@rocicorp/datadog-util": "^0.6.0",
+    "@rocicorp/eslint-config": "^0.3.0",
+    "@rocicorp/lock": "^1.0.1",
+    "@rocicorp/logger": "^2.2.0",
+    "@rocicorp/prettier-config": "^0.1.1",
+    "@rocicorp/resolver": "^1.0.0",
+    "@types/node": "^18.11.18",
+    "@types/sinon": "^10.0.11",
+    "@web/dev-server-esbuild": "^0.3.3",
+    "@web/test-runner": "^0.15.0",
+    "@web/test-runner-playwright": "^0.9.0",
+    "esbuild": "^0.16.2",
+    "fetch-mock": "^9.11.0",
+    "mocha": "^9.2.1",
+    "nanoid": "^3.3.1",
+    "replicache": "file:replicache-12.0.1.tgz",
+    "rollup": "^2.70.1",
+    "rollup-plugin-dts": "^4.2.0",
+    "sinon": "^13.0.1",
+    "typescript": "^4.9.4",
+    "zod": "^3.20.2"
+  },
+  "files": [
+    "out/reflect.d.ts",
+    "out/reflect.js"
+  ],
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}
