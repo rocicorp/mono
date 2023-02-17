@@ -1,0 +1,62 @@
+{
+  "name": "@rocicorp/reflect-server",
+  "description": "Multiplayer server for Replicache",
+  "version": "0.21.7",
+  "repository": "github:rocicorp/reflect-server",
+  "license": "SEE LICENSE IN https://roci.dev/terms.html",
+  "main": "out/reflect-server.js",
+  "module": "out/reflect-server.js",
+  "types": "out/reflect-server.d.ts",
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write '**/*.{js,jsx,json,ts,tsx,html,css,md,yml}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md,yml}'",
+    "check-format": "prettier --check '**/*.{js,jsx,json,ts,tsx,html,css,md,yml}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md,yml}'",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "build": "rm -rf out && npm run build-dts && node build.js",
+    "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
+    "dev": "miniflare --live-reload --debug",
+    "test": "npm run build && node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "npm run build && node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "types:check": "tsc --noEmit",
+    "prepack": "npm run lint && npm run test && npm run build"
+  },
+  "engines": {
+    "node": ">=16.14.0 || >=17.1"
+  },
+  "bin": {
+    "reflect": "out/cli.js"
+  },
+  "//1": "Note: we need these precise versions of miniflare and jest-environment-miniflare due to: https://github.com/rocicorp/reflect-server/issues/148",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^3.8.0",
+    "@rocicorp/datadog-util": "^0.4.0",
+    "@rocicorp/eslint-config": "^0.3.0",
+    "@rocicorp/lock": "^1.0.1",
+    "@rocicorp/logger": "^2.2.0",
+    "@rocicorp/prettier-config": "^0.1.1",
+    "@types/jest": "^29.2.6",
+    "compare-utf8": "^0.1.1",
+    "esbuild": "^0.14.38",
+    "jest-environment-miniflare": "^2.11.0",
+    "miniflare": "^2.11.0",
+    "replicache": "file:replicache-12.0.1.tgz",
+    "rollup": "^2.71.1",
+    "rollup-plugin-dts": "^4.2.1",
+    "superstruct": "^0.16.7",
+    "ts-jest": "^29.0.5",
+    "typescript": "^4.9.4"
+  },
+  "//2": "Note: we need this precise version of wrangler due to: https://github.com/rocicorp/reflect-server/issues/148",
+  "peerDependencies": {
+    "wrangler": "^2.9.1"
+  },
+  "files": [
+    "out/reflect-server.d.ts",
+    "out/reflect-server.js",
+    "out/cli.js"
+  ],
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}
