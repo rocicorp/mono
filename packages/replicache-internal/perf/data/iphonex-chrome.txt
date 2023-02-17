@@ -1,0 +1,135 @@
+idb read tx (arraybuffer) 1x1 B 50/75/90/95%=0.00,0.00,1.00,1.00ms/op Infinity MB/s (2441 runs sampled)
+idb read tx (arraybuffer) 1x1 KiB 50/75/90/95%=0.00,0.00,1.00,1.00ms/op Infinity MB/s (2578 runs sampled)
+idb read tx (arraybuffer) 1x31 KiB 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (1960 runs sampled)
+idb read tx (arraybuffer) 1x32 KiB 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (1969 runs sampled)
+idb read tx (arraybuffer) 1x63 KiB 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (1429 runs sampled)
+idb read tx (arraybuffer) 1x64 KiB 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (1307 runs sampled)
+idb read tx (arraybuffer) 1x1 MiB 50/75/90/95%=1.00,2.00,2.00,2.00ms/op 1000.00 MB/s (332 runs sampled)
+idb read tx (arraybuffer) 1x10 MiB 50/75/90/95%=13.00,14.00,14.00,15.00ms/op 769.23 MB/s (38 runs sampled)
+idb read tx (arraybuffer) 1x100 MiB 50/75/90/95%=175.00,184.00,224.00,224.00ms/op 571.43 MB/s (5 runs sampled)
+idb read tx (arraybuffer) 5x1 B 50/75/90/95%=0.00,0.00,1.00,1.00ms/op Infinity MB/s (2669 runs sampled)
+idb read tx (arraybuffer) 5x1 KiB 50/75/90/95%=0.00,0.00,1.00,1.00ms/op Infinity MB/s (2297 runs sampled)
+idb read tx (arraybuffer) 5x31 KiB 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (1017 runs sampled)
+idb read tx (arraybuffer) 5x32 KiB 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (986 runs sampled)
+idb read tx (arraybuffer) 5x63 KiB 50/75/90/95%=1.00,1.00,1.00,1.00ms/op 307.62 MB/s (742 runs sampled)
+idb read tx (arraybuffer) 5x64 KiB 50/75/90/95%=1.00,1.00,1.00,1.00ms/op 312.50 MB/s (711 runs sampled)
+idb read tx (arraybuffer) 5x1 MiB 50/75/90/95%=7.00,7.00,7.00,8.00ms/op 714.29 MB/s (74 runs sampled)
+idb read tx (arraybuffer) 5x10 MiB 50/75/90/95%=67.00,68.00,104.00,104.00ms/op 746.27 MB/s (7 runs sampled)
+idb read tx (arraybuffer) 10x1 B 50/75/90/95%=0.00,0.00,1.00,1.00ms/op Infinity MB/s (2333 runs sampled)
+idb read tx (arraybuffer) 10x1 KiB 50/75/90/95%=0.00,0.00,1.00,1.00ms/op Infinity MB/s (2116 runs sampled)
+idb read tx (arraybuffer) 10x31 KiB 50/75/90/95%=1.00,1.00,1.00,1.00ms/op 302.73 MB/s (780 runs sampled)
+idb read tx (arraybuffer) 10x32 KiB 50/75/90/95%=1.00,1.00,1.00,1.00ms/op 312.50 MB/s (745 runs sampled)
+idb read tx (arraybuffer) 10x63 KiB 50/75/90/95%=1.00,1.00,2.00,2.00ms/op 615.23 MB/s (445 runs sampled)
+idb read tx (arraybuffer) 10x64 KiB 50/75/90/95%=1.00,1.00,2.00,2.00ms/op 625.00 MB/s (454 runs sampled)
+idb read tx (arraybuffer) 10x1 MiB 50/75/90/95%=14.00,14.00,14.00,14.00ms/op 714.29 MB/s (38 runs sampled)
+idb read tx (arraybuffer) 10x10 MiB 50/75/90/95%=153.00,173.00,222.00,222.00ms/op 653.59 MB/s (5 runs sampled)
+idb read tx (arraybuffer) 15x1 B 50/75/90/95%=0.00,0.00,1.00,1.00ms/op Infinity MB/s (2129 runs sampled)
+idb read tx (arraybuffer) 15x1 KiB 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (1540 runs sampled)
+idb read tx (arraybuffer) 15x31 KiB 50/75/90/95%=1.00,1.00,1.00,1.00ms/op 454.10 MB/s (643 runs sampled)
+idb read tx (arraybuffer) 15x32 KiB 50/75/90/95%=1.00,1.00,1.00,1.00ms/op 468.75 MB/s (589 runs sampled)
+idb read tx (arraybuffer) 15x63 KiB 50/75/90/95%=1.00,2.00,2.00,2.00ms/op 922.85 MB/s (343 runs sampled)
+idb read tx (arraybuffer) 15x64 KiB 50/75/90/95%=1.00,2.00,2.00,2.00ms/op 937.50 MB/s (343 runs sampled)
+idb read tx (arraybuffer) 20x1 B 50/75/90/95%=0.00,0.00,1.00,1.00ms/op Infinity MB/s (2265 runs sampled)
+idb read tx (arraybuffer) 20x1 KiB 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (1422 runs sampled)
+idb read tx (arraybuffer) 20x31 KiB 50/75/90/95%=1.00,1.00,2.00,2.00ms/op 605.47 MB/s (449 runs sampled)
+idb read tx (arraybuffer) 20x32 KiB 50/75/90/95%=1.00,1.00,1.00,2.00ms/op 625.00 MB/s (455 runs sampled)
+idb read tx (arraybuffer) 20x63 KiB 50/75/90/95%=2.00,2.00,2.00,3.00ms/op 615.23 MB/s (263 runs sampled)
+idb read tx (arraybuffer) 20x64 KiB 50/75/90/95%=2.00,2.00,2.00,2.00ms/op 625.00 MB/s (259 runs sampled)
+idb read tx (arraybuffer) 25x1 B 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (1938 runs sampled)
+idb read tx (arraybuffer) 25x1 KiB 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (1347 runs sampled)
+idb read tx (arraybuffer) 25x31 KiB 50/75/90/95%=1.00,2.00,2.00,2.00ms/op 756.84 MB/s (392 runs sampled)
+idb read tx (arraybuffer) 25x32 KiB 50/75/90/95%=1.00,2.00,2.00,2.00ms/op 781.25 MB/s (386 runs sampled)
+idb read tx (arraybuffer) 25x63 KiB 50/75/90/95%=2.00,2.00,3.00,3.00ms/op 769.04 MB/s (220 runs sampled)
+idb read tx (arraybuffer) 25x64 KiB 50/75/90/95%=2.00,3.00,3.00,3.00ms/op 781.25 MB/s (217 runs sampled)
+idb read tx (arraybuffer) 32x1 B 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (1872 runs sampled)
+idb read tx (arraybuffer) 32x1 KiB 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (1184 runs sampled)
+idb read tx (arraybuffer) 32x31 KiB 50/75/90/95%=1.00,2.00,2.00,2.00ms/op 968.75 MB/s (326 runs sampled)
+idb read tx (arraybuffer) 32x32 KiB 50/75/90/95%=2.00,2.00,2.00,2.00ms/op 500.00 MB/s (302 runs sampled)
+idb read tx (arraybuffer) 32x63 KiB 50/75/90/95%=3.00,3.00,3.00,4.00ms/op 656.25 MB/s (171 runs sampled)
+idb read tx (arraybuffer) 32x64 KiB 50/75/90/95%=3.00,3.00,3.00,4.00ms/op 666.67 MB/s (164 runs sampled)
+idb read tx (arraybuffer) 64x1 B 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (1310 runs sampled)
+idb read tx (arraybuffer) 64x1 KiB 50/75/90/95%=0.00,1.00,1.00,1.00ms/op Infinity MB/s (1048 runs sampled)
+idb read tx (arraybuffer) 64x31 KiB 50/75/90/95%=3.00,3.00,3.00,4.00ms/op 645.83 MB/s (182 runs sampled)
+idb read tx (arraybuffer) 64x32 KiB 50/75/90/95%=3.00,3.00,3.00,4.00ms/op 666.67 MB/s (164 runs sampled)
+idb read tx (arraybuffer) 64x63 KiB 50/75/90/95%=6.00,6.00,7.00,7.00ms/op 656.25 MB/s (86 runs sampled)
+idb read tx (arraybuffer) 64x64 KiB 50/75/90/95%=10.00,13.00,16.00,17.00ms/op 400.00 MB/s (46 runs sampled)
+idb read tx (arraybuffer) 100x1 B 50/75/90/95%=1.00,1.00,2.00,2.00ms/op 0.10 MB/s (395 runs sampled)
+idb read tx (arraybuffer) 100x1 KiB 50/75/90/95%=4.00,4.00,5.00,7.00ms/op 24.41 MB/s (121 runs sampled)
+idb read tx (arraybuffer) 100x31 KiB 50/75/90/95%=17.00,17.00,18.00,18.00ms/op 178.08 MB/s (30 runs sampled)
+idb read tx (arraybuffer) 100x32 KiB 50/75/90/95%=12.00,12.00,13.00,14.00ms/op 260.42 MB/s (41 runs sampled)
+idb read tx (arraybuffer) 100x63 KiB 50/75/90/95%=15.00,18.00,18.00,19.00ms/op 410.16 MB/s (33 runs sampled)
+idb read tx (arraybuffer) 100x64 KiB 50/75/90/95%=12.00,13.00,13.00,14.00ms/op 520.83 MB/s (43 runs sampled)
+idb read tx (arraybuffer) 1000x1 B 50/75/90/95%=2.00,2.00,2.00,2.00ms/op 0.48 MB/s (274 runs sampled)
+idb read tx (arraybuffer) 1000x1 KiB 50/75/90/95%=4.00,5.00,5.00,6.00ms/op 244.14 MB/s (114 runs sampled)
+idb read tx (arraybuffer) 1000x31 KiB 50/75/90/95%=54.00,57.00,60.00,60.00ms/op 560.62 MB/s (10 runs sampled)
+idb read tx (arraybuffer) 1000x32 KiB 50/75/90/95%=50.00,50.00,54.00,54.00ms/op 625.00 MB/s (10 runs sampled)
+idb read tx (arraybuffer) 1000x63 KiB 50/75/90/95%=89.00,90.00,93.00,93.00ms/op 691.27 MB/s (6 runs sampled)
+idb read tx (arraybuffer) 1000x64 KiB 50/75/90/95%=85.00,90.00,96.00,96.00ms/op 735.29 MB/s (6 runs sampled)
+idb write tx (arraybuffer) 1x1 B 50/75/90/95%=8.00,9.00,10.00,10.00ms/op 0.00 MB/s (59 runs sampled)
+idb write tx (arraybuffer) 1x1 KiB 50/75/90/95%=9.00,9.00,10.00,11.00ms/op 0.11 MB/s (59 runs sampled)
+idb write tx (arraybuffer) 1x31 KiB 50/75/90/95%=8.00,8.00,8.00,8.00ms/op 3.78 MB/s (66 runs sampled)
+idb write tx (arraybuffer) 1x32 KiB 50/75/90/95%=7.00,8.00,8.00,8.00ms/op 4.46 MB/s (67 runs sampled)
+idb write tx (arraybuffer) 1x63 KiB 50/75/90/95%=7.00,8.00,8.00,8.00ms/op 8.79 MB/s (67 runs sampled)
+idb write tx (arraybuffer) 1x64 KiB 50/75/90/95%=8.00,8.00,8.00,8.00ms/op 7.81 MB/s (65 runs sampled)
+idb write tx (arraybuffer) 1x1 MiB 50/75/90/95%=13.00,14.00,14.00,17.00ms/op 76.92 MB/s (38 runs sampled)
+idb write tx (arraybuffer) 1x10 MiB 50/75/90/95%=83.00,84.00,122.00,122.00ms/op 120.48 MB/s (6 runs sampled)
+idb write tx (arraybuffer) 1x100 MiB 50/75/90/95%=1259.00,1361.00,1494.00,1494.00ms/op 79.43 MB/s (5 runs sampled)
+idb write tx (arraybuffer) 5x1 B 50/75/90/95%=10.00,10.00,11.00,12.00ms/op 0.00 MB/s (50 runs sampled)
+idb write tx (arraybuffer) 5x1 KiB 50/75/90/95%=8.00,9.00,10.00,10.00ms/op 0.61 MB/s (63 runs sampled)
+idb write tx (arraybuffer) 5x31 KiB 50/75/90/95%=8.00,9.00,9.00,9.00ms/op 18.92 MB/s (61 runs sampled)
+idb write tx (arraybuffer) 5x32 KiB 50/75/90/95%=9.00,9.00,9.00,10.00ms/op 17.36 MB/s (59 runs sampled)
+idb write tx (arraybuffer) 5x63 KiB 50/75/90/95%=9.00,9.00,10.00,10.00ms/op 34.18 MB/s (57 runs sampled)
+idb write tx (arraybuffer) 5x64 KiB 50/75/90/95%=9.00,10.00,10.00,10.00ms/op 34.72 MB/s (54 runs sampled)
+idb write tx (arraybuffer) 5x1 MiB 50/75/90/95%=47.00,49.00,49.00,53.00ms/op 106.38 MB/s (11 runs sampled)
+idb write tx (arraybuffer) 5x10 MiB 50/75/90/95%=534.00,544.00,544.00,544.00ms/op 93.63 MB/s (5 runs sampled)
+idb write tx (arraybuffer) 10x1 B 50/75/90/95%=9.00,10.00,11.00,11.00ms/op 0.00 MB/s (53 runs sampled)
+idb write tx (arraybuffer) 10x1 KiB 50/75/90/95%=8.00,8.00,9.00,9.00ms/op 1.22 MB/s (64 runs sampled)
+idb write tx (arraybuffer) 10x31 KiB 50/75/90/95%=9.00,10.00,11.00,11.00ms/op 33.64 MB/s (54 runs sampled)
+idb write tx (arraybuffer) 10x32 KiB 50/75/90/95%=9.00,10.00,10.00,10.00ms/op 34.72 MB/s (53 runs sampled)
+idb write tx (arraybuffer) 10x63 KiB 50/75/90/95%=11.00,11.00,12.00,12.00ms/op 55.93 MB/s (47 runs sampled)
+idb write tx (arraybuffer) 10x64 KiB 50/75/90/95%=11.00,11.00,12.00,12.00ms/op 56.82 MB/s (45 runs sampled)
+idb write tx (arraybuffer) 10x1 MiB 50/75/90/95%=73.00,73.00,74.00,74.00ms/op 136.99 MB/s (8 runs sampled)
+idb write tx (arraybuffer) 10x10 MiB 50/75/90/95%=1255.00,1300.00,1384.00,1384.00ms/op 79.68 MB/s (5 runs sampled)
+idb write tx (arraybuffer) 15x1 B 50/75/90/95%=11.00,11.00,12.00,12.00ms/op 0.00 MB/s (47 runs sampled)
+idb write tx (arraybuffer) 15x1 KiB 50/75/90/95%=8.00,8.00,9.00,19.00ms/op 1.83 MB/s (53 runs sampled)
+idb write tx (arraybuffer) 15x31 KiB: Error: UnknownError: An internal error was encountered in the Indexed Database server
+idb write tx (arraybuffer) 15x32 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 15x63 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 15x64 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 20x1 B: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 20x1 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 20x31 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 20x32 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 20x63 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 20x64 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 25x1 B: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 25x1 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 25x31 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 25x32 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 25x63 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 25x64 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 32x1 B: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 32x1 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 32x31 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 32x32 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 32x63 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 32x64 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 64x1 B: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 64x1 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 64x31 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 64x32 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 64x63 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 64x64 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 100x1 B: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 100x1 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 100x31 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 100x32 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 100x63 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 100x64 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 1000x1 B: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 1000x1 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 1000x31 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 1000x32 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 1000x63 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+idb write tx (arraybuffer) 1000x64 KiB: Error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again
+Done!
