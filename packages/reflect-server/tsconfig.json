@@ -19,7 +19,7 @@
     "outDir": "out",
     "allowJs": true,
 
-    "types": ["@cloudflare/workers-types"],
+    "types": [],
     "lib": ["esnext"],
     "skipLibCheck": true,
 

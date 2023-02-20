@@ -19,6 +19,10 @@
     "test": {},
     "test:watch": {
       "cache": false
+    },
+    "check-types": {
+      "dependsOn": ["^check-types"],
+      "outputs": []
     }
   }
 }
