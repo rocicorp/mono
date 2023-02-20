@@ -1,3 +1,4 @@
+import 'mocha';
 import {expect} from '@esm-bundle/chai';
 import {MutatorDefs, Replicache, BeginPullResult} from './replicache.js';
 import {

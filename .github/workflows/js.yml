@@ -38,5 +38,5 @@ jobs:
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
       - run: npm ci
-      # - run: npm run check-types
+      - run: npm run check-types
       - run: npm run build

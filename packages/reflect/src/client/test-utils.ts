@@ -1,3 +1,4 @@
+import 'mocha';
 import {resolver} from '@rocicorp/resolver';
 import type {MutatorDefs} from 'replicache';
 import type {SinonFakeTimers} from 'sinon';
