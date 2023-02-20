@@ -9,8 +9,8 @@
   "types": "out/reflect-server.d.ts",
   "type": "module",
   "scripts": {
-    "format": "prettier --write '**/*.{js,jsx,json,ts,tsx,html,css,md,yml}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md,yml}'",
-    "check-format": "prettier --check '**/*.{js,jsx,json,ts,tsx,html,css,md,yml}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md,yml}'",
+    "format": "prettier --write *",
+    "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "build": "rm -rf out && npm run build-dts && node build.js",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",

@@ -7,8 +7,8 @@
   "scripts": {
     "test": "web-test-runner",
     "test:watch": "web-test-runner --watch",
-    "format": "prettier --write '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
-    "check-format": "prettier --check '{doc,src,sample,perf}/**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
+    "format": "prettier --write *",
+    "check-format": "prettier --check *",
     "check-types": "tsc --noEmit && npm run build && tsc --noEmit --project perf/tsconfig.json && tsc --noEmit tool/cli.ts",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
