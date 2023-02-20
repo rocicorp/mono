@@ -44,6 +44,7 @@ import type {ConnectedMessage} from '../protocol/connected.js';
 import {ErrorKind, type ErrorMessage} from '../protocol/error.js';
 import {MessageError, isAuthError} from './connection-error.js';
 import type {PullResponse} from '../protocol/pull.js';
+import {getDocumentVisibilityWatcher} from './document-visible.js';
 
 export const enum ConnectionState {
   Disconnected,
@@ -61,7 +62,7 @@ export const enum CloseKind {
   Unknown = 'Unknown',
 }
 
-export type DisconnectReason = ErrorKind | CloseKind;
+export type DisconnectReason = ErrorKind | CloseKind | 'Hidden';
 
 /**
  * How frequently we should ping the server to keep the connection alive.
@@ -72,6 +73,11 @@ export const PING_INTERVAL_MS = 5_000;
  * The amount of time we wait for a pong before we consider the ping timed out.
  */
 export const PING_TIMEOUT_MS = 2_000;
+
+/**
+ * The amount of time to wait before we consider a tab hidden.
+ */
+export const HIDDEN_INTERVAL_MS = 5_000;
 
 /**
  * The amount of time we wait for a connection to be established before we
@@ -177,6 +183,14 @@ export class Reflect<MD extends MutatorDefs> {
   #connectionStateChangeResolver = resolver<ConnectionState>();
 
   #nextMessageResolver: Resolver<Downstream> | undefined = undefined;
+
+  #closeAbortController = new AbortController();
+
+  readonly #visibilityWatcher = getDocumentVisibilityWatcher(
+    getDocument(),
+    HIDDEN_INTERVAL_MS,
+    this.#closeAbortController.signal,
+  );
 
   // We use an accessor pair to allow the subclass to override the setter.
   #connectionState: ConnectionState = ConnectionState.Disconnected;
@@ -341,6 +355,7 @@ export class Reflect<MD extends MutatorDefs> {
       const lc = await this._l;
       this._disconnect(lc, CloseKind.ReflectClosed);
     }
+    this.#closeAbortController.abort();
     return this._rep.close();
   }
 
@@ -771,6 +786,9 @@ export class Reflect<MD extends MutatorDefs> {
       try {
         switch (this._connectionState) {
           case ConnectionState.Disconnected: {
+            // If hidden, we wait for the tab to become visible before trying again.
+            await this.#visibilityWatcher.waitForVisible();
+
             // If we got an auth error we try to get a new auth token before reconnecting.
             if (needsReauth) {
               await this.#updateAuthToken(lc);
@@ -804,15 +822,20 @@ export class Reflect<MD extends MutatorDefs> {
             // - After PING_INTERVAL_MS we send a ping
             // - We get disconnected
             // - We get a message
+            // - The tab becomes hidden (with a delay)
+
             const pingTimeoutPromise = sleep(PING_INTERVAL_MS);
 
             this.#nextMessageResolver = resolver();
 
-            let pingTimerFired = false;
-            await Promise.race([
-              pingTimeoutPromise.then(() => {
-                pingTimerFired = true;
-              }),
+            const enum RaceCases {
+              Ping = 0,
+              Hidden = 1,
+            }
+
+            const raceResult = await promiseRace([
+              pingTimeoutPromise,
+              this.#visibilityWatcher.waitForHidden(),
               this.#connectionStateChangeResolver.promise,
               this.#nextMessageResolver.promise,
             ]);
@@ -823,8 +846,13 @@ export class Reflect<MD extends MutatorDefs> {
               break;
             }
 
-            if (pingTimerFired) {
-              await this._ping(lc);
+            switch (raceResult) {
+              case RaceCases.Ping:
+                await this._ping(lc);
+                break;
+              case RaceCases.Hidden:
+                this._disconnect(lc, 'Hidden');
+                break;
             }
           }
         }
@@ -984,10 +1012,8 @@ export class Reflect<MD extends MutatorDefs> {
     assert(this._socket);
     send(this._socket, pingMessage);
 
-    const connected = await Promise.race([
-      promise.then(() => true),
-      sleep(PING_TIMEOUT_MS).then(() => false),
-    ]);
+    const connected =
+      (await promiseRace([promise, sleep(PING_TIMEOUT_MS)])) === 0;
     if (this._connectionState !== ConnectionState.Connected) {
       return;
     }
@@ -1073,4 +1099,20 @@ class CloseError extends Error {
     super(`socket closed (${closeKind})`);
     this.kind = closeKind;
   }
+}
+
+/**
+ * Returns the document object. This is wrapped in a function because Reflect
+ * runs in environments that do not have a document (such as Web Workers, Deno
+ * etc)
+ */
+function getDocument(): Document | undefined {
+  return typeof document !== 'undefined' ? document : undefined;
+}
+
+/**
+ * Like Promise.race but returns the index of the first promise that resolved.
+ */
+function promiseRace(ps: Promise<unknown>[]): Promise<number> {
+  return Promise.race(ps.map((p, i) => p.then(() => i)));
 }
