@@ -2,3 +2,12 @@ node_modules
 dist
 lib
 *.log
+
+packages/reflect-server/out
+
+packages/reflect/out
+
+packages/replicache-internal/out
+packages/replicache-internal/doc/build/
+packages/replicache-internal/doc/docs/api
+packages/replicache-internal/doc/.docusaurus/

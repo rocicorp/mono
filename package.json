@@ -11,8 +11,9 @@
     "dev": "turbo run dev",
     "test": "turbo run test",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "tsc --noEmit"
+    "format": "turbo run format",
+    "check-format": "turbo run check-format",
+    "check-types": "turbo run check-types"
   },
   "devDependencies": {
     "@changesets/cli": "^2.26.0",

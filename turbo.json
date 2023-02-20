@@ -4,17 +4,27 @@
   "pipeline": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**"]
+      "outputs": ["out/**", "dist/**", ".next/**"]
     },
     "lint": {
+      "outputs": []
+    },
+    "format": {},
+    "check-format": {
       "outputs": []
     },
     "dev": {
       "cache": true
     },
-    "test": {},
+    "test": {
+      "dependsOn": ["build"]
+    },
     "test:watch": {
       "cache": false
+    },
+    "check-types": {
+      "dependsOn": ["^check-types"],
+      "outputs": []
     }
   }
 }
