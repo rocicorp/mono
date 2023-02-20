@@ -21,7 +21,7 @@
     // esnext for Object.fromEntries
     "lib": ["dom", "esnext"],
     "preserveSymlinks": true,
-    "types": ["node", "mocha"]
+    "types": []
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "out/**/*"]

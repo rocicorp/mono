@@ -17,7 +17,7 @@
     "dev": "miniflare --live-reload --debug",
     "test": "npm run build && node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
     "test:watch": "npm run build && node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
-    "types:check": "tsc --noEmit",
+    "check-types": "tsc --noEmit",
     "prepack": "npm run lint && npm run test && npm run build"
   },
   "engines": {
@@ -34,7 +34,6 @@
     "@rocicorp/lock": "^1.0.1",
     "@rocicorp/logger": "^2.2.0",
     "@rocicorp/prettier-config": "^0.1.1",
-    "@types/jest": "^29.2.6",
     "compare-utf8": "^0.1.1",
     "esbuild": "^0.14.38",
     "jest-environment-miniflare": "^2.11.0",
