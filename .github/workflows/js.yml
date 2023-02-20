@@ -20,6 +20,23 @@ jobs:
         run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
-      - run: npm install
+      - run: npm ci
       - run: npm run check-format
       - run: npm run lint
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18.x
+          cache: 'npm'
+      - name: configure npm auth token
+        run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
+        env:
+          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
+      - run: npm ci
+      # - run: npm run check-types
+      - run: npm run build
