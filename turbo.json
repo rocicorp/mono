@@ -4,9 +4,13 @@
   "pipeline": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**"]
+      "outputs": ["out/**", "dist/**", ".next/**"]
     },
     "lint": {
+      "outputs": []
+    },
+    "format": {},
+    "check-format": {
       "outputs": []
     },
     "dev": {
