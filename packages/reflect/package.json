@@ -12,8 +12,8 @@
   "types": "out/reflect.d.ts",
   "type": "module",
   "scripts": {
-    "format": "prettier --write '**/*.{js,jsx,json,ts,tsx,html,css,md,yml}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md,yml}'",
-    "check-format": "prettier --check '**/*.{js,jsx,json,ts,tsx,html,css,md,yml}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md,yml}'",
+    "format": "prettier --write *",
+    "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "test": "web-test-runner",
     "test:watch": "web-test-runner --watch",

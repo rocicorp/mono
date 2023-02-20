@@ -11,7 +11,8 @@
     "dev": "turbo run dev",
     "test": "turbo run test",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "format": "prettier --write *",
+    "check-format": "prettier --check *",
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {
