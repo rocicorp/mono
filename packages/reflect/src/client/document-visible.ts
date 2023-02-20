@@ -20,7 +20,7 @@ interface DocumentVisibilityWatcher {
   waitForHidden(): Promise<unknown>;
 }
 
-class DocumentVisibilityWatcherImpl {
+class DocumentVisibilityWatcherImpl implements DocumentVisibilityWatcher {
   readonly #doc: PartialDocument;
   readonly #hiddenIntervalMS: number;
   #timeoutID: ReturnType<typeof setTimeout> | 0 = 0;
@@ -97,7 +97,7 @@ class DocumentVisibilityWatcherImpl {
 const resolvedPromise = Promise.resolve();
 const promiseThatNeverResolves = new Promise(() => undefined);
 
-class DocumentVisibilityWatcherNoDoc {
+class DocumentVisibilityWatcherNoDoc implements DocumentVisibilityWatcher {
   waitForVisible(): Promise<unknown> {
     return resolvedPromise;
   }
