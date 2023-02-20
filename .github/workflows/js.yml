@@ -24,24 +24,8 @@ jobs:
       - run: npm run check-format
       - run: npm run lint
 
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 18.x
-          cache: 'npm'
-      - name: configure npm auth token
-        run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
-        env:
-          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
-      - run: npm ci
-      - run: npm run check-types
-      - run: npm run build
-
   test:
+    # npm run test also runs build due to turbo repo deps.
     name: Test
     runs-on: ubuntu-latest
     steps:
@@ -61,4 +45,4 @@ jobs:
       - name: Install Playwright Deps
         run: npx playwright install --with-deps
 
-      - run: npm test
+      - run: npm run test
