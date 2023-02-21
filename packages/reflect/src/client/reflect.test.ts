@@ -1,3 +1,4 @@
+import * as superstruct from 'superstruct';
 import {expect} from '@esm-bundle/chai';
 import type {
   JSONValue,
@@ -369,7 +370,8 @@ test('pusher sends one mutation per push message', async () => {
       expect(mockSocket.messages).to.have.lengthOf(expectedMessages);
 
       for (const raw of mockSocket.messages) {
-        const msg = pushMessageSchema.parse(JSON.parse(raw));
+        const msg = JSON.parse(raw);
+        superstruct.assert(msg, pushMessageSchema);
         expect(msg[1].clientGroupID).to.equal(
           clientGroupID ?? (await r.clientGroupID),
         );

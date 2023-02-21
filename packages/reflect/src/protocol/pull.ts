@@ -1,23 +1,23 @@
-import {z} from 'zod';
+import * as s from 'superstruct';
 import {nullableVersionSchema, versionSchema} from '../types/version.js';
 import {patchSchema} from './patch.js';
 
-export const pullRequestSchema = z.object({
-  roomID: z.string(),
-  profileID: z.string(),
-  clientGroupID: z.string(),
+export const pullRequestSchema = s.object({
+  roomID: s.string(),
+  profileID: s.string(),
+  clientGroupID: s.string(),
   cookie: nullableVersionSchema,
-  pullVersion: z.number(),
-  schemaVersion: z.string(),
+  pullVersion: s.number(),
+  schemaVersion: s.string(),
 });
 
-export const pullResponseSchema = z.object({
+export const pullResponseSchema = s.object({
   cookie: versionSchema,
-  lastMutationIDChanges: z.record(z.string(), z.number()),
+  lastMutationIDChanges: s.record(s.string(), s.number()),
   // Pull is only used for mutation recovery which does not use
   // the patch so we save work by not computing the patch.
-  patch: patchSchema.length(0),
+  patch: s.size(patchSchema, 0, 0),
 });
 
-export type PullRequest = z.infer<typeof pullRequestSchema>;
-export type PullResponse = z.infer<typeof pullResponseSchema>;
+export type PullRequest = s.Infer<typeof pullRequestSchema>;
+export type PullResponse = s.Infer<typeof pullResponseSchema>;

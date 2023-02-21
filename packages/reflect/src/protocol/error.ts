@@ -1,4 +1,4 @@
-import {z} from 'zod';
+import * as s from 'superstruct';
 
 // Keep this in sync with reflect server.
 //
@@ -22,26 +22,26 @@ export const enum ErrorKind {
   VersionNotSupported = 'VersionNotSupported',
 }
 
-export const errorKindSchema = z.union([
-  z.literal(ErrorKind.AuthInvalidated),
-  z.literal(ErrorKind.ClientNotFound),
-  z.literal(ErrorKind.ConnectTimeout),
-  z.literal(ErrorKind.InvalidConnectionRequest),
-  z.literal(ErrorKind.InvalidMessage),
-  z.literal(ErrorKind.InvalidPush),
-  z.literal(ErrorKind.PingTimeout),
-  z.literal(ErrorKind.RoomClosed),
-  z.literal(ErrorKind.RoomNotFound),
-  z.literal(ErrorKind.Unauthorized),
-  z.literal(ErrorKind.UnexpectedBaseCookie),
-  z.literal(ErrorKind.UnexpectedLastMutationID),
-  z.literal(ErrorKind.VersionNotSupported),
+export const errorKindSchema = s.union([
+  s.literal(ErrorKind.AuthInvalidated),
+  s.literal(ErrorKind.ClientNotFound),
+  s.literal(ErrorKind.ConnectTimeout),
+  s.literal(ErrorKind.InvalidConnectionRequest),
+  s.literal(ErrorKind.InvalidMessage),
+  s.literal(ErrorKind.InvalidPush),
+  s.literal(ErrorKind.PingTimeout),
+  s.literal(ErrorKind.RoomClosed),
+  s.literal(ErrorKind.RoomNotFound),
+  s.literal(ErrorKind.Unauthorized),
+  s.literal(ErrorKind.UnexpectedBaseCookie),
+  s.literal(ErrorKind.UnexpectedLastMutationID),
+  s.literal(ErrorKind.VersionNotSupported),
 ]);
 
-export const errorMessageSchema = z.tuple([
-  z.literal('error'),
+export const errorMessageSchema = s.tuple([
+  s.literal('error'),
   errorKindSchema,
-  z.string(),
+  s.string(),
 ]);
 
 export type ErrorMessage = ['error', ErrorKind, string];

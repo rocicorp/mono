@@ -1,21 +1,21 @@
-import {z} from 'zod';
+import * as s from 'superstruct';
 import {jsonSchema} from './json.js';
 
-const putOpSchema = z.object({
-  op: z.literal('put'),
-  key: z.string(),
+const putOpSchema = s.object({
+  op: s.literal('put'),
+  key: s.string(),
   value: jsonSchema,
 });
 
-const delOpSchema = z.object({
-  op: z.literal('del'),
-  key: z.string(),
+const delOpSchema = s.object({
+  op: s.literal('del'),
+  key: s.string(),
 });
 
-const patchOpSchema = z.union([putOpSchema, delOpSchema]);
+const patchOpSchema = s.union([putOpSchema, delOpSchema]);
 
-export const patchSchema = z.array(patchOpSchema);
-export type PutOp = z.infer<typeof putOpSchema>;
-export type DelOp = z.infer<typeof delOpSchema>;
-export type PatchOp = z.infer<typeof patchOpSchema>;
-export type Patch = z.infer<typeof patchSchema>;
+export const patchSchema = s.array(patchOpSchema);
+export type PutOp = s.Infer<typeof putOpSchema>;
+export type DelOp = s.Infer<typeof delOpSchema>;
+export type PatchOp = s.Infer<typeof patchOpSchema>;
+export type Patch = s.Infer<typeof patchSchema>;
