@@ -4,7 +4,9 @@ export class TestDurableObjectId implements DurableObjectId {
 
   constructor(objectIDString: string, name?: string) {
     this._objectIDString = objectIDString;
-    this.name = name;
+    if (name !== undefined) {
+      this.name = name;
+    }
   }
   toString(): string {
     return this._objectIDString;

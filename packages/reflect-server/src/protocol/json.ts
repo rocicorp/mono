@@ -16,3 +16,18 @@ export const jsonSchema: s.Struct<Json> = s.lazy(() =>
   ]),
 );
 export type JSONType = s.Infer<typeof jsonSchema>;
+
+/**
+ * A JSON value that allows undefined values in objects.
+ */
+export type RelaxedJSONValue =
+  | boolean
+  | null
+  | number
+  | string
+  | RelaxedJSONObject
+  | RelaxedJSONArray;
+
+type RelaxedJSONArray = Array<RelaxedJSONValue>;
+
+type RelaxedJSONObject = {[key: string]: RelaxedJSONValue | undefined};

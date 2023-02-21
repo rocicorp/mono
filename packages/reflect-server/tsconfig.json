@@ -4,6 +4,7 @@
     "module": "esnext",
 
     "strict": true,
+    "exactOptionalPropertyTypes": true,
     "noUnusedLocals": true,
 
     "noUnusedParameters": true,

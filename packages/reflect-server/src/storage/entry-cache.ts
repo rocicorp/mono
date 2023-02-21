@@ -17,7 +17,8 @@ import type {ListOptions, Storage} from './storage.js';
  */
 export class EntryCache implements Storage {
   private _storage: Storage;
-  private _cache: Map<string, {value?: JSONValue; dirty: boolean}> = new Map();
+  private _cache: Map<string, {value?: JSONValue | undefined; dirty: boolean}> =
+    new Map();
 
   constructor(storage: Storage) {
     this._storage = storage;

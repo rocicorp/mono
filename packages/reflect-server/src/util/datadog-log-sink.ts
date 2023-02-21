@@ -19,10 +19,10 @@ export class DatadogLogSink implements LogSink {
   private readonly _interval: number;
   private _timerID: ReturnType<typeof setTimeout> | 0 = 0;
   private _flushLock = new Lock();
-  private readonly _signal: AbortSignal | undefined = undefined;
+  private readonly _signal: AbortSignal | null = null;
 
   constructor(options: DatadogLoggerOptions) {
-    const {apiKey, service, host, interval = 10_000, signal} = options;
+    const {apiKey, service, host, interval = 10_000, signal = null} = options;
 
     this._apiKey = apiKey;
     this._service = service;

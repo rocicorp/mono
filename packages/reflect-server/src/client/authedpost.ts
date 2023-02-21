@@ -1,14 +1,14 @@
-import type {JSONType} from '../protocol/json.js';
+import type {RelaxedJSONValue} from '../protocol/json.js';
 import {createAuthAPIHeaders} from '../server/auth-api-headers.js';
 
 export function newAuthedPostRequest(
   url: URL,
   authApiKey: string,
-  req?: JSONType | undefined,
+  req?: RelaxedJSONValue | undefined,
 ) {
   return new Request(url.toString(), {
     method: 'POST',
     headers: createAuthAPIHeaders(authApiKey),
-    body: req ? JSON.stringify(req) : undefined,
+    body: req !== undefined ? JSON.stringify(req) : null,
   });
 }
