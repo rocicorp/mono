@@ -1,7 +1,7 @@
-import {z} from 'zod';
+import * as s from 'superstruct';
 
-export const pongBodySchema = z.object({});
-export const pongMessageSchema = z.tuple([z.literal('pong'), pongBodySchema]);
+export const pongBodySchema = s.object({});
+export const pongMessageSchema = s.tuple([s.literal('pong'), pongBodySchema]);
 
-export type PongBody = z.infer<typeof pongBodySchema>;
-export type PongMessage = z.infer<typeof pongMessageSchema>;
+export type PongBody = s.Infer<typeof pongBodySchema>;
+export type PongMessage = s.Infer<typeof pongMessageSchema>;

@@ -1,9 +1,9 @@
-import {z} from 'zod';
+import * as s from 'superstruct';
 
 // TODO: Do we maybe want to send the client timestamp for any reason?
 // Server could reply with its time. Seems useful ... somehow.
-export const pingBodySchema = z.object({});
-export const pingMessageSchema = z.tuple([z.literal('ping'), pingBodySchema]);
+export const pingBodySchema = s.object({});
+export const pingMessageSchema = s.tuple([s.literal('ping'), pingBodySchema]);
 
-export type PingBody = z.infer<typeof pingBodySchema>;
-export type PingMessage = z.infer<typeof pingMessageSchema>;
+export type PingBody = s.Infer<typeof pingBodySchema>;
+export type PingMessage = s.Infer<typeof pingMessageSchema>;

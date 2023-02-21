@@ -1,10 +1,18 @@
-import {z} from 'zod';
+import * as s from 'superstruct';
 
-// From https://github.com/colinhacks/zod#json-type
 type Literal = boolean | null | number | string;
 type Json = Literal | {[key: string]: Json} | Json[];
-const literalSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
-export const jsonSchema: z.ZodSchema<Json> = z.lazy(() =>
-  z.union([literalSchema, z.array(jsonSchema), z.record(jsonSchema)]),
+const literalSchema = s.union([
+  s.string(),
+  s.number(),
+  s.boolean(),
+  s.literal(null),
+]);
+export const jsonSchema: s.Struct<Json> = s.lazy(() =>
+  s.union([
+    literalSchema,
+    s.array(jsonSchema),
+    s.record(s.string(), jsonSchema),
+  ]),
 );
-export type JSONType = z.infer<typeof jsonSchema>;
+export type JSONType = s.Infer<typeof jsonSchema>;

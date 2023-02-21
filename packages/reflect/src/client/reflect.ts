@@ -1,3 +1,4 @@
+import * as superstruct from 'superstruct';
 import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
 import {Lock} from '@rocicorp/lock';
@@ -926,10 +927,11 @@ export class Reflect<MD extends MutatorDefs> {
     // intercepted here (in a complete hack), and a no-op response is returned
     // as pulls for this client group are handled via poke over the socket.
     if (req.clientGroupID === (await this.clientGroupID)) {
-      const parsed = nullableVersionSchema.parse(req.cookie);
+      const {cookie} = req;
+      superstruct.assert(cookie, nullableVersionSchema);
       const resolver = this._baseCookieResolver;
       this._baseCookieResolver = null;
-      resolver?.resolve(parsed);
+      resolver?.resolve(cookie);
       return {
         httpRequestInfo: {
           errorMessage: '',

@@ -45,8 +45,8 @@
     "rollup": "^2.70.1",
     "rollup-plugin-dts": "^4.2.0",
     "sinon": "^13.0.1",
-    "typescript": "^4.9.4",
-    "zod": "^3.20.2"
+    "superstruct": "^0.16.7",
+    "typescript": "^4.9.4"
   },
   "files": [
     "out/reflect.d.ts",

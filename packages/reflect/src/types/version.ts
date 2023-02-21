@@ -1,7 +1,7 @@
-import {z} from 'zod';
+import * as s from 'superstruct';
 
-export const versionSchema = z.number();
-export const nullableVersionSchema = z.union([versionSchema, z.null()]);
+export const versionSchema = s.number();
+export const nullableVersionSchema = s.union([versionSchema, s.literal(null)]);
 
-export type Version = z.infer<typeof versionSchema>;
-export type NullableVersion = z.infer<typeof nullableVersionSchema>;
+export type Version = s.Infer<typeof versionSchema>;
+export type NullableVersion = s.Infer<typeof nullableVersionSchema>;
