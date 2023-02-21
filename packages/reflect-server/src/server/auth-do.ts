@@ -43,13 +43,11 @@ import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
 import {createUnauthorizedResponse} from './create-unauthorized-response.js';
 import {ErrorKind} from '../protocol/error.js';
 import {ROOM_ROUTES} from './room-do.js';
-import {pullRequestSchema} from '../protocol/pull.js';
 import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
   LEGACY_CONNECT_PATH,
   LEGACY_CREATE_ROOM_PATH,
-  PULL_PATH,
 } from './paths.js';
 
 export interface AuthDOOptions {
@@ -87,7 +85,6 @@ export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
 export const AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER = {
   legacyConnect: LEGACY_CONNECT_PATH,
   connect: CONNECT_URL_PATTERN,
-  pull: PULL_PATH,
 } as const;
 
 export const AUTH_ROUTES = {
@@ -291,7 +288,6 @@ export class BaseAuthDO implements DurableObject {
 
     this._router.register(AUTH_ROUTES.legacyConnect, this._legacyConnect);
     this._router.register(AUTH_ROUTES.connect, this._connect);
-    this._router.register(AUTH_ROUTES.pull, this._pull);
   }
 
   private _connect = get(
@@ -459,58 +455,6 @@ export class BaseAuthDO implements DurableObject {
       return response;
     });
   }
-
-  private _pull = post(
-    withBody(pullRequestSchema, async (ctx, req) => {
-      const {
-        lc,
-        body: {roomID},
-      } = ctx;
-
-      const auth = req.headers.get('Authorization');
-      if (!auth) {
-        lc.info?.('auth not found in Authorization header.');
-        return createUnauthorizedResponse('auth required');
-      }
-
-      let userData: UserData | undefined;
-      try {
-        userData = await this._authHandler(auth, roomID);
-      } catch (e) {
-        return createUnauthorizedResponse();
-      }
-      if (!userData || !userData.userID) {
-        if (!userData) {
-          lc.info?.('userData returned by authHandler is not an object.');
-        } else if (!userData.userID) {
-          lc.info?.('userData returned by authHandler has no userID.');
-        }
-        return createUnauthorizedResponse();
-      }
-
-      // Find the room's objectID so we can route the request to it.
-      const roomRecord = await this._roomRecordLock.withRead(() =>
-        roomRecordByRoomID(this._durableStorage, roomID),
-      );
-      if (roomRecord === undefined || roomRecord.status !== RoomStatus.Open) {
-        const errorMsg = roomRecord ? 'room is not open' : 'room not found';
-        return new Response(errorMsg, {
-          status: 404,
-        });
-      }
-
-      const roomObjectID = this._roomDO.idFromString(roomRecord.objectIDString);
-      // Forward the request to the Room Durable Object...
-      const stub = this._roomDO.get(roomObjectID);
-      const requestToDO = new Request(req);
-      requestToDO.headers.set(
-        USER_DATA_HEADER_NAME,
-        encodeHeaderValue(JSON.stringify(userData)),
-      );
-      const responseFromDO = await stub.fetch(requestToDO);
-      return responseFromDO;
-    }),
-  );
 
   private _authInvalidateForRoom = post(
     this._requireAPIKey(
