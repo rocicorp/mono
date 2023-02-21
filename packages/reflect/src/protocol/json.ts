@@ -1,6 +1,5 @@
 import * as s from 'superstruct';
 
-// From https://github.com/colinhacks/zod#json-type
 type Literal = boolean | null | number | string;
 type Json = Literal | {[key: string]: Json} | Json[];
 const literalSchema = s.union([
