@@ -58,6 +58,7 @@ test('flush calls fetch', async () => {
       // eslint-disable-next-line @typescript-eslint/naming-convention
       headers: {'DD-API-KEY': 'apiKey'},
       method: 'POST',
+      signal: null,
     },
   );
 });
@@ -164,6 +165,7 @@ test('flush calls fetch but includes logs efter the error', async () => {
       // eslint-disable-next-line @typescript-eslint/naming-convention
       headers: {'DD-API-KEY': 'apiKey'},
       method: 'POST',
+      signal: null,
     },
   );
 });
@@ -188,6 +190,7 @@ test('flush is called 1s after a log', async () => {
       // eslint-disable-next-line @typescript-eslint/naming-convention
       headers: {'DD-API-KEY': 'apiKey'},
       method: 'POST',
+      signal: null,
     },
   );
 });
@@ -213,6 +216,7 @@ test('flush is called again in case of failure', async () => {
       // eslint-disable-next-line @typescript-eslint/naming-convention
       headers: {'DD-API-KEY': 'apiKey'},
       method: 'POST',
+      signal: null,
     },
   );
 
@@ -233,6 +237,7 @@ test('flush is called again in case of failure', async () => {
       // eslint-disable-next-line @typescript-eslint/naming-convention
       headers: {'DD-API-KEY': 'apiKey'},
       method: 'POST',
+      signal: null,
     },
   );
 });
