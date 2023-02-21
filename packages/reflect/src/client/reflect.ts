@@ -99,7 +99,7 @@ export const CONNECT_TIMEOUT_MS = 10_000;
 const NULL_LAST_MUTATION_ID_SENT = {clientID: '', id: -1} as const;
 
 // When the protocol changes (pull, push, poke,...) we need to bump this.
-const REFLECT_VERSION = 0;
+const REFLECT_VERSION = 1;
 
 /**
  * The reason {@link onUpdateNeeded} was called.
