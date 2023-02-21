@@ -9,6 +9,6 @@ export function newAuthedPostRequest(
   return new Request(url.toString(), {
     method: 'POST',
     headers: createAuthAPIHeaders(authApiKey),
-    body: req ? JSON.stringify(req) : undefined,
+    body: req ? JSON.stringify(req) : null,
   });
 }

@@ -62,8 +62,12 @@ export class DurableStorage implements Storage {
 function doListOptions(opts: ListOptions): DurableObjectListOptions {
   const doOpts: DurableObjectListOptions = {...baseOptions};
 
-  doOpts.prefix = opts.prefix;
-  doOpts.limit = opts.limit;
+  if (opts.prefix !== undefined) {
+    doOpts.prefix = opts.prefix;
+  }
+  if (opts.limit !== undefined) {
+    doOpts.limit = opts.limit;
+  }
 
   if (opts.start) {
     const {key, exclusive} = opts.start;

@@ -47,9 +47,10 @@ function createTestFixture(
         });
       },
     },
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    REFLECT_AUTH_API_KEY: authApiKeyDefined ? TEST_AUTH_API_KEY : undefined,
   };
+  if (authApiKeyDefined) {
+    testEnv.REFLECT_AUTH_API_KEY = TEST_AUTH_API_KEY;
+  }
 
   return {
     testEnv,
@@ -252,14 +253,14 @@ test('worker forwards authDO api requests to authDO', async () => {
       new Request(tc.path, {
         method: tc.method,
         headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
-        body: tc.body ? JSON.stringify(tc.body) : undefined,
+        body: tc.body ? JSON.stringify(tc.body) : null,
       }),
     );
     await testNotForwardedToAuthDo(
       new Request(tc.path, {
         method: tc.path,
         // Note: no auth header.
-        body: tc.body ? JSON.stringify(tc.body) : undefined,
+        body: tc.body ? JSON.stringify(tc.body) : null,
       }),
       new Response('Unauthorized', {
         status: 401,
@@ -578,9 +579,11 @@ describe('reportMetrics', () => {
         authDO: {
           ...createTestDurableObjectNamespace(),
         },
-        // eslint-disable-next-line @typescript-eslint/naming-convention
-        REFLECT_DATADOG_API_KEY: tc.ddKey,
       };
+
+      if (tc.ddKey) {
+        testEnv.REFLECT_DATADOG_API_KEY = tc.ddKey;
+      }
 
       const worker = createWorker({
         getLogSink: _env => new TestLogSink(),
@@ -588,8 +591,7 @@ describe('reportMetrics', () => {
       });
       const testRequest = new Request(reportMetricsURL.toString(), {
         method: tc.method,
-        body:
-          tc.method === 'post' && tc.body ? JSON.stringify(tc.body) : undefined,
+        body: tc.method === 'post' && tc.body ? JSON.stringify(tc.body) : null,
       });
       if (worker.fetch === undefined) {
         throw new Error('Expect fetch to be defined');

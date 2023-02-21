@@ -400,7 +400,7 @@ test('400 bad body requests', async () => {
   const {testRoomDO, state} = await createCreateRoomTestFixture();
   const undefinedInvalidateForUserRequest = createBadBodyRequest(
     AUTH_ROUTES.authInvalidateForUser,
-    undefined,
+    null,
   );
   const badInvalidateForUserRequest = createBadBodyRequest(
     AUTH_ROUTES.authInvalidateForUser,
@@ -409,7 +409,7 @@ test('400 bad body requests', async () => {
 
   const undefinedInvalidateForRoomRequest = createBadBodyRequest(
     AUTH_ROUTES.authInvalidateForRoom,
-    undefined,
+    null,
   );
   const badInvalidateForRoomRequest = createBadBodyRequest(
     AUTH_ROUTES.authInvalidateForRoom,
@@ -449,10 +449,7 @@ test('400 bad body requests', async () => {
   }
 });
 
-function createBadBodyRequest(
-  path: string,
-  body: BodyInit | undefined,
-): Request {
+function createBadBodyRequest(path: string, body: BodyInit | null): Request {
   const url = new URL(path, 'https://roci.dev');
   return new Request(url.toString(), {
     method: 'post',

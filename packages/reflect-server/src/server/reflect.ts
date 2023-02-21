@@ -37,6 +37,17 @@ export interface ReflectServerOptions<
   allowUnconfirmedWrites?: boolean | undefined;
 }
 
+type Required<T> = {
+  [P in keyof T]-?: Exclude<T[P], undefined>;
+};
+
+type ReflectServerOptionsWithDefaults<
+  Env extends ReflectServerBaseEnv,
+  MD extends MutatorDefs,
+> = Required<Omit<ReflectServerOptions<Env, MD>, 'mutators'>> & {
+  mutators: MD;
+};
+
 function combineLogSinks(sinks: LogSink[]): LogSink {
   if (sinks.length === 1) {
     return sinks[0];
@@ -113,7 +124,7 @@ function getOptionsWithDefaults<
   MD extends MutatorDefs,
 >(
   options: ReflectServerOptions<Env, MD>,
-): Required<ReflectServerOptions<Env, MD>> {
+): ReflectServerOptionsWithDefaults<Env, MD> {
   const {
     disconnectHandler = () => Promise.resolve(),
     getLogSinks = _env => [consoleLogSink],
@@ -132,7 +143,7 @@ function getOptionsWithDefaults<
 function createRoomDOClass<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
->(optionsWithDefaults: Required<ReflectServerOptions<Env, MD>>) {
+>(optionsWithDefaults: ReflectServerOptionsWithDefaults<Env, MD>) {
   const {
     mutators,
     disconnectHandler,
@@ -158,7 +169,7 @@ function createRoomDOClass<
 function createAuthDOClass<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
->(optionsWithDefaults: Required<ReflectServerOptions<Env, MD>>) {
+>(optionsWithDefaults: ReflectServerOptionsWithDefaults<Env, MD>) {
   const {authHandler, getLogSinks, getLogLevel} = optionsWithDefaults;
   return class extends BaseAuthDO {
     constructor(state: DurableObjectState, env: Env) {

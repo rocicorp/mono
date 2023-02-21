@@ -44,7 +44,7 @@ test('Router', async () => {
 
   type Case = {
     path: string;
-    expectedError?: string;
+    expectedError?: string | undefined;
     expectedResponseCode: number | undefined;
     expectedResponseText: string | undefined;
   };
@@ -147,7 +147,7 @@ test('requireMethod', async () => {
   for (const c of cases) {
     const req = new Request(url, {
       method: c.method,
-      body: c.method === 'POST' ? 'ok' : undefined,
+      body: c.method === 'POST' ? 'ok' : null,
     });
 
     const resp = await c.handler({lc, parsedURL}, req);
