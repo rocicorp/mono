@@ -44,7 +44,7 @@ import {send} from '../util/socket.js';
 import type {ConnectedMessage} from '../protocol/connected.js';
 import {ErrorKind, type ErrorMessage} from '../protocol/error.js';
 import {MessageError, isAuthError} from './connection-error.js';
-import type {PullResponse} from '../protocol/pull.js';
+import type {PullRequestBody, PullResponse} from '../protocol/pull.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 
 export const enum ConnectionState {
@@ -942,6 +942,16 @@ export class Reflect<MD extends MutatorDefs> {
 
     // Mutation recovery pull.
     l.debug?.('Pull is for mutation recovery');
+    const pullRequestMessage: PullRequestMessage = [
+      'pull',
+      {
+        clientGroupID: req.clientGroupID,
+        cookie: req.cookie,
+        requestID: requestID,
+      },
+    ];
+    send(socket, pullRequestMessage);
+
     const pullURL = new URL(this._socketOrigin);
     pullURL.protocol = pullURL.protocol === 'ws:' ? 'http:' : 'https:';
     pullURL.pathname = `/api/sync/v${REFLECT_VERSION}/pull`;
