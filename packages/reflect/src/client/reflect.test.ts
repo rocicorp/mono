@@ -280,7 +280,7 @@ test('createSocket', () => {
     'roomID',
     '',
     0,
-    'ws://example.com/api/sync/v0/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -290,7 +290,7 @@ test('createSocket', () => {
     'roomID',
     '',
     0,
-    'ws://example.com/api/sync/v0/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -300,7 +300,7 @@ test('createSocket', () => {
     'a/b',
     '',
     0,
-    'ws://example.com/api/sync/v0/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=a%2Fb&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=a%2Fb&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -310,7 +310,7 @@ test('createSocket', () => {
     'roomID',
     '',
     123,
-    'ws://example.com/api/sync/v0/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
   );
 
   t(
@@ -320,7 +320,7 @@ test('createSocket', () => {
     'roomID',
     'auth with []',
     0,
-    'ws://example.com/api/sync/v0/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
     'auth%20with%20%5B%5D',
   );
 
@@ -332,7 +332,7 @@ test('createSocket', () => {
     'roomID',
     '',
     0,
-    'ws://example.com/api/sync/v0/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
   );
 });
 
