@@ -106,6 +106,10 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       .addContext('doID', state.id.toString());
     this._lc.info?.('Starting server');
     this._lc.info?.('Version:', version);
+
+    addEventListener('unhandledrejection', event => {
+      this._lc.error?.('Unhandled promise rejection:', event.reason);
+    });
   }
 
   private _initRoutes() {
@@ -381,8 +385,11 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       lc.debug?.('already processing, nothing to do');
       return;
     }
+
     this._turnTimerID = setInterval(() => {
-      void this._processNext(lc);
+      this._processNext(lc).catch(e => {
+        lc.error?.('Unhandled exception in _processNext', e);
+      });
     }, this._turnDuration);
   }
 
