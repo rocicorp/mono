@@ -34,15 +34,12 @@ import {
   withBody,
 } from './router.js';
 import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
-import {pullRequestSchema} from '../protocol/pull.js';
 import type {PendingMutationMap} from '../types/mutation.js';
-import {handlePull} from './pull.js';
 import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
   LEGACY_CONNECT_PATH,
   LEGACY_CREATE_ROOM_PATH,
-  PULL_PATH,
 } from './paths.js';
 
 const roomIDKey = '/system/roomID';
@@ -68,7 +65,6 @@ export const ROOM_ROUTES = {
   createRoom: CREATE_ROOM_PATH,
   legacyConnect: LEGACY_CONNECT_PATH,
   connect: CONNECT_URL_PATTERN,
-  pull: PULL_PATH,
 } as const;
 
 export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
@@ -127,7 +123,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     this._router.register(ROOM_ROUTES.legacyCreateRoom, this._createRoom);
     this._router.register(ROOM_ROUTES.connect, this._connect);
     this._router.register(ROOM_ROUTES.legacyConnect, this._connect);
-    this._router.register(ROOM_ROUTES.pull, this._pull);
   }
 
   private _requireAPIKey = <Context extends BaseContext, Resp>(
@@ -276,19 +271,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
     return new Response(null, {status: 101, webSocket: clientWS});
   });
-
-  private _pull = post(
-    withBody(pullRequestSchema, async ctx => {
-      const {lc, body: pullRequest} = ctx;
-      lc.debug?.('handling mutation recovery pull', pullRequest);
-      const pullResponse = await this._lock.withLock(() =>
-        handlePull(this._storage, pullRequest),
-      );
-      const pullResponseJSONString = JSON.stringify(pullResponse);
-      lc.debug?.('pull response', pullResponseJSONString);
-      return new Response(pullResponseJSONString, {status: 200});
-    }),
-  );
 
   private _authInvalidateForRoom = post(
     this._requireAPIKey(

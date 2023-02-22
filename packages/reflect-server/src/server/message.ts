@@ -8,6 +8,7 @@ import {superstructAssert} from '../util/superstruct.js';
 import {ErrorKind} from '../protocol/error.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import type {PendingMutationMap} from '../types/mutation.js';
+import {handlePull} from './pull.js';
 
 /**
  * Handles an upstream message coming into the server by dispatching to the
@@ -56,6 +57,9 @@ export async function handleMessage(
         () => Date.now(),
         processUntilDone,
       );
+      break;
+    case 'pull':
+      await handlePull(storage, message[1], ws);
       break;
     default:
       throw new Error(`Unknown message type: ${message[0]}`);

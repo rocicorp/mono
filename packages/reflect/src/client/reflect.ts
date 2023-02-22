@@ -44,7 +44,11 @@ import {send} from '../util/socket.js';
 import type {ConnectedMessage} from '../protocol/connected.js';
 import {ErrorKind, type ErrorMessage} from '../protocol/error.js';
 import {MessageError, isAuthError} from './connection-error.js';
-import type {PullResponse} from '../protocol/pull.js';
+import type {
+  PullRequestMessage,
+  PullResponseBody,
+  PullResponseMessage,
+} from '../protocol/pull.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 
 export const enum ConnectionState {
@@ -74,6 +78,12 @@ export const PING_INTERVAL_MS = 5_000;
  * The amount of time we wait for a pong before we consider the ping timed out.
  */
 export const PING_TIMEOUT_MS = 2_000;
+
+/**
+ * The amount of time we wait for a pull response before we consider a pull
+ * request timed out.
+ */
+export const PULL_TIMEOUT_MS = 5_000;
 
 /**
  * The amount of time to wait before we consider a tab hidden.
@@ -176,6 +186,8 @@ export class Reflect<MD extends MutatorDefs> {
 
   private _connectResolver = resolver<void>();
   private _baseCookieResolver: Resolver<NullableVersion> | null = null;
+  private _pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> =
+    new Map();
   private _lastMutationIDReceived = 0;
 
   private _socket: WebSocket | undefined = undefined;
@@ -465,6 +477,10 @@ export class Reflect<MD extends MutatorDefs> {
         await this._handlePoke(l, downMessage);
         return;
 
+      case 'pull':
+        await this._handlePullResponse(l, downMessage);
+        return;
+
       default:
         rejectInvalidMessage();
     }
@@ -678,6 +694,24 @@ export class Reflect<MD extends MutatorDefs> {
         throw e;
       }
     });
+  }
+
+  private _handlePullResponse(
+    lc: LogContext,
+    pullResponseMessage: PullResponseMessage,
+  ) {
+    this.#nextMessageResolver?.resolve(pullResponseMessage);
+    const body = pullResponseMessage[1];
+    lc = lc.addContext('requestID', body.requestID);
+    lc.debug?.('Handling pull response', body);
+    const resolver = this._pendingPullsByRequestID.get(body.requestID);
+    if (!resolver) {
+      // This can happen because resolvers are deleted
+      // from this._pendingPullsByRequestID when pulls timeout.
+      lc.debug?.('No resolver found');
+      return;
+    }
+    resolver.resolve(pullResponseMessage[1]);
   }
 
   private async _pusher(
@@ -940,49 +974,62 @@ export class Reflect<MD extends MutatorDefs> {
       };
     }
 
+    // If we are connecting we wait until we are connected.
+    await this._connectResolver.promise;
+    const socket = this._socket;
+    assert(socket);
+
     // Mutation recovery pull.
     l.debug?.('Pull is for mutation recovery');
-    const pullURL = new URL(this._socketOrigin);
-    pullURL.protocol = pullURL.protocol === 'ws:' ? 'http:' : 'https:';
-    pullURL.pathname = `/api/sync/v${REFLECT_VERSION}/pull`;
-    const headers = new Headers();
-    headers.set('Authorization', this._rep.auth);
-    headers.set('X-Replicache-RequestID', requestID);
-    const pullRequest = {
-      roomID: this.roomID,
-      profileID: req.profileID,
-      clientGroupID: req.clientGroupID,
-      cookie: req.cookie,
-      pullVersion: req.pullVersion,
-      schemaVersion: req.schemaVersion,
-    };
-    const response = await fetch(
-      new Request(pullURL.toString(), {
-        headers,
-        body: JSON.stringify(pullRequest),
-        method: 'POST',
-      }),
-    );
-    l.debug?.('Pull response', response);
-    const httpStatusCode = response.status;
-    if (httpStatusCode === 200) {
-      // TODO: validate this, at least in debug mode:
-      // https://github.com/rocicorp/reflect-server/issues/225
-      const pullResponse = (await response.json()) as PullResponse;
-      return {
-        response: pullResponse,
-        httpRequestInfo: {
-          errorMessage: '',
-          httpStatusCode,
-        },
-      };
-    }
-    return {
-      httpRequestInfo: {
-        errorMessage: await response.text(),
-        httpStatusCode,
+    const {cookie} = req;
+    superstruct.assert(cookie, nullableVersionSchema);
+    const pullRequestMessage: PullRequestMessage = [
+      'pull',
+      {
+        clientGroupID: req.clientGroupID,
+        cookie,
+        requestID,
       },
-    };
+    ];
+    send(socket, pullRequestMessage);
+    const pullResponseResolver: Resolver<PullResponseBody> = resolver();
+    this._pendingPullsByRequestID.set(requestID, pullResponseResolver);
+    try {
+      const enum RaceCases {
+        Timeout = 0,
+        Response = 1,
+      }
+      const raceResult = await promiseRace([
+        sleep(PULL_TIMEOUT_MS),
+        pullResponseResolver.promise,
+      ]);
+
+      switch (raceResult) {
+        case RaceCases.Timeout:
+          l.debug?.('Mutation recovery pull timed out');
+          throw new MessageError(ErrorKind.PullTimeout, 'Pull timed out');
+        case RaceCases.Response: {
+          l.debug?.('Returning mutation recovery pull response');
+          const response = await pullResponseResolver.promise;
+          return {
+            response: {
+              cookie: response.cookie,
+              lastMutationIDChanges: response.lastMutationIDChanges,
+              patch: [],
+            },
+            httpRequestInfo: {
+              errorMessage: '',
+              httpStatusCode: 200,
+            },
+          };
+        }
+        default:
+          assert(false, 'unreachable');
+      }
+    } finally {
+      pullResponseResolver.reject('timed out');
+      this._pendingPullsByRequestID.delete(requestID);
+    }
   }
 
   #setOnline(online: boolean): void {
