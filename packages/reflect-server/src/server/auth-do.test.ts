@@ -870,17 +870,17 @@ test('roomRecords requires authApiKey', async () => {
   expect(roomRecordsResponse.status).toEqual(401);
 });
 
-function createConnectTestFixture(options: {
-  testUserID?: string;
-  testRoomID?: string;
-  testClientID?: string;
-  useLegacyURL: boolean;
-}) {
+function createConnectTestFixture(
+  options: {
+    testUserID?: string;
+    testRoomID?: string;
+    testClientID?: string;
+  } = {},
+) {
   const {
     testUserID = 'testUserID1',
     testRoomID = 'testRoomID1',
     testClientID = 'testClientID1',
-    useLegacyURL = true,
   } = options;
   const encodedTestAuth = 'test%20auth%20token%20value%20%25%20encoded';
   const testAuth = 'test auth token value % encoded';
@@ -888,9 +888,7 @@ function createConnectTestFixture(options: {
   const headers = new Headers();
   headers.set('Sec-WebSocket-Protocol', encodedTestAuth);
   headers.set('Upgrade', 'websocket');
-  const url = `ws://test.roci.dev${
-    useLegacyURL ? `/connect` : `/api/sync/v0/connect`
-  }?roomID=${testRoomID}&clientID=${testClientID}`;
+  const url = `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}`;
   const testRequest = new Request(url, {
     headers,
   });
@@ -947,200 +945,170 @@ function createRoomDOThatThrowsIfFetchIsCalled(): DurableObjectNamespace {
   };
 }
 
-describe("connect won't connect to a room that doesn't exist", () => {
-  const t = (useLegacyURL: boolean) =>
-    test('legacy: ' + useLegacyURL, async () => {
-      jest.useRealTimers();
-      const {testAuth, testUserID, testRoomID, testRequest, testRoomDO} =
-        createConnectTestFixture({useLegacyURL});
+test("connect won't connect to a room that doesn't exist", async () => {
+  jest.useRealTimers();
+  const {testAuth, testUserID, testRoomID, testRequest, testRoomDO} =
+    createConnectTestFixture();
 
-      const storage = await getMiniflareDurableObjectStorage(authDOID);
-      const state = new TestDurableObjectState(authDOID, storage);
-      const logSink = new TestLogSink();
-      const [, serverWS] = mockWebSocketPair();
-      const authDO = new BaseAuthDO({
-        roomDO: testRoomDO,
-        state,
-        // eslint-disable-next-line require-await
-        authHandler: async (auth, roomID) => {
-          expect(auth).toEqual(testAuth);
-          expect(roomID).toEqual(testRoomID);
-          return {userID: testUserID};
-        },
-        authApiKey: TEST_AUTH_API_KEY,
-        logSink,
-        logLevel: 'debug',
-      });
-      // Note: no room created.
+  const storage = await getMiniflareDurableObjectStorage(authDOID);
+  const state = new TestDurableObjectState(authDOID, storage);
+  const logSink = new TestLogSink();
+  const [, serverWS] = mockWebSocketPair();
+  const authDO = new BaseAuthDO({
+    roomDO: testRoomDO,
+    state,
+    // eslint-disable-next-line require-await
+    authHandler: async (auth, roomID) => {
+      expect(auth).toEqual(testAuth);
+      expect(roomID).toEqual(testRoomID);
+      return {userID: testUserID};
+    },
+    authApiKey: TEST_AUTH_API_KEY,
+    logSink,
+    logLevel: 'debug',
+  });
+  // Note: no room created.
 
-      const response = await authDO.fetch(testRequest);
+  const response = await authDO.fetch(testRequest);
 
-      expect(response.status).toEqual(101);
-      expect(serverWS.log).toEqual([
-        [
-          'send',
-          JSON.stringify(['error', ErrorKind.RoomNotFound, 'testRoomID1']),
-        ],
-        ['close'],
-      ]);
-      expect((await storage.list({prefix: 'connection/'})).size).toEqual(0);
-    });
-
-  t(true);
-  t(false);
+  expect(response.status).toEqual(101);
+  expect(serverWS.log).toEqual([
+    ['send', JSON.stringify(['error', ErrorKind.RoomNotFound, 'testRoomID1'])],
+    ['close'],
+  ]);
+  expect((await storage.list({prefix: 'connection/'})).size).toEqual(0);
 });
 
-describe('connect calls authHandler and sends resolved UserData in header to Room DO', () => {
-  const t = (useLegacyURL: boolean) =>
-    test('legacy: ' + useLegacyURL, async () => {
-      const {
-        testAuth,
-        testUserID,
-        testRoomID,
-        testRequest,
-        testRoomDO,
-        mocket,
-        encodedTestAuth,
-      } = createConnectTestFixture({useLegacyURL});
+test('connect calls authHandler and sends resolved UserData in header to Room DO', async () => {
+  const {
+    testAuth,
+    testUserID,
+    testRoomID,
+    testRequest,
+    testRoomDO,
+    mocket,
+    encodedTestAuth,
+  } = createConnectTestFixture();
 
-      const storage = await getMiniflareDurableObjectStorage(authDOID);
-      const state = new TestDurableObjectState(authDOID, storage);
-      const logSink = new TestLogSink();
-      const authDO = new BaseAuthDO({
-        roomDO: testRoomDO,
-        state,
-        // eslint-disable-next-line require-await
-        authHandler: async (auth, roomID) => {
-          expect(auth).toEqual(testAuth);
-          expect(roomID).toEqual(testRoomID);
-          return {userID: testUserID};
-        },
-        authApiKey: TEST_AUTH_API_KEY,
-        logSink,
-        logLevel: 'debug',
-      });
-      await createRoom(authDO, testRoomID);
+  const storage = await getMiniflareDurableObjectStorage(authDOID);
+  const state = new TestDurableObjectState(authDOID, storage);
+  const logSink = new TestLogSink();
+  const authDO = new BaseAuthDO({
+    roomDO: testRoomDO,
+    state,
+    // eslint-disable-next-line require-await
+    authHandler: async (auth, roomID) => {
+      expect(auth).toEqual(testAuth);
+      expect(roomID).toEqual(testRoomID);
+      return {userID: testUserID};
+    },
+    authApiKey: TEST_AUTH_API_KEY,
+    logSink,
+    logLevel: 'debug',
+  });
+  await createRoom(authDO, testRoomID);
 
-      const testTime = 1010101;
-      jest.setSystemTime(testTime);
-      const response = await authDO.fetch(testRequest);
+  const testTime = 1010101;
+  jest.setSystemTime(testTime);
+  const response = await authDO.fetch(testRequest);
 
-      expect(response.status).toEqual(101);
-      expect(response.webSocket).toBe(mocket);
-      expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
-        encodedTestAuth,
-      );
-      expect((await storage.list({prefix: 'connection/'})).size).toEqual(1);
-      const connectionRecord = (await storage.get(
-        'connection/testUserID1/testRoomID1/testClientID1/',
-      )) as ConnectionRecord;
-      expect(connectionRecord).toBeDefined();
-      expect(connectionRecord.connectTimestamp).toEqual(testTime);
-    });
-
-  t(true);
-  t(false);
+  expect(response.status).toEqual(101);
+  expect(response.webSocket).toBe(mocket);
+  expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
+    encodedTestAuth,
+  );
+  expect((await storage.list({prefix: 'connection/'})).size).toEqual(1);
+  const connectionRecord = (await storage.get(
+    'connection/testUserID1/testRoomID1/testClientID1/',
+  )) as ConnectionRecord;
+  expect(connectionRecord).toBeDefined();
+  expect(connectionRecord.connectTimestamp).toEqual(testTime);
 });
 
-describe('connect wont connect to a room that is closed', () => {
-  const t = (useLegacyURL: boolean) =>
-    test('legacy: ' + useLegacyURL, async () => {
-      jest.useRealTimers();
-      const {testUserID, testRoomID, testRequest, testRoomDO} =
-        createConnectTestFixture({useLegacyURL});
+test('connect wont connect to a room that is closed', async () => {
+  jest.useRealTimers();
+  const {testUserID, testRoomID, testRequest, testRoomDO} =
+    createConnectTestFixture();
 
-      const storage = await getMiniflareDurableObjectStorage(authDOID);
-      const state = new TestDurableObjectState(authDOID, storage);
-      const logSink = new TestLogSink();
-      const [, serverWS] = mockWebSocketPair();
-      const authDO = new BaseAuthDO({
-        roomDO: testRoomDO,
-        state,
-        // eslint-disable-next-line require-await
-        authHandler: async () => ({userID: testUserID}),
-        authApiKey: TEST_AUTH_API_KEY,
-        logSink,
-        logLevel: 'debug',
-      });
-      await createRoom(authDO, testRoomID);
+  const storage = await getMiniflareDurableObjectStorage(authDOID);
+  const state = new TestDurableObjectState(authDOID, storage);
+  const logSink = new TestLogSink();
+  const [, serverWS] = mockWebSocketPair();
+  const authDO = new BaseAuthDO({
+    roomDO: testRoomDO,
+    state,
+    // eslint-disable-next-line require-await
+    authHandler: async () => ({userID: testUserID}),
+    authApiKey: TEST_AUTH_API_KEY,
+    logSink,
+    logLevel: 'debug',
+  });
+  await createRoom(authDO, testRoomID);
 
-      const closeRoomRequest = newCloseRoomRequest(
-        'https://test.roci.dev',
-        TEST_AUTH_API_KEY,
-        testRoomID,
-      );
-      const closeRoomResponse = await authDO.fetch(closeRoomRequest);
-      expect(closeRoomResponse.status).toEqual(200);
+  const closeRoomRequest = newCloseRoomRequest(
+    'https://test.roci.dev',
+    TEST_AUTH_API_KEY,
+    testRoomID,
+  );
+  const closeRoomResponse = await authDO.fetch(closeRoomRequest);
+  expect(closeRoomResponse.status).toEqual(200);
 
-      const response = await authDO.fetch(testRequest);
+  const response = await authDO.fetch(testRequest);
 
-      expect(response.status).toEqual(101);
-      expect(serverWS.log).toEqual([
-        [
-          'send',
-          JSON.stringify(['error', ErrorKind.RoomClosed, 'testRoomID1']),
-        ],
-        ['close'],
-      ]);
-    });
-
-  t(true);
-  t(false);
+  expect(response.status).toEqual(101);
+  expect(serverWS.log).toEqual([
+    ['send', JSON.stringify(['error', ErrorKind.RoomClosed, 'testRoomID1'])],
+    ['close'],
+  ]);
 });
 
-describe('connect percent escapes components of the connection key', () => {
-  const t = (useLegacyURL: boolean) =>
-    test('legacy: ' + useLegacyURL, async () => {
-      const {
-        testAuth,
-        testUserID,
-        testRoomID,
-        testRequest,
-        testRoomDO,
-        mocket,
-        encodedTestAuth,
-      } = createConnectTestFixture({
-        testUserID: '/testUserID/?',
-        testRoomID: 'testRoomID',
-        testClientID: '/testClientID/&',
-        useLegacyURL,
-      });
+test('connect percent escapes components of the connection key', async () => {
+  const {
+    testAuth,
+    testUserID,
+    testRoomID,
+    testRequest,
+    testRoomDO,
+    mocket,
+    encodedTestAuth,
+  } = createConnectTestFixture({
+    testUserID: '/testUserID/?',
+    testRoomID: 'testRoomID',
+    testClientID: '/testClientID/&',
+  });
 
-      const storage = await getMiniflareDurableObjectStorage(authDOID);
-      const state = new TestDurableObjectState(authDOID, storage);
-      const authDO = new BaseAuthDO({
-        roomDO: testRoomDO,
-        state,
-        // eslint-disable-next-line require-await
-        authHandler: async (auth, roomID) => {
-          expect(auth).toEqual(testAuth);
-          expect(roomID).toEqual(testRoomID);
-          return {userID: testUserID};
-        },
-        authApiKey: TEST_AUTH_API_KEY,
-        logSink: new TestLogSink(),
-        logLevel: 'debug',
-      });
-      await createRoom(authDO, testRoomID);
+  const storage = await getMiniflareDurableObjectStorage(authDOID);
+  const state = new TestDurableObjectState(authDOID, storage);
+  const authDO = new BaseAuthDO({
+    roomDO: testRoomDO,
+    state,
+    // eslint-disable-next-line require-await
+    authHandler: async (auth, roomID) => {
+      expect(auth).toEqual(testAuth);
+      expect(roomID).toEqual(testRoomID);
+      return {userID: testUserID};
+    },
+    authApiKey: TEST_AUTH_API_KEY,
+    logSink: new TestLogSink(),
+    logLevel: 'debug',
+  });
+  await createRoom(authDO, testRoomID);
 
-      const testTime = 1010101;
-      jest.setSystemTime(testTime);
-      const response = await authDO.fetch(testRequest);
+  const testTime = 1010101;
+  jest.setSystemTime(testTime);
+  const response = await authDO.fetch(testRequest);
 
-      expect(response.status).toEqual(101);
-      expect(response.webSocket).toBe(mocket);
-      expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
-        encodedTestAuth,
-      );
-      expect((await storage.list({prefix: 'connection/'})).size).toEqual(1);
-      const connectionRecord = (await storage.get(
-        'connection/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F/',
-      )) as ConnectionRecord;
-      expect(connectionRecord).toBeDefined();
-      expect(connectionRecord.connectTimestamp).toEqual(testTime);
-    });
-  t(true);
-  t(false);
+  expect(response.status).toEqual(101);
+  expect(response.webSocket).toBe(mocket);
+  expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
+    encodedTestAuth,
+  );
+  expect((await storage.list({prefix: 'connection/'})).size).toEqual(1);
+  const connectionRecord = (await storage.get(
+    'connection/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F/',
+  )) as ConnectionRecord;
+  expect(connectionRecord).toBeDefined();
+  expect(connectionRecord.connectTimestamp).toEqual(testTime);
 });
 
 test('connect pipes 401 over ws without calling Room DO if authHandler rejects', async () => {
@@ -1153,7 +1121,7 @@ test('connect pipes 401 over ws without calling Room DO if authHandler rejects',
   headers.set('Upgrade', 'websocket');
 
   const testRequest = new Request(
-    `ws://test.roci.dev/connect?roomID=${testRoomID}&clientID=${testClientID}`,
+    `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}`,
     {
       headers,
     },
@@ -1194,7 +1162,7 @@ test('connect pipes 401 over ws without calling Room DO if Sec-WebSocket-Protoco
   const headers = new Headers();
   headers.set('Upgrade', 'websocket');
   const testRequest = new Request(
-    `ws://test.roci.dev/connect?roomID=${testRoomID}&clientID=${testClientID}`,
+    `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}`,
     {
       headers,
     },
@@ -1214,6 +1182,57 @@ test('connect pipes 401 over ws without calling Room DO if Sec-WebSocket-Protoco
 
   expect(response.status).toEqual(401);
   expect(response.webSocket).toBeUndefined();
+});
+
+describe('connect sends VersionNotSupported error over ws if path is for unsupported version', () => {
+  const t = (path: string) =>
+    -test('path: ' + path, async () => {
+      const testRoomID = 'testRoomID1';
+      const testClientID = 'testClientID1';
+
+      const testAuth = 'testAuthTokenValue';
+
+      const headers = new Headers();
+      headers.set('Sec-WebSocket-Protocol', testAuth);
+      headers.set('Upgrade', 'websocket');
+      const testRequest = new Request(
+        `ws://test.roci.dev${path}?roomID=${testRoomID}&clientID=${testClientID}`,
+        {
+          headers,
+        },
+      );
+      const [clientWS, serverWS] = mockWebSocketPair();
+      const authDO = new BaseAuthDO({
+        roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
+        state: {id: authDOID} as DurableObjectState,
+        // eslint-disable-next-line require-await
+        authHandler: () =>
+          Promise.reject(new Error('Unexpected call to authHandler')),
+        authApiKey: TEST_AUTH_API_KEY,
+        logSink: new TestLogSink(),
+        logLevel: 'debug',
+      });
+
+      const response = await authDO.fetch(testRequest);
+
+      expect(response.status).toEqual(101);
+      expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(testAuth);
+      expect(response.webSocket).toBe(clientWS);
+      expect(serverWS.log).toEqual([
+        [
+          'send',
+          JSON.stringify([
+            'error',
+            ErrorKind.VersionNotSupported,
+            'unsupported version',
+          ]),
+        ],
+        ['close'],
+      ]);
+    });
+  t('/connect');
+  t('/api/sync/v0/connect');
+  t('/api/sync/v2/connect');
 });
 
 test('authInvalidateForUser when requests to roomDOs are successful', async () => {
