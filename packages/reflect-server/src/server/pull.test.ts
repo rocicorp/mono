@@ -106,6 +106,8 @@ test('pull', async () => {
 
     const mocket = new Mocket();
     await handlePull(storage, c.pullRequest, mocket);
-    expect(mocket.log).toEqual([['send', ['pull', c.expectedPullResponse]]]);
+    expect(mocket.log).toEqual([
+      ['send', JSON.stringify(['pull', c.expectedPullResponse])],
+    ]);
   }
 });

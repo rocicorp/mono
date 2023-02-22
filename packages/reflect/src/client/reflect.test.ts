@@ -3,6 +3,7 @@ import {expect} from '@esm-bundle/chai';
 import type {
   JSONValue,
   LogLevel,
+  MutatorDefs,
   PullRequestV1,
   PushRequestV1,
   WriteTransaction,
@@ -20,6 +21,7 @@ import {
   MAX_RUN_LOOP_INTERVAL_MS,
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
+  PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
 } from './reflect.js';
 import {
@@ -449,6 +451,10 @@ test('pusher sends one mutation per push message', async () => {
 
 test('puller with mutation recovery pull, success response', async () => {
   const r = reflectForTest();
+  await r.triggerConnected();
+
+  const mockSocket = await r.socket;
+
   const pullReq: PullRequestV1 = {
     profileID: 'test-profile-id',
     clientGroupID: 'test-client-group-id',
@@ -456,29 +462,35 @@ test('puller with mutation recovery pull, success response', async () => {
     pullVersion: 1,
     schemaVersion: r.schemaVersion,
   };
+  mockSocket.messages.length = 0;
 
-  const pullResponseBody = {
-    cookie: 2,
-    lastMutationIDChanges: {cid1: 1},
-    patch: [],
-  };
-  fetchMock.post(
-    'https://example.com/api/sync/v0/pull',
-    async (_url: string, _options: RequestInit, request: Request) => {
-      expect(await request.json()).to.deep.equal({
-        ...pullReq,
-        roomID: 'test-room-id',
-      });
-      expect(request.headers.get('Authorization')).to.equal('test-auth');
-      expect(request.headers.get('X-Replicache-RequestID')).to.equal(
-        'test-request-id',
-      );
-      return pullResponseBody;
+  const resultPromise = r.puller(pullReq, 'test-request-id');
+
+  await tickAFewTimes(clock);
+  expect(mockSocket.messages.length).to.equal(1);
+  expect(JSON.parse(mockSocket.messages[0])).to.deep.equal([
+    'pull',
+    {
+      clientGroupID: 'test-client-group-id',
+      cookie: 1,
+      requestID: 'test-request-id',
     },
-  );
-  const result = await r.puller(pullReq, 'test-request-id');
+  ]);
+
+  await r.triggerPullResponse({
+    cookie: 2,
+    requestID: 'test-request-id',
+    lastMutationIDChanges: {cid1: 1},
+  });
+
+  const result = await resultPromise;
+
   expect(result).to.deep.equal({
-    response: pullResponseBody,
+    response: {
+      cookie: 2,
+      lastMutationIDChanges: {cid1: 1},
+      patch: [],
+    },
     httpRequestInfo: {
       errorMessage: '',
       httpStatusCode: 200,
@@ -486,8 +498,12 @@ test('puller with mutation recovery pull, success response', async () => {
   });
 });
 
-test('puller with mutation recovery pull, error response', async () => {
+test('puller with mutation recovery pull, response timeout', async () => {
   const r = reflectForTest();
+  await r.triggerConnected();
+
+  const mockSocket = await r.socket;
+
   const pullReq: PullRequestV1 = {
     profileID: 'test-profile-id',
     clientGroupID: 'test-client-group-id',
@@ -495,33 +511,33 @@ test('puller with mutation recovery pull, error response', async () => {
     pullVersion: 1,
     schemaVersion: r.schemaVersion,
   };
+  mockSocket.messages.length = 0;
 
-  const errorMessage = 'Pull error';
-  const errorStatusCode = 500;
-  fetchMock.post(
-    'https://example.com/api/sync/v0/pull',
-    async (_url: string, _options: RequestInit, request: Request) => {
-      expect(await request.json()).to.deep.equal({
-        ...pullReq,
-        roomID: 'test-room-id',
-      });
-      expect(request.headers.get('Authorization')).to.equal('test-auth');
-      expect(request.headers.get('X-Replicache-RequestID')).to.equal(
-        'test-request-id',
-      );
-      return new Response(errorMessage, {status: errorStatusCode});
+  const resultPromise = r.puller(pullReq, 'test-request-id');
+
+  await tickAFewTimes(clock);
+  expect(mockSocket.messages.length).to.equal(1);
+  expect(JSON.parse(mockSocket.messages[0])).to.deep.equal([
+    'pull',
+    {
+      clientGroupID: 'test-client-group-id',
+      cookie: 1,
+      requestID: 'test-request-id',
     },
-  );
-  const result = await r.puller(pullReq, 'test-request-id');
-  expect(result).to.deep.equal({
-    httpRequestInfo: {
-      errorMessage,
-      httpStatusCode: errorStatusCode,
-    },
-  });
+  ]);
+
+  clock.tick(PULL_TIMEOUT_MS);
+
+  let expectedE = undefined;
+  try {
+    await resultPromise;
+  } catch (e) {
+    expectedE = e;
+  }
+  expect(expectedE).instanceOf(Error).property('message', 'pull timed out');
 });
 
-test('puller with normal, non-mutation recovery, pull', async () => {
+test('puller with normal non-mutation recovery pull', async () => {
   const r = reflectForTest();
   const pullReq: PullRequestV1 = {
     profileID: 'test-profile-id',
@@ -1001,23 +1017,17 @@ test('Logs errors in connect', async () => {
   await r.close();
 });
 
-test('pusher waits for connection', async () => {
+async function testWaitsForConnection(
+  fn: (r: TestReflect<MutatorDefs>) => Promise<unknown>,
+) {
   const r = reflectForTest();
-
-  const pushReq: PushRequestV1 = {
-    profileID: 'p1',
-    clientGroupID: await r.clientGroupID,
-    pushVersion: 1,
-    schemaVersion: '1',
-    mutations: [],
-  };
 
   const log: ('resolved' | 'rejected')[] = [];
 
   await r.triggerError(ErrorKind.ClientNotFound, 'client-id-a');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
-  r.pusher(pushReq, 'request-id').then(
+  fn(r).then(
     () => log.push('resolved'),
     () => log.push('rejected'),
   );
@@ -1034,6 +1044,32 @@ test('pusher waits for connection', async () => {
   await r.triggerError(ErrorKind.ClientNotFound, 'client-id-a');
   await tickAFewTimes(clock);
   expect(log).to.deep.equal(['rejected']);
+}
+
+test('pusher waits for connection', async () => {
+  await testWaitsForConnection(async r => {
+    const pushReq: PushRequestV1 = {
+      profileID: 'p1',
+      clientGroupID: await r.clientGroupID,
+      pushVersion: 1,
+      schemaVersion: '1',
+      mutations: [],
+    };
+    return r.pusher(pushReq, 'request-id');
+  });
+});
+
+test('puller waits for connection', async () => {
+  await testWaitsForConnection(r => {
+    const pullReq: PullRequestV1 = {
+      profileID: 'test-profile-id',
+      clientGroupID: 'test-client-group-id',
+      cookie: 1,
+      pullVersion: 1,
+      schemaVersion: r.schemaVersion,
+    };
+    return r.puller(pullReq, 'request-id');
+  });
 });
 
 test('Protocol mismatch', async () => {

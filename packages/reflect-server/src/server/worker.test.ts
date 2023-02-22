@@ -152,24 +152,6 @@ test('worker forwards connect requests to authDO', async () => {
   );
 });
 
-test('worker forwards pull requests to authDO', async () => {
-  await testForwardedToAuthDO(
-    new Request('https://test.roci.dev/api/sync/v0/pull', {
-      method: 'post',
-      body: JSON.stringify({
-        profileID: 'test-pID',
-        clientGroupID: 'test-cgID',
-        cookie: 1,
-        pullVersion: 1,
-        schemaVersion: '1',
-      }),
-    }),
-    new Response(null, {
-      status: 200,
-    }),
-  );
-});
-
 test('worker forwards authDO api requests to authDO', async () => {
   const roomStatusByRoomIDPathWithRoomID =
     AUTH_ROUTES.roomStatusByRoomID.replace(':roomID', 'ae4565');
@@ -403,21 +385,7 @@ test('scheduled logging', async () => {
 test('preflight request handling allows all origins, paths, methods and headers', async () => {
   await testPreflightRequest({
     origin: 'http://example.com',
-    url: 'https://worker.com/api/sync/v0/pull',
-    accessControlRequestHeaders: '',
-    accessControlRequestMethod: 'POST',
-  });
-
-  await testPreflightRequest({
-    origin: 'http://example.com',
-    url: 'https://worker.com/api/sync/v0/pull',
-    accessControlRequestHeaders: '',
-    accessControlRequestMethod: 'GET',
-  });
-
-  await testPreflightRequest({
-    origin: 'http://example.com',
-    url: 'https://worker.com/api/sync/v0/pull',
+    url: 'https://worker.com/connect',
     accessControlRequestHeaders: 'x-request-id, x-auth, other-header',
     accessControlRequestMethod: 'POST',
   });

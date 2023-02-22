@@ -26,9 +26,9 @@ export async function handlePull(
   const pullResponseMessage: PullResponseMessage = [
     'pull',
     {
-      requestID,
       cookie: version || 0,
       lastMutationIDChanges,
+      requestID,
     },
   ];
   send(ws, pullResponseMessage);
