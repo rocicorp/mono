@@ -700,6 +700,7 @@ export class Reflect<MD extends MutatorDefs> {
     lc: LogContext,
     pullResponseMessage: PullResponseMessage,
   ) {
+    this.#nextMessageResolver?.resolve(pullResponseMessage);
     const body = pullResponseMessage[1];
     lc = lc.addContext('requestID', body.requestID);
     lc.debug?.('Handling pull response', body);
@@ -1006,7 +1007,7 @@ export class Reflect<MD extends MutatorDefs> {
       switch (raceResult) {
         case RaceCases.Timeout:
           l.debug?.('Mutation recovery pull timed out');
-          throw new Error('pull timed out');
+          throw new MessageError(ErrorKind.PullTimeout, 'Pull timed out');
         case RaceCases.Response: {
           l.debug?.('Returning mutation recovery pull response');
           const response = await pullResponseResolver.promise;

@@ -38,6 +38,7 @@ import {ErrorKind} from '../protocol/error.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import {MessageError} from './connection-error.js';
 
 let clock: sinon.SinonFakeTimers;
 
@@ -534,7 +535,9 @@ test('puller with mutation recovery pull, response timeout', async () => {
   } catch (e) {
     expectedE = e;
   }
-  expect(expectedE).instanceOf(Error).property('message', 'pull timed out');
+  expect(expectedE)
+    .instanceOf(MessageError)
+    .property('message', 'PullTimeout: Pull timed out');
 });
 
 test('puller with normal non-mutation recovery pull', async () => {
