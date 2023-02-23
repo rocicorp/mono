@@ -1,28 +1,8 @@
 {
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "target": "ES2018",
-    "module": "ESNext",
-
-    "strict": true,
-    "exactOptionalPropertyTypes": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "esModuleInterop": true,
-
-    "importsNotUsedAsValues": "error",
-
-    "declaration": true,
-    "forceConsistentCasingInFileNames": true,
-    "moduleResolution": "Node16",
-    "outDir": "out",
-    "allowJs": true,
     // esnext for Object.fromEntries
-    "lib": ["dom", "esnext"],
-    "preserveSymlinks": true,
-    "types": []
+    "lib": ["dom", "esnext"]
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "out/**/*"]
+  "include": ["src/**/*.ts"]
 }
