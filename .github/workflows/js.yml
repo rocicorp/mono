@@ -14,7 +14,7 @@ jobs:
     # for the job.
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
 
     steps:
       - uses: actions/checkout@v3
@@ -38,7 +38,7 @@ jobs:
     # for the job.
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
