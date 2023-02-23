@@ -10,6 +10,12 @@ jobs:
   format:
     name: ESLint & Prettier
     runs-on: ubuntu-latest
+    # To use Turborepo Remote Caching, set the following environment variables
+    # for the job.
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
@@ -28,6 +34,11 @@ jobs:
     # npm run test also runs build due to turbo repo deps.
     name: Test
     runs-on: ubuntu-latest
+    # To use Turborepo Remote Caching, set the following environment variables
+    # for the job.
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
