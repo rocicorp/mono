@@ -2,6 +2,7 @@
   "name": "reflect.net",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev-next": "./keepalive.sh NODE_ENV=development vercel dev",
     "dev-worker": "./keepalive.sh wrangler dev",
