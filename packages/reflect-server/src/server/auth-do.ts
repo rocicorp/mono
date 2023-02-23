@@ -136,6 +136,10 @@ export class BaseAuthDO implements DurableObject {
     this._initRoutes();
     this._lc.info?.('Starting server');
     this._lc.info?.('Version:', version);
+
+    addEventListener('unhandledrejection', event => {
+      this._lc.error?.('Unhandled promise rejection:', event.reason);
+    });
   }
 
   async fetch(request: Request): Promise<Response> {
