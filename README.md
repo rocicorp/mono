@@ -1,1 +1,1 @@
-# Rocicorp Mono Repo
+# Rocicorp Monorepo
