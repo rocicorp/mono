@@ -7,7 +7,7 @@ packages/reflect-server/out
 
 packages/reflect/out
 
-packages/replicache-internal/out
-packages/replicache-internal/doc/build/
-packages/replicache-internal/doc/docs/api
-packages/replicache-internal/doc/.docusaurus/
+packages/replicache/out
+packages/replicache/doc/build/
+packages/replicache/doc/docs/api
+packages/replicache/doc/.docusaurus/
