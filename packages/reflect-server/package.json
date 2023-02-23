@@ -1,7 +1,7 @@
 {
   "name": "@rocicorp/reflect-server",
   "description": "Multiplayer server for Replicache",
-  "version": "0.21.7",
+  "version": "0.22.0-beta.0",
   "repository": "github:rocicorp/reflect-server",
   "license": "SEE LICENSE IN https://roci.dev/terms.html",
   "main": "out/reflect-server.js",
