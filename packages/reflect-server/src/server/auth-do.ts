@@ -49,6 +49,7 @@ import {
   LEGACY_CONNECT_PATH,
   LEGACY_CREATE_ROOM_PATH,
 } from './paths.js';
+import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 
 export interface AuthDOOptions {
   roomDO: DurableObjectNamespace;
@@ -126,9 +127,9 @@ export class BaseAuthDO implements DurableObject {
     );
     this._authHandler = authHandler;
     this._authApiKey = authApiKey;
-    this._lc = new LogContext(logLevel, logSink)
-      .addContext('AuthDO')
-      .addContext('doID', state.id.toString());
+    const lc = new LogContext(logLevel, logSink).addContext('AuthDO');
+    registerUnhandledRejectionHandler(lc);
+    this._lc = lc.addContext('doID', state.id.toString());
 
     this._initRoutes();
     this._lc.info?.('Starting server');

@@ -23,6 +23,7 @@ import {
 } from '@rocicorp/datadog-util';
 import {assert} from '../util/asserts.js';
 import {REPORT_METRICS_PATH} from './paths.js';
+import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 
 export interface WorkerOptions<Env extends BaseWorkerEnv> {
   getLogSink: (env: Env) => LogSink;
@@ -138,16 +139,24 @@ export function createWorker<Env extends BaseWorkerEnv>(
   registerRoutes(router);
   return {
     fetch: (request: Request, env: Env, ctx: ExecutionContext) =>
-      withLogContext(env, ctx, getLogSink, getLogLevel, (lc: LogContext) =>
-        fetch(request, env, router, lc),
+      withLogContext(
+        env,
+        ctx,
+        getLogSink,
+        getLogLevel,
+        withUnhandledRejectionHandler(lc => fetch(request, env, router, lc)),
       ),
     scheduled: (
       _controller: ScheduledController,
       env: Env,
       ctx: ExecutionContext,
     ) =>
-      withLogContext(env, ctx, getLogSink, getLogLevel, (lc: LogContext) =>
-        scheduled(env, lc),
+      withLogContext(
+        env,
+        ctx,
+        getLogSink,
+        getLogLevel,
+        withUnhandledRejectionHandler(lc => scheduled(env, lc)),
       ),
   };
 }

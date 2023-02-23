@@ -41,6 +41,7 @@ import {
   LEGACY_CONNECT_PATH,
   LEGACY_CREATE_ROOM_PATH,
 } from './paths.js';
+import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -79,7 +80,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   private readonly _authApiKey: string;
   private _turnTimerID: ReturnType<typeof setInterval> | 0 = 0;
   private readonly _turnDuration: number;
-  private _router: Router;
+  private readonly _router = new Router();
 
   constructor(options: RoomDOOptions<MD>) {
     const {mutators, disconnectHandler, state, authApiKey, logSink, logLevel} =
@@ -92,14 +93,14 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       options.allowUnconfirmedWrites,
     );
 
-    this._router = new Router();
     this._initRoutes();
 
     this._turnDuration = 1000 / (options.allowUnconfirmedWrites ? 60 : 15);
     this._authApiKey = authApiKey;
-    this._lc = new LogContext(logLevel, logSink)
-      .addContext('RoomDO')
-      .addContext('doID', state.id.toString());
+    const lc = new LogContext(logLevel, logSink).addContext('RoomDO');
+    registerUnhandledRejectionHandler(lc);
+    this._lc = lc.addContext('doID', state.id.toString());
+
     this._lc.info?.('Starting server');
     this._lc.info?.('Version:', version);
   }
@@ -363,8 +364,11 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       lc.debug?.('already processing, nothing to do');
       return;
     }
+
     this._turnTimerID = setInterval(() => {
-      void this._processNext(lc);
+      this._processNext(lc).catch(e => {
+        lc.error?.('Unhandled exception in _processNext', e);
+      });
     }, this._turnDuration);
   }
 
