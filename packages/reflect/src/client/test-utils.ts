@@ -6,6 +6,7 @@ import type {Downstream} from '../protocol/down.js';
 import type {ErrorKind, ErrorMessage} from '../protocol/error.js';
 import type {PokeBody, PokeMessage} from '../protocol/poke.js';
 import type {PongMessage} from '../protocol/pong.js';
+import type {PullResponseBody, PullResponseMessage} from '../protocol/pull.js';
 import {assert} from '../util/asserts.js';
 import type {ReflectOptions} from './options.js';
 import {ConnectionState, Reflect} from './reflect.js';
@@ -113,6 +114,11 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
 
   triggerPoke(pokeBody: PokeBody): Promise<void> {
     const msg: PokeMessage = ['poke', pokeBody];
+    return this.triggerMessage(msg);
+  }
+
+  triggerPullResponse(pullResponseBody: PullResponseBody): Promise<void> {
+    const msg: PullResponseMessage = ['pull', pullResponseBody];
     return this.triggerMessage(msg);
   }
 

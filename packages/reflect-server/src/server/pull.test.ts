@@ -3,8 +3,8 @@ import {ClientRecordMap, putClientRecord} from '../types/client-record.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {NullableVersion, putVersion} from '../types/version.js';
 import {handlePull} from './pull.js';
-import type {PullRequest, PullResponse} from '../protocol/pull.js';
-import {clientRecord} from '../util/test-utils.js';
+import {clientRecord, Mocket} from '../util/test-utils.js';
+import type {PullRequestBody, PullResponseBody} from '../protocol/pull.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -14,8 +14,8 @@ test('pull', async () => {
     name: string;
     clientRecords: ClientRecordMap;
     version: NullableVersion;
-    pullRequest: PullRequest;
-    expectedPullResponse: PullResponse;
+    pullRequest: PullRequestBody;
+    expectedPullResponse: PullResponseBody;
   };
 
   const cases: Case[] = [
@@ -24,17 +24,14 @@ test('pull', async () => {
       clientRecords: new Map(),
       version: null,
       pullRequest: {
-        roomID: 'r1',
-        profileID: 'p1',
         clientGroupID: 'cg1',
         cookie: 1,
-        pullVersion: 1,
-        schemaVersion: '',
+        requestID: 'r1',
       },
       expectedPullResponse: {
         cookie: 0,
         lastMutationIDChanges: {},
-        patch: [],
+        requestID: 'r1',
       },
     },
     {
@@ -46,17 +43,14 @@ test('pull', async () => {
       ]),
       version: 3,
       pullRequest: {
-        roomID: 'r1',
-        profileID: 'p1',
         clientGroupID: 'cg1',
         cookie: 1,
-        pullVersion: 1,
-        schemaVersion: '',
+        requestID: 'r1',
       },
       expectedPullResponse: {
         cookie: 3,
         lastMutationIDChanges: {c1: 1, c2: 7},
-        patch: [],
+        requestID: 'r1',
       },
     },
     {
@@ -67,17 +61,14 @@ test('pull', async () => {
       ]),
       version: 5,
       pullRequest: {
-        roomID: 'r1',
-        profileID: 'p1',
         clientGroupID: 'cg1',
         cookie: 3,
-        pullVersion: 1,
-        schemaVersion: '',
+        requestID: 'r1',
       },
       expectedPullResponse: {
         cookie: 5,
         lastMutationIDChanges: {c2: 7},
-        patch: [],
+        requestID: 'r1',
       },
     },
 
@@ -89,17 +80,14 @@ test('pull', async () => {
       ]),
       version: 5,
       pullRequest: {
-        roomID: 'r1',
-        profileID: 'p1',
         clientGroupID: 'cg1',
         cookie: 4,
-        pullVersion: 1,
-        schemaVersion: '',
+        requestID: 'r1',
       },
       expectedPullResponse: {
         cookie: 5,
         lastMutationIDChanges: {},
-        patch: [],
+        requestID: 'r1',
       },
     },
   ];
@@ -116,8 +104,10 @@ test('pull', async () => {
       await putVersion(c.version, storage);
     }
 
-    const pullResponse = await handlePull(storage, c.pullRequest);
-
-    expect(pullResponse).toEqual(c.expectedPullResponse);
+    const mocket = new Mocket();
+    await handlePull(storage, c.pullRequest, mocket);
+    expect(mocket.log).toEqual([
+      ['send', JSON.stringify(['pull', c.expectedPullResponse])],
+    ]);
   }
 });

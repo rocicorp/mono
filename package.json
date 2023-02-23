@@ -19,7 +19,7 @@
     "@changesets/cli": "^2.26.0",
     "@rocicorp/eslint-config": "^0.1.2",
     "@rocicorp/prettier-config": "^0.1.1",
-    "turbo": "^1.7.4"
+    "turbo": "^1.8.2"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

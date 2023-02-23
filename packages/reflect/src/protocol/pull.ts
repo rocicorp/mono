@@ -1,23 +1,33 @@
 import * as s from 'superstruct';
 import {nullableVersionSchema, versionSchema} from '../types/version.js';
-import {patchSchema} from './patch.js';
 
-export const pullRequestSchema = s.object({
-  roomID: s.string(),
-  profileID: s.string(),
+export const pullRequestBodySchema = s.object({
   clientGroupID: s.string(),
   cookie: nullableVersionSchema,
-  pullVersion: s.number(),
-  schemaVersion: s.string(),
+  requestID: s.string(),
 });
 
-export const pullResponseSchema = s.object({
+export const pullResponseBodySchema = s.object({
   cookie: versionSchema,
+  // Matches pullRequestBodySchema requestID that initiated this response
+  requestID: s.string(),
   lastMutationIDChanges: s.record(s.string(), s.number()),
-  // Pull is only used for mutation recovery which does not use
+  // Pull is currently only used for mutation recovery which does not use
   // the patch so we save work by not computing the patch.
-  patch: s.size(patchSchema, 0, 0),
 });
 
-export type PullRequest = s.Infer<typeof pullRequestSchema>;
-export type PullResponse = s.Infer<typeof pullResponseSchema>;
+export const pullRequestMessageSchema = s.tuple([
+  s.literal('pull'),
+  pullRequestBodySchema,
+]);
+
+export const pullResponseMessageSchema = s.tuple([
+  s.literal('pull'),
+  pullResponseBodySchema,
+]);
+
+export type PullRequestBody = s.Infer<typeof pullRequestBodySchema>;
+export type PullResponseBody = s.Infer<typeof pullResponseBodySchema>;
+
+export type PullRequestMessage = s.Infer<typeof pullRequestMessageSchema>;
+export type PullResponseMessage = s.Infer<typeof pullResponseMessageSchema>;

@@ -42,7 +42,7 @@ describe('handleMessage', () => {
       data: '[]',
       expectedErrorKind: ErrorKind.InvalidMessage,
       expectedErrorMessage:
-        'StructError: Expected the value to satisfy a union of `tuple | tuple`, but received: ',
+        'StructError: Expected the value to satisfy a union of `tuple | tuple | tuple`, but received: ',
     },
     {
       name: 'valid push',
@@ -79,7 +79,7 @@ describe('handleMessage', () => {
       // This error message is not great
       expectedErrorKind: ErrorKind.InvalidMessage,
       expectedErrorMessage:
-        'StructError: Expected the value to satisfy a union of `tuple | tuple`, but received: push,[object Object]',
+        'StructError: Expected the value to satisfy a union of `tuple | tuple | tuple`, but received: push,[object Object]',
     },
     {
       name: 'missing client push',

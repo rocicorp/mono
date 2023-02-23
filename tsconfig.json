@@ -1,8 +1,7 @@
 {
   "compilerOptions": {
-    "target": "ES2018",
+    "target": "ES2021",
     "module": "ESNext",
-
     "strict": true,
     "exactOptionalPropertyTypes": true,
     "noUnusedLocals": true,
@@ -10,19 +9,15 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
-
     "importsNotUsedAsValues": "error",
-
+    "declarationMap": true,
     "declaration": true,
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "Node16",
-    "outDir": "out",
     "allowJs": true,
-    // esnext for Object.fromEntries
-    "lib": ["dom", "esnext"],
     "preserveSymlinks": true,
-    "types": []
-  },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "out/**/*"]
+    "types": [],
+    "resolveJsonModule": true,
+    "incremental": true
+  }
 }
