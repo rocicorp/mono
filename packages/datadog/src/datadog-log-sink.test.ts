@@ -1,16 +1,15 @@
 import {jest, afterEach, beforeEach, test, expect} from '@jest/globals';
-import type {SpyInstance} from 'jest-mock';
 import type {ReadonlyJSONObject} from 'replicache';
 import {DatadogLogSink} from './datadog-log-sink.js';
+import realFetch from 'cross-fetch';
 
-let fetchSpy: SpyInstance<typeof fetch>;
+const fetch = jest.fn(realFetch);
+globalThis.fetch = fetch;
 
 beforeEach(() => {
   jest.useFakeTimers();
   jest.setSystemTime(0);
-  fetchSpy = jest
-    .spyOn(globalThis, 'fetch')
-    .mockReturnValue(Promise.resolve(new Response('{}')));
+  fetch.mockReturnValue(Promise.resolve(new Response('{}')));
 });
 
 afterEach(() => {
@@ -43,9 +42,9 @@ test('flush calls fetch', async () => {
 
   await l.flush();
 
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
-  expect(fetchSpy).toHaveBeenCalledWith(
-    'https://http-intake.logs.datadoghq.com/api/v2/logs?ddsource=worker',
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledWith(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
     {
       body: stringifyMany(
         {
@@ -55,10 +54,8 @@ test('flush calls fetch', async () => {
         },
         {date: 2, message: 'info message', status: 'info'},
       ),
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      headers: {'DD-API-KEY': 'apiKey'},
       method: 'POST',
-      signal: null,
+      keepalive: true,
     },
   );
 });
@@ -73,17 +70,15 @@ test('Errors in multi arg messages are converted to JSON', async () => {
 
   await l.flush();
 
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
-  expect(fetchSpy.mock.calls[0][0]).toEqual(
-    'https://http-intake.logs.datadoghq.com/api/v2/logs?ddsource=worker',
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch.mock.calls[0][0]).toEqual(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
   );
-  const request = fetchSpy.mock.calls[0][1];
+  const request = fetch.mock.calls[0][1];
   expect(request).toBeDefined();
   if (request === undefined) {
     throw new Error('Expect request to be defined');
   }
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  expect(request.headers).toEqual({'DD-API-KEY': 'apiKey'});
   expect(request.method).toEqual('POST');
   const {body} = request;
   expect(body).toBeDefined();
@@ -111,17 +106,15 @@ test('Errors in single arg messages are converted to JSON', async () => {
 
   await l.flush();
 
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
-  expect(fetchSpy.mock.calls[0][0]).toEqual(
-    'https://http-intake.logs.datadoghq.com/api/v2/logs?ddsource=worker',
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch.mock.calls[0][0]).toEqual(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
   );
-  const request = fetchSpy.mock.calls[0][1];
+  const request = fetch.mock.calls[0][1];
   expect(request).toBeDefined();
   if (request === undefined) {
     throw new Error('Expect request to be defined');
   }
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  expect(request.headers).toEqual({'DD-API-KEY': 'apiKey'});
   expect(request.method).toEqual('POST');
   const {body} = request;
   expect(body).toBeDefined();
@@ -148,9 +141,9 @@ test('flush calls fetch but includes logs efter the error', async () => {
 
   await l.flush();
 
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
-  expect(fetchSpy).toHaveBeenCalledWith(
-    'https://http-intake.logs.datadoghq.com/api/v2/logs?ddsource=worker',
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledWith(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
     {
       body: stringifyMany(
         {
@@ -161,11 +154,8 @@ test('flush calls fetch but includes logs efter the error', async () => {
         },
         {date: 4, message: 'info message', status: 'info'},
       ),
-
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      headers: {'DD-API-KEY': 'apiKey'},
       method: 'POST',
-      signal: null,
+      keepalive: true,
     },
   );
 });
@@ -180,17 +170,15 @@ test('flush is called 1s after a log', async () => {
   l.log('info', 'info message');
   jest.advanceTimersByTime(1000);
 
-  await microtasksUntil(() => fetchSpy.mock.calls.length >= 1);
+  await microtasksUntil(() => fetch.mock.calls.length >= 1);
 
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
-  expect(fetchSpy).toHaveBeenCalledWith(
-    'https://http-intake.logs.datadoghq.com/api/v2/logs?ddsource=worker',
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledWith(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
     {
       body: stringifyMany({date: 3, message: 'info message', status: 'info'}),
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      headers: {'DD-API-KEY': 'apiKey'},
       method: 'POST',
-      signal: null,
+      keepalive: true,
     },
   );
 });
@@ -201,43 +189,39 @@ test('flush is called again in case of failure', async () => {
     interval: 1000,
   });
 
-  fetchSpy.mockReturnValue(Promise.reject(new Error('error')));
+  fetch.mockReturnValue(Promise.reject(new Error('error')));
   jest.setSystemTime(3);
   l.log('info', 'info message');
   jest.advanceTimersByTime(1000);
 
-  await microtasksUntil(() => fetchSpy.mock.calls.length >= 1);
+  await microtasksUntil(() => fetch.mock.calls.length >= 1);
 
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
-  expect(fetchSpy).toHaveBeenCalledWith(
-    'https://http-intake.logs.datadoghq.com/api/v2/logs?ddsource=worker',
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledWith(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
     {
       body: stringifyMany({date: 3, message: 'info message', status: 'info'}),
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      headers: {'DD-API-KEY': 'apiKey'},
       method: 'POST',
-      signal: null,
+      keepalive: true,
     },
   );
 
-  fetchSpy.mockReturnValue(Promise.resolve(new Response('{}')));
+  fetch.mockReturnValue(Promise.resolve(new Response('{}')));
   l.log('info', 'info message 2');
   jest.advanceTimersByTime(1000);
 
-  await microtasksUntil(() => fetchSpy.mock.calls.length >= 2);
+  await microtasksUntil(() => fetch.mock.calls.length >= 2);
 
-  expect(fetchSpy).toHaveBeenCalledTimes(2);
-  expect(fetchSpy).toHaveBeenLastCalledWith(
-    'https://http-intake.logs.datadoghq.com/api/v2/logs?ddsource=worker',
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenLastCalledWith(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
     {
       body: stringifyMany(
         {date: 3, message: 'info message', status: 'info'},
         {date: 1003, message: 'info message 2', status: 'info'},
       ),
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      headers: {'DD-API-KEY': 'apiKey'},
       method: 'POST',
-      signal: null,
+      keepalive: true,
     },
   );
 });
@@ -250,23 +234,3 @@ async function microtasksUntil(p: () => boolean) {
     await 'microtask';
   }
 }
-
-test('aborting stops timers', async () => {
-  const ac = new AbortController();
-  const l = new DatadogLogSink({
-    apiKey: 'apiKey',
-    interval: 1000,
-    signal: ac.signal,
-  });
-
-  jest.setSystemTime(3);
-  l.log('info', 'info message');
-  ac.abort();
-
-  jest.advanceTimersByTime(1000);
-
-  let i = 0;
-  await microtasksUntil(() => i++ > 100);
-
-  expect(fetchSpy).toHaveBeenCalledTimes(0);
-});

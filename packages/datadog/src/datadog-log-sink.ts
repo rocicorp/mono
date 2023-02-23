@@ -1,12 +1,12 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogLevel, LogSink} from '@rocicorp/logger';
 
-export interface DatadogLoggerOptions {
+export interface DatadogLogSinkOptions {
   apiKey: string;
-  service?: string;
-  host?: string;
-  interval?: number;
-  signal?: AbortSignal;
+  source?: string | undefined;
+  service?: string | undefined;
+  host?: string | undefined;
+  interval?: number | undefined;
 }
 
 const DD_URL = 'https://http-intake.logs.datadoghq.com/api/v2/logs';
@@ -14,37 +14,24 @@ const DD_URL = 'https://http-intake.logs.datadoghq.com/api/v2/logs';
 export class DatadogLogSink implements LogSink {
   private _messages: Message[] = [];
   private readonly _apiKey: string;
+  private readonly _source: string | undefined;
   private readonly _service: string | undefined;
   private readonly _host: string | undefined;
   private readonly _interval: number;
   private _timerID: ReturnType<typeof setTimeout> | 0 = 0;
   private _flushLock = new Lock();
-  private readonly _signal: AbortSignal | null = null;
 
-  constructor(options: DatadogLoggerOptions) {
-    const {apiKey, service, host, interval = 10_000, signal = null} = options;
+  constructor(options: DatadogLogSinkOptions) {
+    const {apiKey, source, service, host, interval = 10_000} = options;
 
     this._apiKey = apiKey;
+    this._source = source;
     this._service = service;
     this._host = host;
     this._interval = interval;
-    this._signal = signal;
-
-    if (signal) {
-      // CF types declarations are not correct.
-      (signal as unknown as EventTarget).addEventListener('abort', () => {
-        if (this._timerID) {
-          clearTimeout(this._timerID);
-        }
-      });
-    }
   }
 
   log(level: LogLevel, ...args: unknown[]): void {
-    if (this._signal?.aborted) {
-      return;
-    }
-
     this._messages.push(makeMessage(args, level));
     if (level === 'error') {
       // Do not await. Later calls to flush will await as needed.
@@ -54,10 +41,6 @@ export class DatadogLogSink implements LogSink {
     }
   }
   private _startTimer() {
-    if (this._signal?.aborted) {
-      return;
-    }
-
     if (this._timerID) {
       return;
     }
@@ -71,10 +54,6 @@ export class DatadogLogSink implements LogSink {
 
   flush(): Promise<void> {
     return this._flushLock.withLock(async () => {
-      if (this._signal?.aborted) {
-        return;
-      }
-
       const {length} = this._messages;
       if (length === 0) {
         return;
@@ -86,21 +65,30 @@ export class DatadogLogSink implements LogSink {
       const body = messages.map(m => JSON.stringify(m)).join('\n');
 
       const url = new URL(DD_URL);
-      url.searchParams.set('ddsource', 'worker');
-      this._service && url.searchParams.set('service', this._service);
-      this._host && url.searchParams.set('host', this._host);
+      url.searchParams.set('dd-api-key', this._apiKey);
+
+      if (this._source) {
+        // Both need to be set for server to treat us as the browser SDK for
+        // value 'browser'.
+        url.searchParams.set('ddsource', this._source);
+        url.searchParams.set('dd-evp-origin', this._source);
+      }
+
+      if (this._service) {
+        url.searchParams.set('service', this._service);
+      }
+
+      if (this._host) {
+        url.searchParams.set('host', this._host);
+      }
 
       let ok = false;
       try {
         const response = await fetch(url.toString(), {
           method: 'POST',
-          headers: {
-            // eslint-disable-next-line @typescript-eslint/naming-convention
-            'DD-API-KEY': this._apiKey,
-          },
           body,
-          signal: this._signal,
-        });
+          keepalive: true,
+        } as RequestInit);
 
         ok = response.ok;
       } catch {
@@ -151,7 +139,7 @@ function convertErrors(message: unknown): unknown {
     return convertError(message);
   }
   if (message instanceof Array) {
-    const convertedMessage = [];
+    const convertedMessage: unknown[] = [];
     for (const item of message) {
       if (item instanceof Error) {
         convertedMessage.push(convertError(item));
