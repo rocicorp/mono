@@ -2,7 +2,7 @@ import {AUTH_ROUTES} from '../server/auth-do.js';
 import {createAuthAPIHeaders} from '../server/auth-api-headers.js';
 import type {RoomStatus} from '../server/rooms.js';
 import {newAuthedPostRequest} from './authedpost.js';
-import type {CreateRoomRequest} from '../protocol/api/room.js';
+import type {CreateRoomRequest} from 'protocol/src/api/room.js';
 
 /**
  * createRoom creates a new room with the given roomID. If the room already

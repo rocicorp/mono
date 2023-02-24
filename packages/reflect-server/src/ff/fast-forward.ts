@@ -1,9 +1,11 @@
 import {listClientRecords} from '../types/client-record.js';
 import type {ClientGroupID, ClientID} from '../types/client-state.js';
-import {compareVersions, NullableVersion, Version} from '../types/version.js';
+import type {NullableVersion, Version} from 'protocol/src/version.js';
+import {compareVersions} from '../types/version.js';
 import type {ClientPokeBody} from '../types/client-poke-body.js';
 import {getPatch} from './get-patch.js';
-import type {Patch, PokeBody} from '../protocol/poke.js';
+import type {PokeBody} from 'protocol/src/poke.js';
+import type {Patch} from 'protocol/src/patch.js';
 import {must} from '../util/must.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {randomID} from '../util/rand.js';

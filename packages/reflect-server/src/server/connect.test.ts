@@ -21,8 +21,9 @@ import {getConnectRequest, handleConnection} from '../../src/server/connect.js';
 import {USER_DATA_HEADER_NAME} from './auth.js';
 import {encodeHeaderValue} from '../util/headers.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {NullableVersion, putVersion} from '../../src/types/version.js';
-import {ErrorKind} from '../protocol/error.js';
+import {putVersion} from '../../src/types/version.js';
+import type {NullableVersion} from 'protocol/src/version.js';
+import {ErrorKind} from 'protocol/src/error.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();

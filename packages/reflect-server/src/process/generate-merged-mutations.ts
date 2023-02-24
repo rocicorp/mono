@@ -2,7 +2,7 @@
 // [[clients]] and [[clientGroups]].
 
 import type {PendingMutationMap} from '../types/mutation.js';
-import type {Mutation} from '../protocol/push.js';
+import type {Mutation} from 'protocol/src/push.js';
 import {PeekIterator} from '../util/peek-iterator.js';
 
 // - we merge sort those lists, but the merge function is the server timestamp

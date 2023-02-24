@@ -1,4 +1,4 @@
-import type {JSONType} from '../protocol/json.js';
+import type {JSONType} from 'protocol/src/json.js';
 import {hasOwn} from './has-own.js';
 
 export function deepClone(value: JSONType): JSONType {

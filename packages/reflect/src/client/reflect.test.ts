@@ -9,8 +9,8 @@ import type {
   WriteTransaction,
 } from 'replicache';
 import * as sinon from 'sinon';
-import {Mutation, pushMessageSchema} from '../protocol/push.js';
-import type {NullableVersion} from '../types/version.js';
+import {Mutation, pushMessageSchema} from 'protocol/src/push.js';
+import type {NullableVersion} from 'protocol/src/version.js';
 import {resolver} from '@rocicorp/resolver';
 import {
   CloseKind,
@@ -33,7 +33,7 @@ import {
 // Why use fakes when we can use the real thing!
 import {Metrics, gaugeValue, DatadogSeries} from '@rocicorp/datadog-util';
 import {camelToSnake, DID_NOT_CONNECT_VALUE, Metric} from './metrics.js';
-import {ErrorKind} from '../protocol/error.js';
+import {ErrorKind} from 'protocol/src/error.js';
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error

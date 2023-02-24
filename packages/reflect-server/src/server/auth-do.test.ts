@@ -36,7 +36,7 @@ import {
   newMigrateRoomRequest,
   newRoomStatusRequest,
 } from '../client/room.js';
-import {ErrorKind} from '../protocol/error.js';
+import {ErrorKind} from 'protocol/src/error.js';
 import {newInvalidateAllAuthRequest} from '../client/auth.js';
 import {newAuthRevalidateConnections} from '../util/auth-test-util.js';
 

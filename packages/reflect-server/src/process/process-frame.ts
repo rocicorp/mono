@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {randomID} from '../util/rand.js';
-import type {PokeBody} from '../protocol/poke.js';
-import type {Mutation} from '../protocol/push.js';
+import type {PokeBody} from 'protocol/src/poke.js';
+import type {Mutation} from 'protocol/src/push.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {unwrapPatch} from '../storage/replicache-transaction.js';

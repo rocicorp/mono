@@ -1,5 +1,5 @@
-import {nullableVersionSchema, versionSchema} from '../types/version.js';
 import * as s from 'superstruct';
+import {nullableVersionSchema, versionSchema} from './version.js';
 
 export const pullRequestBodySchema = s.object({
   clientGroupID: s.string(),
@@ -9,8 +9,9 @@ export const pullRequestBodySchema = s.object({
 
 export const pullResponseBodySchema = s.object({
   cookie: versionSchema,
-  lastMutationIDChanges: s.record(s.string(), s.number()),
+  // Matches pullRequestBodySchema requestID that initiated this response
   requestID: s.string(),
+  lastMutationIDChanges: s.record(s.string(), s.number()),
   // Pull is currently only used for mutation recovery which does not use
   // the patch so we save work by not computing the patch.
 });

@@ -1,6 +1,6 @@
-import type {Patch} from '../protocol/poke.js';
+import type {Patch} from 'protocol/src/patch.js';
 import {userValuePrefix, userValueSchema} from '../types/user-value.js';
-import type {Version} from '../types/version.js';
+import type {Version} from 'protocol/src/version.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 
 export async function getPatch(

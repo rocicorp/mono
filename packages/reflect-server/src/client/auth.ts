@@ -2,7 +2,7 @@ import {AUTH_ROUTES} from '../server/auth-do.js';
 import type {
   InvalidateForRoomRequest,
   InvalidateForUserRequest,
-} from '../protocol/api/auth.js';
+} from 'protocol/src/api/auth.js';
 import {newAuthedPostRequest} from './authedpost.js';
 
 export function newInvalidateAllAuthRequest(

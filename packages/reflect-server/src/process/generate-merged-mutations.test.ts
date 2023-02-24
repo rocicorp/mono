@@ -1,7 +1,7 @@
 import {test, expect} from '@jest/globals';
 import {generateMergedMutations} from '../../src/process/generate-merged-mutations.js';
 import {pendingMutationsEntry, mutation} from '../util/test-utils.js';
-import type {Mutation} from '../protocol/push.js';
+import type {Mutation} from 'protocol/src/push.js';
 import type {PendingMutationMap} from '../types/mutation.js';
 
 test('generateMergedMutations', () => {

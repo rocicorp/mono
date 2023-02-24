@@ -17,13 +17,13 @@ import {version} from '../util/version.js';
 import {
   invalidateForUserRequestSchema,
   invalidateForRoomRequestSchema,
-} from '../protocol/api/auth.js';
+} from 'protocol/src/api/auth.js';
 import {closeConnections, getConnections} from './connections.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {getConnectedClients} from '../types/connected-clients.js';
 import * as s from 'superstruct';
-import {createRoomRequestSchema} from '../protocol/api/room.js';
+import {createRoomRequestSchema} from 'protocol/src/api/room.js';
 import {
   get,
   post,

@@ -23,12 +23,12 @@ import {
   PokeDD31,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from 'replicache';
-import type {Downstream} from '../protocol/down.js';
-import type {JSONType} from '../protocol/json.js';
-import type {PingMessage} from '../protocol/ping.js';
-import type {PokeMessage} from '../protocol/poke.js';
-import type {PushMessage} from '../protocol/push.js';
-import {NullableVersion, nullableVersionSchema} from '../types/version.js';
+import type {Downstream} from 'protocol/src/down.js';
+import type {JSONType} from 'protocol/src/json.js';
+import type {PingMessage} from 'protocol/src/ping.js';
+import type {PokeMessage} from 'protocol/src/poke.js';
+import type {PushMessage} from 'protocol/src/push.js';
+import {NullableVersion, nullableVersionSchema} from 'protocol/src/version.js';
 import {assert} from '../util/asserts.js';
 import {sleep} from '../util/sleep.js';
 import type {ReflectOptions} from './options.js';
@@ -41,14 +41,14 @@ import {
   camelToSnake,
 } from './metrics.js';
 import {send} from '../util/socket.js';
-import type {ConnectedMessage} from '../protocol/connected.js';
-import {ErrorKind, type ErrorMessage} from '../protocol/error.js';
+import type {ConnectedMessage} from 'protocol/src/connected.js';
+import {ErrorKind, type ErrorMessage} from 'protocol/src/error.js';
 import {MessageError, isAuthError} from './connection-error.js';
 import type {
   PullRequestMessage,
   PullResponseBody,
   PullResponseMessage,
-} from '../protocol/pull.js';
+} from 'protocol/src/pull.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 
 export const enum ConnectionState {

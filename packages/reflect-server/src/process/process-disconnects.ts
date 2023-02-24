@@ -1,7 +1,8 @@
 import {EntryCache} from '../storage/entry-cache.js';
 import {ReplicacheTransaction} from '../storage/replicache-transaction.js';
 import type {Storage} from '../storage/storage.js';
-import {putVersion, Version} from '../types/version.js';
+import {putVersion} from '../types/version.js';
+import type {Version} from 'protocol/src/version.js';
 import type {LogContext} from '@rocicorp/logger';
 import {
   getConnectedClients,
