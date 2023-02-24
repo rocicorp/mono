@@ -1,4 +1,4 @@
-import {versionSchema, NullableVersion, Version} from 'protocol/src/version.js';
+import {versionSchema, NullableVersion, Version} from 'protocol';
 import type {Storage} from '../storage/storage.js';
 
 export const versionKey = 'version';

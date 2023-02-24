@@ -10,7 +10,7 @@ import {
 import type {ClientMap} from '../types/client-state.js';
 import {getUserValue, UserValue} from '../types/user-value.js';
 import {getVersion, versionKey} from '../types/version.js';
-import type {Version} from 'protocol/src/version.js';
+import type {Version} from 'protocol';
 import {
   client,
   mutation,

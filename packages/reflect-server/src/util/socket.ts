@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Downstream} from 'protocol/src/down.js';
-import type {ErrorKind, ErrorMessage} from 'protocol/src/error.js';
+import type {Downstream} from 'protocol';
+import type {ErrorKind, ErrorMessage} from 'protocol';
 import type {Socket} from '../types/client-state.js';
 
 export function sendError(

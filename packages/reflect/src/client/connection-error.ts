@@ -1,4 +1,4 @@
-import {ErrorKind} from 'protocol/src/error.js';
+import {ErrorKind} from 'protocol';
 
 export class MessageError<K extends ErrorKind = ErrorKind> extends Error {
   readonly kind: K;

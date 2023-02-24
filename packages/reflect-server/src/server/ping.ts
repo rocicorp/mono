@@ -1,5 +1,5 @@
 import type {Socket} from '../types/client-state.js';
-import type {PongMessage} from 'protocol/src/pong.js';
+import type {PongMessage} from 'protocol';
 import type {LogContext} from '@rocicorp/logger';
 import {send} from '../util/socket.js';
 

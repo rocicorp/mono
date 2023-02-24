@@ -1,5 +1,8 @@
-import * as superstruct from 'superstruct';
 import {expect} from '@esm-bundle/chai';
+import {DatadogSeries, gaugeValue, Metrics} from '@rocicorp/datadog-util';
+import {resolver} from '@rocicorp/resolver';
+import type {NullableVersion} from 'protocol';
+import {ErrorKind, Mutation, pushMessageSchema} from 'protocol';
 import type {
   JSONValue,
   LogLevel,
@@ -9,9 +12,8 @@ import type {
   WriteTransaction,
 } from 'replicache';
 import * as sinon from 'sinon';
-import {Mutation, pushMessageSchema} from 'protocol/src/push.js';
-import type {NullableVersion} from 'protocol/src/version.js';
-import {resolver} from '@rocicorp/resolver';
+import * as superstruct from 'superstruct';
+import {camelToSnake, DID_NOT_CONNECT_VALUE, Metric} from './metrics.js';
 import {
   CloseKind,
   ConnectionState,
@@ -29,11 +31,7 @@ import {
   reflectForTest,
   TestReflect,
   tickAFewTimes,
-} from './test-utils.js';
-// Why use fakes when we can use the real thing!
-import {Metrics, gaugeValue, DatadogSeries} from '@rocicorp/datadog-util';
-import {camelToSnake, DID_NOT_CONNECT_VALUE, Metric} from './metrics.js';
-import {ErrorKind} from 'protocol/src/error.js';
+} from './test-utils.js'; // Why use fakes when we can use the real thing!
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error

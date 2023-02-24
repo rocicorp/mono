@@ -1,4 +1,4 @@
-import type {RelaxedJSONValue} from 'protocol/src/json.js';
+import type {RelaxedJSONValue} from 'protocol';
 import {createAuthAPIHeaders} from '../server/auth-api-headers.js';
 
 export function newAuthedPostRequest(

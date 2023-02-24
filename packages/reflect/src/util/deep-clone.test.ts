@@ -1,6 +1,6 @@
-import type {JSONType} from 'protocol/src/json.js';
-import {deepClone} from '../util/deep-clone.js';
 import {expect} from '@esm-bundle/chai';
+import type {JSONType} from 'protocol';
+import {deepClone} from '../util/deep-clone.js';
 
 test('deepClone', () => {
   const t = (v: JSONType) => {

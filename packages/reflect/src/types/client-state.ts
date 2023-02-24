@@ -1,4 +1,4 @@
-import type {Mutation} from 'protocol/src/push.js';
+import type {Mutation} from 'protocol';
 
 export type ClientID = string;
 
