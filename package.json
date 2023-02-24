@@ -21,8 +21,8 @@
   },
   "dependencies": {
     "@rocicorp/logger": "^2.2.0",
-    "@rocicorp/reflect": "^0.12.1",
-    "@rocicorp/reflect-server": "file:./vendor/rocicorp-reflect-server-0.21.7-private.0.tgz",
+    "@rocicorp/reflect": "file:./vendor/rocicorp-reflect-0.12.2.tgz",
+    "@rocicorp/reflect-server": "file:./vendor/rocicorp-reflect-server-0.21.7.tgz",
     "base-64": "^1.0.0",
     "nanoid": "^3.3.4"
   },
