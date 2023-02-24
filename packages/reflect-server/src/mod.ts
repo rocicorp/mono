@@ -1,4 +1,5 @@
 import {REPORT_METRICS_PATH} from './server/paths.js';
+import {DatadogLogSink} from 'datadog';
 
 export {
   createReflectServer,
@@ -14,11 +15,19 @@ export {
   type LogSink,
   type LogLevel,
 } from '@rocicorp/logger';
-export {DatadogLogSink} from './util/datadog-log-sink.js';
 export {version} from './util/version.js';
 export const ROUTES = {
   reportMetrics: REPORT_METRICS_PATH,
 };
+
+export type WorkerDatadogLogSinkOptions = {
+  apiKey: string;
+  service?: string | undefined;
+  host?: string | undefined;
+};
+export function createWorkerDatadogLogSink(opts: WorkerDatadogLogSinkOptions) {
+  return new DatadogLogSink({...opts, source: 'worker'});
+}
 
 // TODO(arv): Only export the types that are actually used.
 // https://github.com/rocicorp/reflect-server/issues/117
