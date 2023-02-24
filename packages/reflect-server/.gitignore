@@ -12,7 +12,4 @@
 # debug
 npm-debug.log*
 
-# pack output
-reflect-*.tgz
-
 tsconfig.tsbuildinfo
