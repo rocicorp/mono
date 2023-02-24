@@ -12,12 +12,12 @@
     "format": "prettier --write *",
     "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "build": "rm -rf out && npm run build-dts && node build.js",
+    "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "dev": "miniflare --live-reload --debug",
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
     "check-types": "tsc --noEmit",
-    "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
-    "build": "rm -rf out && npm run build-dts && node build.js",
     "prepack": "npm run lint && npm run test && npm run build"
   },
   "engines": {
