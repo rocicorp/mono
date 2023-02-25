@@ -1,5 +1,5 @@
 import {expect, test} from '@jest/globals';
-import type {Version} from 'protocol';
+import type {Version} from 'reflect-protocol';
 import type {PatchOperation} from 'replicache';
 import {getPatch} from '../../src/ff/get-patch.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';

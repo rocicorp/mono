@@ -1,6 +1,6 @@
 import {test, expect, beforeEach} from '@jest/globals';
 import {LogContext} from '@rocicorp/logger';
-import type {Mutation} from 'protocol';
+import type {Mutation} from 'reflect-protocol';
 import {handlePush} from '../server/push.js';
 import {resolver} from '../util/resolver.js';
 import {randomID} from '../util/rand.js';

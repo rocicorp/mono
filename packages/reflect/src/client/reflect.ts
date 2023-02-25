@@ -12,13 +12,13 @@ import type {
   PullResponseBody,
   PullResponseMessage,
   PushMessage,
-} from 'protocol';
+} from 'reflect-protocol';
 import {
   ErrorKind,
   NullableVersion,
   nullableVersionSchema,
   type ErrorMessage,
-} from 'protocol';
+} from 'reflect-protocol';
 import {
   ExperimentalWatchCallbackForOptions,
   ExperimentalWatchNoIndexCallback,

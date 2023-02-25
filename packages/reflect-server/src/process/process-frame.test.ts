@@ -1,5 +1,5 @@
 import {expect, test} from '@jest/globals';
-import type {JSONType, Mutation, Version} from 'protocol';
+import type {JSONType, Mutation, Version} from 'reflect-protocol';
 import type {WriteTransaction} from 'replicache';
 import * as s from 'superstruct';
 import {DurableStorage} from '../../src/storage/durable-storage.js';

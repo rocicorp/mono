@@ -1,4 +1,4 @@
-import type {CreateRoomRequest} from 'protocol';
+import type {CreateRoomRequest} from 'reflect-protocol';
 import {createAuthAPIHeaders} from '../server/auth-api-headers.js';
 import {AUTH_ROUTES} from '../server/auth-do.js';
 import type {RoomStatus} from '../server/rooms.js';

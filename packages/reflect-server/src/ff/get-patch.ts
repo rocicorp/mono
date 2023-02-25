@@ -1,4 +1,4 @@
-import type {Patch, Version} from 'protocol';
+import type {Patch, Version} from 'reflect-protocol';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {userValuePrefix, userValueSchema} from '../types/user-value.js';
 

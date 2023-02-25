@@ -15,7 +15,10 @@ export default {
     ],
   },
   moduleNameMapper: {
-    '^protocol/(.*)\\.js$': path.join(__dirname, '../protocol/$1'),
+    '^reflect-protocol/(.*)\\.js$': path.join(
+      __dirname,
+      '../reflect-protocol/$1',
+    ),
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   testEnvironment: 'miniflare',

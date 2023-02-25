@@ -17,7 +17,7 @@ import {
   MutatorMap,
   processMutation,
 } from '../../src/process/process-mutation.js';
-import type {Mutation} from 'protocol';
+import type {Mutation} from 'reflect-protocol';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();

@@ -1,5 +1,5 @@
 import {test, expect} from '@jest/globals';
-import {ErrorKind} from 'protocol';
+import {ErrorKind} from 'reflect-protocol';
 import {client, createSilentLogContext, Mocket} from '../util/test-utils.js';
 import {handleAuthInvalidate} from './auth-invalidate.js';
 

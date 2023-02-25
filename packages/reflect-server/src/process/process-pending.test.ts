@@ -1,6 +1,6 @@
 import {test, expect} from '@jest/globals';
 import type {WriteTransaction} from 'replicache';
-import type {PokeBody} from 'protocol';
+import type {PokeBody} from 'reflect-protocol';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
 import {
   ClientRecordMap,
@@ -10,7 +10,7 @@ import {
 import type {ClientMap} from '../../src/types/client-state.js';
 import {getUserValue, UserValue} from '../../src/types/user-value.js';
 import {getVersion, putVersion} from '../../src/types/version.js';
-import type {Version} from 'protocol';
+import type {Version} from 'reflect-protocol';
 import {
   client,
   mutation,

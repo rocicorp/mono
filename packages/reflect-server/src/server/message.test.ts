@@ -1,5 +1,5 @@
 import {test, describe, expect} from '@jest/globals';
-import type {Mutation} from 'protocol';
+import type {Mutation} from 'reflect-protocol';
 import type {
   ClientID,
   ClientGroupID,
@@ -14,7 +14,7 @@ import {
 import {handleMessage} from '../../src/server/message.js';
 import {assert} from '../util/asserts.js';
 import {randomID} from '../util/rand.js';
-import {ErrorKind} from 'protocol';
+import {ErrorKind} from 'reflect-protocol';
 import {DurableStorage} from '../storage/durable-storage.js';
 
 describe('handleMessage', () => {

@@ -1,5 +1,5 @@
 import {test, expect} from '@jest/globals';
-import type {JSONType} from 'protocol';
+import type {JSONType} from 'reflect-protocol';
 import {deepClone} from '../../src/util/deep-clone.js';
 
 test('deepClone', () => {

@@ -1,8 +1,8 @@
 import {expect} from '@esm-bundle/chai';
 import {DatadogSeries, gaugeValue, Metrics} from '@rocicorp/datadog-util';
 import {resolver} from '@rocicorp/resolver';
-import type {NullableVersion} from 'protocol';
-import {ErrorKind, Mutation, pushMessageSchema} from 'protocol';
+import type {NullableVersion} from 'reflect-protocol';
+import {ErrorKind, Mutation, pushMessageSchema} from 'reflect-protocol';
 import type {
   JSONValue,
   LogLevel,

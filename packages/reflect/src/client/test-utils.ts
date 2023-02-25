@@ -9,7 +9,7 @@ import type {
   PongMessage,
   PullResponseBody,
   PullResponseMessage,
-} from 'protocol';
+} from 'reflect-protocol';
 import type {MutatorDefs} from 'replicache';
 import type {SinonFakeTimers} from 'sinon';
 import {assert} from '../util/asserts.js';

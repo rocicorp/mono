@@ -1,4 +1,4 @@
-import type {JSONType} from 'protocol';
+import type {JSONType} from 'reflect-protocol';
 import {hasOwn} from './has-own.js';
 
 export function deepClone(value: JSONType): JSONType {

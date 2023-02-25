@@ -1,7 +1,7 @@
 import type {
   InvalidateForRoomRequest,
   InvalidateForUserRequest,
-} from 'protocol';
+} from 'reflect-protocol';
 import {AUTH_ROUTES} from '../server/auth-do.js';
 import {newAuthedPostRequest} from './authedpost.js';
 

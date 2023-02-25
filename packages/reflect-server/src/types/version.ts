@@ -1,4 +1,4 @@
-import {versionSchema, NullableVersion, Version} from 'protocol';
+import {versionSchema, NullableVersion, Version} from 'reflect-protocol';
 import type {Storage} from '../storage/storage.js';
 
 export const versionKey = 'version';

@@ -1,4 +1,4 @@
-import type {NullableVersion, Patch, PokeBody, Version} from 'protocol';
+import type {NullableVersion, Patch, PokeBody, Version} from 'reflect-protocol';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import type {ClientPokeBody} from '../types/client-poke-body.js';
 import {listClientRecords} from '../types/client-record.js';

@@ -1,5 +1,5 @@
 import {expect, test} from '@jest/globals';
-import type {Mutation} from 'protocol';
+import type {Mutation} from 'reflect-protocol';
 import {generateMergedMutations} from '../../src/process/generate-merged-mutations.js';
 import type {PendingMutationMap} from '../types/mutation.js';
 import {mutation, pendingMutationsEntry} from '../util/test-utils.js';

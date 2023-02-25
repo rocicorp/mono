@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Mutation, PokeBody} from 'protocol';
+import type {Mutation, PokeBody} from 'reflect-protocol';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {unwrapPatch} from '../storage/replicache-transaction.js';

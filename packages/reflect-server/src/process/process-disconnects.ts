@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Version} from 'protocol';
+import type {Version} from 'reflect-protocol';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {ReplicacheTransaction} from '../storage/replicache-transaction.js';

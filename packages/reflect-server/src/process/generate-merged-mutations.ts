@@ -1,7 +1,7 @@
 // Generates the total merged ordering of mutation from the pending lists in
 // [[clients]] and [[clientGroups]].
 
-import type {Mutation} from 'protocol';
+import type {Mutation} from 'reflect-protocol';
 import type {PendingMutationMap} from '../types/mutation.js';
 import {PeekIterator} from '../util/peek-iterator.js';
 
