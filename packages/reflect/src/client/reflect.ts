@@ -1,55 +1,59 @@
-import * as superstruct from 'superstruct';
+import {Lock} from '@rocicorp/lock';
 import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
-import {Lock} from '@rocicorp/lock';
 import {nanoid} from 'nanoid';
+import type {
+  ConnectedMessage,
+  Downstream,
+  JSONType,
+  PingMessage,
+  PokeMessage,
+  PullRequestMessage,
+  PullResponseBody,
+  PullResponseMessage,
+  PushMessage,
+} from 'reflect-protocol';
 import {
+  ErrorKind,
+  NullableVersion,
+  nullableVersionSchema,
+  type ErrorMessage,
+} from 'reflect-protocol';
+import {
+  ExperimentalWatchCallbackForOptions,
+  ExperimentalWatchNoIndexCallback,
+  ExperimentalWatchOptions,
+  MaybePromise,
   MutatorDefs,
+  PokeDD31,
+  PullerResultV0,
+  PullerResultV1,
+  PullRequestV0,
+  PullRequestV1,
+  PusherResult,
+  PushRequestV0,
+  PushRequestV1,
   ReadonlyJSONValue,
   ReadTransaction,
   Replicache,
   ReplicacheOptions,
-  ExperimentalWatchNoIndexCallback,
-  ExperimentalWatchOptions,
-  ExperimentalWatchCallbackForOptions,
-  MaybePromise,
-  PushRequestV0,
-  PushRequestV1,
-  PusherResult,
-  PullRequestV0,
-  PullRequestV1,
-  PullerResultV0,
-  PullerResultV1,
-  PokeDD31,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from 'replicache';
-import type {Downstream} from '../protocol/down.js';
-import type {JSONType} from '../protocol/json.js';
-import type {PingMessage} from '../protocol/ping.js';
-import type {PokeMessage} from '../protocol/poke.js';
-import type {PushMessage} from '../protocol/push.js';
-import {NullableVersion, nullableVersionSchema} from '../types/version.js';
+import * as superstruct from 'superstruct';
 import {assert} from '../util/asserts.js';
 import {sleep} from '../util/sleep.js';
-import type {ReflectOptions} from './options.js';
-import {
-  Gauge,
-  State,
-  DID_NOT_CONNECT_VALUE,
-  NopMetrics,
-  Metric,
-  camelToSnake,
-} from './metrics.js';
 import {send} from '../util/socket.js';
-import type {ConnectedMessage} from '../protocol/connected.js';
-import {ErrorKind, type ErrorMessage} from '../protocol/error.js';
-import {MessageError, isAuthError} from './connection-error.js';
-import type {
-  PullRequestMessage,
-  PullResponseBody,
-  PullResponseMessage,
-} from '../protocol/pull.js';
+import {isAuthError, MessageError} from './connection-error.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
+import {
+  camelToSnake,
+  DID_NOT_CONNECT_VALUE,
+  Gauge,
+  Metric,
+  NopMetrics,
+  State,
+} from './metrics.js';
+import type {ReflectOptions} from './options.js';
 
 export const enum ConnectionState {
   Disconnected,

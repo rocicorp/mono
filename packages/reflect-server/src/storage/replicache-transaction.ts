@@ -6,8 +6,8 @@ import {
   ScanOptions,
   WriteTransaction,
 } from 'replicache';
-import type {JSONType} from '../protocol/json.js';
-import type {Patch} from '../protocol/poke.js';
+import type {JSONType} from 'reflect-protocol';
+import type {Patch} from 'reflect-protocol';
 import type {ClientID} from '../types/client-state.js';
 import {
   UserValue,
@@ -15,7 +15,7 @@ import {
   userValuePrefix,
   userValueSchema,
 } from '../types/user-value.js';
-import type {Version} from '../types/version.js';
+import type {Version} from 'reflect-protocol';
 import type {Storage} from './storage.js';
 
 /**

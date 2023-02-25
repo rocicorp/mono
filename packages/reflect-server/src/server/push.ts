@@ -1,5 +1,5 @@
 import type {ClientID, ClientMap, ClientState} from '../types/client-state.js';
-import type {PushBody} from '../protocol/push.js';
+import type {PushBody} from 'reflect-protocol';
 import type {LogContext} from '@rocicorp/logger';
 import {
   ClientRecord,
@@ -10,7 +10,7 @@ import type {DurableStorage} from '../storage/durable-storage.js';
 import type {PendingMutationMap} from '../types/mutation.js';
 import {closeWithError} from '../util/socket.js';
 import {must} from '../util/must.js';
-import {ErrorKind} from '../protocol/error.js';
+import {ErrorKind} from 'reflect-protocol';
 
 export type Now = () => number;
 export type ProcessUntilDone = () => void;

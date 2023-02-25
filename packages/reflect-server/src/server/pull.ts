@@ -2,7 +2,7 @@ import {compareVersions, getVersion} from '../types/version.js';
 import {listClientRecords} from '../types/client-record.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import type {Socket, ClientID} from '../types/client-state.js';
-import type {PullRequestBody, PullResponseMessage} from '../protocol/pull.js';
+import type {PullRequestBody, PullResponseMessage} from 'reflect-protocol';
 import {send} from '../util/socket.js';
 
 export async function handlePull(

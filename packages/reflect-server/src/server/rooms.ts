@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {CreateRoomRequest} from '../protocol/api/room.js';
+import type {CreateRoomRequest} from 'reflect-protocol';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import * as s from 'superstruct';
 

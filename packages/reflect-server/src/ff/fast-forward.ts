@@ -1,12 +1,12 @@
+import type {NullableVersion, Patch, PokeBody, Version} from 'reflect-protocol';
+import type {DurableStorage} from '../storage/durable-storage.js';
+import type {ClientPokeBody} from '../types/client-poke-body.js';
 import {listClientRecords} from '../types/client-record.js';
 import type {ClientGroupID, ClientID} from '../types/client-state.js';
-import {compareVersions, NullableVersion, Version} from '../types/version.js';
-import type {ClientPokeBody} from '../types/client-poke-body.js';
-import {getPatch} from './get-patch.js';
-import type {Patch, PokeBody} from '../protocol/poke.js';
+import {compareVersions} from '../types/version.js';
 import {must} from '../util/must.js';
-import type {DurableStorage} from '../storage/durable-storage.js';
 import {randomID} from '../util/rand.js';
+import {getPatch} from './get-patch.js';
 
 /**
  * Returns zero or more pokes necessary to fast forward any clients in a room

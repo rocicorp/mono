@@ -2,7 +2,7 @@
 // processed in one or more frames, up to [[endTime]] and sends necessary
 
 import type {ClientMap} from '../types/client-state.js';
-import type {PokeMessage} from '../protocol/poke.js';
+import type {PokeMessage} from 'reflect-protocol';
 import type {ClientPokeBody} from '../types/client-poke-body.js';
 import type {LogContext} from '@rocicorp/logger';
 import {must} from '../util/must.js';

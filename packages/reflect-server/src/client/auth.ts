@@ -1,8 +1,8 @@
-import {AUTH_ROUTES} from '../server/auth-do.js';
 import type {
   InvalidateForRoomRequest,
   InvalidateForUserRequest,
-} from '../protocol/api/auth.js';
+} from 'reflect-protocol';
+import {AUTH_ROUTES} from '../server/auth-do.js';
 import {newAuthedPostRequest} from './authedpost.js';
 
 export function newInvalidateAllAuthRequest(

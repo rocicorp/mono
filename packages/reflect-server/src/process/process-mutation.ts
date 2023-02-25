@@ -2,9 +2,10 @@ import {EntryCache} from '../storage/entry-cache.js';
 import {ReplicacheTransaction} from '../storage/replicache-transaction.js';
 import type {Storage} from '../storage/storage.js';
 import {getClientRecord, putClientRecord} from '../types/client-record.js';
-import {putVersion, Version} from '../types/version.js';
+import {putVersion} from '../types/version.js';
+import type {Version} from 'reflect-protocol';
 import type {LogContext} from '@rocicorp/logger';
-import type {Mutation} from '../protocol/push.js';
+import type {Mutation} from 'reflect-protocol';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Mutator = (tx: ReplicacheTransaction, args: any) => Promise<void>;

@@ -10,21 +10,17 @@ import type {
   Socket,
 } from '../types/client-state.js';
 import type {LogContext} from '@rocicorp/logger';
-import type {ConnectedMessage} from '../protocol/connected.js';
+import type {ConnectedMessage} from 'reflect-protocol';
 import type {UserData} from './auth.js';
 import {USER_DATA_HEADER_NAME} from './auth.js';
 import {decodeHeaderValue} from '../util/headers.js';
 import {addConnectedClient} from '../types/connected-clients.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
-import {
-  NullableVersion,
-  Version,
-  compareVersions,
-  getVersion,
-} from '../types/version.js';
+import {compareVersions, getVersion} from '../types/version.js';
+import type {NullableVersion, Version} from 'reflect-protocol';
 import {send, closeWithError} from '../util/socket.js';
 import {assert} from '../util/asserts.js';
-import {ErrorKind} from '../protocol/error.js';
+import {ErrorKind} from 'reflect-protocol';
 
 export type MessageHandler = (
   lc: LogContext,

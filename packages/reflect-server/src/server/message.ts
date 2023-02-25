@@ -1,11 +1,11 @@
-import {Upstream, upstreamSchema} from '../protocol/up.js';
+import {Upstream, upstreamSchema} from 'reflect-protocol';
 import type {ClientID, ClientMap, Socket} from '../types/client-state.js';
 import type {LogContext} from '@rocicorp/logger';
 import {sendError, closeWithError} from '../util/socket.js';
 import {handlePush, type ProcessUntilDone} from './push.js';
 import {handlePing} from './ping.js';
 import {superstructAssert} from '../util/superstruct.js';
-import {ErrorKind} from '../protocol/error.js';
+import {ErrorKind} from 'reflect-protocol';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import type {PendingMutationMap} from '../types/mutation.js';
 import {handlePull} from './pull.js';

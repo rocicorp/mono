@@ -1,6 +1,6 @@
 import * as s from 'superstruct';
-import {jsonSchema} from '../protocol/json.js';
-import {versionSchema} from './version.js';
+import {jsonSchema} from 'reflect-protocol';
+import {versionSchema} from 'reflect-protocol';
 import type {Storage} from '../storage/storage.js';
 
 export const userValueSchema = s.type({

@@ -1,12 +1,17 @@
 import {resolver} from '@rocicorp/resolver';
+import type {
+  ConnectedMessage,
+  Downstream,
+  ErrorKind,
+  ErrorMessage,
+  PokeBody,
+  PokeMessage,
+  PongMessage,
+  PullResponseBody,
+  PullResponseMessage,
+} from 'reflect-protocol';
 import type {MutatorDefs} from 'replicache';
 import type {SinonFakeTimers} from 'sinon';
-import type {ConnectedMessage} from '../protocol/connected.js';
-import type {Downstream} from '../protocol/down.js';
-import type {ErrorKind, ErrorMessage} from '../protocol/error.js';
-import type {PokeBody, PokeMessage} from '../protocol/poke.js';
-import type {PongMessage} from '../protocol/pong.js';
-import type {PullResponseBody, PullResponseMessage} from '../protocol/pull.js';
 import {assert} from '../util/asserts.js';
 import type {ReflectOptions} from './options.js';
 import {ConnectionState, Reflect} from './reflect.js';

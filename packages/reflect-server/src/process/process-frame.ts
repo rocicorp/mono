@@ -1,7 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {randomID} from '../util/rand.js';
-import type {PokeBody} from '../protocol/poke.js';
-import type {Mutation} from '../protocol/push.js';
+import type {Mutation, PokeBody} from 'reflect-protocol';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {unwrapPatch} from '../storage/replicache-transaction.js';
@@ -11,6 +9,7 @@ import {getClientRecord, putClientRecord} from '../types/client-record.js';
 import type {ClientGroupID, ClientID} from '../types/client-state.js';
 import {getVersion} from '../types/version.js';
 import {must} from '../util/must.js';
+import {randomID} from '../util/rand.js';
 import {processDisconnects} from './process-disconnects.js';
 import {MutatorMap, processMutation} from './process-mutation.js';
 

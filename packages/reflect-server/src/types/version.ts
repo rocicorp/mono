@@ -1,11 +1,5 @@
-import * as s from 'superstruct';
+import {versionSchema, NullableVersion, Version} from 'reflect-protocol';
 import type {Storage} from '../storage/storage.js';
-
-export const versionSchema = s.number();
-export const nullableVersionSchema = s.union([versionSchema, s.literal(null)]);
-
-export type Version = s.Infer<typeof versionSchema>;
-export type NullableVersion = s.Infer<typeof nullableVersionSchema>;
 
 export const versionKey = 'version';
 

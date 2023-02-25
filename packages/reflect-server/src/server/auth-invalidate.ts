@@ -1,7 +1,7 @@
 import type {ClientMap} from '../types/client-state.js';
 import type {LogContext} from '@rocicorp/logger';
 import {closeWithError} from '../util/socket.js';
-import {ErrorKind} from '../protocol/error.js';
+import {ErrorKind} from 'reflect-protocol';
 
 export function handleAuthInvalidate(
   lc: LogContext,

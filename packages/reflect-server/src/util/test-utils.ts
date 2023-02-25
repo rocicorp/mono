@@ -1,15 +1,15 @@
 import {jest, beforeEach, afterEach} from '@jest/globals';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import type {ClientRecord} from '../../src/types/client-record.js';
-import type {JSONType} from '../../src/protocol/json.js';
-import type {Mutation} from '../../src/protocol/push.js';
+import type {JSONType} from 'reflect-protocol';
+import type {Mutation} from 'reflect-protocol';
 import type {
   ClientGroupID,
   ClientID,
   ClientState,
   Socket,
 } from '../../src/types/client-state.js';
-import type {NullableVersion} from '../../src/types/version.js';
+import type {NullableVersion} from 'reflect-protocol';
 
 afterEach(() => {
   jest.restoreAllMocks();

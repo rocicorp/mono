@@ -39,6 +39,7 @@
     "jest-environment-miniflare": "^2.11.0",
     "miniflare": "^2.11.0",
     "replicache": "*",
+    "reflect-protocol": "*",
     "rollup": "^2.71.1",
     "rollup-plugin-dts": "^4.2.1",
     "superstruct": "^0.16.7",

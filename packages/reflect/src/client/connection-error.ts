@@ -1,4 +1,4 @@
-import {ErrorKind} from '../protocol/error.js';
+import {ErrorKind} from 'reflect-protocol';
 
 export class MessageError<K extends ErrorKind = ErrorKind> extends Error {
   readonly kind: K;

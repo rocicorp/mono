@@ -1,5 +1,5 @@
 import * as s from 'superstruct';
-import {nullableVersionSchema} from './version.js';
+import {nullableVersionSchema} from 'reflect-protocol';
 import type {ClientID} from './client-state.js';
 import type {Storage} from '../storage/storage.js';
 

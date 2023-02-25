@@ -1,8 +1,8 @@
 import {compareUTF8} from 'compare-utf8';
 import type {JSONValue} from 'replicache';
 import type * as z from 'superstruct';
-import type {JSONType} from '../protocol/json.js';
-import type {Patch} from '../protocol/poke.js';
+import type {JSONType} from 'reflect-protocol';
+import type {Patch} from 'reflect-protocol';
 import {superstructAssert} from '../util/superstruct.js';
 import type {ListOptions, Storage} from './storage.js';
 

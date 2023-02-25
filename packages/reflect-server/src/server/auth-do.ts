@@ -19,11 +19,11 @@ import {
   connectionsResponseSchema,
   invalidateForRoomRequestSchema,
   invalidateForUserRequestSchema,
-} from '../protocol/api/auth.js';
+} from 'reflect-protocol';
 import * as superstruct from 'superstruct';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {createRoomRequestSchema} from '../protocol/api/room.js';
+import {createRoomRequestSchema} from 'reflect-protocol';
 import {closeWithError} from '../util/socket.js';
 import {
   requireAuthAPIKey,
@@ -41,7 +41,7 @@ import {
 } from './router.js';
 import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
 import {createUnauthorizedResponse} from './create-unauthorized-response.js';
-import {ErrorKind} from '../protocol/error.js';
+import {ErrorKind} from 'reflect-protocol';
 import {ROOM_ROUTES} from './room-do.js';
 import {
   CONNECT_URL_PATTERN,

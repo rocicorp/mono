@@ -11,6 +11,7 @@
     "esModuleInterop": true,
     "importsNotUsedAsValues": "error",
     "declarationMap": true,
+    "sourceMap": true,
     "declaration": true,
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "Node16",
