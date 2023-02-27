@@ -178,8 +178,8 @@ During release, below, we reset the `docs` branch to main, dropping these cherry
 We continuously track performance across a variety of benchmarks and the size of Replicache's bundle.
 Results here:
 
-- [Performance Benchmarks](https://rocicorp.github.io/replicache-internal/perf-v2/)
-- [Bundle Sizes](https://rocicorp.github.io/replicache-internal/bundle-sizes)
+- [Performance Benchmarks](https://rocicorp.github.io/mono/perf-v2/)
+- [Bundle Sizes](https://rocicorp.github.io/mono/bundle-sizes)
 
 The runner runs on an ec2 instance you can find [here](https://us-east-1.console.aws.amazon.com/ec2/v2/home?region=us-east-1#InstanceDetails:instanceId=i-0492542c9af59b8e7) or through the ec2 aws console. If you need
 to set it up again you can kill the existing runner processes, rm the old `actions-runner` directory, and
