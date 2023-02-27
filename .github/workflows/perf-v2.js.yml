@@ -3,8 +3,8 @@ name: Perf Test V2
 on:
   push:
     branches: [main]
-  paths:
-    - 'packages/replicache/**'
+    paths:
+      - 'packages/replicache/**'
 
 jobs:
   benchmark:
