@@ -3,8 +3,8 @@ name: Perf Test V2
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  paths:
+    - 'packages/replicache/**'
 
 jobs:
   benchmark:
@@ -51,7 +51,7 @@ jobs:
           fail-on-alert: true
           github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
           benchmark-data-dir-path: perf-v2
-          auto-push: false
+          auto-push: true
           alert-threshold: '130%'
           comment-on-alert: true
 
@@ -66,6 +66,6 @@ jobs:
           fail-on-alert: false
           github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
           benchmark-data-dir-path: perf-v2/p95
-          auto-push: false
+          auto-push: true
           alert-threshold: '1000%'
           comment-on-alert: false
