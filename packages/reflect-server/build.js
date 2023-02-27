@@ -1,10 +1,11 @@
 // @ts-check
 
-import path from 'path';
-import {fileURLToPath} from 'url';
-import {build} from 'esbuild';
+/* eslint-env node, es2020 */
 
-// @ts-ignore
+import {build} from 'esbuild';
+import * as path from 'path';
+import {fileURLToPath} from 'url';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -45,7 +46,6 @@ function buildInternal(options) {
 }
 
 try {
-  // @ts-ignore
   await Promise.all([buildESM(), buildExample(), buildCLI()]);
 } catch {
   process.exitCode = 1;
