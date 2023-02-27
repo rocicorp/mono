@@ -1,20 +1,23 @@
 /* eslint-env node, es2020 */
 // @ts-check
 
-import commandLineArgs from 'command-line-args';
-import commandLineUsage from 'command-line-usage';
-import * as playwright from 'playwright';
 import {startDevServer} from '@web/dev-server';
 import {esbuildPlugin} from '@web/dev-server-esbuild';
+import commandLineArgs from 'command-line-args';
+import commandLineUsage from 'command-line-usage';
+import * as fs from 'fs/promises';
 import getPort from 'get-port';
 import * as os from 'os';
 import * as path from 'path';
-import {promises as fs} from 'fs';
+import * as playwright from 'playwright';
+import {fileURLToPath} from 'url';
 import {makeDefine} from '../tool/make-define.js';
 
 /** @typedef {'chromium' | 'firefox' | 'webkit'} Browser */
 
 const allBrowsers = ['chromium', 'firefox', 'webkit'];
+
+const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 class UnknownValueError extends Error {
   name = 'UNKNOWN_VALUE';
@@ -150,7 +153,7 @@ async function main() {
   const server = await startDevServer({
     config: {
       nodeResolve: true,
-      rootDir: process.cwd(),
+      rootDir,
       port,
       watch: false,
       plugins: [
