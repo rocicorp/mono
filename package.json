@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev-next": "./keepalive.sh NODE_ENV=development vercel dev",
-    "dev-worker": "./keepalive.sh wrangler dev",
+    "dev-worker": "./keepalive.sh wrangler dev --local --persist",
     "dev-worker-jd": "CLOUDFLARE_ACCOUNT_ID=2a265bc62fc09e9ed1c43226f7a3de57 npm run dev-worker",
     "dev-worker-rc": "CLOUDFLARE_ACCOUNT_ID=085f6d8eb08e5b23debfb08b21bda1eb npm run dev-worker",
     "build-wasm": "cd renderer && rm -rf pkg && wasm-pack build --target web && rm pkg/.gitignore",
@@ -13,7 +13,8 @@
     "build": "next build",
     "lint": "next lint",
     "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
-    "check-types": "npm run build-wasm && tsc -p tsconfig.json --noEmit && tsc -p demo/worker/tsconfig.json --noEmit",
+    "check-types-fe": "tsc -p tsconfig.json --noEmit && tsc -p demo/worker/tsconfig.json --noEmit",
+    "check-types": "npm run build-wasm && npm run check-types-fe",
     "test": "mocha",
     "test-wasm": "cd renderer && wasm-pack test --chrome --headless",
     "publish-worker-jd": "CLOUDFLARE_ACCOUNT_ID=2a265bc62fc09e9ed1c43226f7a3de57 wrangler publish",
