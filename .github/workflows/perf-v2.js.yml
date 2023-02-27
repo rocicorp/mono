@@ -39,33 +39,33 @@ jobs:
         shell: bash
         working-directory: packages/replicache
 
-      # # Run `github-action-benchmark` action
-      # - name: Store benchmark result
-      #   uses: rhysd/github-action-benchmark@v1
-      #   with:
-      #     # What benchmark tool the output.json came from
-      #     tool: 'customSmallerIsBetter'
-      #     # Where the output from the benchmark tool is stored
-      #     output-file-path: perf-v2-output.json
-      #     # Workflow will fail when an alert happens
-      #     fail-on-alert: true
-      #     github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
-      #     benchmark-data-dir-path: perf-v2
-      #     auto-push: true
-      #     alert-threshold: '130%'
-      #     comment-on-alert: true
+      # Run `github-action-benchmark` action
+      - name: Store benchmark result
+        uses: rhysd/github-action-benchmark@v1
+        with:
+          # What benchmark tool the output.json came from
+          tool: 'customSmallerIsBetter'
+          # Where the output from the benchmark tool is stored
+          output-file-path: packages/replicache/perf-v2-output.json
+          # Workflow will fail when an alert happens
+          fail-on-alert: true
+          github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+          benchmark-data-dir-path: perf-v2
+          auto-push: false
+          alert-threshold: '130%'
+          comment-on-alert: true
 
-      # - name: Store benchmark result p95
-      #   uses: rhysd/github-action-benchmark@v1
-      #   with:
-      #     # What benchmark tool the output.json came from
-      #     tool: 'customSmallerIsBetter'
-      #     # Where the output from the benchmark tool is stored
-      #     output-file-path: perf-v2-p95-output.json
-      #     # Workflow will fail when an alert happens
-      #     fail-on-alert: false
-      #     github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
-      #     benchmark-data-dir-path: perf-v2/p95
-      #     auto-push: true
-      #     alert-threshold: '1000%'
-      #     comment-on-alert: false
+      - name: Store benchmark result p95
+        uses: rhysd/github-action-benchmark@v1
+        with:
+          # What benchmark tool the output.json came from
+          tool: 'customSmallerIsBetter'
+          # Where the output from the benchmark tool is stored
+          output-file-path: packages/replicache/perf-v2-p95-output.json
+          # Workflow will NOT fail when an alert happens
+          fail-on-alert: false
+          github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+          benchmark-data-dir-path: perf-v2/p95
+          auto-push: false
+          alert-threshold: '1000%'
+          comment-on-alert: false
