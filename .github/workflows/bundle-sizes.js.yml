@@ -1,8 +1,10 @@
-name: Bundle Sizes
+name: Replicache Bundle Size
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'packages/replicache/**'
 
 jobs:
   benchmark:
@@ -12,24 +14,19 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          node-version: 16.x
+          node-version: 18.x
       - name: configure npm auth token
         run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
-      - name: npm install
-        run: npm install
-      - run: npm run build-bundle-sizes
-      - run: brotli ./out/*
+      - run: npm ci
+      - run: npm run --workspace=replicache build-bundle-sizes
+      - run: brotli packages/replicache/out/*
 
       # Builds bundles then measures bundles sizes and stores them to a file
       - name: Measure bundles
         run: node perf/bundle-sizes --bundles replicache.js replicache.js.br replicache.mjs replicache.mjs.br replicache.min.mjs replicache.min.mjs.br | tee bundle-sizes.json
-
-      # install above may have modified package-lock, in which case
-      # rhysd/github-action-benchmark@v1 will error when trying to switch
-      # branches to commit the new data to the gh-pages branch
-      - run: git restore package-lock.json
+        working-directory: packages/replicache
 
       # Run `github-action-benchmark` action
       - name: Store bundle size
@@ -37,7 +34,7 @@ jobs:
         with:
           name: 'Bundle Sizes'
           tool: 'customSmallerIsBetter'
-          output-file-path: bundle-sizes.json
+          output-file-path: packages/replicache/bundle-sizes.json
           fail-on-alert: true
           github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
           benchmark-data-dir-path: bundle-sizes
