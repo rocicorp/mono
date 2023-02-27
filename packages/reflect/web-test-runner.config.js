@@ -1,4 +1,7 @@
 // @ts-check
+
+/* eslint-env node, es2020 */
+
 import {esbuildPlugin} from '@web/dev-server-esbuild';
 import {playwrightLauncher} from '@web/test-runner-playwright';
 
