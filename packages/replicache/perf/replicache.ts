@@ -199,6 +199,7 @@ export function benchmarkRefresh(opts: {
       const initialScanResolver = resolver<void>();
       const cancel = repA.subscribe(
         async tx => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           for await (const _ of tx.scan({prefix: 'key'})) {
             return true;
           }
