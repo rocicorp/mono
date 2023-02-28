@@ -13,12 +13,13 @@
     "build": "next build",
     "lint": "next lint",
     "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
-    "check-types-fe": "tsc -p tsconfig.json --noEmit && tsc -p demo/worker/tsconfig.json --noEmit",
+    "check-types-js": "tsc -p tsconfig.json --noEmit && tsc -p demo/worker/tsconfig.json --noEmit",
     "check-types": "npm run build-wasm && npm run check-types-fe",
     "test": "mocha",
     "test-wasm": "cd renderer && wasm-pack test --chrome --headless",
     "publish-worker-jd": "CLOUDFLARE_ACCOUNT_ID=2a265bc62fc09e9ed1c43226f7a3de57 wrangler publish",
-    "publish-worker": "CLOUDFLARE_ACCOUNT_ID=085f6d8eb08e5b23debfb08b21bda1eb wrangler publish"
+    "publish-worker": "CLOUDFLARE_ACCOUNT_ID=085f6d8eb08e5b23debfb08b21bda1eb wrangler publish",
+    "prepare": "husky install"
   },
   "dependencies": {
     "@rocicorp/logger": "^2.2.0",
@@ -47,6 +48,7 @@
     "buffer": "^5.7.1",
     "eslint": "8.32.0",
     "eslint-config-next": "13.1.5",
+    "husky": "^8.0.3",
     "mocha": "^10.1.0",
     "next": "13.1.5",
     "path-browserify": "^1.0.1",
