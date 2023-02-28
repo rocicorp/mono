@@ -21,7 +21,6 @@ import {httpStatusUnauthorized, UpdateNeededReason} from './replicache.js';
 import type {Puller} from './puller.js';
 import {getDefaultPuller} from './get-default-puller.js';
 import {resolver} from '@rocicorp/resolver';
-import {enablePullAndPushInOpenSymbol} from './replicache-options.js';
 
 initReplicacheTesting();
 
@@ -48,7 +47,7 @@ test('pull', async () => {
       },
     },
     ...disableAllBackgroundProcesses,
-    [enablePullAndPushInOpenSymbol]: false,
+    enablePullAndPushInOpen: false,
   });
 
   let createCount = 0;
@@ -154,7 +153,7 @@ test('reauth pull', async () => {
     pullURL,
     auth: 'wrong',
     ...disableAllBackgroundProcesses,
-    [enablePullAndPushInOpenSymbol]: false,
+    enablePullAndPushInOpen: false,
   });
 
   fetchMock.post(pullURL, {body: 'xxx', status: httpStatusUnauthorized});
@@ -288,7 +287,7 @@ test('Client Group not found on server', async () => {
 
   const rep = await replicacheForTesting('client-group-not-found-pull', {
     ...disableAllBackgroundProcesses,
-    [enablePullAndPushInOpenSymbol]: false,
+    enablePullAndPushInOpen: false,
   });
 
   // eslint-disable-next-line require-await

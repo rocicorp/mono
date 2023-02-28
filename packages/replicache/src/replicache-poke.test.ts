@@ -10,7 +10,6 @@ import {
 } from './test-util.js';
 import type {WriteTransaction} from './transactions.js';
 import * as sinon from 'sinon';
-import {enablePullAndPushInOpenSymbol} from './replicache-options.js';
 
 initReplicacheTesting();
 
@@ -90,7 +89,7 @@ test('overlapped pokes not supported', async () => {
       addData,
     },
     ...disableAllBackgroundProcesses,
-    [enablePullAndPushInOpenSymbol]: false,
+    enablePullAndPushInOpen: false,
   });
 
   const clientID = await rep.clientID;

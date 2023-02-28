@@ -28,7 +28,6 @@ import {IDBNotFoundError} from './kv/idb-store.js';
 import type {WriteTransaction} from './transactions.js';
 import type {MutatorDefs} from './replicache.js';
 import {sleep} from './sleep.js';
-import {enablePullAndPushInOpenSymbol} from './replicache-options.js';
 import {withRead, withWrite} from './with-transactions.js';
 
 initReplicacheTesting();
@@ -201,7 +200,7 @@ suite('onClientStateNotFound', () => {
         ...disableAllBackgroundProcesses,
         // To ensure query has to go to perdag, prevent pull from happening and
         // populating the lazy store cache.
-        [enablePullAndPushInOpenSymbol]: false,
+        enablePullAndPushInOpen: false,
       },
       // Use same idb and client group as above rep.
       {useUniqueName: false},
@@ -263,7 +262,7 @@ suite('onClientStateNotFound', () => {
         ...disableAllBackgroundProcesses,
         // To ensure mutate has to go to perdag, prevent pull from happening and
         // populating the lazy store cache.
-        [enablePullAndPushInOpenSymbol]: false,
+        enablePullAndPushInOpen: false,
       },
       // Use same idb and client group as above rep.
       {useUniqueName: false},

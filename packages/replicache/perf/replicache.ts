@@ -122,7 +122,7 @@ export function benchmarkRefreshSimple(opts: {
       await setupPersistedData(repName, opts.numKeys, indexes);
 
       const initialScanResolver = resolver<void>();
-      rep.subscribe(async tx => (await tx.get('key0')) ?? {}, {
+      const cancel = rep.subscribe(async tx => (await tx.get('key0')) ?? {}, {
         onData: r => {
           if (r) {
             initialScanResolver.resolve();
@@ -130,6 +130,7 @@ export function benchmarkRefreshSimple(opts: {
         },
       });
       await initialScanResolver.promise;
+      cancel();
       bencher.reset();
       await rep.refresh();
       bencher.stop();
@@ -196,14 +197,24 @@ export function benchmarkRefresh(opts: {
       await putMapMutations(repA, opts.numMutationsRebased);
 
       const initialScanResolver = resolver<void>();
-      repA.subscribe(async tx => await tx.scan({prefix: 'key'}).toArray(), {
-        onData: r => {
-          if (r) {
-            initialScanResolver.resolve();
+      const cancel = repA.subscribe(
+        async tx => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          for await (const _ of tx.scan({prefix: 'key'})) {
+            return true;
           }
+          return false;
         },
-      });
+        {
+          onData: r => {
+            if (r) {
+              initialScanResolver.resolve();
+            }
+          },
+        },
+      );
       await initialScanResolver.promise;
+      cancel();
 
       bencher.reset();
       await repA.refresh();

@@ -1,12 +1,9 @@
 import {expect} from '@esm-bundle/chai';
 import {MutatorDefs, Replicache, BeginPullResult} from './replicache.js';
-import {
+import type {
   ReplicacheOptions,
   ReplicacheInternalOptions,
   ReplicacheInternalAPI,
-  enableMutationRecoverySymbol,
-  enableScheduledRefreshSymbol,
-  enableScheduledPersistSymbol,
 } from './replicache-options.js';
 import * as kv from './kv/mod.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
@@ -368,7 +365,7 @@ export function waitForSync(rep: {
 
 export const disableAllBackgroundProcesses = {
   enableLicensing: false,
-  [enableMutationRecoverySymbol]: false,
-  [enableScheduledRefreshSymbol]: false,
-  [enableScheduledPersistSymbol]: false,
+  enableMutationRecovery: false,
+  enableScheduledRefresh: false,
+  enableScheduledPersist: false,
 };
