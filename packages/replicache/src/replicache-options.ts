@@ -221,11 +221,6 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
   readonly indexes?: IndexDefinitions | undefined;
 }
 
-export const enablePullAndPushInOpenSymbol = Symbol();
-export const enableMutationRecoverySymbol = Symbol();
-export const enableScheduledPersistSymbol = Symbol();
-export const enableScheduledRefreshSymbol = Symbol();
-
 export type ReplicacheInternalOptions = {
   /**
    * Defaults to true.
@@ -236,22 +231,22 @@ export type ReplicacheInternalOptions = {
   /**
    * Defaults to true.
    */
-  [enableMutationRecoverySymbol]?: boolean | undefined;
+  enableMutationRecovery?: boolean | undefined;
 
   /**
    * Defaults to true.
    */
-  [enableScheduledPersistSymbol]?: boolean | undefined;
+  enableScheduledPersist?: boolean | undefined;
 
   /**
    * Defaults to true.
    */
-  [enableScheduledRefreshSymbol]?: boolean | undefined;
+  enableScheduledRefresh?: boolean | undefined;
 
   /**
    * Defaults to true.
    */
-  [enablePullAndPushInOpenSymbol]?: boolean | undefined;
+  enablePullAndPushInOpen?: boolean | undefined;
 
   /**
    * Allows exposing parts of the internal API to a subclass. This works when

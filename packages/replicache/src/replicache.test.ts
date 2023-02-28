@@ -42,10 +42,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {
-  enablePullAndPushInOpenSymbol,
-  ReplicacheOptions,
-} from './replicache-options.js';
+import type {ReplicacheOptions} from './replicache-options.js';
 import {deleteClientForTesting} from './persist/clients-test-helpers.js';
 import type {LogLevel} from '@rocicorp/logger';
 import {
@@ -1110,7 +1107,7 @@ test('onSync', async () => {
     pushURL,
     pushDelay: 5,
     mutators: {addData},
-    [enablePullAndPushInOpenSymbol]: false,
+    enablePullAndPushInOpen: false,
   });
   const add = rep.mutate.addData;
 
@@ -1244,7 +1241,7 @@ test('push and pull concurrently', async () => {
     pushURL,
     pushDelay: 10,
     mutators: {addData},
-    [enablePullAndPushInOpenSymbol]: false,
+    enablePullAndPushInOpen: false,
   });
 
   const beginPullSpy = sinon.spy(rep, 'beginPull');
@@ -1494,7 +1491,7 @@ test('pull mutate options', async () => {
     pullURL,
     pushURL: '',
     ...disableAllBackgroundProcesses,
-    [enablePullAndPushInOpenSymbol]: false,
+    enablePullAndPushInOpen: false,
   });
   const clientID = await rep.clientID;
   const log: number[] = [];

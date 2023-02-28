@@ -9,11 +9,7 @@ import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
 import {ReadTransactionImpl, WriteTransactionImpl} from './transactions.js';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
-import {
-  enableMutationRecoverySymbol,
-  enablePullAndPushInOpenSymbol,
-  enableScheduledPersistSymbol,
-  enableScheduledRefreshSymbol,
+import type {
   ReplicacheInternalOptions,
   ReplicacheOptions,
 } from './replicache-options.js';
@@ -441,14 +437,14 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     const internalOptions = options as unknown as ReplicacheInternalOptions;
     const enableMutationRecovery =
-      internalOptions[enableMutationRecoverySymbol] ?? true;
+      internalOptions.enableMutationRecovery ?? true;
     this._enableLicensing = internalOptions.enableLicensing ?? true;
     this._enableScheduledPersist =
-      internalOptions[enableScheduledPersistSymbol] ?? true;
+      internalOptions.enableScheduledPersist ?? true;
     this._enableScheduledRefresh =
-      internalOptions[enableScheduledRefreshSymbol] ?? true;
+      internalOptions.enableScheduledRefresh ?? true;
     this._enablePullAndPushInOpen =
-      internalOptions[enablePullAndPushInOpenSymbol] ?? true;
+      internalOptions.enablePullAndPushInOpen ?? true;
 
     if (internalOptions.exposeInternalAPI) {
       internalOptions.exposeInternalAPI({

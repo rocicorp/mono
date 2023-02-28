@@ -22,7 +22,6 @@ import type {IndexKey} from './db/index.js';
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
 import {resolver} from '@rocicorp/resolver';
-import {enablePullAndPushInOpenSymbol} from './replicache-options.js';
 import type {PatchOperation} from './patch-operation.js';
 
 initReplicacheTesting();
@@ -823,7 +822,7 @@ test('subscription coalescing', async () => {
   const rep = await replicacheForTesting('subscription-coalescing', {
     mutators: {addData},
     ...disableAllBackgroundProcesses,
-    [enablePullAndPushInOpenSymbol]: false,
+    enablePullAndPushInOpen: false,
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
