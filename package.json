@@ -10,6 +10,7 @@
     "dev-worker-rc": "CLOUDFLARE_ACCOUNT_ID=085f6d8eb08e5b23debfb08b21bda1eb npm run dev-worker",
     "build-wasm": "cd renderer && rm -rf pkg && wasm-pack build --target web && rm pkg/.gitignore",
     "build-wasm-debug": "cd renderer && rm -rf pkg && wasm-pack build --target web --debug && rm pkg/.gitignore",
+    "nuke-it-from-orbit": "rm -rf node_modules package-lock.json .wrangler .next .vercel; npm i",
     "build": "next build",
     "lint": "next lint",
     "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
