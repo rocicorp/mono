@@ -38,7 +38,7 @@ test('processPending', async () => {
     expectedError?: string;
     expectedClients: ClientMap;
     expectedVersion: Version;
-    expectedPokes?: Map<Mocket, PokeBody[]>;
+    expectedPokes?: Map<Mocket, PokeBody>;
     expectedUserValues?: Map<string, UserValue>;
     expectedClientRecords?: ClientRecordMap;
   };
@@ -73,22 +73,24 @@ test('processPending', async () => {
       expectedPokes: new Map([
         [
           s1,
-          [
-            {
-              baseCookie: 1,
-              cookie: 2,
-              lastMutationIDChanges: {c1: 2},
-              patch: [
-                {
-                  op: 'put',
-                  key: 'count',
-                  value: 1,
-                },
-              ],
-              timestamp: 100,
-              requestID: '4fxcm49g2j9',
-            },
-          ],
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                lastMutationIDChanges: {c1: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 100,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
         ],
       ]),
       expectedUserValues: new Map([
@@ -124,73 +126,157 @@ test('processPending', async () => {
         client('c2', 'u2', 'cg1', s2, 0),
         client('c3', 'u3', 'cg2', s3, 0),
       ]),
-      expectedVersion: 2,
-      expectedPokes: new Map([
+      expectedVersion: 4,
+      expectedPokes: new Map<Mocket, PokeBody>([
         [
           s1,
-          [
-            {
-              baseCookie: 1,
-              cookie: 2,
-              lastMutationIDChanges: {c1: 2, c2: 2},
-              patch: [
-                {
-                  op: 'put',
-                  key: 'count',
-                  value: 3,
-                },
-              ],
-              timestamp: 100,
-              requestID: '4fxcm49g2j9',
-            },
-          ],
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                lastMutationIDChanges: {c1: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 100,
+              },
+              {
+                baseCookie: 2,
+                cookie: 3,
+                lastMutationIDChanges: {c2: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 2,
+                  },
+                ],
+                timestamp: 120,
+              },
+              {
+                baseCookie: 3,
+                cookie: 4,
+                lastMutationIDChanges: {},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 3,
+                  },
+                ],
+                timestamp: 140,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
         ],
         [
           s2,
-          [
-            {
-              baseCookie: 1,
-              cookie: 2,
-              lastMutationIDChanges: {c1: 2, c2: 2},
-              patch: [
-                {
-                  op: 'put',
-                  key: 'count',
-                  value: 3,
-                },
-              ],
-              timestamp: 100,
-              requestID: '4fxcm49g2j9',
-            },
-          ],
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                lastMutationIDChanges: {c1: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 100,
+              },
+              {
+                baseCookie: 2,
+                cookie: 3,
+                lastMutationIDChanges: {c2: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 2,
+                  },
+                ],
+                timestamp: 120,
+              },
+              {
+                baseCookie: 3,
+                cookie: 4,
+                lastMutationIDChanges: {},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 3,
+                  },
+                ],
+                timestamp: 140,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
         ],
         [
           s3,
-          [
-            {
-              baseCookie: 1,
-              cookie: 2,
-              lastMutationIDChanges: {c3: 2},
-              patch: [
-                {
-                  op: 'put',
-                  key: 'count',
-                  value: 3,
-                },
-              ],
-              timestamp: 100,
-              requestID: '4fxcm49g2j9',
-            },
-          ],
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                lastMutationIDChanges: {},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 100,
+              },
+              {
+                baseCookie: 2,
+                cookie: 3,
+                lastMutationIDChanges: {},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 2,
+                  },
+                ],
+                timestamp: 120,
+              },
+              {
+                baseCookie: 3,
+                cookie: 4,
+                lastMutationIDChanges: {c3: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 3,
+                  },
+                ],
+                timestamp: 140,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
         ],
       ]),
       expectedUserValues: new Map([
-        ['count', {value: 3, version: 2, deleted: false}],
+        ['count', {value: 3, version: 4, deleted: false}],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 2, 2, 2)],
-        ['c2', clientRecord('cg1', 2, 2, 2)],
-        ['c3', clientRecord('cg2', 2, 2, 2)],
+        ['c1', clientRecord('cg1', 4, 2, 2)],
+        ['c2', clientRecord('cg1', 4, 2, 3)],
+        ['c3', clientRecord('cg2', 4, 2, 4)],
       ]),
     },
   ];
@@ -243,10 +329,11 @@ test('processPending', async () => {
 
     expect(c.expectedError).toBeUndefined;
     expect(await getVersion(storage)).toEqual(c.expectedVersion);
-    for (const [mocket, clientPokes] of c.expectedPokes ?? []) {
-      expect(mocket.log).toEqual(
-        clientPokes.map(poke => ['send', JSON.stringify(['poke', poke])]),
-      );
+    for (const [mocket, clientPoke] of c.expectedPokes ?? []) {
+      expect(mocket.log[0]).toEqual([
+        'send',
+        JSON.stringify(['poke', clientPoke]),
+      ]);
     }
     for (const [expKey, expValue] of c.expectedUserValues ?? new Map()) {
       expect(await getUserValue(expKey, storage)).toEqual(expValue);

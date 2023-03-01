@@ -1,6 +1,6 @@
 import {test, expect} from '@jest/globals';
 import {DurableStorage} from '../storage/durable-storage.js';
-import type {ClientPokeBody} from '../types/client-poke-body.js';
+import type {ClientPoke} from '../types/client-poke.js';
 import {ClientRecordMap, putClientRecord} from '../types/client-record.js';
 import type {ClientID} from '../types/client-state.js';
 import {putUserValue, UserValue} from '../types/user-value.js';
@@ -20,7 +20,7 @@ test('fastForward', async () => {
     clients: ClientID[];
     timestamp: number;
     expectedError?: string;
-    expectedPokes?: ClientPokeBody[];
+    expectedPokes?: ClientPoke[];
   };
 
   const CURRENT_VERSION_FOR_TEST = 42;
@@ -69,7 +69,6 @@ test('fastForward', async () => {
             lastMutationIDChanges: {c1: 1},
             patch: [],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],
@@ -136,7 +135,6 @@ test('fastForward', async () => {
               },
             ],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],
@@ -191,7 +189,6 @@ test('fastForward', async () => {
               },
             ],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
         {
@@ -207,7 +204,6 @@ test('fastForward', async () => {
               },
             ],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],
@@ -262,7 +258,6 @@ test('fastForward', async () => {
               },
             ],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],
@@ -328,7 +323,6 @@ test('fastForward', async () => {
             lastMutationIDChanges: {c1: 2, c2: 3, c3: 4},
             patch: [],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
         {
@@ -339,7 +333,6 @@ test('fastForward', async () => {
             lastMutationIDChanges: {c1: 2, c2: 3, c3: 4},
             patch: [],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
         {
@@ -350,7 +343,6 @@ test('fastForward', async () => {
             lastMutationIDChanges: {c1: 2},
             patch: [],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
         {
@@ -361,7 +353,6 @@ test('fastForward', async () => {
             lastMutationIDChanges: {c4: 5, c5: 6},
             patch: [],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
         {
@@ -372,7 +363,6 @@ test('fastForward', async () => {
             lastMutationIDChanges: {},
             patch: [],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],
@@ -445,7 +435,6 @@ test('fastForward', async () => {
               },
             ],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
         {
@@ -461,7 +450,6 @@ test('fastForward', async () => {
               },
             ],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
         {
@@ -482,7 +470,6 @@ test('fastForward', async () => {
               },
             ],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
         {
@@ -498,7 +485,6 @@ test('fastForward', async () => {
               },
             ],
             timestamp: 1,
-            requestID: '4fxcm49g2j9',
           },
         },
       ],

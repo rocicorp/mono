@@ -1,15 +1,15 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Mutation, PokeBody} from 'reflect-protocol';
+import type {Mutation, Poke} from 'reflect-protocol';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {unwrapPatch} from '../storage/replicache-transaction.js';
 import type {Storage} from '../storage/storage.js';
-import type {ClientPokeBody} from '../types/client-poke-body.js';
+import type {ClientPoke} from '../types/client-poke.js';
 import {getClientRecord, putClientRecord} from '../types/client-record.js';
-import type {ClientGroupID, ClientID} from '../types/client-state.js';
+import type {ClientID} from '../types/client-state.js';
 import {getVersion} from '../types/version.js';
+import {assert} from '../util/asserts.js';
 import {must} from '../util/must.js';
-import {randomID} from '../util/rand.js';
 import {processDisconnects} from './process-disconnects.js';
 import {MutatorMap, processMutation} from './process-mutation.js';
 
@@ -24,84 +24,99 @@ export async function processFrame(
   disconnectHandler: DisconnectHandler,
   clients: ClientID[],
   storage: Storage,
-  timestamp: number,
-): Promise<ClientPokeBody[]> {
+): Promise<ClientPoke[]> {
   lc.debug?.('processing frame - clients', clients);
 
   const cache = new EntryCache(storage);
-  const prevVersion = must(await getVersion(cache));
-  const nextVersion = (prevVersion ?? 0) + 1;
+  const startVersion = must(await getVersion(cache));
+  let prevVersion = startVersion;
+  let nextVersion = (prevVersion ?? 0) + 1;
 
   lc.debug?.('prevVersion', prevVersion, 'nextVersion', nextVersion);
-
-  const lastMutationIDChangesByClientGroupID: Map<
-    ClientGroupID,
-    Record<ClientID, number>
-  > = new Map();
   let count = 0;
+  const clientPokes: ClientPoke[] = [];
   for (const mutation of mutations) {
     count++;
+    const mutationCache = new EntryCache(cache);
     const newLastMutationID = await processMutation(
       lc,
       mutation,
       mutators,
-      cache,
+      mutationCache,
       nextVersion,
     );
-    if (newLastMutationID !== undefined) {
-      const {clientID} = mutation;
-      const clientRecord = must(
-        await getClientRecord(clientID, cache),
-        `Client record not found: ${clientID}`,
-      );
-      const {clientGroupID} = clientRecord;
-      let changes = lastMutationIDChangesByClientGroupID.get(clientGroupID);
-      if (changes === undefined) {
-        changes = {};
-        lastMutationIDChangesByClientGroupID.set(clientGroupID, changes);
+    const version = must(await getVersion(mutationCache));
+    assert(
+      (version !== prevVersion) === (newLastMutationID !== undefined),
+      'version should be updated iff the mutation was applied',
+    );
+    if (version !== prevVersion && newLastMutationID !== undefined) {
+      const patch = unwrapPatch(mutationCache.pending());
+      await mutationCache.flush();
+      const mutationClientID = mutation.clientID;
+      const mutationClientGroupID = must(
+        await getClientRecord(mutationClientID, cache),
+      ).clientGroupID;
+      for (const clientID of clients) {
+        const clientRecord = must(await getClientRecord(clientID, cache));
+        clientRecord.baseCookie = nextVersion;
+        await putClientRecord(clientID, clientRecord, cache);
+        const clientPoke: ClientPoke = {
+          clientID,
+          poke: {
+            baseCookie: prevVersion,
+            cookie: nextVersion,
+            lastMutationIDChanges:
+              clientRecord.clientGroupID === mutationClientGroupID
+                ? {[mutationClientID]: newLastMutationID}
+                : {},
+            patch,
+            timestamp: mutation.timestamp,
+          },
+        };
+        clientPokes.push(clientPoke);
       }
-      changes[clientID] = newLastMutationID;
+      prevVersion = nextVersion;
+      nextVersion = prevVersion + 1;
     }
   }
 
   lc.debug?.(`processed ${count} mutations`);
 
-  await processDisconnects(lc, disconnectHandler, clients, cache, nextVersion);
-
-  // If version has not changed, then there should not be any patch or pokes to
-  // send. But processDisconnects still makes other changes to cache that need
-  // to be flushed.
-  if (must(await getVersion(cache)) === prevVersion) {
-    await cache.flush();
-    return [];
+  const disconnectsCache = new EntryCache(cache);
+  await processDisconnects(
+    lc,
+    disconnectHandler,
+    clients,
+    disconnectsCache,
+    nextVersion,
+  );
+  if (must(await getVersion(disconnectsCache)) !== prevVersion) {
+    const patch = unwrapPatch(disconnectsCache.pending());
+    for (const clientID of clients) {
+      const clientRecord = must(
+        await getClientRecord(clientID, cache),
+        `Client record not found: ${clientID}`,
+      );
+      clientRecord.baseCookie = nextVersion;
+      await putClientRecord(clientID, clientRecord, cache);
+      const poke: Poke = {
+        baseCookie: prevVersion,
+        cookie: nextVersion,
+        lastMutationIDChanges: {},
+        patch,
+        timestamp: undefined,
+      };
+      const clientPoke: ClientPoke = {
+        clientID,
+        poke,
+      };
+      clientPokes.push(clientPoke);
+    }
   }
 
-  const ret: ClientPokeBody[] = [];
-  const patch = unwrapPatch(cache.pending());
-  for (const clientID of clients) {
-    const clientRecord = must(
-      await getClientRecord(clientID, cache),
-      `Client record not found: ${clientID}`,
-    );
-    clientRecord.baseCookie = nextVersion;
-    await putClientRecord(clientID, clientRecord, cache);
-    const {clientGroupID} = clientRecord;
-    const pokeBody: PokeBody = {
-      baseCookie: prevVersion,
-      cookie: nextVersion,
-      lastMutationIDChanges:
-        lastMutationIDChangesByClientGroupID.get(clientGroupID) ?? {},
-      patch,
-      timestamp,
-      requestID: randomID(),
-    };
-    const poke: ClientPokeBody = {
-      clientID,
-      poke: pokeBody,
-    };
-    ret.push(poke);
-  }
-  lc.debug?.('built poke bodies', ret.length);
+  lc.debug?.('built pokes', clientPokes.length);
+  await disconnectsCache.flush();
   await cache.flush();
-  return ret;
+  return clientPokes;
 }

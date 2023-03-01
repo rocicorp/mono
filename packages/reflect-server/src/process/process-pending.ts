@@ -1,9 +1,6 @@
-// Processes all pending mutations from [[clients]] that are ready to be
-// processed in one or more frames, up to [[endTime]] and sends necessary
-
-import type {ClientMap} from '../types/client-state.js';
-import type {PokeMessage} from 'reflect-protocol';
-import type {ClientPokeBody} from '../types/client-poke-body.js';
+import type {ClientID, ClientMap} from '../types/client-state.js';
+import type {Poke, PokeMessage} from 'reflect-protocol';
+import type {ClientPoke} from '../types/client-poke.js';
 import type {LogContext} from '@rocicorp/logger';
 import {must} from '../util/must.js';
 import type {MutatorMap} from './process-mutation.js';
@@ -12,6 +9,7 @@ import type {DisconnectHandler} from '../server/disconnect.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {send} from '../util/socket.js';
 import type {PendingMutationMap} from '../types/mutation.js';
+import {randomID} from '../util/rand.js';
 
 /**
  * Processes all mutations in all rooms for a time range, and send relevant pokes.
@@ -50,13 +48,28 @@ export async function processPending(
 
 function sendPokes(
   lc: LogContext,
-  pokes: ClientPokeBody[],
+  clientPokes: ClientPoke[],
   clients: ClientMap,
 ) {
-  for (const pokeBody of pokes) {
-    const client = must(clients.get(pokeBody.clientID));
-    const poke: PokeMessage = ['poke', pokeBody.poke];
-    lc.debug?.('sending client', pokeBody.clientID, 'poke', pokeBody.poke);
-    send(client.socket, poke);
+  const pokesByClientID = new Map<ClientID, Poke[]>();
+  for (const clientPoke of clientPokes) {
+    let pokes = pokesByClientID.get(clientPoke.clientID);
+    if (!pokes) {
+      pokes = [];
+      pokesByClientID.set(clientPoke.clientID, pokes);
+    }
+    pokes.push(clientPoke.poke);
+  }
+  for (const [clientID, pokes] of pokesByClientID) {
+    const client = must(clients.get(clientID));
+    const pokeMessage: PokeMessage = [
+      'poke',
+      {
+        pokes,
+        requestID: randomID(),
+      },
+    ];
+    lc.debug?.('sending client', clientID, 'poke', pokeMessage);
+    send(client.socket, pokeMessage);
   }
 }

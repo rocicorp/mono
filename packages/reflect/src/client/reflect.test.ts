@@ -21,6 +21,7 @@ import {
   createSocket,
   HIDDEN_INTERVAL_MS,
   MAX_RUN_LOOP_INTERVAL_MS,
+  mergePokes,
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
@@ -662,11 +663,15 @@ test('poke log context includes requestID', async () => {
   log.length = 0;
 
   await reflect.triggerPoke({
-    baseCookie: null,
-    cookie: 1,
-    lastMutationIDChanges: {c1: 1},
-    patch: [],
-    timestamp: 123456,
+    pokes: [
+      {
+        baseCookie: null,
+        cookie: 1,
+        lastMutationIDChanges: {c1: 1},
+        patch: [],
+        timestamp: 123456,
+      },
+    ],
     requestID: 'test-request-id-poke',
   });
 
@@ -1130,4 +1135,71 @@ test('Disconnect on hide', async () => {
   expect(r.connectionState).to.equal(ConnectionState.Connected);
 
   await r.close();
+});
+
+test('Merge pokes', () => {
+  const merged = mergePokes([
+    {
+      baseCookie: 1,
+      cookie: 2,
+      lastMutationIDChanges: {c1: 2},
+      patch: [
+        {
+          op: 'put',
+          key: 'count',
+          value: 1,
+        },
+      ],
+      timestamp: 100,
+    },
+    {
+      baseCookie: 2,
+      cookie: 3,
+      lastMutationIDChanges: {c2: 2},
+      patch: [
+        {
+          op: 'put',
+          key: 'count',
+          value: 2,
+        },
+      ],
+      timestamp: 120,
+    },
+    {
+      baseCookie: 3,
+      cookie: 4,
+      lastMutationIDChanges: {c1: 3, c3: 1},
+      patch: [
+        {
+          op: 'put',
+          key: 'count',
+          value: 3,
+        },
+      ],
+      timestamp: 140,
+    },
+  ]);
+  expect(merged).to.deep.equal({
+    baseCookie: 1,
+    cookie: 4,
+    lastMutationIDChanges: {c1: 3, c2: 2, c3: 1},
+    patch: [
+      {
+        op: 'put',
+        key: 'count',
+        value: 1,
+      },
+      {
+        op: 'put',
+        key: 'count',
+        value: 2,
+      },
+      {
+        op: 'put',
+        key: 'count',
+        value: 3,
+      },
+    ],
+    timestamp: 100,
+  });
 });
