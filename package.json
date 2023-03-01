@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev-next": "./keepalive.sh NODE_ENV=development vercel dev",
+    "dev-next": "./keepalive.sh NODE_ENV=development next dev",
     "dev-worker": "./keepalive.sh wrangler dev --local --persist",
     "dev-worker-jd": "CLOUDFLARE_ACCOUNT_ID=2a265bc62fc09e9ed1c43226f7a3de57 npm run dev-worker",
     "dev-worker-rc": "CLOUDFLARE_ACCOUNT_ID=085f6d8eb08e5b23debfb08b21bda1eb npm run dev-worker",
