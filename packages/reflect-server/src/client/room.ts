@@ -29,7 +29,6 @@ export async function createRoom(
   if (!resp.ok) {
     throw new Error(`Failed to create room: ${resp.status} ${resp.statusText}`);
   }
-  return Promise.resolve(void 0);
 }
 
 export async function closeRoom(
@@ -43,7 +42,6 @@ export async function closeRoom(
   if (!resp.ok) {
     throw new Error(`Failed to close room: ${resp.status} ${resp.statusText}`);
   }
-  return Promise.resolve(void 0);
 }
 
 export async function deleteRoom(
@@ -57,7 +55,6 @@ export async function deleteRoom(
   if (!resp.ok) {
     throw new Error(`Failed to delete room: ${resp.status} ${resp.statusText}`);
   }
-  return Promise.resolve(void 0);
 }
 
 /**
