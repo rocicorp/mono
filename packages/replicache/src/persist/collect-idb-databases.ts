@@ -5,7 +5,7 @@ import {dropStore} from '../kv/idb-util.js';
 import {IDBDatabasesStore} from './idb-databases-store.js';
 import type {IndexedDBDatabase} from './idb-databases-store.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
-import type {LogContext} from '@rocicorp/logger';
+import {LogContext} from '@rocicorp/logger';
 import {
   REPLICACHE_FORMAT_VERSION,
   REPLICACHE_FORMAT_VERSION_DD31,
@@ -194,7 +194,8 @@ function allClientsOlderThan(
  * and any errors encountered while dropping.
  */
 export async function deleteAllReplicacheData(
-  createKVStore: kv.CreateStore,
+  createKVStore: kv.CreateStore = name =>
+    kv.newIDBStoreWithMemFallback(new LogContext(), name),
 ): Promise<{
   dropped: string[];
   errors: unknown[];
