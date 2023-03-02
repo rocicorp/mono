@@ -45,6 +45,7 @@ import {sleep} from '../util/sleep.js';
 import {send} from '../util/socket.js';
 import {isAuthError, MessageError} from './connection-error.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
+import {mergePokes} from './merge-pokes.js';
 import {
   camelToSnake,
   DID_NOT_CONNECT_VALUE,
@@ -657,8 +658,11 @@ export class Reflect<MD extends MutatorDefs> {
     await this._pokeLock.withLock(async () => {
       lc = lc.addContext('requestID', pokeBody.requestID);
       lc.debug?.('Applying poke', pokeBody);
-
-      const {lastMutationIDChanges, baseCookie, patch, cookie} = pokeBody;
+      const mergedPokes = mergePokes(pokeBody.pokes);
+      if (!mergedPokes) {
+        return;
+      }
+      const {lastMutationIDChanges, baseCookie, patch, cookie} = mergedPokes;
       const lastMutationIDChangeForSelf =
         lastMutationIDChanges[await this.clientID];
       if (lastMutationIDChangeForSelf !== undefined) {

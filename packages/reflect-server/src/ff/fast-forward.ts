@@ -1,11 +1,10 @@
-import type {NullableVersion, Patch, PokeBody, Version} from 'reflect-protocol';
+import type {NullableVersion, Patch, Poke, Version} from 'reflect-protocol';
 import type {DurableStorage} from '../storage/durable-storage.js';
-import type {ClientPokeBody} from '../types/client-poke-body.js';
+import type {ClientPoke} from '../types/client-poke.js';
 import {listClientRecords} from '../types/client-record.js';
 import type {ClientGroupID, ClientID} from '../types/client-state.js';
 import {compareVersions} from '../types/version.js';
 import {must} from '../util/must.js';
-import {randomID} from '../util/rand.js';
 import {getPatch} from './get-patch.js';
 
 /**
@@ -21,7 +20,7 @@ export async function fastForwardRoom(
   currentVersion: Version,
   storage: DurableStorage,
   timestamp: number,
-): Promise<ClientPokeBody[]> {
+): Promise<ClientPoke[]> {
   const clientRecords = await listClientRecords(storage);
   // Get all of the distinct base cookies. Typically almost all active clients
   // of a room will have same base cookie. No need to recalculate over and over.
@@ -77,7 +76,7 @@ export async function fastForwardRoom(
     }
   }
 
-  const ret: ClientPokeBody[] = [];
+  const ret: ClientPoke[] = [];
   for (const clientID of clients) {
     const record = must(clientRecords.get(clientID));
     if (record.baseCookie === currentVersion) {
@@ -85,7 +84,7 @@ export async function fastForwardRoom(
     }
     const patch = must(distinctPatches.get(record.baseCookie));
     const {clientGroupID} = record;
-    const pokeBody: PokeBody = {
+    const poke: Poke = {
       baseCookie: record.baseCookie,
       cookie: currentVersion,
       lastMutationIDChanges:
@@ -94,13 +93,12 @@ export async function fastForwardRoom(
           ?.get(record.baseCookie) ?? {},
       patch,
       timestamp,
-      requestID: randomID(),
     };
-    const poke: ClientPokeBody = {
+    const clientPoke: ClientPoke = {
       clientID,
-      poke: pokeBody,
+      poke,
     };
-    ret.push(poke);
+    ret.push(clientPoke);
   }
 
   return ret;

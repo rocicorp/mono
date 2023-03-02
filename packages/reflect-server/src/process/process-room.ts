@@ -5,7 +5,7 @@ import type {DisconnectHandler} from '../server/disconnect.js';
 import {fastForwardRoom} from '../ff/fast-forward.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {EntryCache} from '../storage/entry-cache.js';
-import type {ClientPokeBody} from '../types/client-poke-body.js';
+import type {ClientPoke} from '../types/client-poke.js';
 import {getClientRecord, putClientRecord} from '../types/client-record.js';
 import type {ClientMap} from '../types/client-state.js';
 import {getVersion, putVersion} from '../types/version.js';
@@ -33,7 +33,7 @@ export async function processRoom(
   disconnectHandler: DisconnectHandler,
   storage: DurableStorage,
   timestamp: number,
-): Promise<ClientPokeBody[]> {
+): Promise<ClientPoke[]> {
   const cache = new EntryCache(storage);
   const clientIDs = [...clients.keys()];
   lc.debug?.(
@@ -52,26 +52,26 @@ export async function processRoom(
     await putVersion(currentVersion, cache);
   }
   lc.debug?.('currentVersion', currentVersion);
-  const pokes: ClientPokeBody[] = await fastForwardRoom(
+  const clientPokes: ClientPoke[] = await fastForwardRoom(
     clientIDs,
     currentVersion,
     storage,
     timestamp,
   );
-  lc.debug?.('pokes from fastforward', JSON.stringify(pokes));
+  lc.debug?.('pokes from fastforward', JSON.stringify(clientPokes));
 
-  for (const poke of pokes) {
+  for (const ffClientPoke of clientPokes) {
     const cr = must(
-      await getClientRecord(poke.clientID, cache),
-      `Client record not found: ${poke.clientID}`,
+      await getClientRecord(ffClientPoke.clientID, cache),
+      `Client record not found: ${ffClientPoke.clientID}`,
     );
-    cr.baseCookie = poke.poke.cookie;
-    await putClientRecord(poke.clientID, cr, cache);
+    cr.baseCookie = ffClientPoke.poke.cookie;
+    await putClientRecord(ffClientPoke.clientID, cr, cache);
   }
 
   const mergedMutations = generateMergedMutations(pendingMutations);
 
-  pokes.push(
+  clientPokes.push(
     ...(await processFrame(
       lc,
       mergedMutations,
@@ -79,10 +79,9 @@ export async function processRoom(
       disconnectHandler,
       clientIDs,
       cache,
-      timestamp,
     )),
   );
 
   await cache.flush();
-  return pokes;
+  return clientPokes;
 }
