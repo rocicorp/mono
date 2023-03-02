@@ -6,9 +6,7 @@ import type {
   ConnectedMessage,
   Downstream,
   JSONType,
-  Patch,
   PingMessage,
-  Poke,
   PokeMessage,
   PullRequestMessage,
   PullResponseBody,
@@ -47,6 +45,7 @@ import {sleep} from '../util/sleep.js';
 import {send} from '../util/socket.js';
 import {isAuthError, MessageError} from './connection-error.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
+import {mergePokes} from './merge-pokes.js';
 import {
   camelToSnake,
   DID_NOT_CONNECT_VALUE,
@@ -1173,27 +1172,4 @@ function getDocument(): Document | undefined {
  */
 function promiseRace(ps: Promise<unknown>[]): Promise<number> {
   return Promise.race(ps.map((p, i) => p.then(() => i)));
-}
-
-export function mergePokes(toMerge: Poke[]): Poke | undefined {
-  if (toMerge.length === 0) {
-    return undefined;
-  }
-  const mergedPatch: Patch = [];
-  const mergedLastMutationIDChanges: Record<string, number> = {};
-  for (const poke of toMerge) {
-    mergedPatch.push(...poke.patch);
-    for (const [clientID, lastMuationID] of Object.entries(
-      poke.lastMutationIDChanges,
-    )) {
-      mergedLastMutationIDChanges[clientID] = lastMuationID;
-    }
-  }
-  return {
-    baseCookie: toMerge[0].baseCookie,
-    cookie: toMerge[toMerge.length - 1].cookie,
-    lastMutationIDChanges: mergedLastMutationIDChanges,
-    patch: mergedPatch,
-    timestamp: toMerge[0].timestamp,
-  };
 }
