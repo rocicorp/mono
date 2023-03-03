@@ -349,7 +349,6 @@ export class BaseAuthDO implements DurableObject {
     const closeWithErrorLocal = (errorKind: ErrorKind, msg: string) =>
       createWSAndCloseWithError(lc, url, errorKind, msg, encodedAuth);
 
-    // TODO(arv): Consider incrementing the version number.
     const expectedVersion = 1;
     if (version !== expectedVersion) {
       lc.debug?.(
