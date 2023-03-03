@@ -924,7 +924,6 @@ function createConnectTestFixture(
           url.pathname === INTERNAL_CREATE_ROOM_PATH ||
           url.pathname === CREATE_ROOM_PATH
         ) {
-          console.log('XXX get', await request.json());
           return new Response();
         }
         expect(request.url).toEqual(testRequest.url);
