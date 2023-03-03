@@ -1,6 +1,7 @@
 import type {CreateRoomRequest} from 'reflect-protocol';
 import {createAuthAPIHeaders} from '../server/auth-api-headers.js';
 import {AUTH_ROUTES} from '../server/auth-do.js';
+import {CREATE_ROOM_PATH} from '../server/paths.js';
 import type {RoomStatus} from '../server/rooms.js';
 import {newAuthedPostRequest} from './authedpost.js';
 
@@ -126,7 +127,7 @@ export function newCreateRoomRequest(
   roomID: string,
   jurisdiction?: 'eu',
 ) {
-  const url = new URL('/createRoom', reflectServerURL);
+  const url = new URL(CREATE_ROOM_PATH, reflectServerURL);
   const req: CreateRoomRequest = {roomID, jurisdiction};
   return newAuthedPostRequest(url, authApiKey, req);
 }
