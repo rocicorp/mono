@@ -50,13 +50,15 @@ export async function processMutation(
       return;
     }
 
-    const tx = new ReplicacheTransaction(cache, clientID, version);
+    const txCache = new EntryCache(storage);
+    const tx = new ReplicacheTransaction(txCache, clientID, version);
     try {
       const mutator = mutators.get(mutation.name);
       if (!mutator) {
         lc.info?.('skipping unknown mutator', JSON.stringify(mutation));
       } else {
         await mutator(tx, mutation.args);
+        await txCache.flush();
       }
     } catch (e) {
       lc.info?.('skipping mutation because error', JSON.stringify(mutation), e);
