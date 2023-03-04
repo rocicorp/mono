@@ -63,7 +63,6 @@ export const enum ConnectionState {
 }
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
-export const MAX_RUN_LOOP_INTERVAL_MS = 60_000;
 
 export const enum CloseKind {
   AbruptClose = 'AbruptClose',
@@ -915,7 +914,7 @@ export class Reflect<MD extends MutatorDefs> {
         if (isAuthError(ex)) {
           if (!needsReauth) {
             needsReauth = true;
-            // First auth error, try right away without backoff.
+            // First auth error, try right away without waiting.
             continue;
           }
           needsReauth = true;
@@ -926,24 +925,21 @@ export class Reflect<MD extends MutatorDefs> {
 
       // Only authentication errors are retried immediately the first time they
       // occur. All other errors wait a few seconds before retrying the first
-      // time. Consecutive errors use a backoff.
+      // time. We specifically do not use a backoff for consecutive errors
+      // because it's a bad experience to wait many seconds for reconnection.
 
       if (errorCount > 0) {
         this.#setOnline(false);
 
-        const duration = Math.min(
-          MAX_RUN_LOOP_INTERVAL_MS,
-          2 ** (errorCount - 1) * RUN_LOOP_INTERVAL_MS,
-        );
         lc.debug?.(
           'Sleeping',
-          duration,
+          RUN_LOOP_INTERVAL_MS,
           'ms before reconnecting due to error count',
           errorCount,
           'state:',
           this._connectionState,
         );
-        await sleep(duration);
+        await sleep(RUN_LOOP_INTERVAL_MS);
       }
     }
   }

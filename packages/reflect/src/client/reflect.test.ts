@@ -20,7 +20,6 @@ import {
   CONNECT_TIMEOUT_MS,
   createSocket,
   HIDDEN_INTERVAL_MS,
-  MAX_RUN_LOOP_INTERVAL_MS,
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
@@ -814,12 +813,11 @@ test('Authentication', async () => {
 
   await emulateErrorWhenConnecting(0, 'auth-token', 0);
   await emulateErrorWhenConnecting(5_000, 'auth-token', 5_000);
-  await emulateErrorWhenConnecting(10_000, 'auth-token', 15_000);
-  await emulateErrorWhenConnecting(20_000, 'auth-token', 35_000);
-  await emulateErrorWhenConnecting(40_000, 'new-auth-token-5', 75_000);
-  // Clamped at MAX_WATCHDOG_INTERVAL_MS.
-  await emulateErrorWhenConnecting(60_000, 'new-auth-token-6', 135_000);
-  await emulateErrorWhenConnecting(60_000, 'new-auth-token-7', 195_000);
+  await emulateErrorWhenConnecting(5_000, 'auth-token', 10_000);
+  await emulateErrorWhenConnecting(5_000, 'auth-token', 15_000);
+  await emulateErrorWhenConnecting(5_000, 'new-auth-token-5', 20_000);
+  await emulateErrorWhenConnecting(5_000, 'new-auth-token-6', 25_000);
+  await emulateErrorWhenConnecting(5_000, 'new-auth-token-7', 30_000);
 
   let socket: MockSocket | undefined;
   {
@@ -881,7 +879,7 @@ test('Disconnect on error', async () => {
   await r.close();
 });
 
-test('Backoff on errors', async () => {
+test('No backoff on errors', async () => {
   const r = reflectForTest();
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
@@ -898,17 +896,13 @@ test('Backoff on errors', async () => {
 
   const steps = async () => {
     await step(5_000, 'a');
-    await step(10_000, 'b');
-    await step(20_000, 'c');
-    await step(40_000, 'd');
-    expect(MAX_RUN_LOOP_INTERVAL_MS).equal(60_000);
-    await step(60_000, 'e');
-    await step(60_000, 'f');
+    await step(5_000, 'a');
+    await step(5_000, 'a');
+    await step(5_000, 'a');
   };
 
   await steps();
 
-  // success resets the backoff.
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
 
@@ -983,11 +977,9 @@ test('Connect timeout', async () => {
   await step(RUN_LOOP_INTERVAL_MS);
 
   // Try again to connect
-  await step(2 * RUN_LOOP_INTERVAL_MS);
-  await step(4 * RUN_LOOP_INTERVAL_MS);
-  await step(8 * RUN_LOOP_INTERVAL_MS);
-  expect(MAX_RUN_LOOP_INTERVAL_MS).equal(60_000);
-  await step(60_000);
+  await step(RUN_LOOP_INTERVAL_MS);
+  await step(RUN_LOOP_INTERVAL_MS);
+  await step(RUN_LOOP_INTERVAL_MS);
 
   // And success after this...
   await r.triggerConnected();
@@ -1042,7 +1034,6 @@ async function testWaitsForConnection(
   // Rejections that happened in previous connect should not reject pusher.
   expect(log).to.deep.equal([]);
 
-  // backoff
   await clock.tickAsync(RUN_LOOP_INTERVAL_MS);
   expect(r.connectionState).to.equal(ConnectionState.Connecting);
 
