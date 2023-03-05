@@ -1,7 +1,7 @@
 {
   "name": "@rocicorp/reflect",
   "description": "",
-  "version": "0.13.0-beta.0",
+  "version": "0.13.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rocicorp/reflect.git"
