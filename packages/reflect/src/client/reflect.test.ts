@@ -2,7 +2,8 @@ import {assert, expect} from '@esm-bundle/chai';
 import {resolver} from '@rocicorp/resolver';
 import type {NullableVersion} from 'reflect-protocol';
 import {ErrorKind, Mutation, pushMessageSchema} from 'reflect-protocol';
-import type {
+import {
+  ExperimentalMemKVStore,
   JSONValue,
   LogLevel,
   MutatorDefs,
@@ -1264,4 +1265,17 @@ test('Invalid Downstream message', async () => {
     ),
   );
   expect(found).true;
+});
+
+test('experimentalKVStore', async () => {
+  const r = reflectForTest({
+    createKVStore: name => new ExperimentalMemKVStore(name),
+    mutators: {
+      putFoo: async (tx, val: string) => {
+        await tx.put('foo', val);
+      },
+    },
+  });
+  await r.mutate.putFoo('bar');
+  expect(await r.query(tx => tx.get('foo'))).to.equal('bar');
 });

@@ -1,4 +1,12 @@
-import type {LogLevel, LogSink, MaybePromise, MutatorDefs} from 'replicache';
+import type {
+  LogLevel,
+  LogSink,
+  MaybePromise,
+  MutatorDefs,
+  ExperimentalCreateKVStore,
+} from 'replicache';
+
+export type CreateKVStore = ExperimentalCreateKVStore;
 
 /**
  * Configuration for [[Reflect]].
@@ -161,4 +169,9 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * How often to send metrics to the server. Default is 120*1000 (120 seconds).
    */
   metricsIntervalMs?: number | undefined;
+
+  /**
+   * Allows providing a custom implementation of the underlying storage layer.
+   */
+  createKVStore?: CreateKVStore | undefined;
 }
