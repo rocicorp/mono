@@ -27,6 +27,7 @@ jobs:
         with:
           node-version: 18.x
           cache: 'npm'
+      - uses: dtinth/setup-github-actions-caching-for-turbo@v1
       - name: configure npm auth token
         run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
         env:
@@ -50,6 +51,7 @@ jobs:
         with:
           node-version: 18.x
           cache: 'npm'
+      - uses: dtinth/setup-github-actions-caching-for-turbo@v1
 
       - name: configure npm auth token
         run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
