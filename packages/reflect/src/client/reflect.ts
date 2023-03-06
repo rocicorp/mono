@@ -1,4 +1,3 @@
-import {Lock} from '@rocicorp/lock';
 import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
 import {nanoid} from 'nanoid';
@@ -25,7 +24,6 @@ import {
   ExperimentalWatchOptions,
   MaybePromise,
   MutatorDefs,
-  PokeDD31,
   PullerResultV0,
   PullerResultV1,
   PullRequestV0,
@@ -45,7 +43,6 @@ import {sleep} from '../util/sleep.js';
 import {send} from '../util/socket.js';
 import {isAuthError, MessageError} from './connection-error.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
-import {mergePokes} from './merge-pokes.js';
 import {
   camelToSnake,
   DID_NOT_CONNECT_VALUE,
@@ -55,6 +52,7 @@ import {
   State,
 } from './metrics.js';
 import type {ReflectOptions} from './options.js';
+import {PokeHandler} from './poke-handler.js';
 
 export const enum ConnectionState {
   Disconnected,
@@ -139,9 +137,7 @@ export class Reflect<MD extends MutatorDefs> {
     lastConnectError: State;
   };
 
-  // Protects _handlePoke. We need pokes to be serialized, otherwise we
-  // can cause out of order poke errors.
-  private readonly _pokeLock = new Lock();
+  private readonly _pokeHandler: PokeHandler;
 
   private _lastMutationIDSent: {clientID: string; id: number} =
     NULL_LAST_MUTATION_ID_SENT;
@@ -313,6 +309,12 @@ export class Reflect<MD extends MutatorDefs> {
     this.roomID = options.roomID;
     this.userID = options.userID;
     this._l = getLogContext(options, this._rep);
+    this._pokeHandler = new PokeHandler(
+      pokeDD31 => this._rep.poke(pokeDD31),
+      () => this._onOutOfOrderPoke(),
+      this.clientID,
+      this._l,
+    );
 
     void this._runLoop();
   }
@@ -651,56 +653,34 @@ export class Reflect<MD extends MutatorDefs> {
     this._lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
   }
 
-  private async _handlePoke(lc: LogContext, pokeMessage: PokeMessage) {
+  private async _handlePoke(_lc: LogContext, pokeMessage: PokeMessage) {
     this.#nextMessageResolver?.resolve(pokeMessage);
     const pokeBody = pokeMessage[1];
-    await this._pokeLock.withLock(async () => {
-      lc = lc.addContext('requestID', pokeBody.requestID);
-      lc.debug?.('Applying poke', pokeBody);
-      const mergedPokes = mergePokes(pokeBody.pokes);
-      if (!mergedPokes) {
-        return;
-      }
-      const {lastMutationIDChanges, baseCookie, patch, cookie} = mergedPokes;
-      const lastMutationIDChangeForSelf =
-        lastMutationIDChanges[await this.clientID];
-      if (lastMutationIDChangeForSelf !== undefined) {
-        this._lastMutationIDReceived = lastMutationIDChangeForSelf;
-      }
-      const p: PokeDD31 = {
-        baseCookie,
-        pullResponse: {
-          lastMutationIDChanges,
-          patch,
-          cookie,
-        },
-      };
+    const lastMutationIDChangeForSelf = await this._pokeHandler.handlePoke(
+      pokeBody,
+    );
+    if (lastMutationIDChangeForSelf !== undefined) {
+      this._lastMutationIDReceived = lastMutationIDChangeForSelf;
+    }
+  }
 
-      try {
-        await this._rep.poke(p);
-      } catch (e) {
-        // TODO(arv): Structured error for poke!
-        if (String(e).indexOf('unexpected base cookie for poke') > -1) {
-          lc.info?.('out of order poke, disconnecting');
-          // This technically happens *after* connection establishment, but
-          // we record it as a connect error here because it is the kind of
-          // thing that we want to hear about (and is sorta connect failure
-          // -ish).
-          this._metrics.lastConnectError.set(
-            camelToSnake(ErrorKind.UnexpectedBaseCookie),
-          );
+  private async _onOutOfOrderPoke() {
+    const lc = await this._l;
+    lc.info?.('out of order poke, disconnecting');
+    // This technically happens *after* connection establishment, but
+    // we record it as a connect error here because it is the kind of
+    // thing that we want to hear about (and is sorta connect failure
+    // -ish).
+    this._metrics.lastConnectError.set(
+      camelToSnake(ErrorKind.UnexpectedBaseCookie),
+    );
 
-          // It is theoretically possible that we get disconnected during the
-          // async poke above. Only disconnect if we are not already
-          // disconnected.
-          if (this._connectionState !== ConnectionState.Disconnected) {
-            this._disconnect(lc, ErrorKind.UnexpectedBaseCookie);
-          }
-          return;
-        }
-        throw e;
-      }
-    });
+    // It is theoretically possible that we get disconnected during the
+    // async poke above. Only disconnect if we are not already
+    // disconnected.
+    if (this._connectionState !== ConnectionState.Disconnected) {
+      this._disconnect(lc, ErrorKind.UnexpectedBaseCookie);
+    }
   }
 
   private _handlePullResponse(
