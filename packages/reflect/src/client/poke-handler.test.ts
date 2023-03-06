@@ -904,7 +904,7 @@ test('onDisconnect clears pending pokes and playback offset', async () => {
   });
   expect(rafStub.callCount).to.equal(3);
 
-  pokeHandler.handleDisconnect();
+  await pokeHandler.handleDisconnect();
 
   const rafCallback2 = rafStub.getCall(2).args[0];
   await clock.tickAsync(40);
