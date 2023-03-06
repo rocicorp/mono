@@ -164,8 +164,8 @@ export function reflectForTest<MD extends MutatorDefs>(
     logSinks: [],
     ...options,
   });
-  // We do not want any unexpected onUpdateNeeded calls in tests.
-  // If the test needs to call onUpdateNeeded it set this as needed.
+  // We do not want any unexpected onUpdateNeeded calls in tests. If the test
+  // needs to call onUpdateNeeded it should set this as needed.
   r.onUpdateNeeded = () => {
     throw new Error('Unexpected update needed');
   };
