@@ -113,6 +113,103 @@ test('playback all pokes dont have timestamps, all merge and play on first raf',
   expect(rafStub.callCount).to.equal(2);
 });
 
+test('playback all pokes have timestamps but are for this client so merge and play on first raf', async () => {
+  const outOfOrderPokeStub = sinon.stub();
+  const replicachePokeStub = sinon.stub();
+  const pokeHandler = new PokeHandler(
+    replicachePokeStub,
+    outOfOrderPokeStub,
+    Promise.resolve('c1'),
+    Promise.resolve(new LogContext('error')),
+  );
+  expect(rafStub.callCount).to.equal(0);
+
+  const lastMutationIDChangeForSelf = await pokeHandler.handlePoke({
+    pokes: [
+      {
+        baseCookie: 1,
+        cookie: 2,
+        lastMutationIDChanges: {c1: 2},
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 1,
+          },
+        ],
+      },
+      {
+        baseCookie: 2,
+        cookie: 3,
+        lastMutationIDChanges: {c1: 3},
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 2,
+          },
+        ],
+      },
+      {
+        baseCookie: 3,
+        cookie: 4,
+        lastMutationIDChanges: {c1: 4},
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 3,
+          },
+        ],
+      },
+    ],
+    requestID: 'requestID1',
+  });
+
+  expect(lastMutationIDChangeForSelf).to.equal(4);
+
+  expect(replicachePokeStub.callCount).to.equal(0);
+  expect(rafStub.callCount).to.equal(1);
+
+  const rafCallback0 = rafStub.getCall(0).args[0];
+  await rafCallback0();
+
+  expect(replicachePokeStub.callCount).to.equal(1);
+  const replicachePoke0 = replicachePokeStub.getCall(0).args[0];
+  expect(replicachePoke0).to.deep.equal({
+    baseCookie: 1,
+    pullResponse: {
+      cookie: 4,
+      lastMutationIDChanges: {
+        c1: 4,
+      },
+      patch: [
+        {
+          key: 'count',
+          op: 'put',
+          value: 1,
+        },
+        {
+          key: 'count',
+          op: 'put',
+          value: 2,
+        },
+        {
+          key: 'count',
+          op: 'put',
+          value: 3,
+        },
+      ],
+    },
+  });
+  expect(rafStub.callCount).to.equal(2);
+
+  const rafCallback1 = rafStub.getCall(1).args[0];
+  await rafCallback1();
+  expect(replicachePokeStub.callCount).to.equal(1);
+  expect(rafStub.callCount).to.equal(2);
+});
+
 test('playback all pokes have timestamps without any merges', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
@@ -388,6 +485,114 @@ test('playback all pokes have timestamps, two pokes merge due to timing', async 
   await rafCallback3();
   expect(replicachePokeStub.callCount).to.equal(2);
   expect(rafStub.callCount).to.equal(4);
+});
+
+test('playback pokes with no timestamp or for this client playback ASAP', async () => {
+  const outOfOrderPokeStub = sinon.stub();
+  const replicachePokeStub = sinon.stub();
+  const pokeHandler = new PokeHandler(
+    replicachePokeStub,
+    outOfOrderPokeStub,
+    Promise.resolve('c1'),
+    Promise.resolve(new LogContext('error')),
+  );
+  expect(rafStub.callCount).to.equal(0);
+
+  const lastMutationIDChangeForSelf = await pokeHandler.handlePoke({
+    pokes: [
+      {
+        baseCookie: 1,
+        cookie: 2,
+        lastMutationIDChanges: {c2: 2},
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 1,
+          },
+        ],
+        timestamp: 100,
+      },
+      {
+        baseCookie: 2,
+        cookie: 3,
+        lastMutationIDChanges: {c2: 3},
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 2,
+          },
+        ],
+      },
+      {
+        baseCookie: 3,
+        cookie: 4,
+        lastMutationIDChanges: {c1: 2},
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 3,
+          },
+        ],
+        timestamp: 140,
+      },
+    ],
+    requestID: 'requestID1',
+  });
+
+  expect(lastMutationIDChangeForSelf).to.equal(2);
+
+  expect(replicachePokeStub.callCount).to.equal(0);
+  expect(rafStub.callCount).to.equal(1);
+
+  const rafCallback0 = rafStub.getCall(0).args[0];
+  await rafCallback0();
+
+  expect(replicachePokeStub.callCount).to.equal(0);
+  expect(rafStub.callCount).to.equal(2);
+
+  const rafCallback1 = rafStub.getCall(1).args[0];
+  await clock.tickAsync(250);
+  expect(replicachePokeStub.callCount).to.equal(0);
+  await rafCallback1();
+
+  expect(replicachePokeStub.callCount).to.equal(1);
+  const replicachePoke0 = replicachePokeStub.getCall(0).args[0];
+  expect(replicachePoke0).to.deep.equal({
+    baseCookie: 1,
+    pullResponse: {
+      cookie: 4,
+      lastMutationIDChanges: {
+        c2: 3,
+        c1: 2,
+      },
+      patch: [
+        {
+          key: 'count',
+          op: 'put',
+          value: 1,
+        },
+        {
+          key: 'count',
+          op: 'put',
+          value: 2,
+        },
+        {
+          key: 'count',
+          op: 'put',
+          value: 3,
+        },
+      ],
+    },
+  });
+  expect(rafStub.callCount).to.equal(3);
+
+  const rafCallback2 = rafStub.getCall(2).args[0];
+  await rafCallback2();
+  expect(replicachePokeStub.callCount).to.equal(1);
+  expect(rafStub.callCount).to.equal(3);
 });
 
 test('playback sequence of poke messages', async () => {
