@@ -148,15 +148,38 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
   }
 }
 
+const testReflectInstances = new Set<TestReflect<MutatorDefs>>();
+
+let testReflectCounter = 0;
+
 export function reflectForTest<MD extends MutatorDefs>(
   options: Partial<ReflectOptions<MD>> = {},
 ): TestReflect<MD> {
-  return new TestReflect({
+  const r = new TestReflect({
     socketOrigin: 'wss://example.com/',
-    userID: 'test-user-id',
+    // Make sure we do not reuse IDB instances between tests by default
+    userID: 'test-user-id-' + testReflectCounter++,
     roomID: 'test-room-id',
     auth: 'test-auth',
     logSinks: [],
     ...options,
   });
+  // We do not want any unexpected onUpdateNeeded calls in tests. If the test
+  // needs to call onUpdateNeeded it should set this as needed.
+  r.onUpdateNeeded = () => {
+    throw new Error('Unexpected update needed');
+  };
+
+  // Keep track of all instances so we can close them in teardown.
+  testReflectInstances.add(r);
+  return r;
 }
+
+teardown(async () => {
+  for (const r of testReflectInstances) {
+    if (!r.closed) {
+      await r.close();
+      testReflectInstances.delete(r);
+    }
+  }
+});

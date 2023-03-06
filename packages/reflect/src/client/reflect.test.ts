@@ -193,8 +193,6 @@ test('onOnlineChange callback', async () => {
     expect(onlineCount).to.equal(0);
     expect(offlineCount).to.equal(0);
   }
-
-  await r.close();
 });
 
 test('onOnlineChange reflection on Reflect class', async () => {
@@ -205,7 +203,6 @@ test('onOnlineChange reflection on Reflect class', async () => {
   await tickAFewTimes(clock);
 
   expect(r.onOnlineChange).to.equal(f);
-  await r.close();
 });
 
 test('disconnects if ping fails', async () => {
@@ -239,8 +236,6 @@ test('disconnects if ping fails', async () => {
 
   await tickAFewTimes(clock, pingTimeout);
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
-
-  await r.close();
 });
 
 test('createSocket', () => {
@@ -379,8 +374,6 @@ test('pusher sends one mutation per push message', async () => {
         expect(msg[1].requestID).to.equal(requestID);
       }
     }
-
-    await r.close();
   };
 
   await t([{mutations: [], expectedMessages: 0}]);
@@ -558,7 +551,7 @@ test('puller with normal non-mutation recovery pull', async () => {
 });
 
 test('watchSmokeTest', async () => {
-  const rep = reflectForTest({
+  const r = reflectForTest({
     roomID: 'watchSmokeTestRoom',
     mutators: {
       addData: async (
@@ -576,9 +569,9 @@ test('watchSmokeTest', async () => {
   });
 
   const spy = sinon.spy();
-  const unwatch = rep.experimentalWatch(spy);
+  const unwatch = r.experimentalWatch(spy);
 
-  await rep.mutate.addData({a: 1, b: 2});
+  await r.mutate.addData({a: 1, b: 2});
 
   expect(spy.callCount).to.equal(1);
   expect(spy.lastCall.args).to.deep.equal([
@@ -597,10 +590,10 @@ test('watchSmokeTest', async () => {
   ]);
 
   spy.resetHistory();
-  await rep.mutate.addData({a: 1, b: 2});
+  await r.mutate.addData({a: 1, b: 2});
   expect(spy.callCount).to.equal(0);
 
-  await rep.mutate.addData({a: 11});
+  await r.mutate.addData({a: 11});
   expect(spy.callCount).to.equal(1);
   expect(spy.lastCall.args).to.deep.equal([
     [
@@ -614,7 +607,7 @@ test('watchSmokeTest', async () => {
   ]);
 
   spy.resetHistory();
-  await rep.mutate.del('b');
+  await r.mutate.del('b');
   expect(spy.callCount).to.equal(1);
   expect(spy.lastCall.args).to.deep.equal([
     [
@@ -629,7 +622,7 @@ test('watchSmokeTest', async () => {
   unwatch();
 
   spy.resetHistory();
-  await rep.mutate.addData({c: 6});
+  await r.mutate.addData({c: 6});
   expect(spy.callCount).to.equal(0);
 });
 
@@ -649,7 +642,7 @@ test('poke log context includes requestID', async () => {
     },
   };
 
-  const reflect = new TestReflect({
+  const r = new TestReflect({
     socketOrigin: url,
     auth: '',
     userID: 'user-id',
@@ -660,7 +653,7 @@ test('poke log context includes requestID', async () => {
 
   log.length = 0;
 
-  await reflect.triggerPoke({
+  await r.triggerPoke({
     pokes: [
       {
         baseCookie: null,
@@ -844,8 +837,6 @@ test('Authentication', async () => {
     // Socket is kept as long as we are connected.
     expect(await r.socket).equal(socket);
   }
-
-  await r.close();
 });
 
 test('AuthInvalidated', async () => {
@@ -866,8 +857,6 @@ test('AuthInvalidated', async () => {
 
   await r.waitForConnectionState(ConnectionState.Connecting);
   expect((await r.socket).protocol).equal('auth-token-2');
-
-  await r.close();
 });
 
 test('Disconnect on error', async () => {
@@ -876,7 +865,6 @@ test('Disconnect on error', async () => {
   expect(r.connectionState).to.equal(ConnectionState.Connected);
   await r.triggerError(ErrorKind.ClientNotFound, 'client not found');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
-  await r.close();
 });
 
 test('No backoff on errors', async () => {
@@ -907,8 +895,6 @@ test('No backoff on errors', async () => {
   expect(r.connectionState).to.equal(ConnectionState.Connected);
 
   await steps();
-
-  await r.close();
 });
 
 test('Ping pong', async () => {
@@ -926,8 +912,6 @@ test('Ping pong', async () => {
   await clock.tickAsync(1);
 
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
-
-  await r.close();
 });
 
 test('Ping timeout', async () => {
@@ -944,8 +928,6 @@ test('Ping timeout', async () => {
   expect(r.connectionState).to.equal(ConnectionState.Connected);
   await clock.tickAsync(1);
   expect(r.connectionState).to.equal(ConnectionState.Connected);
-
-  await r.close();
 });
 
 test('Connect timeout', async () => {
@@ -984,8 +966,6 @@ test('Connect timeout', async () => {
   // And success after this...
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
-
-  await r.close();
 });
 
 test('Logs errors in connect', async () => {
@@ -1010,8 +990,6 @@ test('Logs errors in connect', async () => {
   );
 
   expect(index).to.not.equal(-1);
-
-  await r.close();
 });
 
 async function testWaitsForConnection(
@@ -1083,8 +1061,6 @@ test('Protocol mismatch', async () => {
   r.onUpdateNeeded = null;
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
   expect(fake.called).false;
-
-  await r.close();
 });
 
 test('Disconnect on hide', async () => {
@@ -1123,6 +1099,4 @@ test('Disconnect on hide', async () => {
   await r.waitForConnectionState(ConnectionState.Connecting);
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
-
-  await r.close();
 });
