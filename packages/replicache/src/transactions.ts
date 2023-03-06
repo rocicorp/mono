@@ -17,6 +17,8 @@ import type {ClientID, ScanNoIndexOptions} from './mod.js';
 import {decodeIndexKey, IndexKey} from './db/index.js';
 import type {IndexDefinition} from './index-defs.js';
 
+export type TransactionEnvironment = 'client' | 'server';
+export type TransactionReason = 'initial' | 'rebase' | 'authoritative';
 /**
  * ReadTransactions are used with {@link Replicache.query} and
  * {@link Replicache.subscribe} and allows read operations on the
@@ -24,6 +26,7 @@ import type {IndexDefinition} from './index-defs.js';
  */
 export interface ReadTransaction {
   readonly clientID: ClientID;
+  readonly environment: TransactionEnvironment;
 
   /**
    * Get a single value from the database. If the `key` is not present this
@@ -89,6 +92,7 @@ export class ReadTransactionImpl implements ReadTransaction {
   readonly clientID: ClientID;
   readonly dbtx: db.Read;
   protected readonly _lc: LogContext;
+  readonly environment: TransactionEnvironment;
 
   constructor(
     clientID: ClientID,
@@ -101,6 +105,7 @@ export class ReadTransactionImpl implements ReadTransaction {
     this._lc = lc
       .addContext(rpcName)
       .addContext('txid', transactionIDCounter++);
+    this.environment = 'client';
   }
 
   // eslint-disable-next-line require-await
@@ -161,6 +166,10 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
     this._tx = tx;
   }
 
+  get environment(): TransactionEnvironment {
+    return this._tx.environment;
+  }
+
   get clientID(): string {
     return this._tx.clientID;
   }
@@ -213,6 +222,7 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
  * database.
  */
 export interface WriteTransaction extends ReadTransaction {
+  readonly reason: TransactionReason;
   /**
    * Sets a single `value` in the database. The value will be frozen (using
    * `Object.freeze`) in debug mode.
@@ -232,14 +242,17 @@ export class WriteTransactionImpl
 {
   // use `declare` to specialize the type.
   declare readonly dbtx: db.Write;
+  readonly reason: TransactionReason;
 
   constructor(
     clientID: ClientID,
+    reason: TransactionReason,
     dbWrite: db.Write,
     lc: LogContext,
     rpcName = 'openWriteTransaction',
   ) {
     super(clientID, dbWrite, lc, rpcName);
+    this.reason = reason;
   }
 
   async put(key: string, value: ReadonlyJSONValue): Promise<void> {
