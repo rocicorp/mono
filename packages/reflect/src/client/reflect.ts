@@ -1,7 +1,6 @@
 import {Lock} from '@rocicorp/lock';
 import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
-import {nanoid} from 'nanoid';
 import type {
   ConnectedMessage,
   Downstream,
@@ -41,6 +40,7 @@ import {
 } from 'replicache';
 import * as superstruct from 'superstruct';
 import {assert} from '../util/asserts.js';
+import {nanoid} from '../util/nanoid.js';
 import {sleep} from '../util/sleep.js';
 import {send} from '../util/socket.js';
 import {isAuthError, MessageError} from './connection-error.js';
