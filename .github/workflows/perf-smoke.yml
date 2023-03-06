@@ -3,6 +3,8 @@ name: Perf Tests Smoke
 on:
   pull_request:
     branches: [main]
+    paths:
+      - 'packages/replicache/**'
 
 # This allows a subsequently queued workflow run to interrupt previous runs
 concurrency:
