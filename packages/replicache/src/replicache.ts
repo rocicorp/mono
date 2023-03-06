@@ -1591,7 +1591,12 @@ export class Replicache<MD extends MutatorDefs = {}> {
           true,
         );
 
-        const tx = new WriteTransactionImpl(clientID, dbWrite, this._lc);
+        const tx = new WriteTransactionImpl(
+          clientID,
+          'initial',
+          dbWrite,
+          this._lc,
+        );
         const result: R = await mutatorImpl(tx, args);
         throwIfClosed(dbWrite);
         const [ref, diffs] = await dbWrite.commitWithDiffs(
