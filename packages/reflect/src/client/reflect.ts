@@ -1,4 +1,3 @@
-import {Lock} from '@rocicorp/lock';
 import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
 import {nanoid} from 'nanoid';
@@ -25,7 +24,6 @@ import {
   ExperimentalWatchOptions,
   MaybePromise,
   MutatorDefs,
-  PokeDD31,
   PullerResultV0,
   PullerResultV1,
   PullRequestV0,
@@ -45,7 +43,6 @@ import {sleep} from '../util/sleep.js';
 import {send} from '../util/socket.js';
 import {isAuthError, MessageError} from './connection-error.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
-import {mergePokes} from './merge-pokes.js';
 import {
   camelToSnake,
   DID_NOT_CONNECT_VALUE,
@@ -55,6 +52,7 @@ import {
   State,
 } from './metrics.js';
 import type {ReflectOptions} from './options.js';
+import {PokeHandler} from './poke-handler.js';
 
 export const enum ConnectionState {
   Disconnected,
@@ -139,9 +137,7 @@ export class Reflect<MD extends MutatorDefs> {
     lastConnectError: State;
   };
 
-  // Protects _handlePoke. We need pokes to be serialized, otherwise we
-  // can cause out of order poke errors.
-  private readonly _pokeLock = new Lock();
+  private readonly _pokeHandler: PokeHandler;
 
   private _lastMutationIDSent: {clientID: string; id: number} =
     NULL_LAST_MUTATION_ID_SENT;
@@ -313,6 +309,12 @@ export class Reflect<MD extends MutatorDefs> {
     this.roomID = options.roomID;
     this.userID = options.userID;
     this._l = getLogContext(options, this._rep);
+    this._pokeHandler = new PokeHandler(
+      pokeDD31 => this._rep.poke(pokeDD31),
+      () => this._onOutOfOrderPoke(),
+      this.clientID,
+      this._l,
+    );
 
     void this._runLoop();
   }
@@ -370,7 +372,7 @@ export class Reflect<MD extends MutatorDefs> {
   async close(): Promise<void> {
     if (this._connectionState !== ConnectionState.Disconnected) {
       const lc = await this._l;
-      this._disconnect(lc, CloseKind.ReflectClosed);
+      await this._disconnect(lc, CloseKind.ReflectClosed);
     }
     this.#closeAbortController.abort();
     return this._rep.close();
@@ -470,7 +472,7 @@ export class Reflect<MD extends MutatorDefs> {
         return;
 
       case 'error':
-        this._handleErrorMessage(l, downMessage);
+        await this._handleErrorMessage(l, downMessage);
         return;
 
       case 'pong':
@@ -500,11 +502,14 @@ export class Reflect<MD extends MutatorDefs> {
 
     const closeKind = wasClean ? CloseKind.CleanClose : CloseKind.AbruptClose;
     this._connectResolver.reject(new CloseError(closeKind));
-    this._disconnect(l, closeKind);
+    await this._disconnect(l, closeKind);
   };
 
   // An error on the connection is fatal for the connection.
-  private _handleErrorMessage(lc: LogContext, downMessage: ErrorMessage): void {
+  private async _handleErrorMessage(
+    lc: LogContext,
+    downMessage: ErrorMessage,
+  ): Promise<void> {
     const [, kind, message] = downMessage;
 
     if (kind === ErrorKind.VersionNotSupported) {
@@ -518,7 +523,7 @@ export class Reflect<MD extends MutatorDefs> {
     this.#nextMessageResolver?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
     this._connectResolver.reject(error);
-    this._disconnect(lc, kind);
+    await this._disconnect(lc, kind);
   }
 
   private _handleConnectedMessage(
@@ -579,12 +584,12 @@ export class Reflect<MD extends MutatorDefs> {
     const baseCookie = await this._getBaseCookie();
 
     // Reject connect after a timeout.
-    const id = setTimeout(() => {
+    const id = setTimeout(async () => {
       l.debug?.('Rejecting connect resolver due to timeout');
       this._connectResolver.reject(
         new MessageError(ErrorKind.ConnectTimeout, 'Timed out connecting'),
       );
-      this._disconnect(l, ErrorKind.ConnectTimeout);
+      await this._disconnect(l, ErrorKind.ConnectTimeout);
     }, CONNECT_TIMEOUT_MS);
     const clear = () => clearTimeout(id);
     this._connectResolver.promise.then(clear, clear);
@@ -606,7 +611,10 @@ export class Reflect<MD extends MutatorDefs> {
     this._socketResolver.resolve(ws);
   }
 
-  private _disconnect(l: LogContext, reason: DisconnectReason): void {
+  private async _disconnect(
+    l: LogContext,
+    reason: DisconnectReason,
+  ): Promise<void> {
     l.info?.('disconnecting', {navigatorOnline: navigator.onLine, reason});
 
     switch (this._connectionState) {
@@ -649,58 +657,37 @@ export class Reflect<MD extends MutatorDefs> {
     this._socket?.close();
     this._socket = undefined;
     this._lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+    await this._pokeHandler.handleDisconnect();
   }
 
-  private async _handlePoke(lc: LogContext, pokeMessage: PokeMessage) {
+  private async _handlePoke(_lc: LogContext, pokeMessage: PokeMessage) {
     this.#nextMessageResolver?.resolve(pokeMessage);
     const pokeBody = pokeMessage[1];
-    await this._pokeLock.withLock(async () => {
-      lc = lc.addContext('requestID', pokeBody.requestID);
-      lc.debug?.('Applying poke', pokeBody);
-      const mergedPokes = mergePokes(pokeBody.pokes);
-      if (!mergedPokes) {
-        return;
-      }
-      const {lastMutationIDChanges, baseCookie, patch, cookie} = mergedPokes;
-      const lastMutationIDChangeForSelf =
-        lastMutationIDChanges[await this.clientID];
-      if (lastMutationIDChangeForSelf !== undefined) {
-        this._lastMutationIDReceived = lastMutationIDChangeForSelf;
-      }
-      const p: PokeDD31 = {
-        baseCookie,
-        pullResponse: {
-          lastMutationIDChanges,
-          patch,
-          cookie,
-        },
-      };
+    const lastMutationIDChangeForSelf = await this._pokeHandler.handlePoke(
+      pokeBody,
+    );
+    if (lastMutationIDChangeForSelf !== undefined) {
+      this._lastMutationIDReceived = lastMutationIDChangeForSelf;
+    }
+  }
 
-      try {
-        await this._rep.poke(p);
-      } catch (e) {
-        // TODO(arv): Structured error for poke!
-        if (String(e).indexOf('unexpected base cookie for poke') > -1) {
-          lc.info?.('out of order poke, disconnecting');
-          // This technically happens *after* connection establishment, but
-          // we record it as a connect error here because it is the kind of
-          // thing that we want to hear about (and is sorta connect failure
-          // -ish).
-          this._metrics.lastConnectError.set(
-            camelToSnake(ErrorKind.UnexpectedBaseCookie),
-          );
+  private async _onOutOfOrderPoke() {
+    const lc = await this._l;
+    lc.info?.('out of order poke, disconnecting');
+    // This technically happens *after* connection establishment, but
+    // we record it as a connect error here because it is the kind of
+    // thing that we want to hear about (and is sorta connect failure
+    // -ish).
+    this._metrics.lastConnectError.set(
+      camelToSnake(ErrorKind.UnexpectedBaseCookie),
+    );
 
-          // It is theoretically possible that we get disconnected during the
-          // async poke above. Only disconnect if we are not already
-          // disconnected.
-          if (this._connectionState !== ConnectionState.Disconnected) {
-            this._disconnect(lc, ErrorKind.UnexpectedBaseCookie);
-          }
-          return;
-        }
-        throw e;
-      }
-    });
+    // It is theoretically possible that we get disconnected during the
+    // async poke above. Only disconnect if we are not already
+    // disconnected.
+    if (this._connectionState !== ConnectionState.Disconnected) {
+      await this._disconnect(lc, ErrorKind.UnexpectedBaseCookie);
+    }
   }
 
   private _handlePullResponse(
@@ -893,7 +880,7 @@ export class Reflect<MD extends MutatorDefs> {
                 await this._ping(lc);
                 break;
               case RaceCases.Hidden:
-                this._disconnect(lc, 'Hidden');
+                await this._disconnect(lc, 'Hidden');
                 break;
             }
           }
@@ -1076,7 +1063,7 @@ export class Reflect<MD extends MutatorDefs> {
       l.debug?.('ping succeeded in', delta, 'ms');
     } else {
       l.info?.('ping failed in', delta, 'ms - disconnecting');
-      this._disconnect(l, ErrorKind.PingTimeout);
+      await this._disconnect(l, ErrorKind.PingTimeout);
       throw new MessageError(ErrorKind.PingTimeout, 'Ping timed out');
     }
   }
