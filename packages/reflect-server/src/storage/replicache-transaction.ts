@@ -5,6 +5,8 @@ import {
   ScanNoIndexOptions,
   ScanOptions,
   WriteTransaction,
+  TransactionReason,
+  TransactionEnvironment,
 } from 'replicache';
 import type {JSONType} from 'reflect-protocol';
 import type {Patch} from 'reflect-protocol';
@@ -25,6 +27,14 @@ export class ReplicacheTransaction implements WriteTransaction {
   private _clientID: ClientID;
   private _storage: Storage;
   private _version: Version;
+
+  get reason(): TransactionReason {
+    return 'authoritative';
+  }
+
+  get environment(): TransactionEnvironment {
+    return 'server';
+  }
 
   get clientID(): string {
     return this._clientID;

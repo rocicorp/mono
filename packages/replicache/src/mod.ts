@@ -17,6 +17,8 @@ export type {
   ReadTransaction,
   WriteTransaction,
   CreateIndexDefinition,
+  TransactionEnvironment,
+  TransactionReason,
 } from './transactions.js';
 export type {
   GetScanIterator,
