@@ -41,7 +41,7 @@ export class PokeHandler {
     lc.debug?.('Applying poke', pokeBody);
     const now = performance.now();
     const thisClientID = await this._clientIDPromise;
-    let lastMutationIDChangeForSelf: number | undefined = undefined;
+    let lastMutationIDChangeForSelf: number | undefined;
     for (const poke of pokeBody.pokes) {
       const {timestamp} = poke;
       if (timestamp !== undefined) {
@@ -71,17 +71,17 @@ export class PokeHandler {
     this._pokePlaybackLoopRunning = true;
     const rafCallback = async () => {
       const now = performance.now();
-      const rafLc = (await this._lcPromise).addContext('rafAt', now);
+      const rafLC = (await this._lcPromise).addContext('rafAt', now);
       if (this._pokeBuffer.length === 0) {
-        rafLc.debug?.('stopping playback loop');
+        rafLC.debug?.('stopping playback loop');
         this._pokePlaybackLoopRunning = false;
         return;
       }
       requestAnimationFrame(rafCallback);
       const start = performance.now();
-      rafLc.debug?.('raf fired, processing pokes');
-      await this._processPokesForFrame(rafLc);
-      rafLc.debug?.('processing pokes took', performance.now() - start);
+      rafLC.debug?.('raf fired, processing pokes');
+      await this._processPokesForFrame(rafLC);
+      rafLC.debug?.('processing pokes took', performance.now() - start);
     };
     requestAnimationFrame(rafCallback);
   }
@@ -148,7 +148,7 @@ export class PokeHandler {
         };
         lc.debug?.('poking replicache');
         await this._replicachePoke(pokeDD31);
-        lc.debug?.('replicache poke took', performance.now() - start);
+        lc.debug?.('poking replicache took', performance.now() - start);
       } catch (e) {
         if (String(e).indexOf('unexpected base cookie for poke') > -1) {
           await this._onOutOfOrderPoke();
@@ -157,7 +157,10 @@ export class PokeHandler {
     });
   }
 
-  onDisconnect() {
+  async handleDisconnect(): Promise<void> {
+    (await this._lcPromise).debug?.(
+      'clearing buffer and playback offset due to disconnect',
+    );
     this._pokeBuffer.length = 0;
     this._playbackOffset = -1;
   }

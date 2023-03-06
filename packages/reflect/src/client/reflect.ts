@@ -372,7 +372,7 @@ export class Reflect<MD extends MutatorDefs> {
   async close(): Promise<void> {
     if (this._connectionState !== ConnectionState.Disconnected) {
       const lc = await this._l;
-      this._disconnect(lc, CloseKind.ReflectClosed);
+      await this._disconnect(lc, CloseKind.ReflectClosed);
     }
     this.#closeAbortController.abort();
     return this._rep.close();
@@ -472,7 +472,7 @@ export class Reflect<MD extends MutatorDefs> {
         return;
 
       case 'error':
-        this._handleErrorMessage(l, downMessage);
+        await this._handleErrorMessage(l, downMessage);
         return;
 
       case 'pong':
@@ -502,11 +502,14 @@ export class Reflect<MD extends MutatorDefs> {
 
     const closeKind = wasClean ? CloseKind.CleanClose : CloseKind.AbruptClose;
     this._connectResolver.reject(new CloseError(closeKind));
-    this._disconnect(l, closeKind);
+    await this._disconnect(l, closeKind);
   };
 
   // An error on the connection is fatal for the connection.
-  private _handleErrorMessage(lc: LogContext, downMessage: ErrorMessage): void {
+  private async _handleErrorMessage(
+    lc: LogContext,
+    downMessage: ErrorMessage,
+  ): Promise<void> {
     const [, kind, message] = downMessage;
 
     if (kind === ErrorKind.VersionNotSupported) {
@@ -520,7 +523,7 @@ export class Reflect<MD extends MutatorDefs> {
     this.#nextMessageResolver?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
     this._connectResolver.reject(error);
-    this._disconnect(lc, kind);
+    await this._disconnect(lc, kind);
   }
 
   private _handleConnectedMessage(
@@ -581,12 +584,12 @@ export class Reflect<MD extends MutatorDefs> {
     const baseCookie = await this._getBaseCookie();
 
     // Reject connect after a timeout.
-    const id = setTimeout(() => {
+    const id = setTimeout(async () => {
       l.debug?.('Rejecting connect resolver due to timeout');
       this._connectResolver.reject(
         new MessageError(ErrorKind.ConnectTimeout, 'Timed out connecting'),
       );
-      this._disconnect(l, ErrorKind.ConnectTimeout);
+      await this._disconnect(l, ErrorKind.ConnectTimeout);
     }, CONNECT_TIMEOUT_MS);
     const clear = () => clearTimeout(id);
     this._connectResolver.promise.then(clear, clear);
@@ -608,7 +611,10 @@ export class Reflect<MD extends MutatorDefs> {
     this._socketResolver.resolve(ws);
   }
 
-  private _disconnect(l: LogContext, reason: DisconnectReason): void {
+  private async _disconnect(
+    l: LogContext,
+    reason: DisconnectReason,
+  ): Promise<void> {
     l.info?.('disconnecting', {navigatorOnline: navigator.onLine, reason});
 
     switch (this._connectionState) {
@@ -651,6 +657,7 @@ export class Reflect<MD extends MutatorDefs> {
     this._socket?.close();
     this._socket = undefined;
     this._lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+    await this._pokeHandler.handleDisconnect();
   }
 
   private async _handlePoke(_lc: LogContext, pokeMessage: PokeMessage) {
@@ -679,7 +686,7 @@ export class Reflect<MD extends MutatorDefs> {
     // async poke above. Only disconnect if we are not already
     // disconnected.
     if (this._connectionState !== ConnectionState.Disconnected) {
-      this._disconnect(lc, ErrorKind.UnexpectedBaseCookie);
+      await this._disconnect(lc, ErrorKind.UnexpectedBaseCookie);
     }
   }
 
@@ -873,7 +880,7 @@ export class Reflect<MD extends MutatorDefs> {
                 await this._ping(lc);
                 break;
               case RaceCases.Hidden:
-                this._disconnect(lc, 'Hidden');
+                await this._disconnect(lc, 'Hidden');
                 break;
             }
           }
@@ -1056,7 +1063,7 @@ export class Reflect<MD extends MutatorDefs> {
       l.debug?.('ping succeeded in', delta, 'ms');
     } else {
       l.info?.('ping failed in', delta, 'ms - disconnecting');
-      this._disconnect(l, ErrorKind.PingTimeout);
+      await this._disconnect(l, ErrorKind.PingTimeout);
       throw new MessageError(ErrorKind.PingTimeout, 'Ping timed out');
     }
   }

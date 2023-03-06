@@ -904,7 +904,7 @@ test('onDisconnect clears pending pokes and playback offset', async () => {
   });
   expect(rafStub.callCount).to.equal(3);
 
-  pokeHandler.onDisconnect();
+  pokeHandler.handleDisconnect();
 
   const rafCallback2 = rafStub.getCall(2).args[0];
   await clock.tickAsync(40);
@@ -995,7 +995,7 @@ test('onDisconnect clears pending pokes and playback offset', async () => {
   expect(rafStub.callCount).to.equal(6);
 });
 
-test('handlePoke return the last mutation id change for this client from poke message or undefined if none', async () => {
+test('handlePoke returns the last mutation id change for this client from poke message or undefined if none', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
   const pokeHandler = new PokeHandler(
