@@ -8,6 +8,7 @@ import {
   createRoomRecordForLegacyRoom,
   deleteRoom,
   deleteRoomRecord,
+  internalCreateRoom,
   objectIDByRoomID,
   roomRecordByRoomID,
   roomRecords,
@@ -50,6 +51,7 @@ import {
   LEGACY_CREATE_ROOM_PATH,
 } from './paths.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import {assert} from '../util/asserts.js';
 
 export interface AuthDOOptions {
   roomDO: DurableObjectNamespace;
@@ -186,9 +188,19 @@ export class BaseAuthDO implements DurableObject {
   private _createRoom = post(
     this._requireAPIKey(
       withBody(createRoomRequestSchema, (ctx, req) => {
-        const {lc, body} = ctx;
+        const {
+          lc,
+          body: {roomID, jurisdiction},
+        } = ctx;
         return this._roomRecordLock.withWrite(() =>
-          createRoom(lc, this._roomDO, this._durableStorage, req, body),
+          createRoom(
+            lc,
+            this._roomDO,
+            this._durableStorage,
+            req,
+            roomID,
+            jurisdiction,
+          ),
         );
       }),
     ),
@@ -369,6 +381,15 @@ export class BaseAuthDO implements DurableObject {
       );
     }
 
+    const jurisdiction = searchParams.get('jurisdiction') ?? undefined;
+    if (jurisdiction && jurisdiction !== 'eu') {
+      return closeWithErrorLocal(
+        ErrorKind.InvalidConnectionRequest,
+        'invalid jurisdiction parameter',
+      );
+    }
+    assert(jurisdiction === undefined || jurisdiction === 'eu');
+
     lc = lc.addContext('client', clientID).addContext('room', roomID);
 
     let decodedAuth: string | undefined;
@@ -403,16 +424,40 @@ export class BaseAuthDO implements DurableObject {
       // Find the room's objectID so we can connect to it. Do this BEFORE
       // writing the connection record, in case it doesn't exist or is
       // closed/deleted.
-      const roomRecord = await this._roomRecordLock.withRead(() =>
-        roomRecordByRoomID(this._durableStorage, roomID),
-      );
 
-      // If the room doesn't exist, or is closed, we need to give the client some
-      // visibility into this. If we just return a 404 here without accepting the
-      // connection the client doesn't have any access to the return code or body.
-      // So we accept the connection and send an error message to the client, then
-      // close the connection. We trust it will be logged by onSocketError in the
-      // client.
+      const roomRecord = await this._roomRecordLock.withRead(async () => {
+        // Check if room already exists.
+        const roomRecord = await roomRecordByRoomID(
+          this._durableStorage,
+          roomID,
+        );
+        if (roomRecord) {
+          return roomRecord;
+        }
+
+        lc.debug?.('room not found, trying to create it');
+
+        const resp = await internalCreateRoom(
+          lc,
+          this._roomDO,
+          this._durableStorage,
+          roomID,
+          jurisdiction,
+        );
+        if (!resp.ok) {
+          return undefined;
+        }
+
+        return roomRecordByRoomID(this._durableStorage, roomID);
+      });
+
+      // If the room is closed or we failed to implicitly create it, we need to
+      // give the client some visibility into this. If we just return a 404 here
+      // without accepting the connection the client doesn't have any access to
+      // the return code or body. So we accept the connection and send an error
+      // message to the client, then close the connection. We trust it will be
+      // logged by onSocketError in the client.
+
       if (roomRecord === undefined || roomRecord.status !== RoomStatus.Open) {
         const kind = roomRecord ? ErrorKind.RoomClosed : ErrorKind.RoomNotFound;
         return createWSAndCloseWithError(lc, url, kind, roomID, encodedAuth);
@@ -671,10 +716,9 @@ export class BaseAuthDO implements DurableObject {
       if (!response.ok) {
         errorResponses.push(response);
         lc.error?.(
-          `Received error response from ${roomIDs[i]}. ${response.status} ${
-            // TODO(arv): This should be `text()` and not `text`
-            await response.text
-          }`,
+          `Received error response from ${roomIDs[i]}. ${
+            response.status
+          } ${await response.clone().text()}`,
         );
       }
     }

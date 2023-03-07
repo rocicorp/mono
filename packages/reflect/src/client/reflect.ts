@@ -153,6 +153,7 @@ export class Reflect<MD extends MutatorDefs> {
   onOnlineChange: ((online: boolean) => void) | null | undefined = null;
 
   private _onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
+  private readonly _jurisdiction: 'eu' | undefined;
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -229,10 +230,12 @@ export class Reflect<MD extends MutatorDefs> {
    * Constructs a new Reflect client.
    */
   constructor(options: ReflectOptions<MD>) {
-    if (options.userID === '') {
+    const {userID, roomID, socketOrigin, onOnlineChange, jurisdiction} =
+      options;
+    if (!userID) {
       throw new Error('ReflectOptions.userID must not be empty.');
     }
-    const {socketOrigin} = options;
+
     if (
       !socketOrigin.startsWith('ws://') &&
       !socketOrigin.startsWith('wss://')
@@ -241,8 +244,11 @@ export class Reflect<MD extends MutatorDefs> {
         "ReflectOptions.socketOrigin must use the 'ws' or 'wss' scheme.",
       );
     }
+    if (jurisdiction !== undefined && jurisdiction !== 'eu') {
+      throw new Error('ReflectOptions.jurisdiction must be "eu" if present.');
+    }
 
-    this.onOnlineChange = options.onOnlineChange;
+    this.onOnlineChange = onOnlineChange;
     this.#options = options;
 
     const metrics = options.metrics ?? new NopMetrics();
@@ -284,7 +290,7 @@ export class Reflect<MD extends MutatorDefs> {
       logLevel: options.logLevel,
       logSinks: options.logSinks,
       mutators: options.mutators,
-      name: `reflect-${options.userID}-${options.roomID}`,
+      name: `reflect-${userID}-${roomID}`,
       pusher: (req, reqID) => this._pusher(req, reqID),
       puller: (req, reqID) => this._puller(req, reqID),
       // TODO: Do we need these?
@@ -305,9 +311,10 @@ export class Reflect<MD extends MutatorDefs> {
     });
     this._rep.getAuth = this.#getAuthToken;
     this._onUpdateNeeded = this._rep.onUpdateNeeded; // defaults to reload.
-    this._socketOrigin = options.socketOrigin;
-    this.roomID = options.roomID;
-    this.userID = options.userID;
+    this._socketOrigin = socketOrigin;
+    this.roomID = roomID;
+    this.userID = userID;
+    this._jurisdiction = jurisdiction;
     this._l = getLogContext(options, this._rep);
     this._pokeHandler = new PokeHandler(
       pokeDD31 => this._rep.poke(pokeDD31),
@@ -601,6 +608,7 @@ export class Reflect<MD extends MutatorDefs> {
       await this.clientGroupID,
       this.roomID,
       this._rep.auth,
+      this._jurisdiction,
       this._lastMutationIDReceived,
       wsid,
     );
@@ -1083,6 +1091,7 @@ export function createSocket(
   clientGroupID: string,
   roomID: string,
   auth: string,
+  jurisdiction: 'eu' | undefined,
   lmid: number,
   wsid: string,
 ): WebSocket {
@@ -1093,6 +1102,9 @@ export function createSocket(
   searchParams.set('clientID', clientID);
   searchParams.set('clientGroupID', clientGroupID);
   searchParams.set('roomID', roomID);
+  if (jurisdiction !== undefined) {
+    searchParams.set('jurisdiction', jurisdiction);
+  }
   searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));
   searchParams.set('ts', String(performance.now()));
   searchParams.set('lmid', String(lmid));

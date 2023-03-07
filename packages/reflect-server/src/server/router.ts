@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {MaybePromise, ReadonlyJSONValue} from 'replicache';
 import {Struct, validate} from 'superstruct';
+import {AUTH_API_KEY_HEADER_NAME} from './auth-api-headers.js';
 import {createUnauthorizedResponse} from './create-unauthorized-response.js';
 
 /**
@@ -123,7 +124,7 @@ export function checkAuthAPIKey(required: string | undefined, req: Request) {
   if (!required) {
     throw new Error('Internal error: expected auth api key cannot be empty');
   }
-  const authHeader = req.headers.get('x-reflect-auth-api-key');
+  const authHeader = req.headers.get(AUTH_API_KEY_HEADER_NAME);
   if (authHeader !== required) {
     return createUnauthorizedResponse();
   }

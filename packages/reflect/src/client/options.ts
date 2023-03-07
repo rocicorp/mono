@@ -57,6 +57,12 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   roomID: string;
 
   /**
+   * The server side data can be restricted to a jurisdiction. This is
+   * useful for GDPR compliance.
+   */
+  jurisdiction?: 'eu' | undefined;
+
+  /**
    * The schema version of the data understood by this application. This enables
    * versioning of mutators and the client view.
    */

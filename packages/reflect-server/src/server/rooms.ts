@@ -1,7 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {CreateRoomRequest} from 'reflect-protocol';
-import type {DurableStorage} from '../storage/durable-storage.js';
 import * as s from 'superstruct';
+import type {DurableStorage} from '../storage/durable-storage.js';
+import {INTERNAL_CREATE_ROOM_PATH} from './paths.js';
 
 // RoomRecord keeps information about the room, for example the Durable
 // Object ID of the DO instance that has the room.
@@ -52,9 +53,8 @@ const roomStatusSchema = s.enums([
   RoomStatus.Deleted,
   RoomStatus.Unknown,
 ]);
-// Note setting jurisdictionSchema to = s.union([s.literal(""), s.literal("eu")]);
-// doesn't work for some reason.
-const jurisdictionSchema = s.enums(['', 'eu']);
+
+const jurisdictionSchema = s.union([s.literal(''), s.literal('eu')]);
 const roomRecordSchema = s.object({
   roomID: s.string(),
   objectIDString: s.string(),
@@ -62,7 +62,24 @@ const roomRecordSchema = s.object({
   status: roomStatusSchema,
 });
 // This assignment ensures that RoomRecord and roomRecordSchema stay in sync.
-const RoomRecord: s.Describe<RoomRecord> = roomRecordSchema;
+const RoomRecord: s.Struct<RoomRecord> = roomRecordSchema;
+
+export function internalCreateRoom(
+  lc: LogContext,
+  roomDO: DurableObjectNamespace,
+  storage: DurableStorage,
+  roomID: string,
+  jurisdiction: 'eu' | undefined,
+) {
+  const url = `https://unused-reflect-room-do.dev${INTERNAL_CREATE_ROOM_PATH}`;
+  const req: CreateRoomRequest = {roomID, jurisdiction};
+  const request = new Request(url, {
+    method: 'POST',
+    // no auth headers, because this is an internal call
+    body: JSON.stringify(req),
+  });
+  return createRoom(lc, roomDO, storage, request, roomID, jurisdiction);
+}
 
 // Note: caller must enforce no other concurrent calls to this and other
 // functions that create or modify the room record.
@@ -71,11 +88,11 @@ export async function createRoom(
   roomDO: DurableObjectNamespace,
   storage: DurableStorage,
   request: Request,
-  validatedBody: CreateRoomRequest,
+  roomID: string,
+  jurisdiction: 'eu' | undefined,
 ): Promise<Response> {
   // Note: this call was authenticated by dispatch, so no need to check for
   // authApiKey here.
-  const {roomID} = validatedBody;
 
   const invalidResponse = validateRoomID(roomID);
   if (invalidResponse) {
@@ -89,14 +106,11 @@ export async function createRoom(
     });
   }
 
-  const options: DurableObjectNamespaceNewUniqueIdOptions = {};
-  if (validatedBody.jurisdiction === 'eu') {
-    options['jurisdiction'] = 'eu';
-  }
+  const options = jurisdiction ? {jurisdiction} : undefined;
 
   // Instantiate it so it will be listed in the namespace by the CF API,
   // and also so that it can do whatever it needs to initialize itself.
-  const objectID = await roomDO.newUniqueId(options);
+  const objectID = roomDO.newUniqueId(options);
   const newRoomDOStub = roomDO.get(objectID);
   const response = await newRoomDOStub.fetch(request);
   if (!response.ok) {
@@ -113,7 +127,7 @@ export async function createRoom(
   const roomRecord: RoomRecord = {
     roomID,
     objectIDString: objectID.toString(),
-    jurisdiction: validatedBody.jurisdiction ?? '',
+    jurisdiction: jurisdiction ?? '',
     status: RoomStatus.Open,
   };
   const roomRecordKey = roomKeyToString(roomRecord);

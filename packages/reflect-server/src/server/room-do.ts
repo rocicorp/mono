@@ -38,6 +38,7 @@ import type {PendingMutationMap} from '../types/mutation.js';
 import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
+  INTERNAL_CREATE_ROOM_PATH,
   LEGACY_CONNECT_PATH,
   LEGACY_CREATE_ROOM_PATH,
 } from './paths.js';
@@ -64,6 +65,7 @@ export const ROOM_ROUTES = {
   authConnections: '/api/auth/v0/connections',
   legacyCreateRoom: LEGACY_CREATE_ROOM_PATH,
   createRoom: CREATE_ROOM_PATH,
+  internalCreateRoom: INTERNAL_CREATE_ROOM_PATH,
   legacyConnect: LEGACY_CONNECT_PATH,
   connect: CONNECT_URL_PATTERN,
 } as const;
@@ -120,8 +122,14 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       this._authInvalidateForRoom,
     );
     this._router.register(ROOM_ROUTES.authConnections, this._authConnections);
+
     this._router.register(ROOM_ROUTES.createRoom, this._createRoom);
     this._router.register(ROOM_ROUTES.legacyCreateRoom, this._createRoom);
+    this._router.register(
+      ROOM_ROUTES.internalCreateRoom,
+      this._internalCreateRoom,
+    );
+
     this._router.register(ROOM_ROUTES.connect, this._connect);
     this._router.register(ROOM_ROUTES.legacyConnect, this._connect);
   }
@@ -212,13 +220,19 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     return 'unknown';
   }
 
-  private _createRoom = this._requireAPIKey(
-    withBody(createRoomRequestSchema, async ctx => {
-      const {roomID} = ctx.body;
-      await this._setRoomID(roomID);
-      return new Response('ok');
-    }),
-  );
+  /**
+   * _internalCreateRoom does not require an API key. It is used by the
+   * _createRoom after it has validated the API key. It is also used as an RPC
+   * from the AuthDO.
+   *
+   */
+  private _internalCreateRoom = withBody(createRoomRequestSchema, async ctx => {
+    const {roomID} = ctx.body;
+    await this._setRoomID(roomID);
+    return new Response('ok');
+  });
+
+  private _createRoom = this._requireAPIKey(this._internalCreateRoom);
 
   // There's a bit of a question here about whether we really want to delete *all* the
   // data when a room is deleted. This deletes everything, including values kept by the
