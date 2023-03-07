@@ -76,7 +76,7 @@ async function rebaseMutation(
     dd31,
   );
 
-  const tx = new WriteTransactionImpl(mutationClientID, dbWrite, lc);
+  const tx = new WriteTransactionImpl(mutationClientID, 'rebase', dbWrite, lc);
   await mutatorImpl(tx, args);
   return dbWrite;
 }
