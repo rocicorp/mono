@@ -315,7 +315,7 @@ export function benchmarkRebase(opts: {
       );
 
       await rep.query(async tx => {
-        // assert(!(await tx.has('key')), 'key not found');
+        assert(await tx.has('key'), 'key not found');
         for (let i = 0; i < numKeys; i++) {
           assert(await tx.has(`key${i}`), `key${i} not found`);
         }
