@@ -319,7 +319,7 @@ export async function newWriteLocal(
   timestamp: number,
   clientID: ClientID,
   dd31: boolean,
-): Promise<Write> {
+): Promise<{mutationID: number; write: Write}> {
   const [basisHash, basis, bTreeWrite] = await readCommitForBTreeWrite(
     whence,
     dagWrite,
@@ -327,7 +327,7 @@ export async function newWriteLocal(
 
   const mutationID = await basis.getNextMutationID(clientID, dagWrite);
   const indexes = readIndexesForWrite(basis, dagWrite);
-  return new Write(
+  const write = new Write(
     dagWrite,
     bTreeWrite,
     basis,
@@ -356,6 +356,8 @@ export async function newWriteLocal(
     clientID,
     dd31,
   );
+
+  return {mutationID, write};
 }
 
 export async function newWriteSnapshotSDD(

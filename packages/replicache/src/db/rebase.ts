@@ -65,7 +65,7 @@ async function rebaseMutation(
     );
   }
 
-  const dbWrite = await newWriteLocal(
+  const {mutationID, write: dbWrite} = await newWriteLocal(
     whenceHash(basis),
     name,
     args,
@@ -76,7 +76,13 @@ async function rebaseMutation(
     dd31,
   );
 
-  const tx = new WriteTransactionImpl(mutationClientID, 'rebase', dbWrite, lc);
+  const tx = new WriteTransactionImpl(
+    mutationClientID,
+    mutationID,
+    'rebase',
+    dbWrite,
+    lc,
+  );
   await mutatorImpl(tx, args);
   return dbWrite;
 }

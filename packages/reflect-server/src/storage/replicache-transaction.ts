@@ -25,6 +25,7 @@ import type {Storage} from './storage.js';
  */
 export class ReplicacheTransaction implements WriteTransaction {
   private _clientID: ClientID;
+  private _mutationID: number;
   private _storage: Storage;
   private _version: Version;
 
@@ -40,10 +41,20 @@ export class ReplicacheTransaction implements WriteTransaction {
     return this._clientID;
   }
 
-  constructor(storage: Storage, clientID: string, version: Version) {
+  get mutationID(): number {
+    return this._mutationID;
+  }
+
+  constructor(
+    storage: Storage,
+    clientID: string,
+    mutationID: number,
+    version: Version,
+  ) {
     this._storage = storage;
     this._clientID = clientID;
     this._version = version;
+    this._mutationID = mutationID;
   }
 
   async put(key: string, value: JSONValue): Promise<void> {

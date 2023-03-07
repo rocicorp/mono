@@ -11,6 +11,8 @@ import {
 } from '../types/connected-clients.js';
 import {putVersion} from '../types/version.js';
 
+const NOOP_MUTATION_ID = -1;
+
 export async function processDisconnects(
   lc: LogContext,
   disconnectHandler: DisconnectHandler,
@@ -31,7 +33,12 @@ export async function processDisconnects(
     if (!currentlyConnectedClients.has(clientID)) {
       lc.debug?.('Executing disconnectHandler for:', clientID);
       const cache = new EntryCache(storage);
-      const tx = new ReplicacheTransaction(cache, clientID, nextVersion);
+      const tx = new ReplicacheTransaction(
+        cache,
+        clientID,
+        NOOP_MUTATION_ID,
+        nextVersion,
+      );
       try {
         await disconnectHandler(tx);
         await putVersion(nextVersion, cache);

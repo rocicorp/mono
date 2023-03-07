@@ -1580,7 +1580,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         const whence: db.Whence = db.whenceHead(db.DEFAULT_HEAD_NAME);
         const originalHash = null;
 
-        const dbWrite = await db.newWriteLocal(
+        const {mutationID, write: dbWrite} = await db.newWriteLocal(
           whence,
           name,
           frozenArgs,
@@ -1593,6 +1593,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
         const tx = new WriteTransactionImpl(
           clientID,
+          mutationID,
           'initial',
           dbWrite,
           this._lc,

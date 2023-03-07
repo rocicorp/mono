@@ -222,6 +222,7 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
  * database.
  */
 export interface WriteTransaction extends ReadTransaction {
+  readonly mutationID: number;
   readonly reason: TransactionReason;
   /**
    * Sets a single `value` in the database. The value will be frozen (using
@@ -243,15 +244,18 @@ export class WriteTransactionImpl
   // use `declare` to specialize the type.
   declare readonly dbtx: db.Write;
   readonly reason: TransactionReason;
+  readonly mutationID: number;
 
   constructor(
     clientID: ClientID,
+    mutationID: number,
     reason: TransactionReason,
     dbWrite: db.Write,
     lc: LogContext,
     rpcName = 'openWriteTransaction',
   ) {
     super(clientID, dbWrite, lc, rpcName);
+    this.mutationID = mutationID;
     this.reason = reason;
   }
 
