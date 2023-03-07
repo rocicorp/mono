@@ -1,33 +1,14 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import {
-  jest,
   afterEach,
   beforeEach,
-  test,
-  expect,
   describe,
+  expect,
+  jest,
+  test,
 } from '@jest/globals';
-import {encodeHeaderValue} from '../util/headers.js';
-import {Mocket, mockWebSocketPair, TestLogSink} from '../util/test-utils.js';
-import {USER_DATA_HEADER_NAME} from './auth.js';
-import {
-  createTestDurableObjectNamespace,
-  TestDurableObjectId,
-  TestDurableObjectState,
-  TestDurableObjectStub,
-} from './do-test-utils.js';
-import {BaseAuthDO, AUTH_ROUTES, ConnectionRecord} from './auth-do.js';
-import {
-  AUTH_API_KEY_HEADER_NAME,
-  createAuthAPIHeaders,
-} from './auth-api-headers.js';
-import {
-  type RoomRecord,
-  roomRecordByRoomID as getRoomRecordOriginal,
-  roomRecordByObjectIDForTest as getRoomRecordByObjectIDOriginal,
-  RoomStatus,
-} from './rooms.js';
-import {DurableStorage} from '../storage/durable-storage.js';
+import {ErrorKind} from 'reflect-protocol';
+import {newInvalidateAllAuthRequest} from '../client/auth.js';
 import {
   newCloseRoomRequest,
   newCreateRoomRequest,
@@ -36,9 +17,30 @@ import {
   newMigrateRoomRequest,
   newRoomStatusRequest,
 } from '../client/room.js';
-import {ErrorKind} from 'reflect-protocol';
-import {newInvalidateAllAuthRequest} from '../client/auth.js';
+import {DurableStorage} from '../storage/durable-storage.js';
+import {assert} from '../util/asserts.js';
 import {newAuthRevalidateConnections} from '../util/auth-test-util.js';
+import {encodeHeaderValue} from '../util/headers.js';
+import {Mocket, mockWebSocketPair, TestLogSink} from '../util/test-utils.js';
+import {
+  AUTH_API_KEY_HEADER_NAME,
+  createAuthAPIHeaders,
+} from './auth-api-headers.js';
+import {AUTH_ROUTES, BaseAuthDO, ConnectionRecord} from './auth-do.js';
+import {USER_DATA_HEADER_NAME} from './auth.js';
+import {
+  createTestDurableObjectNamespace,
+  TestDurableObjectId,
+  TestDurableObjectState,
+  TestDurableObjectStub,
+} from './do-test-utils.js';
+import {CREATE_ROOM_PATH, INTERNAL_CREATE_ROOM_PATH} from './paths.js';
+import {
+  roomRecordByObjectIDForTest as getRoomRecordByObjectIDOriginal,
+  roomRecordByRoomID as getRoomRecordOriginal,
+  RoomStatus,
+  type RoomRecord,
+} from './rooms.js';
 
 const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
 const {authDO} = getMiniflareBindings();
@@ -86,7 +88,7 @@ async function createCreateRoomTestFixture() {
       // eslint-disable-next-line require-await
       return new TestDurableObjectStub(id, async (request: Request) => {
         const url = new URL(request.url);
-        if (url.pathname === '/createRoom') {
+        if (url.pathname === CREATE_ROOM_PATH) {
           const count = roomDOcreateRoomCounts.get(objectIDString) || 0;
           roomDOcreateRoomCounts.set(objectIDString, count + 1);
           return new Response();
@@ -875,12 +877,14 @@ function createConnectTestFixture(
     testUserID?: string;
     testRoomID?: string;
     testClientID?: string;
+    jurisdiction?: string | undefined;
   } = {},
 ) {
   const {
     testUserID = 'testUserID1',
     testRoomID = 'testRoomID1',
     testClientID = 'testClientID1',
+    jurisdiction,
   } = options;
   const encodedTestAuth = 'test%20auth%20token%20value%20%25%20encoded';
   const testAuth = 'test auth token value % encoded';
@@ -888,7 +892,10 @@ function createConnectTestFixture(
   const headers = new Headers();
   headers.set('Sec-WebSocket-Protocol', encodedTestAuth);
   headers.set('Upgrade', 'websocket');
-  const url = `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}`;
+  let url = `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}`;
+  if (jurisdiction) {
+    url += `&jurisdiction=${jurisdiction}`;
+  }
   const testRequest = new Request(url, {
     headers,
   });
@@ -898,16 +905,25 @@ function createConnectTestFixture(
   let numRooms = 0;
   const testRoomDO: DurableObjectNamespace = {
     ...createTestDurableObjectNamespace(),
-    idFromName: () => {
+    idFromName() {
       throw 'should not be called';
     },
-    newUniqueId: () => new TestDurableObjectId('room-do-' + numRooms++),
-    get: (id: DurableObjectId) => {
+    newUniqueId(options) {
+      if (jurisdiction) {
+        assert(options);
+        expect(options.jurisdiction).toEqual(jurisdiction);
+      }
+      return new TestDurableObjectId('room-do-' + numRooms++, undefined);
+    },
+    get(id: DurableObjectId) {
       expect(id.toString()).toEqual('room-do-0');
       // eslint-disable-next-line require-await
       return new TestDurableObjectStub(id, async (request: Request) => {
         const url = new URL(request.url);
-        if (url.pathname === '/createRoom') {
+        if (
+          url.pathname === INTERNAL_CREATE_ROOM_PATH ||
+          url.pathname === CREATE_ROOM_PATH
+        ) {
           return new Response();
         }
         expect(request.url).toEqual(testRequest.url);
@@ -945,38 +961,50 @@ function createRoomDOThatThrowsIfFetchIsCalled(): DurableObjectNamespace {
   };
 }
 
-test("connect won't connect to a room that doesn't exist", async () => {
-  jest.useRealTimers();
-  const {testAuth, testUserID, testRoomID, testRequest, testRoomDO} =
-    createConnectTestFixture();
+describe("connect will implicitly create a room that doesn't exist", () => {
+  const t = (jurisdiction: string | undefined) => {
+    test(`jurisdiction=${jurisdiction}:`, async () => {
+      const {
+        testAuth,
+        testUserID,
+        testRoomID,
+        testRequest,
+        testRoomDO,
+        mocket,
+        encodedTestAuth,
+      } = createConnectTestFixture({jurisdiction});
 
-  const storage = await getMiniflareDurableObjectStorage(authDOID);
-  const state = new TestDurableObjectState(authDOID, storage);
-  const logSink = new TestLogSink();
-  const [, serverWS] = mockWebSocketPair();
-  const authDO = new BaseAuthDO({
-    roomDO: testRoomDO,
-    state,
-    // eslint-disable-next-line require-await
-    authHandler: async (auth, roomID) => {
-      expect(auth).toEqual(testAuth);
-      expect(roomID).toEqual(testRoomID);
-      return {userID: testUserID};
-    },
-    authApiKey: TEST_AUTH_API_KEY,
-    logSink,
-    logLevel: 'debug',
-  });
-  // Note: no room created.
+      const storage = await getMiniflareDurableObjectStorage(authDOID);
+      const state = new TestDurableObjectState(authDOID, storage);
+      const logSink = new TestLogSink();
+      const authDO = new BaseAuthDO({
+        roomDO: testRoomDO,
+        state,
+        // eslint-disable-next-line require-await
+        authHandler: async (auth, roomID) => {
+          expect(auth).toEqual(testAuth);
+          expect(roomID).toEqual(testRoomID);
+          return {userID: testUserID};
+        },
+        authApiKey: TEST_AUTH_API_KEY,
+        logSink,
+        logLevel: 'debug',
+      });
 
-  const response = await authDO.fetch(testRequest);
+      await connectAndTestThatRoomGotCreated(
+        authDO,
+        testRequest,
+        mocket,
+        encodedTestAuth,
+        storage,
+        jurisdiction,
+      );
+    });
+  };
 
-  expect(response.status).toEqual(101);
-  expect(serverWS.log).toEqual([
-    ['send', JSON.stringify(['error', ErrorKind.RoomNotFound, 'testRoomID1'])],
-    ['close'],
-  ]);
-  expect((await storage.list({prefix: 'connection/'})).size).toEqual(0);
+  t(undefined);
+  t('eu');
+  t('invalid');
 });
 
 test('connect calls authHandler and sends resolved UserData in header to Room DO', async () => {
@@ -1006,23 +1034,17 @@ test('connect calls authHandler and sends resolved UserData in header to Room DO
     logSink,
     logLevel: 'debug',
   });
+
   await createRoom(authDO, testRoomID);
 
-  const testTime = 1010101;
-  jest.setSystemTime(testTime);
-  const response = await authDO.fetch(testRequest);
-
-  expect(response.status).toEqual(101);
-  expect(response.webSocket).toBe(mocket);
-  expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
+  await connectAndTestThatRoomGotCreated(
+    authDO,
+    testRequest,
+    mocket,
     encodedTestAuth,
+    storage,
+    undefined,
   );
-  expect((await storage.list({prefix: 'connection/'})).size).toEqual(1);
-  const connectionRecord = (await storage.get(
-    'connection/testUserID1/testRoomID1/testClientID1/',
-  )) as ConnectionRecord;
-  expect(connectionRecord).toBeDefined();
-  expect(connectionRecord.connectTimestamp).toEqual(testTime);
 });
 
 test('connect wont connect to a room that is closed', async () => {
@@ -1526,6 +1548,40 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
   expect(roomDORequestCount).toEqual(1);
   expect(response.status).toEqual(200);
 });
+
+async function connectAndTestThatRoomGotCreated(
+  authDO: BaseAuthDO,
+  testRequest: Request,
+  mocket: Mocket,
+  encodedTestAuth: string,
+  storage: DurableObjectStorage,
+  jurisdiction: string | undefined,
+) {
+  const testTime = 1010101;
+  jest.setSystemTime(testTime);
+  const response = await authDO.fetch(testRequest);
+
+  expect(response.status).toEqual(101);
+  expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
+    encodedTestAuth,
+  );
+
+  if (jurisdiction !== 'invalid') {
+    expect(response.webSocket).toBe(mocket);
+    expect((await storage.list({prefix: 'connection/'})).size).toEqual(1);
+    const connectionRecord = (await storage.get(
+      'connection/testUserID1/testRoomID1/testClientID1/',
+    )) as Record<string, unknown> | undefined;
+    assert(connectionRecord);
+    expect(connectionRecord.connectTimestamp).toEqual(testTime);
+  } else {
+    expect((await storage.list({prefix: 'connection/'})).size).toEqual(0);
+    const connectionRecord = await storage.get(
+      'connection/testUserID1/testRoomID1/testClientID1/',
+    );
+    expect(connectionRecord).toBeUndefined();
+  }
+}
 
 async function createRoom(authDO: BaseAuthDO, roomID: string) {
   const createRoomRequest = newCreateRoomRequest(

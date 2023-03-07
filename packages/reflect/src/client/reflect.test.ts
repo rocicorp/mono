@@ -247,6 +247,7 @@ test('createSocket', () => {
     clientID: string,
     roomID: string,
     auth: string,
+    jurisdiction: 'eu' | undefined,
     lmid: number,
     expectedURL: string,
     expectedProtocol = '',
@@ -258,6 +259,7 @@ test('createSocket', () => {
       'testClientGroupID',
       roomID,
       auth,
+      jurisdiction,
       lmid,
       'wsidx',
     ) as unknown as MockSocket;
@@ -271,6 +273,7 @@ test('createSocket', () => {
     'clientID',
     'roomID',
     '',
+    undefined,
     0,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
   );
@@ -281,6 +284,7 @@ test('createSocket', () => {
     'clientID',
     'roomID',
     '',
+    undefined,
     0,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
@@ -291,6 +295,7 @@ test('createSocket', () => {
     'clientID',
     'a/b',
     '',
+    undefined,
     0,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=a%2Fb&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
@@ -301,6 +306,7 @@ test('createSocket', () => {
     'clientID',
     'roomID',
     '',
+    undefined,
     123,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
   );
@@ -311,8 +317,21 @@ test('createSocket', () => {
     'clientID',
     'roomID',
     'auth with []',
+    undefined,
     0,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'auth%20with%20%5B%5D',
+  );
+
+  t(
+    'ws://example.com/',
+    null,
+    'clientID',
+    'roomID',
+    'auth with []',
+    'eu',
+    0,
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
     'auth%20with%20%5B%5D',
   );
 
@@ -323,6 +342,7 @@ test('createSocket', () => {
     'clientID',
     'roomID',
     '',
+    undefined,
     0,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
   );
