@@ -1,8 +1,8 @@
 {
   "name": "datadog",
   "type": "module",
-  "main": "src/mod.ts",
-  "types": "src/mod.ts",
+  "module": "./src/mod.ts",
+  "types": "./src/mod.ts",
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.3.0",
     "@rocicorp/lock": "^1.0.1",
@@ -22,5 +22,11 @@
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },
-  "prettier": "@rocicorp/prettier-config"
+  "prettier": "@rocicorp/prettier-config",
+  "exports": {
+    ".": {
+      "import": "./src/mod.ts",
+      "types": "./src/mod.ts"
+    }
+  }
 }

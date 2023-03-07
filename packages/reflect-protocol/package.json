@@ -1,10 +1,16 @@
 {
   "name": "reflect-protocol",
   "type": "module",
-  "main": "src/mod.ts",
-  "types": "src/mod.ts",
+  "module": "./src/mod.ts",
+  "types": "./src/mod.ts",
   "dependencies": {
     "superstruct": "^0.16.7",
     "typescript": "^4.9.5"
+  },
+  "exports": {
+    ".": {
+      "import": "./src/mod.ts",
+      "types": "./src/mod.ts"
+    }
   }
 }
