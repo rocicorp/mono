@@ -20,7 +20,7 @@ import {
   mockMathRandom,
 } from '../util/test-utils.js';
 import {processRoom} from '../process/process-room.js';
-import type {PendingMutationMap} from '../types/mutation.js';
+import type {PendingMutation} from '../types/mutation.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -295,7 +295,7 @@ test('processRoom', async () => {
     clientRecords: ClientRecordMap;
     headVersion: Version;
     clients: ClientMap;
-    pendingMutations: PendingMutationMap;
+    pendingMutations: PendingMutation[];
     expectedError?: string;
     expectedPokes?: ClientPoke[];
     expectedUserValues?: Map<string, UserValue>;
@@ -309,7 +309,7 @@ test('processRoom', async () => {
     {
       name: 'no client record',
       clientRecords: new Map(),
-      pendingMutations: new Map(),
+      pendingMutations: [],
       headVersion: 42,
       clients: new Map([client('c1', 'u1', 'cg1')]),
       expectedUserValues: new Map(),
@@ -329,7 +329,7 @@ test('processRoom', async () => {
         client('c2', 'u2', 'cg1'),
         client('c3', 'u3', 'cg2'),
       ]),
-      pendingMutations: new Map(),
+      pendingMutations: [],
       expectedPokes: [
         {
           clientID: 'c1',
@@ -383,7 +383,7 @@ test('processRoom', async () => {
         client('c2', 'u2', 'cg1'),
         client('c3', 'u3', 'cg2'),
       ]),
-      pendingMutations: new Map(),
+      pendingMutations: [],
       expectedPokes: [
         {
           clientID: 'c2',
@@ -409,9 +409,7 @@ test('processRoom', async () => {
       clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
       headVersion: 1,
       clients: new Map([client('c1', 'u1', 'cg1')]),
-      pendingMutations: new Map([
-        ['cg1', [mutation('c1', 2, 'inc', null, 300)]],
-      ]),
+      pendingMutations: [mutation('c1', 2, 'inc', null, 300)],
       expectedPokes: [
         {
           clientID: 'c1',
@@ -439,15 +437,10 @@ test('processRoom', async () => {
       clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
       headVersion: 1,
       clients: new Map([client('c1', 'u1', 'cg1')]),
-      pendingMutations: new Map([
-        [
-          'cg1',
-          [
-            mutation('c1', 2, 'inc', null, 50),
-            mutation('c1', 3, 'inc', null, 100),
-          ],
-        ],
-      ]),
+      pendingMutations: [
+        mutation('c1', 2, 'inc', null, 50),
+        mutation('c1', 3, 'inc', null, 100),
+      ],
       expectedPokes: [
         {
           clientID: 'c1',
@@ -501,17 +494,12 @@ test('processRoom', async () => {
         client('c3', 'u3', 'cg2'),
         client('c4', 'u4', 'cg3'),
       ]),
-      pendingMutations: new Map([
-        [
-          'cg1',
-          [
-            mutation('c1', 2, 'inc', null, 50),
-            mutation('c1', 3, 'inc', null, 100),
-            mutation('c2', 2, 'inc', null, 10),
-          ],
-        ],
-        ['cg2', [mutation('c3', 5, 'inc', null, 50)]],
-      ]),
+      pendingMutations: [
+        mutation('c1', 2, 'inc', null, 50),
+        mutation('c1', 3, 'inc', null, 100),
+        mutation('c2', 2, 'inc', null, 10),
+        mutation('c3', 5, 'inc', null, 50),
+      ],
       expectedPokes: expectedPokesForPendingMutations,
       expectedClientRecords: new Map([
         ['c1', clientRecord('cg1', 5, 3, 4)],
@@ -537,17 +525,12 @@ test('processRoom', async () => {
         client('c3', 'u3', 'cg2'),
         client('c4', 'u4', 'cg3'),
       ]),
-      pendingMutations: new Map([
-        [
-          'cg1',
-          [
-            mutation('c1', 2, 'inc', null, 50),
-            mutation('c1', 3, 'inc', null, 100),
-            mutation('c2', 2, 'inc', null, 10),
-          ],
-        ],
-        ['cg2', [mutation('c3', 5, 'inc', null, 50)]],
-      ]),
+      pendingMutations: [
+        mutation('c1', 2, 'inc', null, 50),
+        mutation('c1', 3, 'inc', null, 100),
+        mutation('c2', 2, 'inc', null, 10),
+        mutation('c3', 5, 'inc', null, 50),
+      ],
       expectedPokes: [
         // fast forward pokes
         {

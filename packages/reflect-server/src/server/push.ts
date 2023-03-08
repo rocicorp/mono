@@ -1,4 +1,4 @@
-import type {ClientID, ClientMap, ClientState} from '../types/client-state.js';
+import type {ClientID, ClientState} from '../types/client-state.js';
 import type {PushBody} from 'reflect-protocol';
 import type {LogContext} from '@rocicorp/logger';
 import {
@@ -7,10 +7,10 @@ import {
   putClientRecord,
 } from '../types/client-record.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
-import type {PendingMutationMap} from '../types/mutation.js';
 import {closeWithError} from '../util/socket.js';
 import {must} from '../util/must.js';
 import {ErrorKind} from 'reflect-protocol';
+import type {PendingMutation} from '../types/mutation.js';
 
 export type Now = () => number;
 export type ProcessUntilDone = () => void;
@@ -22,9 +22,9 @@ export type ProcessUntilDone = () => void;
 export async function handlePush(
   lc: LogContext,
   storage: DurableStorage,
+  clientID: ClientID,
   client: ClientState,
-  clients: ClientMap,
-  pendingMutations: PendingMutationMap,
+  pendingMutations: PendingMutation[],
   body: PushBody,
   now: Now,
   processUntilDone: ProcessUntilDone,
@@ -32,17 +32,13 @@ export async function handlePush(
   lc = lc.addContext('requestID', body.requestID);
   lc.debug?.('handling push', JSON.stringify(body));
 
-  // TODO(greg): not sure of best handling of clockBehindByMs in
-  // a client group model (push contains mutations from multiple clients)
-  if (client.clockBehindByMs === undefined) {
-    client.clockBehindByMs = now() - body.timestamp;
-    lc.debug?.(
-      'initializing clock offset: clock behind by',
-      client.clockBehindByMs,
-    );
+  const clockOffsetMs = client.clockOffsetMs ?? now() - body.timestamp;
+  if (client.clockOffsetMs === undefined) {
+    client.clockOffsetMs = clockOffsetMs;
+    lc.debug?.('initializing client clockOffsetMs to', client.clockOffsetMs);
   }
+
   const {clientGroupID} = body;
-  const pending = [...(pendingMutations.get(clientGroupID) ?? [])];
   const mutationClientIDs = new Set(body.mutations.map(m => m.clientID));
   const clientRecords = new Map(
     await Promise.all(
@@ -56,48 +52,46 @@ export async function handlePush(
     ),
   );
 
-  const expectedMutationIDByClientID = new Map();
+  const previousMutationByClientID: Map<
+    ClientID,
+    {id: number; pendingIndex: number}
+  > = new Map();
   const newClientIDs: ClientID[] = [];
   for (const mClientID of mutationClientIDs) {
     const clientRecord = clientRecords.get(mClientID);
-    expectedMutationIDByClientID.set(
-      mClientID,
-      (clientRecord?.lastMutationID ?? 0) + 1,
-    );
+    previousMutationByClientID.set(mClientID, {
+      id: clientRecord?.lastMutationID ?? 0,
+      pendingIndex: -1,
+    });
     if (clientRecord) {
       if (clientRecord.clientGroupID !== clientGroupID) {
         // This is not expected to ever occur.  However if it does no pushes
         // will ever succeed over this connection since the server and client
-        // disagree about what client group a mClientID belongs to.  Even
+        // disagree about what client group a client id belongs to.  Even
         // after reconnecting this client is likely to be stuck.
-        closeWithError(
-          lc,
-          client.socket,
-          ErrorKind.InvalidPush,
-          `Push with clientGroupID ${clientGroupID} contains mutation for client ${mClientID} which belongs to clientGroupID ${clientRecord.clientGroupID}.`,
-        );
+        const errMsg = `Push for client ${clientID} with clientGroupID ${clientGroupID} contains mutation for client ${mClientID} which belongs to clientGroupID ${clientRecord.clientGroupID}.`;
+        lc.error?.(errMsg);
+        closeWithError(lc, client.socket, ErrorKind.InvalidPush, errMsg);
         return;
       }
     } else {
       newClientIDs.push(mClientID);
     }
   }
-  for (const alreadyPending of pending) {
-    expectedMutationIDByClientID.set(
-      alreadyPending.clientID,
-      alreadyPending.id + 1,
-    );
+  for (let i = 0; i < pendingMutations.length; i++) {
+    const m = pendingMutations[i];
+    previousMutationByClientID.set(m.clientID, {id: m.id, pendingIndex: i});
   }
-
+  let previousPushMutationIndex = -1;
+  const newPendingMutations = [...pendingMutations];
   for (const m of body.mutations) {
-    const expectedMutationID = must(
-      expectedMutationIDByClientID.get(m.clientID),
+    const {id: previousMutationID, pendingIndex: previousPendingIndex} = must(
+      previousMutationByClientID.get(m.clientID),
     );
-    if (expectedMutationID > m.id) {
-      lc.debug?.('mutation already applied', m.id);
+    if (m.id <= previousMutationID) {
       continue;
     }
-    if (expectedMutationID < m.id) {
+    if (m.id > previousMutationID + 1) {
       // No pushes will ever succeed over this connection since the client
       // is out of sync with the server. Close connection so client can try to
       // reconnect and recover.
@@ -105,22 +99,54 @@ export async function handlePush(
         lc,
         client.socket,
         ErrorKind.InvalidPush,
-        `Push contains unexpected mutation id ${m.id} for client ${m.clientID}. Expected mutation id ${expectedMutationID}.`,
+        `Push contains unexpected mutation id ${m.id} for client ${
+          m.clientID
+        }. Expected mutation id ${previousMutationID + 1}.`,
       );
       return;
     }
-    expectedMutationIDByClientID.set(m.clientID, m.id + 1);
-    m.timestamp += clients.get(m.clientID)?.clockBehindByMs ?? 0;
-    pending.push(m);
+
+    const normalizedTimestamp =
+      m.clientID === clientID ? m.timestamp + clockOffsetMs : undefined;
+    const mWithNormalizedTimestamp = {
+      ...m,
+      timestamp: normalizedTimestamp,
+    };
+
+    let insertIndex =
+      Math.max(previousPushMutationIndex, previousPendingIndex) + 1;
+    for (; insertIndex < newPendingMutations.length; insertIndex++) {
+      if (normalizedTimestamp === undefined) {
+        break;
+      }
+      const pendingM = newPendingMutations[insertIndex];
+      if (
+        pendingM.timestamp !== undefined &&
+        pendingM.timestamp > normalizedTimestamp
+      ) {
+        break;
+      }
+    }
+
+    previousPushMutationIndex = insertIndex;
+    for (const [clientID, {id, pendingIndex}] of previousMutationByClientID) {
+      if (m.clientID === clientID) {
+        previousMutationByClientID.set(m.clientID, {
+          id: m.id,
+          pendingIndex: insertIndex,
+        });
+      } else {
+        if (pendingIndex >= insertIndex) {
+          previousMutationByClientID.set(m.clientID, {
+            id,
+            pendingIndex: pendingIndex + 1,
+          });
+        }
+      }
+    }
+    pendingMutations.splice(insertIndex, 0, mWithNormalizedTimestamp);
   }
 
-  lc.debug?.(
-    'inserted mutations, client group id',
-    clientGroupID,
-    'now has',
-    pending.length,
-    'pending mutations.',
-  );
   await Promise.all(
     newClientIDs.map(clientID =>
       putClientRecord(
@@ -135,6 +161,13 @@ export async function handlePush(
       ),
     ),
   );
-  pendingMutations.set(clientGroupID, pending);
+
+  lc.debug?.(
+    'inserted mutations, client group id',
+    clientGroupID,
+    'now has',
+    pendingMutations.length,
+    'pending mutations.',
+  );
   processUntilDone();
 }

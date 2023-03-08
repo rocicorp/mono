@@ -10,10 +10,9 @@ import {getClientRecord, putClientRecord} from '../types/client-record.js';
 import type {ClientMap} from '../types/client-state.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {must} from '../util/must.js';
-import {generateMergedMutations} from './generate-merged-mutations.js';
 import {processFrame} from './process-frame.js';
 import type {MutatorMap} from './process-mutation.js';
-import type {PendingMutationMap} from '../types/mutation.js';
+import type {PendingMutation} from '../types/mutation.js';
 
 export const FRAME_LENGTH_MS = 1000 / 60;
 
@@ -28,7 +27,7 @@ export const FRAME_LENGTH_MS = 1000 / 60;
 export async function processRoom(
   lc: LogContext,
   clients: ClientMap,
-  pendingMutations: PendingMutationMap,
+  pendingMutations: PendingMutation[],
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
   storage: DurableStorage,
@@ -69,12 +68,10 @@ export async function processRoom(
     await putClientRecord(ffClientPoke.clientID, cr, cache);
   }
 
-  const mergedMutations = generateMergedMutations(pendingMutations);
-
   clientPokes.push(
     ...(await processFrame(
       lc,
-      mergedMutations,
+      pendingMutations,
       mutators,
       disconnectHandler,
       clientIDs,

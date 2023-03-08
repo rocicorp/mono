@@ -10,6 +10,7 @@ import type {
   Socket,
 } from '../../src/types/client-state.js';
 import type {NullableVersion} from 'reflect-protocol';
+import type {PendingMutation} from '../types/mutation.js';
 
 afterEach(() => {
   jest.restoreAllMocks();
@@ -35,7 +36,7 @@ export function client(
       socket,
       userData: {userID},
       clientGroupID,
-      clockBehindByMs,
+      clockOffsetMs: clockBehindByMs,
     },
   ];
 }
@@ -47,6 +48,22 @@ export function mutation(
   args: JSONType = [],
   timestamp = 1,
 ): Mutation {
+  return {
+    clientID,
+    id,
+    name,
+    args,
+    timestamp,
+  };
+}
+
+export function pendingMutation(
+  clientID: ClientID,
+  id: number,
+  name = 'foo',
+  args: JSONType = [],
+  timestamp?: number | undefined,
+): PendingMutation {
   return {
     clientID,
     id,

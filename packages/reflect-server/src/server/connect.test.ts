@@ -39,7 +39,7 @@ function freshClient(
   socket: Socket = new Mocket(),
 ) {
   const [clientID, c] = client(id, userID, clientGroupID, socket);
-  c.clockBehindByMs = undefined;
+  c.clockOffsetMs = undefined;
   return [clientID, c] as const;
 }
 

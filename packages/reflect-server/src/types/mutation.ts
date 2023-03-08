@@ -1,4 +1,10 @@
-import type {Mutation} from 'reflect-protocol';
-import type {ClientGroupID} from './client-state.js';
+import type {JSONType} from 'reflect-protocol';
+import type {ClientID} from './client-state.js';
 
-export type PendingMutationMap = Map<ClientGroupID, Mutation[]>;
+export type PendingMutation = {
+  id: number;
+  clientID: ClientID;
+  name: string;
+  args: JSONType;
+  timestamp?: number | undefined;
+};

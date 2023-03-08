@@ -21,7 +21,7 @@ import {
   mockMathRandom,
 } from '../util/test-utils.js';
 import {processPending} from '../process/process-pending.js';
-import type {PendingMutationMap} from '../types/mutation.js';
+import type {PendingMutation} from '../types/mutation.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -34,7 +34,7 @@ test('processPending', async () => {
     version: Version;
     clientRecords: ClientRecordMap;
     clients: ClientMap;
-    pendingMutations: PendingMutationMap;
+    pendingMutations: PendingMutation[];
     expectedError?: string;
     expectedClients: ClientMap;
     expectedVersion: Version;
@@ -53,7 +53,7 @@ test('processPending', async () => {
       version: 1,
       clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
       clients: new Map(),
-      pendingMutations: new Map(),
+      pendingMutations: [],
       expectedClients: new Map(),
       expectedVersion: 1,
       expectedPokes: new Map(),
@@ -65,9 +65,7 @@ test('processPending', async () => {
       version: 1,
       clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
       clients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
-      pendingMutations: new Map([
-        ['cg1', [mutation('c1', 2, 'inc', null, 100)]],
-      ]),
+      pendingMutations: [mutation('c1', 2, 'inc', null, 100)],
       expectedClients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
       expectedVersion: 2,
       expectedPokes: new Map([
@@ -111,16 +109,11 @@ test('processPending', async () => {
         client('c2', 'u2', 'cg1', s2, 0),
         client('c3', 'u3', 'cg2', s3, 0),
       ]),
-      pendingMutations: new Map([
-        [
-          'cg1',
-          [
-            mutation('c1', 2, 'inc', null, 100),
-            mutation('c2', 2, 'inc', null, 120),
-          ],
-        ],
-        ['cg2', [mutation('c3', 2, 'inc', null, 140)]],
-      ]),
+      pendingMutations: [
+        mutation('c1', 2, 'inc', null, 100),
+        mutation('c2', 2, 'inc', null, 120),
+        mutation('c3', 2, 'inc', null, 140),
+      ],
       expectedClients: new Map([
         client('c1', 'u1', 'cg1', s1, 0),
         client('c2', 'u2', 'cg1', s2, 0),
@@ -325,7 +318,7 @@ test('processPending', async () => {
 
     await p;
     expect(c.clients).toEqual(c.expectedClients);
-    expect(c.pendingMutations.size).toEqual(0);
+    expect(c.pendingMutations.length).toEqual(0);
 
     expect(c.expectedError).toBeUndefined;
     expect(await getVersion(storage)).toEqual(c.expectedVersion);
