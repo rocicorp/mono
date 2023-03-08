@@ -9,7 +9,7 @@
     "test:watch": "web-test-runner --watch",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
-    "check-types": "tsc --noEmit && npm run build && tsc --noEmit --project perf/tsconfig.json && tsc --noEmit tool/cli.ts",
+    "check-types": "tsc --noEmit && npm run build && tsc --noEmit --project perf/tsconfig.json && tsc --noEmit --project tool/tsconfig.json",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/ perf/",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "build": "rm -rf out && npm run build-dts && node tool/build.js",
