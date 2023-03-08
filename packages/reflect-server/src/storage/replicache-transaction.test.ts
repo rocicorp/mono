@@ -87,7 +87,7 @@ test('ReplicacheTransaction scan()', async () => {
 
   function makeTx(): [ReplicacheTransaction, EntryCache] {
     const cache = new EntryCache(durableStorage);
-    const tx = new ReplicacheTransaction(cache, 'name', version, mutationID);
+    const tx = new ReplicacheTransaction(cache, 'name', mutationID, version);
     version++;
     mutationID++;
     return [tx, cache];
