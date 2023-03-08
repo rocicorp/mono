@@ -7,7 +7,7 @@ on:
       - 'packages/replicache/**'
 
 jobs:
-  benchmark:
+  bundle-size:
     name: Bundle Sizes Check
     runs-on: ubuntu-latest
     steps:
