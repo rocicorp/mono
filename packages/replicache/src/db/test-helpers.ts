@@ -121,7 +121,7 @@ async function createLocal(
 ): Promise<Commit<Meta>> {
   const lc = new LogContext();
   await withWrite(store, async dagWrite => {
-    const {write: w} = await newWriteLocal(
+    const w = await newWriteLocal(
       whenceHead(headName),
       createMutatorName(i),
       deepFreeze([i]),

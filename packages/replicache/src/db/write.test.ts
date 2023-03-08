@@ -23,7 +23,7 @@ suite('basics w/ commit', () => {
 
     // Put.
     await withWrite(ds, async dagWrite => {
-      const {write: w} = await newWriteLocal(
+      const w = await newWriteLocal(
         whenceHead(DEFAULT_HEAD_NAME),
         'mutator_name',
         JSON.stringify([]),
@@ -42,7 +42,7 @@ suite('basics w/ commit', () => {
 
     // As well as after it has committed.
     await withWrite(ds, async dagWrite => {
-      const {write: w} = await newWriteLocal(
+      const w = await newWriteLocal(
         whenceHead(DEFAULT_HEAD_NAME),
         'mutator_name',
         JSON.stringify(null),
@@ -58,7 +58,7 @@ suite('basics w/ commit', () => {
 
     // Del.
     await withWrite(ds, async dagWrite => {
-      const {write: w} = await newWriteLocal(
+      const w = await newWriteLocal(
         whenceHead(DEFAULT_HEAD_NAME),
         'mutator_name',
         JSON.stringify([]),
@@ -77,7 +77,7 @@ suite('basics w/ commit', () => {
 
     // As well as after it has committed.
     await withWrite(ds, async dagWrite => {
-      const {write: w} = await newWriteLocal(
+      const w = await newWriteLocal(
         whenceHead(DEFAULT_HEAD_NAME),
         'mutator_name',
         JSON.stringify(null),
@@ -105,7 +105,7 @@ suite('basics w/ putCommit', () => {
 
     // Put.
     const commit1 = await withWrite(ds, async dagWrite => {
-      const {write: w} = await newWriteLocal(
+      const w = await newWriteLocal(
         whenceHead(DEFAULT_HEAD_NAME),
         'mutator_name',
         JSON.stringify([]),
@@ -127,7 +127,7 @@ suite('basics w/ putCommit', () => {
 
     // As well as from the Commit that was put.
     await withWrite(ds, async dagWrite => {
-      const {write: w} = await newWriteLocal(
+      const w = await newWriteLocal(
         whenceHash(commit1.chunk.hash),
         'mutator_name',
         JSON.stringify(null),
@@ -143,7 +143,7 @@ suite('basics w/ putCommit', () => {
 
     // Del.
     const commit2 = await withWrite(ds, async dagWrite => {
-      const {write: w} = await newWriteLocal(
+      const w = await newWriteLocal(
         whenceHash(commit1.chunk.hash),
         'mutator_name',
         JSON.stringify([]),
@@ -165,7 +165,7 @@ suite('basics w/ putCommit', () => {
 
     // As well as from the commit after it was put.
     await withWrite(ds, async dagWrite => {
-      const {write: w} = await newWriteLocal(
+      const w = await newWriteLocal(
         whenceHash(commit2.chunk.hash),
         'mutator_name',
         JSON.stringify(null),
@@ -200,7 +200,7 @@ test('clear', async () => {
     ),
   );
   await withWrite(ds, async dagWrite => {
-    const {write: w} = await newWriteLocal(
+    const w = await newWriteLocal(
       whenceHead(DEFAULT_HEAD_NAME),
       'mutator_name',
       JSON.stringify([]),
@@ -215,7 +215,7 @@ test('clear', async () => {
   });
 
   await withWrite(ds, async dagWrite => {
-    const {write: w} = await newWriteLocal(
+    const w = await newWriteLocal(
       whenceHead(DEFAULT_HEAD_NAME),
       'mutator_name',
       JSON.stringify([]),
@@ -283,7 +283,7 @@ test('mutationID on newWriteLocal', async () => {
     ),
   );
   await withWrite(ds, async dagWrite => {
-    const {mutationID, write: w} = await newWriteLocal(
+    const w = await newWriteLocal(
       whenceHead(DEFAULT_HEAD_NAME),
       'mutator_name',
       JSON.stringify([]),
@@ -295,11 +295,11 @@ test('mutationID on newWriteLocal', async () => {
     );
     await w.put(lc, 'foo', 'bar');
     await w.commit(DEFAULT_HEAD_NAME);
-    expect(mutationID).equals(1);
+    expect(w.mutationID).equals(1);
   });
 
   await withWrite(ds, async dagWrite => {
-    const {mutationID, write: w} = await newWriteLocal(
+    const w = await newWriteLocal(
       whenceHead(DEFAULT_HEAD_NAME),
       'mutator_name',
       JSON.stringify([]),
@@ -311,6 +311,6 @@ test('mutationID on newWriteLocal', async () => {
     );
     await w.put(lc, 'hot', 'dog');
     await w.commit(DEFAULT_HEAD_NAME);
-    expect(mutationID).equals(2);
+    expect(w.mutationID).equals(2);
   });
 });

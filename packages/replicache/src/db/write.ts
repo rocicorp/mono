@@ -87,6 +87,12 @@ export class Write extends Read {
     await this.map.put(key, value);
   }
 
+  get mutationID(): number {
+    const meta = this._meta;
+    assert(meta.type === MetaType.LocalSDD || meta.type === MetaType.LocalDD31);
+    return meta.mutationID;
+  }
+
   async del(lc: LogContext, key: string): Promise<boolean> {
     if (this._meta.type === MetaType.IndexChangeSDD) {
       throw new Error('Not allowed');
@@ -319,7 +325,7 @@ export async function newWriteLocal(
   timestamp: number,
   clientID: ClientID,
   dd31: boolean,
-): Promise<{mutationID: number; write: Write}> {
+): Promise<Write> {
   const [basisHash, basis, bTreeWrite] = await readCommitForBTreeWrite(
     whence,
     dagWrite,
@@ -327,7 +333,7 @@ export async function newWriteLocal(
 
   const mutationID = await basis.getNextMutationID(clientID, dagWrite);
   const indexes = readIndexesForWrite(basis, dagWrite);
-  const write = new Write(
+  return new Write(
     dagWrite,
     bTreeWrite,
     basis,
@@ -356,8 +362,6 @@ export async function newWriteLocal(
     clientID,
     dd31,
   );
-
-  return {mutationID, write};
 }
 
 export async function newWriteSnapshotSDD(

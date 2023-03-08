@@ -12,7 +12,7 @@ suite('basics', () => {
     const ds = new dag.TestStore();
     const lc = new LogContext();
     await initDB(await ds.write(), DEFAULT_HEAD_NAME, clientID, {}, dd31);
-    const {write: w} = await newWriteLocal(
+    const w = await newWriteLocal(
       whenceHead(DEFAULT_HEAD_NAME),
       'mutator_name',
       JSON.stringify([]),

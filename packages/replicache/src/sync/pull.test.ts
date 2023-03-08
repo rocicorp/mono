@@ -1208,7 +1208,7 @@ suite('maybe end try pull', () => {
           throw new Error('impossible');
         }
         basisHash = await withWrite(store, async dagWrite => {
-          const {write: w} = await db.newWriteLocal(
+          const w = await db.newWriteLocal(
             db.whenceHash(basisHash),
             mutatorName,
             mutatorArgs,
