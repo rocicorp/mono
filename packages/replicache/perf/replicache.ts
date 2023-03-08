@@ -223,6 +223,108 @@ export function benchmarkRefresh(opts: {
   };
 }
 
+export function benchmarkRebase(opts: {
+  mutations: number;
+  targetSizePerMutation: number;
+  numKeys?: number;
+  targetSizePerKey?: number;
+}): Benchmark {
+  const repName = makeRepName();
+  let repToClose: Replicache;
+  const {
+    mutations,
+    targetSizePerMutation,
+    numKeys = 1000,
+    targetSizePerKey = 1024,
+  } = opts;
+  return {
+    name: `rebase ${mutations}x${targetSizePerMutation}`,
+    group: 'replicache',
+    async teardownEach() {
+      if (repToClose) {
+        await closeAndCleanupRep(repToClose);
+      }
+    },
+    async run(bencher: Bencher) {
+      const rep = (repToClose = new ReplicachePerfTest({
+        name: repName,
+        pullInterval: null,
+        pushDelay: 9999,
+        mutators: {putMap},
+        // eslint-disable-next-line require-await
+        puller: async () => {
+          return {
+            response: {
+              cookie: 1,
+              lastMutationIDChanges: {},
+              patch: [
+                {
+                  op: 'put',
+                  key: 'pull-done',
+                  value: true,
+                },
+              ],
+            },
+            httpRequestInfo: {
+              httpStatusCode: 200,
+              errorMessage: '',
+            },
+          };
+        },
+      }));
+
+      // Create a bunch of keys.
+      await rep.mutate.putMap(
+        Object.fromEntries(
+          Array.from({length: numKeys}).map((_, i) => [
+            `key${i}`,
+            jsonObjectTestData(targetSizePerKey),
+          ]),
+        ),
+      );
+
+      for (let i = 0; i < mutations; i++) {
+        await rep.mutate.putMap({
+          key: jsonObjectTestData(targetSizePerMutation),
+        });
+      }
+
+      const {promise, resolve} = resolver<void>();
+      let subscribeCallCount = 0;
+      const cancel = rep.subscribe(tx => tx.get('pull-done'), {
+        onData: r => {
+          subscribeCallCount++;
+          if (r) {
+            resolve();
+          }
+        },
+      });
+
+      bencher.reset();
+
+      // pull will rebase.
+      rep.pull();
+      await promise;
+
+      bencher.stop();
+      cancel();
+
+      assert(
+        subscribeCallCount === 2,
+        'subscribe should have been called: ' + subscribeCallCount,
+      );
+
+      await rep.query(async tx => {
+        assert(await tx.has('key'), 'key not found');
+        for (let i = 0; i < numKeys; i++) {
+          assert(await tx.has(`key${i}`), `key${i} not found`);
+        }
+        assert(await tx.has('pull-done'), 'pull-done not found');
+      });
+    },
+  };
+}
+
 class ReplicachePerfTest<MD extends MutatorDefs> extends Replicache<MD> {
   private readonly _internalAPI: ReplicacheInternalAPI;
   constructor(options: Omit<ReplicacheOptions<MD>, 'licenseKey'>) {
@@ -823,6 +925,11 @@ export function benchmarks(): Benchmark[] {
 
     benchmarkTmcw('populate'),
     benchmarkTmcw('persist'),
+
+    benchmarkRebase({
+      mutations: 1000,
+      targetSizePerMutation: 1024,
+    }),
   ];
 }
 
