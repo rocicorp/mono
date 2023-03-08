@@ -47,7 +47,7 @@ jobs:
       - run: npm run lint
 
   check-types:
-    name: ESLint & Prettier
+    name: Check Types
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
