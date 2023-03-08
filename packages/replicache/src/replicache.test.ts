@@ -50,6 +50,7 @@ import {
   LICENSE_STATUS_PATH,
 } from '@rocicorp/licensing/src/server/api-types.js';
 import {assert} from './asserts.js';
+import {resolver} from '@rocicorp/resolver';
 
 const {fail} = chaiAssert;
 
@@ -2092,7 +2093,11 @@ suite('check for client not found in visibilitychange', () => {
   const t = (visibilityState: DocumentVisibilityState, called: boolean) => {
     test('visibilityState: ' + visibilityState, async () => {
       const consoleErrorStub = sinon.stub(console, 'error');
-      sinon.stub(document, 'visibilityState').get(() => visibilityState);
+      const {resolve, promise} = resolver<void>();
+      sinon.stub(document, 'visibilityState').get(() => {
+        resolve();
+        return visibilityState;
+      });
 
       const rep = await replicacheForTesting(
         `check-for-client-not-found-in-visibilitychange-${visibilityState}`,
@@ -2108,10 +2113,8 @@ suite('check for client not found in visibilitychange', () => {
 
       document.dispatchEvent(new Event('visibilitychange'));
 
+      await promise;
       await tickAFewTimes();
-
-      clock.restore();
-      await sleep(10);
 
       expect(onClientStateNotFound.called).to.equal(called);
       if (called) {
