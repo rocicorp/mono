@@ -24,26 +24,13 @@ import type {Storage} from './storage.js';
  * Implements Replicache's WriteTransaction in terms of EntryCache.
  */
 export class ReplicacheTransaction implements WriteTransaction {
-  private _clientID: ClientID;
-  private _mutationID: number;
-  private _storage: Storage;
-  private _version: Version;
+  readonly clientID: ClientID;
+  readonly mutationID: number;
+  readonly storage: Storage;
+  readonly version: Version;
 
-  get reason(): TransactionReason {
-    return 'authoritative';
-  }
-
-  get environment(): TransactionEnvironment {
-    return 'server';
-  }
-
-  get clientID(): string {
-    return this._clientID;
-  }
-
-  get mutationID(): number {
-    return this._mutationID;
-  }
+  readonly reason: TransactionReason = 'authoritative';
+  readonly environment: TransactionEnvironment = 'server';
 
   constructor(
     storage: Storage,
@@ -51,19 +38,19 @@ export class ReplicacheTransaction implements WriteTransaction {
     mutationID: number,
     version: Version,
   ) {
-    this._storage = storage;
-    this._clientID = clientID;
-    this._version = version;
-    this._mutationID = mutationID;
+    this.storage = storage;
+    this.clientID = clientID;
+    this.version = version;
+    this.mutationID = mutationID;
   }
 
   async put(key: string, value: JSONValue): Promise<void> {
     const userValue: UserValue = {
       deleted: false,
-      version: this._version,
+      version: this.version,
       value: value as JSONType,
     };
-    await this._storage.put(userValueKey(key), userValue);
+    await this.storage.put(userValueKey(key), userValue);
   }
 
   async del(key: string): Promise<boolean> {
@@ -75,15 +62,15 @@ export class ReplicacheTransaction implements WriteTransaction {
     // Implement del with soft delete so we can detect deletes for diff.
     const userValue: UserValue = {
       deleted: true,
-      version: this._version,
+      version: this.version,
       value: prev as JSONType,
     };
-    await this._storage.put(userValueKey(key), userValue);
+    await this.storage.put(userValueKey(key), userValue);
     return prev !== undefined;
   }
 
   async get(key: string): Promise<JSONValue | undefined> {
-    const entry = await this._storage.get(userValueKey(key), userValueSchema);
+    const entry = await this.storage.get(userValueKey(key), userValueSchema);
     if (entry === undefined) {
       return undefined;
     }
@@ -123,7 +110,7 @@ export class ReplicacheTransaction implements WriteTransaction {
       start: start && {key: userValueKey(start.key)}, // remove exclusive option, as makeScanResult will take care of it
     };
 
-    const entriesMap = await this._storage.list(optsInternal, userValueSchema);
+    const entriesMap = await this.storage.list(optsInternal, userValueSchema);
 
     for (const [k, v] of entriesMap) {
       if (!v.deleted) {
