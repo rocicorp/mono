@@ -51,6 +51,7 @@
     "@types/styled-components": "^5.1.26",
     "@vercel/node": "^2.8.13",
     "buffer": "^5.7.1",
+    "classnames": "^2.3.2",
     "eslint": "8.32.0",
     "eslint-config-next": "13.1.5",
     "husky": "^8.0.3",
