@@ -18,8 +18,12 @@
     "check-types": "npm run build-wasm && npm run check-types-js",
     "test": "mocha",
     "test-wasm": "cd renderer && wasm-pack test --chrome --headless",
-    "publish-worker-jd": "CLOUDFLARE_ACCOUNT_ID=2a265bc62fc09e9ed1c43226f7a3de57 wrangler publish",
-    "publish-worker": "CLOUDFLARE_ACCOUNT_ID=085f6d8eb08e5b23debfb08b21bda1eb wrangler publish",
+    "publish-worker-jd": "npm run wrangler-jd -- publish",
+    "publish-worker": "npm run wrangler-rc -- publish",
+    "worker-logs-jd": "npm run wrangler-jd -- tail",
+    "worker-logs": "npm run wrangler-rc -- tail",
+    "wrangler-jd": "CLOUDFLARE_ACCOUNT_ID=2a265bc62fc09e9ed1c43226f7a3de57 wrangler",
+    "wrangler-rc": "CLOUDFLARE_ACCOUNT_ID=085f6d8eb08e5b23debfb08b21bda1eb wrangler",
     "prepare": "husky install"
   },
   "dependencies": {
