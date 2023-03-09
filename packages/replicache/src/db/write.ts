@@ -15,6 +15,7 @@ import {
   MetaType,
   Meta,
   baseSnapshotHashFromHash,
+  getMutationID,
 } from './commit.js';
 import {
   Read,
@@ -87,10 +88,8 @@ export class Write extends Read {
     await this.map.put(key, value);
   }
 
-  get mutationID(): number {
-    const meta = this._meta;
-    assert(meta.type === MetaType.LocalSDD || meta.type === MetaType.LocalDD31);
-    return meta.mutationID;
+  get mutationID(): Promise<number> {
+    return getMutationID(this._clientID, this._dagWrite, this._meta);
   }
 
   async del(lc: LogContext, key: string): Promise<boolean> {

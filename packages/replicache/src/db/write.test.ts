@@ -295,7 +295,7 @@ test('mutationID on newWriteLocal', async () => {
     );
     await w.put(lc, 'foo', 'bar');
     await w.commit(DEFAULT_HEAD_NAME);
-    expect(w.mutationID).equals(1);
+    expect(await w.mutationID).equals(1);
   });
 
   await withWrite(ds, async dagWrite => {
@@ -311,6 +311,6 @@ test('mutationID on newWriteLocal', async () => {
     );
     await w.put(lc, 'hot', 'dog');
     await w.commit(DEFAULT_HEAD_NAME);
-    expect(w.mutationID).equals(2);
+    expect(await w.mutationID).equals(2);
   });
 });

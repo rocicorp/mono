@@ -1593,7 +1593,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
         const tx = new WriteTransactionImpl(
           clientID,
-          dbWrite.mutationID,
+          await dbWrite.mutationID,
           'initial',
           dbWrite,
           this._lc,
