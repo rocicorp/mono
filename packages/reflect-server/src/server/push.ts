@@ -25,7 +25,12 @@ export type ProcessUntilDone = () => void;
  * 2. mutations from the same client group pushed by the same client, must be in
  *    the order they were pushed by that client (even across pushes), unless
  *    they were already pushed by a different client, then the already
- *    established order should persist.
+ *    established order should persist.  This is important for dd31, as it
+ *    ensures that if a mutation C1M1 was initially created on client C1
+ *    after C1 refreshed a mutation C2M1 created by client C2 from their
+ *    shared perdag, that C1M1 is ordered after C2M1, which is important
+ *    since C1M1 may have a data dependency on C2M1 (e.g. C2M1 creates shape
+ *    S1, and C1M1 changes the color of shape S1).
  * 3. mutations should be ordered by normalized timestamp, as long as it does
  *    not violate any of the above ordering constraints.  This will minimize
  *    forcing clients to miss frames when playing back the mutations.
@@ -103,14 +108,17 @@ export async function handlePush(
   let previousPushMutationIndex = -1;
   const pendingDuplicates: Map<string, number> = new Map();
   for (let i = 0; i < pendingMutations.length; i++) {
-    const m = pendingMutations[i];
-    if (m.pusherClientIDs.has(clientID)) {
+    const pendingM = pendingMutations[i];
+    if (pendingM.pusherClientIDs.has(clientID)) {
       previousPushMutationIndex = i;
     }
-    previousMutationByClientID.set(m.clientID, {id: m.id, pendingIndex: i});
-    const range = mutationIdRangesByClientID.get(m.clientID);
-    if (range && range[0] <= m.id && range[1] >= m.id) {
-      pendingDuplicates.set(m.clientID + ':' + m.id, i);
+    previousMutationByClientID.set(pendingM.clientID, {
+      id: pendingM.id,
+      pendingIndex: i,
+    });
+    const range = mutationIdRangesByClientID.get(pendingM.clientID);
+    if (range && range[0] <= pendingM.id && range[1] >= pendingM.id) {
+      pendingDuplicates.set(pendingM.clientID + ':' + pendingM.id, i);
     }
   }
   const inserts: [number, PendingMutation][] = [];
@@ -201,14 +209,37 @@ export async function handlePush(
     };
   }
 
-  for (let i = 0; i < inserts.length; i++) {
-    pendingMutations.splice(inserts[i][0] + i, 0, inserts[i][1]);
+  if (inserts.length === 1) {
+    pendingMutations.splice(inserts[0][0], 0, inserts[0][1]);
+  } else if (inserts.length > 1) {
+    if (pendingMutations.length === 0) {
+      pendingMutations.push(...inserts.map(([, pendingM]) => pendingM));
+    } else {
+      // This copy approach is taken to ensure O(m + p).  Using splice
+      // in place would result in O(m * p).
+      const newPendingMutations = [];
+      // merge into newPendingMutations
+      for (let i = 0, insertsIndex = 0; i < pendingMutations.length; ) {
+        if (insertsIndex < inserts.length && inserts[insertsIndex][0] === i) {
+          newPendingMutations.push(inserts[insertsIndex][1]);
+          insertsIndex++;
+        } else {
+          newPendingMutations.push(pendingMutations[i]);
+          i++;
+        }
+      }
+      pendingMutations.splice(
+        0,
+        pendingMutations.length,
+        ...newPendingMutations,
+      );
+    }
   }
 
   lc.debug?.(
-    'inserted mutations, client group id',
-    clientGroupID,
-    'now has',
+    'inserted',
+    inserts.length,
+    'mutations, now there are',
     pendingMutations.length,
     'pending mutations.',
   );
