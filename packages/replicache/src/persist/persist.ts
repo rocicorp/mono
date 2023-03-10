@@ -233,11 +233,11 @@ async function getClientGroupInfo(
   ];
 }
 
-async function gatherMemOnlyChunks(
+function gatherMemOnlyChunks(
   memdag: dag.LazyStore,
   baseSnapshotHash: Hash,
 ): Promise<ReadonlyMap<Hash, dag.Chunk>> {
-  return await withRead(memdag, async dagRead => {
+  return withRead(memdag, async dagRead => {
     const visitor = new GatherMemoryOnlyVisitor(dagRead);
     await visitor.visitCommit(baseSnapshotHash);
     return visitor.gatheredChunks;

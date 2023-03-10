@@ -192,19 +192,16 @@ async function createMissingMutatorFixture() {
 suite('rebaseMutationAndCommit', () => {
   test('with sequence of mutations', async () => {
     const fixture = await createMutationSequenceFixture();
-    const hashOfRebasedLocalCommit1 = await withWrite(
-      fixture.store,
-      async write => {
-        return await rebaseMutationAndCommit(
-          fixture.localCommit1,
-          write,
-          fixture.syncSnapshotCommit.chunk.hash,
-          SYNC_HEAD_NAME,
-          fixture.mutators,
-          new LogContext(),
-          fixture.clientID,
-        );
-      },
+    const hashOfRebasedLocalCommit1 = await withWrite(fixture.store, write =>
+      rebaseMutationAndCommit(
+        fixture.localCommit1,
+        write,
+        fixture.syncSnapshotCommit.chunk.hash,
+        SYNC_HEAD_NAME,
+        fixture.mutators,
+        new LogContext(),
+        fixture.clientID,
+      ),
     );
     expect(fixture.testMutator1CallCount).to.equal(1);
     expect(fixture.testMutator2CallCount).to.equal(0);
@@ -216,19 +213,16 @@ suite('rebaseMutationAndCommit', () => {
       );
       await fixture.expectRebasedCommit1(rebasedLocalCommit1, btreeRead);
     });
-    const hashOfRebasedLocalCommit2 = await withWrite(
-      fixture.store,
-      async write => {
-        return await rebaseMutationAndCommit(
-          fixture.localCommit2,
-          write,
-          hashOfRebasedLocalCommit1,
-          SYNC_HEAD_NAME,
-          fixture.mutators,
-          new LogContext(),
-          fixture.clientID,
-        );
-      },
+    const hashOfRebasedLocalCommit2 = await withWrite(fixture.store, write =>
+      rebaseMutationAndCommit(
+        fixture.localCommit2,
+        write,
+        hashOfRebasedLocalCommit1,
+        SYNC_HEAD_NAME,
+        fixture.mutators,
+        new LogContext(),
+        fixture.clientID,
+      ),
     );
     expect(fixture.testMutator1CallCount).to.equal(1);
     expect(fixture.testMutator2CallCount).to.equal(1);
@@ -248,19 +242,16 @@ suite('rebaseMutationAndCommit', () => {
 
   test("with missing mutator, still rebases but doesn't modify btree", async () => {
     const fixture = await createMissingMutatorFixture();
-    const hashOfRebasedLocalCommit = await withWrite(
-      fixture.store,
-      async write => {
-        return await rebaseMutationAndCommit(
-          fixture.localCommit,
-          write,
-          fixture.syncSnapshotCommit.chunk.hash,
-          SYNC_HEAD_NAME,
-          {}, // empty
-          new LogContext(),
-          fixture.clientID,
-        );
-      },
+    const hashOfRebasedLocalCommit = await withWrite(fixture.store, write =>
+      rebaseMutationAndCommit(
+        fixture.localCommit,
+        write,
+        fixture.syncSnapshotCommit.chunk.hash,
+        SYNC_HEAD_NAME,
+        {}, // empty
+        new LogContext(),
+        fixture.clientID,
+      ),
     );
     await withRead(fixture.store, async read => {
       const [, rebasedLocalCommit, btreeRead] = await db.readCommitForBTreeRead(
@@ -292,7 +283,7 @@ suite('rebaseMutationAndPutCommit', () => {
     const fixture = await createMutationSequenceFixture();
     const hashOfRebasedLocalCommit1 = await withWrite(
       fixture.store,
-      async write => {
+      async (write): Promise<Hash> => {
         const commit = await rebaseMutationAndPutCommit(
           fixture.localCommit1,
           write,

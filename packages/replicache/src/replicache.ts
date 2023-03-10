@@ -886,7 +886,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       return undefined;
     }
     await this._ready;
-    return await db.getRoot(this._memdag, db.DEFAULT_HEAD_NAME);
+    return db.getRoot(this._memdag, db.DEFAULT_HEAD_NAME);
   }
 
   private async _checkChange(
@@ -1575,7 +1575,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     await this._ready;
     const clientID = await this._clientIDPromise;
-    return await withWrite(this._memdag, async dagWrite => {
+    return withWrite(this._memdag, async dagWrite => {
       try {
         const whence: db.Whence = db.whenceHead(db.DEFAULT_HEAD_NAME);
         const originalHash = null;

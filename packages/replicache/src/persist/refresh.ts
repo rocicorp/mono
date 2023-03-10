@@ -156,7 +156,7 @@ export async function refresh(
         perdagLmid,
         gatheredChunks,
       ] = perdagWriteResult;
-      return await withWrite(memdag, async memdagWrite => {
+      return withWrite(memdag, async memdagWrite => {
         const memdagHeadCommit = await db.commitFromHead(
           db.DEFAULT_HEAD_NAME,
           memdagWrite,

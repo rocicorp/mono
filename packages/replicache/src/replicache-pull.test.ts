@@ -291,15 +291,13 @@ test('Client Group not found on server', async () => {
   });
 
   // eslint-disable-next-line require-await
-  const puller: Puller = async () => {
-    return {
-      response: {error: 'ClientStateNotFound'},
-      httpRequestInfo: {
-        httpStatusCode: 200,
-        errorMessage: '',
-      },
-    };
-  };
+  const puller: Puller = async () => ({
+    response: {error: 'ClientStateNotFound'},
+    httpRequestInfo: {
+      httpStatusCode: 200,
+      errorMessage: '',
+    },
+  });
 
   expect(rep.isClientGroupDisabled).false;
 
@@ -334,15 +332,13 @@ test('Version not supported on server', async () => {
       }));
 
     // eslint-disable-next-line require-await
-    const puller: Puller = async () => {
-      return {
-        response,
-        httpRequestInfo: {
-          httpStatusCode: 200,
-          errorMessage: '',
-        },
-      };
-    };
+    const puller: Puller = async () => ({
+      response,
+      httpRequestInfo: {
+        httpStatusCode: 200,
+        errorMessage: '',
+      },
+    });
 
     rep.puller = puller;
     rep.pull();

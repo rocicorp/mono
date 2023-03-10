@@ -106,9 +106,7 @@ test('calling function returned by initBgIntervalProcess, stops interval', async
 test('error thrown during process (before stop is called) is logged to error', async () => {
   const lc = new LogContext();
   const errorStub = sinon.stub(console, 'error');
-  const process = () => {
-    return Promise.reject('TestErrorBeforeStop');
-  };
+  const process = () => Promise.reject('TestErrorBeforeStop');
   const controller = new AbortController();
   initBgIntervalProcess(
     'testProcess',

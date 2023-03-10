@@ -228,9 +228,9 @@ suite('persistDD31', () => {
   }
 
   async function getClientGroupAndHeadHashes() {
-    const memdagHeadHash = await withRead(memdag, memdagRead => {
-      return memdagRead.getHead(db.DEFAULT_HEAD_NAME);
-    });
+    const memdagHeadHash = await withRead(memdag, memdagRead =>
+      memdagRead.getHead(db.DEFAULT_HEAD_NAME),
+    );
     assertNotUndefined(memdagHeadHash);
 
     const clientGroup = await withRead(perdag, async perdagRead => {
@@ -827,9 +827,9 @@ async function setupPersistTest() {
       ]);
     });
 
-  const mutatorNames = Array.from({length: 10}, (_, index) => {
-    return createMutatorName(index);
-  });
+  const mutatorNames = Array.from({length: 10}, (_, index) =>
+    createMutatorName(index),
+  );
   const mutators: MutatorDefs = {};
   for (let i = 0; i < mutatorNames.length; i++) {
     mutators[mutatorNames[i]] = async (
@@ -878,9 +878,9 @@ async function setupPersistTest() {
       onGatherMemOnlyChunksForTest,
     );
     const persistedChunkHashes = new Set<Hash>();
-    const clientGroupsHeadHash = await withRead(perdag, read => {
-      return read.getHead(CLIENT_GROUPS_HEAD_NAME);
-    });
+    const clientGroupsHeadHash = await withRead(perdag, read =>
+      read.getHead(CLIENT_GROUPS_HEAD_NAME),
+    );
     for (const hash of perdag.chunkHashes()) {
       if (
         !perdagChunkHashesPrePersist.has(hash) &&
@@ -930,10 +930,13 @@ async function setupPersistTest() {
     testPersist,
   };
 }
-function getClientGroupHelper(perdag: dag.TestStore, clientGroupID: string) {
-  return withRead(perdag, perdagRead => {
-    return getClientGroup(clientGroupID, perdagRead);
-  });
+function getClientGroupHelper(
+  perdag: dag.TestStore,
+  clientGroupID: string,
+): Promise<ClientGroup | undefined> {
+  return withRead(perdag, perdagRead =>
+    getClientGroup(clientGroupID, perdagRead),
+  );
 }
 
 function expectRebasedLocal(

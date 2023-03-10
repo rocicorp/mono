@@ -252,25 +252,23 @@ export function benchmarkRebase(opts: {
         pushDelay: 9999,
         mutators: {putMap},
         // eslint-disable-next-line require-await
-        puller: async () => {
-          return {
-            response: {
-              cookie: 1,
-              lastMutationIDChanges: {},
-              patch: [
-                {
-                  op: 'put',
-                  key: 'pull-done',
-                  value: true,
-                },
-              ],
-            },
-            httpRequestInfo: {
-              httpStatusCode: 200,
-              errorMessage: '',
-            },
-          };
-        },
+        puller: async () => ({
+          response: {
+            cookie: 1,
+            lastMutationIDChanges: {},
+            patch: [
+              {
+                op: 'put',
+                key: 'pull-done',
+                value: true,
+              },
+            ],
+          },
+          httpRequestInfo: {
+            httpStatusCode: 200,
+            errorMessage: '',
+          },
+        }),
       }));
 
       // Create a bunch of keys.
@@ -380,19 +378,17 @@ async function setupPersistedData(
       indexes,
       pullInterval: null,
       // eslint-disable-next-line require-await
-      puller: async () => {
-        return {
-          response: {
-            cookie: 1,
-            lastMutationIDChanges: {},
-            patch,
-          },
-          httpRequestInfo: {
-            httpStatusCode: 200,
-            errorMessage: '',
-          },
-        };
-      },
+      puller: async () => ({
+        response: {
+          cookie: 1,
+          lastMutationIDChanges: {},
+          patch,
+        },
+        httpRequestInfo: {
+          httpStatusCode: 200,
+          errorMessage: '',
+        },
+      }),
     }));
 
     const initialPullResolver = resolver<void>();
@@ -663,9 +659,9 @@ export function benchmarkWriteSubRead(opts: {
       const subs = Array.from({length: numSubsTotal}, (_, i) => {
         const startKeyIndex = i * keysPerSub;
         return rep.subscribe(
-          async tx => {
+          tx => {
             const startKey = sortedKeys[startKeyIndex];
-            return await tx
+            return tx
               .scan({
                 start: {key: startKey},
                 limit: keysWatchedPerSub,

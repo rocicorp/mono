@@ -350,20 +350,16 @@ export async function allEntriesAsDiff(
     entry: EntryWithOptionalSize<FrozenJSONValue>,
   ) => InternalDiffOperation =
     op === 'add'
-      ? entry => {
-          return {
-            op: 'add',
-            key: entry[0],
-            newValue: entry[1],
-          };
-        }
-      : entry => {
-          return {
-            op: 'del',
-            key: entry[0],
-            oldValue: entry[1],
-          };
-        };
+      ? entry => ({
+          op: 'add',
+          key: entry[0],
+          newValue: entry[1],
+        })
+      : entry => ({
+          op: 'del',
+          key: entry[0],
+          oldValue: entry[1],
+        });
 
   for await (const entry of map.entries()) {
     diff.push(make(entry));

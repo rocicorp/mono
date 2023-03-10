@@ -14,3 +14,7 @@ export function throwIfClosed(tx: Closed): void {
     throw new TransactionClosedError();
   }
 }
+
+export function rejectIfClosed(tx: Closed): undefined | Promise<never> {
+  return tx.closed ? Promise.reject(new TransactionClosedError()) : undefined;
+}

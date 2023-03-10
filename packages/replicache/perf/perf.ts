@@ -115,9 +115,8 @@ async function runBenchmark(
   times.sort((a, b) => a - b);
   // Remove two slowest. Treat them as JIT warmup.
   times.splice(0, 2);
-  const calcPercentile = (percentile: number): number => {
-    return times[Math.floor((runCount * percentile) / 100)];
-  };
+  const calcPercentile = (percentile: number): number =>
+    times[Math.floor((runCount * percentile) / 100)];
   const runCount = times.length;
   const medianMs = calcPercentile(50);
   return {

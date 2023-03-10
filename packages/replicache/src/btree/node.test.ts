@@ -215,9 +215,9 @@ function doRead<R>(
   dagStore: dag.Store,
   fn: (r: BTreeRead) => R | Promise<R>,
 ): Promise<R> {
-  return withRead(dagStore, async dagWrite => {
+  return withRead(dagStore, dagWrite => {
     const r = new BTreeRead(dagWrite, rootHash, getEntrySize, chunkHeaderSize);
-    return await fn(r);
+    return fn(r);
   });
 }
 

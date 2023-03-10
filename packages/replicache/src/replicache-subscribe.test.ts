@@ -42,9 +42,9 @@ test('subscribe', async () => {
   });
   let queryCallCount = 0;
   const cancel = rep.subscribe(
-    async (tx: ReadTransaction) => {
+    (tx: ReadTransaction) => {
       queryCallCount++;
-      return await tx.scan({prefix: 'a/'}).entries().toArray();
+      return tx.scan({prefix: 'a/'}).entries().toArray();
     },
     {
       onData: (values: Iterable<readonly [string, ReadonlyJSONValue]>) => {
@@ -115,9 +115,9 @@ suite('subscribe', () => {
     let onDataCallCount = 0;
 
     const cancel = rep.subscribe(
-      async (tx: ReadTransaction) => {
+      (tx: ReadTransaction) => {
         queryCallCount++;
-        return await tx.scan(scanOptions).entries().toArray();
+        return tx.scan(scanOptions).entries().toArray();
       },
       {
         onData: values => {
@@ -438,9 +438,9 @@ test('subscribe with isEmpty and prefix', async () => {
   let queryCallCount = 0;
   let onDataCallCount = 0;
   const cancel = rep.subscribe(
-    async (tx: ReadTransaction) => {
+    (tx: ReadTransaction) => {
       queryCallCount++;
-      return await tx.isEmpty();
+      return tx.isEmpty();
     },
     {
       onData: (empty: boolean) => {

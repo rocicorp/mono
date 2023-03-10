@@ -335,7 +335,7 @@ async function recoverMutationsOfClientSDD(
       ) {
         const newClients = new Map(clients);
         newClients.delete(clientID);
-        return await setNewClients(newClients);
+        return setNewClients(newClients);
       }
 
       assert(pullResponse);
@@ -349,7 +349,7 @@ async function recoverMutationsOfClientSDD(
         ...clientToUpdate,
         lastServerAckdMutationID: pullResponse.lastMutationID,
       });
-      return await setNewClients(newClients);
+      return setNewClients(newClients);
     });
   } catch (e) {
     logMutationRecoveryError(e, lc, stepDescription, delegate);
@@ -709,7 +709,7 @@ async function recoverMutationsOfClientGroupDD31(
           ...clientGroupToUpdate,
           disabled: true,
         });
-        return await setNewClientGroups(newClientGroups);
+        return setNewClientGroups(newClientGroups);
       }
 
       assert(pullResponse);
@@ -737,7 +737,7 @@ async function recoverMutationsOfClientGroupDD31(
           ...lastServerAckdMutationIDsUpdates,
         },
       });
-      return await setNewClientGroups(newClientGroups);
+      return setNewClientGroups(newClientGroups);
     });
   } catch (e) {
     logMutationRecoveryError(e, lc, stepDescription, delegate);

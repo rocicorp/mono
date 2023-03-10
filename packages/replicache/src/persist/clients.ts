@@ -491,7 +491,7 @@ export async function getClientGroupForClient(
   if (!clientGroupID) {
     return undefined;
   }
-  return await getClientGroup(clientGroupID, read);
+  return getClientGroup(clientGroupID, read);
 }
 
 export async function getClientGroupIDForClient(

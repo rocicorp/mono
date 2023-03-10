@@ -70,9 +70,7 @@ function storeThatErrorsInOpen(lc: LogContext, name: string) {
       'InvalidStateError',
     ),
   } as IDBOpenDBRequest;
-  sinon.replace(indexedDB, 'open', () => {
-    return openRequest;
-  });
+  sinon.replace(indexedDB, 'open', () => openRequest);
 
   const store = newIDBStoreWithMemFallback(lc, name);
   expect(store).instanceOf(IDBStoreWithMemFallback);

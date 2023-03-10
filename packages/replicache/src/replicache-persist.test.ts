@@ -108,9 +108,7 @@ test('basic persist & load', async () => {
     assertNotUndefined(clientGroupBeforePull);
     const clientGroup: persist.ClientGroup | undefined = await withRead(
       perdag,
-      read => {
-        return persist.getClientGroup(clientBeforePull.clientGroupID, read);
-      },
+      read => persist.getClientGroup(clientBeforePull.clientGroupID, read),
     );
     assertNotUndefined(clientGroup);
     if (clientGroupBeforePull.headHash !== clientGroup.headHash) {

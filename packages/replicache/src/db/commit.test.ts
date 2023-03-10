@@ -140,59 +140,55 @@ test('local mutations greater than', async () => {
   const headCommit = b.chain[b.chain.length - 1];
 
   expect(
-    await withRead(store, async dagRead => {
-      return await localMutationsGreaterThan(headCommit, {}, dagRead);
-    }),
+    await withRead(store, dagRead =>
+      localMutationsGreaterThan(headCommit, {}, dagRead),
+    ),
   ).to.deep.equal([]);
 
   expect(
-    await withRead(store, async dagRead => {
-      return await localMutationsGreaterThan(
+    await withRead(store, dagRead =>
+      localMutationsGreaterThan(
         headCommit,
         {[clientID1]: 0, [clientID2]: 0},
         dagRead,
-      );
-    }),
+      ),
+    ),
   ).to.deep.equal([b.chain[5], b.chain[4], b.chain[3], b.chain[2], b.chain[1]]);
 
   expect(
-    await withRead(store, async dagRead => {
-      return await localMutationsGreaterThan(
+    await withRead(store, dagRead =>
+      localMutationsGreaterThan(
         headCommit,
         {[clientID1]: 1, [clientID2]: 1},
         dagRead,
-      );
-    }),
+      ),
+    ),
   ).to.deep.equal([b.chain[5], b.chain[4], b.chain[3]]);
 
   expect(
-    await withRead(store, async dagRead => {
-      return await localMutationsGreaterThan(
+    await withRead(store, dagRead =>
+      localMutationsGreaterThan(
         headCommit,
         {[clientID1]: 2, [clientID2]: 1},
         dagRead,
-      );
-    }),
+      ),
+    ),
   ).to.deep.equal([b.chain[5], b.chain[3]]);
 
   expect(
-    await withRead(store, async dagRead => {
-      return await localMutationsGreaterThan(
-        headCommit,
-        {[clientID2]: 1},
-        dagRead,
-      );
-    }),
+    await withRead(store, dagRead =>
+      localMutationsGreaterThan(headCommit, {[clientID2]: 1}, dagRead),
+    ),
   ).to.deep.equal([b.chain[3]]);
 
   expect(
-    await withRead(store, async dagRead => {
-      return await localMutationsGreaterThan(
+    await withRead(store, dagRead =>
+      localMutationsGreaterThan(
         headCommit,
         {[clientID1]: 3, [clientID2]: 2},
         dagRead,
-      );
-    }),
+      ),
+    ),
   ).to.deep.equal([]);
 });
 
@@ -203,7 +199,7 @@ suite('chain', () => {
     const b = new ChainBuilder(store, undefined, dd31);
     await b.addGenesis(clientID);
 
-    let got = await withRead(store, dagRead =>
+    let got: Commit<Meta>[] = await withRead(store, dagRead =>
       commitChain(b.chain[b.chain.length - 1].chunk.hash, dagRead),
     );
 

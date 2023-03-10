@@ -34,10 +34,8 @@ export function initClientGroupGC(
   );
 }
 
-export async function gcClientGroups(
-  dagStore: dag.Store,
-): Promise<ClientGroupMap> {
-  return await withWrite(dagStore, async tx => {
+export function gcClientGroups(dagStore: dag.Store): Promise<ClientGroupMap> {
+  return withWrite(dagStore, async tx => {
     const clients = await getClients(tx);
     const clientGroupIDs = new Set();
     for (const client of clients.values()) {
