@@ -163,7 +163,7 @@ export async function push(
     if (!mainHeadHash) {
       throw new Error('Internal no main head');
     }
-    return await db.localMutations(mainHeadHash, dagRead);
+    return db.localMutations(mainHeadHash, dagRead);
     // Important! Don't hold the lock through an HTTP request!
   });
 

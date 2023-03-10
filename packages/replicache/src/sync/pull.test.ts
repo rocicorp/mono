@@ -1188,7 +1188,7 @@ suite('maybe end try pull', () => {
               clientID,
             );
         await w.put(lc, `key/${i}`, `${i}`);
-        return await w.commit(SYNC_HEAD_NAME);
+        return w.commit(SYNC_HEAD_NAME);
       });
 
       if (c.interveningSync) {
@@ -1218,7 +1218,7 @@ suite('maybe end try pull', () => {
             clientID,
             dd31,
           );
-          return await w.commit(SYNC_HEAD_NAME);
+          return w.commit(SYNC_HEAD_NAME);
         });
       }
       const syncHead = basisHash;

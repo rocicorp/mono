@@ -63,7 +63,7 @@ export async function persistSDD(
   await memdag.chunksPersisted(gatheredChunks.keys());
 }
 
-async function gatherMemOnlyChunks(
+function gatherMemOnlyChunks(
   memdag: dag.LazyStore,
   clientID: sync.ClientID,
 ): Promise<
@@ -74,7 +74,7 @@ async function gatherMemOnlyChunks(
     lastMutationID: number,
   ]
 > {
-  return await withRead(memdag, async dagRead => {
+  return withRead(memdag, async dagRead => {
     const mainHeadHash = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
     assert(mainHeadHash);
     const visitor = new GatherMemoryOnlyVisitor(dagRead);

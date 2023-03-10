@@ -284,15 +284,13 @@ test('Version not supported on server', async () => {
     const onUpdateNeededStub = (rep.onUpdateNeeded = sinon.stub());
 
     // eslint-disable-next-line require-await
-    const pusher: Pusher = async () => {
-      return {
-        response,
-        httpRequestInfo: {
-          httpStatusCode: 200,
-          errorMessage: '',
-        },
-      };
-    };
+    const pusher: Pusher = async () => ({
+      response,
+      httpRequestInfo: {
+        httpStatusCode: 200,
+        errorMessage: '',
+      },
+    });
 
     rep.pusher = pusher as Pusher;
 
@@ -326,15 +324,13 @@ test('ClientStateNotFound on server', async () => {
   const onUpdateNeededStub = (rep.onUpdateNeeded = sinon.stub());
 
   // eslint-disable-next-line require-await
-  const pusher: Pusher = async () => {
-    return {
-      response: {error: 'ClientStateNotFound'},
-      httpRequestInfo: {
-        httpStatusCode: 200,
-        errorMessage: '',
-      },
-    };
-  };
+  const pusher: Pusher = async () => ({
+    response: {error: 'ClientStateNotFound'},
+    httpRequestInfo: {
+      httpStatusCode: 200,
+      errorMessage: '',
+    },
+  });
 
   rep.pusher = pusher as Pusher;
 

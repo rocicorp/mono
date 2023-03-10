@@ -427,7 +427,7 @@ suite('refresh', () => {
 
     const {perdag, memdag} = makeStores();
 
-    async function makeSnapshot({
+    function makeSnapshot({
       store,
       basisHash = null,
       lastMutationIDs,
@@ -442,7 +442,7 @@ suite('refresh', () => {
       valueHash?: Hash;
       indexes?: db.IndexRecord[];
     }): Promise<db.Commit<db.SnapshotMetaDD31>> {
-      return await withWrite(store, async dagWrite => {
+      return withWrite(store, async dagWrite => {
         if (!valueHash) {
           const map = new btree.BTreeWrite(dagWrite);
           valueHash = await map.flush();
@@ -466,7 +466,7 @@ suite('refresh', () => {
 
     let timestampCounter = 0;
 
-    async function makeLocalMutation({
+    function makeLocalMutation({
       store,
       clientID,
       mutationID,
@@ -491,7 +491,7 @@ suite('refresh', () => {
       timestamp?: number;
       entries?: readonly btree.Entry<ReadonlyJSONValue>[];
     }): Promise<db.Commit<db.LocalMetaDD31>> {
-      return await withWrite(store, async dagWrite => {
+      return withWrite(store, async dagWrite => {
         const m = new btree.BTreeWrite(dagWrite, valueHash);
         for (const [k, v] of entries) {
           await m.put(k, deepFreeze(v));

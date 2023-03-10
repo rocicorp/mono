@@ -38,12 +38,11 @@ function gcClients(
   return withWrite(dagStore, async dagWrite => {
     const now = Date.now();
     const clients = await getClients(dagWrite);
-    const clientsAfterGC = Array.from(clients).filter(([id, client]) => {
-      return (
+    const clientsAfterGC = Array.from(clients).filter(
+      ([id, client]) =>
         id === clientID /* never collect ourself */ ||
-        now - client.heartbeatTimestampMs <= CLIENT_MAX_INACTIVE_IN_MS
-      );
-    });
+        now - client.heartbeatTimestampMs <= CLIENT_MAX_INACTIVE_IN_MS,
+    );
     if (clientsAfterGC.length === clients.size) {
       return clients;
     }

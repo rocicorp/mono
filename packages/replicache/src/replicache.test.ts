@@ -665,18 +665,16 @@ test('allow redefinition of indexes', async () => {
     {useDefaultURLs: false},
   );
   const clientID = await rep.clientID;
-  fetchMock.postOnce(pullURL, () => {
-    return {
-      cookie: '',
-      lastMutationIDChanges: {[clientID]: 2},
-      patch: [
-        {op: 'put', key: 'a/0', value: {a: '0'}},
-        {op: 'put', key: 'a/1', value: {a: '1'}},
-        {op: 'put', key: 'b/2', value: {a: '2'}},
-        {op: 'put', key: 'b/3', value: {a: '3'}},
-      ],
-    };
-  });
+  fetchMock.postOnce(pullURL, () => ({
+    cookie: '',
+    lastMutationIDChanges: {[clientID]: 2},
+    patch: [
+      {op: 'put', key: 'a/0', value: {a: '0'}},
+      {op: 'put', key: 'a/1', value: {a: '1'}},
+      {op: 'put', key: 'b/2', value: {a: '2'}},
+      {op: 'put', key: 'b/3', value: {a: '3'}},
+    ],
+  }));
 
   rep.pull();
 
@@ -2070,7 +2068,7 @@ test('mutation timestamps are immutable', async () => {
   await rep.poke(poke);
 
   // Verify rebase did occur by checking for the new value.
-  const val = await rep.query(async tx => await tx.get('hot'));
+  const val = await rep.query(tx => tx.get('hot'));
   expect(val).equal('dog');
 
   // Check that mutation timestamp did not change

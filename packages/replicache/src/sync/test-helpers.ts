@@ -62,9 +62,9 @@ export async function addSyncSnapshot(
       await w.commit(sync.SYNC_HEAD_NAME);
     }
   });
-  const [, commit] = await withRead(store, async dagRead => {
-    return await db.readCommit(db.whenceHead(sync.SYNC_HEAD_NAME), dagRead);
-  });
+  const [, commit] = await withRead(store, dagRead =>
+    db.readCommit(db.whenceHead(sync.SYNC_HEAD_NAME), dagRead),
+  );
   syncChain.push(commit);
 
   return syncChain;

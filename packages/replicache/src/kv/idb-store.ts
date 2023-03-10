@@ -23,12 +23,12 @@ export class IDBStore implements Store {
     this._db = openDatabase(name);
   }
 
-  async read(): Promise<Read> {
-    return await this._withReopen(readImpl);
+  read(): Promise<Read> {
+    return this._withReopen(readImpl);
   }
 
-  async write(): Promise<Write> {
-    return await this._withReopen(writeImpl);
+  write(): Promise<Write> {
+    return this._withReopen(writeImpl);
   }
 
   async close(): Promise<void> {

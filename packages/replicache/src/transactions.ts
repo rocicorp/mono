@@ -10,7 +10,7 @@ import {
 } from './scan-options.js';
 import {fromKeyForIndexScanInternal, ScanResultImpl} from './scan-iterator.js';
 import type {ScanResult} from './scan-iterator.js';
-import {throwIfClosed} from './transaction-closed-error.js';
+import {rejectIfClosed, throwIfClosed} from './transaction-closed-error.js';
 import type * as db from './db/mod.js';
 import type {ScanSubscriptionInfo} from './subscriptions.js';
 import type {ClientID, ScanNoIndexOptions} from './mod.js';
@@ -260,9 +260,8 @@ export class WriteTransactionImpl
     await this.dbtx.put(this._lc, key, deepFreeze(value));
   }
 
-  async del(key: string): Promise<boolean> {
-    throwIfClosed(this.dbtx);
-    return await this.dbtx.del(this._lc, key);
+  del(key: string): Promise<boolean> {
+    return rejectIfClosed(this.dbtx) ?? this.dbtx.del(this._lc, key);
   }
 }
 

@@ -121,5 +121,5 @@ export async function rebaseMutationAndCommit(
     lc,
     mutationClientID,
   );
-  return await dbWrite.commit(headName);
+  return dbWrite.commit(headName);
 }

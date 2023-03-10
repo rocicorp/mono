@@ -80,7 +80,7 @@ async function createGenesis(
   await withWrite(store, async w => {
     await initDB(w, headName, clientID, indexDefinitions, dd31);
   });
-  return await withRead(store, async read => {
+  return withRead(store, async read => {
     const [, commit] = await readCommit(whenceHead(headName), read);
     return commit;
   });
@@ -422,7 +422,7 @@ export async function initDB(
     clientID,
     dd31,
   );
-  return await w.commit(headName);
+  return w.commit(headName);
 }
 
 async function createEmptyIndexMaps(

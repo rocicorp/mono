@@ -271,7 +271,7 @@ async function callPuller(
 }
 
 // Returns new sync head, or null if response did not apply due to mismatched cookie.
-export async function handlePullResponseSDD(
+export function handlePullResponseSDD(
   lc: LogContext,
   store: dag.Store,
   expectedBaseCookie: ReadonlyJSONValue,
@@ -280,7 +280,7 @@ export async function handlePullResponseSDD(
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
   // that is not the case by re-checking the base snapshot.
-  return await withWrite(store, async dagWrite => {
+  return withWrite(store, async dagWrite => {
     const dagRead = dagWrite;
     const mainHead = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
 
@@ -420,7 +420,7 @@ function badOrderMessage(
   return `Received ${name} ${receivedValue} is < than last snapshot ${name} ${lastSnapshotValue}; ignoring client view`;
 }
 
-export async function handlePullResponseDD31(
+export function handlePullResponseDD31(
   lc: LogContext,
   store: dag.Store,
   expectedBaseCookie: FrozenJSONValue,
@@ -429,7 +429,7 @@ export async function handlePullResponseDD31(
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
   // that is not the case by re-checking the base snapshot.
-  return await withWrite(store, async dagWrite => {
+  return withWrite(store, async dagWrite => {
     const dagRead = dagWrite;
     const mainHead = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
     if (mainHead === undefined) {
@@ -518,7 +518,7 @@ type MaybeEndPullResultBase<M extends db.Meta> = {
 
 export type MaybeEndPullResultSDD = MaybeEndPullResultBase<db.LocalMetaSDD>;
 
-export async function maybeEndPull<M extends db.LocalMeta>(
+export function maybeEndPull<M extends db.LocalMeta>(
   store: dag.Store,
   lc: LogContext,
   expectedSyncHead: Hash,
@@ -529,7 +529,7 @@ export async function maybeEndPull<M extends db.LocalMeta>(
   replayMutations: db.Commit<M>[];
   diffs: DiffsMap;
 }> {
-  return await withWrite(store, async dagWrite => {
+  return withWrite(store, async dagWrite => {
     const dagRead = dagWrite;
     // Ensure sync head is what the caller thinks it is.
     const syncHeadHash = await dagRead.getHead(SYNC_HEAD_NAME);

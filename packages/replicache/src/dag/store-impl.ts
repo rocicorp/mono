@@ -48,8 +48,8 @@ export class ReadImpl implements Read {
     this.assertValidHash = assertValidHash;
   }
 
-  async hasChunk(hash: Hash): Promise<boolean> {
-    return await this._tx.has(chunkDataKey(hash));
+  hasChunk(hash: Hash): Promise<boolean> {
+    return this._tx.has(chunkDataKey(hash));
   }
 
   async getChunk(hash: Hash): Promise<Chunk | undefined> {

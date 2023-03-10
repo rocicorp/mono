@@ -203,7 +203,7 @@ class WatchImpl implements Subscription<Diff | undefined> {
     }
   }
 
-  async invoke(
+  invoke(
     tx: ReadTransaction,
     kind: InvokeKind,
     diffs: sync.DiffsMap | undefined,
@@ -262,7 +262,7 @@ class WatchImpl implements Subscription<Diff | undefined> {
     };
 
     if (this._indexName) {
-      return await invoke<db.IndexKey>(
+      return invoke<db.IndexKey>(
         this._indexName,
         this._prefix,
         diff => diff.key[0],
@@ -270,7 +270,7 @@ class WatchImpl implements Subscription<Diff | undefined> {
       );
     }
 
-    return await invoke<string>(
+    return invoke<string>(
       undefined,
       this._prefix,
       diff => diff.key,

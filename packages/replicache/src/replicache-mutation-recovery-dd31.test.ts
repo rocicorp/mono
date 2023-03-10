@@ -1641,9 +1641,9 @@ suite('DD31', () => {
     expect(rep.recoverMutationsSpy.callCount).to.equal(1);
     expect(rep.online).to.equal(true);
 
-    fetchMock.post(pullURL, () => {
-      return {throws: new Error('Simulate fetch error in push')};
-    });
+    fetchMock.post(pullURL, () => ({
+      throws: new Error('Simulate fetch error in push'),
+    }));
 
     rep.pull();
 
@@ -2003,9 +2003,7 @@ suite('DD31', () => {
       schemaVersion: schemaVersion1,
       mutators: {
         // eslint-disable-next-line @typescript-eslint/naming-convention
-        mutator_name_2: () => {
-          return;
-        },
+        mutator_name_2: () => undefined,
       },
     });
 
