@@ -18,8 +18,21 @@ export type ProcessUntilDone = () => void;
 /**
  * handles the 'push' upstream message by queueing the mutations included in
  * [[body]] into pendingMutations.
- * O(p + m) where p is pendingMutations.length and m is body.mutations.length
- * (assuming array splice is O(1))
+ *
+ * It ensures the following ordering constraints for mutations:
+ * 1. mutation ids for a given client id must be in ascending order (without
+ *    gaps)
+ * 2. mutations from the same client group pushed by the same client, must be in
+ *    the order they were pushed by that client (even across pushes), unless
+ *    they were already pushed by a different client, then the already
+ *    established order should persist.
+ * 3. mutations should be ordered by normalized timestamp, as long as it does
+ *    not violate any of the above ordering constraints.  This will minimize
+ *    forcing clients to miss frames when playing back the mutations.
+ *
+ *
+ * Runtime: O(p + m) where p is pendingMutations.length and m is
+ * body.mutations.length
  */
 export async function handlePush(
   lc: LogContext,
