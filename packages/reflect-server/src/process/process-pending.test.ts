@@ -13,12 +13,12 @@ import {getVersion, putVersion} from '../../src/types/version.js';
 import type {Version} from 'reflect-protocol';
 import {
   client,
-  mutation,
   clientRecord,
   createSilentLogContext,
   fail,
   Mocket,
   mockMathRandom,
+  pendingMutation,
 } from '../util/test-utils.js';
 import {processPending} from '../process/process-pending.js';
 import type {PendingMutation} from '../types/mutation.js';
@@ -65,7 +65,15 @@ test('processPending', async () => {
       version: 1,
       clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
       clients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
-      pendingMutations: [mutation('c1', 2, 'inc', null, 100)],
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamp: 100,
+          name: 'inc',
+        }),
+      ],
       expectedClients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
       expectedVersion: 2,
       expectedPokes: new Map([
@@ -110,9 +118,27 @@ test('processPending', async () => {
         client('c3', 'u3', 'cg2', s3, 0),
       ]),
       pendingMutations: [
-        mutation('c1', 2, 'inc', null, 100),
-        mutation('c2', 2, 'inc', null, 120),
-        mutation('c3', 2, 'inc', null, 140),
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamp: 100,
+          name: 'inc',
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamp: 120,
+          name: 'inc',
+        }),
+        pendingMutation({
+          clientID: 'c3',
+          clientGroupID: 'cg2',
+          id: 2,
+          timestamp: 140,
+          name: 'inc',
+        }),
       ],
       expectedClients: new Map([
         client('c1', 'u1', 'cg1', s1, 0),

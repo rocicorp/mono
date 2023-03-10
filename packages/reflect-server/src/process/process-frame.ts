@@ -60,9 +60,7 @@ export async function processFrame(
       const patch = unwrapPatch(mutationCache.pending());
       await mutationCache.flush();
       const mutationClientID = pendingMutation.clientID;
-      const mutationClientGroupID = must(
-        await getClientRecord(mutationClientID, cache),
-      ).clientGroupID;
+      const mutationClientGroupID = pendingMutation.clientGroupID;
       clientPokes.push(
         ...(await buildClientPokesAndUpdateClientRecords(
           cache,

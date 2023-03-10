@@ -51,7 +51,7 @@ export async function handleMessage(
         lc,
         storage,
         clientID,
-        client,
+        clients,
         pendingMutations,
         message[1],
         () => Date.now(),

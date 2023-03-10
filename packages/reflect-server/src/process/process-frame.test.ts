@@ -1,5 +1,5 @@
 import {expect, test} from '@jest/globals';
-import type {JSONType, Mutation, Version} from 'reflect-protocol';
+import type {JSONType, Version} from 'reflect-protocol';
 import type {WriteTransaction} from 'replicache';
 import * as s from 'superstruct';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
@@ -18,9 +18,10 @@ import {
   clientRecord,
   createSilentLogContext,
   mockMathRandom,
-  mutation,
+  pendingMutation,
   userValue,
 } from '../util/test-utils.js';
+import type {PendingMutation} from '../types/mutation.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -34,7 +35,7 @@ test('processFrame', async () => {
 
   type Case = {
     name: string;
-    mutations: Mutation[];
+    pendingMutations: PendingMutation[];
     clients: ClientID[];
     clientRecords: ClientRecordMap;
     connectedClients: ClientID[];
@@ -69,7 +70,7 @@ test('processFrame', async () => {
   const cases: Case[] = [
     {
       name: 'no mutations, no clients',
-      mutations: [],
+      pendingMutations: [],
       clients: [],
       clientRecords: records,
       connectedClients: [],
@@ -82,7 +83,7 @@ test('processFrame', async () => {
     },
     {
       name: 'no mutations, one client',
-      mutations: [],
+      pendingMutations: [],
       clients: ['c1'],
       clientRecords: records,
       connectedClients: ['c1'],
@@ -95,7 +96,16 @@ test('processFrame', async () => {
     },
     {
       name: 'one mutation, one client',
-      mutations: [mutation('c1', 2, 'put', {key: 'foo', value: 'bar'}, 100)],
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamp: 100,
+          name: 'put',
+          args: {key: 'foo', value: 'bar'},
+        }),
+      ],
       clients: ['c1'],
       clientRecords: records,
       connectedClients: ['c1'],
@@ -130,7 +140,16 @@ test('processFrame', async () => {
     },
     {
       name: 'one mutation, two clients',
-      mutations: [mutation('c1', 2, 'put', {key: 'foo', value: 'bar'}, 100)],
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamp: 100,
+          name: 'put',
+          args: {key: 'foo', value: 'bar'},
+        }),
+      ],
       clients: ['c1', 'c2'],
       clientRecords: records,
       connectedClients: ['c1', 'c2'],
@@ -182,9 +201,26 @@ test('processFrame', async () => {
     },
     {
       name: 'two mutations, three clients, two client groups',
-      mutations: [
-        mutation('c1', 2, 'put', {key: 'foo', value: 'bar'}, 100),
-        mutation('c3', 8, 'put', {key: 'fuzzy', value: 'wuzzy'}, 120),
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamp: 100,
+          name: 'put',
+          args: {key: 'foo', value: 'bar'},
+        }),
+        pendingMutation({
+          clientID: 'c3',
+          clientGroupID: 'cg2',
+          id: 8,
+          timestamp: 120,
+          name: 'put',
+          args: {
+            key: 'fuzzy',
+            value: 'wuzzy',
+          },
+        }),
       ],
       clients: ['c1', 'c2', 'c3'],
       clientRecords: records,
@@ -303,9 +339,23 @@ test('processFrame', async () => {
     },
     {
       name: 'two mutations, one client, one key',
-      mutations: [
-        mutation('c1', 2, 'put', {key: 'foo', value: 'bar'}, 100),
-        mutation('c1', 3, 'put', {key: 'foo', value: 'baz'}, 120),
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamp: 100,
+          name: 'put',
+          args: {key: 'foo', value: 'bar'},
+        }),
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 3,
+          timestamp: 120,
+          name: 'put',
+          args: {key: 'foo', value: 'baz'},
+        }),
       ],
       clients: ['c1'],
       clientRecords: records,
@@ -357,7 +407,7 @@ test('processFrame', async () => {
     },
     {
       name: 'no mutations, no clients, 1 client disconnects',
-      mutations: [],
+      pendingMutations: [],
       clients: [],
       clientRecords: records,
       connectedClients: ['c1'],
@@ -372,7 +422,7 @@ test('processFrame', async () => {
     },
     {
       name: 'no mutations, no clients, 1 client disconnects, disconnect handler throws',
-      mutations: [],
+      pendingMutations: [],
       clients: [],
       clientRecords: records,
       connectedClients: ['c1'],
@@ -387,7 +437,7 @@ test('processFrame', async () => {
     },
     {
       name: 'no mutations, 1 client, 1 client disconnected',
-      mutations: [],
+      pendingMutations: [],
       clients: ['c2'],
       clientRecords: records,
       connectedClients: ['c1', 'c2'],
@@ -422,7 +472,7 @@ test('processFrame', async () => {
     },
     {
       name: 'no mutations, 1 client, 2 clients disconnected',
-      mutations: [],
+      pendingMutations: [],
       clients: ['c2'],
       clientRecords: records,
       connectedClients: ['c1', 'c2', 'c3'],
@@ -463,7 +513,16 @@ test('processFrame', async () => {
     },
     {
       name: '1 mutation, 2 clients, 1 client disconnects',
-      mutations: [mutation('c1', 2, 'put', {key: 'foo', value: 'bar'}, 100)],
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamp: 100,
+          name: 'put',
+          args: {key: 'foo', value: 'bar'},
+        }),
+      ],
       clients: ['c1', 'c2'],
       clientRecords: records,
       connectedClients: ['c1', 'c2', 'c3'],
@@ -562,7 +621,7 @@ test('processFrame', async () => {
     const disconnectCallClients: ClientID[] = [];
     const result = await processFrame(
       createSilentLogContext(),
-      c.mutations,
+      c.pendingMutations,
       mutators,
       async write => {
         await write.put(disconnectHandlerWriteKey(write.clientID), true);

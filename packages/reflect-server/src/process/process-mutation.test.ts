@@ -9,15 +9,15 @@ import {
 import {getUserValue} from '../../src/types/user-value.js';
 import {getVersion} from '../../src/types/version.js';
 import {
-  mutation,
   clientRecord,
   createSilentLogContext,
+  pendingMutation,
 } from '../util/test-utils.js';
 import {
   MutatorMap,
   processMutation,
 } from '../../src/process/process-mutation.js';
-import type {Mutation} from 'reflect-protocol';
+import type {PendingMutation} from '../types/mutation.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -27,7 +27,7 @@ test('processMutation', async () => {
   type Case = {
     name: string;
     existingRecord?: ClientRecord;
-    mutation: Mutation;
+    pendingMutation: PendingMutation;
     expectedError?: string;
     expectedRecord?: ClientRecord;
     expectAppWrite: boolean;
@@ -37,7 +37,12 @@ test('processMutation', async () => {
   const cases: Case[] = [
     {
       name: 'clientID not found',
-      mutation: mutation('c1', 1),
+      pendingMutation: pendingMutation({
+        clientID: 'c1',
+        clientGroupID: 'cg1',
+        id: 1,
+        timestamp: 100,
+      }),
       expectedError: 'Error: Client c1 not found',
       expectAppWrite: false,
       expectVersionWrite: false,
@@ -45,7 +50,12 @@ test('processMutation', async () => {
     {
       name: 'duplicate mutation',
       existingRecord: clientRecord('cg1', null, 1, 1),
-      mutation: mutation('c1', 1),
+      pendingMutation: pendingMutation({
+        clientID: 'c1',
+        clientGroupID: 'cg1',
+        id: 1,
+        timestamp: 100,
+      }),
       expectedRecord: clientRecord('cg1', null, 1, 1),
       expectAppWrite: false,
       expectVersionWrite: false,
@@ -53,7 +63,12 @@ test('processMutation', async () => {
     {
       name: 'ooo mutation',
       existingRecord: clientRecord('cg1', null, 1, 1),
-      mutation: mutation('c1', 3),
+      pendingMutation: pendingMutation({
+        clientID: 'c1',
+        clientGroupID: 'cg1',
+        id: 3,
+        timestamp: 100,
+      }),
       expectedRecord: clientRecord('cg1', null, 1, 1),
       expectAppWrite: false,
       expectVersionWrite: false,
@@ -61,7 +76,13 @@ test('processMutation', async () => {
     {
       name: 'unknown mutator',
       existingRecord: clientRecord('cg1', null, 1, 1),
-      mutation: mutation('c1', 2, 'unknown'),
+      pendingMutation: pendingMutation({
+        clientID: 'c1',
+        clientGroupID: 'cg1',
+        id: 2,
+        timestamp: 100,
+        name: 'unknown',
+      }),
       expectedRecord: clientRecord('cg1', null, 2, version),
       expectAppWrite: false,
       expectVersionWrite: true,
@@ -69,7 +90,13 @@ test('processMutation', async () => {
     {
       name: 'mutator throws',
       existingRecord: clientRecord('cg1', null, 1, 1),
-      mutation: mutation('c1', 2, 'throws'),
+      pendingMutation: pendingMutation({
+        clientID: 'c1',
+        clientGroupID: 'cg1',
+        id: 2,
+        timestamp: 100,
+        name: 'throws',
+      }),
       expectedRecord: clientRecord('cg1', null, 2, version),
       expectAppWrite: false,
       expectVersionWrite: true,
@@ -77,7 +104,13 @@ test('processMutation', async () => {
     {
       name: 'success',
       existingRecord: clientRecord('cg1', null, 1, 1),
-      mutation: mutation('c1', 2, 'foo'),
+      pendingMutation: pendingMutation({
+        clientID: 'c1',
+        clientGroupID: 'cg1',
+        id: 2,
+        timestamp: 100,
+        name: 'foo',
+      }),
       expectedRecord: clientRecord('cg1', null, 2, version),
       expectAppWrite: true,
       expectVersionWrite: true,
@@ -104,7 +137,7 @@ test('processMutation', async () => {
 
   for (const c of cases) {
     const storage = new DurableStorage(durable);
-    const {clientID} = c.mutation;
+    const {clientID} = c.pendingMutation;
 
     if (c.existingRecord) {
       await putClientRecord(clientID, c.existingRecord, storage);
@@ -114,7 +147,7 @@ test('processMutation', async () => {
     try {
       await processMutation(
         createSilentLogContext(),
-        c.mutation,
+        c.pendingMutation,
         mutators,
         storage,
         version,
