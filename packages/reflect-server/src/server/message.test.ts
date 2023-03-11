@@ -1,4 +1,11 @@
-import {test, describe, expect} from '@jest/globals';
+import {
+  test,
+  describe,
+  expect,
+  afterEach,
+  beforeEach,
+  jest,
+} from '@jest/globals';
 import type {
   ClientID,
   ClientGroupID,
@@ -17,6 +24,15 @@ import {randomID} from '../util/rand.js';
 import {ErrorKind} from 'reflect-protocol';
 import {DurableStorage} from '../storage/durable-storage.js';
 import type {PendingMutation} from '../types/mutation.js';
+
+beforeEach(() => {
+  jest.useFakeTimers();
+  jest.setSystemTime(0);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
 
 describe('handleMessage', () => {
   type Case = {

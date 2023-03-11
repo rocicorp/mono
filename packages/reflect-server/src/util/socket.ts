@@ -8,8 +8,9 @@ export function sendError(
   ws: Socket,
   kind: ErrorKind,
   message = '',
+  logLevel: 'info' | 'error' = 'info',
 ) {
-  sendErrorInternal(lc, 'Sending error on socket', ws, kind, message);
+  sendErrorInternal(lc, 'Sending error on socket', ws, kind, message, logLevel);
 }
 
 /**
@@ -20,8 +21,16 @@ export function closeWithError(
   ws: Socket,
   kind: ErrorKind,
   message = '',
+  logLevel: 'info' | 'error' = 'info',
 ) {
-  sendErrorInternal(lc, 'Closing socket with error', ws, kind, message);
+  sendErrorInternal(
+    lc,
+    'Closing socket with error',
+    ws,
+    kind,
+    message,
+    logLevel,
+  );
   ws.close();
 }
 
@@ -31,9 +40,12 @@ function sendErrorInternal(
   ws: Socket,
   kind: ErrorKind,
   message = '',
+  logLevel: 'info' | 'error' = 'info',
 ) {
   const data: ErrorMessage = ['error', kind, message];
-  lc.debug?.(logMessage, {
+  const log = (...args: unknown[]) =>
+    logLevel === 'info' ? lc.info?.(...args) : lc.error?.(...args);
+  log(logMessage, {
     kind,
     message,
   });
