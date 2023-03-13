@@ -166,7 +166,7 @@ export async function handleConnection(
   const client: ClientState = {
     socket: ws,
     userData,
-    clockBehindByMs: undefined,
+    clockOffsetMs: undefined,
     clientGroupID: requestClientGroupID,
   };
   lc.debug?.('Setting client map entry', clientID, client);

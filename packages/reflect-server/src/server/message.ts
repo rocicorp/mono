@@ -7,8 +7,8 @@ import {handlePing} from './ping.js';
 import {superstructAssert} from '../util/superstruct.js';
 import {ErrorKind} from 'reflect-protocol';
 import type {DurableStorage} from '../storage/durable-storage.js';
-import type {PendingMutationMap} from '../types/mutation.js';
 import {handlePull} from './pull.js';
+import type {PendingMutation} from '../types/mutation.js';
 
 /**
  * Handles an upstream message coming into the server by dispatching to the
@@ -18,7 +18,7 @@ export async function handleMessage(
   lc: LogContext,
   storage: DurableStorage,
   clients: ClientMap,
-  pendingMutations: PendingMutationMap,
+  pendingMutations: PendingMutation[],
   clientID: ClientID,
   data: string,
   ws: Socket,
@@ -50,7 +50,7 @@ export async function handleMessage(
       await handlePush(
         lc,
         storage,
-        client,
+        clientID,
         clients,
         pendingMutations,
         message[1],

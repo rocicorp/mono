@@ -8,7 +8,7 @@ import {processRoom} from './process-room.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {send} from '../util/socket.js';
-import type {PendingMutationMap} from '../types/mutation.js';
+import type {PendingMutation} from '../types/mutation.js';
 import {randomID} from '../util/rand.js';
 
 /**
@@ -20,7 +20,7 @@ export async function processPending(
   lc: LogContext,
   storage: DurableStorage,
   clients: ClientMap,
-  pendingMutations: PendingMutationMap,
+  pendingMutations: PendingMutation[],
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
   timestamp: number,
@@ -40,7 +40,7 @@ export async function processPending(
     );
     sendPokes(lc, pokes, clients);
     lc.debug?.('clearing pending mutations');
-    pendingMutations.clear();
+    pendingMutations.length = 0;
   } finally {
     lc.debug?.(`processPending took ${Date.now() - t0} ms`);
   }

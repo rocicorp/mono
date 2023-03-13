@@ -21,5 +21,5 @@ export type ClientState = {
   // connect, which is why we need the |undefined here. We need to do that
   // because socket setup overhead is substantial and we will get a value
   // that is far too high if we use connection.
-  clockBehindByMs: number | undefined;
+  clockOffsetMs: number | undefined;
 };

@@ -5,7 +5,7 @@ import {getClientRecord, putClientRecord} from '../types/client-record.js';
 import {putVersion} from '../types/version.js';
 import type {Version} from 'reflect-protocol';
 import type {LogContext} from '@rocicorp/logger';
-import type {Mutation} from 'reflect-protocol';
+import type {PendingMutation} from '../types/mutation.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Mutator = (tx: ReplicacheTransaction, args: any) => Promise<void>;
@@ -18,7 +18,7 @@ export type MutatorMap = Map<string, Mutator>;
 // - client record of mutating client will have been updated
 export async function processMutation(
   lc: LogContext,
-  mutation: Mutation,
+  pendingMutation: PendingMutation,
   mutators: MutatorMap,
   storage: Storage,
   version: Version,
@@ -27,11 +27,11 @@ export async function processMutation(
   try {
     lc.debug?.(
       'processing mutation',
-      JSON.stringify(mutation),
+      JSON.stringify(pendingMutation),
       'version',
       version,
     );
-    const {clientID} = mutation;
+    const {clientID} = pendingMutation;
     const cache = new EntryCache(storage);
     const record = await getClientRecord(clientID, cache);
     if (!record) {
@@ -40,28 +40,40 @@ export async function processMutation(
     }
 
     const expectedMutationID = record.lastMutationID + 1;
-    if (mutation.id < expectedMutationID) {
-      lc.debug?.('skipping duplicate mutation', JSON.stringify(mutation));
+    if (pendingMutation.id < expectedMutationID) {
+      lc.debug?.(
+        'skipping duplicate mutation',
+        JSON.stringify(pendingMutation),
+      );
       return;
     }
 
-    if (mutation.id > expectedMutationID) {
-      lc.info?.('skipping out of order mutation', JSON.stringify(mutation));
+    if (pendingMutation.id > expectedMutationID) {
+      // This should never happen, the order is validated in the push message
+      // handler.
+      lc.error?.(
+        'skipping out of order mutation',
+        JSON.stringify(pendingMutation),
+      );
       return;
     }
 
     const txCache = new EntryCache(storage);
     const tx = new ReplicacheTransaction(txCache, clientID, version);
     try {
-      const mutator = mutators.get(mutation.name);
+      const mutator = mutators.get(pendingMutation.name);
       if (!mutator) {
-        lc.info?.('skipping unknown mutator', JSON.stringify(mutation));
+        lc.info?.('skipping unknown mutator', JSON.stringify(pendingMutation));
       } else {
-        await mutator(tx, mutation.args);
+        await mutator(tx, pendingMutation.args);
         await txCache.flush();
       }
     } catch (e) {
-      lc.info?.('skipping mutation because error', JSON.stringify(mutation), e);
+      lc.info?.(
+        'skipping mutation because error',
+        JSON.stringify(pendingMutation),
+        e,
+      );
     }
 
     record.lastMutationID = expectedMutationID;
