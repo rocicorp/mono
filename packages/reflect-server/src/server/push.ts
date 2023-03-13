@@ -11,7 +11,6 @@ import {closeWithError} from '../util/socket.js';
 import {must} from '../util/must.js';
 import {ErrorKind} from 'reflect-protocol';
 import type {PendingMutation} from '../types/mutation.js';
-import {assert} from '../util/asserts.js';
 
 export type Now = () => number;
 export type ProcessUntilDone = () => void;
