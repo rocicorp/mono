@@ -17,7 +17,11 @@ import {
   createSilentLogContext,
   Mocket,
 } from '../util/test-utils.js';
-import {getConnectRequest, handleConnection} from '../../src/server/connect.js';
+import {
+  getConnectRequest,
+  handleConnection,
+  maybeOldClientStateMessage,
+} from '../../src/server/connect.js';
 import {USER_DATA_HEADER_NAME} from './auth.js';
 import {encodeHeaderValue} from '../util/headers.js';
 import {DurableStorage} from '../storage/durable-storage.js';
@@ -173,7 +177,7 @@ describe('handleConnection', () => {
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=1&ts=42&lmid=0&wsid=wsidx',
       headers: createHeadersWithValidUserData('u1'),
       expectErrorKind: ErrorKind.InvalidConnectionRequest,
-      expectErrorMessage: `Unexpected baseCookie`,
+      expectErrorMessage: `Unexpected baseCookie. ${maybeOldClientStateMessage}`,
       existingClients: new Map(),
       expectedClients: () => new Map(),
       version: null,
@@ -183,7 +187,7 @@ describe('handleConnection', () => {
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=2&ts=42&lmid=0&wsid=wsidx',
       headers: createHeadersWithValidUserData('u1'),
       expectErrorKind: ErrorKind.InvalidConnectionRequest,
-      expectErrorMessage: `Unexpected baseCookie`,
+      expectErrorMessage: `Unexpected baseCookie. ${maybeOldClientStateMessage}`,
       existingClients: new Map(),
       expectedClients: () => new Map(),
       version: null,
@@ -269,7 +273,7 @@ describe('handleConnection', () => {
       headers: createHeadersWithValidUserData('u1'),
       existingRecord: clientRecord('cg1', 7, 0),
       expectErrorKind: ErrorKind.InvalidConnectionRequest,
-      expectErrorMessage: `Unexpected lmid`,
+      expectErrorMessage: `Unexpected lmid. ${maybeOldClientStateMessage}`,
       version: 7,
     },
   ];

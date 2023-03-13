@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect, assert} from '@esm-bundle/chai';
 import {DatadogSeries, gaugeValue, Metrics} from '@rocicorp/datadog-util';
 import {resolver} from '@rocicorp/resolver';
 import type {NullableVersion} from 'reflect-protocol';
@@ -28,6 +28,7 @@ import {
 import {
   MockSocket,
   reflectForTest,
+  TestLogSink,
   TestReflect,
   tickAFewTimes,
 } from './test-utils.js'; // Why use fakes when we can use the real thing!
@@ -1119,4 +1120,18 @@ test('Disconnect on hide', async () => {
   await r.waitForConnectionState(ConnectionState.Connecting);
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
+});
+
+test('InvalidConnectionRequest', async () => {
+  const testLogSink = new TestLogSink();
+  const r = reflectForTest({
+    logSinks: [testLogSink],
+  });
+  await r.triggerError(ErrorKind.InvalidConnectionRequest, 'test');
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  await clock.tickAsync(0);
+  const msg = testLogSink.messages.at(-1);
+  assert(msg !== undefined);
+  assert.equal(msg[0], 'error');
+  assert.equal((msg.at(-1) as Error).message, 'InvalidConnectionRequest: test');
 });
