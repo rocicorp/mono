@@ -8,6 +8,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: rocicorp
+      TURBO_REMOTE_ONLY: true
     steps:
       - uses: actions/checkout@v3
 
@@ -16,14 +20,12 @@ jobs:
           node-version: 16.x
           cache: 'npm'
 
-      - uses: dtinth/setup-github-actions-caching-for-turbo@v1
-
       - name: configure npm auth token
         run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
 
-      - run: npm install
+      - run: npm ci
 
       - name: Build
         run: npm run build
