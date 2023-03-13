@@ -73,6 +73,7 @@ export const ROOM_ROUTES = {
 export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   private readonly _clients: ClientMap = new Map();
   private readonly _pendingMutations: PendingMutation[] = [];
+  private _maxProcessedMutationTimestamp = 0;
   private readonly _lock = new Lock();
   private readonly _mutators: MutatorMap;
   private readonly _disconnectHandler: DisconnectHandler;
@@ -410,14 +411,14 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         return;
       }
 
-      await processPending(
+      this._maxProcessedMutationTimestamp = await processPending(
         lc,
         this._storage,
         this._clients,
         this._pendingMutations,
         this._mutators,
         this._disconnectHandler,
-        Date.now(),
+        this._maxProcessedMutationTimestamp,
       );
     });
   }

@@ -31,7 +31,6 @@ export async function processRoom(
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
   storage: DurableStorage,
-  timestamp: number,
 ): Promise<ClientPoke[]> {
   const cache = new EntryCache(storage);
   const clientIDs = [...clients.keys()];
@@ -55,7 +54,6 @@ export async function processRoom(
     clientIDs,
     currentVersion,
     storage,
-    timestamp,
   );
   lc.debug?.('pokes from fastforward', JSON.stringify(clientPokes));
 
