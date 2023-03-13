@@ -1030,7 +1030,9 @@ test('New connection logs', async () => {
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
   await clock.tickAsync(500);
+  await r.triggerPong();
   await r.triggerClose();
+  await r.waitForConnectionState(ConnectionState.Disconnected);
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
   const connectIndex = log.findIndex(
     ([level, args]) =>
@@ -1039,7 +1041,7 @@ test('New connection logs', async () => {
       args.find(
         arg =>
           arg instanceof Object &&
-          (arg as {timeToConnectMs: number}).timeToConnectMs == 500,
+          (arg as {timeToConnectMs: number}).timeToConnectMs === 500,
       ),
   );
 
@@ -1050,8 +1052,9 @@ test('New connection logs', async () => {
       args.find(
         arg =>
           arg instanceof Object &&
-          (arg as {connectedAt: number}).connectedAt == 1500 &&
-          (arg as {connectionDuration: number}).connectionDuration == 500,
+          (arg as {connectedAt: number}).connectedAt === 1500 &&
+          (arg as {connectionDuration: number}).connectionDuration === 500 &&
+          (arg as {messageCount: number}).messageCount === 2,
       ),
   );
   expect(connectIndex).to.not.equal(-1);
