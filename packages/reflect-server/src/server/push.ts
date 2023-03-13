@@ -205,10 +205,13 @@ export async function handlePush(
       }
     }
 
-    lastSamePusherAndClientGroupPendingMIndex = insertIndex;
+    // -1 because we are not modifying pendingMutation, and we still need
+    // to check the next push mutation against the pendingMutation we
+    // just selected to insert the current push mutation in front of.
+    lastSamePusherAndClientGroupPendingMIndex = insertIndex - 1;
     previousMutationByClientID.set(m.clientID, {
       id: m.id,
-      pendingIndex: insertIndex,
+      pendingIndex: insertIndex - 1,
     });
     inserts.push([insertIndex, mWithNormalizedTimestamp]);
   }
@@ -261,8 +264,7 @@ export async function handlePush(
           i++;
         }
       }
-      for (; insertsIndex < inserts.length; insertsIndex) {
-        assert(inserts[insertsIndex][0] === pendingMutations.length);
+      for (; insertsIndex < inserts.length; insertsIndex++) {
         newPendingMutations.push(inserts[insertsIndex][1]);
       }
       pendingMutations.splice(

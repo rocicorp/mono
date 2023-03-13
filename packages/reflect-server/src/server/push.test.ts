@@ -423,10 +423,12 @@ describe('handlePush', () => {
         }),
       ],
       mutations: [
-        mutation(clientID, 5, 5),
-        mutation(clientID, 6, 25),
-        mutation(clientID, 7, 80),
-        mutation(clientID, 8, 70),
+        mutation(clientID, 5, 1),
+        mutation(clientID, 6, 9),
+        mutation(clientID, 7, 10),
+        mutation(clientID, 8, 29),
+        mutation(clientID, 9, 30),
+        mutation(clientID, 10, 70),
       ],
       clientRecords: new Map([
         [clientID, clientRecord(clientGroupID, 1, 4, 1)],
@@ -437,7 +439,14 @@ describe('handlePush', () => {
           clientID,
           clientGroupID,
           id: 5,
-          timestamp: 5,
+          timestamp: 1,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 6,
+          timestamp: 9,
           pusherClientIDs: new Set([clientID]),
         }),
         pendingMutation({
@@ -450,8 +459,15 @@ describe('handlePush', () => {
         pendingMutation({
           clientID,
           clientGroupID,
-          id: 6,
-          timestamp: 25,
+          id: 7,
+          timestamp: 10,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 8,
+          timestamp: 29,
           pusherClientIDs: new Set([clientID]),
         }),
         pendingMutation({
@@ -464,14 +480,14 @@ describe('handlePush', () => {
         pendingMutation({
           clientID,
           clientGroupID,
-          id: 7,
-          timestamp: 80,
+          id: 9,
+          timestamp: 30,
           pusherClientIDs: new Set([clientID]),
         }),
         pendingMutation({
           clientID,
           clientGroupID,
-          id: 8,
+          id: 10,
           timestamp: 70,
           pusherClientIDs: new Set([clientID]),
         }),
@@ -516,14 +532,14 @@ describe('handlePush', () => {
           clientGroupID,
           id: 3,
           timestamp: 10,
-          pusherClientIDs: new Set(['c2']),
+          pusherClientIDs: new Set([clientID]),
         }),
         pendingMutation({
           clientID: 'c2',
           clientGroupID,
           id: 4,
           timestamp: 30,
-          pusherClientIDs: new Set(['c2']),
+          pusherClientIDs: new Set([clientID]),
         }),
         pendingMutation({
           clientID,
@@ -536,7 +552,7 @@ describe('handlePush', () => {
           clientID: 'c2',
           clientGroupID,
           id: 5,
-          timestamp: 25,
+          timestamp: undefined,
           pusherClientIDs: new Set([clientID]),
         }),
         pendingMutation({
@@ -604,10 +620,10 @@ describe('handlePush', () => {
         }),
         pendingMutation({
           clientID: 'c2',
-          clientGroupID,
+          clientGroupID: 'cg2',
           id: 3,
           timestamp: 10,
-          pusherClientIDs: new Set(['c2']),
+          pusherClientIDs: new Set([clientID]),
         }),
         pendingMutation({
           clientID,
@@ -618,10 +634,10 @@ describe('handlePush', () => {
         }),
         pendingMutation({
           clientID: 'c2',
-          clientGroupID,
+          clientGroupID: 'cg2',
           id: 4,
           timestamp: 30,
-          pusherClientIDs: new Set(['c2']),
+          pusherClientIDs: new Set([clientID]),
         }),
         pendingMutation({
           clientID,
