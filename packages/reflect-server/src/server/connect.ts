@@ -35,6 +35,9 @@ export type CloseHandler = (
   ws: Socket,
 ) => void;
 
+export const maybeOldClientStateMessage =
+  'Possibly the room was re-created without also clearing browser state? Try clearing browser state and trying again.';
+
 /**
  * Handles the connect message from a client, registering the client state in
  * memory and updating the persistent client-record.
@@ -100,7 +103,7 @@ export async function handleConnection(
       'expected lastMutationID',
       existingLastMutationID,
     );
-    closeWithErrorLocal(`Unexpected lmid`);
+    closeWithErrorLocal(`Unexpected lmid. ${maybeOldClientStateMessage}`);
     return;
   }
 
@@ -112,7 +115,7 @@ export async function handleConnection(
       'current version is',
       version,
     );
-    closeWithErrorLocal(`Unexpected baseCookie`);
+    closeWithErrorLocal(`Unexpected baseCookie. ${maybeOldClientStateMessage}`);
     return;
   }
 

@@ -1,3 +1,4 @@
+import type {LogLevel, LogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {
   ConnectedMessage,
@@ -183,3 +184,11 @@ teardown(async () => {
     }
   }
 });
+
+export class TestLogSink implements LogSink {
+  messages: [LogLevel, ...unknown[]][] = [];
+
+  log(level: LogLevel, ...args: unknown[]): void {
+    this.messages.push([level, ...args]);
+  }
+}
