@@ -5,11 +5,12 @@ import {
   makePullResponseDD31,
   replicacheForTesting,
   requestIDLogContextRegex,
+  TestLogSink,
   tickAFewTimes,
   waitForSync,
 } from './test-util.js';
 import type {VersionNotSupportedResponse, WriteTransaction} from './mod.js';
-import {expect} from '@esm-bundle/chai';
+import {expect, assert} from '@esm-bundle/chai';
 import {emptyHash, Hash} from './hash.js';
 import * as sinon from 'sinon';
 
@@ -283,11 +284,13 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
 });
 
 test('Client Group not found on server', async () => {
-  const consoleErrorStub = sinon.stub(console, 'error');
+  const testLogSink = new TestLogSink();
 
   const rep = await replicacheForTesting('client-group-not-found-pull', {
     ...disableAllBackgroundProcesses,
     enablePullAndPushInOpen: false,
+    logSinks: [testLogSink],
+    logLevel: 'error',
   });
 
   // eslint-disable-next-line require-await
@@ -299,20 +302,23 @@ test('Client Group not found on server', async () => {
     },
   });
 
-  expect(rep.isClientGroupDisabled).false;
+  assert.isFalse(rep.isClientGroupDisabled);
 
   rep.puller = puller;
   rep.pull();
 
   await waitForSync(rep);
 
-  expect(rep.isClientGroupDisabled).true;
+  assert.isTrue(rep.isClientGroupDisabled);
 
-  expect(consoleErrorStub.callCount).to.equal(1);
-  expect(consoleErrorStub.lastCall.args).to.have.length(2);
-  const err = consoleErrorStub.lastCall.args[1];
-  expect(err).to.be.an.instanceOf(Error);
-  expect(err.message).to.match(/Client group (\S)+ is unknown on server/);
+  assert.lengthOf(testLogSink.messages, 1);
+  const args = testLogSink.messages[0];
+  assert.lengthOf(args, 3);
+  assert.equal(args[0], 'error');
+  assert(typeof args[1] === 'string');
+  assert.match(args[1], /^name=/);
+  assert(args[2] instanceof Error);
+  assert.match(args[2].message, /Client group (\S)+ is unknown on server/);
 });
 
 test('Version not supported on server', async () => {

@@ -6,7 +6,7 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.3.0",
     "@rocicorp/lock": "^1.0.1",
-    "@rocicorp/logger": "^2.2.0",
+    "@rocicorp/logger": "^4.1.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/jest": "^27.5.0",
     "@types/node-fetch": "^2.6.2",

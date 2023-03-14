@@ -23,9 +23,9 @@
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4",
     "@rocicorp/eslint-config": "^0.3.0",
-    "@rocicorp/licensing": "^4.1.0",
+    "@rocicorp/licensing": "^5.0.0",
     "@rocicorp/lock": "^1.0.1",
-    "@rocicorp/logger": "^2.2.0",
+    "@rocicorp/logger": "^4.1.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "@rocicorp/resolver": "^1.0.0",
     "@types/command-line-usage": "^5.0.2",
