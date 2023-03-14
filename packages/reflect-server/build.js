@@ -40,7 +40,7 @@ function buildInternal(options) {
   return build({
     bundle: true,
     minify: true,
-    target: 'esnext',
+    target: 'es2022',
     ...options,
   });
 }

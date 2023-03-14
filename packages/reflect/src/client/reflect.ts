@@ -155,6 +155,8 @@ export class Reflect<MD extends MutatorDefs> {
   private _onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
   private readonly _jurisdiction: 'eu' | undefined;
   private _baseCookie: number | null = null;
+  private _messageCount = 0;
+  private _connectedAt = 0;
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -473,7 +475,7 @@ export class Reflect<MD extends MutatorDefs> {
       rejectInvalidMessage();
       return;
     }
-
+    this._messageCount++;
     switch (downMessage[0]) {
       case 'connected':
         this._handleConnectedMessage(l, downMessage);
@@ -539,16 +541,22 @@ export class Reflect<MD extends MutatorDefs> {
     connectedMessage: ConnectedMessage,
   ) {
     lc = addWebSocketIDToLogContext(connectedMessage[1].wsid, lc);
-    lc.info?.('Connected', {navigatorOnline: navigator.onLine});
 
     this._connectionState = ConnectionState.Connected;
+    this._connectedAt = Date.now();
     this._metrics.lastConnectError.clear();
+
     if (this._connectingStart === undefined) {
       lc.error?.(
         'Got connected message but connect start time is undefined. This should not happen.',
       );
     } else {
-      this._metrics.timeToConnectMs.set(Date.now() - this._connectingStart);
+      const timeToConnectMs = Date.now() - this._connectingStart;
+      this._metrics.timeToConnectMs.set(timeToConnectMs);
+      lc.info?.('Connected', {
+        navigatorOnline: navigator.onLine,
+        timeToConnectMs,
+      });
       this._connectingStart = undefined;
     }
 
@@ -625,7 +633,15 @@ export class Reflect<MD extends MutatorDefs> {
     l: LogContext,
     reason: DisconnectReason,
   ): Promise<void> {
-    l.info?.('disconnecting', {navigatorOnline: navigator.onLine, reason});
+    l.info?.('disconnecting', {
+      navigatorOnline: navigator.onLine,
+      reason,
+      connectedAt: this._connectedAt,
+      connectionDuration: this._connectedAt
+        ? Date.now() - this._connectedAt
+        : 0,
+      messageCount: this._messageCount,
+    });
 
     switch (this._connectionState) {
       case ConnectionState.Connected: {
@@ -660,8 +676,9 @@ export class Reflect<MD extends MutatorDefs> {
     l.debug?.('Creating new connect resolver');
     this._connectResolver = resolver();
     this._connectionState = ConnectionState.Disconnected;
-
+    this._messageCount = 0;
     this._connectingStart = undefined;
+    this._connectedAt = 0;
     this._socket?.removeEventListener('message', this._onMessage);
     this._socket?.removeEventListener('close', this._onClose);
     this._socket?.close();
@@ -842,7 +859,6 @@ export class Reflect<MD extends MutatorDefs> {
             lc.debug?.('Waiting for connection to be acknowledged');
             await this._connectResolver.promise;
             lc.debug?.('Connected successfully');
-
             errorCount = 0;
             needsReauth = false;
             this.#setOnline(true);

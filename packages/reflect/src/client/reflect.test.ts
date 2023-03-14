@@ -1013,6 +1013,54 @@ test('Logs errors in connect', async () => {
   expect(index).to.not.equal(-1);
 });
 
+test('New connection logs', async () => {
+  const log: [LogLevel, unknown[]][] = [];
+  clock.setSystemTime(1000);
+  const r = reflectForTest({
+    logSinks: [
+      {
+        log: (level, ...args) => {
+          log.push([level, args]);
+        },
+      },
+    ],
+  });
+  await r.waitForConnectionState(ConnectionState.Connecting);
+  await clock.tickAsync(500);
+  await r.triggerConnected();
+  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  await clock.tickAsync(500);
+  await r.triggerPong();
+  await r.triggerClose();
+  await r.waitForConnectionState(ConnectionState.Disconnected);
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  const connectIndex = log.findIndex(
+    ([level, args]) =>
+      level === 'info' &&
+      args.find(arg => /Connected/.test(String(arg))) &&
+      args.find(
+        arg =>
+          arg instanceof Object &&
+          (arg as {timeToConnectMs: number}).timeToConnectMs === 500,
+      ),
+  );
+
+  const disconnectIndex = log.findIndex(
+    ([level, args]) =>
+      level === 'info' &&
+      args.find(arg => /disconnecting/.test(String(arg))) &&
+      args.find(
+        arg =>
+          arg instanceof Object &&
+          (arg as {connectedAt: number}).connectedAt === 1500 &&
+          (arg as {connectionDuration: number}).connectionDuration === 500 &&
+          (arg as {messageCount: number}).messageCount === 2,
+      ),
+  );
+  expect(connectIndex).to.not.equal(-1);
+  expect(disconnectIndex).to.not.equal(-1);
+});
+
 async function testWaitsForConnection(
   fn: (r: TestReflect<MutatorDefs>) => Promise<unknown>,
 ) {

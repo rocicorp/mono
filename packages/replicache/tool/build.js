@@ -23,7 +23,7 @@ const metafile = process.argv.includes('--metafile');
 function sharedOptions(minify) {
   const opts = {
     bundle: true,
-    target: 'es2018',
+    target: 'es2022',
   };
   if (minify) {
     return {...opts, mangleProps: /^_./, reserveProps: /^__.*__$/};
