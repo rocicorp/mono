@@ -155,8 +155,8 @@ export class Reflect<MD extends MutatorDefs> {
   private _onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
   private readonly _jurisdiction: 'eu' | undefined;
   private _baseCookie: number | null = null;
-  private _messageCount: number = 0;
-  private _connectedAt: number | undefined = undefined;
+  private _messageCount = 0;
+  private _connectedAt = 0;
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -678,7 +678,7 @@ export class Reflect<MD extends MutatorDefs> {
     this._connectionState = ConnectionState.Disconnected;
     this._messageCount = 0;
     this._connectingStart = undefined;
-    this._connectedAt = undefined;
+    this._connectedAt = 0;
     this._socket?.removeEventListener('message', this._onMessage);
     this._socket?.removeEventListener('close', this._onClose);
     this._socket?.close();
