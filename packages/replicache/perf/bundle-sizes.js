@@ -1,4 +1,4 @@
-/* eslint-env node, es2020 */
+/* eslint-env node, es2022 */
 
 import commandLineArgs from 'command-line-args';
 import commandLineUsage from 'command-line-usage';

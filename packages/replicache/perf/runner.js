@@ -1,4 +1,4 @@
-/* eslint-env node, es2020 */
+/* eslint-env node, es2022 */
 // @ts-check
 
 import {startDevServer} from '@web/dev-server';
@@ -159,7 +159,7 @@ async function main() {
       plugins: [
         esbuildPlugin({
           ts: true,
-          target: 'esnext',
+          target: 'es2022',
           define: await makeDefine('release'),
         }),
       ],

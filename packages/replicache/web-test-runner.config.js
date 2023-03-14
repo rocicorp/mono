@@ -1,6 +1,6 @@
 // @ts-check
 
-/* eslint-env node, es2020 */
+/* eslint-env node, es2022 */
 
 import {esbuildPlugin} from '@web/dev-server-esbuild';
 import {playwrightLauncher} from '@web/test-runner-playwright';
@@ -18,7 +18,7 @@ const config = {
   plugins: [
     esbuildPlugin({
       ts: true,
-      target: 'esnext',
+      target: 'es2022',
       define: await makeDefine('debug'),
     }),
   ],
