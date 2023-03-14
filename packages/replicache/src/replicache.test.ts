@@ -2110,12 +2110,15 @@ test('mutation timestamps are immutable', async () => {
 type DocumentVisibilityState = 'hidden' | 'visible';
 
 suite('check for client not found in visibilitychange', () => {
-  const t = (visibilityState: DocumentVisibilityState, called: boolean) => {
+  const t = (
+    visibilityState: DocumentVisibilityState,
+    shouldBeCalled: boolean,
+  ) => {
     test('visibilityState: ' + visibilityState, async () => {
       const consoleErrorStub = sinon.stub(console, 'error');
-      const {resolve, promise} = resolver<void>();
+      const visibilityStateResolver = resolver<void>();
       sinon.stub(document, 'visibilityState').get(() => {
-        resolve();
+        visibilityStateResolver.resolve();
         return visibilityState;
       });
 
@@ -2123,7 +2126,12 @@ suite('check for client not found in visibilitychange', () => {
         `check-for-client-not-found-in-visibilitychange-${visibilityState}`,
       );
 
-      const onClientStateNotFound = sinon.fake();
+      const onClientStateNotFound = () => {
+        onClientStateNotFound.resolver.resolve();
+        onClientStateNotFound.called = true;
+      };
+      onClientStateNotFound.resolver = resolver<void>();
+      onClientStateNotFound.called = false;
       rep.onClientStateNotFound = onClientStateNotFound;
 
       const clientID = await rep.clientID;
@@ -2132,18 +2140,19 @@ suite('check for client not found in visibilitychange', () => {
       consoleErrorStub.resetHistory();
 
       document.dispatchEvent(new Event('visibilitychange'));
+      await visibilityStateResolver.promise;
 
-      await promise;
-      await tickAFewTimes();
-
-      expect(onClientStateNotFound.called).to.equal(called);
-      if (called) {
+      if (shouldBeCalled) {
+        await onClientStateNotFound.resolver.promise;
+        expect(onClientStateNotFound.called).true;
         expectLogContext(
           consoleErrorStub,
           0,
           rep,
           `Client state not found, clientID: ${clientID}`,
         );
+      } else {
+        expect(onClientStateNotFound.called).false;
       }
 
       await rep.close();
