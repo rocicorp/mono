@@ -78,7 +78,7 @@ async function rebaseMutation(
 
   const tx = new WriteTransactionImpl(
     mutationClientID,
-    await dbWrite.mutationID,
+    await dbWrite.getMutationID(),
     'rebase',
     dbWrite,
     lc,

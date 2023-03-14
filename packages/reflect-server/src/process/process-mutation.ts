@@ -62,7 +62,7 @@ export async function processMutation(
     const tx = new ReplicacheTransaction(
       txCache,
       clientID,
-      mutation.id,
+      pendingMutation.id,
       version,
     );
     try {

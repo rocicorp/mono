@@ -88,7 +88,7 @@ export class Write extends Read {
     await this.map.put(key, value);
   }
 
-  get mutationID(): Promise<number> {
+  getMutationID(): Promise<number> {
     return getMutationID(this._clientID, this._dagWrite, this._meta);
   }
 
