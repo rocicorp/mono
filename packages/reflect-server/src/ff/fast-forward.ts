@@ -13,13 +13,11 @@ import {getPatch} from './get-patch.js';
  * @param clients clients active in room
  * @param currentVersion head version to fast-forward to
  * @param durable storage to read/write to
- * @param timestamp for resulting pokes
  */
 export async function fastForwardRoom(
   clients: ClientID[],
   currentVersion: Version,
   storage: DurableStorage,
-  timestamp: number,
 ): Promise<ClientPoke[]> {
   const clientRecords = await listClientRecords(storage);
   // Get all of the distinct base cookies. Typically almost all active clients
@@ -92,7 +90,8 @@ export async function fastForwardRoom(
           .get(clientGroupID)
           ?.get(record.baseCookie) ?? {},
       patch,
-      timestamp,
+      // apply immediately
+      timestamp: undefined,
     };
     const clientPoke: ClientPoke = {
       clientID,

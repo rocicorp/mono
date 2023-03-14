@@ -1,4 +1,5 @@
 import {test, expect} from '@jest/globals';
+import type {ClientMap} from '../types/client-state.js';
 import {createSilentLogContext, Mocket} from '../util/test-utils.js';
 import {handleClose} from './close.js';
 
@@ -8,19 +9,19 @@ test('handleClose deletes client map entry for client id if socket matches', () 
   const client1Socket = new Mocket();
   const client2ID = 'clientID2';
   const client2Socket = new Mocket();
-  const clientMap = new Map(
+  const clientMap: ClientMap = new Map(
     Object.entries({
       [client1ID]: {
         clientGroupID: 'cg1',
         socket: client1Socket,
         userData: {userID: 'userID1'},
-        clockBehindByMs: 1000,
+        clockOffsetMs: 1000,
       },
       [client2ID]: {
         clientGroupID: 'cg1',
         socket: client2Socket,
         userData: {userID: 'userID2'},
-        clockBehindByMs: 2000,
+        clockOffsetMs: 2000,
       },
     }),
   );
@@ -31,7 +32,7 @@ test('handleClose deletes client map entry for client id if socket matches', () 
     clientGroupID: 'cg1',
     socket: client2Socket,
     userData: {userID: 'userID2'},
-    clockBehindByMs: 2000,
+    clockOffsetMs: 2000,
   });
 });
 
@@ -42,19 +43,19 @@ test('handleClose does not delete client map entry for client id if socket does 
   const client1Socket2 = new Mocket();
   const client2ID = 'clientID2';
   const client2Socket = new Mocket();
-  const clientMap = new Map(
+  const clientMap: ClientMap = new Map(
     Object.entries({
       [client1ID]: {
         clientGroupID: 'cg1',
         socket: client1Socket2,
         userData: {userID: 'userID1'},
-        clockBehindByMs: 1000,
+        clockOffsetMs: 1000,
       },
       [client2ID]: {
         clientGroupID: 'cg1',
         socket: client2Socket,
         userData: {userID: 'userID2'},
-        clockBehindByMs: 2000,
+        clockOffsetMs: 2000,
       },
     }),
   );
@@ -63,12 +64,12 @@ test('handleClose does not delete client map entry for client id if socket does 
     clientGroupID: 'cg1',
     socket: client1Socket2,
     userData: {userID: 'userID1'},
-    clockBehindByMs: 1000,
+    clockOffsetMs: 1000,
   });
   expect(clientMap.get(client2ID)).toEqual({
     clientGroupID: 'cg1',
     socket: client2Socket,
     userData: {userID: 'userID2'},
-    clockBehindByMs: 2000,
+    clockOffsetMs: 2000,
   });
 });

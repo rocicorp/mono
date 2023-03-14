@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Mutation, NullableVersion, Patch, Version} from 'reflect-protocol';
+import type {NullableVersion, Patch, Version} from 'reflect-protocol';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {unwrapPatch} from '../storage/replicache-transaction.js';
@@ -11,6 +11,7 @@ import {
   putClientRecord,
 } from '../types/client-record.js';
 import type {ClientID} from '../types/client-state.js';
+import type {PendingMutation} from '../types/mutation.js';
 import {getVersion} from '../types/version.js';
 import {assert} from '../util/asserts.js';
 import {must} from '../util/must.js';
@@ -23,7 +24,7 @@ import {MutatorMap, processMutation} from './process-mutation.js';
 // can continue to apply.
 export async function processFrame(
   lc: LogContext,
-  mutations: Iterable<Mutation>,
+  pendingMutations: PendingMutation[],
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
   clients: ClientID[],
@@ -39,12 +40,12 @@ export async function processFrame(
   lc.debug?.('prevVersion', prevVersion, 'nextVersion', nextVersion);
   let count = 0;
   const clientPokes: ClientPoke[] = [];
-  for (const mutation of mutations) {
+  for (const pendingMutation of pendingMutations) {
     count++;
     const mutationCache = new EntryCache(cache);
     const newLastMutationID = await processMutation(
       lc,
-      mutation,
+      pendingMutation,
       mutators,
       mutationCache,
       nextVersion,
@@ -58,10 +59,8 @@ export async function processFrame(
     if (version !== prevVersion && newLastMutationID !== undefined) {
       const patch = unwrapPatch(mutationCache.pending());
       await mutationCache.flush();
-      const mutationClientID = mutation.clientID;
-      const mutationClientGroupID = must(
-        await getClientRecord(mutationClientID, cache),
-      ).clientGroupID;
+      const mutationClientID = pendingMutation.clientID;
+      const mutationClientGroupID = pendingMutation.clientGroupID;
       clientPokes.push(
         ...(await buildClientPokesAndUpdateClientRecords(
           cache,
@@ -73,7 +72,7 @@ export async function processFrame(
             clientRecord.clientGroupID === mutationClientGroupID
               ? {[mutationClientID]: newLastMutationID}
               : {},
-          mutation.timestamp,
+          pendingMutation.timestamp,
         )),
       );
       prevVersion = nextVersion;

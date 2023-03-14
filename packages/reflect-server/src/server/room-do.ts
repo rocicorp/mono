@@ -34,7 +34,7 @@ import {
   withBody,
 } from './router.js';
 import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
-import type {PendingMutationMap} from '../types/mutation.js';
+import type {PendingMutation} from '../types/mutation.js';
 import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
@@ -72,7 +72,8 @@ export const ROOM_ROUTES = {
 
 export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   private readonly _clients: ClientMap = new Map();
-  private readonly _pendingMutations: PendingMutationMap = new Map();
+  private readonly _pendingMutations: PendingMutation[] = [];
+  private _maxProcessedMutationTimestamp = 0;
   private readonly _lock = new Lock();
   private readonly _mutators: MutatorMap;
   private readonly _disconnectHandler: DisconnectHandler;
@@ -401,10 +402,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
           break;
         }
       }
-      if (
-        !hasPendingMutations(this._pendingMutations) &&
-        !hasDisconnectsToProcess
-      ) {
+      if (this._pendingMutations.length === 0 && !hasDisconnectsToProcess) {
         lc.debug?.('No pending mutations or disconnects to process, exiting');
         if (this._turnTimerID) {
           clearInterval(this._turnTimerID);
@@ -413,14 +411,14 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         return;
       }
 
-      await processPending(
+      this._maxProcessedMutationTimestamp = await processPending(
         lc,
         this._storage,
         this._clients,
         this._pendingMutations,
         this._mutators,
         this._disconnectHandler,
-        Date.now(),
+        this._maxProcessedMutationTimestamp,
       );
     });
   }
@@ -450,15 +448,6 @@ function addWebSocketIDToLogContext(lc: LogContext, url: string): LogContext {
     'wsid',
     new URL(url).searchParams.get('wsid') ?? randomID(),
   );
-}
-
-function hasPendingMutations(pendingMutations: PendingMutationMap) {
-  for (const mutations of pendingMutations.values()) {
-    if (mutations.length > 0) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /**

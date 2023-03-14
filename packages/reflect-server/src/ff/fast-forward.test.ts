@@ -18,7 +18,6 @@ test('fastForward', async () => {
     state: Map<string, UserValue>;
     clientRecords: ClientRecordMap;
     clients: ClientID[];
-    timestamp: number;
     expectedError?: string;
     expectedPokes?: ClientPoke[];
   };
@@ -41,7 +40,6 @@ test('fastForward', async () => {
         ],
       ]),
       clients: [],
-      timestamp: 1,
       expectedPokes: [],
     },
     {
@@ -59,7 +57,6 @@ test('fastForward', async () => {
         ],
       ]),
       clients: ['c1'],
-      timestamp: 1,
       expectedPokes: [
         {
           clientID: 'c1',
@@ -68,7 +65,7 @@ test('fastForward', async () => {
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c1: 1},
             patch: [],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
       ],
@@ -88,7 +85,6 @@ test('fastForward', async () => {
         ],
       ]),
       clients: ['c1'],
-      timestamp: 1,
       expectedPokes: [],
     },
     {
@@ -115,7 +111,6 @@ test('fastForward', async () => {
         ],
       ]),
       clients: ['c1'],
-      timestamp: 1,
       expectedPokes: [
         {
           clientID: 'c1',
@@ -134,7 +129,7 @@ test('fastForward', async () => {
                 key: 'hot',
               },
             ],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
       ],
@@ -169,7 +164,6 @@ test('fastForward', async () => {
         ],
       ]),
       clients: ['c1', 'c2'],
-      timestamp: 1,
       expectedPokes: [
         {
           clientID: 'c1',
@@ -188,7 +182,7 @@ test('fastForward', async () => {
                 key: 'hot',
               },
             ],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
         {
@@ -203,7 +197,7 @@ test('fastForward', async () => {
                 key: 'hot',
               },
             ],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
       ],
@@ -238,7 +232,6 @@ test('fastForward', async () => {
         ],
       ]),
       clients: ['c1'],
-      timestamp: 1,
       expectedPokes: [
         {
           clientID: 'c1',
@@ -257,7 +250,7 @@ test('fastForward', async () => {
                 key: 'hot',
               },
             ],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
       ],
@@ -313,7 +306,6 @@ test('fastForward', async () => {
         ],
       ]),
       clients: ['c1', 'c2', 'c3', 'c4', 'c5'],
-      timestamp: 1,
       expectedPokes: [
         {
           clientID: 'c1',
@@ -322,7 +314,7 @@ test('fastForward', async () => {
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c1: 2, c2: 3, c3: 4},
             patch: [],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
         {
@@ -332,7 +324,7 @@ test('fastForward', async () => {
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c1: 2, c2: 3, c3: 4},
             patch: [],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
         {
@@ -342,7 +334,7 @@ test('fastForward', async () => {
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c1: 2},
             patch: [],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
         {
@@ -352,7 +344,7 @@ test('fastForward', async () => {
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c4: 5, c5: 6},
             patch: [],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
         {
@@ -362,7 +354,7 @@ test('fastForward', async () => {
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {},
             patch: [],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
       ],
@@ -415,7 +407,6 @@ test('fastForward', async () => {
         ],
       ]),
       clients: ['c1', 'c2', 'c3', 'c4'],
-      timestamp: 1,
       expectedPokes: [
         {
           clientID: 'c1',
@@ -434,7 +425,7 @@ test('fastForward', async () => {
                 key: 'hot',
               },
             ],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
         {
@@ -449,7 +440,7 @@ test('fastForward', async () => {
                 key: 'hot',
               },
             ],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
         {
@@ -469,7 +460,7 @@ test('fastForward', async () => {
                 key: 'hot',
               },
             ],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
         {
@@ -484,7 +475,7 @@ test('fastForward', async () => {
                 key: 'hot',
               },
             ],
-            timestamp: 1,
+            timestamp: undefined,
           },
         },
       ],
@@ -503,7 +494,7 @@ test('fastForward', async () => {
       await putUserValue(key, value, storage);
     }
 
-    const pokes = await fastForwardRoom(c.clients, 42, storage, c.timestamp);
+    const pokes = await fastForwardRoom(c.clients, 42, storage);
 
     expect(pokes).toEqual(c.expectedPokes);
   }

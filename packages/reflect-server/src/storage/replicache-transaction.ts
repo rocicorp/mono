@@ -24,26 +24,24 @@ import type {Storage} from './storage.js';
  * Implements Replicache's WriteTransaction in terms of EntryCache.
  */
 export class ReplicacheTransaction implements WriteTransaction {
-  private _clientID: ClientID;
+  readonly clientID: ClientID;
+  readonly mutationID: number;
   private _storage: Storage;
   private _version: Version;
 
-  get reason(): TransactionReason {
-    return 'authoritative';
-  }
+  readonly reason: TransactionReason = 'authoritative';
+  readonly environment: TransactionEnvironment = 'server';
 
-  get environment(): TransactionEnvironment {
-    return 'server';
-  }
-
-  get clientID(): string {
-    return this._clientID;
-  }
-
-  constructor(storage: Storage, clientID: string, version: Version) {
+  constructor(
+    storage: Storage,
+    clientID: string,
+    mutationID: number,
+    version: Version,
+  ) {
     this._storage = storage;
-    this._clientID = clientID;
+    this.clientID = clientID;
     this._version = version;
+    this.mutationID = mutationID;
   }
 
   async put(key: string, value: JSONValue): Promise<void> {

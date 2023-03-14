@@ -20,7 +20,7 @@ test('ReplicacheTransaction', async () => {
   );
 
   const entryCache = new EntryCache(storage);
-  const writeTx = new ReplicacheTransaction(entryCache, 'c1', 1);
+  const writeTx = new ReplicacheTransaction(entryCache, 'c1', 1, 1);
 
   expect(!(await writeTx.has('foo')));
   expect(await writeTx.get('foo')).toBeUndefined;
@@ -32,7 +32,12 @@ test('ReplicacheTransaction', async () => {
   expect(await writeTx.isEmpty()).toBe(false);
 
   // They don't overlap until one flushes and the other is reloaded.
-  const writeTx2 = new ReplicacheTransaction(new EntryCache(storage), 'c1', 2);
+  const writeTx2 = new ReplicacheTransaction(
+    new EntryCache(storage),
+    'c1',
+    2,
+    2,
+  );
   expect(!(await writeTx2.has('foo')));
   expect(await writeTx2.get('foo')).toBeUndefined;
 
@@ -41,7 +46,7 @@ test('ReplicacheTransaction', async () => {
 
   // Go ahead and flush one
   await entryCache.flush();
-  const writeTx3 = new ReplicacheTransaction(entryCache, 'c1', 3);
+  const writeTx3 = new ReplicacheTransaction(entryCache, 'c1', 3, 3);
   expect(await writeTx3.has('foo'));
   expect(await writeTx3.get('foo')).toEqual('bar');
 
@@ -66,7 +71,7 @@ test('ReplicacheTransaction environment and reason', async () => {
   );
 
   const entryCache = new EntryCache(storage);
-  const tx = new ReplicacheTransaction(entryCache, 'c1', 1);
+  const tx = new ReplicacheTransaction(entryCache, 'c1', 1, 1);
   expect(tx.environment).toEqual('server');
   expect(tx.reason).toEqual('authoritative');
 });
@@ -75,15 +80,16 @@ test('ReplicacheTransaction scan()', async () => {
   const cfStorage = await getMiniflareDurableObjectStorage(id);
   const durableStorage = new DurableStorage(cfStorage);
   let version = 1;
-
+  let mutationID = 1;
   // add some non-user data to durable storage
   await durableStorage.put('internal-value-1', 'foo');
   await durableStorage.put('internal-value-2', null);
 
   function makeTx(): [ReplicacheTransaction, EntryCache] {
     const cache = new EntryCache(durableStorage);
-    const tx = new ReplicacheTransaction(cache, 'name', version);
+    const tx = new ReplicacheTransaction(cache, 'name', mutationID, version);
     version++;
+    mutationID++;
     return [tx, cache];
   }
 

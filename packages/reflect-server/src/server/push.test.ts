@@ -1,232 +1,661 @@
-import {test, expect, beforeEach} from '@jest/globals';
+import {describe, test, expect} from '@jest/globals';
 import {LogContext} from '@rocicorp/logger';
 import type {Mutation} from 'reflect-protocol';
 import {handlePush} from '../server/push.js';
 import {resolver} from '../util/resolver.js';
 import {randomID} from '../util/rand.js';
-import {client, clientRecord, Mocket, mutation} from '../util/test-utils.js';
-import type {ClientMap} from '../types/client-state.js';
-import type {PendingMutationMap} from '../types/mutation.js';
-import {ClientRecordMap, putClientRecord} from '../types/client-record.js';
+import {
+  client,
+  clientRecord,
+  Mocket,
+  mutation,
+  pendingMutation,
+  SilentLogSink,
+} from '../util/test-utils.js';
+import type {ClientID, ClientMap, ClientState} from '../types/client-state.js';
+import type {PendingMutation} from '../types/mutation.js';
+import {
+  ClientRecordMap,
+  listClientRecords,
+  putClientRecord,
+} from '../types/client-record.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {must} from '../util/must.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
 
-let s1: Mocket;
-beforeEach(() => {
-  s1 = new Mocket();
-});
+const s1: Mocket = new Mocket();
 const clientID = 'c1';
+const clientGroupID = 'cg1';
 
-test('handlePush', async () => {
+function clientMapSansSockets(
+  clientMap: ClientMap,
+): Map<ClientID, Omit<ClientState, 'socket'>> {
+  return new Map(
+    [...clientMap.entries()].map(([clientID, clientState]) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const {socket, ...clientStateSansSocket} = clientState;
+      return [clientID, clientStateSansSocket];
+    }),
+  );
+}
+
+describe('handlePush', () => {
   type Case = {
     name: string;
     clientMap: ClientMap;
-    pendingMutations: PendingMutationMap;
+    pendingMutations: PendingMutation[];
     clientRecords: ClientRecordMap;
     mutations: Mutation[];
-    expectedPendingMutations: PendingMutationMap;
-    expectedClientRecords: ClientRecordMap;
+    now?: number;
+    pushTimestamp?: number;
+    expectedClientMap?: ClientMap;
+    expectedPendingMutations: PendingMutation[];
+    expectedClientRecords?: ClientRecordMap;
     expectedErrorAndSocketClosed?: string;
   };
 
   const cases: Case[] = [
     {
       name: 'no mutations',
-      clientMap: new Map([client(clientID, 'u1', 'cg1', s1)]),
-      pendingMutations: new Map(),
+      clientMap: new Map([client(clientID, 'u1', clientGroupID, s1, 0)]),
+      pendingMutations: [],
       mutations: [],
-      clientRecords: new Map([[clientID, clientRecord('cg1', 1, 2, 1)]]),
-      expectedPendingMutations: new Map(),
-      expectedClientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 2, 1)],
+      clientRecords: new Map([
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
       ]),
+      expectedPendingMutations: [],
     },
     {
       name: 'empty pending, single mutation',
-      clientMap: new Map([client(clientID, 'u1', 'cg1', s1)]),
-      pendingMutations: new Map(),
-      mutations: [mutation(clientID, 3)],
-      clientRecords: new Map([[clientID, clientRecord('cg1', 1, 2, 1)]]),
-      expectedPendingMutations: new Map([['cg1', [mutation(clientID, 3)]]]),
-      expectedClientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 2, 1)],
+      clientMap: new Map([client(clientID, 'u1', clientGroupID, s1, 0)]),
+      pendingMutations: [],
+      mutations: [mutation(clientID, 3, 10)],
+      clientRecords: new Map([
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
       ]),
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 3,
+          timestamp: 10,
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
     },
     {
       name: 'empty pending, multiple mutations',
       clientMap: new Map([
-        client(clientID, 'u1', 'cg1', s1),
-        client('c2', 'u2', 'cg1'),
+        client(clientID, 'u1', clientGroupID, s1, 0),
+        client('c2', 'u2', clientGroupID),
       ]),
-      pendingMutations: new Map(),
+      pendingMutations: [],
       mutations: [
-        mutation(clientID, 3),
-        mutation('c2', 5),
-        mutation(clientID, 4),
+        mutation(clientID, 3, 10),
+        mutation('c2', 5, 20),
+        mutation(clientID, 4, 20),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 2, 1)],
-        ['c2', clientRecord('cg1', 1, 4, 1)],
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        ['c2', clientRecord(clientGroupID, 1, 4, 1)],
       ]),
-      expectedPendingMutations: new Map([
-        [
-          'cg1',
-          [mutation(clientID, 3), mutation('c2', 5), mutation(clientID, 4)],
-        ],
-      ]),
-      expectedClientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 2, 1)],
-        ['c2', clientRecord('cg1', 1, 4, 1)],
-      ]),
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 3,
+          timestamp: 10,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 5,
+          timestamp: undefined,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 4,
+          timestamp: 20,
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
     },
-
     {
       name: 'empty pending, multiple mutations, new client',
-      clientMap: new Map([client(clientID, 'u1', 'cg1', s1)]),
-      pendingMutations: new Map(),
+      clientMap: new Map([client(clientID, 'u1', clientGroupID, s1, 0)]),
+      pendingMutations: [],
       mutations: [
-        mutation(clientID, 3),
-        mutation('c2', 1),
-        mutation(clientID, 4),
+        mutation(clientID, 3, 10),
+        mutation('c2', 1, 20),
+        mutation(clientID, 4, 20),
       ],
-      clientRecords: new Map([[clientID, clientRecord('cg1', 1, 2, 1)]]),
-      expectedPendingMutations: new Map([
-        [
-          'cg1',
-          [mutation(clientID, 3), mutation('c2', 1), mutation(clientID, 4)],
-        ],
+      clientRecords: new Map([
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
       ]),
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 3,
+          timestamp: 10,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 1,
+          timestamp: undefined,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 4,
+          timestamp: 20,
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
       expectedClientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 2, 1)],
-        ['c2', clientRecord('cg1', null, 0, null)],
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        ['c2', clientRecord(clientGroupID, null, 0, null)],
       ]),
     },
     {
       name: 'already applied according to client record',
       clientMap: new Map([
-        client(clientID, 'u1', 'cg1', s1),
-        client('c2', 'u2', 'cg1'),
+        client(clientID, 'u1', clientGroupID, s1, 0),
+        client('c2', 'u2', clientGroupID),
       ]),
-      pendingMutations: new Map(),
+      pendingMutations: [],
       mutations: [
-        mutation(clientID, 3), // already applied
-        mutation('c2', 5),
-        mutation(clientID, 4),
+        mutation(clientID, 3, 10), // already applied
+        mutation('c2', 5, 20),
+        mutation(clientID, 4, 20),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 3, 1)],
-        ['c2', clientRecord('cg1', 1, 4, 1)],
+        [clientID, clientRecord(clientGroupID, 1, 3, 1)],
+        ['c2', clientRecord(clientGroupID, 1, 4, 1)],
       ]),
-      expectedPendingMutations: new Map([
-        ['cg1', [mutation(clientID, 4), mutation('c2', 5)]],
-      ]),
-      expectedClientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 2, 1)],
-        ['c2', clientRecord('cg1', 1, 4, 1)],
-      ]),
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 5,
+          timestamp: undefined,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 4,
+          timestamp: 20,
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
     },
     {
       name: 'pending duplicates',
       clientMap: new Map([
-        client(clientID, 'u1', 'cg1', s1),
-        client('c2', 'u2', 'cg1'),
+        client(clientID, 'u1', clientGroupID, s1, 0),
+        client('c2', 'u2', clientGroupID),
       ]),
-      pendingMutations: new Map([
-        ['cg1', [mutation(clientID, 3), mutation(clientID, 4)]],
-      ]),
+      pendingMutations: [
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 3,
+          timestamp: 10,
+          pusherClientIDs: new Set(['c3']),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 4,
+          timestamp: 20,
+          pusherClientIDs: new Set(['c3']),
+        }),
+      ],
       mutations: [
-        mutation(clientID, 3),
-        mutation('c2', 5),
-        mutation(clientID, 4),
+        mutation(clientID, 3, 10),
+        mutation('c2', 5, 20),
+        mutation(clientID, 4, 20),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 2, 1)],
-        ['c2', clientRecord('cg1', 1, 4, 1)],
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        ['c2', clientRecord(clientGroupID, 1, 4, 1)],
       ]),
-      expectedPendingMutations: new Map([
-        [
-          'cg1',
-          [mutation(clientID, 3), mutation(clientID, 4), mutation('c2', 5)],
-        ],
-      ]),
-      expectedClientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 2, 1)],
-        ['c2', clientRecord('cg1', 1, 4, 1)],
-      ]),
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 3,
+          timestamp: 10,
+          pusherClientIDs: new Set([clientID, 'c3']),
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 5,
+          timestamp: undefined,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 4,
+          timestamp: 20,
+          pusherClientIDs: new Set([clientID, 'c3']),
+        }),
+      ],
     },
     {
       name: 'unexpected client group id is an error',
       clientMap: new Map([
-        client(clientID, 'u1', 'cg1', s1),
+        client(clientID, 'u1', clientGroupID, s1, 0),
         client('c2', 'u2', 'cg2'),
       ]),
-      pendingMutations: new Map(),
+      pendingMutations: [],
       mutations: [
-        mutation(clientID, 3),
-        mutation('c2', 5),
-        mutation(clientID, 4),
+        mutation(clientID, 3, 10),
+        mutation('c2', 5, 20),
+        mutation(clientID, 4, 20),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 2, 1)],
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
         ['c2', clientRecord('cg2', 1, 4, 1)],
       ]),
       // no mutations enqueued
-      expectedPendingMutations: new Map(),
-      expectedClientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 2, 1)],
-        ['c2', clientRecord('cg2', 1, 4, 1)],
-      ]),
+      expectedPendingMutations: [],
       expectedErrorAndSocketClosed:
-        'Push with clientGroupID cg1 contains mutation for client c2 which belongs to clientGroupID cg2.',
+        'Push for client c1 with clientGroupID cg1 contains mutation for client c2 which belongs to clientGroupID cg2.',
     },
     {
       name: 'unexpected mutation id for new client is an error, client not recorded',
-      clientMap: new Map([client(clientID, 'u1', 'cg1', s1)]),
-      pendingMutations: new Map(),
+      clientMap: new Map([client(clientID, 'u1', clientGroupID, s1, 0)]),
+      pendingMutations: [],
       mutations: [
-        mutation(clientID, 3),
-        mutation('c2', 2), // 1 is expected
-        mutation(clientID, 4),
+        mutation(clientID, 3, 10),
+        mutation('c2', 2, 20), // 1 is expected
+        mutation(clientID, 4, 20),
       ],
-      clientRecords: new Map([[clientID, clientRecord('cg1', 1, 2, 1)]]),
-      // no mutations enqueued
-      expectedPendingMutations: new Map(),
-      // new client not recorded
-      expectedClientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 2, 1)],
+      clientRecords: new Map([
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
       ]),
+      // no mutations enqueued
+      expectedPendingMutations: [],
+      // new client not recorded, so no expectedClientRecords
       expectedErrorAndSocketClosed:
         'Push contains unexpected mutation id 2 for client c2. Expected mutation id 1.',
     },
     {
       name: 'unexpected mutation id for existing client',
-      clientMap: new Map([client(clientID, 'u1', 'cg1', s1)]),
-      pendingMutations: new Map(),
+      clientMap: new Map([client(clientID, 'u1', clientGroupID, s1, 0)]),
+      pendingMutations: [],
       mutations: [
-        mutation(clientID, 3),
-        mutation('c2', 6), // 5 is expected
-        mutation(clientID, 4),
+        mutation(clientID, 3, 10),
+        mutation('c2', 6, 20), // 5 is expected
+        mutation(clientID, 4, 20),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 2, 1)],
-        ['c2', clientRecord('cg1', 1, 4, 1)],
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        ['c2', clientRecord(clientGroupID, 1, 4, 1)],
       ]),
       // no mutations enqueued
-      expectedPendingMutations: new Map(),
-      // new client not recorded
-      expectedClientRecords: new Map([
-        [clientID, clientRecord('cg1', 1, 2, 1)],
-        ['c2', clientRecord('cg1', 1, 4, 1)],
-      ]),
+      expectedPendingMutations: [],
+      // new client not recorded, so no expectedClientRecords
       expectedErrorAndSocketClosed:
         'Push contains unexpected mutation id 6 for client c2. Expected mutation id 5.',
     },
-    // TODO tests for timestamp adjustments
+    // clock offset tests
+    {
+      name: 'clock offset is initialized if undefined',
+      clientMap: new Map([
+        client(clientID, 'u1', clientGroupID, s1, undefined),
+      ]),
+      pendingMutations: [],
+      mutations: [mutation(clientID, 3, 10)],
+      clientRecords: new Map([
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+      ]),
+      pushTimestamp: 5,
+      now: 500,
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 3,
+          timestamp: 10 + 495,
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
+      expectedClientMap: new Map([
+        client(clientID, 'u1', clientGroupID, s1, 495),
+      ]),
+    },
+    {
+      name: 'uses existing clock offset',
+      clientMap: new Map([client(clientID, 'u1', clientGroupID, s1, 495)]),
+      pendingMutations: [],
+      mutations: [mutation(clientID, 3, 10)],
+      clientRecords: new Map([
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+      ]),
+      pushTimestamp: 5,
+      now: 700, // offset would be 695 if not reused
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 3,
+          timestamp: 10 + 495,
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
+      expectedClientMap: new Map([
+        client(clientID, 'u1', clientGroupID, s1, 495),
+      ]),
+    },
+    {
+      name: 'resets clock offset if changes by greater than 1 second',
+      clientMap: new Map([client(clientID, 'u1', clientGroupID, s1, 100)]),
+      pendingMutations: [],
+      mutations: [mutation(clientID, 3, 10)],
+      clientRecords: new Map([
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+      ]),
+      pushTimestamp: 5,
+      now: 1110,
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 3,
+          timestamp: 10 + 1105,
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
+      expectedClientMap: new Map([
+        client(clientID, 'u1', clientGroupID, s1, 1105),
+      ]),
+    },
+    {
+      name: 'if push has an error clock offset is not initialized',
+      clientMap: new Map([
+        client(clientID, 'u1', clientGroupID, s1, undefined),
+      ]),
+      pendingMutations: [],
+      mutations: [mutation(clientID, 3, 10), mutation(clientID, 5, 20)],
+      clientRecords: new Map([
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+      ]),
+      pushTimestamp: 5,
+      now: 500,
+      // no mutations enqueued
+      expectedPendingMutations: [],
+      expectedErrorAndSocketClosed:
+        'Push contains unexpected mutation id 5 for client c1. Expected mutation id 4.',
+    },
+    // end clock offset tests
+    {
+      name: 'orders by normalized timestamp when possible',
+      clientMap: new Map([
+        client(clientID, 'u1', clientGroupID, s1, 0),
+        client('c2', 'u2', clientGroupID, undefined, 0),
+      ]),
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 3,
+          timestamp: 10,
+          pusherClientIDs: new Set(['c2']),
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 4,
+          timestamp: 30,
+          pusherClientIDs: new Set(['c2']),
+        }),
+      ],
+      mutations: [
+        mutation(clientID, 5, 1),
+        mutation(clientID, 6, 9),
+        mutation(clientID, 7, 10),
+        mutation(clientID, 8, 29),
+        mutation(clientID, 9, 30),
+        mutation(clientID, 10, 70),
+      ],
+      clientRecords: new Map([
+        [clientID, clientRecord(clientGroupID, 1, 4, 1)],
+        ['c2', clientRecord(clientGroupID, 1, 2, 1)],
+      ]),
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 5,
+          timestamp: 1,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 6,
+          timestamp: 9,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 3,
+          timestamp: 10,
+          pusherClientIDs: new Set(['c2']),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 7,
+          timestamp: 10,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 8,
+          timestamp: 29,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 4,
+          timestamp: 30,
+          pusherClientIDs: new Set(['c2']),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 9,
+          timestamp: 30,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 10,
+          timestamp: 70,
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
+    },
+    {
+      name: 'orders by order pushed by pusher if in same client group',
+      clientMap: new Map([
+        client(clientID, 'u1', clientGroupID, s1, 0),
+        client('c2', 'u2', clientGroupID, undefined, 0),
+      ]),
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 3,
+          timestamp: 10,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 4,
+          timestamp: 30,
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
+      mutations: [
+        mutation(clientID, 5, 5),
+        mutation('c2', 5, 20),
+        mutation(clientID, 6, 25),
+        mutation(clientID, 7, 80),
+        mutation(clientID, 8, 70),
+      ],
+      clientRecords: new Map([
+        [clientID, clientRecord(clientGroupID, 1, 4, 1)],
+        ['c2', clientRecord(clientGroupID, 1, 2, 1)],
+      ]),
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 3,
+          timestamp: 10,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 4,
+          timestamp: 30,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 5,
+          timestamp: 5,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 5,
+          timestamp: undefined,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 6,
+          timestamp: 25,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 7,
+          timestamp: 80,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 8,
+          timestamp: 70,
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
+    },
+    {
+      name: 'does not by order pushed by pusher if different client group',
+      clientMap: new Map([
+        client(clientID, 'u1', clientGroupID, s1, 0),
+        client('c2', 'u2', 'cg2', undefined, 0),
+      ]),
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID: 'cg2',
+          id: 3,
+          timestamp: 10,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID: 'cg2',
+          id: 4,
+          timestamp: 30,
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
+      mutations: [
+        mutation(clientID, 5, 5),
+        mutation(clientID, 6, 25),
+        mutation(clientID, 7, 80),
+        mutation(clientID, 8, 70),
+      ],
+      clientRecords: new Map([
+        [clientID, clientRecord(clientGroupID, 1, 4, 1)],
+        ['c2', clientRecord(clientGroupID, 1, 2, 1)],
+      ]),
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 5,
+          timestamp: 5,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID: 'cg2',
+          id: 3,
+          timestamp: 10,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 6,
+          timestamp: 25,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID: 'cg2',
+          id: 4,
+          timestamp: 30,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 7,
+          timestamp: 80,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 8,
+          timestamp: 70,
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
+    },
   ];
-  const durable = await getMiniflareDurableObjectStorage(id);
 
   // Special LC that waits for a requestID to be added to the context.
   class TestLogContext extends LogContext {
@@ -241,45 +670,69 @@ test('handlePush', async () => {
   }
 
   for (const c of cases) {
-    s1.log.length = 0;
-    await durable.deleteAll();
+    test(c.name, async () => {
+      const durable = await getMiniflareDurableObjectStorage(id);
+      await durable.deleteAll();
+      const storage = new DurableStorage(durable);
+      s1.log.length = 0;
 
-    const storage = new DurableStorage(durable);
-    for (const [clientID, record] of c.clientRecords) {
-      await putClientRecord(clientID, record, storage);
-    }
+      for (const [clientID, record] of c.clientRecords) {
+        await putClientRecord(clientID, record, storage);
+      }
+      expect(await listClientRecords(storage)).toEqual(c.clientRecords);
 
-    const requestID = randomID();
-    const push = {
-      clientGroupID: 'cg1',
-      mutations: c.mutations,
-      pushVersion: 1,
-      schemaVersion: '',
-      timestamp: 42,
-      requestID,
-    };
+      const requestID = randomID();
+      const push = {
+        clientGroupID,
+        mutations: c.mutations,
+        pushVersion: 1,
+        schemaVersion: '',
+        timestamp: c.pushTimestamp ?? 42,
+        requestID,
+      };
 
-    const lc = new TestLogContext();
-    await handlePush(
-      lc,
-      storage,
-      must(c.clientMap.get(clientID)),
-      c.clientMap,
-      c.pendingMutations,
-      push,
-      () => 42,
-      () => undefined,
-    );
+      const lc = new TestLogContext('info', new SilentLogSink());
+      const pendingMutationsPrePush = [...c.pendingMutations];
+      const clientMapPrePush = new Map(c.clientMap);
+      const clientRecordsPrePush = new Map(c.clientRecords);
+      let processUntilDoneCallCount = 0;
+      await handlePush(
+        lc,
+        storage,
+        clientID,
+        c.clientMap,
+        c.pendingMutations,
+        push,
+        () => c.now ?? 42,
+        () => {
+          processUntilDoneCallCount++;
+        },
+      );
 
-    expect(await lc.resolver.promise).toEqual(requestID);
-    if (c.expectedErrorAndSocketClosed !== undefined) {
-      expect(s1.log.length).toEqual(2);
-      const [type, message] = s1.log[0];
-      expect(type).toEqual('send');
-      expect(message).toContain(c.expectedErrorAndSocketClosed);
-      expect(s1.log[1][0]).toEqual('close');
-    } else {
-      expect(s1.log).toEqual([]);
-    }
+      expect(await lc.resolver.promise).toEqual(requestID);
+      if (c.expectedErrorAndSocketClosed !== undefined) {
+        expect(processUntilDoneCallCount).toEqual(0);
+        expect(s1.log.length).toEqual(2);
+        const [type, message] = s1.log[0];
+        expect(type).toEqual('send');
+        expect(message).toContain(c.expectedErrorAndSocketClosed);
+        expect(s1.log[1][0]).toEqual('close');
+        expect(c.pendingMutations).toEqual(pendingMutationsPrePush);
+        expect(await listClientRecords(storage)).toEqual(clientRecordsPrePush);
+        expect(clientMapSansSockets(c.clientMap)).toEqual(
+          clientMapSansSockets(clientMapPrePush),
+        );
+      } else {
+        expect(processUntilDoneCallCount).toEqual(1);
+        expect(s1.log).toEqual([]);
+        expect(c.pendingMutations).toEqual(c.expectedPendingMutations);
+        expect(await listClientRecords(storage)).toEqual(
+          c.expectedClientRecords ?? clientRecordsPrePush,
+        );
+        expect(clientMapSansSockets(c.clientMap)).toEqual(
+          clientMapSansSockets(c.expectedClientMap ?? clientMapPrePush),
+        );
+      }
+    });
   }
 });

@@ -12,7 +12,7 @@ test('getPatch', async () => {
   type Case = {
     name: string;
     // undefined value means delete
-    muts?: {key: string; value?: number; version: number}[];
+    muts?: {key: string; value?: number; mutationID: number; version: number}[];
     fromCookie: Version;
     expected: PatchOperation[];
   };
@@ -20,7 +20,7 @@ test('getPatch', async () => {
   const cases: Case[] = [
     {
       name: 'add a, diff from null',
-      muts: [{key: 'a', value: 1, version: 2}],
+      muts: [{key: 'a', mutationID: 1, value: 1, version: 2}],
       fromCookie: 0,
       expected: [
         {
@@ -48,7 +48,7 @@ test('getPatch', async () => {
     },
     {
       name: 'add a + b, diff from null',
-      muts: [{key: 'b', value: 2, version: 3}],
+      muts: [{key: 'b', mutationID: 2, value: 2, version: 3}],
       fromCookie: 0,
       expected: [
         {
@@ -89,7 +89,7 @@ test('getPatch', async () => {
     },
     {
       name: 'del a, diff from 3',
-      muts: [{key: 'a', version: 4}],
+      muts: [{key: 'a', mutationID: 3, version: 4}],
       fromCookie: 3,
       expected: [
         {
@@ -111,7 +111,12 @@ test('getPatch', async () => {
 
   for (const c of cases) {
     for (const p of c.muts || []) {
-      const tx = new ReplicacheTransaction(storage, 'c1', p.version);
+      const tx = new ReplicacheTransaction(
+        storage,
+        'c1',
+        p.mutationID,
+        p.version,
+      );
       if (p.value !== undefined) {
         await tx.put(p.key, p.value);
       } else {

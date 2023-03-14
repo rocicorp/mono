@@ -92,6 +92,10 @@ export class ReadTransactionImpl implements ReadTransaction {
   readonly clientID: ClientID;
   readonly dbtx: db.Read;
   protected readonly _lc: LogContext;
+
+  /**
+   * The environment in which this transaction is being used. This is either `client` or `server`.
+   */
   readonly environment: TransactionEnvironment;
 
   constructor(
@@ -222,6 +226,14 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
  * database.
  */
 export interface WriteTransaction extends ReadTransaction {
+  /**
+   * The ID of the mutation that is being applied.
+   */
+  readonly mutationID: number;
+
+  /**
+   * The reason for the transaction. This can be `initial`, `rebase` or `authoriative`.
+   */
   readonly reason: TransactionReason;
   /**
    * Sets a single `value` in the database. The value will be frozen (using
@@ -243,15 +255,18 @@ export class WriteTransactionImpl
   // use `declare` to specialize the type.
   declare readonly dbtx: db.Write;
   readonly reason: TransactionReason;
+  readonly mutationID: number;
 
   constructor(
     clientID: ClientID,
+    mutationID: number,
     reason: TransactionReason,
     dbWrite: db.Write,
     lc: LogContext,
     rpcName = 'openWriteTransaction',
   ) {
     super(clientID, dbWrite, lc, rpcName);
+    this.mutationID = mutationID;
     this.reason = reason;
   }
 
