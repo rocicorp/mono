@@ -1,5 +1,5 @@
-import {LogContext} from '@rocicorp/logger';
-import {expect} from '@esm-bundle/chai';
+import {LogContext, LogSink} from '@rocicorp/logger';
+import {expect, assert} from '@esm-bundle/chai';
 import * as sinon from 'sinon';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import * as dag from '../dag/mod.js';
@@ -247,20 +247,25 @@ test('heartbeat with missing client calls callback', async () => {
 
 test('heartbeat with dropped idb throws', async () => {
   const {resolve, promise} = resolver();
-  const consoleErrorStub = sinon.stub(console, 'error').callsFake(() => {
-    resolve();
-  });
   const name = `heartbeat-test-dropped-idb-${Math.random()}`;
   const ibdStore = new IDBStore(name);
   const dagStore = new dag.StoreImpl(ibdStore, dag.uuidChunkHasher, assertHash);
   const onClientStateNotFound = sinon.fake();
   const controller = new AbortController();
 
+  let message: unknown[] = [];
+  const testLogSink: LogSink = {
+    log(_level, ...args) {
+      message = args;
+      resolve();
+    },
+  };
+
   startHeartbeats(
     'client1',
     dagStore,
     onClientStateNotFound,
-    new LogContext(),
+    new LogContext('error', testLogSink),
     controller.signal,
   );
 
@@ -270,15 +275,13 @@ test('heartbeat with dropped idb throws', async () => {
 
   await clock.tickAsync(ONE_MIN_IN_MS / 2);
 
-  expect(onClientStateNotFound.callCount).to.equal(0);
+  assert.equal(onClientStateNotFound.callCount, 0);
 
   await promise;
 
-  expect(consoleErrorStub.callCount).to.equal(1);
-  expect(consoleErrorStub.args[0][2]).to.be.instanceOf(IDBNotFoundError);
-  expect(consoleErrorStub.args[0][2].message).equal(
-    `Replicache IndexedDB not found: ${name}`,
-  );
+  assert.equal(message.length, 3);
+  assert(message[2] instanceof IDBNotFoundError);
+  assert.equal(message[2].message, `Replicache IndexedDB not found: ${name}`);
 
   controller.abort();
 });

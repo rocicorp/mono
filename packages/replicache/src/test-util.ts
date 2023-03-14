@@ -29,6 +29,7 @@ import {resolver} from '@rocicorp/resolver';
 import type {Cookie} from './cookies.js';
 import type {PatchOperation} from './patch-operation.js';
 import {MemStore} from './kv/mem-store.js';
+import type {LogLevel, LogSink} from '@rocicorp/logger';
 
 export class ReplicacheTest<
   // eslint-disable-next-line @typescript-eslint/ban-types
@@ -369,3 +370,11 @@ export const disableAllBackgroundProcesses = {
   enableScheduledRefresh: false,
   enableScheduledPersist: false,
 };
+
+export class TestLogSink implements LogSink {
+  messages: [LogLevel, ...unknown[]][] = [];
+
+  log(level: LogLevel, ...args: unknown[]): void {
+    this.messages.push([level, ...args]);
+  }
+}

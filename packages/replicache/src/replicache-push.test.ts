@@ -2,10 +2,11 @@ import {
   disableAllBackgroundProcesses,
   initReplicacheTesting,
   replicacheForTesting,
+  TestLogSink,
   tickAFewTimes,
 } from './test-util.js';
 import type {VersionNotSupportedResponse, WriteTransaction} from './mod.js';
-import {expect} from '@esm-bundle/chai';
+import {expect, assert} from '@esm-bundle/chai';
 import type {Pusher} from './pusher.js';
 import * as sinon from 'sinon';
 
@@ -313,11 +314,13 @@ test('Version not supported on server', async () => {
 });
 
 test('ClientStateNotFound on server', async () => {
-  const consoleErrorStub = sinon.stub(console, 'error');
+  const testLogSink = new TestLogSink();
   const rep = await replicacheForTesting('client-state-not-found-push', {
     mutators: {
       noop: () => undefined,
     },
+    logSinks: [testLogSink],
+    logLevel: 'error',
     ...disableAllBackgroundProcesses,
   });
 
@@ -337,12 +340,14 @@ test('ClientStateNotFound on server', async () => {
   await rep.mutate.noop();
   await rep.invokePush();
 
-  expect(onUpdateNeededStub.callCount).to.equal(0);
+  assert.equal(onUpdateNeededStub.callCount, 0);
 
-  expect(rep.isClientGroupDisabled).to.equal(true);
+  assert.isTrue(rep.isClientGroupDisabled);
 
-  expect(consoleErrorStub.callCount).to.equal(1);
-  expect(consoleErrorStub.lastCall.args[1].message).match(
+  assert.equal(testLogSink.messages.length, 1);
+  assert(testLogSink.messages[0][2] instanceof Error);
+  assert.match(
+    testLogSink.messages[0][2].message,
     /Client group \S+ is unknown on server/,
   );
 });

@@ -4,11 +4,12 @@ import {
   initReplicacheTesting,
   makePullResponseDD31,
   replicacheForTesting,
+  TestLogSink,
   tickAFewTimes,
   tickUntil,
 } from './test-util.js';
 import type {JSONValue, ReadonlyJSONValue} from './json.js';
-import {expect} from '@esm-bundle/chai';
+import {expect, assert} from '@esm-bundle/chai';
 import {sleep} from './sleep.js';
 import type * as dag from './dag/mod.js';
 import * as sinon from 'sinon';
@@ -1020,18 +1021,19 @@ test('subscription with error in body', async () => {
 test('Errors in subscriptions are logged if no onError', async () => {
   const t = async (
     onError?: (err: unknown) => void,
-    err: unknown = new Error(),
+    err: unknown = new Error('a'),
   ) => {
-    const consoleErrorStub = sinon.stub(console, 'error');
-
     let called = false;
-    const rep = await replicacheForTesting('subscription-with-exception');
+    const testLogSink = new TestLogSink();
+    const rep = await replicacheForTesting('subscription-with-exception', {
+      logSinks: [testLogSink],
+      logLevel: 'error',
+    });
 
     rep.subscribe(
-      // eslint-disable-next-line require-await
-      async () => {
+      () => {
         called = true;
-        throw err;
+        return Promise.reject(err);
       },
       {
         onData: () => {
@@ -1043,24 +1045,24 @@ test('Errors in subscriptions are logged if no onError', async () => {
 
     await tickUntil(() => called);
     if (onError) {
-      expect(consoleErrorStub.callCount).to.equal(0);
+      assert.equal(testLogSink.messages.length, 0);
     } else {
-      expect(consoleErrorStub.callCount).to.equal(1);
-      const {args} = consoleErrorStub.lastCall;
-      expect(args).to.have.length(2);
-      expect(args[0]).to.equal(`name=${rep.name}`);
-      expect(args[1]).to.equal(err);
+      assert.equal(testLogSink.messages.length, 1);
+      assert.deepEqual(testLogSink.messages[0], [
+        'error',
+        `name=${rep.name}`,
+        err,
+      ]);
     }
 
-    consoleErrorStub.restore();
     await rep.close();
   };
 
   await t();
 
   const f = sinon.fake();
-  const err = new Error();
+  const err = new Error('b');
   await t(f, err);
-  expect(f.callCount).to.equal(1);
-  expect(f.calledWith(err)).to.be.true;
+  assert.equal(f.callCount, 1);
+  assert.isTrue(f.calledWith(err));
 });
