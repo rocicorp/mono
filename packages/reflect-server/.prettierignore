@@ -1,4 +1,5 @@
 out/
 *.tgz
 *.toml
+*.tsbuildinfo
 STATUS
