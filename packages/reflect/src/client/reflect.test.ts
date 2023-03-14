@@ -1131,7 +1131,17 @@ test('InvalidConnectionRequest', async () => {
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
   await clock.tickAsync(0);
   const msg = testLogSink.messages.at(-1);
-  assert(msg !== undefined);
+  assert(msg);
+
   assert.equal(msg[0], 'error');
-  assert.equal((msg.at(-1) as Error).message, 'InvalidConnectionRequest: test');
+
+  const err = msg.at(-2);
+  assert(err instanceof MessageError);
+  assert.equal(err.message, 'InvalidConnectionRequest: test');
+
+  const data = msg.at(-1);
+  assert.deepEqual(data, {
+    lmid: 0,
+    baseCookie: null,
+  });
 });
