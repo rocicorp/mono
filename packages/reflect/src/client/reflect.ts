@@ -154,6 +154,7 @@ export class Reflect<MD extends MutatorDefs> {
 
   private _onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
   private readonly _jurisdiction: 'eu' | undefined;
+  private _baseCookie: number | null = null;
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -589,6 +590,7 @@ export class Reflect<MD extends MutatorDefs> {
     this._connectingStart = Date.now();
 
     const baseCookie = await this._getBaseCookie();
+    this._baseCookie = baseCookie;
 
     // Reject connect after a timeout.
     const id = setTimeout(async () => {
@@ -895,7 +897,10 @@ export class Reflect<MD extends MutatorDefs> {
         }
       } catch (ex) {
         if (this._connectionState !== ConnectionState.Connected) {
-          lc.error?.('Failed to connect', ex);
+          lc.error?.('Failed to connect', ex, {
+            lmid: this._lastMutationIDReceived,
+            baseCookie: this._baseCookie,
+          });
         }
 
         lc.debug?.(
