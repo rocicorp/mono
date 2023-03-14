@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "ES2021",
-    "module": "ESNext",
+    "target": "es2022",
+    "module": "es2022",
     "strict": true,
     "exactOptionalPropertyTypes": true,
     "noUnusedLocals": true,

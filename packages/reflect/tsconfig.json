@@ -1,8 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    // esnext for Object.fromEntries
-    "lib": ["dom", "esnext"]
+    "lib": ["dom", "es2022"]
   },
   "include": ["src/**/*.ts"]
 }

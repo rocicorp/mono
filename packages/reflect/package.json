@@ -19,7 +19,7 @@
     "test:watch": "web-test-runner --watch",
     "check-types": "tsc --noEmit",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
-    "build-min": "esbuild --bundle --target=es2018 --outfile=out/reflect.js --format=esm --platform=neutral src/mod.ts --minify --mangle-props=^_",
+    "build-min": "esbuild --bundle --target=es2022 --outfile=out/reflect.js --format=esm --platform=neutral src/mod.ts --minify --mangle-props=^_",
     "build": "rm -rf out && npm run build-dts && npm run build-min",
     "prepack": "npm run lint && npm run test && npm run build"
   },
