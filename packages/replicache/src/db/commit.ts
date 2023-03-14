@@ -90,36 +90,11 @@ export class Commit<M extends Meta> {
     return this.chunk.data.valueHash;
   }
 
-  async getMutationID(
+  getMutationID(
     clientID: sync.ClientID,
     dagRead: dag.MustGetChunk,
   ): Promise<number> {
-    const {meta} = this;
-    switch (meta.type) {
-      case MetaType.IndexChangeSDD:
-        return meta.lastMutationID;
-
-      case MetaType.SnapshotSDD:
-        return meta.lastMutationID;
-
-      case MetaType.SnapshotDD31:
-        return meta.lastMutationIDs[clientID] ?? 0;
-
-      case MetaType.LocalSDD:
-        return meta.mutationID;
-
-      case MetaType.LocalDD31: {
-        if (meta.clientID === clientID) {
-          return meta.mutationID;
-        }
-        const {basisHash} = meta;
-        const basisCommit = await fromHash(basisHash, dagRead);
-        return basisCommit.getMutationID(clientID, dagRead);
-      }
-
-      default:
-        unreachable();
-    }
+    return getMutationID(clientID, dagRead, this.meta);
   }
 
   async getNextMutationID(
@@ -132,6 +107,38 @@ export class Commit<M extends Meta> {
   get indexes(): readonly IndexRecord[] {
     // Already validated!
     return this.chunk.data.indexes;
+  }
+}
+
+export async function getMutationID(
+  clientID: sync.ClientID,
+  dagRead: dag.MustGetChunk,
+  meta: Meta,
+): Promise<number> {
+  switch (meta.type) {
+    case MetaType.IndexChangeSDD:
+      return meta.lastMutationID;
+
+    case MetaType.SnapshotSDD:
+      return meta.lastMutationID;
+
+    case MetaType.SnapshotDD31:
+      return meta.lastMutationIDs[clientID] ?? 0;
+
+    case MetaType.LocalSDD:
+      return meta.mutationID;
+
+    case MetaType.LocalDD31: {
+      if (meta.clientID === clientID) {
+        return meta.mutationID;
+      }
+      const {basisHash} = meta;
+      const basisCommit = await fromHash(basisHash, dagRead);
+      return getMutationID(clientID, dagRead, basisCommit.meta);
+    }
+
+    default:
+      unreachable();
   }
 }
 

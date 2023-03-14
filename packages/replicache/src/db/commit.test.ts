@@ -19,6 +19,7 @@ import {
   chunkIndexDefinitionEqualIgnoreName,
   ChunkIndexDefinition,
   makeCommitData,
+  getMutationID,
 } from './commit.js';
 import {ChainBuilder} from './test-helpers.js';
 import {Hash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
@@ -795,6 +796,11 @@ test('getMutationID across commits with different clients', async () => {
   await withRead(store, async dagRead => {
     expect(await local.getMutationID(clientID, dagRead)).to.equal(2);
     expect(await local.getMutationID(clientID2, dagRead)).to.equal(1);
+  });
+
+  await withRead(store, async dagRead => {
+    expect(await getMutationID(clientID, dagRead, local.meta)).to.equal(2);
+    expect(await getMutationID(clientID2, dagRead, local.meta)).to.equal(1);
   });
 });
 

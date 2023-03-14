@@ -1097,6 +1097,28 @@ test('isEmpty', async () => {
   await t(false);
 });
 
+test('mutationID on transaction', async () => {
+  let expectedMutationID = 1;
+  const rep = await replicacheForTesting('test-is-empty', {
+    mutators: {
+      addData: async (
+        tx: WriteTransaction,
+        data: {[key: string]: JSONValue},
+      ) => {
+        for (const [key, value] of Object.entries(data)) {
+          await tx.put(key, value);
+        }
+        expect(tx.mutationID).to.equal(expectedMutationID++);
+      },
+    },
+  });
+  const {addData} = rep.mutate;
+  await addData({foo: 'bar'});
+  await addData({fuzzy: 'wuzzy'});
+  await addData({fizz: 'bang'});
+  expect(expectedMutationID).equals(4);
+});
+
 test('onSync', async () => {
   const pullURL = 'https://pull.com/pull';
   const pushURL = 'https://push.com/push';

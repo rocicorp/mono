@@ -265,3 +265,52 @@ test('clear', async () => {
     }
   });
 });
+
+test('mutationID on newWriteLocal', async () => {
+  const clientID = 'client-id';
+  const ds = new dag.TestStore();
+  const lc = new LogContext();
+  await withWrite(ds, dagWrite =>
+    initDB(
+      dagWrite,
+      DEFAULT_HEAD_NAME,
+      clientID,
+
+      {
+        idx: {prefix: '', jsonPointer: '', allowEmpty: false},
+      },
+      true,
+    ),
+  );
+  await withWrite(ds, async dagWrite => {
+    const w = await newWriteLocal(
+      whenceHead(DEFAULT_HEAD_NAME),
+      'mutator_name',
+      JSON.stringify([]),
+      null,
+      dagWrite,
+      42,
+      clientID,
+      true,
+    );
+    await w.put(lc, 'foo', 'bar');
+    await w.commit(DEFAULT_HEAD_NAME);
+    expect(await w.getMutationID()).equals(1);
+  });
+
+  await withWrite(ds, async dagWrite => {
+    const w = await newWriteLocal(
+      whenceHead(DEFAULT_HEAD_NAME),
+      'mutator_name',
+      JSON.stringify([]),
+      null,
+      dagWrite,
+      42,
+      clientID,
+      true,
+    );
+    await w.put(lc, 'hot', 'dog');
+    await w.commit(DEFAULT_HEAD_NAME);
+    expect(await w.getMutationID()).equals(2);
+  });
+});

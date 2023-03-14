@@ -59,7 +59,12 @@ export async function processMutation(
     }
 
     const txCache = new EntryCache(storage);
-    const tx = new ReplicacheTransaction(txCache, clientID, version);
+    const tx = new ReplicacheTransaction(
+      txCache,
+      clientID,
+      pendingMutation.id,
+      version,
+    );
     try {
       const mutator = mutators.get(pendingMutation.name);
       if (!mutator) {
