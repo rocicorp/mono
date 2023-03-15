@@ -42,6 +42,7 @@
     "replicache": "*",
     "rollup": "^2.71.1",
     "rollup-plugin-dts": "^4.2.1",
+    "shared": "*",
     "superstruct": "^0.16.7",
     "ts-jest": "^29.0.5",
     "typescript": "^4.9.4"
