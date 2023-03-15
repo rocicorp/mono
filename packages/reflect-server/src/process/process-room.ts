@@ -9,7 +9,7 @@ import type {ClientPoke} from '../types/client-poke.js';
 import {getClientRecord, putClientRecord} from '../types/client-record.js';
 import type {ClientMap} from '../types/client-state.js';
 import {getVersion, putVersion} from '../types/version.js';
-import {must} from '../util/must.js';
+import {must} from 'shared';
 import {processFrame} from './process-frame.js';
 import type {MutatorMap} from './process-mutation.js';
 import type {PendingMutation} from '../types/mutation.js';

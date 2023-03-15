@@ -8,7 +8,7 @@ import {
 } from '../types/client-record.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {closeWithError} from '../util/socket.js';
-import {must} from '../util/must.js';
+import {must} from 'shared';
 import {ErrorKind} from 'reflect-protocol';
 import type {PendingMutation} from '../types/mutation.js';
 

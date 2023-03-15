@@ -4,7 +4,7 @@ import type {ClientPoke} from '../types/client-poke.js';
 import {listClientRecords} from '../types/client-record.js';
 import type {ClientGroupID, ClientID} from '../types/client-state.js';
 import {compareVersions} from '../types/version.js';
-import {must} from '../util/must.js';
+import {must} from 'shared';
 import {getPatch} from './get-patch.js';
 
 /**

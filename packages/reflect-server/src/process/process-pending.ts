@@ -2,7 +2,7 @@ import type {ClientID, ClientMap} from '../types/client-state.js';
 import type {Poke, PokeMessage} from 'reflect-protocol';
 import type {ClientPoke} from '../types/client-poke.js';
 import type {LogContext} from '@rocicorp/logger';
-import {must} from '../util/must.js';
+import {must} from 'shared';
 import type {MutatorMap} from './process-mutation.js';
 import {processRoom} from './process-room.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
