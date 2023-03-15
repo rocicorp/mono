@@ -39,13 +39,15 @@ import {testSubscriptionsManagerOptions} from '../test-util.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import type {DiffsMap} from './diff.js';
 import {
+  beginPullV1,
   BeginPullResponseV0,
   BeginPullResponseV1,
-  beginPullSDD,
+  beginPullV0,
+  handlePullResponseV1,
   HandlePullResponseResultType,
   isPullRequestV1,
   maybeEndPull,
-  MaybeEndPullResultSDD,
+  MaybeEndPullResultV0,
   PullRequestV0,
   PullRequestV1,
   PULL_VERSION_DD31,
@@ -448,7 +450,7 @@ test('begin try pull SDD', async () => {
 
     let result: BeginPullResponseV0 | string;
     try {
-      result = await beginPullSDD(
+      result = await beginPullV0(
         profileID,
         clientID,
         schemaVersion,
@@ -993,7 +995,7 @@ test('begin try pull DD31', async () => {
 
     let result: BeginPullResponseV1 | string;
     try {
-      result = await beginPullDD31(
+      result = await beginPullV1(
         profileID,
         clientID,
         clientGroupID,
@@ -1220,7 +1222,7 @@ suite('maybe end try pull', () => {
       }
       const syncHead = basisHash;
 
-      let result: MaybeEndPullResultSDD | string;
+      let result: MaybeEndPullResultV0 | string;
       try {
         result = await maybeEndPull(
           store,
@@ -1437,7 +1439,7 @@ suite('changed keys', () => {
       });
 
       const pullResult = dd31
-        ? await beginPullDD31(
+        ? await beginPullV1(
             profileID,
             clientID,
             clientGroupID,
@@ -1447,7 +1449,7 @@ suite('changed keys', () => {
             store,
             new LogContext(),
           )
-        : await beginPullSDD(
+        : await beginPullV0(
             profileID,
             clientID,
             schemaVersion,
@@ -1726,7 +1728,7 @@ test('pull for client group with multiple client local changes', async () => {
   await b.addLocal(clientID1, []);
   await b.addLocal(clientID2, []);
 
-  const response: BeginPullResponseV1 = await beginPullDD31(
+  const response: BeginPullResponseV1 = await beginPullV1(
     profileID,
     clientID1,
     clientGroupID,
@@ -1775,7 +1777,7 @@ suite('beginPull DD31', () => {
     };
     const puller = makeFakePuller(options);
 
-    const response = await beginPullDD31(
+    const response = await beginPullV1(
       profileID,
       clientID1,
       clientGroupID1,
@@ -1837,7 +1839,7 @@ suite('handlePullResponseDD31', () => {
       patch: responsePatch,
     };
 
-    const result = await handlePullResponseDD31(
+    const result = await handlePullResponseV1(
       lc,
       store,
       expectedBaseCookie,

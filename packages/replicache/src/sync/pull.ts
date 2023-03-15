@@ -96,7 +96,7 @@ export type BeginPullResponseV0 = {
   syncHead: Hash;
 };
 
-export async function beginPullSDD(
+export async function beginPullV0(
   profileID: string,
   clientID: ClientID,
   schemaVersion: string,
@@ -171,7 +171,7 @@ export async function beginPullSDD(
   };
 }
 
-export async function beginPullDD31(
+export async function beginPullV1(
   profileID: string,
   clientID: ClientID,
   clientGroupID: ClientGroupID,
@@ -225,7 +225,7 @@ export async function beginPullDD31(
     };
   }
 
-  const result = await handlePullResponseDD31(
+  const result = await handlePullResponseV1(
     lc,
     store,
     baseCookie,
@@ -421,7 +421,7 @@ function badOrderMessage(
   return `Received ${name} ${receivedValue} is < than last snapshot ${name} ${lastSnapshotValue}; ignoring client view`;
 }
 
-export function handlePullResponseDD31(
+export function handlePullResponseV1(
   lc: LogContext,
   store: dag.Store,
   expectedBaseCookie: FrozenJSONValue,
@@ -517,7 +517,7 @@ type MaybeEndPullResultBase<M extends db.Meta> = {
   diffs: DiffsMap;
 };
 
-export type MaybeEndPullResultSDD = MaybeEndPullResultBase<db.LocalMetaSDD>;
+export type MaybeEndPullResultV0 = MaybeEndPullResultBase<db.LocalMetaSDD>;
 
 export function maybeEndPull<M extends db.LocalMeta>(
   store: dag.Store,
