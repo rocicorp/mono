@@ -13,8 +13,8 @@ import {
 } from '../db/commit.js';
 import {assertHash, fakeHash, newUUIDHash} from '../hash.js';
 import {
-  assertClientDD31,
-  ClientDD31,
+  assertClientV5,
+  ClientV5,
   CLIENTS_HEAD_NAME,
   findMatchingClient,
   FindMatchingClientResult,
@@ -25,12 +25,12 @@ import {
   getClients,
   getClientGroupForClient,
   getClientGroupIDForClient,
-  initClientDD31,
+  initClientV5,
   setClient,
 } from './clients.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {makeClientDD31, setClientsForTesting} from './clients-test-helpers.js';
+import {makeClientV5, setClientsForTesting} from './clients-test-helpers.js';
 import type {ClientID} from '../sync/ids.js';
 import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
 import type {ClientGroupID} from '../sync/ids.js';
@@ -65,11 +65,11 @@ test('updateClients and getClients', async () => {
   const dagStore = new dag.TestStore();
   const clientMap = new Map(
     Object.entries({
-      client1: makeClientDD31({
+      client1: makeClientV5({
         heartbeatTimestampMs: 1000,
         headHash: headClient1Hash,
       }),
-      client2: makeClientDD31({
+      client2: makeClientV5({
         heartbeatTimestampMs: 3000,
         headHash: headClient2Hash,
       }),
@@ -126,11 +126,11 @@ test('updateClients and getClients sequence', async () => {
   const dagStore = new dag.TestStore();
   const clientMap1 = new Map(
     Object.entries({
-      client1: makeClientDD31({
+      client1: makeClientV5({
         heartbeatTimestampMs: 1000,
         headHash: headClient1Hash,
       }),
-      client2: makeClientDD31({
+      client2: makeClientV5({
         heartbeatTimestampMs: 3000,
         headHash: headClient2Hash,
       }),
@@ -139,7 +139,7 @@ test('updateClients and getClients sequence', async () => {
 
   const clientMap2 = new Map(
     Object.entries({
-      client3: makeClientDD31({
+      client3: makeClientV5({
         heartbeatTimestampMs: 4000,
         headHash: headClient3Hash,
       }),
@@ -167,11 +167,11 @@ test('updateClients properly manages refs to client heads when clients are remov
 
   const clientMap1 = new Map(
     Object.entries({
-      client1: makeClientDD31({
+      client1: makeClientV5({
         heartbeatTimestampMs: 1000,
         headHash: client1HeadHash,
       }),
-      client2: makeClientDD31({
+      client2: makeClientV5({
         heartbeatTimestampMs: 3000,
         headHash: client2HeadHash,
       }),
@@ -181,7 +181,7 @@ test('updateClients properly manages refs to client heads when clients are remov
   const client3HeadHash = headClient3Hash;
   const clientMap2 = new Map(
     Object.entries({
-      client3: makeClientDD31({
+      client3: makeClientV5({
         heartbeatTimestampMs: 4000,
         headHash: client3HeadHash,
       }),
@@ -214,15 +214,15 @@ test("updateClients properly manages refs to client heads when a client's head c
   const client1V2HeadHash = fakeHash('c12');
   const client2HeadHash = fakeHash('c2');
 
-  const client1V1 = makeClientDD31({
+  const client1V1 = makeClientV5({
     heartbeatTimestampMs: 1000,
     headHash: client1V1HeadHash,
   });
-  const client1V2 = makeClientDD31({
+  const client1V2 = makeClientV5({
     heartbeatTimestampMs: 2000,
     headHash: client1V2HeadHash,
   });
-  const client2 = makeClientDD31({
+  const client2 = makeClientV5({
     heartbeatTimestampMs: 3000,
     headHash: client2HeadHash,
   });
@@ -269,14 +269,14 @@ test("updateClients properly manages refs to client heads when a client's head c
 
 test('getClient', async () => {
   const dagStore = new dag.TestStore();
-  const client1 = makeClientDD31({
+  const client1 = makeClientV5({
     heartbeatTimestampMs: 1000,
     headHash: headClient1Hash,
   });
   const clientMap = new Map(
     Object.entries({
       client1,
-      client2: makeClientDD31({
+      client2: makeClientV5({
         heartbeatTimestampMs: 3000,
         headHash: headClient2Hash,
       }),
@@ -339,7 +339,7 @@ test('updateClients throws errors if chunk pointed to by clients head does not c
 test('initClient creates new empty snapshot when no existing snapshot to bootstrap from', async () => {
   const dagStore = new dag.TestStore();
   clock.tick(4000);
-  const [clientID, client, clients] = await initClientDD31(
+  const [clientID, client, clients] = await initClientV5(
     new LogContext(),
     dagStore,
     [],
@@ -382,7 +382,7 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
 test('setClient', async () => {
   const dagStore = new dag.TestStore();
 
-  const t = async (clientID: ClientID, client: ClientDD31) => {
+  const t = async (clientID: ClientID, client: ClientV5) => {
     await withWrite(dagStore, async (write: dag.Write) => {
       await setClient(clientID, client, write);
       await write.commit();
@@ -423,7 +423,7 @@ test('getClientGroupID', async () => {
 
   const t = async (
     clientID: ClientID,
-    client: ClientDD31,
+    client: ClientV5,
     clientGroupID: ClientGroupID,
     clientGroup: ClientGroup,
     expectedClientGroupID: ClientGroupID | undefined,
@@ -535,7 +535,7 @@ suite('findMatchingClient', () => {
     await b.addLocal(clientID, []);
 
     await withWrite(perdag, async write => {
-      const client: ClientDD31 = {
+      const client: ClientV5 = {
         clientGroupID,
         headHash: b.chain[1].chunk.hash,
         heartbeatTimestampMs: 1,
@@ -661,7 +661,7 @@ suite('findMatchingClient', () => {
   });
 });
 
-suite('initClientDD31', () => {
+suite('initClientV5', () => {
   let clock: SinonFakeTimers;
   setup(() => {
     clock = useFakeTimers(0);
@@ -677,14 +677,14 @@ suite('initClientDD31', () => {
     const mutatorNames: string[] = [];
     const indexes: IndexDefinitions = {};
 
-    const [clientID, client, clientMap] = await initClientDD31(
+    const [clientID, client, clientMap] = await initClientV5(
       lc,
       perdag,
       mutatorNames,
       indexes,
     );
     expect(clientID).to.be.a('string');
-    assertClientDD31(client);
+    assertClientV5(client);
     expect(clientMap.size).to.equal(1);
     expect(clientMap.get(clientID)).to.equal(client);
     expect(client.tempRefreshHash).to.be.null;
@@ -705,7 +705,7 @@ suite('initClientDD31', () => {
 
     clock.setSystemTime(10);
 
-    const client1: ClientDD31 = {
+    const client1: ClientV5 = {
       clientGroupID,
       headHash,
       heartbeatTimestampMs: 1,
@@ -726,7 +726,7 @@ suite('initClientDD31', () => {
       await write.commit();
     });
 
-    const [clientID2, client2, clientMap] = await initClientDD31(
+    const [clientID2, client2, clientMap] = await initClientV5(
       lc,
       perdag,
       mutatorNames,
@@ -771,7 +771,7 @@ suite('initClientDD31', () => {
 
     clock.setSystemTime(10);
 
-    const client1: ClientDD31 = {
+    const client1: ClientV5 = {
       clientGroupID: clientGroupID1,
       headHash,
       heartbeatTimestampMs: 1,
@@ -792,14 +792,14 @@ suite('initClientDD31', () => {
       await write.commit();
     });
 
-    const [clientID2, client2, clientMap] = await initClientDD31(
+    const [clientID2, client2, clientMap] = await initClientV5(
       lc,
       perdag,
       newMutatorNames,
       newIndexes,
     );
     expect(clientID2).to.not.equal(clientID1);
-    assertClientDD31(client2);
+    assertClientV5(client2);
     const clientGroupID2 = client2.clientGroupID;
     expect(clientGroupID2).to.not.equal(clientGroupID1);
     expect(clientMap.size).to.equal(2);
@@ -857,7 +857,7 @@ suite('initClientDD31', () => {
 
     clock.setSystemTime(10);
 
-    const client1: ClientDD31 = {
+    const client1: ClientV5 = {
       clientGroupID: clientGroupID1,
       headHash,
       heartbeatTimestampMs: 1,
@@ -878,14 +878,14 @@ suite('initClientDD31', () => {
       await write.commit();
     });
 
-    const [clientID2, client2, clientMap] = await initClientDD31(
+    const [clientID2, client2, clientMap] = await initClientV5(
       lc,
       perdag,
       newMutatorNames,
       newIndexes,
     );
     expect(clientID2).to.not.equal(clientID1);
-    assertClientDD31(client2);
+    assertClientV5(client2);
     const clientGroupID2 = client2.clientGroupID;
     expect(clientGroupID2).to.not.equal(clientGroupID1);
     expect(clientMap.size).to.equal(2);

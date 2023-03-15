@@ -31,7 +31,7 @@ import sinon from 'sinon';
 import fetchMock from 'fetch-mock/esm/client';
 import {initClientWithClientID} from './persist/clients-test-helpers.js';
 import {PUSH_VERSION_SDD} from './sync/push.js';
-import {assertClientSDD} from './persist/clients.js';
+import {assertClientV4} from './persist/clients.js';
 import {persistSDD} from './persist/persist-test-helpers.js';
 import {withRead} from './with-transactions.js';
 
@@ -117,7 +117,7 @@ export function createPushBodySDD(
   };
 }
 
-async function testRecoveringMutationsOfClientSDD(args: {
+async function testRecoveringMutationsOfClientV4(args: {
   schemaVersionOfClientWPendingMutations: string;
   schemaVersionOfClientRecoveringMutations: string;
   numMutationsNotAcknowledgedByPull?: number;
@@ -157,7 +157,7 @@ async function testRecoveringMutationsOfClientSDD(args: {
   const client1 = await withRead(testPerdag, read =>
     persist.getClient(client1ID, read),
   );
-  assertClientSDD(client1);
+  assertClientV4(client1);
 
   fetchMock.reset();
   fetchMock.post(pushURL, 'ok');
@@ -208,28 +208,28 @@ async function testRecoveringMutationsOfClientSDD(args: {
   const updatedClient1 = await withRead(testPerdag, read =>
     persist.getClient(client1ID, read),
   );
-  assertClientSDD(updatedClient1);
+  assertClientV4(updatedClient1);
   expect(updatedClient1.mutationID).to.equal(client1.mutationID);
   expect(updatedClient1.lastServerAckdMutationID).to.equal(pullLastMutationID);
   expect(updatedClient1.headHash).to.equal(client1.headHash);
 }
 
 test('successfully recovering mutations of client with same schema version and replicache format version', async () => {
-  await testRecoveringMutationsOfClientSDD({
+  await testRecoveringMutationsOfClientV4({
     schemaVersionOfClientWPendingMutations: 'testSchema1',
     schemaVersionOfClientRecoveringMutations: 'testSchema1',
   });
 });
 
 test('successfully recovering mutations of client with different schema version but same replicache format version', async () => {
-  await testRecoveringMutationsOfClientSDD({
+  await testRecoveringMutationsOfClientV4({
     schemaVersionOfClientWPendingMutations: 'testSchema1',
     schemaVersionOfClientRecoveringMutations: 'testSchema2',
   });
 });
 
 test('successfully recovering some but not all mutations of another client (pull does not acknowledge all)', async () => {
-  await testRecoveringMutationsOfClientSDD({
+  await testRecoveringMutationsOfClientV4({
     schemaVersionOfClientWPendingMutations: 'testSchema1',
     schemaVersionOfClientRecoveringMutations: 'testSchema1',
     numMutationsNotAcknowledgedByPull: 1,
@@ -346,7 +346,7 @@ test('client does not attempt to recover mutations from IndexedDB with different
   const clientWPendingMutations = await withRead(testPerdag, read =>
     persist.getClient(clientWPendingMutationsID, read),
   );
-  assertClientSDD(clientWPendingMutations);
+  assertClientV4(clientWPendingMutations);
 
   fetchMock.reset();
   fetchMock.post(pushURL, 'ok');
@@ -431,16 +431,16 @@ test('successfully recovering mutations of multiple clients with mix of schema v
     persist.getClients(read),
   );
   const client1 = clients1Thru3.get(client1ID);
-  assertClientSDD(client1);
+  assertClientV4(client1);
   const client2 = clients1Thru3.get(client2ID);
-  assertClientSDD(client2);
+  assertClientV4(client2);
   const client3 = clients1Thru3.get(client3ID);
-  assertClientSDD(client3);
+  assertClientV4(client3);
 
   const client4 = await withRead(testPerdagForClient4, read =>
     persist.getClient(client4ID, read),
   );
-  assertClientSDD(client4);
+  assertClientV4(client4);
 
   const pullRequestJsonBodies: JSONObject[] = [];
   fetchMock.reset();
@@ -536,16 +536,16 @@ test('successfully recovering mutations of multiple clients with mix of schema v
     persist.getClients(read),
   );
   const updatedClient1 = updateClients1Thru3.get(client1ID);
-  assertClientSDD(updatedClient1);
+  assertClientV4(updatedClient1);
   const updatedClient2 = updateClients1Thru3.get(client2ID);
-  assertClientSDD(updatedClient2);
+  assertClientV4(updatedClient2);
   const updatedClient3 = updateClients1Thru3.get(client3ID);
-  assertClientSDD(updatedClient3);
+  assertClientV4(updatedClient3);
 
   const updatedClient4 = await withRead(testPerdagForClient4, read =>
     persist.getClient(client4ID, read),
   );
-  assertClientSDD(updatedClient4);
+  assertClientV4(updatedClient4);
 
   expect(updatedClient1.mutationID).to.equal(client1.mutationID);
   // lastServerAckdMutationID is updated to high mutationID as mutations
@@ -609,11 +609,11 @@ test('if a push error occurs, continues to try to recover other clients', async 
 
   const clients = await withRead(testPerdag, read => persist.getClients(read));
   const client1 = clients.get(client1ID);
-  assertClientSDD(client1);
+  assertClientV4(client1);
   const client2 = clients.get(client2ID);
-  assertClientSDD(client2);
+  assertClientV4(client2);
   const client3 = clients.get(client3ID);
-  assertClientSDD(client3);
+  assertClientV4(client3);
 
   const pushRequestJsonBodies: JSONObject[] = [];
   const pullRequestJsonBodies: JSONObject[] = [];
@@ -708,11 +708,11 @@ test('if a push error occurs, continues to try to recover other clients', async 
     persist.getClients(read),
   );
   const updatedClient1 = updateClients.get(client1ID);
-  assertClientSDD(updatedClient1);
+  assertClientV4(updatedClient1);
   const updatedClient2 = updateClients.get(client2ID);
-  assertClientSDD(updatedClient2);
+  assertClientV4(updatedClient2);
   const updatedClient3 = updateClients.get(client3ID);
-  assertClientSDD(updatedClient3);
+  assertClientV4(updatedClient3);
 
   expect(updatedClient1.mutationID).to.equal(client1.mutationID);
   // lastServerAckdMutationID is updated to high mutationID as mutations
@@ -770,11 +770,11 @@ test('if an error occurs recovering one client, continues to try to recover othe
 
   const clients = await withRead(testPerdag, read => persist.getClients(read));
   const client1 = clients.get(client1ID);
-  assertClientSDD(client1);
+  assertClientV4(client1);
   const client2 = clients.get(client2ID);
-  assertClientSDD(client2);
+  assertClientV4(client2);
   const client3 = clients.get(client3ID);
-  assertClientSDD(client3);
+  assertClientV4(client3);
 
   const pullRequestJsonBodies: JSONObject[] = [];
   fetchMock.reset();
@@ -858,11 +858,11 @@ test('if an error occurs recovering one client, continues to try to recover othe
     persist.getClients(read),
   );
   const updatedClient1 = updateClients.get(client1ID);
-  assertClientSDD(updatedClient1);
+  assertClientV4(updatedClient1);
   const updatedClient2 = updateClients.get(client2ID);
-  assertClientSDD(updatedClient2);
+  assertClientV4(updatedClient2);
   const updatedClient3 = updateClients.get(client3ID);
-  assertClientSDD(updatedClient3);
+  assertClientV4(updatedClient3);
 
   expect(updatedClient1.mutationID).to.equal(client1.mutationID);
   // lastServerAckdMutationID is updated to high mutationID as mutations
@@ -930,12 +930,12 @@ test('if an error occurs recovering one db, continues to try to recover clients 
   const client1 = await withRead(testPerdagForClient1, read =>
     persist.getClient(client1ID, read),
   );
-  assertClientSDD(client1);
+  assertClientV4(client1);
 
   const client2 = await withRead(testPerdagForClient2, read =>
     persist.getClient(client2ID, read),
   );
-  assertClientSDD(client2);
+  assertClientV4(client2);
 
   const pullRequestJsonBodies: JSONObject[] = [];
   fetchMock.reset();
@@ -996,12 +996,12 @@ test('if an error occurs recovering one db, continues to try to recover clients 
   const updatedClient1 = await withRead(testPerdagForClient1, read =>
     persist.getClient(client1ID, read),
   );
-  assertClientSDD(updatedClient1);
+  assertClientV4(updatedClient1);
 
   const updatedClient2 = await withRead(testPerdagForClient2, read =>
     persist.getClient(client2ID, read),
   );
-  assertClientSDD(updatedClient2);
+  assertClientV4(updatedClient2);
 
   expect(updatedClient1.mutationID).to.equal(client1.mutationID);
   // lastServerAckdMutationID not updated due to error when recovering this
@@ -1048,9 +1048,9 @@ test('mutation recovery exits early if Replicache is closed', async () => {
 
   const clients = await withRead(testPerdag, read => persist.getClients(read));
   const client1 = clients.get(client1ID);
-  assertClientSDD(client1);
+  assertClientV4(client1);
   const client2 = clients.get(client2ID);
-  assertClientSDD(client2);
+  assertClientV4(client2);
 
   const pullRequestJsonBodies: JSONObject[] = [];
   fetchMock.reset();
@@ -1109,9 +1109,9 @@ test('mutation recovery exits early if Replicache is closed', async () => {
     persist.getClients(read),
   );
   const updatedClient1 = updateClients.get(client1ID);
-  assertClientSDD(updatedClient1);
+  assertClientV4(updatedClient1);
   const updatedClient2 = updateClients.get(client2ID);
-  assertClientSDD(updatedClient2);
+  assertClientV4(updatedClient2);
 
   expect(updatedClient1.mutationID).to.equal(client1.mutationID);
   // lastServerAckdMutationID is updated to high mutationID as mutations

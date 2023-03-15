@@ -5,42 +5,44 @@ import type {
   VersionNotSupportedResponse,
 } from './error-responses.js';
 import type {Cookie} from './cookies.js';
-import type {PullRequestDD31, PullRequestSDD} from './sync/pull.js';
+import type {PullRequest} from './sync/pull.js';
 import type {PatchOperation} from './patch-operation.js';
 import type {ReadonlyJSONValue} from './json.js';
 
-export type PullerResultSDD = {
-  response?: PullResponseSDD | undefined;
+export type PullerResultV0 = {
+  response?: PullResponseV0 | undefined;
   httpRequestInfo: HTTPRequestInfo;
 };
 
 // TODO(arv): Does it really make sense to call this httpRequestInfo? It is
 // really the response status code and error message!
 
-export type PullerResultDD31 = {
-  response?: PullResponseDD31 | undefined;
+export type PullerResultV1 = {
+  response?: PullResponseV1 | undefined;
   httpRequestInfo: HTTPRequestInfo;
 };
+
+export type PullerResult = PullerResultV1 | PullerResultV0;
 
 /**
  * Puller is the function type used to do the fetch part of a pull.
  *
  * Puller needs to support dealing with pull request of version 0 and 1. Version
  * 0 is used when doing mutation recovery of old clients. If a
- * {@link PullRequestDD31} is passed in the n a {@link PullerResultDD31} should
+ * {@link PullRequestV1} is passed in the n a {@link PullerResultV1} should
  * be returned. We do a runtime assert to make this is the case.
  *
  * If you do not support old clients you can just throw if `pullVersion` is `0`,
  */
 export type Puller = (
-  requestBody: PullRequestDD31 | PullRequestSDD,
+  requestBody: PullRequest,
   requestID: string,
-) => Promise<PullerResultDD31 | PullerResultSDD>;
+) => Promise<PullerResult>;
 
 /**
  * The shape of a pull response under normal circumstances.
  */
-export type PullResponseOKSDD = {
+export type PullResponseOKV0 = {
   cookie?: ReadonlyJSONValue | undefined;
   lastMutationID: number;
   patch: PatchOperation[];
@@ -49,7 +51,7 @@ export type PullResponseOKSDD = {
 /**
  * The shape of a pull response under normal circumstances.
  */
-export type PullResponseOKDD31 = {
+export type PullResponseOKV1 = {
   cookie: Cookie;
   // All last mutation IDs from clients in clientGroupID that changed
   // between PullRequest.cookie and PullResponseOK.cookie.
@@ -61,8 +63,8 @@ export type PullResponseOKDD31 = {
  * PullResponse defines the shape and type of the response of a pull. This is
  * the JSON you should return from your pull server endpoint.
  */
-export type PullResponseSDD =
-  | PullResponseOKSDD
+export type PullResponseV0 =
+  | PullResponseOKV0
   | ClientStateNotFoundResponse
   | VersionNotSupportedResponse;
 
@@ -70,7 +72,9 @@ export type PullResponseSDD =
  * PullResponse defines the shape and type of the response of a pull. This is
  * the JSON you should return from your pull server endpoint.
  */
-export type PullResponseDD31 =
-  | PullResponseOKDD31
+export type PullResponseV1 =
+  | PullResponseOKV1
   | ClientStateNotFoundResponse
   | VersionNotSupportedResponse;
+
+export type PullResponse = PullResponseV1 | PullResponseV0;

@@ -68,7 +68,7 @@ suite('initNewClientChannel', () => {
   //   const replicacheName = 'test-name';
   //   const controller = new AbortController();
   //   const clientID1 = 'client1';
-  //   const client1: ClientDD31 = {
+  //   const client1: ClientV5 = {
   //     heartbeatTimestampMs: 111,
   //     headHash: fakeHash('c1'),
   //     tempRefreshHash: null,
@@ -76,10 +76,10 @@ suite('initNewClientChannel', () => {
   //   };
   //   const clientID2 = 'client2';
   //   // intentionally missing required fields.
-  //   const client2 = {} as ClientDD31;
+  //   const client2 = {} as ClientV5;
   //   const clientID3 = 'client3';
   //   // intentionally missing required fields.
-  //   const client3 = {} as ClientDD31;
+  //   const client3 = {} as ClientV5;
   //   let client1OnUpdateNeededCallCount = 0;
   //   initNewClientChannel(
   //     replicacheName,

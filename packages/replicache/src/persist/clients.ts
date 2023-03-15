@@ -29,10 +29,10 @@ import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
 import {createIndexBTree} from '../db/write.js';
 import {withWrite} from '../with-transactions.js';
 
-export type ClientMap = ReadonlyMap<sync.ClientID, ClientSDD | ClientDD31>;
-export type ClientMapDD31 = ReadonlyMap<sync.ClientID, ClientDD31>;
+export type ClientMap = ReadonlyMap<sync.ClientID, ClientV4 | ClientV5>;
+export type ClientMapDD31 = ReadonlyMap<sync.ClientID, ClientV5>;
 
-export type ClientSDD = {
+export type ClientV4 = {
   /**
    * A UNIX timestamp in milliseconds updated by the client once a minute
    * while it is active and every time the client persists its state to
@@ -77,7 +77,7 @@ export type ClientSDD = {
   readonly lastServerAckdMutationID: number;
 };
 
-export type ClientDD31 = {
+export type ClientV5 = {
   readonly heartbeatTimestampMs: number;
   readonly headHash: Hash;
 
@@ -94,14 +94,14 @@ export type ClientDD31 = {
   readonly clientGroupID: sync.ClientGroupID;
 };
 
-export type Client = ClientSDD | ClientDD31;
+export type Client = ClientV4 | ClientV5;
 
-function isClientDD31(client: Client): client is ClientDD31 {
-  return (client as ClientDD31).clientGroupID !== undefined;
+function isClientV5(client: Client): client is ClientV5 {
+  return (client as ClientV5).clientGroupID !== undefined;
 }
 
-export function isClientSDD(client: Client): client is ClientSDD {
-  return (client as ClientSDD).lastServerAckdMutationID !== undefined;
+export function isClientV4(client: Client): client is ClientV4 {
+  return (client as ClientV4).lastServerAckdMutationID !== undefined;
 }
 
 export const CLIENTS_HEAD_NAME = 'clients';
@@ -131,14 +131,14 @@ function assertClientBase(value: unknown): asserts value is {
   assertHash(headHash);
 }
 
-export function assertClientSDD(value: unknown): asserts value is ClientSDD {
+export function assertClientV4(value: unknown): asserts value is ClientV4 {
   assertClientBase(value);
   const {mutationID, lastServerAckdMutationID} = value;
   assertNumber(mutationID);
   assertNumber(lastServerAckdMutationID);
 }
 
-export function assertClientDD31(value: unknown): asserts value is ClientDD31 {
+export function assertClientV5(value: unknown): asserts value is ClientV5 {
   assertClientBase(value);
   const {tempRefreshHash} = value;
   if (tempRefreshHash) {
@@ -168,7 +168,7 @@ function clientMapToChunkData(
 ): FrozenJSONValue {
   for (const client of clients.values()) {
     dagWrite.assertValidHash(client.headHash);
-    if (isClientDD31(client) && client.tempRefreshHash) {
+    if (isClientV5(client) && client.tempRefreshHash) {
       dagWrite.assertValidHash(client.tempRefreshHash);
     }
   }
@@ -230,7 +230,7 @@ export async function getClient(
   return clients.get(id);
 }
 
-export function initClientDD31(
+export function initClientV5(
   lc: LogContext,
   perdag: dag.Store,
   mutatorNames: string[],
@@ -238,7 +238,7 @@ export function initClientDD31(
 ): Promise<
   [
     clientID: sync.ClientID,
-    client: ClientDD31,
+    client: ClientV5,
     clientMap: ClientMap,
     newClientGroup: boolean,
   ]
@@ -249,7 +249,7 @@ export function initClientDD31(
       cookieJSON: FrozenCookie,
       valueHash: Hash,
       indexRecords: readonly db.IndexRecord[],
-    ): Promise<[sync.ClientID, ClientDD31, ClientMap, boolean]> {
+    ): Promise<[sync.ClientID, ClientV5, ClientMap, boolean]> {
       const newSnapshotData = newSnapshotCommitDataDD31(
         basisHash,
         {},
@@ -264,7 +264,7 @@ export function initClientDD31(
 
       const newClientGroupID = makeUuid();
 
-      const newClient: ClientDD31 = {
+      const newClient: ClientV5 = {
         heartbeatTimestampMs: Date.now(),
         headHash: chunk.hash,
         tempRefreshHash: null,
@@ -302,7 +302,7 @@ export function initClientDD31(
       // reuse it.
       const {clientGroupID, headHash} = res;
 
-      const newClient: ClientDD31 = {
+      const newClient: ClientV5 = {
         clientGroupID,
         headHash,
         heartbeatTimestampMs: Date.now(),
@@ -476,7 +476,7 @@ function getRefsForClients(clients: ClientMap): Hash[] {
   const refs: Hash[] = [];
   for (const client of clients.values()) {
     refs.push(client.headHash);
-    if (isClientDD31(client) && client.tempRefreshHash) {
+    if (isClientV5(client) && client.tempRefreshHash) {
       refs.push(client.tempRefreshHash);
     }
   }
@@ -499,7 +499,7 @@ export async function getClientGroupIDForClient(
   read: dag.Read,
 ): Promise<sync.ClientGroupID | undefined> {
   const client = await getClient(clientID, read);
-  if (!client || !isClientDD31(client)) {
+  if (!client || !isClientV5(client)) {
     return undefined;
   }
   return client.clientGroupID;

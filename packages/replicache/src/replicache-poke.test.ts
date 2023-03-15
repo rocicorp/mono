@@ -1,11 +1,11 @@
 import {expect} from '@esm-bundle/chai';
 import type {VersionNotSupportedResponse} from './error-responses.js';
-import type {PokeDD31, UpdateNeededReason} from './replicache.js';
+import type {Poke, UpdateNeededReason} from './replicache.js';
 import {
   addData,
   disableAllBackgroundProcesses,
   initReplicacheTesting,
-  makePullResponseDD31,
+  makePullResponseV1,
   replicacheForTesting,
 } from './test-util.js';
 import type {WriteTransaction} from './transactions.js';
@@ -42,9 +42,9 @@ test('poke', async () => {
   expect(await rep.query(tx => tx.has(key))).true;
 
   // cookie *does* apply
-  const poke: PokeDD31 = {
+  const poke: Poke = {
     baseCookie: null,
-    pullResponse: makePullResponseDD31(clientID, 1, [{op: 'del', key}], 'c1'),
+    pullResponse: makePullResponseV1(clientID, 1, [{op: 'del', key}], 'c1'),
   };
 
   await rep.poke(poke);
@@ -54,9 +54,9 @@ test('poke', async () => {
   await setTodo({id, text});
   let error = null;
   try {
-    const poke: PokeDD31 = {
+    const poke: Poke = {
       baseCookie: null,
-      pullResponse: makePullResponseDD31(clientID, 1, [{op: 'del', key}], 'c1'),
+      pullResponse: makePullResponseV1(clientID, 1, [{op: 'del', key}], 'c1'),
     };
     await rep.poke(poke);
   } catch (e) {
@@ -70,9 +70,9 @@ test('poke', async () => {
   error = null;
   try {
     // blech could not figure out how to use chai-as-promised.
-    const poke: PokeDD31 = {
+    const poke: Poke = {
       baseCookie: 'c1',
-      pullResponse: makePullResponseDD31(clientID, 0, [{op: 'del', key}], 'c2'),
+      pullResponse: makePullResponseV1(clientID, 0, [{op: 'del', key}], 'c2'),
     };
     await rep.poke(poke);
   } catch (e: unknown) {
@@ -93,9 +93,9 @@ test('overlapped pokes not supported', async () => {
   });
 
   const clientID = await rep.clientID;
-  const poke: PokeDD31 = {
+  const poke: Poke = {
     baseCookie: null,
-    pullResponse: makePullResponseDD31(
+    pullResponse: makePullResponseV1(
       clientID,
       1,
       [
@@ -111,9 +111,9 @@ test('overlapped pokes not supported', async () => {
 
   const p1 = rep.poke(poke);
 
-  const poke2: PokeDD31 = {
+  const poke2: Poke = {
     baseCookie: 'c2',
-    pullResponse: makePullResponseDD31(
+    pullResponse: makePullResponseV1(
       clientID,
       2,
       [
@@ -147,7 +147,7 @@ test('Client group unknown on server', async () => {
 
   expect(rep.isClientGroupDisabled).false;
 
-  const poke: PokeDD31 = {
+  const poke: Poke = {
     baseCookie: 123,
     pullResponse: {
       error: 'ClientStateNotFound',
@@ -179,7 +179,7 @@ test('Version not supported on server', async () => {
 
     const onUpdateNeededStub = (rep.onUpdateNeeded = sinon.stub());
 
-    const poke: PokeDD31 = {
+    const poke: Poke = {
       baseCookie: 123,
       pullResponse: response,
     };

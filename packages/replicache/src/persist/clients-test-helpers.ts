@@ -1,10 +1,10 @@
 import {
   ClientMap,
-  ClientDD31,
-  ClientSDD,
+  ClientV5,
+  ClientV4,
   setClients,
   getClients,
-  initClientDD31,
+  initClientV5,
   Client,
   ClientMapDD31,
 } from './clients.js';
@@ -30,13 +30,13 @@ export function setClientsForTesting(
   });
 }
 
-type PartialClientSDD = Partial<ClientSDD> &
-  Pick<ClientSDD, 'heartbeatTimestampMs' | 'headHash'>;
+type PartialClientV4 = Partial<ClientV4> &
+  Pick<ClientV4, 'heartbeatTimestampMs' | 'headHash'>;
 
-type PartialClientDD31 = Partial<ClientDD31> &
-  Pick<ClientDD31, 'heartbeatTimestampMs' | 'headHash'>;
+type PartialClientV5 = Partial<ClientV5> &
+  Pick<ClientV5, 'heartbeatTimestampMs' | 'headHash'>;
 
-export function makeClientDD31(partialClient: PartialClientDD31): ClientDD31 {
+export function makeClientV5(partialClient: PartialClientV5): ClientV5 {
   return {
     clientGroupID: partialClient.clientGroupID ?? 'make-client-group-id',
     headHash: partialClient.headHash,
@@ -45,7 +45,7 @@ export function makeClientDD31(partialClient: PartialClientDD31): ClientDD31 {
   };
 }
 
-export function makeClientSDD(partialClient: PartialClientSDD): ClientSDD {
+export function makeClientV4(partialClient: PartialClientV4): ClientV4 {
   return {
     mutationID: 0,
     lastServerAckdMutationID: 0,
@@ -54,11 +54,11 @@ export function makeClientSDD(partialClient: PartialClientSDD): ClientSDD {
 }
 
 export function makeClientMapDD31(
-  obj: Record<sync.ClientID, PartialClientDD31>,
+  obj: Record<sync.ClientID, PartialClientV5>,
 ): ClientMapDD31 {
   return new Map(
     Object.entries(obj).map(
-      ([id, client]) => [id, makeClientDD31(client)] as const,
+      ([id, client]) => [id, makeClientV5(client)] as const,
     ),
   );
 }
@@ -84,14 +84,14 @@ export async function initClientWithClientID(
 ): Promise<void> {
   let generatedClientID, client, clientMap;
   if (dd31) {
-    [generatedClientID, client, clientMap] = await initClientDD31(
+    [generatedClientID, client, clientMap] = await initClientV5(
       new LogContext(),
       dagStore,
       mutatorNames,
       indexes,
     );
   } else {
-    [generatedClientID, client, clientMap] = await initClientSDD(dagStore);
+    [generatedClientID, client, clientMap] = await initClientV4(dagStore);
   }
   const newMap = new Map(clientMap);
   newMap.delete(generatedClientID);
@@ -100,7 +100,7 @@ export async function initClientWithClientID(
 }
 
 // We only keep this around for testing purposes.
-function initClientSDD(
+function initClientV4(
   perdag: dag.Store,
 ): Promise<
   [

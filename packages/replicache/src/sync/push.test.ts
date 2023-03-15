@@ -7,10 +7,11 @@ import {ChainBuilder} from '../db/test-helpers.js';
 import {SYNC_HEAD_NAME} from './sync-head-name.js';
 import {
   push,
-  PushRequestSDD,
-  PushRequestDD31,
+  PushRequestV0,
+  PushRequestV1,
   PUSH_VERSION_SDD,
   PUSH_VERSION_DD31,
+  PushRequest,
 } from './push.js';
 import type {Pusher, PusherResult} from '../pusher.js';
 import type {ClientGroupID} from './ids.js';
@@ -19,7 +20,7 @@ import {withRead, withWrite} from '../with-transactions.js';
 
 type FakePusherArgs = {
   expPush: boolean;
-  expPushReq?: PushRequestSDD | PushRequestDD31 | undefined;
+  expPushReq?: PushRequest | undefined;
   expRequestID: string;
   error?: string | undefined;
 };
@@ -87,7 +88,7 @@ test('try push [SDD]', async () => {
 
     // Push expectations.
     numPendingMutations: number;
-    expPushReq: PushRequestSDD | undefined;
+    expPushReq: PushRequestV0 | undefined;
     pushResult: undefined | 'ok' | {error: string};
     expPusherResult: PusherResult | undefined;
   };
@@ -291,7 +292,7 @@ test('try push [DD31]', async () => {
 
     // Push expectations.
     numPendingMutations: number;
-    expPushReq: PushRequestDD31 | undefined;
+    expPushReq: PushRequestV1 | undefined;
     pushResult: undefined | 'ok' | {error: string};
     expPusherResult: PusherResult | undefined;
   };

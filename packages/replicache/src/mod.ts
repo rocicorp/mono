@@ -6,7 +6,7 @@ export type {
   MaybePromise,
   MutatorDefs,
   MutatorReturn,
-  PokeDD31,
+  Poke,
   RequestOptions,
   UpdateNeededReason,
   PendingMutation,
@@ -45,12 +45,14 @@ export {isScanIndexOptions} from './scan-options.js';
 export type {HTTPRequestInfo} from './http-request-info.js';
 export type {
   Puller,
-  PullResponseDD31 as PullResponseV1,
-  PullResponseOKDD31 as PullResponseOKV1,
-  PullerResultDD31 as PullerResultV1,
-  PullerResultSDD as PullerResultV0,
-  PullResponseSDD as PullResponseV0,
-  PullResponseOKSDD as PullResponseOKV0,
+  PullResponseV1,
+  PullResponseOKV1,
+  PullerResultV1,
+  PullerResultV0,
+  PullResponseV0,
+  PullResponseOKV0,
+  PullerResult,
+  PullResponse,
 } from './puller.js';
 export type {PatchOperation} from './patch-operation.js';
 export {PullError} from './sync/pull-error.js';
@@ -70,19 +72,16 @@ export type {
 
 export {MemStore as ExperimentalMemKVStore} from './kv/mem-store.js';
 
-export type {
-  PullRequest,
-  PullRequestSDD as PullRequestV0,
-  PullRequestDD31 as PullRequestV1,
-} from './sync/pull.js';
+export type {PullRequest, PullRequestV0, PullRequestV1} from './sync/pull.js';
 
 export type {ClientID, ClientGroupID} from './sync/ids.js';
 
 export type {
-  PushRequestDD31 as PushRequestV1,
-  PushRequestSDD as PushRequestV0,
-  MutationSDD as MutationV0,
-  MutationDD31 as MutationV1,
+  PushRequestV1,
+  PushRequestV0,
+  PushRequest,
+  MutationV0,
+  MutationV1,
 } from './sync/push.js';
 
 export {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';

@@ -4,14 +4,14 @@ import {
   isVersionNotSupportedResponse,
 } from './error-responses.js';
 import type {Pusher, PusherResult} from './pusher.js';
-import type {PushRequestDD31, PushRequestSDD} from './sync/push.js';
+import type {PushRequest} from './sync/push.js';
 
 /**
  * This creates a default pusher which uses HTTP POST to send the push request.
  */
 export function getDefaultPusher(rep: {pushURL: string; auth: string}): Pusher {
   async function pusher(
-    requestBody: PushRequestDD31 | PushRequestSDD,
+    requestBody: PushRequest,
     requestID: string,
   ): Promise<PusherResult> {
     const [response, httpRequestInfo] = await callDefaultFetch(

@@ -6,7 +6,7 @@ import {
   isClientStateNotFoundResponse,
   VersionNotSupportedResponse,
 } from './error-responses.js';
-import type {PushRequestDD31, PushRequestSDD} from './sync/push.js';
+import type {PushRequest} from './sync/push.js';
 
 export type PusherResult = {
   response?: PushResponse | undefined;
@@ -47,7 +47,7 @@ function assertPushResponse(v: unknown): asserts v is PushResponse {
  * return value.
  */
 export type Pusher = (
-  requestBody: PushRequestDD31 | PushRequestSDD,
+  requestBody: PushRequest,
   requestID: string,
 ) => Promise<PusherResult>;
 

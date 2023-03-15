@@ -1,10 +1,10 @@
 export type {ClientID, ClientGroupID} from './ids.js';
 export {
   maybeEndPull,
-  beginPullDD31,
-  beginPullSDD,
-  handlePullResponseDD31,
-  handlePullResponseSDD,
+  beginPullV1 as beginPullDD31,
+  beginPullV0 as beginPullSDD,
+  handlePullResponseV1 as handlePullResponseDD31,
+  handlePullResponseV0 as handlePullResponseSDD,
 } from './pull.js';
 export {push} from './push.js';
 export {newRequestID} from './request-id.js';

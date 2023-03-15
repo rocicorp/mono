@@ -9,12 +9,9 @@ export {
   disableClientGroup,
 } from './client-groups.js';
 export type {ClientGroup, ClientGroupMap} from './client-groups.js';
+export {initClientGroupGC, gcClientGroups} from './client-group-gc.js';
 export {
-  initClientGroupGC as initClientGroupGC,
-  gcClientGroups,
-} from './client-group-gc.js';
-export {
-  initClientDD31,
+  initClientV5,
   getClient,
   getClients,
   hasClientState,

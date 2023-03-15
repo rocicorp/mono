@@ -2,14 +2,15 @@ import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from './error-responses.js';
-import type {PullRequestDD31, PullRequestSDD} from './sync/pull.js';
+import type {PullRequest} from './sync/pull.js';
 import type {
   Puller,
-  PullerResultDD31,
-  PullerResultSDD,
-  PullResponseDD31,
-  PullResponseOKSDD,
-  PullResponseSDD,
+  PullerResultV1,
+  PullerResultV0,
+  PullResponseV1,
+  PullResponseOKV0,
+  PullResponseV0,
+  PullerResult,
 } from './puller.js';
 import {assertNumber, assertObject, assertString} from 'shared';
 import {assertPatchOperations} from './patch-operation.js';
@@ -23,9 +24,9 @@ import {assertCookie} from './cookies.js';
  */
 export function getDefaultPuller(rep: {pullURL: string; auth: string}): Puller {
   async function puller(
-    requestBody: PullRequestDD31 | PullRequestSDD,
+    requestBody: PullRequest,
     requestID: string,
-  ): Promise<PullerResultDD31 | PullerResultSDD> {
+  ): Promise<PullerResult> {
     const [response, httpRequestInfo] = await callDefaultFetch(
       rep.pullURL,
       rep.auth,
@@ -52,14 +53,12 @@ export function isDefaultPuller(puller: Puller): boolean {
   return defaultPullers.has(puller);
 }
 
-export function assertPullResponseSDD(
-  v: unknown,
-): asserts v is PullResponseSDD {
+export function assertPullResponseV0(v: unknown): asserts v is PullResponseV0 {
   assertObject(v);
   if (isClientStateNotFoundResponse(v) || isVersionNotSupportedResponse(v)) {
     return;
   }
-  const v2 = v as Partial<PullResponseOKSDD>;
+  const v2 = v as Partial<PullResponseOKV0>;
   if (v2.cookie !== undefined) {
     assertJSONValue(v2.cookie);
   }
@@ -67,9 +66,7 @@ export function assertPullResponseSDD(
   assertPatchOperations(v2.patch);
 }
 
-export function assertPullResponseDD31(
-  v: unknown,
-): asserts v is PullResponseDD31 {
+export function assertPullResponseV1(v: unknown): asserts v is PullResponseV1 {
   assertObject(v);
   if (isClientStateNotFoundResponse(v) || isVersionNotSupportedResponse(v)) {
     return;
@@ -92,22 +89,18 @@ function assertLastMutationIDChanges(
   }
 }
 
-export function assertPullerResultDD31(
-  v: unknown,
-): asserts v is PullerResultDD31 {
+export function assertPullerResultV1(v: unknown): asserts v is PullerResultV1 {
   assertObject(v);
   assertHTTPRequestInfo(v.httpRequestInfo);
   if (v.response !== undefined) {
-    assertPullResponseDD31(v.response);
+    assertPullResponseV1(v.response);
   }
 }
 
-export function assertPullerResultSDD(
-  v: unknown,
-): asserts v is PullerResultSDD {
+export function assertPullerResultV0(v: unknown): asserts v is PullerResultV0 {
   assertObject(v);
   assertHTTPRequestInfo(v.httpRequestInfo);
   if (v.response !== undefined) {
-    assertPullResponseSDD(v.response);
+    assertPullResponseV0(v.response);
   }
 }
