@@ -1,5 +1,5 @@
 import {expect} from '@esm-bundle/chai';
-import {assert, assertNotNull, assertNotUndefined} from '../asserts.js';
+import {assert, assertNotNull, assertNotUndefined} from 'shared';
 import * as dag from '../dag/mod.js';
 import * as db from '../db/mod.js';
 import type * as sync from '../sync/mod.js';

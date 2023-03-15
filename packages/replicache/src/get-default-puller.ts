@@ -11,7 +11,7 @@ import type {
   PullResponseOKSDD,
   PullResponseSDD,
 } from './puller.js';
-import {assertNumber, assertObject, assertString} from './asserts.js';
+import {assertNumber, assertObject, assertString} from 'shared';
 import {assertPatchOperations} from './patch-operation.js';
 import {assertJSONValue} from './json.js';
 import {assertHTTPRequestInfo} from './http-request-info.js';

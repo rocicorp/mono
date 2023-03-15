@@ -6,7 +6,7 @@ import {ClientMap, getClients, setClient} from './clients.js';
 import {newUUIDHash} from '../hash.js';
 import {initClientGC, getLatestGCUpdate} from './client-gc.js';
 import {makeClientSDD, setClientsForTesting} from './clients-test-helpers.js';
-import {assertNotUndefined} from '../asserts.js';
+import {assertNotUndefined} from 'shared';
 import {withRead, withWrite} from '../with-transactions.js';
 
 let clock: SinonFakeTimers;

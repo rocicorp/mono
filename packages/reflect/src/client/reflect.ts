@@ -37,7 +37,7 @@ import {
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from 'replicache';
 import * as superstruct from 'superstruct';
-import {assert} from '../util/asserts.js';
+import {assert} from 'shared';
 import {nanoid} from '../util/nanoid.js';
 import {sleep} from '../util/sleep.js';
 import {send} from '../util/socket.js';

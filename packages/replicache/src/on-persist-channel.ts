@@ -1,4 +1,4 @@
-import {assertObject, assertString} from './asserts.js';
+import {assertObject, assertString} from 'shared';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
 
 function makeChannelName(replicacheName: string): string {

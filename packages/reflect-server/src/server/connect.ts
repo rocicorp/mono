@@ -19,7 +19,7 @@ import type {DurableStorage} from '../storage/durable-storage.js';
 import {compareVersions, getVersion} from '../types/version.js';
 import type {NullableVersion, Version} from 'reflect-protocol';
 import {send, closeWithError} from '../util/socket.js';
-import {assert} from '../util/asserts.js';
+import {assert} from 'shared';
 import {ErrorKind} from 'reflect-protocol';
 
 export type MessageHandler = (

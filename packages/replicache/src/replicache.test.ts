@@ -49,7 +49,7 @@ import {
   LICENSE_ACTIVE_PATH,
   LICENSE_STATUS_PATH,
 } from '@rocicorp/licensing/src/server/api-types.js';
-import {assert} from './asserts.js';
+import {assert} from 'shared';
 import {resolver} from '@rocicorp/resolver';
 
 const {fail} = chaiAssert;

@@ -2,7 +2,7 @@ import type {Poke, PokeBody} from 'reflect-protocol';
 import {Lock} from '@rocicorp/lock';
 import type {ClientID, MaybePromise, PokeDD31} from 'replicache';
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../util/asserts.js';
+import {assert} from 'shared';
 import {mergePokes} from './merge-pokes.js';
 
 // TODO: make buffer dynamic

@@ -1,4 +1,4 @@
-import {assert, assertNumber, assertObject, assertString} from '../asserts.js';
+import {assert, assertNumber, assertObject, assertString} from 'shared';
 import {deepFreeze} from '../json.js';
 import type * as kv from '../kv/mod.js';
 import {uuid} from '../uuid.js';

@@ -1,5 +1,5 @@
 import {assertHTTPRequestInfo, HTTPRequestInfo} from './http-request-info.js';
-import {assertObject} from './asserts.js';
+import {assertObject} from 'shared';
 import {
   assertVersionNotSupportedResponse,
   ClientStateNotFoundResponse,

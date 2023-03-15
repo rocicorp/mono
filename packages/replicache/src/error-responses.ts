@@ -1,4 +1,4 @@
-import {assert} from './asserts.js';
+import {assert} from 'shared';
 
 function isError(obj: unknown, type: string): boolean {
   return (

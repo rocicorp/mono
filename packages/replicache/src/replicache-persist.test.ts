@@ -19,7 +19,7 @@ import fetchMock from 'fetch-mock/esm/client';
 import * as kv from './kv/mod.js';
 import * as dag from './dag/mod.js';
 import * as persist from './persist/mod.js';
-import {assert, assertNotUndefined} from './asserts.js';
+import {assert, assertNotUndefined} from 'shared';
 import {deleteClientForTesting} from './persist/clients-test-helpers.js';
 import {assertClientDD31} from './persist/clients.js';
 import {deleteClientGroup} from './persist/client-groups.js';

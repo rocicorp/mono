@@ -12,6 +12,10 @@ export function assertNumber(v: unknown): asserts v is number {
   assertType(v, 'number');
 }
 
+export function assertBoolean(v: unknown): asserts v is boolean {
+  assertType(v, 'boolean');
+}
+
 function assertType(v: unknown, t: string) {
   if (typeof v !== t) {
     throwInvalidType(v, t);
@@ -68,4 +72,12 @@ export function assertInstanceof<T>(
 
 export function assertUint8Array(v: unknown): asserts v is Uint8Array {
   assertInstanceof(v, Uint8Array);
+}
+
+export function unreachable(): never {
+  throw new Error('Unreachable');
+}
+
+export function notImplemented(): never {
+  throw new Error('Not implemented');
 }

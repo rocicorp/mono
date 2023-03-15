@@ -1,7 +1,7 @@
 import {compareUTF8, greaterThan, lessThan, lessThanEq} from 'compare-utf8';
 import * as db from './db/mod.js';
 import type * as sync from './sync/mod.js';
-import {assert} from './asserts.js';
+import {assert} from 'shared';
 import type {
   Diff,
   InternalDiffOperation,

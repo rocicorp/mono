@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from '@esm-bundle/chai';
-import {assertNotUndefined} from '../asserts.js';
-import {assertObject, assertString} from '../asserts.js';
+import {assertNotUndefined} from 'shared';
+import {assertObject, assertString} from 'shared';
 import * as dag from '../dag/mod.js';
 import * as db from '../db/mod.js';
 import {DEFAULT_HEAD_NAME} from '../db/mod.js';

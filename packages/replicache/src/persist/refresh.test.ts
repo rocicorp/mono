@@ -15,7 +15,7 @@ import {
 import {ClientDD31, setClient} from '../persist/clients.js';
 import {addData, testSubscriptionsManagerOptions} from '../test-util.js';
 import {refresh} from './refresh.js';
-import {assert, assertNotUndefined} from '../asserts.js';
+import {assert, assertNotUndefined} from 'shared';
 import type {MutatorDefs} from '../replicache.js';
 import type {WriteTransaction} from '../transactions.js';
 import type {Cookie} from '../cookies.js';
