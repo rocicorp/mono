@@ -3,7 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import {ReadonlyJSONValue, deepFreeze} from './json.js';
 import type {JSONValue} from './json.js';
 import {Pusher, PushError} from './pusher.js';
-import type {Puller, PullResponseDD31} from './puller.js';
+import type {Puller, PullResponseV1} from './puller.js';
 import {PullError} from './sync/pull-error.js';
 import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
 import {ReadTransactionImpl, WriteTransactionImpl} from './transactions.js';
@@ -71,9 +71,9 @@ export type BeginPullResult = {
   ok: boolean;
 };
 
-export type PokeDD31 = {
+export type Poke = {
   baseCookie: ReadonlyJSONValue;
-  pullResponse: PullResponseDD31;
+  pullResponse: PullResponseV1;
 };
 
 export const httpStatusUnauthorized = 401;
@@ -574,7 +574,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     await this._idbDatabases.getProfileID().then(profileIDResolver);
     await this._idbDatabases.putDatabase(this._idbDatabase);
     const [clientID, client, clients, isNewClientGroup] =
-      await persist.initClientDD31(
+      await persist.initClientV5(
         this._lc,
         this._perdag,
         Object.keys(this._mutatorRegistry),
@@ -1204,7 +1204,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    *
    * @experimental This method is under development and its semantics will change.
    */
-  async poke(poke: PokeDD31): Promise<void> {
+  async poke(poke: Poke): Promise<void> {
     await this._ready;
     // TODO(MP) Previously we created a request ID here and included it with the
     // PullRequest to the server so we could tie events across client and server

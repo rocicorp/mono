@@ -2,7 +2,7 @@ import type * as dag from '../dag/mod.js';
 import * as db from '../db/mod.js';
 import * as sync from '../sync/mod.js';
 import {
-  assertClientDD31,
+  assertClientV5,
   ClientStateNotFoundError,
   getClient,
   getClientGroupForClient,
@@ -95,7 +95,7 @@ export async function refresh(
         if (!client) {
           throw new ClientStateNotFoundError(clientID);
         }
-        assertClientDD31(client);
+        assertClientV5(client);
         const perdagClientGroupBaseSnapshot = await db.baseSnapshotFromHash(
           perdagClientGroupHeadHash,
           perdagWrite,

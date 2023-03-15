@@ -13,8 +13,8 @@ import {
   setClients,
   getClients,
   ClientStateNotFoundError,
-  ClientDD31,
-  initClientDD31,
+  ClientV5,
+  initClientV5,
   Client,
 } from './clients.js';
 import {assertLocalMetaDD31, assertSnapshotCommitDD31} from '../db/commit.js';
@@ -842,7 +842,7 @@ async function setupPersistTest() {
 
   let clientGroupID: undefined | sync.ClientGroupID;
   const createClient = async () => {
-    const [cID, c] = await initClientDD31(
+    const [cID, c] = await initClientV5(
       new LogContext(),
       perdag,
       mutatorNames,
@@ -855,7 +855,7 @@ async function setupPersistTest() {
       client: c,
     };
   };
-  const clients: {clientID: sync.ClientID; client: ClientDD31}[] = [];
+  const clients: {clientID: sync.ClientID; client: ClientV5}[] = [];
   for (let i = 0; i < 3; i++) {
     clients.push(await createClient());
   }

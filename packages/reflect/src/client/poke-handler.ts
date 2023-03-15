@@ -1,6 +1,6 @@
 import type {Poke, PokeBody} from 'reflect-protocol';
 import {Lock} from '@rocicorp/lock';
-import type {ClientID, MaybePromise, PokeDD31} from 'replicache';
+import type {ClientID, MaybePromise, Poke as ReplicachePoke} from 'replicache';
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared';
 import {mergePokes} from './merge-pokes.js';
@@ -10,7 +10,7 @@ const PLAYBACK_BUFFER_MS = 250;
 const RESET_PLAYBACK_OFFSET_THRESHOLD_MS = 1000;
 
 export class PokeHandler {
-  private readonly _replicachePoke: (poke: PokeDD31) => Promise<void>;
+  private readonly _replicachePoke: (poke: ReplicachePoke) => Promise<void>;
   private readonly _onOutOfOrderPoke: () => MaybePromise<void>;
   private readonly _clientIDPromise: Promise<ClientID>;
   private readonly _lcPromise: Promise<LogContext>;
@@ -22,7 +22,7 @@ export class PokeHandler {
   private readonly _pokeLock = new Lock();
 
   constructor(
-    replicachePoke: (poke: PokeDD31) => Promise<void>,
+    replicachePoke: (poke: ReplicachePoke) => Promise<void>,
     onOutOfOrderPoke: () => MaybePromise<void>,
     clientIDPromise: Promise<ClientID>,
     lcPromise: Promise<LogContext>,
@@ -138,7 +138,7 @@ export class PokeHandler {
       try {
         const start = performance.now();
         const {lastMutationIDChanges, baseCookie, patch, cookie} = merged;
-        const pokeDD31: PokeDD31 = {
+        const pokeDD31: ReplicachePoke = {
           baseCookie,
           pullResponse: {
             lastMutationIDChanges,

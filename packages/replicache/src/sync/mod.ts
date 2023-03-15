@@ -4,7 +4,7 @@ export {
   beginPullDD31,
   beginPullSDD,
   handlePullResponseDD31,
-  handlePullResponseSDD,
+  handlePullResponseV0 as handlePullResponseSDD,
 } from './pull.js';
 export {push} from './push.js';
 export {newRequestID} from './request-id.js';

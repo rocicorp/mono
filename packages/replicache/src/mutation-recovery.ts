@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Puller, PullResponseDD31, PullResponseSDD} from './puller.js';
+import type {Puller, PullResponseV1, PullResponseV0} from './puller.js';
 import * as dag from './dag/mod.js';
 import * as db from './db/mod.js';
 import * as persist from './persist/mod.js';
@@ -12,7 +12,7 @@ import {
   REPLICACHE_FORMAT_VERSION_DD31,
   REPLICACHE_FORMAT_VERSION_SDD,
 } from './replicache.js';
-import {assertClientSDD, setClients} from './persist/clients.js';
+import {assertClientV4, setClients} from './persist/clients.js';
 import type {ClientID, ClientGroupID} from './sync/ids.js';
 import type {Pusher} from './pusher.js';
 import {PUSH_VERSION_DD31, PUSH_VERSION_SDD} from './sync/push.js';
@@ -160,7 +160,7 @@ function logMutationRecoveryError(
  *   recover, or because an error occurred when trying to recover the
  *   mutations.
  */
-async function recoverMutationsOfClientSDD(
+async function recoverMutationsOfClientV4(
   client: persist.Client,
   clientID: sync.ClientID,
   perdag: dag.Store,
@@ -168,7 +168,7 @@ async function recoverMutationsOfClientSDD(
   options: MutationRecoveryOptions,
 ): Promise<persist.ClientMap | undefined> {
   assert(database.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_SDD);
-  assertClientSDD(client);
+  assertClientV4(client);
 
   const {
     delegate,
@@ -253,7 +253,7 @@ async function recoverMutationsOfClientSDD(
     const {puller} = delegate;
 
     const pullDescription = 'recoveringMutationsPull';
-    let pullResponse: PullResponseSDD | undefined;
+    let pullResponse: PullResponseV0 | undefined;
     const pullSucceeded = await wrapInOnlineCheck(async () => {
       const {result: beginPullResponse} = await wrapInReauthRetries(
         async (requestID: string, requestLc: LogContext) => {
@@ -318,7 +318,7 @@ async function recoverMutationsOfClientSDD(
         return clients;
       }
 
-      assertClientSDD(clientToUpdate);
+      assertClientV4(clientToUpdate);
 
       const setNewClients = async (newClients: persist.ClientMap) => {
         await setClients(newClients, dagWrite);
@@ -420,7 +420,7 @@ async function recoverMutationsFromPerdagSDD(
         }
         if (!clientIDsVisited.has(clientID)) {
           clientIDsVisited.add(clientID);
-          newClientMap = await recoverMutationsOfClientSDD(
+          newClientMap = await recoverMutationsOfClientV4(
             client,
             clientID,
             perdag,
@@ -621,7 +621,7 @@ async function recoverMutationsOfClientGroupDD31(
     const {puller} = delegate;
 
     const pullDescription = 'recoveringMutationsPull';
-    let pullResponse: PullResponseDD31 | undefined;
+    let pullResponse: PullResponseV1 | undefined;
     const pullSucceeded = await wrapInOnlineCheck(async () => {
       const {result: beginPullResponse} = await wrapInReauthRetries(
         async (requestID: string, requestLc: LogContext) => {

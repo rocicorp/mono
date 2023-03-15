@@ -28,18 +28,18 @@ import sinon from 'sinon';
 import fetchMock from 'fetch-mock/esm/client';
 import {initClientWithClientID} from './persist/clients-test-helpers.js';
 import {
-  assertPushRequestDD31,
-  PushRequestDD31,
-  PushRequestSDD,
+  assertPushRequestV1,
+  PushRequestV1,
+  PushRequestV0,
   PUSH_VERSION_DD31,
   PUSH_VERSION_SDD,
 } from './sync/push.js';
-import {assertClientDD31, assertClientSDD} from './persist/clients.js';
+import {assertClientV5, assertClientV4} from './persist/clients.js';
 import {LogContext} from '@rocicorp/logger';
-import type {PullResponseDD31, PullResponseSDD} from './puller.js';
+import type {PullResponseV1, PullResponseV0} from './puller.js';
 import {
-  PullRequestDD31,
-  PullRequestSDD,
+  PullRequestV1,
+  PullRequestV0,
   PULL_VERSION_DD31,
   PULL_VERSION_SDD,
 } from './sync/pull.js';
@@ -166,7 +166,7 @@ suite('DD31', () => {
     };
   }
 
-  async function testRecoveringMutationsOfClientDD31(args: {
+  async function testRecoveringMutationsOfClientV5(args: {
     schemaVersionOfClientWPendingMutations: string;
     schemaVersionOfClientRecoveringMutations: string;
     snapshotLastMutationIDs?: Record<sync.ClientID, number> | undefined;
@@ -177,7 +177,7 @@ suite('DD31', () => {
     expectedLastServerAckdMutationIDs?:
       | Record<sync.ClientID, number>
       | undefined;
-    pullResponse?: PullResponseDD31 | undefined;
+    pullResponse?: PullResponseV1 | undefined;
     pushResponse?: PushResponse | undefined;
   }) {
     sinon.stub(console, 'error');
@@ -250,12 +250,12 @@ suite('DD31', () => {
     const client1 = await withRead(testPerdag, read =>
       persist.getClient(client1ID, read),
     );
-    assertClientDD31(client1);
+    assertClientV5(client1);
 
     const client2 = await withRead(testPerdag, read =>
       persist.getClient(client2ID, read),
     );
-    assertClientDD31(client2);
+    assertClientV5(client2);
 
     expect(client1.clientGroupID).to.equal(client2.clientGroupID);
 
@@ -266,7 +266,7 @@ suite('DD31', () => {
 
     fetchMock.reset();
     fetchMock.post(pushURL, pushResponse ?? 'ok');
-    const pullResponse: PullResponseDD31 = pullResponseArg ?? {
+    const pullResponse: PullResponseV1 = pullResponseArg ?? {
       cookie: 'cookie_2',
       lastMutationIDChanges: pullLastMutationIDChanges,
       patch: [],
@@ -332,7 +332,7 @@ suite('DD31', () => {
       expect(pullCalls.length).to.equal(0);
     } else {
       expect(pullCalls.length).to.equal(1);
-      const pullReq: PullRequestDD31 = {
+      const pullReq: PullRequestV1 = {
         profileID,
         clientGroupID: client1.clientGroupID,
         cookie: 'cookie_0',
@@ -345,7 +345,7 @@ suite('DD31', () => {
     const updatedClient1 = await withRead(testPerdag, read =>
       persist.getClient(client1ID, read),
     );
-    assertClientDD31(updatedClient1);
+    assertClientV5(updatedClient1);
 
     expect(updatedClient1.clientGroupID).to.deep.equal(client1.clientGroupID);
     expect(updatedClient1.headHash).to.equal(client1.headHash);
@@ -359,7 +359,7 @@ suite('DD31', () => {
     const updatedClient2 = await withRead(testPerdag, read =>
       persist.getClient(client2ID, read),
     );
-    assertClientDD31(updatedClient2);
+    assertClientV5(updatedClient2);
 
     expect(updatedClient2.clientGroupID).to.deep.equal(client2.clientGroupID);
     expect(updatedClient2.headHash).to.equal(client2.headHash);
@@ -379,14 +379,14 @@ suite('DD31', () => {
   }
 
   test('successfully recovering mutations of client with same schema version and replicache format version', async () => {
-    await testRecoveringMutationsOfClientDD31({
+    await testRecoveringMutationsOfClientV5({
       schemaVersionOfClientWPendingMutations: 'testSchema1',
       schemaVersionOfClientRecoveringMutations: 'testSchema1',
     });
   });
 
   test('successfully recovering mutations of client with empty lastServerAckdMutationIDs', async () => {
-    await testRecoveringMutationsOfClientDD31({
+    await testRecoveringMutationsOfClientV5({
       schemaVersionOfClientWPendingMutations: 'testSchema1',
       schemaVersionOfClientRecoveringMutations: 'testSchema1',
       snapshotLastMutationIDs: {},
@@ -394,7 +394,7 @@ suite('DD31', () => {
   });
 
   test('successfully recovering mutations of client with empty lastMutationIDChanges', async () => {
-    await testRecoveringMutationsOfClientDD31({
+    await testRecoveringMutationsOfClientV5({
       schemaVersionOfClientWPendingMutations: 'testSchema1',
       schemaVersionOfClientRecoveringMutations: 'testSchema1',
       pullLastMutationIDChanges: {},
@@ -406,7 +406,7 @@ suite('DD31', () => {
   });
 
   test('successfully recovering mutations some lastMutationIDChanges not applied to client groups lastServerAckdMutationIDs due to being smaller', async () => {
-    await testRecoveringMutationsOfClientDD31({
+    await testRecoveringMutationsOfClientV5({
       schemaVersionOfClientWPendingMutations: 'testSchema1',
       schemaVersionOfClientRecoveringMutations: 'testSchema1',
       pullLastMutationIDChanges: {
@@ -425,7 +425,7 @@ suite('DD31', () => {
   });
 
   test('successfully recovering mutations no lastMutationIDChanges applied to client groups lastServerAckdMutationIDs due to being smaller', async () => {
-    await testRecoveringMutationsOfClientDD31({
+    await testRecoveringMutationsOfClientV5({
       schemaVersionOfClientWPendingMutations: 'testSchema1',
       schemaVersionOfClientRecoveringMutations: 'testSchema1',
       pullLastMutationIDChanges: {
@@ -444,14 +444,14 @@ suite('DD31', () => {
   });
 
   test('successfully recovering mutations of client with different schema version but same replicache format version', async () => {
-    await testRecoveringMutationsOfClientDD31({
+    await testRecoveringMutationsOfClientV5({
       schemaVersionOfClientWPendingMutations: 'testSchema1',
       schemaVersionOfClientRecoveringMutations: 'testSchema2',
     });
   });
 
   test('successfully recovering some but not all mutations of another client (pull does not acknowledge all)', async () => {
-    await testRecoveringMutationsOfClientDD31({
+    await testRecoveringMutationsOfClientV5({
       schemaVersionOfClientWPendingMutations: 'testSchema1',
       schemaVersionOfClientRecoveringMutations: 'testSchema1',
       pullLastMutationIDChanges: {
@@ -466,7 +466,7 @@ suite('DD31', () => {
   });
 
   test('Pull returns VersionNotSupported', async () => {
-    await testRecoveringMutationsOfClientDD31({
+    await testRecoveringMutationsOfClientV5({
       schemaVersionOfClientWPendingMutations: 'testSchema1',
       schemaVersionOfClientRecoveringMutations: 'testSchema1',
       pullResponse: {error: 'VersionNotSupported', versionType: 'pull'},
@@ -474,7 +474,7 @@ suite('DD31', () => {
   });
 
   test('Pull returns ClientStateNotFound', async () => {
-    await testRecoveringMutationsOfClientDD31({
+    await testRecoveringMutationsOfClientV5({
       schemaVersionOfClientWPendingMutations: 'testSchema1',
       schemaVersionOfClientRecoveringMutations: 'testSchema1',
       pullResponse: {error: 'ClientStateNotFound'},
@@ -482,7 +482,7 @@ suite('DD31', () => {
   });
 
   test('Push returns VersionNotSupported', async () => {
-    await testRecoveringMutationsOfClientDD31({
+    await testRecoveringMutationsOfClientV5({
       schemaVersionOfClientWPendingMutations: 'testSchema1',
       schemaVersionOfClientRecoveringMutations: 'testSchema1',
       pushResponse: {error: 'VersionNotSupported', versionType: 'pull'},
@@ -490,7 +490,7 @@ suite('DD31', () => {
   });
 
   test('Push returns ClientStateNotFound', async () => {
-    await testRecoveringMutationsOfClientDD31({
+    await testRecoveringMutationsOfClientV5({
       schemaVersionOfClientWPendingMutations: 'testSchema1',
       schemaVersionOfClientRecoveringMutations: 'testSchema1',
       pushResponse: {error: 'ClientStateNotFound'},
@@ -539,7 +539,7 @@ suite('DD31', () => {
     const client1 = await withRead(testPerdag, read =>
       persist.getClient(client1ID, read),
     );
-    assertClientDD31(client1);
+    assertClientV5(client1);
 
     fetchMock.reset();
     fetchMock.post(pushURL, 'ok');
@@ -627,11 +627,11 @@ suite('DD31', () => {
     const clientWPendingMutations = await withRead(testPerdag, read =>
       persist.getClient(clientWPendingMutationsID, read),
     );
-    assertClientDD31(clientWPendingMutations);
+    assertClientV5(clientWPendingMutations);
 
     fetchMock.reset();
     fetchMock.post(pushURL, 'ok');
-    const pullResponse: PullResponseDD31 = {
+    const pullResponse: PullResponseV1 = {
       cookie: 'pull_cookie_1',
       lastMutationIDChanges: {},
       patch: [],
@@ -727,11 +727,11 @@ suite('DD31', () => {
       persist.getClients(read),
     );
     const client1 = clients1Thru3.get(client1ID);
-    assertClientDD31(client1);
+    assertClientV5(client1);
     const client2 = clients1Thru3.get(client2ID);
-    assertClientDD31(client2);
+    assertClientV5(client2);
     const client3 = clients1Thru3.get(client3ID);
-    assertClientDD31(client3);
+    assertClientV5(client3);
     const {clientGroup1, clientGroup2, clientGroup3} = await withRead(
       testPerdagForClients1Thru3,
       async read => {
@@ -757,7 +757,7 @@ suite('DD31', () => {
     const client4 = await withRead(testPerdagForClient4, read =>
       persist.getClient(client4ID, read),
     );
-    assertClientDD31(client4);
+    assertClientV5(client4);
     const clientGroup4 = await withRead(testPerdagForClient4, read =>
       persist.getClientGroup(client4.clientGroupID, read),
     );
@@ -858,11 +858,11 @@ suite('DD31', () => {
       read => persist.getClients(read),
     );
     const updatedClient1 = updateClients1Thru3.get(client1ID);
-    assertClientDD31(updatedClient1);
+    assertClientV5(updatedClient1);
     const updatedClient2 = updateClients1Thru3.get(client2ID);
-    assertClientDD31(updatedClient2);
+    assertClientV5(updatedClient2);
     const updatedClient3 = updateClients1Thru3.get(client3ID);
-    assertClientDD31(updatedClient3);
+    assertClientV5(updatedClient3);
 
     const updatedClientGroups = await withRead(
       testPerdagForClients1Thru3,
@@ -878,7 +878,7 @@ suite('DD31', () => {
     const updatedClient4 = await withRead(testPerdagForClient4, read =>
       persist.getClient(client4ID, read),
     );
-    assertClientDD31(updatedClient4);
+    assertClientV5(updatedClient4);
     const updatedClientGroup4 = await withRead(testPerdagForClient4, read =>
       persist.getClientGroup(client4.clientGroupID, read),
     );
@@ -978,11 +978,11 @@ suite('DD31', () => {
       persist.getClients(read),
     );
     const client1 = clients.get(client1ID);
-    assertClientDD31(client1);
+    assertClientV5(client1);
     const client2 = clients.get(client2ID);
-    assertClientDD31(client2);
+    assertClientV5(client2);
     const client3 = clients.get(client3ID);
-    assertClientDD31(client3);
+    assertClientV5(client3);
 
     const {clientGroup1, clientGroup2, clientGroup3} = await withRead(
       testPerdag,
@@ -1010,14 +1010,14 @@ suite('DD31', () => {
       },
     );
 
-    const pushRequestJSONBodies: PushRequestDD31[] = [];
+    const pushRequestJSONBodies: PushRequestV1[] = [];
     const pullRequestJsonBodies: JSONObject[] = [];
     fetchMock.reset();
     fetchMock.post(
       pushURL,
       async (_url: string, _options: RequestInit, request: Request) => {
         const requestJSON = await request.json();
-        assertPushRequestDD31(requestJSON);
+        assertPushRequestV1(requestJSON);
         pushRequestJSONBodies.push(requestJSON);
         if (requestJSON.mutations.find(m => m.clientID === client2ID)) {
           throw new Error('test error in push');
@@ -1103,11 +1103,11 @@ suite('DD31', () => {
       persist.getClients(read),
     );
     const updatedClient1 = updateClients.get(client1ID);
-    assertClientDD31(updatedClient1);
+    assertClientV5(updatedClient1);
     const updatedClient2 = updateClients.get(client2ID);
-    assertClientDD31(updatedClient2);
+    assertClientV5(updatedClient2);
     const updatedClient3 = updateClients.get(client3ID);
-    assertClientDD31(updatedClient3);
+    assertClientV5(updatedClient3);
 
     const updatedClientGroups = await withRead(testPerdag, read =>
       persist.getClientGroups(read),
@@ -1185,11 +1185,11 @@ suite('DD31', () => {
       persist.getClients(read),
     );
     const client1 = clients.get(client1ID);
-    assertClientDD31(client1);
+    assertClientV5(client1);
     const client2 = clients.get(client2ID);
-    assertClientDD31(client2);
+    assertClientV5(client2);
     const client3 = clients.get(client3ID);
-    assertClientDD31(client3);
+    assertClientV5(client3);
 
     const {clientGroup1, clientGroup2, clientGroup3} = await withRead(
       testPerdag,
@@ -1299,11 +1299,11 @@ suite('DD31', () => {
       persist.getClients(read),
     );
     const updatedClient1 = updateClients.get(client1ID);
-    assertClientDD31(updatedClient1);
+    assertClientV5(updatedClient1);
     const updatedClient2 = updateClients.get(client2ID);
-    assertClientDD31(updatedClient2);
+    assertClientV5(updatedClient2);
     const updatedClient3 = updateClients.get(client3ID);
-    assertClientDD31(updatedClient3);
+    assertClientV5(updatedClient3);
 
     const updatedClientGroups = await withRead(testPerdag, read =>
       persist.getClientGroups(read),
@@ -1380,12 +1380,12 @@ suite('DD31', () => {
     const client1 = await withRead(testPerdagForClient1, read =>
       persist.getClient(client1ID, read),
     );
-    assertClientDD31(client1);
+    assertClientV5(client1);
 
     const client2 = await withRead(testPerdagForClient2, read =>
       persist.getClient(client2ID, read),
     );
-    assertClientDD31(client2);
+    assertClientV5(client2);
 
     const clientGroup1 = await withRead(testPerdagForClient1, read =>
       persist.getClientGroup(client1.clientGroupID, read),
@@ -1409,7 +1409,7 @@ suite('DD31', () => {
         const {clientGroupID} = requestJson;
         switch (clientGroupID) {
           case client2.clientGroupID: {
-            const pullResponse: PullResponseDD31 = {
+            const pullResponse: PullResponseV1 = {
               cookie: 'pull_cookie_2',
               lastMutationIDChanges: {
                 [client2ID]: clientGroup2.mutationIDs[client2ID] ?? 0,
@@ -1461,12 +1461,12 @@ suite('DD31', () => {
     const updatedClient1 = await withRead(testPerdagForClient1, read =>
       persist.getClient(client1ID, read),
     );
-    assertClientDD31(updatedClient1);
+    assertClientV5(updatedClient1);
 
     const updatedClient2 = await withRead(testPerdagForClient2, read =>
       persist.getClient(client2ID, read),
     );
-    assertClientDD31(updatedClient2);
+    assertClientV5(updatedClient2);
 
     const updatedClientGroup1 = await withRead(testPerdagForClient1, read =>
       persist.getClientGroup(updatedClient1.clientGroupID, read),
@@ -1549,9 +1549,9 @@ suite('DD31', () => {
       persist.getClients(read),
     );
     const client1 = clients.get(client1ID);
-    assertClientDD31(client1);
+    assertClientV5(client1);
     const client2 = clients.get(client2ID);
-    assertClientDD31(client2);
+    assertClientV5(client2);
 
     const pullRequestJsonBodies: JSONObject[] = [];
     fetchMock.reset();
@@ -1563,7 +1563,7 @@ suite('DD31', () => {
         assertJSONObject(requestJson);
         pullRequestJsonBodies.push(requestJson);
         const {clientID} = requestJson;
-        const resp: PullResponseDD31 = {
+        const resp: PullResponseV1 = {
           cookie: 'pull_cookie_1',
           lastMutationIDChanges: {
             [client1ID]: 0,
@@ -1709,7 +1709,7 @@ suite('DD31', () => {
       const client1 = await withRead(testPerdagSDD, read =>
         persist.getClient(client1ID, read),
       );
-      assertClientSDD(client1);
+      assertClientV4(client1);
       expect(client1.mutationID).to.equal(2);
 
       const pullRequestJSONBodies: JSONObject[] = [];
@@ -1744,7 +1744,7 @@ suite('DD31', () => {
 
       await rep.recoverMutations();
 
-      const pushRequestBody: PushRequestSDD = {
+      const pushRequestBody: PushRequestV0 = {
         clientID: 'client1',
         mutations: [
           {
@@ -1759,7 +1759,7 @@ suite('DD31', () => {
         schemaVersion: 'schema-version-1',
       };
       expect(pushRequestJSONBodies).to.deep.equal([pushRequestBody]);
-      const pullRequestBody: PullRequestSDD = {
+      const pullRequestBody: PullRequestV0 = {
         clientID: client1ID,
         cookie: 'cookie_1',
         lastMutationID: client1.lastServerAckdMutationID,
@@ -1830,13 +1830,13 @@ suite('DD31', () => {
       const client1 = await withRead(testPerdagSDD, read =>
         persist.getClient(client1ID, read),
       );
-      assertClientSDD(client1);
+      assertClientV4(client1);
       expect(client1.mutationID).to.equal(2);
 
       const client2 = await withRead(testPerdagDD31, read =>
         persist.getClient(client2ID, read),
       );
-      assertClientDD31(client2);
+      assertClientV5(client2);
       const clientGroup2 = await withRead(testPerdagDD31, read =>
         persist.getClientGroup(client2.clientGroupID, read),
       );
@@ -1862,7 +1862,7 @@ suite('DD31', () => {
           assertJSONObject(requestJSON);
           pullRequestJSONBodies.push(requestJSON);
           if (requestJSON.clientID === client1ID) {
-            const resp: PullResponseSDD = {
+            const resp: PullResponseV0 = {
               cookie: 'pull_cookie_1',
               lastMutationID: client1.mutationID,
               patch: [],
@@ -1870,7 +1870,7 @@ suite('DD31', () => {
             return resp;
           }
           if (requestJSON.clientGroupID === client2.clientGroupID) {
-            const resp: PullResponseDD31 = {
+            const resp: PullResponseV1 = {
               cookie: 'c3',
               lastMutationIDChanges: clientGroup2.mutationIDs,
               patch: [],
@@ -1883,7 +1883,7 @@ suite('DD31', () => {
 
       await rep.recoverMutations();
 
-      const pushRequestBody1: PushRequestSDD = {
+      const pushRequestBody1: PushRequestV0 = {
         clientID: 'client1',
         mutations: [
           {
@@ -1897,7 +1897,7 @@ suite('DD31', () => {
         pushVersion: PUSH_VERSION_SDD,
         schemaVersion: schemaVersion1,
       };
-      const pushRequestBody2: PushRequestDD31 = {
+      const pushRequestBody2: PushRequestV1 = {
         clientGroupID: client2.clientGroupID,
         mutations: [
           {
@@ -1930,7 +1930,7 @@ suite('DD31', () => {
         pushRequestBody2,
         pushRequestBody1,
       ]);
-      const pullRequestBody1: PullRequestSDD = {
+      const pullRequestBody1: PullRequestV0 = {
         clientID: client1ID,
         cookie: 'cookie_1',
         lastMutationID: client1.lastServerAckdMutationID,
@@ -1938,7 +1938,7 @@ suite('DD31', () => {
         pullVersion: PULL_VERSION_SDD,
         schemaVersion: schemaVersion1,
       };
-      const pullRequestBody2: PullRequestDD31 = {
+      const pullRequestBody2: PullRequestV1 = {
         clientGroupID: client2.clientGroupID,
         cookie: 'c2',
         profileID,
@@ -1953,7 +1953,7 @@ suite('DD31', () => {
       const updatedClient1 = await withRead(testPerdagSDD, read =>
         persist.getClient(client1ID, read),
       );
-      assertClientSDD(updatedClient1);
+      assertClientV4(updatedClient1);
       expect(updatedClient1).to.deep.equal({
         ...client1,
         // This got updated by the mutation recovery!
@@ -1963,7 +1963,7 @@ suite('DD31', () => {
       const updatedClient2 = await withRead(testPerdagDD31, read =>
         persist.getClient(client2ID, read),
       );
-      assertClientDD31(updatedClient2);
+      assertClientV5(updatedClient2);
       expect(updatedClient2).to.deep.equal(client2);
 
       const updatedClientGroup2 = await withRead(testPerdagDD31, read =>
@@ -2024,7 +2024,7 @@ suite('DD31', () => {
     const client1 = await withRead(testPerdagDD31, read =>
       persist.getClient(client1ID, read),
     );
-    assertClientDD31(client1);
+    assertClientV5(client1);
     const clientGroup1 = await withRead(testPerdagDD31, read =>
       persist.getClientGroup(client1.clientGroupID, read),
     );
@@ -2061,7 +2061,7 @@ suite('DD31', () => {
     const updatedClient1 = await withRead(testPerdagDD31, read =>
       persist.getClient(client1ID, read),
     );
-    assertClientDD31(updatedClient1);
+    assertClientV5(updatedClient1);
     expect(updatedClient1).to.deep.equal(client1);
 
     const updatedClientGroup1 = await withRead(testPerdagDD31, read =>
@@ -2112,7 +2112,7 @@ suite('DD31', () => {
     const client1 = await withRead(testPerdagDD31, read =>
       persist.getClient(client1ID, read),
     );
-    assertClientDD31(client1);
+    assertClientV5(client1);
     const clientGroup1 = await withRead(testPerdagDD31, read =>
       persist.getClientGroup(client1.clientGroupID, read),
     );
@@ -2143,7 +2143,7 @@ suite('DD31', () => {
 
     await rep.recoverMutations();
 
-    const pushRequestBody1: PushRequestDD31 = {
+    const pushRequestBody1: PushRequestV1 = {
       clientGroupID: client1.clientGroupID,
       mutations: [
         {
@@ -2165,7 +2165,7 @@ suite('DD31', () => {
     const updatedClient1 = await withRead(testPerdagDD31, read =>
       persist.getClient(client1ID, read),
     );
-    assertClientDD31(updatedClient1);
+    assertClientV5(updatedClient1);
     expect(updatedClient1).to.deep.equal(client1);
 
     const updatedClientGroup1 = await withRead(testPerdagDD31, read =>

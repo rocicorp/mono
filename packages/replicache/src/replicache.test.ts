@@ -1,4 +1,9 @@
-import {httpStatusUnauthorized} from './replicache.js';
+import {
+  httpStatusUnauthorized,
+  MutatorDefs,
+  Poke,
+  Replicache,
+} from './replicache.js';
 import {
   addData,
   clock,
@@ -7,7 +12,7 @@ import {
   expectConsoleLogContextStub,
   expectLogContext,
   initReplicacheTesting,
-  makePullResponseDD31,
+  makePullResponseV1,
   MemStoreWithCounters,
   replicacheForTesting,
   ReplicacheTest,
@@ -15,15 +20,6 @@ import {
   tickAFewTimes,
   tickUntil,
 } from './test-util.js';
-import {
-  ClientID,
-  MutatorDefs,
-  PatchOperation,
-  PokeDD31,
-  Replicache,
-  TransactionClosedError,
-} from './mod.js';
-import type {ReadTransaction, WriteTransaction} from './mod.js';
 import type {JSONValue} from './json.js';
 import {assert as chaiAssert, expect} from '@esm-bundle/chai';
 import * as sinon from 'sinon';
@@ -51,6 +47,10 @@ import {
 } from '@rocicorp/licensing/src/server/api-types.js';
 import {assert} from 'shared';
 import {resolver} from '@rocicorp/resolver';
+import type {ReadTransaction, WriteTransaction} from './transactions.js';
+import {TransactionClosedError} from './transaction-closed-error.js';
+import type {PatchOperation} from './patch-operation.js';
+import type {ClientID} from './sync/ids.js';
 
 const {fail} = chaiAssert;
 
@@ -482,7 +482,7 @@ test('HTTP status pull', async () => {
         return {body: 'not found', status: 404};
       default: {
         okCalled = true;
-        return {body: makePullResponseDD31(clientID, 0), status: 200};
+        return {body: makePullResponseV1(clientID, 0), status: 200};
       }
     }
   });
@@ -1138,7 +1138,7 @@ test('onSync', async () => {
   expect(onSync.callCount).to.equal(0);
 
   const clientID = await rep.clientID;
-  fetchMock.postOnce(pullURL, makePullResponseDD31(clientID, 2));
+  fetchMock.postOnce(pullURL, makePullResponseV1(clientID, 2));
   rep.pull();
   await tickAFewTimes(15);
 
@@ -1296,7 +1296,7 @@ test('push and pull concurrently', async () => {
   });
   fetchMock.post(pullURL, () => {
     requests.push(pullURL);
-    return makePullResponseDD31(clientID, 0, [], null);
+    return makePullResponseV1(clientID, 0, [], null);
   });
 
   await add({a: 0});
@@ -1433,7 +1433,7 @@ test('pull and index update', async () => {
     let pullDone = false;
     fetchMock.post(pullURL, () => {
       pullDone = true;
-      return makePullResponseDD31(clientID, lastMutationID++, opt.patch);
+      return makePullResponseV1(clientID, lastMutationID++, opt.patch);
     });
 
     rep.pull();
@@ -1519,7 +1519,7 @@ test('pull mutate options', async () => {
 
   fetchMock.post(pullURL, () => {
     log.push(Date.now());
-    return makePullResponseDD31(clientID, 0, [], '');
+    return makePullResponseV1(clientID, 0, [], '');
   });
 
   await tickUntilTimeIs(1000);
@@ -2072,9 +2072,9 @@ test('mutation timestamps are immutable', async () => {
   await tickAFewTimes();
 
   const clientID = await rep.clientID;
-  const poke: PokeDD31 = {
+  const poke: Poke = {
     baseCookie: null,
-    pullResponse: makePullResponseDD31(
+    pullResponse: makePullResponseV1(
       clientID,
       0,
       [

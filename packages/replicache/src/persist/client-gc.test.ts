@@ -5,7 +5,7 @@ import * as dag from '../dag/mod.js';
 import {ClientMap, getClients, setClient} from './clients.js';
 import {newUUIDHash} from '../hash.js';
 import {initClientGC, getLatestGCUpdate} from './client-gc.js';
-import {makeClientSDD, setClientsForTesting} from './clients-test-helpers.js';
+import {makeClientV4, setClientsForTesting} from './clients-test-helpers.js';
 import {assertNotUndefined} from 'shared';
 import {withRead, withWrite} from '../with-transactions.js';
 
@@ -29,21 +29,21 @@ function awaitLatestGCUpdate(): Promise<ClientMap> {
 
 test('initClientGC starts 5 min interval that collects clients that have been inactive for > 7 days', async () => {
   const dagStore = new dag.TestStore();
-  const client1 = makeClientSDD({
+  const client1 = makeClientV4({
     heartbeatTimestampMs: START_TIME,
     headHash: newUUIDHash(),
     mutationID: 100,
     lastServerAckdMutationID: 90,
   });
-  const client2 = makeClientSDD({
+  const client2 = makeClientV4({
     heartbeatTimestampMs: START_TIME,
     headHash: newUUIDHash(),
   });
-  const client3 = makeClientSDD({
+  const client3 = makeClientV4({
     heartbeatTimestampMs: START_TIME + 6 * 60 * 1000,
     headHash: newUUIDHash(),
   });
-  const client4 = makeClientSDD({
+  const client4 = makeClientV4({
     heartbeatTimestampMs: START_TIME + 6 * 60 * 1000,
     headHash: newUUIDHash(),
   });

@@ -4,7 +4,7 @@ import {
   disableAllBackgroundProcesses,
   expectLogContext,
   initReplicacheTesting,
-  makePullResponseDD31,
+  makePullResponseV1,
   replicacheForTesting,
   ReplicacheTest,
   tickAFewTimes,
@@ -21,7 +21,7 @@ import * as dag from './dag/mod.js';
 import * as persist from './persist/mod.js';
 import {assert, assertNotUndefined} from 'shared';
 import {deleteClientForTesting} from './persist/clients-test-helpers.js';
-import {assertClientDD31} from './persist/clients.js';
+import {assertClientV5} from './persist/clients.js';
 import {deleteClientGroup} from './persist/client-groups.js';
 import {assertHash} from './hash.js';
 import {IDBNotFoundError} from './kv/idb-store.js';
@@ -67,7 +67,7 @@ test('basic persist & load', async () => {
   );
   assertNotUndefined(clientBeforePull);
 
-  assertClientDD31(clientBeforePull);
+  assertClientV5(clientBeforePull);
   const clientGroupBeforePull = await withRead(perdag, read =>
     persist.getClientGroup(clientBeforePull.clientGroupID, read),
   );
@@ -75,7 +75,7 @@ test('basic persist & load', async () => {
 
   fetchMock.postOnce(
     pullURL,
-    makePullResponseDD31(clientID, 2, [
+    makePullResponseV1(clientID, 2, [
       {
         op: 'put',
         key: 'a',
@@ -104,7 +104,7 @@ test('basic persist & load', async () => {
       );
     }
     await tickAFewTimes(waitMs);
-    assertClientDD31(clientBeforePull);
+    assertClientV5(clientBeforePull);
     assertNotUndefined(clientGroupBeforePull);
     const clientGroup: persist.ClientGroup | undefined = await withRead(
       perdag,
