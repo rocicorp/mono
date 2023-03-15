@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {expect, test} from '@jest/globals';
-import * as s from 'superstruct';
+import * as valita from '@badrap/valita';
 import {DurableStorage} from './durable-storage.js';
 import type {ListOptions} from './storage.js';
 
@@ -86,7 +86,7 @@ test('list', async () => {
   }
 
   for (const c of cases) {
-    const entries = [...(await storage.list(c.opts || {}, s.number()))];
+    const entries = [...(await storage.list(c.opts || {}, valita.number()))];
     expect(entries).toEqual(c.expected);
   }
 });

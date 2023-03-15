@@ -21,7 +21,6 @@ import {
   invalidateForRoomRequestSchema,
   invalidateForUserRequestSchema,
 } from 'reflect-protocol';
-import * as superstruct from 'superstruct';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {createRoomRequestSchema} from 'reflect-protocol';
@@ -631,8 +630,9 @@ export class BaseAuthDO implements DurableObject {
           );
           let connectionsResponse: ConnectionsResponse | undefined;
           try {
-            const responseJSON = await response.json();
-            superstruct.assert(responseJSON, connectionsResponseSchema);
+            const responseJSON = connectionsResponseSchema.parse(
+              await response.json(),
+            );
             connectionsResponse = responseJSON;
           } catch (e) {
             lc.error?.(

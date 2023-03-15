@@ -1,8 +1,8 @@
-import * as s from 'superstruct';
+import * as v from '@badrap/valita';
 
-export const createRoomRequestSchema = s.type({
-  roomID: s.string(),
-  jurisdiction: s.optional(s.literal('eu')),
+export const createRoomRequestSchema = v.object({
+  roomID: v.string(),
+  jurisdiction: v.literal('eu').optional(),
 });
 
-export type CreateRoomRequest = s.Infer<typeof createRoomRequestSchema>;
+export type CreateRoomRequest = v.Infer<typeof createRoomRequestSchema>;

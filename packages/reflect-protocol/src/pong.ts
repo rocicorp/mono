@@ -1,7 +1,7 @@
-import * as s from 'superstruct';
+import * as v from '@badrap/valita';
 
-export const pongBodySchema = s.object({});
-export const pongMessageSchema = s.tuple([s.literal('pong'), pongBodySchema]);
+export const pongBodySchema = v.object({});
+export const pongMessageSchema = v.tuple([v.literal('pong'), pongBodySchema]);
 
-export type PongBody = s.Infer<typeof pongBodySchema>;
-export type PongMessage = s.Infer<typeof pongMessageSchema>;
+export type PongBody = v.Infer<typeof pongBodySchema>;
+export type PongMessage = v.Infer<typeof pongMessageSchema>;

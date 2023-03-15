@@ -1,14 +1,14 @@
-import * as s from 'superstruct';
+import * as v from '@badrap/valita';
 
-const datadogPointSchema = s.tuple([s.number(), s.array(s.number())]);
+const datadogPointSchema = v.tuple([v.number(), v.array(v.number())]);
 
-const datadogSeriesSchema = s.type({
-  metric: s.string(),
-  points: s.array(datadogPointSchema),
+const datadogSeriesSchema = v.object({
+  metric: v.string(),
+  points: v.array(datadogPointSchema),
 });
 
-export const reportMetricsSchema = s.type({
-  series: s.array(datadogSeriesSchema),
+export const reportMetricsSchema = v.object({
+  series: v.array(datadogSeriesSchema),
 });
 
-export type ReportMetrics = s.Infer<typeof reportMetricsSchema>;
+export type ReportMetrics = v.Infer<typeof reportMetricsSchema>;

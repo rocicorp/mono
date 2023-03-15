@@ -1,5 +1,5 @@
 import {test, expect} from '@jest/globals';
-import * as s from 'superstruct';
+import * as valita from '@badrap/valita';
 import {delEntry, getEntry, listEntries, putEntry} from './data.js';
 
 const {roomDO} = getMiniflareBindings();
@@ -37,7 +37,7 @@ test('getEntry', async () => {
       await storage.put('foo', c.validSchema ? 42 : {});
     }
 
-    const promise = getEntry(storage, 'foo', s.number(), {});
+    const promise = getEntry(storage, 'foo', valita.number(), {});
     let result: number | undefined;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let error: any | undefined;
@@ -51,7 +51,9 @@ test('getEntry', async () => {
       expect(error).toBeUndefined();
     } else if (!c.validSchema) {
       expect(result).toBeUndefined();
-      expect(String(error)).toMatch('Expected a number');
+      expect(String(error)).toMatch(
+        'ValitaError: invalid_type at . (expected number)',
+      );
     } else {
       expect(result).toEqual(42);
       expect(error).toBeUndefined();
@@ -68,17 +70,19 @@ test('getEntry RoundTrip types', async () => {
   await putEntry(storage, 'array', [1, 2, 3], {});
   await putEntry(storage, 'object', {a: 1, b: 2}, {});
 
-  expect(await getEntry(storage, 'boolean', s.boolean(), {})).toEqual(true);
-  expect(await getEntry(storage, 'number', s.number(), {})).toEqual(42);
-  expect(await getEntry(storage, 'string', s.string(), {})).toEqual('foo');
-  expect(await getEntry(storage, 'array', s.array(s.number()), {})).toEqual([
-    1, 2, 3,
-  ]);
+  expect(await getEntry(storage, 'boolean', valita.boolean(), {})).toEqual(
+    true,
+  );
+  expect(await getEntry(storage, 'number', valita.number(), {})).toEqual(42);
+  expect(await getEntry(storage, 'string', valita.string(), {})).toEqual('foo');
+  expect(
+    await getEntry(storage, 'array', valita.array(valita.number()), {}),
+  ).toEqual([1, 2, 3]);
   expect(
     await getEntry(
       storage,
       'object',
-      s.object({a: s.number(), b: s.number()}),
+      valita.object({a: valita.number(), b: valita.number()}),
       {},
     ),
   ).toEqual({a: 1, b: 2});
@@ -122,7 +126,7 @@ test('listEntries', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let error: any | undefined;
     try {
-      result = await listEntries(storage, s.number(), {prefix: 'foos/'});
+      result = await listEntries(storage, valita.number(), {prefix: 'foos/'});
     } catch (e) {
       error = e;
     }
@@ -134,7 +138,9 @@ test('listEntries', async () => {
       expect(result.size).toEqual(0);
     } else if (!c.validSchema) {
       expect(result).toBeUndefined();
-      expect(String(error)).toMatch('Expected a number');
+      expect(String(error)).toMatch(
+        'ValitaError: invalid_type at . (expected number)',
+      );
     } else {
       expect(result).toBeDefined();
       if (result === undefined) {
@@ -156,7 +162,7 @@ test('listEntries ordering', async () => {
   await putEntry(storage, '𝙕', 2, {});
   await putEntry(storage, 'Ｚ', 3, {});
 
-  const entriesMap = await listEntries(storage, s.number(), {});
+  const entriesMap = await listEntries(storage, valita.number(), {});
   const entries = Array.from(entriesMap);
 
   expect(entries).toEqual([

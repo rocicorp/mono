@@ -1,12 +1,12 @@
-import * as s from 'superstruct';
+import * as v from '@badrap/valita';
 import {pingMessageSchema} from './ping.js';
 import {pullRequestMessageSchema} from './pull.js';
 import {pushMessageSchema} from './push.js';
 
-export const upstreamSchema = s.union([
+export const upstreamSchema = v.union(
   pingMessageSchema,
   pushMessageSchema,
   pullRequestMessageSchema,
-]);
+);
 
-export type Upstream = s.Infer<typeof upstreamSchema>;
+export type Upstream = v.Infer<typeof upstreamSchema>;

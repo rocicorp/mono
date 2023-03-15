@@ -1,7 +1,6 @@
 import {expect, test} from '@jest/globals';
-import type {JSONType, Version} from 'reflect-protocol';
+import {jsonSchema, JSONType, Version} from 'reflect-protocol';
 import type {WriteTransaction} from 'replicache';
-import * as s from 'superstruct';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
 import type {ClientPoke} from '../types/client-poke.js';
 import {
@@ -660,7 +659,7 @@ test('processFrame', async () => {
 
     expect((await durable.list()).size).toEqual(expectedState.size);
     for (const [key, value] of expectedState) {
-      expect(await storage.get(key, s.any())).toEqual(value);
+      expect(await storage.get(key, jsonSchema)).toEqual(value);
     }
   }
 });

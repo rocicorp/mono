@@ -12,7 +12,6 @@ import type {
   WriteTransaction,
 } from 'replicache';
 import * as sinon from 'sinon';
-import * as superstruct from 'superstruct';
 import {camelToSnake, DID_NOT_CONNECT_VALUE, Metric} from './metrics.js';
 import {
   CloseKind,
@@ -386,8 +385,7 @@ test('pusher sends one mutation per push message', async () => {
       expect(mockSocket.messages).to.have.lengthOf(expectedMessages);
 
       for (const raw of mockSocket.messages) {
-        const msg = JSON.parse(raw);
-        superstruct.assert(msg, pushMessageSchema);
+        const msg = pushMessageSchema.parse(JSON.parse(raw));
         expect(msg[1].clientGroupID).to.equal(
           clientGroupID ?? (await r.clientGroupID),
         );

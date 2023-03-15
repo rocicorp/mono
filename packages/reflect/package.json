@@ -24,6 +24,7 @@
     "prepack": "npm run lint && npm run test && npm run build"
   },
   "devDependencies": {
+    "@badrap/valita": "^0.2.0",
     "@esm-bundle/chai": "^4.3.4-fix.0",
     "@rocicorp/datadog-util": "^0.6.0",
     "@rocicorp/eslint-config": "^0.3.0",
@@ -44,7 +45,6 @@
     "rollup-plugin-dts": "^5.2.0",
     "shared": "*",
     "sinon": "^13.0.1",
-    "superstruct": "^0.16.7",
     "typescript": "^4.9.4"
   },
   "files": [

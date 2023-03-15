@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {MaybePromise, ReadonlyJSONValue} from 'replicache';
-import {Struct, validate} from 'superstruct';
+import type * as valita from '@badrap/valita';
 import {AUTH_API_KEY_HEADER_NAME} from './auth-api-headers.js';
 import {createUnauthorizedResponse} from './create-unauthorized-response.js';
 
@@ -170,7 +170,7 @@ export function asJSON<Context extends BaseContext>(
 }
 
 export function withBody<T, Context extends BaseContext, Resp>(
-  struct: Struct<T>,
+  struct: valita.Type<T>,
   next: Handler<Context & {body: T}, Resp>,
 ) {
   return async (ctx: Context, req: Request) => {
@@ -188,7 +188,7 @@ type ValidateResult<T> =
 
 async function validateBody<T>(
   request: Request,
-  struct: Struct<T>,
+  schema: valita.Type<T>,
 ): Promise<ValidateResult<T>> {
   let json;
   try {
@@ -205,11 +205,11 @@ async function validateBody<T>(
       value: undefined,
     };
   }
-  const validateResult = validate(json, struct);
-  if (validateResult[0]) {
+  const validateResult = schema.try(json);
+  if (!validateResult.ok) {
     return {
       errorResponse: new Response(
-        'Body schema error. ' + validateResult[0].message,
+        'Body schema error. ' + validateResult.message,
         {
           status: 400,
         },
@@ -218,7 +218,7 @@ async function validateBody<T>(
     };
   }
   return {
-    value: validateResult[1],
+    value: validateResult.value,
     errorResponse: undefined,
   };
 }

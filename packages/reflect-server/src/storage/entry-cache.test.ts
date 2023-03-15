@@ -1,7 +1,7 @@
 import {test, expect} from '@jest/globals';
 import {DurableStorage} from './durable-storage.js';
 import {EntryCache} from './entry-cache.js';
-import * as s from 'superstruct';
+import * as valita from '@badrap/valita';
 import type {ListOptions} from './storage.js';
 
 test('list', async () => {
@@ -240,7 +240,7 @@ test('list', async () => {
       await cache.del(k);
     }
 
-    const entries = [...(await cache.list(c.opts || {}, s.string()))];
+    const entries = [...(await cache.list(c.opts || {}, valita.string()))];
 
     expect(entries).toEqual(c.expected);
   }

@@ -1,18 +1,22 @@
-import * as s from 'superstruct';
+import * as v from '@badrap/valita';
 
-export const invalidateForUserRequestSchema = s.type({userID: s.string()});
-export const invalidateForRoomRequestSchema = s.type({roomID: s.string()});
-export const connectionsResponseSchema = s.array(
-  s.type({
-    userID: s.string(),
-    clientID: s.string(),
+export const invalidateForUserRequestSchema = v.object({
+  userID: v.string(),
+});
+export const invalidateForRoomRequestSchema = v.object({
+  roomID: v.string(),
+});
+export const connectionsResponseSchema = v.array(
+  v.object({
+    userID: v.string(),
+    clientID: v.string(),
   }),
 );
 
-export type InvalidateForUserRequest = s.Infer<
+export type InvalidateForUserRequest = v.Infer<
   typeof invalidateForUserRequestSchema
 >;
-export type InvalidateForRoomRequest = s.Infer<
+export type InvalidateForRoomRequest = v.Infer<
   typeof invalidateForRoomRequestSchema
 >;
-export type ConnectionsResponse = s.Infer<typeof connectionsResponseSchema>;
+export type ConnectionsResponse = v.Infer<typeof connectionsResponseSchema>;

@@ -1,21 +1,21 @@
-import * as s from 'superstruct';
+import * as v from '@badrap/valita';
 import {jsonSchema} from './json.js';
 
-const putOpSchema = s.object({
-  op: s.literal('put'),
-  key: s.string(),
+const putOpSchema = v.object({
+  op: v.literal('put'),
+  key: v.string(),
   value: jsonSchema,
 });
 
-const delOpSchema = s.object({
-  op: s.literal('del'),
-  key: s.string(),
+const delOpSchema = v.object({
+  op: v.literal('del'),
+  key: v.string(),
 });
 
-const patchOpSchema = s.union([putOpSchema, delOpSchema]);
+const patchOpSchema = v.union(putOpSchema, delOpSchema);
 
-export const patchSchema = s.array(patchOpSchema);
-export type PutOp = s.Infer<typeof putOpSchema>;
-export type DelOp = s.Infer<typeof delOpSchema>;
-export type PatchOp = s.Infer<typeof patchOpSchema>;
-export type Patch = s.Infer<typeof patchSchema>;
+export const patchSchema = v.array(patchOpSchema);
+export type PutOp = v.Infer<typeof putOpSchema>;
+export type DelOp = v.Infer<typeof delOpSchema>;
+export type PatchOp = v.Infer<typeof patchOpSchema>;
+export type Patch = v.Infer<typeof patchSchema>;

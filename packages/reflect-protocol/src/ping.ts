@@ -1,9 +1,9 @@
-import * as s from 'superstruct';
+import * as v from '@badrap/valita';
 
 // TODO: Do we maybe want to send the client timestamp for any reason?
 // Server could reply with its time. Seems useful ... somehow.
-export const pingBodySchema = s.object({});
-export const pingMessageSchema = s.tuple([s.literal('ping'), pingBodySchema]);
+export const pingBodySchema = v.object({});
+export const pingMessageSchema = v.tuple([v.literal('ping'), pingBodySchema]);
 
-export type PingBody = s.Infer<typeof pingBodySchema>;
-export type PingMessage = s.Infer<typeof pingMessageSchema>;
+export type PingBody = v.Infer<typeof pingBodySchema>;
+export type PingMessage = v.Infer<typeof pingMessageSchema>;

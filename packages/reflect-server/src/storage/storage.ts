@@ -1,5 +1,5 @@
 import type {JSONValue, ScanNoIndexOptions} from 'replicache';
-import type * as z from 'superstruct';
+import type * as valita from '@badrap/valita';
 
 export type ListOptions = ScanNoIndexOptions;
 
@@ -12,12 +12,12 @@ export interface Storage {
   del(key: string): Promise<void>;
   get<T extends JSONValue>(
     key: string,
-    schema: z.Struct<T>,
+    schema: valita.Type<T>,
   ): Promise<T | undefined>;
 
   // the returned map is guaranteed to be sorted by (UTF-8) key
   list<T extends JSONValue>(
     options: ListOptions,
-    schema: z.Struct<T>,
+    schema: valita.Type<T>,
   ): Promise<Map<string, T>>;
 }

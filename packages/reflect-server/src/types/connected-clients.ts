@@ -1,8 +1,8 @@
-import * as s from 'superstruct';
+import * as valita from '@badrap/valita';
 import type {ClientID} from './client-state.js';
 import type {Storage} from '../storage/storage.js';
 
-export const connectedClientSchema = s.array(s.string());
+export const connectedClientSchema = valita.array(valita.string());
 export const connectedClientsKey = 'connectedclients';
 
 export async function getConnectedClients(
