@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
 import type {JSONValue} from 'replicache';
-import type * as valita from '@badrap/valita';
+import * as valita from 'shared/valita.js';
 import type {JSONType} from 'reflect-protocol';
 import type {Patch} from 'reflect-protocol';
 import type {ListOptions, Storage} from './storage.js';
@@ -116,7 +116,7 @@ export class EntryCache implements Storage {
         if (v.value === undefined) {
           pending.push([k, undefined]);
         } else {
-          pending.push([k, schema.parse(v.value)]);
+          pending.push([k, valita.parse(v.value, schema)]);
         }
       }
     }

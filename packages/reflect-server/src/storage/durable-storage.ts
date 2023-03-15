@@ -1,5 +1,5 @@
 import type {JSONValue} from 'replicache';
-import type * as valita from '@badrap/valita';
+import type * as valita from 'shared/valita.js';
 import {delEntry, getEntry, putEntry, listEntries} from '../db/data.js';
 import type {ListOptions, Storage} from './storage.js';
 

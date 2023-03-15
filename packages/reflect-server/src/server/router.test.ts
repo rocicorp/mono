@@ -1,7 +1,7 @@
 import {expect, test} from '@jest/globals';
 import type {JSONObject, ReadonlyJSONValue} from 'replicache';
 import {assert, must} from 'shared';
-import * as valita from '@badrap/valita';
+import * as valita from 'shared/valita.js';
 import {createSilentLogContext} from '../util/test-utils.js';
 import {
   asJSON,
@@ -412,7 +412,7 @@ test('withBody', async () => {
       body: {badUserId: 'bar'},
       expected: {
         status: 400,
-        text: 'Body schema error. unrecognized_keys at . (unrecognized key "badUserId") (+ 1 other issue)',
+        text: 'Body schema error. Unexpected property badUserId',
       },
     },
     {
@@ -426,13 +426,13 @@ test('withBody', async () => {
       body: 'foo',
       expected: {
         status: 400,
-        text: 'Body schema error. invalid_type at . (expected object)',
+        text: 'Body schema error. Expected object. Got "foo"',
       },
     },
   ];
 
-  const userIdStruct = valita.object({userID: valita.string()});
-  const handler = withBody(userIdStruct, ctx => {
+  const userIdSchema = valita.object({userID: valita.string()});
+  const handler = withBody(userIdSchema, ctx => {
     const {body} = ctx;
     const {userID} = body;
     return new Response(`userID:${userID}`, {status: 200});

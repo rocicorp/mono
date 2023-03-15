@@ -1,4 +1,4 @@
-import * as v from '@badrap/valita';
+import * as v from 'shared/valita.js';
 
 type Literal = boolean | null | number | string;
 type Json = Literal | {[key: string]: Json} | Json[];
@@ -6,7 +6,7 @@ const literalSchema = v.union(v.string(), v.number(), v.boolean(), v.null());
 
 export type JSONType = v.Infer<typeof jsonSchema>;
 
-export const jsonSchema: v.Type<Json> = v.lazy(() =>
+export const jsonSchema: v.ValitaType<Json> = v.lazy(() =>
   v.union(literalSchema, v.array(jsonSchema), v.record(jsonSchema)),
 );
 

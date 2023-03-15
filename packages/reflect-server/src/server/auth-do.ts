@@ -1,3 +1,4 @@
+import * as valita from 'shared/valita.js';
 import {encodeHeaderValue} from '../util/headers.js';
 import {LogSink, LogContext, LogLevel} from '@rocicorp/logger';
 import {version} from '../util/version.js';
@@ -630,8 +631,9 @@ export class BaseAuthDO implements DurableObject {
           );
           let connectionsResponse: ConnectionsResponse | undefined;
           try {
-            const responseJSON = connectionsResponseSchema.parse(
+            const responseJSON = valita.parse(
               await response.json(),
+              connectionsResponseSchema,
             );
             connectionsResponse = responseJSON;
           } catch (e) {

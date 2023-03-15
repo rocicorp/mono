@@ -1,4 +1,4 @@
-import * as v from '@badrap/valita';
+import * as v from 'shared/valita.js';
 import {pingMessageSchema} from './ping.js';
 import {pullRequestMessageSchema} from './pull.js';
 import {pushMessageSchema} from './push.js';

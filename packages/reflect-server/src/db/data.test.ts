@@ -1,5 +1,5 @@
 import {test, expect} from '@jest/globals';
-import * as valita from '@badrap/valita';
+import * as valita from 'shared/valita.js';
 import {delEntry, getEntry, listEntries, putEntry} from './data.js';
 
 const {roomDO} = getMiniflareBindings();
@@ -51,9 +51,7 @@ test('getEntry', async () => {
       expect(error).toBeUndefined();
     } else if (!c.validSchema) {
       expect(result).toBeUndefined();
-      expect(String(error)).toMatch(
-        'ValitaError: invalid_type at . (expected number)',
-      );
+      expect(String(error)).toMatch('TypeError: Expected number. Got object');
     } else {
       expect(result).toEqual(42);
       expect(error).toBeUndefined();
@@ -138,9 +136,7 @@ test('listEntries', async () => {
       expect(result.size).toEqual(0);
     } else if (!c.validSchema) {
       expect(result).toBeUndefined();
-      expect(String(error)).toMatch(
-        'ValitaError: invalid_type at . (expected number)',
-      );
+      expect(String(error)).toMatch('TypeError: Expected number. Got object');
     } else {
       expect(result).toBeDefined();
       if (result === undefined) {

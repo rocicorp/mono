@@ -1,7 +1,7 @@
 import {test, expect} from '@jest/globals';
 import {DurableStorage} from './durable-storage.js';
 import {EntryCache} from './entry-cache.js';
-import * as valita from '@badrap/valita';
+import * as valita from 'shared/valita.js';
 import type {ListOptions} from './storage.js';
 
 test('list', async () => {

@@ -28,6 +28,7 @@
     "@rocicorp/logger": "^4.1.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "@rocicorp/resolver": "^1.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.1",
     "@types/command-line-usage": "^5.0.2",
     "@types/mocha": "^9.1.0",
     "@types/sinon": "^10.0.11",

@@ -1,5 +1,5 @@
 import type {JSONValue, ScanNoIndexOptions} from 'replicache';
-import type * as valita from '@badrap/valita';
+import type * as valita from 'shared/valita.js';
 
 export type ListOptions = ScanNoIndexOptions;
 

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {expect, test} from '@jest/globals';
-import * as valita from '@badrap/valita';
+import * as valita from 'shared/valita.js';
 import {DurableStorage} from './durable-storage.js';
 import type {ListOptions} from './storage.js';
 

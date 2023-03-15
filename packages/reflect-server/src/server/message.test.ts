@@ -58,8 +58,7 @@ describe('handleMessage', () => {
       name: 'invalid push',
       data: '[]',
       expectedErrorKind: ErrorKind.InvalidMessage,
-      expectedErrorMessage:
-        'ValitaError: invalid_union at . (validation failed)',
+      expectedErrorMessage: 'TypeError: Invalid union value',
     },
     {
       name: 'valid push',
@@ -103,8 +102,7 @@ describe('handleMessage', () => {
       ]),
       // This error message is not great
       expectedErrorKind: ErrorKind.InvalidMessage,
-      expectedErrorMessage:
-        'ValitaError: invalid_union at . (validation failed)',
+      expectedErrorMessage: 'TypeError: Invalid union value',
     },
     {
       name: 'missing client push',

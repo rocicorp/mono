@@ -1,4 +1,4 @@
-import * as v from '@badrap/valita';
+import * as v from 'shared/valita.js';
 import {connectedMessageSchema} from './connected.js';
 import {errorMessageSchema} from './error.js';
 import {pokeMessageSchema} from './poke.js';

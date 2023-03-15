@@ -1,4 +1,4 @@
-import * as v from '@badrap/valita';
+import * as v from 'shared/valita.js';
 import {nullableVersionSchema, versionSchema} from './version.js';
 import {patchSchema} from './patch.js';
 

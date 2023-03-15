@@ -1,10 +1,10 @@
-import type * as valita from '@badrap/valita';
+import * as valita from 'shared/valita.js';
 
 export function assert<T>(v: unknown, schema: valita.Type<T>): asserts v is T {
   if (typeof MINIFLARE !== 'undefined') {
     // TODO(greg): figure out how to detect when running
     // on `wrangler dev` and assert there as well.
-    schema.parse(v);
+    valita.assert(v, schema);
   }
 }
 

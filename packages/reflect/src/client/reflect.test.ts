@@ -1,3 +1,4 @@
+import * as valita from 'shared/valita.js';
 import {expect, assert} from '@esm-bundle/chai';
 import {DatadogSeries, gaugeValue, Metrics} from '@rocicorp/datadog-util';
 import {resolver} from '@rocicorp/resolver';
@@ -385,7 +386,7 @@ test('pusher sends one mutation per push message', async () => {
       expect(mockSocket.messages).to.have.lengthOf(expectedMessages);
 
       for (const raw of mockSocket.messages) {
-        const msg = pushMessageSchema.parse(JSON.parse(raw));
+        const msg = valita.parse(JSON.parse(raw), pushMessageSchema);
         expect(msg[1].clientGroupID).to.equal(
           clientGroupID ?? (await r.clientGroupID),
         );

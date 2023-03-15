@@ -1,4 +1,4 @@
-import * as v from '@badrap/valita';
+import * as v from 'shared/valita.js';
 
 export const pongBodySchema = v.object({});
 export const pongMessageSchema = v.tuple([v.literal('pong'), pongBodySchema]);
