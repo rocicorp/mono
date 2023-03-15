@@ -20,6 +20,10 @@ export class PokeHandler {
   // Serializes calls to this._replicachePoke otherwise we can cause out of
   // order poke errors.
   private readonly _pokeLock = new Lock();
+  private _timedPokeCount = 0;
+  private _missedTimedPokeCount = 0;
+  private _timedFrameCount = 0;
+  private _missedTimedFrameCount = 0;
 
   constructor(
     replicachePoke: (poke: ReplicachePoke) => Promise<void>,
@@ -48,13 +52,25 @@ export class PokeHandler {
         const timestampOffset = now - timestamp;
         if (
           this._playbackOffset === -1 ||
-          Math.abs(timestamp - this._playbackOffset) >
+          Math.abs(timestampOffset - this._playbackOffset) >
             RESET_PLAYBACK_OFFSET_THRESHOLD_MS
         ) {
           this._playbackOffset = timestampOffset;
           lc.debug?.('new playback offset', timestampOffset);
         }
+        // only consider the first poke in the message with a timestamp for
+        // resetting playback offset
+        break;
       }
+    }
+    // adjust timestamps by playback offset
+    for (const poke of pokeBody.pokes) {
+      if (poke.timestamp !== undefined) {
+        assert(this._playbackOffset !== -1);
+        poke.timestamp = poke.timestamp + this._playbackOffset;
+      }
+    }
+    for (const poke of pokeBody.pokes) {
       if (poke.lastMutationIDChanges[thisClientID] !== undefined) {
         lastMutationIDChangeForSelf = poke.lastMutationIDChanges[thisClientID];
       }
@@ -92,7 +108,8 @@ export class PokeHandler {
       const toMerge: Poke[] = [];
       const now = performance.now();
       const thisClientID = await this._clientIDPromise;
-      let misses = 0;
+      let timedPokeCount = 0;
+      let missedTimedPokeCount = 0;
       while (this._pokeBuffer.length) {
         const headPoke = this._pokeBuffer[0];
         const {timestamp, lastMutationIDChanges} = headPoke;
@@ -103,27 +120,42 @@ export class PokeHandler {
           lastMutationIDChangesClientIDs.length === 1 &&
           lastMutationIDChangesClientIDs[0] === thisClientID;
         if (!isThisClientsMutation && timestamp !== undefined) {
-          const playbackOffset = this._playbackOffset;
-          assert(playbackOffset !== -1);
-          const pokePlaybackTarget =
-            timestamp + playbackOffset + PLAYBACK_BUFFER_MS;
-          const pokePlaybackOffset = now - pokePlaybackTarget;
+          const pokePlaybackTarget = timestamp + PLAYBACK_BUFFER_MS;
+          const pokePlaybackOffset = Math.floor(now - pokePlaybackTarget);
           if (pokePlaybackOffset < 0) {
             break;
           }
           // TODO consider systems that don't run at 60fps (supposedly new
           // ipads run RAF at 120fps).
+          timedPokeCount++;
+          this._timedPokeCount++;
           if (pokePlaybackOffset > 16) {
-            lc.debug?.('poke playback missed by', pokePlaybackOffset - 16);
-            misses++;
+            lc.debug?.(
+              'poke',
+              this._timedPokeCount,
+              'playback missed by',
+              pokePlaybackOffset - 16,
+            );
+            this._missedTimedPokeCount++;
+            missedTimedPokeCount++;
           }
         }
         const poke = this._pokeBuffer.shift();
         assert(poke);
         toMerge.push(poke);
       }
-      if (misses > 0) {
-        lc.debug?.('frame contains', misses, 'missed pokes');
+      if (timedPokeCount > 0) {
+        this._timedFrameCount++;
+        if (missedTimedPokeCount > 0) {
+          this._missedTimedFrameCount++;
+          lc.debug?.(
+            'frame',
+            this._timedFrameCount,
+            'contains',
+            missedTimedPokeCount,
+            'missed pokes',
+          );
+        }
       }
       lc.debug?.(
         'merging',
@@ -133,6 +165,7 @@ export class PokeHandler {
       );
       const merged = mergePokes(toMerge);
       if (merged === undefined) {
+        lc.debug?.('frame is empty');
         return;
       }
       try {
@@ -154,6 +187,21 @@ export class PokeHandler {
           await this._onOutOfOrderPoke();
         }
       }
+      lc.debug?.(
+        'playback stats (misses / total = percent missed):',
+        '\npokes:',
+        this._missedTimedPokeCount,
+        '/',
+        this._timedPokeCount,
+        '=',
+        this._missedTimedPokeCount / this._timedPokeCount,
+        '\nframes:',
+        this._missedTimedFrameCount,
+        '/',
+        this._timedFrameCount,
+        '=',
+        this._missedTimedFrameCount / this._timedFrameCount,
+      );
     });
   }
 
