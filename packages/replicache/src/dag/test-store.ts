@@ -9,7 +9,7 @@ import type {Hash} from '../hash.js';
 import {chunkMetaKey, parse as parseKey} from './key.js';
 import {KeyType} from './key.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
-import {assertArray, assertString} from '../asserts.js';
+import {assertArray, assertString} from 'shared';
 import {stringCompare} from '../string-compare.js';
 
 export class TestStore extends StoreImpl {

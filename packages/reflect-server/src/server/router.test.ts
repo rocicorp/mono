@@ -15,7 +15,7 @@ import {
   withVersion,
 } from './router.js';
 import * as s from 'superstruct';
-import {assert} from '../util/asserts.js';
+import {assert} from 'shared';
 import {must} from '../util/must.js';
 
 test('Router', async () => {

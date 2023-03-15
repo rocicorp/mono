@@ -15,7 +15,7 @@ import {
   clientGroupHasPendingMutations,
   getClientGroups,
 } from './client-groups.js';
-import {assert} from '../asserts.js';
+import {assert} from 'shared';
 import {withRead} from '../with-transactions.js';
 
 // How frequently to try to collect

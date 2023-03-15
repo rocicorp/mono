@@ -1,4 +1,4 @@
-import {assertObject, throwInvalidType} from './asserts.js';
+import {assertObject, throwInvalidType} from 'shared';
 import {skipAssertJSONValue, skipFreeze, skipFrozenAsserts} from './config.js';
 import type {FrozenCookie, Cookie} from './cookies.js';
 import {hasOwn} from 'shared';

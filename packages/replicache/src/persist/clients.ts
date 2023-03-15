@@ -5,7 +5,7 @@ import type * as dag from '../dag/mod.js';
 import * as db from '../db/mod.js';
 import type * as sync from '../sync/mod.js';
 import {FrozenJSONValue, deepFreeze} from '../json.js';
-import {assert, assertNumber, assertObject, assertString} from '../asserts.js';
+import {assert, assertNumber, assertObject, assertString} from 'shared';
 import {hasOwn} from 'shared';
 import {uuid as makeUuid} from '../uuid.js';
 import {
