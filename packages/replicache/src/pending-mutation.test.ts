@@ -1,6 +1,6 @@
 import {
   initReplicacheTesting,
-  makePullResponseDD31,
+  makePullResponseV1,
   replicacheForTesting,
   tickAFewTimes,
 } from './test-util.js';
@@ -46,7 +46,7 @@ test('pending mutation', async () => {
   ]);
 
   rep.pullURL = 'https://diff.com/pull';
-  fetchMock.post(rep.pullURL, makePullResponseDD31(clientID, 2));
+  fetchMock.post(rep.pullURL, makePullResponseV1(clientID, 2));
   rep.pull();
   await tickAFewTimes(100);
   await rep.mutate.addData({a: 3});
@@ -56,7 +56,7 @@ test('pending mutation', async () => {
   ]);
 
   fetchMock.reset();
-  fetchMock.post(rep.pullURL, makePullResponseDD31(clientID, 3));
+  fetchMock.post(rep.pullURL, makePullResponseV1(clientID, 3));
   rep.pull();
   await tickAFewTimes(100);
   expect(await rep.experimentalPendingMutations()).to.deep.equal([]);

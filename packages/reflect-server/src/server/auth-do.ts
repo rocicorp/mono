@@ -51,7 +51,7 @@ import {
   LEGACY_CREATE_ROOM_PATH,
 } from './paths.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
-import {assert} from '../util/asserts.js';
+import {assert} from 'shared';
 
 export interface AuthDOOptions {
   roomDO: DurableObjectNamespace;

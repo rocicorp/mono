@@ -1,5 +1,5 @@
 {
-  "name": "reflect-protocol",
+  "name": "shared",
   "type": "module",
   "module": "./src/mod.ts",
   "types": "./src/mod.ts",
@@ -9,8 +9,9 @@
     "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
-  "dependencies": {
-    "superstruct": "^0.16.7",
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.3.0",
+    "@rocicorp/prettier-config": "^0.1.1",
     "typescript": "^4.9.5"
   },
   "exports": {
@@ -18,5 +19,9 @@
       "import": "./src/mod.ts",
       "types": "./src/mod.ts"
     }
-  }
+  },
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config"
 }

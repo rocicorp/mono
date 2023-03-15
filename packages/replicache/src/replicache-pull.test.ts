@@ -2,7 +2,7 @@ import {
   disableAllBackgroundProcesses,
   expectConsoleLogContextStub,
   initReplicacheTesting,
-  makePullResponseDD31,
+  makePullResponseV1,
   replicacheForTesting,
   requestIDLogContextRegex,
   TestLogSink,
@@ -72,7 +72,7 @@ test('pull', async () => {
   const clientID = await rep.clientID;
   fetchMock.postOnce(
     pullURL,
-    makePullResponseDD31(clientID, 2, [
+    makePullResponseV1(clientID, 2, [
       {op: 'del', key: ''},
       {
         op: 'put',
@@ -85,7 +85,7 @@ test('pull', async () => {
   await tickAFewTimes();
   expect(deleteCount).to.equal(2);
 
-  fetchMock.postOnce(pullURL, makePullResponseDD31(clientID, 2));
+  fetchMock.postOnce(pullURL, makePullResponseV1(clientID, 2));
   beginPullResult = await rep.beginPull();
   ({syncHead} = beginPullResult);
   expect(syncHead).to.equal(emptyHash);
@@ -102,7 +102,7 @@ test('pull', async () => {
 
   fetchMock.postOnce(
     pullURL,
-    makePullResponseDD31(clientID, 3, [
+    makePullResponseV1(clientID, 3, [
       {
         op: 'put',
         key: '/todo/14323534',
@@ -124,7 +124,7 @@ test('pull', async () => {
     ((await rep.query(tx => tx.get(`/todo/${id2}`))) as {text: string}).text,
   ).to.equal('Test 2');
 
-  fetchMock.postOnce(pullURL, makePullResponseDD31(clientID, 3));
+  fetchMock.postOnce(pullURL, makePullResponseV1(clientID, 3));
   await rep.maybeEndPull(syncHead, beginPullResult.requestID);
 
   expect(createCount).to.equal(3);
@@ -138,7 +138,7 @@ test('pull', async () => {
 
   fetchMock.postOnce(
     pullURL,
-    makePullResponseDD31(clientID, 6, [{op: 'del', key: '/todo/14323534'}], ''),
+    makePullResponseV1(clientID, 6, [{op: 'del', key: '/todo/14323534'}], ''),
   );
   rep.pull();
   await tickAFewTimes();

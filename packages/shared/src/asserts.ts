@@ -1,4 +1,4 @@
-export function assert<T>(b: T, msg = 'Assertion failed'): asserts b {
+export function assert(b: unknown, msg = 'Assertion failed'): asserts b {
   if (!b) {
     throw new Error(msg);
   }
@@ -35,7 +35,7 @@ export function assertArray(v: unknown): asserts v is unknown[] {
   }
 }
 
-function invalidType(v: unknown, t: string): string {
+export function invalidType(v: unknown, t: string): string {
   let s = 'Invalid type: ';
   if (v === null || v === undefined) {
     s += v;

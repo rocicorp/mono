@@ -3,3 +3,4 @@ out/
 doc/build/
 doc/docs/api
 doc/.docusaurus/
+*.tsbuildinfo

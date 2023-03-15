@@ -4,7 +4,7 @@ import {StoreImpl, ReadImpl, WriteImpl} from './store-impl.js';
 import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.js';
 import type * as kv from '../kv/mod.js';
 import {assertHash, fakeHash, Hash, makeNewFakeHashFunction} from '../hash.js';
-import {assert} from '../asserts.js';
+import {assert} from 'shared';
 import {TestStore} from './test-store.js';
 import {ChunkNotFoundError} from './store.js';
 import {ReadonlyJSONValue, deepFreeze} from '../json.js';

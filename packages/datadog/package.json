@@ -17,7 +17,11 @@
   },
   "scripts": {
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
-    "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch"
+    "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
+    "check-types": "tsc --noEmit",
+    "format": "prettier --write *",
+    "check-format": "prettier --check *",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

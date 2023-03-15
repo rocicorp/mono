@@ -5,7 +5,7 @@ import {
   ClientMap,
   ClientStateNotFoundError,
   getClients,
-  isClientSDD,
+  isClientV4,
   setClients,
 } from './clients.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
@@ -55,7 +55,7 @@ export function writeHeartbeat(
 
     const newClients = new Map(clients).set(
       clientID,
-      isClientSDD(client)
+      isClientV4(client)
         ? {
             heartbeatTimestampMs: Date.now(),
             headHash: client.headHash,

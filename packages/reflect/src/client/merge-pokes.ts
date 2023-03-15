@@ -8,10 +8,10 @@ export function mergePokes(toMerge: Poke[]): Poke | undefined {
   const mergedLastMutationIDChanges: Record<string, number> = {};
   for (const poke of toMerge) {
     mergedPatch.push(...poke.patch);
-    for (const [clientID, lastMuationID] of Object.entries(
+    for (const [clientID, lastMutationID] of Object.entries(
       poke.lastMutationIDChanges,
     )) {
-      mergedLastMutationIDChanges[clientID] = lastMuationID;
+      mergedLastMutationIDChanges[clientID] = lastMutationID;
     }
   }
   return {

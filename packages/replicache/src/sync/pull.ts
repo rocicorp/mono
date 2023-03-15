@@ -8,13 +8,14 @@ import {
   deepFreeze,
 } from '../json.js';
 import type {
-  PullResponseDD31,
-  PullResponseOKDD31,
-  PullResponseOKSDD,
-  PullResponseSDD,
+  PullResponseV1,
+  PullResponseOKV1,
+  PullResponseOKV0,
+  PullResponseV0,
   Puller,
-  PullerResultDD31,
-  PullerResultSDD,
+  PullerResultV1,
+  PullerResultV0,
+  PullerResult,
 } from '../puller.js';
 import {PullError} from './pull-error.js';
 import type {HTTPRequestInfo} from '../http-request-info.js';
@@ -31,8 +32,8 @@ import {compareCookies, Cookie} from '../cookies.js';
 import {isErrorResponse} from '../error-responses.js';
 import {toError} from '../to-error.js';
 import {
-  assertPullerResultDD31,
-  assertPullerResultSDD,
+  assertPullerResultV1,
+  assertPullerResultV0,
 } from '../get-default-puller.js';
 import {withRead, withWrite} from '../with-transactions.js';
 
@@ -43,14 +44,14 @@ export const PULL_VERSION_DD31 = 1;
  * The JSON value used as the body when doing a POST to the [pull
  * endpoint](/reference/server-pull).
  */
-export type PullRequest = PullRequestDD31 | PullRequestSDD;
+export type PullRequest = PullRequestV1 | PullRequestV0;
 
 /**
  * The JSON value used as the body when doing a POST to the [pull
  * endpoint](/reference/server-pull). This is the legacy version (V0) and it is
  * still used when recovering mutations from old clients.
  */
-export type PullRequestSDD = {
+export type PullRequestV0 = {
   pullVersion: 0;
   // schemaVersion can optionally be used by the customer's app
   // to indicate to the data layer what format of Client View the
@@ -67,7 +68,7 @@ export type PullRequestSDD = {
  * The JSON value used as the body when doing a POST to the [pull
  * endpoint](/reference/server-pull).
  */
-export type PullRequestDD31 = {
+export type PullRequestV1 = {
   pullVersion: 1;
   // schemaVersion can optionally be used by the customer's app
   // to indicate to the data layer what format of Client View the
@@ -79,23 +80,23 @@ export type PullRequestDD31 = {
   clientGroupID: ClientGroupID;
 };
 
-export function isPullRequestDD31(pr: PullRequest): pr is PullRequestDD31 {
+export function isPullRequestV1(pr: PullRequest): pr is PullRequestV1 {
   return pr.pullVersion === PULL_VERSION_DD31;
 }
 
-export type BeginPullResponseDD31 = {
+export type BeginPullResponseV1 = {
   httpRequestInfo: HTTPRequestInfo;
-  pullResponse?: PullResponseDD31;
+  pullResponse?: PullResponseV1;
   syncHead: Hash;
 };
 
-export type BeginPullResponseSDD = {
+export type BeginPullResponseV0 = {
   httpRequestInfo: HTTPRequestInfo;
-  pullResponse?: PullResponseSDD;
+  pullResponse?: PullResponseV0;
   syncHead: Hash;
 };
 
-export async function beginPullSDD(
+export async function beginPullV0(
   profileID: string,
   clientID: ClientID,
   schemaVersion: string,
@@ -104,7 +105,7 @@ export async function beginPullSDD(
   store: dag.Store,
   lc: LogContext,
   createSyncBranch = true,
-): Promise<BeginPullResponseSDD> {
+): Promise<BeginPullResponseV0> {
   const [lastMutationID, baseCookie] = await withRead(store, async dagRead => {
     const mainHeadHash = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
     if (!mainHeadHash) {
@@ -117,7 +118,7 @@ export async function beginPullSDD(
     return [lastMutationID, baseCookie];
   });
 
-  const pullReq: PullRequestSDD = {
+  const pullReq: PullRequestV0 = {
     profileID,
     clientID,
     cookie: baseCookie,
@@ -131,7 +132,7 @@ export async function beginPullSDD(
     puller,
     pullReq,
     requestID,
-  )) as PullerResultSDD;
+  )) as PullerResultV0;
 
   // If Puller did not get a pull response we still want to return the HTTP
   // request info to the JS SDK.
@@ -150,7 +151,7 @@ export async function beginPullSDD(
     };
   }
 
-  const result = await handlePullResponseSDD(
+  const result = await handlePullResponseV0(
     lc,
     store,
     baseCookie,
@@ -170,7 +171,7 @@ export async function beginPullSDD(
   };
 }
 
-export async function beginPullDD31(
+export async function beginPullV1(
   profileID: string,
   clientID: ClientID,
   clientGroupID: ClientGroupID,
@@ -180,7 +181,7 @@ export async function beginPullDD31(
   store: dag.Store,
   lc: LogContext,
   createSyncBranch = true,
-): Promise<BeginPullResponseDD31> {
+): Promise<BeginPullResponseV1> {
   const baseCookie = await withRead(store, async dagRead => {
     const mainHeadHash = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
     if (!mainHeadHash) {
@@ -192,7 +193,7 @@ export async function beginPullDD31(
     return baseSnapshotMeta.cookieJSON;
   });
 
-  const pullReq: PullRequestDD31 = {
+  const pullReq: PullRequestV1 = {
     profileID,
     clientGroupID,
     cookie: baseCookie,
@@ -205,7 +206,7 @@ export async function beginPullDD31(
     puller,
     pullReq,
     requestID,
-  )) as PullerResultDD31;
+  )) as PullerResultV1;
 
   // If Puller did not get a pull response we still want to return the HTTP
   // request info.
@@ -224,7 +225,7 @@ export async function beginPullDD31(
     };
   }
 
-  const result = await handlePullResponseDD31(
+  const result = await handlePullResponseV1(
     lc,
     store,
     baseCookie,
@@ -245,9 +246,9 @@ export async function beginPullDD31(
 async function callPuller(
   lc: LogContext,
   puller: Puller,
-  pullReq: PullRequestDD31 | PullRequestSDD,
+  pullReq: PullRequest,
   requestID: string,
-): Promise<PullerResultDD31 | PullerResultSDD> {
+): Promise<PullerResult> {
   lc.debug?.('Starting pull...');
   const pullStart = Date.now();
   try {
@@ -258,10 +259,10 @@ async function callPuller(
       'ms',
     );
 
-    if (isPullRequestDD31(pullReq)) {
-      assertPullerResultDD31(pullerResult);
+    if (isPullRequestV1(pullReq)) {
+      assertPullerResultV1(pullerResult);
     } else {
-      assertPullerResultSDD(pullerResult);
+      assertPullerResultV0(pullerResult);
     }
 
     return pullerResult;
@@ -271,11 +272,11 @@ async function callPuller(
 }
 
 // Returns new sync head, or null if response did not apply due to mismatched cookie.
-export function handlePullResponseSDD(
+export function handlePullResponseV0(
   lc: LogContext,
   store: dag.Store,
   expectedBaseCookie: ReadonlyJSONValue,
-  response: PullResponseOKSDD,
+  response: PullResponseOKV0,
   clientID: ClientID,
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
@@ -420,11 +421,11 @@ function badOrderMessage(
   return `Received ${name} ${receivedValue} is < than last snapshot ${name} ${lastSnapshotValue}; ignoring client view`;
 }
 
-export function handlePullResponseDD31(
+export function handlePullResponseV1(
   lc: LogContext,
   store: dag.Store,
   expectedBaseCookie: FrozenJSONValue,
-  response: PullResponseOKDD31,
+  response: PullResponseOKV1,
   clientID: ClientID,
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
@@ -516,7 +517,7 @@ type MaybeEndPullResultBase<M extends db.Meta> = {
   diffs: DiffsMap;
 };
 
-export type MaybeEndPullResultSDD = MaybeEndPullResultBase<db.LocalMetaSDD>;
+export type MaybeEndPullResultV0 = MaybeEndPullResultBase<db.LocalMetaSDD>;
 
 export function maybeEndPull<M extends db.LocalMeta>(
   store: dag.Store,

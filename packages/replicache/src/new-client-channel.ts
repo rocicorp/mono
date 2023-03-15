@@ -1,4 +1,4 @@
-import {assert, assertArray, assertString} from './asserts.js';
+import {assert, assertArray, assertString} from 'shared';
 
 function makeChannelName(replicacheName: string): string {
   return `replicache-new-client-group:${replicacheName}`;

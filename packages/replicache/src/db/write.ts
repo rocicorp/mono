@@ -29,7 +29,7 @@ import {lazy} from '../lazy.js';
 import {emptyHash, Hash} from '../hash.js';
 import type {InternalDiff} from '../btree/node.js';
 import {allEntriesAsDiff} from '../btree/read.js';
-import {assert} from '../asserts.js';
+import {assert} from 'shared';
 import type {DiffComputationConfig} from '../sync/diff.js';
 import type {FrozenJSONValue} from '../json.js';
 import type {FrozenCookie} from '../cookies.js';
