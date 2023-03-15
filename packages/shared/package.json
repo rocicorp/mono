@@ -4,20 +4,29 @@
   "module": "./src/mod.ts",
   "types": "./src/mod.ts",
   "scripts": {
+    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "devDependencies": {
+    "@badrap/valita": "^0.2.0",
     "@rocicorp/eslint-config": "^0.3.0",
     "@rocicorp/prettier-config": "^0.1.1",
+    "@types/jest": "^29.4.2",
+    "ts-jest": "^29.0.5",
     "typescript": "^4.9.5"
   },
   "exports": {
     ".": {
       "import": "./src/mod.ts",
       "types": "./src/mod.ts"
+    },
+    "./valita.js": {
+      "import": "./src/valita.ts",
+      "types": "./src/valita.ts"
     }
   },
   "eslintConfig": {

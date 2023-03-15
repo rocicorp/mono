@@ -1,4 +1,4 @@
-import * as v from '@badrap/valita';
+import * as v from 'shared/valita.js';
 import {jsonSchema} from './json.js';
 
 export const mutationSchema = v.object({

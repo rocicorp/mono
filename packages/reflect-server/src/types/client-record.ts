@@ -1,4 +1,4 @@
-import * as valita from '@badrap/valita';
+import * as valita from 'shared/valita.js';
 import {nullableVersionSchema} from 'reflect-protocol';
 import type {ClientID} from './client-state.js';
 import type {Storage} from '../storage/storage.js';

@@ -1,3 +1,4 @@
+import * as valita from 'shared/valita.js';
 import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
 import type {
@@ -980,7 +981,7 @@ export class Reflect<MD extends MutatorDefs> {
     // intercepted here (in a complete hack), and a no-op response is returned
     // as pulls for this client group are handled via poke over the socket.
     if (req.clientGroupID === (await this.clientGroupID)) {
-      const cookie = nullableVersionSchema.parse(req.cookie);
+      const cookie = valita.parse(req.cookie, nullableVersionSchema);
       const resolver = this._baseCookieResolver;
       this._baseCookieResolver = null;
       resolver?.resolve(cookie);
@@ -999,7 +1000,7 @@ export class Reflect<MD extends MutatorDefs> {
 
     // Mutation recovery pull.
     l.debug?.('Pull is for mutation recovery');
-    const cookie = nullableVersionSchema.parse(req.cookie);
+    const cookie = valita.parse(req.cookie, nullableVersionSchema);
     const pullRequestMessage: PullRequestMessage = [
       'pull',
       {

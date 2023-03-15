@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {CreateRoomRequest} from 'reflect-protocol';
-import * as valita from '@badrap/valita';
+import * as valita from 'shared/valita.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {INTERNAL_CREATE_ROOM_PATH} from './paths.js';
 

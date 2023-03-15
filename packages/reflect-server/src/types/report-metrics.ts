@@ -1,4 +1,4 @@
-import * as v from '@badrap/valita';
+import * as v from 'shared/valita.js';
 
 const datadogPointSchema = v.tuple([v.number(), v.array(v.number())]);
 

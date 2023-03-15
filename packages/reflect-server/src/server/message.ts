@@ -1,3 +1,4 @@
+import * as valita from 'shared/valita.js';
 import {Upstream, upstreamSchema} from 'reflect-protocol';
 import type {ClientID, ClientMap, Socket} from '../types/client-state.js';
 import type {LogContext} from '@rocicorp/logger';
@@ -67,5 +68,5 @@ export async function handleMessage(
 
 function getMessage(data: string): Upstream {
   const value = JSON.parse(data);
-  return upstreamSchema.parse(value);
+  return valita.parse(value, upstreamSchema);
 }

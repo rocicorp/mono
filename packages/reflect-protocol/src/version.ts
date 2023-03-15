@@ -1,4 +1,4 @@
-import * as v from '@badrap/valita';
+import * as v from 'shared/valita.js';
 
 export const versionSchema = v.number();
 export const nullableVersionSchema = v.union(versionSchema, v.null());

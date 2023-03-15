@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
 import type {JSONValue} from 'replicache';
-import type * as valita from '@badrap/valita';
+import * as valita from 'shared/valita.js';
 import {assertMapValues as valitaAssertMapValues} from '../util/valita.js';
 
 export async function getEntry<T extends JSONValue>(
@@ -13,7 +13,7 @@ export async function getEntry<T extends JSONValue>(
   if (value === undefined) {
     return undefined;
   }
-  return schema.parse(value);
+  return valita.parse(value, schema);
 }
 
 export async function listEntries<T extends JSONValue>(

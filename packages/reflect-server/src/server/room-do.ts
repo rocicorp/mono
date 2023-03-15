@@ -22,7 +22,7 @@ import {closeConnections, getConnections} from './connections.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {getConnectedClients} from '../types/connected-clients.js';
-import * as valita from '@badrap/valita';
+import * as valita from 'shared/valita.js';
 import {createRoomRequestSchema} from 'reflect-protocol';
 import {
   get,
