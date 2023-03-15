@@ -966,7 +966,7 @@ test('playback offset is reset for new pokes if timestamp offset delta is > 1000
   expect(rafStub.callCount).to.equal(6);
 });
 
-test.only('playback stats', async () => {
+test('playback stats', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
   const log: [LogLevel, unknown[]][] = [];
