@@ -1,5 +1,7 @@
-import {test, expect} from '@jest/globals';
+import {expect, test} from '@jest/globals';
 import type {JSONObject, ReadonlyJSONValue} from 'replicache';
+import {assert, must} from 'shared';
+import * as s from 'superstruct';
 import {createSilentLogContext} from '../util/test-utils.js';
 import {
   asJSON,
@@ -14,9 +16,6 @@ import {
   withRoomID,
   withVersion,
 } from './router.js';
-import * as s from 'superstruct';
-import {assert} from 'shared';
-import {must} from '../util/must.js';
 
 test('Router', async () => {
   const router = new Router();

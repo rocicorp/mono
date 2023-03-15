@@ -1,12 +1,31 @@
-import {LogContext} from '@rocicorp/logger';
 import {expect} from '@esm-bundle/chai';
-import {assertNotUndefined} from 'shared';
-import {assertObject, assertString} from 'shared';
+import {LogContext} from '@rocicorp/logger';
+import {assertNotUndefined, assertObject, assertString} from 'shared';
+import {asyncIterableToArray} from '../async-iterable-to-array.js';
+import {BTreeRead} from '../btree/read.js';
+import type {Cookie, FrozenCookie} from '../cookies.js';
 import * as dag from '../dag/mod.js';
+import {
+  assertSnapshotCommitDD31,
+  assertSnapshotCommitSDD,
+  commitIsLocal,
+} from '../db/commit.js';
 import * as db from '../db/mod.js';
 import {DEFAULT_HEAD_NAME} from '../db/mod.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {FrozenJSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
+import {
+  isClientStateNotFoundResponse,
+  isVersionNotSupportedResponse,
+} from '../error-responses.js';
+import {
+  assertPullResponseDD31,
+  assertPullResponseSDD,
+} from '../get-default-puller.js';
+import {assertHash, emptyHash} from '../hash.js';
+import type {HTTPRequestInfo} from '../http-request-info.js';
+import type {IndexDefinitions} from '../index-defs.js';
+import {deepFreeze, FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
+import type {PatchOperation} from '../patch-operation.js';
 import type {
   Puller,
   PullerResultDD31,
@@ -15,46 +34,26 @@ import type {
   PullResponseOKDD31,
   PullResponseSDD,
 } from '../puller.js';
-import type {HTTPRequestInfo} from '../http-request-info.js';
-import {SYNC_HEAD_NAME} from './sync-head-name.js';
+import {stringCompare} from '../string-compare.js';
+import {testSubscriptionsManagerOptions} from '../test-util.js';
+import {withRead, withWrite} from '../with-transactions.js';
+import type {DiffsMap} from './diff.js';
 import {
   beginPullDD31,
   BeginPullResponseDD31,
+  BeginPullResponseSDD,
   beginPullSDD,
   handlePullResponseDD31,
+  HandlePullResponseResultType,
+  isPullRequestDD31,
   maybeEndPull,
   MaybeEndPullResultSDD,
-  PullRequestSDD,
   PullRequestDD31,
+  PullRequestSDD,
   PULL_VERSION_DD31,
   PULL_VERSION_SDD,
-  HandlePullResponseResultType,
-  BeginPullResponseSDD,
-  isPullRequestDD31,
 } from './pull.js';
-import {assertHash, emptyHash} from '../hash.js';
-import {stringCompare} from '../string-compare.js';
-import {asyncIterableToArray} from '../async-iterable-to-array.js';
-import {
-  assertSnapshotCommitDD31,
-  assertSnapshotCommitSDD,
-  commitIsLocal,
-} from '../db/commit.js';
-import type {DiffsMap} from './diff.js';
-import {testSubscriptionsManagerOptions} from '../test-util.js';
-import {BTreeRead} from '../btree/read.js';
-import type {Cookie, FrozenCookie} from '../cookies.js';
-import {
-  isClientStateNotFoundResponse,
-  isVersionNotSupportedResponse,
-} from '../error-responses.js';
-import type {PatchOperation} from '../patch-operation.js';
-import {
-  assertPullResponseDD31,
-  assertPullResponseSDD,
-} from '../get-default-puller.js';
-import type {IndexDefinitions} from '../index-defs.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {SYNC_HEAD_NAME} from './sync-head-name.js';
 
 test('begin try pull SDD', async () => {
   const clientID = 'test_client_id';
