@@ -1,5 +1,5 @@
 import type {JSONType} from 'reflect-protocol';
-import {hasOwn} from './has-own.js';
+import {hasOwn} from 'shared';
 
 export function deepClone(value: JSONType): JSONType {
   const seen: Array<JSONType | ReadonlyArray<JSONType>> = [];

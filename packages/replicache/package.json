@@ -48,6 +48,7 @@
     "playwright": "^1.28.1",
     "rollup": "^3.19.1",
     "rollup-plugin-dts": "^5.2.0",
+    "shared": "*",
     "sinon": "13.0.1",
     "typescript": "^4.9.4",
     "xbytes": "^1.7.0"

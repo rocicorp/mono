@@ -1,0 +1,21 @@
+{
+  "name": "shared",
+  "type": "module",
+  "module": "./src/mod.ts",
+  "types": "./src/mod.ts",
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "format": "prettier --write *",
+    "check-format": "prettier --check *",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+  },
+  "dependencies": {
+    "typescript": "^4.9.5"
+  },
+  "exports": {
+    ".": {
+      "import": "./src/mod.ts",
+      "types": "./src/mod.ts"
+    }
+  }
+}
