@@ -1,4 +1,4 @@
-import {assertNumber, assertObject, assertString} from 'shared';
+import {assertNumber, assertObject, assertString} from 'shared/asserts.js';
 
 export function assertHTTPRequestInfo(
   v: unknown,

@@ -15,7 +15,7 @@ import {
   Entry,
 } from './node.js';
 import type {CreateChunk} from '../dag/chunk.js';
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 
 export class BTreeWrite extends BTreeRead {
   /**

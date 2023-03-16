@@ -15,7 +15,7 @@ import {
   assertObject,
   assertString,
   unreachable,
-} from 'shared';
+} from 'shared/asserts.js';
 import {assertHash, Hash} from '../hash.js';
 import {skipCommitDataAsserts} from '../config.js';
 import type {MustGetChunk} from '../dag/store.js';

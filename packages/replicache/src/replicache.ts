@@ -29,7 +29,7 @@ import * as sync from './sync/mod.js';
 import {assertHash, emptyHash, Hash} from './hash.js';
 import * as persist from './persist/mod.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 import {
   getLicenseStatus,
   licenseActive,

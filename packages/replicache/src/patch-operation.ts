@@ -1,4 +1,4 @@
-import {assertArray, assertObject, assertString} from 'shared';
+import {assertArray, assertObject, assertString} from 'shared/asserts.js';
 import {assertJSONValue, ReadonlyJSONValue} from './json.js';
 
 /**

@@ -1,7 +1,7 @@
 import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
 import * as sinon from 'sinon';
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 import {IDBStore} from './idb-store.js';
 import {
   IDBStoreWithMemFallback,

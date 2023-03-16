@@ -1,6 +1,6 @@
 import {expect, test} from '@jest/globals';
 import type {JSONObject, ReadonlyJSONValue} from 'replicache';
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 import {must} from 'shared/must.js';
 import * as valita from 'shared/valita.js';
 import {createSilentLogContext} from '../util/test-utils.js';

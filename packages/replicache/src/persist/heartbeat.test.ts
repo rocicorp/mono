@@ -11,7 +11,7 @@ import {
 import {ClientMap, ClientStateNotFoundError, getClients} from './clients.js';
 import {assertHash, fakeHash} from '../hash.js';
 import {makeClientV5, setClientsForTesting} from './clients-test-helpers.js';
-import {assertNotUndefined} from 'shared';
+import {assertNotUndefined} from 'shared/asserts.js';
 import {IDBNotFoundError, IDBStore} from '../kv/idb-store.js';
 import {dropIDBStore} from '../kv/mod.js';
 import {resolver} from '@rocicorp/resolver';

@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import {deepEqual} from '../src/json.js';
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 import {
   MutatorDefs,
   PatchOperation,

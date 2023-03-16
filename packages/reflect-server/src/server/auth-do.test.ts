@@ -18,7 +18,7 @@ import {
   newRoomStatusRequest,
 } from '../client/room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 import {newAuthRevalidateConnections} from '../util/auth-test-util.js';
 import {encodeHeaderValue} from '../util/headers.js';
 import {Mocket, mockWebSocketPair, TestLogSink} from '../util/test-utils.js';

@@ -12,7 +12,7 @@ import type {
   PullResponseV0,
   PullerResult,
 } from './puller.js';
-import {assertNumber, assertObject, assertString} from 'shared';
+import {assertNumber, assertObject, assertString} from 'shared/asserts.js';
 import {assertPatchOperations} from './patch-operation.js';
 import {assertJSONValue} from './json.js';
 import {assertHTTPRequestInfo} from './http-request-info.js';

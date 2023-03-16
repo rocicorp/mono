@@ -21,7 +21,7 @@ import {
   DD_DISTRIBUTION_METRIC_URL,
   report,
 } from '@rocicorp/datadog-util';
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 import {REPORT_METRICS_PATH} from './paths.js';
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 

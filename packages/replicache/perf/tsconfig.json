@@ -3,7 +3,6 @@
   "include": ["*.ts", "*.js"],
   "exclude": ["node_modules", "runner.js"],
   "compilerOptions": {
-    "moduleResolution": "nodenext",
     "noEmit": true
   }
 }

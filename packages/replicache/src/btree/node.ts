@@ -8,7 +8,12 @@ import {
   ReadonlyJSONValue,
   deepFreeze,
 } from '../json.js';
-import {assert, assertArray, assertNumber, assertString} from 'shared';
+import {
+  assert,
+  assertArray,
+  assertNumber,
+  assertString,
+} from 'shared/asserts.js';
 import {Hash, emptyHash, newUUIDHash} from '../hash.js';
 import type {BTreeRead} from './read.js';
 import type {BTreeWrite} from './write.js';
