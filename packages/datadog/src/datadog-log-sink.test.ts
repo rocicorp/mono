@@ -129,7 +129,7 @@ test('Errors in single arg messages are converted to JSON', async () => {
   expect(parsedBody.message.stack).toBeDefined();
 });
 
-test('flush calls fetch but includes logs efter the error', async () => {
+test('flush calls fetch but includes logs after the error', async () => {
   const l = new DatadogLogSink({
     apiKey: 'apiKey',
   });
