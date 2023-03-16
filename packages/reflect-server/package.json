@@ -45,7 +45,7 @@
     "rollup-plugin-dts": "^5.2.0",
     "shared": "*",
     "ts-jest": "^29.0.5",
-    "typescript": "^4.9.4"
+    "typescript": "^4.9.5"
   },
   "//2": "Note: we need this precise version of wrangler due to: https://github.com/rocicorp/reflect-server/issues/148",
   "peerDependencies": {
