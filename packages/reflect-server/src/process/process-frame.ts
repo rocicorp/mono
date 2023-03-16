@@ -14,7 +14,7 @@ import type {ClientID} from '../types/client-state.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {getVersion} from '../types/version.js';
 import {assert} from 'shared';
-import {must} from 'shared';
+import {must} from 'shared/must.js';
 import {processDisconnects} from './process-disconnects.js';
 import {MutatorMap, processMutation} from './process-mutation.js';
 

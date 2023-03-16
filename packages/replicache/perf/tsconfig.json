@@ -1,8 +1,9 @@
 {
   "extends": "../tsconfig.json",
-  "include": ["**/*.ts", "../**/*.d.ts", "**/*.js"],
-  "exclude": ["node_modules"],
+  "include": ["*.ts", "*.js"],
+  "exclude": ["node_modules", "runner.js"],
   "compilerOptions": {
-    "moduleResolution": "node"
+    "moduleResolution": "nodenext",
+    "noEmit": true
   }
 }

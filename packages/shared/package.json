@@ -27,6 +27,14 @@
     "./valita.js": {
       "import": "./src/valita.ts",
       "types": "./src/valita.ts"
+    },
+    "./must.js": {
+      "import": "./src/must.ts",
+      "types": "./src/must.ts"
+    },
+    "./has-own.js": {
+      "import": "./src/has-own.ts",
+      "types": "./src/has-own.ts"
     }
   },
   "eslintConfig": {

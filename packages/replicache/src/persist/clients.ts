@@ -6,7 +6,7 @@ import * as db from '../db/mod.js';
 import type * as sync from '../sync/mod.js';
 import {FrozenJSONValue, deepFreeze} from '../json.js';
 import {assert, assertNumber, assertObject, assertString} from 'shared';
-import {hasOwn} from 'shared';
+import {hasOwn} from 'shared/has-own.js';
 import {uuid as makeUuid} from '../uuid.js';
 import {
   assertSnapshotCommitDD31,
