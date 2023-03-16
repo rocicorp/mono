@@ -4,7 +4,6 @@ import type {LogContext} from '@rocicorp/logger';
 import {sendError, closeWithError} from '../util/socket.js';
 import {handlePush, type ProcessUntilDone} from './push.js';
 import {handlePing} from './ping.js';
-import {superstructAssert} from '../util/superstruct.js';
 import {ErrorKind} from 'reflect-protocol';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {handlePull} from './pull.js';
@@ -68,6 +67,5 @@ export async function handleMessage(
 
 function getMessage(data: string): Upstream {
   const value = JSON.parse(data);
-  superstructAssert(value, upstreamSchema);
-  return value;
+  return upstreamSchema.parse(value);
 }

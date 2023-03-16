@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {CreateRoomRequest} from 'reflect-protocol';
-import * as s from 'superstruct';
+import * as valita from '@badrap/valita';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {INTERNAL_CREATE_ROOM_PATH} from './paths.js';
 
@@ -42,27 +42,30 @@ export enum RoomStatus {
 }
 
 // The DurableStorage interface adds type-awareness to the DO Storage API. It
-// requires a superstruct schema for values, which we define here. I've chosen
+// requires a valita schema for values, which we define here. I've chosen
 // the slightly non-DRY path of having a separate ts type definition and schema,
 // instead of inferring the type from a schema, because frankly I like reading
 // type definitions in the type definition language (ts) and want to keep goop
-// (superstruct) from polluting the main ideas.
-const roomStatusSchema = s.enums([
-  RoomStatus.Open,
-  RoomStatus.Closed,
-  RoomStatus.Deleted,
-  RoomStatus.Unknown,
-]);
+// (valita) from polluting the main ideas.
+const roomStatusSchema = valita.union(
+  valita.literal(RoomStatus.Open),
+  valita.literal(RoomStatus.Closed),
+  valita.literal(RoomStatus.Deleted),
+  valita.literal(RoomStatus.Unknown),
+);
 
-const jurisdictionSchema = s.union([s.literal(''), s.literal('eu')]);
-const roomRecordSchema = s.object({
-  roomID: s.string(),
-  objectIDString: s.string(),
+const jurisdictionSchema = valita.union(
+  valita.literal(''),
+  valita.literal('eu'),
+);
+const roomRecordSchema = valita.object({
+  roomID: valita.string(),
+  objectIDString: valita.string(),
   jurisdiction: jurisdictionSchema,
   status: roomStatusSchema,
 });
 // This assignment ensures that RoomRecord and roomRecordSchema stay in sync.
-const RoomRecord: s.Struct<RoomRecord> = roomRecordSchema;
+const RoomRecord: valita.Type<RoomRecord> = roomRecordSchema;
 
 export function internalCreateRoom(
   lc: LogContext,

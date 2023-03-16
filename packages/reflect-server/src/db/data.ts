@@ -1,28 +1,24 @@
 import {compareUTF8} from 'compare-utf8';
 import type {JSONValue} from 'replicache';
-import type * as s from 'superstruct';
-import {
-  superstructAssert,
-  superstructAssertMapValues,
-} from '../util/superstruct.js';
+import type * as valita from '@badrap/valita';
+import {assertMapValues as valitaAssertMapValues} from '../util/valita.js';
 
 export async function getEntry<T extends JSONValue>(
   durable: DurableObjectStorage,
   key: string,
-  schema: s.Struct<T>,
+  schema: valita.Type<T>,
   options: DurableObjectGetOptions,
 ): Promise<T | undefined> {
   const value = await durable.get(key, options);
   if (value === undefined) {
     return undefined;
   }
-  superstructAssert(value, schema);
-  return value;
+  return schema.parse(value);
 }
 
 export async function listEntries<T extends JSONValue>(
   durable: DurableObjectStorage,
-  schema: s.Struct<T>,
+  schema: valita.Type<T>,
   options: DurableObjectListOptions,
 ): Promise<Map<string, T>> {
   let result = await durable.list(options);
@@ -35,7 +31,7 @@ export async function listEntries<T extends JSONValue>(
     result = new Map(entries);
   }
 
-  superstructAssertMapValues(result, schema);
+  valitaAssertMapValues(result, schema);
   return result;
 }
 

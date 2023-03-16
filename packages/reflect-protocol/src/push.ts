@@ -1,25 +1,25 @@
-import * as s from 'superstruct';
+import * as v from '@badrap/valita';
 import {jsonSchema} from './json.js';
 
-export const mutationSchema = s.object({
-  id: s.number(),
-  clientID: s.string(),
-  name: s.string(),
+export const mutationSchema = v.object({
+  id: v.number(),
+  clientID: v.string(),
+  name: v.string(),
   args: jsonSchema,
-  timestamp: s.number(),
+  timestamp: v.number(),
 });
 
-export const pushBodySchema = s.object({
-  clientGroupID: s.string(),
-  mutations: s.array(mutationSchema),
-  pushVersion: s.number(),
-  schemaVersion: s.string(),
-  timestamp: s.number(),
-  requestID: s.string(),
+export const pushBodySchema = v.object({
+  clientGroupID: v.string(),
+  mutations: v.array(mutationSchema),
+  pushVersion: v.number(),
+  schemaVersion: v.string(),
+  timestamp: v.number(),
+  requestID: v.string(),
 });
 
-export const pushMessageSchema = s.tuple([s.literal('push'), pushBodySchema]);
+export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);
 
-export type Mutation = s.Infer<typeof mutationSchema>;
-export type PushBody = s.Infer<typeof pushBodySchema>;
-export type PushMessage = s.Infer<typeof pushMessageSchema>;
+export type Mutation = v.Infer<typeof mutationSchema>;
+export type PushBody = v.Infer<typeof pushBodySchema>;
+export type PushMessage = v.Infer<typeof pushMessageSchema>;

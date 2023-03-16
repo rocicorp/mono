@@ -1,5 +1,5 @@
 import type {JSONValue} from 'replicache';
-import type * as z from 'superstruct';
+import type * as valita from '@badrap/valita';
 import {delEntry, getEntry, putEntry, listEntries} from '../db/data.js';
 import type {ListOptions, Storage} from './storage.js';
 
@@ -40,14 +40,14 @@ export class DurableStorage implements Storage {
 
   get<T extends JSONValue>(
     key: string,
-    schema: z.Struct<T>,
+    schema: valita.Type<T>,
   ): Promise<T | undefined> {
     return getEntry(this._durable, key, schema, baseOptions);
   }
 
   list<T extends JSONValue>(
     options: ListOptions,
-    schema: z.Struct<T>,
+    schema: valita.Type<T>,
   ): Promise<Map<string, T>> {
     const doOptions = doListOptions(options);
     return listEntries(this._durable, schema, doOptions);

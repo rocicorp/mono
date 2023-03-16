@@ -36,7 +36,6 @@ import {
   ReplicacheOptions,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from 'replicache';
-import * as superstruct from 'superstruct';
 import {assert} from 'shared';
 import {nanoid} from '../util/nanoid.js';
 import {sleep} from '../util/sleep.js';
@@ -981,8 +980,7 @@ export class Reflect<MD extends MutatorDefs> {
     // intercepted here (in a complete hack), and a no-op response is returned
     // as pulls for this client group are handled via poke over the socket.
     if (req.clientGroupID === (await this.clientGroupID)) {
-      const {cookie} = req;
-      superstruct.assert(cookie, nullableVersionSchema);
+      const cookie = nullableVersionSchema.parse(req.cookie);
       const resolver = this._baseCookieResolver;
       this._baseCookieResolver = null;
       resolver?.resolve(cookie);
@@ -1001,8 +999,7 @@ export class Reflect<MD extends MutatorDefs> {
 
     // Mutation recovery pull.
     l.debug?.('Pull is for mutation recovery');
-    const {cookie} = req;
-    superstruct.assert(cookie, nullableVersionSchema);
+    const cookie = nullableVersionSchema.parse(req.cookie);
     const pullRequestMessage: PullRequestMessage = [
       'pull',
       {

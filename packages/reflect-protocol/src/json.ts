@@ -1,21 +1,14 @@
-import * as s from 'superstruct';
+import * as v from '@badrap/valita';
 
 type Literal = boolean | null | number | string;
 type Json = Literal | {[key: string]: Json} | Json[];
-const literalSchema = s.union([
-  s.string(),
-  s.number(),
-  s.boolean(),
-  s.literal(null),
-]);
-export const jsonSchema: s.Struct<Json> = s.lazy(() =>
-  s.union([
-    literalSchema,
-    s.array(jsonSchema),
-    s.record(s.string(), jsonSchema),
-  ]),
+const literalSchema = v.union(v.string(), v.number(), v.boolean(), v.null());
+
+export type JSONType = v.Infer<typeof jsonSchema>;
+
+export const jsonSchema: v.Type<Json> = v.lazy(() =>
+  v.union(literalSchema, v.array(jsonSchema), v.record(jsonSchema)),
 );
-export type JSONType = s.Infer<typeof jsonSchema>;
 
 /**
  * A JSON value that allows undefined values in objects.

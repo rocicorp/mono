@@ -1,4 +1,4 @@
-import * as s from 'superstruct';
+import * as v from '@badrap/valita';
 
 // Keep this in sync with reflect server.
 //
@@ -23,27 +23,27 @@ export const enum ErrorKind {
   VersionNotSupported = 'VersionNotSupported',
 }
 
-export const errorKindSchema = s.union([
-  s.literal(ErrorKind.AuthInvalidated),
-  s.literal(ErrorKind.ClientNotFound),
-  s.literal(ErrorKind.ConnectTimeout),
-  s.literal(ErrorKind.InvalidConnectionRequest),
-  s.literal(ErrorKind.InvalidMessage),
-  s.literal(ErrorKind.InvalidPush),
-  s.literal(ErrorKind.PingTimeout),
-  s.literal(ErrorKind.PullTimeout),
-  s.literal(ErrorKind.RoomClosed),
-  s.literal(ErrorKind.RoomNotFound),
-  s.literal(ErrorKind.Unauthorized),
-  s.literal(ErrorKind.UnexpectedBaseCookie),
-  s.literal(ErrorKind.UnexpectedLastMutationID),
-  s.literal(ErrorKind.VersionNotSupported),
-]);
+export const errorKindSchema = v.union(
+  v.literal(ErrorKind.AuthInvalidated),
+  v.literal(ErrorKind.ClientNotFound),
+  v.literal(ErrorKind.ConnectTimeout),
+  v.literal(ErrorKind.InvalidConnectionRequest),
+  v.literal(ErrorKind.InvalidMessage),
+  v.literal(ErrorKind.InvalidPush),
+  v.literal(ErrorKind.PingTimeout),
+  v.literal(ErrorKind.PullTimeout),
+  v.literal(ErrorKind.RoomClosed),
+  v.literal(ErrorKind.RoomNotFound),
+  v.literal(ErrorKind.Unauthorized),
+  v.literal(ErrorKind.UnexpectedBaseCookie),
+  v.literal(ErrorKind.UnexpectedLastMutationID),
+  v.literal(ErrorKind.VersionNotSupported),
+);
 
-export const errorMessageSchema = s.tuple([
-  s.literal('error'),
+export const errorMessageSchema = v.tuple([
+  v.literal('error'),
   errorKindSchema,
-  s.string(),
+  v.string(),
 ]);
 
 export type ErrorMessage = ['error', ErrorKind, string];

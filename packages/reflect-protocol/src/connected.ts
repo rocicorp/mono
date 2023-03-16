@@ -1,13 +1,13 @@
-import * as s from 'superstruct';
+import * as v from '@badrap/valita';
 
-export const connectedBodySchema = s.object({
-  wsid: s.string(),
+export const connectedBodySchema = v.object({
+  wsid: v.string(),
 });
 
-export const connectedMessageSchema = s.tuple([
-  s.literal('connected'),
+export const connectedMessageSchema = v.tuple([
+  v.literal('connected'),
   connectedBodySchema,
 ]);
 
-export type ConnectedBody = s.Infer<typeof connectedBodySchema>;
-export type ConnectedMessage = s.Infer<typeof connectedMessageSchema>;
+export type ConnectedBody = v.Infer<typeof connectedBodySchema>;
+export type ConnectedMessage = v.Infer<typeof connectedMessageSchema>;

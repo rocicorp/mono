@@ -1,19 +1,19 @@
-import * as s from 'superstruct';
+import * as valita from '@badrap/valita';
 import {nullableVersionSchema} from 'reflect-protocol';
 import type {ClientID} from './client-state.js';
 import type {Storage} from '../storage/storage.js';
 
-export const clientRecordSchema = s.type({
-  clientGroupID: s.string(),
+export const clientRecordSchema = valita.object({
+  clientGroupID: valita.string(),
   baseCookie: nullableVersionSchema,
-  lastMutationID: s.number(),
+  lastMutationID: valita.number(),
   // Room version that last updated lastMutationID for this client
   // or null if no mutations have been applied for this client
   // (i.e. lastMutationID is 0).
   lastMutationIDVersion: nullableVersionSchema,
 });
 
-export type ClientRecord = s.Infer<typeof clientRecordSchema>;
+export type ClientRecord = valita.Infer<typeof clientRecordSchema>;
 export type ClientRecordMap = Map<ClientID, ClientRecord>;
 
 // Note: old (pre-dd31, conceptually V0) client records were stored with key

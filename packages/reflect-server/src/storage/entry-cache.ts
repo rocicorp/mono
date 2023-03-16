@@ -1,9 +1,8 @@
 import {compareUTF8} from 'compare-utf8';
 import type {JSONValue} from 'replicache';
-import type * as z from 'superstruct';
+import type * as valita from '@badrap/valita';
 import type {JSONType} from 'reflect-protocol';
 import type {Patch} from 'reflect-protocol';
-import {superstructAssert} from '../util/superstruct.js';
 import type {ListOptions, Storage} from './storage.js';
 
 /**
@@ -34,7 +33,7 @@ export class EntryCache implements Storage {
   }
   async get<T extends JSONValue>(
     key: string,
-    schema: z.Struct<T>,
+    schema: valita.Type<T>,
   ): Promise<T | undefined> {
     const cached = this._cache.get(key);
     if (cached) {
@@ -78,7 +77,7 @@ export class EntryCache implements Storage {
 
   async list<T extends JSONValue>(
     options: ListOptions,
-    schema: z.Struct<T>,
+    schema: valita.Type<T>,
   ): Promise<Map<string, T>> {
     const {prefix, start, limit} = options;
     const startKey = start?.key;
@@ -117,8 +116,7 @@ export class EntryCache implements Storage {
         if (v.value === undefined) {
           pending.push([k, undefined]);
         } else {
-          superstructAssert(v.value, schema);
-          pending.push([k, v.value]);
+          pending.push([k, schema.parse(v.value)]);
         }
       }
     }

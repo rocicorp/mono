@@ -22,7 +22,7 @@ import {closeConnections, getConnections} from './connections.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {getConnectedClients} from '../types/connected-clients.js';
-import * as s from 'superstruct';
+import * as valita from '@badrap/valita';
 import {createRoomRequestSchema} from 'reflect-protocol';
 import {
   get,
@@ -198,7 +198,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   }
 
   maybeRoomID(): Promise<string | undefined> {
-    return this._storage.get(roomIDKey, s.string());
+    return this._storage.get(roomIDKey, valita.string());
   }
 
   private _setDeleted() {
@@ -206,7 +206,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   }
 
   async deleted(): Promise<boolean> {
-    return (await this._storage.get(deletedKey, s.boolean())) === true;
+    return (await this._storage.get(deletedKey, valita.boolean())) === true;
   }
 
   // roomID errors and returns "unknown" if the roomID is not set. Prefer

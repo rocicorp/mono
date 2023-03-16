@@ -1,7 +1,7 @@
-import * as s from 'superstruct';
+import * as v from '@badrap/valita';
 
-export const versionSchema = s.number();
-export const nullableVersionSchema = s.union([versionSchema, s.literal(null)]);
+export const versionSchema = v.number();
+export const nullableVersionSchema = v.union(versionSchema, v.null());
 
-export type Version = s.Infer<typeof versionSchema>;
-export type NullableVersion = s.Infer<typeof nullableVersionSchema>;
+export type Version = v.Infer<typeof versionSchema>;
+export type NullableVersion = v.Infer<typeof nullableVersionSchema>;

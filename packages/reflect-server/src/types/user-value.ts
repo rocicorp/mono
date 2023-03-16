@@ -1,15 +1,15 @@
-import * as s from 'superstruct';
+import * as v from '@badrap/valita';
 import {jsonSchema} from 'reflect-protocol';
 import {versionSchema} from 'reflect-protocol';
 import type {Storage} from '../storage/storage.js';
 
-export const userValueSchema = s.type({
+export const userValueSchema = v.object({
   version: versionSchema,
-  deleted: s.boolean(),
+  deleted: v.boolean(),
   value: jsonSchema,
 });
 
-export type UserValue = s.Infer<typeof userValueSchema>;
+export type UserValue = v.Infer<typeof userValueSchema>;
 
 export const userValuePrefix = 'user/';
 
