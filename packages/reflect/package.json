@@ -45,7 +45,7 @@
     "rollup-plugin-dts": "^5.2.0",
     "shared": "*",
     "sinon": "^13.0.1",
-    "typescript": "^4.9.4"
+    "typescript": "^4.9.5"
   },
   "files": [
     "out/reflect.d.ts",
