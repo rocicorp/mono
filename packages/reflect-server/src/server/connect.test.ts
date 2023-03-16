@@ -86,6 +86,7 @@ describe('handleConnection', () => {
     expectedClients: (socket: Socket) => ClientMap;
     socket?: Socket;
     version: NullableVersion;
+    wsid?: string | undefined;
   };
   const c2 = client('c2', 'u2', 'cg1');
   const cases: Case[] = [
@@ -147,16 +148,6 @@ describe('handleConnection', () => {
       expectErrorKind: ErrorKind.InvalidConnectionRequest,
       expectErrorMessage:
         'invalid querystring parameter lmid, got: xx, url: http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=1&ts=123&lmid=xx',
-      existingClients: new Map(),
-      expectedClients: () => new Map(),
-      version: 1,
-    },
-    {
-      name: 'missing wsid',
-      url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=1&ts=123&lmid=12',
-      headers: createHeadersWithValidUserData('u1'),
-      expectErrorKind: ErrorKind.InvalidConnectionRequest,
-      expectErrorMessage: 'invalid querystring - missing wsid',
       existingClients: new Map(),
       expectedClients: () => new Map(),
       version: 1,
@@ -225,6 +216,18 @@ describe('handleConnection', () => {
       version: 7,
     },
     {
+      name: 'missing wsid',
+      url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=7&ts=123&lmid=0',
+      headers: createHeadersWithValidUserData('u1'),
+      existingClients: new Map(),
+      expectedClients: socket =>
+        new Map([freshClient('c1', 'u1', 'cg1', socket)]),
+      existingRecord: clientRecord('cg1', 4, 0),
+      expectedRecord: clientRecord('cg1', 7, 0),
+      version: 7,
+      wsid: '',
+    },
+    {
       name: 'missing user data',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=7&ts=42&lmid=0&wsid=wsidx',
       headers: new Headers(),
@@ -282,6 +285,7 @@ describe('handleConnection', () => {
     test(c.name, async () => {
       const durable = await getMiniflareDurableObjectStorage(id);
       const storage = new DurableStorage(durable);
+      const {wsid = 'wsidx'} = c;
 
       await durable.deleteAll();
       if (c.existingRecord) {
@@ -321,7 +325,7 @@ describe('handleConnection', () => {
 
       try {
         expect(mocket.log).toEqual([
-          ['send', JSON.stringify(['connected', {wsid: 'wsidx'}])],
+          ['send', JSON.stringify(['connected', {wsid}])],
         ]);
         const expectedClients = c.expectedClients(mocket);
         expect(clients).toEqual(expectedClients);
@@ -382,10 +386,6 @@ test('getConnectRequest', () => {
   testError(
     'https://www.example.com/?clientID=123&clientGroupID=cg1&ts=123',
     'invalid querystring - missing lmid',
-  );
-  testError(
-    'https://www.example.com/?clientID=123&clientGroupID=cg1&ts=123&lmid=456',
-    'invalid querystring - missing wsid',
   );
   testError(
     'https://www.example.com/?clientID=123&clientGroupID=cg1&ts=123&lmid=456&wsid=wsidx',
