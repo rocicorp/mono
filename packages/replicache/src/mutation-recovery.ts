@@ -5,7 +5,7 @@ import * as db from './db/mod.js';
 import * as persist from './persist/mod.js';
 import * as sync from './sync/mod.js';
 import {assertHash} from './hash.js';
-import {assert, assertNotUndefined} from 'shared';
+import {assert, assertNotUndefined} from 'shared/asserts.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import {
   MaybePromise,

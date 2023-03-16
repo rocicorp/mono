@@ -1,4 +1,4 @@
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 import type * as dag from '../dag/mod.js';
 import type * as sync from '../sync/mod.js';
 import * as db from '../db/mod.js';

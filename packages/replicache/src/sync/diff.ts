@@ -4,7 +4,7 @@ import {Commit, fromHash, Meta} from '../db/commit.js';
 import * as btree from '../btree/mod.js';
 import {allEntriesAsDiff, BTreeRead} from '../btree/read.js';
 import {readIndexesForRead} from '../db/read.js';
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 import type {InternalDiff} from '../btree/node.js';
 
 /**

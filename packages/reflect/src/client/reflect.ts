@@ -37,7 +37,7 @@ import {
   ReplicacheOptions,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from 'replicache';
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 import {nanoid} from '../util/nanoid.js';
 import {sleep} from '../util/sleep.js';
 import {send} from '../util/socket.js';

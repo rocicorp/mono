@@ -35,6 +35,10 @@
     "./has-own.js": {
       "import": "./src/has-own.ts",
       "types": "./src/has-own.ts"
+    },
+    "./asserts.js": {
+      "import": "./src/asserts.ts",
+      "types": "./src/asserts.ts"
     }
   },
   "eslintConfig": {

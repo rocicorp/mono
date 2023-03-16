@@ -1,5 +1,5 @@
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
-import {assertNotUndefined} from 'shared';
+import {assertNotUndefined} from 'shared/asserts.js';
 import {getLatestGCUpdate, initClientGroupGC} from './client-group-gc.js';
 import {
   ClientGroup,

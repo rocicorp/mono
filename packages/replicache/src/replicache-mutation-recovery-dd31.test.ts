@@ -16,7 +16,7 @@ import * as dag from './dag/mod.js';
 import * as persist from './persist/mod.js';
 import type * as sync from './sync/mod.js';
 import {assertHash} from './hash.js';
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 import {expect} from '@esm-bundle/chai';
 import {uuid} from './uuid.js';
 import {assertJSONObject, JSONObject, ReadonlyJSONObject} from './json.js';

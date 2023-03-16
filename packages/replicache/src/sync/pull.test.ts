@@ -1,6 +1,10 @@
 import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
-import {assertNotUndefined, assertObject, assertString} from 'shared';
+import {
+  assertNotUndefined,
+  assertObject,
+  assertString,
+} from 'shared/asserts.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import {BTreeRead} from '../btree/read.js';
 import type {Cookie, FrozenCookie} from '../cookies.js';

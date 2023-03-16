@@ -1,7 +1,7 @@
 import {deleteSentinel, WriteImplBase} from './write-impl-base.js';
 import type {Read, Store, Write} from './store.js';
 import {resolver} from '@rocicorp/resolver';
-import {assertNotNull} from 'shared';
+import {assertNotNull} from 'shared/asserts.js';
 import {wrap} from './idb-util.js';
 import {FrozenJSONValue, deepFreeze} from '../json.js';
 

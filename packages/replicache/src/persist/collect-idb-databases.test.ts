@@ -16,7 +16,7 @@ import {
 } from './collect-idb-databases.js';
 import * as dag from '../dag/mod.js';
 import type {ClientMap} from './clients.js';
-import {assertNotUndefined} from 'shared';
+import {assertNotUndefined} from 'shared/asserts.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {
   REPLICACHE_FORMAT_VERSION,

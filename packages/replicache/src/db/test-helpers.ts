@@ -43,7 +43,7 @@ import * as btree from '../btree/mod.js';
 import type {IndexDefinition, IndexDefinitions} from '../index-defs.js';
 import {IndexWrite} from './index.js';
 import {Visitor} from './visitor.js';
-import {assert, assertNotUndefined} from 'shared';
+import {assert, assertNotUndefined} from 'shared/asserts.js';
 import {addSyncSnapshot} from '../sync/test-helpers.js';
 import type {Cookie} from '../cookies.js';
 import {withRead, withWrite} from '../with-transactions.js';

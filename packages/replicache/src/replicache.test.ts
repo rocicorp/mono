@@ -45,7 +45,7 @@ import {
   LICENSE_ACTIVE_PATH,
   LICENSE_STATUS_PATH,
 } from '@rocicorp/licensing/src/server/api-types.js';
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 import {resolver} from '@rocicorp/resolver';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';
 import {TransactionClosedError} from './transaction-closed-error.js';

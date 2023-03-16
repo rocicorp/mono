@@ -16,7 +16,7 @@ import {
   assertNumber,
   assertObject,
   assertString,
-} from 'shared';
+} from 'shared/asserts.js';
 import {
   assertJSONValue,
   FrozenJSONValue,

@@ -1,4 +1,4 @@
-import {assertBoolean, assertObject, assertString} from 'shared';
+import {assertBoolean, assertObject, assertString} from 'shared/asserts.js';
 
 /**
  * The definition of a single index.

@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from '@esm-bundle/chai';
-import {assertNotUndefined} from 'shared';
+import {assertNotUndefined} from 'shared/asserts.js';
 import * as dag from '../dag/mod.js';
 import {DEFAULT_HEAD_NAME} from './commit.js';
 import {

@@ -4,7 +4,7 @@ import type {MutatorDefs} from '../replicache.js';
 import {WriteTransactionImpl} from '../transactions.js';
 import type {LogContext} from '@rocicorp/logger';
 import type {ClientID} from '../sync/mod.js';
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 import {
   Commit,
   fromHash,

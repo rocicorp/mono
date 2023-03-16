@@ -13,7 +13,7 @@ import type {
 } from 'reflect-protocol';
 import type {MutatorDefs} from 'replicache';
 import type {SinonFakeTimers} from 'sinon';
-import {assert} from 'shared';
+import {assert} from 'shared/asserts.js';
 import type {ReflectOptions} from './options.js';
 import {ConnectionState, Reflect} from './reflect.js';
 

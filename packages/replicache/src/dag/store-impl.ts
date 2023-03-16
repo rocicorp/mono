@@ -3,7 +3,7 @@ import {Store, Read, Write, mustGetChunk} from './store.js';
 import {assertMeta, Chunk, createChunk, ChunkHasher} from './chunk.js';
 import {chunkDataKey, chunkMetaKey, headKey, chunkRefCountKey} from './key.js';
 import {assertHash, Hash} from '../hash.js';
-import {assertNumber} from 'shared';
+import {assertNumber} from 'shared/asserts.js';
 import type {ReadonlyJSONValue} from '../json.js';
 import {computeRefCountUpdates, RefCountUpdatesDelegate} from './gc.js';
 
