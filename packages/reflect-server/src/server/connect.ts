@@ -252,7 +252,7 @@ export function getConnectRequest(
     const baseCookie = getIntegerParam('baseCookie', false);
     const timestamp = getIntegerParam('ts', true);
     const lmid = getIntegerParam('lmid', true);
-    const wsid = getParam('wsid', true);
+    const wsid = getParam('wsid', false) ?? '';
 
     const userData = getUserData(headers);
     return {
