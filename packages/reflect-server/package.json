@@ -33,6 +33,7 @@
     "@rocicorp/lock": "^1.0.1",
     "@rocicorp/logger": "^4.1.0",
     "@rocicorp/prettier-config": "^0.1.1",
+    "@rollup/plugin-node-resolve": "^15.0.1",
     "compare-utf8": "^0.1.1",
     "datadog": "*",
     "esbuild": "^0.17.11",
