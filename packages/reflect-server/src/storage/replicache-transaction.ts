@@ -1,4 +1,4 @@
-import type {Patch, Version} from 'reflect-protocol';
+import {jsonSchema, Patch, Version} from 'reflect-protocol';
 import {
   isScanIndexOptions,
   makeScanResult,
@@ -9,6 +9,7 @@ import {
   WriteTransaction,
 } from 'replicache';
 import type {ReadonlyJSONValue} from 'shared/json.js';
+import * as v from 'shared/valita.js';
 import type {ClientID} from '../types/client-state.js';
 import {
   UserValue,
@@ -46,7 +47,7 @@ export class ReplicacheTransaction implements WriteTransaction {
     const userValue: UserValue = {
       deleted: false,
       version: this._version,
-      value,
+      value: v.parse(value, jsonSchema),
     };
     await this._storage.put(userValueKey(key), userValue);
   }
@@ -61,7 +62,7 @@ export class ReplicacheTransaction implements WriteTransaction {
     const userValue: UserValue = {
       deleted: true,
       version: this._version,
-      value: prev,
+      value: prev, // prev came from get which needs to be verified when it was written.
     };
     await this._storage.put(userValueKey(key), userValue);
     return prev !== undefined;

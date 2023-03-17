@@ -2,6 +2,8 @@
 import {expect, test} from '@jest/globals';
 import {compareUTF8} from 'compare-utf8';
 import type {ScanOptions} from 'replicache';
+import {assert} from 'shared/asserts.js';
+import type {ReadonlyJSONValue} from 'shared/json.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
 import {EntryCache} from '../../src/storage/entry-cache.js';
 import {ReplicacheTransaction} from '../../src/storage/replicache-transaction.js';
@@ -274,4 +276,22 @@ test('ReplicacheTransaction scan()', async () => {
   await cache.flush();
   [tx, cache] = makeTx();
   await testScanForDels(tx);
+});
+
+test('put with non JSON value', async () => {
+  const storage = new DurableStorage(
+    await getMiniflareDurableObjectStorage(id),
+  );
+
+  const entryCache = new EntryCache(storage);
+  const writeTx = new ReplicacheTransaction(entryCache, 'c1', 1, 1);
+
+  let err;
+  try {
+    await writeTx.put('key', {a: Symbol()} as unknown as ReadonlyJSONValue);
+  } catch (e) {
+    err = e;
+  }
+  assert(err instanceof TypeError);
+  expect(err.message).toBe('Not a JSON value at a. Got symbol');
 });
