@@ -47,6 +47,10 @@
     "./deep-clone.js": {
       "import": "./src/deep-clone.ts",
       "types": "./src/deep-clone.ts"
+    },
+    "./config.js": {
+      "import": "./src/config.ts",
+      "types": "./src/config.ts"
     }
   },
   "eslintConfig": {

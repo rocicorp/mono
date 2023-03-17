@@ -1,15 +1,7 @@
-declare const process: {
-  env: {
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    NODE_ENV?: string;
-  };
-};
-
-const isProd = process.env.NODE_ENV === 'production';
+import {isProd} from 'shared/config.js';
 
 export {
   isProd as skipCommitDataAsserts,
-  isProd as skipAssertJSONValue,
   isProd as skipBTreeNodeAsserts,
   isProd as skipGCAsserts,
 
