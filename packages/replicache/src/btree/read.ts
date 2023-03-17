@@ -1,4 +1,4 @@
-import {deepEqual, FrozenJSONValue, getSizeOfValue} from '../json.js';
+import {deepEqual, FrozenJSONValue} from '../json.js';
 import type * as dag from '../dag/mod.js';
 import {Hash, emptyHash} from '../hash.js';
 import {
@@ -25,6 +25,7 @@ import {
   SPLICE_FROM,
   SPLICE_REMOVED,
 } from './splice.js';
+import {getSizeOfValue} from '../size-of-value.js';
 
 /**
  * The size of the header of a node. (If we had compile time

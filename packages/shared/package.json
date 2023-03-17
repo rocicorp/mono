@@ -39,6 +39,10 @@
     "./asserts.js": {
       "import": "./src/asserts.ts",
       "types": "./src/asserts.ts"
+    },
+    "./json.js": {
+      "import": "./src/json.ts",
+      "types": "./src/json.ts"
     }
   },
   "eslintConfig": {

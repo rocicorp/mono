@@ -1,28 +1,24 @@
-import {expect, assert} from '@esm-bundle/chai';
+import {assert, expect} from '@esm-bundle/chai';
 import * as dag from '../dag/mod.js';
 import {emptyHash, Hash, makeNewFakeHashFunction} from '../hash.js';
-import {
-  FrozenJSONValue,
-  getSizeOfValue,
-  ReadonlyJSONValue,
-  deepFreeze,
-} from '../json.js';
+import {deepFreeze, FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
+import {getSizeOfValue} from '../size-of-value.js';
+import {withRead, withWrite} from '../with-transactions.js';
 import {
   DataNode,
-  findLeaf,
-  InternalNode,
-  partition,
-  Entry,
-  NODE_LEVEL,
-  NODE_ENTRIES,
   Diff,
-  internalizeBTreeNode,
+  Entry,
   EntryWithOptionalSize,
+  findLeaf,
+  internalizeBTreeNode,
+  InternalNode,
   makeNodeChunkData,
+  NODE_ENTRIES,
+  NODE_LEVEL,
+  partition,
 } from './node.js';
-import {BTreeWrite} from './write.js';
 import {BTreeRead, NODE_HEADER_SIZE} from './read.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {BTreeWrite} from './write.js';
 
 test('findLeaf', async () => {
   const dagStore = new dag.TestStore();
