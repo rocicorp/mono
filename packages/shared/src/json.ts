@@ -153,3 +153,57 @@ function assertJSONArray(v: unknown[]): asserts v is JSONValue[] {
     assertJSONValue(item);
   }
 }
+
+interface Path {
+  push(key: string | number): void;
+  pop(): void;
+}
+
+/**
+ * Checks if a value is a JSON value. If there is a value that is not a JSON
+ * value, the path parameter is updated to the path of the invalid value.
+ */
+export function isJSONValue(v: unknown, path: Path): v is JSONValue {
+  switch (typeof v) {
+    case 'boolean':
+    case 'number':
+    case 'string':
+      return true;
+    case 'object':
+      if (v === null) {
+        return true;
+      }
+      if (Array.isArray(v)) {
+        return isJSONArray(v, path);
+      }
+      return objectIsJSONObject(v as Record<string, unknown>, path);
+  }
+  return false;
+}
+
+function objectIsJSONObject(
+  v: Record<string, unknown>,
+  path: Path,
+): v is JSONObject {
+  for (const k in v) {
+    if (hasOwn(v, k)) {
+      path.push(k);
+      if (!isJSONValue(v[k], path)) {
+        return false;
+      }
+      path.pop();
+    }
+  }
+  return true;
+}
+
+function isJSONArray(v: unknown[], path: Path): v is JSONValue[] {
+  for (let i = 0; i < v.length; i++) {
+    path.push(i);
+    if (!isJSONValue(v[i], path)) {
+      return false;
+    }
+    path.pop();
+  }
+  return true;
+}

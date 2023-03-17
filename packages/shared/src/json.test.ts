@@ -1,6 +1,5 @@
 import {expect, test} from '@jest/globals';
-import type {JSONValue} from './json.js';
-import {assertJSONValue, deepEqual} from './json.js';
+import {assertJSONValue, deepEqual, isJSONValue, JSONValue} from './json.js';
 
 test('JSON deep equal', () => {
   const t = (
@@ -76,4 +75,37 @@ test('assertJSONValue', () => {
   const o = {x: {}};
   o.x = o;
   expect(() => assertJSONValue(o)).toThrow(Error);
+});
+
+test('isJSONValue', () => {
+  const t = (v: unknown, expectedPath?: (string | number)[]) => {
+    if (expectedPath) {
+      const path: (string | number)[] = [];
+      expect(isJSONValue(v, path)).toBe(false);
+      expect(path).toEqual(expectedPath);
+    } else {
+      expect(isJSONValue(v, [])).toBe(true);
+    }
+  };
+
+  t(null);
+  t(true);
+  t(false);
+  t(1);
+  t(123.456);
+  t('');
+  t('abc');
+  t([]);
+  t([1, 2, 3]);
+  t({});
+  t({a: 1, b: 2});
+  t({a: 1, b: 2, c: [3, 4, 5]});
+
+  t(Symbol(), []);
+  t(() => 0, []);
+  t(undefined, []);
+  t(123n, []);
+  t({x: undefined}, ['x']);
+  t([undefined], [0]);
+  t({x: [undefined]}, ['x', 0]);
 });

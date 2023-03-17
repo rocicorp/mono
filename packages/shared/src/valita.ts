@@ -103,13 +103,12 @@ function getMessage(err: v.Err, v: unknown): string {
 
     case 'custom_error': {
       const {error} = firstIssue;
-      return (
-        (typeof error === 'string'
-          ? error
-          : typeof error === 'undefined'
-          ? 'unknown'
-          : error.message ?? 'unknown') + atPath
-      );
+      const message = !error
+        ? 'unknown'
+        : typeof error === 'string'
+        ? error
+        : error.message ?? 'unknown';
+      return `${message}${atPath}. Got ${toDisplayAtPath(v, path)}`;
     }
   }
 }

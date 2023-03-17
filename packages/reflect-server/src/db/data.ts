@@ -1,9 +1,9 @@
 import {compareUTF8} from 'compare-utf8';
-import type {JSONValue} from 'replicache';
+import type {ReadonlyJSONValue} from 'replicache';
 import * as valita from 'shared/valita.js';
 import {assertMapValues as valitaAssertMapValues} from '../util/valita.js';
 
-export async function getEntry<T extends JSONValue>(
+export async function getEntry<T extends ReadonlyJSONValue>(
   durable: DurableObjectStorage,
   key: string,
   schema: valita.Type<T>,
@@ -16,7 +16,7 @@ export async function getEntry<T extends JSONValue>(
   return valita.parse(value, schema);
 }
 
-export async function listEntries<T extends JSONValue>(
+export async function listEntries<T extends ReadonlyJSONValue>(
   durable: DurableObjectStorage,
   schema: valita.Type<T>,
   options: DurableObjectListOptions,
@@ -35,7 +35,7 @@ export async function listEntries<T extends JSONValue>(
   return result;
 }
 
-export async function putEntry<T extends JSONValue>(
+export async function putEntry<T extends ReadonlyJSONValue>(
   durable: DurableObjectStorage,
   key: string,
   value: T,
