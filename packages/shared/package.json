@@ -43,6 +43,10 @@
     "./json.js": {
       "import": "./src/json.ts",
       "types": "./src/json.ts"
+    },
+    "./deep-clone.js": {
+      "import": "./src/deep-clone.ts",
+      "types": "./src/deep-clone.ts"
     }
   },
   "eslintConfig": {

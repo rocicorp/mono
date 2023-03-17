@@ -1,10 +1,10 @@
-import {expect} from '@esm-bundle/chai';
-import type {JSONValue, ReadonlyJSONValue} from 'shared/json.js';
-import {deepClone} from '../util/deep-clone.js';
+import {expect, test} from '@jest/globals';
+import {deepClone} from './deep-clone.js';
+import type {JSONValue, ReadonlyJSONValue} from './json.js';
 
 test('deepClone', () => {
   const t = (v: ReadonlyJSONValue) => {
-    expect(deepClone(v)).to.deep.equal(v);
+    expect(deepClone(v)).toEqual(v);
   };
 
   t(null);
@@ -29,20 +29,20 @@ test('deepClone', () => {
 
   const cyclicObject: JSONValue = {a: 42, cycle: null};
   cyclicObject.cycle = cyclicObject;
-  expect(() => deepClone(cyclicObject)).to.throw('Cyclic object');
+  expect(() => deepClone(cyclicObject)).toThrow('Cyclic object');
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cyclicArray: any = {a: 42, cycle: [null]};
   cyclicArray.cycle[0] = cyclicArray;
-  expect(() => deepClone(cyclicArray)).to.throw('Cyclic object');
+  expect(() => deepClone(cyclicArray)).toThrow('Cyclic object');
 
   const sym = Symbol();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  expect(() => deepClone(sym as any)).to.throw('Invalid type: symbol');
+  expect(() => deepClone(sym as any)).toThrow('Invalid type: symbol');
 });
 
 test('deepClone - reuse references', () => {
-  const t = (v: ReadonlyJSONValue) => expect(deepClone(v)).to.deep.equal(v);
+  const t = (v: ReadonlyJSONValue) => expect(deepClone(v)).toEqual(v);
   const arr: number[] = [0, 1];
 
   t({a: arr, b: arr});
