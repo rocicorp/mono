@@ -258,16 +258,6 @@ describe('handleConnection', () => {
       version: 7,
     },
     {
-      name: 'user data with empty userID',
-      url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=7&ts=42&lmid=0&wsid=wsidx',
-      headers: createHeadersWithUserDataWithEmptyUserID(),
-      expectErrorKind: ErrorKind.InvalidConnectionRequest,
-      expectErrorMessage: 'invalid user-data - missing userID',
-      existingClients: new Map(),
-      expectedClients: () => new Map(),
-      version: 7,
-    },
-    {
       name: 'Invalid lastMutationID',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=7&ts=42&lmid=100&wsid=wsidx',
       existingClients: new Map(),
@@ -438,6 +428,19 @@ test('getConnectRequest', () => {
       clientID: 'cid1',
       clientGroupID: 'cg1',
       userData: {userID: 'u1', more: 'data'},
+      timestamp: 123,
+      lmid: 456,
+      baseCookie: 789,
+      wsid: 'wsidx2',
+    },
+  );
+  testResult(
+    'https://www.example.com/?clientID=cid1&clientGroupID=cg1&ts=123&lmid=456&baseCookie=789&wsid=wsidx2',
+    createHeadersWithUserDataWithEmptyUserID(),
+    {
+      clientID: 'cid1',
+      clientGroupID: 'cg1',
+      userData: {userID: ''},
       timestamp: 123,
       lmid: 456,
       baseCookie: 789,

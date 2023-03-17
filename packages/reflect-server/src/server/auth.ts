@@ -25,3 +25,8 @@ export type UserData = ReadonlyJSONObject & {userID: string};
  * with `encodeUrlComponent`.
  */
 export const USER_DATA_HEADER_NAME = 'x-reflect-user-data';
+
+/**
+ * Sentinel value used for userID when reflect is created without an auth handler.
+ */
+export const REFLECT_NOAUTH_USER_ID = '';

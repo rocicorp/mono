@@ -234,11 +234,7 @@ export function getConnectRequest(
     } catch (e) {
       throw new Error('invalid user-data - failed to decode/parse');
     }
-    if (
-      !jsonValue ||
-      typeof jsonValue.userID !== 'string' ||
-      jsonValue.userID === ''
-    ) {
+    if (!jsonValue || typeof jsonValue.userID !== 'string') {
       throw new Error('invalid user-data - missing userID');
     }
     return jsonValue;

@@ -2,7 +2,12 @@ import * as valita from 'shared/valita.js';
 import {encodeHeaderValue} from '../util/headers.js';
 import {LogSink, LogContext, LogLevel} from '@rocicorp/logger';
 import {version} from '../util/version.js';
-import {AuthHandler, UserData, USER_DATA_HEADER_NAME} from './auth.js';
+import {
+  AuthHandler,
+  REFLECT_NOAUTH_USER_ID,
+  UserData,
+  USER_DATA_HEADER_NAME,
+} from './auth.js';
 import {
   closeRoom,
   createRoom,
@@ -56,7 +61,7 @@ import {assert} from 'shared/asserts.js';
 export interface AuthDOOptions {
   roomDO: DurableObjectNamespace;
   state: DurableObjectState;
-  authHandler: AuthHandler;
+  authHandler: AuthHandler | undefined;
   authApiKey: string;
   logSink: LogSink;
   logLevel: LogLevel;
@@ -105,7 +110,7 @@ export class BaseAuthDO implements DurableObject {
   // storage should probably use _durableStorage, and not _state.storage
   // directly.
   private readonly _durableStorage: DurableStorage;
-  private readonly _authHandler: AuthHandler;
+  private readonly _authHandler: AuthHandler | undefined;
   private readonly _authApiKey: string;
   private readonly _lc: LogContext;
 
@@ -324,7 +329,8 @@ export class BaseAuthDO implements DurableObject {
     }
 
     const encodedAuth = request.headers.get('Sec-WebSocket-Protocol');
-    if (!encodedAuth) {
+
+    if (this._authHandler && !encodedAuth) {
       lc.error?.('authDO auth not found in Sec-WebSocket-Protocol header.');
       return createUnauthorizedResponse('auth required');
     }
@@ -392,33 +398,43 @@ export class BaseAuthDO implements DurableObject {
 
     lc = lc.addContext('client', clientID).addContext('room', roomID);
 
-    let decodedAuth: string | undefined;
-    try {
-      decodedAuth = decodeURIComponent(encodedAuth);
-    } catch (e) {
-      return closeWithErrorLocal(
-        ErrorKind.InvalidConnectionRequest,
-        'malformed auth',
-      );
-    }
-    const auth = decodedAuth;
     return this._authLock.withRead(async () => {
-      let userData: UserData | undefined;
-      try {
-        userData = await this._authHandler(auth, roomID);
-      } catch (e) {
-        return closeWithErrorLocal(
-          ErrorKind.Unauthorized,
-          'authHandler rejected',
-        );
-      }
-      if (!userData || !userData.userID) {
-        if (!userData) {
-          lc.info?.('userData returned by authHandler is not an object.');
-        } else if (!userData.userID) {
-          lc.info?.('userData returned by authHandler has no userID.');
+      let userData: UserData = {
+        userID: REFLECT_NOAUTH_USER_ID,
+      };
+
+      if (this._authHandler) {
+        let decodedAuth: string | undefined;
+        assert(encodedAuth);
+        try {
+          decodedAuth = decodeURIComponent(encodedAuth);
+        } catch (e) {
+          return closeWithErrorLocal(
+            ErrorKind.InvalidConnectionRequest,
+            'malformed auth',
+          );
         }
-        return closeWithErrorLocal(ErrorKind.Unauthorized, 'no userData');
+
+        const auth = decodedAuth;
+        let authHandlerUserData: UserData | undefined;
+
+        try {
+          authHandlerUserData = await this._authHandler(auth, roomID);
+        } catch (e) {
+          return closeWithErrorLocal(
+            ErrorKind.Unauthorized,
+            'authHandler rejected',
+          );
+        }
+        if (!authHandlerUserData || !authHandlerUserData.userID) {
+          if (!authHandlerUserData) {
+            lc.info?.('userData returned by authHandler is not an object.');
+          } else if (!authHandlerUserData.userID) {
+            lc.info?.('userData returned by authHandler has no userID.');
+          }
+          return closeWithErrorLocal(ErrorKind.Unauthorized, 'no userData');
+        }
+        userData = authHandlerUserData;
       }
 
       // Find the room's objectID so we can connect to it. Do this BEFORE
@@ -491,7 +507,9 @@ export class BaseAuthDO implements DurableObject {
       // Send a Sec-WebSocket-Protocol response header with a value
       // matching the Sec-WebSocket-Protocol request header, to indicate
       // support for the protocol, otherwise the client will close the connection.
-      responseHeaders.set('Sec-WebSocket-Protocol', encodedAuth);
+      if (encodedAuth) {
+        responseHeaders.set('Sec-WebSocket-Protocol', encodedAuth);
+      }
       const response = new Response(responseFromDO.body, {
         status: responseFromDO.status,
         statusText: responseFromDO.statusText,
@@ -738,7 +756,7 @@ function createWSAndCloseWithError(
   url: string,
   kind: ErrorKind,
   msg: string,
-  encodedAuth: string,
+  encodedAuth: string | null,
 ) {
   const pair = new WebSocketPair();
   const ws = pair[1];
@@ -756,7 +774,9 @@ function createWSAndCloseWithError(
   closeWithError(lc, ws, kind, msg);
 
   const responseHeaders = new Headers();
-  responseHeaders.set('Sec-WebSocket-Protocol', encodedAuth);
+  if (encodedAuth) {
+    responseHeaders.set('Sec-WebSocket-Protocol', encodedAuth);
+  }
   return new Response(null, {
     status: 101,
     headers: responseHeaders,

@@ -878,19 +878,31 @@ function createConnectTestFixture(
     testRoomID?: string;
     testClientID?: string;
     jurisdiction?: string | undefined;
+    encodedTestAuth?: string | undefined;
+    testAuth?: string;
   } = {},
 ) {
+  const optionsWithDefault = {
+    testUserID: 'testUserID1',
+    testRoomID: 'testRoomID1',
+    testClientID: 'testClientID1',
+    encodedTestAuth: 'test%20auth%20token%20value%20%25%20encoded',
+    testAuth: 'test auth token value % encoded',
+    ...options,
+  };
   const {
-    testUserID = 'testUserID1',
-    testRoomID = 'testRoomID1',
-    testClientID = 'testClientID1',
+    testUserID,
+    testRoomID,
+    testClientID,
     jurisdiction,
-  } = options;
-  const encodedTestAuth = 'test%20auth%20token%20value%20%25%20encoded';
-  const testAuth = 'test auth token value % encoded';
+    encodedTestAuth,
+    testAuth,
+  } = optionsWithDefault;
 
   const headers = new Headers();
-  headers.set('Sec-WebSocket-Protocol', encodedTestAuth);
+  if (encodedTestAuth) {
+    headers.set('Sec-WebSocket-Protocol', encodedTestAuth);
+  }
   headers.set('Upgrade', 'websocket');
   let url = `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}`;
   if (jurisdiction) {
@@ -930,9 +942,11 @@ function createConnectTestFixture(
         expect(request.headers.get(USER_DATA_HEADER_NAME)).toEqual(
           encodeHeaderValue(JSON.stringify({userID: testUserID})),
         );
-        expect(request.headers.get('Sec-WebSocket-Protocol')).toEqual(
-          encodedTestAuth,
-        );
+        if (encodedTestAuth) {
+          expect(request.headers.get('Sec-WebSocket-Protocol')).toEqual(
+            encodedTestAuth,
+          );
+        }
         return new Response(null, {status: 101, webSocket: mocket});
       });
     },
@@ -996,6 +1010,7 @@ describe("connect will implicitly create a room that doesn't exist", () => {
         testRequest,
         mocket,
         encodedTestAuth,
+        testUserID,
         storage,
         jurisdiction,
       );
@@ -1042,6 +1057,43 @@ test('connect calls authHandler and sends resolved UserData in header to Room DO
     testRequest,
     mocket,
     encodedTestAuth,
+    testUserID,
+    storage,
+    undefined,
+  );
+});
+
+test('connect with undefined authHandler sends UserData with empty userID to roomDO', async () => {
+  const {
+    testRoomID,
+    testRequest,
+    testRoomDO,
+    mocket,
+    encodedTestAuth,
+    testUserID,
+  } = createConnectTestFixture({encodedTestAuth: undefined, testUserID: ''});
+
+  const storage = await getMiniflareDurableObjectStorage(authDOID);
+  const state = new TestDurableObjectState(authDOID, storage);
+  const logSink = new TestLogSink();
+  const authDO = new BaseAuthDO({
+    roomDO: testRoomDO,
+    state,
+    // eslint-disable-next-line require-await
+    authHandler: undefined,
+    authApiKey: TEST_AUTH_API_KEY,
+    logSink,
+    logLevel: 'debug',
+  });
+
+  await createRoom(authDO, testRoomID);
+
+  await connectAndTestThatRoomGotCreated(
+    authDO,
+    testRequest,
+    mocket,
+    encodedTestAuth,
+    testUserID,
     storage,
     undefined,
   );
@@ -1553,7 +1605,8 @@ async function connectAndTestThatRoomGotCreated(
   authDO: BaseAuthDO,
   testRequest: Request,
   mocket: Mocket,
-  encodedTestAuth: string,
+  encodedTestAuth: string | undefined,
+  testUserID: string,
   storage: DurableObjectStorage,
   jurisdiction: string | undefined,
 ) {
@@ -1562,22 +1615,24 @@ async function connectAndTestThatRoomGotCreated(
   const response = await authDO.fetch(testRequest);
 
   expect(response.status).toEqual(101);
-  expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
-    encodedTestAuth,
-  );
+  if (encodedTestAuth) {
+    expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
+      encodedTestAuth,
+    );
+  }
 
   if (jurisdiction !== 'invalid') {
     expect(response.webSocket).toBe(mocket);
     expect((await storage.list({prefix: 'connection/'})).size).toEqual(1);
     const connectionRecord = (await storage.get(
-      'connection/testUserID1/testRoomID1/testClientID1/',
+      `connection/${testUserID}/testRoomID1/testClientID1/`,
     )) as Record<string, unknown> | undefined;
     assert(connectionRecord);
     expect(connectionRecord.connectTimestamp).toEqual(testTime);
   } else {
     expect((await storage.list({prefix: 'connection/'})).size).toEqual(0);
     const connectionRecord = await storage.get(
-      'connection/testUserID1/testRoomID1/testClientID1/',
+      `connection/${testUserID}/testRoomID1/testClientID1/`,
     );
     expect(connectionRecord).toBeUndefined();
   }
