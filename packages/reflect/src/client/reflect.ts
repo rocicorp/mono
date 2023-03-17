@@ -1,19 +1,18 @@
 import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
-import type {
+import {
   ConnectedMessage,
   Downstream,
+  downstreamSchema,
+  ErrorKind,
+  NullableVersion,
+  nullableVersionSchema,
   PingMessage,
   PokeMessage,
   PullRequestMessage,
   PullResponseBody,
   PullResponseMessage,
   PushMessage,
-} from 'reflect-protocol';
-import {
-  ErrorKind,
-  NullableVersion,
-  nullableVersionSchema,
   type ErrorMessage,
 } from 'reflect-protocol';
 import {
@@ -459,19 +458,20 @@ export class Reflect<MD extends MutatorDefs> {
       return;
     }
 
-    const rejectInvalidMessage = () =>
+    const rejectInvalidMessage = (e?: unknown) =>
       this.#nextMessageResolver?.reject(
-        new MessageError(ErrorKind.InvalidMessage, `Invalid message: ${data}`),
+        new MessageError(
+          ErrorKind.InvalidMessage,
+          `${e instanceof Error ? e.message + '. ' : ''}${data}`,
+        ),
       );
 
     let downMessage: Downstream;
     const {data} = e;
     try {
-      // TODO: validate this, at least in debug mode:
-      // https://github.com/rocicorp/reflect-server/issues/225
-      downMessage = JSON.parse(data) as Downstream; //downstreamSchema.parse(data);
+      downMessage = valita.parse(JSON.parse(data), downstreamSchema);
     } catch (e) {
-      rejectInvalidMessage();
+      rejectInvalidMessage(e);
       return;
     }
     this._messageCount++;
@@ -493,7 +493,7 @@ export class Reflect<MD extends MutatorDefs> {
         return;
 
       case 'pull':
-        await this._handlePullResponse(l, downMessage);
+        this._handlePullResponse(l, downMessage);
         return;
 
       default:
