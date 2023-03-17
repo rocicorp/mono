@@ -1,17 +1,17 @@
 import {RWLock} from '@rocicorp/lock';
 import type {Hash} from '../hash.js';
+import {joinIterables} from '../iterables.js';
+import type {MaybePromise} from '../replicache.js';
+import {promiseVoid} from '../resolved-promises.js';
+import {getSizeOfValue} from '../size-of-value.js';
+import {withWrite} from '../with-transactions.js';
 import {Chunk, ChunkHasher, createChunk} from './chunk.js';
-import {Store, Read, Write, mustGetChunk} from './store.js';
-import {getSizeOfValue} from '../json.js';
 import {
   computeRefCountUpdates,
   HeadChange,
   RefCountUpdatesDelegate,
 } from './gc.js';
-import {promiseVoid} from '../resolved-promises.js';
-import {joinIterables} from '../iterables.js';
-import type {MaybePromise} from '../replicache.js';
-import {withWrite} from '../with-transactions.js';
+import {mustGetChunk, Read, Store, Write} from './store.js';
 
 /**
  * Dag Store which lazily loads values from a source store and then caches

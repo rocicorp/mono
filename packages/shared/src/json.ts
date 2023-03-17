@@ -1,0 +1,155 @@
+import {assertObject, throwInvalidType} from './asserts.js';
+import {hasOwn} from './has-own.js';
+
+/** The values that can be represented in JSON */
+export type JSONValue =
+  | null
+  | string
+  | boolean
+  | number
+  | Array<JSONValue>
+  | JSONObject;
+
+/**
+ * A JSON object. This is a map from strings to JSON values.
+ */
+export type JSONObject = {[key: string]: JSONValue};
+
+/** Like {@link JSONValue} but deeply readonly */
+export type ReadonlyJSONValue =
+  | null
+  | string
+  | boolean
+  | number
+  | ReadonlyArray<ReadonlyJSONValue>
+  | ReadonlyJSONObject;
+
+/** Like {@link JSONObject} but deeply readonly */
+export type ReadonlyJSONObject = {
+  readonly [key: string]: ReadonlyJSONValue;
+};
+
+/**
+ * Checks deep equality of two JSON value with (almost) same semantics as
+ * `JSON.stringify`. The only difference is that with `JSON.stringify` the
+ * ordering of the properties in an object/map/dictionary matters. In
+ * {@link deepEqual} the following two values are consider equal, even though the
+ * strings JSON.stringify would produce is different:
+ *
+ * ```js
+ * assert(deepEqual(t({a: 1, b: 2}, {b: 2, a: 1}))
+ * ```
+ */
+export function deepEqual(
+  a: ReadonlyJSONValue | undefined,
+  b: ReadonlyJSONValue | undefined,
+): boolean {
+  if (a === b) {
+    return true;
+  }
+
+  if (typeof a !== typeof b) {
+    return false;
+  }
+
+  switch (typeof a) {
+    case 'boolean':
+    case 'number':
+    case 'string':
+      return false;
+  }
+
+  // a cannot be undefined here because either a and b are undefined or their
+  // types are different.
+  // eslint-disable-next-line  @typescript-eslint/no-non-null-assertion
+  a = a!;
+
+  // 'object'
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b)) {
+      return false;
+    }
+    if (a.length !== b.length) {
+      return false;
+    }
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (a === null || b === null) {
+    return false;
+  }
+
+  if (Array.isArray(b)) {
+    return false;
+  }
+
+  // We know a and b are objects here but type inference is not smart enough.
+  a = a as ReadonlyJSONObject;
+  b = b as ReadonlyJSONObject;
+
+  // We use for-in loops instead of for of Object.keys() to make sure deepEquals
+  // does not allocate any objects.
+
+  let aSize = 0;
+  for (const key in a) {
+    if (hasOwn(a, key)) {
+      if (!deepEqual(a[key], b[key])) {
+        return false;
+      }
+      aSize++;
+    }
+  }
+
+  let bSize = 0;
+  for (const key in b) {
+    if (hasOwn(b, key)) {
+      bSize++;
+    }
+  }
+
+  return aSize === bSize;
+}
+
+export function assertJSONValue(v: unknown): asserts v is JSONValue {
+  switch (typeof v) {
+    case 'boolean':
+    case 'number':
+    case 'string':
+      return;
+    case 'object':
+      if (v === null) {
+        return;
+      }
+      if (Array.isArray(v)) {
+        return assertJSONArray(v);
+      }
+      return assertObjectIsJSONObject(v as Record<string, unknown>);
+  }
+  throwInvalidType(v, 'JSON value');
+}
+
+export function assertJSONObject(v: unknown): asserts v is JSONObject {
+  assertObject(v);
+  assertObjectIsJSONObject(v);
+}
+
+function assertObjectIsJSONObject(
+  v: Record<string, unknown>,
+): asserts v is JSONObject {
+  for (const k in v) {
+    if (hasOwn(v, k)) {
+      assertJSONValue(v[k]);
+    }
+  }
+}
+
+function assertJSONArray(v: unknown[]): asserts v is JSONValue[] {
+  for (const item of v) {
+    assertJSONValue(item);
+  }
+}

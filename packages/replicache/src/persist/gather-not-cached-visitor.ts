@@ -2,7 +2,7 @@ import * as db from '../db/mod.js';
 import type {Hash} from '../hash.js';
 import type * as dag from '../dag/mod.js';
 import type * as btree from '../btree/mod.js';
-import {getSizeOfValue} from '../json.js';
+import {getSizeOfValue} from '../size-of-value.js';
 import {promiseVoid} from '../resolved-promises.js';
 
 export type ChunkWithSize = {chunk: dag.Chunk; size: number};
