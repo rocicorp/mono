@@ -1,15 +1,15 @@
-import type {JSONType} from 'reflect-protocol';
 import {hasOwn} from 'shared/has-own.js';
+import type {JSONValue, ReadonlyJSONValue} from 'shared/json.js';
 
-export function deepClone(value: JSONType): JSONType {
-  const seen: Array<JSONType | ReadonlyArray<JSONType>> = [];
+export function deepClone(value: ReadonlyJSONValue): JSONValue {
+  const seen: Array<ReadonlyJSONValue> = [];
   return internalDeepClone(value, seen);
 }
 
 export function internalDeepClone(
-  value: JSONType,
-  seen: Array<JSONType | ReadonlyArray<JSONType>>,
-): JSONType {
+  value: ReadonlyJSONValue,
+  seen: Array<ReadonlyJSONValue>,
+): JSONValue {
   switch (typeof value) {
     case 'boolean':
     case 'number':
@@ -30,11 +30,11 @@ export function internalDeepClone(
         return rv;
       }
 
-      const obj: JSONType = {};
+      const obj: JSONValue = {};
 
       for (const k in value) {
         if (hasOwn(value, k)) {
-          const v = (value as Record<string, JSONType>)[k];
+          const v = (value as Record<string, ReadonlyJSONValue>)[k];
           if (v !== undefined) {
             obj[k] = internalDeepClone(v, seen);
           }

@@ -1,9 +1,9 @@
 import {expect} from '@esm-bundle/chai';
-import type {JSONType} from 'reflect-protocol';
+import type {JSONValue, ReadonlyJSONValue} from 'shared/json.js';
 import {deepClone} from '../util/deep-clone.js';
 
 test('deepClone', () => {
-  const t = (v: JSONType) => {
+  const t = (v: ReadonlyJSONValue) => {
     expect(deepClone(v)).to.deep.equal(v);
   };
 
@@ -27,7 +27,7 @@ test('deepClone', () => {
   t({a: 42, b: [1, 2, 3]});
   t([1, {}, 2]);
 
-  const cyclicObject: JSONType = {a: 42, cycle: null};
+  const cyclicObject: JSONValue = {a: 42, cycle: null};
   cyclicObject.cycle = cyclicObject;
   expect(() => deepClone(cyclicObject)).to.throw('Cyclic object');
 
@@ -42,7 +42,7 @@ test('deepClone', () => {
 });
 
 test('deepClone - reuse references', () => {
-  const t = (v: JSONType) => expect(deepClone(v)).to.deep.equal(v);
+  const t = (v: ReadonlyJSONValue) => expect(deepClone(v)).to.deep.equal(v);
   const arr: number[] = [0, 1];
 
   t({a: arr, b: arr});

@@ -1,6 +1,6 @@
-import type {JSONValue} from 'replicache';
+import type {ReadonlyJSONValue} from 'shared/json.js';
 import type * as valita from 'shared/valita.js';
-import {delEntry, getEntry, putEntry, listEntries} from '../db/data.js';
+import {delEntry, getEntry, listEntries, putEntry} from '../db/data.js';
 import type {ListOptions, Storage} from './storage.js';
 
 const baseAllowConcurrency = true;
@@ -30,7 +30,7 @@ export class DurableStorage implements Storage {
     };
   }
 
-  put<T extends JSONValue>(key: string, value: T): Promise<void> {
+  put<T extends ReadonlyJSONValue>(key: string, value: T): Promise<void> {
     return putEntry(this._durable, key, value, this._baseOptions);
   }
 
@@ -38,14 +38,14 @@ export class DurableStorage implements Storage {
     return delEntry(this._durable, key, this._baseOptions);
   }
 
-  get<T extends JSONValue>(
+  get<T extends ReadonlyJSONValue>(
     key: string,
     schema: valita.Type<T>,
   ): Promise<T | undefined> {
     return getEntry(this._durable, key, schema, baseOptions);
   }
 
-  list<T extends JSONValue>(
+  list<T extends ReadonlyJSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
   ): Promise<Map<string, T>> {

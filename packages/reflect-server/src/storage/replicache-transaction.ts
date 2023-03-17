@@ -1,15 +1,14 @@
+import type {Patch, Version} from 'reflect-protocol';
 import {
   isScanIndexOptions,
-  JSONValue,
   makeScanResult,
   ScanNoIndexOptions,
   ScanOptions,
-  WriteTransaction,
-  TransactionReason,
   TransactionEnvironment,
+  TransactionReason,
+  WriteTransaction,
 } from 'replicache';
-import type {JSONType} from 'reflect-protocol';
-import type {Patch} from 'reflect-protocol';
+import type {ReadonlyJSONValue} from 'shared/json.js';
 import type {ClientID} from '../types/client-state.js';
 import {
   UserValue,
@@ -17,7 +16,6 @@ import {
   userValuePrefix,
   userValueSchema,
 } from '../types/user-value.js';
-import type {Version} from 'reflect-protocol';
 import type {Storage} from './storage.js';
 
 /**
@@ -44,11 +42,11 @@ export class ReplicacheTransaction implements WriteTransaction {
     this.mutationID = mutationID;
   }
 
-  async put(key: string, value: JSONValue): Promise<void> {
+  async put(key: string, value: ReadonlyJSONValue): Promise<void> {
     const userValue: UserValue = {
       deleted: false,
       version: this._version,
-      value: value as JSONType,
+      value,
     };
     await this._storage.put(userValueKey(key), userValue);
   }
@@ -63,13 +61,13 @@ export class ReplicacheTransaction implements WriteTransaction {
     const userValue: UserValue = {
       deleted: true,
       version: this._version,
-      value: prev as JSONType,
+      value: prev,
     };
     await this._storage.put(userValueKey(key), userValue);
     return prev !== undefined;
   }
 
-  async get(key: string): Promise<JSONValue | undefined> {
+  async get(key: string): Promise<ReadonlyJSONValue | undefined> {
     const entry = await this._storage.get(userValueKey(key), userValueSchema);
     if (entry === undefined) {
       return undefined;
@@ -114,7 +112,7 @@ export class ReplicacheTransaction implements WriteTransaction {
 
     for (const [k, v] of entriesMap) {
       if (!v.deleted) {
-        const entry: [string, JSONValue] = [stripPrefix(k), v.value];
+        const entry: [string, ReadonlyJSONValue] = [stripPrefix(k), v.value];
         yield entry;
       }
     }

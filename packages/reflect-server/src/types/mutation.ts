@@ -1,5 +1,5 @@
-import type {JSONType} from 'reflect-protocol';
 import type {ClientGroupID} from 'replicache';
+import type {ReadonlyJSONValue} from 'shared/json.js';
 import type {ClientID} from './client-state.js';
 
 export type PendingMutation = {
@@ -8,6 +8,6 @@ export type PendingMutation = {
   readonly clientGroupID: ClientGroupID;
   readonly pusherClientIDs: ReadonlySet<ClientID>;
   readonly name: string;
-  readonly args: JSONType;
+  readonly args: ReadonlyJSONValue;
   readonly timestamp?: number | undefined;
 };

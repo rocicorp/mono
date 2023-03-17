@@ -1,8 +1,8 @@
 import {expect, test} from '@jest/globals';
-import {jsonSchema, JSONType, Version} from 'reflect-protocol';
+import {jsonSchema, Version} from 'reflect-protocol';
 import type {WriteTransaction} from 'replicache';
+import type {ReadonlyJSONValue} from 'shared/json.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
-import type {ClientPoke} from '../types/client-poke.js';
 import {
   clientRecordKey,
   ClientRecordMap,
@@ -12,7 +12,9 @@ import type {ClientID} from '../../src/types/client-state.js';
 import {UserValue, userValueKey} from '../../src/types/user-value.js';
 import {versionKey} from '../../src/types/version.js';
 import {processFrame} from '../process/process-frame.js';
+import type {ClientPoke} from '../types/client-poke.js';
 import {connectedClientsKey} from '../types/connected-clients.js';
+import type {PendingMutation} from '../types/mutation.js';
 import {
   clientRecord,
   createSilentLogContext,
@@ -20,7 +22,6 @@ import {
   pendingMutation,
   userValue,
 } from '../util/test-utils.js';
-import type {PendingMutation} from '../types/mutation.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -50,7 +51,7 @@ test('processFrame', async () => {
     Object.entries({
       put: async (
         tx: WriteTransaction,
-        {key, value}: {key: string; value: JSONType},
+        {key, value}: {key: string; value: ReadonlyJSONValue},
       ) => {
         await tx.put(key, value);
       },
@@ -641,13 +642,13 @@ test('processFrame', async () => {
     );
 
     const expectedState = new Map([
-      ...new Map<string, JSONType>(
+      ...new Map<string, ReadonlyJSONValue>(
         [...c.expectedUserValues].map(([key, value]) => [
           userValueKey(key),
           value,
         ]),
       ),
-      ...new Map<string, JSONType>(
+      ...new Map<string, ReadonlyJSONValue>(
         [...c.expectedClientRecords].map(([key, value]) => [
           clientRecordKey(key),
           value,

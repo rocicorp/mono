@@ -1,10 +1,8 @@
-import * as valita from 'shared/valita.js';
 import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
 import type {
   ConnectedMessage,
   Downstream,
-  JSONType,
   PingMessage,
   PokeMessage,
   PullRequestMessage,
@@ -38,6 +36,7 @@ import {
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from 'replicache';
 import {assert} from 'shared/asserts.js';
+import * as valita from 'shared/valita.js';
 import {nanoid} from '../util/nanoid.js';
 import {sleep} from '../util/sleep.js';
 import {send} from '../util/socket.js';
@@ -787,7 +786,7 @@ export class Reflect<MD extends MutatorDefs> {
               id: m.id,
               clientID: m.clientID,
               name: m.name,
-              args: m.args as JSONType,
+              args: m.args,
             },
           ],
           pushVersion: req.pushVersion,

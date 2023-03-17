@@ -1,14 +1,22 @@
+import * as valita from '@badrap/valita';
+import type {ReadonlyJSONValue} from 'shared/json.js';
+import {isJSONValue} from 'shared/json.js';
 import * as v from 'shared/valita.js';
 
-type Literal = boolean | null | number | string;
-type Json = Literal | {[key: string]: Json} | Json[];
-const literalSchema = v.union(v.string(), v.number(), v.boolean(), v.null());
+const path: (string | number)[] = [];
 
-export type JSONType = v.Infer<typeof jsonSchema>;
-
-export const jsonSchema: v.ValitaType<Json> = v.lazy(() =>
-  v.union(literalSchema, v.array(jsonSchema), v.record(jsonSchema)),
-);
+export const jsonSchema: valita.Type<ReadonlyJSONValue> = v
+  .unknown()
+  .chain(v => {
+    const rv = isJSONValue(v, path)
+      ? valita.ok(v)
+      : valita.err({
+          message: `Not a JSON value`,
+          path: path.slice(),
+        });
+    path.length = 0;
+    return rv;
+  });
 
 /**
  * A JSON value that allows undefined values in objects.
@@ -21,6 +29,6 @@ export type RelaxedJSONValue =
   | RelaxedJSONObject
   | RelaxedJSONArray;
 
-type RelaxedJSONArray = Array<RelaxedJSONValue>;
+type RelaxedJSONArray = ReadonlyArray<RelaxedJSONValue>;
 
-type RelaxedJSONObject = {[key: string]: RelaxedJSONValue | undefined};
+type RelaxedJSONObject = {readonly [key: string]: RelaxedJSONValue | undefined};

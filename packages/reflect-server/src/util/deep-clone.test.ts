@@ -1,9 +1,9 @@
-import {test, expect} from '@jest/globals';
-import type {JSONType} from 'reflect-protocol';
+import {expect, test} from '@jest/globals';
+import type {JSONValue, ReadonlyJSONValue} from 'shared/json.js';
 import {deepClone} from '../../src/util/deep-clone.js';
 
 test('deepClone', () => {
-  const t = (v: JSONType) => {
+  const t = (v: ReadonlyJSONValue) => {
     expect(deepClone(v)).toEqual(v);
   };
 
@@ -27,7 +27,7 @@ test('deepClone', () => {
   t({a: 42, b: [1, 2, 3]});
   t([1, {}, 2]);
 
-  const cyclicObject: JSONType = {a: 42, cycle: null};
+  const cyclicObject: JSONValue = {a: 42, cycle: null};
   cyclicObject.cycle = cyclicObject;
   expect(() => deepClone(cyclicObject)).toThrowError('Cyclic object');
 
@@ -42,7 +42,7 @@ test('deepClone', () => {
 });
 
 test('deepClone - reuse references', () => {
-  const t = (v: JSONType) => expect(deepClone(v)).toEqual(v);
+  const t = (v: JSONValue) => expect(deepClone(v)).toEqual(v);
   const arr: number[] = [0, 1];
 
   t({a: arr, b: arr});

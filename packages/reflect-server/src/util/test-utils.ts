@@ -1,15 +1,14 @@
-import {jest, beforeEach, afterEach} from '@jest/globals';
+import {afterEach, beforeEach, jest} from '@jest/globals';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import type {Mutation, NullableVersion} from 'reflect-protocol';
+import type {ReadonlyJSONValue} from 'shared/json.js';
 import type {ClientRecord} from '../../src/types/client-record.js';
-import type {JSONType} from 'reflect-protocol';
-import type {Mutation} from 'reflect-protocol';
 import type {
   ClientGroupID,
   ClientID,
   ClientState,
   Socket,
 } from '../../src/types/client-state.js';
-import type {NullableVersion} from 'reflect-protocol';
 import type {PendingMutation} from '../types/mutation.js';
 
 afterEach(() => {
@@ -46,7 +45,7 @@ export function mutation(
   id: number,
   timestamp = 1,
   name = 'foo',
-  args: JSONType = [],
+  args: ReadonlyJSONValue = [],
 ): Mutation {
   return {
     clientID,
@@ -64,7 +63,7 @@ export function pendingMutation(opts: {
   timestamp: number | undefined;
   pusherClientIDs?: Set<ClientID>;
   name?: string;
-  args?: JSONType;
+  args?: ReadonlyJSONValue;
 }): PendingMutation {
   const {
     clientID,
@@ -124,7 +123,11 @@ export function clientRecord(
   };
 }
 
-export function userValue(value: JSONType, version = 1, deleted = false) {
+export function userValue(
+  value: ReadonlyJSONValue,
+  version = 1,
+  deleted = false,
+) {
   return {
     value,
     version,

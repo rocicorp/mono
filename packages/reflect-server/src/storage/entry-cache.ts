@@ -1,8 +1,7 @@
 import {compareUTF8} from 'compare-utf8';
-import type {JSONValue} from 'replicache';
-import * as valita from 'shared/valita.js';
-import type {JSONType} from 'reflect-protocol';
 import type {Patch} from 'reflect-protocol';
+import type {ReadonlyJSONValue} from 'shared/json.js';
+import * as valita from 'shared/valita.js';
 import type {ListOptions, Storage} from './storage.js';
 
 /**
@@ -16,22 +15,24 @@ import type {ListOptions, Storage} from './storage.js';
  */
 export class EntryCache implements Storage {
   private _storage: Storage;
-  private _cache: Map<string, {value?: JSONValue | undefined; dirty: boolean}> =
-    new Map();
+  private _cache: Map<
+    string,
+    {value?: ReadonlyJSONValue | undefined; dirty: boolean}
+  > = new Map();
 
   constructor(storage: Storage) {
     this._storage = storage;
   }
 
   // eslint-disable-next-line require-await
-  async put<T extends JSONValue>(key: string, value: T): Promise<void> {
+  async put<T extends ReadonlyJSONValue>(key: string, value: T): Promise<void> {
     this._cache.set(key, {value, dirty: true});
   }
   // eslint-disable-next-line require-await
   async del(key: string): Promise<void> {
     this._cache.set(key, {value: undefined, dirty: true});
   }
-  async get<T extends JSONValue>(
+  async get<T extends ReadonlyJSONValue>(
     key: string,
     schema: valita.Type<T>,
   ): Promise<T | undefined> {
@@ -54,7 +55,7 @@ export class EntryCache implements Storage {
         if (value === undefined) {
           res.push({op: 'del', key});
         } else {
-          res.push({op: 'put', key, value: value as JSONType});
+          res.push({op: 'put', key, value});
         }
       }
     }
@@ -75,7 +76,7 @@ export class EntryCache implements Storage {
     );
   }
 
-  async list<T extends JSONValue>(
+  async list<T extends ReadonlyJSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
   ): Promise<Map<string, T>> {
