@@ -1,5 +1,5 @@
-import {hasOwn} from 'shared/has-own.js';
-import type {JSONValue, ReadonlyJSONValue} from 'shared/json.js';
+import {hasOwn} from './has-own.js';
+import type {JSONValue, ReadonlyJSONValue} from './json.js';
 
 export function deepClone(value: ReadonlyJSONValue): JSONValue {
   const seen: Array<ReadonlyJSONValue> = [];
