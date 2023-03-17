@@ -1,4 +1,5 @@
 import {assertObject, throwInvalidType} from './asserts.js';
+import {skipAssertJSONValue} from './config.js';
 import {hasOwn} from './has-own.js';
 
 /** The values that can be represented in JSON */
@@ -116,6 +117,9 @@ export function deepEqual(
 }
 
 export function assertJSONValue(v: unknown): asserts v is JSONValue {
+  if (skipAssertJSONValue) {
+    return;
+  }
   switch (typeof v) {
     case 'boolean':
     case 'number':
