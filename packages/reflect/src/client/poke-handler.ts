@@ -1,7 +1,7 @@
-import type {Poke, PokeBody} from 'reflect-protocol';
 import {Lock} from '@rocicorp/lock';
-import type {ClientID, MaybePromise, Poke as ReplicachePoke} from 'replicache';
 import type {LogContext} from '@rocicorp/logger';
+import type {Poke, PokeBody} from 'reflect-protocol';
+import type {ClientID, MaybePromise, Poke as ReplicachePoke} from 'replicache';
 import {assert} from 'shared/asserts.js';
 import {mergePokes} from './merge-pokes.js';
 
@@ -171,7 +171,7 @@ export class PokeHandler {
       try {
         const start = performance.now();
         const {lastMutationIDChanges, baseCookie, patch, cookie} = merged;
-        const pokeDD31: ReplicachePoke = {
+        const poke: ReplicachePoke = {
           baseCookie,
           pullResponse: {
             lastMutationIDChanges,
@@ -180,7 +180,7 @@ export class PokeHandler {
           },
         };
         lc.debug?.('poking replicache');
-        await this._replicachePoke(pokeDD31);
+        await this._replicachePoke(poke);
         lc.debug?.('poking replicache took', performance.now() - start);
       } catch (e) {
         if (String(e).indexOf('unexpected base cookie for poke') > -1) {
