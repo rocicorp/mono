@@ -1,7 +1,8 @@
 import {expect} from '@esm-bundle/chai';
 import {LogContext, LogLevel} from '@rocicorp/logger';
 import * as sinon from 'sinon';
-import {PokeHandler} from './poke-handler.js';
+import {BUFFER_SIZER_OPTIONS, PokeHandler} from './poke-handler.js';
+import {BufferSizer} from 'shared/buffer-sizer.js';
 
 let clock: sinon.SinonFakeTimers;
 let rafStub: sinon.SinonStub;
@@ -772,7 +773,7 @@ test('playback sequence of poke messages', async () => {
   expect(rafStub.callCount).to.equal(5);
 });
 
-test('playback offset is reset for new pokes if timestamp offset delta is > 1000', async () => {
+test('playback offset is reset for new pokes if timestamp offset delta is > 2000', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
   const pokeHandler = new PokeHandler(
@@ -864,7 +865,7 @@ test('playback offset is reset for new pokes if timestamp offset delta is > 1000
             value: 3,
           },
         ],
-        timestamp: startTime + 100 + 250 - 1001,
+        timestamp: startTime + 100 + 250 - 5001,
       },
       {
         baseCookie: 4,
@@ -877,7 +878,7 @@ test('playback offset is reset for new pokes if timestamp offset delta is > 1000
             value: 4,
           },
         ],
-        timestamp: startTime + 100 + 250 - 1001 + 60,
+        timestamp: startTime + 100 + 250 - 5001 + 60,
       },
     ],
     requestID: 'requestID2',
@@ -1577,4 +1578,227 @@ test('handlePoke returns the last mutation id change for this client from poke m
     requestID: 'requestID1',
   });
   expect(lastMutationIDChangeForSelf3).to.equal(3);
+});
+
+test.only('integration with BufferSizer', async () => {
+  const outOfOrderPokeStub = sinon.stub();
+  const replicachePokeStub = sinon.stub();
+  const bufferSizer = new BufferSizer(BUFFER_SIZER_OPTIONS);
+  const recordOffsetSpy = sinon.spy(bufferSizer, 'recordOffset');
+  const recordMissableSpy = sinon.spy(bufferSizer, 'recordMissable');
+  const bufferSizeMsStub = sinon.stub(bufferSizer, 'bufferSizeMs');
+  const pokeHandler = new PokeHandler(
+    replicachePokeStub,
+    outOfOrderPokeStub,
+    Promise.resolve('c1'),
+    Promise.resolve(new LogContext('error')),
+    bufferSizer,
+  );
+  expect(rafStub.callCount).to.equal(0);
+  expect(recordMissableSpy.callCount).to.equal(0);
+  expect(recordOffsetSpy.callCount).to.equal(0);
+
+  const lastMutationIDChangeForSelf = await pokeHandler.handlePoke({
+    pokes: [
+      {
+        baseCookie: 1,
+        cookie: 2,
+        lastMutationIDChanges: {c2: 2},
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 1,
+          },
+        ],
+        timestamp: startTime + 100,
+      },
+      {
+        baseCookie: 2,
+        cookie: 3,
+        lastMutationIDChanges: {c2: 3},
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 2,
+          },
+        ],
+        timestamp: startTime + 120,
+      },
+    ],
+    requestID: 'requestID1',
+  });
+  expect(lastMutationIDChangeForSelf).to.equal(undefined);
+
+  expect(recordMissableSpy.callCount).to.equal(0);
+  expect(recordOffsetSpy.callCount).to.equal(1);
+  const recordOffset0 = recordOffsetSpy.getCall(0);
+  expect(recordOffset0.args).to.deep.equal(['c1', -(startTime + 100)]);
+
+  expect(replicachePokeStub.callCount).to.equal(0);
+  expect(rafStub.callCount).to.equal(1);
+
+  const rafCallback0 = rafStub.getCall(0).args[0];
+  await rafCallback0();
+
+  expect(recordMissableSpy.callCount).to.equal(0);
+  expect(recordOffsetSpy.callCount).to.equal(1);
+  expect(replicachePokeStub.callCount).to.equal(0);
+  expect(rafStub.callCount).to.equal(2);
+
+  const rafCallback1 = rafStub.getCall(1).args[0];
+  await clock.tickAsync(250);
+  expect(replicachePokeStub.callCount).to.equal(0);
+  await rafCallback1();
+
+  expect(recordMissableSpy.callCount).to.equal(1);
+  expect(recordOffsetSpy.callCount).to.equal(1);
+  const recordMissable0 = recordMissableSpy.getCall(0);
+  expect(recordMissable0.args).to.deep.equal([false]);
+
+  expect(replicachePokeStub.callCount).to.equal(1);
+  const replicachePoke0 = replicachePokeStub.getCall(0).args[0];
+  expect(replicachePoke0).to.deep.equal({
+    baseCookie: 1,
+    pullResponse: {
+      cookie: 2,
+      lastMutationIDChanges: {
+        c2: 2,
+      },
+      patch: [
+        {
+          key: 'count',
+          op: 'put',
+          value: 1,
+        },
+      ],
+    },
+  });
+  expect(rafStub.callCount).to.equal(3);
+
+  const lastMutationIDChangeForSelf2 = await pokeHandler.handlePoke({
+    pokes: [
+      {
+        baseCookie: 3,
+        cookie: 4,
+        lastMutationIDChanges: {c3: 2},
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 3,
+          },
+        ],
+        timestamp: startTime + 140,
+      },
+      {
+        baseCookie: 4,
+        cookie: 5,
+        lastMutationIDChanges: {c3: 3},
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 4,
+          },
+        ],
+        timestamp: startTime + 160,
+      },
+    ],
+    requestID: 'requestID2',
+  });
+  expect(lastMutationIDChangeForSelf2).to.be.undefined;
+
+  expect(recordMissableSpy.callCount).to.equal(1);
+  expect(recordOffsetSpy.callCount).to.equal(2);
+  const recordOffset1 = recordOffsetSpy.getCall(1);
+  expect(recordOffset1.args).to.deep.equal(['c1', 250 - (startTime + 140)]);
+
+  const rafCallback2 = rafStub.getCall(2).args[0];
+  await clock.tickAsync(40);
+  expect(replicachePokeStub.callCount).to.equal(1);
+  await rafCallback2();
+
+  expect(recordMissableSpy.callCount).to.equal(2);
+  expect(recordOffsetSpy.callCount).to.equal(2);
+  const recordMissable1 = recordMissableSpy.getCall(1);
+  expect(recordMissable1.args).to.deep.equal([true]);
+
+  expect(replicachePokeStub.callCount).to.equal(2);
+  const replicachePoke1 = replicachePokeStub.getCall(1).args[0];
+  expect(replicachePoke1).to.deep.equal({
+    baseCookie: 2,
+    pullResponse: {
+      cookie: 4,
+      lastMutationIDChanges: {
+        c2: 3,
+        c3: 2,
+      },
+      patch: [
+        {
+          key: 'count',
+          op: 'put',
+          value: 2,
+        },
+        {
+          key: 'count',
+          op: 'put',
+          value: 3,
+        },
+      ],
+    },
+  });
+  expect(rafStub.callCount).to.equal(4);
+
+  bufferSizeMsStub.get(() => 500);
+
+  const rafCallback3 = rafStub.getCall(3).args[0];
+  await clock.tickAsync(20);
+  expect(replicachePokeStub.callCount).to.equal(2);
+  await rafCallback3();
+
+  // not called because of bigger buffer size
+  expect(recordMissableSpy.callCount).to.equal(2);
+  expect(recordOffsetSpy.callCount).to.equal(2);
+  expect(replicachePokeStub.callCount).to.equal(2);
+
+  expect(rafStub.callCount).to.equal(5);
+
+  const rafCallback4 = rafStub.getCall(4).args[0];
+  await clock.tickAsync(250);
+  expect(replicachePokeStub.callCount).to.equal(2);
+  await rafCallback4();
+
+  expect(recordMissableSpy.callCount).to.equal(3);
+  expect(recordOffsetSpy.callCount).to.equal(2);
+  const recordMissable2 = recordMissableSpy.getCall(2);
+  expect(recordMissable2.args).to.deep.equal([false]);
+
+  expect(replicachePokeStub.callCount).to.equal(3);
+  const replicachePoke2 = replicachePokeStub.getCall(2).args[0];
+  expect(replicachePoke2).to.deep.equal({
+    baseCookie: 4,
+    pullResponse: {
+      cookie: 5,
+      lastMutationIDChanges: {
+        c3: 3,
+      },
+      patch: [
+        {
+          key: 'count',
+          op: 'put',
+          value: 4,
+        },
+      ],
+    },
+  });
+  expect(rafStub.callCount).to.equal(6);
+
+  const rafCallback5 = rafStub.getCall(5).args[0];
+  await rafCallback5();
+  expect(recordMissableSpy.callCount).to.equal(3);
+  expect(recordOffsetSpy.callCount).to.equal(2);
+  expect(replicachePokeStub.callCount).to.equal(3);
+  expect(rafStub.callCount).to.equal(6);
 });

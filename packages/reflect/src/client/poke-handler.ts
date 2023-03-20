@@ -4,10 +4,15 @@ import type {Poke, PokeBody} from 'reflect-protocol';
 import type {ClientID, MaybePromise, Poke as ReplicachePoke} from 'replicache';
 import {assert} from 'shared/asserts.js';
 import {mergePokes} from './merge-pokes.js';
+import {BufferSizer} from 'shared/buffer-sizer.js';
 
-// TODO: make buffer dynamic
-const PLAYBACK_BUFFER_MS = 250;
-const RESET_PLAYBACK_OFFSET_THRESHOLD_MS = 1000;
+export const BUFFER_SIZER_OPTIONS = Object.freeze({
+  initialBufferSizeMs: 250,
+  maxBufferSizeMs: 5000,
+  minBuferSizeMs: 20,
+  adjustBufferSizeIntervalMs: 10 * 1000,
+});
+const RESET_PLAYBACK_OFFSET_THRESHOLD_MS = BUFFER_SIZER_OPTIONS.maxBufferSizeMs;
 
 export class PokeHandler {
   private readonly _replicachePoke: (poke: ReplicachePoke) => Promise<void>;
@@ -15,8 +20,9 @@ export class PokeHandler {
   private readonly _clientIDPromise: Promise<ClientID>;
   private readonly _lcPromise: Promise<LogContext>;
   private readonly _pokeBuffer: Poke[] = [];
+  private readonly _bufferSizer: BufferSizer;
   private _pokePlaybackLoopRunning = false;
-  private _playbackOffset = -1;
+  private _playbackOffset: number | undefined = undefined;
   // Serializes calls to this._replicachePoke otherwise we can cause out of
   // order poke errors.
   private readonly _pokeLock = new Lock();
@@ -30,11 +36,13 @@ export class PokeHandler {
     onOutOfOrderPoke: () => MaybePromise<void>,
     clientIDPromise: Promise<ClientID>,
     lcPromise: Promise<LogContext>,
+    bufferSizer = new BufferSizer(BUFFER_SIZER_OPTIONS),
   ) {
     this._replicachePoke = replicachePoke;
     this._onOutOfOrderPoke = onOutOfOrderPoke;
     this._clientIDPromise = clientIDPromise;
     this._lcPromise = lcPromise.then(lc => lc.addContext('PokeHandler'));
+    this._bufferSizer = bufferSizer;
   }
 
   async handlePoke(pokeBody: PokeBody): Promise<number | undefined> {
@@ -50,23 +58,33 @@ export class PokeHandler {
       const {timestamp} = poke;
       if (timestamp !== undefined) {
         const timestampOffset = now - timestamp;
+        console.log('checking', this._playbackOffset);
         if (
-          this._playbackOffset === -1 ||
+          this._playbackOffset === undefined ||
           Math.abs(timestampOffset - this._playbackOffset) >
             RESET_PLAYBACK_OFFSET_THRESHOLD_MS
         ) {
+          console.log(
+            'new playback offset',
+            timestampOffset,
+            this._playbackOffset !== undefined &&
+              Math.abs(timestampOffset - this._playbackOffset),
+          );
+          this._bufferSizer.reset();
           this._playbackOffset = timestampOffset;
+
           lc.debug?.('new playback offset', timestampOffset);
         }
+        this._bufferSizer.recordOffset(thisClientID, timestampOffset);
         // only consider the first poke in the message with a timestamp for
-        // resetting playback offset
+        // timestamp offsets
         break;
       }
     }
     // adjust timestamps by playback offset
     for (const poke of pokeBody.pokes) {
       if (poke.timestamp !== undefined) {
-        assert(this._playbackOffset !== -1);
+        assert(this._playbackOffset !== undefined);
         poke.timestamp = poke.timestamp + this._playbackOffset;
       }
     }
@@ -104,9 +122,19 @@ export class PokeHandler {
 
   private async _processPokesForFrame(lc: LogContext) {
     await this._pokeLock.withLock(async () => {
-      lc.debug?.('got poke lock at', performance.now());
-      const toMerge: Poke[] = [];
       const now = performance.now();
+      lc.debug?.('got poke lock at', now);
+      this._bufferSizer.maybeAdjustBufferSize(now, lc);
+      lc.debug?.();
+      console.log(
+        'now',
+        now,
+        'offset',
+        this._playbackOffset,
+        'buffer',
+        this._bufferSizer.bufferSizeMs,
+      );
+      const toMerge: Poke[] = [];
       const thisClientID = await this._clientIDPromise;
       let timedPokeCount = 0;
       let missedTimedPokeCount = 0;
@@ -120,8 +148,14 @@ export class PokeHandler {
           lastMutationIDChangesClientIDs.length === 1 &&
           lastMutationIDChangesClientIDs[0] === thisClientID;
         if (!isThisClientsMutation && timestamp !== undefined) {
-          const pokePlaybackTarget = timestamp + PLAYBACK_BUFFER_MS;
+          const pokePlaybackTarget = timestamp + this._bufferSizer.bufferSizeMs;
           const pokePlaybackOffset = Math.floor(now - pokePlaybackTarget);
+          console.log(
+            'target',
+            pokePlaybackTarget,
+            'offset',
+            pokePlaybackOffset,
+          );
           if (pokePlaybackOffset < 0) {
             break;
           }
@@ -146,6 +180,7 @@ export class PokeHandler {
       }
       if (timedPokeCount > 0) {
         this._timedFrameCount++;
+        this._bufferSizer.recordMissable(missedTimedPokeCount > 0);
         if (missedTimedPokeCount > 0) {
           this._missedTimedFrameCount++;
           lc.debug?.(
@@ -210,6 +245,7 @@ export class PokeHandler {
       'clearing buffer and playback offset due to disconnect',
     );
     this._pokeBuffer.length = 0;
-    this._playbackOffset = -1;
+    this._playbackOffset = undefined;
+    this._bufferSizer.reset();
   }
 }
