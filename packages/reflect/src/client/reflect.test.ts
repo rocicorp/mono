@@ -1,5 +1,4 @@
-import * as valita from 'shared/valita.js';
-import {expect, assert} from '@esm-bundle/chai';
+import {assert, expect} from '@esm-bundle/chai';
 import {DatadogSeries, gaugeValue, Metrics} from '@rocicorp/datadog-util';
 import {resolver} from '@rocicorp/resolver';
 import type {NullableVersion} from 'reflect-protocol';
@@ -12,6 +11,7 @@ import type {
   PushRequestV1,
   WriteTransaction,
 } from 'replicache';
+import * as valita from 'shared/valita.js';
 import * as sinon from 'sinon';
 import {camelToSnake, DID_NOT_CONNECT_VALUE, Metric} from './metrics.js';
 import {
@@ -1191,4 +1191,39 @@ test('InvalidConnectionRequest', async () => {
     lmid: 0,
     baseCookie: null,
   });
+});
+
+test('Invalid Downstream message', async () => {
+  const testLogSink = new TestLogSink();
+  const r = reflectForTest({
+    logSinks: [testLogSink],
+    logLevel: 'debug',
+  });
+  await r.triggerConnected();
+  expect(r.connectionState).to.equal(ConnectionState.Connected);
+
+  await r.triggerPoke({
+    pokes: [
+      {
+        baseCookie: null,
+        cookie: 1,
+        lastMutationIDChanges: {c1: 1},
+        // @ts-expect-error - invalid field
+        patch: [{op: 'put', key: 'k1', valueXXX: 'v1'}],
+        timestamp: 123456,
+      },
+    ],
+    requestID: 'test-request-id-poke',
+  });
+
+  await clock.tickAsync(0);
+
+  const found = testLogSink.messages.some(m =>
+    m.some(
+      v =>
+        v instanceof Error &&
+        v.message.includes('InvalidMessage: Invalid union value.'),
+    ),
+  );
+  expect(found).true;
 });
