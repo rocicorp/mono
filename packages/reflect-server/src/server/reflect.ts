@@ -1,38 +1,37 @@
+import {consoleLogSink, LogLevel, LogSink, TeeLogSink} from '@rocicorp/logger';
 import type {MutatorDefs} from 'replicache';
-import {consoleLogSink, LogSink, LogLevel, TeeLogSink} from '@rocicorp/logger';
-import type {AuthHandler} from './auth.js';
 import {BaseAuthDO} from './auth-do.js';
-import {BaseRoomDO} from './room-do.js';
-import {createWorker} from './worker.js';
+import type {AuthHandler} from './auth.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {createNoAuthDOWorker} from './no-auth-do-worker.js';
+import {BaseRoomDO} from './room-do.js';
+import {createWorker} from './worker.js';
 
-export interface ReflectServerOptions<
-  Env extends ReflectServerBaseEnv,
-  MD extends MutatorDefs,
-> {
+export interface ReflectServerOptions<MD extends MutatorDefs> {
   mutators: MD;
   authHandler: AuthHandler;
 
   disconnectHandler?: DisconnectHandler | undefined;
 
   /**
-   * Get the log sink(s). This takes an `Env` so that the log sink can depend on the environment.
+   * The log sinks. If you need access to the `Env` you can use a function form
+   * when calling {@link createReflectServer}.
    */
-  getLogSinks?: ((env: Env) => LogSink[]) | undefined;
+  logSinks?: LogSink[] | undefined;
 
   /**
-   * Get the log level. This takes an `Env` so that the log level can depend on the environment.
+   * The level to log at. If you need access to the `Env` you can use a function
+   * form when calling {@link createReflectServer}.
    */
-  getLogLevel?: ((env: Env) => LogLevel) | undefined;
+  logLevel?: LogLevel | undefined;
 
   /**
-   * If true, outgoing network messages are sent before the writes
-   * they reflect are confirmed to be durable. This enables
-   * lower latency but can result in clients losing some mutations
-   * in the case of an untimely server restart.
+   * If `true`, outgoing network messages are sent before the writes they
+   * reflect are confirmed to be durable. This enables lower latency but can
+   * result in clients losing some mutations in the case of an untimely server
+   * restart.
    *
-   * Default is false.
+   * Default is `false`.
    */
   allowUnconfirmedWrites?: boolean | undefined;
 }
@@ -41,11 +40,11 @@ type Required<T> = {
   [P in keyof T]-?: Exclude<T[P], undefined>;
 };
 
-type ReflectServerOptionsWithDefaults<
-  Env extends ReflectServerBaseEnv,
-  MD extends MutatorDefs,
-> = Required<Omit<ReflectServerOptions<Env, MD>, 'mutators'>> & {
+type ReflectServerOptionsWithDefaults<MD extends MutatorDefs> = Required<
+  Omit<ReflectServerOptions<MD>, 'mutators' | 'logSinks'>
+> & {
   mutators: MD;
+  logSink: LogSink;
 };
 
 function combineLogSinks(sinks: LogSink[]): LogSink {
@@ -74,7 +73,7 @@ export function createReflectServer<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
 >(
-  options: ReflectServerOptions<Env, MD>,
+  options: ReflectServerOptions<MD> | ((env: Env) => ReflectServerOptions<MD>),
 ): {
   worker: ExportedHandler<Env>;
   // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -82,15 +81,10 @@ export function createReflectServer<
   // eslint-disable-next-line @typescript-eslint/naming-convention
   AuthDO: DurableObjectCtor<Env>;
 } {
-  const optionsWithDefaults = getOptionsWithDefaults(options);
-  const roomDOClass = createRoomDOClass(optionsWithDefaults);
-  const authDOClass = createAuthDOClass(optionsWithDefaults);
-
-  const {getLogSinks, getLogLevel} = optionsWithDefaults;
-  const worker = createWorker<Env>({
-    getLogSink: env => combineLogSinks(getLogSinks(env)),
-    getLogLevel,
-  });
+  const getOptionsWithDefaults = getOptionsFuncWithDefaultsPerEnv(options);
+  const roomDOClass = createRoomDOClass(getOptionsWithDefaults);
+  const authDOClass = createAuthDOClass(getOptionsWithDefaults);
+  const worker = createWorker<Env>(getOptionsWithDefaults);
 
   // eslint-disable-next-line @typescript-eslint/naming-convention
   return {worker, RoomDO: roomDOClass, AuthDO: authDOClass};
@@ -100,66 +94,78 @@ export function createReflectServerWithoutAuthDO<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
 >(
-  options: ReflectServerOptions<Env, MD>,
+  getOptions: (env: Env) => ReflectServerOptions<MD>,
 ): {
   worker: ExportedHandler<Env>;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   RoomDO: DurableObjectCtor<Env>;
 } {
-  const optionsWithDefaults = getOptionsWithDefaults(options);
-  const roomDOClass = createRoomDOClass(optionsWithDefaults);
-  const {authHandler, getLogSinks, getLogLevel} = optionsWithDefaults;
-  const worker = createNoAuthDOWorker<Env>({
-    getLogSink: env => combineLogSinks(getLogSinks(env)),
-    getLogLevel,
-    authHandler,
-  });
+  const getOptionsWithDefaults = getOptionsFuncWithDefaultsPerEnv(getOptions);
+  const roomDOClass = createRoomDOClass(getOptionsWithDefaults);
+  const worker = createNoAuthDOWorker<Env>(getOptionsWithDefaults);
 
   // eslint-disable-next-line @typescript-eslint/naming-convention
   return {worker, RoomDO: roomDOClass};
 }
 
-function getOptionsWithDefaults<
+const optionsPerEnv = new WeakMap<
+  ReflectServerBaseEnv,
+  ReflectServerOptionsWithDefaults<MutatorDefs>
+>();
+
+function getOptionsFuncWithDefaultsPerEnv<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
 >(
-  options: ReflectServerOptions<Env, MD>,
-): ReflectServerOptionsWithDefaults<Env, MD> {
-  const {
-    disconnectHandler = () => Promise.resolve(),
-    getLogSinks = _env => [consoleLogSink],
-    getLogLevel = _env => 'debug',
-    allowUnconfirmedWrites = false,
-  } = options;
-  return {
-    ...options,
-    disconnectHandler,
-    getLogSinks,
-    getLogLevel,
-    allowUnconfirmedWrites,
+  getOptions:
+    | ((env: Env) => ReflectServerOptions<MD>)
+    | ReflectServerOptions<MD>,
+): (env: Env) => ReflectServerOptionsWithDefaults<MD> {
+  return (env: Env) => {
+    const existingOptions = optionsPerEnv.get(env);
+    if (existingOptions) {
+      return existingOptions as ReflectServerOptionsWithDefaults<MD>;
+    }
+    const {
+      mutators,
+      authHandler,
+      disconnectHandler = () => Promise.resolve(),
+      logSinks,
+      logLevel = 'debug',
+      allowUnconfirmedWrites = false,
+    } = typeof getOptions === 'function' ? getOptions(env) : getOptions;
+    const newOptions = {
+      mutators,
+      authHandler,
+      disconnectHandler,
+      logSink: logSinks ? combineLogSinks(logSinks) : consoleLogSink,
+      logLevel,
+      allowUnconfirmedWrites,
+    };
+    optionsPerEnv.set(env, newOptions);
+    return newOptions;
   };
 }
-
 function createRoomDOClass<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
->(optionsWithDefaults: ReflectServerOptionsWithDefaults<Env, MD>) {
-  const {
-    mutators,
-    disconnectHandler,
-    getLogSinks,
-    getLogLevel,
-    allowUnconfirmedWrites,
-  } = optionsWithDefaults;
+>(getOptionsWithDefaults: (env: Env) => ReflectServerOptionsWithDefaults<MD>) {
   return class extends BaseRoomDO<MD> {
     constructor(state: DurableObjectState, env: Env) {
+      const {
+        mutators,
+        disconnectHandler,
+        logSink,
+        logLevel,
+        allowUnconfirmedWrites,
+      } = getOptionsWithDefaults(env);
       super({
         mutators,
         state,
         disconnectHandler,
         authApiKey: getAPIKey(env),
-        logSink: combineLogSinks(getLogSinks(env)),
-        logLevel: getLogLevel(env),
+        logSink,
+        logLevel,
         allowUnconfirmedWrites,
       });
     }
@@ -169,17 +175,17 @@ function createRoomDOClass<
 function createAuthDOClass<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
->(optionsWithDefaults: ReflectServerOptionsWithDefaults<Env, MD>) {
-  const {authHandler, getLogSinks, getLogLevel} = optionsWithDefaults;
+>(getOptionsWithDefaults: (env: Env) => ReflectServerOptionsWithDefaults<MD>) {
   return class extends BaseAuthDO {
     constructor(state: DurableObjectState, env: Env) {
+      const {authHandler, logSink, logLevel} = getOptionsWithDefaults(env);
       super({
         roomDO: env.roomDO,
         state,
         authHandler,
         authApiKey: getAPIKey(env),
-        logSink: combineLogSinks(getLogSinks(env)),
-        logLevel: getLogLevel(env),
+        logSink,
+        logLevel,
       });
     }
   };

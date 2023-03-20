@@ -1,4 +1,5 @@
-import {test, describe, expect, jest} from '@jest/globals';
+import {describe, expect, jest, test} from '@jest/globals';
+import type {DatadogSeries} from '@rocicorp/datadog-util';
 import type {LogLevel} from '@rocicorp/logger';
 import {fail, Mocket, TestLogSink} from '../util/test-utils.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
@@ -8,9 +9,8 @@ import {
   TestDurableObjectId,
   TestDurableObjectStub,
 } from './do-test-utils.js';
-import {BaseWorkerEnv, createWorker} from './worker.js';
-import type {DatadogSeries} from '@rocicorp/datadog-util';
 import {REPORT_METRICS_PATH} from './paths.js';
+import {BaseWorkerEnv, createWorker} from './worker.js';
 
 const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
 
@@ -58,6 +58,13 @@ function createTestFixture(
   };
 }
 
+function createWorkerWithTestLogSink() {
+  return createWorker(() => ({
+    logSink: new TestLogSink(),
+    logLevel: 'error',
+  }));
+}
+
 async function testNotForwardedToAuthDo(
   testRequest: Request,
   expectedResponse: Response,
@@ -65,10 +72,7 @@ async function testNotForwardedToAuthDo(
   const {testEnv, authDORequests} = createTestFixture(() => {
     throw new Error('Unexpected call to auth DO');
   });
-  const worker = createWorker({
-    getLogSink: _env => new TestLogSink(),
-    getLogLevel: _env => 'error',
-  });
+  const worker = createWorkerWithTestLogSink();
   if (!worker.fetch) {
     throw new Error('Expect fetch to be defined');
   }
@@ -108,10 +112,7 @@ async function testForwardedToAuthDO(
     ? undefined
     : authDoResponse.clone();
   const {testEnv, authDORequests} = createTestFixture(() => authDoResponse);
-  const worker = createWorker({
-    getLogSink: _env => new TestLogSink(),
-    getLogLevel: _env => 'error',
-  });
+  const worker = createWorkerWithTestLogSink();
   if (!worker.fetch) {
     throw new Error('Expect fetch to be defined');
   }
@@ -252,10 +253,7 @@ test('worker forwards authDO api requests to authDO', async () => {
 });
 
 test('on scheduled event sends api/auth/v0/revalidateConnections to AuthDO when REFLECT_AUTH_API_KEY is defined', async () => {
-  const worker = createWorker({
-    getLogSink: _env => new TestLogSink(),
-    getLogLevel: _env => 'error',
-  });
+  const worker = createWorkerWithTestLogSink();
 
   const {testEnv, authDORequests} = createTestFixture();
 
@@ -277,10 +275,7 @@ test('on scheduled event sends api/auth/v0/revalidateConnections to AuthDO when 
 });
 
 test('on scheduled event does not send api/auth/v0/revalidateConnections to AuthDO when REFLECT_AUTH_API_KEY is undefined', async () => {
-  const worker = createWorker({
-    getLogSink: _env => new TestLogSink(),
-    getLogLevel: _env => 'error',
-  });
+  const worker = createWorkerWithTestLogSink();
 
   const {testEnv, authDORequests} = createTestFixture(undefined, false);
 
@@ -317,22 +312,24 @@ async function testLogging(
   let getLogLevelCallCount = 0;
   let logCallCount = 0;
   const logFlushPromise = Promise.resolve();
-  const worker = createWorker({
-    getLogSink: env => {
-      getLogSinkCallCount++;
-      expect(env).toBe(testEnv);
-      return {
-        log: (_level: LogLevel, ..._args: unknown[]): void => {
-          logCallCount++;
-        },
-        flush: (): Promise<void> => logFlushPromise,
-      };
-    },
-    getLogLevel: env => {
-      getLogLevelCallCount++;
-      expect(env).toBe(testEnv);
-      return 'debug';
-    },
+  const worker = createWorker(env => {
+    expect(env).toBe(testEnv);
+    const logSink = {
+      log: (_level: LogLevel, ..._args: unknown[]): void => {
+        logCallCount++;
+      },
+      flush: (): Promise<void> => logFlushPromise,
+    };
+    return {
+      get logSink() {
+        getLogSinkCallCount++;
+        return logSink;
+      },
+      get logLevel(): LogLevel {
+        getLogLevelCallCount++;
+        return 'debug';
+      },
+    };
   });
 
   expect(getLogSinkCallCount).toEqual(0);
@@ -424,10 +421,7 @@ async function testPreflightRequest({
   accessControlRequestMethod: string;
 }) {
   const {testEnv, authDORequests} = createTestFixture();
-  const worker = createWorker({
-    getLogSink: _env => new TestLogSink(),
-    getLogLevel: _env => 'error',
-  });
+  const worker = createWorkerWithTestLogSink();
   if (!worker.fetch) {
     throw new Error('Expect fetch to be defined');
   }
@@ -553,10 +547,7 @@ describe('reportMetrics', () => {
         testEnv.REFLECT_DATADOG_API_KEY = tc.ddKey;
       }
 
-      const worker = createWorker({
-        getLogSink: _env => new TestLogSink(),
-        getLogLevel: _env => 'error',
-      });
+      const worker = createWorkerWithTestLogSink();
       const testRequest = new Request(reportMetricsURL.toString(), {
         method: tc.method,
         body: tc.method === 'post' && tc.body ? JSON.stringify(tc.body) : null,

@@ -1,12 +1,12 @@
-import {LogContext, LogSink, LogLevel} from '@rocicorp/logger';
+import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {encodeHeaderValue} from '../util/headers.js';
 import {randomID} from '../util/rand.js';
 import {AuthHandler, UserData, USER_DATA_HEADER_NAME} from './auth.js';
 import {createUnauthorizedResponse} from './create-unauthorized-response.js';
 
-export interface NoAuthDOWorkerOptions<Env extends BaseNoAuthDOWorkerEnv> {
-  getLogSink: (env: Env) => LogSink;
-  getLogLevel: (env: Env) => LogLevel;
+export interface NoAuthDOWorkerOptions {
+  logSink: LogSink;
+  logLevel: LogLevel;
   authHandler: AuthHandler;
 }
 
@@ -15,22 +15,25 @@ export interface BaseNoAuthDOWorkerEnv {
 }
 
 export function createNoAuthDOWorker<Env extends BaseNoAuthDOWorkerEnv>(
-  options: NoAuthDOWorkerOptions<Env>,
+  getOptions: (env: Env) => NoAuthDOWorkerOptions,
 ): ExportedHandler<Env> {
-  const {getLogSink, getLogLevel, authHandler} = options;
   return {
-    fetch: (request: Request, env: Env, ctx: ExecutionContext) =>
-      withLogContext(env, ctx, getLogSink, getLogLevel, (lc: LogContext) =>
+    fetch: (request: Request, env: Env, ctx: ExecutionContext) => {
+      const {logSink, logLevel, authHandler} = getOptions(env);
+      return withLogContext(ctx, logSink, logLevel, (lc: LogContext) =>
         fetch(request, lc, env.roomDO, authHandler),
-      ),
+      );
+    },
     scheduled: (
       _controller: ScheduledController,
       env: Env,
       ctx: ExecutionContext,
-    ) =>
-      withLogContext(env, ctx, getLogSink, getLogLevel, (lc: LogContext) =>
+    ) => {
+      const {logSink, logLevel} = getOptions(env);
+      return withLogContext(ctx, logSink, logLevel, (lc: LogContext) =>
         scheduled(env, lc),
-      ),
+      );
+    },
   };
 }
 
@@ -145,15 +148,13 @@ async function handleRequest(
   return response;
 }
 
-async function withLogContext<Env extends BaseNoAuthDOWorkerEnv, R>(
-  env: Env,
+async function withLogContext<R>(
   ctx: ExecutionContext,
-  getLogSink: (env: Env) => LogSink,
-  getLogLevel: (env: Env) => LogLevel,
+  logSink: LogSink,
+  logLevel: LogLevel,
   fn: (lc: LogContext) => Promise<R> | R,
 ): Promise<R> {
-  const logSink = getLogSink(env);
-  const lc = new LogContext(getLogLevel(env), logSink).addContext('Worker');
+  const lc = new LogContext(logLevel, logSink).addContext('Worker');
   try {
     return await fn(lc);
   } finally {
