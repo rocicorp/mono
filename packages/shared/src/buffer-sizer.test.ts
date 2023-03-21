@@ -311,4 +311,32 @@ test('maybeAdjustBufferSize sequence adjustment every adjustBufferSizeIntervalMs
   // 10% increase, because miss rate high, but max diff offset of 400 is less
   // than existing buffer size of 500
   expect(bufferSizer.bufferSizeMs).toEqual(550);
+
+  bufferSizer.recordOffset('c1', 6000);
+  bufferSizer.recordOffset('c1', 6200);
+  bufferSizer.recordOffset('c1', 6800);
+
+  // First record missable after buffer is adjusted is ignored
+  bufferSizer.recordMissable(true);
+  bufferSizer.recordMissable(false);
+  bufferSizer.recordMissable(false);
+  bufferSizer.recordMissable(false);
+
+  expect(bufferSizer.bufferSizeMs).toEqual(550);
+  expect(
+    bufferSizer.maybeAdjustBufferSize(
+      adjustBufferSizeIntervalMs * 3,
+      new LogContext('error'),
+    ),
+  ).toEqual(false);
+  expect(bufferSizer.bufferSizeMs).toEqual(550);
+  expect(
+    bufferSizer.maybeAdjustBufferSize(
+      adjustBufferSizeIntervalMs * 4,
+      new LogContext('error'),
+    ),
+  ).toEqual(false);
+  // no change because first record missable after buffer is adjusted
+  // is ignored, so miss percent is considered low but offsets are high
+  expect(bufferSizer.bufferSizeMs).toEqual(550);
 });

@@ -1,7 +1,11 @@
 import {expect} from '@esm-bundle/chai';
 import {LogContext, LogLevel} from '@rocicorp/logger';
 import * as sinon from 'sinon';
-import {BUFFER_SIZER_OPTIONS, PokeHandler} from './poke-handler.js';
+import {
+  BUFFER_SIZER_OPTIONS,
+  PokeHandler,
+  RESET_PLAYBACK_OFFSET_THRESHOLD_MS,
+} from './poke-handler.js';
 import {BufferSizer} from 'shared/buffer-sizer.js';
 
 let clock: sinon.SinonFakeTimers;
@@ -773,7 +777,7 @@ test('playback sequence of poke messages', async () => {
   expect(rafStub.callCount).to.equal(5);
 });
 
-test('playback offset is reset for new pokes if timestamp offset delta is > 2000', async () => {
+test(`playback offset is reset for new pokes if timestamp offset delta is > ${RESET_PLAYBACK_OFFSET_THRESHOLD_MS}`, async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
   const pokeHandler = new PokeHandler(
@@ -865,7 +869,8 @@ test('playback offset is reset for new pokes if timestamp offset delta is > 2000
             value: 3,
           },
         ],
-        timestamp: startTime + 100 + 250 - 5001,
+        timestamp:
+          startTime + 100 + 250 - (RESET_PLAYBACK_OFFSET_THRESHOLD_MS + 1),
       },
       {
         baseCookie: 4,
@@ -878,7 +883,8 @@ test('playback offset is reset for new pokes if timestamp offset delta is > 2000
             value: 4,
           },
         ],
-        timestamp: startTime + 100 + 250 - 5001 + 60,
+        timestamp:
+          startTime + 100 + 250 - (RESET_PLAYBACK_OFFSET_THRESHOLD_MS + 1) + 60,
       },
     ],
     requestID: 'requestID2',
