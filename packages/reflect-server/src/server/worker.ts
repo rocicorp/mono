@@ -1,4 +1,19 @@
-import {LogContext, LogSink, LogLevel} from '@rocicorp/logger';
+import {
+  DD_AUTH_HEADER_NAME,
+  DD_DISTRIBUTION_METRIC_URL,
+  report,
+} from '@rocicorp/datadog-util';
+import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import {assert} from 'shared/asserts.js';
+import {reportMetricsSchema} from '../types/report-metrics.js';
+import {randomID} from '../util/rand.js';
+import {createAuthAPIHeaders} from './auth-api-headers.js';
+import {
+  AUTH_ROUTES,
+  AUTH_ROUTES_AUTHED_BY_API_KEY,
+  AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER,
+} from './auth-do.js';
+import {REPORT_METRICS_PATH} from './paths.js';
 import {
   BaseContext,
   checkAuthAPIKey,
@@ -8,26 +23,11 @@ import {
   withBody,
   WithLogContext,
 } from './router.js';
-import {randomID} from '../util/rand.js';
-import {createAuthAPIHeaders} from './auth-api-headers.js';
-import {
-  AUTH_ROUTES,
-  AUTH_ROUTES_AUTHED_BY_API_KEY,
-  AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER,
-} from './auth-do.js';
-import {reportMetricsSchema} from '../types/report-metrics.js';
-import {
-  DD_AUTH_HEADER_NAME,
-  DD_DISTRIBUTION_METRIC_URL,
-  report,
-} from '@rocicorp/datadog-util';
-import {assert} from 'shared/asserts.js';
-import {REPORT_METRICS_PATH} from './paths.js';
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 
-export interface WorkerOptions<Env extends BaseWorkerEnv> {
-  getLogSink: (env: Env) => LogSink;
-  getLogLevel: (env: Env) => LogLevel;
+export interface WorkerOptions {
+  logSink: LogSink;
+  logLevel: LogLevel;
 }
 
 export interface BaseWorkerEnv {
@@ -132,32 +132,33 @@ function requireDataDogApiEnv(next: Handler<WorkerContext, Response>) {
 }
 
 export function createWorker<Env extends BaseWorkerEnv>(
-  options: WorkerOptions<Env>,
+  getOptions: (env: Env) => WorkerOptions,
 ): ExportedHandler<Env> {
-  const {getLogSink, getLogLevel} = options;
   const router: WorkerRouter = new Router();
   registerRoutes(router);
   return {
-    fetch: (request: Request, env: Env, ctx: ExecutionContext) =>
-      withLogContext(
-        env,
+    fetch: (request: Request, env: Env, ctx: ExecutionContext) => {
+      const {logSink, logLevel} = getOptions(env);
+      return withLogContext(
         ctx,
-        getLogSink,
-        getLogLevel,
+        logSink,
+        logLevel,
         withUnhandledRejectionHandler(lc => fetch(request, env, router, lc)),
-      ),
+      );
+    },
     scheduled: (
       _controller: ScheduledController,
       env: Env,
       ctx: ExecutionContext,
-    ) =>
-      withLogContext(
-        env,
+    ) => {
+      const {logSink, logLevel} = getOptions(env);
+      return withLogContext(
         ctx,
-        getLogSink,
-        getLogLevel,
+        logSink,
+        logLevel,
         withUnhandledRejectionHandler(lc => scheduled(env, lc)),
-      ),
+      );
+    },
   };
 }
 
@@ -270,15 +271,13 @@ function handleOptions(request: Request): Response {
   });
 }
 
-async function withLogContext<Env extends BaseWorkerEnv, R>(
-  env: Env,
+async function withLogContext<R>(
   ctx: ExecutionContext,
-  getLogSink: (env: Env) => LogSink,
-  getLogLevel: (env: Env) => LogLevel,
+  logSink: LogSink,
+  logLevel: LogLevel,
   fn: (lc: LogContext) => Promise<R>,
 ): Promise<R> {
-  const logSink = getLogSink(env);
-  const lc = new LogContext(getLogLevel(env), logSink).addContext('Worker');
+  const lc = new LogContext(logLevel, logSink).addContext('Worker');
   try {
     return await fn(lc);
   } finally {

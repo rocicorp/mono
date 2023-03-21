@@ -9,6 +9,7 @@ const mutators = {
   },
 };
 
+// eslint-disable-next-line require-await
 const authHandler = async (auth: string, _roomID: string) => {
   if (auth) {
     // A real implementation could:
@@ -25,8 +26,8 @@ const authHandler = async (auth: string, _roomID: string) => {
   throw Error('Unauthorized');
 };
 
-const {worker, RoomDO, AuthDO} = createReflectServer({
+const {worker, RoomDO, AuthDO} = createReflectServer(_env => ({
   mutators,
   authHandler,
-});
+}));
 export {worker as default, RoomDO, AuthDO};
