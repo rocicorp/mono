@@ -105,6 +105,14 @@ export class BufferSizer {
     const missPercent =
       this._missedCountSinceLastBufferAdjust /
       this._missableCountSinceLastBufferAdjust;
+    // This logic is pretty aggressive about adjusting up, and fairly
+    // conservative about adjusting down.
+    // If the miss percent is greater than 3% it will adjust up
+    // to the max observed difference in offsets, or 110% of the current
+    // buffer size, whichever is larger.
+    // If the miss percent is less than 0.5% it will adjust down
+    // to the max observer difference in offsets if its at least 10%
+    // smaller than the current buffer size.
     if (missPercent > 0.03) {
       newBufferSizeMs = Math.min(
         this._maxBufferSizeMs,
