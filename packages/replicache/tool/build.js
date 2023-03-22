@@ -2,7 +2,8 @@
 
 import * as esbuild from 'esbuild';
 import {writeFile} from 'fs/promises';
-import {makeDefine} from './make-define.js';
+import {makeDefine, sharedOptions} from '../../shared/src/build.js';
+// import {makeDefine} from './make-define.js';
 import {readPackageJSON} from './read-package-json.js';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
@@ -12,66 +13,56 @@ const debug = process.argv.includes('--debug');
 const metafile = process.argv.includes('--metafile');
 
 /**
- * @param {boolean} minify
- * @returns {{
- *   bundle: boolean;
- *   target: string;
- *   mangleProps?: RegExp;
- *   reserveProps?: RegExp;
- * }}
- */
-function sharedOptions(minify) {
-  const opts = {
-    bundle: true,
-    target: 'es2022',
-  };
-  if (minify) {
-    return {...opts, mangleProps: /^_./, reserveProps: /^__.*__$/};
-  }
-  return opts;
-}
-
-/**
  * @typedef {'unknown'|'debug'|'release'} BuildMode
  */
 
 /**
  * @typedef {{
+ *   format: 'esm' | 'cjs',
  *   minify: boolean,
  *   ext: string,
- *   mode: BuildMode
+ *   mode: BuildMode,
+ *   external?: string[] | undefined,
  * }} BuildOptions
  */
 
 /**
- * @param {esbuild.BuildOptions & BuildOptions} options
+ * @param {BuildOptions} options
  */
 async function buildReplicache(options) {
-  const {ext, mode, ...restOfOptions} = options;
+  const basicDefine = makeDefine(options.mode);
+  const {version} = await readPackageJSON();
+  const define = {
+    ...basicDefine,
+    REPLICACHE_VERSION: JSON.stringify(version),
+  };
+  const {ext, mode, external, ...restOfOptions} = options;
+  const outfile = 'out/replicache.' + ext;
   const result = await esbuild.build({
-    ...sharedOptions(options.minify),
+    ...sharedOptions(options.minify, metafile),
+    ...(external ? {external} : {}),
     ...restOfOptions,
     // Use neutral to remove the automatic define for process.env.NODE_ENV
     platform: 'neutral',
-    outfile: 'out/replicache.' + ext,
+    define,
+    outfile,
     entryPoints: ['src/mod.ts'],
-    define: await makeDefine(mode),
-    metafile,
-    sourcemap: true,
   });
   if (metafile) {
-    await writeFile(
-      'out/replicache.' + ext + '.meta.json',
-      JSON.stringify(result.metafile),
-    );
+    await writeFile(outfile + '.meta.json', JSON.stringify(result.metafile));
   }
 }
 
 /**
  * @param {Partial<BuildOptions>} options
  */
-async function buildMJS({minify = true, ext = 'js', mode = 'unknown'} = {}) {
-  await buildReplicache({format: 'esm', minify, ext, mode});
+async function buildMJS({
+  minify = true,
+  ext = 'js',
+  mode = 'unknown',
+  external,
+} = {}) {
+  await buildReplicache({format: 'esm', minify, ext, mode, external});
 }
 
 /**
@@ -85,22 +76,22 @@ async function buildCLI() {
   await esbuild.build({
     ...sharedOptions(true),
     platform: 'node',
-    external: ['node:*'],
     outfile: 'out/cli.cjs',
     entryPoints: ['tool/cli.ts'],
-    minify: true,
   });
 }
 
 if (perf) {
   await buildMJS({mode: 'release'});
 } else if (forBundleSizeDashboard) {
+  // Bundle external modules for the bundle size dashboard
+  const external = ['node:*'];
   // We keep cjs as js and mjs as mjs so the dashboard does not get reset
   await Promise.all([
-    buildMJS({minify: false, ext: 'mjs'}),
-    buildMJS({minify: true, ext: 'min.mjs'}),
-    buildCJS({minify: false, ext: 'js'}),
-    buildCJS({minify: true, ext: 'min.js'}),
+    buildMJS({minify: false, ext: 'mjs', external}),
+    buildMJS({minify: true, ext: 'min.mjs', external}),
+    buildCJS({minify: false, ext: 'js', external}),
+    buildCJS({minify: true, ext: 'min.js', external}),
     buildCLI(),
   ]);
 } else {
