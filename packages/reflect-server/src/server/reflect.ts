@@ -69,6 +69,12 @@ export type DurableObjectCtor<Env> = new (
   env: Env,
 ) => DurableObject;
 
+/**
+ * Creates the different parts of a reflect server.
+ * @param options The options for the server. If you need access to the `Env`
+ * you can use a function form. When using a function form, the function may
+ * be called multiple times so it should be idempotent.
+ */
 export function createReflectServer<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
@@ -94,7 +100,9 @@ export function createReflectServerWithoutAuthDO<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
 >(
-  getOptions: (env: Env) => ReflectServerOptions<MD>,
+  getOptions:
+    | ReflectServerOptions<MD>
+    | ((env: Env) => ReflectServerOptions<MD>),
 ): {
   worker: ExportedHandler<Env>;
   // eslint-disable-next-line @typescript-eslint/naming-convention
