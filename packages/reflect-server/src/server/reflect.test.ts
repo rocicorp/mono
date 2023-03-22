@@ -1,7 +1,7 @@
 import {expect, test} from '@jest/globals';
 import {TestLogSink} from '../util/test-utils.js';
 import {
-  optionsGetterWithDefaults,
+  makeNormalizedOptionsGetter,
   type ReflectServerBaseEnv,
 } from './reflect.js';
 
@@ -9,7 +9,7 @@ test('Make sure options getter only gets called once', () => {
   const testLogSink = new TestLogSink();
   type Env = unknown;
   const envs: Env[] = [];
-  const getOptions = optionsGetterWithDefaults((env: Env) => {
+  const getOptions = makeNormalizedOptionsGetter((env: Env) => {
     envs.push(env);
     return {
       logSinks: [testLogSink],
@@ -37,7 +37,7 @@ test('Make sure options getter only gets called once', () => {
   // New createReflectServer "call".
   envs.length = 0;
   testLogSink.messages.length = 0;
-  const getOptions2 = optionsGetterWithDefaults((env: Env) => {
+  const getOptions2 = makeNormalizedOptionsGetter((env: Env) => {
     envs.push(env);
     return {
       logSinks: [testLogSink],
