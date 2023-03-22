@@ -26,6 +26,9 @@ function buildExample() {
   return buildInternal({
     entryPoints: [path.join(dirname, 'example', 'index.ts')],
     outdir: path.join(dirname, 'out', 'example'),
+
+    // Jest builds this target and tries to load it... Maybe related to
+    // `testEnvironment: 'miniflare'`
     external: [],
   });
 }
