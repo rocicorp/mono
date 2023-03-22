@@ -44,7 +44,7 @@ export interface ReflectServerOptions<MD extends MutatorDefs> {
  */
 export type NormalizedOptions<MD extends MutatorDefs> = {
   mutators: MD;
-  authHandler: AuthHandler;
+  authHandler?: AuthHandler | undefined;
   disconnectHandler: DisconnectHandler;
   logSink: LogSink;
   logLevel: LogLevel;
