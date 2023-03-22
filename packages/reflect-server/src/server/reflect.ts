@@ -70,6 +70,12 @@ export type DurableObjectCtor<Env> = new (
   env: Env,
 ) => DurableObject;
 
+/**
+ * Creates the different parts of a reflect server.
+ * @param options The options for the server. If you need access to the `Env`
+ * you can use a function form. When using a function form, the function may
+ * be called multiple times so it should be idempotent.
+ */
 export function createReflectServer<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
@@ -82,9 +88,10 @@ export function createReflectServer<
   // eslint-disable-next-line @typescript-eslint/naming-convention
   AuthDO: DurableObjectCtor<Env>;
 } {
-  const roomDOClass = createRoomDOClass(makeNormalizedOptionsGetter(options));
-  const authDOClass = createAuthDOClass(makeNormalizedOptionsGetter(options));
-  const worker = createWorker<Env>(makeNormalizedOptionsGetter(options));
+  const normalizedOptionsGetter = makeNormalizedOptionsGetter(options);
+  const roomDOClass = createRoomDOClass(normalizedOptionsGetter);
+  const authDOClass = createAuthDOClass(normalizedOptionsGetter);
+  const worker = createWorker<Env>(normalizedOptionsGetter);
 
   // eslint-disable-next-line @typescript-eslint/naming-convention
   return {worker, RoomDO: roomDOClass, AuthDO: authDOClass};
@@ -94,38 +101,43 @@ export function createReflectServerWithoutAuthDO<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
 >(
-  options: (env: Env) => ReflectServerOptions<MD>,
+  options: ReflectServerOptions<MD> | ((env: Env) => ReflectServerOptions<MD>),
 ): {
   worker: ExportedHandler<Env>;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   RoomDO: DurableObjectCtor<Env>;
 } {
-  const roomDOClass = createRoomDOClass(makeNormalizedOptionsGetter(options));
-  const worker = createNoAuthDOWorker<Env>(
-    makeNormalizedOptionsGetter(options),
-  );
+  const normalizedOptionsGetter = makeNormalizedOptionsGetter(options);
+  const roomDOClass = createRoomDOClass(normalizedOptionsGetter);
+  const worker = createNoAuthDOWorker<Env>(normalizedOptionsGetter);
 
   // eslint-disable-next-line @typescript-eslint/naming-convention
   return {worker, RoomDO: roomDOClass};
 }
-
-const optionsPerEnv = new WeakMap<
-  ReflectServerBaseEnv,
-  NormalizedOptions<MutatorDefs>
->();
 
 type GetNormalizedOptions<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
 > = (env: Env) => NormalizedOptions<MD>;
 
-function makeNormalizedOptionsGetter<
+// exported for testing.
+export function makeNormalizedOptionsGetter<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
 >(
   options: ((env: Env) => ReflectServerOptions<MD>) | ReflectServerOptions<MD>,
-): GetNormalizedOptions<Env, MD> {
+): (env: Env) => NormalizedOptions<MD> {
+  let normalizedOptions: NormalizedOptions<MD> | undefined;
+  let originalEnv: Env | undefined;
+  let logSink: LogSink;
   return (env: Env) => {
+    if (normalizedOptions) {
+      if (originalEnv !== env) {
+        logSink.log('info', 'get options called with different env');
+      }
+      return normalizedOptions;
+    }
+    originalEnv = env;
     const {
       mutators,
       authHandler,
@@ -134,18 +146,19 @@ function makeNormalizedOptionsGetter<
       logLevel = 'debug',
       allowUnconfirmedWrites = false,
     } = typeof options === 'function' ? options(env) : options;
-    const newOptions = {
+    logSink = logSinks ? combineLogSinks(logSinks) : consoleLogSink;
+    normalizedOptions = {
       mutators,
       authHandler,
       disconnectHandler,
-      logSink: logSinks ? combineLogSinks(logSinks) : consoleLogSink,
+      logSink,
       logLevel,
       allowUnconfirmedWrites,
     };
-    optionsPerEnv.set(env, newOptions);
-    return newOptions;
+    return normalizedOptions;
   };
 }
+
 function createRoomDOClass<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
