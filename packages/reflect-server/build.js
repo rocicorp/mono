@@ -12,7 +12,7 @@ const metafile = process.argv.includes('--metafile');
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function buildESM() {
-  const outfile = path.join(dirname, 'out/reflect-server.js');
+  const outfile = path.join(dirname, 'out', 'reflect-server.js');
   const result = await buildInternal({
     entryPoints: [path.join(dirname, 'src', 'mod.ts')],
     outfile,
