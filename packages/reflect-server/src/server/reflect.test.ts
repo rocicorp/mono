@@ -1,7 +1,9 @@
 import {expect, test} from '@jest/globals';
-import type {ReflectServerBaseEnv} from '../../out/reflect-server.js';
 import {TestLogSink} from '../util/test-utils.js';
-import {optionsGetterWithDefaults} from './reflect.js';
+import {
+  optionsGetterWithDefaults,
+  type ReflectServerBaseEnv,
+} from './reflect.js';
 
 test('Make sure options getter only gets called once', () => {
   const testLogSink = new TestLogSink();
