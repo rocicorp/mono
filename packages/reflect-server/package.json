@@ -28,8 +28,7 @@
   },
   "dependencies": {
     "@rocicorp/lock": "^1.0.1",
-    "@rocicorp/logger": "^4.1.0",
-    "replicache": "*"
+    "@rocicorp/logger": "^4.1.0"
   },
   "//1": "Note: we need these precise versions of miniflare and jest-environment-miniflare due to: https://github.com/rocicorp/reflect-server/issues/148",
   "devDependencies": {
@@ -43,6 +42,7 @@
     "jest-environment-miniflare": "^2.11.0",
     "miniflare": "^2.11.0",
     "reflect-protocol": "*",
+    "replicache": "*",
     "rollup": "^3.19.1",
     "rollup-plugin-dts": "^5.2.0",
     "shared": "*",

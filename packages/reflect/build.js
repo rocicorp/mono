@@ -13,27 +13,11 @@ const debug = process.argv.includes('--debug');
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/**
- * @typedef {'unknown'|'debug'|'release'} BuildMode
- */
-
-/**
- * @typedef {{
- *   minify?: boolean,
- *   mode?: BuildMode | undefined,
- * }} BuildOptions
- */
-
-/**
- * @param {Partial<BuildOptions>} options
- */
-async function buildESM({mode, minify = true} = {}) {
-  if (debug) {
-    mode = 'debug';
-  } else {
-    mode = 'unknown';
-  }
+async function buildESM() {
+  const mode = debug ? 'debug' : 'unknown';
+  const minify = !debug;
   const shared = sharedOptions(minify, metafile);
+  const outfile = path.join(dirname, 'out', 'reflect.js');
   const result = await esbuild.build({
     ...shared,
     // Use neutral to remove the automatic define for process.env.NODE_ENV
@@ -41,14 +25,11 @@ async function buildESM({mode, minify = true} = {}) {
     define: makeDefine(mode),
     format: 'esm',
     entryPoints: [path.join(dirname, 'src', 'mod.ts')],
-    outfile: path.join(dirname, 'out/reflect.js'),
+    outfile,
     metafile,
   });
   if (metafile) {
-    await writeFile(
-      path.join(dirname, 'out/reflect.js.meta.json'),
-      JSON.stringify(result.metafile),
-    );
+    await writeFile(outfile + '.meta.json', JSON.stringify(result.metafile));
   }
 }
 

@@ -1,7 +1,6 @@
 /** @type {import('jest').Config} */
 const config = {
   preset: 'ts-jest/presets/default-esm',
-  testPathIgnorePatterns: ['/node_modules/', '/out/'],
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',

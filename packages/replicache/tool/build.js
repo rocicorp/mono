@@ -2,8 +2,9 @@
 
 import * as esbuild from 'esbuild';
 import {writeFile} from 'fs/promises';
+import * as path from 'path';
+import {fileURLToPath} from 'url';
 import {makeDefine, sharedOptions} from '../../shared/src/build.js';
-// import {makeDefine} from './make-define.js';
 import {readPackageJSON} from './read-package-json.js';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
@@ -11,6 +12,8 @@ const perf = process.argv.includes('--perf');
 const debug = process.argv.includes('--debug');
 // You can then visualize the metafile at https://esbuild.github.io/analyze/
 const metafile = process.argv.includes('--metafile');
+
+const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * @typedef {'unknown'|'debug'|'release'} BuildMode
@@ -37,7 +40,7 @@ async function buildReplicache(options) {
     REPLICACHE_VERSION: JSON.stringify(version),
   };
   const {ext, mode, external, ...restOfOptions} = options;
-  const outfile = 'out/replicache.' + ext;
+  const outfile = path.join(dirname, '..', 'out', 'replicache.' + ext);
   const result = await esbuild.build({
     ...sharedOptions(options.minify, metafile),
     ...(external ? {external} : {}),
@@ -46,7 +49,7 @@ async function buildReplicache(options) {
     platform: 'neutral',
     define,
     outfile,
-    entryPoints: ['src/mod.ts'],
+    entryPoints: [path.join(dirname, '..', 'src', 'mod.ts')],
   });
   if (metafile) {
     await writeFile(outfile + '.meta.json', JSON.stringify(result.metafile));
@@ -76,8 +79,8 @@ async function buildCLI() {
   await esbuild.build({
     ...sharedOptions(true),
     platform: 'node',
-    outfile: 'out/cli.cjs',
-    entryPoints: ['tool/cli.ts'],
+    outfile: path.join(dirname, '..', 'out', 'cli.cjs'),
+    entryPoints: [path.join(dirname, 'cli.ts')],
   });
 }
 
