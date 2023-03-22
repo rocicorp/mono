@@ -81,7 +81,7 @@ export function createReflectServer<
   // eslint-disable-next-line @typescript-eslint/naming-convention
   AuthDO: DurableObjectCtor<Env>;
 } {
-  const getOptionsWithDefaults = getOptionsFuncWithDefaultsPerEnv(options);
+  const getOptionsWithDefaults = optionsGetterWithDefaults(options);
   const roomDOClass = createRoomDOClass(getOptionsWithDefaults);
   const authDOClass = createAuthDOClass(getOptionsWithDefaults);
   const worker = createWorker<Env>(getOptionsWithDefaults);
@@ -100,7 +100,7 @@ export function createReflectServerWithoutAuthDO<
   // eslint-disable-next-line @typescript-eslint/naming-convention
   RoomDO: DurableObjectCtor<Env>;
 } {
-  const getOptionsWithDefaults = getOptionsFuncWithDefaultsPerEnv(getOptions);
+  const getOptionsWithDefaults = optionsGetterWithDefaults(getOptions);
   const roomDOClass = createRoomDOClass(getOptionsWithDefaults);
   const worker = createNoAuthDOWorker<Env>(getOptionsWithDefaults);
 
@@ -108,12 +108,8 @@ export function createReflectServerWithoutAuthDO<
   return {worker, RoomDO: roomDOClass};
 }
 
-const optionsPerEnv = new WeakMap<
-  ReflectServerBaseEnv,
-  ReflectServerOptionsWithDefaults<MutatorDefs>
->();
-
-function getOptionsFuncWithDefaultsPerEnv<
+// exported for testing.
+export function optionsGetterWithDefaults<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
 >(
@@ -121,11 +117,17 @@ function getOptionsFuncWithDefaultsPerEnv<
     | ((env: Env) => ReflectServerOptions<MD>)
     | ReflectServerOptions<MD>,
 ): (env: Env) => ReflectServerOptionsWithDefaults<MD> {
+  let options: ReflectServerOptionsWithDefaults<MD> | undefined;
+  let originalEnv: Env | undefined;
+  let logSink: LogSink;
   return (env: Env) => {
-    const existingOptions = optionsPerEnv.get(env);
-    if (existingOptions) {
-      return existingOptions as ReflectServerOptionsWithDefaults<MD>;
+    if (options) {
+      if (originalEnv !== env) {
+        logSink.log('info', 'get options called with different env');
+      }
+      return options;
     }
+    originalEnv = env;
     const {
       mutators,
       authHandler,
@@ -134,18 +136,19 @@ function getOptionsFuncWithDefaultsPerEnv<
       logLevel = 'debug',
       allowUnconfirmedWrites = false,
     } = typeof getOptions === 'function' ? getOptions(env) : getOptions;
-    const newOptions = {
+    logSink = logSinks ? combineLogSinks(logSinks) : consoleLogSink;
+    options = {
       mutators,
       authHandler,
       disconnectHandler,
-      logSink: logSinks ? combineLogSinks(logSinks) : consoleLogSink,
+      logSink,
       logLevel,
       allowUnconfirmedWrites,
     };
-    optionsPerEnv.set(env, newOptions);
-    return newOptions;
+    return options;
   };
 }
+
 function createRoomDOClass<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
