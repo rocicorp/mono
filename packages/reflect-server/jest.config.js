@@ -1,9 +1,5 @@
-import * as path from 'path';
-import {fileURLToPath} from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-export default {
+/** @type {import('jest').Config} */
+const config = {
   preset: 'ts-jest/presets/default-esm',
   transform: {
     '^.+\\.tsx?$': [
@@ -15,11 +11,9 @@ export default {
     ],
   },
   moduleNameMapper: {
-    '^reflect-protocol/(.*)\\.js$': path.join(
-      __dirname,
-      '../reflect-protocol/$1',
-    ),
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   testEnvironment: 'miniflare',
 };
+
+export {config as default};

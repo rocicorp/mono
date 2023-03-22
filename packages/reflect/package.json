@@ -19,20 +19,23 @@
     "test:watch": "web-test-runner --watch",
     "check-types": "tsc --noEmit",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
-    "build-min": "esbuild --bundle --target=es2022 --outfile=out/reflect.js --format=esm --platform=neutral src/mod.ts --minify --mangle-props=^_",
+    "build-min": "node build.js",
     "build": "rm -rf out && npm run build-dts && npm run build-min",
     "prepack": "npm run lint && npm run test && npm run build"
   },
-  "devDependencies": {
-    "@esm-bundle/chai": "^4.3.4-fix.0",
+  "dependencies": {
     "@rocicorp/datadog-util": "^0.6.0",
-    "@rocicorp/eslint-config": "^0.3.0",
     "@rocicorp/lock": "^1.0.1",
     "@rocicorp/logger": "^4.1.0",
+    "@rocicorp/resolver": "^1.0.0"
+  },
+  "devDependencies": {
+    "@esm-bundle/chai": "^4.3.4-fix.0",
+    "@rocicorp/eslint-config": "^0.3.0",
     "@rocicorp/prettier-config": "^0.1.1",
-    "@rocicorp/resolver": "^1.0.0",
     "@rollup/plugin-node-resolve": "^15.0.1",
     "@types/sinon": "^10.0.11",
+    "@web/dev-server": "^0.1.36",
     "@web/dev-server-esbuild": "^0.3.4",
     "@web/test-runner": "^0.15.1",
     "@web/test-runner-playwright": "^0.9.0",
@@ -54,8 +57,5 @@
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },
-  "prettier": "@rocicorp/prettier-config",
-  "dependencies": {
-    "@web/dev-server": "^0.1.36"
-  }
+  "prettier": "@rocicorp/prettier-config"
 }

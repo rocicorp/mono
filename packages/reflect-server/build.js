@@ -1,35 +1,42 @@
 // @ts-check
+/* eslint-env node, es2022 */
 
-/* eslint-env node, es2020 */
-
-import {build} from 'esbuild';
+import * as esbuild from 'esbuild';
+import {writeFile} from 'fs/promises';
 import * as path from 'path';
 import {fileURLToPath} from 'url';
+import {sharedOptions} from '../shared/src/build.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const metafile = process.argv.includes('--metafile');
 
-function buildESM() {
-  return buildInternal({
-    format: 'esm',
-    entryPoints: [path.join(__dirname, 'src', 'mod.ts')],
-    outfile: path.join(__dirname, 'out/reflect-server.js'),
+const dirname = path.dirname(fileURLToPath(import.meta.url));
+
+async function buildESM() {
+  const outfile = path.join(dirname, 'out', 'reflect-server.js');
+  const result = await buildInternal({
+    entryPoints: [path.join(dirname, 'src', 'mod.ts')],
+    outfile,
   });
+  if (metafile) {
+    await writeFile(outfile + '.meta.json', JSON.stringify(result.metafile));
+  }
 }
 
 function buildExample() {
   return buildInternal({
-    format: 'esm',
-    entryPoints: [path.join(__dirname, 'example', 'index.ts')],
-    outdir: path.join(__dirname, 'out', 'example'),
+    entryPoints: [path.join(dirname, 'example', 'index.ts')],
+    outdir: path.join(dirname, 'out', 'example'),
+
+    // Jest builds this target and tries to load it... Maybe related to
+    // `testEnvironment: 'miniflare'`
+    external: [],
   });
 }
 
 function buildCLI() {
   return buildInternal({
-    format: 'esm',
-    entryPoints: [path.join(__dirname, 'tool', 'cli.ts')],
-    outfile: path.join(__dirname, 'out', 'cli.js'),
+    entryPoints: [path.join(dirname, 'tool', 'cli.ts')],
+    outfile: path.join(dirname, 'out', 'cli.js'),
   });
 }
 
@@ -37,10 +44,9 @@ function buildCLI() {
  * @param {Partial<import("esbuild").BuildOptions>} options
  */
 function buildInternal(options) {
-  return build({
-    bundle: true,
-    minify: true,
-    target: 'es2022',
+  const shared = sharedOptions(true, metafile);
+  return esbuild.build({
+    ...shared,
     ...options,
   });
 }
