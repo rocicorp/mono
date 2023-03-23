@@ -24,8 +24,8 @@
     "publish-worker-prod": "npm run wrangler-prod -- publish",
     "worker-logs-staging": "npm run wrangler-staging -- tail",
     "worker-logs-prod": "npm run wrangler-prod -- tail",
-    "wrangler-staging": "wrangler --config wrangler-staging.toml",
-    "wrangler-prod": "wrangler --config wrangler.toml",
+    "wrangler-staging": "npx wrangler --config wrangler-staging.toml",
+    "wrangler-prod": "npx wrangler --config wrangler.toml",
     "update-reflect": "./build-latest-reflect.sh",
     "prepare": "husky install"
   },
@@ -73,8 +73,7 @@
     "styled-components": "^5.3.6",
     "ts-node": "^10.9.1",
     "typescript": "^4.9.4",
-    "vercel": "^28.12.7",
-    "wrangler": "^2.1.9"
+    "vercel": "^28.12.7"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
