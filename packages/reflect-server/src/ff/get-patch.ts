@@ -13,7 +13,7 @@ export async function getPatch(
     const validValue = value;
 
     // TODO: More efficient way of finding changed values.
-    if (validValue.version <= (fromCookie ?? 0)) {
+    if (fromCookie !== null && validValue.version <= fromCookie) {
       continue;
     }
 
