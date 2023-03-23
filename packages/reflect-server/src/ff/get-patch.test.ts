@@ -1,4 +1,4 @@
-import {expect, test} from '@jest/globals';
+import {expect, describe, test} from '@jest/globals';
 import type {Version} from 'reflect-protocol';
 import type {PatchOperation} from 'replicache';
 import {getPatch} from '../../src/ff/get-patch.js';
@@ -8,89 +8,125 @@ import {ReplicacheTransaction} from '../../src/storage/replicache-transaction.js
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
 
-test('getPatch', async () => {
+describe('getPatch', () => {
   type Case = {
     name: string;
     // undefined value means delete
-    muts?: {key: string; value?: number; mutationID: number; version: number}[];
+    muts?: {key: string; value?: string; mutationID: number; version: number}[];
     fromCookie: Version;
     expected: PatchOperation[];
   };
 
   const cases: Case[] = [
     {
-      name: 'add a, diff from null',
-      muts: [{key: 'a', mutationID: 1, value: 1, version: 2}],
+      name: 'add a+b, diff from null',
+      muts: [
+        {key: 'a', mutationID: 1, value: 'a1', version: 2},
+        {key: 'b', mutationID: 1, value: 'b1', version: 2},
+      ],
       fromCookie: 0,
       expected: [
         {
           op: 'put',
           key: 'a',
-          value: 1,
+          value: 'a1',
+        },
+        {
+          op: 'put',
+          key: 'b',
+          value: 'b1',
         },
       ],
     },
     {
-      name: 'add a, diff from 1',
+      name: 'del b, diff from null',
+      muts: [{key: 'b', mutationID: 2, version: 3}],
+      fromCookie: 0,
+      expected: [
+        {
+          op: 'put',
+          key: 'a',
+          value: 'a1',
+        },
+        // no delete for b because diff is from null
+      ],
+    },
+    {
+      name: 'diff from 1',
       fromCookie: 1,
       expected: [
         {
           op: 'put',
           key: 'a',
-          value: 1,
+          value: 'a1',
+        },
+        {
+          op: 'del',
+          key: 'b',
         },
       ],
     },
     {
-      name: 'add a, diff from 2',
+      name: 'diff from 2',
       fromCookie: 2,
-      expected: [],
+      expected: [
+        {
+          op: 'del',
+          key: 'b',
+        },
+      ],
     },
     {
-      name: 'add a + b, diff from null',
-      muts: [{key: 'b', mutationID: 2, value: 2, version: 3}],
+      name: 'add b, diff from null',
+      muts: [{key: 'b', mutationID: 3, value: 'b2', version: 4}],
       fromCookie: 0,
       expected: [
         {
           op: 'put',
           key: 'a',
-          value: 1,
+          value: 'a1',
         },
         {
           op: 'put',
           key: 'b',
-          value: 2,
+          value: 'b2',
         },
       ],
     },
     {
-      name: 'add a + b, diff from 2',
+      name: 'diff from 2 after b re-added',
       muts: [],
       fromCookie: 2,
       expected: [
         {
           op: 'put',
           key: 'b',
-          value: 2,
+          value: 'b2',
         },
       ],
     },
     {
-      name: 'add a + b, diff from 3',
+      name: 'diff from 3',
       muts: [],
       fromCookie: 3,
-      expected: [],
+      expected: [
+        {
+          op: 'put',
+          key: 'b',
+          value: 'b2',
+        },
+      ],
     },
     {
-      name: 'add a + b, diff from 4',
+      name: 'diff from 4',
       muts: [],
       fromCookie: 4,
       expected: [],
     },
     {
-      name: 'del a, diff from 3',
-      muts: [{key: 'a', mutationID: 3, version: 4}],
-      fromCookie: 3,
+      name: 'del a, diff from 4',
+      muts: [{key: 'a', mutationID: 4, version: 5}],
+      fromCookie: 4,
       expected: [
         {
           op: 'del',
@@ -99,31 +135,35 @@ test('getPatch', async () => {
       ],
     },
     {
-      name: 'del a, diff from 4',
-      fromCookie: 4,
+      name: 'diff from 5',
+      fromCookie: 5,
       expected: [],
     },
   ];
 
-  const storage = new DurableStorage(
-    await getMiniflareDurableObjectStorage(id),
-  );
-
-  for (const c of cases) {
-    for (const p of c.muts || []) {
-      const tx = new ReplicacheTransaction(
-        storage,
-        'c1',
-        p.mutationID,
-        p.version,
-      );
-      if (p.value !== undefined) {
-        await tx.put(p.key, p.value);
-      } else {
-        await tx.del(p.key);
+  for (let i = 0; i < cases.length; i++) {
+    const c = cases[i];
+    test(c.name, async () => {
+      const durable = await getMiniflareDurableObjectStorage(id);
+      await durable.deleteAll();
+      const storage = new DurableStorage(durable);
+      // The cases build on each other, apply mutations from
+      // all previous cases, and this case.
+      for (const p of cases.slice(0, i + 1).flatMap(c => c.muts || [])) {
+        const tx = new ReplicacheTransaction(
+          storage,
+          'c1',
+          p.mutationID,
+          p.version,
+        );
+        if (p.value !== undefined) {
+          await tx.put(p.key, p.value);
+        } else {
+          await tx.del(p.key);
+        }
       }
-    }
-    const patch = await getPatch(storage, c.fromCookie);
-    expect(patch).toEqual(c.expected);
+      const patch = await getPatch(storage, c.fromCookie);
+      expect(patch).toEqual(c.expected);
+    });
   }
 });

@@ -20,10 +20,12 @@ export async function getPatch(
     const unwrappedKey = key.substring(userValuePrefix.length);
     const unwrappedValue = validValue.value;
     if (validValue.deleted) {
-      patch.push({
-        op: 'del',
-        key: unwrappedKey,
-      });
+      if (fromCookie !== 0) {
+        patch.push({
+          op: 'del',
+          key: unwrappedKey,
+        });
+      }
     } else {
       patch.push({
         op: 'put',
