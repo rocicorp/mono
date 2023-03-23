@@ -35,7 +35,7 @@ export async function fastForwardRoom(
 
   // Calculate all the distinct patches in parallel
   const getPatchEntry = async (baseCookie: NullableVersion) =>
-    [baseCookie, await getPatch(storage, baseCookie ?? 0)] as [
+    [baseCookie, await getPatch(storage, baseCookie)] as [
       NullableVersion,
       Patch,
     ];
