@@ -10,13 +10,14 @@ import type {DurableStorage} from '../storage/durable-storage.js';
 import {send} from '../util/socket.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {randomID} from '../util/rand.js';
+import {getConnectedClients} from '../types/connected-clients.js';
 
 // TODO: make buffer dynamic
 const PENDING_ORDER_BUFFER_MS = 200;
 
 /**
- * Processes all mutations in all rooms for a time range, and send relevant
- * pokes.
+ * Processes pending mutations and client disconnect/connects, and sends
+ * relevant pokes.
  * @param clients Rooms to process mutations for
  * @param mutators All known mutators
  */
@@ -28,8 +29,25 @@ export async function processPending(
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
   maxProcessedMutationTimestamp: number,
-): Promise<number> {
+): Promise<{maxProcessedMutationTimestamp: number; nothingToProcess: boolean}> {
   lc.debug?.('process pending');
+
+  const storedConnectedClients = await getConnectedClients(storage);
+  let hasConnectsOrDisconnectsToProcess = false;
+  if (storedConnectedClients.size === clients.size) {
+    for (const clientID of storedConnectedClients) {
+      if (!clients.has(clientID)) {
+        hasConnectsOrDisconnectsToProcess = true;
+        break;
+      }
+    }
+  } else {
+    hasConnectsOrDisconnectsToProcess = true;
+  }
+  if (pendingMutations.length === 0 && !hasConnectsOrDisconnectsToProcess) {
+    return {maxProcessedMutationTimestamp, nothingToProcess: true};
+    lc.debug?.('No pending mutations or disconnects to process, exiting');
+  }
 
   const t0 = Date.now();
   const tooNewIndex = pendingMutations.findIndex(
@@ -75,10 +93,13 @@ export async function processPending(
   } finally {
     lc.debug?.(`processPending took ${Date.now() - t0} ms`);
   }
-  return toProcess.reduce<number>(
-    (max, processed) => Math.max(max, processed.timestamp ?? max),
-    maxProcessedMutationTimestamp,
-  );
+  return {
+    nothingToProcess: false,
+    maxProcessedMutationTimestamp: toProcess.reduce<number>(
+      (max, processed) => Math.max(max, processed.timestamp ?? max),
+      maxProcessedMutationTimestamp,
+    ),
+  };
 }
 
 function sendPokes(

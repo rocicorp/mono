@@ -14,7 +14,7 @@ import {
   getClientRecord,
   putClientRecord,
 } from '../../src/types/client-record.js';
-import type {ClientMap} from '../../src/types/client-state.js';
+import type {ClientID, ClientMap} from '../../src/types/client-state.js';
 import {getUserValue, UserValue} from '../../src/types/user-value.js';
 import {getVersion, putVersion} from '../../src/types/version.js';
 import type {Version} from 'reflect-protocol';
@@ -22,13 +22,16 @@ import {
   client,
   clientRecord,
   createSilentLogContext,
-  fail,
   Mocket,
   mockMathRandom,
   pendingMutation,
 } from '../util/test-utils.js';
 import {processPending} from '../process/process-pending.js';
 import type {PendingMutation} from '../types/mutation.js';
+import {
+  getConnectedClients,
+  putConnectedClients,
+} from '../types/connected-clients.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -51,15 +54,16 @@ describe('processPending', () => {
     version: Version;
     clientRecords: ClientRecordMap;
     clients: ClientMap;
+    storedConnectedClients: ClientID[];
     pendingMutations: PendingMutation[];
     maxProcessedMutationTimestamp: number;
     expectedError?: string;
-    expectedClients: ClientMap;
     expectedVersion: Version;
-    expectedPokes?: Map<Mocket, PokeBody>;
+    expectedPokes?: Map<ClientID, PokeBody>;
     expectedUserValues?: Map<string, UserValue>;
     expectedClientRecords?: ClientRecordMap;
     expectedPendingMutations?: PendingMutation[];
+    expectNothingToProcess?: boolean;
     expectedMaxProcessedMutationTimestamp?: number;
   };
 
@@ -69,23 +73,90 @@ describe('processPending', () => {
 
   const cases: Case[] = [
     {
-      name: 'none pending',
+      name: 'no pending mutations connects or disconnects',
       version: 1,
       clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
       clients: new Map(),
+      storedConnectedClients: [],
       pendingMutations: [],
       maxProcessedMutationTimestamp: 500,
-      expectedClients: new Map(),
       expectedVersion: 1,
       expectedPokes: new Map(),
       expectedUserValues: new Map(),
+      expectNothingToProcess: true,
       expectedClientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
+    },
+    {
+      name: 'no pending mutations, but connect pending',
+      version: 3,
+      clientRecords: new Map([
+        ['c1', clientRecord('cg1', 3)],
+        ['c2', clientRecord('cg1', 1)],
+      ]),
+      clients: new Map([
+        client('c1', 'u1', 'cg1', s1, 0),
+        client('c2', 'u2', 'cg1', s2, 0),
+      ]),
+      storedConnectedClients: ['c1'],
+      pendingMutations: [],
+      maxProcessedMutationTimestamp: 500,
+      expectedVersion: 3,
+      // newly connected client is fast forwarded
+      expectedPokes: new Map([
+        [
+          'c2',
+          {
+            pokes: [
+              {baseCookie: 1, cookie: 3, lastMutationIDChanges: {}, patch: []},
+            ],
+            requestID: '4fxcm49g2j9',
+          },
+        ],
+      ]),
+      expectedUserValues: new Map(),
+      expectNothingToProcess: false,
+      expectedClientRecords: new Map([
+        ['c1', clientRecord('cg1', 3)],
+        ['c2', clientRecord('cg1', 3)],
+      ]),
+    },
+    {
+      name: 'no pending mutations, but disconnect pending',
+      version: 1,
+      clientRecords: new Map([
+        ['c1', clientRecord('cg1', 1)],
+        ['c2', clientRecord('cg1', 1)],
+      ]),
+      clients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
+      storedConnectedClients: ['c1', 'c2'],
+      pendingMutations: [],
+      maxProcessedMutationTimestamp: 500,
+      // version updated by disconnectHandler
+      expectedVersion: 2,
+      expectedPokes: new Map([
+        [
+          'c1',
+          {
+            pokes: [
+              {baseCookie: 1, cookie: 2, lastMutationIDChanges: {}, patch: []},
+            ],
+            requestID: '4fxcm49g2j9',
+          },
+        ],
+      ]),
+      expectedUserValues: new Map(),
+      expectNothingToProcess: false,
+      expectedClientRecords: new Map([
+        ['c1', clientRecord('cg1', 2)],
+        ['c2', clientRecord('cg1', 1)],
+      ]),
     },
     {
       name: 'one client, one mutation, all processed',
       version: 1,
       clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
       clients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
+      storedConnectedClients: ['c1'],
       pendingMutations: [
         pendingMutation({
           clientID: 'c1',
@@ -96,11 +167,10 @@ describe('processPending', () => {
         }),
       ],
       maxProcessedMutationTimestamp: 700,
-      expectedClients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
       expectedVersion: 2,
       expectedPokes: new Map([
         [
-          s1,
+          'c1',
           {
             pokes: [
               {
@@ -140,6 +210,7 @@ describe('processPending', () => {
         client('c2', 'u2', 'cg1', s2, 0),
         client('c3', 'u3', 'cg2', s3, 0),
       ]),
+      storedConnectedClients: ['c1', 'c2', 'c3'],
       pendingMutations: [
         pendingMutation({
           clientID: 'c1',
@@ -164,15 +235,10 @@ describe('processPending', () => {
         }),
       ],
       maxProcessedMutationTimestamp: 700,
-      expectedClients: new Map([
-        client('c1', 'u1', 'cg1', s1, 0),
-        client('c2', 'u2', 'cg1', s2, 0),
-        client('c3', 'u3', 'cg2', s3, 0),
-      ]),
       expectedVersion: 4,
-      expectedPokes: new Map<Mocket, PokeBody>([
+      expectedPokes: new Map([
         [
-          s1,
+          'c1',
           {
             pokes: [
               {
@@ -219,7 +285,7 @@ describe('processPending', () => {
           },
         ],
         [
-          s2,
+          'c2',
           {
             pokes: [
               {
@@ -266,7 +332,7 @@ describe('processPending', () => {
           },
         ],
         [
-          s3,
+          'c3',
           {
             pokes: [
               {
@@ -334,6 +400,7 @@ describe('processPending', () => {
         client('c1', 'u1', 'cg1', s1, 0),
         client('c2', 'u2', 'cg1', s2, 0),
       ]),
+      storedConnectedClients: ['c1', 'c2'],
       pendingMutations: [
         pendingMutation({
           clientID: 'c1',
@@ -365,14 +432,10 @@ describe('processPending', () => {
         }),
       ],
       maxProcessedMutationTimestamp: 700,
-      expectedClients: new Map([
-        client('c1', 'u1', 'cg1', s1, 0),
-        client('c2', 'u2', 'cg1', s2, 0),
-      ]),
       expectedVersion: 3,
-      expectedPokes: new Map<Mocket, PokeBody>([
+      expectedPokes: new Map([
         [
-          s1,
+          'c1',
           {
             pokes: [
               {
@@ -406,7 +469,7 @@ describe('processPending', () => {
           },
         ],
         [
-          s2,
+          'c2',
           {
             pokes: [
               {
@@ -476,6 +539,7 @@ describe('processPending', () => {
         client('c1', 'u1', 'cg1', s1, 0),
         client('c2', 'u2', 'cg1', s2, 0),
       ]),
+      storedConnectedClients: ['c1', 'c2'],
       pendingMutations: [
         pendingMutation({
           clientID: 'c1',
@@ -507,14 +571,10 @@ describe('processPending', () => {
         }),
       ],
       maxProcessedMutationTimestamp: 700,
-      expectedClients: new Map([
-        client('c1', 'u1', 'cg1', s1, 0),
-        client('c2', 'u2', 'cg1', s2, 0),
-      ]),
       expectedVersion: 3,
-      expectedPokes: new Map<Mocket, PokeBody>([
+      expectedPokes: new Map([
         [
-          s1,
+          'c1',
           {
             pokes: [
               {
@@ -548,7 +608,7 @@ describe('processPending', () => {
           },
         ],
         [
-          s2,
+          'c2',
           {
             pokes: [
               {
@@ -612,6 +672,7 @@ describe('processPending', () => {
       version: 1,
       clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
       clients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
+      storedConnectedClients: ['c1'],
       pendingMutations: [
         pendingMutation({
           clientID: 'c1',
@@ -622,11 +683,10 @@ describe('processPending', () => {
         }),
       ],
       maxProcessedMutationTimestamp: 800,
-      expectedClients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
       expectedVersion: 2,
       expectedPokes: new Map([
         [
-          s1,
+          'c1',
           {
             pokes: [
               {
@@ -658,6 +718,7 @@ describe('processPending', () => {
       version: 1,
       clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
       clients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
+      storedConnectedClients: ['c1'],
       pendingMutations: [
         pendingMutation({
           clientID: 'c1',
@@ -675,11 +736,10 @@ describe('processPending', () => {
         }),
       ],
       maxProcessedMutationTimestamp: 700,
-      expectedClients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
       expectedVersion: 3,
       expectedPokes: new Map([
         [
-          s1,
+          'c1',
           {
             pokes: [
               {
@@ -740,6 +800,7 @@ describe('processPending', () => {
       for (const [clientID, record] of c.clientRecords) {
         await putClientRecord(clientID, record, storage);
       }
+      await putConnectedClients(new Set(c.storedConnectedClients), storage);
       for (const [, clientState] of c.clients) {
         (clientState.socket as Mocket).log.length = 0;
       }
@@ -753,29 +814,40 @@ describe('processPending', () => {
         c.maxProcessedMutationTimestamp,
       );
       if (c.expectedError) {
+        let expectedE;
         try {
           await p;
-          fail('should have thrown');
         } catch (e) {
-          expect(String(e)).toEqual(c.expectedError);
+          expectedE = String(e);
         }
+        expect(expectedE).toEqual(c.expectedError);
         return;
       }
 
-      expect(await p).toEqual(
-        c.expectedMaxProcessedMutationTimestamp ??
+      expect(await p).toEqual({
+        maxProcessedMutationTimestamp:
+          c.expectedMaxProcessedMutationTimestamp ??
           c.maxProcessedMutationTimestamp,
-      );
-      expect(c.clients).toEqual(c.expectedClients);
+        nothingToProcess: c.expectNothingToProcess ?? false,
+      });
       expect(c.pendingMutations).toEqual(c.expectedPendingMutations ?? []);
+      expect(await getConnectedClients(storage)).toEqual(
+        new Set(c.clients.keys()),
+      );
 
       expect(c.expectedError).toBeUndefined;
       expect(await getVersion(storage)).toEqual(c.expectedVersion);
-      for (const [mocket, clientPoke] of c.expectedPokes ?? []) {
-        expect(mocket.log[0]).toEqual([
-          'send',
-          JSON.stringify(['poke', clientPoke]),
-        ]);
+      for (const [clientID, clientState] of c.clients) {
+        const mocket = clientState.socket as Mocket;
+        const expectedPoke = c.expectedPokes?.get(clientID);
+        if (!expectedPoke) {
+          expect(mocket.log.length).toEqual(0);
+        } else {
+          expect(mocket.log[0]).toEqual([
+            'send',
+            JSON.stringify(['poke', expectedPoke]),
+          ]);
+        }
       }
       for (const [expKey, expValue] of c.expectedUserValues ?? new Map()) {
         expect(await getUserValue(expKey, storage)).toEqual(expValue);

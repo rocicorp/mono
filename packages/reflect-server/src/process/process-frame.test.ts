@@ -13,7 +13,10 @@ import {UserValue, userValueKey} from '../../src/types/user-value.js';
 import {versionKey} from '../../src/types/version.js';
 import {processFrame} from '../process/process-frame.js';
 import type {ClientPoke} from '../types/client-poke.js';
-import {connectedClientsKey} from '../types/connected-clients.js';
+import {
+  connectedClientsKey,
+  putConnectedClients,
+} from '../types/connected-clients.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {
   clientRecord,
@@ -38,7 +41,7 @@ test('processFrame', async () => {
     pendingMutations: PendingMutation[];
     clients: ClientID[];
     clientRecords: ClientRecordMap;
-    connectedClients: ClientID[];
+    storedConnectedClients: ClientID[];
     expectedPokes: ClientPoke[];
     expectedUserValues: Map<string, UserValue>;
     expectedClientRecords: ClientRecordMap;
@@ -73,7 +76,7 @@ test('processFrame', async () => {
       pendingMutations: [],
       clients: [],
       clientRecords: records,
-      connectedClients: [],
+      storedConnectedClients: [],
       expectedPokes: [],
       expectedUserValues: new Map(),
       expectedClientRecords: records,
@@ -86,7 +89,7 @@ test('processFrame', async () => {
       pendingMutations: [],
       clients: ['c1'],
       clientRecords: records,
-      connectedClients: ['c1'],
+      storedConnectedClients: ['c1'],
       expectedPokes: [],
       expectedUserValues: new Map(),
       expectedClientRecords: records,
@@ -108,7 +111,7 @@ test('processFrame', async () => {
       ],
       clients: ['c1'],
       clientRecords: records,
-      connectedClients: ['c1'],
+      storedConnectedClients: ['c1'],
       expectedPokes: [
         {
           clientID: 'c1',
@@ -152,7 +155,7 @@ test('processFrame', async () => {
       ],
       clients: ['c1', 'c2'],
       clientRecords: records,
-      connectedClients: ['c1', 'c2'],
+      storedConnectedClients: ['c1', 'c2'],
       expectedPokes: [
         {
           clientID: 'c1',
@@ -224,7 +227,7 @@ test('processFrame', async () => {
       ],
       clients: ['c1', 'c2', 'c3'],
       clientRecords: records,
-      connectedClients: ['c1', 'c2', 'c3'],
+      storedConnectedClients: ['c1', 'c2', 'c3'],
       expectedPokes: [
         {
           clientID: 'c1',
@@ -359,7 +362,7 @@ test('processFrame', async () => {
       ],
       clients: ['c1'],
       clientRecords: records,
-      connectedClients: ['c1'],
+      storedConnectedClients: ['c1'],
       expectedPokes: [
         {
           clientID: 'c1',
@@ -410,7 +413,7 @@ test('processFrame', async () => {
       pendingMutations: [],
       clients: [],
       clientRecords: records,
-      connectedClients: ['c1'],
+      storedConnectedClients: ['c1'],
       expectedPokes: [],
       expectedUserValues: new Map([
         [disconnectHandlerWriteKey('c1'), userValue(true, startVersion + 1)],
@@ -425,7 +428,7 @@ test('processFrame', async () => {
       pendingMutations: [],
       clients: [],
       clientRecords: records,
-      connectedClients: ['c1'],
+      storedConnectedClients: ['c1'],
       // No user values or pokes because only write was in disconnect handler which threw
       expectedPokes: [],
       expectedUserValues: new Map(),
@@ -440,7 +443,7 @@ test('processFrame', async () => {
       pendingMutations: [],
       clients: ['c2'],
       clientRecords: records,
-      connectedClients: ['c1', 'c2'],
+      storedConnectedClients: ['c1', 'c2'],
       expectedPokes: [
         {
           clientID: 'c2',
@@ -475,7 +478,7 @@ test('processFrame', async () => {
       pendingMutations: [],
       clients: ['c2'],
       clientRecords: records,
-      connectedClients: ['c1', 'c2', 'c3'],
+      storedConnectedClients: ['c1', 'c2', 'c3'],
       expectedPokes: [
         {
           clientID: 'c2',
@@ -525,7 +528,7 @@ test('processFrame', async () => {
       ],
       clients: ['c1', 'c2'],
       clientRecords: records,
-      connectedClients: ['c1', 'c2', 'c3'],
+      storedConnectedClients: ['c1', 'c2', 'c3'],
       expectedPokes: [
         {
           clientID: 'c1',
@@ -616,7 +619,7 @@ test('processFrame', async () => {
     for (const [clientID, record] of c.clientRecords) {
       await putClientRecord(clientID, record, storage);
     }
-    await storage.put(connectedClientsKey, c.connectedClients);
+    await putConnectedClients(new Set(c.storedConnectedClients), storage);
 
     const disconnectCallClients: ClientID[] = [];
     const result = await processFrame(
