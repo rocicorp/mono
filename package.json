@@ -27,6 +27,7 @@
     "wrangler-staging": "npx wrangler --config wrangler-staging.toml",
     "wrangler-prod": "npx wrangler --config wrangler.toml",
     "update-reflect": "./build-latest-reflect.sh",
+    "update-reflect-pull": "npm run update-reflect -- pull",
     "prepare": "husky install"
   },
   "dependencies": {
