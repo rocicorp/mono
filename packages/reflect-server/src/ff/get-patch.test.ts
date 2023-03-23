@@ -1,5 +1,5 @@
 import {expect, describe, test} from '@jest/globals';
-import type {Version} from 'reflect-protocol';
+import type {NullableVersion} from 'reflect-protocol';
 import type {PatchOperation} from 'replicache';
 import {getPatch} from '../../src/ff/get-patch.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
@@ -13,7 +13,7 @@ describe('getPatch', () => {
     name: string;
     // undefined value means delete
     muts?: {key: string; value?: string; mutationID: number; version: number}[];
-    fromCookie: Version;
+    fromCookie: NullableVersion;
     expected: PatchOperation[];
   };
 
@@ -24,7 +24,7 @@ describe('getPatch', () => {
         {key: 'a', mutationID: 1, value: 'a1', version: 2},
         {key: 'b', mutationID: 1, value: 'b1', version: 2},
       ],
-      fromCookie: 0,
+      fromCookie: null,
       expected: [
         {
           op: 'put',
@@ -41,7 +41,7 @@ describe('getPatch', () => {
     {
       name: 'del b, diff from null',
       muts: [{key: 'b', mutationID: 2, version: 3}],
-      fromCookie: 0,
+      fromCookie: null,
       expected: [
         {
           op: 'put',
