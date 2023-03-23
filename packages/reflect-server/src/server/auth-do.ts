@@ -2,12 +2,7 @@ import * as valita from 'shared/valita.js';
 import {encodeHeaderValue} from '../util/headers.js';
 import {LogSink, LogContext, LogLevel} from '@rocicorp/logger';
 import {version} from '../util/version.js';
-import {
-  AuthHandler,
-  REFLECT_NOAUTH_USER_ID,
-  UserData,
-  USER_DATA_HEADER_NAME,
-} from './auth.js';
+import {AuthHandler, UserData, USER_DATA_HEADER_NAME} from './auth.js';
 import {
   closeRoom,
   createRoom,
@@ -61,7 +56,7 @@ import {assert} from 'shared/asserts.js';
 export interface AuthDOOptions {
   roomDO: DurableObjectNamespace;
   state: DurableObjectState;
-  authHandler: AuthHandler | undefined;
+  authHandler?: AuthHandler | undefined;
   authApiKey: string;
   logSink: LogSink;
   logLevel: LogLevel;
@@ -387,6 +382,14 @@ export class BaseAuthDO implements DurableObject {
       );
     }
 
+    const userID = searchParams.get('userID');
+    if (!userID) {
+      return closeWithErrorLocal(
+        ErrorKind.InvalidConnectionRequest,
+        'userID parameter required',
+      );
+    }
+
     const jurisdiction = searchParams.get('jurisdiction') ?? undefined;
     if (jurisdiction && jurisdiction !== 'eu') {
       return closeWithErrorLocal(
@@ -397,25 +400,24 @@ export class BaseAuthDO implements DurableObject {
     assert(jurisdiction === undefined || jurisdiction === 'eu');
 
     lc = lc.addContext('client', clientID).addContext('room', roomID);
-
+    let decodedAuth: string | undefined;
+    assert(encodedAuth);
+    try {
+      decodedAuth = decodeURIComponent(encodedAuth);
+    } catch (e) {
+      return closeWithErrorLocal(
+        ErrorKind.InvalidConnectionRequest,
+        'malformed auth',
+      );
+    }
     return this._authLock.withRead(async () => {
       let userData: UserData = {
-        userID: REFLECT_NOAUTH_USER_ID,
+        userID,
       };
 
       if (this._authHandler) {
-        let decodedAuth: string | undefined;
-        assert(encodedAuth);
-        try {
-          decodedAuth = decodeURIComponent(encodedAuth);
-        } catch (e) {
-          return closeWithErrorLocal(
-            ErrorKind.InvalidConnectionRequest,
-            'malformed auth',
-          );
-        }
-
         const auth = decodedAuth;
+        assert(auth);
         let authHandlerUserData: UserData | undefined;
 
         try {
@@ -433,6 +435,13 @@ export class BaseAuthDO implements DurableObject {
             lc.info?.('userData returned by authHandler has no userID.');
           }
           return closeWithErrorLocal(ErrorKind.Unauthorized, 'no userData');
+        }
+        if (authHandlerUserData.userID !== userID) {
+          lc.info?.('userData returned by authHandler has a different userID.');
+          return closeWithErrorLocal(
+            ErrorKind.Unauthorized,
+            'userID returned by authHandler does not match userID url parameter',
+          );
         }
         userData = authHandlerUserData;
       }

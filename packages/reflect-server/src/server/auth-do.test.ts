@@ -904,7 +904,7 @@ function createConnectTestFixture(
     headers.set('Sec-WebSocket-Protocol', encodedTestAuth);
   }
   headers.set('Upgrade', 'websocket');
-  let url = `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}`;
+  let url = `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}&userID=${testUserID}`;
   if (jurisdiction) {
     url += `&jurisdiction=${jurisdiction}`;
   }
@@ -1063,42 +1063,6 @@ test('connect calls authHandler and sends resolved UserData in header to Room DO
   );
 });
 
-test('connect with undefined authHandler sends UserData with empty userID to roomDO', async () => {
-  const {
-    testRoomID,
-    testRequest,
-    testRoomDO,
-    mocket,
-    encodedTestAuth,
-    testUserID,
-  } = createConnectTestFixture({encodedTestAuth: undefined, testUserID: ''});
-
-  const storage = await getMiniflareDurableObjectStorage(authDOID);
-  const state = new TestDurableObjectState(authDOID, storage);
-  const logSink = new TestLogSink();
-  const authDO = new BaseAuthDO({
-    roomDO: testRoomDO,
-    state,
-    // eslint-disable-next-line require-await
-    authHandler: undefined,
-    authApiKey: TEST_AUTH_API_KEY,
-    logSink,
-    logLevel: 'debug',
-  });
-
-  await createRoom(authDO, testRoomID);
-
-  await connectAndTestThatRoomGotCreated(
-    authDO,
-    testRequest,
-    mocket,
-    encodedTestAuth,
-    testUserID,
-    storage,
-    undefined,
-  );
-});
-
 test('connect wont connect to a room that is closed', async () => {
   jest.useRealTimers();
   const {testUserID, testRoomID, testRequest, testRoomDO} =
@@ -1189,13 +1153,14 @@ test('connect pipes 401 over ws without calling Room DO if authHandler rejects',
   const testRoomID = 'testRoomID1';
   const testClientID = 'testClientID1';
   const testAuth = 'testAuthTokenValue';
+  const testUserID = 'testUserID1';
 
   const headers = new Headers();
   headers.set('Sec-WebSocket-Protocol', testAuth);
   headers.set('Upgrade', 'websocket');
 
   const testRequest = new Request(
-    `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}`,
+    `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}&userID=${testUserID}`,
     {
       headers,
     },
@@ -1258,9 +1223,57 @@ test('connect pipes 401 over ws without calling Room DO if Sec-WebSocket-Protoco
   expect(response.webSocket).toBeUndefined();
 });
 
+test('connect pipes 401 over ws without calling Room DO if userID is not present', async () => {
+  const testRoomID = 'testRoomID1';
+  const testClientID = 'testClientID1';
+  const testAuth = 'testAuthTokenValue';
+
+  const headers = new Headers();
+  headers.set('Sec-WebSocket-Protocol', testAuth);
+  headers.set('Upgrade', 'websocket');
+
+  const testRequest = new Request(
+    `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}`,
+    {
+      headers,
+    },
+  );
+  const [clientWS, serverWS] = mockWebSocketPair();
+  const authDO = new BaseAuthDO({
+    roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
+    state: {id: authDOID} as DurableObjectState,
+    // eslint-disable-next-line require-await
+    authHandler: async (auth, roomID) => {
+      expect(auth).toEqual(testAuth);
+      expect(roomID).toEqual(testRoomID);
+      return {userID: ''};
+    },
+    authApiKey: TEST_AUTH_API_KEY,
+    logSink: new TestLogSink(),
+    logLevel: 'debug',
+  });
+
+  const response = await authDO.fetch(testRequest);
+
+  expect(response.status).toEqual(101);
+  expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(testAuth);
+  expect(response.webSocket).toBe(clientWS);
+  expect(serverWS.log).toEqual([
+    [
+      'send',
+      JSON.stringify([
+        'error',
+        ErrorKind.InvalidConnectionRequest,
+        'userID parameter required',
+      ]),
+    ],
+    ['close'],
+  ]);
+});
+
 describe('connect sends VersionNotSupported error over ws if path is for unsupported version', () => {
   const t = (path: string) =>
-    -test('path: ' + path, async () => {
+    test('path: ' + path, async () => {
       const testRoomID = 'testRoomID1';
       const testClientID = 'testClientID1';
 
@@ -1311,7 +1324,7 @@ describe('connect sends VersionNotSupported error over ws if path is for unsuppo
 
 describe('authInvalidateForUser when requests to roomDOs are succesful', () => {
   const t = (userID: string) =>
-    -test('userID: ' + userID, async () => {
+    test('userID: ' + userID, async () => {
       const testRequest = new Request(
         `https://test.roci.dev/api/auth/v0/invalidateForUser`,
         {
@@ -1387,7 +1400,6 @@ describe('authInvalidateForUser when requests to roomDOs are succesful', () => {
       expect(response.status).toEqual(200);
     });
   t('testUserID1');
-  t('');
 });
 
 test('authInvalidateForUser when connection ids have chars that need to be percent escaped', async () => {
@@ -1919,9 +1931,6 @@ async function createRevalidateConnectionsTestFixture() {
   await storage.put('connection/testUserID2/testRoomID3/testClientID1/', {
     connectTimestamp: 1000,
   });
-  await storage.put('connection//testRoomID1/testClientID1/', {
-    connectTimestamp: 1000,
-  });
   await storage.put('connection/testUserID3/testRoomID3/testClientID1/', {
     connectTimestamp: 1000,
   });
@@ -2014,7 +2023,6 @@ test('revalidateConnections continues if one storage delete throws an error', as
   expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(1);
 
   expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([
-    'connection//testRoomID1/testClientID1/',
     'connection/testUserID1/testRoomID1/testClientID1/',
     'connection/testUserID1/testRoomID1/testClientID2/',
     'connection/testUserID1/testRoomID2/testClientID1/',
@@ -2049,9 +2057,6 @@ test('revalidateConnections continues if one roomDO returns an error', async () 
     connectTimestamp: 1000,
   });
   await storage.put('connection/testUserID3/testRoomID3/testClientID1/', {
-    connectTimestamp: 1000,
-  });
-  await storage.put('connection//testRoomID1/testClientID1/', {
     connectTimestamp: 1000,
   });
 
@@ -2116,7 +2121,6 @@ test('revalidateConnections continues if one roomDO returns an error', async () 
   expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(1);
 
   expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([
-    'connection//testRoomID1/testClientID1/',
     'connection/testUserID1/testRoomID1/testClientID1/',
     'connection/testUserID1/testRoomID1/testClientID2/',
     'connection/testUserID1/testRoomID2/testClientID1/',

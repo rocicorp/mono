@@ -240,6 +240,7 @@ test('createSocket', () => {
     baseCookie: NullableVersion,
     clientID: string,
     roomID: string,
+    userID: string,
     auth: string,
     jurisdiction: 'eu' | undefined,
     lmid: number,
@@ -252,6 +253,7 @@ test('createSocket', () => {
       clientID,
       'testClientGroupID',
       roomID,
+      userID,
       auth,
       jurisdiction,
       lmid,
@@ -266,10 +268,11 @@ test('createSocket', () => {
     null,
     'clientID',
     'roomID',
+    'userID',
     '',
     undefined,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -277,10 +280,11 @@ test('createSocket', () => {
     1234,
     'clientID',
     'roomID',
+    'userID',
     '',
     undefined,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -288,10 +292,11 @@ test('createSocket', () => {
     1234,
     'clientID',
     'a/b',
+    'userID',
     '',
     undefined,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=a%2Fb&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=a%2Fb&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -299,10 +304,11 @@ test('createSocket', () => {
     null,
     'clientID',
     'roomID',
+    'userID',
     '',
     undefined,
     123,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
   );
 
   t(
@@ -310,10 +316,11 @@ test('createSocket', () => {
     null,
     'clientID',
     'roomID',
+    'userID',
     'auth with []',
     undefined,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
     'auth%20with%20%5B%5D',
   );
 
@@ -322,10 +329,11 @@ test('createSocket', () => {
     null,
     'clientID',
     'roomID',
+    'userID',
     'auth with []',
     'eu',
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
     'auth%20with%20%5B%5D',
   );
 
@@ -335,10 +343,11 @@ test('createSocket', () => {
     null,
     'clientID',
     'roomID',
+    'userID',
     '',
     undefined,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
   );
 });
 

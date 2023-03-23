@@ -23,7 +23,7 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * attempt. This provides the application the opportunity to calculate or
    * fetch a fresh token.
    */
-  auth: string | (() => MaybePromise<string>);
+  auth?: string | (() => MaybePromise<string>) | undefined;
 
   /**
    * A unique identifier for the user authenticated by
