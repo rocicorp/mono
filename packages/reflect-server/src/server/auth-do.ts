@@ -348,7 +348,7 @@ export class BaseAuthDO implements DurableObject {
       lc.error?.('authDO auth not found in Sec-WebSocket-Protocol header.');
       return closeWithErrorLocal(
         ErrorKind.InvalidConnectionRequest,
-        'encodedAuth required',
+        'auth required',
       );
     }
     const expectedVersion = 1;
@@ -402,14 +402,15 @@ export class BaseAuthDO implements DurableObject {
 
     lc = lc.addContext('client', clientID).addContext('room', roomID);
     let decodedAuth: string | undefined;
-    assert(encodedAuth);
-    try {
-      decodedAuth = decodeURIComponent(encodedAuth);
-    } catch (e) {
-      return closeWithErrorLocal(
-        ErrorKind.InvalidConnectionRequest,
-        'malformed auth',
-      );
+    if (encodedAuth) {
+      try {
+        decodedAuth = decodeURIComponent(encodedAuth);
+      } catch (e) {
+        return closeWithErrorLocal(
+          ErrorKind.InvalidConnectionRequest,
+          'malformed auth',
+        );
+      }
     }
     return this._authLock.withRead(async () => {
       let userData: UserData = {
@@ -517,7 +518,7 @@ export class BaseAuthDO implements DurableObject {
       // Send a Sec-WebSocket-Protocol response header with a value
       // matching the Sec-WebSocket-Protocol request header, to indicate
       // support for the protocol, otherwise the client will close the connection.
-      if (encodedAuth) {
+      if (encodedAuth !== null) {
         responseHeaders.set('Sec-WebSocket-Protocol', encodedAuth);
       }
       const response = new Response(responseFromDO.body, {

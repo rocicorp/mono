@@ -879,7 +879,7 @@ function createConnectTestFixture(
     testClientID?: string;
     jurisdiction?: string | undefined;
     encodedTestAuth?: string | undefined;
-    testAuth?: string;
+    testAuth?: string | undefined;
   } = {},
 ) {
   const optionsWithDefault = {
@@ -1063,39 +1063,55 @@ test('connect calls authHandler and sends resolved UserData in header to Room DO
   );
 });
 
-test('connect with undefined authHandler sends UserData with url param userID to roomDO', async () => {
-  const {
-    testRoomID,
-    testRequest,
-    testRoomDO,
-    mocket,
-    encodedTestAuth,
-    testUserID,
-  } = createConnectTestFixture();
+describe('connect with undefined authHandler sends UserData with url param userID to roomDO', () => {
+  const t = (
+    tTestAuth: string | undefined,
+    tEncodedTestAuth: string | undefined,
+  ) =>
+    test(`${tTestAuth} - ${tEncodedTestAuth}`, async () => {
+      const {
+        testRoomID,
+        testRequest,
+        testRoomDO,
+        mocket,
+        encodedTestAuth,
+        testUserID,
+      } = createConnectTestFixture({
+        testAuth: tTestAuth,
+        encodedTestAuth: tEncodedTestAuth,
+      });
 
-  const storage = await getMiniflareDurableObjectStorage(authDOID);
-  const state = new TestDurableObjectState(authDOID, storage);
-  const logSink = new TestLogSink();
-  const authDO = new BaseAuthDO({
-    roomDO: testRoomDO,
-    state,
-    authHandler: undefined,
-    authApiKey: TEST_AUTH_API_KEY,
-    logSink,
-    logLevel: 'debug',
-  });
+      const storage = await getMiniflareDurableObjectStorage(authDOID);
+      const state = new TestDurableObjectState(authDOID, storage);
+      const logSink = new TestLogSink();
+      const authDO = new BaseAuthDO({
+        roomDO: testRoomDO,
+        state,
+        authHandler: undefined,
+        authApiKey: TEST_AUTH_API_KEY,
+        logSink,
+        logLevel: 'debug',
+      });
 
-  await createRoom(authDO, testRoomID);
+      await createRoom(authDO, testRoomID);
 
-  await connectAndTestThatRoomGotCreated(
-    authDO,
-    testRequest,
-    mocket,
-    encodedTestAuth,
-    testUserID,
-    storage,
-    undefined,
+      await connectAndTestThatRoomGotCreated(
+        authDO,
+        testRequest,
+        mocket,
+        encodedTestAuth,
+        testUserID,
+        storage,
+        undefined,
+      );
+    });
+
+  t(
+    'test auth token value % encoded',
+    'test%20auth%20token%20value%20%25%20encoded',
   );
+  t('', '');
+  t(undefined, undefined);
 });
 
 test('connect wont connect to a room that is closed', async () => {
@@ -1229,44 +1245,55 @@ test('connect pipes 401 over ws without calling Room DO if authHandler rejects',
   ]);
 });
 
-test('connect sends InvalidConnectionRequest over ws without calling Room DO if Sec-WebSocket-Protocol header is not present', async () => {
-  const testRoomID = 'testRoomID1';
-  const testClientID = 'testClientID1';
-  const [clientWS, serverWS] = mockWebSocketPair();
-  const headers = new Headers();
-  headers.set('Upgrade', 'websocket');
-  const testRequest = new Request(
-    `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}`,
-    {
-      headers,
-    },
+describe('connect sends InvalidConnectionRequest over ws without calling Room DO if Sec-WebSocket-Protocol header is missing', () => {
+  const t = (headers: Headers) => {
+    test(`headers: ${JSON.stringify(headers)}`, async () => {
+      const testRoomID = 'testRoomID1';
+      const testClientID = 'testClientID1';
+      const [clientWS, serverWS] = mockWebSocketPair();
+
+      const testRequest = new Request(
+        `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}`,
+        {
+          headers,
+        },
+      );
+      const authDO = new BaseAuthDO({
+        roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
+        state: {id: authDOID} as DurableObjectState,
+        // eslint-disable-next-line require-await
+        authHandler: () =>
+          Promise.reject(new Error('Unexpected call to authHandler')),
+        authApiKey: TEST_AUTH_API_KEY,
+        logSink: new TestLogSink(),
+        logLevel: 'debug',
+      });
+
+      const response = await authDO.fetch(testRequest);
+
+      expect(response.status).toEqual(101);
+      expect(response.webSocket).toBe(clientWS);
+      expect(serverWS.log).toEqual([
+        [
+          'send',
+          JSON.stringify([
+            'error',
+            ErrorKind.InvalidConnectionRequest,
+            'auth required',
+          ]),
+        ],
+        ['close'],
+      ]);
+    });
+  };
+
+  t(new Headers([['Upgrade', 'websocket']]));
+  t(
+    new Headers([
+      ['Upgrade', 'websocket'],
+      ['Sec-WebSocket-Protocol', ''],
+    ]),
   );
-  const authDO = new BaseAuthDO({
-    roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
-    state: {id: authDOID} as DurableObjectState,
-    // eslint-disable-next-line require-await
-    authHandler: () =>
-      Promise.reject(new Error('Unexpected call to authHandler')),
-    authApiKey: TEST_AUTH_API_KEY,
-    logSink: new TestLogSink(),
-    logLevel: 'debug',
-  });
-
-  const response = await authDO.fetch(testRequest);
-
-  expect(response.status).toEqual(101);
-  expect(response.webSocket).toBe(clientWS);
-  expect(serverWS.log).toEqual([
-    [
-      'send',
-      JSON.stringify([
-        'error',
-        ErrorKind.InvalidConnectionRequest,
-        'encodedAuth required',
-      ]),
-    ],
-    ['close'],
-  ]);
 });
 
 test('connect sends over InvalidConnectionRequest over ws without calling Room DO if userID is not present', async () => {

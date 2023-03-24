@@ -13,8 +13,10 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   /**
    * Identifies and authenticates the user.
    *
-   * This string is passed to the `authHandler` function on the server, where
-   * it can be used to authenticate the user.
+   * This value is required when you provide a `authHandler` to your ReflectServer.
+   * During connection this value is passed to your provided `authHandler`, which should use it to
+   * authenticate the user. The `userID` returned by your `authHandler` for this value
+   * must be equal to [[ReflectOptions.userID]].
    *
    * In the case authentication fails, the connection to the server will be
    * closed and Reflect will retry connecting with exponential backoff.
@@ -22,24 +24,14 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * If a function is provided here, that function is invoked before each
    * attempt. This provides the application the opportunity to calculate or
    * fetch a fresh token.
-   *
-   * If the server does not have an authHandler this is not a required.
    */
   auth?: string | (() => MaybePromise<string>) | undefined;
 
   /**
-   * A unique identifier for the user authenticated by
-   * [[ReflectOptions.auth]]. Must be non-empty.
-   *
-   * This must be the same as the `userID` returned by the `authHandler` you
-   * provide to the Reflect server.
+   * A unique identifier for the user. Must be non-empty.
    *
    * For efficiency, a new Reflect instance will initialize its state from
    * the persisted state of an existing Reflect instance with the same
-   * `userID`, `roomID`, domain and browser profile.
-   *
-   * Mutations from one Reflect instance may be pushed using the
-   * [[Reflect.auth]] of another Reflect instance with the same
    * `userID`, `roomID`, domain and browser profile.
    */
   userID: string;
