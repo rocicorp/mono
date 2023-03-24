@@ -22,7 +22,7 @@ export function camelToSnake(s: string): string {
 // than any other value.
 export const DID_NOT_CONNECT_VALUE = 100 * 1000;
 
-const REPORT_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
+export const REPORT_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
 
 type MetricsReporter = (metrics: Series[]) => MaybePromise<void>;
 

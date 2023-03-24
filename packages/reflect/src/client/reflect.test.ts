@@ -29,11 +29,8 @@ import {
   TestReflect,
   tickAFewTimes,
 } from './test-utils.js'; // Why use fakes when we can use the real thing!
-// fetch-mock has invalid d.ts file so we removed that on npm install.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-expect-error
-import fetchMock from 'fetch-mock/esm/client';
 import {MessageError} from './connection-error.js';
+import {REPORT_INTERVAL_MS} from './metrics.js';
 
 let clock: sinon.SinonFakeTimers;
 
@@ -45,7 +42,6 @@ setup(() => {
 
 teardown(() => {
   sinon.restore();
-  fetchMock.restore();
 });
 
 test('onOnlineChange callback', async () => {
@@ -548,6 +544,7 @@ test('puller with mutation recovery pull, response timeout', async () => {
 });
 
 test('puller with normal non-mutation recovery pull', async () => {
+  const fetchStub = sinon.stub(window, 'fetch');
   const r = reflectForTest();
   const pullReq: PullRequestV1 = {
     profileID: 'test-profile-id',
@@ -558,7 +555,7 @@ test('puller with normal non-mutation recovery pull', async () => {
   };
 
   const result = await r.puller(pullReq, 'test-request-id');
-  expect(fetchMock.called()).to.be.false;
+  expect(fetchStub.notCalled).true;
   expect(result).to.deep.equal({
     httpRequestInfo: {
       errorMessage: '',
@@ -685,6 +682,30 @@ test('poke log context includes requestID', async () => {
 
   const foundRequestID = await foundRequestIDFromLogPromise;
   expect(foundRequestID).to.equal('test-request-id-poke');
+});
+
+test('Metrics', async () => {
+  const fetchStub = sinon.stub(window, 'fetch');
+
+  // This is just a smoke test -- it ensures that we send metrics once at startup.
+  // Ideally we would run Reflect and put it into different error conditions and see
+  // that the metrics are reported appropriately.
+
+  const r = reflectForTest();
+  await r.waitForConnectionState(ConnectionState.Connecting);
+  await r.triggerConnected();
+  await r.waitForConnectionState(ConnectionState.Connected);
+
+  for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
+    await clock.tickAsync(PING_INTERVAL_MS);
+    await r.triggerPong();
+  }
+
+  fetchStub.calledOnceWithExactly('https://example.com/api/metrics/v0/report', {
+    method: 'POST',
+    body: '{"series":[{"metric":"time_to_connect_ms","points":[[120,[0]]]}]}',
+    keepalive: true,
+  });
 });
 
 test('Authentication', async () => {
