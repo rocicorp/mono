@@ -21,14 +21,3 @@ export function putConnectedClients(
 ): Promise<void> {
   return storage.put(connectedClientsKey, [...clients.values()]);
 }
-
-export async function addConnectedClient(
-  clientID: ClientID,
-  storage: Storage,
-): Promise<void> {
-  const connectedClients = await getConnectedClients(storage);
-  if (!connectedClients.has(clientID)) {
-    connectedClients.add(clientID);
-    await putConnectedClients(connectedClients, storage);
-  }
-}

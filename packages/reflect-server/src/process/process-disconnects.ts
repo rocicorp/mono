@@ -41,6 +41,7 @@ export async function processDisconnects(
       );
       try {
         await disconnectHandler(tx);
+        // TODO only update version if disconnectHandler modifies state
         await putVersion(nextVersion, cache);
         await cache.flush();
       } catch (e) {
