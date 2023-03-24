@@ -900,7 +900,7 @@ function createConnectTestFixture(
   } = optionsWithDefault;
 
   const headers = new Headers();
-  if (encodedTestAuth) {
+  if (encodedTestAuth !== undefined) {
     headers.set('Sec-WebSocket-Protocol', encodedTestAuth);
   }
   headers.set('Upgrade', 'websocket');
@@ -942,7 +942,7 @@ function createConnectTestFixture(
         expect(request.headers.get(USER_DATA_HEADER_NAME)).toEqual(
           encodeHeaderValue(JSON.stringify({userID: testUserID})),
         );
-        if (encodedTestAuth) {
+        if (encodedTestAuth !== undefined) {
           expect(request.headers.get('Sec-WebSocket-Protocol')).toEqual(
             encodedTestAuth,
           );
