@@ -241,7 +241,7 @@ test('createSocket', () => {
     clientID: string,
     roomID: string,
     userID: string,
-    auth: string,
+    auth: string | undefined,
     jurisdiction: 'eu' | undefined,
     lmid: number,
     expectedURL: string,
@@ -306,6 +306,18 @@ test('createSocket', () => {
     'roomID',
     'userID',
     '',
+    undefined,
+    123,
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
+  );
+
+  t(
+    'ws://example.com/',
+    null,
+    'clientID',
+    'roomID',
+    'userID',
+    undefined,
     undefined,
     123,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',

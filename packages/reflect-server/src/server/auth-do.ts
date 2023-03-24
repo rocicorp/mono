@@ -41,7 +41,6 @@ import {
   WithVersion,
 } from './router.js';
 import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
-import {createUnauthorizedResponse} from './create-unauthorized-response.js';
 import {ErrorKind} from 'reflect-protocol';
 import {ROOM_ROUTES} from './room-do.js';
 import {
@@ -325,11 +324,6 @@ export class BaseAuthDO implements DurableObject {
 
     const encodedAuth = request.headers.get('Sec-WebSocket-Protocol');
 
-    if (this._authHandler && !encodedAuth) {
-      lc.error?.('authDO auth not found in Sec-WebSocket-Protocol header.');
-      return createUnauthorizedResponse('auth required');
-    }
-
     // From this point forward we want to return errors over the websocket so
     // the client can see them.
     //
@@ -350,6 +344,13 @@ export class BaseAuthDO implements DurableObject {
     const closeWithErrorLocal = (errorKind: ErrorKind, msg: string) =>
       createWSAndCloseWithError(lc, url, errorKind, msg, encodedAuth);
 
+    if (this._authHandler && !encodedAuth) {
+      lc.error?.('authDO auth not found in Sec-WebSocket-Protocol header.');
+      return closeWithErrorLocal(
+        ErrorKind.InvalidConnectionRequest,
+        'encodedAuth required',
+      );
+    }
     const expectedVersion = 1;
     if (version !== expectedVersion) {
       lc.debug?.(

@@ -1063,6 +1063,42 @@ test('connect calls authHandler and sends resolved UserData in header to Room DO
   );
 });
 
+test('connect with undefined authHandler sends UserData with url param userID to roomDO', async () => {
+  const {
+    testRoomID,
+    testRequest,
+    testRoomDO,
+    mocket,
+    encodedTestAuth,
+    testUserID,
+  } = createConnectTestFixture();
+
+  const storage = await getMiniflareDurableObjectStorage(authDOID);
+  const state = new TestDurableObjectState(authDOID, storage);
+  const logSink = new TestLogSink();
+  const authDO = new BaseAuthDO({
+    roomDO: testRoomDO,
+    state,
+    // eslint-disable-next-line require-await
+    authHandler: undefined,
+    authApiKey: TEST_AUTH_API_KEY,
+    logSink,
+    logLevel: 'debug',
+  });
+
+  await createRoom(authDO, testRoomID);
+
+  await connectAndTestThatRoomGotCreated(
+    authDO,
+    testRequest,
+    mocket,
+    encodedTestAuth,
+    testUserID,
+    storage,
+    undefined,
+  );
+});
+
 test('connect wont connect to a room that is closed', async () => {
   jest.useRealTimers();
   const {testUserID, testRoomID, testRequest, testRoomDO} =
@@ -1194,10 +1230,10 @@ test('connect pipes 401 over ws without calling Room DO if authHandler rejects',
   ]);
 });
 
-test('connect pipes 401 over ws without calling Room DO if Sec-WebSocket-Protocol header is not present', async () => {
+test('connect sends InvalidConnectionRequest over ws without calling Room DO if Sec-WebSocket-Protocol header is not present', async () => {
   const testRoomID = 'testRoomID1';
   const testClientID = 'testClientID1';
-
+  const [clientWS, serverWS] = mockWebSocketPair();
   const headers = new Headers();
   headers.set('Upgrade', 'websocket');
   const testRequest = new Request(
@@ -1219,11 +1255,22 @@ test('connect pipes 401 over ws without calling Room DO if Sec-WebSocket-Protoco
 
   const response = await authDO.fetch(testRequest);
 
-  expect(response.status).toEqual(401);
-  expect(response.webSocket).toBeUndefined();
+  expect(response.status).toEqual(101);
+  expect(response.webSocket).toBe(clientWS);
+  expect(serverWS.log).toEqual([
+    [
+      'send',
+      JSON.stringify([
+        'error',
+        ErrorKind.InvalidConnectionRequest,
+        'encodedAuth required',
+      ]),
+    ],
+    ['close'],
+  ]);
 });
 
-test('connect pipes 401 over ws without calling Room DO if userID is not present', async () => {
+test('connect sends over InvalidConnectionRequest over ws without calling Room DO if userID is not present', async () => {
   const testRoomID = 'testRoomID1';
   const testClientID = 'testClientID1';
   const testAuth = 'testAuthTokenValue';
@@ -1322,84 +1369,81 @@ describe('connect sends VersionNotSupported error over ws if path is for unsuppo
   t('/api/sync/v2/connect');
 });
 
-describe('authInvalidateForUser when requests to roomDOs are succesful', () => {
-  const t = (userID: string) =>
-    test('userID: ' + userID, async () => {
-      const testRequest = new Request(
-        `https://test.roci.dev/api/auth/v0/invalidateForUser`,
-        {
-          method: 'post',
-          headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
-          body: JSON.stringify({
-            userID,
-          }),
-        },
-      );
+test('authInvalidateForUser when requests to roomDOs are successful', async () => {
+  const testUserID = 'testUserID1';
+  const testRequest = new Request(
+    `https://test.roci.dev/api/auth/v0/invalidateForUser`,
+    {
+      method: 'post',
+      headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+      body: JSON.stringify({
+        userID: testUserID,
+      }),
+    },
+  );
 
-      const storage = await getMiniflareDurableObjectStorage(authDOID);
-      const state = new TestDurableObjectState(authDOID, storage);
-      await storage.put(`connection/${userID}/testRoomID1/testClientID1/`, {
-        connectTimestamp: 1000,
-      });
-      await storage.put(`connection/${userID}/testRoomID1/testClientID2/`, {
-        connectTimestamp: 1000,
-      });
-      await storage.put(`connection/${userID}/testRoomID2/testClientID3/`, {
-        connectTimestamp: 1000,
-      });
-      await storage.put(`connection/testUserID2/testRoomID1/testClientID4/`, {
-        connectTimestamp: 1000,
-      });
-      await storage.put(`connection/testUserID2/testRoomID3/testClientID5/`, {
-        connectTimestamp: 1000,
-      });
-      const roomDORequestCountsByRoomID = new Map();
-      const testRoomDO: DurableObjectNamespace = {
-        ...createTestDurableObjectNamespace(),
-        get: (id: DurableObjectId) =>
-          new TestDurableObjectStub(id, async (request: Request) => {
-            // We are only interested in auth requests. Plus, we can't get the RoomRecord
-            // during the /createRoom call because it hasn't been written yet when /createRoom
-            // is called!
-            if (isAuthRequest(request)) {
-              const roomRecord = (await getRoomRecordByObjectID(
-                storage,
-                id,
-              )) as RoomRecord;
-              const {roomID} = roomRecord;
-              roomDORequestCountsByRoomID.set(
-                roomID,
-                (roomDORequestCountsByRoomID.get(roomID) || 0) + 1,
-              );
-              await expectForwardedAuthInvalidateRequest(request, testRequest);
-            }
-            return new Response('Test Success', {status: 200});
-          }),
-      };
+  const storage = await getMiniflareDurableObjectStorage(authDOID);
+  const state = new TestDurableObjectState(authDOID, storage);
+  await storage.put('connection/testUserID1/testRoomID1/testClientID1/', {
+    connectTimestamp: 1000,
+  });
+  await storage.put('connection/testUserID1/testRoomID1/testClientID2/', {
+    connectTimestamp: 1000,
+  });
+  await storage.put('connection/testUserID1/testRoomID2/testClientID3/', {
+    connectTimestamp: 1000,
+  });
+  await storage.put('connection/testUserID2/testRoomID1/testClientID4/', {
+    connectTimestamp: 1000,
+  });
+  await storage.put('connection/testUserID2/testRoomID3/testClientID5/', {
+    connectTimestamp: 1000,
+  });
+  const roomDORequestCountsByRoomID = new Map();
+  const testRoomDO: DurableObjectNamespace = {
+    ...createTestDurableObjectNamespace(),
+    get: (id: DurableObjectId) =>
+      new TestDurableObjectStub(id, async (request: Request) => {
+        // We are only interested in auth requests. Plus, we can't get the RoomRecord
+        // during the /createRoom call because it hasn't been written yet when /createRoom
+        // is called!
+        if (isAuthRequest(request)) {
+          const roomRecord = (await getRoomRecordByObjectID(
+            storage,
+            id,
+          )) as RoomRecord;
+          const {roomID} = roomRecord;
+          roomDORequestCountsByRoomID.set(
+            roomID,
+            (roomDORequestCountsByRoomID.get(roomID) || 0) + 1,
+          );
+          await expectForwardedAuthInvalidateRequest(request, testRequest);
+        }
+        return new Response('Test Success', {status: 200});
+      }),
+  };
 
-      const logSink = new TestLogSink();
-      const authDO = new BaseAuthDO({
-        roomDO: testRoomDO,
-        state,
-        authHandler: () =>
-          Promise.reject(new Error('Unexpected call to authHandler')),
-        authApiKey: TEST_AUTH_API_KEY,
-        logSink,
-        logLevel: 'debug',
-      });
-      await createRoom(authDO, 'testRoomID1');
-      await createRoom(authDO, 'testRoomID2');
-      await createRoom(authDO, 'testRoomID3');
+  const logSink = new TestLogSink();
+  const authDO = new BaseAuthDO({
+    roomDO: testRoomDO,
+    state,
+    authHandler: () =>
+      Promise.reject(new Error('Unexpected call to authHandler')),
+    authApiKey: TEST_AUTH_API_KEY,
+    logSink,
+    logLevel: 'debug',
+  });
+  await createRoom(authDO, 'testRoomID1');
+  await createRoom(authDO, 'testRoomID2');
+  await createRoom(authDO, 'testRoomID3');
 
-      const response = await authDO.fetch(testRequest);
+  const response = await authDO.fetch(testRequest);
 
-      expect(roomDORequestCountsByRoomID.size).toEqual(2);
-      expect(roomDORequestCountsByRoomID.get('testRoomID1')).toEqual(1);
-      expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
-      expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(undefined);
-      expect(response.status).toEqual(200);
-    });
-  t('testUserID1');
+  expect(roomDORequestCountsByRoomID.size).toEqual(2);
+  expect(roomDORequestCountsByRoomID.get('testRoomID1')).toEqual(1);
+  expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
+  expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(undefined);
+  expect(response.status).toEqual(200);
 });
 
 test('authInvalidateForUser when connection ids have chars that need to be percent escaped', async () => {

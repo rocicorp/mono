@@ -22,6 +22,8 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * If a function is provided here, that function is invoked before each
    * attempt. This provides the application the opportunity to calculate or
    * fetch a fresh token.
+   *
+   * If the server does not have an authHandler this is not a required.
    */
   auth?: string | (() => MaybePromise<string>) | undefined;
 

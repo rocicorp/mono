@@ -1108,7 +1108,7 @@ export function createSocket(
   clientGroupID: string,
   roomID: string,
   userID: string,
-  auth: string,
+  auth: string | undefined,
   jurisdiction: 'eu' | undefined,
   lmid: number,
   wsid: string,
@@ -1133,7 +1133,10 @@ export function createSocket(
   // invalid `protocol`, and will result in an exception, so pass undefined
   // instead.  encodeURIComponent to ensure it only contains chars allowed
   // for a `protocol`.
-  return new WebSocket(url, auth === '' ? undefined : encodeURIComponent(auth));
+  return new WebSocket(
+    url,
+    auth === '' || auth === undefined ? undefined : encodeURIComponent(auth),
+  );
 }
 
 async function getLogContext<MD extends MutatorDefs>(
