@@ -1079,7 +1079,6 @@ test('connect with undefined authHandler sends UserData with url param userID to
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
     state,
-    // eslint-disable-next-line require-await
     authHandler: undefined,
     authApiKey: TEST_AUTH_API_KEY,
     logSink,
