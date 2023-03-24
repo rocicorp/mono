@@ -1,4 +1,5 @@
 /.next
 /.vercel
 /renderer
+/vendor
 !/renderer/src/constants.ts
