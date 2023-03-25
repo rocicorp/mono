@@ -26,20 +26,37 @@ export const REPORT_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
 
 type MetricsReporter = (metrics: Series[]) => MaybePromise<void>;
 
+export type MetricManagerOptions = {
+  reportIntervalMs: number;
+  host: string;
+  source: string;
+  reporter: MetricsReporter;
+  lc: Promise<LogContext>;
+};
+
 /**
  * MetricManager keeps track of the set of metrics in use and flushes them
  * to a format suitable for reporting.
  */
 export class MetricManager {
-  constructor(
-    private readonly _reporter: MetricsReporter,
-    private readonly _lc: Promise<LogContext> | undefined,
-  ) {
+  private _reportIntervalMs: number;
+  private _host: string;
+  private _source: string;
+  private _reporter: MetricsReporter;
+  private _lc: Promise<LogContext>;
+
+  constructor(opts: MetricManagerOptions) {
+    this._reportIntervalMs = opts.reportIntervalMs;
+    this._host = opts.host;
+    this._source = opts.source;
+    this._reporter = opts.reporter;
+    this._lc = opts.lc;
+
     this.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
 
     setInterval(() => {
       void this.flush();
-    }, REPORT_INTERVAL_MS);
+    }, this._reportIntervalMs);
   }
 
   private _metrics: Flushable[] = [];
@@ -85,7 +102,11 @@ export class MetricManager {
     for (const metric of this._metrics) {
       const series = metric.flush();
       if (series !== undefined) {
-        allSeries.push(series);
+        allSeries.push({
+          ...series,
+          host: this._host,
+          tags: [`source:${this._source}`],
+        });
       }
     }
     const lc = await this._lc;
@@ -112,6 +133,7 @@ export class MetricManager {
 
 /** Series is a time series of points for a single metric. */
 export type Series = {
+  host: string;
   metric: string; // We call this 'name' bc 'metric' is overloaded in code.
   points: Point[];
   tags?: string[];
@@ -129,7 +151,7 @@ function makePoint(ts: number, value: number): Point {
 }
 
 type Flushable = {
-  flush(): Series | undefined;
+  flush(): Pick<Series, 'metric' | 'points'> | undefined;
 };
 
 /**
@@ -146,7 +168,7 @@ type Flushable = {
  * reporting period. The result is ~one point per client per reporting
  * period.
  */
-export class Gauge {
+export class Gauge implements Flushable {
   private readonly _name: string;
   private _value: number | undefined = undefined;
 
@@ -158,7 +180,7 @@ export class Gauge {
     this._value = value;
   }
 
-  public flush(): Series {
+  public flush() {
     // Gauge reports the timestamp at flush time, not at the point the value was
     // recorded.
     const points =
@@ -184,7 +206,7 @@ function t() {
  *   s.set('open');
  *   s.flush(); // returns {metric: 'connection_open', points: [[now(), [1]]]}
  */
-export class State {
+export class State implements Flushable {
   private readonly _prefix: string;
   private readonly _clearOnFlush: boolean;
   private _current: string | undefined = undefined;
@@ -202,7 +224,7 @@ export class State {
     this._current = undefined;
   }
 
-  public flush(): Series | undefined {
+  public flush() {
     if (this._current === undefined) {
       return undefined;
     }

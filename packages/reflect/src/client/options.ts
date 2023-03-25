@@ -162,4 +162,9 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * `onOnlineChange` is called when the Reflect instance's online status changes
    */
   onOnlineChange?: ((online: boolean) => void) | undefined;
+
+  /**
+   * How often to send metrics to the server. Default is 120*1000 (120 seconds).
+   */
+  metricsIntervalMs?: number | undefined;
 }

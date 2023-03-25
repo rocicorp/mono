@@ -150,6 +150,7 @@ export function makeNormalizedOptionsGetter<
       logSinks,
       logLevel = 'debug',
       allowUnconfirmedWrites = false,
+      metricsSink = undefined,
     } = typeof options === 'function' ? options(env) : options;
     logSink = logSinks ? combineLogSinks(logSinks) : consoleLogSink;
     normalizedOptions = {
@@ -159,6 +160,7 @@ export function makeNormalizedOptionsGetter<
       logSink,
       logLevel,
       allowUnconfirmedWrites,
+      metricsSink,
     };
     return normalizedOptions;
   };

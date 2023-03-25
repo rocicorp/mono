@@ -1,17 +1,16 @@
+import type {LogContext} from '@rocicorp/logger';
 import type {Series} from '../types/report-metrics.js';
 
 export type DatadogMetricsSinkOptions = {
   apiKey: string;
-  // TODO: Do something with these.
-  service?: string;
-  host?: string;
 };
 
 export function createDatadogMetricsSink(options: DatadogMetricsSinkOptions) {
-  return async (allSeries: Series[]) => {
+  return async (allSeries: Series[], lc: LogContext) => {
     const body = JSON.stringify({
       series: allSeries,
     });
+    lc.debug?.('Reporting metrics to Datadog', {body});
     const resp = await fetch(
       'https://api.datadoghq.com/api/v1/distribution_points',
       {

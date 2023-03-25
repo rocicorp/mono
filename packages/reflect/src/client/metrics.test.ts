@@ -62,7 +62,7 @@ test('State', () => {
     name: string;
     state: string | undefined;
     time: number;
-    expected: Series | undefined;
+    expected: ReturnType<State['flush']>;
   };
 
   const cases: Case[] = [
@@ -121,7 +121,13 @@ test('MetricManager', async () => {
   const clock = sinon.useFakeTimers();
 
   const reporter = sinon.mock().returns(Promise.resolve());
-  const mm = new MetricManager(reporter, Promise.resolve(new LogContext()));
+  const mm = new MetricManager({
+    reportIntervalMs: REPORT_INTERVAL_MS,
+    host: 'test-host',
+    source: 'test-source',
+    reporter,
+    lc: Promise.resolve(new LogContext()),
+  });
 
   type Case = {
     name: string;
@@ -139,6 +145,8 @@ test('MetricManager', async () => {
         {
           metric: 'time_to_connect_ms',
           points: [[REPORT_INTERVAL_MS / 1000, [DID_NOT_CONNECT_VALUE]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
         },
       ],
     },
@@ -150,6 +158,8 @@ test('MetricManager', async () => {
         {
           metric: 'time_to_connect_ms',
           points: [[(REPORT_INTERVAL_MS * 2) / 1000, [2]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
         },
       ],
     },
@@ -161,6 +171,8 @@ test('MetricManager', async () => {
         {
           metric: 'time_to_connect_ms',
           points: [[(REPORT_INTERVAL_MS * 3) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
         },
       ],
     },
@@ -172,10 +184,14 @@ test('MetricManager', async () => {
         {
           metric: 'time_to_connect_ms',
           points: [[(REPORT_INTERVAL_MS * 4) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
         },
         {
           metric: 'last_connect_error_bonk',
           points: [[(REPORT_INTERVAL_MS * 4) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
         },
       ],
     },
@@ -187,10 +203,14 @@ test('MetricManager', async () => {
         {
           metric: 'time_to_connect_ms',
           points: [[(REPORT_INTERVAL_MS * 5) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
         },
         {
           metric: 'last_connect_error_nuts',
           points: [[(REPORT_INTERVAL_MS * 5) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
         },
       ],
     },
@@ -202,6 +222,8 @@ test('MetricManager', async () => {
         {
           metric: 'time_to_connect_ms',
           points: [[(REPORT_INTERVAL_MS * 6) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
         },
       ],
     },
