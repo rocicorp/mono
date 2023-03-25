@@ -3,12 +3,16 @@ import type {Series} from '../types/report-metrics.js';
 
 export type DatadogMetricsSinkOptions = {
   apiKey: string;
+  service?: string | undefined;
 };
 
 export function createDatadogMetricsSink(options: DatadogMetricsSinkOptions) {
   return async (allSeries: Series[], lc: LogContext) => {
     const body = JSON.stringify({
-      series: allSeries,
+      series: allSeries.map(s => ({
+        ...s,
+        tags: [...(s.tags ?? []), `service:${options.service}`],
+      })),
     });
     lc.debug?.('Reporting metrics to Datadog', {body});
     const resp = await fetch(
