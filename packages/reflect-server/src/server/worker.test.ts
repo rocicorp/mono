@@ -532,6 +532,7 @@ test('reportMetrics', async () => {
       logLevel: 'error',
       metricsSink: createDatadogMetricsSink({
         apiKey: 'test-dd-key',
+        service: 'test-service',
       }),
     }));
 
@@ -560,7 +561,15 @@ test('reportMetrics', async () => {
       expect(gotURL.toString()).toContain('api.datadoghq.com');
       const gotOptions = fetchSpy.mock.calls[0][1];
       expect(gotOptions).toEqual({
-        body: tc.body ? JSON.stringify(tc.body) : undefined,
+        body: tc.body
+          ? JSON.stringify({
+              ...tc.body,
+              series: (tc.body.series as Series[]).map(s => ({
+                ...s,
+                tags: [...(s.tags ?? []), 'service:test-service'],
+              })),
+            })
+          : undefined,
         headers: {
           'DD-API-KEY': 'test-dd-key',
         },
