@@ -41,7 +41,6 @@ import {
   WithVersion,
 } from './router.js';
 import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
-import {createUnauthorizedResponse} from './create-unauthorized-response.js';
 import {ErrorKind} from 'reflect-protocol';
 import {ROOM_ROUTES} from './room-do.js';
 import {
@@ -56,7 +55,7 @@ import {assert} from 'shared/asserts.js';
 export interface AuthDOOptions {
   roomDO: DurableObjectNamespace;
   state: DurableObjectState;
-  authHandler: AuthHandler;
+  authHandler?: AuthHandler | undefined;
   authApiKey: string;
   logSink: LogSink;
   logLevel: LogLevel;
@@ -105,7 +104,7 @@ export class BaseAuthDO implements DurableObject {
   // storage should probably use _durableStorage, and not _state.storage
   // directly.
   private readonly _durableStorage: DurableStorage;
-  private readonly _authHandler: AuthHandler;
+  private readonly _authHandler: AuthHandler | undefined;
   private readonly _authApiKey: string;
   private readonly _lc: LogContext;
 
@@ -324,10 +323,6 @@ export class BaseAuthDO implements DurableObject {
     }
 
     const encodedAuth = request.headers.get('Sec-WebSocket-Protocol');
-    if (!encodedAuth) {
-      lc.error?.('authDO auth not found in Sec-WebSocket-Protocol header.');
-      return createUnauthorizedResponse('auth required');
-    }
 
     // From this point forward we want to return errors over the websocket so
     // the client can see them.
@@ -349,6 +344,13 @@ export class BaseAuthDO implements DurableObject {
     const closeWithErrorLocal = (errorKind: ErrorKind, msg: string) =>
       createWSAndCloseWithError(lc, url, errorKind, msg, encodedAuth);
 
+    if (this._authHandler && !encodedAuth) {
+      lc.error?.('authDO auth not found in Sec-WebSocket-Protocol header.');
+      return closeWithErrorLocal(
+        ErrorKind.InvalidConnectionRequest,
+        'auth required',
+      );
+    }
     const expectedVersion = 1;
     if (version !== expectedVersion) {
       lc.debug?.(
@@ -381,6 +383,14 @@ export class BaseAuthDO implements DurableObject {
       );
     }
 
+    const userID = searchParams.get('userID');
+    if (!userID) {
+      return closeWithErrorLocal(
+        ErrorKind.InvalidConnectionRequest,
+        'userID parameter required',
+      );
+    }
+
     const jurisdiction = searchParams.get('jurisdiction') ?? undefined;
     if (jurisdiction && jurisdiction !== 'eu') {
       return closeWithErrorLocal(
@@ -391,34 +401,51 @@ export class BaseAuthDO implements DurableObject {
     assert(jurisdiction === undefined || jurisdiction === 'eu');
 
     lc = lc.addContext('client', clientID).addContext('room', roomID);
-
     let decodedAuth: string | undefined;
-    try {
-      decodedAuth = decodeURIComponent(encodedAuth);
-    } catch (e) {
-      return closeWithErrorLocal(
-        ErrorKind.InvalidConnectionRequest,
-        'malformed auth',
-      );
-    }
-    const auth = decodedAuth;
-    return this._authLock.withRead(async () => {
-      let userData: UserData | undefined;
+    if (encodedAuth) {
       try {
-        userData = await this._authHandler(auth, roomID);
+        decodedAuth = decodeURIComponent(encodedAuth);
       } catch (e) {
         return closeWithErrorLocal(
-          ErrorKind.Unauthorized,
-          'authHandler rejected',
+          ErrorKind.InvalidConnectionRequest,
+          'malformed auth',
         );
       }
-      if (!userData || !userData.userID) {
-        if (!userData) {
-          lc.info?.('userData returned by authHandler is not an object.');
-        } else if (!userData.userID) {
-          lc.info?.('userData returned by authHandler has no userID.');
+    }
+    return this._authLock.withRead(async () => {
+      let userData: UserData = {
+        userID,
+      };
+
+      if (this._authHandler) {
+        const auth = decodedAuth;
+        assert(auth);
+        let authHandlerUserData: UserData | undefined;
+
+        try {
+          authHandlerUserData = await this._authHandler(auth, roomID);
+        } catch (e) {
+          return closeWithErrorLocal(
+            ErrorKind.Unauthorized,
+            'authHandler rejected',
+          );
         }
-        return closeWithErrorLocal(ErrorKind.Unauthorized, 'no userData');
+        if (!authHandlerUserData || !authHandlerUserData.userID) {
+          if (!authHandlerUserData) {
+            lc.info?.('userData returned by authHandler is not an object.');
+          } else if (!authHandlerUserData.userID) {
+            lc.info?.('userData returned by authHandler has no userID.');
+          }
+          return closeWithErrorLocal(ErrorKind.Unauthorized, 'no userData');
+        }
+        if (authHandlerUserData.userID !== userID) {
+          lc.info?.('userData returned by authHandler has a different userID.');
+          return closeWithErrorLocal(
+            ErrorKind.Unauthorized,
+            'userID returned by authHandler does not match userID url parameter',
+          );
+        }
+        userData = authHandlerUserData;
       }
 
       // Find the room's objectID so we can connect to it. Do this BEFORE
@@ -491,7 +518,9 @@ export class BaseAuthDO implements DurableObject {
       // Send a Sec-WebSocket-Protocol response header with a value
       // matching the Sec-WebSocket-Protocol request header, to indicate
       // support for the protocol, otherwise the client will close the connection.
-      responseHeaders.set('Sec-WebSocket-Protocol', encodedAuth);
+      if (encodedAuth !== null) {
+        responseHeaders.set('Sec-WebSocket-Protocol', encodedAuth);
+      }
       const response = new Response(responseFromDO.body, {
         status: responseFromDO.status,
         statusText: responseFromDO.statusText,
@@ -738,7 +767,7 @@ function createWSAndCloseWithError(
   url: string,
   kind: ErrorKind,
   msg: string,
-  encodedAuth: string,
+  encodedAuth: string | null,
 ) {
   const pair = new WebSocketPair();
   const ws = pair[1];
@@ -756,7 +785,9 @@ function createWSAndCloseWithError(
   closeWithError(lc, ws, kind, msg);
 
   const responseHeaders = new Headers();
-  responseHeaders.set('Sec-WebSocket-Protocol', encodedAuth);
+  if (encodedAuth) {
+    responseHeaders.set('Sec-WebSocket-Protocol', encodedAuth);
+  }
   return new Response(null, {
     status: 101,
     headers: responseHeaders,

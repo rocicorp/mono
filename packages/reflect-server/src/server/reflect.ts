@@ -3,13 +3,12 @@ import type {MutatorDefs} from 'replicache';
 import {BaseAuthDO} from './auth-do.js';
 import type {AuthHandler} from './auth.js';
 import type {DisconnectHandler} from './disconnect.js';
-import {createNoAuthDOWorker} from './no-auth-do-worker.js';
 import {BaseRoomDO} from './room-do.js';
 import {createWorker, MetricsSink} from './worker.js';
 
 export interface ReflectServerOptions<MD extends MutatorDefs> {
   mutators: MD;
-  authHandler: AuthHandler;
+  authHandler?: AuthHandler | undefined;
 
   disconnectHandler?: DisconnectHandler | undefined;
 
@@ -45,7 +44,7 @@ export interface ReflectServerOptions<MD extends MutatorDefs> {
  */
 export type NormalizedOptions<MD extends MutatorDefs> = {
   mutators: MD;
-  authHandler: AuthHandler;
+  authHandler?: AuthHandler | undefined;
   disconnectHandler: DisconnectHandler;
   logSink: LogSink;
   logLevel: LogLevel;
@@ -100,24 +99,6 @@ export function createReflectServer<
 
   // eslint-disable-next-line @typescript-eslint/naming-convention
   return {worker, RoomDO: roomDOClass, AuthDO: authDOClass};
-}
-
-export function createReflectServerWithoutAuthDO<
-  Env extends ReflectServerBaseEnv,
-  MD extends MutatorDefs,
->(
-  options: ReflectServerOptions<MD> | ((env: Env) => ReflectServerOptions<MD>),
-): {
-  worker: ExportedHandler<Env>;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  RoomDO: DurableObjectCtor<Env>;
-} {
-  const normalizedOptionsGetter = makeNormalizedOptionsGetter(options);
-  const roomDOClass = createRoomDOClass(normalizedOptionsGetter);
-  const worker = createNoAuthDOWorker<Env>(normalizedOptionsGetter);
-
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  return {worker, RoomDO: roomDOClass};
 }
 
 type GetNormalizedOptions<

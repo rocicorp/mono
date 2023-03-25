@@ -593,6 +593,7 @@ export class Reflect<MD extends MutatorDefs> {
       await this.clientID,
       await this.clientGroupID,
       this.roomID,
+      this.userID,
       this._rep.auth,
       this._jurisdiction,
       this._lastMutationIDReceived,
@@ -784,15 +785,17 @@ export class Reflect<MD extends MutatorDefs> {
     };
   }
 
-  #getAuthToken = (): MaybePromise<string> => {
+  #getAuthToken = (): MaybePromise<string> | undefined => {
     const {auth} = this.#options;
     return typeof auth === 'function' ? auth() : auth;
   };
 
   async #updateAuthToken(lc: LogContext): Promise<void> {
     const auth = await this.#getAuthToken();
-    lc.debug?.('Got auth token');
-    this._rep.auth = auth;
+    if (auth) {
+      lc.debug?.('Got auth token');
+      this._rep.auth = auth;
+    }
   }
 
   private async _runLoop() {
@@ -1104,7 +1107,8 @@ export function createSocket(
   clientID: string,
   clientGroupID: string,
   roomID: string,
-  auth: string,
+  userID: string,
+  auth: string | undefined,
   jurisdiction: 'eu' | undefined,
   lmid: number,
   wsid: string,
@@ -1116,6 +1120,7 @@ export function createSocket(
   searchParams.set('clientID', clientID);
   searchParams.set('clientGroupID', clientGroupID);
   searchParams.set('roomID', roomID);
+  searchParams.set('userID', userID);
   if (jurisdiction !== undefined) {
     searchParams.set('jurisdiction', jurisdiction);
   }
@@ -1128,7 +1133,10 @@ export function createSocket(
   // invalid `protocol`, and will result in an exception, so pass undefined
   // instead.  encodeURIComponent to ensure it only contains chars allowed
   // for a `protocol`.
-  return new WebSocket(url, auth === '' ? undefined : encodeURIComponent(auth));
+  return new WebSocket(
+    url,
+    auth === '' || auth === undefined ? undefined : encodeURIComponent(auth),
+  );
 }
 
 async function getLogContext<MD extends MutatorDefs>(
