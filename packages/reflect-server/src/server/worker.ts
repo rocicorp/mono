@@ -20,7 +20,10 @@ import {
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import type {MaybePromise} from 'replicache';
 
-export type MetricsSink = (allSeries: Series[]) => MaybePromise<void>;
+export type MetricsSink = (
+  allSeries: Series[],
+  lc: LogContext,
+) => MaybePromise<void>;
 
 export interface WorkerOptions {
   logSink: LogSink;
@@ -87,7 +90,7 @@ const reportMetrics = post<WorkerContext, Response>(
     }
 
     try {
-      await metricsSink(body.series);
+      await metricsSink(body.series, lc);
       lc.debug?.('Successfully sent metrics to Datadog.');
     } catch (e) {
       lc.error?.(

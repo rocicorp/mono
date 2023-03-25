@@ -45,6 +45,7 @@ import {
   camelToSnake,
   DID_NOT_CONNECT_VALUE,
   MetricManager,
+  REPORT_INTERVAL_MS,
   Series,
 } from './metrics.js';
 import type {ReflectOptions} from './options.js';
@@ -226,8 +227,14 @@ export class Reflect<MD extends MutatorDefs> {
    * Constructs a new Reflect client.
    */
   constructor(options: ReflectOptions<MD>) {
-    const {userID, roomID, socketOrigin, onOnlineChange, jurisdiction} =
-      options;
+    const {
+      userID,
+      roomID,
+      socketOrigin,
+      onOnlineChange,
+      jurisdiction,
+      metricsIntervalMs,
+    } = options;
     if (!userID) {
       throw new Error('ReflectOptions.userID must not be empty.');
     }
@@ -279,10 +286,13 @@ export class Reflect<MD extends MutatorDefs> {
     this._jurisdiction = jurisdiction;
     this._l = getLogContext(options, this._rep);
 
-    this._metrics = new MetricManager(
-      allSeries => this._reportMetrics(allSeries),
-      this._l,
-    );
+    this._metrics = new MetricManager({
+      reportIntervalMs: metricsIntervalMs ?? REPORT_INTERVAL_MS,
+      host: location.host,
+      source: 'client',
+      reporter: allSeries => this._reportMetrics(allSeries),
+      lc: this._l,
+    });
 
     this._pokeHandler = new PokeHandler(
       pokeDD31 => this._rep.poke(pokeDD31),
