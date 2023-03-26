@@ -41,16 +41,16 @@ export type MetricManagerOptions = {
 export class MetricManager {
   private _reportIntervalMs: number;
   private _host: string;
-  private _source: string;
   private _reporter: MetricsReporter;
   private _lc: Promise<LogContext>;
 
   constructor(opts: MetricManagerOptions) {
     this._reportIntervalMs = opts.reportIntervalMs;
     this._host = opts.host;
-    this._source = opts.source;
     this._reporter = opts.reporter;
     this._lc = opts.lc;
+
+    this.tags.push(`source:${opts.source}`);
 
     this.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
 
@@ -95,6 +95,11 @@ export class MetricManager {
     ),
   );
 
+  /**
+   * Tags to include in all metrics.
+   */
+  readonly tags: string[] = [];
+
   // Flushes all metrics to an array of time series (plural), one Series
   // per metric.
   public async flush() {
@@ -105,7 +110,7 @@ export class MetricManager {
         allSeries.push({
           ...series,
           host: this._host,
-          tags: [`source:${this._source}`],
+          tags: this.tags,
         });
       }
     }

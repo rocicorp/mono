@@ -52,6 +52,7 @@ import {
 import type {ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
+import {version} from './version.js';
 
 export const enum ConnectionState {
   Disconnected,
@@ -126,6 +127,8 @@ function convertOnUpdateNeededReason(
 }
 
 export class Reflect<MD extends MutatorDefs> {
+  readonly version = version;
+
   private readonly _rep: Replicache<MD>;
   private readonly _socketOrigin: string;
   readonly userID: string;
@@ -305,6 +308,7 @@ export class Reflect<MD extends MutatorDefs> {
       reporter: allSeries => this._reportMetrics(allSeries),
       lc: this._l,
     });
+    this._metrics.tags.push(`version:${this.version}`);
 
     this._pokeHandler = new PokeHandler(
       pokeDD31 => this._rep.poke(pokeDD31),
@@ -827,6 +831,8 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   private async _runLoop() {
+    (await this._l).info?.(`Starting Reflect version: ${this.version}`);
+
     let runLoopCounter = 0;
     const bareLogContext = await this._l;
     const getLogContext = () => {
