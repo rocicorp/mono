@@ -131,16 +131,15 @@ test('MetricManager', async () => {
 
   type Case = {
     name: string;
-    timeToConnect: number | undefined;
-    lastConnectError: string | undefined;
+    timeToConnect?: number | undefined;
+    lastConnectError?: string | undefined;
+    extraTags?: string[];
     expected: Series[];
   };
 
   const cases: Case[] = [
     {
       name: 'no metrics',
-      timeToConnect: undefined,
-      lastConnectError: undefined,
       expected: [
         {
           metric: 'time_to_connect_ms',
@@ -153,7 +152,6 @@ test('MetricManager', async () => {
     {
       name: 'ttc-1',
       timeToConnect: 2,
-      lastConnectError: undefined,
       expected: [
         {
           metric: 'time_to_connect_ms',
@@ -166,7 +164,6 @@ test('MetricManager', async () => {
     {
       name: 'ttc-2',
       timeToConnect: 1,
-      lastConnectError: undefined,
       expected: [
         {
           metric: 'time_to_connect_ms',
@@ -178,7 +175,6 @@ test('MetricManager', async () => {
     },
     {
       name: 'lce-bonk',
-      timeToConnect: undefined,
       lastConnectError: 'bonk',
       expected: [
         {
@@ -197,7 +193,6 @@ test('MetricManager', async () => {
     },
     {
       name: 'lce-nuts',
-      timeToConnect: undefined,
       lastConnectError: 'nuts',
       expected: [
         {
@@ -216,14 +211,24 @@ test('MetricManager', async () => {
     },
     {
       name: 'lce-unchanged',
-      timeToConnect: undefined,
-      lastConnectError: undefined,
       expected: [
         {
           metric: 'time_to_connect_ms',
           points: [[(REPORT_INTERVAL_MS * 6) / 1000, [1]]],
           host: 'test-host',
           tags: ['source:test-source'],
+        },
+      ],
+    },
+    {
+      name: 'extra-tags',
+      extraTags: ['foo:bar', 'hotdog'],
+      expected: [
+        {
+          metric: 'time_to_connect_ms',
+          points: [[(REPORT_INTERVAL_MS * 7) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source', 'foo:bar', 'hotdog'],
         },
       ],
     },
@@ -236,10 +241,15 @@ test('MetricManager', async () => {
     if (c.lastConnectError !== undefined) {
       mm.lastConnectError.set(c.lastConnectError);
     }
+    if (c.extraTags !== undefined) {
+      mm.tags.push(...c.extraTags);
+    }
 
     await clock.tickAsync(REPORT_INTERVAL_MS);
 
     expect(reporter.calledOnceWithExactly(c.expected), c.name).true;
+
+    mm.tags.length = 1;
 
     reporter.resetHistory();
   }
