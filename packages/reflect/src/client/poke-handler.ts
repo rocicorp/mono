@@ -31,6 +31,7 @@ export class PokeHandler {
   private _missedTimedPokeCount = 0;
   private _timedFrameCount = 0;
   private _missedTimedFrameCount = 0;
+  private _timedPokeLatencyTotal = 0;
 
   constructor(
     replicachePoke: (poke: ReplicachePoke) => Promise<void>,
@@ -119,9 +120,10 @@ export class PokeHandler {
 
   private async _processPokesForFrame(lc: LogContext) {
     await this._pokeLock.withLock(async () => {
-      const now = performance.now();
-      lc.debug?.('got poke lock at', now);
-      this._bufferSizer.maybeAdjustBufferSize(now, lc);
+      const perfNow = performance.now();
+      const unixNow = Date.now();
+      lc.debug?.('got poke lock at', perfNow);
+      this._bufferSizer.maybeAdjustBufferSize(perfNow, lc);
       const toMerge: Poke[] = [];
       const thisClientID = await this._clientIDPromise;
       let timedPokeCount = 0;
@@ -137,12 +139,14 @@ export class PokeHandler {
           lastMutationIDChangesClientIDs[0] === thisClientID;
         if (!isThisClientsMutation && timestamp !== undefined) {
           const pokePlaybackTarget = timestamp + this._bufferSizer.bufferSizeMs;
-          const pokePlaybackOffset = Math.floor(now - pokePlaybackTarget);
+          const pokePlaybackOffset = Math.floor(perfNow - pokePlaybackTarget);
           if (pokePlaybackOffset < 0) {
             break;
           }
           if (headPoke.debugOriginTimestamp) {
-            lc.debug?.('poke latency ms', headPoke.debugOriginTimestamp);
+            const latencyMs = unixNow - headPoke.debugOriginTimestamp;
+            this._timedPokeLatencyTotal += latencyMs;
+            lc.debug?.('poke latency ms', latencyMs);
           }
           // TODO consider systems that don't run at 60fps (supposedly new
           // ipads run RAF at 120fps).
@@ -221,6 +225,8 @@ export class PokeHandler {
         this._timedFrameCount,
         '=',
         this._missedTimedFrameCount / this._timedFrameCount,
+        '\navg poke latency:',
+        this._timedPokeLatencyTotal / this._timedPokeCount,
       );
     });
   }

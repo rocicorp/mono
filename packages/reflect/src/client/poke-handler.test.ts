@@ -988,6 +988,7 @@ test('playback stats', async () => {
       missedTimedPokeCount: number;
       timedFrameCount: number;
       missedTimedFrameCount: number;
+      avgLatency: number;
     },
     rafAtTime: number,
   ) => {
@@ -1017,6 +1018,8 @@ test('playback stats', async () => {
       expectedStats.timedFrameCount,
       '=',
       expectedStats.missedTimedFrameCount / expectedStats.timedFrameCount,
+      '\navg poke latency:',
+      expectedStats.avgLatency,
     ]);
   };
 
@@ -1055,6 +1058,7 @@ test('playback stats', async () => {
           },
         ],
         timestamp: startTime + 110,
+        debugOriginTimestamp: startTime + 10,
       },
       {
         baseCookie: 3,
@@ -1068,6 +1072,7 @@ test('playback stats', async () => {
           },
         ],
         timestamp: startTime + 120,
+        debugOriginTimestamp: startTime + 20,
       },
       {
         baseCookie: 4,
@@ -1081,6 +1086,7 @@ test('playback stats', async () => {
           },
         ],
         timestamp: startTime + 130,
+        debugOriginTimestamp: startTime + 30,
       },
       {
         baseCookie: 5,
@@ -1094,6 +1100,7 @@ test('playback stats', async () => {
           },
         ],
         timestamp: startTime + 150,
+        debugOriginTimestamp: startTime + 100,
       },
       {
         baseCookie: 6,
@@ -1107,6 +1114,7 @@ test('playback stats', async () => {
           },
         ],
         timestamp: startTime + 170,
+        debugOriginTimestamp: startTime + 120,
       },
     ],
     requestID: 'requestID1',
@@ -1154,6 +1162,7 @@ test('playback stats', async () => {
       timedPokeCount: 0,
       missedTimedFrameCount: 0,
       timedFrameCount: 0,
+      avgLatency: NaN,
     },
     0,
   );
@@ -1194,6 +1203,7 @@ test('playback stats', async () => {
       timedPokeCount: 2,
       missedTimedFrameCount: 0,
       timedFrameCount: 1,
+      avgLatency: 245,
     },
     270,
   );
@@ -1234,6 +1244,7 @@ test('playback stats', async () => {
       timedPokeCount: 4,
       missedTimedFrameCount: 1,
       timedFrameCount: 2,
+      avgLatency: 222.5,
     },
     310,
   );
