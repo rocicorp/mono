@@ -1,41 +1,41 @@
 import type {LogContext} from '@rocicorp/logger';
-import type * as dag from '../dag/mod.js';
-import * as db from '../db/mod.js';
-import {
-  deepEqual,
-  FrozenJSONValue,
-  ReadonlyJSONValue,
-  deepFreeze,
-} from '../json.js';
-import type {
-  PullResponseV1,
-  PullResponseOKV1,
-  PullResponseOKV0,
-  PullResponseV0,
-  Puller,
-  PullerResultV1,
-  PullerResultV0,
-  PullerResult,
-} from '../puller.js';
-import {PullError} from './pull-error.js';
-import type {HTTPRequestInfo} from '../http-request-info.js';
-import {SYNC_HEAD_NAME} from './sync-head-name.js';
-import * as patch from './patch.js';
 import * as btree from '../btree/mod.js';
 import {BTreeRead} from '../btree/mod.js';
-import {updateIndexes} from '../db/write.js';
-import {emptyHash, Hash} from '../hash.js';
-import type {ClientGroupID, ClientID} from './ids.js';
-import {addDiffsForIndexes, DiffComputationConfig, DiffsMap} from './diff.js';
-import {assertSnapshotMetaDD31, commitIsLocalDD31} from '../db/commit.js';
 import {compareCookies, Cookie} from '../cookies.js';
+import type * as dag from '../dag/mod.js';
+import {assertSnapshotMetaDD31, commitIsLocalDD31} from '../db/commit.js';
+import * as db from '../db/mod.js';
+import {updateIndexes} from '../db/write.js';
 import {isErrorResponse} from '../error-responses.js';
-import {toError} from '../to-error.js';
 import {
-  assertPullerResultV1,
   assertPullerResultV0,
+  assertPullerResultV1,
 } from '../get-default-puller.js';
+import {emptyHash, Hash} from '../hash.js';
+import type {HTTPRequestInfo} from '../http-request-info.js';
+import {
+  deepEqual,
+  deepFreeze,
+  FrozenJSONValue,
+  ReadonlyJSONValue,
+} from '../json.js';
+import type {
+  Puller,
+  PullerResult,
+  PullerResultV0,
+  PullerResultV1,
+  PullResponseOKV0,
+  PullResponseOKV1,
+  PullResponseV0,
+  PullResponseV1,
+} from '../puller.js';
+import {toError} from '../to-error.js';
 import {withRead, withWrite} from '../with-transactions.js';
+import {addDiffsForIndexes, DiffComputationConfig, DiffsMap} from './diff.js';
+import type {ClientGroupID, ClientID} from './ids.js';
+import * as patch from './patch.js';
+import {PullError} from './pull-error.js';
+import {SYNC_HEAD_NAME} from './sync-head-name.js';
 
 export const PULL_VERSION_SDD = 0;
 export const PULL_VERSION_DD31 = 1;
@@ -640,7 +640,7 @@ export function maybeEndPull<M extends db.LocalMeta>(
         clientID,
       );
       lc.debug(
-        `Successfully pulled new snapshot w/last_mutation_id:`,
+        `Successfully pulled new snapshot with lastMutationID:`,
         newLastMutationID,
         `(prev:`,
         oldLastMutationID,
@@ -652,7 +652,7 @@ export function maybeEndPull<M extends db.LocalMeta>(
         syncHeadHash,
         ', main head hash:',
         mainHeadHash,
-        `, value_hash:`,
+        `, valueHash:`,
         syncHead.valueHash,
         `(prev:`,
         mainSnapshot.valueHash,

@@ -356,7 +356,7 @@ class LazyWrite extends LazyRead implements Write, RefCountUpdatesDelegate {
         this.assertValidHash(h);
       }
     }
-    if (this._createdChunks.has(hash) || this.isMemOnlyChunkHash(c.hash)) {
+    if (this._createdChunks.has(hash) || this.isMemOnlyChunkHash(hash)) {
       this._pendingMemOnlyChunks.set(hash, c);
     } else {
       this._pendingCachedChunks.set(hash, {chunk: c, size: size ?? -1});

@@ -1,15 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {ClientID} from '../sync/ids.js';
+import {initBgIntervalProcess} from '../bg-interval.js';
 import type * as dag from '../dag/mod.js';
+import type {ClientID} from '../sync/ids.js';
+import {withWrite} from '../with-transactions.js';
 import {
   ClientMap,
   ClientStateNotFoundError,
   getClients,
-  isClientV4,
   setClients,
 } from './clients.js';
-import {initBgIntervalProcess} from '../bg-interval.js';
-import {withWrite} from '../with-transactions.js';
 
 const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 
@@ -53,22 +52,11 @@ export function writeHeartbeat(
       throw new ClientStateNotFoundError(clientID);
     }
 
-    const newClients = new Map(clients).set(
-      clientID,
-      isClientV4(client)
-        ? {
-            heartbeatTimestampMs: Date.now(),
-            headHash: client.headHash,
-            mutationID: client.mutationID,
-            lastServerAckdMutationID: client.lastServerAckdMutationID,
-          }
-        : {
-            heartbeatTimestampMs: Date.now(),
-            headHash: client.headHash,
-            clientGroupID: client.clientGroupID,
-            tempRefreshHash: client.tempRefreshHash,
-          },
-    );
+    const newClient = {
+      ...client,
+      heartbeatTimestampMs: Date.now(),
+    };
+    const newClients = new Map(clients).set(clientID, newClient);
 
     await setClients(newClients, dagWrite);
     await dagWrite.commit();
