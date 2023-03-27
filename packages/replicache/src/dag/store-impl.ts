@@ -95,13 +95,9 @@ function assertRefsData(v: unknown): asserts v is Hash[] {
   if (!Array.isArray(v)) {
     throw new Error('Refs must be an array');
   }
-  const seen = new Set<unknown>();
+  // Don't check for duplicates here. Old chunks may have duplicate refs.
   for (const e of v) {
-    if (seen.has(e)) {
-      throw new Error('Refs must not contain duplicates');
-    }
     assertHash(e);
-    seen.add(v);
   }
 }
 

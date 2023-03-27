@@ -797,12 +797,4 @@ function validateChunk(
     }
     seenIndexes.add(name);
   }
-
-  const seenRefs = new Set();
-  for (const ref of chunk.refs) {
-    if (seenRefs.has(ref)) {
-      throw new Error(`Duplicate ref ${ref}`);
-    }
-    seenRefs.add(ref);
-  }
 }
