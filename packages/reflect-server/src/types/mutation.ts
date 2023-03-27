@@ -9,5 +9,10 @@ export type PendingMutation = {
   readonly pusherClientIDs: ReadonlySet<ClientID>;
   readonly name: string;
   readonly args: ReadonlyJSONValue;
-  readonly timestamp?: number | undefined;
+  readonly timestamps?:
+    | {
+        normalizedTimestamp: number;
+        originTimestamp: number;
+      }
+    | undefined;
 };

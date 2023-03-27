@@ -22,4 +22,6 @@ export type ClientState = {
   // because socket setup overhead is substantial and we will get a value
   // that is far too high if we use connection.
   clockOffsetMs: number | undefined;
+  // Should extra performance debug information be sent to this client?
+  debugPerf: boolean;
 };

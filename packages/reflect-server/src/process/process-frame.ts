@@ -10,7 +10,7 @@ import {
   getClientRecord,
   putClientRecord,
 } from '../types/client-record.js';
-import type {ClientID} from '../types/client-state.js';
+import type {ClientID, ClientMap} from '../types/client-state.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {getVersion} from '../types/version.js';
 import {assert} from 'shared/asserts.js';
@@ -27,10 +27,11 @@ export async function processFrame(
   pendingMutations: PendingMutation[],
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
-  clients: ClientID[],
+  clients: ClientMap,
   storage: Storage,
 ): Promise<ClientPoke[]> {
   lc.debug?.('processing frame - clients', clients);
+  const clientIDs = [...clients.keys()];
 
   const cache = new EntryCache(storage);
   const startVersion = must(await getVersion(cache));
@@ -64,6 +65,7 @@ export async function processFrame(
       clientPokes.push(
         ...(await buildClientPokesAndUpdateClientRecords(
           cache,
+          clientIDs,
           clients,
           patch,
           prevVersion,
@@ -72,7 +74,7 @@ export async function processFrame(
             clientRecord.clientGroupID === mutationClientGroupID
               ? {[mutationClientID]: newLastMutationID}
               : {},
-          pendingMutation.timestamp,
+          pendingMutation.timestamps,
         )),
       );
       prevVersion = nextVersion;
@@ -90,7 +92,7 @@ export async function processFrame(
   await processDisconnects(
     lc,
     disconnectHandler,
-    clients,
+    clientIDs,
     disconnectsCache,
     nextVersion,
   );
@@ -103,6 +105,7 @@ export async function processFrame(
     clientPokes.push(
       ...(await buildClientPokesAndUpdateClientRecords(
         cache,
+        clientIDs,
         clients,
         patch,
         prevVersion,
@@ -123,18 +126,25 @@ export async function processFrame(
 
 function buildClientPokesAndUpdateClientRecords(
   cache: Storage,
-  clients: ClientID[],
+  clientIDs: ClientID[],
+  clients: ClientMap,
   patch: Patch,
   prevVersion: NullableVersion,
   nextVersion: Version,
   getLastMutationIDChanges: (
     clientRecord: ClientRecord,
   ) => Record<string, number>,
-  timestamp: number | undefined,
+  timestamps:
+    | {
+        normalizedTimestamp: number;
+        originTimestamp: number;
+      }
+    | undefined,
 ): Promise<ClientPoke[]> {
   return Promise.all(
-    clients.map(async clientID => {
+    clientIDs.map(async clientID => {
       const clientRecord = must(await getClientRecord(clientID, cache));
+      const client = must(clients.get(clientID));
       const updatedClientRecord: ClientRecord = {
         ...clientRecord,
         baseCookie: nextVersion,
@@ -147,7 +157,10 @@ function buildClientPokesAndUpdateClientRecords(
           cookie: nextVersion,
           lastMutationIDChanges: await getLastMutationIDChanges(clientRecord),
           patch,
-          timestamp,
+          timestamp: timestamps?.normalizedTimestamp,
+          debugOriginTimestamp: client.debugPerf
+            ? timestamps?.originTimestamp
+            : undefined,
         },
       };
       return clientPoke;

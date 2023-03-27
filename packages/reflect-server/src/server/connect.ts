@@ -166,6 +166,7 @@ export async function handleConnection(
     userData,
     clockOffsetMs: undefined,
     clientGroupID: requestClientGroupID,
+    debugPerf: result.debugPerf,
   };
   lc.debug?.('Setting client map entry', clientID, client);
   clients.set(clientID, client);
@@ -187,6 +188,7 @@ export function getConnectRequest(
         timestamp: number;
         lmid: number;
         wsid: string;
+        debugPerf: boolean;
       };
       error: null;
     }
@@ -223,6 +225,14 @@ export function getConnectRequest(
     return int;
   }
 
+  function getBooleanParam(name: string): boolean {
+    const value = getParam(name, false);
+    if (value === null) {
+      return false;
+    }
+    return value === 'true';
+  }
+
   const getUserData = (headers: Headers): UserData => {
     const encodedValue = headers.get(USER_DATA_HEADER_NAME);
     if (!encodedValue) {
@@ -251,6 +261,7 @@ export function getConnectRequest(
     const timestamp = getIntegerParam('ts', true);
     const lmid = getIntegerParam('lmid', true);
     const wsid = getParam('wsid', false) ?? '';
+    const debugPerf = getBooleanParam('debugPerf');
 
     const userData = getUserData(headers);
     return {
@@ -262,6 +273,7 @@ export function getConnectRequest(
         timestamp,
         lmid,
         wsid,
+        debugPerf,
       },
       error: null,
     };

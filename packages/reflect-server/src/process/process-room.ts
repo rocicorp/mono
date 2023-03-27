@@ -72,7 +72,7 @@ export async function processRoom(
       pendingMutations,
       mutators,
       disconnectHandler,
-      clientIDs,
+      clients,
       cache,
     )),
   );

@@ -180,10 +180,15 @@ export async function handlePush(
       m.clientID === clientID ? m.timestamp + clockOffsetMs : undefined;
 
     const mWithNormalizedTimestamp: PendingMutation = {
-      ...m,
+      name: m.name,
+      id: m.id,
+      clientID: m.clientID,
+      args: m.args,
       clientGroupID,
       pusherClientIDs: new Set([clientID]),
-      timestamp: normalizedTimestamp,
+      timestamps: normalizedTimestamp
+        ? {normalizedTimestamp, originTimestamp: m.timestamp}
+        : undefined,
     };
 
     let insertIndex =
@@ -192,13 +197,14 @@ export async function handlePush(
         previousPendingIndex,
       ) + 1;
     for (; insertIndex < pendingMutations.length; insertIndex++) {
-      if (mWithNormalizedTimestamp.timestamp === undefined) {
+      if (mWithNormalizedTimestamp.timestamps === undefined) {
         break;
       }
       const pendingM = pendingMutations[insertIndex];
       if (
-        pendingM.timestamp !== undefined &&
-        pendingM.timestamp > mWithNormalizedTimestamp.timestamp
+        pendingM.timestamps !== undefined &&
+        pendingM.timestamps.normalizedTimestamp >
+          mWithNormalizedTimestamp.timestamps.normalizedTimestamp
       ) {
         break;
       }
