@@ -1,17 +1,17 @@
 import {expect} from '@esm-bundle/chai';
-import {Hash, fakeHash, parse, makeNewFakeHashFunction} from '../hash.js';
-import {createChunk, Chunk} from './chunk.js';
-import {ReadonlyJSONValue, deepFreeze} from '../json.js';
+import {fakeHash, Hash, makeNewFakeHashFunction, parse} from '../hash.js';
+import {deepFreeze, ReadonlyJSONValue} from '../json.js';
+import {Chunk, createChunk} from './chunk.js';
 
 test('round trip', () => {
   const chunkHasher = makeNewFakeHashFunction();
   const t = (hash: Hash, data: ReadonlyJSONValue, refs: Hash[]) => {
-    const c = createChunk(deepFreeze(data), refs, chunkHasher);
+    const c = createChunk(deepFreeze(data), new Set(refs), chunkHasher);
     expect(c.hash).to.equal(hash);
     expect(c.data).to.deep.equal(data);
-    expect(c.meta).to.deep.equal(refs);
+    expect([...c.refs]).to.deep.equal([...refs]);
 
-    const {meta} = c;
+    const {refs: meta} = c;
     const c2 = new Chunk(hash, data, meta);
     expect(c).to.deep.equal(c2);
   };
@@ -53,7 +53,7 @@ test('equals', () => {
       hashMapper.set(s, hash);
     }
 
-    return new Chunk(hash, data, refs);
+    return new Chunk(hash, data, new Set(refs));
   };
 
   eq(newChunk([], []), newChunk([], []));

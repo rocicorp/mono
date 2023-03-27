@@ -1,52 +1,53 @@
-import {LogContext} from '@rocicorp/logger';
 import {expect} from '@esm-bundle/chai';
+import {LogContext} from '@rocicorp/logger';
+import {assert, assertNotUndefined} from 'shared/asserts.js';
+import * as btree from '../btree/mod.js';
+import {BTreeWrite, Node} from '../btree/mod.js';
+import type {Cookie} from '../cookies.js';
+import {emptyRefs} from '../dag/chunk.js';
 import type * as dag from '../dag/mod.js';
+import {emptyHash, Hash} from '../hash.js';
+import type {IndexDefinition, IndexDefinitions} from '../index-defs.js';
+import {deepFreeze, JSONValue} from '../json.js';
+import type {ClientID} from '../sync/ids.js';
+import {addSyncSnapshot} from '../sync/test-helpers.js';
+import {withRead, withWrite} from '../with-transactions.js';
 import {
+  assertIndexChangeCommit,
   assertLocalCommitDD31,
   assertLocalCommitSDD,
   assertSnapshotCommitDD31,
   assertSnapshotCommitSDD,
+  ChunkIndexDefinition,
+  chunkIndexDefinitionEqualIgnoreName,
   Commit,
   CommitData,
   DEFAULT_HEAD_NAME,
   fromHead,
   IndexRecord,
+  LocalMeta,
   Meta,
   MetaType,
-  toChunkIndexDefinition,
   SnapshotMetaDD31,
   SnapshotMetaSDD,
-  LocalMeta,
-  assertIndexChangeCommit,
-  ChunkIndexDefinition,
-  chunkIndexDefinitionEqualIgnoreName,
+  toChunkIndexDefinition,
 } from './commit.js';
+import {IndexWrite} from './index.js';
 import {
   readCommit,
   readCommitForBTreeWrite,
   Whence,
   whenceHead,
 } from './read.js';
-import {
-  Write,
-  readIndexesForWrite,
-  newWriteSnapshotSDD,
-  newWriteSnapshotDD31,
-  newWriteLocal,
-  createIndexBTree,
-} from './write.js';
-import {JSONValue, deepFreeze} from '../json.js';
-import type {ClientID} from '../sync/ids.js';
-import {emptyHash, Hash} from '../hash.js';
-import {BTreeWrite, Node} from '../btree/mod.js';
-import * as btree from '../btree/mod.js';
-import type {IndexDefinition, IndexDefinitions} from '../index-defs.js';
-import {IndexWrite} from './index.js';
 import {Visitor} from './visitor.js';
-import {assert, assertNotUndefined} from 'shared/asserts.js';
-import {addSyncSnapshot} from '../sync/test-helpers.js';
-import type {Cookie} from '../cookies.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {
+  createIndexBTree,
+  newWriteLocal,
+  newWriteSnapshotDD31,
+  newWriteSnapshotSDD,
+  readIndexesForWrite,
+  Write,
+} from './write.js';
 
 export type Chain = Commit<Meta>[];
 
@@ -434,7 +435,10 @@ async function createEmptyIndexMaps(
   let emptyTreeHash: Hash | undefined;
   for (const [name, indexDefinition] of Object.entries(indexDefinitions)) {
     if (!emptyTreeHash) {
-      const emptyBTreeChunk = dagWrite.createChunk(btree.emptyDataNode, []);
+      const emptyBTreeChunk = dagWrite.createChunk(
+        btree.emptyDataNode,
+        emptyRefs,
+      );
       await dagWrite.putChunk(emptyBTreeChunk);
       emptyTreeHash = emptyBTreeChunk.hash;
     }

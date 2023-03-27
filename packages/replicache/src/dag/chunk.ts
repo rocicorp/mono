@@ -1,8 +1,10 @@
-import {assert, assertString} from 'shared/asserts.js';
+import {assert} from 'shared/asserts.js';
 import {Hash, newUUIDHash} from '../hash.js';
 import {assertDeepFrozen} from '../json.js';
 
-type Refs = readonly Hash[];
+export type Refs = ReadonlySet<Hash>;
+
+export const emptyRefs: Refs = new Set();
 
 export class Chunk<V = unknown> {
   readonly hash: Hash;
@@ -12,23 +14,14 @@ export class Chunk<V = unknown> {
    * Meta is an array of refs. If there are no refs we do not write a meta
    * chunk.
    */
-  readonly meta: Refs;
+  readonly refs: Refs;
 
-  constructor(hash: Hash, data: V, meta: Refs) {
-    assert(!meta.includes(hash), 'Chunk cannot reference itself');
+  constructor(hash: Hash, data: V, refs: Refs) {
+    assert(!refs.has(hash), 'Chunk cannot reference itself');
     assertDeepFrozen(data);
     this.hash = hash;
     this.data = data;
-    this.meta = meta;
-  }
-}
-
-export function assertMeta(v: unknown): asserts v is Refs {
-  if (!Array.isArray(v)) {
-    throw new Error('Meta must be an array');
-  }
-  for (const e of v) {
-    assertString(e);
+    this.refs = refs;
   }
 }
 

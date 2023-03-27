@@ -1,10 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assertHash, Hash} from '../hash.js';
-import * as btree from '../btree/mod.js';
-import type * as dag from '../dag/mod.js';
-import * as db from '../db/mod.js';
-import type * as sync from '../sync/mod.js';
-import {FrozenJSONValue, deepFreeze} from '../json.js';
 import {
   assert,
   assertNumber,
@@ -12,17 +6,27 @@ import {
   assertString,
 } from 'shared/asserts.js';
 import {hasOwn} from 'shared/has-own.js';
-import {uuid as makeUuid} from '../uuid.js';
+import * as btree from '../btree/mod.js';
+import {compareCookies, FrozenCookie} from '../cookies.js';
+import {emptyRefs, Refs} from '../dag/chunk.js';
+import type * as dag from '../dag/mod.js';
 import {
   assertSnapshotCommitDD31,
-  getRefs,
-  toChunkIndexDefinition,
-  newSnapshotCommitDataDD31,
   ChunkIndexDefinition,
   chunkIndexDefinitionEqualIgnoreName,
+  getRefs,
+  newSnapshotCommitDataDD31,
+  toChunkIndexDefinition,
 } from '../db/commit.js';
-import {compareCookies, FrozenCookie} from '../cookies.js';
+import * as db from '../db/mod.js';
+import {createIndexBTree} from '../db/write.js';
+import {assertHash, Hash} from '../hash.js';
+import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
+import {deepFreeze, FrozenJSONValue} from '../json.js';
 import type {ClientID} from '../sync/ids.js';
+import type * as sync from '../sync/mod.js';
+import {uuid as makeUuid} from '../uuid.js';
+import {withWrite} from '../with-transactions.js';
 import {
   ClientGroup,
   getClientGroup,
@@ -30,9 +34,6 @@ import {
   mutatorNamesEqual,
   setClientGroup,
 } from './client-groups.js';
-import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
-import {createIndexBTree} from '../db/write.js';
-import {withWrite} from '../with-transactions.js';
 
 export type ClientMap = ReadonlyMap<sync.ClientID, ClientV4 | ClientV5>;
 export type ClientMapDD31 = ReadonlyMap<sync.ClientID, ClientV5>;
@@ -322,7 +323,10 @@ export function initClientV5(
 
     if (res.type === FIND_MATCHING_CLIENT_TYPE_NEW) {
       // No client group to fork from. Create empty snapshot.
-      const emptyBTreeChunk = dagWrite.createChunk(btree.emptyDataNode, []);
+      const emptyBTreeChunk = dagWrite.createChunk(
+        btree.emptyDataNode,
+        emptyRefs,
+      );
       await dagWrite.putChunk(emptyBTreeChunk);
 
       // Create indexes
@@ -477,12 +481,12 @@ export async function findMatchingClient(
   return {type: FIND_MATCHING_CLIENT_TYPE_NEW};
 }
 
-function getRefsForClients(clients: ClientMap): Hash[] {
-  const refs: Hash[] = [];
+function getRefsForClients(clients: ClientMap): Refs {
+  const refs: Set<Hash> = new Set();
   for (const client of clients.values()) {
-    refs.push(client.headHash);
+    refs.add(client.headHash);
     if (isClientV5(client) && client.tempRefreshHash) {
-      refs.push(client.tempRefreshHash);
+      refs.add(client.tempRefreshHash);
     }
   }
   return refs;

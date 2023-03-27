@@ -1,7 +1,8 @@
 import {expect} from '@esm-bundle/chai';
 import * as dag from '../dag/mod.js';
-import type * as sync from '../sync/mod.js';
 import {assertHash, fakeHash, Hash} from '../hash.js';
+import type * as sync from '../sync/mod.js';
+import {withRead, withWrite} from '../with-transactions.js';
 import {
   ClientGroup,
   clientGroupHasPendingMutations,
@@ -14,7 +15,6 @@ import {
   setClientGroup,
   setClientGroups,
 } from './client-groups.js';
-import {withRead, withWrite} from '../with-transactions.js';
 
 const headClientGroup1Hash = fakeHash('b1');
 const headClientGroup2Hash = fakeHash('b2');
@@ -690,8 +690,8 @@ async function expectRefs(expected: Hash[], dagStore: dag.Store) {
   await withRead(dagStore, async (read: dag.Read) => {
     const clientGroupsHash = await read.getHead('client-groups');
     assertHash(clientGroupsHash);
-    const clientGroupsChunk = await read.getChunk(clientGroupsHash);
-    expect(clientGroupsChunk?.meta).to.deep.equal(expected);
+    const clientGroupsChunk = await read.mustGetChunk(clientGroupsHash);
+    expect([...clientGroupsChunk.refs]).to.deep.equal(expected);
   });
 }
 

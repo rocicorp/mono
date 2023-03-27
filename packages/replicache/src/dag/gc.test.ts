@@ -1,5 +1,6 @@
 import {expect} from '@esm-bundle/chai';
 import {fakeHash, Hash} from '../hash.js';
+import {emptyRefs, Refs} from './chunk.js';
 import {computeRefCountUpdates, RefCountUpdatesDelegate} from './gc.js';
 
 function createGraph(args: {
@@ -11,10 +12,10 @@ function createGraph(args: {
   const hashes = Object.fromEntries(
     Object.keys(graph).map(k => [k.toString(), fakeHash(k)]),
   );
-  const refs = Object.fromEntries(
+  const refs: Record<string, Refs> = Object.fromEntries(
     Object.entries(graph).map(([k, refs]) => [
       hashes[k].toString(),
-      refs.map(v => hashes[v]),
+      new Set(refs.map(v => hashes[v])),
     ]),
   );
 
@@ -32,7 +33,7 @@ function createGraph(args: {
 
   const delegate: RefCountUpdatesDelegate = {
     getRefCount: hash => refCounts[hash.toString()] || 0,
-    getRefs: hash => refs[hash.toString()] || [],
+    getRefs: hash => refs[hash.toString()] || emptyRefs,
   };
 
   return {
@@ -52,7 +53,10 @@ function createLazyDelegate(
     Object.keys(refCounts).map(k => [fakeHash(k), refCounts[k]]),
   );
   const refsHashes = Object.fromEntries(
-    Object.keys(refs).map(k => [fakeHash(k), refs[k].map(w => fakeHash(w))]),
+    Object.keys(refs).map(k => [
+      fakeHash(k),
+      new Set(refs[k].map(w => fakeHash(w))),
+    ]),
   );
   const countedHashes = new Set([...counted.values()].map(w => fakeHash(w)));
   return {

@@ -1,10 +1,11 @@
 import {expect} from '@esm-bundle/chai';
+import {emptyRefs} from '../dag/chunk.js';
 import * as dag from '../dag/mod.js';
-import {assertHash, makeNewFakeHashFunction} from '../hash.js';
-import {ChainBuilder} from '../db/test-helpers.js';
-import {GatherNotCachedVisitor} from './gather-not-cached-visitor.js';
 import {MetaType} from '../db/commit.js';
+import {ChainBuilder} from '../db/test-helpers.js';
+import {assertHash, makeNewFakeHashFunction} from '../hash.js';
 import {withRead, withWrite} from '../with-transactions.js';
+import {GatherNotCachedVisitor} from './gather-not-cached-visitor.js';
 
 suite('GatherNotCachedVisitor', () => {
   test('when gatherSizeLimit not exceeded, if none cached gathers all, if all cached gathers none', async () => {
@@ -137,11 +138,11 @@ suite('GatherNotCachedVisitor', () => {
                 },
               ],
             },
-            meta: [
+            refs: new Set([
               'face0000000040008000000000000000000000000012',
               'face0000000040008000000000000000000000000011',
               'face0000000040008000000000000000000000000013',
-            ],
+            ]),
           },
           size: 10,
         },
@@ -158,7 +159,7 @@ suite('GatherNotCachedVisitor', () => {
                 ['snapTwo', {id: 'snap2'}],
               ],
             ],
-            meta: [],
+            refs: emptyRefs,
           },
           size: 10,
         },
@@ -175,7 +176,7 @@ suite('GatherNotCachedVisitor', () => {
                 ['\u0000snap2\u0000snapTwo', {id: 'snap2'}],
               ],
             ],
-            meta: [],
+            refs: emptyRefs,
           },
           size: 10,
         },
@@ -246,11 +247,11 @@ const allChunksInVisitOrder = {
           },
         ],
       },
-      meta: [
+      refs: new Set([
         'face0000000040008000000000000000000000000009',
         'face0000000040008000000000000000000000000008',
         'face0000000040008000000000000000000000000010',
-      ],
+      ]),
     },
     size: 10,
   },
@@ -266,7 +267,7 @@ const allChunksInVisitOrder = {
           ['snapTwo', {id: 'snap2'}],
         ],
       ],
-      meta: [],
+      refs: emptyRefs,
     },
     size: 10,
   },
@@ -282,7 +283,7 @@ const allChunksInVisitOrder = {
           ['\u0000snap2\u0000snapTwo', {id: 'snap2'}],
         ],
       ],
-      meta: [],
+      refs: emptyRefs,
     },
     size: 10,
   },
@@ -314,11 +315,11 @@ const allChunksInVisitOrder = {
           },
         ],
       },
-      meta: [
+      refs: new Set([
         'face0000000040008000000000000000000000000006',
         'face0000000040008000000000000000000000000005',
         'face0000000040008000000000000000000000000007',
-      ],
+      ]),
     },
     size: 10,
   },
@@ -333,7 +334,7 @@ const allChunksInVisitOrder = {
           ['snapTwo', {id: 'snap2'}],
         ],
       ],
-      meta: [],
+      refs: emptyRefs,
     },
     size: 10,
   },
@@ -348,7 +349,7 @@ const allChunksInVisitOrder = {
           ['\u0000snap2\u0000snapTwo', {id: 'snap2'}],
         ],
       ],
-      meta: [],
+      refs: emptyRefs,
     },
     size: 10,
   },
@@ -377,10 +378,10 @@ const allChunksInVisitOrder = {
           },
         ],
       },
-      meta: [
+      refs: new Set([
         'face0000000040008000000000000000000000000003',
         'face0000000040008000000000000000000000000004',
-      ],
+      ]),
     },
     size: 10,
   },
@@ -394,7 +395,7 @@ const allChunksInVisitOrder = {
           ['snapTwo', {id: 'snap2'}],
         ],
       ],
-      meta: [],
+      refs: emptyRefs,
     },
     size: 10,
   },
@@ -408,7 +409,7 @@ const allChunksInVisitOrder = {
           ['\u0000snap2\u0000snapTwo', {id: 'snap2'}],
         ],
       ],
-      meta: [],
+      refs: emptyRefs,
     },
     size: 10,
   },

@@ -1,12 +1,13 @@
 import {expect} from '@esm-bundle/chai';
+import {emptyRefs} from '../dag/chunk.js';
 import * as dag from '../dag/mod.js';
-import * as db from '../db/mod.js';
-import {assertHash, makeNewFakeHashFunction} from '../hash.js';
-import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
-import {ChainBuilder} from '../db/test-helpers.js';
-import {MetaType} from '../db/commit.js';
 import {TestLazyStore} from '../dag/test-lazy-store.js';
+import {MetaType} from '../db/commit.js';
+import * as db from '../db/mod.js';
+import {ChainBuilder} from '../db/test-helpers.js';
+import {assertHash, makeNewFakeHashFunction} from '../hash.js';
 import {withRead, withWrite} from '../with-transactions.js';
+import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
 
 suite('dag with no memory-only hashes gathers nothing', () => {
   const t = async (dd31: boolean) => {
@@ -142,7 +143,7 @@ suite(
           ['face0000000040008000000000000000' + '' + '000000000004']: {
             data: [0, [['local', '2']]],
             hash: 'face0000000040008000000000000000' + '' + '000000000004',
-            meta: [],
+            refs: emptyRefs,
           },
           ['face0000000040008000000000000000' + '' + '000000000005']: {
             data: {
@@ -152,10 +153,10 @@ suite(
                 'face0000000040008000000000000000' + '' + '000000000004',
             },
             hash: 'face0000000040008000000000000000' + '' + '000000000005',
-            meta: [
+            refs: new Set([
               'face0000000040008000000000000000' + '' + '000000000004',
               'face0000000040008000000000000000' + '' + '000000000003',
-            ],
+            ]),
           },
         });
       });
@@ -254,11 +255,11 @@ suite(
                       },
                     ],
                   },
-                  meta: [
+                  refs: new Set([
                     'face0000000040008000000000000000' + '' + '000000000006',
                     'face0000000040008000000000000000' + '' + '000000000005',
                     'face0000000040008000000000000000' + '' + '000000000007',
-                  ],
+                  ]),
                 },
                 ['face0000000040008000000000000000' + '' + '000000000006']: {
                   hash:
@@ -281,7 +282,7 @@ suite(
                       ],
                     ],
                   ],
-                  meta: [],
+                  refs: emptyRefs,
                 },
                 ['face0000000040008000000000000000' + '' + '000000000007']: {
                   hash:
@@ -303,7 +304,7 @@ suite(
                       ],
                     ],
                   ],
-                  meta: [],
+                  refs: emptyRefs,
                 },
               }
             : {
@@ -320,7 +321,7 @@ suite(
                     ],
                   ],
                   hash: 'face0000000040008000000000000000' + '000000000006',
-                  meta: [],
+                  refs: emptyRefs,
                 },
                 ['face0000000040008000000000000000' + '000000000007']: {
                   data: {
@@ -346,11 +347,11 @@ suite(
                       'face0000000040008000000000000000' + '000000000003',
                   },
                   hash: 'face0000000040008000000000000000' + '000000000007',
-                  meta: [
+                  refs: new Set([
                     'face0000000040008000000000000000' + '000000000003',
                     'face0000000040008000000000000000' + '000000000005',
                     'face0000000040008000000000000000' + '000000000006',
-                  ],
+                  ]),
                 },
                 ['face0000000040008000000000000000' + '000000000008']: {
                   data: [
@@ -372,7 +373,7 @@ suite(
                     ],
                   ],
                   hash: 'face0000000040008000000000000000' + '000000000008',
-                  meta: [],
+                  refs: emptyRefs,
                 },
                 ['face0000000040008000000000000000' + '000000000009']: {
                   data: [
@@ -393,7 +394,7 @@ suite(
                     ],
                   ],
                   hash: 'face0000000040008000000000000000' + '000000000009',
-                  meta: [],
+                  refs: emptyRefs,
                 },
                 ['face0000000040008000000000000000' + '000000000010']: {
                   data: {
@@ -423,11 +424,11 @@ suite(
                       'face0000000040008000000000000000' + '000000000008',
                   },
                   hash: 'face0000000040008000000000000000' + '000000000010',
-                  meta: [
+                  refs: new Set([
                     'face0000000040008000000000000000' + '000000000008',
                     'face0000000040008000000000000000' + '000000000007',
                     'face0000000040008000000000000000' + '000000000009',
-                  ],
+                  ]),
                 },
               },
         );

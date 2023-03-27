@@ -1,21 +1,21 @@
 import {Lock} from '@rocicorp/lock';
-import type {FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
+import {assert} from 'shared/asserts.js';
+import {CreateChunk, emptyRefs} from '../dag/chunk.js';
 import type * as dag from '../dag/mod.js';
-import {Hash, emptyHash, newUUIDHash} from '../hash.js';
-import {BTreeRead} from './read.js';
+import {emptyHash, Hash, newUUIDHash} from '../hash.js';
+import type {FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
 import {
+  createNewInternalEntryForNode,
   DataNodeImpl,
+  emptyDataNode,
+  Entry,
+  EntryWithOptionalSize,
   InternalNodeImpl,
+  isDataNodeImpl,
   newNodeImpl,
   partition,
-  emptyDataNode,
-  isDataNodeImpl,
-  EntryWithOptionalSize,
-  createNewInternalEntryForNode,
-  Entry,
 } from './node.js';
-import type {CreateChunk} from '../dag/chunk.js';
-import {assert} from 'shared/asserts.js';
+import {BTreeRead} from './read.js';
 
 export class BTreeWrite extends BTreeRead {
   /**
@@ -192,7 +192,7 @@ export class BTreeWrite extends BTreeRead {
 
       if (this.rootHash === emptyHash) {
         // Write a chunk for the empty tree.
-        const chunk = dagWrite.createChunk(emptyDataNode, []);
+        const chunk = dagWrite.createChunk(emptyDataNode, emptyRefs);
         await dagWrite.putChunk(chunk as dag.Chunk<ReadonlyJSONValue>);
         return chunk.hash;
       }
@@ -225,12 +225,12 @@ function gatherNewChunks(
   }
 
   if (isDataNodeImpl(node)) {
-    const chunk = createChunk(node.toChunkData(), []);
+    const chunk = createChunk(node.toChunkData(), emptyRefs);
     newChunks.push(chunk);
     return chunk.hash;
   }
 
-  const refs: Hash[] = [];
+  const refs: Set<Hash> = new Set();
   const {entries} = node;
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
@@ -245,7 +245,7 @@ function gatherNewChunks(
       // MUTATES the entries!
       entries[i] = [entry[0], newChildHash];
     }
-    refs.push(newChildHash);
+    refs.add(newChildHash);
   }
   const chunk = createChunk(node.toChunkData(), refs);
   newChunks.push(chunk);

@@ -1,11 +1,11 @@
-import type * as kv from '../kv/mod.js';
-import {Store, Read, Write, mustGetChunk} from './store.js';
-import {assertMeta, Chunk, createChunk, ChunkHasher} from './chunk.js';
-import {chunkDataKey, chunkMetaKey, headKey, chunkRefCountKey} from './key.js';
-import {assertHash, Hash} from '../hash.js';
 import {assertNumber} from 'shared/asserts.js';
+import {assertHash, Hash} from '../hash.js';
 import type {ReadonlyJSONValue} from '../json.js';
+import type * as kv from '../kv/mod.js';
+import {Chunk, ChunkHasher, createChunk, emptyRefs, Refs} from './chunk.js';
 import {computeRefCountUpdates, RefCountUpdatesDelegate} from './gc.js';
+import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.js';
+import {mustGetChunk, Read, Store, Write} from './store.js';
 
 export class StoreImpl implements Store {
   private readonly _kv: kv.Store;
@@ -59,12 +59,12 @@ export class ReadImpl implements Read {
     }
 
     const refsVal = await this._tx.get(chunkMetaKey(hash));
-    let refs: readonly Hash[];
+    let refs: Refs;
     if (refsVal !== undefined) {
-      assertMeta(refsVal);
-      refs = refsVal;
+      assertRefsData(refsVal);
+      refs = new Set(refsVal);
     } else {
-      refs = [];
+      refs = emptyRefs;
     }
     return new Chunk(hash, data, refs);
   }
@@ -88,6 +88,20 @@ export class ReadImpl implements Read {
 
   get closed(): boolean {
     return this._tx.closed;
+  }
+}
+
+function assertRefsData(v: unknown): asserts v is Hash[] {
+  if (!Array.isArray(v)) {
+    throw new Error('Refs must be an array');
+  }
+  const seen = new Set<unknown>();
+  for (const e of v) {
+    if (seen.has(e)) {
+      throw new Error('Refs must not contain duplicates');
+    }
+    assertHash(e);
+    seen.add(v);
   }
 }
 
@@ -115,7 +129,7 @@ export class WriteImpl
     this._chunkHasher = chunkHasher;
   }
 
-  createChunk = <V>(data: V, refs: readonly Hash[]): Chunk<V> =>
+  createChunk = <V>(data: V, refs: Refs): Chunk<V> =>
     createChunk(data, refs, this._chunkHasher);
 
   get kvWrite(): kv.Write {
@@ -123,18 +137,18 @@ export class WriteImpl
   }
 
   async putChunk(c: Chunk): Promise<void> {
-    const {hash, data, meta} = c;
+    const {hash, data, refs} = c;
     // We never want to write temp hashes to the underlying store.
     this.assertValidHash(hash);
     const key = chunkDataKey(hash);
     // Commit contains InternalValue and Hash which are opaque types.
     const p1 = this._tx.put(key, data as ReadonlyJSONValue);
     let p2;
-    if (meta.length > 0) {
-      for (const h of meta) {
+    if (refs.size > 0) {
+      for (const h of refs) {
         this.assertValidHash(h);
       }
-      p2 = this._tx.put(chunkMetaKey(hash), meta);
+      p2 = this._tx.put(chunkMetaKey(hash), [...refs]);
     }
     this._putChunks.add(hash);
     await p1;
@@ -195,13 +209,13 @@ export class WriteImpl
     return value;
   }
 
-  async getRefs(hash: Hash): Promise<readonly Hash[]> {
+  async getRefs(hash: Hash): Promise<Refs> {
     const meta = await this._tx.get(chunkMetaKey(hash));
     if (meta === undefined) {
-      return [];
+      return emptyRefs;
     }
-    assertMeta(meta);
-    return meta;
+    assertRefsData(meta);
+    return new Set(meta);
   }
 
   private async _applyRefCountUpdates(

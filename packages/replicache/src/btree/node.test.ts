@@ -1,4 +1,5 @@
 import {assert, expect} from '@esm-bundle/chai';
+import {emptyRefs} from '../dag/chunk.js';
 import * as dag from '../dag/mod.js';
 import {emptyHash, Hash, makeNewFakeHashFunction} from '../hash.js';
 import {deepFreeze, FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
@@ -46,9 +47,9 @@ test('findLeaf', async () => {
   let rootHash: Hash;
 
   await withWrite(dagStore, async dagWrite => {
-    const c0 = dagWrite.createChunk(leaf0, []);
-    const c1 = dagWrite.createChunk(leaf1, []);
-    const c2 = dagWrite.createChunk(leaf2, []);
+    const c0 = dagWrite.createChunk(leaf0, emptyRefs);
+    const c1 = dagWrite.createChunk(leaf1, emptyRefs);
+    const c2 = dagWrite.createChunk(leaf2, emptyRefs);
 
     h0 = c0.hash;
     h1 = c1.hash;
@@ -60,7 +61,7 @@ test('findLeaf', async () => {
       ['i', h2],
     ]);
 
-    const rootChunk = dagWrite.createChunk(root, [h0, h1, h2]);
+    const rootChunk = dagWrite.createChunk(root, new Set([h0, h1, h2]));
     rootHash = rootChunk.hash;
 
     await dagWrite.putChunk(c0);
@@ -130,7 +131,7 @@ function makeTree(node: TreeData, dagStore: dag.Store): Promise<Hash> {
         0,
         entries.map(entry => [entry[0], entry[1]]),
       );
-      const chunk = dagWrite.createChunk(dataNode, []);
+      const chunk = dagWrite.createChunk(dataNode, emptyRefs);
       await dagWrite.putChunk(chunk);
       return [chunk.hash, 0];
     }
@@ -145,7 +146,7 @@ function makeTree(node: TreeData, dagStore: dag.Store): Promise<Hash> {
 
     const internalNode = makeNodeChunkData(level + 1, entries2);
     const refs = entries2.map(pair => pair[1]);
-    const chunk = dagWrite.createChunk(internalNode, refs);
+    const chunk = dagWrite.createChunk(internalNode, new Set(refs));
     await dagWrite.putChunk(chunk);
     return [chunk.hash, level + 1];
   }

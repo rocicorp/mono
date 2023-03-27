@@ -1,7 +1,8 @@
 import {assert, assertNumber} from 'shared/asserts.js';
+import {skipGCAsserts} from '../config.js';
 import {emptyHash, Hash} from '../hash.js';
 import type {MaybePromise} from '../replicache.js';
-import {skipGCAsserts} from '../config.js';
+import type {Refs} from './chunk.js';
 
 export type HeadChange = {
   new: Hash | undefined;
@@ -12,7 +13,7 @@ type LoadedRefCountPromises = Map<Hash, Promise<number>>;
 
 export interface RefCountUpdatesDelegate {
   getRefCount: (hash: Hash) => MaybePromise<number | undefined>;
-  getRefs: (hash: Hash) => MaybePromise<readonly Hash[] | undefined>;
+  getRefs: (hash: Hash) => MaybePromise<Refs | undefined>;
   /**
    * Should be implemented if the store lazily loads refs, returning whether
    * or not the chunks refs have already been counted (i.e. are reflected
@@ -164,7 +165,10 @@ class RefCountUpdates {
 
     if (refs !== undefined) {
       this._refsCounted?.add(hash);
-      const ps = refs.map(ref => this._changeRefCount(ref, delta));
+      const ps = [];
+      for (const ref of refs) {
+        ps.push(this._changeRefCount(ref, delta));
+      }
       await Promise.all(ps);
     }
   }

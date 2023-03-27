@@ -1,15 +1,15 @@
 import {expect} from '@esm-bundle/chai';
-import {createChunk, Chunk} from './chunk.js';
-import {StoreImpl, ReadImpl, WriteImpl} from './store-impl.js';
-import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.js';
-import type * as kv from '../kv/mod.js';
-import {assertHash, fakeHash, Hash, makeNewFakeHashFunction} from '../hash.js';
 import {assert} from 'shared/asserts.js';
-import {TestStore} from './test-store.js';
-import {ChunkNotFoundError} from './store.js';
-import {ReadonlyJSONValue, deepFreeze} from '../json.js';
+import {assertHash, fakeHash, Hash, makeNewFakeHashFunction} from '../hash.js';
+import {deepFreeze, ReadonlyJSONValue} from '../json.js';
+import type * as kv from '../kv/mod.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
 import {using, withRead, withWrite} from '../with-transactions.js';
+import {Chunk, createChunk, emptyRefs, Refs} from './chunk.js';
+import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.js';
+import {ReadImpl, StoreImpl, WriteImpl} from './store-impl.js';
+import {ChunkNotFoundError} from './store.js';
+import {TestStore} from './test-store.js';
 
 suite('read', () => {
   test('has chunk', async () => {
@@ -39,11 +39,11 @@ suite('read', () => {
       getSameChunk: boolean,
     ) => {
       const kv = new TestMemStore();
-      const chunk = createChunk(data, refs, chunkHasher);
+      const chunk = createChunk(data, new Set(refs), chunkHasher);
       await withWrite(kv, async kvw => {
         await kvw.put(chunkDataKey(chunk.hash), chunk.data);
-        if (chunk.meta.length > 0) {
-          await kvw.put(chunkMetaKey(chunk.hash), chunk.meta);
+        if (chunk.refs.size > 0) {
+          await kvw.put(chunkMetaKey(chunk.hash), [...chunk.refs]);
         }
         await kvw.commit();
       });
@@ -80,7 +80,7 @@ suite('read', () => {
 suite('write', () => {
   test('put chunk', async () => {
     const chunkHasher = makeNewFakeHashFunction();
-    const t = async (data: ReadonlyJSONValue, refs: Hash[]) => {
+    const t = async (data: ReadonlyJSONValue, refs: Refs) => {
       const kv = new TestMemStore();
       await withWrite(kv, async kvw => {
         const w = new WriteImpl(kvw, chunkHasher, assertHash);
@@ -94,24 +94,24 @@ suite('write', () => {
         expect(await kvw.get(kd)).to.deep.equal(c.data);
 
         // The chunk meta should only be there if there were refs.
-        if (refs.length === 0) {
+        if (refs.size === 0) {
           expect(await kvw.has(km)).to.be.false;
         } else {
-          expect(await kvw.get(km)).to.deep.equal(c.meta);
+          expect(await kvw.get(km)).to.deep.equal(c.refs);
         }
       });
     };
 
-    await t(0, []);
-    await t(42, []);
-    await t(true, []);
-    await t(false, []);
-    await t('', []);
-    await t('hello', []);
-    await t([], []);
-    await t([1], []);
-    await t({}, []);
-    await t({a: 42}, []);
+    await t(0, emptyRefs);
+    await t(42, emptyRefs);
+    await t(true, emptyRefs);
+    await t(false, emptyRefs);
+    await t('', emptyRefs);
+    await t('hello', emptyRefs);
+    await t([], emptyRefs);
+    await t([1], emptyRefs);
+    await t({}, emptyRefs);
+    await t({a: 42}, emptyRefs);
   });
 
   async function assertRefCount(kvr: kv.Read, hash: Hash, count: number) {
@@ -245,7 +245,7 @@ suite('write', () => {
       const kv = new TestMemStore();
       await withWrite(kv, async kvw => {
         const w = new WriteImpl(kvw, chunkHasher, assertHash);
-        const c = w.createChunk(deepFreeze([0, 1]), []);
+        const c = w.createChunk(deepFreeze([0, 1]), emptyRefs);
         await w.putChunk(c);
 
         key = chunkDataKey(c.hash);
@@ -278,7 +278,7 @@ suite('write', () => {
     const t = async (name: string, data: ReadonlyJSONValue, refs: Hash[]) => {
       const kv = new TestMemStore();
       const hash = chunkHasher();
-      const c = new Chunk(hash, deepFreeze(data), refs);
+      const c = new Chunk(hash, deepFreeze(data), new Set(refs));
       await withWrite(kv, async kvw => {
         const w = new WriteImpl(kvw, chunkHasher, assertHash);
         await w.putChunk(c);
@@ -331,7 +331,7 @@ suite('write', () => {
       const data = deepFreeze([true, 42]);
 
       await withWrite(store, async dagWrite => {
-        const c = dagWrite.createChunk(data, []);
+        const c = dagWrite.createChunk(data, emptyRefs);
         await dagWrite.putChunk(c);
         await dagWrite.setHead('test', c.hash);
         await dagWrite.commit();
@@ -378,11 +378,11 @@ suite('write', () => {
     //    |
     //    D
 
-    const d = new Chunk(fakeHash('d'), 'd', []);
-    const c = new Chunk(fakeHash('c'), 'c', [d.hash]);
-    const a = new Chunk(fakeHash('a'), 'a', [c.hash]);
-    const b = new Chunk(fakeHash('b'), 'b', [c.hash]);
-    const r = new Chunk(fakeHash('000'), 'r', [a.hash, b.hash]);
+    const d = new Chunk(fakeHash('d'), 'd', new Set([]));
+    const c = new Chunk(fakeHash('c'), 'c', new Set([d.hash]));
+    const a = new Chunk(fakeHash('a'), 'a', new Set([c.hash]));
+    const b = new Chunk(fakeHash('b'), 'b', new Set([c.hash]));
+    const r = new Chunk(fakeHash('000'), 'r', new Set([a.hash, b.hash]));
     await withWrite(dagStore, async dagWrite => {
       await Promise.all([
         dagWrite.setHead('test', r.hash),
@@ -407,7 +407,7 @@ suite('write', () => {
     // |
     // D
 
-    const e = new Chunk(fakeHash('e'), 'e', [d.hash]);
+    const e = new Chunk(fakeHash('e'), 'e', new Set([d.hash]));
     await withWrite(dagStore, async dagWrite => {
       await Promise.all([
         dagWrite.setHead('test', e.hash),
@@ -440,7 +440,7 @@ async function testChunkNotFoundError(methodName: 'read' | 'write') {
   const data = 42;
 
   const h = await withWrite(store, async dagWrite => {
-    const c = dagWrite.createChunk(data, []);
+    const c = dagWrite.createChunk(data, emptyRefs);
     await dagWrite.putChunk(c);
     await dagWrite.setHead('test', c.hash);
     await dagWrite.commit();

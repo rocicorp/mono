@@ -1,16 +1,15 @@
-import {StoreImpl} from './store-impl.js';
+import {assertArray, assertString} from 'shared/asserts.js';
+import type {Hash} from '../hash.js';
 import {
   assertHash,
   makeNewFakeHashFunction,
   parse as parseHash,
 } from '../hash.js';
-import {Chunk, ChunkHasher} from './chunk.js';
-import type {Hash} from '../hash.js';
-import {chunkMetaKey, parse as parseKey} from './key.js';
-import {KeyType} from './key.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
-import {assertArray, assertString} from 'shared/asserts.js';
 import {stringCompare} from '../string-compare.js';
+import {Chunk, ChunkHasher, emptyRefs, Refs} from './chunk.js';
+import {chunkMetaKey, KeyType, parse as parseKey} from './key.js';
+import {StoreImpl} from './store-impl.js';
 
 export class TestStore extends StoreImpl {
   readonly kvStore: TestMemStore;
@@ -56,13 +55,15 @@ function sortByHash(arr: Iterable<Chunk>): Chunk[] {
   return [...arr].sort((a, b) => stringCompare(String(a.hash), String(b.hash)));
 }
 
-function toRefs(refs: unknown): Hash[] {
+function toRefs(refs: unknown): Refs {
   if (refs === undefined) {
-    return [];
+    return emptyRefs;
   }
   assertArray(refs);
-  return refs.map(h => {
+  const s = new Set<Hash>();
+  for (const h of refs) {
     assertString(h);
-    return parseHash(h);
-  });
+    s.add(parseHash(h));
+  }
+  return s;
 }

@@ -1,7 +1,3 @@
-import {assertHash, Hash} from '../hash.js';
-import type * as sync from '../sync/mod.js';
-import type * as dag from '../dag/mod.js';
-import {FrozenJSONValue, deepFreeze} from '../json.js';
 import {
   assert,
   assertArray,
@@ -9,11 +5,15 @@ import {
   assertObject,
   assertString,
 } from 'shared/asserts.js';
+import type * as dag from '../dag/mod.js';
+import {assertHash, Hash} from '../hash.js';
 import {
   assertIndexDefinitions,
   IndexDefinitions,
   indexDefinitionsEqual,
 } from '../index-defs.js';
+import {deepFreeze, FrozenJSONValue} from '../json.js';
+import type * as sync from '../sync/mod.js';
 
 export type ClientGroupMap = ReadonlyMap<sync.ClientGroupID, ClientGroup>;
 
@@ -208,10 +208,10 @@ async function setValidatedClientGroups(
   dagWrite: dag.Write,
 ): Promise<ClientGroupMap> {
   const chunkData = clientGroupMapToChunkData(clientGroups, dagWrite);
-  const refs = Array.from(
-    clientGroups.values(),
-    clientGroup => clientGroup.headHash,
-  );
+  const refs: Set<Hash> = new Set();
+  for (const clientGroup of clientGroups.values()) {
+    refs.add(clientGroup.headHash);
+  }
   const chunk = dagWrite.createChunk(chunkData, refs);
   await dagWrite.putChunk(chunk);
   await dagWrite.setHead(CLIENT_GROUPS_HEAD_NAME, chunk.hash);

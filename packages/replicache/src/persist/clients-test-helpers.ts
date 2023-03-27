@@ -1,23 +1,24 @@
+import {LogContext} from '@rocicorp/logger';
+import * as btree from '../btree/mod.js';
+import {emptyRefs} from '../dag/chunk.js';
+import * as dag from '../dag/mod.js';
+import {getRefs, newSnapshotCommitDataSDD} from '../db/commit.js';
+import * as db from '../db/mod.js';
+import {newUUIDHash} from '../hash.js';
+import type {IndexDefinitions} from '../index-defs.js';
+import type * as sync from '../sync/mod.js';
+import {uuid as makeUuid} from '../uuid.js';
+import {withWrite} from '../with-transactions.js';
 import {
+  Client,
   ClientMap,
-  ClientV5,
+  ClientMapDD31,
   ClientV4,
-  setClients,
+  ClientV5,
   getClients,
   initClientV5,
-  Client,
-  ClientMapDD31,
+  setClients,
 } from './clients.js';
-import * as dag from '../dag/mod.js';
-import type * as sync from '../sync/mod.js';
-import {LogContext} from '@rocicorp/logger';
-import type {IndexDefinitions} from '../index-defs.js';
-import {newUUIDHash} from '../hash.js';
-import * as btree from '../btree/mod.js';
-import * as db from '../db/mod.js';
-import {uuid as makeUuid} from '../uuid.js';
-import {getRefs, newSnapshotCommitDataSDD} from '../db/commit.js';
-import {withWrite} from '../with-transactions.js';
 
 export function setClientsForTesting(
   clients: ClientMap,
@@ -148,7 +149,7 @@ function initClientV4(
       const emptyBTreeChunk = new dag.Chunk(
         newUUIDHash(),
         btree.emptyDataNode,
-        [],
+        emptyRefs,
       );
       chunksToPut.push(emptyBTreeChunk);
       newClientCommitData = newSnapshotCommitDataSDD(

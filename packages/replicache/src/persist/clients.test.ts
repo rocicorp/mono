@@ -1,42 +1,41 @@
-import {LogContext} from '@rocicorp/logger';
 import {expect} from '@esm-bundle/chai';
+import {LogContext} from '@rocicorp/logger';
 import {assert, assertNotUndefined} from 'shared/asserts.js';
+import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {BTreeRead} from '../btree/read.js';
 import * as dag from '../dag/mod.js';
 import {
   Commit,
+  commitIsSnapshot,
   fromChunk,
   fromHash,
-  SnapshotMetaSDD,
   SnapshotMetaDD31,
-  commitIsSnapshot,
+  SnapshotMetaSDD,
 } from '../db/commit.js';
+import {ChainBuilder} from '../db/test-helpers.js';
 import {assertHash, fakeHash, newUUIDHash} from '../hash.js';
+import type {IndexDefinitions} from '../index-defs.js';
+import {deepFreeze} from '../json.js';
+import type {ClientGroupID, ClientID} from '../sync/ids.js';
+import {withRead, withWrite} from '../with-transactions.js';
+import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
+import {makeClientV5, setClientsForTesting} from './clients-test-helpers.js';
 import {
   assertClientV5,
-  ClientV5,
   CLIENTS_HEAD_NAME,
+  ClientV5,
   findMatchingClient,
   FindMatchingClientResult,
   FIND_MATCHING_CLIENT_TYPE_FORK,
   FIND_MATCHING_CLIENT_TYPE_HEAD,
   FIND_MATCHING_CLIENT_TYPE_NEW,
   getClient,
-  getClients,
   getClientGroupForClient,
   getClientGroupIDForClient,
+  getClients,
   initClientV5,
   setClient,
 } from './clients.js';
-import {SinonFakeTimers, useFakeTimers} from 'sinon';
-import {ChainBuilder} from '../db/test-helpers.js';
-import {makeClientV5, setClientsForTesting} from './clients-test-helpers.js';
-import type {ClientID} from '../sync/ids.js';
-import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
-import type {ClientGroupID} from '../sync/ids.js';
-import type {IndexDefinitions} from '../index-defs.js';
-import {deepFreeze} from '../json.js';
-import {withRead, withWrite} from '../with-transactions.js';
 
 let clock: SinonFakeTimers;
 setup(() => {
@@ -112,9 +111,8 @@ test('updateClients and getClients for DD31', async () => {
   await withRead(dagStore, async read => {
     const h = await read.getHead(CLIENTS_HEAD_NAME);
     assert(h);
-    const chunk = await read.getChunk(h);
-    assert(chunk);
-    expect(chunk.meta).to.deep.equal([
+    const chunk = await read.mustGetChunk(h);
+    expect([...chunk.refs]).to.deep.equal([
       headClient1Hash,
       refresh1Hash,
       headClient2Hash,
@@ -192,8 +190,8 @@ test('updateClients properly manages refs to client heads when clients are remov
   await withRead(dagStore, async (read: dag.Read) => {
     const clientsHash = await read.getHead('clients');
     assertHash(clientsHash);
-    const clientsChunk = await read.getChunk(clientsHash);
-    expect(clientsChunk?.meta).to.deep.equal([
+    const clientsChunk = await read.mustGetChunk(clientsHash);
+    expect([...clientsChunk.refs]).to.deep.equal([
       client1HeadHash,
       client2HeadHash,
     ]);
@@ -203,8 +201,8 @@ test('updateClients properly manages refs to client heads when clients are remov
   await withRead(dagStore, async (read: dag.Read) => {
     const clientsHash = await read.getHead('clients');
     assertHash(clientsHash);
-    const clientsChunk = await read.getChunk(clientsHash);
-    expect(clientsChunk?.meta).to.deep.equal([client3HeadHash]);
+    const clientsChunk = await read.mustGetChunk(clientsHash);
+    expect([...clientsChunk.refs]).to.deep.equal([client3HeadHash]);
   });
 });
 
@@ -239,8 +237,8 @@ test("updateClients properly manages refs to client heads when a client's head c
   await withRead(dagStore, async (read: dag.Read) => {
     const clientsHash = await read.getHead('clients');
     assertHash(clientsHash);
-    const clientsChunk = await read.getChunk(clientsHash);
-    expect(clientsChunk?.meta).to.deep.equal([
+    const clientsChunk = await read.mustGetChunk(clientsHash);
+    expect([...clientsChunk.refs]).to.deep.equal([
       client1V1HeadHash,
       client2HeadHash,
     ]);
@@ -259,8 +257,8 @@ test("updateClients properly manages refs to client heads when a client's head c
   await withRead(dagStore, async (read: dag.Read) => {
     const clientsHash = await read.getHead('clients');
     assertHash(clientsHash);
-    const clientsChunk = await read.getChunk(clientsHash);
-    expect(clientsChunk?.meta).to.deep.equal([
+    const clientsChunk = await read.mustGetChunk(clientsHash);
+    expect([...clientsChunk.refs]).to.deep.equal([
       client1V2HeadHash,
       client2HeadHash,
     ]);
@@ -316,7 +314,7 @@ test('updateClients throws errors if chunk pointed to by clients head does not c
         heartbeatTimestampMs: 'this should be a number',
         headHash,
       }),
-      [headHash],
+      new Set([headHash]),
     );
 
     await Promise.all([

@@ -1,30 +1,31 @@
 import {expect} from '@esm-bundle/chai';
+import type {Refs} from '../dag/chunk.js';
 import * as dag from '../dag/mod.js';
+import {fakeHash, Hash, makeNewFakeHashFunction} from '../hash.js';
+import {deepFreeze} from '../json.js';
+import {withRead} from '../with-transactions.js';
 import {
+  baseSnapshotFromHash,
+  chain as commitChain,
+  ChunkIndexDefinition,
+  chunkIndexDefinitionEqualIgnoreName,
   Commit,
   CommitData,
   fromChunk,
+  getMutationID,
   IndexChangeMetaSDD,
+  localMutations,
+  localMutationsGreaterThan,
+  makeCommitData,
   Meta,
   MetaType,
   newIndexChange as commitNewIndexChange,
-  newLocalSDD as commitNewLocalSDD,
   newLocalDD31 as commitNewLocalDD31,
-  newSnapshotSDD as commitNewSnapshotSDD,
+  newLocalSDD as commitNewLocalSDD,
   newSnapshotDD31 as commitNewSnapshotDD31,
-  chain as commitChain,
-  localMutations,
-  baseSnapshotFromHash,
-  localMutationsGreaterThan,
-  chunkIndexDefinitionEqualIgnoreName,
-  ChunkIndexDefinition,
-  makeCommitData,
-  getMutationID,
+  newSnapshotSDD as commitNewSnapshotSDD,
 } from './commit.js';
 import {ChainBuilder} from './test-helpers.js';
-import {Hash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
-import {deepFreeze} from '../json.js';
-import {withRead} from '../with-transactions.js';
 
 suite('base snapshot', () => {
   const t = async (dd31: boolean) => {
@@ -748,7 +749,7 @@ const chunkHasher = makeNewFakeHashFunction('face55');
 
 const hashMapper: Map<string, Hash> = new Map();
 
-function createChunk<V>(data: V, refs: readonly Hash[]): dag.Chunk<V> {
+function createChunk<V>(data: V, refs: Refs): dag.Chunk<V> {
   const s = JSON.stringify(data);
   let hash = hashMapper.get(s);
   if (!hash) {
@@ -762,10 +763,10 @@ function createChunk<V>(data: V, refs: readonly Hash[]): dag.Chunk<V> {
 function makeCommit<M extends Meta>(
   meta: M,
   valueHash: Hash,
-  refs: Hash[],
+  refs: Iterable<Hash>,
 ): dag.Chunk<CommitData<M>> {
   const data: CommitData<M> = makeCommitData(meta, valueHash, []);
-  return createChunk(data, refs);
+  return createChunk(data, new Set(refs));
 }
 
 function makeIndexChangeMeta(

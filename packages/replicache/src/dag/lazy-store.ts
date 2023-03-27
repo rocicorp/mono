@@ -5,7 +5,7 @@ import type {MaybePromise} from '../replicache.js';
 import {promiseVoid} from '../resolved-promises.js';
 import {getSizeOfValue} from '../size-of-value.js';
 import {withWrite} from '../with-transactions.js';
-import {Chunk, ChunkHasher, createChunk} from './chunk.js';
+import {Chunk, ChunkHasher, createChunk, Refs} from './chunk.js';
 import {
   computeRefCountUpdates,
   HeadChange,
@@ -140,7 +140,7 @@ export class LazyStore implements Store {
    * because it has been evicted).
    */
   protected readonly _refCounts = new Map<Hash, number>();
-  protected readonly _refs = new Map<Hash, readonly Hash[]>();
+  protected readonly _refs = new Map<Hash, Refs>();
 
   constructor(
     sourceStore: Store,
@@ -308,7 +308,7 @@ export class LazyRead implements Read {
 
 class LazyWrite extends LazyRead implements Write, RefCountUpdatesDelegate {
   private readonly _refCounts: Map<Hash, number>;
-  private readonly _refs: Map<Hash, readonly Hash[]>;
+  private readonly _refs: Map<Hash, Refs>;
   private readonly _chunkHasher: ChunkHasher;
   protected readonly _pendingHeadChanges = new Map<string, HeadChange>();
   protected readonly _pendingMemOnlyChunks = new Map<Hash, Chunk>();
@@ -324,7 +324,7 @@ class LazyWrite extends LazyRead implements Write, RefCountUpdatesDelegate {
     sourceChunksCache: ChunksCache,
     sourceStore: Store,
     refCounts: Map<Hash, number>,
-    refs: Map<Hash, readonly Hash[]>,
+    refs: Map<Hash, Refs>,
     release: () => void,
     chunkHasher: ChunkHasher,
     assertValidHash: (hash: Hash) => void,
@@ -342,17 +342,17 @@ class LazyWrite extends LazyRead implements Write, RefCountUpdatesDelegate {
     this._chunkHasher = chunkHasher;
   }
 
-  createChunk = <V>(data: V, refs: readonly Hash[]): Chunk<V> => {
+  createChunk = <V>(data: V, refs: Refs): Chunk<V> => {
     const chunk = createChunk(data, refs, this._chunkHasher);
     this._createdChunks.add(chunk.hash);
     return chunk;
   };
 
   putChunk<V>(c: Chunk<V>, size?: number): Promise<void> {
-    const {hash, meta} = c;
+    const {hash, refs} = c;
     this.assertValidHash(hash);
-    if (meta.length > 0) {
-      for (const h of meta) {
+    if (refs.size > 0) {
+      for (const h of refs) {
         this.assertValidHash(h);
       }
     }
@@ -446,7 +446,7 @@ class LazyWrite extends LazyRead implements Write, RefCountUpdatesDelegate {
           this._refCounts.set(hash, count);
           const chunk = this._pendingMemOnlyChunks.get(hash);
           if (chunk) {
-            this._refs.set(hash, chunk.meta);
+            this._refs.set(hash, chunk.refs);
             this._memOnlyChunks.set(hash, chunk);
           }
         }
@@ -477,18 +477,18 @@ class LazyWrite extends LazyRead implements Write, RefCountUpdatesDelegate {
     return this._refCounts.get(hash);
   }
 
-  getRefs(hash: Hash): readonly Hash[] | undefined {
+  getRefs(hash: Hash): Refs | undefined {
     const pendingMemOnlyChunk = this._pendingMemOnlyChunks.get(hash);
     if (pendingMemOnlyChunk) {
-      return pendingMemOnlyChunk.meta;
+      return pendingMemOnlyChunk.refs;
     }
     const memOnlyChunk = this._memOnlyChunks.get(hash);
     if (memOnlyChunk) {
-      return memOnlyChunk.meta;
+      return memOnlyChunk.refs;
     }
     const pendingCachedChunk = this._pendingCachedChunks.get(hash);
     if (pendingCachedChunk !== undefined) {
-      return pendingCachedChunk.chunk.meta;
+      return pendingCachedChunk.chunk.refs;
     }
     return this._refs.get(hash);
   }
@@ -507,7 +507,7 @@ class ChunksCache {
   private readonly _cacheSizeLimit: number;
   private readonly _getSizeOfChunk: (chunk: Chunk) => number;
   private readonly _refCounts: Map<Hash, number>;
-  private readonly _refs: Map<Hash, readonly Hash[]>;
+  private readonly _refs: Map<Hash, Refs>;
   private _size = 0;
   private _evictsAndDeletesSuspended = false;
   private readonly _suspendedDeletes: Hash[] = [];
@@ -523,7 +523,7 @@ class ChunksCache {
     cacheSizeLimit: number,
     getSizeOfChunk: (v: Chunk) => number,
     refCounts: Map<Hash, number>,
-    refs: Map<Hash, readonly Hash[]>,
+    refs: Map<Hash, Refs>,
   ) {
     this._cacheSizeLimit = cacheSizeLimit;
     this._getSizeOfChunk = getSizeOfChunk;
@@ -565,10 +565,10 @@ class ChunksCache {
       return;
     }
     if (!this._refs.has(hash)) {
-      for (const refHash of chunk.meta) {
+      for (const refHash of chunk.refs) {
         this._refCounts.set(refHash, (this._refCounts.get(refHash) || 0) + 1);
       }
-      this._refs.set(hash, chunk.meta);
+      this._refs.set(hash, chunk.refs);
     }
 
     this._ensureCacheSizeLimit();
@@ -641,7 +641,7 @@ class ChunksCache {
             this.cacheEntries.set(hash, oldCacheEntry);
           } else {
             this._cacheChunk(chunk, size !== -1 ? size : undefined);
-            this._refs.set(hash, chunk.meta);
+            this._refs.set(hash, chunk.refs);
           }
         }
       }

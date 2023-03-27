@@ -9,6 +9,7 @@ import {
 } from 'shared/asserts.js';
 import {skipCommitDataAsserts} from '../config.js';
 import {compareCookies, FrozenCookie} from '../cookies.js';
+import type {Refs} from '../dag/chunk.js';
 import type * as dag from '../dag/mod.js';
 import type {MustGetChunk} from '../dag/store.js';
 import {assertHash, Hash} from '../hash.js';
@@ -725,16 +726,16 @@ function commitFromCommitData<M extends Meta>(
   return new Commit(createChunk(data, getRefs(data)));
 }
 
-export function getRefs(data: CommitData<Meta>): Hash[] {
-  const refs: Hash[] = [data.valueHash];
+export function getRefs(data: CommitData<Meta>): Refs {
+  const refs = new Set([data.valueHash]);
   const {meta} = data;
   switch (meta.type) {
     case MetaType.IndexChangeSDD:
-      meta.basisHash && refs.push(meta.basisHash);
+      meta.basisHash && refs.add(meta.basisHash);
       break;
     case MetaType.LocalSDD:
     case MetaType.LocalDD31:
-      meta.basisHash && refs.push(meta.basisHash);
+      meta.basisHash && refs.add(meta.basisHash);
       // Local has weak originalHash
       break;
     case MetaType.SnapshotSDD:
@@ -746,7 +747,7 @@ export function getRefs(data: CommitData<Meta>): Hash[] {
   }
 
   for (const index of data.indexes) {
-    refs.push(index.valueHash);
+    refs.add(index.valueHash);
   }
 
   return refs;
@@ -788,12 +789,20 @@ function validateChunk(
   const {data} = chunk;
   assertCommitData(data);
 
-  const seen = new Set();
+  const seenIndexes = new Set();
   for (const index of data.indexes) {
     const {name} = index.definition;
-    if (seen.has(name)) {
+    if (seenIndexes.has(name)) {
       throw new Error(`Duplicate index ${name}`);
     }
-    seen.add(name);
+    seenIndexes.add(name);
+  }
+
+  const seenRefs = new Set();
+  for (const ref of chunk.refs) {
+    if (seenRefs.has(ref)) {
+      throw new Error(`Duplicate ref ${ref}`);
+    }
+    seenRefs.add(ref);
   }
 }

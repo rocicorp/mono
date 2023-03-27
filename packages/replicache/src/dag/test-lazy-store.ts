@@ -1,5 +1,5 @@
 import type {Hash} from '../hash.js';
-import type {Chunk} from './chunk.js';
+import type {Chunk, Refs} from './chunk.js';
 import {LazyStore} from './lazy-store.js';
 
 export class TestLazyStore extends LazyStore {
@@ -11,11 +11,11 @@ export class TestLazyStore extends LazyStore {
     return Object.fromEntries(this._memOnlyChunks);
   }
 
-  getRefsSnapshot(): Record<Hash, readonly Hash[]> {
+  getRefsSnapshot(): Record<Hash, Refs> {
     return Object.fromEntries(this._refs);
   }
 
-  getCachedSourceChunksSnapshot(): readonly Hash[] {
-    return [...this._sourceChunksCache.cacheEntries.keys()];
+  getCachedSourceChunksSnapshot(): Refs {
+    return new Set(this._sourceChunksCache.cacheEntries.keys());
   }
 }
