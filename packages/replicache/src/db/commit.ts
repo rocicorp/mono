@@ -1,12 +1,3 @@
-import type * as dag from '../dag/mod.js';
-import type * as sync from '../sync/mod.js';
-import {
-  assertDeepFrozen,
-  assertJSONValue,
-  FrozenJSONValue,
-  FrozenTag,
-  deepFreeze,
-} from '../json.js';
 import {
   assert,
   assertArray,
@@ -16,11 +7,20 @@ import {
   assertString,
   unreachable,
 } from 'shared/asserts.js';
-import {assertHash, Hash} from '../hash.js';
 import {skipCommitDataAsserts} from '../config.js';
-import type {MustGetChunk} from '../dag/store.js';
-import type {IndexDefinition} from '../index-defs.js';
 import {compareCookies, FrozenCookie} from '../cookies.js';
+import type * as dag from '../dag/mod.js';
+import type {MustGetChunk} from '../dag/store.js';
+import {assertHash, Hash} from '../hash.js';
+import type {IndexDefinition} from '../index-defs.js';
+import {
+  assertDeepFrozen,
+  assertJSONValue,
+  deepFreeze,
+  FrozenJSONValue,
+  FrozenTag,
+} from '../json.js';
+import type * as sync from '../sync/mod.js';
 
 export const DEFAULT_HEAD_NAME = 'main';
 
@@ -317,8 +317,8 @@ function assertIndexChangeMeta(
 
   // Note: indexes are already validated for all commit types. Only additional
   // things to validate are:
-  //   - last_mutation_id is equal to the basis
-  //   - value_hash has not been changed
+  //   - lastMutationID is equal to the basis
+  //   - valueHash has not been changed
   // However we don't have a write transaction this deep, so these validated at
   // commit time.
 }
