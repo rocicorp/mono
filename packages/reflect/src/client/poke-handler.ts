@@ -52,6 +52,9 @@ export class PokeHandler {
       pokeBody.requestID,
     );
     lc.debug?.('Applying poke', pokeBody);
+    if (pokeBody.debugServerBufferMs) {
+      lc.debug?.('server buffer ms', pokeBody.debugServerBufferMs);
+    }
     const now = performance.now();
     const thisClientID = await this._clientIDPromise;
     let lastMutationIDChangeForSelf: number | undefined;
@@ -137,6 +140,9 @@ export class PokeHandler {
           const pokePlaybackOffset = Math.floor(now - pokePlaybackTarget);
           if (pokePlaybackOffset < 0) {
             break;
+          }
+          if (headPoke.debugOriginTimestamp) {
+            lc.debug?.('poke latency ms', headPoke.debugOriginTimestamp);
           }
           // TODO consider systems that don't run at 60fps (supposedly new
           // ipads run RAF at 120fps).

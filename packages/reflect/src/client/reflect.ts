@@ -598,6 +598,7 @@ export class Reflect<MD extends MutatorDefs> {
       this._jurisdiction,
       this._lastMutationIDReceived,
       wsid,
+      this.#options.logLevel === 'debug',
     );
 
     ws.addEventListener('message', this._onMessage);
@@ -751,16 +752,17 @@ export class Reflect<MD extends MutatorDefs> {
       req.mutations.length,
       'mutations.',
     );
+    const now = Date.now();
     for (let i = start; i < req.mutations.length; i++) {
       const m = req.mutations[i];
       const msg: PushMessage = [
         'push',
         {
-          timestamp: performance.now(),
+          timestamp: now,
           clientGroupID: req.clientGroupID,
           mutations: [
             {
-              timestamp: m.timestamp,
+              timestamp: now - Math.round(performance.now() - m.timestamp),
               id: m.id,
               clientID: m.clientID,
               name: m.name,
@@ -1112,6 +1114,7 @@ export function createSocket(
   jurisdiction: 'eu' | undefined,
   lmid: number,
   wsid: string,
+  debugPerf: boolean,
 ): WebSocket {
   const url = new URL(socketOrigin);
   // Keep this in sync with the server.
@@ -1128,6 +1131,9 @@ export function createSocket(
   searchParams.set('ts', String(performance.now()));
   searchParams.set('lmid', String(lmid));
   searchParams.set('wsid', wsid);
+  if (debugPerf) {
+    searchParams.set('debugPerf', true.toString());
+  }
   // Pass auth to the server via the `Sec-WebSocket-Protocol` header by passing
   // it as a `protocol` to the `WebSocket` constructor.  The empty string is an
   // invalid `protocol`, and will result in an exception, so pass undefined

@@ -37,8 +37,16 @@ function freshClient(
   userID: string,
   clientGroupID: ClientGroupID,
   socket: Socket = new Mocket(),
+  debugPerf = false,
 ) {
-  const [clientID, c] = client(id, userID, clientGroupID, socket);
+  const [clientID, c] = client(
+    id,
+    userID,
+    clientGroupID,
+    socket,
+    undefined,
+    debugPerf,
+  );
   c.clockOffsetMs = undefined;
   return [clientID, c] as const;
 }
@@ -190,6 +198,17 @@ describe('handleConnection', () => {
       existingClients: new Map(),
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket)]),
+      existingRecord: clientRecord('cg1', 2, 0),
+      expectedRecord: clientRecord('cg1', 1, 0),
+      version: 2,
+    },
+    {
+      name: 'baseCookie: 1 and version: 2, debugPerf',
+      url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=1&ts=42&lmid=0&wsid=wsidx&debugPerf=true',
+      headers: createHeadersWithValidUserData('u1'),
+      existingClients: new Map(),
+      expectedClients: socket =>
+        new Map([freshClient('c1', 'u1', 'cg1', socket, true)]),
       existingRecord: clientRecord('cg1', 2, 0),
       expectedRecord: clientRecord('cg1', 1, 0),
       version: 2,
@@ -429,6 +448,7 @@ test('getConnectRequest', () => {
       lmid: 456,
       baseCookie: null,
       wsid: 'wsidx1',
+      debugPerf: false,
     },
   );
   testResult(
@@ -442,6 +462,21 @@ test('getConnectRequest', () => {
       lmid: 456,
       baseCookie: 789,
       wsid: 'wsidx2',
+      debugPerf: false,
+    },
+  );
+  testResult(
+    'https://www.example.com/?clientID=cid1&clientGroupID=cg1&ts=123&lmid=456&baseCookie=789&wsid=wsidx2&debugPerf=true',
+    new Headers([[USER_DATA_HEADER_NAME, '{"userID":"u1","more":"data"}']]),
+    {
+      clientID: 'cid1',
+      clientGroupID: 'cg1',
+      userData: {userID: 'u1', more: 'data'},
+      timestamp: 123,
+      lmid: 456,
+      baseCookie: 789,
+      wsid: 'wsidx2',
+      debugPerf: true,
     },
   );
 });

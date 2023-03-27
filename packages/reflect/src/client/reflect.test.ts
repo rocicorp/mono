@@ -33,9 +33,11 @@ import {MessageError} from './connection-error.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
 
 let clock: sinon.SinonFakeTimers;
+const startTime = 1678829450000;
 
 setup(() => {
   clock = sinon.useFakeTimers();
+  clock.setSystemTime(startTime);
   // @ts-expect-error MockSocket is not sufficiently compatible with WebSocket
   sinon.replace(globalThis, 'WebSocket', MockSocket);
 });
@@ -244,6 +246,7 @@ test('createSocket', () => {
     auth: string | undefined,
     jurisdiction: 'eu' | undefined,
     lmid: number,
+    debugPerf: boolean,
     expectedURL: string,
     expectedProtocol = '',
   ) => {
@@ -258,6 +261,7 @@ test('createSocket', () => {
       jurisdiction,
       lmid,
       'wsidx',
+      debugPerf,
     ) as unknown as MockSocket;
     expect(`${mockSocket.url}`).equal(expectedURL);
     expect(mockSocket.protocol).equal(expectedProtocol);
@@ -272,6 +276,7 @@ test('createSocket', () => {
     '',
     undefined,
     0,
+    false,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
   );
 
@@ -284,6 +289,7 @@ test('createSocket', () => {
     '',
     undefined,
     0,
+    false,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
@@ -296,6 +302,7 @@ test('createSocket', () => {
     '',
     undefined,
     0,
+    false,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=a%2Fb&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
@@ -308,6 +315,7 @@ test('createSocket', () => {
     '',
     undefined,
     123,
+    false,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
   );
 
@@ -320,6 +328,7 @@ test('createSocket', () => {
     undefined,
     undefined,
     123,
+    false,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
   );
 
@@ -332,6 +341,7 @@ test('createSocket', () => {
     'auth with []',
     undefined,
     0,
+    false,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
     'auth%20with%20%5B%5D',
   );
@@ -345,7 +355,22 @@ test('createSocket', () => {
     'auth with []',
     'eu',
     0,
+    false,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'auth%20with%20%5B%5D',
+  );
+
+  t(
+    'ws://example.com/',
+    null,
+    'clientID',
+    'roomID',
+    'userID',
+    'auth with []',
+    'eu',
+    0,
+    true,
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true',
     'auth%20with%20%5B%5D',
   );
 
@@ -359,6 +384,7 @@ test('createSocket', () => {
     '',
     undefined,
     0,
+    false,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
   );
 });
@@ -472,6 +498,46 @@ test('pusher sends one mutation per push message', async () => {
       expectedMessages: 3,
     },
   ]);
+});
+
+test('pusher adjusts mutation timestamps to be unix timestamps', async () => {
+  const r = reflectForTest();
+  await r.triggerConnected();
+
+  const mockSocket = await r.socket;
+
+  clock.tick(300); // performance.now is 500, system time is startTime + 300
+
+  const mutations = [
+    {clientID: 'c1', id: 1, name: 'mut1', args: {d: 1}, timestamp: 100},
+    {clientID: 'c2', id: 1, name: 'mut1', args: {d: 2}, timestamp: 200},
+  ];
+  const requestID = 'test-request-id';
+
+  const pushReq: PushRequestV1 = {
+    profileID: 'p1',
+    clientGroupID: await r.clientGroupID,
+    pushVersion: 1,
+    schemaVersion: '1',
+    mutations,
+  };
+
+  mockSocket.messages.length = 0;
+
+  await r.pusher(pushReq, requestID);
+
+  expect(mockSocket.messages).to.have.lengthOf(mutations.length);
+
+  const msg0 = valita.parse(
+    JSON.parse(mockSocket.messages[0]),
+    pushMessageSchema,
+  );
+  expect(msg0[1].mutations[0].timestamp).to.equal(startTime + 100);
+  const msg1 = valita.parse(
+    JSON.parse(mockSocket.messages[1]),
+    pushMessageSchema,
+  );
+  expect(msg1[1].mutations[0].timestamp).to.equal(startTime + 200);
 });
 
 test('puller with mutation recovery pull, success response', async () => {
@@ -761,13 +827,25 @@ test('Authentication', async () => {
     log.length = 0;
   };
 
-  await emulateErrorWhenConnecting(0, 'auth-token', 0);
-  await emulateErrorWhenConnecting(5_000, 'auth-token', 5_000);
-  await emulateErrorWhenConnecting(5_000, 'auth-token', 10_000);
-  await emulateErrorWhenConnecting(5_000, 'auth-token', 15_000);
-  await emulateErrorWhenConnecting(5_000, 'new-auth-token-5', 20_000);
-  await emulateErrorWhenConnecting(5_000, 'new-auth-token-6', 25_000);
-  await emulateErrorWhenConnecting(5_000, 'new-auth-token-7', 30_000);
+  await emulateErrorWhenConnecting(0, 'auth-token', startTime);
+  await emulateErrorWhenConnecting(5_000, 'auth-token', startTime + 5_000);
+  await emulateErrorWhenConnecting(5_000, 'auth-token', startTime + 10_000);
+  await emulateErrorWhenConnecting(5_000, 'auth-token', startTime + 15_000);
+  await emulateErrorWhenConnecting(
+    5_000,
+    'new-auth-token-5',
+    startTime + 20_000,
+  );
+  await emulateErrorWhenConnecting(
+    5_000,
+    'new-auth-token-6',
+    startTime + 25_000,
+  );
+  await emulateErrorWhenConnecting(
+    5_000,
+    'new-auth-token-7',
+    startTime + 30_000,
+  );
 
   let socket: MockSocket | undefined;
   {
