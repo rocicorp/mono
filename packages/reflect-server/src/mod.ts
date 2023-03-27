@@ -3,7 +3,6 @@ import {DatadogLogSink} from 'datadog';
 
 export {
   createReflectServer,
-  createReflectServerWithoutAuthDO,
   ReflectServerOptions,
   ReflectServerBaseEnv,
 } from './server/reflect.js';
@@ -19,6 +18,7 @@ export {version} from './util/version.js';
 export const ROUTES = {
   reportMetrics: REPORT_METRICS_PATH,
 };
+export {createDatadogMetricsSink} from './server/datadog-metrics-sink.js';
 
 export type WorkerDatadogLogSinkOptions = {
   apiKey: string;

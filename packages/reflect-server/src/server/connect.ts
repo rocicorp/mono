@@ -14,7 +14,6 @@ import type {ConnectedMessage} from 'reflect-protocol';
 import type {UserData} from './auth.js';
 import {USER_DATA_HEADER_NAME} from './auth.js';
 import {decodeHeaderValue} from '../util/headers.js';
-import {addConnectedClient} from '../types/connected-clients.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {compareVersions, getVersion} from '../types/version.js';
 import type {NullableVersion, Version} from 'reflect-protocol';
@@ -130,7 +129,6 @@ export async function handleConnection(
   };
   await putClientRecord(clientID, record, storage);
   lc.debug?.('Put client record', record);
-  await addConnectedClient(clientID, storage);
 
   const existing = clients.get(clientID);
   if (existing) {

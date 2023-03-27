@@ -1,9 +1,10 @@
-import {describe, expect, jest, test} from '@jest/globals';
-import type {DatadogSeries} from '@rocicorp/datadog-util';
+import {test, expect, jest} from '@jest/globals';
 import type {LogLevel} from '@rocicorp/logger';
+import type {Series} from '../types/report-metrics.js';
 import {fail, Mocket, TestLogSink} from '../util/test-utils.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {AUTH_ROUTES} from './auth-do.js';
+import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
 import {
   createTestDurableObjectNamespace,
   TestDurableObjectId,
@@ -449,22 +450,20 @@ async function testPreflightRequest({
   );
 }
 
-describe('reportMetrics', () => {
+test('reportMetrics', async () => {
   const reportMetricsURL = new URL(
     REPORT_METRICS_PATH,
     'https://test.roci.dev/',
   );
-  const ddKey = 'datadog-secret-key-shhhhh';
   type TestCase = {
     name: string;
     method: string;
     body: undefined | Record<string, unknown>;
-    ddKey: string | undefined;
     expectedStatus: number;
     expectFetch: boolean;
   };
 
-  const series: DatadogSeries = {
+  const series: Series = {
     metric: 'metric1',
     points: [[1, [2]]],
   };
@@ -474,7 +473,6 @@ describe('reportMetrics', () => {
       name: 'good request',
       method: 'post',
       body: goodBody,
-      ddKey,
       expectedStatus: 200,
       expectFetch: true,
     },
@@ -482,23 +480,13 @@ describe('reportMetrics', () => {
       name: 'good request: empty series',
       method: 'post',
       body: {series: []},
-      ddKey,
       expectedStatus: 200,
-      expectFetch: false,
-    },
-    {
-      name: 'good request but server has no datadog key',
-      method: 'post',
-      body: goodBody,
-      ddKey: undefined,
-      expectedStatus: 503,
       expectFetch: false,
     },
     {
       name: 'bad method',
       method: 'get',
       body: goodBody,
-      ddKey,
       expectedStatus: 405,
       expectFetch: false,
     },
@@ -506,7 +494,6 @@ describe('reportMetrics', () => {
       name: 'malformed body: no body',
       method: 'post',
       body: undefined,
-      ddKey,
       expectedStatus: 400,
       expectFetch: false,
     },
@@ -514,7 +501,6 @@ describe('reportMetrics', () => {
       name: 'malformed body: empty body',
       method: 'post',
       body: {},
-      ddKey,
       expectedStatus: 400,
       expectFetch: false,
     },
@@ -522,68 +508,77 @@ describe('reportMetrics', () => {
       name: 'malformed body: no series',
       method: 'post',
       body: {foo: 'bar'},
-      ddKey,
       expectedStatus: 400,
       expectFetch: false,
     },
   ];
   for (const tc of testCases) {
-    testReportMetrics(tc);
+    await testReportMetrics(tc);
   }
 
-  function testReportMetrics(tc: TestCase) {
-    test(tc.name, async () => {
-      const fetchSpy = jest
-        .spyOn(globalThis, 'fetch')
-        .mockReturnValue(Promise.resolve(new Response('{}')));
+  async function testReportMetrics(tc: TestCase) {
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockReturnValue(Promise.resolve(new Response('{}')));
 
-      const testEnv: BaseWorkerEnv = {
-        authDO: {
-          ...createTestDurableObjectNamespace(),
-        },
-      };
+    const testEnv: BaseWorkerEnv = {
+      authDO: {
+        ...createTestDurableObjectNamespace(),
+      },
+    };
 
-      if (tc.ddKey) {
-        testEnv.REFLECT_DATADOG_API_KEY = tc.ddKey;
-      }
+    const worker = createWorker(() => ({
+      logSink: new TestLogSink(),
+      logLevel: 'error',
+      metricsSink: createDatadogMetricsSink({
+        apiKey: 'test-dd-key',
+        service: 'test-service',
+      }),
+    }));
 
-      const worker = createWorkerWithTestLogSink();
-      const testRequest = new Request(reportMetricsURL.toString(), {
-        method: tc.method,
-        body: tc.method === 'post' && tc.body ? JSON.stringify(tc.body) : null,
-      });
-      if (worker.fetch === undefined) {
-        throw new Error('Expect fetch to be defined');
-      }
-      const response = await worker.fetch(
-        testRequest,
-        testEnv,
-        new TestExecutionContext(),
-      );
-      if (response.status !== tc.expectedStatus) {
-        fail(
-          `Expected status ${tc.expectedStatus} but got ${response.status} ` +
-            `Response body: ${await response.text()}`,
-        );
-      }
-
-      if (tc.expectFetch) {
-        expect(fetchSpy).toHaveBeenCalledTimes(1);
-        const gotURL = fetchSpy.mock.calls[0][0];
-        expect(gotURL.toString()).toContain('api.datadoghq.com');
-        const gotOptions = fetchSpy.mock.calls[0][1];
-        expect(gotOptions).toEqual({
-          body: tc.body ? JSON.stringify(tc.body) : undefined,
-          // eslint-disable-next-line @typescript-eslint/naming-convention
-          headers: {'DD-API-KEY': ddKey, 'Content-Type': 'application/json'},
-          signal: null,
-          method: 'POST',
-        });
-      } else {
-        expect(fetchSpy).not.toHaveBeenCalled();
-      }
-
-      jest.resetAllMocks();
+    const testRequest = new Request(reportMetricsURL.toString(), {
+      method: tc.method,
+      body: tc.method === 'post' && tc.body ? JSON.stringify(tc.body) : null,
     });
+    if (worker.fetch === undefined) {
+      throw new Error('Expect fetch to be defined');
+    }
+    const response = await worker.fetch(
+      testRequest,
+      testEnv,
+      new TestExecutionContext(),
+    );
+    if (response.status !== tc.expectedStatus) {
+      fail(
+        `Expected status ${tc.expectedStatus} but got ${response.status} ` +
+          `Response body: ${await response.text()}`,
+      );
+    }
+
+    if (tc.expectFetch) {
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const gotURL = fetchSpy.mock.calls[0][0];
+      expect(gotURL.toString()).toContain('api.datadoghq.com');
+      const gotOptions = fetchSpy.mock.calls[0][1];
+      expect(gotOptions).toEqual({
+        body: tc.body
+          ? JSON.stringify({
+              ...tc.body,
+              series: (tc.body.series as Series[]).map(s => ({
+                ...s,
+                tags: [...(s.tags ?? []), 'service:test-service'],
+              })),
+            })
+          : undefined,
+        headers: {
+          'DD-API-KEY': 'test-dd-key',
+        },
+        method: 'POST',
+      });
+    } else {
+      expect(fetchSpy).not.toHaveBeenCalled();
+    }
+
+    jest.resetAllMocks();
   }
 });

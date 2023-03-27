@@ -1,5 +1,4 @@
 import type {LogLevel, LogSink, MaybePromise, MutatorDefs} from 'replicache';
-import type {Metrics} from './metrics.js';
 
 /**
  * Configuration for [[Reflect]].
@@ -14,8 +13,10 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   /**
    * Identifies and authenticates the user.
    *
-   * This string is passed to the `authHandler` function on the server, where
-   * it can be used to authenticate the user.
+   * This value is required when you provide a `authHandler` to your ReflectServer.
+   * During connection this value is passed to your provided `authHandler`, which should use it to
+   * authenticate the user. The `userID` returned by your `authHandler` for this value
+   * must be equal to [[ReflectOptions.userID]].
    *
    * In the case authentication fails, the connection to the server will be
    * closed and Reflect will retry connecting with exponential backoff.
@@ -24,21 +25,13 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * attempt. This provides the application the opportunity to calculate or
    * fetch a fresh token.
    */
-  auth: string | (() => MaybePromise<string>);
+  auth?: string | (() => MaybePromise<string>) | undefined;
 
   /**
-   * A unique identifier for the user authenticated by
-   * [[ReflectOptions.auth]]. Must be non-empty.
-   *
-   * This must be the same as the `userID` returned by the `authHandler` you
-   * provide to the Reflect server.
+   * A unique identifier for the user. Must be non-empty.
    *
    * For efficiency, a new Reflect instance will initialize its state from
    * the persisted state of an existing Reflect instance with the same
-   * `userID`, `roomID`, domain and browser profile.
-   *
-   * Mutations from one Reflect instance may be pushed using the
-   * [[Reflect.auth]] of another Reflect instance with the same
    * `userID`, `roomID`, domain and browser profile.
    */
   userID: string;
@@ -165,30 +158,7 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   onOnlineChange?: ((online: boolean) => void) | undefined;
 
   /**
-   * metrics is the interface by which Reflect instantiates metrics
-   * to record important events.
-   *
-   * It is expected that the caller has arranged for the Metrics to be periodically
-   * reported to a server. Reflect server offers an endpoint to receive metrics from
-   * the client and report them to Datadog (datadog does not support CORS so metrics
-   * cannot be directly submitted). You can use
-   *  https://github.com/rocicorp/datadog-util
-   * as the concrete implementation to record metrics and report them.
-   *
-   * ```ts
-   * const metrics = new Metrics();
-   * const reporter = new Reporter({
-   *   metrics,
-   *   url: '<reflect server url>/api/metrics/v0/report',
-   *   headers: { [DD_AUTH_HEADER_NAME]: '<your-datadog-api-key>'},
-   * });
-   * const reflect = new Reflect({
-   *   ...
-   *   metrics,
-   * });
-   * ```
-   *
-   * If metrics is undefined, the default implementation is a no-op.
+   * How often to send metrics to the server. Default is 120*1000 (120 seconds).
    */
-  metrics?: Metrics | undefined;
+  metricsIntervalMs?: number | undefined;
 }

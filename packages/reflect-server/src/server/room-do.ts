@@ -21,7 +21,6 @@ import {
 import {closeConnections, getConnections} from './connections.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {getConnectedClients} from '../types/connected-clients.js';
 import * as valita from 'shared/valita.js';
 import {createRoomRequestSchema} from 'reflect-protocol';
 import {
@@ -268,9 +267,9 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     serverWS.accept();
 
     void this._lock
-      .withLock(() => {
+      .withLock(async () => {
         lc.debug?.('received lock');
-        return handleConnection(
+        await handleConnection(
           lc,
           serverWS,
           this._storage,
@@ -280,6 +279,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
           this._handleMessage,
           this._handleClose,
         );
+        this._processUntilDone(lc);
       })
       .catch(e => {
         lc.error?.('unhandled exception in handleConnection', e);
@@ -393,33 +393,21 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     );
     await this._lock.withLock(async () => {
       lc.debug?.(`received lock at ${Date.now()}`);
-
-      const storedConnectedClients = await getConnectedClients(this._storage);
-      let hasDisconnectsToProcess = false;
-      for (const clientID of storedConnectedClients) {
-        if (!this._clients.has(clientID)) {
-          hasDisconnectsToProcess = true;
-          break;
-        }
+      const {maxProcessedMutationTimestamp, nothingToProcess} =
+        await processPending(
+          lc,
+          this._storage,
+          this._clients,
+          this._pendingMutations,
+          this._mutators,
+          this._disconnectHandler,
+          this._maxProcessedMutationTimestamp,
+        );
+      this._maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
+      if (nothingToProcess && this._turnTimerID) {
+        clearInterval(this._turnTimerID);
+        this._turnTimerID = 0;
       }
-      if (this._pendingMutations.length === 0 && !hasDisconnectsToProcess) {
-        lc.debug?.('No pending mutations or disconnects to process, exiting');
-        if (this._turnTimerID) {
-          clearInterval(this._turnTimerID);
-          this._turnTimerID = 0;
-        }
-        return;
-      }
-
-      this._maxProcessedMutationTimestamp = await processPending(
-        lc,
-        this._storage,
-        this._clients,
-        this._pendingMutations,
-        this._mutators,
-        this._disconnectHandler,
-        this._maxProcessedMutationTimestamp,
-      );
     });
   }
 

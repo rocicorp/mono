@@ -3,27 +3,30 @@ import type {MutatorDefs} from 'replicache';
 import {BaseAuthDO} from './auth-do.js';
 import type {AuthHandler} from './auth.js';
 import type {DisconnectHandler} from './disconnect.js';
-import {createNoAuthDOWorker} from './no-auth-do-worker.js';
 import {BaseRoomDO} from './room-do.js';
-import {createWorker} from './worker.js';
+import {createWorker, MetricsSink} from './worker.js';
 
 export interface ReflectServerOptions<MD extends MutatorDefs> {
   mutators: MD;
-  authHandler: AuthHandler;
+  authHandler?: AuthHandler | undefined;
 
   disconnectHandler?: DisconnectHandler | undefined;
 
   /**
-   * The log sinks. If you need access to the `Env` you can use a function form
-   * when calling {@link createReflectServer}.
+   * Where to send logs. By default logs are sent to `console.log`.
    */
   logSinks?: LogSink[] | undefined;
 
   /**
-   * The level to log at. If you need access to the `Env` you can use a function
-   * form when calling {@link createReflectServer}.
+   * The level to log at. By default the level is 'info'.
    */
   logLevel?: LogLevel | undefined;
+
+  /**
+   * Where to send metrics. By default metrics are sent nowhere. A Datadog implementation
+   * exists at {@link createDatadogMetricsSink}.
+   */
+  metricsSink?: MetricsSink | undefined;
 
   /**
    * If `true`, outgoing network messages are sent before the writes they
@@ -41,10 +44,11 @@ export interface ReflectServerOptions<MD extends MutatorDefs> {
  */
 export type NormalizedOptions<MD extends MutatorDefs> = {
   mutators: MD;
-  authHandler: AuthHandler;
+  authHandler?: AuthHandler | undefined;
   disconnectHandler: DisconnectHandler;
   logSink: LogSink;
   logLevel: LogLevel;
+  metricsSink?: MetricsSink | undefined;
   allowUnconfirmedWrites: boolean;
 };
 
@@ -97,24 +101,6 @@ export function createReflectServer<
   return {worker, RoomDO: roomDOClass, AuthDO: authDOClass};
 }
 
-export function createReflectServerWithoutAuthDO<
-  Env extends ReflectServerBaseEnv,
-  MD extends MutatorDefs,
->(
-  options: ReflectServerOptions<MD> | ((env: Env) => ReflectServerOptions<MD>),
-): {
-  worker: ExportedHandler<Env>;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  RoomDO: DurableObjectCtor<Env>;
-} {
-  const normalizedOptionsGetter = makeNormalizedOptionsGetter(options);
-  const roomDOClass = createRoomDOClass(normalizedOptionsGetter);
-  const worker = createNoAuthDOWorker<Env>(normalizedOptionsGetter);
-
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  return {worker, RoomDO: roomDOClass};
-}
-
 type GetNormalizedOptions<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
@@ -145,6 +131,7 @@ export function makeNormalizedOptionsGetter<
       logSinks,
       logLevel = 'debug',
       allowUnconfirmedWrites = false,
+      metricsSink = undefined,
     } = typeof options === 'function' ? options(env) : options;
     logSink = logSinks ? combineLogSinks(logSinks) : consoleLogSink;
     normalizedOptions = {
@@ -154,6 +141,7 @@ export function makeNormalizedOptionsGetter<
       logSink,
       logLevel,
       allowUnconfirmedWrites,
+      metricsSink,
     };
     return normalizedOptions;
   };

@@ -44,10 +44,9 @@ import {getDocumentVisibilityWatcher} from './document-visible.js';
 import {
   camelToSnake,
   DID_NOT_CONNECT_VALUE,
-  Gauge,
-  Metric,
-  NopMetrics,
-  State,
+  MetricManager,
+  REPORT_INTERVAL_MS,
+  Series,
 } from './metrics.js';
 import type {ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
@@ -129,11 +128,6 @@ export class Reflect<MD extends MutatorDefs> {
   // This is a promise because it is waiting for the clientID from the
   // Replicache instance.
   private readonly _l: Promise<LogContext>;
-
-  private readonly _metrics: {
-    timeToConnectMs: Gauge;
-    lastConnectError: State;
-  };
 
   private readonly _pokeHandler: PokeHandler;
 
@@ -227,12 +221,20 @@ export class Reflect<MD extends MutatorDefs> {
 
   readonly #options: ReflectOptions<MD>;
 
+  private _metrics: MetricManager;
+
   /**
    * Constructs a new Reflect client.
    */
   constructor(options: ReflectOptions<MD>) {
-    const {userID, roomID, socketOrigin, onOnlineChange, jurisdiction} =
-      options;
+    const {
+      userID,
+      roomID,
+      socketOrigin,
+      onOnlineChange,
+      jurisdiction,
+      metricsIntervalMs,
+    } = options;
     if (!userID) {
       throw new Error('ReflectOptions.userID must not be empty.');
     }
@@ -251,40 +253,6 @@ export class Reflect<MD extends MutatorDefs> {
 
     this.onOnlineChange = onOnlineChange;
     this.#options = options;
-
-    const metrics = options.metrics ?? new NopMetrics();
-    this._metrics = {
-      // timeToConnectMs measures the time from the call to connect() to receiving
-      // the 'connected' ws message. We record the DID_NOT_CONNECT_VALUE if the previous
-      // connection attempt failed for any reason.
-      //
-      // We set the gauge using _connectingStart as follows:
-      // - _connectingStart is undefined if we are disconnected or connected; it is
-      //   defined only in the Connecting state, as a number representing the timestamp
-      //   at which we started connecting.
-      // - _connectingStart is set to the current time when connect() is called.
-      // - When we receive the 'connected' message we record the time to connect and
-      //   set _connectingStart to undefined.
-      // - If disconnect() is called with a defined _connectingStart then we record
-      //   DID_NOT_CONNECT_VALUE and set _connectingStart to undefined.
-      //
-      // TODO It's clear after playing with the connection code we should encapsulate
-      // the ConnectionState along with its state transitions and possibly behavior.
-      // In that world the metric gauge(s) and bookkeeping like _connectingStart would
-      // be encapsulated with the ConnectionState. This will probably happen as part
-      // of https://github.com/rocicorp/reflect-server/issues/255.
-      timeToConnectMs: metrics.gauge(Metric.TimeToConnectMs),
-
-      // lastConnectError records the last error that occurred when connecting,
-      // if any. It is cleared when connecting successfully or when reported, so this
-      // state only gets reported if there was a failure during the reporting period and
-      // we are still not connected.
-      lastConnectError: metrics.state(
-        Metric.LastConnectError,
-        true, // clearOnFlush
-      ),
-    };
-    this._metrics.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
 
     const replicacheOptions: ReplicacheOptions<MD> = {
       schemaVersion: options.schemaVersion,
@@ -317,6 +285,15 @@ export class Reflect<MD extends MutatorDefs> {
     this.userID = userID;
     this._jurisdiction = jurisdiction;
     this._l = getLogContext(options, this._rep);
+
+    this._metrics = new MetricManager({
+      reportIntervalMs: metricsIntervalMs ?? REPORT_INTERVAL_MS,
+      host: location.host,
+      source: 'client',
+      reporter: allSeries => this._reportMetrics(allSeries),
+      lc: this._l,
+    });
+
     this._pokeHandler = new PokeHandler(
       pokeDD31 => this._rep.poke(pokeDD31),
       () => this._onOutOfOrderPoke(),
@@ -616,6 +593,7 @@ export class Reflect<MD extends MutatorDefs> {
       await this.clientID,
       await this.clientGroupID,
       this.roomID,
+      this.userID,
       this._rep.auth,
       this._jurisdiction,
       this._lastMutationIDReceived,
@@ -807,15 +785,17 @@ export class Reflect<MD extends MutatorDefs> {
     };
   }
 
-  #getAuthToken = (): MaybePromise<string> => {
+  #getAuthToken = (): MaybePromise<string> | undefined => {
     const {auth} = this.#options;
     return typeof auth === 'function' ? auth() : auth;
   };
 
   async #updateAuthToken(lc: LogContext): Promise<void> {
     const auth = await this.#getAuthToken();
-    lc.debug?.('Got auth token');
-    this._rep.auth = auth;
+    if (auth) {
+      lc.debug?.('Got auth token');
+      this._rep.auth = auth;
+    }
   }
 
   private async _runLoop() {
@@ -1094,6 +1074,25 @@ export class Reflect<MD extends MutatorDefs> {
     }
   }
 
+  // Sends a set of metrics to the server. Throws unless the server
+  // returns 200.
+  private async _reportMetrics(allSeries: Series[]) {
+    const body = JSON.stringify({series: allSeries});
+    const url = new URL('/api/metrics/v0/report', this._socketOrigin);
+    url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      body,
+      keepalive: true,
+    });
+    if (!res.ok) {
+      const maybeBody = await res.text();
+      throw new Error(
+        `unexpected response: ${res.status} ${res.statusText} body: ${maybeBody}`,
+      );
+    }
+  }
+
   // Total hack to get base cookie, see _puller for how the promise is resolved.
   private _getBaseCookie(): Promise<NullableVersion> {
     this._baseCookieResolver ??= resolver();
@@ -1108,7 +1107,8 @@ export function createSocket(
   clientID: string,
   clientGroupID: string,
   roomID: string,
-  auth: string,
+  userID: string,
+  auth: string | undefined,
   jurisdiction: 'eu' | undefined,
   lmid: number,
   wsid: string,
@@ -1120,6 +1120,7 @@ export function createSocket(
   searchParams.set('clientID', clientID);
   searchParams.set('clientGroupID', clientGroupID);
   searchParams.set('roomID', roomID);
+  searchParams.set('userID', userID);
   if (jurisdiction !== undefined) {
     searchParams.set('jurisdiction', jurisdiction);
   }
@@ -1132,7 +1133,10 @@ export function createSocket(
   // invalid `protocol`, and will result in an exception, so pass undefined
   // instead.  encodeURIComponent to ensure it only contains chars allowed
   // for a `protocol`.
-  return new WebSocket(url, auth === '' ? undefined : encodeURIComponent(auth));
+  return new WebSocket(
+    url,
+    auth === '' || auth === undefined ? undefined : encodeURIComponent(auth),
+  );
 }
 
 async function getLogContext<MD extends MutatorDefs>(
