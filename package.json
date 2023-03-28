@@ -32,8 +32,8 @@
   },
   "dependencies": {
     "@rocicorp/logger": "^2.2.0",
-    "@rocicorp/reflect": "./vendor/rocicorp-reflect-0.13.0-beta.0.tgz",
-    "@rocicorp/reflect-server": "./vendor/rocicorp-reflect-server-0.22.0-beta.0.tgz",
+    "@rocicorp/reflect": "^0.13.1",
+    "@rocicorp/reflect-server": "^0.22.0",
     "base-64": "^1.0.0",
     "nanoid": "^3.3.4",
     "react-range": "^1.8.14",
