@@ -26,14 +26,14 @@
     "worker-logs-prod": "npm run wrangler-prod -- tail",
     "wrangler-staging": "npx wrangler --config wrangler-staging.toml",
     "wrangler-prod": "npx wrangler --config wrangler.toml",
-    "update-reflect": "./build-latest-reflect.sh; npm run nuke-it-from-orbit",
-    "update-reflect-pull": "./build-latest-reflect.sh pull; npm run nuke-it-from-orbit",
+    "update-reflect": "./build-latest-reflect.sh",
+    "update-reflect-pull": "./build-latest-reflect.sh pull",
     "prepare": "husky install"
   },
   "dependencies": {
     "@rocicorp/logger": "^2.2.0",
-    "@rocicorp/reflect": "^0.13.1",
-    "@rocicorp/reflect-server": "^0.22.0",
+    "@rocicorp/reflect": "file:vendor/rocicorp-reflect-0.13.0-beta.0-1680041033.tgz",
+    "@rocicorp/reflect-server": "file:vendor/rocicorp-reflect-server-0.22.0-beta.0-1680041033.tgz",
     "base-64": "^1.0.0",
     "nanoid": "^3.3.4",
     "react-range": "^1.8.14",
