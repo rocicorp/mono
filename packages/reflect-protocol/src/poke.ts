@@ -11,11 +11,15 @@ export const pokeSchema = v.object({
   lastMutationIDChanges: v.record(v.number()),
   patch: patchSchema,
   timestamp: v.number().optional(),
+  // Set when client's connect request has debugPerf=true
+  debugOriginTimestamp: v.number().optional(),
 });
 
 export const pokeBodySchema = v.object({
   pokes: v.array(pokeSchema),
   requestID: v.string(),
+  // Set when client's connect request has debugPerf=true
+  debugServerBufferMs: v.number().optional(),
 });
 export const pokeMessageSchema = v.tuple([v.literal('poke'), pokeBodySchema]);
 

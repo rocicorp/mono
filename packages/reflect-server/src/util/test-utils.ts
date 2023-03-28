@@ -28,6 +28,7 @@ export function client(
   clientGroupID: ClientGroupID,
   socket: Socket = new Mocket(),
   clockBehindByMs?: number | undefined,
+  debugPerf = false,
 ): [ClientID, ClientState] {
   return [
     id,
@@ -36,6 +37,7 @@ export function client(
       userData: {userID},
       clientGroupID,
       clockOffsetMs: clockBehindByMs,
+      debugPerf,
     },
   ];
 }
@@ -60,7 +62,13 @@ export function pendingMutation(opts: {
   clientID: ClientID;
   clientGroupID: ClientGroupID;
   id: number;
-  timestamp: number | undefined;
+  timestamps:
+    | {
+        normalizedTimestamp: number;
+        originTimestamp: number;
+      }
+    | number
+    | undefined;
   pusherClientIDs?: Set<ClientID>;
   name?: string;
   args?: ReadonlyJSONValue;
@@ -69,7 +77,7 @@ export function pendingMutation(opts: {
     clientID,
     clientGroupID,
     id,
-    timestamp,
+    timestamps,
     pusherClientIDs = new Set([clientID]),
     name = 'foo',
     args = [],
@@ -80,7 +88,10 @@ export function pendingMutation(opts: {
     id,
     name,
     args,
-    timestamp,
+    timestamps:
+      typeof timestamps === 'number'
+        ? {normalizedTimestamp: timestamps, originTimestamp: timestamps}
+        : timestamps,
     pusherClientIDs,
   };
 }

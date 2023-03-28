@@ -8,7 +8,7 @@ import {
   ClientRecordMap,
   putClientRecord,
 } from '../../src/types/client-record.js';
-import type {ClientID} from '../../src/types/client-state.js';
+import type {ClientID, ClientMap} from '../../src/types/client-state.js';
 import {UserValue, userValueKey} from '../../src/types/user-value.js';
 import {versionKey} from '../../src/types/version.js';
 import {processFrame} from '../process/process-frame.js';
@@ -19,6 +19,7 @@ import {
 } from '../types/connected-clients.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {
+  client,
   clientRecord,
   createSilentLogContext,
   mockMathRandom,
@@ -39,7 +40,7 @@ test('processFrame', async () => {
   type Case = {
     name: string;
     pendingMutations: PendingMutation[];
-    clients: ClientID[];
+    clients: ClientMap;
     clientRecords: ClientRecordMap;
     storedConnectedClients: ClientID[];
     expectedPokes: ClientPoke[];
@@ -74,7 +75,7 @@ test('processFrame', async () => {
     {
       name: 'no mutations, no clients',
       pendingMutations: [],
-      clients: [],
+      clients: new Map(),
       clientRecords: records,
       storedConnectedClients: [],
       expectedPokes: [],
@@ -87,7 +88,7 @@ test('processFrame', async () => {
     {
       name: 'no mutations, one client',
       pendingMutations: [],
-      clients: ['c1'],
+      clients: new Map([client('c1', 'u1', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1'],
       expectedPokes: [],
@@ -104,12 +105,12 @@ test('processFrame', async () => {
           clientID: 'c1',
           clientGroupID: 'cg1',
           id: 2,
-          timestamp: 100,
+          timestamps: 100,
           name: 'put',
           args: {key: 'foo', value: 'bar'},
         }),
       ],
-      clients: ['c1'],
+      clients: new Map([client('c1', 'u1', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1'],
       expectedPokes: [
@@ -148,12 +149,12 @@ test('processFrame', async () => {
           clientID: 'c1',
           clientGroupID: 'cg1',
           id: 2,
-          timestamp: 100,
+          timestamps: 100,
           name: 'put',
           args: {key: 'foo', value: 'bar'},
         }),
       ],
-      clients: ['c1', 'c2'],
+      clients: new Map([client('c1', 'u1', 'cg1'), client('c2', 'u2', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1', 'c2'],
       expectedPokes: [
@@ -203,13 +204,81 @@ test('processFrame', async () => {
       disconnectHandlerThrows: false,
     },
     {
+      name: 'one mutation, two clients, debugPerf',
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamps: {
+            normalizedTimestamp: 100,
+            originTimestamp: 1000,
+          },
+          name: 'put',
+          args: {key: 'foo', value: 'bar'},
+        }),
+      ],
+      clients: new Map([
+        client('c1', 'u1', 'cg1', undefined, undefined, true /* debugPerf */),
+        client('c2', 'u2', 'cg1'),
+      ]),
+      clientRecords: records,
+      storedConnectedClients: ['c1', 'c2'],
+      expectedPokes: [
+        {
+          clientID: 'c1',
+          poke: {
+            baseCookie: startVersion,
+            cookie: startVersion + 1,
+            lastMutationIDChanges: {c1: 2},
+            patch: [
+              {
+                op: 'put',
+                key: 'foo',
+                value: 'bar',
+              },
+            ],
+            timestamp: 100,
+            debugOriginTimestamp: 1000,
+          },
+        },
+        {
+          clientID: 'c2',
+          poke: {
+            baseCookie: startVersion,
+            cookie: startVersion + 1,
+            lastMutationIDChanges: {c1: 2},
+            patch: [
+              {
+                op: 'put',
+                key: 'foo',
+                value: 'bar',
+              },
+            ],
+            timestamp: 100,
+          },
+        },
+      ],
+      expectedUserValues: new Map([
+        ['foo', userValue('bar', startVersion + 1)],
+      ]),
+      expectedClientRecords: new Map([
+        ...records,
+        ['c1', clientRecord('cg1', startVersion + 1, 2, startVersion + 1)],
+        ['c2', clientRecord('cg1', startVersion + 1, 7, startVersion)],
+      ]),
+      expectedVersion: startVersion + 1,
+      expectedDisconnectedClients: [],
+      disconnectHandlerThrows: false,
+    },
+    {
       name: 'two mutations, three clients, two client groups',
       pendingMutations: [
         pendingMutation({
           clientID: 'c1',
           clientGroupID: 'cg1',
           id: 2,
-          timestamp: 100,
+          timestamps: 100,
           name: 'put',
           args: {key: 'foo', value: 'bar'},
         }),
@@ -217,7 +286,7 @@ test('processFrame', async () => {
           clientID: 'c3',
           clientGroupID: 'cg2',
           id: 8,
-          timestamp: 120,
+          timestamps: 120,
           name: 'put',
           args: {
             key: 'fuzzy',
@@ -225,7 +294,11 @@ test('processFrame', async () => {
           },
         }),
       ],
-      clients: ['c1', 'c2', 'c3'],
+      clients: new Map([
+        client('c1', 'u1', 'cg1'),
+        client('c2', 'u2', 'cg1'),
+        client('c3', 'u3', 'cg2'),
+      ]),
       clientRecords: records,
       storedConnectedClients: ['c1', 'c2', 'c3'],
       expectedPokes: [
@@ -347,7 +420,7 @@ test('processFrame', async () => {
           clientID: 'c1',
           clientGroupID: 'cg1',
           id: 2,
-          timestamp: 100,
+          timestamps: 100,
           name: 'put',
           args: {key: 'foo', value: 'bar'},
         }),
@@ -355,12 +428,12 @@ test('processFrame', async () => {
           clientID: 'c1',
           clientGroupID: 'cg1',
           id: 3,
-          timestamp: 120,
+          timestamps: 120,
           name: 'put',
           args: {key: 'foo', value: 'baz'},
         }),
       ],
-      clients: ['c1'],
+      clients: new Map([client('c1', 'u1', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1'],
       expectedPokes: [
@@ -411,7 +484,7 @@ test('processFrame', async () => {
     {
       name: 'no mutations, no clients, 1 client disconnects',
       pendingMutations: [],
-      clients: [],
+      clients: new Map(),
       clientRecords: records,
       storedConnectedClients: ['c1'],
       expectedPokes: [],
@@ -426,7 +499,7 @@ test('processFrame', async () => {
     {
       name: 'no mutations, no clients, 1 client disconnects, disconnect handler throws',
       pendingMutations: [],
-      clients: [],
+      clients: new Map(),
       clientRecords: records,
       storedConnectedClients: ['c1'],
       // No user values or pokes because only write was in disconnect handler which threw
@@ -441,7 +514,7 @@ test('processFrame', async () => {
     {
       name: 'no mutations, 1 client, 1 client disconnected',
       pendingMutations: [],
-      clients: ['c2'],
+      clients: new Map([client('c2', 'u2', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1', 'c2'],
       expectedPokes: [
@@ -476,7 +549,7 @@ test('processFrame', async () => {
     {
       name: 'no mutations, 1 client, 2 clients disconnected',
       pendingMutations: [],
-      clients: ['c2'],
+      clients: new Map([client('c2', 'u2', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1', 'c2', 'c3'],
       expectedPokes: [
@@ -521,12 +594,12 @@ test('processFrame', async () => {
           clientID: 'c1',
           clientGroupID: 'cg1',
           id: 2,
-          timestamp: 100,
+          timestamps: 100,
           name: 'put',
           args: {key: 'foo', value: 'bar'},
         }),
       ],
-      clients: ['c1', 'c2'],
+      clients: new Map([client('c1', 'u1', 'cg1'), client('c2', 'u2', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1', 'c2', 'c3'],
       expectedPokes: [
@@ -658,7 +731,7 @@ test('processFrame', async () => {
         ]),
       ),
       [versionKey, c.expectedVersion],
-      [connectedClientsKey, c.clients],
+      [connectedClientsKey, [...c.clients.keys()]],
     ]);
 
     expect((await durable.list()).size).toEqual(expectedState.size);

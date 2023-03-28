@@ -52,8 +52,8 @@ export async function processPending(
   const t0 = Date.now();
   const tooNewIndex = pendingMutations.findIndex(
     pendingM =>
-      pendingM.timestamp !== undefined &&
-      pendingM.timestamp > t0 - PENDING_ORDER_BUFFER_MS,
+      pendingM.timestamps !== undefined &&
+      pendingM.timestamps.normalizedTimestamp > t0 - PENDING_ORDER_BUFFER_MS,
   );
   const endIndex = tooNewIndex !== -1 ? tooNewIndex : pendingMutations.length;
   const toProcess = pendingMutations.slice(0, endIndex);
@@ -63,8 +63,9 @@ export async function processPending(
       : toProcess.reduce(
           (sum, pendingM) =>
             sum +
-            (pendingM.timestamp !== undefined &&
-            pendingM.timestamp < maxProcessedMutationTimestamp
+            (pendingM.timestamps !== undefined &&
+            pendingM.timestamps.normalizedTimestamp <
+              maxProcessedMutationTimestamp
               ? 1
               : 0),
           0,
@@ -96,7 +97,8 @@ export async function processPending(
   return {
     nothingToProcess: false,
     maxProcessedMutationTimestamp: toProcess.reduce<number>(
-      (max, processed) => Math.max(max, processed.timestamp ?? max),
+      (max, processed) =>
+        Math.max(max, processed.timestamps?.normalizedTimestamp ?? max),
       maxProcessedMutationTimestamp,
     ),
   };
@@ -123,6 +125,9 @@ function sendPokes(
       {
         pokes,
         requestID: randomID(),
+        debugServerBufferMs: client.debugPerf
+          ? PENDING_ORDER_BUFFER_MS
+          : undefined,
       },
     ];
     lc.debug?.('sending client', clientID, 'poke', pokeMessage);
