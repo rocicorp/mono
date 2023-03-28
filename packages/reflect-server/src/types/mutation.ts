@@ -13,6 +13,7 @@ export type PendingMutation = {
     | {
         normalizedTimestamp: number;
         originTimestamp: number;
+        serverReceivedTimestamp: number;
       }
     | undefined;
 };
