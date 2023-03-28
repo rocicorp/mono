@@ -3,6 +3,7 @@
 
 const external = [
   'node:*',
+  '@badrap/valita',
   '@rocicorp/datadog-util',
   '@rocicorp/lock',
   '@rocicorp/logger',
