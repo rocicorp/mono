@@ -26,8 +26,8 @@
     "worker-logs-prod": "npm run wrangler-prod -- tail",
     "wrangler-staging": "npx wrangler --config wrangler-staging.toml",
     "wrangler-prod": "npx wrangler --config wrangler.toml",
-    "update-reflect": "./build-latest-reflect.sh",
-    "update-reflect-pull": "npm run update-reflect -- pull",
+    "update-reflect": "./build-latest-reflect.sh; npm run nuke-it-from-orbit",
+    "update-reflect-pull": "./build-latest-reflect.sh pull; npm run nuke-it-from-orbit",
     "prepare": "husky install"
   },
   "dependencies": {
