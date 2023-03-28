@@ -32,6 +32,7 @@ export class PokeHandler {
   private readonly _pokeBuffer: PendingPoke[] = [];
   private readonly _bufferSizer: BufferSizer;
   private _pokePlaybackLoopRunning = false;
+  private _lastRafPerfTimestamp = 0;
   private _playbackOffsetMs: number | undefined = undefined;
   // Serializes calls to this._replicachePoke otherwise we can cause out of
   // order poke errors.
@@ -119,8 +120,10 @@ export class PokeHandler {
     lc.debug?.('starting playback loop');
     this._pokePlaybackLoopRunning = true;
     const rafCallback = async () => {
-      const now = Math.floor(performance.now());
-      const rafLC = (await this._lcPromise).addContext('rafAt', now);
+      const rafLC = (await this._lcPromise).addContext(
+        'rafAt',
+        Math.floor(performance.now()),
+      );
       if (this._pokeBuffer.length === 0) {
         rafLC.debug?.('stopping playback loop');
         this._pokePlaybackLoopRunning = false;
@@ -128,7 +131,11 @@ export class PokeHandler {
       }
       requestAnimationFrame(rafCallback);
       const start = performance.now();
-      rafLC.debug?.('raf fired, processing pokes');
+      rafLC.debug?.(
+        'raf fired, processing pokes.  Since last raf',
+        start - this._lastRafPerfTimestamp,
+      );
+      this._lastRafPerfTimestamp = start;
       await this._processPokesForFrame(rafLC);
       rafLC.debug?.('processing pokes took', performance.now() - start);
     };
