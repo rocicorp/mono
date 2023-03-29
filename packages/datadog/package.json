@@ -8,10 +8,10 @@
     "@rocicorp/lock": "^1.0.1",
     "@rocicorp/logger": "^4.1.0",
     "@rocicorp/prettier-config": "^0.1.1",
-    "@types/jest": "^27.5.0",
+    "@types/jest": "^29.4.2",
     "@types/node-fetch": "^2.6.2",
     "cross-fetch": "^3.1.5",
-    "replicache": "*",
+    "replicache": "12.0.1",
     "ts-jest": "^29.0.5",
     "typescript": "^4.9.5"
   },
