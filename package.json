@@ -45,6 +45,7 @@
     "@babylonjs/loaders": "5.46.0",
     "@cloudflare/workers-types": "^3.11.0",
     "@datadog/browser-logs": "^4.11.3",
+    "@miniflare/tre": "^3.0.0-next.12",
     "@next/font": "13.1.5",
     "@rocicorp/eslint-config": "^0.2.0",
     "@rocicorp/prettier-config": "^0.1.1",
