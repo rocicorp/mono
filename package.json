@@ -37,7 +37,8 @@
     "base-64": "^1.0.0",
     "nanoid": "^3.3.4",
     "react-range": "^1.8.14",
-    "react-syntax-highlighter": "^15.5.0"
+    "react-syntax-highlighter": "^15.5.0",
+    "replicache-react": "^2.10.1"
   },
   "devDependencies": {
     "@babylonjs/core": "5.46.0",
