@@ -29,4 +29,6 @@ export type {
 export {
   initCollectIDBDatabases,
   deleteAllReplicacheData,
+  dropAllDatabases,
+  dropDatabase,
 } from './collect-idb-databases.js';
