@@ -42,7 +42,6 @@ export function initCollectIDBDatabases(
     async () => {
       await collectIDBDatabases(
         idbDatabasesStore,
-        signal,
         Date.now(),
         MAX_AGE,
         DD31_MAX_AGE,
@@ -62,7 +61,6 @@ export function initCollectIDBDatabases(
 
 export async function collectIDBDatabases(
   idbDatabasesStore: IDBDatabasesStore,
-  signal: AbortSignal,
   now: number,
   maxAge: number,
   dd31MaxAge: number,
@@ -85,27 +83,29 @@ export async function collectIDBDatabases(
     .filter(result => result[1])
     .map(result => result[0]);
 
-  const {errors} = await dropDatabases(
-    idbDatabasesStore,
-    namesToRemove,
-    signal,
-  );
-
+  const {errors} = await dropDatabases(idbDatabasesStore, namesToRemove);
   if (errors.length) {
     throw errors[0];
   }
 }
 
+async function dropDatabaseInternal(
+  name: string,
+  idbDatabasesStore: IDBDatabasesStore,
+) {
+  await dropStore(name);
+  await idbDatabasesStore.deleteDatabases([name]);
+}
+
 async function dropDatabases(
   idbDatabasesStore: IDBDatabasesStore,
   namesToRemove: string[],
-  signal?: AbortSignal,
 ): Promise<{dropped: string[]; errors: unknown[]}> {
   // Try to remove the databases in parallel. Don't let a single reject fail the
   // other ones. We will check for failures afterwards.
   const dropStoreResults = await Promise.allSettled(
     namesToRemove.map(async name => {
-      await dropStore(name);
+      await dropDatabaseInternal(name, idbDatabasesStore);
       return name;
     }),
   );
@@ -118,11 +118,6 @@ async function dropDatabases(
     } else {
       errors.push(result.reason);
     }
-  }
-
-  if (dropped.length && !signal?.aborted) {
-    // Remove the database name from the meta table.
-    await idbDatabasesStore.deleteDatabases(dropped);
   }
 
   return {dropped, errors};
@@ -188,12 +183,25 @@ function allClientsOlderThan(
 }
 
 /**
+ * Deletes a single Replicache database.
+ * @param dbName
+ * @param createKVStore
+ */
+export async function dropDatabase(
+  dbName: string,
+  createKVStore: kv.CreateStore = name =>
+    kv.newIDBStoreWithMemFallback(new LogContext(), name),
+) {
+  await dropDatabaseInternal(dbName, new IDBDatabasesStore(createKVStore));
+}
+
+/**
  * Deletes all IndexedDB data associated with Replicache.
  *
  * Returns an object with the names of the successfully dropped databases
  * and any errors encountered while dropping.
  */
-export async function deleteAllReplicacheData(
+export async function dropAllDatabases(
   createKVStore: kv.CreateStore = name =>
     kv.newIDBStoreWithMemFallback(new LogContext(), name),
 ): Promise<{
@@ -205,12 +213,22 @@ export async function deleteAllReplicacheData(
   const dbNames = Object.values(databases).map(db => db.name);
 
   const result = await dropDatabases(store, dbNames);
-
-  if (result.dropped.length) {
-    await store.deleteDatabases(result.dropped);
-  }
-
   return result;
+}
+
+/**
+ * Deletes all IndexedDB data associated with Replicache.
+ *
+ * Returns an object with the names of the successfully dropped databases
+ * and any errors encountered while dropping.
+ *
+ * @deprecated Use `dropAllDatabases` instead.
+ */
+export function deleteAllReplicacheData(
+  createKVStore: kv.CreateStore = name =>
+    kv.newIDBStoreWithMemFallback(new LogContext(), name),
+) {
+  return dropAllDatabases(createKVStore);
 }
 
 async function anyPendingMutationsInClientGroups(

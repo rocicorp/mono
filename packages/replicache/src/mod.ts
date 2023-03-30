@@ -109,7 +109,11 @@ export type {
 
 export {mergeAsyncIterables} from './merge-async-iterables.js';
 export {filterAsyncIterable} from './filter-async-iterable.js';
-export {deleteAllReplicacheData} from './persist/mod.js';
+export {
+  dropAllDatabases,
+  deleteAllReplicacheData,
+  dropDatabase,
+} from './persist/mod.js';
 export type {IterableUnion} from './iterable-union.js';
 
 export {version} from './version.js';

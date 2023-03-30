@@ -13,6 +13,8 @@ import {
 import {
   collectIDBDatabases,
   deleteAllReplicacheData,
+  dropAllDatabases,
+  dropDatabase,
 } from './collect-idb-databases.js';
 import * as dag from '../dag/mod.js';
 import type {ClientMap} from './clients.js';
@@ -103,15 +105,7 @@ suite('collectIDBDatabases', () => {
 
         const maxAge = 1000;
 
-        const controller = new AbortController();
-        await collectIDBDatabases(
-          store,
-          controller.signal,
-          now,
-          maxAge,
-          maxAge,
-          newDagStore,
-        );
+        await collectIDBDatabases(store, now, maxAge, maxAge, newDagStore);
 
         expect(Object.keys(await store.getDatabases())).to.deep.equal(
           expectedDatabases,
@@ -333,27 +327,51 @@ suite('collectIDBDatabases', () => {
   }
 });
 
-test('deleteAllReplicacheData', async () => {
+test('dropAllDatabase', async () => {
   const createKVStore = (name: string) => new IDBStore(name);
   const store = new IDBDatabasesStore(createKVStore);
   const numDbs = 10;
 
-  for (let i = 0; i < numDbs; i++) {
-    const db = {
-      name: `db${i}`,
-      replicacheName: `testReplicache${i}`,
-      replicacheFormatVersion: 1,
-      schemaVersion: 'testSchemaVersion1',
-    };
+  for (const f of [dropAllDatabases, deleteAllReplicacheData] as const) {
+    for (let i = 0; i < numDbs; i++) {
+      const db = {
+        name: `db${i}`,
+        replicacheName: `testReplicache${i}`,
+        replicacheFormatVersion: 1,
+        schemaVersion: 'testSchemaVersion1',
+      };
 
-    expect(await store.putDatabase(db)).to.have.property(db.name);
+      expect(await store.putDatabase(db)).to.have.property(db.name);
+    }
+
+    expect(Object.values(await store.getDatabases())).to.have.length(numDbs);
+
+    const result = await f(createKVStore);
+
+    expect(Object.values(await store.getDatabases())).to.have.length(0);
+    expect(result.dropped).to.have.length(numDbs);
+    expect(result.errors).to.have.length(0);
   }
+});
 
-  expect(Object.values(await store.getDatabases())).to.have.length(numDbs);
+test('dropDatabase', async () => {
+  const createKVStore = (name: string) => new IDBStore(name);
+  const store = new IDBDatabasesStore(createKVStore);
 
-  const result = await deleteAllReplicacheData(createKVStore);
+  const db = {
+    name: `foo`,
+    replicacheName: `fooRep`,
+    replicacheFormatVersion: 1,
+    schemaVersion: 'testSchemaVersion1',
+  };
+
+  expect(await store.putDatabase(db)).to.have.property(db.name);
+
+  expect(Object.values(await store.getDatabases())).to.have.length(1);
+  await dropDatabase(db.name);
 
   expect(Object.values(await store.getDatabases())).to.have.length(0);
-  expect(result.dropped).to.have.length(numDbs);
-  expect(result.errors).to.have.length(0);
+
+  // deleting non-existent db fails silently.
+  await dropDatabase('bonk');
 });
