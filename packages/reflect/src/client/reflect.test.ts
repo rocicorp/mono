@@ -21,6 +21,7 @@ import {
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
+  serverAheadReloadReason,
 } from './reflect.js';
 import {
   MockSocket,
@@ -31,6 +32,7 @@ import {
 } from './test-utils.js'; // Why use fakes when we can use the real thing!
 import {MessageError} from './connection-error.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
+import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -1144,6 +1146,27 @@ test('Protocol mismatch', async () => {
   r.onUpdateNeeded = null;
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
   expect(fake.called).false;
+});
+
+test('server ahead', async () => {
+  const sink = new TestLogSink();
+  const {promise, resolve} = resolver();
+  const storage: Record<string, string> = {};
+  sinon.replaceGetter(window, 'localStorage', () => storage as Storage);
+  const r = reflectForTest({
+    logSinks: [sink],
+  });
+  r.reload = resolve;
+
+  await r.triggerError(
+    ErrorKind.InvalidConnectionRequestBaseCookie,
+    'unexpected BaseCookie',
+  );
+  await promise;
+
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
+    serverAheadReloadReason(ErrorKind.InvalidConnectionRequestBaseCookie),
+  );
 });
 
 test('Disconnect on hide', async () => {

@@ -147,6 +147,11 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
     // @ts-expect-error Property '_puller' is private
     return this._puller;
   }
+
+  set reload(r: () => void) {
+    // @ts-expect-error Property '_reload' is private
+    this._reload = r;
+  }
 }
 
 const testReflectInstances = new Set<TestReflect<MutatorDefs>>();

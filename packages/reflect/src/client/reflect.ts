@@ -16,6 +16,7 @@ import {
   type ErrorMessage,
 } from 'reflect-protocol';
 import {
+  dropDatabase,
   ExperimentalWatchCallbackForOptions,
   ExperimentalWatchNoIndexCallback,
   ExperimentalWatchOptions,
@@ -50,6 +51,7 @@ import {
 } from './metrics.js';
 import type {ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
+import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 
 export const enum ConnectionState {
   Disconnected,
@@ -112,6 +114,10 @@ export type UpdateNeededReason =
   // This is used When reflect tries to connect with a version that the server
   // does not support
   | {type: 'VersionNotSupported'};
+
+export function serverAheadReloadReason(kind: string) {
+  return `Server reported that client is ahead of server (${kind}). This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Reflect.`;
+}
 
 function convertOnUpdateNeededReason(
   reason: ReplicacheUpdateNeededReason,
@@ -223,6 +229,10 @@ export class Reflect<MD extends MutatorDefs> {
 
   private _metrics: MetricManager;
 
+  // Store as field to allow test subclass to override. Web API doesn't allow
+  // overwriting location fields for security reasons.
+  private _reload = () => location.reload();
+
   /**
    * Constructs a new Reflect client.
    */
@@ -285,6 +295,8 @@ export class Reflect<MD extends MutatorDefs> {
     this.userID = userID;
     this._jurisdiction = jurisdiction;
     this._l = getLogContext(options, this._rep);
+
+    void this._l.then(lc => reportReloadReason(lc, localStorage));
 
     this._metrics = new MetricManager({
       reportIntervalMs: metricsIntervalMs ?? REPORT_INTERVAL_MS,
@@ -502,6 +514,18 @@ export class Reflect<MD extends MutatorDefs> {
       this.onUpdateNeeded?.({type: kind});
     }
 
+    if (
+      kind === ErrorKind.InvalidConnectionRequestLastMutationID ||
+      kind === ErrorKind.InvalidConnectionRequestBaseCookie
+    ) {
+      await dropDatabase(this._rep.idbName);
+      reloadWithReason(
+        this._reload,
+        localStorage,
+        serverAheadReloadReason(kind),
+      );
+    }
+
     const error = new MessageError(kind, message);
 
     lc.info?.(`${kind}: ${message}}`);
@@ -683,6 +707,8 @@ export class Reflect<MD extends MutatorDefs> {
     // we record it as a connect error here because it is the kind of
     // thing that we want to hear about (and is sorta connect failure
     // -ish).
+    // TODO: let's rename this to clearly distinguish it. Need to update metrics
+    // dashboard too, though.
     this._metrics.lastConnectError.set(
       camelToSnake(ErrorKind.UnexpectedBaseCookie),
     );
