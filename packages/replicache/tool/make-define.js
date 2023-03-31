@@ -1,4 +1,5 @@
 import {readPackageJSON} from './read-package-json.js';
+import {makeDefine as makeBasicDefine} from '../../shared/src/build.js';
 
 /**
  * @param {'debug'|'release'|'unknown'} mode
@@ -6,14 +7,8 @@ import {readPackageJSON} from './read-package-json.js';
  */
 
 export async function makeDefine(mode) {
-  const define = {
-    REPLICACHE_VERSION: JSON.stringify((await readPackageJSON()).version),
-  };
-  if (mode === 'unknown') {
-    return define;
-  }
   return {
-    ...define,
-    'process.env.NODE_ENV': mode === 'debug' ? '"development"' : '"production"',
+    ...makeBasicDefine(mode),
+    REPLICACHE_VERSION: JSON.stringify((await readPackageJSON()).version),
   };
 }

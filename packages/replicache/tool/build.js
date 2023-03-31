@@ -4,7 +4,8 @@ import * as esbuild from 'esbuild';
 import {writeFile} from 'fs/promises';
 import * as path from 'path';
 import {fileURLToPath} from 'url';
-import {makeDefine, sharedOptions} from '../../shared/src/build.js';
+import {sharedOptions} from '../../shared/src/build.js';
+import {makeDefine} from './make-define.js';
 import {readPackageJSON} from './read-package-json.js';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
@@ -33,12 +34,7 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
  * @param {BuildOptions} options
  */
 async function buildReplicache(options) {
-  const basicDefine = makeDefine(options.mode);
-  const {version} = await readPackageJSON();
-  const define = {
-    ...basicDefine,
-    REPLICACHE_VERSION: JSON.stringify(version),
-  };
+  const define = await makeDefine(options.mode);
   const {ext, mode, external, ...restOfOptions} = options;
   const outfile = path.join(dirname, '..', 'out', 'replicache.' + ext);
   const result = await esbuild.build({
