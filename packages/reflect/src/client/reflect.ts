@@ -4,7 +4,7 @@ import {
   ConnectedMessage,
   Downstream,
   downstreamSchema,
-  ErrorKind,
+  ErrorKind as ServerErrorKind,
   NullableVersion,
   nullableVersionSchema,
   PingMessage,
@@ -43,7 +43,6 @@ import {send} from '../util/socket.js';
 import {isAuthError, ServerError} from './server-error.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 import {
-  camelToSnake,
   DID_NOT_CONNECT_VALUE,
   MetricManager,
   REPORT_INTERVAL_MS,
@@ -62,13 +61,22 @@ export const enum ConnectionState {
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
 
-export const enum CloseKind {
-  AbruptClose = 'AbruptClose',
-  CleanClose = 'CleanClose',
-  ReflectClosed = 'ReflectClosed',
-}
+type ClientDisconnectReason =
+  | 'AbruptClose'
+  | 'CleanClose'
+  | 'ReflectClosed'
+  | 'ConnectTimeout'
+  | 'UnexpectedBaseCookie'
+  | 'PingTimeout'
+  | 'Hidden';
 
-export type DisconnectReason = ErrorKind | CloseKind | 'Hidden';
+export type DisconnectReason =
+  | {
+      server: ServerErrorKind;
+    }
+  | {
+      client: ClientDisconnectReason;
+    };
 
 /**
  * How frequently we should ping the server to keep the connection alive.
@@ -366,7 +374,9 @@ export class Reflect<MD extends MutatorDefs> {
   async close(): Promise<void> {
     if (this._connectionState !== ConnectionState.Disconnected) {
       const lc = await this._l;
-      await this._disconnect(lc, CloseKind.ReflectClosed);
+      await this._disconnect(lc, {
+        client: 'ReflectClosed',
+      });
     }
     this.#closeAbortController.abort();
     return this._rep.close();
@@ -496,9 +506,9 @@ export class Reflect<MD extends MutatorDefs> {
     const {code, reason, wasClean} = e;
     l.info?.('Got socket close event', {code, reason, wasClean});
 
-    const closeKind = wasClean ? CloseKind.CleanClose : CloseKind.AbruptClose;
+    const closeKind = wasClean ? 'CleanClose' : 'AbruptClose';
     this._connectResolver.reject(new Error('clean close'));
-    await this._disconnect(l, closeKind);
+    await this._disconnect(l, {client: closeKind});
   };
 
   // An error on the connection is fatal for the connection.
@@ -508,13 +518,13 @@ export class Reflect<MD extends MutatorDefs> {
   ): Promise<void> {
     const [, kind, message] = downMessage;
 
-    if (kind === ErrorKind.VersionNotSupported) {
+    if (kind === ServerErrorKind.VersionNotSupported) {
       this.onUpdateNeeded?.({type: kind});
     }
 
     if (
-      kind === ErrorKind.InvalidConnectionRequestLastMutationID ||
-      kind === ErrorKind.InvalidConnectionRequestBaseCookie
+      kind === ServerErrorKind.InvalidConnectionRequestLastMutationID ||
+      kind === ServerErrorKind.InvalidConnectionRequestBaseCookie
     ) {
       await dropDatabase(this._rep.idbName);
       reloadWithReason(
@@ -531,7 +541,7 @@ export class Reflect<MD extends MutatorDefs> {
     this.#nextMessageResolver?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
     this._connectResolver.reject(error);
-    await this._disconnect(lc, kind);
+    await this._disconnect(lc, {server: kind});
   }
 
   private _handleConnectedMessage(
@@ -602,7 +612,9 @@ export class Reflect<MD extends MutatorDefs> {
     const id = setTimeout(async () => {
       l.debug?.('Rejecting connect resolver due to timeout');
       this._connectResolver.reject(new Error('Timed out connecting'));
-      await this._disconnect(l, ErrorKind.ConnectTimeout);
+      await this._disconnect(l, {
+        client: 'ConnectTimeout',
+      });
     }, CONNECT_TIMEOUT_MS);
     const clear = () => clearTimeout(id);
     this._connectResolver.promise.then(clear, clear);
@@ -653,7 +665,7 @@ export class Reflect<MD extends MutatorDefs> {
         break;
       }
       case ConnectionState.Connecting: {
-        this._metrics.lastConnectError.set(camelToSnake(reason));
+        this._metrics.lastConnectError.set(getLastConnectMetricState(reason));
         if (this._connectingStart === undefined) {
           l.error?.(
             'disconnect() called while connecting but connect start time is undefined. This should not happen.',
@@ -705,15 +717,15 @@ export class Reflect<MD extends MutatorDefs> {
     // -ish).
     // TODO: let's rename this to clearly distinguish it. Need to update metrics
     // dashboard too, though.
-    this._metrics.lastConnectError.set(
-      camelToSnake(ErrorKind.UnexpectedBaseCookie),
-    );
+    this._metrics.lastConnectError.set(camelToSnake('UnexpectedBaseCookie'));
 
     // It is theoretically possible that we get disconnected during the
     // async poke above. Only disconnect if we are not already
     // disconnected.
     if (this._connectionState !== ConnectionState.Disconnected) {
-      await this._disconnect(lc, ErrorKind.UnexpectedBaseCookie);
+      await this._disconnect(lc, {
+        client: 'UnexpectedBaseCookie',
+      });
     }
   }
 
@@ -911,7 +923,9 @@ export class Reflect<MD extends MutatorDefs> {
                 await this._ping(lc);
                 break;
               case RaceCases.Hidden:
-                await this._disconnect(lc, 'Hidden');
+                await this._disconnect(lc, {
+                  client: 'Hidden',
+                });
                 break;
             }
           }
@@ -1073,7 +1087,7 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   /**
-   * Throws a MessageError with ErrorKind.PingTimeout if the ping times out.
+   * Throws a MessageError with ServerErrorKind.PingTimeout if the ping times out.
    */
   private async _ping(l: LogContext): Promise<void> {
     l.debug?.('pinging');
@@ -1095,7 +1109,9 @@ export class Reflect<MD extends MutatorDefs> {
       l.debug?.('ping succeeded in', delta, 'ms');
     } else {
       l.info?.('ping failed in', delta, 'ms - disconnecting');
-      await this._disconnect(l, ErrorKind.PingTimeout);
+      await this._disconnect(l, {
+        client: 'PingTimeout',
+      });
       throw new Error('Ping timed out');
     }
   }
@@ -1211,4 +1227,21 @@ function getDocument(): Document | undefined {
  */
 function promiseRace(ps: Promise<unknown>[]): Promise<number> {
   return Promise.race(ps.map((p, i) => p.then(() => i)));
+}
+
+function getLastConnectMetricState(reason: DisconnectReason): string {
+  if ('server' in reason) {
+    return `server_${camelToSnake(reason.server)}`;
+  }
+  return `client_${camelToSnake(reason.client)}`;
+}
+
+// camelToSnake is used to convert a protocol ErrorKind into a suitable
+// metric name, eg AuthInvalidated => auth_invalidated. It converts
+// both PascalCase and camelCase to snake_case.
+function camelToSnake(s: string): string {
+  return s
+    .split(/\.?(?=[A-Z])/)
+    .join('_')
+    .toLowerCase();
 }

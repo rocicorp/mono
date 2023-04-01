@@ -6,16 +6,6 @@ export enum MetricName {
   LastConnectError = 'last_connect_error',
 }
 
-// camelToSnake is used to convert a protocol ErrorKind into a suitable
-// metric name, eg AuthInvalidated => auth_invalidated. It converts
-// both PascalCase and camelCase to snake_case.
-export function camelToSnake(s: string): string {
-  return s
-    .split(/\.?(?=[A-Z])/)
-    .join('_')
-    .toLowerCase();
-}
-
 // This value is used to indicate that the client's last connection attempt
 // failed. We don't make this -1 becuase we want to stack this never connected
 // state in a graph on top of actual connection times, so it should be greater
