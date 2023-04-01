@@ -5,7 +5,6 @@ import type {LogContext} from '@rocicorp/logger';
 import {sendError, closeWithError} from '../util/socket.js';
 import {handlePush, type ProcessUntilDone} from './push.js';
 import {handlePing} from './ping.js';
-import {ErrorKind} from 'reflect-protocol';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {handlePull} from './pull.js';
 import type {PendingMutation} from '../types/mutation.js';
@@ -28,7 +27,7 @@ export async function handleMessage(
   try {
     message = getMessage(data);
   } catch (e) {
-    sendError(lc, ws, ErrorKind.InvalidMessage, String(e));
+    sendError(lc, ws, 'InvalidMessage', String(e));
     return;
   }
 
@@ -37,7 +36,7 @@ export async function handleMessage(
     // This is not expected to ever occur.  However if it does no pushes will
     // ever succeed over this connection since it is missing an entry in
     // ClientMap.  Close connection so client can try to reconnect and recover.
-    closeWithError(lc, ws, ErrorKind.ClientNotFound, clientID);
+    closeWithError(lc, ws, 'ClientNotFound', clientID);
     return;
   }
 

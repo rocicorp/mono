@@ -21,7 +21,7 @@ import {
 import {handleMessage} from '../../src/server/message.js';
 import {assert} from 'shared/asserts.js';
 import {randomID} from '../util/rand.js';
-import {ErrorKind} from 'reflect-protocol';
+import type {ErrorKind} from 'reflect-protocol';
 import {DurableStorage} from '../storage/durable-storage.js';
 import type {PendingMutation} from '../types/mutation.js';
 
@@ -51,13 +51,13 @@ describe('handleMessage', () => {
     {
       name: 'empty',
       data: '',
-      expectedErrorKind: ErrorKind.InvalidMessage,
+      expectedErrorKind: 'InvalidMessage',
       expectedErrorMessage: 'SyntaxError: Unexpected end of JSON input',
     },
     {
       name: 'invalid push',
       data: '[]',
-      expectedErrorKind: ErrorKind.InvalidMessage,
+      expectedErrorKind: 'InvalidMessage',
       expectedErrorMessage: 'TypeError: Invalid union value',
     },
     {
@@ -101,7 +101,7 @@ describe('handleMessage', () => {
         },
       ]),
       // This error message is not great
-      expectedErrorKind: ErrorKind.InvalidMessage,
+      expectedErrorKind: 'InvalidMessage',
       expectedErrorMessage: 'TypeError: Invalid union value',
     },
     {
@@ -119,7 +119,7 @@ describe('handleMessage', () => {
       ]),
       clients: new Map(),
       clientID: 'c1',
-      expectedErrorKind: ErrorKind.ClientNotFound,
+      expectedErrorKind: 'ClientNotFound',
       expectedErrorMessage: 'c1',
       expectSocketClosed: true,
     },
@@ -128,7 +128,7 @@ describe('handleMessage', () => {
       data: JSON.stringify(['ping', {}]),
       clients: new Map(),
       clientID: 'c1',
-      expectedErrorKind: ErrorKind.ClientNotFound,
+      expectedErrorKind: 'ClientNotFound',
       expectedErrorMessage: 'c1',
       expectSocketClosed: true,
     },

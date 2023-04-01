@@ -41,7 +41,7 @@ import {
   WithVersion,
 } from './router.js';
 import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
-import {ErrorKind} from 'reflect-protocol';
+import type {ErrorKind} from 'reflect-protocol';
 import {ROOM_ROUTES} from './room-do.js';
 import {
   CONNECT_URL_PATTERN,
@@ -346,10 +346,7 @@ export class BaseAuthDO implements DurableObject {
 
     if (this._authHandler && !encodedAuth) {
       lc.error?.('authDO auth not found in Sec-WebSocket-Protocol header.');
-      return closeWithErrorLocal(
-        ErrorKind.InvalidConnectionRequest,
-        'auth required',
-      );
+      return closeWithErrorLocal('InvalidConnectionRequest', 'auth required');
     }
     const expectedVersion = 1;
     if (version !== expectedVersion) {
@@ -359,10 +356,7 @@ export class BaseAuthDO implements DurableObject {
         'but got',
         version,
       );
-      return closeWithErrorLocal(
-        ErrorKind.VersionNotSupported,
-        'unsupported version',
-      );
+      return closeWithErrorLocal('VersionNotSupported', 'unsupported version');
     }
 
     const {searchParams} = new URL(url);
@@ -370,7 +364,7 @@ export class BaseAuthDO implements DurableObject {
     const clientID = searchParams.get('clientID');
     if (!clientID) {
       return closeWithErrorLocal(
-        ErrorKind.InvalidConnectionRequest,
+        'InvalidConnectionRequest',
         'clientID parameter required',
       );
     }
@@ -378,7 +372,7 @@ export class BaseAuthDO implements DurableObject {
     const roomID = searchParams.get('roomID');
     if (!roomID) {
       return closeWithErrorLocal(
-        ErrorKind.InvalidConnectionRequest,
+        'InvalidConnectionRequest',
         'roomID parameter required',
       );
     }
@@ -386,7 +380,7 @@ export class BaseAuthDO implements DurableObject {
     const userID = searchParams.get('userID');
     if (!userID) {
       return closeWithErrorLocal(
-        ErrorKind.InvalidConnectionRequest,
+        'InvalidConnectionRequest',
         'userID parameter required',
       );
     }
@@ -394,7 +388,7 @@ export class BaseAuthDO implements DurableObject {
     const jurisdiction = searchParams.get('jurisdiction') ?? undefined;
     if (jurisdiction && jurisdiction !== 'eu') {
       return closeWithErrorLocal(
-        ErrorKind.InvalidConnectionRequest,
+        'InvalidConnectionRequest',
         'invalid jurisdiction parameter',
       );
     }
@@ -407,7 +401,7 @@ export class BaseAuthDO implements DurableObject {
         decodedAuth = decodeURIComponent(encodedAuth);
       } catch (e) {
         return closeWithErrorLocal(
-          ErrorKind.InvalidConnectionRequest,
+          'InvalidConnectionRequest',
           'malformed auth',
         );
       }
@@ -425,10 +419,7 @@ export class BaseAuthDO implements DurableObject {
         try {
           authHandlerUserData = await this._authHandler(auth, roomID);
         } catch (e) {
-          return closeWithErrorLocal(
-            ErrorKind.Unauthorized,
-            'authHandler rejected',
-          );
+          return closeWithErrorLocal('Unauthorized', 'authHandler rejected');
         }
         if (!authHandlerUserData || !authHandlerUserData.userID) {
           if (!authHandlerUserData) {
@@ -436,12 +427,12 @@ export class BaseAuthDO implements DurableObject {
           } else if (!authHandlerUserData.userID) {
             lc.info?.('userData returned by authHandler has no userID.');
           }
-          return closeWithErrorLocal(ErrorKind.Unauthorized, 'no userData');
+          return closeWithErrorLocal('Unauthorized', 'no userData');
         }
         if (authHandlerUserData.userID !== userID) {
           lc.info?.('userData returned by authHandler has a different userID.');
           return closeWithErrorLocal(
-            ErrorKind.Unauthorized,
+            'Unauthorized',
             'userID returned by authHandler does not match userID url parameter',
           );
         }
@@ -486,7 +477,7 @@ export class BaseAuthDO implements DurableObject {
       // logged by onSocketError in the client.
 
       if (roomRecord === undefined || roomRecord.status !== RoomStatus.Open) {
-        const kind = roomRecord ? ErrorKind.RoomClosed : ErrorKind.RoomNotFound;
+        const kind = roomRecord ? 'RoomClosed' : 'RoomNotFound';
         return createWSAndCloseWithError(lc, url, kind, roomID, encodedAuth);
       }
 

@@ -524,13 +524,13 @@ export class Reflect<MD extends MutatorDefs> {
   ): Promise<void> {
     const [, kind, message] = downMessage;
 
-    if (kind === ServerErrorKind.VersionNotSupported) {
+    if (kind === 'VersionNotSupported') {
       this.onUpdateNeeded?.({type: kind});
     }
 
     if (
-      kind === ServerErrorKind.InvalidConnectionRequestLastMutationID ||
-      kind === ServerErrorKind.InvalidConnectionRequestBaseCookie
+      kind === 'InvalidConnectionRequestLastMutationID' ||
+      kind === 'InvalidConnectionRequestBaseCookie'
     ) {
       await dropDatabase(this._rep.idbName);
       reloadWithReason(
@@ -1093,7 +1093,7 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   /**
-   * Throws a MessageError with ServerErrorKind.PingTimeout if the ping times out.
+   * Throws an error if the ping times out.
    */
   private async _ping(l: LogContext): Promise<void> {
     l.debug?.('pinging');

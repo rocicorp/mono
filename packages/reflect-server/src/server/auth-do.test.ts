@@ -7,7 +7,6 @@ import {
   jest,
   test,
 } from '@jest/globals';
-import {ErrorKind} from 'reflect-protocol';
 import {newInvalidateAllAuthRequest} from '../client/auth.js';
 import {
   newCloseRoomRequest,
@@ -1146,7 +1145,7 @@ test('connect wont connect to a room that is closed', async () => {
 
   expect(response.status).toEqual(101);
   expect(serverWS.log).toEqual([
-    ['send', JSON.stringify(['error', ErrorKind.RoomClosed, 'testRoomID1'])],
+    ['send', JSON.stringify(['error', 'RoomClosed', 'testRoomID1'])],
     ['close'],
   ]);
 });
@@ -1237,10 +1236,7 @@ test('connect pipes 401 over ws without calling Room DO if authHandler rejects',
   expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(testAuth);
   expect(response.webSocket).toBe(clientWS);
   expect(serverWS.log).toEqual([
-    [
-      'send',
-      JSON.stringify(['error', ErrorKind.Unauthorized, 'authHandler rejected']),
-    ],
+    ['send', JSON.stringify(['error', 'Unauthorized', 'authHandler rejected'])],
     ['close'],
   ]);
 });
@@ -1278,7 +1274,7 @@ describe('connect sends InvalidConnectionRequest over ws without calling Room DO
           'send',
           JSON.stringify([
             'error',
-            ErrorKind.InvalidConnectionRequest,
+            'InvalidConnectionRequest',
             'auth required',
           ]),
         ],
@@ -1336,7 +1332,7 @@ test('connect sends over InvalidConnectionRequest over ws without calling Room D
       'send',
       JSON.stringify([
         'error',
-        ErrorKind.InvalidConnectionRequest,
+        'InvalidConnectionRequest',
         'userID parameter required',
       ]),
     ],
@@ -1383,7 +1379,7 @@ describe('connect sends VersionNotSupported error over ws if path is for unsuppo
           'send',
           JSON.stringify([
             'error',
-            ErrorKind.VersionNotSupported,
+            'VersionNotSupported',
             'unsupported version',
           ]),
         ],

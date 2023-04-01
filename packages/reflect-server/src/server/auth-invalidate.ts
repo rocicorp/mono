@@ -1,7 +1,6 @@
 import type {ClientMap} from '../types/client-state.js';
 import type {LogContext} from '@rocicorp/logger';
 import {closeWithError} from '../util/socket.js';
-import {ErrorKind} from 'reflect-protocol';
 
 export function handleAuthInvalidate(
   lc: LogContext,
@@ -11,7 +10,7 @@ export function handleAuthInvalidate(
   let closedCount = 0;
   for (const clientState of clients.values()) {
     if (userID === undefined || userID === clientState.userData.userID) {
-      closeWithError(lc, clientState.socket, ErrorKind.AuthInvalidated);
+      closeWithError(lc, clientState.socket, 'AuthInvalidated');
       closedCount++;
     }
   }
