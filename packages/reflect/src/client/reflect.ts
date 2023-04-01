@@ -66,7 +66,6 @@ export const enum CloseKind {
   AbruptClose = 'AbruptClose',
   CleanClose = 'CleanClose',
   ReflectClosed = 'ReflectClosed',
-  Unknown = 'Unknown',
 }
 
 export type DisconnectReason = ErrorKind | CloseKind | 'Hidden';
@@ -497,7 +496,7 @@ export class Reflect<MD extends MutatorDefs> {
     l.info?.('Got socket close event', {code, reason, wasClean});
 
     const closeKind = wasClean ? CloseKind.CleanClose : CloseKind.AbruptClose;
-    this._connectResolver.reject(new CloseError(closeKind));
+    this._connectResolver.reject(new Error('clean close'));
     await this._disconnect(l, closeKind);
   };
 
@@ -1197,14 +1196,6 @@ function addWebSocketIDFromSocketToLogContext(
 
 function addWebSocketIDToLogContext(wsid: string, lc: LogContext): LogContext {
   return lc.addContext('wsid', wsid);
-}
-class CloseError extends Error {
-  readonly name = 'CloseError';
-  readonly kind: CloseKind;
-  constructor(closeKind: CloseKind) {
-    super(`socket closed (${closeKind})`);
-    this.kind = closeKind;
-  }
 }
 
 /**
