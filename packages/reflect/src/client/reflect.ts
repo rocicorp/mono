@@ -40,7 +40,7 @@ import * as valita from 'shared/valita.js';
 import {nanoid} from '../util/nanoid.js';
 import {sleep} from '../util/sleep.js';
 import {send} from '../util/socket.js';
-import {isAuthError, MessageError} from './connection-error.js';
+import {isAuthError, ServerError} from './server-error.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 import {
   camelToSnake,
@@ -446,9 +446,10 @@ export class Reflect<MD extends MutatorDefs> {
 
     const rejectInvalidMessage = (e?: unknown) =>
       this.#nextMessageResolver?.reject(
-        new MessageError(
-          ErrorKind.InvalidMessage,
-          `${e instanceof Error ? e.message + '. ' : ''}${data}`,
+        new Error(
+          `Invalid message received from server: ${
+            e instanceof Error ? e.message + '. ' : ''
+          }${data}`,
         ),
       );
 
@@ -523,7 +524,7 @@ export class Reflect<MD extends MutatorDefs> {
       );
     }
 
-    const error = new MessageError(kind, message);
+    const error = new ServerError(kind, message);
 
     lc.info?.(`${kind}: ${message}}`);
 
@@ -600,9 +601,7 @@ export class Reflect<MD extends MutatorDefs> {
     // Reject connect after a timeout.
     const id = setTimeout(async () => {
       l.debug?.('Rejecting connect resolver due to timeout');
-      this._connectResolver.reject(
-        new MessageError(ErrorKind.ConnectTimeout, 'Timed out connecting'),
-      );
+      this._connectResolver.reject(new Error('Timed out connecting'));
       await this._disconnect(l, ErrorKind.ConnectTimeout);
     }, CONNECT_TIMEOUT_MS);
     const clear = () => clearTimeout(id);
@@ -1031,7 +1030,7 @@ export class Reflect<MD extends MutatorDefs> {
       switch (raceResult) {
         case RaceCases.Timeout:
           l.debug?.('Mutation recovery pull timed out');
-          throw new MessageError(ErrorKind.PullTimeout, 'Pull timed out');
+          throw new Error('Pull timed out');
         case RaceCases.Response: {
           l.debug?.('Returning mutation recovery pull response');
           const response = await pullResponseResolver.promise;
@@ -1097,7 +1096,7 @@ export class Reflect<MD extends MutatorDefs> {
     } else {
       l.info?.('ping failed in', delta, 'ms - disconnecting');
       await this._disconnect(l, ErrorKind.PingTimeout);
-      throw new MessageError(ErrorKind.PingTimeout, 'Ping timed out');
+      throw new Error('Ping timed out');
     }
   }
 
