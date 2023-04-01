@@ -31,9 +31,9 @@ import {
   TestReflect,
   tickAFewTimes,
 } from './test-utils.js'; // Why use fakes when we can use the real thing!
-import {MessageError} from './connection-error.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
+import {ServerError} from './server-error.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -628,9 +628,7 @@ test('puller with mutation recovery pull, response timeout', async () => {
   } catch (e) {
     expectedE = e;
   }
-  expect(expectedE)
-    .instanceOf(MessageError)
-    .property('message', 'PullTimeout: Pull timed out');
+  expect(expectedE).property('message', 'Pull timed out');
 });
 
 test('puller with normal non-mutation recovery pull', async () => {
@@ -1222,7 +1220,7 @@ test('InvalidConnectionRequest', async () => {
   assert.equal(msg[0], 'error');
 
   const err = msg.at(-2);
-  assert(err instanceof MessageError);
+  assert(err instanceof ServerError);
   assert.equal(err.message, 'InvalidConnectionRequest: test');
 
   const data = msg.at(-1);
@@ -1259,9 +1257,7 @@ test('Invalid Downstream message', async () => {
 
   const found = testLogSink.messages.some(m =>
     m.some(
-      v =>
-        v instanceof Error &&
-        v.message.includes('InvalidMessage: Invalid union value.'),
+      v => v instanceof Error && v.message.includes('Invalid union value.'),
     ),
   );
   expect(found).true;
