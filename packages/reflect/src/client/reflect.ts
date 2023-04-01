@@ -711,13 +711,6 @@ export class Reflect<MD extends MutatorDefs> {
   private async _onOutOfOrderPoke() {
     const lc = await this._l;
     lc.info?.('out of order poke, disconnecting');
-    // This technically happens *after* connection establishment, but
-    // we record it as a connect error here because it is the kind of
-    // thing that we want to hear about (and is sorta connect failure
-    // -ish).
-    // TODO: let's rename this to clearly distinguish it. Need to update metrics
-    // dashboard too, though.
-    this._metrics.lastConnectError.set(camelToSnake('UnexpectedBaseCookie'));
 
     // It is theoretically possible that we get disconnected during the
     // async poke above. Only disconnect if we are not already
