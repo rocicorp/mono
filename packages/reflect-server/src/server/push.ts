@@ -9,7 +9,6 @@ import {
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {closeWithError} from '../util/socket.js';
 import {must} from 'shared/must.js';
-import {ErrorKind} from 'reflect-protocol';
 import type {PendingMutation} from '../types/mutation.js';
 
 export type Now = () => number;
@@ -110,13 +109,7 @@ export async function handlePush(
         // disagree about what client group a client id belongs to.  Even
         // after reconnecting this client is likely to be stuck.
         const errMsg = `Push for client ${clientID} with clientGroupID ${clientGroupID} contains mutation for client ${mClientID} which belongs to clientGroupID ${clientRecord.clientGroupID}.`;
-        closeWithError(
-          lc,
-          client.socket,
-          ErrorKind.InvalidPush,
-          errMsg,
-          'error',
-        );
+        closeWithError(lc, client.socket, 'InvalidPush', errMsg, 'error');
         return;
       }
     } else {
@@ -168,7 +161,7 @@ export async function handlePush(
       closeWithError(
         lc,
         client.socket,
-        ErrorKind.InvalidPush,
+        'InvalidPush',
         `Push contains unexpected mutation id ${m.id} for client ${
           m.clientID
         }. Expected mutation id ${previousMutationID + 1}.`,

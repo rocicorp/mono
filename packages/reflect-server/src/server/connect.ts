@@ -19,7 +19,7 @@ import {compareVersions, getVersion} from '../types/version.js';
 import type {NullableVersion, Version} from 'reflect-protocol';
 import {send, closeWithError} from '../util/socket.js';
 import {assert} from 'shared/asserts.js';
-import {ErrorKind} from 'reflect-protocol';
+import type {ErrorKind} from 'reflect-protocol';
 
 export type MessageHandler = (
   lc: LogContext,
@@ -55,7 +55,7 @@ export async function handleConnection(
 
   const {result, error} = getConnectRequest(url, headers);
   if (error !== null) {
-    closeWithErrorLocal(ErrorKind.InvalidConnectionRequest, error);
+    closeWithErrorLocal('InvalidConnectionRequest', error);
     return;
   }
 
@@ -84,7 +84,7 @@ export async function handleConnection(
       existingRecord.clientGroupID,
     );
     closeWithErrorLocal(
-      ErrorKind.InvalidConnectionRequest,
+      'InvalidConnectionRequest',
       'Unexpected clientGroupID.',
     );
     return;
@@ -103,7 +103,7 @@ export async function handleConnection(
       existingLastMutationID,
     );
     closeWithErrorLocal(
-      ErrorKind.InvalidConnectionRequestLastMutationID,
+      'InvalidConnectionRequestLastMutationID',
       `Unexpected lmid.`,
     );
     return;
@@ -118,7 +118,7 @@ export async function handleConnection(
       version,
     );
     closeWithErrorLocal(
-      ErrorKind.InvalidConnectionRequestBaseCookie,
+      'InvalidConnectionRequestBaseCookie',
       `Unexpected baseCookie.`,
     );
     return;
