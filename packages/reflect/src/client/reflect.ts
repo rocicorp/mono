@@ -247,14 +247,8 @@ export class Reflect<MD extends MutatorDefs> {
    * Constructs a new Reflect client.
    */
   constructor(options: ReflectOptions<MD>) {
-    const {
-      userID,
-      roomID,
-      socketOrigin,
-      onOnlineChange,
-      jurisdiction,
-      metricsIntervalMs,
-    } = options;
+    const {userID, roomID, socketOrigin, onOnlineChange, jurisdiction} =
+      options;
     if (!userID) {
       throw new Error('ReflectOptions.userID must not be empty.');
     }
@@ -309,7 +303,7 @@ export class Reflect<MD extends MutatorDefs> {
     void this._l.then(lc => reportReloadReason(lc, localStorage));
 
     this._metrics = new MetricManager({
-      reportIntervalMs: metricsIntervalMs ?? REPORT_INTERVAL_MS,
+      reportIntervalMs: REPORT_INTERVAL_MS,
       host: location.host,
       source: 'client',
       reporter: allSeries => this._reportMetrics(allSeries),
