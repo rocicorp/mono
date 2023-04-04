@@ -1597,7 +1597,7 @@ test('handlePoke returns the last mutation id change for this client from poke m
   expect(lastMutationIDChangeForSelf3).to.equal(3);
 });
 
-test.only('integration with BufferSizer', async () => {
+test('integration with BufferSizer', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
   const bufferSizer = new BufferSizer(BUFFER_SIZER_OPTIONS);

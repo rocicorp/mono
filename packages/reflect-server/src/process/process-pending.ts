@@ -13,7 +13,7 @@ import {randomID} from '../util/rand.js';
 import {getConnectedClients} from '../types/connected-clients.js';
 
 // TODO: make buffer dynamic
-const PENDING_ORDER_BUFFER_MS = 50;
+const PENDING_ORDER_BUFFER_MS = 200;
 
 /**
  * Processes pending mutations and client disconnect/connects, and sends
