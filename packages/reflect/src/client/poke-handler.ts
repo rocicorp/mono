@@ -224,12 +224,12 @@ export class PokeHandler {
           }
           timedPokeCount++;
           this._timedPokeCount++;
-          if (pokePlaybackOffset > FRAME_INTERVAL_TOLERANCE_MS + 1) {
+          if (pokePlaybackOffset > FRAME_INTERVAL_TOLERANCE_MS) {
             lc.debug?.(
               'poke',
               this._timedPokeCount,
               'playback missed by',
-              pokePlaybackOffset - FRAME_INTERVAL_TOLERANCE_MS + 1,
+              pokePlaybackOffset - FRAME_INTERVAL_TOLERANCE_MS,
             );
             this._missedTimedPokeCount++;
             missedTimedPokeCount++;
