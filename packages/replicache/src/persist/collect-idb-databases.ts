@@ -228,10 +228,7 @@ export async function dropAllDatabases(
  *
  * @deprecated Use `dropAllDatabases` instead.
  */
-export function deleteAllReplicacheData(
-  createKVStore: kv.CreateStore = name =>
-    kv.newIDBStoreWithMemFallback(new LogContext(), name),
-) {
+export function deleteAllReplicacheData(createKVStore?: kv.CreateStore) {
   return dropAllDatabases(createKVStore);
 }
 
