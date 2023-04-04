@@ -3,25 +3,25 @@ import {
   ClientRecord,
   clientRecordKey,
   clientRecordSchema,
-} from '../../src/types/client-record.js';
-import {getEntry, putEntry} from '../../src/db/data.js';
+} from '../types/client-record.js';
+import {getEntry, putEntry} from '../db/data.js';
 import type {
   ClientGroupID,
   ClientID,
   ClientMap,
   Socket,
-} from '../../src/types/client-state.js';
+} from '../types/client-state.js';
 import {
   client,
   clientRecord,
   createSilentLogContext,
   Mocket,
 } from '../util/test-utils.js';
-import {getConnectRequest, handleConnection} from '../../src/server/connect.js';
+import {getConnectRequest, handleConnection} from '../server/connect.js';
 import {USER_DATA_HEADER_NAME} from './auth.js';
 import {encodeHeaderValue} from '../util/headers.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {putVersion} from '../../src/types/version.js';
+import {putVersion} from '../types/version.js';
 import type {NullableVersion} from 'reflect-protocol';
 import type {ErrorKind} from 'reflect-protocol';
 
