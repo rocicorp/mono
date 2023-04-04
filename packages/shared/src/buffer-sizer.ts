@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from './asserts.js';
 
 export class BufferSizer {
   private _bufferSizeMs: number;
@@ -6,7 +7,7 @@ export class BufferSizer {
   private readonly _minBufferSizeMs: number;
   private readonly _maxBufferSizeMs: number;
   private readonly _adjustBufferSizeIntervalMs: number;
-  private _maxBufferNeededMs: number[] = [];
+  private _bufferNeededMsHistory: number[] = [];
   private _missableCountSinceLastBufferAdjust = 0;
   private _missedCountSinceLastBufferAdjust = 0;
   private _timeOfLastBufferAdjust = -1;
@@ -18,6 +19,10 @@ export class BufferSizer {
     maxBufferSizeMs: number;
     adjustBufferSizeIntervalMs: number;
   }) {
+    assert(options.minBuferSizeMs <= options.maxBufferSizeMs);
+    assert(options.initialBufferSizeMs >= options.minBuferSizeMs);
+    assert(options.initialBufferSizeMs <= options.maxBufferSizeMs);
+    assert(options.adjustBufferSizeIntervalMs > 0);
     this._initialBufferSizeMs = options.initialBufferSizeMs;
     this._minBufferSizeMs = options.minBuferSizeMs;
     this._maxBufferSizeMs = options.maxBufferSizeMs;
@@ -41,7 +46,7 @@ export class BufferSizer {
     }
 
     lc = lc.addContext('BufferSizer');
-    this._maxBufferNeededMs.push(bufferNeededMs);
+    this._bufferNeededMsHistory.push(bufferNeededMs);
     this._missableCountSinceLastBufferAdjust++;
     if (missed) {
       this._missedCountSinceLastBufferAdjust++;
@@ -57,10 +62,10 @@ export class BufferSizer {
       return;
     }
 
-    this._maxBufferNeededMs.sort((a, b) => a - b);
+    this._bufferNeededMsHistory.sort((a, b) => a - b);
     const targetBufferNeededMs =
-      this._maxBufferNeededMs[
-        Math.floor((this._maxBufferNeededMs.length * 99.5) / 100)
+      this._bufferNeededMsHistory[
+        Math.floor((this._bufferNeededMsHistory.length * 99.5) / 100)
       ];
     const bufferSizeMs = this._bufferSizeMs;
 
@@ -70,10 +75,10 @@ export class BufferSizer {
       'targetBufferNeededMs',
       targetBufferNeededMs,
       'this._maxBufferNeededMs.length',
-      this._maxBufferNeededMs.length,
+      this._bufferNeededMsHistory.length,
       'percentile index',
-      Math.floor((this._maxBufferNeededMs.length * 99.5) / 100),
-      this._maxBufferNeededMs,
+      Math.floor((this._bufferNeededMsHistory.length * 99.5) / 100),
+      this._bufferNeededMsHistory,
     );
     let newBufferSizeMs = bufferSizeMs;
     const missPercent =
@@ -116,7 +121,7 @@ export class BufferSizer {
       );
     }
 
-    this._maxBufferNeededMs = [];
+    this._bufferNeededMsHistory = [];
     this._missableCountSinceLastBufferAdjust = 0;
     this._missedCountSinceLastBufferAdjust = 0;
     this._timeOfLastBufferAdjust = now;
@@ -126,7 +131,7 @@ export class BufferSizer {
 
   reset() {
     this._bufferSizeMs = this._initialBufferSizeMs;
-    this._maxBufferNeededMs = [];
+    this._bufferNeededMsHistory = [];
     this._missableCountSinceLastBufferAdjust = 0;
     this._missedCountSinceLastBufferAdjust = 0;
     this._timeOfLastBufferAdjust = -1;

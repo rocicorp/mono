@@ -12,13 +12,19 @@ export const BUFFER_SIZER_OPTIONS = {
   minBuferSizeMs: -1000,
   adjustBufferSizeIntervalMs: 10 * 1000,
 } as const;
-// TODO consider systems that don't run at 60fps (supposedly new ipads run RAF
-// at 120fps).
-const FRAME_INTERVAL_MS = 16;
+// TODO consider systems that don't run at 60fps (newer macs/ipads run RAF
+// at 120fps).  Playback on 120fps systems will actually be 120fps with
+// current logic, but the counting of missed frames will be incorrect (
+// only counted as missed if its off by >= 2 frames on a 120fps system).
+// This is not exactly 16 because raf does not fire exactly every 16 ms
+// on 60fps systems, instead its usually in the range 14-18 ms (even
+// when there is no interference from other JS).
+const FRAME_INTERVAL_TOLERANCE_MS = 18;
 export const RESET_PLAYBACK_OFFSET_THRESHOLD_MS = 1000;
 
 type PendingPoke = Poke & {
   normalizedTimestamp?: number | undefined;
+  playbackOffsetMs?: number | undefined;
   bufferNeededMs?: number | undefined;
   serverBufferMs?: number | undefined;
   receivedTimestamp: number;
@@ -73,7 +79,7 @@ export class PokeHandler {
     for (const poke of pokeBody.pokes) {
       const {timestamp} = poke;
       if (timestamp !== undefined) {
-        const timestampOffset = Math.round(now - timestamp);
+        const timestampOffset = now - timestamp;
         if (
           this._playbackOffsetMs === undefined ||
           Math.abs(timestampOffset - this._playbackOffsetMs) >
@@ -85,7 +91,10 @@ export class PokeHandler {
           lc.debug?.('new playback offset', timestampOffset);
         }
         bufferNeededMs =
-          now - (timestamp + this._playbackOffsetMs) + FRAME_INTERVAL_MS;
+          now -
+          (timestamp + this._playbackOffsetMs) +
+          FRAME_INTERVAL_TOLERANCE_MS;
+
         // only consider the first poke in the message with a timestamp for
         // timestamp offsets
         break;
@@ -104,6 +113,7 @@ export class PokeHandler {
       const pendingPoke: PendingPoke = {
         ...poke,
         serverBufferMs: pokeBody.debugServerBufferMs,
+        playbackOffsetMs: this._playbackOffsetMs,
         receivedTimestamp: now,
         normalizedTimestamp,
         bufferNeededMs,
@@ -201,7 +211,11 @@ export class PokeHandler {
               '(+',
               clientReceivedLatency - serverSentLatency,
               ')',
-              '\nplayback:',
+              '\nplayback (offset',
+              headPoke.playbackOffsetMs,
+              ', buffer',
+              this._bufferSizer.bufferSizeMs,
+              '):',
               playbackLatency,
               '(+',
               playbackLatency - clientReceivedLatency,
@@ -210,12 +224,12 @@ export class PokeHandler {
           }
           timedPokeCount++;
           this._timedPokeCount++;
-          if (pokePlaybackOffset > FRAME_INTERVAL_MS + 1) {
+          if (pokePlaybackOffset > FRAME_INTERVAL_TOLERANCE_MS + 1) {
             lc.debug?.(
               'poke',
               this._timedPokeCount,
               'playback missed by',
-              pokePlaybackOffset - FRAME_INTERVAL_MS + 1,
+              pokePlaybackOffset - FRAME_INTERVAL_TOLERANCE_MS + 1,
             );
             this._missedTimedPokeCount++;
             missedTimedPokeCount++;
@@ -246,10 +260,6 @@ export class PokeHandler {
         }
       }
       lc.debug?.(
-        'playbackOffset',
-        this._playbackOffsetMs,
-        'bufferSizeMs',
-        this._bufferSizer.bufferSizeMs,
         'merging',
         toMerge.length,
         'remaining buffer length',
