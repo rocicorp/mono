@@ -66,6 +66,7 @@ export function pendingMutation(opts: {
     | {
         normalizedTimestamp: number;
         originTimestamp: number;
+        serverReceivedTimestamp: number;
       }
     | number
     | undefined;
@@ -90,7 +91,11 @@ export function pendingMutation(opts: {
     args,
     timestamps:
       typeof timestamps === 'number'
-        ? {normalizedTimestamp: timestamps, originTimestamp: timestamps}
+        ? {
+            normalizedTimestamp: timestamps,
+            originTimestamp: timestamps,
+            serverReceivedTimestamp: timestamps,
+          }
         : timestamps,
     pusherClientIDs,
   };

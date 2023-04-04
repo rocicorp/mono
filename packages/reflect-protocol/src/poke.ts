@@ -11,8 +11,11 @@ export const pokeSchema = v.object({
   lastMutationIDChanges: v.record(v.number()),
   patch: patchSchema,
   timestamp: v.number().optional(),
-  // Set when client's connect request has debugPerf=true
+  // Following debug fields are set when client's connect request has
+  // debugPerf=true
   debugOriginTimestamp: v.number().optional(),
+  debugServerReceivedTimestamp: v.number().optional(),
+  debugServerSentTimestamp: v.number().optional(),
 });
 
 export const pokeBodySchema = v.object({

@@ -1,9 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-
-type OffsetStats = {
-  minOffsetMs: number;
-  maxOffsetMs: number;
-};
+import {assert} from './asserts.js';
 
 export class BufferSizer {
   private _bufferSizeMs: number;
@@ -11,7 +7,7 @@ export class BufferSizer {
   private readonly _minBufferSizeMs: number;
   private readonly _maxBufferSizeMs: number;
   private readonly _adjustBufferSizeIntervalMs: number;
-  private _offsetStats = new Map<string, OffsetStats>();
+  private _bufferNeededMsHistory: number[] = [];
   private _missableCountSinceLastBufferAdjust = 0;
   private _missedCountSinceLastBufferAdjust = 0;
   private _timeOfLastBufferAdjust = -1;
@@ -23,6 +19,10 @@ export class BufferSizer {
     maxBufferSizeMs: number;
     adjustBufferSizeIntervalMs: number;
   }) {
+    assert(options.minBuferSizeMs <= options.maxBufferSizeMs);
+    assert(options.initialBufferSizeMs >= options.minBuferSizeMs);
+    assert(options.initialBufferSizeMs <= options.maxBufferSizeMs);
+    assert(options.adjustBufferSizeIntervalMs > 0);
     this._initialBufferSizeMs = options.initialBufferSizeMs;
     this._minBufferSizeMs = options.minBuferSizeMs;
     this._maxBufferSizeMs = options.maxBufferSizeMs;
@@ -34,142 +34,107 @@ export class BufferSizer {
     return this._bufferSizeMs;
   }
 
-  recordOffset(id: string, offsetMs: number) {
-    const existingStats = this._offsetStats.get(id);
-    this._offsetStats.set(
-      id,
-      existingStats
-        ? {
-            minOffsetMs: Math.min(existingStats.minOffsetMs, offsetMs),
-            maxOffsetMs: Math.max(existingStats.maxOffsetMs, offsetMs),
-          }
-        : {minOffsetMs: offsetMs, maxOffsetMs: offsetMs},
-    );
-  }
-
-  recordMissable(missed: boolean) {
+  recordMissable(
+    now: number,
+    missed: boolean,
+    bufferNeededMs: number,
+    lc: LogContext,
+  ) {
     if (this._ignoreNextMissable) {
       this._ignoreNextMissable = false;
       return;
     }
+
+    lc = lc.addContext('BufferSizer');
+    this._bufferNeededMsHistory.push(bufferNeededMs);
     this._missableCountSinceLastBufferAdjust++;
     if (missed) {
       this._missedCountSinceLastBufferAdjust++;
     }
-  }
-
-  reset() {
-    this._bufferSizeMs = this._initialBufferSizeMs;
-    this._offsetStats = new Map();
-    this._missableCountSinceLastBufferAdjust = 0;
-    this._missedCountSinceLastBufferAdjust = 0;
-    this._timeOfLastBufferAdjust = -1;
-    this._ignoreNextMissable = false;
-  }
-
-  maybeAdjustBufferSize(now: number, lc: LogContext): boolean {
     if (this._timeOfLastBufferAdjust === -1) {
       this._timeOfLastBufferAdjust = now;
-      return false;
+      return;
     }
     if (now - this._timeOfLastBufferAdjust < this._adjustBufferSizeIntervalMs) {
-      return false;
+      return;
     }
-    if (this._missableCountSinceLastBufferAdjust === 0) {
-      return false;
+    if (this._missableCountSinceLastBufferAdjust < 200) {
+      return;
     }
 
-    let maxDiffOffsetStats = undefined;
-    let maxDiffID = undefined;
-    for (const [id, offsetStats] of this._offsetStats) {
-      if (
-        maxDiffOffsetStats === undefined ||
-        Math.abs(offsetStats.maxOffsetMs - offsetStats.minOffsetMs) >
-          Math.abs(
-            maxDiffOffsetStats.maxOffsetMs - maxDiffOffsetStats.minOffsetMs,
-          )
-      ) {
-        maxDiffID = id;
-        maxDiffOffsetStats = offsetStats;
-      }
-    }
-    if (maxDiffOffsetStats === undefined || maxDiffID === undefined) {
-      return false;
-    }
-    const maxDiffOffsetMs = Math.abs(
-      maxDiffOffsetStats.maxOffsetMs - maxDiffOffsetStats.minOffsetMs,
-    );
-
+    this._bufferNeededMsHistory.sort((a, b) => a - b);
+    const targetBufferNeededMs =
+      this._bufferNeededMsHistory[
+        Math.floor((this._bufferNeededMsHistory.length * 99.5) / 100)
+      ];
     const bufferSizeMs = this._bufferSizeMs;
+
+    lc.debug?.(
+      'bufferSizeMs',
+      bufferSizeMs,
+      'targetBufferNeededMs',
+      targetBufferNeededMs,
+      'this._maxBufferNeededMs.length',
+      this._bufferNeededMsHistory.length,
+      'percentile index',
+      Math.floor((this._bufferNeededMsHistory.length * 99.5) / 100),
+      this._bufferNeededMsHistory,
+    );
     let newBufferSizeMs = bufferSizeMs;
     const missPercent =
       this._missedCountSinceLastBufferAdjust /
       this._missableCountSinceLastBufferAdjust;
-    // This logic is pretty aggressive about adjusting up, and fairly
-    // conservative about adjusting down.
-    // If the miss percent is greater than 3% it will adjust up
-    // to the max observed difference in offsets, or 110% of the current
-    // buffer size, whichever is larger.
-    // If the miss percent is less than 0.5% it will adjust down
-    // to the max observer difference in offsets if its at least 10%
-    // smaller than the current buffer size.
-    if (missPercent > 0.03) {
+    if (missPercent > 0.01) {
       newBufferSizeMs = Math.min(
         this._maxBufferSizeMs,
-        Math.max(bufferSizeMs * 1.1, maxDiffOffsetMs),
+        Math.max(bufferSizeMs, targetBufferNeededMs),
       );
       lc.debug?.(
-        'Adjusting buffer up to',
-        newBufferSizeMs,
-        'from',
-        bufferSizeMs,
-        'due to high miss percent',
+        'High miss percent',
         missPercent,
         'over last',
-        this._adjustBufferSizeIntervalMs,
-        'ms',
-        'based on offset stats',
-        maxDiffOffsetStats,
-        maxDiffOffsetMs,
-        'from id',
-        maxDiffID,
+        now - this._timeOfLastBufferAdjust,
+        'ms.',
       );
     } else if (missPercent < 0.005) {
-      const potentialNewBufferSizeMs = Math.max(
+      newBufferSizeMs = Math.max(
         this._minBufferSizeMs,
-        Math.min(bufferSizeMs, maxDiffOffsetMs),
+        Math.min(bufferSizeMs, targetBufferNeededMs),
       );
-      const percentChange =
-        (potentialNewBufferSizeMs - bufferSizeMs) / bufferSizeMs;
-      if (percentChange < -0.1) {
-        newBufferSizeMs = potentialNewBufferSizeMs;
-      }
       lc.debug?.(
-        'Adjusting buffer down to',
-        newBufferSizeMs,
-        'from',
-        bufferSizeMs,
-        'due to low miss percent',
+        'Low miss percent',
         missPercent,
         'over last',
-        this._adjustBufferSizeIntervalMs,
-        'ms',
-        'based on offset stats',
-        maxDiffOffsetStats,
-        maxDiffOffsetMs,
-        'from id',
-        maxDiffID,
+        now - this._timeOfLastBufferAdjust,
+        'ms.',
       );
-    } else {
-      lc.debug?.('Not adjusting buffer.');
     }
 
-    this._offsetStats = new Map();
+    if (bufferSizeMs !== newBufferSizeMs) {
+      lc.debug?.(
+        'Adjusting buffer',
+        newBufferSizeMs > bufferSizeMs ? 'up' : 'down',
+        'from',
+        bufferSizeMs,
+        'to',
+        newBufferSizeMs,
+      );
+    }
+
+    this._bufferNeededMsHistory = [];
     this._missableCountSinceLastBufferAdjust = 0;
     this._missedCountSinceLastBufferAdjust = 0;
     this._timeOfLastBufferAdjust = now;
     this._bufferSizeMs = newBufferSizeMs;
     this._ignoreNextMissable = true;
-    return this._bufferSizeMs !== bufferSizeMs;
+  }
+
+  reset() {
+    this._bufferSizeMs = this._initialBufferSizeMs;
+    this._bufferNeededMsHistory = [];
+    this._missableCountSinceLastBufferAdjust = 0;
+    this._missedCountSinceLastBufferAdjust = 0;
+    this._timeOfLastBufferAdjust = -1;
+    this._ignoreNextMissable = false;
   }
 }
