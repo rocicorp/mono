@@ -99,6 +99,68 @@ describe('handlePush', () => {
     },
     {
       name: 'empty pending, multiple mutations',
+      clientMap: new Map([client(clientID, 'u1', clientGroupID, s1, 0)]),
+      pendingMutations: [],
+      mutations: [mutation(clientID, 3, 10), mutation(clientID, 4, 20)],
+      clientRecords: new Map([
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+      ]),
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 3,
+          timestamps: timestamps(10),
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 4,
+          timestamps: timestamps(20),
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
+    },
+    {
+      name: 'empty pending, multiple mutations, no timestamps for old mutations relative to push timestamp',
+      clientMap: new Map([client(clientID, 'u1', clientGroupID, s1, 0)]),
+      pendingMutations: [],
+      mutations: [
+        mutation(clientID, 3, 10),
+        mutation(clientID, 4, 50),
+        mutation(clientID, 5, 51),
+      ],
+      clientRecords: new Map([
+        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+      ]),
+      pushTimestamp: 100,
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 3,
+          timestamps: undefined,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 4,
+          timestamps: undefined,
+          pusherClientIDs: new Set([clientID]),
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 5,
+          timestamps: timestamps(51),
+          pusherClientIDs: new Set([clientID]),
+        }),
+      ],
+    },
+    {
+      name: 'empty pending, multiple mutations, no timestamps for mutations from other clients',
       clientMap: new Map([
         client(clientID, 'u1', clientGroupID, s1, 0),
         client('c2', 'u2', clientGroupID),
