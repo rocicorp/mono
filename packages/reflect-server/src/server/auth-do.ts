@@ -443,31 +443,33 @@ export class BaseAuthDO implements DurableObject {
       // writing the connection record, in case it doesn't exist or is
       // closed/deleted.
 
-      const roomRecord = await this._roomRecordLock.withRead(async () => {
+      let roomRecord = await this._roomRecordLock.withRead(
         // Check if room already exists.
-        const roomRecord = await roomRecordByRoomID(
-          this._durableStorage,
-          roomID,
-        );
-        if (roomRecord) {
-          return roomRecord;
-        }
+        () => roomRecordByRoomID(this._durableStorage, roomID),
+      );
 
-        lc.debug?.('room not found, trying to create it');
+      if (!roomRecord) {
+        roomRecord = await this._roomRecordLock.withWrite(async () => {
+          // checking again in case it was created while we were waiting for writeLock
+          const rr = roomRecordByRoomID(this._durableStorage, roomID);
+          if (rr) {
+            return rr;
+          }
+          lc.debug?.('room not found, trying to create it');
 
-        const resp = await internalCreateRoom(
-          lc,
-          this._roomDO,
-          this._durableStorage,
-          roomID,
-          jurisdiction,
-        );
-        if (!resp.ok) {
-          return undefined;
-        }
-
-        return roomRecordByRoomID(this._durableStorage, roomID);
-      });
+          const resp = await internalCreateRoom(
+            lc,
+            this._roomDO,
+            this._durableStorage,
+            roomID,
+            jurisdiction,
+          );
+          if (!resp.ok) {
+            return undefined;
+          }
+          return roomRecordByRoomID(this._durableStorage, roomID);
+        });
+      }
 
       // If the room is closed or we failed to implicitly create it, we need to
       // give the client some visibility into this. If we just return a 404 here
