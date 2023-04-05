@@ -451,7 +451,7 @@ export class BaseAuthDO implements DurableObject {
       if (!roomRecord) {
         roomRecord = await this._roomRecordLock.withWrite(async () => {
           // checking again in case it was created while we were waiting for writeLock
-          const rr = roomRecordByRoomID(this._durableStorage, roomID);
+          const rr = await roomRecordByRoomID(this._durableStorage, roomID);
           if (rr) {
             return rr;
           }
