@@ -11,6 +11,7 @@ import {
   deleteRoomRecord,
   internalCreateRoom,
   objectIDByRoomID,
+  RoomRecord,
   roomRecordByRoomID,
   roomRecords,
   RoomStatus,
@@ -443,10 +444,11 @@ export class BaseAuthDO implements DurableObject {
       // writing the connection record, in case it doesn't exist or is
       // closed/deleted.
 
-      let roomRecord = await this._roomRecordLock.withRead(
-        // Check if room already exists.
-        () => roomRecordByRoomID(this._durableStorage, roomID),
-      );
+      let roomRecord: RoomRecord | undefined =
+        await this._roomRecordLock.withRead(
+          // Check if room already exists.
+          () => roomRecordByRoomID(this._durableStorage, roomID),
+        );
 
       if (!roomRecord) {
         roomRecord = await this._roomRecordLock.withWrite(async () => {
