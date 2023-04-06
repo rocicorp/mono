@@ -48,7 +48,7 @@ type MissableRecord = {
 
 class FakeBufferSizer extends BufferSizer {
   readonly missableRecords: MissableRecord[] = [];
-  testBufferSizeMs: number = 0;
+  testBufferSizeMs = 0;
 
   constructor() {
     super(
