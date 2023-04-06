@@ -15,16 +15,16 @@ export class BufferSizer {
 
   constructor(options: {
     initialBufferSizeMs: number;
-    minBuferSizeMs: number;
+    minBufferSizeMs: number;
     maxBufferSizeMs: number;
     adjustBufferSizeIntervalMs: number;
   }) {
-    assert(options.minBuferSizeMs <= options.maxBufferSizeMs);
-    assert(options.initialBufferSizeMs >= options.minBuferSizeMs);
+    assert(options.minBufferSizeMs <= options.maxBufferSizeMs);
+    assert(options.initialBufferSizeMs >= options.minBufferSizeMs);
     assert(options.initialBufferSizeMs <= options.maxBufferSizeMs);
     assert(options.adjustBufferSizeIntervalMs > 0);
     this._initialBufferSizeMs = options.initialBufferSizeMs;
-    this._minBufferSizeMs = options.minBuferSizeMs;
+    this._minBufferSizeMs = options.minBufferSizeMs;
     this._maxBufferSizeMs = options.maxBufferSizeMs;
     this._adjustBufferSizeIntervalMs = options.adjustBufferSizeIntervalMs;
     this._bufferSizeMs = this._initialBufferSizeMs;
@@ -69,7 +69,7 @@ export class BufferSizer {
       ];
     const bufferSizeMs = this._bufferSizeMs;
 
-    lc.debug?.(
+    lc.info?.(
       'bufferSizeMs',
       bufferSizeMs,
       'targetBufferNeededMs',
@@ -89,7 +89,7 @@ export class BufferSizer {
         this._maxBufferSizeMs,
         Math.max(bufferSizeMs, targetBufferNeededMs),
       );
-      lc.debug?.(
+      lc.info?.(
         'High miss percent',
         missPercent,
         'over last',
@@ -101,7 +101,7 @@ export class BufferSizer {
         this._minBufferSizeMs,
         Math.min(bufferSizeMs, targetBufferNeededMs),
       );
-      lc.debug?.(
+      lc.info?.(
         'Low miss percent',
         missPercent,
         'over last',
@@ -111,7 +111,7 @@ export class BufferSizer {
     }
 
     if (bufferSizeMs !== newBufferSizeMs) {
-      lc.debug?.(
+      lc.info?.(
         'Adjusting buffer',
         newBufferSizeMs > bufferSizeMs ? 'up' : 'down',
         'from',

@@ -16,6 +16,7 @@ export const pokeSchema = v.object({
   debugOriginTimestamp: v.number().optional(),
   debugServerReceivedTimestamp: v.number().optional(),
   debugServerSentTimestamp: v.number().optional(),
+  debugTurnMissCount: v.number().optional(),
 });
 
 export const pokeBodySchema = v.object({

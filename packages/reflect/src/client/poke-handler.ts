@@ -9,7 +9,7 @@ import {BufferSizer} from 'shared/buffer-sizer.js';
 export const BUFFER_SIZER_OPTIONS = {
   initialBufferSizeMs: 250,
   maxBufferSizeMs: 1000,
-  minBuferSizeMs: -1000,
+  minBufferSizeMs: -1000,
   adjustBufferSizeIntervalMs: 10 * 1000,
 } as const;
 // TODO consider systems that don't run at 60fps (newer macs/ipads run RAF

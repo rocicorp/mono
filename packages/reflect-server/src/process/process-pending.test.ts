@@ -32,11 +32,49 @@ import {
   getConnectedClients,
   putConnectedClients,
 } from '../types/connected-clients.js';
+import {BufferSizer} from 'shared/buffer-sizer.js';
+import type {LogContext} from '@rocicorp/logger';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
 
 mockMathRandom();
+
+type MissableRecord = {
+  now: number;
+  missed: boolean;
+  bufferNeededMs: number;
+};
+
+class FakeBufferSizer extends BufferSizer {
+  readonly missableRecords: MissableRecord[] = [];
+  testBufferSizeMs: number = 0;
+
+  constructor() {
+    super(
+      // values unused
+      {
+        initialBufferSizeMs: 0,
+        maxBufferSizeMs: 0,
+        minBufferSizeMs: 0,
+        adjustBufferSizeIntervalMs: 1,
+      },
+    );
+  }
+
+  override get bufferSizeMs() {
+    return this.testBufferSizeMs;
+  }
+
+  override recordMissable(
+    now: number,
+    missed: boolean,
+    bufferNeededMs: number,
+    _lc: LogContext,
+  ): void {
+    this.missableRecords.push({now, missed, bufferNeededMs});
+  }
+}
 
 const START_TIME = 1000;
 beforeEach(() => {
@@ -57,6 +95,7 @@ describe('processPending', () => {
     storedConnectedClients: ClientID[];
     pendingMutations: PendingMutation[];
     maxProcessedMutationTimestamp: number;
+    bufferSizeMs?: number; // default 200
     expectedError?: string;
     expectedVersion: Version;
     expectedPokes?: Map<ClientID, PokeBody>;
@@ -65,6 +104,7 @@ describe('processPending', () => {
     expectedPendingMutations?: PendingMutation[];
     expectNothingToProcess?: boolean;
     expectedMaxProcessedMutationTimestamp?: number;
+    expectedMissableRecords: MissableRecord[];
   };
 
   const s1 = new Mocket();
@@ -85,6 +125,7 @@ describe('processPending', () => {
       expectedUserValues: new Map(),
       expectNothingToProcess: true,
       expectedClientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
+      expectedMissableRecords: [],
     },
     {
       name: 'no pending mutations, but connect pending',
@@ -119,6 +160,7 @@ describe('processPending', () => {
         ['c1', clientRecord('cg1', 3)],
         ['c2', clientRecord('cg1', 3)],
       ]),
+      expectedMissableRecords: [],
     },
     {
       name: 'no pending mutations, but disconnect pending',
@@ -150,6 +192,7 @@ describe('processPending', () => {
         ['c1', clientRecord('cg1', 2)],
         ['c2', clientRecord('cg1', 1)],
       ]),
+      expectedMissableRecords: [],
     },
     {
       name: 'one client, one mutation, all processed',
@@ -196,6 +239,13 @@ describe('processPending', () => {
       ]),
       expectedClientRecords: new Map([['c1', clientRecord('cg1', 2, 2, 2)]]),
       expectedMaxProcessedMutationTimestamp: 750,
+      expectedMissableRecords: [
+        {
+          bufferNeededMs: 0,
+          missed: false,
+          now: START_TIME,
+        },
+      ],
     },
     {
       name: 'one client, one mutation, all processed, debugPerf',
@@ -252,6 +302,13 @@ describe('processPending', () => {
       ]),
       expectedClientRecords: new Map([['c1', clientRecord('cg1', 2, 2, 2)]]),
       expectedMaxProcessedMutationTimestamp: 750,
+      expectedMissableRecords: [
+        {
+          bufferNeededMs: -50,
+          missed: false,
+          now: START_TIME,
+        },
+      ],
     },
     {
       name: 'three clients, two client groups, three mutations, all processed',
@@ -444,6 +501,13 @@ describe('processPending', () => {
         ['c3', clientRecord('cg2', 4, 2, 4)],
       ]),
       expectedMaxProcessedMutationTimestamp: 740,
+      expectedMissableRecords: [
+        {
+          bufferNeededMs: 0,
+          missed: false,
+          now: START_TIME,
+        },
+      ],
     },
     {
       name: 'two clients, two client groups, four mutations all w timestamps, two processed',
@@ -583,6 +647,199 @@ describe('processPending', () => {
         }),
       ],
       expectedMaxProcessedMutationTimestamp: 800,
+      expectedMissableRecords: [
+        {
+          bufferNeededMs: 0,
+          missed: false,
+          now: START_TIME,
+        },
+      ],
+    },
+    {
+      name: 'two clients, two client groups, four mutations all w timestamps, three processed, different bufferNeededMs',
+      version: 1,
+      clientRecords: new Map([
+        ['c1', clientRecord('cg1', 1)],
+        ['c2', clientRecord('cg1', 1)],
+      ]),
+      clients: new Map([
+        client('c1', 'u1', 'cg1', s1, 0),
+        client('c2', 'u2', 'cg1', s2, 0),
+      ]),
+      storedConnectedClients: ['c1', 'c2'],
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamps: {
+            normalizedTimestamp: 840,
+            originTimestamp: 640,
+            serverReceivedTimestamp: 910,
+          },
+          name: 'inc',
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamps: {
+            normalizedTimestamp: 850,
+            originTimestamp: 650,
+            serverReceivedTimestamp: 915,
+          },
+          name: 'inc',
+        }),
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 3,
+          timestamps: {
+            normalizedTimestamp: 860,
+            originTimestamp: 660,
+            serverReceivedTimestamp: 935,
+          },
+          name: 'inc',
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID: 'cg1',
+          id: 3,
+          timestamps: {
+            normalizedTimestamp: 870,
+            originTimestamp: 670,
+            serverReceivedTimestamp: 940,
+          },
+          name: 'inc',
+        }),
+      ],
+      maxProcessedMutationTimestamp: 700,
+      bufferSizeMs: 140,
+      expectedVersion: 4,
+      expectedPokes: new Map([
+        [
+          'c1',
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                lastMutationIDChanges: {c1: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 840,
+              },
+              {
+                baseCookie: 2,
+                cookie: 3,
+                lastMutationIDChanges: {c2: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 2,
+                  },
+                ],
+                timestamp: 850,
+              },
+              {
+                baseCookie: 3,
+                cookie: 4,
+                lastMutationIDChanges: {c1: 3},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 3,
+                  },
+                ],
+                timestamp: 860,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
+        ],
+        [
+          'c2',
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                lastMutationIDChanges: {c1: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 840,
+              },
+              {
+                baseCookie: 2,
+                cookie: 3,
+                lastMutationIDChanges: {c2: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 2,
+                  },
+                ],
+                timestamp: 850,
+              },
+              {
+                baseCookie: 3,
+                cookie: 4,
+                lastMutationIDChanges: {c1: 3},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 3,
+                  },
+                ],
+                timestamp: 860,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
+        ],
+      ]),
+      expectedUserValues: new Map([
+        ['count', {value: 3, version: 4, deleted: false}],
+      ]),
+      expectedClientRecords: new Map([
+        ['c1', clientRecord('cg1', 4, 3, 4)],
+        ['c2', clientRecord('cg1', 4, 2, 3)],
+      ]),
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID: 'cg1',
+          id: 3,
+          timestamps: {
+            normalizedTimestamp: 870,
+            originTimestamp: 670,
+            serverReceivedTimestamp: 940,
+          },
+          name: 'inc',
+        }),
+      ],
+      expectedMaxProcessedMutationTimestamp: 860,
+      expectedMissableRecords: [
+        {
+          bufferNeededMs: 75,
+          missed: false,
+          now: START_TIME,
+        },
+      ],
     },
     {
       name: 'two clients, two client groups, four mutations some with undefined timestamps, two processed',
@@ -722,6 +979,13 @@ describe('processPending', () => {
         }),
       ],
       expectedMaxProcessedMutationTimestamp: 790,
+      expectedMissableRecords: [
+        {
+          bufferNeededMs: 0,
+          missed: false,
+          now: START_TIME,
+        },
+      ],
     },
     {
       name: 'one client, one mutation, all processed, passed maxProcessedMutationTimestamp is greater than processed',
@@ -734,7 +998,11 @@ describe('processPending', () => {
           clientID: 'c1',
           clientGroupID: 'cg1',
           id: 2,
-          timestamps: 750,
+          timestamps: {
+            normalizedTimestamp: 750,
+            originTimestamp: 500,
+            serverReceivedTimestamp: 850,
+          },
           name: 'inc',
         }),
       ],
@@ -768,6 +1036,13 @@ describe('processPending', () => {
       ]),
       expectedClientRecords: new Map([['c1', clientRecord('cg1', 2, 2, 2)]]),
       expectedMaxProcessedMutationTimestamp: 800,
+      expectedMissableRecords: [
+        {
+          bufferNeededMs: 100,
+          missed: true,
+          now: START_TIME,
+        },
+      ],
     },
     {
       name: 'one client, two mutations, all processed, maxProcessedMutationTimestamp returned is not last mutation',
@@ -834,6 +1109,13 @@ describe('processPending', () => {
       ]),
       expectedClientRecords: new Map([['c1', clientRecord('cg1', 3, 3, 3)]]),
       expectedMaxProcessedMutationTimestamp: 750,
+      expectedMissableRecords: [
+        {
+          bufferNeededMs: 0,
+          missed: false,
+          now: START_TIME,
+        },
+      ],
     },
   ];
 
@@ -860,6 +1142,8 @@ describe('processPending', () => {
       for (const [, clientState] of c.clients) {
         (clientState.socket as Mocket).log.length = 0;
       }
+      const fakeBufferSizer = new FakeBufferSizer();
+      fakeBufferSizer.testBufferSizeMs = c.bufferSizeMs ?? 200;
       const p = processPending(
         createSilentLogContext(),
         storage,
@@ -868,6 +1152,7 @@ describe('processPending', () => {
         mutators,
         () => Promise.resolve(),
         c.maxProcessedMutationTimestamp,
+        fakeBufferSizer,
       );
       if (c.expectedError) {
         let expectedE;
@@ -912,6 +1197,9 @@ describe('processPending', () => {
         new Map()) {
         expect(await getClientRecord(expClientID, storage)).toEqual(expRecord);
       }
+      expect(fakeBufferSizer.missableRecords).toEqual(
+        c.expectedMissableRecords,
+      );
     });
   }
 });
