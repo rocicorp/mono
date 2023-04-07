@@ -1,12 +1,12 @@
 import {expect} from '@esm-bundle/chai';
 import * as dag from '../dag/mod.js';
-import * as db from '../db/mod.js';
-import {assertHash, makeNewFakeHashFunction} from '../hash.js';
-import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
-import {ChainBuilder} from '../db/test-helpers.js';
-import {MetaType} from '../db/commit.js';
 import {TestLazyStore} from '../dag/test-lazy-store.js';
+import {MetaType} from '../db/commit.js';
+import * as db from '../db/mod.js';
+import {ChainBuilder} from '../db/test-helpers.js';
+import {assertHash, makeNewFakeHashFunction} from '../hash.js';
 import {withRead, withWrite} from '../with-transactions.js';
+import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
 
 suite('dag with no memory-only hashes gathers nothing', () => {
   const t = async (dd31: boolean) => {
@@ -31,7 +31,7 @@ suite('dag with no memory-only hashes gathers nothing', () => {
     await withRead(memdag, async dagRead => {
       for (const commit of pb.chain) {
         const visitor = new GatherMemoryOnlyVisitor(dagRead);
-        await visitor.visitCommit(commit.chunk.hash);
+        await visitor.visit(commit.chunk.hash);
         expect(visitor.gatheredChunks).to.be.empty;
       }
     });
@@ -40,7 +40,7 @@ suite('dag with no memory-only hashes gathers nothing', () => {
 
     await withRead(memdag, async dagRead => {
       const visitor = new GatherMemoryOnlyVisitor(dagRead);
-      await visitor.visitCommit(pb.headHash);
+      await visitor.visit(pb.headHash);
       expect(visitor.gatheredChunks).to.be.empty;
     });
   };
@@ -66,7 +66,7 @@ suite('dag with only memory-only hashes gathers everything', () => {
     const testGatheredChunks = async () => {
       await withRead(memdag, async dagRead => {
         const visitor = new GatherMemoryOnlyVisitor(dagRead);
-        await visitor.visitCommit(mb.headHash);
+        await visitor.visit(mb.headHash);
         expect(memdag.getMemOnlyChunksSnapshot()).to.deep.equal(
           Object.fromEntries(visitor.gatheredChunks),
         );
@@ -120,7 +120,7 @@ suite(
 
       await withRead(memdag, async dagRead => {
         const visitor = new GatherMemoryOnlyVisitor(dagRead);
-        await visitor.visitCommit(mb.headHash);
+        await visitor.visit(mb.headHash);
         const metaBase = {
           basisHash: 'face0000000040008000000000000000' + '' + '000000000003',
           mutationID: 2,
@@ -212,7 +212,7 @@ suite(
 
       await withRead(memdag, async dagRead => {
         const visitor = new GatherMemoryOnlyVisitor(dagRead);
-        await visitor.visitCommit(mb.headHash);
+        await visitor.visit(mb.headHash);
         expect(Object.fromEntries(visitor.gatheredChunks)).to.deep.equal(
           dd31
             ? {

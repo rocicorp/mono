@@ -1,15 +1,15 @@
+import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/asserts.js';
 import type * as dag from '../dag/mod.js';
+import {assertSnapshotCommitDD31} from '../db/commit.js';
 import * as db from '../db/mod.js';
+import type {Hash} from '../hash.js';
+import type {MutatorDefs} from '../replicache.js';
 import type * as sync from '../sync/mod.js';
+import {withRead, withWrite} from '../with-transactions.js';
+import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
 import {assertHasClientState, getClientGroupIDForClient} from './clients.js';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
-import type {MutatorDefs} from '../replicache.js';
-import type {Hash} from '../hash.js';
-import type {LogContext} from '@rocicorp/logger';
-import {assertSnapshotCommitDD31} from '../db/commit.js';
-import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
-import {withRead, withWrite} from '../with-transactions.js';
 
 /**
  * Persists the client's memdag state to the client's perdag client group.
@@ -239,7 +239,7 @@ function gatherMemOnlyChunks(
 ): Promise<ReadonlyMap<Hash, dag.Chunk>> {
   return withRead(memdag, async dagRead => {
     const visitor = new GatherMemoryOnlyVisitor(dagRead);
-    await visitor.visitCommit(baseSnapshotHash);
+    await visitor.visit(baseSnapshotHash);
     return visitor.gatheredChunks;
   });
 }
