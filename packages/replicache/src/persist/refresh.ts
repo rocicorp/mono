@@ -243,8 +243,8 @@ export async function refresh(
     return;
   }
 
-  const setRefreshHashes = (refreshHashes: Hash[]) => {
-    return withWrite(perdag, async perdagWrite => {
+  const setRefreshHashes = (refreshHashes: Hash[]) =>
+    withWrite(perdag, async perdagWrite => {
       const client = await getClient(clientID, perdagWrite);
       if (!client) {
         throw new ClientStateNotFoundError(clientID);
@@ -260,17 +260,15 @@ export async function refresh(
 
       await perdagWrite.commit();
     });
-  };
 
   if (result.type === 'aborted') {
     if (result.refreshHashesForRevert) {
       await setRefreshHashes(result.refreshHashesForRevert);
     }
     return undefined;
-  } else {
-    await setRefreshHashes([result.newPerdagClientHeadHash]);
-    return [result.newMemdagHeadHash, result.diffs];
   }
+  await setRefreshHashes([result.newPerdagClientHeadHash]);
+  return [result.newMemdagHeadHash, result.diffs];
 }
 
 function shouldAbortRefresh(

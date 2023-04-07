@@ -150,8 +150,7 @@ function assertClientBase(value: unknown): asserts value is {
   [key: string]: unknown;
 } {
   assertObject(value);
-  const {heartbeatTimestampMs, headHash} = value;
-  assertNumber(heartbeatTimestampMs);
+  assertNumber(value.heartbeatTimestampMs);
 }
 
 export function assertClientV4(value: unknown): asserts value is ClientV4 {

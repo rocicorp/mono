@@ -13,7 +13,6 @@ import {
 } from '../db/commit.js';
 import {assertHash, fakeHash, newUUIDHash} from '../hash.js';
 import {
-  assertClientV5,
   ClientV5,
   CLIENTS_HEAD_NAME,
   findMatchingClient,

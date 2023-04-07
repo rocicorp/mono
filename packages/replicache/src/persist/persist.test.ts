@@ -13,7 +13,6 @@ import {
   setClients,
   getClients,
   ClientStateNotFoundError,
-  ClientV5,
   initClientV6,
   Client,
   ClientV6,
