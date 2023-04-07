@@ -5,7 +5,7 @@ import {BufferSizer} from './buffer-sizer.js';
 type Case = {
   name: string;
   initialBufferSizeMs: number;
-  minBuferSizeMs: number;
+  minBufferSizeMs: number;
   maxBufferSizeMs: number;
   missables: {missed: boolean; bufferNeededMs: number; count: number}[];
   expectedBufferSizeMs: number;
@@ -16,7 +16,7 @@ describe('BufferSizer buffer adjustment', () => {
     {
       name: 'adjust up to 99.5% (under max)',
       initialBufferSizeMs: 250,
-      minBuferSizeMs: 10,
+      minBufferSizeMs: 10,
       maxBufferSizeMs: 1000,
       missables: [
         {missed: true, bufferNeededMs: 700, count: 1},
@@ -29,7 +29,7 @@ describe('BufferSizer buffer adjustment', () => {
     {
       name: 'adjust up to 99.5% (under max, more missables)',
       initialBufferSizeMs: 250,
-      minBuferSizeMs: 10,
+      minBufferSizeMs: 10,
       maxBufferSizeMs: 1000,
       missables: [
         {missed: true, bufferNeededMs: 700, count: 1},
@@ -44,7 +44,7 @@ describe('BufferSizer buffer adjustment', () => {
     {
       name: 'adjust up capped at max',
       initialBufferSizeMs: 250,
-      minBuferSizeMs: 10,
+      minBufferSizeMs: 10,
       maxBufferSizeMs: 1000,
       missables: [
         {missed: true, bufferNeededMs: 1100, count: 5},
@@ -55,7 +55,7 @@ describe('BufferSizer buffer adjustment', () => {
     {
       name: 'even if bufferNeededMs high doesnt adjust up if low miss rate',
       initialBufferSizeMs: 250,
-      minBuferSizeMs: 10,
+      minBufferSizeMs: 10,
       maxBufferSizeMs: 1000,
       missables: [
         {missed: true, bufferNeededMs: 1100, count: 2},
@@ -66,7 +66,7 @@ describe('BufferSizer buffer adjustment', () => {
     {
       name: 'if miss rate is high, but bufferNeededMs is lower than current buffer, does not adjust up',
       initialBufferSizeMs: 250,
-      minBuferSizeMs: 10,
+      minBufferSizeMs: 10,
       maxBufferSizeMs: 1000,
       missables: [
         {missed: true, bufferNeededMs: 300, count: 1},
@@ -79,7 +79,7 @@ describe('BufferSizer buffer adjustment', () => {
     {
       name: 'adjust down to 99.5% (above min)',
       initialBufferSizeMs: 250,
-      minBuferSizeMs: 10,
+      minBufferSizeMs: 10,
       maxBufferSizeMs: 1000,
       missables: [
         {missed: true, bufferNeededMs: 1100, count: 1},
@@ -91,7 +91,7 @@ describe('BufferSizer buffer adjustment', () => {
     {
       name: 'adjust down floored at min',
       initialBufferSizeMs: 250,
-      minBuferSizeMs: 10,
+      minBufferSizeMs: 10,
       maxBufferSizeMs: 1000,
       missables: [
         {missed: true, bufferNeededMs: 1100, count: 1},
@@ -103,7 +103,7 @@ describe('BufferSizer buffer adjustment', () => {
     {
       name: 'even if bufferNeededMs low doesnt adjust down if miss rate is not low enough',
       initialBufferSizeMs: 250,
-      minBuferSizeMs: 10,
+      minBufferSizeMs: 10,
       maxBufferSizeMs: 1000,
       missables: [
         {missed: true, bufferNeededMs: 1100, count: 1},
@@ -115,7 +115,7 @@ describe('BufferSizer buffer adjustment', () => {
     {
       name: 'if miss rate is low, but bufferNeededMs is higher than current buffer, does not adjust down',
       initialBufferSizeMs: 250,
-      minBuferSizeMs: 10,
+      minBufferSizeMs: 10,
       maxBufferSizeMs: 1000,
       missables: [
         {missed: true, bufferNeededMs: 1100, count: 1},
@@ -127,7 +127,7 @@ describe('BufferSizer buffer adjustment', () => {
     {
       name: 'negative buffer sizes',
       initialBufferSizeMs: 250,
-      minBuferSizeMs: -1000,
+      minBufferSizeMs: -1000,
       maxBufferSizeMs: 1000,
       missables: [
         {missed: true, bufferNeededMs: 1100, count: 1},
@@ -139,7 +139,7 @@ describe('BufferSizer buffer adjustment', () => {
     {
       name: 'does not update if less than 200 misseables recorded',
       initialBufferSizeMs: 250,
-      minBuferSizeMs: 10,
+      minBufferSizeMs: 10,
       maxBufferSizeMs: 1000,
       missables: [
         {missed: true, bufferNeededMs: 700, count: 1},
@@ -157,7 +157,7 @@ describe('BufferSizer buffer adjustment', () => {
     test(c.name, () => {
       const bufferSizer = new BufferSizer({
         initialBufferSizeMs: c.initialBufferSizeMs,
-        minBuferSizeMs: c.minBuferSizeMs,
+        minBufferSizeMs: c.minBufferSizeMs,
         maxBufferSizeMs: c.maxBufferSizeMs,
         adjustBufferSizeIntervalMs,
       });
@@ -179,7 +179,7 @@ test('sequence of recordMissable adjusts every adjustBufferSizeIntervalMs and st
   const adjustBufferSizeIntervalMs = 1000;
   const bufferSizer = new BufferSizer({
     initialBufferSizeMs: 250,
-    minBuferSizeMs: 10,
+    minBufferSizeMs: 10,
     maxBufferSizeMs: 1000,
     adjustBufferSizeIntervalMs,
   });
