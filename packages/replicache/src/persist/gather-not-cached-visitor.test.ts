@@ -1,10 +1,10 @@
 import {expect} from '@esm-bundle/chai';
 import * as dag from '../dag/mod.js';
-import {assertHash, makeNewFakeHashFunction} from '../hash.js';
-import {ChainBuilder} from '../db/test-helpers.js';
-import {GatherNotCachedVisitor} from './gather-not-cached-visitor.js';
 import {MetaType} from '../db/commit.js';
+import {ChainBuilder} from '../db/test-helpers.js';
+import {assertHash, makeNewFakeHashFunction} from '../hash.js';
 import {withRead, withWrite} from '../with-transactions.js';
+import {GatherNotCachedVisitor} from './gather-not-cached-visitor.js';
 
 suite('GatherNotCachedVisitor', () => {
   test('when gatherSizeLimit not exceeded, if none cached gathers all, if all cached gathers none', async () => {
@@ -17,7 +17,7 @@ suite('GatherNotCachedVisitor', () => {
         1000,
         getSize,
       );
-      await visitor.visitCommit(pb.headHash);
+      await visitor.visit(pb.headHash);
       expect(
         Object.fromEntries(visitor.gatheredChunks.entries()),
       ).to.deep.equal(allChunksInVisitOrder);
@@ -39,7 +39,7 @@ suite('GatherNotCachedVisitor', () => {
         1000,
         getSize,
       );
-      await visitor.visitCommit(pb.headHash);
+      await visitor.visit(pb.headHash);
       expect(visitor.gatheredChunks).to.be.empty;
     });
   });
@@ -55,7 +55,7 @@ suite('GatherNotCachedVisitor', () => {
         45,
         getSize,
       );
-      await visitor.visitCommit(pb.headHash);
+      await visitor.visit(pb.headHash);
 
       const allChunksInVisitOrderEntries = Object.entries(
         allChunksInVisitOrder,
@@ -80,7 +80,7 @@ suite('GatherNotCachedVisitor', () => {
         1000,
         getSize,
       );
-      await visitor.visitCommit(pb.headHash);
+      await visitor.visit(pb.headHash);
       expect(
         Object.fromEntries(visitor.gatheredChunks.entries()),
       ).to.deep.equal(allChunksInVisitOrder);
@@ -104,7 +104,7 @@ suite('GatherNotCachedVisitor', () => {
         1000,
         getSize,
       );
-      await visitor.visitCommit(pb.headHash);
+      await visitor.visit(pb.headHash);
       expect(
         Object.fromEntries(visitor.gatheredChunks.entries()),
       ).to.deep.equal({
@@ -270,22 +270,6 @@ const allChunksInVisitOrder = {
     },
     size: 10,
   },
-  face0000000040008000000000000000000000000010: {
-    chunk: {
-      hash: 'face0000000040008000000000000000000000000010',
-      data: [
-        0,
-        [
-          ['\u0000local1\u0000localOne', {id: 'local1'}],
-          ['\u0000local2\u0000localTwo', {id: 'local2'}],
-          ['\u0000snap1\u0000snapOne', {id: 'snap1'}],
-          ['\u0000snap2\u0000snapTwo', {id: 'snap2'}],
-        ],
-      ],
-      meta: [],
-    },
-    size: 10,
-  },
   face0000000040008000000000000000000000000008: {
     chunk: {
       hash: 'face0000000040008000000000000000000000000008',
@@ -322,6 +306,22 @@ const allChunksInVisitOrder = {
     },
     size: 10,
   },
+  face0000000040008000000000000000000000000010: {
+    chunk: {
+      hash: 'face0000000040008000000000000000000000000010',
+      data: [
+        0,
+        [
+          ['\u0000local1\u0000localOne', {id: 'local1'}],
+          ['\u0000local2\u0000localTwo', {id: 'local2'}],
+          ['\u0000snap1\u0000snapOne', {id: 'snap1'}],
+          ['\u0000snap2\u0000snapTwo', {id: 'snap2'}],
+        ],
+      ],
+      meta: [],
+    },
+    size: 10,
+  },
   face0000000040008000000000000000000000000006: {
     chunk: {
       hash: 'face0000000040008000000000000000000000000006',
@@ -331,21 +331,6 @@ const allChunksInVisitOrder = {
           ['localOne', {id: 'local1'}],
           ['snapOne', {id: 'snap1'}],
           ['snapTwo', {id: 'snap2'}],
-        ],
-      ],
-      meta: [],
-    },
-    size: 10,
-  },
-  face0000000040008000000000000000000000000007: {
-    chunk: {
-      hash: 'face0000000040008000000000000000000000000007',
-      data: [
-        0,
-        [
-          ['\u0000local1\u0000localOne', {id: 'local1'}],
-          ['\u0000snap1\u0000snapOne', {id: 'snap1'}],
-          ['\u0000snap2\u0000snapTwo', {id: 'snap2'}],
         ],
       ],
       meta: [],
@@ -381,6 +366,21 @@ const allChunksInVisitOrder = {
         'face0000000040008000000000000000000000000003',
         'face0000000040008000000000000000000000000004',
       ],
+    },
+    size: 10,
+  },
+  face0000000040008000000000000000000000000007: {
+    chunk: {
+      hash: 'face0000000040008000000000000000000000000007',
+      data: [
+        0,
+        [
+          ['\u0000local1\u0000localOne', {id: 'local1'}],
+          ['\u0000snap1\u0000snapOne', {id: 'snap1'}],
+          ['\u0000snap2\u0000snapTwo', {id: 'snap2'}],
+        ],
+      ],
+      meta: [],
     },
     size: 10,
   },

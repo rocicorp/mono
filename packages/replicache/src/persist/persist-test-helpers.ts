@@ -1,12 +1,12 @@
 import {assert} from 'shared/asserts.js';
 import type * as dag from '../dag/mod.js';
-import type * as sync from '../sync/mod.js';
+import {assertSnapshotMetaSDD} from '../db/commit.js';
 import * as db from '../db/mod.js';
 import type {Hash} from '../hash.js';
+import type * as sync from '../sync/mod.js';
+import {withRead, withWrite} from '../with-transactions.js';
 import {assertHasClientState, setClient} from './clients.js';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
-import {assertSnapshotMetaSDD} from '../db/commit.js';
-import {withRead, withWrite} from '../with-transactions.js';
 
 /**
  * Persists the client's 'main' head memdag state to the perdag.
@@ -78,7 +78,7 @@ function gatherMemOnlyChunks(
     const mainHeadHash = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
     assert(mainHeadHash);
     const visitor = new GatherMemoryOnlyVisitor(dagRead);
-    await visitor.visitCommit(mainHeadHash);
+    await visitor.visit(mainHeadHash);
     const headCommit = await db.commitFromHash(mainHeadHash, dagRead);
     const baseSnapshotCommit = await db.baseSnapshotFromHash(
       mainHeadHash,

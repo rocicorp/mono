@@ -1,52 +1,51 @@
-import {LogContext} from '@rocicorp/logger';
 import {expect} from '@esm-bundle/chai';
+import {LogContext} from '@rocicorp/logger';
+import {assert, assertNotUndefined} from 'shared/asserts.js';
+import * as btree from '../btree/mod.js';
+import {BTreeWrite} from '../btree/mod.js';
+import type {Cookie} from '../cookies.js';
 import type * as dag from '../dag/mod.js';
+import {Visitor} from '../dag/visitor.js';
+import {Hash, emptyHash} from '../hash.js';
+import type {IndexDefinition, IndexDefinitions} from '../index-defs.js';
+import {JSONValue, deepFreeze} from '../json.js';
+import type {ClientID} from '../sync/ids.js';
+import {addSyncSnapshot} from '../sync/test-helpers.js';
+import {withRead, withWrite} from '../with-transactions.js';
 import {
+  ChunkIndexDefinition,
+  Commit,
+  DEFAULT_HEAD_NAME,
+  IndexRecord,
+  LocalMeta,
+  Meta,
+  MetaType,
+  SnapshotMetaDD31,
+  SnapshotMetaSDD,
+  assertIndexChangeCommit,
   assertLocalCommitDD31,
   assertLocalCommitSDD,
   assertSnapshotCommitDD31,
   assertSnapshotCommitSDD,
-  Commit,
-  CommitData,
-  DEFAULT_HEAD_NAME,
-  fromHead,
-  IndexRecord,
-  Meta,
-  MetaType,
-  toChunkIndexDefinition,
-  SnapshotMetaDD31,
-  SnapshotMetaSDD,
-  LocalMeta,
-  assertIndexChangeCommit,
-  ChunkIndexDefinition,
   chunkIndexDefinitionEqualIgnoreName,
+  fromHead,
+  toChunkIndexDefinition,
 } from './commit.js';
+import {IndexWrite} from './index.js';
 import {
+  Whence,
   readCommit,
   readCommitForBTreeWrite,
-  Whence,
   whenceHead,
 } from './read.js';
 import {
   Write,
-  readIndexesForWrite,
-  newWriteSnapshotSDD,
-  newWriteSnapshotDD31,
-  newWriteLocal,
   createIndexBTree,
+  newWriteLocal,
+  newWriteSnapshotDD31,
+  newWriteSnapshotSDD,
+  readIndexesForWrite,
 } from './write.js';
-import {JSONValue, deepFreeze} from '../json.js';
-import type {ClientID} from '../sync/ids.js';
-import {emptyHash, Hash} from '../hash.js';
-import {BTreeWrite, Node} from '../btree/mod.js';
-import * as btree from '../btree/mod.js';
-import type {IndexDefinition, IndexDefinitions} from '../index-defs.js';
-import {IndexWrite} from './index.js';
-import {Visitor} from './visitor.js';
-import {assert, assertNotUndefined} from 'shared/asserts.js';
-import {addSyncSnapshot} from '../sync/test-helpers.js';
-import type {Cookie} from '../cookies.js';
-import {withRead, withWrite} from '../with-transactions.js';
 
 export type Chain = Commit<Meta>[];
 
@@ -453,14 +452,9 @@ async function createEmptyIndexMaps(
 class ChunkSnapshotVisitor extends Visitor {
   snapshot: Record<string, unknown> = {};
 
-  override visitCommitChunk(chunk: dag.Chunk<CommitData<Meta>>): Promise<void> {
+  override visitChunk(chunk: dag.Chunk): Promise<void> {
     this.snapshot[chunk.hash.toString()] = chunk.data;
-    return super.visitCommitChunk(chunk);
-  }
-
-  override visitBTreeNodeChunk(chunk: dag.Chunk<Node>): Promise<void> {
-    this.snapshot[chunk.hash.toString()] = chunk.data;
-    return super.visitBTreeNodeChunk(chunk);
+    return super.visitChunk(chunk);
   }
 }
 
@@ -470,7 +464,7 @@ export function getChunkSnapshot(
 ): Promise<Record<string, unknown>> {
   return withRead(dagStore, async dagRead => {
     const v = new ChunkSnapshotVisitor(dagRead);
-    await v.visitCommit(hash);
+    await v.visit(hash);
     return v.snapshot;
   });
 }
