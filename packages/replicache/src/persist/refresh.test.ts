@@ -1,25 +1,31 @@
 import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
-import type * as sync from '../sync/mod.js';
+import {assert, assertNotUndefined} from 'shared/asserts.js';
+import * as btree from '../btree/mod.js';
+import type {Cookie} from '../cookies.js';
 import * as dag from '../dag/mod.js';
 import * as db from '../db/mod.js';
-import * as btree from '../btree/mod.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {assertHash, Hash, makeNewFakeHashFunction} from '../hash.js';
+import {Hash, assertHash, makeNewFakeHashFunction} from '../hash.js';
 import {JSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
 import {
   ClientGroupMap,
   setClientGroup,
   setClientGroups,
 } from '../persist/client-groups.js';
-import {ClientV5, setClient} from '../persist/clients.js';
-import {addData, testSubscriptionsManagerOptions} from '../test-util.js';
-import {refresh} from './refresh.js';
-import {assert, assertNotUndefined} from 'shared/asserts.js';
+import {
+  ClientV5,
+  assertClientV5,
+  getClient,
+  getClients,
+  setClient,
+} from '../persist/clients.js';
 import type {MutatorDefs} from '../replicache.js';
+import type * as sync from '../sync/mod.js';
+import {addData, testSubscriptionsManagerOptions} from '../test-util.js';
 import type {WriteTransaction} from '../transactions.js';
-import type {Cookie} from '../cookies.js';
 import {withRead, withWrite} from '../with-transactions.js';
+import {refresh} from './refresh.js';
 
 async function makeChain(
   store: dag.Store,
@@ -129,6 +135,28 @@ function mutatorsProxy(): MutatorDefs {
   );
 }
 
+function assertTempRefreshHashToBeNull(perdag: dag.Store): Promise<void> {
+  return withRead(perdag, async perdagRead => {
+    const clients = await getClients(perdagRead);
+    for (const client of clients.values()) {
+      assertClientV5(client);
+      expect(client.tempRefreshHash).equal(null);
+    }
+  });
+}
+
+function assertClientHeadHash(
+  perdag: dag.TestStore,
+  clientID: string,
+  hash: Hash | undefined,
+) {
+  return withRead(perdag, async read => {
+    const client = await getClient(clientID, read);
+    assert(client, `No client ${clientID}`);
+    expect(client.headHash).equal(hash);
+  });
+}
+
 suite('refresh', () => {
   test('identical dags', async () => {
     // If the dags are the same then refresh is a no op.
@@ -153,6 +181,9 @@ suite('refresh', () => {
       await withRead(memdag, read => read.getHead(db.DEFAULT_HEAD_NAME)),
     );
     expect(Object.fromEntries(result[1])).to.deep.equal({});
+
+    await assertTempRefreshHashToBeNull(perdag);
+    await assertClientHeadHash(perdag, clientID, result[0]);
   });
 
   test('memdag has one more LM', async () => {
@@ -160,7 +191,8 @@ suite('refresh', () => {
     const clientID = 'client-id-1';
     const mutators: MutatorDefs = mutatorsProxy();
 
-    await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 1);
+    const {chainBuilder: perdagChainBuilder} =
+      await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 1);
 
     // Memdag has one more LM than perdag.
     const {chainBuilder: memdagChainBuilder} = await makeMemdagChain(
@@ -192,6 +224,13 @@ suite('refresh', () => {
         },
       ],
     });
+
+    await assertTempRefreshHashToBeNull(perdag);
+    await assertClientHeadHash(
+      perdag,
+      clientID,
+      perdagChainBuilder.chain.at(-1)?.chunk.hash,
+    );
   });
 
   test('memdag has a newer cookie', async () => {
@@ -199,7 +238,8 @@ suite('refresh', () => {
     const clientID = 'client-id-1';
     const mutators: MutatorDefs = mutatorsProxy();
 
-    await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 1);
+    const {chainBuilder: perdagChainBuilder} =
+      await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 1);
 
     // Memdag has a newer cookie than perdag so we abort the refresh
     const {chainBuilder: memdagChainBuilder} = await makeMemdagChain(
@@ -220,6 +260,12 @@ suite('refresh', () => {
       () => false,
     );
     expect(diffs).undefined;
+    await assertTempRefreshHashToBeNull(perdag);
+    await assertClientHeadHash(
+      perdag,
+      clientID,
+      perdagChainBuilder.chain.at(-1)?.chunk.hash,
+    );
   });
 
   test('cookies are equal and perdag has no LM', async () => {
@@ -227,12 +273,13 @@ suite('refresh', () => {
     const clientID = 'client-id-1';
     const mutators: MutatorDefs = mutatorsProxy();
 
-    await makePerdagChainAndSetClientsAndClientGroup(
-      perdag,
-      clientID,
-      1,
-      false,
-    );
+    const {chainBuilder: perdagChainBuilder} =
+      await makePerdagChainAndSetClientsAndClientGroup(
+        perdag,
+        clientID,
+        1,
+        false,
+      );
 
     // Memdag has same cookie as perdag, and perdag has no
     // LM so we abort the refresh
@@ -248,6 +295,12 @@ suite('refresh', () => {
       () => false,
     );
     expect(diffs).undefined;
+    await assertTempRefreshHashToBeNull(perdag);
+    await assertClientHeadHash(
+      perdag,
+      clientID,
+      perdagChainBuilder.chain.at(-1)?.chunk.hash,
+    );
   });
 
   test('memdag has two more LMs', async () => {
@@ -255,7 +308,8 @@ suite('refresh', () => {
     const clientID = 'client-id-1';
     const mutators: MutatorDefs = mutatorsProxy();
 
-    await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 1);
+    const {chainBuilder: perdagChainBuilder} =
+      await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 1);
 
     // Memdag has two more LM than perdag.
     const {chainBuilder: memdagChainBuilder} = await makeMemdagChain(
@@ -293,6 +347,12 @@ suite('refresh', () => {
         },
       ],
     });
+    await assertTempRefreshHashToBeNull(perdag);
+    await assertClientHeadHash(
+      perdag,
+      clientID,
+      perdagChainBuilder.chain.at(-1)?.chunk.hash,
+    );
   });
 
   test('perdag has LM from different clients', async () => {
@@ -350,6 +410,12 @@ suite('refresh', () => {
         },
       ],
     });
+    await assertTempRefreshHashToBeNull(perdag);
+    await assertClientHeadHash(
+      perdag,
+      clientID1,
+      perdagChainBuilder.chain.at(-1)?.chunk.hash,
+    );
   });
 
   test('new snapshot during refresh', async () => {
@@ -357,7 +423,8 @@ suite('refresh', () => {
     const clientID = 'client-id-1';
     const mutators: MutatorDefs = mutatorsProxy();
 
-    await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 2);
+    const {chainBuilder: perdagChainBuilder} =
+      await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 2);
 
     // Memdag has one more LM than perdag.
     const {chainBuilder: memdagChainBuilder} = await makeMemdagChain(
@@ -389,6 +456,12 @@ suite('refresh', () => {
       () => false,
     );
     expect(diffs).undefined;
+    await assertTempRefreshHashToBeNull(perdag);
+    await assertClientHeadHash(
+      perdag,
+      clientID,
+      perdagChainBuilder.chain.at(-1)?.chunk.hash,
+    );
   });
 
   test('greg example', async () => {
@@ -639,5 +712,8 @@ suite('refresh', () => {
     expect(Object.fromEntries(result[1])).to.deep.equal({
       '': [{key: 'c', newValue: 3, op: 'add'}],
     });
+
+    await assertTempRefreshHashToBeNull(perdag);
+    await assertClientHeadHash(perdag, clientID1, l2.chunk.hash);
   });
 });
