@@ -8,8 +8,8 @@ import {sleep} from '../sleep.js';
 import * as sync from '../sync/mod.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {
-  assertClientV5,
   ClientStateNotFoundError,
+  assertClientV5,
   getClient,
   getClientGroupForClient,
   setClient,
@@ -210,6 +210,7 @@ export async function refresh(
 
         await memdagWrite.setHead(db.DEFAULT_HEAD_NAME, newMemdagHeadHash);
         await memdagWrite.commit();
+
         return [newMemdagHeadHash, diffs, perdagClientGroupHeadHash];
       });
     },
@@ -233,6 +234,8 @@ export async function refresh(
     // If this cleanup never happens, it's no big deal, some data will stay
     // alive longer but next refresh will fix it.
     await setClient(clientID, newClient, perdagWrite);
+
+    await perdagWrite.commit();
   });
 
   return result && [result[0], result[1]];
