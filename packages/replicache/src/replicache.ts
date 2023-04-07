@@ -573,8 +573,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
     await closingInstances.get(this.name);
     await this._idbDatabases.getProfileID().then(profileIDResolver);
     await this._idbDatabases.putDatabase(this._idbDatabase);
-    const [clientID, client, clients, isNewClientGroup] =
-      await persist.initClientV5(
+    const [clientID, client, headHash, clients, isNewClientGroup] =
+      await persist.initClientV6(
         this._lc,
         this._perdag,
         Object.keys(this._mutatorRegistry),
@@ -584,7 +584,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     resolveClientGroupID(client.clientGroupID);
     resolveClientID(clientID);
     await withWrite(this._memdag, async write => {
-      await write.setHead(db.DEFAULT_HEAD_NAME, client.headHash);
+      await write.setHead(db.DEFAULT_HEAD_NAME, headHash);
       await write.commit();
     });
 

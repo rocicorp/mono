@@ -14,8 +14,10 @@ import {
   getClients,
   ClientStateNotFoundError,
   ClientV5,
-  initClientV5,
+  initClientV6,
   Client,
+  ClientV6,
+  CLIENTS_HEAD_NAME,
 } from './clients.js';
 import {assertLocalMetaDD31, assertSnapshotCommitDD31} from '../db/commit.js';
 import {LogContext} from '@rocicorp/logger';
@@ -42,6 +44,7 @@ enum PersistedExpectation {
   NOTHING,
 }
 
+// TODO test setting of the persistHead
 suite('persistDD31', () => {
   let memdag: dag.LazyStore,
     perdag: dag.TestStore,
@@ -842,7 +845,7 @@ async function setupPersistTest() {
 
   let clientGroupID: undefined | sync.ClientGroupID;
   const createClient = async () => {
-    const [cID, c] = await initClientV5(
+    const [cID, c] = await initClientV6(
       new LogContext(),
       perdag,
       mutatorNames,
@@ -855,7 +858,7 @@ async function setupPersistTest() {
       client: c,
     };
   };
-  const clients: {clientID: sync.ClientID; client: ClientV5}[] = [];
+  const clients: {clientID: sync.ClientID; client: ClientV6}[] = [];
   for (let i = 0; i < 3; i++) {
     clients.push(await createClient());
   }
@@ -881,10 +884,14 @@ async function setupPersistTest() {
     const clientGroupsHeadHash = await withRead(perdag, read =>
       read.getHead(CLIENT_GROUPS_HEAD_NAME),
     );
+    const clientsHeadHash = await withRead(perdag, read =>
+      read.getHead(CLIENTS_HEAD_NAME),
+    );
     for (const hash of perdag.chunkHashes()) {
       if (
         !perdagChunkHashesPrePersist.has(hash) &&
-        hash !== clientGroupsHeadHash
+        hash !== clientGroupsHeadHash &&
+        hash !== clientsHeadHash
       ) {
         persistedChunkHashes.add(hash);
       }

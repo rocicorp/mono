@@ -8,7 +8,13 @@ import type {MutatorDefs} from '../replicache.js';
 import type * as sync from '../sync/mod.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
-import {assertHasClientState, getClientGroupIDForClient} from './clients.js';
+import {
+  assertHasClientState,
+  ClientStateNotFoundError,
+  getClient,
+  getClientGroupIDForClient,
+  setClient,
+} from './clients.js';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
 
 /**
@@ -115,6 +121,10 @@ export async function persistDD31(
       // check if memdag snapshot still newer than perdag snapshot
       const [mainClientGroup, latestPerdagMainClientGroupHeadCommit] =
         await getClientGroupInfo(perdagWrite, mainClientGroupID);
+      const client = await getClient(clientID, perdagWrite);
+      if (!client) {
+        throw new ClientStateNotFoundError(clientID);
+      }
       let mutationIDs;
       let {lastServerAckdMutationIDs} = mainClientGroup;
       const latestPerdagBaseSnapshot = await db.baseSnapshotFromCommit(
@@ -133,6 +143,14 @@ export async function persistDD31(
         // still newer, persist memdag snapshot by writing chunks
         await Promise.all(
           Array.from(gatheredChunks.values(), c => perdagWrite.putChunk(c)),
+        );
+        await setClient(
+          clientID,
+          {
+            ...client,
+            persistHash: memdagBaseSnapshotHash,
+          },
+          perdagWrite,
         );
         memdagBaseSnapshotPersisted = true;
         // Rebase local mutations from perdag main client group onto new

@@ -14,11 +14,10 @@ import {
   setClientGroups,
 } from '../persist/client-groups.js';
 import {
-  ClientV5,
-  assertClientV5,
   getClient,
-  getClients,
   setClient,
+  ClientV6,
+  assertClientV6,
 } from '../persist/clients.js';
 import type {MutatorDefs} from '../replicache.js';
 import type * as sync from '../sync/mod.js';
@@ -75,6 +74,7 @@ async function setClientsAndClientGroups(
   headHash: Hash,
   clientID: sync.ClientID,
   perdag: dag.Store,
+  refreshHashes = [headHash],
 ) {
   const clientGroupID = 'client-group-1';
   const clientGroups: ClientGroupMap = new Map([
@@ -93,12 +93,12 @@ async function setClientsAndClientGroups(
     ],
   ]);
 
-  const client: ClientV5 = {
+  const client: ClientV6 = {
     clientGroupID,
-    headHash,
+    refreshHashes,
     // Not used
     heartbeatTimestampMs: -1,
-    tempRefreshHash: null,
+    persistHash: null,
   };
 
   await withWrite(perdag, async perdagWrite => {
@@ -135,25 +135,16 @@ function mutatorsProxy(): MutatorDefs {
   );
 }
 
-function assertTempRefreshHashToBeNull(perdag: dag.Store): Promise<void> {
-  return withRead(perdag, async perdagRead => {
-    const clients = await getClients(perdagRead);
-    for (const client of clients.values()) {
-      assertClientV5(client);
-      expect(client.tempRefreshHash).equal(null);
-    }
-  });
-}
-
-function assertClientHeadHash(
+function assertRefreshHashes(
   perdag: dag.TestStore,
   clientID: string,
-  hash: Hash | undefined,
+  hashes: (Hash | undefined)[],
 ) {
   return withRead(perdag, async read => {
     const client = await getClient(clientID, read);
     assert(client, `No client ${clientID}`);
-    expect(client.headHash).equal(hash);
+    assertClientV6(client);
+    expect(client.refreshHashes).to.deep.equal(hashes);
   });
 }
 
@@ -182,8 +173,7 @@ suite('refresh', () => {
     );
     expect(Object.fromEntries(result[1])).to.deep.equal({});
 
-    await assertTempRefreshHashToBeNull(perdag);
-    await assertClientHeadHash(perdag, clientID, result[0]);
+    await assertRefreshHashes(perdag, clientID, [result[0]]);
   });
 
   test('memdag has one more LM', async () => {
@@ -225,12 +215,9 @@ suite('refresh', () => {
       ],
     });
 
-    await assertTempRefreshHashToBeNull(perdag);
-    await assertClientHeadHash(
-      perdag,
-      clientID,
+    await assertRefreshHashes(perdag, clientID, [
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
-    );
+    ]);
   });
 
   test('memdag has a newer cookie', async () => {
@@ -260,12 +247,9 @@ suite('refresh', () => {
       () => false,
     );
     expect(diffs).undefined;
-    await assertTempRefreshHashToBeNull(perdag);
-    await assertClientHeadHash(
-      perdag,
-      clientID,
+    await assertRefreshHashes(perdag, clientID, [
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
-    );
+    ]);
   });
 
   test('cookies are equal and perdag has no LM', async () => {
@@ -295,12 +279,9 @@ suite('refresh', () => {
       () => false,
     );
     expect(diffs).undefined;
-    await assertTempRefreshHashToBeNull(perdag);
-    await assertClientHeadHash(
-      perdag,
-      clientID,
+    await assertRefreshHashes(perdag, clientID, [
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
-    );
+    ]);
   });
 
   test('memdag has two more LMs', async () => {
@@ -347,12 +328,9 @@ suite('refresh', () => {
         },
       ],
     });
-    await assertTempRefreshHashToBeNull(perdag);
-    await assertClientHeadHash(
-      perdag,
-      clientID,
+    await assertRefreshHashes(perdag, clientID, [
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
-    );
+    ]);
   });
 
   test('perdag has LM from different clients', async () => {
@@ -410,12 +388,9 @@ suite('refresh', () => {
         },
       ],
     });
-    await assertTempRefreshHashToBeNull(perdag);
-    await assertClientHeadHash(
-      perdag,
-      clientID1,
+    await assertRefreshHashes(perdag, clientID1, [
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
-    );
+    ]);
   });
 
   test('new snapshot during refresh', async () => {
@@ -456,12 +431,9 @@ suite('refresh', () => {
       () => false,
     );
     expect(diffs).undefined;
-    await assertTempRefreshHashToBeNull(perdag);
-    await assertClientHeadHash(
-      perdag,
-      clientID,
+    await assertRefreshHashes(perdag, clientID, [
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
-    );
+    ]);
   });
 
   test('greg example', async () => {
@@ -628,9 +600,9 @@ suite('refresh', () => {
         clientID1,
         {
           clientGroupID,
-          headHash: l2.chunk.hash,
+          refreshHashes: [l2.chunk.hash],
           heartbeatTimestampMs: 1,
-          tempRefreshHash: null,
+          persistHash: null,
         },
         dagWrite,
       );
@@ -638,9 +610,9 @@ suite('refresh', () => {
         clientID2,
         {
           clientGroupID,
-          headHash: l2.chunk.hash,
+          refreshHashes: [l2.chunk.hash],
           heartbeatTimestampMs: 2,
-          tempRefreshHash: null,
+          persistHash: null,
         },
         dagWrite,
       );
@@ -713,7 +685,10 @@ suite('refresh', () => {
       '': [{key: 'c', newValue: 3, op: 'add'}],
     });
 
-    await assertTempRefreshHashToBeNull(perdag);
-    await assertClientHeadHash(perdag, clientID1, l2.chunk.hash);
+    await assertRefreshHashes(perdag, clientID1, [l2.chunk.hash]);
   });
+
+  // TODO test second perdag write fails
+  // TODO test rollback of refreshHashes
+  // TODO test if existing refreshHashes has multiple after complete there is one
 });
