@@ -108,12 +108,11 @@ export type ClientV6 = {
   /**
    * A set of hashes, which contains:
    * 1. The hash of the last commit this client refreshed from its client group
-   *    (this is the commit it bootstrapped from until it completes its
-   *     first refresh).
-   * 2. One or more hashes that were added to retain chunks of a commit
-   *    while it was being refreshed into this client's memdag. (This
-   *    can be one or more because refresh's cleanup step is a separate
-   *    transaction and can fail).
+   *    (this is the commit it bootstrapped from until it completes its first
+   *    refresh).
+   * 2. One or more hashes that were added to retain chunks of a commit while it
+   *    was being refreshed into this client's memdag. (This can be one or more
+   *    because refresh's cleanup step is a separate transaction and can fail).
    * Upon refresh completing and successfully running its clean up step, this
    * set will contain a single hash: the hash of the last commit this client
    * refreshed.
