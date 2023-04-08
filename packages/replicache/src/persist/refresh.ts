@@ -132,10 +132,12 @@ export async function refresh(
         const refreshHashesSet = new Set<Hash>();
         client.refreshHashes.forEach(h => refreshHashesSet.add(h));
         refreshHashesSet.add(perdagClientGroupHeadHash);
+
         const newClient: ClientV6 = {
           ...client,
           refreshHashes: [...refreshHashesSet],
         };
+
         await setClient(clientID, newClient, perdagWrite);
         await perdagWrite.commit();
         return [

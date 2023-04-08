@@ -17,6 +17,8 @@ import {
   Client,
   ClientV6,
   CLIENTS_HEAD_NAME,
+  ClientMap,
+  assertClientV6,
 } from './clients.js';
 import {assertLocalMetaDD31, assertSnapshotCommitDD31} from '../db/commit.js';
 import {LogContext} from '@rocicorp/logger';
@@ -43,7 +45,6 @@ enum PersistedExpectation {
   NOTHING,
 }
 
-// TODO test setting of the persistHead
 suite('persistDD31', () => {
   let memdag: dag.LazyStore,
     perdag: dag.TestStore,
@@ -229,19 +230,22 @@ suite('persistDD31', () => {
     });
   }
 
-  async function getClientGroupAndHeadHashes() {
+  async function getClientMapClientGroupAndHeadHashes() {
     const memdagHeadHash = await withRead(memdag, memdagRead =>
       memdagRead.getHead(db.DEFAULT_HEAD_NAME),
     );
     assertNotUndefined(memdagHeadHash);
 
-    const clientGroup = await withRead(perdag, async perdagRead => {
-      const clientGroup = await getClientGroup(clientGroupID, perdagRead);
-      assertNotUndefined(clientGroup);
-      return clientGroup;
-    });
+    const [clientGroup, clientMap] = await withRead(
+      perdag,
+      async perdagRead => {
+        const clientGroup = await getClientGroup(clientGroupID, perdagRead);
+        assertNotUndefined(clientGroup);
+        return [clientGroup, await getClients(perdagRead)];
+      },
+    );
     const perdagClientGroupHeadHash = clientGroup.headHash;
-    return {memdagHeadHash, perdagClientGroupHeadHash, clientGroup};
+    return {memdagHeadHash, perdagClientGroupHeadHash, clientGroup, clientMap};
   }
 
   test('equal snapshot cookies no locals', async () => {
@@ -251,7 +255,7 @@ suite('persistDD31', () => {
     } = await setupSnapshots();
     await perdagClientGroupChainBuilder.removeHead();
 
-    const clientGroupSnapshot = await getClientGroupHelper(
+    const {clientMap, clientGroup} = await getClientMapAndClientGroup(
       perdag,
       clientGroupID,
     );
@@ -263,9 +267,10 @@ suite('persistDD31', () => {
 
     await testPersist(PersistedExpectation.NOTHING);
 
-    const afterPersist = await getClientGroupAndHeadHashes();
-    // memdag and perdag client group both unchanged
-    expect(afterPersist.clientGroup).to.deep.equal(clientGroupSnapshot);
+    const afterPersist = await getClientMapClientGroupAndHeadHashes();
+    // memdag, perdag client group, perdag client map all unchanged
+    expect(afterPersist.clientGroup).to.deep.equal(clientGroup);
+    expect(afterPersist.clientMap).to.deep.equal(clientMap);
     expect(afterPersist.memdagHeadHash).to.equal(memdagHeadHash);
     expect(
       await getChunkSnapshot(memdag, afterPersist.memdagHeadHash),
@@ -285,7 +290,7 @@ suite('persistDD31', () => {
     } = await setupLocals();
     await perdagClientGroupChainBuilder.removeHead();
 
-    const clientGroupSnapshot = await getClientGroupHelper(
+    const {clientMap, clientGroup} = await getClientMapAndClientGroup(
       perdag,
       clientGroupID,
     );
@@ -293,9 +298,9 @@ suite('persistDD31', () => {
 
     await testPersist(PersistedExpectation.LOCALS);
 
-    const afterPersist = await getClientGroupAndHeadHashes();
+    const afterPersist = await getClientMapClientGroupAndHeadHashes();
     expect(afterPersist.clientGroup).to.deep.equal({
-      ...clientGroupSnapshot,
+      ...clientGroup,
       mutationIDs: {
         [clients[0].clientID]: 2,
         [clients[1].clientID]: 1,
@@ -303,6 +308,7 @@ suite('persistDD31', () => {
       },
       headHash: afterPersist.perdagClientGroupHeadHash,
     });
+    expect(afterPersist.clientMap).to.deep.equal(clientMap);
     // memdag unchanged
     expect(afterPersist.memdagHeadHash).to.equal(memdagHeadHash);
     expect(
@@ -343,7 +349,7 @@ suite('persistDD31', () => {
     });
     await perdagClientGroupChainBuilder.removeHead();
 
-    const clientGroupSnapshot = await getClientGroupHelper(
+    const {clientMap, clientGroup} = await getClientMapAndClientGroup(
       perdag,
       clientGroupID,
     );
@@ -355,9 +361,10 @@ suite('persistDD31', () => {
 
     await testPersist(PersistedExpectation.NOTHING);
 
-    const afterPersist = await getClientGroupAndHeadHashes();
+    const afterPersist = await getClientMapClientGroupAndHeadHashes();
     // memdag and perdag client group both unchanged
-    expect(afterPersist.clientGroup).to.deep.equal(clientGroupSnapshot);
+    expect(afterPersist.clientGroup).to.deep.equal(clientGroup);
+    expect(afterPersist.clientMap).to.deep.equal(clientMap);
     expect(afterPersist.memdagHeadHash).to.equal(memdagHeadHash);
     expect(
       await getChunkSnapshot(memdag, afterPersist.memdagHeadHash),
@@ -380,7 +387,7 @@ suite('persistDD31', () => {
     } = await setupLocals();
     await perdagClientGroupChainBuilder.removeHead();
 
-    const clientGroupSnapshot = await getClientGroupHelper(
+    const {clientMap, clientGroup} = await getClientMapAndClientGroup(
       perdag,
       clientGroupID,
     );
@@ -388,9 +395,9 @@ suite('persistDD31', () => {
 
     await testPersist(PersistedExpectation.LOCALS);
 
-    const afterPersist = await getClientGroupAndHeadHashes();
+    const afterPersist = await getClientMapClientGroupAndHeadHashes();
     expect(afterPersist.clientGroup).to.deep.equal({
-      ...clientGroupSnapshot,
+      ...clientGroup,
       mutationIDs: {
         [clients[0].clientID]: 2,
         [clients[1].clientID]: 1,
@@ -398,6 +405,7 @@ suite('persistDD31', () => {
       },
       headHash: afterPersist.perdagClientGroupHeadHash,
     });
+    expect(afterPersist.clientMap).to.deep.equal(clientMap);
     // memdag unchanged
     expect(afterPersist.memdagHeadHash).to.equal(memdagHeadHash);
     expect(
@@ -460,7 +468,7 @@ suite('persistDD31', () => {
     });
     await perdagClientGroupChainBuilder.removeHead();
 
-    const clientGroupSnapshot = await getClientGroupHelper(
+    const {clientMap, clientGroup} = await getClientMapAndClientGroup(
       perdag,
       clientGroupID,
     );
@@ -468,9 +476,9 @@ suite('persistDD31', () => {
 
     await testPersist(PersistedExpectation.NOTHING);
 
-    const afterPersist = await getClientGroupAndHeadHashes();
+    const afterPersist = await getClientMapClientGroupAndHeadHashes();
     expect(afterPersist.clientGroup).to.deep.equal({
-      ...clientGroupSnapshot,
+      ...clientGroup,
       mutationIDs: {
         [clients[0].clientID]: 2,
         [clients[1].clientID]: 1,
@@ -478,6 +486,7 @@ suite('persistDD31', () => {
       },
       headHash: afterPersist.perdagClientGroupHeadHash,
     });
+    expect(afterPersist.clientMap).to.deep.equal(clientMap);
     // memdag unchanged
     expect(afterPersist.memdagHeadHash).to.equal(memdagHeadHash);
     expect(
@@ -490,7 +499,7 @@ suite('persistDD31', () => {
   });
 
   test('memdag newer snapshot no locals', async () => {
-    await setupSnapshots({
+    const {memdagHeadHash: memdagSnapshotCommitHash} = await setupSnapshots({
       perdagClientGroupCookie: 'cookie1',
       memdagCookie: 'cookie2',
       memdagValueMap: [
@@ -504,16 +513,16 @@ suite('persistDD31', () => {
     });
     await perdagClientGroupChainBuilder.removeHead();
 
-    const clientGroupSnapshot = await getClientGroupHelper(
+    const {clientMap, clientGroup} = await getClientMapAndClientGroup(
       perdag,
       clientGroupID,
     );
     await testPersist(PersistedExpectation.SNAPSHOT);
 
-    const afterPersist = await getClientGroupAndHeadHashes();
+    const afterPersist = await getClientMapClientGroupAndHeadHashes();
 
     expect(afterPersist.clientGroup).to.deep.equal({
-      ...clientGroupSnapshot,
+      ...clientGroup,
       headHash: afterPersist.perdagClientGroupHeadHash,
       lastServerAckdMutationIDs: {
         [clients[0].clientID]: 1,
@@ -524,6 +533,12 @@ suite('persistDD31', () => {
         [clients[1].clientID]: 2,
       },
     });
+    expectUpdatedClientPersistHash(
+      clientMap,
+      clients,
+      memdagSnapshotCommitHash,
+      afterPersist.clientMap,
+    );
     // memdag and perdag client group snapshots should be identical (memdag
     // snapshot written to perdag client group with temp hashes replace with
     // permanent hashes, and then memdag fixed up with permanent hashes)
@@ -549,7 +564,7 @@ suite('persistDD31', () => {
       [clients[0].clientID]: 1,
       [clients[2].clientID]: 2,
     };
-    await setupSnapshots({
+    const {memdagHeadHash: memdagSnapshotCommitHash} = await setupSnapshots({
       perdagClientGroupCookie: 'cookie1',
       memdagCookie,
       memdagValueMap: [
@@ -573,16 +588,16 @@ suite('persistDD31', () => {
     );
     await perdagClientGroupChainBuilder.removeHead();
 
-    const clientGroupSnapshot = await getClientGroupHelper(
+    const {clientMap, clientGroup} = await getClientMapAndClientGroup(
       perdag,
       clientGroupID,
     );
     await testPersist(PersistedExpectation.SNAPSHOT_AND_LOCALS);
 
-    const afterPersist = await getClientGroupAndHeadHashes();
+    const afterPersist = await getClientMapClientGroupAndHeadHashes();
 
     expect(afterPersist.clientGroup).to.deep.equal({
-      ...clientGroupSnapshot,
+      ...clientGroup,
       headHash: afterPersist.perdagClientGroupHeadHash,
       lastServerAckdMutationIDs: {
         [clients[0].clientID]: 1,
@@ -594,6 +609,12 @@ suite('persistDD31', () => {
         [clients[2].clientID]: 2,
       },
     });
+    expectUpdatedClientPersistHash(
+      clientMap,
+      clients,
+      memdagSnapshotCommitHash,
+      afterPersist.clientMap,
+    );
     const afterPersistPerdagBaseSnapshotHash = await withRead(
       perdag,
       async perdagRead => {
@@ -664,7 +685,7 @@ suite('persistDD31', () => {
 
   test('memdag newer snapshot with locals, but then older after chunks hashed', async () => {
     const memdagCookie = 'cookie2';
-    await setupSnapshots({
+    const {memdagHeadHash: memdagSnapshotCommitHash} = await setupSnapshots({
       perdagClientGroupCookie: 'cookie1',
       memdagCookie,
       memdagValueMap: [
@@ -717,7 +738,7 @@ suite('persistDD31', () => {
       );
     }
 
-    const clientGroupSnapshot = await getClientGroupHelper(
+    const {clientMap, clientGroup} = await getClientMapAndClientGroup(
       perdag,
       clientGroupID,
     );
@@ -727,10 +748,10 @@ suite('persistDD31', () => {
       await ensurePerdagClientGroupUpdatedToNewerSnapshot();
     });
 
-    const afterPersist = await getClientGroupAndHeadHashes();
+    const afterPersist = await getClientMapClientGroupAndHeadHashes();
 
     expect(afterPersist.clientGroup).to.deep.equal({
-      ...clientGroupSnapshot,
+      ...clientGroup,
       headHash: afterPersist.perdagClientGroupHeadHash,
       lastServerAckdMutationIDs: {
         [clients[0].clientID]: 1,
@@ -743,7 +764,7 @@ suite('persistDD31', () => {
         [clients[2].clientID]: 1,
       },
     });
-
+    expect(afterPersist.clientMap).to.deep.equal(clientMap);
     // memdag unchanged
     expect(afterPersist.memdagHeadHash).to.equal(memdagHeadHash);
     expect(
@@ -808,6 +829,22 @@ suite('persistDD31', () => {
       .property('id', clients[0].clientID);
   });
 });
+
+function expectUpdatedClientPersistHash(
+  clientMap: ClientMap,
+  clients: {clientID: sync.ClientID; client: Client}[],
+  memdagSnapshotCommitHash: Hash,
+  afterPersistClientMap: ClientMap,
+) {
+  const expectedClientMap = new Map(clientMap);
+  const persistingClient = clientMap.get(clients[0].clientID);
+  assertClientV6(persistingClient);
+  expectedClientMap.set(clients[0].clientID, {
+    ...persistingClient,
+    persistHash: memdagSnapshotCommitHash,
+  });
+  expect(afterPersistClientMap).to.deep.equal(expectedClientMap);
+}
 
 async function setupPersistTest() {
   const hashFunction = makeNewFakeHashFunction();
@@ -936,13 +973,14 @@ async function setupPersistTest() {
     testPersist,
   };
 }
-function getClientGroupHelper(
+function getClientMapAndClientGroup(
   perdag: dag.TestStore,
   clientGroupID: string,
-): Promise<ClientGroup | undefined> {
-  return withRead(perdag, perdagRead =>
-    getClientGroup(clientGroupID, perdagRead),
-  );
+): Promise<{clientMap: ClientMap; clientGroup: ClientGroup | undefined}> {
+  return withRead(perdag, async perdagRead => ({
+    clientGroup: await getClientGroup(clientGroupID, perdagRead),
+    clientMap: await getClients(perdagRead),
+  }));
 }
 
 function expectRebasedLocal(
