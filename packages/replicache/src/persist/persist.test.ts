@@ -685,7 +685,7 @@ suite('persistDD31', () => {
 
   test('memdag newer snapshot with locals, but then older after chunks hashed', async () => {
     const memdagCookie = 'cookie2';
-    const {memdagHeadHash: memdagSnapshotCommitHash} = await setupSnapshots({
+    await setupSnapshots({
       perdagClientGroupCookie: 'cookie1',
       memdagCookie,
       memdagValueMap: [

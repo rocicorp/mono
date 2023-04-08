@@ -18,7 +18,6 @@ import {
   setClient,
   ClientV6,
   assertClientV6,
-  Client,
 } from '../persist/clients.js';
 import type {MutatorDefs} from '../replicache.js';
 import type * as sync from '../sync/mod.js';
@@ -278,8 +277,11 @@ suite('refresh', () => {
     const clientID = 'client-id-1';
     const mutators: MutatorDefs = mutatorsProxy();
 
-    const {chainBuilder: perdagChainBuilder, client} =
-      await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 1);
+    const {client} = await makePerdagChainAndSetClientsAndClientGroup(
+      perdag,
+      clientID,
+      1,
+    );
 
     // Memdag has a newer cookie than perdag so we abort the refresh
     const {chainBuilder: memdagChainBuilder} = await makeMemdagChain(
@@ -499,11 +501,11 @@ suite('refresh', () => {
     const clientID = 'client-id-1';
     const mutators: MutatorDefs = mutatorsProxy();
 
-    let {chainBuilder: perdagChainBuilder, client} =
+    const {chainBuilder: perdagChainBuilder, client: c} =
       await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 2);
-    client = await withWrite(perdag, async perdagWrite => {
+    const client = await withWrite(perdag, async perdagWrite => {
       const newClient = {
-        ...client,
+        ...c,
         refreshHashes: [fakeHash('a'), fakeHash('b')],
       };
       await setClient(clientID, newClient, perdagWrite);
@@ -521,7 +523,7 @@ suite('refresh', () => {
 
     let writeCalls = 0;
     const {write} = perdag;
-    perdag.write = async () => {
+    perdag.write = () => {
       if (writeCalls++ === 1) {
         throw new Error('Test error in second perdag write');
       }
