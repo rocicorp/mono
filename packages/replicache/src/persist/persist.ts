@@ -200,7 +200,10 @@ export async function persistDD31(
       await perdagWrite.commit();
     });
     if (memdagBaseSnapshotPersisted) {
-      await memdag.chunksPersisted(gatheredChunks.keys());
+      await withWrite(memdag, async perdagWrite => {
+        perdagWrite.chunksPersisted([...gatheredChunks.keys()]);
+        await perdagWrite.commit();
+      });
     }
   } else {
     if (closed()) {

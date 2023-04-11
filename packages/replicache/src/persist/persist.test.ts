@@ -1,40 +1,40 @@
 import {expect} from '@esm-bundle/chai';
+import {LogContext} from '@rocicorp/logger';
 import {assert, assertNotNull, assertNotUndefined} from 'shared/asserts.js';
+import sinon from 'sinon';
 import * as dag from '../dag/mod.js';
+import {assertLocalMetaDD31, assertSnapshotCommitDD31} from '../db/commit.js';
 import * as db from '../db/mod.js';
-import type * as sync from '../sync/mod.js';
 import {
   ChainBuilder,
   createMutatorName,
   getChunkSnapshot,
 } from '../db/test-helpers.js';
-import {assertHash, Hash, makeNewFakeHashFunction} from '../hash.js';
+import {Hash, assertHash, makeNewFakeHashFunction} from '../hash.js';
+import type {JSONValue} from '../json.js';
+import type {MutatorDefs} from '../mod.js';
+import {promiseVoid} from '../resolved-promises.js';
+import type * as sync from '../sync/mod.js';
+import type {WriteTransaction} from '../transactions.js';
+import {withRead, withWrite} from '../with-transactions.js';
 import {
-  setClients,
-  getClients,
-  ClientStateNotFoundError,
-  initClientV6,
-  Client,
-  ClientV6,
-  CLIENTS_HEAD_NAME,
-  ClientMap,
-  assertClientV6,
-} from './clients.js';
-import {assertLocalMetaDD31, assertSnapshotCommitDD31} from '../db/commit.js';
-import {LogContext} from '@rocicorp/logger';
-import {
-  ClientGroup,
   CLIENT_GROUPS_HEAD_NAME,
+  ClientGroup,
   getClientGroup,
   setClientGroup,
 } from './client-groups.js';
+import {
+  CLIENTS_HEAD_NAME,
+  Client,
+  ClientMap,
+  ClientStateNotFoundError,
+  ClientV6,
+  assertClientV6,
+  getClients,
+  initClientV6,
+  setClients,
+} from './clients.js';
 import {persistDD31} from './persist.js';
-import type {WriteTransaction} from '../transactions.js';
-import type {JSONValue} from '../json.js';
-import type {MutatorDefs} from '../mod.js';
-import sinon from 'sinon';
-import {promiseVoid} from '../resolved-promises.js';
-import {withRead, withWrite} from '../with-transactions.js';
 
 const PERDAG_TEST_SETUP_HEAD_NAME = 'test-setup-head';
 
@@ -72,6 +72,7 @@ suite('persistDD31', () => {
   teardown(async () => {
     await memdag.close();
     await perdag.close();
+    sinon.restore();
   });
 
   async function setupSnapshots(options?: {
@@ -855,16 +856,10 @@ async function setupPersistTest() {
     hashFunction,
     assertHash,
   );
-  const chunksPersistedCalls: Hash[][] = [];
-  sinon
-    .stub(memdag, 'chunksPersisted')
-    .callsFake((chunkHashes: Iterable<Hash>) => {
-      const chunkHashesArray = [...chunkHashes];
-      chunksPersistedCalls.push(chunkHashesArray);
-      return dag.LazyStore.prototype.chunksPersisted.apply(memdag, [
-        chunkHashesArray,
-      ]);
-    });
+  const chunksPersistedSpy = sinon.spy(
+    dag.LazyWrite.prototype,
+    'chunksPersisted',
+  );
 
   const mutatorNames = Array.from({length: 10}, (_, index) =>
     createMutatorName(index),
@@ -905,7 +900,7 @@ async function setupPersistTest() {
     persistedExpectation: PersistedExpectation,
     onGatherMemOnlyChunksForTest = () => promiseVoid,
   ) => {
-    chunksPersistedCalls.length = 0;
+    chunksPersistedSpy.resetHistory();
     const perdagChunkHashesPrePersist = perdag.chunkHashes();
     await persistDD31(
       new LogContext(),
@@ -916,7 +911,7 @@ async function setupPersistTest() {
       () => false,
       onGatherMemOnlyChunksForTest,
     );
-    const persistedChunkHashes = new Set<Hash>();
+    const persistedChunkHashes: Hash[] = [];
     const clientGroupsHeadHash = await withRead(perdag, read =>
       read.getHead(CLIENT_GROUPS_HEAD_NAME),
     );
@@ -929,33 +924,33 @@ async function setupPersistTest() {
         hash !== clientGroupsHeadHash &&
         hash !== clientsHeadHash
       ) {
-        persistedChunkHashes.add(hash);
+        persistedChunkHashes.push(hash);
       }
     }
     switch (persistedExpectation) {
       case PersistedExpectation.SNAPSHOT:
-        expect(persistedChunkHashes.size).to.be.greaterThan(0);
-        expect(chunksPersistedCalls.length).to.equal(1);
-        expect(new Set(chunksPersistedCalls[0])).to.deep.equal(
+        expect(persistedChunkHashes.length).to.be.greaterThan(0);
+        expect(chunksPersistedSpy.callCount).to.equal(1);
+        expect(chunksPersistedSpy.firstCall.args[0]).to.deep.equal(
           persistedChunkHashes,
         );
         break;
       case PersistedExpectation.SNAPSHOT_AND_LOCALS:
-        expect(persistedChunkHashes.size).to.be.greaterThan(0);
-        expect(chunksPersistedCalls.length).to.equal(1);
+        expect(persistedChunkHashes.length).to.be.greaterThan(0);
+        expect(chunksPersistedSpy.callCount).to.equal(1);
         // Persisted chunks is a superset of chunks passed to
         // chunksPersisted
         expect([...persistedChunkHashes]).to.include.members(
-          chunksPersistedCalls[0],
+          chunksPersistedSpy.firstCall.args[0],
         );
         break;
       case PersistedExpectation.LOCALS:
-        expect(persistedChunkHashes.size).to.be.greaterThan(0);
-        expect(chunksPersistedCalls.length).to.equal(0);
+        expect(persistedChunkHashes.length).to.be.greaterThan(0);
+        expect(chunksPersistedSpy.callCount).to.equal(0);
         break;
       case PersistedExpectation.NOTHING:
-        expect(persistedChunkHashes.size).to.equal(0);
-        expect(chunksPersistedCalls.length).to.equal(0);
+        expect(persistedChunkHashes.length).to.equal(0);
+        expect(chunksPersistedSpy.callCount).to.equal(0);
         break;
     }
   };
