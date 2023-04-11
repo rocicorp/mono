@@ -57,11 +57,11 @@ export async function refresh(
   assertSnapshotCommitDD31(memdagBaseSnapshot);
 
   type PerdagWriteResult = [
-    Hash,
-    db.Commit<db.SnapshotMetaDD31>,
-    number,
-    ReadonlyMap<Hash, ChunkWithSize>,
-    readonly Hash[],
+    perdagClientGroupHeadHash: Hash,
+    perdagClientGroupBaseSnapshot: db.Commit<db.SnapshotMetaDD31>,
+    perdagLmid: number,
+    gatheredChunks: ReadonlyMap<Hash, ChunkWithSize>,
+    refreshHashesForRevert: readonly Hash[],
   ];
 
   // Suspend eviction and deletion of chunks cached by the lazy store

@@ -178,16 +178,6 @@ export function assertClientV4(value: unknown): asserts value is ClientV4 {
   assertNumber(lastServerAckdMutationID);
 }
 
-export function assertClientV5OrV6(
-  value: unknown,
-): asserts value is ClientV5 | ClientV6 {
-  if ((value as ClientV6).refreshHashes !== undefined) {
-    assertClientV6(value);
-    return;
-  }
-  assertClientV5(value);
-}
-
 export function assertClientV5(value: unknown): asserts value is ClientV5 {
   assertClientBase(value);
   const {headHash, tempRefreshHash} = value;

@@ -107,7 +107,6 @@ export async function persistDD31(
         // after gathering the snapshot chunks from memdag
         const memdagBaseSnapshotHash = memdagBaseSnapshot.chunk.hash;
         // Gather all memory only chunks from base snapshot on the memdag.
-
         const visitor = new GatherMemoryOnlyVisitor(memdagRead);
         await visitor.visit(memdagBaseSnapshotHash);
         gatheredChunks = visitor.gatheredChunks;
@@ -125,8 +124,15 @@ export async function persistDD31(
     const [mainClientGroup, latestPerdagMainClientGroupHeadCommit] =
       await getClientGroupInfo(perdagWrite, mainClientGroupID);
 
-    let newMainClientGroupHeadHash: Hash;
-    let mutationIDs: Record<sync.ClientID, number>;
+    // These initial values for newMainClientGroupHeadHash, mutationIDs,
+    // lastServerAckdMutationIDs are correct for the case where the memdag
+    // snapshot is *not* persisted.  If the memdag snapshot is persisted
+    // these values are overwritten appropriately.
+    let newMainClientGroupHeadHash: Hash =
+      latestPerdagMainClientGroupHeadCommit.chunk.hash;
+    let mutationIDs: Record<sync.ClientID, number> = {
+      ...mainClientGroup.mutationIDs,
+    };
     let {lastServerAckdMutationIDs} = mainClientGroup;
 
     if (gatheredChunks) {
@@ -149,6 +155,7 @@ export async function persistDD31(
         ) > 0
       ) {
         // still newer, persist memdag snapshot by writing chunks
+        memdagBaseSnapshotPersisted = true;
         await Promise.all(
           Array.from(gatheredChunks.values(), c => perdagWrite.putChunk(c)),
         );
@@ -161,7 +168,6 @@ export async function persistDD31(
           },
           perdagWrite,
         );
-        memdagBaseSnapshotPersisted = true;
         // Rebase local mutations from perdag main client group onto new
         // snapshot
         newMainClientGroupHeadHash = memdagBaseSnapshot.chunk.hash;
@@ -181,37 +187,17 @@ export async function persistDD31(
           mutationIDs,
           lc,
         );
-      } else {
-        newMainClientGroupHeadHash =
-          latestPerdagMainClientGroupHeadCommit.chunk.hash;
-        mutationIDs = {...mainClientGroup.mutationIDs};
       }
-      // persist new memdag mutations
-      newMainClientGroupHeadHash = await rebase(
-        newMemdagMutations,
-        newMainClientGroupHeadHash,
-        perdagWrite,
-        mutators,
-        mutationIDs,
-        lc,
-      );
-    } else {
-      lc.debug?.(
-        'memdag base snapshot is older than (or same as) perdag base snapshot',
-        memdagBaseSnapshot.meta.cookieJSON,
-        perdagBaseSnapshot.meta.cookieJSON,
-      );
-
-      mutationIDs = {...mainClientGroup.mutationIDs};
-      newMainClientGroupHeadHash = await rebase(
-        newMemdagMutations,
-        latestPerdagMainClientGroupHeadCommit.chunk.hash,
-        perdagWrite,
-        mutators,
-        mutationIDs,
-        lc,
-      );
     }
+    // rebase new memdag mutations onto perdag
+    newMainClientGroupHeadHash = await rebase(
+      newMemdagMutations,
+      newMainClientGroupHeadHash,
+      perdagWrite,
+      mutators,
+      mutationIDs,
+      lc,
+    );
 
     const newMainClientGroup = {
       ...mainClientGroup,
@@ -225,9 +211,9 @@ export async function persistDD31(
   });
 
   if (gatheredChunks && memdagBaseSnapshotPersisted) {
-    await withWrite(memdag, async perdagWrite => {
-      perdagWrite.chunksPersisted([...gatheredChunks.keys()]);
-      await perdagWrite.commit();
+    await withWrite(memdag, async memdagWrite => {
+      memdagWrite.chunksPersisted([...gatheredChunks.keys()]);
+      await memdagWrite.commit();
     });
   }
 }

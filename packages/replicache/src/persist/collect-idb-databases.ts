@@ -8,6 +8,7 @@ import * as kv from '../kv/mod.js';
 import {
   REPLICACHE_FORMAT_VERSION,
   REPLICACHE_FORMAT_VERSION_DD31,
+  REPLICACHE_FORMAT_VERSION_V6,
 } from '../replicache.js';
 import {withRead} from '../with-transactions.js';
 import {
@@ -156,7 +157,10 @@ async function canCollectDatabase(
 
     // If increase the format version we need to decide how to deal with this
     // logic.
-    assert(db.replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31);
+    assert(
+      db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_DD31 ||
+        db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_V6,
+    );
     return !(await anyPendingMutationsInClientGroups(newDagStore(db.name)));
   }
 
