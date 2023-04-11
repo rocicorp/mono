@@ -109,10 +109,12 @@ export async function persistDD31(
     // after gathering the snapshot chunks from memdag
     const memdagBaseSnapshotHash = memdagBaseSnapshot.chunk.hash;
     // Gather all memory only chunks from base snapshot on the memdag.
-    const gatheredChunks = await gatherMemOnlyChunks(
-      memdag,
-      memdagBaseSnapshotHash,
-    );
+    const gatheredChunks = await withRead(memdag, async dagRead => {
+      const visitor = new GatherMemoryOnlyVisitor(dagRead);
+      await visitor.visit(memdagBaseSnapshotHash);
+      return visitor.gatheredChunks;
+    });
+
     let memdagBaseSnapshotPersisted = false;
     if (closed()) {
       return;
@@ -248,17 +250,6 @@ async function getClientGroupInfo(
     clientGroup,
     await db.commitFromHash(clientGroup.headHash, perdagRead),
   ];
-}
-
-function gatherMemOnlyChunks(
-  memdag: dag.LazyStore,
-  baseSnapshotHash: Hash,
-): Promise<ReadonlyMap<Hash, dag.Chunk>> {
-  return withRead(memdag, async dagRead => {
-    const visitor = new GatherMemoryOnlyVisitor(dagRead);
-    await visitor.visit(baseSnapshotHash);
-    return visitor.gatheredChunks;
-  });
 }
 
 async function rebase(
