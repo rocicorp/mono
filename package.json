@@ -36,6 +36,7 @@
     "@rocicorp/reflect-server": "file:vendor/rocicorp-reflect-server-0.22.0-beta.0-2e2bcb4688fc46560d9127b55c3b580139b377e2.tgz",
     "base-64": "^1.0.0",
     "nanoid": "^3.3.4",
+    "react-intersection-observer": "^9.4.3",
     "react-range": "^1.8.14",
     "react-syntax-highlighter": "^15.5.0",
     "replicache-react": "^2.10.1"
