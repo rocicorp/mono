@@ -6,7 +6,7 @@ import type {Cookie} from '../cookies.js';
 import * as dag from '../dag/mod.js';
 import * as db from '../db/mod.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {Hash, assertHash, makeNewFakeHashFunction, fakeHash} from '../hash.js';
+import {Hash, assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {JSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
 import {
   ClientGroupMap,
@@ -14,10 +14,10 @@ import {
   setClientGroups,
 } from '../persist/client-groups.js';
 import {
-  getClient,
-  setClient,
   ClientV6,
   assertClientV6,
+  getClient,
+  setClient,
 } from '../persist/clients.js';
 import type {MutatorDefs} from '../replicache.js';
 import type * as sync from '../sync/mod.js';
@@ -141,7 +141,7 @@ function mutatorsProxy(): MutatorDefs {
 function assertRefreshHashes(
   perdag: dag.TestStore,
   clientID: string,
-  hashes: (Hash | undefined)[],
+  hashes: readonly (Hash | undefined)[],
 ) {
   return withRead(perdag, async read => {
     const client = await getClient(clientID, read);

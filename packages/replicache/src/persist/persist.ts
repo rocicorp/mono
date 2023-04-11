@@ -9,10 +9,10 @@ import type * as sync from '../sync/mod.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
 import {
+  assertClientV6,
   assertHasClientState,
-  ClientStateNotFoundError,
-  getClient,
   getClientGroupIDForClient,
+  mustGetClient,
   setClient,
 } from './clients.js';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
@@ -121,10 +121,8 @@ export async function persistDD31(
       // check if memdag snapshot still newer than perdag snapshot
       const [mainClientGroup, latestPerdagMainClientGroupHeadCommit] =
         await getClientGroupInfo(perdagWrite, mainClientGroupID);
-      const client = await getClient(clientID, perdagWrite);
-      if (!client) {
-        throw new ClientStateNotFoundError(clientID);
-      }
+      const client = await mustGetClient(clientID, perdagWrite);
+
       let mutationIDs;
       let {lastServerAckdMutationIDs} = mainClientGroup;
       const latestPerdagBaseSnapshot = await db.baseSnapshotFromCommit(
@@ -144,6 +142,7 @@ export async function persistDD31(
         await Promise.all(
           Array.from(gatheredChunks.values(), c => perdagWrite.putChunk(c)),
         );
+        assertClientV6(client);
         await setClient(
           clientID,
           {

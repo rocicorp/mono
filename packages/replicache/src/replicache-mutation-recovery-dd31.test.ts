@@ -1,56 +1,56 @@
+import {expect} from '@esm-bundle/chai';
+import {LogContext} from '@rocicorp/logger';
+import {assert} from 'shared/asserts.js';
+import sinon from 'sinon';
+import * as dag from './dag/mod.js';
+import {assertLocalMetaDD31} from './db/commit.js';
+import type * as db from './db/mod.js';
+import {ChainBuilder} from './db/test-helpers.js';
+import {assertHash} from './hash.js';
+import {JSONObject, ReadonlyJSONObject, assertJSONObject} from './json.js';
+import {initClientWithClientID} from './persist/clients-test-helpers.js';
+import {assertClientV4, assertClientV6} from './persist/clients.js';
+import * as persist from './persist/mod.js';
+import type {PullResponseV0, PullResponseV1} from './puller.js';
+import type {PushResponse} from './pusher.js';
 import {
+  createAndPersistClientWithPendingLocalSDD,
+  createPerdag,
+} from './replicache-mutation-recovery.test.js';
+import {
+  MutatorDefs,
+  REPLICACHE_FORMAT_VERSION_SDD,
+  REPLICACHE_FORMAT_VERSION_V6,
+} from './replicache.js';
+import {stringCompare} from './string-compare.js';
+import type * as sync from './sync/mod.js';
+import {
+  PULL_VERSION_DD31,
+  PULL_VERSION_SDD,
+  PullRequestV0,
+  PullRequestV1,
+} from './sync/pull.js';
+import {
+  PUSH_VERSION_DD31,
+  PUSH_VERSION_SDD,
+  PushRequestV0,
+  PushRequestV1,
+  assertPushRequestV1,
+} from './sync/push.js';
+import {
+  clock,
+  disableAllBackgroundProcesses,
   initReplicacheTesting,
   replicacheForTesting,
   tickAFewTimes,
-  clock,
-  disableAllBackgroundProcesses,
 } from './test-util.js';
-import {
-  MutatorDefs,
-  REPLICACHE_FORMAT_VERSION_DD31,
-  REPLICACHE_FORMAT_VERSION_SDD,
-} from './replicache.js';
-import {ChainBuilder} from './db/test-helpers.js';
-import type * as db from './db/mod.js';
-import * as dag from './dag/mod.js';
-import * as persist from './persist/mod.js';
-import type * as sync from './sync/mod.js';
-import {assertHash} from './hash.js';
-import {assert} from 'shared/asserts.js';
-import {expect} from '@esm-bundle/chai';
 import {uuid} from './uuid.js';
-import {assertJSONObject, JSONObject, ReadonlyJSONObject} from './json.js';
-import sinon from 'sinon';
+import {withRead} from './with-transactions.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {initClientWithClientID} from './persist/clients-test-helpers.js';
-import {
-  assertPushRequestV1,
-  PushRequestV1,
-  PushRequestV0,
-  PUSH_VERSION_DD31,
-  PUSH_VERSION_SDD,
-} from './sync/push.js';
-import {assertClientV6, assertClientV4} from './persist/clients.js';
-import {LogContext} from '@rocicorp/logger';
-import type {PullResponseV1, PullResponseV0} from './puller.js';
-import {
-  PullRequestV1,
-  PullRequestV0,
-  PULL_VERSION_DD31,
-  PULL_VERSION_SDD,
-} from './sync/pull.js';
-import {assertLocalMetaDD31} from './db/commit.js';
-import {
-  createAndPersistClientWithPendingLocalSDD,
-  createPerdag,
-} from './replicache-mutation-recovery.test.js';
-import {stringCompare} from './string-compare.js';
-import type {PushResponse} from './pusher.js';
-import {withRead} from './with-transactions.js';
 
 async function createAndPersistClientWithPendingLocalDD31(
   clientID: sync.ClientID,
@@ -224,7 +224,7 @@ suite('DD31', () => {
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersionOfClientWPendingMutations,
-      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
     });
 
     const mutatorNames = ['mutator_name_2', 'mutator_name_3'];
@@ -349,7 +349,6 @@ suite('DD31', () => {
     assertClientV6(updatedClient1);
 
     expect(updatedClient1.clientGroupID).to.deep.equal(client1.clientGroupID);
-    //expect(updatedClient1.headHash).to.equal(client1.headHash);
 
     const updatedClientGroup = await withRead(testPerdag, read =>
       persist.getClientGroup(client1.clientGroupID, read),
@@ -526,7 +525,7 @@ suite('DD31', () => {
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersionOfClientWPendingMutations,
-      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
     });
 
     const client1PendingLocalMetas =
@@ -615,7 +614,7 @@ suite('DD31', () => {
     const testPerdag = await createPerdag({
       replicacheName: replicacheNameOfClientWPendingMutations,
       schemaVersion,
-      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
     });
 
     await createAndPersistClientWithPendingLocalDD31(
@@ -681,7 +680,7 @@ suite('DD31', () => {
     const testPerdagForClients1Thru3 = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersionOfClients1Thru3AndClientRecoveringMutations,
-      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
     });
 
     const client1PendingLocalMetas =
@@ -713,7 +712,7 @@ suite('DD31', () => {
     const testPerdagForClient4 = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersionOfClient4,
-      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
     });
     const client4PendingLocalMetas =
       await createAndPersistClientWithPendingLocalDD31(
@@ -947,7 +946,7 @@ suite('DD31', () => {
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
       schemaVersion,
-      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
     });
 
     const client1PendingLocalMetas =
@@ -1155,7 +1154,7 @@ suite('DD31', () => {
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
       schemaVersion,
-      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
     });
 
     const client1PendingLocalMetas =
@@ -1354,7 +1353,7 @@ suite('DD31', () => {
     const testPerdagForClient1 = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersionOfClient1,
-      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
     });
     await createAndPersistClientWithPendingLocalDD31(
       client1ID,
@@ -1367,7 +1366,7 @@ suite('DD31', () => {
     const testPerdagForClient2 = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersionOfClient2,
-      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
     });
     const client2PendingLocalMetas =
       await createAndPersistClientWithPendingLocalDD31(
@@ -1486,7 +1485,6 @@ suite('DD31', () => {
     expect(updatedClientGroup1.lastServerAckdMutationIDs[client1ID]).equal(
       clientGroup1.lastServerAckdMutationIDs[client1ID],
     );
-    //expect(updatedClient1.headHash).to.equal(client1.headHash);
 
     expect(updatedClientGroup2.mutationIDs[client2ID]).equal(
       clientGroup2.mutationIDs[client2ID],
@@ -1496,7 +1494,6 @@ suite('DD31', () => {
     expect(updatedClientGroup2.lastServerAckdMutationIDs[client2ID]).equal(
       clientGroup2.mutationIDs[client2ID],
     );
-    //expect(updatedClient2.headHash).to.equal(client2.headHash);
   });
 
   test('mutation recovery exits early if Replicache is closed', async () => {
@@ -1525,7 +1522,7 @@ suite('DD31', () => {
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
       schemaVersion,
-      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
     });
 
     const client1PendingLocalMetas =
@@ -1809,7 +1806,7 @@ suite('DD31', () => {
       const testPerdagDD31 = await createPerdag({
         replicacheName: rep.name,
         schemaVersion: schemaVersion2,
-        replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+        replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
       });
 
       const client1PendingLocalMetasSDD =
@@ -2011,7 +2008,7 @@ suite('DD31', () => {
     const testPerdagDD31 = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersion2,
-      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
     });
 
     await createAndPersistClientWithPendingLocalDD31(
@@ -2098,7 +2095,7 @@ suite('DD31', () => {
     const testPerdagDD31 = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersion2,
-      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
     });
 
     const client1PendingLocalMetasDD31 =

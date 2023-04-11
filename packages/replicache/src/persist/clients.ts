@@ -1,10 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assertHash, Hash} from '../hash.js';
-import * as btree from '../btree/mod.js';
-import type * as dag from '../dag/mod.js';
-import * as db from '../db/mod.js';
-import type * as sync from '../sync/mod.js';
-import {FrozenJSONValue, deepFreeze} from '../json.js';
 import {
   assert,
   assertArray,
@@ -13,17 +7,26 @@ import {
   assertString,
 } from 'shared/asserts.js';
 import {hasOwn} from 'shared/has-own.js';
-import {uuid as makeUuid} from '../uuid.js';
+import * as btree from '../btree/mod.js';
+import {FrozenCookie, compareCookies} from '../cookies.js';
+import type * as dag from '../dag/mod.js';
 import {
-  assertSnapshotCommitDD31,
-  getRefs,
-  toChunkIndexDefinition,
-  newSnapshotCommitDataDD31,
   ChunkIndexDefinition,
+  assertSnapshotCommitDD31,
   chunkIndexDefinitionEqualIgnoreName,
+  getRefs,
+  newSnapshotCommitDataDD31,
+  toChunkIndexDefinition,
 } from '../db/commit.js';
-import {compareCookies, FrozenCookie} from '../cookies.js';
+import * as db from '../db/mod.js';
+import {createIndexBTree} from '../db/write.js';
+import {Hash, assertHash} from '../hash.js';
+import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
+import {FrozenJSONValue, deepFreeze} from '../json.js';
 import type {ClientID} from '../sync/ids.js';
+import type * as sync from '../sync/mod.js';
+import {uuid as makeUuid} from '../uuid.js';
+import {withWrite} from '../with-transactions.js';
 import {
   ClientGroup,
   getClientGroup,
@@ -31,9 +34,6 @@ import {
   mutatorNamesEqual,
   setClientGroup,
 } from './client-groups.js';
-import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
-import {createIndexBTree} from '../db/write.js';
-import {withWrite} from '../with-transactions.js';
 
 export type ClientMap = ReadonlyMap<
   sync.ClientID,
@@ -117,7 +117,7 @@ export type ClientV6 = {
    * set will contain a single hash: the hash of the last commit this client
    * refreshed.
    */
-  readonly refreshHashes: Hash[];
+  readonly refreshHashes: readonly Hash[];
 
   /**
    * The hash of the last snapshot commit persisted by this client to this
@@ -300,27 +300,38 @@ export async function getClient(
   return clients.get(id);
 }
 
+export async function mustGetClient(
+  id: sync.ClientID,
+  dagRead: dag.Read,
+): Promise<Client> {
+  const client = await getClient(id, dagRead);
+  if (!client) {
+    throw new ClientStateNotFoundError(id);
+  }
+  return client;
+}
+
+type InitClientV6Result = [
+  clientID: sync.ClientID,
+  client: ClientV6,
+  hash: Hash,
+  clientMap: ClientMap,
+  newClientGroup: boolean,
+];
+
 export function initClientV6(
   lc: LogContext,
   perdag: dag.Store,
   mutatorNames: string[],
   indexes: IndexDefinitions,
-): Promise<
-  [
-    clientID: sync.ClientID,
-    client: ClientV6,
-    hash: Hash,
-    clientMap: ClientMap,
-    newClientGroup: boolean,
-  ]
-> {
+): Promise<InitClientV6Result> {
   return withWrite(perdag, async dagWrite => {
     async function setClientsAndClientGroupAndCommit(
       basisHash: Hash | null,
       cookieJSON: FrozenCookie,
       valueHash: Hash,
       indexRecords: readonly db.IndexRecord[],
-    ): Promise<[sync.ClientID, ClientV6, Hash, ClientMap, boolean]> {
+    ): Promise<InitClientV6Result> {
       const newSnapshotData = newSnapshotCommitDataDD31(
         basisHash,
         {},
