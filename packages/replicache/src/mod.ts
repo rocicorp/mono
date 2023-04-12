@@ -1,39 +1,78 @@
-export {Replicache, makeIDBName} from './replicache.js';
-export {TransactionClosedError} from './transaction-closed-error.js';
+export {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
 export {consoleLogSink} from '@rocicorp/logger';
-
+export type {LogLevel, LogSink} from '@rocicorp/logger';
+export type {
+  Diff as ExperimentalDiff,
+  DiffOperation as ExperimentalDiffOperation,
+  DiffOperationAdd as ExperimentalDiffOperationAdd,
+  DiffOperationChange as ExperimentalDiffOperationChange,
+  DiffOperationDel as ExperimentalDiffOperationDel,
+  IndexDiff as ExperimentalIndexDiff,
+  NoIndexDiff as ExperimentalNoIndexDiff,
+} from './btree/node.js';
+export type {Cookie} from './cookies.js';
+export type {IndexKey} from './db/index.js';
+export type {
+  ClientStateNotFoundResponse,
+  VersionNotSupportedResponse,
+} from './error-responses.js';
+export {filterAsyncIterable} from './filter-async-iterable.js';
+export {getDefaultPuller} from './get-default-puller.js';
+export type {HTTPRequestInfo} from './http-request-info.js';
+export type {IndexDefinition, IndexDefinitions} from './index-defs.js';
+export type {IterableUnion} from './iterable-union.js';
+export type {
+  JSONObject,
+  JSONValue,
+  ReadonlyJSONObject,
+  ReadonlyJSONValue,
+} from './json.js';
+export {IDBNotFoundError} from './kv/idb-store.js';
+export {MemStore as ExperimentalMemKVStore} from './kv/mem-store.js';
+export type {
+  CreateStore as ExperimentalCreateKVStore,
+  Read as ExperimentalKVRead,
+  Store as ExperimentalKVStore,
+  Write as ExperimentalKVWrite,
+} from './kv/store.js';
+export {mergeAsyncIterables} from './merge-async-iterables.js';
+export type {PatchOperation} from './patch-operation.js';
+export {
+  deleteAllReplicacheData,
+  dropAllDatabases,
+  dropDatabase,
+} from './persist/mod.js';
+export type {
+  PullResponse,
+  PullResponseOKV0,
+  PullResponseOKV1,
+  PullResponseV0,
+  PullResponseV1,
+  Puller,
+  PullerResult,
+  PullerResultV0,
+  PullerResultV1,
+} from './puller.js';
+export type {PushError, PushResponse, Pusher, PusherResult} from './pusher.js';
+export type {ReplicacheOptions} from './replicache-options.js';
+export {Replicache, makeIDBName} from './replicache.js';
 export type {
   MaybePromise,
   MutatorDefs,
   MutatorReturn,
+  PendingMutation,
   Poke,
   RequestOptions,
   UpdateNeededReason,
-  PendingMutation,
 } from './replicache.js';
-export type {ReplicacheOptions} from './replicache-options.js';
-export type {IndexDefinition, IndexDefinitions} from './index-defs.js';
-export type {
-  ReadTransaction,
-  WriteTransaction,
-  CreateIndexDefinition,
-  TransactionEnvironment,
-  TransactionReason,
-} from './transactions.js';
-export type {
-  GetScanIterator,
-  GetIndexScanIterator,
-  ScanResult,
-  AsyncIterableIteratorToArray,
-} from './scan-iterator.js';
 export {makeScanResult} from './scan-iterator.js';
-export type {LogSink, LogLevel} from '@rocicorp/logger';
 export type {
-  JSONObject,
-  JSONValue,
-  ReadonlyJSONValue,
-  ReadonlyJSONObject,
-} from './json.js';
+  AsyncIterableIteratorToArray,
+  GetIndexScanIterator,
+  GetScanIterator,
+  ScanResult,
+} from './scan-iterator.js';
+export {isScanIndexOptions} from './scan-options.js';
 export type {
   KeyTypeForScanOptions,
   ScanIndexOptions,
@@ -41,80 +80,31 @@ export type {
   ScanOptionIndexedStartKey,
   ScanOptions,
 } from './scan-options.js';
-export {isScanIndexOptions} from './scan-options.js';
-export type {HTTPRequestInfo} from './http-request-info.js';
 export type {
-  Puller,
-  PullResponseV1,
-  PullResponseOKV1,
-  PullerResultV1,
-  PullerResultV0,
-  PullResponseV0,
-  PullResponseOKV0,
-  PullerResult,
-  PullResponse,
-} from './puller.js';
-export type {PatchOperation} from './patch-operation.js';
-export {PullError} from './sync/pull-error.js';
-export {getDefaultPuller} from './get-default-puller.js';
-export type {Pusher, PushError, PusherResult, PushResponse} from './pusher.js';
-export type {
-  ClientStateNotFoundResponse,
-  VersionNotSupportedResponse,
-} from './error-responses.js';
-
-export type {
-  Store as ExperimentalKVStore,
-  Read as ExperimentalKVRead,
-  Write as ExperimentalKVWrite,
-  CreateStore as ExperimentalCreateKVStore,
-} from './kv/store.js';
-
-export {MemStore as ExperimentalMemKVStore} from './kv/mem-store.js';
-
-export type {PullRequest, PullRequestV0, PullRequestV1} from './sync/pull.js';
-
-export type {ClientID, ClientGroupID} from './sync/ids.js';
-
-export type {
-  PushRequestV1,
-  PushRequestV0,
-  PushRequest,
-  MutationV0,
-  MutationV1,
-} from './sync/push.js';
-
-export {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
-
-export type {IndexKey} from './db/index.js';
-
-export type {
-  Diff as ExperimentalDiff,
-  DiffOperation as ExperimentalDiffOperation,
-  DiffOperationAdd as ExperimentalDiffOperationAdd,
-  DiffOperationDel as ExperimentalDiffOperationDel,
-  DiffOperationChange as ExperimentalDiffOperationChange,
-  IndexDiff as ExperimentalIndexDiff,
-  NoIndexDiff as ExperimentalNoIndexDiff,
-} from './btree/node.js';
-export type {
-  WatchNoIndexCallback as ExperimentalWatchNoIndexCallback,
-  WatchOptions as ExperimentalWatchOptions,
-  WatchNoIndexOptions as ExperimentalWatchNoIndexOptions,
-  WatchIndexOptions as ExperimentalWatchIndexOptions,
   WatchCallbackForOptions as ExperimentalWatchCallbackForOptions,
   WatchIndexCallback as ExperimentalWatchIndexCallback,
+  WatchIndexOptions as ExperimentalWatchIndexOptions,
+  WatchNoIndexCallback as ExperimentalWatchNoIndexCallback,
+  WatchNoIndexOptions as ExperimentalWatchNoIndexOptions,
+  WatchOptions as ExperimentalWatchOptions,
   SubscribeOptions,
 } from './subscriptions.js';
-
-export {mergeAsyncIterables} from './merge-async-iterables.js';
-export {filterAsyncIterable} from './filter-async-iterable.js';
-export {
-  dropAllDatabases,
-  deleteAllReplicacheData,
-  dropDatabase,
-} from './persist/mod.js';
-export type {IterableUnion} from './iterable-union.js';
-
+export type {ClientGroupID, ClientID} from './sync/ids.js';
+export {PullError} from './sync/pull-error.js';
+export type {PullRequest, PullRequestV0, PullRequestV1} from './sync/pull.js';
+export type {
+  MutationV0,
+  MutationV1,
+  PushRequest,
+  PushRequestV0,
+  PushRequestV1,
+} from './sync/push.js';
+export {TransactionClosedError} from './transaction-closed-error.js';
+export type {
+  CreateIndexDefinition,
+  ReadTransaction,
+  TransactionEnvironment,
+  TransactionReason,
+  WriteTransaction,
+} from './transactions.js';
 export {version} from './version.js';
-export type {Cookie} from './cookies.js';
