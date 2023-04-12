@@ -11,7 +11,7 @@ export {
 export type {ClientGroup, ClientGroupMap} from './client-groups.js';
 export {initClientGroupGC, gcClientGroups} from './client-group-gc.js';
 export {
-  initClientV5,
+  initClientV6,
   getClient,
   getClients,
   hasClientState,

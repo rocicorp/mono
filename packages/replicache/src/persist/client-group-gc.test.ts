@@ -10,7 +10,7 @@ import {
 } from './client-groups.js';
 import * as dag from '../dag/mod.js';
 import {fakeHash} from '../hash.js';
-import {makeClientV5, setClientsForTesting} from './clients-test-helpers.js';
+import {makeClientV6, setClientsForTesting} from './clients-test-helpers.js';
 import {LogContext} from '@rocicorp/logger';
 import {expect} from '@esm-bundle/chai';
 import {withRead, withWrite} from '../with-transactions.js';
@@ -80,19 +80,19 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
     await write.commit();
     return clientGroupMap;
   });
-  const client1 = makeClientV5({
+  const client1 = makeClientV6({
     heartbeatTimestampMs: START_TIME,
-    headHash: fakeHash('eadce1'),
+    refreshHashes: [fakeHash('eadce1')],
     clientGroupID: 'client-group-1',
   });
-  const client2 = makeClientV5({
+  const client2 = makeClientV6({
     heartbeatTimestampMs: START_TIME,
-    headHash: fakeHash('eadce2'),
+    refreshHashes: [fakeHash('eadce2')],
     clientGroupID: 'client-group-2',
   });
-  const client3 = makeClientV5({
+  const client3 = makeClientV6({
     heartbeatTimestampMs: START_TIME,
-    headHash: fakeHash('eadce3'),
+    refreshHashes: [fakeHash('eadce3')],
     clientGroupID: 'client-group-2',
   });
   await setClientsForTesting(

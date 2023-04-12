@@ -1,28 +1,32 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assertHash, Hash} from '../hash.js';
-import * as btree from '../btree/mod.js';
-import type * as dag from '../dag/mod.js';
-import * as db from '../db/mod.js';
-import type * as sync from '../sync/mod.js';
-import {FrozenJSONValue, deepFreeze} from '../json.js';
 import {
   assert,
+  assertArray,
   assertNumber,
   assertObject,
   assertString,
 } from 'shared/asserts.js';
 import {hasOwn} from 'shared/has-own.js';
-import {uuid as makeUuid} from '../uuid.js';
+import * as btree from '../btree/mod.js';
+import {FrozenCookie, compareCookies} from '../cookies.js';
+import type * as dag from '../dag/mod.js';
 import {
-  assertSnapshotCommitDD31,
-  getRefs,
-  toChunkIndexDefinition,
-  newSnapshotCommitDataDD31,
   ChunkIndexDefinition,
+  assertSnapshotCommitDD31,
   chunkIndexDefinitionEqualIgnoreName,
+  getRefs,
+  newSnapshotCommitDataDD31,
+  toChunkIndexDefinition,
 } from '../db/commit.js';
-import {compareCookies, FrozenCookie} from '../cookies.js';
+import * as db from '../db/mod.js';
+import {createIndexBTree} from '../db/write.js';
+import {Hash, assertHash} from '../hash.js';
+import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
+import {FrozenJSONValue, deepFreeze} from '../json.js';
 import type {ClientID} from '../sync/ids.js';
+import type * as sync from '../sync/mod.js';
+import {uuid as makeUuid} from '../uuid.js';
+import {withWrite} from '../with-transactions.js';
 import {
   ClientGroup,
   getClientGroup,
@@ -30,12 +34,12 @@ import {
   mutatorNamesEqual,
   setClientGroup,
 } from './client-groups.js';
-import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
-import {createIndexBTree} from '../db/write.js';
-import {withWrite} from '../with-transactions.js';
 
-export type ClientMap = ReadonlyMap<sync.ClientID, ClientV4 | ClientV5>;
-export type ClientMapDD31 = ReadonlyMap<sync.ClientID, ClientV5>;
+export type ClientMap = ReadonlyMap<
+  sync.ClientID,
+  ClientV4 | ClientV5 | ClientV6
+>;
+export type ClientMapDD31 = ReadonlyMap<sync.ClientID, ClientV5 | ClientV6>;
 
 export type ClientV4 = {
   /**
@@ -99,7 +103,40 @@ export type ClientV5 = {
   readonly clientGroupID: sync.ClientGroupID;
 };
 
-export type Client = ClientV4 | ClientV5;
+export type ClientV6 = {
+  readonly heartbeatTimestampMs: number;
+  /**
+   * A set of hashes, which contains:
+   * 1. The hash of the last commit this client refreshed from its client group
+   *    (this is the commit it bootstrapped from until it completes its first
+   *    refresh).
+   * 2. One or more hashes that were added to retain chunks of a commit while it
+   *    was being refreshed into this client's memdag. (This can be one or more
+   *    because refresh's cleanup step is a separate transaction and can fail).
+   * Upon refresh completing and successfully running its clean up step, this
+   * set will contain a single hash: the hash of the last commit this client
+   * refreshed.
+   */
+  readonly refreshHashes: readonly Hash[];
+
+  /**
+   * The hash of the last snapshot commit persisted by this client to this
+   * client's client group, or null if has never persisted a snapshot.
+   */
+  readonly persistHash: Hash | null;
+
+  /**
+   * ID of this client's perdag client group. This needs to be sent in pull
+   * request (to enable syncing all last mutation ids in the client group).
+   */
+  readonly clientGroupID: sync.ClientGroupID;
+};
+
+export type Client = ClientV4 | ClientV5 | ClientV6;
+
+function isClientV6(client: Client): client is ClientV6 {
+  return (client as ClientV6).refreshHashes !== undefined;
+}
 
 function isClientV5(client: Client): client is ClientV5 {
   return (client as ClientV5).clientGroupID !== undefined;
@@ -127,27 +164,38 @@ function assertClient(value: unknown): asserts value is Client {
 
 function assertClientBase(value: unknown): asserts value is {
   heartbeatTimestampMs: number;
-  headHash: Hash;
   [key: string]: unknown;
 } {
   assertObject(value);
-  const {heartbeatTimestampMs, headHash} = value;
-  assertNumber(heartbeatTimestampMs);
-  assertHash(headHash);
+  assertNumber(value.heartbeatTimestampMs);
 }
 
 export function assertClientV4(value: unknown): asserts value is ClientV4 {
   assertClientBase(value);
-  const {mutationID, lastServerAckdMutationID} = value;
+  const {headHash, mutationID, lastServerAckdMutationID} = value;
+  assertHash(headHash);
   assertNumber(mutationID);
   assertNumber(lastServerAckdMutationID);
 }
 
 export function assertClientV5(value: unknown): asserts value is ClientV5 {
   assertClientBase(value);
-  const {tempRefreshHash} = value;
+  const {headHash, tempRefreshHash} = value;
+  assertHash(headHash);
   if (tempRefreshHash) {
     assertHash(tempRefreshHash);
+  }
+  assertString(value.clientGroupID);
+}
+
+export function assertClientV6(value: unknown): asserts value is ClientV6 {
+  assertClientBase(value);
+  const {refreshHashes, persistHash} = value;
+  assertArray(refreshHashes);
+  assert(refreshHashes.length > 0);
+  refreshHashes.forEach(assertHash);
+  if (persistHash) {
+    assertHash(persistHash);
   }
   assertString(value.clientGroupID);
 }
@@ -172,9 +220,16 @@ function clientMapToChunkData(
   dagWrite: dag.Write,
 ): FrozenJSONValue {
   for (const client of clients.values()) {
-    dagWrite.assertValidHash(client.headHash);
-    if (isClientV5(client) && client.tempRefreshHash) {
-      dagWrite.assertValidHash(client.tempRefreshHash);
+    if (isClientV6(client)) {
+      client.refreshHashes.forEach(dagWrite.assertValidHash);
+      if (client.persistHash) {
+        dagWrite.assertValidHash(client.persistHash);
+      }
+    } else {
+      dagWrite.assertValidHash(client.headHash);
+      if (isClientV5(client) && client.tempRefreshHash) {
+        dagWrite.assertValidHash(client.tempRefreshHash);
+      }
     }
   }
   return deepFreeze(Object.fromEntries(clients));
@@ -235,26 +290,38 @@ export async function getClient(
   return clients.get(id);
 }
 
-export function initClientV5(
+export async function mustGetClient(
+  id: sync.ClientID,
+  dagRead: dag.Read,
+): Promise<Client> {
+  const client = await getClient(id, dagRead);
+  if (!client) {
+    throw new ClientStateNotFoundError(id);
+  }
+  return client;
+}
+
+type InitClientV6Result = [
+  clientID: sync.ClientID,
+  client: ClientV6,
+  hash: Hash,
+  clientMap: ClientMap,
+  newClientGroup: boolean,
+];
+
+export function initClientV6(
   lc: LogContext,
   perdag: dag.Store,
   mutatorNames: string[],
   indexes: IndexDefinitions,
-): Promise<
-  [
-    clientID: sync.ClientID,
-    client: ClientV5,
-    clientMap: ClientMap,
-    newClientGroup: boolean,
-  ]
-> {
+): Promise<InitClientV6Result> {
   return withWrite(perdag, async dagWrite => {
     async function setClientsAndClientGroupAndCommit(
       basisHash: Hash | null,
       cookieJSON: FrozenCookie,
       valueHash: Hash,
       indexRecords: readonly db.IndexRecord[],
-    ): Promise<[sync.ClientID, ClientV5, ClientMap, boolean]> {
+    ): Promise<InitClientV6Result> {
       const newSnapshotData = newSnapshotCommitDataDD31(
         basisHash,
         {},
@@ -269,10 +336,10 @@ export function initClientV5(
 
       const newClientGroupID = makeUuid();
 
-      const newClient: ClientV5 = {
+      const newClient: ClientV6 = {
         heartbeatTimestampMs: Date.now(),
-        headHash: chunk.hash,
-        tempRefreshHash: null,
+        refreshHashes: [chunk.hash],
+        persistHash: null,
         clientGroupID: newClientGroupID,
       };
 
@@ -295,7 +362,7 @@ export function initClientV5(
 
       await dagWrite.commit();
 
-      return [newClientID, newClient, newClients, true];
+      return [newClientID, newClient, chunk.hash, newClients, true];
     }
 
     const newClientID = makeUuid();
@@ -307,17 +374,17 @@ export function initClientV5(
       // reuse it.
       const {clientGroupID, headHash} = res;
 
-      const newClient: ClientV5 = {
+      const newClient: ClientV6 = {
         clientGroupID,
-        headHash,
+        refreshHashes: [headHash],
         heartbeatTimestampMs: Date.now(),
-        tempRefreshHash: null,
+        persistHash: null,
       };
       const newClients = new Map(clients).set(newClientID, newClient);
       await setClients(newClients, dagWrite);
 
       await dagWrite.commit();
-      return [newClientID, newClient, newClients, false];
+      return [newClientID, newClient, headHash, newClients, false];
     }
 
     if (res.type === FIND_MATCHING_CLIENT_TYPE_NEW) {
@@ -480,9 +547,16 @@ export async function findMatchingClient(
 function getRefsForClients(clients: ClientMap): Hash[] {
   const refs: Hash[] = [];
   for (const client of clients.values()) {
-    refs.push(client.headHash);
-    if (isClientV5(client) && client.tempRefreshHash) {
-      refs.push(client.tempRefreshHash);
+    if (isClientV6(client)) {
+      refs.push(...client.refreshHashes);
+      if (client.persistHash) {
+        refs.push(client.persistHash);
+      }
+    } else {
+      refs.push(client.headHash);
+      if (isClientV5(client) && client.tempRefreshHash) {
+        refs.push(client.tempRefreshHash);
+      }
     }
   }
   return refs;
@@ -511,7 +585,7 @@ export async function getClientGroupIDForClient(
 }
 
 /**
- * Adds a Client to the ClientMap and updates the 'clients' head top point at
+ * Adds a Client to the ClientMap and updates the 'clients' head to point at
  * the updated clients.
  */
 export async function setClient(

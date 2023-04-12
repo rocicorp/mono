@@ -60,7 +60,7 @@ export async function persistSDD(
     mutationID,
     lastMutationID,
   );
-  await memdag.chunksPersisted(gatheredChunks.keys());
+  await withWrite(memdag, w => w.chunksPersisted([...gatheredChunks.keys()]));
 }
 
 function gatherMemOnlyChunks(

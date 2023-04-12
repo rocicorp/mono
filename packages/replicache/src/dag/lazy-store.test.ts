@@ -1,10 +1,10 @@
 import {expect} from '@esm-bundle/chai';
 import {assertHash, fakeHash, Hash, makeNewFakeHashFunction} from '../hash.js';
-import type {Chunk} from './chunk.js';
 import {deepFreeze} from '../json.js';
+import {withRead, withWrite} from '../with-transactions.js';
+import type {Chunk} from './chunk.js';
 import {TestLazyStore} from './test-lazy-store.js';
 import {TestStore} from './test-store.js';
-import {withRead, withWrite} from '../with-transactions.js';
 
 const DEFAULT_VALUE_SIZE = 100;
 function getSizeOfChunkForTest(chunk: Chunk): number {
@@ -140,10 +140,13 @@ test('chunksPersisted', async () => {
     expect(read.isMemOnlyChunkHash(testValue3MemOnlyChunk.hash)).to.be.true;
   });
 
-  await lazyStore.chunksPersisted([
-    testValue1MemOnlyChunk.hash,
-    testValue3MemOnlyChunk.hash,
-  ]);
+  await withWrite(lazyStore, async write => {
+    write.chunksPersisted([
+      testValue1MemOnlyChunk.hash,
+      testValue3MemOnlyChunk.hash,
+    ]);
+    await write.commit();
+  });
 
   await withRead(lazyStore, read => {
     expect(read.isMemOnlyChunkHash(testValue1MemOnlyChunk.hash)).to.be.false;

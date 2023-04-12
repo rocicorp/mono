@@ -1,34 +1,34 @@
 import {expect} from '@esm-bundle/chai';
+import {assertNotUndefined} from 'shared/asserts.js';
+import {SinonFakeTimers, useFakeTimers} from 'sinon';
+import * as dag from '../dag/mod.js';
 import {fakeHash} from '../hash.js';
+import {IDBStore} from '../kv/idb-store.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
+import {
+  REPLICACHE_FORMAT_VERSION,
+  REPLICACHE_FORMAT_VERSION_SDD,
+  REPLICACHE_FORMAT_VERSION_V6,
+} from '../replicache.js';
+import {withWrite} from '../with-transactions.js';
+import {ClientGroupMap, setClientGroups} from './client-groups.js';
+import {makeClientGroupMap} from './client-groups.test.js';
 import {
   makeClientMapDD31,
   setClientsForTesting,
 } from './clients-test-helpers.js';
-import {
-  IDBDatabasesStore,
-  IndexedDBDatabase,
-  IndexedDBName,
-} from './idb-databases-store.js';
+import type {ClientMap} from './clients.js';
 import {
   collectIDBDatabases,
   deleteAllReplicacheData,
   dropAllDatabases,
   dropDatabase,
 } from './collect-idb-databases.js';
-import * as dag from '../dag/mod.js';
-import type {ClientMap} from './clients.js';
-import {assertNotUndefined} from 'shared/asserts.js';
-import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {
-  REPLICACHE_FORMAT_VERSION,
-  REPLICACHE_FORMAT_VERSION_DD31,
-  REPLICACHE_FORMAT_VERSION_SDD,
-} from '../replicache.js';
-import {ClientGroupMap, setClientGroups} from './client-groups.js';
-import {makeClientGroupMap} from './client-groups.test.js';
-import {IDBStore} from '../kv/idb-store.js';
-import {withWrite} from '../with-transactions.js';
+  IDBDatabasesStore,
+  IndexedDBDatabase,
+  IndexedDBName,
+} from './idb-databases-store.js';
 
 suite('collectIDBDatabases', () => {
   let clock: SinonFakeTimers;
@@ -274,7 +274,7 @@ suite('collectIDBDatabases', () => {
         makeIndexedDBDatabase({
           name: 'a',
           lastOpenedTimestampMS: 0,
-          replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_DD31,
+          replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
         }),
         makeClientMapDD31({
           clientA1: {

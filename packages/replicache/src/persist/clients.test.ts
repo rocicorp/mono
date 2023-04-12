@@ -13,7 +13,6 @@ import {
 } from '../db/commit.js';
 import {assertHash, fakeHash, newUUIDHash} from '../hash.js';
 import {
-  assertClientV5,
   ClientV5,
   CLIENTS_HEAD_NAME,
   findMatchingClient,
@@ -25,12 +24,13 @@ import {
   getClients,
   getClientGroupForClient,
   getClientGroupIDForClient,
-  initClientV5,
+  initClientV6,
   setClient,
+  assertClientV6,
 } from './clients.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {makeClientV5, setClientsForTesting} from './clients-test-helpers.js';
+import {makeClientV6, setClientsForTesting} from './clients-test-helpers.js';
 import type {ClientID} from '../sync/ids.js';
 import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
 import type {ClientGroupID} from '../sync/ids.js';
@@ -65,13 +65,13 @@ test('updateClients and getClients', async () => {
   const dagStore = new dag.TestStore();
   const clientMap = new Map(
     Object.entries({
-      client1: makeClientV5({
+      client1: makeClientV6({
         heartbeatTimestampMs: 1000,
-        headHash: headClient1Hash,
+        refreshHashes: [headClient1Hash],
       }),
-      client2: makeClientV5({
+      client2: makeClientV6({
         heartbeatTimestampMs: 3000,
-        headHash: headClient2Hash,
+        refreshHashes: [headClient2Hash],
       }),
     }),
   );
@@ -87,18 +87,16 @@ test('updateClients and getClients for DD31', async () => {
   const dagStore = new dag.TestStore();
   const clientMap = new Map(
     Object.entries({
-      client1: {
+      client1: makeClientV6({
         heartbeatTimestampMs: 1000,
-        headHash: headClient1Hash,
+        refreshHashes: [headClient1Hash, refresh1Hash],
         clientGroupID: 'client-group-id-1',
-        tempRefreshHash: refresh1Hash,
-      },
-      client2: {
+      }),
+      client2: makeClientV6({
         heartbeatTimestampMs: 3000,
-        headHash: headClient2Hash,
+        refreshHashes: [headClient2Hash],
         clientGroupID: 'client-group-id-2',
-        tempRefreshHash: null,
-      },
+      }),
     }),
   );
   await setClientsForTesting(clientMap, dagStore);
@@ -108,7 +106,7 @@ test('updateClients and getClients for DD31', async () => {
     expect(readClientMap).to.deep.equal(clientMap);
   });
 
-  // Make sure we write the tempRefreshHash as well.
+  // Make sure we write the refresh1Hash as well.
   await withRead(dagStore, async read => {
     const h = await read.getHead(CLIENTS_HEAD_NAME);
     assert(h);
@@ -126,22 +124,22 @@ test('updateClients and getClients sequence', async () => {
   const dagStore = new dag.TestStore();
   const clientMap1 = new Map(
     Object.entries({
-      client1: makeClientV5({
+      client1: makeClientV6({
         heartbeatTimestampMs: 1000,
-        headHash: headClient1Hash,
+        refreshHashes: [headClient1Hash],
       }),
-      client2: makeClientV5({
+      client2: makeClientV6({
         heartbeatTimestampMs: 3000,
-        headHash: headClient2Hash,
+        refreshHashes: [headClient2Hash],
       }),
     }),
   );
 
   const clientMap2 = new Map(
     Object.entries({
-      client3: makeClientV5({
+      client3: makeClientV6({
         heartbeatTimestampMs: 4000,
-        headHash: headClient3Hash,
+        refreshHashes: [headClient3Hash],
       }),
     }),
   );
@@ -167,13 +165,13 @@ test('updateClients properly manages refs to client heads when clients are remov
 
   const clientMap1 = new Map(
     Object.entries({
-      client1: makeClientV5({
+      client1: makeClientV6({
         heartbeatTimestampMs: 1000,
-        headHash: client1HeadHash,
+        refreshHashes: [client1HeadHash],
       }),
-      client2: makeClientV5({
+      client2: makeClientV6({
         heartbeatTimestampMs: 3000,
-        headHash: client2HeadHash,
+        refreshHashes: [client2HeadHash],
       }),
     }),
   );
@@ -181,9 +179,9 @@ test('updateClients properly manages refs to client heads when clients are remov
   const client3HeadHash = headClient3Hash;
   const clientMap2 = new Map(
     Object.entries({
-      client3: makeClientV5({
+      client3: makeClientV6({
         heartbeatTimestampMs: 4000,
-        headHash: client3HeadHash,
+        refreshHashes: [client3HeadHash],
       }),
     }),
   );
@@ -214,17 +212,17 @@ test("updateClients properly manages refs to client heads when a client's head c
   const client1V2HeadHash = fakeHash('c12');
   const client2HeadHash = fakeHash('c2');
 
-  const client1V1 = makeClientV5({
+  const client1V1 = makeClientV6({
     heartbeatTimestampMs: 1000,
-    headHash: client1V1HeadHash,
+    refreshHashes: [client1V1HeadHash],
   });
-  const client1V2 = makeClientV5({
+  const client1V2 = makeClientV6({
     heartbeatTimestampMs: 2000,
-    headHash: client1V2HeadHash,
+    refreshHashes: [client1V2HeadHash],
   });
-  const client2 = makeClientV5({
+  const client2 = makeClientV6({
     heartbeatTimestampMs: 3000,
-    headHash: client2HeadHash,
+    refreshHashes: [client2HeadHash],
   });
 
   const clientMap1 = new Map(
@@ -269,16 +267,16 @@ test("updateClients properly manages refs to client heads when a client's head c
 
 test('getClient', async () => {
   const dagStore = new dag.TestStore();
-  const client1 = makeClientV5({
+  const client1 = makeClientV6({
     heartbeatTimestampMs: 1000,
-    headHash: headClient1Hash,
+    refreshHashes: [headClient1Hash],
   });
   const clientMap = new Map(
     Object.entries({
       client1,
-      client2: makeClientV5({
+      client2: makeClientV6({
         heartbeatTimestampMs: 3000,
-        headHash: headClient2Hash,
+        refreshHashes: [headClient2Hash],
       }),
     }),
   );
@@ -339,7 +337,7 @@ test('updateClients throws errors if chunk pointed to by clients head does not c
 test('initClient creates new empty snapshot when no existing snapshot to bootstrap from', async () => {
   const dagStore = new dag.TestStore();
   clock.tick(4000);
-  const [clientID, client, clients] = await initClientV5(
+  const [clientID, client, headHash, clients] = await initClientV6(
     new LogContext(),
     dagStore,
     [],
@@ -366,7 +364,7 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
     expect(clientGroup.lastServerAckdMutationIDs).to.deep.equal({});
 
     // New client's head hash points to an empty snapshot with an empty btree.
-    const headChunk = await dagRead.getChunk(client.headHash);
+    const headChunk = await dagRead.getChunk(headHash);
     assertNotUndefined(headChunk);
     const commit = fromChunk(headChunk);
     expect(commitIsSnapshot(commit)).to.be.true;
@@ -661,7 +659,7 @@ suite('findMatchingClient', () => {
   });
 });
 
-suite('initClientV5', () => {
+suite('initClientV6', () => {
   let clock: SinonFakeTimers;
   setup(() => {
     clock = useFakeTimers(0);
@@ -677,17 +675,17 @@ suite('initClientV5', () => {
     const mutatorNames: string[] = [];
     const indexes: IndexDefinitions = {};
 
-    const [clientID, client, clientMap] = await initClientV5(
+    const [clientID, client, , clientMap] = await initClientV6(
       lc,
       perdag,
       mutatorNames,
       indexes,
     );
     expect(clientID).to.be.a('string');
-    assertClientV5(client);
+    assertClientV6(client);
     expect(clientMap.size).to.equal(1);
     expect(clientMap.get(clientID)).to.equal(client);
-    expect(client.tempRefreshHash).to.be.null;
+    expect(client.persistHash).to.be.null;
   });
 
   test('reuse head', async () => {
@@ -726,7 +724,7 @@ suite('initClientV5', () => {
       await write.commit();
     });
 
-    const [clientID2, client2, clientMap] = await initClientV5(
+    const [clientID2, client2, client2HeadHash, clientMap] = await initClientV6(
       lc,
       perdag,
       mutatorNames,
@@ -735,10 +733,12 @@ suite('initClientV5', () => {
     expect(clientID2).to.not.equal(clientID1);
     expect(clientMap.size).to.equal(2);
     expect(client2).to.deep.equal({
-      ...client1,
+      clientGroupID,
+      refreshHashes: [client2HeadHash],
       heartbeatTimestampMs: 10,
-      tempRefreshHash: null,
+      persistHash: null,
     });
+    expect(client2HeadHash).to.equal(clientGroup1.headHash);
 
     const clientGroup2 = await withRead(perdag, read =>
       getClientGroup(clientGroupID, read),
@@ -792,30 +792,31 @@ suite('initClientV5', () => {
       await write.commit();
     });
 
-    const [clientID2, client2, clientMap] = await initClientV5(
+    const [clientID2, client2, client2HeadHash, clientMap] = await initClientV6(
       lc,
       perdag,
       newMutatorNames,
       newIndexes,
     );
     expect(clientID2).to.not.equal(clientID1);
-    assertClientV5(client2);
+    assertClientV6(client2);
     const clientGroupID2 = client2.clientGroupID;
     expect(clientGroupID2).to.not.equal(clientGroupID1);
     expect(clientMap.size).to.equal(2);
 
-    expect(client2.headHash).to.not.equal(
-      client1.headHash,
+    expect(client2HeadHash).to.not.equal(
+      clientGroup1.headHash,
       'Forked so we need a new head',
     );
+    expect(client2.refreshHashes).to.deep.equal([client2HeadHash]);
     expect(client2.heartbeatTimestampMs).to.equal(10);
-    expect(client2.tempRefreshHash).to.be.null;
+    expect(client2.persistHash).to.be.null;
 
     const clientGroup2 = await withRead(perdag, read =>
       getClientGroup(clientGroupID2, read),
     );
     expect(clientGroup2).to.deep.equal({
-      headHash: client2.headHash,
+      headHash: client2HeadHash,
       indexes: newIndexes,
       mutatorNames: newMutatorNames,
       lastServerAckdMutationIDs: {},
@@ -878,30 +879,31 @@ suite('initClientV5', () => {
       await write.commit();
     });
 
-    const [clientID2, client2, clientMap] = await initClientV5(
+    const [clientID2, client2, client2HeadHash, clientMap] = await initClientV6(
       lc,
       perdag,
       newMutatorNames,
       newIndexes,
     );
     expect(clientID2).to.not.equal(clientID1);
-    assertClientV5(client2);
+    assertClientV6(client2);
     const clientGroupID2 = client2.clientGroupID;
     expect(clientGroupID2).to.not.equal(clientGroupID1);
     expect(clientMap.size).to.equal(2);
 
-    expect(client2.headHash).to.not.equal(
+    expect(client2HeadHash).to.not.equal(
       client1.headHash,
       'Forked so we need a new head',
     );
+    expect(client2.refreshHashes).to.deep.equal([client2HeadHash]);
     expect(client2.heartbeatTimestampMs).to.equal(10);
-    expect(client2.tempRefreshHash).to.be.null;
+    expect(client2.persistHash).to.be.null;
 
     const clientGroup2 = await withRead(perdag, read =>
       getClientGroup(clientGroupID2, read),
     );
     expect(clientGroup2).to.deep.equal({
-      headHash: client2.headHash,
+      headHash: client2HeadHash,
       indexes: newIndexes,
       mutatorNames: newMutatorNames,
       lastServerAckdMutationIDs: {},
@@ -913,7 +915,7 @@ suite('initClientV5', () => {
       const c1 = await fromHash(client1.headHash, read);
       expect(c1.chunk.data.indexes).length(1);
 
-      const c2 = await fromHash(client2.headHash, read);
+      const c2 = await fromHash(client2HeadHash, read);
       expect(c2.chunk.data.indexes).length(2);
 
       expect(c1.chunk.data.indexes[0].valueHash).to.equal(

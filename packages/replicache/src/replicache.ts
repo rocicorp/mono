@@ -1,68 +1,68 @@
-import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
-import {ReadonlyJSONValue, deepFreeze} from './json.js';
-import type {JSONValue} from './json.js';
-import {Pusher, PushError} from './pusher.js';
-import type {Puller, PullResponseV1} from './puller.js';
-import {PullError} from './sync/pull-error.js';
-import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
-import {ReadTransactionImpl, WriteTransactionImpl} from './transactions.js';
-import type {ReadTransaction, WriteTransaction} from './transactions.js';
-import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
-import type {
-  ReplicacheInternalOptions,
-  ReplicacheOptions,
-} from './replicache-options.js';
-import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
-import {
-  WatchNoIndexCallback,
-  SubscribeOptions,
-  SubscriptionsManager,
-  WatchOptions,
-  WatchCallbackForOptions,
-  WatchCallback,
-} from './subscriptions.js';
-import type {CreateStore} from './kv/mod.js';
-import * as dag from './dag/mod.js';
-import * as db from './db/mod.js';
-import * as sync from './sync/mod.js';
-import {assertHash, emptyHash, Hash} from './hash.js';
-import * as persist from './persist/mod.js';
-import type {HTTPRequestInfo} from './http-request-info.js';
-import {assert} from 'shared/asserts.js';
 import {
   getLicenseStatus,
   licenseActive,
-  PROD_LICENSE_SERVER_URL,
   LicenseStatus,
-  TEST_LICENSE_KEY,
+  PROD_LICENSE_SERVER_URL,
   SimpleFetch,
+  TEST_LICENSE_KEY,
 } from '@rocicorp/licensing/src/client';
-import {mustSimpleFetch} from './simple-fetch.js';
-import {initBgIntervalProcess} from './bg-interval.js';
-import {setIntervalWithSignal} from './set-interval-with-signal.js';
-import {MutationRecovery} from './mutation-recovery.js';
-import type {IndexDefinitions} from './index-defs.js';
-import {throwIfClosed} from './transaction-closed-error.js';
-import {version} from './version.js';
-import {PUSH_VERSION_DD31} from './sync/push.js';
-import {
-  initOnPersistChannel,
-  OnPersist,
-  PersistInfo,
-} from './on-persist-channel.js';
-import {ProcessScheduler} from './process-scheduler.js';
+import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
+import {assert} from 'shared/asserts.js';
 import {AbortError} from './abort-error.js';
-import {initNewClientChannel} from './new-client-channel.js';
-import {HandlePullResponseResultType} from './sync/pull.js';
+import {initBgIntervalProcess} from './bg-interval.js';
+import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
+import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
+import * as dag from './dag/mod.js';
+import {assertLocalCommitDD31} from './db/commit.js';
+import * as db from './db/mod.js';
 import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
   VersionNotSupportedResponse,
 } from './error-responses.js';
-import {assertLocalCommitDD31} from './db/commit.js';
+import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
 import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.js';
+import {assertHash, emptyHash, Hash} from './hash.js';
+import type {HTTPRequestInfo} from './http-request-info.js';
+import type {IndexDefinitions} from './index-defs.js';
+import type {JSONValue} from './json.js';
+import {deepFreeze, ReadonlyJSONValue} from './json.js';
 import {newIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
+import type {CreateStore} from './kv/mod.js';
+import {MutationRecovery} from './mutation-recovery.js';
+import {initNewClientChannel} from './new-client-channel.js';
+import {
+  initOnPersistChannel,
+  OnPersist,
+  PersistInfo,
+} from './on-persist-channel.js';
+import * as persist from './persist/mod.js';
+import {ProcessScheduler} from './process-scheduler.js';
+import type {Puller, PullResponseV1} from './puller.js';
+import {Pusher, PushError} from './pusher.js';
+import type {
+  ReplicacheInternalOptions,
+  ReplicacheOptions,
+} from './replicache-options.js';
+import {setIntervalWithSignal} from './set-interval-with-signal.js';
+import {mustSimpleFetch} from './simple-fetch.js';
+import {
+  SubscribeOptions,
+  SubscriptionsManager,
+  WatchCallback,
+  WatchCallbackForOptions,
+  WatchNoIndexCallback,
+  WatchOptions,
+} from './subscriptions.js';
+import * as sync from './sync/mod.js';
+import {PullError} from './sync/pull-error.js';
+import {HandlePullResponseResultType} from './sync/pull.js';
+import {PUSH_VERSION_DD31} from './sync/push.js';
+import {throwIfClosed} from './transaction-closed-error.js';
+import type {ReadTransaction, WriteTransaction} from './transactions.js';
+import {ReadTransactionImpl, WriteTransactionImpl} from './transactions.js';
+import {version} from './version.js';
 import {withRead, withWrite} from './with-transactions.js';
 
 export type BeginPullResult = {
@@ -80,8 +80,9 @@ export const httpStatusUnauthorized = 401;
 
 export const REPLICACHE_FORMAT_VERSION_SDD = 4;
 export const REPLICACHE_FORMAT_VERSION_DD31 = 5;
+export const REPLICACHE_FORMAT_VERSION_V6 = 6;
 
-export const REPLICACHE_FORMAT_VERSION = REPLICACHE_FORMAT_VERSION_DD31;
+export const REPLICACHE_FORMAT_VERSION = REPLICACHE_FORMAT_VERSION_V6;
 
 const LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 100 * 2 ** 20; // 100 MB
 
@@ -573,8 +574,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
     await closingInstances.get(this.name);
     await this._idbDatabases.getProfileID().then(profileIDResolver);
     await this._idbDatabases.putDatabase(this._idbDatabase);
-    const [clientID, client, clients, isNewClientGroup] =
-      await persist.initClientV5(
+    const [clientID, client, headHash, clients, isNewClientGroup] =
+      await persist.initClientV6(
         this._lc,
         this._perdag,
         Object.keys(this._mutatorRegistry),
@@ -584,7 +585,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     resolveClientGroupID(client.clientGroupID);
     resolveClientID(clientID);
     await withWrite(this._memdag, async write => {
-      await write.setHead(db.DEFAULT_HEAD_NAME, client.headHash);
+      await write.setHead(db.DEFAULT_HEAD_NAME, headHash);
       await write.commit();
     });
 

@@ -1,7 +1,3 @@
-import {assertHash, Hash} from '../hash.js';
-import type * as sync from '../sync/mod.js';
-import type * as dag from '../dag/mod.js';
-import {FrozenJSONValue, deepFreeze} from '../json.js';
 import {
   assert,
   assertArray,
@@ -9,11 +5,15 @@ import {
   assertObject,
   assertString,
 } from 'shared/asserts.js';
+import type * as dag from '../dag/mod.js';
+import {Hash, assertHash} from '../hash.js';
 import {
-  assertIndexDefinitions,
   IndexDefinitions,
+  assertIndexDefinitions,
   indexDefinitionsEqual,
 } from '../index-defs.js';
+import {FrozenJSONValue, deepFreeze} from '../json.js';
+import type * as sync from '../sync/mod.js';
 
 export type ClientGroupMap = ReadonlyMap<sync.ClientGroupID, ClientGroup>;
 
@@ -43,7 +43,7 @@ export type ClientGroup = {
    * are unacknowledged pending mutations without having to load the commit
    * graph.
    */
-  readonly mutationIDs: Record<sync.ClientID, number>;
+  readonly mutationIDs: Readonly<Record<sync.ClientID, number>>;
 
   /**
    * The highest lastMutationID received from the server for every client
@@ -61,7 +61,7 @@ export type ClientGroup = {
    * it may be different because the other client does not update the commit
    * graph.
    */
-  readonly lastServerAckdMutationIDs: Record<sync.ClientID, number>;
+  readonly lastServerAckdMutationIDs: Readonly<Record<sync.ClientID, number>>;
 
   /**
    * If the server deletes this client group it can signal that the client group

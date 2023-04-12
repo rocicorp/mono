@@ -1,26 +1,27 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Puller, PullResponseV1, PullResponseV0} from './puller.js';
+import {assert, assertNotUndefined} from 'shared/asserts.js';
 import * as dag from './dag/mod.js';
 import * as db from './db/mod.js';
-import * as persist from './persist/mod.js';
-import * as sync from './sync/mod.js';
-import {assertHash} from './hash.js';
-import {assert, assertNotUndefined} from 'shared/asserts.js';
-import type {HTTPRequestInfo} from './http-request-info.js';
-import {
-  MaybePromise,
-  REPLICACHE_FORMAT_VERSION_DD31,
-  REPLICACHE_FORMAT_VERSION_SDD,
-} from './replicache.js';
-import {assertClientV4, setClients} from './persist/clients.js';
-import type {ClientID, ClientGroupID} from './sync/ids.js';
-import type {Pusher} from './pusher.js';
-import {PUSH_VERSION_DD31, PUSH_VERSION_SDD} from './sync/push.js';
 import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from './error-responses.js';
+import {assertHash} from './hash.js';
+import type {HTTPRequestInfo} from './http-request-info.js';
 import type {CreateStore} from './kv/store.js';
+import {assertClientV4, setClients} from './persist/clients.js';
+import * as persist from './persist/mod.js';
+import type {PullResponseV0, PullResponseV1, Puller} from './puller.js';
+import type {Pusher} from './pusher.js';
+import {
+  MaybePromise,
+  REPLICACHE_FORMAT_VERSION_DD31,
+  REPLICACHE_FORMAT_VERSION_SDD,
+  REPLICACHE_FORMAT_VERSION_V6,
+} from './replicache.js';
+import type {ClientGroupID, ClientID} from './sync/ids.js';
+import * as sync from './sync/mod.js';
+import {PUSH_VERSION_DD31, PUSH_VERSION_SDD} from './sync/push.js';
 import {withRead, withWrite} from './with-transactions.js';
 
 const MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 10 * 2 ** 20; // 10 MB
@@ -116,6 +117,7 @@ export class MutationRecovery {
           switch (database.replicacheFormatVersion) {
             case REPLICACHE_FORMAT_VERSION_SDD:
             case REPLICACHE_FORMAT_VERSION_DD31:
+            case REPLICACHE_FORMAT_VERSION_V6:
               await recoverMutationsWithNewPerdag(
                 database,
                 this._options,
@@ -386,7 +388,7 @@ function recoverMutationsFromPerdag(
   perdag: dag.Store,
   preReadClientMap: persist.ClientMap | undefined,
 ): Promise<void> {
-  if (database.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_DD31) {
+  if (database.replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31) {
     return recoverMutationsFromPerdagDD31(database, options, perdag);
   }
   return recoverMutationsFromPerdagSDD(
@@ -495,7 +497,7 @@ async function recoverMutationsOfClientGroupDD31(
   database: persist.IndexedDBDatabase,
   options: MutationRecoveryOptions,
 ): Promise<persist.ClientGroupMap | undefined> {
-  assert(database.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_DD31);
+  assert(database.replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31);
 
   const {
     delegate,

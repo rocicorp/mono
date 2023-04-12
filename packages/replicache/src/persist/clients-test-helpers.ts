@@ -4,9 +4,11 @@ import {
   ClientV4,
   setClients,
   getClients,
-  initClientV5,
+  initClientV6,
   Client,
   ClientMapDD31,
+  isClientV4,
+  ClientV6,
 } from './clients.js';
 import * as dag from '../dag/mod.js';
 import type * as sync from '../sync/mod.js';
@@ -18,6 +20,7 @@ import * as db from '../db/mod.js';
 import {uuid as makeUuid} from '../uuid.js';
 import {getRefs, newSnapshotCommitDataSDD} from '../db/commit.js';
 import {withWrite} from '../with-transactions.js';
+import {assert} from 'shared/asserts.js';
 
 export function setClientsForTesting(
   clients: ClientMap,
@@ -36,6 +39,17 @@ type PartialClientV4 = Partial<ClientV4> &
 type PartialClientV5 = Partial<ClientV5> &
   Pick<ClientV5, 'heartbeatTimestampMs' | 'headHash'>;
 
+type PartialClientV6 = Partial<ClientV6> &
+  Pick<ClientV6, 'heartbeatTimestampMs' | 'refreshHashes'>;
+
+export function makeClientV4(partialClient: PartialClientV4): ClientV4 {
+  return {
+    mutationID: 0,
+    lastServerAckdMutationID: 0,
+    ...partialClient,
+  };
+}
+
 export function makeClientV5(partialClient: PartialClientV5): ClientV5 {
   return {
     clientGroupID: partialClient.clientGroupID ?? 'make-client-group-id',
@@ -45,11 +59,12 @@ export function makeClientV5(partialClient: PartialClientV5): ClientV5 {
   };
 }
 
-export function makeClientV4(partialClient: PartialClientV4): ClientV4 {
+export function makeClientV6(partialClient: PartialClientV6): ClientV6 {
   return {
-    mutationID: 0,
-    lastServerAckdMutationID: 0,
-    ...partialClient,
+    clientGroupID: partialClient.clientGroupID ?? 'make-client-group-id',
+    refreshHashes: partialClient.refreshHashes,
+    heartbeatTimestampMs: partialClient.heartbeatTimestampMs,
+    persistHash: partialClient.persistHash ?? null,
   };
 }
 
@@ -84,7 +99,7 @@ export async function initClientWithClientID(
 ): Promise<void> {
   let generatedClientID, client, clientMap;
   if (dd31) {
-    [generatedClientID, client, clientMap] = await initClientV5(
+    [generatedClientID, client, , clientMap] = await initClientV6(
       new LogContext(),
       dagStore,
       mutatorNames,
@@ -128,6 +143,7 @@ function initClientV4(
     const chunksToPut: dag.Chunk[] = [];
     if (bootstrapClient) {
       const constBootstrapClient = bootstrapClient;
+      assert(isClientV4(constBootstrapClient));
       const bootstrapCommit = await db.baseSnapshotFromHash(
         constBootstrapClient.headHash,
         dagWrite,
