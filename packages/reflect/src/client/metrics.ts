@@ -106,7 +106,7 @@ export class MetricManager {
         allSeries.push({
           ...series,
           host: this._host,
-          tags: this.tags,
+          tags: [...this.tags, ...(series.tags ?? [])],
         });
       }
     }
@@ -162,7 +162,7 @@ function makePoint(ts: number, value: number): Point {
 }
 
 type Flushable = {
-  flush(): Pick<Series, 'metric' | 'points'> | undefined;
+  flush(): Pick<Series, 'metric' | 'points' | 'tags'> | undefined;
 };
 
 /**
@@ -221,14 +221,16 @@ export class State implements Flushable {
   private readonly _prefix: string;
   private readonly _clearOnFlush: boolean;
   private _current: string | undefined = undefined;
+  private _currentTags: string[] = [];
 
   constructor(prefix: string, clearOnFlush = false) {
     this._prefix = prefix;
     this._clearOnFlush = clearOnFlush;
   }
 
-  public set(state: string) {
+  public set(state: string, tags: string[] = []) {
     this._current = state;
+    this._currentTags = tags;
   }
 
   public clear() {
@@ -245,6 +247,6 @@ export class State implements Flushable {
     if (this._clearOnFlush) {
       this.clear();
     }
-    return series;
+    return {...series, tags: this._currentTags};
   }
 }

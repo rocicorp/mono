@@ -61,6 +61,8 @@ export const enum ConnectionState {
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
 
+type CanaryResultTagType = 'canary_success' | 'canary_failed';
+
 type ClientDisconnectReason =
   | 'AbruptClose'
   | 'CleanClose'
@@ -243,6 +245,9 @@ export class Reflect<MD extends MutatorDefs> {
 
   // See comment on _metrics.timeToConnectMs for how _connectingStart is used.
   protected _connectingStart: number | undefined = undefined;
+
+  private _canaryRequestResultTag: Promise<CanaryResultTagType> | undefined =
+    undefined;
 
   readonly #options: ReflectOptions<MD>;
 
@@ -519,7 +524,11 @@ export class Reflect<MD extends MutatorDefs> {
 
     const closeKind = wasClean ? 'CleanClose' : 'AbruptClose';
     this._connectResolver.reject(new CloseError(closeKind));
-    await this._disconnect(l, {client: closeKind});
+    await this._disconnect(
+      l,
+      {client: closeKind},
+      this._canaryRequestResultTag,
+    );
   };
 
   // An error on the connection is fatal for the connection.
@@ -584,6 +593,41 @@ export class Reflect<MD extends MutatorDefs> {
     this._connectResolver.resolve();
   }
 
+  private async _fetchCanary(l: LogContext): Promise<CanaryResultTagType> {
+    const HTTP_OK = 200;
+    const canary_url = this._socketOrigin.replace(/^ws/, 'http') + 'api/canary';
+
+    function fetchTimeout(url: string, ms: number): Promise<Response> {
+      const controller = new AbortController();
+      const {signal} = controller;
+      const fetchPromise = fetch(url, {method: 'GET', signal});
+      const timeoutPromise = new Promise<Response>((_resolve, reject) => {
+        setTimeout(() => {
+          reject(new Error(`Request timed out after ${ms}ms`));
+          controller.abort();
+        }, ms);
+      });
+      return Promise.race([fetchPromise, timeoutPromise]);
+    }
+    let canary_return: CanaryResultTagType = 'canary_failed';
+    try {
+      const response = await fetchTimeout(canary_url, CONNECT_TIMEOUT_MS);
+      if (response.status === HTTP_OK) {
+        l.debug?.('Got 200 response from canary');
+        canary_return = 'canary_success';
+      } else {
+        l.debug?.('Got non-200 response from canary', {
+          status: response.status,
+          statusText: response.statusText,
+        });
+      }
+      return canary_return;
+    } catch (e) {
+      l.debug?.('Error from canary', e);
+      return canary_return;
+    }
+  }
+
   /**
    * Starts a new connection. This will create the WebSocket that does the HTTP
    * request to the server.
@@ -615,6 +659,7 @@ export class Reflect<MD extends MutatorDefs> {
     assert(this._connectingStart === undefined);
 
     this._connectingStart = Date.now();
+    this._canaryRequestResultTag = this._fetchCanary(l);
 
     const baseCookie = await this._getBaseCookie();
     this._baseCookie = baseCookie;
@@ -623,9 +668,13 @@ export class Reflect<MD extends MutatorDefs> {
     const id = setTimeout(async () => {
       l.debug?.('Rejecting connect resolver due to timeout');
       this._connectResolver.reject(new TimedOutError('Connect'));
-      await this._disconnect(l, {
-        client: 'ConnectTimeout',
-      });
+      await this._disconnect(
+        l,
+        {
+          client: 'ConnectTimeout',
+        },
+        this._canaryRequestResultTag,
+      );
     }, CONNECT_TIMEOUT_MS);
     const clear = () => clearTimeout(id);
     this._connectResolver.promise.then(clear, clear);
@@ -653,6 +702,7 @@ export class Reflect<MD extends MutatorDefs> {
   private async _disconnect(
     l: LogContext,
     reason: DisconnectReason,
+    canaryRequestResultTag?: Promise<CanaryResultTagType> | undefined,
   ): Promise<void> {
     l.info?.('disconnecting', {
       navigatorOnline: navigator.onLine,
@@ -672,11 +722,26 @@ export class Reflect<MD extends MutatorDefs> {
           );
           // this._connectingStart reset below.
         }
-
         break;
       }
       case ConnectionState.Connecting: {
-        this._metrics.lastConnectError.set(getLastConnectMetricState(reason));
+        if (canaryRequestResultTag === undefined) {
+          this._metrics.lastConnectError.set(getLastConnectMetricState(reason));
+        } else {
+          canaryRequestResultTag
+            .then(tag => {
+              this._metrics.lastConnectError.set(
+                getLastConnectMetricState(reason),
+                [tag],
+              );
+            })
+            .catch(() => {
+              // log unexpected error
+              this._metrics.lastConnectError.set(
+                getLastConnectMetricState(reason),
+              );
+            });
+        }
         if (this._connectingStart === undefined) {
           l.error?.(
             'disconnect() called while connecting but connect start time is undefined. This should not happen.',

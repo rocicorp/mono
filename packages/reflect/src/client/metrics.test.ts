@@ -79,6 +79,7 @@ test('State', () => {
       expected: {
         metric: 'mygauge_foo',
         points: [[200, [1]]],
+        tags: [],
       },
     },
     {
@@ -88,6 +89,7 @@ test('State', () => {
       expected: {
         metric: 'mygauge_bar',
         points: [[500, [1]]],
+        tags: [],
       },
     },
   ];

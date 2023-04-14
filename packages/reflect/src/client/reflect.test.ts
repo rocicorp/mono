@@ -1,6 +1,8 @@
 import {assert, expect} from '@esm-bundle/chai';
 import {resolver} from '@rocicorp/resolver';
-import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
+import type {NullableVersion} from 'reflect-protocol';
+import {Mutation, pushMessageSchema} from 'reflect-protocol';
+import {version} from './version.js';
 import {
   ExperimentalMemKVStore,
   JSONValue,
@@ -790,11 +792,27 @@ test('Metrics', async () => {
     await r.triggerPong();
   }
 
-  fetchStub.calledOnceWithExactly('https://example.com/api/metrics/v0/report', {
-    method: 'POST',
-    body: '{"series":[{"metric":"time_to_connect_ms","points":[[120,[0]]]}]}',
-    keepalive: true,
-  });
+  expect(
+    fetchStub.calledWithMatch('https://example.com/api/metrics/v0/report', {
+      method: 'POST',
+      body: `{"series":[{"metric":"time_to_connect_ms","points":[[1678829570,[0]]],"host":"localhost:8000","tags":["source:client","version:${version}"]}]}`,
+      keepalive: true,
+    }),
+  ).to.be.true;
+});
+
+test('Canary', async () => {
+  const fetchStub = sinon.stub(window, 'fetch');
+  const r = reflectForTest();
+  await r.waitForConnectionState(ConnectionState.Connecting);
+  await r.triggerConnected();
+  await r.waitForConnectionState(ConnectionState.Connected);
+  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(
+    fetchStub.calledWithMatch('https://example.com/api/canary', {
+      method: 'GET',
+    }),
+  ).to.be.true;
 });
 
 test('Authentication', async () => {
