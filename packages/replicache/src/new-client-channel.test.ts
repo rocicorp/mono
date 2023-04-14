@@ -1,10 +1,10 @@
 import {expect} from '@esm-bundle/chai';
 import {resolver} from '@rocicorp/resolver';
+import {sleep} from 'shared/sleep.js';
 import {
   initNewClientChannel,
   makeChannelNameForTesting,
 } from './new-client-channel.js';
-import {sleep} from './sleep.js';
 
 function getChannelMessagePromise(replicacheName: string) {
   const channel = new BroadcastChannel(
