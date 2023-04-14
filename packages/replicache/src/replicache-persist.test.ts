@@ -1,3 +1,5 @@
+import {expect} from '@esm-bundle/chai';
+import * as sinon from 'sinon';
 import {
   addData,
   clock,
@@ -9,25 +11,23 @@ import {
   ReplicacheTest,
   tickAFewTimes,
 } from './test-util.js';
-import {expect} from '@esm-bundle/chai';
-import * as sinon from 'sinon';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import * as kv from './kv/mod.js';
-import * as dag from './dag/mod.js';
-import * as persist from './persist/mod.js';
 import {assert, assertNotUndefined} from 'shared/asserts.js';
-import {deleteClientForTesting} from './persist/clients-test-helpers.js';
-import {assertClientV6} from './persist/clients.js';
-import {deleteClientGroup} from './persist/client-groups.js';
+import {sleep} from 'shared/sleep.js';
+import * as dag from './dag/mod.js';
 import {assertHash} from './hash.js';
 import {IDBNotFoundError} from './kv/idb-store.js';
-import type {WriteTransaction} from './transactions.js';
+import * as kv from './kv/mod.js';
+import {deleteClientGroup} from './persist/client-groups.js';
+import {deleteClientForTesting} from './persist/clients-test-helpers.js';
+import {assertClientV6} from './persist/clients.js';
+import * as persist from './persist/mod.js';
 import type {MutatorDefs} from './replicache.js';
-import {sleep} from './sleep.js';
+import type {WriteTransaction} from './transactions.js';
 import {withRead, withWrite} from './with-transactions.js';
 
 initReplicacheTesting();

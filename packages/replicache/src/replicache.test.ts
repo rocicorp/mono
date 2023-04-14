@@ -1,10 +1,36 @@
+import {assert as chaiAssert, expect} from '@esm-bundle/chai';
 import {
-  httpStatusUnauthorized,
+  LicenseStatus,
+  PROD_LICENSE_SERVER_URL,
+  TEST_LICENSE_KEY,
+} from '@rocicorp/licensing/src/client';
+import {
+  LICENSE_ACTIVE_PATH,
+  LICENSE_STATUS_PATH,
+} from '@rocicorp/licensing/src/server/api-types.js';
+import type {LogLevel} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
+import {assert} from 'shared/asserts.js';
+import {sleep} from 'shared/sleep.js';
+import * as sinon from 'sinon';
+import {asyncIterableToArray} from './async-iterable-to-array.js';
+import * as db from './db/mod.js';
+import type {JSONValue} from './json.js';
+import {TestMemStore} from './kv/test-mem-store.js';
+import type {PatchOperation} from './patch-operation.js';
+import {deleteClientForTesting} from './persist/clients-test-helpers.js';
+import type {ReplicacheOptions} from './replicache-options.js';
+import {
   MutatorDefs,
   Poke,
   Replicache,
+  httpStatusUnauthorized,
 } from './replicache.js';
+import type {ScanOptions} from './scan-options.js';
+import type {ClientID} from './sync/ids.js';
 import {
+  MemStoreWithCounters,
+  ReplicacheTest,
   addData,
   clock,
   disableAllBackgroundProcesses,
@@ -13,44 +39,18 @@ import {
   expectLogContext,
   initReplicacheTesting,
   makePullResponseV1,
-  MemStoreWithCounters,
   replicacheForTesting,
-  ReplicacheTest,
   requestIDLogContextRegex,
   tickAFewTimes,
   tickUntil,
 } from './test-util.js';
-import type {JSONValue} from './json.js';
-import {assert as chaiAssert, expect} from '@esm-bundle/chai';
-import * as sinon from 'sinon';
-import type {ScanOptions} from './scan-options.js';
-import {asyncIterableToArray} from './async-iterable-to-array.js';
-import {sleep} from './sleep.js';
-import * as db from './db/mod.js';
-import {TestMemStore} from './kv/test-mem-store.js';
-import {
-  PROD_LICENSE_SERVER_URL,
-  TEST_LICENSE_KEY,
-  LicenseStatus,
-} from '@rocicorp/licensing/src/client';
+import {TransactionClosedError} from './transaction-closed-error.js';
+import type {ReadTransaction, WriteTransaction} from './transactions.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import type {ReplicacheOptions} from './replicache-options.js';
-import {deleteClientForTesting} from './persist/clients-test-helpers.js';
-import type {LogLevel} from '@rocicorp/logger';
-import {
-  LICENSE_ACTIVE_PATH,
-  LICENSE_STATUS_PATH,
-} from '@rocicorp/licensing/src/server/api-types.js';
-import {assert} from 'shared/asserts.js';
-import {resolver} from '@rocicorp/resolver';
-import type {ReadTransaction, WriteTransaction} from './transactions.js';
-import {TransactionClosedError} from './transaction-closed-error.js';
-import type {PatchOperation} from './patch-operation.js';
-import type {ClientID} from './sync/ids.js';
 
 const {fail} = chaiAssert;
 

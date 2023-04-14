@@ -1,10 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
+import {sleep} from 'shared/sleep.js';
 import type * as dag from '../dag/mod.js';
 import {assertSnapshotCommitDD31} from '../db/commit.js';
 import * as db from '../db/mod.js';
 import type {Hash} from '../hash.js';
 import type {MutatorDefs} from '../replicache.js';
-import {sleep} from '../sleep.js';
 import * as sync from '../sync/mod.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {
