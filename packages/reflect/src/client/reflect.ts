@@ -4,7 +4,6 @@ import {
   ConnectedMessage,
   Downstream,
   downstreamSchema,
-  ErrorKind as ServerErrorKind,
   NullableVersion,
   nullableVersionSchema,
   PingMessage,
@@ -13,6 +12,7 @@ import {
   PullResponseBody,
   PullResponseMessage,
   PushMessage,
+  ErrorKind as ServerErrorKind,
   type ErrorMessage,
 } from 'reflect-protocol';
 import {
@@ -36,11 +36,10 @@ import {
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from 'replicache';
 import {assert} from 'shared/asserts.js';
+import {sleep} from 'shared/sleep.js';
 import * as valita from 'shared/valita.js';
 import {nanoid} from '../util/nanoid.js';
-import {sleep} from '../util/sleep.js';
 import {send} from '../util/socket.js';
-import {isAuthError, ServerError} from './server-error.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 import {
   DID_NOT_CONNECT_VALUE,
@@ -51,6 +50,7 @@ import {
 import type {ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
+import {isAuthError, ServerError} from './server-error.js';
 import {version} from './version.js';
 
 export const enum ConnectionState {
