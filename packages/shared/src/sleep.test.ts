@@ -61,10 +61,10 @@ test('sleepWithAbort', async () => {
   let abortedResolved = false;
   const controller = new AbortController();
   const [p, abortedP] = sleepWithAbort(100, controller.signal);
-  p.then(() => {
+  void p.then(() => {
     okResolved = true;
   });
-  abortedP.then(() => {
+  void abortedP.then(() => {
     abortedResolved = true;
   });
 
