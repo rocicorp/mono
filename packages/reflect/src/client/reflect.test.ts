@@ -801,7 +801,7 @@ test('Metrics', async () => {
   ).to.be.true;
 });
 
-test('Canary', async () => {
+test('canary connect', async () => {
   const fetchStub = sinon.stub(window, 'fetch');
   const r = reflectForTest();
   await r.waitForConnectionState(ConnectionState.Connecting);
@@ -813,6 +813,98 @@ test('Canary', async () => {
       method: 'GET',
     }),
   ).to.be.true;
+});
+
+test('canary logs and errors', async () => {
+  const OK_CANARY = Promise.resolve(
+    new Response('ok', {
+      status: 200,
+    }),
+  );
+
+  const NOT_OK_CANARY = Promise.resolve(
+    new Response('', {
+      status: 405,
+    }),
+  );
+  const fetchStub = sinon.stub(window, 'fetch');
+
+  const log: [LogLevel, unknown[]][] = [];
+  const step = async (
+    sleepMS: number,
+    canaryEndpointMock: Promise<Response>,
+    debugMessage: string,
+    canaryBody: string,
+  ) => {
+    fetchStub
+      .withArgs('https://example.com/api/canary')
+      .returns(canaryEndpointMock);
+
+    const r = reflectForTest({
+      logLevel: 'debug',
+      logSinks: [
+        {
+          log: (level, ...args) => {
+            log.push([level, args]);
+          },
+        },
+      ],
+    });
+    await r.waitForConnectionState(ConnectionState.Connecting);
+
+    // Need to drain the microtask queue without changing the clock because we are
+    // using the time below to check when the connect times out.
+    for (let i = 0; i < 10; i++) {
+      await clock.tickAsync(0);
+    }
+
+    expect(r.connectionState).to.equal(ConnectionState.Connecting);
+    await clock.tickAsync(CONNECT_TIMEOUT_MS - 1);
+    await r.triggerConnected();
+    await r.waitForConnectionState(ConnectionState.Connected);
+    for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
+      await clock.tickAsync(PING_INTERVAL_MS);
+      await r.triggerPong();
+    }
+    await clock.tickAsync(sleepMS);
+    await r.triggerClose();
+    console.log(fetchStub.getCalls().map(c => JSON.stringify(c.args)));
+    expect(
+      fetchStub.calledWithMatch('https://example.com/api/metrics/v0/report', {
+        method: 'POST',
+        body: canaryBody,
+        keepalive: true,
+      }),
+    ).to.be.true;
+
+    const index: number = log.findIndex(
+      ([level, args]: [LogLevel, unknown[]]) =>
+        level === 'debug' &&
+        args[4] &&
+        (JSON.stringify(args[4]) as string).includes(debugMessage),
+    );
+
+    expect(index).to.not.equal(-1);
+  };
+
+  const basicRequest = `{"series":[{"metric":"time_to_connect_ms","points":[[1678829570,[9999]]],"host":"localhost:8000","tags":["source:client","version:${version}"]}]}`;
+  // const successRequest = `{"series":[{"metric":"time_to_connect_ms","points":[[1678829825,[100000]]],"host":"localhost:8000","tags":["source:client","version:${version}"]},{"metric":"last_connect_error_client_connect_timeout","points":[[1678829825,[1]]],"tags":["source:client","version:${version}","canary:success"],"host":"localhost:8000"}]}`
+  const failedRequest = `{"series":[{"metric":"time_to_connect_ms","points":[[1678829690,[100000]]],"host":"localhost:8000","tags":["source:client","version:${version}"]},{"metric":"last_connect_error_client_connect_timeout","points":[[1678829690,[1]]],"tags":["source:client","version:${version}","canary:failed"],"host":"localhost:8000"}]}`;
+
+  await step(1, OK_CANARY, 'Got 200 response from canary', basicRequest);
+  await step(
+    5_000,
+    NOT_OK_CANARY,
+    'Aborting canary request because of timeout',
+    failedRequest,
+  );
+  await step(
+    2,
+    NOT_OK_CANARY,
+    'Got non-200 response from canary',
+    failedRequest,
+  );
+  await step(1, OK_CANARY, 'Got 200 response from canary', basicRequest);
 });
 
 test('Authentication', async () => {
