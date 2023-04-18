@@ -17,7 +17,6 @@ import {
   REPLICACHE_FORMAT_VERSION_V6,
   makeIDBNameForTesting,
 } from './replicache.js';
-import type * as sync from './sync/mod.js';
 import {PUSH_VERSION_SDD} from './sync/push.js';
 import {
   clock,
@@ -35,6 +34,7 @@ import {withRead} from './with-transactions.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import type {ClientID} from './sync/ids.js';
 
 initReplicacheTesting();
 
@@ -73,7 +73,7 @@ export async function createPerdag(args: {
 }
 
 export async function createAndPersistClientWithPendingLocalSDD(
-  clientID: sync.ClientID,
+  clientID: ClientID,
   perdag: dag.Store,
   numLocal: number,
 ): Promise<db.LocalMetaSDD[]> {
@@ -101,7 +101,7 @@ export async function createAndPersistClientWithPendingLocalSDD(
 
 export function createPushBodySDD(
   profileID: string,
-  clientID: sync.ClientID,
+  clientID: ClientID,
   localMetas: db.LocalMetaSDD[],
   schemaVersion: string,
 ): ReadonlyJSONObject {

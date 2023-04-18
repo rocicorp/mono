@@ -1,38 +1,38 @@
 import type {LogContext} from '@rocicorp/logger';
-import type * as dag from '../dag/mod.js';
+import {assert} from 'shared/asserts.js';
 import * as btree from '../btree/mod.js';
+import {BTreeRead, BTreeWrite} from '../btree/mod.js';
+import type {InternalDiff} from '../btree/node.js';
+import {allEntriesAsDiff} from '../btree/read.js';
+import type {FrozenCookie} from '../cookies.js';
+import type * as dag from '../dag/mod.js';
+import {Hash, emptyHash} from '../hash.js';
+import type {FrozenJSONValue} from '../json.js';
+import {lazy} from '../lazy.js';
+import type {DiffComputationConfig} from '../sync/diff.js';
+import type {ClientID} from '../sync/ids.js';
 import * as sync from '../sync/mod.js';
-import type {ClientID} from '../sync/mod.js';
 import {
   Commit,
   Meta as CommitMeta,
   IndexRecord,
-  newIndexChange as commitNewIndexChange,
-  newLocalSDD as commitNewLocalSDD,
-  newLocalDD31 as commitNewLocalDD31,
-  newSnapshotSDD as commitNewSnapshotSDD,
-  newSnapshotDD31 as commitNewSnapshotDD31,
-  MetaType,
   Meta,
+  MetaType,
   baseSnapshotHashFromHash,
+  newIndexChange as commitNewIndexChange,
+  newLocalDD31 as commitNewLocalDD31,
+  newLocalSDD as commitNewLocalSDD,
+  newSnapshotDD31 as commitNewSnapshotDD31,
+  newSnapshotSDD as commitNewSnapshotSDD,
   getMutationID,
 } from './commit.js';
+import {IndexOperation, IndexRead, IndexWrite, indexValue} from './index.js';
 import {
   Read,
+  Whence,
   readCommitForBTreeWrite,
   readIndexesForRead,
-  Whence,
 } from './read.js';
-import {IndexWrite, IndexOperation, indexValue, IndexRead} from './index.js';
-import {BTreeRead, BTreeWrite} from '../btree/mod.js';
-import {lazy} from '../lazy.js';
-import {emptyHash, Hash} from '../hash.js';
-import type {InternalDiff} from '../btree/node.js';
-import {allEntriesAsDiff} from '../btree/read.js';
-import {assert} from 'shared/asserts.js';
-import type {DiffComputationConfig} from '../sync/diff.js';
-import type {FrozenJSONValue} from '../json.js';
-import type {FrozenCookie} from '../cookies.js';
 
 export class Write extends Read {
   private readonly _dagWrite: dag.Write;

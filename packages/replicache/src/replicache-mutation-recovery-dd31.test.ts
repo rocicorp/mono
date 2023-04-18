@@ -23,7 +23,6 @@ import {
   REPLICACHE_FORMAT_VERSION_V6,
 } from './replicache.js';
 import {stringCompare} from './string-compare.js';
-import type * as sync from './sync/mod.js';
 import {
   PULL_VERSION_DD31,
   PULL_VERSION_SDD,
@@ -51,14 +50,15 @@ import {withRead} from './with-transactions.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import type {ClientGroupID, ClientID} from './sync/ids.js';
 
 async function createAndPersistClientWithPendingLocalDD31(
-  clientID: sync.ClientID,
+  clientID: ClientID,
   perdag: dag.Store,
   numLocal: number,
   mutatorNames: string[],
   cookie: string | number,
-  snapshotLastMutationIDs?: Record<sync.ClientID, number> | undefined,
+  snapshotLastMutationIDs?: Record<ClientID, number> | undefined,
 ): Promise<db.LocalMetaDD31[]> {
   const testMemdag = new dag.LazyStore(
     perdag,
@@ -104,11 +104,11 @@ async function createAndPersistClientWithPendingLocalDD31(
 }
 
 async function persistSnapshotDD31(
-  clientID: sync.ClientID,
+  clientID: ClientID,
   perdag: dag.Store,
   cookie: string | number,
   mutatorNames: string[],
-  snapshotLastMutationIDs: Record<sync.ClientID, number>,
+  snapshotLastMutationIDs: Record<ClientID, number>,
 ): Promise<void> {
   const testMemdag = new dag.LazyStore(
     perdag,
@@ -147,8 +147,8 @@ suite('DD31', () => {
 
   function createPushRequestBodyDD31(
     profileID: string,
-    clientGroupID: sync.ClientGroupID,
-    clientID: sync.ClientID,
+    clientGroupID: ClientGroupID,
+    clientID: ClientID,
     localMetas: db.LocalMetaDD31[],
     schemaVersion: string,
   ): ReadonlyJSONObject {
@@ -170,14 +170,10 @@ suite('DD31', () => {
   async function testRecoveringMutationsOfClientV6(args: {
     schemaVersionOfClientWPendingMutations: string;
     schemaVersionOfClientRecoveringMutations: string;
-    snapshotLastMutationIDs?: Record<sync.ClientID, number> | undefined;
-    snapshotLastMutationIDsAfterPull?:
-      | Record<sync.ClientID, number>
-      | undefined;
-    pullLastMutationIDChanges?: Record<sync.ClientID, number> | undefined;
-    expectedLastServerAckdMutationIDs?:
-      | Record<sync.ClientID, number>
-      | undefined;
+    snapshotLastMutationIDs?: Record<ClientID, number> | undefined;
+    snapshotLastMutationIDsAfterPull?: Record<ClientID, number> | undefined;
+    pullLastMutationIDChanges?: Record<ClientID, number> | undefined;
+    expectedLastServerAckdMutationIDs?: Record<ClientID, number> | undefined;
     pullResponse?: PullResponseV1 | undefined;
     pushResponse?: PushResponse | undefined;
   }) {

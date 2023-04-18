@@ -3,7 +3,7 @@ import type * as dag from '../dag/mod.js';
 import {assertSnapshotMetaSDD} from '../db/commit.js';
 import * as db from '../db/mod.js';
 import type {Hash} from '../hash.js';
-import type * as sync from '../sync/mod.js';
+import type {ClientID} from '../sync/ids.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {assertHasClientState, setClient} from './clients.js';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
@@ -19,7 +19,7 @@ import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
  * or is rejected if the persist fails.
  */
 export async function persistSDD(
-  clientID: sync.ClientID,
+  clientID: ClientID,
   memdag: dag.LazyStore,
   perdag: dag.Store,
   closed: () => boolean,
@@ -65,7 +65,7 @@ export async function persistSDD(
 
 function gatherMemOnlyChunks(
   memdag: dag.LazyStore,
-  clientID: sync.ClientID,
+  clientID: ClientID,
 ): Promise<
   [
     map: ReadonlyMap<Hash, dag.Chunk>,
@@ -99,7 +99,7 @@ async function writeChunks(
   perdag: dag.Store,
   chunks: ReadonlyMap<Hash, dag.Chunk>,
   mainHeadHash: Hash,
-  clientID: sync.ClientID,
+  clientID: ClientID,
   mutationID: number,
   lastMutationID: number,
 ): Promise<void> {

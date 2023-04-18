@@ -1,10 +1,10 @@
+import type {LogContext} from '@rocicorp/logger';
+import {assert} from 'shared/asserts.js';
 import type * as dag from '../dag/mod.js';
 import type {Hash} from '../hash.js';
 import type {MutatorDefs} from '../replicache.js';
+import type {ClientID} from '../sync/ids.js';
 import {WriteTransactionImpl} from '../transactions.js';
-import type {LogContext} from '@rocicorp/logger';
-import type {ClientID} from '../sync/mod.js';
-import {assert} from 'shared/asserts.js';
 import {
   Commit,
   fromHash,
@@ -14,8 +14,8 @@ import {
   LocalMetaSDD,
   Meta,
 } from './commit.js';
-import {newWriteLocal, Write} from './write.js';
 import {whenceHash} from './read.js';
+import {newWriteLocal, Write} from './write.js';
 
 async function rebaseMutation(
   mutation: Commit<LocalMetaDD31 | LocalMetaSDD>,

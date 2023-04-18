@@ -55,6 +55,7 @@ import {
   WatchNoIndexCallback,
   WatchOptions,
 } from './subscriptions.js';
+import type {ClientGroupID, ClientID} from './sync/ids.js';
 import * as sync from './sync/mod.js';
 import {PullError} from './sync/pull-error.js';
 import {HandlePullResponseResultType} from './sync/pull.js';
@@ -207,7 +208,7 @@ export type PendingMutation = {
   readonly name: string;
   readonly id: number;
   readonly args: ReadonlyJSONValue;
-  readonly clientID: sync.ClientID;
+  readonly clientID: ClientID;
 };
 
 // eslint-disable-next-line @typescript-eslint/ban-types
@@ -563,8 +564,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
   private async _open(
     indexes: IndexDefinitions,
     profileIDResolver: (profileID: string) => void,
-    resolveClientGroupID: (clientGroupID: sync.ClientGroupID) => void,
-    resolveClientID: (clientID: sync.ClientID) => void,
+    resolveClientGroupID: (clientGroupID: ClientGroupID) => void,
+    resolveClientID: (clientID: ClientID) => void,
     resolveReady: () => void,
     resolveLicenseCheck: (valid: boolean) => void,
     resolveLicenseActive: (active: boolean) => void,
@@ -1362,12 +1363,12 @@ export class Replicache<MD extends MutatorDefs = {}> {
     }
   }
 
-  private _fireOnClientStateNotFound(clientID: sync.ClientID) {
+  private _fireOnClientStateNotFound(clientID: ClientID) {
     this._lc.error?.(`Client state not found, clientID: ${clientID}`);
     this.onClientStateNotFound?.();
   }
 
-  private _clientStateNotFoundOnClient(clientID: sync.ClientID) {
+  private _clientStateNotFoundOnClient(clientID: ClientID) {
     this._lc.error?.(`Client state not found, clientID: ${clientID}`);
     this._fireOnClientStateNotFound(clientID);
   }

@@ -164,7 +164,7 @@ function logMutationRecoveryError(
  */
 async function recoverMutationsOfClientV4(
   client: persist.Client,
-  clientID: sync.ClientID,
+  clientID: ClientID,
   perdag: dag.Store,
   database: persist.IndexedDBDatabase,
   options: MutationRecoveryOptions,
@@ -412,7 +412,7 @@ async function recoverMutationsFromPerdagSDD(
     let clientMap: persist.ClientMap | undefined =
       preReadClientMap ||
       (await withRead(perdag, read => persist.getClients(read)));
-    const clientIDsVisited = new Set<sync.ClientID>();
+    const clientIDsVisited = new Set<ClientID>();
     while (clientMap) {
       let newClientMap: persist.ClientMap | undefined;
       for (const [clientID, client] of clientMap) {
@@ -455,7 +455,7 @@ async function recoverMutationsFromPerdagDD31(
       perdag,
       read => persist.getClientGroups(read),
     );
-    const clientGroupIDsVisited = new Set<sync.ClientGroupID>();
+    const clientGroupIDsVisited = new Set<ClientGroupID>();
     while (clientGroups) {
       let newClientGroups: persist.ClientGroupMap | undefined;
       for (const [clientGroupID, clientGroup] of clientGroups) {
@@ -492,7 +492,7 @@ async function recoverMutationsFromPerdagDD31(
  */
 async function recoverMutationsOfClientGroupDD31(
   clientGroup: persist.ClientGroup,
-  clientGroupID: sync.ClientGroupID,
+  clientGroupID: ClientGroupID,
   perdag: dag.Store,
   database: persist.IndexedDBDatabase,
   options: MutationRecoveryOptions,
@@ -512,7 +512,7 @@ async function recoverMutationsOfClientGroupDD31(
     return;
   }
 
-  let clientID: sync.ClientID | undefined;
+  let clientID: ClientID | undefined;
 
   // If all local mutations have been applied then exit.
   let allAckd = true;

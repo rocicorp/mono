@@ -1,10 +1,11 @@
 import {expect} from '@esm-bundle/chai';
-import type {Chain} from '../db/test-helpers.js';
 import type * as dag from '../dag/mod.js';
-import * as db from '../db/mod.js';
-import * as sync from '../sync/mod.js';
 import {commitIsSnapshot} from '../db/commit.js';
+import * as db from '../db/mod.js';
+import type {Chain} from '../db/test-helpers.js';
+import * as sync from '../sync/mod.js';
 import {withRead, withWrite} from '../with-transactions.js';
+import type {ClientID} from './ids.js';
 
 // See db.test_helpers for addLocal, addSnapshot, etc. We can't put addLocalRebase
 // there because sync depends on db, and addLocalRebase depends on sync.
@@ -18,7 +19,7 @@ export async function addSyncSnapshot(
   chain: Chain,
   store: dag.Store,
   takeIndexesFrom: number,
-  clientID: sync.ClientID,
+  clientID: ClientID,
   dd31: boolean,
 ): Promise<Chain> {
   expect(chain.length >= 2).to.be.true;

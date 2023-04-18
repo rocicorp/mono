@@ -1,7 +1,8 @@
 import {expect} from '@esm-bundle/chai';
 import * as dag from '../dag/mod.js';
-import type * as sync from '../sync/mod.js';
 import {assertHash, fakeHash, Hash} from '../hash.js';
+import type {ClientGroupID} from '../sync/ids.js';
+import {withRead, withWrite} from '../with-transactions.js';
 import {
   ClientGroup,
   clientGroupHasPendingMutations,
@@ -14,7 +15,6 @@ import {
   setClientGroup,
   setClientGroups,
 } from './client-groups.js';
-import {withRead, withWrite} from '../with-transactions.js';
 
 const headClientGroup1Hash = fakeHash('b1');
 const headClientGroup2Hash = fakeHash('b2');
@@ -23,7 +23,7 @@ const headClientGroup3Hash = fakeHash('b3');
 type PartialClientGroup = Partial<ClientGroup> & Pick<ClientGroup, 'headHash'>;
 
 export function makeClientGroupMap(
-  partialClientGroups: Record<sync.ClientGroupID, PartialClientGroup>,
+  partialClientGroups: Record<ClientGroupID, PartialClientGroup>,
 ): ClientGroupMap {
   const clientGroupMap = new Map();
   for (const [clientGroupID, partialClientGroup] of Object.entries(
@@ -56,7 +56,7 @@ test('getClientGroups with no existing ClientGroupMap in dag store', async () =>
 });
 
 async function testSetClientGroups(
-  partialClientGroupMap: Record<sync.ClientGroupID, PartialClientGroup>,
+  partialClientGroupMap: Record<ClientGroupID, PartialClientGroup>,
   dagStore: dag.Store,
 ) {
   const clientGroupMap = makeClientGroupMap(partialClientGroupMap);
@@ -93,8 +93,8 @@ test('setClientGroups and getClientGroups', async () => {
 });
 
 async function testSetClientGroupsSequence(
-  partialClientGroupMap1: Record<sync.ClientGroupID, PartialClientGroup>,
-  partialClientGroupMap2: Record<sync.ClientGroupID, PartialClientGroup>,
+  partialClientGroupMap1: Record<ClientGroupID, PartialClientGroup>,
+  partialClientGroupMap2: Record<ClientGroupID, PartialClientGroup>,
   dagStore: dag.Store,
 ) {
   await testSetClientGroups(partialClientGroupMap1, dagStore);
@@ -102,8 +102,8 @@ async function testSetClientGroupsSequence(
 }
 
 async function testSetClientGroupsSequenceThrowsError(
-  partialClientGroupMap1: Record<sync.ClientGroupID, PartialClientGroup>,
-  partialClientGroupMap2: Record<sync.ClientGroupID, PartialClientGroup>,
+  partialClientGroupMap1: Record<ClientGroupID, PartialClientGroup>,
+  partialClientGroupMap2: Record<ClientGroupID, PartialClientGroup>,
   expectedErrorMsg: string,
   dagStore: dag.Store,
 ) {
@@ -314,9 +314,9 @@ test('setClientGroups throws error if mutatorNames is not a set', async () => {
 });
 
 async function testSetClientGroup(
-  partialClientGroupMap1: Record<sync.ClientGroupID, PartialClientGroup>,
-  partialClientGroupEntryToSet: [sync.ClientGroupID, PartialClientGroup],
-  expectedPartialClientGroupMap: Record<sync.ClientGroupID, PartialClientGroup>,
+  partialClientGroupMap1: Record<ClientGroupID, PartialClientGroup>,
+  partialClientGroupEntryToSet: [ClientGroupID, PartialClientGroup],
+  expectedPartialClientGroupMap: Record<ClientGroupID, PartialClientGroup>,
   dagStore: dag.Store,
 ) {
   await testSetClientGroups(partialClientGroupMap1, dagStore);
@@ -343,8 +343,8 @@ async function testSetClientGroup(
 }
 
 async function testSetClientGroupThrowsError(
-  partialClientGroupMap1: Record<sync.ClientGroupID, PartialClientGroup>,
-  partialClientGroupEntryToSet: [sync.ClientGroupID, PartialClientGroup],
+  partialClientGroupMap1: Record<ClientGroupID, PartialClientGroup>,
+  partialClientGroupEntryToSet: [ClientGroupID, PartialClientGroup],
   expectedErrorMsg: string,
   dagStore: dag.Store,
 ) {
