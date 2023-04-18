@@ -1,9 +1,32 @@
-import * as valita from 'shared/valita.js';
-import {encodeHeaderValue} from '../util/headers.js';
-import {LogSink, LogContext, LogLevel} from '@rocicorp/logger';
-import {version} from '../util/version.js';
-import {AuthHandler, UserData, USER_DATA_HEADER_NAME} from './auth.js';
+import {RWLock} from '@rocicorp/lock';
+import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import type {ErrorKind} from 'reflect-protocol';
 import {
+  ConnectionsResponse,
+  connectionsResponseSchema,
+  createRoomRequestSchema,
+  invalidateForRoomRequestSchema,
+  invalidateForUserRequestSchema,
+} from 'reflect-protocol';
+import {assert} from 'shared/asserts.js';
+import * as valita from 'shared/valita.js';
+import {DurableStorage} from '../storage/durable-storage.js';
+import {encodeHeaderValue} from '../util/headers.js';
+import {closeWithError} from '../util/socket.js';
+import {version} from '../util/version.js';
+import {createAuthAPIHeaders} from './auth-api-headers.js';
+import {AuthHandler, USER_DATA_HEADER_NAME, UserData} from './auth.js';
+import {
+  CONNECT_URL_PATTERN,
+  CREATE_ROOM_PATH,
+  LEGACY_CONNECT_PATH,
+  LEGACY_CREATE_ROOM_PATH,
+} from './paths.js';
+import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
+import {ROOM_ROUTES} from './room-do.js';
+import {
+  RoomRecord,
+  RoomStatus,
   closeRoom,
   createRoom,
   createRoomRecordForLegacyRoom,
@@ -11,47 +34,24 @@ import {
   deleteRoomRecord,
   internalCreateRoom,
   objectIDByRoomID,
-  RoomRecord,
   roomRecordByRoomID,
   roomRecords,
-  RoomStatus,
 } from './rooms.js';
-import {RWLock} from '@rocicorp/lock';
 import {
-  ConnectionsResponse,
-  connectionsResponseSchema,
-  invalidateForRoomRequestSchema,
-  invalidateForUserRequestSchema,
-} from 'reflect-protocol';
-import {createAuthAPIHeaders} from './auth-api-headers.js';
-import {DurableStorage} from '../storage/durable-storage.js';
-import {createRoomRequestSchema} from 'reflect-protocol';
-import {closeWithError} from '../util/socket.js';
-import {
-  requireAuthAPIKey,
+  BaseContext,
   Handler,
   Router,
+  WithRoomID,
+  WithVersion,
   asJSON,
-  withRoomID,
   get,
   post,
-  BaseContext,
-  WithRoomID,
+  requireAuthAPIKey,
   withBody,
+  withRoomID,
   withVersion,
-  WithVersion,
 } from './router.js';
-import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
-import type {ErrorKind} from 'reflect-protocol';
-import {ROOM_ROUTES} from './room-do.js';
-import {
-  CONNECT_URL_PATTERN,
-  CREATE_ROOM_PATH,
-  LEGACY_CONNECT_PATH,
-  LEGACY_CREATE_ROOM_PATH,
-} from './paths.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
-import {assert} from 'shared/asserts.js';
 
 export interface AuthDOOptions {
   roomDO: DurableObjectNamespace;
@@ -415,7 +415,7 @@ export class BaseAuthDO implements DurableObject {
       if (this._authHandler) {
         const auth = decodedAuth;
         assert(auth);
-        let authHandlerUserData: UserData | undefined;
+        let authHandlerUserData: UserData | null;
 
         try {
           authHandlerUserData = await this._authHandler(auth, roomID);

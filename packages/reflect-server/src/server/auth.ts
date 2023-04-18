@@ -1,14 +1,18 @@
-import type {ReadonlyJSONObject} from 'replicache';
+import type {MaybePromise, ReadonlyJSONObject} from 'replicache';
 
 /**
  * An `AuthHandler` should validate that the user authenticated by `auth` is
- * authorized to access the room with `roomID`. By 'access' we mean create
- * or connect to the room.
+ * authorized to access the room with `roomID`. By 'access' we mean create or
+ * connect to the room.
  * @return A promise which resolves to `UserData` for the user if authentication
- * and authorization is successful, or rejects (throws) if authentication or
- * authorization fail.
+ * and authorization is successful. If authentication fails you can return
+ * `null`. Exceptions and promise rejections are treated as authentication
+ * failures.
  */
-export type AuthHandler = (auth: string, roomID: string) => Promise<UserData>;
+export type AuthHandler = (
+  auth: string,
+  roomID: string,
+) => MaybePromise<UserData | null>;
 
 /**
  * `UserData` must include a `userID` which is unique stable identifier
