@@ -23,8 +23,7 @@ import {createIndexBTree} from '../db/write.js';
 import {Hash, assertHash} from '../hash.js';
 import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
 import {FrozenJSONValue, deepFreeze} from '../json.js';
-import type {ClientID} from '../sync/ids.js';
-import type * as sync from '../sync/mod.js';
+import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import {uuid as makeUuid} from '../uuid.js';
 import {withWrite} from '../with-transactions.js';
 import {
@@ -35,11 +34,8 @@ import {
   setClientGroup,
 } from './client-groups.js';
 
-export type ClientMap = ReadonlyMap<
-  sync.ClientID,
-  ClientV4 | ClientV5 | ClientV6
->;
-export type ClientMapDD31 = ReadonlyMap<sync.ClientID, ClientV5 | ClientV6>;
+export type ClientMap = ReadonlyMap<ClientID, ClientV4 | ClientV5 | ClientV6>;
+export type ClientMapDD31 = ReadonlyMap<ClientID, ClientV5 | ClientV6>;
 
 export type ClientV4 = {
   /**
@@ -100,7 +96,7 @@ export type ClientV5 = {
    * ID of this client's perdag client group. This needs to be sent in pull
    * request (to enable syncing all last mutation ids in the client group).
    */
-  readonly clientGroupID: sync.ClientGroupID;
+  readonly clientGroupID: ClientGroupID;
 };
 
 export type ClientV6 = {
@@ -129,7 +125,7 @@ export type ClientV6 = {
    * ID of this client's perdag client group. This needs to be sent in pull
    * request (to enable syncing all last mutation ids in the client group).
    */
-  readonly clientGroupID: sync.ClientGroupID;
+  readonly clientGroupID: ClientGroupID;
 };
 
 export type Client = ClientV4 | ClientV5 | ClientV6;
@@ -257,7 +253,7 @@ async function getClientsAtHash(
 export class ClientStateNotFoundError extends Error {
   name = 'ClientStateNotFoundError';
   readonly id: string;
-  constructor(id: sync.ClientID) {
+  constructor(id: ClientID) {
     super(`Client state not found, id: ${id}`);
     this.id = id;
   }
@@ -267,7 +263,7 @@ export class ClientStateNotFoundError extends Error {
  * Throws a `ClientStateNotFoundError` if the client does not exist.
  */
 export async function assertHasClientState(
-  id: sync.ClientID,
+  id: ClientID,
   dagRead: dag.Read,
 ): Promise<void> {
   if (!(await hasClientState(id, dagRead))) {
@@ -276,14 +272,14 @@ export async function assertHasClientState(
 }
 
 export async function hasClientState(
-  id: sync.ClientID,
+  id: ClientID,
   dagRead: dag.Read,
 ): Promise<boolean> {
   return !!(await getClient(id, dagRead));
 }
 
 export async function getClient(
-  id: sync.ClientID,
+  id: ClientID,
   dagRead: dag.Read,
 ): Promise<Client | undefined> {
   const clients = await getClients(dagRead);
@@ -291,7 +287,7 @@ export async function getClient(
 }
 
 export async function mustGetClient(
-  id: sync.ClientID,
+  id: ClientID,
   dagRead: dag.Read,
 ): Promise<Client> {
   const client = await getClient(id, dagRead);
@@ -302,7 +298,7 @@ export async function mustGetClient(
 }
 
 type InitClientV6Result = [
-  clientID: sync.ClientID,
+  clientID: ClientID,
   client: ClientV6,
   hash: Hash,
   clientMap: ClientMap,
@@ -490,7 +486,7 @@ export type FindMatchingClientResult =
     }
   | {
       type: typeof FIND_MATCHING_CLIENT_TYPE_HEAD;
-      clientGroupID: sync.ClientGroupID;
+      clientGroupID: ClientGroupID;
       headHash: Hash;
     };
 
@@ -576,7 +572,7 @@ export async function getClientGroupForClient(
 export async function getClientGroupIDForClient(
   clientID: ClientID,
   read: dag.Read,
-): Promise<sync.ClientGroupID | undefined> {
+): Promise<ClientGroupID | undefined> {
   const client = await getClient(clientID, read);
   if (!client || !isClientV5(client)) {
     return undefined;

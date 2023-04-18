@@ -20,7 +20,7 @@ import {
   setClient,
 } from '../persist/clients.js';
 import type {MutatorDefs} from '../replicache.js';
-import type * as sync from '../sync/mod.js';
+import type {ClientID} from '../sync/ids.js';
 import {addData, testSubscriptionsManagerOptions} from '../test-util.js';
 import type {WriteTransaction} from '../transactions.js';
 import {withRead, withWrite} from '../with-transactions.js';
@@ -28,7 +28,7 @@ import {refresh} from './refresh.js';
 
 async function makeChain(
   store: dag.Store,
-  clientID: sync.ClientID,
+  clientID: ClientID,
   cookie: number,
   headName: string,
   withLocal = true,
@@ -46,7 +46,7 @@ async function makeChain(
 
 function makeMemdagChain(
   memdag: dag.Store,
-  clientID: sync.ClientID,
+  clientID: ClientID,
   cookie: number,
 ): Promise<{headHash: Hash; chainBuilder: ChainBuilder}> {
   return makeChain(memdag, clientID, cookie, db.DEFAULT_HEAD_NAME);
@@ -55,7 +55,7 @@ function makeMemdagChain(
 const PERDAG_TEST_SETUP_HEAD_NAME = 'test-setup-head';
 async function makePerdagChainAndSetClientsAndClientGroup(
   perdag: dag.Store,
-  clientID: sync.ClientID,
+  clientID: ClientID,
   cookie: number,
   withLocal = true,
 ): Promise<{headHash: Hash; chainBuilder: ChainBuilder; client: ClientV6}> {
@@ -75,7 +75,7 @@ async function makePerdagChainAndSetClientsAndClientGroup(
 
 async function setClientsAndClientGroups(
   headHash: Hash,
-  clientID: sync.ClientID,
+  clientID: ClientID,
   perdag: dag.Store,
 ) {
   const clientGroupID = 'client-group-1';
@@ -597,7 +597,7 @@ suite('refresh', () => {
     }: {
       store: dag.Store;
       basisHash?: Hash | null;
-      lastMutationIDs: Record<sync.ClientID, number>;
+      lastMutationIDs: Record<ClientID, number>;
       cookieJSON: Cookie;
       valueHash?: Hash;
       indexes?: db.IndexRecord[];
@@ -640,7 +640,7 @@ suite('refresh', () => {
       entries = [],
     }: {
       store: dag.Store;
-      clientID: sync.ClientID;
+      clientID: ClientID;
       mutationID: number;
       basisHash: Hash;
       mutatorName: string;

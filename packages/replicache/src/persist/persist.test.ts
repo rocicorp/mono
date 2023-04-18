@@ -12,9 +12,9 @@ import {
 } from '../db/test-helpers.js';
 import {Hash, assertHash, makeNewFakeHashFunction} from '../hash.js';
 import type {JSONValue} from '../json.js';
-import type {MutatorDefs} from '../mod.js';
+import type {MutatorDefs} from '../replicache.js';
 import {promiseVoid} from '../resolved-promises.js';
-import type * as sync from '../sync/mod.js';
+import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import type {WriteTransaction} from '../transactions.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {
@@ -50,8 +50,8 @@ suite('persistDD31', () => {
     perdag: dag.TestStore,
     memdagChainBuilder: ChainBuilder,
     perdagClientGroupChainBuilder: ChainBuilder,
-    clients: {clientID: sync.ClientID; client: Client}[],
-    clientGroupID: sync.ClientGroupID,
+    clients: {clientID: ClientID; client: Client}[],
+    clientGroupID: ClientGroupID,
     testPersist: (
       persistedExpectation: PersistedExpectation,
       onGatherMemOnlyChunksForTest?: () => Promise<void>,
@@ -79,8 +79,8 @@ suite('persistDD31', () => {
     memdagCookie?: string;
     perdagClientGroupCookie?: string;
     memdagValueMap?: [string, JSONValue][];
-    memdagMutationIDs?: Record<sync.ClientID, number>;
-    perdagClientGroupMutationIDs?: Record<sync.ClientID, number>;
+    memdagMutationIDs?: Record<ClientID, number>;
+    perdagClientGroupMutationIDs?: Record<ClientID, number>;
   }) {
     const {
       memdagCookie = 'cookie1',
@@ -833,7 +833,7 @@ suite('persistDD31', () => {
 
 function expectUpdatedClientPersistHash(
   clientMap: ClientMap,
-  clients: {clientID: sync.ClientID; client: Client}[],
+  clients: {clientID: ClientID; client: Client}[],
   memdagSnapshotCommitHash: Hash,
   afterPersistClientMap: ClientMap,
 ) {
@@ -874,7 +874,7 @@ async function setupPersistTest() {
     };
   }
 
-  let clientGroupID: undefined | sync.ClientGroupID;
+  let clientGroupID: undefined | ClientGroupID;
   const createClient = async () => {
     const [cID, c] = await initClientV6(
       new LogContext(),
@@ -889,7 +889,7 @@ async function setupPersistTest() {
       client: c,
     };
   };
-  const clients: {clientID: sync.ClientID; client: ClientV6}[] = [];
+  const clients: {clientID: ClientID; client: ClientV6}[] = [];
   for (let i = 0; i < 3; i++) {
     clients.push(await createClient());
   }

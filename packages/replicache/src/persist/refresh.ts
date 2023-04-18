@@ -5,6 +5,7 @@ import {assertSnapshotCommitDD31} from '../db/commit.js';
 import * as db from '../db/mod.js';
 import type {Hash} from '../hash.js';
 import type {MutatorDefs} from '../replicache.js';
+import type {ClientID} from '../sync/ids.js';
 import * as sync from '../sync/mod.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {
@@ -43,7 +44,7 @@ export async function refresh(
   lc: LogContext,
   memdag: dag.LazyStore,
   perdag: dag.Store,
-  clientID: sync.ClientID,
+  clientID: ClientID,
   mutators: MutatorDefs,
   diffConfig: sync.DiffComputationConfig,
   closed: () => boolean,

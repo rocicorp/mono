@@ -5,7 +5,7 @@ import {assertSnapshotCommitDD31} from '../db/commit.js';
 import * as db from '../db/mod.js';
 import type {Hash} from '../hash.js';
 import type {MutatorDefs} from '../replicache.js';
-import type * as sync from '../sync/mod.js';
+import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
 import {
@@ -37,7 +37,7 @@ import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
  */
 export async function persistDD31(
   lc: LogContext,
-  clientID: sync.ClientID,
+  clientID: ClientID,
   memdag: dag.LazyStore,
   perdag: dag.Store,
   mutators: MutatorDefs,
@@ -130,7 +130,7 @@ export async function persistDD31(
     // these values are overwritten appropriately.
     let newMainClientGroupHeadHash: Hash =
       latestPerdagMainClientGroupHeadCommit.chunk.hash;
-    let mutationIDs: Record<sync.ClientID, number> = {
+    let mutationIDs: Record<ClientID, number> = {
       ...mainClientGroup.mutationIDs,
     };
     let {lastServerAckdMutationIDs} = mainClientGroup;
@@ -220,7 +220,7 @@ export async function persistDD31(
 
 async function getClientGroupInfo(
   perdagRead: dag.Read,
-  clientGroupID: sync.ClientGroupID,
+  clientGroupID: ClientGroupID,
 ): Promise<[ClientGroup, db.Commit<db.Meta>]> {
   const clientGroup = await getClientGroup(clientGroupID, perdagRead);
   assert(clientGroup, `No client group for clientGroupID: ${clientGroupID}`);
@@ -235,7 +235,7 @@ async function rebase(
   basis: Hash,
   write: dag.Write,
   mutators: MutatorDefs,
-  mutationIDs: Record<sync.ClientID, number>,
+  mutationIDs: Record<ClientID, number>,
   lc: LogContext,
 ): Promise<Hash> {
   for (let i = mutations.length - 1; i >= 0; i--) {
