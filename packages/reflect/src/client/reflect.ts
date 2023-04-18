@@ -61,7 +61,10 @@ export const enum ConnectionState {
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
 
-type CanaryResultTagType = 'canary:success' | 'canary:failed';
+type CanaryResultTagType =
+  | 'canary:success'
+  | 'canary:failure'
+  | 'canary:timeout';
 
 type ClientDisconnectReason =
   | 'AbruptClose'
@@ -603,29 +606,30 @@ export class Reflect<MD extends MutatorDefs> {
       const fetchPromise = fetch(url, {method: 'GET', signal});
       const timeoutPromise = new Promise<Response>((_resolve, reject) => {
         setTimeout(() => {
-          reject(new Error(`Request timed out after ${ms}ms`));
-          l.debug?.('Aborting canary request because of timeout');
+          reject('timeout');
           controller.abort();
         }, ms);
       });
       return Promise.race([fetchPromise, timeoutPromise]);
     }
-    let canary_return: CanaryResultTagType = 'canary:failed';
     try {
       const response = await fetchTimeout(canary_url, CONNECT_TIMEOUT_MS);
       if (response.status === HTTP_OK) {
-        l.debug?.('Got 200 response from canary');
-        canary_return = 'canary:success';
-      } else {
-        l.debug?.('Got non-200 response from canary', {
-          status: response.status,
-          statusText: response.statusText,
-        });
+        l.debug?.('200 response from canary');
+        return 'canary:success';
       }
-      return canary_return;
+      l.debug?.('non-200 response from canary', {
+        status: response.status,
+        statusText: response.statusText,
+      });
+      return 'canary:failure';
     } catch (e) {
-      l.debug?.('Error from canary', e);
-      return canary_return;
+      if (e === 'timeout') {
+        l.debug?.('timeout from canary');
+        return 'canary:timeout';
+      }
+      l.debug?.('error from canary', e);
+      return 'canary:failure';
     }
   }
 
