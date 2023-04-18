@@ -824,7 +824,7 @@ test('canary connect', async () => {
   ).to.be.true;
 });
 
-test('canary logs and errors: ok', async () => {
+test('canary logs and metrics: ok', async () => {
   const basicRequest = `{"series":[{"metric":"time_to_connect_ms","points":[[1678829570,[0]]],"host":"localhost:8000","tags":["source:client","version:${version}"]}]}`;
   const OK_CANARY = Promise.resolve(
     new Response('ok', {
@@ -843,7 +843,7 @@ test('canary logs and errors: ok', async () => {
   await testCanary(c);
 });
 
-test('canary logs and errors: not ok', async () => {
+test('canary logs and metrics: not ok', async () => {
   const basicRequest = `{"series":[{"metric":"time_to_connect_ms","points":[[1678829570,[0]]],"host":"localhost:8000","tags":["source:client","version:${version}"]}]}`;
   const NOT_OK_CANARY = Promise.resolve(
     new Response('', {
@@ -862,7 +862,7 @@ test('canary logs and errors: not ok', async () => {
   await testCanary(c);
 });
 
-test('canary logs and errors: connect times-out but canary is ok', async () => {
+test('canary logs and metrics: connect times-out but canary is ok', async () => {
   const failedRequest = `{"series":[{"metric":"time_to_connect_ms","points":[[1678829570,[100000]]],"host":"localhost:8000","tags":["source:client","version:${version}"]},{"metric":"last_connect_error_client_connect_timeout","points":[[1678829570,[1]]],"tags":["source:client","version:${version}","canary:success"],"host":"localhost:8000"}]}`;
   const OK_CANARY = Promise.resolve(
     new Response('ok', {
@@ -881,7 +881,7 @@ test('canary logs and errors: connect times-out but canary is ok', async () => {
   await testCanary(c);
 });
 
-test('canary logs and errors: canary mock rejects', async () => {
+test('canary logs and metrics: canary mock rejects', async () => {
   const failedRequest = `{"series":[{"metric":"time_to_connect_ms","points":[[1678829570,[100000]]],"host":"localhost:8000","tags":["source:client","version:${version}"]},{"metric":"last_connect_error_client_connect_timeout","points":[[1678829570,[1]]],"tags":["source:client","version:${version}","canary:failure"],"host":"localhost:8000"}]}`;
   const REJECT_CANARY = Promise.reject(new Error('test canary fetcher'));
 
@@ -896,14 +896,13 @@ test('canary logs and errors: canary mock rejects', async () => {
   await testCanary(c);
 });
 
-test('canary logs and errors: timeout', async () => {
+test('canary logs and metrics: timeout', async () => {
   const failedRequest = `{"series":[{"metric":"time_to_connect_ms","points":[[1678829570,[100000]]],"host":"localhost:8000","tags":["source:client","version:${version}"]},{"metric":"last_connect_error_client_connect_timeout","points":[[1678829570,[1]]],"tags":["source:client","version:${version}","canary:timeout"],"host":"localhost:8000"}]}`;
-
-  const DelayResponse = new Promise<Response>(() => undefined);
+  const TIMEOUT_CANARY = new Promise<Response>(() => undefined);
 
   const c: CanaryCase = {
     name: 'timeout canary request',
-    canaryEndpointMock: DelayResponse,
+    canaryEndpointMock: TIMEOUT_CANARY,
     debugMessage: 'timeout from canary',
     metricBody: failedRequest,
     shouldTimeOut: true,

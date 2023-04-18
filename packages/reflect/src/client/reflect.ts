@@ -598,7 +598,7 @@ export class Reflect<MD extends MutatorDefs> {
 
   private async _fetchCanary(l: LogContext): Promise<CanaryResultTagType> {
     const HTTP_OK = 200;
-    const canary_url = this._socketOrigin.replace(/^ws/, 'http') + 'api/canary';
+    const canaryUrl = this._socketOrigin.replace(/^ws/, 'http') + 'api/canary';
 
     function fetchTimeout(url: string, ms: number): Promise<Response> {
       const controller = new AbortController();
@@ -613,7 +613,7 @@ export class Reflect<MD extends MutatorDefs> {
       return Promise.race([fetchPromise, timeoutPromise]);
     }
     try {
-      const response = await fetchTimeout(canary_url, CONNECT_TIMEOUT_MS);
+      const response = await fetchTimeout(canaryUrl, CONNECT_TIMEOUT_MS);
       if (response.status === HTTP_OK) {
         l.debug?.('200 response from canary');
         return 'canary:success';
