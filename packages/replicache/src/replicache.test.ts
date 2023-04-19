@@ -15,7 +15,7 @@ import {sleep} from 'shared/sleep.js';
 import * as sinon from 'sinon';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import * as db from './db/mod.js';
-import type {JSONValue} from './json.js';
+import type {JSONValue, ReadonlyJSONValue} from './json.js';
 import {TestMemStore} from './kv/test-mem-store.js';
 import type {PatchOperation} from './patch-operation.js';
 import {deleteClientForTesting} from './persist/clients-test-helpers.js';
@@ -652,37 +652,21 @@ test('index in options', async () => {
 });
 
 test('allow redefinition of indexes', async () => {
-  const pullURL = 'https://diff.com/pull';
-  const rep = await replicacheForTesting(
-    'index-redefinition',
-    {
-      pullURL,
-      indexes: {
-        aIndex: {jsonPointer: '/a'},
-      },
-      ...disableAllBackgroundProcesses,
+  const rep = await replicacheForTesting('index-redefinition', {
+    mutators: {addData},
+    indexes: {
+      aIndex: {jsonPointer: '/a'},
     },
-    {useDefaultURLs: false},
-  );
-  const clientID = await rep.clientID;
-  fetchMock.postOnce(pullURL, () => ({
-    cookie: '',
-    lastMutationIDChanges: {[clientID]: 2},
-    patch: [
-      {op: 'put', key: 'a/0', value: {a: '0'}},
-      {op: 'put', key: 'a/1', value: {a: '1'}},
-      {op: 'put', key: 'b/2', value: {a: '2'}},
-      {op: 'put', key: 'b/3', value: {a: '3'}},
-    ],
-  }));
+    ...disableAllBackgroundProcesses,
+    enablePullAndPushInOpen: false,
+  });
 
-  rep.pull();
-
-  // Allow pull to finish (larger than PERSIST_TIMEOUT)
-  await clock.tickAsync(22 * 1000);
-  await tickAFewTimes(20, 100);
-
-  await rep.persist();
+  await populateDataUsingPull(rep, {
+    'a/0': {a: '0'},
+    'a/1': {a: '1'},
+    'b/2': {a: '2'},
+    'b/3': {a: '3'},
+  });
 
   await testScanResult(rep, {indexName: 'aIndex'}, [
     [['0', 'a/0'], {a: '0'}],
@@ -693,22 +677,120 @@ test('allow redefinition of indexes', async () => {
 
   await rep.close();
 
-  // const rep2 = await replicacheForTesting(
-  //   rep.name,
-  //   {
-  //     indexes: {
-  //       aIndex: {jsonPointer: '/a', prefix: 'b'},
-  //     },
-  //   },
-  //   {useUniqueName: false},
-  // );
+  const rep2 = await replicacheForTesting(
+    rep.name,
+    {
+      mutators: {addData},
+      indexes: {
+        aIndex: {jsonPointer: '/a', prefix: 'b'},
+      },
+      enablePullAndPushInOpen: false,
+    },
+    {useUniqueName: false},
+  );
 
-  // await testScanResult(rep2, {indexName: 'aIndex'}, [
-  //   [['2', 'b/2'], {a: '2'}],
-  //   [['3', 'b/3'], {a: '3'}],
-  // ]);
+  await testScanResult(rep2, {indexName: 'aIndex'}, [
+    [['2', 'b/2'], {a: '2'}],
+    [['3', 'b/3'], {a: '3'}],
+  ]);
 
-  // await rep2.close();
+  await rep2.close();
+});
+
+test('add more indexes', async () => {
+  const rep = await replicacheForTesting('index-add-more', {
+    mutators: {addData},
+    indexes: {
+      aIndex: {jsonPointer: '/a'},
+    },
+    ...disableAllBackgroundProcesses,
+  });
+
+  await populateDataUsingPull(rep, {
+    'a/0': {a: '0'},
+    'b/1': {a: '1'},
+    'b/2': {a: '2'},
+    'b/3': {b: '3'},
+  });
+
+  await testScanResult(rep, {indexName: 'aIndex'}, [
+    [['0', 'a/0'], {a: '0'}],
+    [['1', 'b/1'], {a: '1'}],
+    [['2', 'b/2'], {a: '2'}],
+  ]);
+
+  await rep.close();
+
+  const rep2 = await replicacheForTesting(
+    rep.name,
+    {
+      mutators: {addData},
+      indexes: {
+        aIndex: {jsonPointer: '/a'},
+        bIndex: {jsonPointer: '/b'},
+      },
+    },
+    {useUniqueName: false},
+  );
+
+  await testScanResult(rep, {indexName: 'aIndex'}, [
+    [['0', 'a/0'], {a: '0'}],
+    [['1', 'b/1'], {a: '1'}],
+    [['2', 'b/2'], {a: '2'}],
+  ]);
+
+  await testScanResult(rep2, {indexName: 'bIndex'}, [[['3', 'b/3'], {b: '3'}]]);
+
+  await rep2.close();
+});
+
+test('rename indexes', async () => {
+  const rep = await replicacheForTesting('index-add-more', {
+    mutators: {addData},
+    indexes: {
+      aIndex: {jsonPointer: '/a'},
+      bIndex: {jsonPointer: '/b'},
+    },
+    ...disableAllBackgroundProcesses,
+  });
+  await populateDataUsingPull(rep, {
+    'a/0': {a: '0'},
+    'b/1': {a: '1'},
+    'b/2': {a: '2'},
+    'b/3': {b: '3'},
+  });
+
+  await testScanResult(rep, {indexName: 'aIndex'}, [
+    [['0', 'a/0'], {a: '0'}],
+    [['1', 'b/1'], {a: '1'}],
+    [['2', 'b/2'], {a: '2'}],
+  ]);
+
+  await testScanResult(rep, {indexName: 'bIndex'}, [[['3', 'b/3'], {b: '3'}]]);
+
+  await rep.close();
+
+  const rep2 = await replicacheForTesting(
+    rep.name,
+    {
+      mutators: {addData},
+      indexes: {
+        bIndex: {jsonPointer: '/a'},
+        aIndex: {jsonPointer: '/b'},
+      },
+    },
+    {useUniqueName: false},
+  );
+
+  await testScanResult(rep2, {indexName: 'bIndex'}, [
+    [['0', 'a/0'], {a: '0'}],
+    [['1', 'b/1'], {a: '1'}],
+    [['2', 'b/2'], {a: '2'}],
+  ]);
+
+  await testScanResult(rep2, {indexName: 'aIndex'}, [[['3', 'b/3'], {b: '3'}]]);
+
+  await rep2.close();
 });
 
 test('index array', async () => {
@@ -1499,6 +1581,30 @@ test('pull and index update', async () => {
     expectedResult: [],
   });
 });
+
+async function populateDataUsingPull<
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  MD extends MutatorDefs = {},
+>(rep: ReplicacheTest<MD>, data: Record<string, ReadonlyJSONValue>) {
+  const clientID = await rep.clientID;
+  fetchMock.postOnce(rep.pullURL, {
+    cookie: '',
+    lastMutationIDChanges: {[clientID]: 2},
+    patch: Object.entries(data).map(([key, value]) => ({
+      op: 'put',
+      key,
+      value,
+    })),
+  });
+
+  rep.pull();
+
+  // Allow pull to finish (larger than PERSIST_TIMEOUT)
+  await clock.tickAsync(22 * 1000);
+  await tickAFewTimes(20, 100);
+
+  await rep.persist();
+}
 
 async function tickUntilTimeIs(time: number, tick = 10) {
   while (Date.now() < time) {
