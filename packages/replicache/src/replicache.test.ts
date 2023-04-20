@@ -744,6 +744,39 @@ test('add more indexes', async () => {
   await rep2.close();
 });
 
+test('add index definition with prefix', async () => {
+  const rep = await replicacheForTesting('index-add-more', {
+    mutators: {addData},
+    ...disableAllBackgroundProcesses,
+    enablePullAndPushInOpen: false,
+  });
+
+  await populateDataUsingPull(rep, {
+    'a/0': {a: '0'},
+    'a/1': {b: '1'},
+    'b/2': {a: '2'},
+    'b/3': {b: '3'},
+  });
+
+  await rep.close();
+
+  const rep2 = await replicacheForTesting(
+    rep.name,
+    {
+      mutators: {addData},
+      indexes: {
+        aIndex: {jsonPointer: '/a', prefix: 'a'},
+      },
+      enablePullAndPushInOpen: false,
+    },
+    {useUniqueName: false},
+  );
+
+  await testScanResult(rep2, {indexName: 'aIndex'}, [[['0', 'a/0'], {a: '0'}]]);
+
+  await rep2.close();
+});
+
 test('rename indexes', async () => {
   const rep = await replicacheForTesting('index-add-more', {
     mutators: {addData},
