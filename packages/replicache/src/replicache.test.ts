@@ -744,7 +744,7 @@ test('add more indexes', async () => {
   await rep2.close();
 });
 
-test('add with prefix', async () => {
+test('add index definition with prefix', async () => {
   const rep = await replicacheForTesting('index-add-more', {
     mutators: {addData},
     ...disableAllBackgroundProcesses,
