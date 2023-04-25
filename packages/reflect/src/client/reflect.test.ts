@@ -207,7 +207,7 @@ test('onOnlineChange reflection on Reflect class', async () => {
 
 test('disconnects if ping fails', async () => {
   const watchdogInterval = RUN_LOOP_INTERVAL_MS;
-  const pingTimeout = 2000;
+  const pingTimeout = 5000;
   const r = reflectForTest();
 
   await r.waitForConnectionState(ConnectionState.Connecting);
