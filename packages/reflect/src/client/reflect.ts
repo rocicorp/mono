@@ -36,7 +36,7 @@ import {
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from 'replicache';
 import {assert} from 'shared/asserts.js';
-import {sleep, sleepWithAbort} from 'shared/sleep.js';
+import {sleep} from 'shared/sleep.js';
 import * as valita from 'shared/valita.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
@@ -50,7 +50,7 @@ import {
 import type {ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
-import {isAuthError, isServerError, ServerError} from './server-error.js';
+import {isAuthError, ServerError} from './server-error.js';
 import {version} from './version.js';
 
 export const enum ConnectionState {
@@ -166,10 +166,6 @@ export class Reflect<MD extends MutatorDefs> {
   private _messageCount = 0;
   private _connectedAt = 0;
 
-  #abortPingTimeout = () => {
-    // intentionally empty
-  };
-
   /**
    * `onUpdateNeeded` is called when a code update is needed.
    *
@@ -211,12 +207,7 @@ export class Reflect<MD extends MutatorDefs> {
 
   #connectionStateChangeResolver = resolver<ConnectionState>();
 
-  /**
-   * This resolver is only used for rejections. It is awaited in the connected
-   * state (including when waiting for a pong). It is rejected when we get an
-   * invalid message or an 'error' message.
-   */
-  #rejectMessageError: Resolver<never> | undefined = undefined;
+  #nextMessageResolver: Resolver<Downstream> | undefined = undefined;
 
   #closeAbortController = new AbortController();
 
@@ -464,7 +455,7 @@ export class Reflect<MD extends MutatorDefs> {
     }
 
     const rejectInvalidMessage = (e?: unknown) =>
-      this.#rejectMessageError?.reject(
+      this.#nextMessageResolver?.reject(
         new Error(
           `Invalid message received from server: ${
             e instanceof Error ? e.message + '. ' : ''
@@ -547,7 +538,7 @@ export class Reflect<MD extends MutatorDefs> {
 
     lc.info?.(`${kind}: ${message}}`);
 
-    this.#rejectMessageError?.reject(error);
+    this.#nextMessageResolver?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
     this._connectResolver.reject(error);
     await this._disconnect(lc, {server: kind});
@@ -620,7 +611,7 @@ export class Reflect<MD extends MutatorDefs> {
     // Reject connect after a timeout.
     const id = setTimeout(async () => {
       l.debug?.('Rejecting connect resolver due to timeout');
-      this._connectResolver.reject(new TimedOutError('Connect'));
+      this._connectResolver.reject(new Error('Timed out connecting'));
       await this._disconnect(l, {
         client: 'ConnectTimeout',
       });
@@ -707,7 +698,7 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   private async _handlePoke(_lc: LogContext, pokeMessage: PokeMessage) {
-    this.#abortPingTimeout();
+    this.#nextMessageResolver?.resolve(pokeMessage);
     const pokeBody = pokeMessage[1];
     const lastMutationIDChangeForSelf = await this._pokeHandler.handlePoke(
       pokeBody,
@@ -735,7 +726,7 @@ export class Reflect<MD extends MutatorDefs> {
     lc: LogContext,
     pullResponseMessage: PullResponseMessage,
   ) {
-    this.#abortPingTimeout();
+    this.#nextMessageResolver?.resolve(pullResponseMessage);
     const body = pullResponseMessage[1];
     lc = lc.addContext('requestID', body.requestID);
     lc.debug?.('Handling pull response', body);
@@ -896,39 +887,33 @@ export class Reflect<MD extends MutatorDefs> {
             // - After PING_INTERVAL_MS we send a ping
             // - We get disconnected
             // - We get a message
-            // - We get an error (rejectMessageError rejects)
             // - The tab becomes hidden (with a delay)
 
-            const controller = new AbortController();
-            this.#abortPingTimeout = () => controller.abort();
-            const [pingTimeoutPromise, pingTimeoutAborted] = sleepWithAbort(
-              PING_INTERVAL_MS,
-              controller.signal,
-            );
+            const pingTimeoutPromise = sleep(PING_INTERVAL_MS);
 
-            this.#rejectMessageError = resolver();
+            this.#nextMessageResolver = resolver();
 
             const enum RaceCases {
               Ping = 0,
-              Hidden = 2,
+              Hidden = 1,
             }
 
             const raceResult = await promiseRace([
               pingTimeoutPromise,
-              pingTimeoutAborted,
               this.#visibilityWatcher.waitForHidden(),
               this.#connectionStateChangeResolver.promise,
-              this.#rejectMessageError.promise,
+              this.#nextMessageResolver.promise,
             ]);
 
+            this.#nextMessageResolver = undefined;
+
             if (this.closed) {
-              this.#rejectMessageError = undefined;
               break;
             }
 
             switch (raceResult) {
               case RaceCases.Ping:
-                await this._ping(lc, this.#rejectMessageError.promise);
+                await this._ping(lc);
                 break;
               case RaceCases.Hidden:
                 await this._disconnect(lc, {
@@ -936,8 +921,6 @@ export class Reflect<MD extends MutatorDefs> {
                 });
                 break;
             }
-
-            this.#rejectMessageError = undefined;
           }
         }
       } catch (ex) {
@@ -965,9 +948,7 @@ export class Reflect<MD extends MutatorDefs> {
           needsReauth = true;
         }
 
-        if (isServerError(ex) || ex instanceof TimedOutError) {
-          errorCount++;
-        }
+        errorCount++;
       }
 
       // Only authentication errors are retried immediately the first time they
@@ -1101,10 +1082,7 @@ export class Reflect<MD extends MutatorDefs> {
   /**
    * Throws an error if the ping times out.
    */
-  private async _ping(
-    l: LogContext,
-    messageErrorRejectionPromise: Promise<never>,
-  ): Promise<void> {
+  private async _ping(l: LogContext): Promise<void> {
     l.debug?.('pinging');
     const {promise, resolve} = resolver();
     this._onPong = resolve;
@@ -1114,11 +1092,7 @@ export class Reflect<MD extends MutatorDefs> {
     send(this._socket, pingMessage);
 
     const connected =
-      (await promiseRace([
-        promise,
-        sleep(PING_TIMEOUT_MS),
-        messageErrorRejectionPromise,
-      ])) === 0;
+      (await promiseRace([promise, sleep(PING_TIMEOUT_MS)])) === 0;
     if (this._connectionState !== ConnectionState.Connected) {
       return;
     }
@@ -1131,7 +1105,7 @@ export class Reflect<MD extends MutatorDefs> {
       await this._disconnect(l, {
         client: 'PingTimeout',
       });
-      throw new TimedOutError('Ping');
+      throw new Error('Ping timed out');
     }
   }
 
@@ -1263,10 +1237,4 @@ function camelToSnake(s: string): string {
     .split(/\.?(?=[A-Z])/)
     .join('_')
     .toLowerCase();
-}
-
-class TimedOutError extends Error {
-  constructor(m: string) {
-    super(`${m} timed out`);
-  }
 }
