@@ -86,7 +86,7 @@ export const PING_INTERVAL_MS = 5_000;
 /**
  * The amount of time we wait for a pong before we consider the ping timed out.
  */
-export const PING_TIMEOUT_MS = 2_000;
+export const PING_TIMEOUT_MS = 5_000;
 
 /**
  * The amount of time we wait for a pull response before we consider a pull
