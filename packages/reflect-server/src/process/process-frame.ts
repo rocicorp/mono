@@ -138,9 +138,11 @@ function buildClientPokesAndUpdateClientRecords(
     | {
         normalizedTimestamp: number;
         originTimestamp: number;
+        serverReceivedTimestamp: number;
       }
     | undefined,
 ): Promise<ClientPoke[]> {
+  const now = Date.now();
   return Promise.all(
     clientIDs.map(async clientID => {
       const clientRecord = must(await getClientRecord(clientID, cache));
@@ -161,6 +163,10 @@ function buildClientPokesAndUpdateClientRecords(
           debugOriginTimestamp: client.debugPerf
             ? timestamps?.originTimestamp
             : undefined,
+          debugServerReceivedTimestamp: client.debugPerf
+            ? timestamps?.serverReceivedTimestamp
+            : undefined,
+          debugServerSentTimestamp: client.debugPerf ? now : undefined,
         },
       };
       return clientPoke;

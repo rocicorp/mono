@@ -4,14 +4,13 @@ import {joinIterables} from '../iterables.js';
 import type {MaybePromise} from '../replicache.js';
 import {promiseVoid} from '../resolved-promises.js';
 import {getSizeOfValue} from '../size-of-value.js';
-import {withWrite} from '../with-transactions.js';
 import {Chunk, ChunkHasher, createChunk} from './chunk.js';
 import {
-  computeRefCountUpdates,
   HeadChange,
   RefCountUpdatesDelegate,
+  computeRefCountUpdates,
 } from './gc.js';
-import {mustGetChunk, Read, Store, Write} from './store.js';
+import {Read, Store, Write, mustGetChunk} from './store.js';
 
 /**
  * Dag Store which lazily loads values from a source store and then caches
@@ -200,23 +199,6 @@ export class LazyStore implements Store {
     );
   }
 
-  /**
-   * Acquires a write lock on the store.
-   */
-  chunksPersisted(chunkHashes: Iterable<Hash>): Promise<void> {
-    return withWrite(this, () => {
-      const chunksToCache = [];
-      for (const chunkHash of chunkHashes) {
-        const chunk = this._memOnlyChunks.get(chunkHash);
-        if (chunk) {
-          this._memOnlyChunks.delete(chunkHash);
-          chunksToCache.push(chunk);
-        }
-      }
-      this._sourceChunksCache.persisted(chunksToCache);
-    });
-  }
-
   withSuspendedSourceCacheEvictsAndDeletes<T>(
     fn: () => MaybePromise<T>,
   ): Promise<T> {
@@ -306,7 +288,10 @@ export class LazyRead implements Read {
   }
 }
 
-class LazyWrite extends LazyRead implements Write, RefCountUpdatesDelegate {
+export class LazyWrite
+  extends LazyRead
+  implements Write, RefCountUpdatesDelegate
+{
   private readonly _refCounts: Map<Hash, number>;
   private readonly _refs: Map<Hash, readonly Hash[]>;
   private readonly _chunkHasher: ChunkHasher;
@@ -495,6 +480,18 @@ class LazyWrite extends LazyRead implements Write, RefCountUpdatesDelegate {
 
   areRefsCounted(hash: Hash): boolean {
     return this._refs.has(hash);
+  }
+
+  chunksPersisted(chunkHashes: readonly Hash[]): void {
+    const chunksToCache = [];
+    for (const chunkHash of chunkHashes) {
+      const chunk = this._memOnlyChunks.get(chunkHash);
+      if (chunk) {
+        this._memOnlyChunks.delete(chunkHash);
+        chunksToCache.push(chunk);
+      }
+    }
+    this._sourceChunksCache.persisted(chunksToCache);
   }
 }
 

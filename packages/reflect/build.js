@@ -16,7 +16,10 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function buildESM() {
   const mode = debug ? 'debug' : 'unknown';
-  const minify = !debug;
+  // let's just never minify for now, it's constantly getting in our and our
+  // user's way. When we have an automated way to do both minified and non-
+  // minified builds we can re-enable this.
+  const minify = false;
   const shared = sharedOptions(minify, metafile);
   const outfile = path.join(dirname, 'out', 'reflect.js');
   const define = await makeDefine(mode);

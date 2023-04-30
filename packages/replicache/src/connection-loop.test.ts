@@ -1,14 +1,14 @@
 import {expect} from '@esm-bundle/chai';
+import {sleep} from 'shared/sleep.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {
-  ConnectionLoopDelegate,
   ConnectionLoop,
+  ConnectionLoopDelegate,
   DEBOUNCE_DELAY_MS,
   MAX_DELAY_MS,
   MIN_DELAY_MS,
 } from './connection-loop.js';
 import {promiseTrue} from './resolved-promises.js';
-import {sleep} from './sleep.js';
 
 let clock: SinonFakeTimers;
 setup(() => {

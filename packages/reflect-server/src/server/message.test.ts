@@ -78,13 +78,21 @@ describe('handleMessage', () => {
           clientID: 'c1',
           clientGroupID: 'cg1',
           id: 1,
-          timestamps: 10,
+          timestamps: {
+            normalizedTimestamp: 10,
+            originTimestamp: 10,
+            serverReceivedTimestamp: 0,
+          },
         }),
         pendingMutation({
           clientID: 'c1',
           clientGroupID: 'cg1',
           id: 2,
-          timestamps: 20,
+          timestamps: {
+            normalizedTimestamp: 20,
+            originTimestamp: 20,
+            serverReceivedTimestamp: 0,
+          },
         }),
       ],
     },

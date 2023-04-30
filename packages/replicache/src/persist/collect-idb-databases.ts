@@ -1,22 +1,23 @@
-import * as kv from '../kv/mod.js';
-import * as dag from '../dag/mod.js';
-import {ClientMap, getClients} from './clients.js';
-import {dropStore} from '../kv/idb-util.js';
-import {IDBDatabasesStore} from './idb-databases-store.js';
-import type {IndexedDBDatabase} from './idb-databases-store.js';
-import {initBgIntervalProcess} from '../bg-interval.js';
 import {LogContext} from '@rocicorp/logger';
+import {assert} from 'shared/asserts.js';
+import {initBgIntervalProcess} from '../bg-interval.js';
+import * as dag from '../dag/mod.js';
+import {assertHash} from '../hash.js';
+import {dropStore} from '../kv/idb-util.js';
+import * as kv from '../kv/mod.js';
 import {
   REPLICACHE_FORMAT_VERSION,
   REPLICACHE_FORMAT_VERSION_DD31,
+  REPLICACHE_FORMAT_VERSION_V6,
 } from '../replicache.js';
-import {assertHash} from '../hash.js';
+import {withRead} from '../with-transactions.js';
 import {
   clientGroupHasPendingMutations,
   getClientGroups,
 } from './client-groups.js';
-import {assert} from 'shared/asserts.js';
-import {withRead} from '../with-transactions.js';
+import {ClientMap, getClients} from './clients.js';
+import type {IndexedDBDatabase} from './idb-databases-store.js';
+import {IDBDatabasesStore} from './idb-databases-store.js';
 
 // How frequently to try to collect
 const COLLECT_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -141,22 +142,25 @@ async function canCollectDatabase(
 
   // 0 is used in testing
   if (db.lastOpenedTimestampMS !== undefined) {
-    const isDd31 = db.replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31;
+    const isDD31 = db.replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31;
 
     // - For SDD we can delete the database if it is older than maxAge.
     // - For DD31 we can delete the database if it is older than dd31MaxAge and
     //   there are no pending mutations.
-    if (now - db.lastOpenedTimestampMS < (isDd31 ? dd31MaxAge : maxAge)) {
+    if (now - db.lastOpenedTimestampMS < (isDD31 ? dd31MaxAge : maxAge)) {
       return false;
     }
 
-    if (!isDd31) {
+    if (!isDD31) {
       return true;
     }
 
     // If increase the format version we need to decide how to deal with this
     // logic.
-    assert(db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_DD31);
+    assert(
+      db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_DD31 ||
+        db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_V6,
+    );
     return !(await anyPendingMutationsInClientGroups(newDagStore(db.name)));
   }
 

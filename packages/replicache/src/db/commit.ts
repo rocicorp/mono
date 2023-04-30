@@ -8,19 +8,19 @@ import {
   unreachable,
 } from 'shared/asserts.js';
 import {skipCommitDataAsserts} from '../config.js';
-import {compareCookies, FrozenCookie} from '../cookies.js';
+import {FrozenCookie, compareCookies} from '../cookies.js';
 import type * as dag from '../dag/mod.js';
 import type {MustGetChunk} from '../dag/store.js';
-import {assertHash, Hash} from '../hash.js';
+import {Hash, assertHash} from '../hash.js';
 import type {IndexDefinition} from '../index-defs.js';
 import {
+  FrozenJSONValue,
+  FrozenTag,
   assertDeepFrozen,
   assertJSONValue,
   deepFreeze,
-  FrozenJSONValue,
-  FrozenTag,
 } from '../json.js';
-import type * as sync from '../sync/mod.js';
+import type {ClientID} from '../sync/ids.js';
 
 export const DEFAULT_HEAD_NAME = 'main';
 
@@ -91,14 +91,14 @@ export class Commit<M extends Meta> {
   }
 
   getMutationID(
-    clientID: sync.ClientID,
+    clientID: ClientID,
     dagRead: dag.MustGetChunk,
   ): Promise<number> {
     return getMutationID(clientID, dagRead, this.meta);
   }
 
   async getNextMutationID(
-    clientID: sync.ClientID,
+    clientID: ClientID,
     dagRead: dag.MustGetChunk,
   ): Promise<number> {
     return (await this.getMutationID(clientID, dagRead)) + 1;
@@ -111,7 +111,7 @@ export class Commit<M extends Meta> {
 }
 
 export async function getMutationID(
-  clientID: sync.ClientID,
+  clientID: ClientID,
   dagRead: dag.MustGetChunk,
   meta: Meta,
 ): Promise<number> {
@@ -174,7 +174,7 @@ export async function localMutationsDD31(
 
 export async function localMutationsGreaterThan(
   commit: Commit<Meta>,
-  mutationIDLimits: Record<sync.ClientID, number>,
+  mutationIDLimits: Record<ClientID, number>,
   dagRead: dag.Read,
 ): Promise<Commit<LocalMetaDD31>[]> {
   const commits: Commit<LocalMetaDD31>[] = [];
@@ -245,7 +245,7 @@ export async function baseSnapshotFromCommit(
 
 export function snapshotMetaParts(
   c: Commit<SnapshotMetaSDD | SnapshotMetaDD31>,
-  clientID: sync.ClientID,
+  clientID: ClientID,
 ): [lastMutationID: number, cookie: FrozenCookie | FrozenJSONValue] {
   const m = c.meta;
   if (isSnapshotMetaDD31(m)) {
@@ -341,7 +341,7 @@ export type LocalMetaSDD = {
 
 export type LocalMetaDD31 = Omit<LocalMetaSDD, 'type'> & {
   readonly type: MetaType.LocalDD31;
-  readonly clientID: sync.ClientID;
+  readonly clientID: ClientID;
   readonly baseSnapshotHash: Hash;
 };
 
@@ -401,7 +401,7 @@ export type SnapshotMetaSDD = {
 export type SnapshotMetaDD31 = {
   readonly type: MetaType.SnapshotDD31;
   readonly basisHash: Hash | null;
-  readonly lastMutationIDs: Record<sync.ClientID, number>;
+  readonly lastMutationIDs: Record<ClientID, number>;
   readonly cookieJSON: FrozenCookie;
 };
 
@@ -431,7 +431,7 @@ export function assertSnapshotMetaDD31(
 
 function assertLastMutationIDs(
   v: unknown,
-): asserts v is Record<sync.ClientID, number> {
+): asserts v is Record<ClientID, number> {
   assertObject(v);
   for (const e of Object.values(v)) {
     assertNumber(e);
@@ -604,7 +604,7 @@ export function newLocalDD31(
   valueHash: Hash,
   indexes: readonly IndexRecord[],
   timestamp: number,
-  clientID: sync.ClientID,
+  clientID: ClientID,
 ): Commit<LocalMetaDD31> {
   const meta: LocalMetaDD31 = {
     type: MetaType.LocalDD31,
@@ -646,7 +646,7 @@ export function newSnapshotSDD(
 export function newSnapshotDD31(
   createChunk: dag.CreateChunk,
   basisHash: Hash | null,
-  lastMutationIDs: Record<sync.ClientID, number>,
+  lastMutationIDs: Record<ClientID, number>,
   cookieJSON: FrozenCookie,
   valueHash: Hash,
   indexes: readonly IndexRecord[],
@@ -681,7 +681,7 @@ export function newSnapshotCommitDataSDD(
 
 export function newSnapshotCommitDataDD31(
   basisHash: Hash | null,
-  lastMutationIDs: Record<sync.ClientID, number>,
+  lastMutationIDs: Record<ClientID, number>,
   cookieJSON: FrozenCookie,
   valueHash: Hash,
   indexes: readonly IndexRecord[],

@@ -11,9 +11,7 @@ import {send} from '../util/socket.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {randomID} from '../util/rand.js';
 import {getConnectedClients} from '../types/connected-clients.js';
-
-// TODO: make buffer dynamic
-const PENDING_ORDER_BUFFER_MS = 200;
+import type {BufferSizer} from 'shared/buffer-sizer.js';
 
 /**
  * Processes pending mutations and client disconnect/connects, and sends
@@ -29,6 +27,7 @@ export async function processPending(
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
   maxProcessedMutationTimestamp: number,
+  bufferSizer: BufferSizer,
 ): Promise<{maxProcessedMutationTimestamp: number; nothingToProcess: boolean}> {
   lc.debug?.('process pending');
 
@@ -50,14 +49,15 @@ export async function processPending(
   }
 
   const t0 = Date.now();
+  const bufferMs = bufferSizer.bufferSizeMs;
   const tooNewIndex = pendingMutations.findIndex(
     pendingM =>
       pendingM.timestamps !== undefined &&
-      pendingM.timestamps.normalizedTimestamp > t0 - PENDING_ORDER_BUFFER_MS,
+      pendingM.timestamps.normalizedTimestamp > t0 - bufferMs,
   );
   const endIndex = tooNewIndex !== -1 ? tooNewIndex : pendingMutations.length;
   const toProcess = pendingMutations.slice(0, endIndex);
-  const forcedMissCount =
+  const missCount =
     maxProcessedMutationTimestamp === undefined
       ? 0
       : toProcess.reduce(
@@ -70,13 +70,30 @@ export async function processPending(
               : 0),
           0,
         );
+
+  const bufferNeededMs = toProcess.reduce(
+    (max, pendingM) =>
+      pendingM.timestamps === undefined
+        ? max
+        : Math.max(
+            max,
+            pendingM.timestamps.serverReceivedTimestamp -
+              pendingM.timestamps.normalizedTimestamp,
+          ),
+    Number.MIN_SAFE_INTEGER,
+  );
+
+  if (bufferNeededMs !== Number.MIN_SAFE_INTEGER) {
+    bufferSizer.recordMissable(t0, missCount > 0, bufferNeededMs, lc);
+  }
+
   lc.debug?.(
     'processing',
     toProcess.length,
     'of',
     pendingMutations.length,
     'pending mutations with',
-    forcedMissCount,
+    missCount,
     'forced misses',
   );
   try {
@@ -88,7 +105,7 @@ export async function processPending(
       disconnectHandler,
       storage,
     );
-    sendPokes(lc, pokes, clients);
+    sendPokes(lc, pokes, clients, bufferMs);
     lc.debug?.('clearing pending mutations');
     pendingMutations.splice(0, endIndex);
   } finally {
@@ -108,6 +125,7 @@ function sendPokes(
   lc: LogContext,
   clientPokes: ClientPoke[],
   clients: ClientMap,
+  bufferMs: number,
 ) {
   const pokesByClientID = new Map<ClientID, Poke[]>();
   for (const clientPoke of clientPokes) {
@@ -125,9 +143,7 @@ function sendPokes(
       {
         pokes,
         requestID: randomID(),
-        debugServerBufferMs: client.debugPerf
-          ? PENDING_ORDER_BUFFER_MS
-          : undefined,
+        debugServerBufferMs: client.debugPerf ? bufferMs : undefined,
       },
     ];
     lc.debug?.('sending client', clientID, 'poke', pokeMessage);

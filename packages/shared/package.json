@@ -1,5 +1,6 @@
 {
   "name": "shared",
+  "private": true,
   "type": "module",
   "module": "./src/mod.ts",
   "types": "./src/mod.ts",
@@ -56,6 +57,14 @@
     "./buffer-sizer.js": {
       "import": "./src/buffer-sizer.ts",
       "types": "./src/buffer-sizer.ts"
+    },
+    "./sleep.js": {
+      "import": "./src/sleep.ts",
+      "types": "./src/sleep.ts"
+    },
+    "./abort-error.js": {
+      "import": "./src/abort-error.ts",
+      "types": "./src/abort-error.ts"
     }
   },
   "eslintConfig": {

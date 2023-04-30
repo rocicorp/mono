@@ -1,29 +1,29 @@
+import {assert, expect} from '@esm-bundle/chai';
+import {resolver} from '@rocicorp/resolver';
+import {sleep} from 'shared/sleep.js';
+import * as sinon from 'sinon';
+import type * as dag from './dag/mod.js';
+import type {IndexKey} from './db/index.js';
+import type {IndexDefinitions} from './index-defs.js';
+import type {JSONValue, ReadonlyJSONValue} from './json.js';
+import type {PatchOperation} from './patch-operation.js';
+import type {ScanOptions} from './scan-options.js';
 import {
+  TestLogSink,
   clock,
   disableAllBackgroundProcesses,
   initReplicacheTesting,
   makePullResponseV1,
   replicacheForTesting,
-  TestLogSink,
   tickAFewTimes,
   tickUntil,
 } from './test-util.js';
-import type {JSONValue, ReadonlyJSONValue} from './json.js';
-import {expect, assert} from '@esm-bundle/chai';
-import {sleep} from './sleep.js';
-import type * as dag from './dag/mod.js';
-import * as sinon from 'sinon';
-import type {IndexDefinitions} from './index-defs.js';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';
-import type {ScanOptions} from './scan-options.js';
-import type {IndexKey} from './db/index.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {resolver} from '@rocicorp/resolver';
-import type {PatchOperation} from './patch-operation.js';
 
 initReplicacheTesting();
 

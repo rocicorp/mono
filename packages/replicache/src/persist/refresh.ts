@@ -1,26 +1,40 @@
+import type {LogContext} from '@rocicorp/logger';
+import {sleep} from 'shared/sleep.js';
 import type * as dag from '../dag/mod.js';
+import {assertSnapshotCommitDD31} from '../db/commit.js';
 import * as db from '../db/mod.js';
+import type {Hash} from '../hash.js';
+import type {MutatorDefs} from '../replicache.js';
+import type {ClientID} from '../sync/ids.js';
 import * as sync from '../sync/mod.js';
+import {withRead, withWrite} from '../with-transactions.js';
 import {
-  assertClientV5,
   ClientStateNotFoundError,
-  getClient,
+  ClientV6,
+  assertClientV6,
   getClientGroupForClient,
+  mustGetClient,
   setClient,
 } from './clients.js';
-import type {MutatorDefs} from '../replicache.js';
-import type {Hash} from '../hash.js';
-import type {LogContext} from '@rocicorp/logger';
-import {assertSnapshotCommitDD31} from '../db/commit.js';
 import {
   ChunkWithSize,
   GatherNotCachedVisitor,
 } from './gather-not-cached-visitor.js';
-import {sleep} from '../sleep.js';
-import {withRead, withWrite} from '../with-transactions.js';
 
 const GATHER_SIZE_LIMIT = 5 * 2 ** 20; // 5 MB
 const DELAY_MS = 300;
+
+type RefreshResult =
+  | {
+      type: 'aborted';
+      refreshHashesForRevert?: readonly Hash[] | undefined;
+    }
+  | {
+      type: 'complete';
+      newMemdagHeadHash: Hash;
+      diffs: sync.DiffsMap;
+      newPerdagClientHeadHash: Hash;
+    };
 
 /**
  * This returns the diff between the state of the btree before and after
@@ -30,7 +44,7 @@ export async function refresh(
   lc: LogContext,
   memdag: dag.LazyStore,
   perdag: dag.Store,
-  clientID: sync.ClientID,
+  clientID: ClientID,
   mutators: MutatorDefs,
   diffConfig: sync.DiffComputationConfig,
   closed: () => boolean,
@@ -43,6 +57,14 @@ export async function refresh(
   );
   assertSnapshotCommitDD31(memdagBaseSnapshot);
 
+  type PerdagWriteResult = [
+    perdagClientGroupHeadHash: Hash,
+    perdagClientGroupBaseSnapshot: db.Commit<db.SnapshotMetaDD31>,
+    perdagLmid: number,
+    gatheredChunks: ReadonlyMap<Hash, ChunkWithSize>,
+    refreshHashesForRevert: readonly Hash[],
+  ];
+
   // Suspend eviction and deletion of chunks cached by the lazy store
   // to prevent cache misses.  If eviction and deletion are not suspended
   // some chunks that are not gathered due to already being cached, may be
@@ -52,94 +74,88 @@ export async function refresh(
   // because they block local mutations, pulls and queries on reading from idb.
   // Cache misses can still happen during the rebase and diff, but only
   // if the gather step hits its size limit.
-  const result:
-    | [
-        newMemdagHeadHash: Hash,
-        diffs: sync.DiffsMap,
-        newPerdagClientHeadHash: Hash,
-      ]
-    | undefined = await memdag.withSuspendedSourceCacheEvictsAndDeletes(
-    async () => {
-      const perdagWriteResult:
-        | [
-            Hash,
-            db.Commit<db.SnapshotMetaDD31>,
-            number,
-            ReadonlyMap<Hash, ChunkWithSize>,
-          ]
-        | undefined = await withWrite(perdag, async perdagWrite => {
-        const clientGroup = await getClientGroupForClient(
-          clientID,
-          perdagWrite,
-        );
-        if (!clientGroup) {
-          throw new ClientStateNotFoundError(clientID);
-        }
+  const result: RefreshResult =
+    await memdag.withSuspendedSourceCacheEvictsAndDeletes(async () => {
+      const perdagWriteResult: PerdagWriteResult | undefined = await withWrite(
+        perdag,
+        async perdagWrite => {
+          const clientGroup = await getClientGroupForClient(
+            clientID,
+            perdagWrite,
+          );
+          if (!clientGroup) {
+            throw new ClientStateNotFoundError(clientID);
+          }
 
-        const perdagClientGroupHeadHash = clientGroup.headHash;
-        const perdagClientGroupHeadCommit = await db.commitFromHash(
-          perdagClientGroupHeadHash,
-          perdagWrite,
-        );
-        const perdagLmid = await perdagClientGroupHeadCommit.getMutationID(
-          clientID,
-          perdagWrite,
-        );
-
-        // Need to pull this head into memdag, but can't have it disappear if
-        // perdag moves forward while we're rebasing in memdag. Can't change
-        // client headHash until our rebase in memdag is complete, because if
-        // rebase fails, then nothing is keeping client's chunks alive in
-        // perdag.
-        const client = await getClient(clientID, perdagWrite);
-        if (!client) {
-          throw new ClientStateNotFoundError(clientID);
-        }
-        assertClientV5(client);
-        const perdagClientGroupBaseSnapshot = await db.baseSnapshotFromHash(
-          perdagClientGroupHeadHash,
-          perdagWrite,
-        );
-        assertSnapshotCommitDD31(perdagClientGroupBaseSnapshot);
-        if (
-          shouldAbortRefresh(
-            memdagBaseSnapshot,
-            perdagClientGroupBaseSnapshot,
+          const perdagClientGroupHeadHash = clientGroup.headHash;
+          const perdagClientGroupHeadCommit = await db.commitFromHash(
             perdagClientGroupHeadHash,
-          )
-        ) {
-          return undefined;
-        }
+            perdagWrite,
+          );
+          const perdagLmid = await perdagClientGroupHeadCommit.getMutationID(
+            clientID,
+            perdagWrite,
+          );
 
-        // To avoid pulling the entire perdag graph into the memdag
-        // the amount of chunk data gathered is limited by size.
-        const visitor = new GatherNotCachedVisitor(
-          perdagWrite,
-          memdag,
-          GATHER_SIZE_LIMIT,
-        );
-        await visitor.visitCommit(perdagClientGroupHeadHash);
-        const {gatheredChunks} = visitor;
+          // Need to pull this head into memdag, but can't have it disappear if
+          // perdag moves forward while we're rebasing in memdag. Can't change
+          // client headHash until our rebase in memdag is complete, because if
+          // rebase fails, then nothing is keeping client's chunks alive in
+          // perdag.
+          const client = await mustGetClient(clientID, perdagWrite);
+          assertClientV6(client);
+          const perdagClientGroupBaseSnapshot = await db.baseSnapshotFromHash(
+            perdagClientGroupHeadHash,
+            perdagWrite,
+          );
+          assertSnapshotCommitDD31(perdagClientGroupBaseSnapshot);
+          if (
+            shouldAbortRefresh(
+              memdagBaseSnapshot,
+              perdagClientGroupBaseSnapshot,
+              perdagClientGroupHeadHash,
+            )
+          ) {
+            return undefined;
+          }
 
-        const newClient = {
-          ...client,
-          tempRefreshHash: perdagClientGroupHeadHash,
-        };
-        await setClient(clientID, newClient, perdagWrite);
-        await perdagWrite.commit();
-        return [
-          perdagClientGroupHeadHash,
-          perdagClientGroupBaseSnapshot,
-          perdagLmid,
-          gatheredChunks,
-        ];
-      });
+          // To avoid pulling the entire perdag graph into the memdag
+          // the amount of chunk data gathered is limited by size.
+          const visitor = new GatherNotCachedVisitor(
+            perdagWrite,
+            memdag,
+            GATHER_SIZE_LIMIT,
+          );
+          await visitor.visit(perdagClientGroupHeadHash);
+          const {gatheredChunks} = visitor;
+
+          const refreshHashesSet = new Set(client.refreshHashes);
+          refreshHashesSet.add(perdagClientGroupHeadHash);
+
+          const newClient: ClientV6 = {
+            ...client,
+            refreshHashes: [...refreshHashesSet],
+          };
+
+          await setClient(clientID, newClient, perdagWrite);
+          await perdagWrite.commit();
+          return [
+            perdagClientGroupHeadHash,
+            perdagClientGroupBaseSnapshot,
+            perdagLmid,
+            gatheredChunks,
+            client.refreshHashes,
+          ];
+        },
+      );
 
       if (closed() || !perdagWriteResult) {
-        return;
+        return {
+          type: 'aborted',
+        };
       }
       // pull/poke and refresh are racing to see who gets to update
-      // the memdag (the one with the newer basesnapshot cookie wins)
+      // the memdag (the one with the newer base snapshot cookie wins)
       // pull/poke updates are preferable so delay refresh slightly to
       // make pull/poke the winner except when pull/pokes are slow.
       // This is especially important for pokes, as refresh winning
@@ -147,7 +163,9 @@ export async function refresh(
       // a disconnect/reconnect.
       await sleep(DELAY_MS);
       if (closed()) {
-        return;
+        return {
+          type: 'aborted',
+        };
       }
 
       const [
@@ -155,6 +173,7 @@ export async function refresh(
         perdagClientGroupBaseSnapshot,
         perdagLmid,
         gatheredChunks,
+        refreshHashesForRevert,
       ] = perdagWriteResult;
       return withWrite(memdag, async memdagWrite => {
         const memdagHeadCommit = await db.commitFromHead(
@@ -173,7 +192,10 @@ export async function refresh(
             perdagClientGroupHeadHash,
           )
         ) {
-          return undefined;
+          return {
+            type: 'aborted',
+            refreshHashesForRevert,
+          };
         }
 
         const newMemdagMutations = await db.localMutationsGreaterThan(
@@ -210,32 +232,42 @@ export async function refresh(
 
         await memdagWrite.setHead(db.DEFAULT_HEAD_NAME, newMemdagHeadHash);
         await memdagWrite.commit();
-        return [newMemdagHeadHash, diffs, perdagClientGroupHeadHash];
+        return {
+          type: 'complete',
+          newMemdagHeadHash,
+          diffs,
+          newPerdagClientHeadHash: perdagClientGroupHeadHash,
+        };
       });
-    },
-  );
+    });
 
   if (closed()) {
     return;
   }
 
-  await withWrite(perdag, async perdagWrite => {
-    const client = await getClient(clientID, perdagWrite);
-    if (!client) {
-      throw new ClientStateNotFoundError(clientID);
+  const setRefreshHashes = (refreshHashes: readonly Hash[]) =>
+    withWrite(perdag, async perdagWrite => {
+      const client = await mustGetClient(clientID, perdagWrite);
+      const newClient = {
+        ...client,
+        refreshHashes,
+      };
+
+      // If this cleanup never happens, it's no big deal, some data will stay
+      // alive longer but next refresh will fix it.
+      await setClient(clientID, newClient, perdagWrite);
+
+      await perdagWrite.commit();
+    });
+
+  if (result.type === 'aborted') {
+    if (result.refreshHashesForRevert) {
+      await setRefreshHashes(result.refreshHashesForRevert);
     }
-    const newClient = {
-      ...client,
-      headHash: result === undefined ? client.headHash : result[2],
-      tempRefreshHash: null,
-    };
-
-    // If this cleanup never happens, it's no big deal, some data will stay
-    // alive longer but next refresh will fix it.
-    await setClient(clientID, newClient, perdagWrite);
-  });
-
-  return result && [result[0], result[1]];
+    return undefined;
+  }
+  await setRefreshHashes([result.newPerdagClientHeadHash]);
+  return [result.newMemdagHeadHash, result.diffs];
 }
 
 function shouldAbortRefresh(

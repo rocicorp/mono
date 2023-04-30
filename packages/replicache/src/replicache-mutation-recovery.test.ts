@@ -1,39 +1,40 @@
+import {expect} from '@esm-bundle/chai';
+import {assertNotUndefined} from 'shared/asserts.js';
+import sinon from 'sinon';
+import * as dag from './dag/mod.js';
+import type * as db from './db/mod.js';
+import {ChainBuilder} from './db/test-helpers.js';
+import {assertHash} from './hash.js';
+import {JSONObject, ReadonlyJSONObject, assertJSONObject} from './json.js';
+import * as kv from './kv/mod.js';
+import {initClientWithClientID} from './persist/clients-test-helpers.js';
+import {assertClientV4} from './persist/clients.js';
+import * as persist from './persist/mod.js';
+import {persistSDD} from './persist/persist-test-helpers.js';
 import {
+  REPLICACHE_FORMAT_VERSION_DD31,
+  REPLICACHE_FORMAT_VERSION_SDD,
+  REPLICACHE_FORMAT_VERSION_V6,
+  makeIDBNameForTesting,
+} from './replicache.js';
+import {PUSH_VERSION_SDD} from './sync/push.js';
+import {
+  clock,
+  closeablesToClose,
+  dbsToDrop,
+  disableAllBackgroundProcesses,
   initReplicacheTesting,
   replicacheForTesting,
   tickAFewTimes,
-  clock,
-  dbsToDrop,
-  closeablesToClose,
-  disableAllBackgroundProcesses,
 } from './test-util.js';
-import {
-  makeIDBNameForTesting,
-  REPLICACHE_FORMAT_VERSION_DD31,
-  REPLICACHE_FORMAT_VERSION_SDD,
-} from './replicache.js';
-import {ChainBuilder} from './db/test-helpers.js';
-import type * as db from './db/mod.js';
-import * as dag from './dag/mod.js';
-import * as persist from './persist/mod.js';
-import * as kv from './kv/mod.js';
-import type * as sync from './sync/mod.js';
-import {assertHash} from './hash.js';
-import {assertNotUndefined} from 'shared/asserts.js';
-import {expect} from '@esm-bundle/chai';
 import {uuid} from './uuid.js';
-import {assertJSONObject, JSONObject, ReadonlyJSONObject} from './json.js';
-import sinon from 'sinon';
+import {withRead} from './with-transactions.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {initClientWithClientID} from './persist/clients-test-helpers.js';
-import {PUSH_VERSION_SDD} from './sync/push.js';
-import {assertClientV4} from './persist/clients.js';
-import {persistSDD} from './persist/persist-test-helpers.js';
-import {withRead} from './with-transactions.js';
+import type {ClientID} from './sync/ids.js';
 
 initReplicacheTesting();
 
@@ -42,7 +43,8 @@ export async function createPerdag(args: {
   schemaVersion: string;
   replicacheFormatVersion:
     | typeof REPLICACHE_FORMAT_VERSION_SDD
-    | typeof REPLICACHE_FORMAT_VERSION_DD31;
+    | typeof REPLICACHE_FORMAT_VERSION_DD31
+    | typeof REPLICACHE_FORMAT_VERSION_V6;
 }): Promise<dag.Store> {
   const {replicacheName, schemaVersion, replicacheFormatVersion} = args;
   const idbName = makeIDBNameForTesting(
@@ -71,7 +73,7 @@ export async function createPerdag(args: {
 }
 
 export async function createAndPersistClientWithPendingLocalSDD(
-  clientID: sync.ClientID,
+  clientID: ClientID,
   perdag: dag.Store,
   numLocal: number,
 ): Promise<db.LocalMetaSDD[]> {
@@ -99,7 +101,7 @@ export async function createAndPersistClientWithPendingLocalSDD(
 
 export function createPushBodySDD(
   profileID: string,
-  clientID: sync.ClientID,
+  clientID: ClientID,
   localMetas: db.LocalMetaSDD[],
   schemaVersion: string,
 ): ReadonlyJSONObject {

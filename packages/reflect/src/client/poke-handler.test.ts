@@ -1601,7 +1601,6 @@ test('integration with BufferSizer', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
   const bufferSizer = new BufferSizer(BUFFER_SIZER_OPTIONS);
-  const recordOffsetSpy = sinon.spy(bufferSizer, 'recordOffset');
   const recordMissableSpy = sinon.spy(bufferSizer, 'recordMissable');
   const bufferSizeMsStub = sinon.stub(bufferSizer, 'bufferSizeMs');
   const pokeHandler = new PokeHandler(
@@ -1613,7 +1612,6 @@ test('integration with BufferSizer', async () => {
   );
   expect(rafStub.callCount).to.equal(0);
   expect(recordMissableSpy.callCount).to.equal(0);
-  expect(recordOffsetSpy.callCount).to.equal(0);
 
   const lastMutationIDChangeForSelf = await pokeHandler.handlePoke({
     pokes: [
@@ -1649,10 +1647,6 @@ test('integration with BufferSizer', async () => {
   expect(lastMutationIDChangeForSelf).to.equal(undefined);
 
   expect(recordMissableSpy.callCount).to.equal(0);
-  expect(recordOffsetSpy.callCount).to.equal(1);
-  const recordOffset0 = recordOffsetSpy.getCall(0);
-  expect(recordOffset0.args).to.deep.equal(['c1', -(startTime + 100)]);
-
   expect(replicachePokeStub.callCount).to.equal(0);
   expect(rafStub.callCount).to.equal(1);
 
@@ -1660,7 +1654,6 @@ test('integration with BufferSizer', async () => {
   await rafCallback0();
 
   expect(recordMissableSpy.callCount).to.equal(0);
-  expect(recordOffsetSpy.callCount).to.equal(1);
   expect(replicachePokeStub.callCount).to.equal(0);
   expect(rafStub.callCount).to.equal(2);
 
@@ -1670,9 +1663,12 @@ test('integration with BufferSizer', async () => {
   await rafCallback1();
 
   expect(recordMissableSpy.callCount).to.equal(1);
-  expect(recordOffsetSpy.callCount).to.equal(1);
   const recordMissable0 = recordMissableSpy.getCall(0);
-  expect(recordMissable0.args).to.deep.equal([false]);
+  expect(recordMissable0.args.slice(0, 3)).to.deep.equal([
+    startTime + 250,
+    false,
+    18,
+  ]);
 
   expect(replicachePokeStub.callCount).to.equal(1);
   const replicachePoke0 = replicachePokeStub.getCall(0).args[0];
@@ -1728,9 +1724,6 @@ test('integration with BufferSizer', async () => {
   expect(lastMutationIDChangeForSelf2).to.be.undefined;
 
   expect(recordMissableSpy.callCount).to.equal(1);
-  expect(recordOffsetSpy.callCount).to.equal(2);
-  const recordOffset1 = recordOffsetSpy.getCall(1);
-  expect(recordOffset1.args).to.deep.equal(['c1', 250 - (startTime + 140)]);
 
   const rafCallback2 = rafStub.getCall(2).args[0];
   await clock.tickAsync(40);
@@ -1738,9 +1731,12 @@ test('integration with BufferSizer', async () => {
   await rafCallback2();
 
   expect(recordMissableSpy.callCount).to.equal(2);
-  expect(recordOffsetSpy.callCount).to.equal(2);
   const recordMissable1 = recordMissableSpy.getCall(1);
-  expect(recordMissable1.args).to.deep.equal([true]);
+  expect(recordMissable1.args.slice(0, 3)).to.deep.equal([
+    startTime + 250 + 40,
+    true,
+    228,
+  ]);
 
   expect(replicachePokeStub.callCount).to.equal(2);
   const replicachePoke1 = replicachePokeStub.getCall(1).args[0];
@@ -1777,7 +1773,6 @@ test('integration with BufferSizer', async () => {
 
   // not called because of bigger buffer size
   expect(recordMissableSpy.callCount).to.equal(2);
-  expect(recordOffsetSpy.callCount).to.equal(2);
   expect(replicachePokeStub.callCount).to.equal(2);
 
   expect(rafStub.callCount).to.equal(5);
@@ -1788,9 +1783,12 @@ test('integration with BufferSizer', async () => {
   await rafCallback4();
 
   expect(recordMissableSpy.callCount).to.equal(3);
-  expect(recordOffsetSpy.callCount).to.equal(2);
   const recordMissable2 = recordMissableSpy.getCall(2);
-  expect(recordMissable2.args).to.deep.equal([false]);
+  expect(recordMissable2.args.slice(0, 3)).to.deep.equal([
+    startTime + 250 + 40 + 20 + 250,
+    false,
+    228,
+  ]);
 
   expect(replicachePokeStub.callCount).to.equal(3);
   const replicachePoke2 = replicachePokeStub.getCall(2).args[0];
@@ -1815,7 +1813,6 @@ test('integration with BufferSizer', async () => {
   const rafCallback5 = rafStub.getCall(5).args[0];
   await rafCallback5();
   expect(recordMissableSpy.callCount).to.equal(3);
-  expect(recordOffsetSpy.callCount).to.equal(2);
   expect(replicachePokeStub.callCount).to.equal(3);
   expect(rafStub.callCount).to.equal(6);
 });

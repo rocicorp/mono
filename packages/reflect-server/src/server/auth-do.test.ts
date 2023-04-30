@@ -7,6 +7,7 @@ import {
   jest,
   test,
 } from '@jest/globals';
+import {assert} from 'shared/asserts.js';
 import {newInvalidateAllAuthRequest} from '../client/auth.js';
 import {
   newCloseRoomRequest,
@@ -17,27 +18,26 @@ import {
   newRoomStatusRequest,
 } from '../client/room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {assert} from 'shared/asserts.js';
 import {newAuthRevalidateConnections} from '../util/auth-test-util.js';
 import {encodeHeaderValue} from '../util/headers.js';
-import {Mocket, mockWebSocketPair, TestLogSink} from '../util/test-utils.js';
+import {Mocket, TestLogSink, mockWebSocketPair} from '../util/test-utils.js';
 import {
   AUTH_API_KEY_HEADER_NAME,
   createAuthAPIHeaders,
 } from './auth-api-headers.js';
 import {AUTH_ROUTES, BaseAuthDO, ConnectionRecord} from './auth-do.js';
-import {USER_DATA_HEADER_NAME} from './auth.js';
+import {AuthHandler, USER_DATA_HEADER_NAME} from './auth.js';
 import {
-  createTestDurableObjectNamespace,
   TestDurableObjectId,
   TestDurableObjectState,
   TestDurableObjectStub,
+  createTestDurableObjectNamespace,
 } from './do-test-utils.js';
 import {CREATE_ROOM_PATH, INTERNAL_CREATE_ROOM_PATH} from './paths.js';
 import {
+  RoomStatus,
   roomRecordByObjectIDForTest as getRoomRecordByObjectIDOriginal,
   roomRecordByRoomID as getRoomRecordOriginal,
-  RoomStatus,
   type RoomRecord,
 } from './rooms.js';
 
@@ -1199,46 +1199,85 @@ test('connect percent escapes components of the connection key', async () => {
   expect(connectionRecord.connectTimestamp).toEqual(testTime);
 });
 
-test('connect pipes 401 over ws without calling Room DO if authHandler rejects', async () => {
+describe('connect pipes 401 over ws without calling Room DO if', () => {
   const testRoomID = 'testRoomID1';
   const testClientID = 'testClientID1';
   const testAuth = 'testAuthTokenValue';
   const testUserID = 'testUserID1';
 
-  const headers = new Headers();
-  headers.set('Sec-WebSocket-Protocol', testAuth);
-  headers.set('Upgrade', 'websocket');
+  const t = (name: string, authHandler: AuthHandler, errorMessage: string) => {
+    test(name, async () => {
+      const headers = new Headers();
+      headers.set('Sec-WebSocket-Protocol', testAuth);
+      headers.set('Upgrade', 'websocket');
 
-  const testRequest = new Request(
-    `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}&userID=${testUserID}`,
-    {
-      headers,
-    },
-  );
-  const [clientWS, serverWS] = mockWebSocketPair();
-  const authDO = new BaseAuthDO({
-    roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
-    state: {id: authDOID} as DurableObjectState,
-    // eslint-disable-next-line require-await
-    authHandler: async (auth, roomID) => {
+      const testRequest = new Request(
+        `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}&userID=${testUserID}`,
+        {
+          headers,
+        },
+      );
+      const [clientWS, serverWS] = mockWebSocketPair();
+      const authDO = new BaseAuthDO({
+        roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
+        state: {id: authDOID} as DurableObjectState,
+        authHandler,
+        authApiKey: TEST_AUTH_API_KEY,
+        logSink: new TestLogSink(),
+        logLevel: 'debug',
+      });
+
+      const response = await authDO.fetch(testRequest);
+
+      expect(response.status).toEqual(101);
+      expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(testAuth);
+      expect(response.webSocket).toBe(clientWS);
+      expect(serverWS.log).toEqual([
+        ['send', JSON.stringify(['error', 'Unauthorized', errorMessage])],
+        ['close'],
+      ]);
+    });
+  };
+
+  t(
+    'authHandler throws',
+    (auth, roomID) => {
       expect(auth).toEqual(testAuth);
       expect(roomID).toEqual(testRoomID);
       throw new Error('Test authHandler reject');
     },
-    authApiKey: TEST_AUTH_API_KEY,
-    logSink: new TestLogSink(),
-    logLevel: 'debug',
-  });
+    'authHandler rejected',
+  );
 
-  const response = await authDO.fetch(testRequest);
+  t(
+    'authHandler rejects',
+    (auth, roomID) => {
+      expect(auth).toEqual(testAuth);
+      expect(roomID).toEqual(testRoomID);
+      return Promise.reject(new Error('Test authHandler reject'));
+    },
+    'authHandler rejected',
+  );
 
-  expect(response.status).toEqual(101);
-  expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(testAuth);
-  expect(response.webSocket).toBe(clientWS);
-  expect(serverWS.log).toEqual([
-    ['send', JSON.stringify(['error', 'Unauthorized', 'authHandler rejected'])],
-    ['close'],
-  ]);
+  t(
+    'authHandler returns null',
+    (auth, roomID) => {
+      expect(auth).toEqual(testAuth);
+      expect(roomID).toEqual(testRoomID);
+      return null;
+    },
+    'no userData',
+  );
+
+  t(
+    'authHandler returns Promise<null>',
+    (auth, roomID) => {
+      expect(auth).toEqual(testAuth);
+      expect(roomID).toEqual(testRoomID);
+      return Promise.resolve(null);
+    },
+    'no userData',
+  );
 });
 
 describe('connect sends InvalidConnectionRequest over ws without calling Room DO if Sec-WebSocket-Protocol header is missing', () => {

@@ -1,4 +1,11 @@
-import {expect, test} from '@jest/globals';
+import {
+  jest,
+  expect,
+  test,
+  describe,
+  beforeEach,
+  afterEach,
+} from '@jest/globals';
 import {jsonSchema, Version} from 'reflect-protocol';
 import type {WriteTransaction} from 'replicache';
 import type {ReadonlyJSONValue} from 'shared/json.js';
@@ -29,10 +36,19 @@ import {
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
+const startTime = 1000;
+beforeEach(() => {
+  jest.useFakeTimers();
+  jest.setSystemTime(startTime);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
 
 mockMathRandom();
 
-test('processFrame', async () => {
+describe('processFrame', () => {
   const startVersion = 1;
   const disconnectHandlerWriteKey = (clientID: string) =>
     'test-disconnected-' + clientID;
@@ -213,6 +229,7 @@ test('processFrame', async () => {
           timestamps: {
             normalizedTimestamp: 100,
             originTimestamp: 1000,
+            serverReceivedTimestamp: startTime - 100,
           },
           name: 'put',
           args: {key: 'foo', value: 'bar'},
@@ -240,6 +257,8 @@ test('processFrame', async () => {
             ],
             timestamp: 100,
             debugOriginTimestamp: 1000,
+            debugServerReceivedTimestamp: startTime - 100,
+            debugServerSentTimestamp: startTime,
           },
         },
         {
@@ -683,60 +702,62 @@ test('processFrame', async () => {
     },
   ];
 
-  const durable = await getMiniflareDurableObjectStorage(id);
   for (const c of cases) {
-    await durable.deleteAll();
-    const storage = new DurableStorage(durable);
+    test(c.name, async () => {
+      const durable = await getMiniflareDurableObjectStorage(id);
+      await durable.deleteAll();
+      const storage = new DurableStorage(durable);
 
-    await storage.put(versionKey, startVersion);
-    for (const [clientID, record] of c.clientRecords) {
-      await putClientRecord(clientID, record, storage);
-    }
-    await putConnectedClients(new Set(c.storedConnectedClients), storage);
+      await storage.put(versionKey, startVersion);
+      for (const [clientID, record] of c.clientRecords) {
+        await putClientRecord(clientID, record, storage);
+      }
+      await putConnectedClients(new Set(c.storedConnectedClients), storage);
 
-    const disconnectCallClients: ClientID[] = [];
-    const result = await processFrame(
-      createSilentLogContext(),
-      c.pendingMutations,
-      mutators,
-      async write => {
-        await write.put(disconnectHandlerWriteKey(write.clientID), true);
-        disconnectCallClients.push(write.clientID);
-        // Throw after writes to confirm they are not saved.
-        if (c.disconnectHandlerThrows) {
-          throw new Error('disconnectHandler threw');
-        }
-      },
-      c.clients,
-      storage,
-    );
+      const disconnectCallClients: ClientID[] = [];
+      const result = await processFrame(
+        createSilentLogContext(),
+        c.pendingMutations,
+        mutators,
+        async write => {
+          await write.put(disconnectHandlerWriteKey(write.clientID), true);
+          disconnectCallClients.push(write.clientID);
+          // Throw after writes to confirm they are not saved.
+          if (c.disconnectHandlerThrows) {
+            throw new Error('disconnectHandler threw');
+          }
+        },
+        c.clients,
+        storage,
+      );
 
-    expect(result).toEqual(c.expectedPokes);
+      expect(result).toEqual(c.expectedPokes);
 
-    expect(disconnectCallClients.sort()).toEqual(
-      c.expectedDisconnectedClients.sort(),
-    );
+      expect(disconnectCallClients.sort()).toEqual(
+        c.expectedDisconnectedClients.sort(),
+      );
 
-    const expectedState = new Map([
-      ...new Map<string, ReadonlyJSONValue>(
-        [...c.expectedUserValues].map(([key, value]) => [
-          userValueKey(key),
-          value,
-        ]),
-      ),
-      ...new Map<string, ReadonlyJSONValue>(
-        [...c.expectedClientRecords].map(([key, value]) => [
-          clientRecordKey(key),
-          value,
-        ]),
-      ),
-      [versionKey, c.expectedVersion],
-      [connectedClientsKey, [...c.clients.keys()]],
-    ]);
+      const expectedState = new Map([
+        ...new Map<string, ReadonlyJSONValue>(
+          [...c.expectedUserValues].map(([key, value]) => [
+            userValueKey(key),
+            value,
+          ]),
+        ),
+        ...new Map<string, ReadonlyJSONValue>(
+          [...c.expectedClientRecords].map(([key, value]) => [
+            clientRecordKey(key),
+            value,
+          ]),
+        ),
+        [versionKey, c.expectedVersion],
+        [connectedClientsKey, [...c.clients.keys()]],
+      ]);
 
-    expect((await durable.list()).size).toEqual(expectedState.size);
-    for (const [key, value] of expectedState) {
-      expect(await storage.get(key, jsonSchema)).toEqual(value);
-    }
+      expect((await durable.list()).size).toEqual(expectedState.size);
+      for (const [key, value] of expectedState) {
+        expect(await storage.get(key, jsonSchema)).toEqual(value);
+      }
+    });
   }
 });

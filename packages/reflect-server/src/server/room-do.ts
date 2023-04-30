@@ -42,6 +42,7 @@ import {
   LEGACY_CREATE_ROOM_PATH,
 } from './paths.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import {BufferSizer} from 'shared/buffer-sizer.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -72,6 +73,12 @@ export const ROOM_ROUTES = {
 export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   private readonly _clients: ClientMap = new Map();
   private readonly _pendingMutations: PendingMutation[] = [];
+  private readonly _bufferSizer = new BufferSizer({
+    initialBufferSizeMs: 200,
+    minBufferSizeMs: 0,
+    maxBufferSizeMs: 500,
+    adjustBufferSizeIntervalMs: 10_000,
+  });
   private _maxProcessedMutationTimestamp = 0;
   private readonly _lock = new Lock();
   private readonly _mutators: MutatorMap;
@@ -402,6 +409,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
           this._mutators,
           this._disconnectHandler,
           this._maxProcessedMutationTimestamp,
+          this._bufferSizer,
         );
       this._maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
       if (nothingToProcess && this._turnTimerID) {

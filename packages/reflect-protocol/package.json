@@ -1,5 +1,6 @@
 {
   "name": "reflect-protocol",
+  "private": true,
   "type": "module",
   "module": "./src/mod.ts",
   "types": "./src/mod.ts",

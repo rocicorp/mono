@@ -1,13 +1,12 @@
-import * as db from '../db/mod.js';
-import type {Hash} from '../hash.js';
 import type * as dag from '../dag/mod.js';
-import type * as btree from '../btree/mod.js';
-import {getSizeOfValue} from '../size-of-value.js';
+import {Visitor} from '../dag/visitor.js';
+import type {Hash} from '../hash.js';
 import {promiseVoid} from '../resolved-promises.js';
+import {getSizeOfValue} from '../size-of-value.js';
 
 export type ChunkWithSize = {chunk: dag.Chunk; size: number};
 
-export class GatherNotCachedVisitor extends db.Visitor {
+export class GatherNotCachedVisitor extends Visitor {
   private readonly _gatheredChunks: Map<Hash, ChunkWithSize> = new Map();
   private _gatheredChunksTotalSize = 0;
   private readonly _lazyStore: dag.LazyStore;
@@ -30,42 +29,23 @@ export class GatherNotCachedVisitor extends db.Visitor {
     return this._gatheredChunks;
   }
 
-  private _shouldVisit(h: Hash): boolean {
-    return (
-      this._gatheredChunksTotalSize < this._gatherSizeLimit &&
-      !this._lazyStore.isCached(h)
-    );
-  }
-
-  private _gather(chunk: dag.Chunk): void {
-    const size = this._getSizeOfChunk(chunk);
-    this._gatheredChunks.set(chunk.hash, {chunk, size});
-    this._gatheredChunksTotalSize += size;
-  }
-
-  override visitCommit(h: Hash, hashRefType?: db.HashRefType): Promise<void> {
-    if (!this._shouldVisit(h)) {
+  override visit(h: Hash): Promise<void> {
+    if (
+      this._gatheredChunksTotalSize >= this._gatherSizeLimit ||
+      this._lazyStore.isCached(h)
+    ) {
       return promiseVoid;
     }
-    return super.visitCommit(h, hashRefType);
+    return super.visit(h);
   }
 
-  override visitCommitChunk(
-    chunk: dag.Chunk<db.CommitData<db.Meta>>,
-  ): Promise<void> {
-    this._gather(chunk);
-    return super.visitCommitChunk(chunk);
-  }
-
-  override visitBTreeNode(h: Hash): Promise<void> {
-    if (!this._shouldVisit(h)) {
-      return promiseVoid;
+  override visitChunk(chunk: dag.Chunk): Promise<void> {
+    if (this._gatheredChunksTotalSize < this._gatherSizeLimit) {
+      const size = this._getSizeOfChunk(chunk);
+      this._gatheredChunks.set(chunk.hash, {chunk, size});
+      this._gatheredChunksTotalSize += size;
     }
-    return super.visitBTreeNode(h);
-  }
 
-  override visitBTreeNodeChunk(chunk: dag.Chunk<btree.Node>): Promise<void> {
-    this._gather(chunk);
-    return super.visitBTreeNodeChunk(chunk);
+    return super.visitChunk(chunk);
   }
 }
