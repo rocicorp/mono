@@ -13,27 +13,28 @@ import {
 } from 'replicache';
 import * as valita from 'shared/valita.js';
 import * as sinon from 'sinon';
+import {REPORT_INTERVAL_MS} from './metrics.js';
 import {
-  ConnectionState,
   CONNECT_TIMEOUT_MS,
-  createSocket,
+  ConnectionState,
   HIDDEN_INTERVAL_MS,
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
+  createSocket,
   serverAheadReloadReason,
 } from './reflect.js';
-import {
-  MockSocket,
-  reflectForTest,
-  TestLogSink,
-  TestReflect,
-  tickAFewTimes,
-} from './test-utils.js'; // Why use fakes when we can use the real thing!
-import {REPORT_INTERVAL_MS} from './metrics.js';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
 import {ServerError} from './server-error.js';
+import {
+  MockSocket,
+  TestLogSink,
+  TestReflect,
+  reflectForTest,
+  tickAFewTimes,
+  waitForUpstreamMessage,
+} from './test-utils.js'; // Why use fakes when we can use the real thing!
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -1168,42 +1169,65 @@ test('server ahead', async () => {
   );
 });
 
-test('Disconnect on hide', async () => {
-  let visibilityState = 'visible';
-  sinon.stub(document, 'visibilityState').get(() => visibilityState);
+suite('Disconnect on hide', () => {
+  type Case = {
+    name: string;
+    duringPing: boolean;
+  };
 
-  const r = reflectForTest();
-  await r.triggerConnected();
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  const cases: Case[] = [
+    {name: 'no ping', duringPing: false},
+    {name: 'during ping', duringPing: true},
+  ];
 
-  visibilityState = 'hidden';
-  document.dispatchEvent(new Event('visibilitychange'));
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  for (const c of cases) {
+    test(c.name, async () => {
+      let visibilityState = 'visible';
+      sinon.stub(document, 'visibilityState').get(() => visibilityState);
 
-  let sleep = HIDDEN_INTERVAL_MS;
-  if (PING_INTERVAL_MS < HIDDEN_INTERVAL_MS) {
-    // We need a ping before PING_INTERVAL_MS to not get disconnected.
-    await clock.tickAsync(PING_INTERVAL_MS - 10);
-    await r.triggerPong();
-    sleep = HIDDEN_INTERVAL_MS - PING_INTERVAL_MS + 10;
+      const r = reflectForTest();
+      await r.triggerConnected();
+      expect(r.connectionState).to.equal(ConnectionState.Connected);
+
+      if (c.duringPing) {
+        await waitForUpstreamMessage(r, 'ping', clock);
+      }
+
+      visibilityState = 'hidden';
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      if (c.duringPing) {
+        await r.triggerPong();
+      }
+
+      expect(r.connectionState).to.equal(ConnectionState.Connected);
+
+      let sleep = HIDDEN_INTERVAL_MS;
+      if (PING_INTERVAL_MS < HIDDEN_INTERVAL_MS) {
+        // We need a ping before PING_INTERVAL_MS to not get disconnected.
+        await clock.tickAsync(PING_INTERVAL_MS - 10);
+        await r.triggerPong();
+        sleep = HIDDEN_INTERVAL_MS - PING_INTERVAL_MS + 10;
+      }
+      await clock.tickAsync(sleep);
+
+      expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+
+      // Stays disconnected as long as we are hidden.
+      while (Date.now() < 100_000) {
+        await clock.tickAsync(1_000);
+        expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+        expect(document.visibilityState).to.equal('hidden');
+      }
+
+      visibilityState = 'visible';
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      await r.waitForConnectionState(ConnectionState.Connecting);
+      await r.triggerConnected();
+      expect(r.connectionState).to.equal(ConnectionState.Connected);
+    });
   }
-  await clock.tickAsync(sleep);
-
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
-
-  // Stays disconnected as long as we are hidden.
-  while (Date.now() < 100_000) {
-    await clock.tickAsync(1_000);
-    expect(r.connectionState).to.equal(ConnectionState.Disconnected);
-    expect(document.visibilityState).to.equal('hidden');
-  }
-
-  visibilityState = 'visible';
-  document.dispatchEvent(new Event('visibilitychange'));
-
-  await r.waitForConnectionState(ConnectionState.Connecting);
-  await r.triggerConnected();
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
 });
 
 test('InvalidConnectionRequest', async () => {
@@ -1230,37 +1254,61 @@ test('InvalidConnectionRequest', async () => {
   });
 });
 
-test('Invalid Downstream message', async () => {
-  const testLogSink = new TestLogSink();
-  const r = reflectForTest({
-    logSinks: [testLogSink],
-    logLevel: 'debug',
-  });
-  await r.triggerConnected();
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+suite('Invalid Downstream message', () => {
+  type Case = {
+    name: string;
+    duringPing: boolean;
+  };
 
-  await r.triggerPoke({
-    pokes: [
-      {
-        baseCookie: null,
-        cookie: 1,
-        lastMutationIDChanges: {c1: 1},
-        // @ts-expect-error - invalid field
-        patch: [{op: 'put', key: 'k1', valueXXX: 'v1'}],
-        timestamp: 123456,
-      },
-    ],
-    requestID: 'test-request-id-poke',
-  });
+  const cases: Case[] = [
+    {name: 'no ping', duringPing: false},
+    {name: 'during ping', duringPing: true},
+  ];
 
-  await clock.tickAsync(0);
+  for (const c of cases) {
+    test(c.name, async () => {
+      const testLogSink = new TestLogSink();
+      const r = reflectForTest({
+        logSinks: [testLogSink],
+        logLevel: 'debug',
+      });
+      await r.triggerConnected();
+      expect(r.connectionState).to.equal(ConnectionState.Connected);
 
-  const found = testLogSink.messages.some(m =>
-    m.some(
-      v => v instanceof Error && v.message.includes('Invalid union value.'),
-    ),
-  );
-  expect(found).true;
+      if (c.duringPing) {
+        await waitForUpstreamMessage(r, 'ping', clock);
+      }
+
+      await r.triggerPoke({
+        pokes: [
+          {
+            baseCookie: null,
+            cookie: 1,
+            lastMutationIDChanges: {c1: 1},
+            // @ts-expect-error - invalid field
+            patch: [{op: 'put', key: 'k1', valueXXX: 'v1'}],
+            timestamp: 123456,
+          },
+        ],
+        requestID: 'test-request-id-poke',
+      });
+      await clock.tickAsync(0);
+
+      if (c.duringPing) {
+        await r.triggerPong();
+      }
+
+      expect(r.online).eq(true);
+      expect(r.connectionState).eq(ConnectionState.Connected);
+
+      const found = testLogSink.messages.some(m =>
+        m.some(
+          v => v instanceof Error && v.message.includes('Invalid union value.'),
+        ),
+      );
+      expect(found).true;
+    });
+  }
 });
 
 test('experimentalKVStore', async () => {
