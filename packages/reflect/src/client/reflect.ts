@@ -516,7 +516,7 @@ export class Reflect<MD extends MutatorDefs> {
     l.info?.('Got socket close event', {code, reason, wasClean});
 
     const closeKind = wasClean ? 'CleanClose' : 'AbruptClose';
-    this._connectResolver.reject(new Error('clean close'));
+    this._connectResolver.reject(new CloseError(closeKind));
     await this._disconnect(l, {client: closeKind});
   };
 
@@ -965,7 +965,11 @@ export class Reflect<MD extends MutatorDefs> {
           needsReauth = true;
         }
 
-        if (isServerError(ex) || ex instanceof TimedOutError) {
+        if (
+          isServerError(ex) ||
+          ex instanceof TimedOutError ||
+          ex instanceof CloseError
+        ) {
           errorCount++;
         }
       }
@@ -1270,3 +1274,5 @@ class TimedOutError extends Error {
     super(`${m} timed out`);
   }
 }
+
+class CloseError extends Error {}
