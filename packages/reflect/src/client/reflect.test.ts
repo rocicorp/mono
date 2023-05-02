@@ -1323,3 +1323,34 @@ test('experimentalKVStore', async () => {
   await r.mutate.putFoo('bar');
   expect(await r.query(tx => tx.get('foo'))).to.equal('bar');
 });
+
+test('Close during connect should sleep', async () => {
+  const testLogSink = new TestLogSink();
+  const r = reflectForTest({
+    logSinks: [testLogSink],
+    logLevel: 'debug',
+  });
+  await r.triggerConnected();
+
+  await r.waitForConnectionState(ConnectionState.Connected);
+  expect(r.online).equal(true);
+
+  (await r.socket).close();
+  await r.waitForConnectionState(ConnectionState.Disconnected);
+  await r.waitForConnectionState(ConnectionState.Connecting);
+
+  (await r.socket).close();
+  await r.waitForConnectionState(ConnectionState.Disconnected);
+  expect(r.online).equal(false);
+  const hasSleeping = testLogSink.messages.some(m =>
+    m.some(v => v === 'Sleeping'),
+  );
+  expect(hasSleeping).true;
+
+  await clock.tickAsync(RUN_LOOP_INTERVAL_MS);
+
+  await r.waitForConnectionState(ConnectionState.Connecting);
+  await r.triggerConnected();
+  await r.waitForConnectionState(ConnectionState.Connected);
+  expect(r.online).equal(true);
+});
