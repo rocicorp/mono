@@ -1,6 +1,6 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import type {
+import {
   ConnectedMessage,
   Downstream,
   ErrorKind,
@@ -10,10 +10,11 @@ import type {
   PongMessage,
   PullResponseBody,
   PullResponseMessage,
+  upstreamSchema,
 } from 'reflect-protocol';
 import type {MutatorDefs} from 'replicache';
-import type {SinonFakeTimers} from 'sinon';
 import {assert} from 'shared/asserts.js';
+import type {SinonFakeTimers} from 'sinon';
 import type {ReflectOptions} from './options.js';
 import {ConnectionState, Reflect} from './reflect.js';
 
@@ -30,6 +31,7 @@ export class MockSocket extends EventTarget {
   protocol: string;
   messages: string[] = [];
   closed = false;
+  onUpstream?: (message: string) => void;
 
   constructor(url: string | URL, protocol = '') {
     super();
@@ -39,6 +41,7 @@ export class MockSocket extends EventTarget {
 
   send(message: string) {
     this.messages.push(message);
+    this.onUpstream?.(message);
   }
 
   close() {
@@ -195,5 +198,26 @@ export class TestLogSink implements LogSink {
 
   log(level: LogLevel, ...args: unknown[]): void {
     this.messages.push([level, ...args]);
+  }
+}
+
+export async function waitForUpstreamMessage(
+  r: TestReflect<MutatorDefs>,
+  name: string,
+  clock: SinonFakeTimers,
+) {
+  let gotMessage = false;
+  (await r.socket).onUpstream = message => {
+    const v = JSON.parse(message);
+    const [kind] = upstreamSchema.parse(v);
+    if (kind === name) {
+      gotMessage = true;
+    }
+  };
+  for (;;) {
+    await clock.tickAsync(100);
+    if (gotMessage) {
+      break;
+    }
   }
 }

@@ -12,10 +12,14 @@ export class ServerError<K extends ErrorKind = ErrorKind> extends Error {
   }
 }
 
+export function isServerError(ex: unknown): ex is ServerError {
+  return ex instanceof ServerError;
+}
+
 export function isAuthError(
   ex: unknown,
 ): ex is ServerError<'AuthInvalidated'> | ServerError<'Unauthorized'> {
-  return ex instanceof ServerError && isAuthErrorKind(ex.kind);
+  return isServerError(ex) && isAuthErrorKind(ex.kind);
 }
 
 function isAuthErrorKind(
