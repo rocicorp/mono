@@ -13,9 +13,11 @@ import {randomID} from '../util/rand.js';
 import {getConnectedClients} from '../types/connected-clients.js';
 import type {BufferSizer} from 'shared/buffer-sizer.js';
 
+const CLIENT_INACTIVITY_THRESHOLD_MS = 10_000;
+
 /**
- * Processes pending mutations and client disconnect/connects, and sends
- * relevant pokes.
+ * Processes pending mutations, inactive clients and client disconnect/connects,
+ * and sends relevant pokes.
  * @param clients Rooms to process mutations for
  * @param mutators All known mutators
  */
@@ -30,6 +32,14 @@ export async function processPending(
   bufferSizer: BufferSizer,
 ): Promise<{maxProcessedMutationTimestamp: number; nothingToProcess: boolean}> {
   lc.debug?.('process pending');
+  const now = Date.now();
+  for (const [clientID, client] of clients) {
+    if (now - client.lastActivityTimestamp > CLIENT_INACTIVITY_THRESHOLD_MS) {
+      lc.debug?.('closing socket', clientID, 'due to inactivity');
+      client.socket.close();
+      clients.delete(clientID);
+    }
+  }
 
   const storedConnectedClients = await getConnectedClients(storage);
   let hasConnectsOrDisconnectsToProcess = false;
@@ -45,7 +55,9 @@ export async function processPending(
   }
   if (pendingMutations.length === 0 && !hasConnectsOrDisconnectsToProcess) {
     return {maxProcessedMutationTimestamp, nothingToProcess: true};
-    lc.debug?.('No pending mutations or disconnects to process, exiting');
+    lc.debug?.(
+      'No pending mutations or connects/disconnects to process, exiting',
+    );
   }
 
   const t0 = Date.now();

@@ -100,7 +100,9 @@ describe('processPending', () => {
     expectedVersion: Version;
     expectedPokes?: Map<ClientID, PokeBody>;
     expectedUserValues?: Map<string, UserValue>;
+    expectedClients?: ClientMap;
     expectedClientRecords?: ClientRecordMap;
+    expectedDisconnectHandlerClientIDs?: ClientID[];
     expectedPendingMutations?: PendingMutation[];
     expectNothingToProcess?: boolean;
     expectedMaxProcessedMutationTimestamp?: number;
@@ -192,6 +194,46 @@ describe('processPending', () => {
         ['c1', clientRecord('cg1', 2)],
         ['c2', clientRecord('cg1', 1)],
       ]),
+      expectedDisconnectHandlerClientIDs: ['c2'],
+      expectedMissableRecords: [],
+    },
+    {
+      name: 'no pending mutations, but one inactive client',
+      version: 1,
+      clientRecords: new Map([
+        ['c1', clientRecord('cg1', 1)],
+        ['c2', clientRecord('cg1', 1)],
+      ]),
+      clients: new Map([
+        client('c1', 'u1', 'cg1', s1, 0, false, START_TIME - 10000),
+        client('c2', 'u1', 'cg1', s2, 0, false, START_TIME - 10001),
+      ]),
+      storedConnectedClients: ['c1', 'c2'],
+      pendingMutations: [],
+      maxProcessedMutationTimestamp: 500,
+      // version updated by disconnectHandler
+      expectedVersion: 2,
+      expectedPokes: new Map([
+        [
+          'c1',
+          {
+            pokes: [
+              {baseCookie: 1, cookie: 2, lastMutationIDChanges: {}, patch: []},
+            ],
+            requestID: '4fxcm49g2j9',
+          },
+        ],
+      ]),
+      expectedUserValues: new Map(),
+      expectNothingToProcess: false,
+      expectedClients: new Map([
+        client('c1', 'u1', 'cg1', s1, 0, false, START_TIME - 10000),
+      ]),
+      expectedClientRecords: new Map([
+        ['c1', clientRecord('cg1', 2)],
+        ['c2', clientRecord('cg1', 1)],
+      ]),
+      expectedDisconnectHandlerClientIDs: ['c2'],
       expectedMissableRecords: [],
     },
     {
@@ -1144,13 +1186,18 @@ describe('processPending', () => {
       }
       const fakeBufferSizer = new FakeBufferSizer();
       fakeBufferSizer.testBufferSizeMs = c.bufferSizeMs ?? 200;
+      const disconnectHandlerClientIDs: ClientID[] = [];
+      const disconnectHandler = (tx: WriteTransaction) => {
+        disconnectHandlerClientIDs.push(tx.clientID);
+        return Promise.resolve();
+      };
       const p = processPending(
         createSilentLogContext(),
         storage,
         c.clients,
         c.pendingMutations,
         mutators,
-        () => Promise.resolve(),
+        disconnectHandler,
         c.maxProcessedMutationTimestamp,
         fakeBufferSizer,
       );
@@ -1175,7 +1222,12 @@ describe('processPending', () => {
       expect(await getConnectedClients(storage)).toEqual(
         new Set(c.clients.keys()),
       );
-
+      if (c.expectedClients) {
+        expect(c.clients).toEqual(c.expectedClients);
+      }
+      expect(disconnectHandlerClientIDs.sort()).toEqual(
+        c.expectedDisconnectHandlerClientIDs?.sort() ?? [],
+      );
       expect(c.expectedError).toBeUndefined;
       expect(await getVersion(storage)).toEqual(c.expectedVersion);
       for (const [clientID, clientState] of c.clients) {

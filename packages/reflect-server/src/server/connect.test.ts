@@ -1,4 +1,11 @@
-import {test, describe, expect} from '@jest/globals';
+import {
+  test,
+  describe,
+  expect,
+  beforeEach,
+  jest,
+  afterEach,
+} from '@jest/globals';
 import {
   ClientRecord,
   clientRecordKey,
@@ -28,12 +35,23 @@ import type {ErrorKind} from 'reflect-protocol';
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
 
+const START_TIME = 1683000000000;
+beforeEach(() => {
+  jest.useFakeTimers();
+  jest.setSystemTime(START_TIME);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
 function freshClient(
   id: ClientID,
   userID: string,
   clientGroupID: ClientGroupID,
-  socket: Socket = new Mocket(),
+  socket: Socket,
   debugPerf = false,
+  lastActivityTimestamp = START_TIME,
 ) {
   const [clientID, c] = client(
     id,
@@ -42,6 +60,7 @@ function freshClient(
     socket,
     undefined,
     debugPerf,
+    lastActivityTimestamp,
   );
   c.clockOffsetMs = undefined;
   return [clientID, c] as const;
@@ -193,7 +212,7 @@ describe('handleConnection', () => {
       headers: createHeadersWithValidUserData('u1'),
       existingClients: new Map(),
       expectedClients: socket =>
-        new Map([freshClient('c1', 'u1', 'cg1', socket)]),
+        new Map([freshClient('c1', 'u1', 'cg1', socket, false)]),
       existingRecord: clientRecord('cg1', 2, 0),
       expectedRecord: clientRecord('cg1', 1, 0),
       version: 2,

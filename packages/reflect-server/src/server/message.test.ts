@@ -19,15 +19,15 @@ import {
   pendingMutation,
 } from '../util/test-utils.js';
 import {handleMessage} from '../../src/server/message.js';
-import {assert} from 'shared/asserts.js';
 import {randomID} from '../util/rand.js';
 import type {ErrorKind} from 'reflect-protocol';
 import {DurableStorage} from '../storage/durable-storage.js';
 import type {PendingMutation} from '../types/mutation.js';
 
+const START_TIME = 1683000000000;
 beforeEach(() => {
   jest.useFakeTimers();
-  jest.setSystemTime(0);
+  jest.setSystemTime(START_TIME);
 });
 
 afterEach(() => {
@@ -45,6 +45,7 @@ describe('handleMessage', () => {
     expectedErrorMessage?: string;
     expectedPendingMutations?: PendingMutation[];
     expectSocketClosed?: boolean;
+    expectLastActivityUpdated?: boolean;
   };
 
   const cases: Case[] = [
@@ -55,7 +56,7 @@ describe('handleMessage', () => {
       expectedErrorMessage: 'SyntaxError: Unexpected end of JSON input',
     },
     {
-      name: 'invalid push',
+      name: 'invalid message',
       data: '[]',
       expectedErrorKind: 'InvalidMessage',
       expectedErrorMessage: 'TypeError: Invalid union value',
@@ -66,10 +67,13 @@ describe('handleMessage', () => {
         'push',
         {
           clientGroupID: 'cg1',
-          mutations: [mutation('c1', 1, 10), mutation('c1', 2, 20)],
+          mutations: [
+            mutation('c1', 1, START_TIME + 10),
+            mutation('c1', 2, START_TIME + 20),
+          ],
           pushVersion: 1,
           schemaVersion: '',
-          timestamp: 42,
+          timestamp: START_TIME + 42,
           requestID: randomID(),
         },
       ]),
@@ -79,9 +83,9 @@ describe('handleMessage', () => {
           clientGroupID: 'cg1',
           id: 1,
           timestamps: {
-            normalizedTimestamp: 10,
-            originTimestamp: 10,
-            serverReceivedTimestamp: 0,
+            normalizedTimestamp: START_TIME + 10,
+            originTimestamp: START_TIME + 10,
+            serverReceivedTimestamp: START_TIME,
           },
         }),
         pendingMutation({
@@ -89,12 +93,13 @@ describe('handleMessage', () => {
           clientGroupID: 'cg1',
           id: 2,
           timestamps: {
-            normalizedTimestamp: 20,
-            originTimestamp: 20,
-            serverReceivedTimestamp: 0,
+            normalizedTimestamp: START_TIME + 20,
+            originTimestamp: START_TIME + 20,
+            serverReceivedTimestamp: START_TIME,
           },
         }),
       ],
+      expectLastActivityUpdated: true,
     },
     {
       name: 'push missing requestID',
@@ -102,10 +107,13 @@ describe('handleMessage', () => {
         'push',
         {
           clientID: 'c1',
-          mutations: [mutation('c1', 1, 10), mutation('c1', 2, 20)],
+          mutations: [
+            mutation('c1', 1, START_TIME + 10),
+            mutation('c1', 2, START_TIME + 20),
+          ],
           pushVersion: 1,
           schemaVersion: '',
-          timestamp: 42,
+          timestamp: START_TIME + 42,
         },
       ]),
       // This error message is not great
@@ -118,10 +126,13 @@ describe('handleMessage', () => {
         'push',
         {
           clientGroupID: 'cg1',
-          mutations: [mutation('c1', 1), mutation('c1', 2)],
+          mutations: [
+            mutation('c1', 1, START_TIME + 10),
+            mutation('c1', 2, START_TIME + 20),
+          ],
           pushVersion: 1,
           schemaVersion: '',
-          timestamp: 42,
+          timestamp: START_TIME + 42,
           requestID: randomID(),
         },
       ]),
@@ -130,6 +141,11 @@ describe('handleMessage', () => {
       expectedErrorKind: 'ClientNotFound',
       expectedErrorMessage: 'c1',
       expectSocketClosed: true,
+    },
+    {
+      name: 'valid ping',
+      data: JSON.stringify(['ping', {}]),
+      expectLastActivityUpdated: true,
     },
     {
       name: 'missing client ping',
@@ -148,8 +164,20 @@ describe('handleMessage', () => {
       const clientID = c.clientID !== undefined ? c.clientID : 'c1';
       const clientGroupID =
         c.clientGroupID !== undefined ? c.clientGroupID : 'cg1';
+      const prevLastActivityTimestamp = START_TIME - 5000;
       const clients: ClientMap =
-        c.clients || new Map([client(clientID, 'u1', clientGroupID, s1, 0)]);
+        c.clients ||
+        new Map([
+          client(
+            clientID,
+            'u1',
+            clientGroupID,
+            s1,
+            0,
+            false,
+            prevLastActivityTimestamp,
+          ),
+        ]);
 
       const {roomDO} = getMiniflareBindings();
       const storage = new DurableStorage(
@@ -157,6 +185,7 @@ describe('handleMessage', () => {
       );
 
       const pendingMutations: PendingMutation[] = [];
+      const clientPreHandleMessage = structuredClone(clients.get(clientID));
       await handleMessage(
         createSilentLogContext(),
         storage,
@@ -189,9 +218,28 @@ describe('handleMessage', () => {
         }
       }
 
-      if (c.expectedPendingMutations) {
+      if (c.expectLastActivityUpdated) {
+        expect({
+          ...clients.get(clientID),
+          socket: undefined,
+        }).toEqual({
+          ...clientPreHandleMessage,
+          socket: undefined,
+          lastActivityTimestamp: START_TIME,
+        });
+      } else {
         const client = clients.get(clientID);
-        assert(client);
+        if (!client) {
+          expect(clientPreHandleMessage).toBeUndefined();
+        } else {
+          expect({...client, socket: undefined}).toEqual({
+            ...clientPreHandleMessage,
+            socket: undefined,
+          });
+        }
+      }
+
+      if (c.expectedPendingMutations) {
         expect(pendingMutations).toEqual(c.expectedPendingMutations);
       }
     });
