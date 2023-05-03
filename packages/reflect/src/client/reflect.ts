@@ -934,6 +934,7 @@ export class Reflect<MD extends MutatorDefs> {
                 await this._disconnect(lc, {
                   client: 'Hidden',
                 });
+                this.#setOnline(false);
                 break;
             }
 

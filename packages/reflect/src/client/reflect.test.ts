@@ -1,7 +1,6 @@
 import {assert, expect} from '@esm-bundle/chai';
 import {resolver} from '@rocicorp/resolver';
-import type {NullableVersion} from 'reflect-protocol';
-import {Mutation, pushMessageSchema} from 'reflect-protocol';
+import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
 import {
   ExperimentalMemKVStore,
   JSONValue,
@@ -1182,43 +1181,75 @@ suite('Disconnect on hide', () => {
 
   for (const c of cases) {
     test(c.name, async () => {
+      // This test makes the assumption that the ping interval is less than
+      // the hidden interval.
+      expect(PING_INTERVAL_MS).lessThanOrEqual(HIDDEN_INTERVAL_MS);
+
       let visibilityState = 'visible';
       sinon.stub(document, 'visibilityState').get(() => visibilityState);
 
+      const makeOnOnlineChangePromise = () =>
+        new Promise(resolve => {
+          r.onOnlineChange = resolve;
+        });
+
       const r = reflectForTest();
+      let onOnlineChangeP = makeOnOnlineChangePromise();
+
       await r.triggerConnected();
       expect(r.connectionState).to.equal(ConnectionState.Connected);
+      expect(await onOnlineChangeP).true;
+      expect(r.online).true;
 
       if (c.duringPing) {
-        await waitForUpstreamMessage(r, 'ping', clock);
+        // - The intention of duringPing is to have the visibilityWatcher
+        //   trigger when a ping is in flight.
+        // - We start the ping after PING_INTERVAL_MS.
+        //   - A ping times out after PING_TIMEOUT_MS.
+        // - The visibilityWatcher will trigger after HIDDEN_INTERVAL_MS after
+        //   the event was dispatched.
+        // - We therefore want the visibilityWatcher to trigger between
+        //   [PING_INTERVAL_MS, PING_INTERVAL_MS + PING_TIMEOUT_MS])
+        // - Trigger the visibility change at PING_INTERVAL_MS + PING_TIMEOUT_MS
+        //   / 2
+        // - That gives us that we we should dispatch the event at
+        //   PING_INTERVAL_MS + PING_TIMEOUT_MS / 2 - HIDDEN_INTERVAL_MS
+        await clock.tickAsync(
+          PING_INTERVAL_MS + PING_TIMEOUT_MS / 2 - HIDDEN_INTERVAL_MS,
+        );
       }
-
       visibilityState = 'hidden';
       document.dispatchEvent(new Event('visibilitychange'));
 
+      onOnlineChangeP = makeOnOnlineChangePromise();
+
+      let sleep = 0;
       if (c.duringPing) {
+        await waitForUpstreamMessage(r, 'ping', clock);
+        await clock.tickAsync(PING_TIMEOUT_MS / 2);
+        // Now the visibilityWatcher triggers.
         await r.triggerPong();
-      }
-
-      expect(r.connectionState).to.equal(ConnectionState.Connected);
-
-      let sleep = HIDDEN_INTERVAL_MS;
-      if (PING_INTERVAL_MS < HIDDEN_INTERVAL_MS) {
+      } else {
         // We need a ping before PING_INTERVAL_MS to not get disconnected.
-        await clock.tickAsync(PING_INTERVAL_MS - 10);
+        await clock.tickAsync(PING_INTERVAL_MS);
         await r.triggerPong();
-        sleep = HIDDEN_INTERVAL_MS - PING_INTERVAL_MS + 10;
+        sleep = HIDDEN_INTERVAL_MS - PING_INTERVAL_MS;
       }
       await clock.tickAsync(sleep);
 
       expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+      expect(await onOnlineChangeP).false;
+      expect(r.online).false;
 
       // Stays disconnected as long as we are hidden.
       while (Date.now() < 100_000) {
         await clock.tickAsync(1_000);
         expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+        expect(r.online).false;
         expect(document.visibilityState).to.equal('hidden');
       }
+
+      onOnlineChangeP = makeOnOnlineChangePromise();
 
       visibilityState = 'visible';
       document.dispatchEvent(new Event('visibilitychange'));
@@ -1226,6 +1257,8 @@ suite('Disconnect on hide', () => {
       await r.waitForConnectionState(ConnectionState.Connecting);
       await r.triggerConnected();
       expect(r.connectionState).to.equal(ConnectionState.Connected);
+      expect(await onOnlineChangeP).true;
+      expect(r.online).true;
     });
   }
 });
