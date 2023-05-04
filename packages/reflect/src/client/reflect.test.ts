@@ -33,6 +33,7 @@ import {
   reflectForTest,
   tickAFewTimes,
   waitForUpstreamMessage,
+  idbExists,
 } from './test-utils.js'; // Why use fakes when we can use the real thing!
 
 let clock: sinon.SinonFakeTimers;
@@ -1345,7 +1346,18 @@ suite('Invalid Downstream message', () => {
 });
 
 test('experimentalKVStore', async () => {
-  const r = reflectForTest({
+  const r1 = reflectForTest({
+    mutators: {
+      putFoo: async (tx, val: string) => {
+        await tx.put('foo', val);
+      },
+    },
+  });
+  await r1.mutate.putFoo('bar');
+  expect(await r1.query(tx => tx.get('foo'))).to.equal('bar');
+  expect(await idbExists(r1.idbName)).is.true;
+
+  const r2 = reflectForTest({
     createKVStore: name => new ExperimentalMemKVStore(name),
     mutators: {
       putFoo: async (tx, val: string) => {
@@ -1353,8 +1365,9 @@ test('experimentalKVStore', async () => {
       },
     },
   });
-  await r.mutate.putFoo('bar');
-  expect(await r.query(tx => tx.get('foo'))).to.equal('bar');
+  await r2.mutate.putFoo('bar');
+  expect(await r2.query(tx => tx.get('foo'))).to.equal('bar');
+  expect(await idbExists(r2.idbName)).is.false;
 });
 
 test('Close during connect should sleep', async () => {

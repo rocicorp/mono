@@ -221,3 +221,18 @@ export async function waitForUpstreamMessage(
     }
   }
 }
+
+export function idbExists(idbName: string): Promise<boolean> {
+  const req = indexedDB.open(idbName);
+  let existed = true;
+  const {promise, resolve} = resolver<boolean>();
+
+  req.onsuccess = function () {
+    req.result.close();
+    resolve(existed);
+  };
+  req.onupgradeneeded = function () {
+    existed = false;
+  };
+  return promise;
+}
