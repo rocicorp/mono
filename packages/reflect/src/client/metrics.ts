@@ -7,12 +7,12 @@ export enum MetricName {
 }
 
 // This value is used to indicate that the client's last connection attempt
-// failed. We don't make this -1 becuase we want to stack this never connected
+// failed. We don't make this -1 because we want to stack this never connected
 // state in a graph on top of actual connection times, so it should be greater
 // than any other value.
 export const DID_NOT_CONNECT_VALUE = 100 * 1000;
 
-export const REPORT_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
+export const REPORT_INTERVAL_MS = 5_000;
 
 type MetricsReporter = (metrics: Series[]) => MaybePromise<void>;
 
@@ -122,7 +122,7 @@ export class MetricManager {
   }
 }
 
-// These two types are infuenced by Datadog's API's needs. We could change what
+// These two types are influenced by Datadog's API's needs. We could change what
 // we use internally if necessary, but we'd just have to convert to/from before
 // sending to DD. So for convenience we go with their format.
 
