@@ -766,7 +766,7 @@ function createWSAndCloseWithError(
 ) {
   const pair = new WebSocketPair();
   const ws = pair[1];
-  lc.error?.('accepting connection to send error', url);
+  lc.info?.('accepting connection to send error', url);
   ws.accept();
 
   // MDN tells me that the message will be delivered even if we call close
