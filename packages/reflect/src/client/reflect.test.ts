@@ -1498,9 +1498,11 @@ test('Close during connect should sleep', async () => {
     logSinks: [testLogSink],
     logLevel: 'debug',
   });
+
   await r.triggerConnected();
 
   await r.waitForConnectionState(ConnectionState.Connected);
+  await clock.tickAsync(0);
   expect(r.online).equal(true);
 
   (await r.socket).close();
@@ -1509,6 +1511,7 @@ test('Close during connect should sleep', async () => {
 
   (await r.socket).close();
   await r.waitForConnectionState(ConnectionState.Disconnected);
+  await clock.tickAsync(0);
   expect(r.online).equal(false);
   const hasSleeping = testLogSink.messages.some(m =>
     m[2].some(v => v === 'Sleeping'),
@@ -1520,5 +1523,6 @@ test('Close during connect should sleep', async () => {
   await r.waitForConnectionState(ConnectionState.Connecting);
   await r.triggerConnected();
   await r.waitForConnectionState(ConnectionState.Connected);
+  await clock.tickAsync(0);
   expect(r.online).equal(true);
 });
