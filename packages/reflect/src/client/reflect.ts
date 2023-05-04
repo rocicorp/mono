@@ -292,6 +292,7 @@ export class Reflect<MD extends MutatorDefs> {
         minDelayMs: 0,
       },
       licenseKey: 'reflect-client-static-key',
+      experimentalCreateKVStore: options.createKVStore,
     };
     const replicacheInternalOptions = {
       enableLicensing: false,
