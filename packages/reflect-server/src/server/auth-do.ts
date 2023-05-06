@@ -147,9 +147,7 @@ export class BaseAuthDO implements DurableObject {
     const lc = addRequestIDFromHeadersOrRandomID(this._lc, request);
     lc.debug?.('Handling request:', request.url);
     try {
-      console.log(1);
       await maybeMigrateStorageSchema(this._state.storage, lc);
-      console.log(2);
       const resp = await this._router.dispatch(request, {lc});
       lc.debug?.(`Returning response: ${resp.status} ${resp.statusText}`);
       return resp;
@@ -367,7 +365,6 @@ export class BaseAuthDO implements DurableObject {
       );
       return closeWithErrorLocal('VersionNotSupported', 'unsupported version');
     }
-    console.log(3);
     const {searchParams} = new URL(url);
     // TODO apparently many of these checks are not tested :(
     const clientID = searchParams.get('clientID');
@@ -950,7 +947,7 @@ async function maybeMigrateStorageSchema(
     );
     let lastKey = '';
     let done = false;
-    while (done) {
+    while (!done) {
       const connectionsListResult = await storage.list({
         startAfter: lastKey,
         prefix: CONNECTION_KEY_PREFIX,

@@ -30,7 +30,6 @@ import {
   AUTH_DO_STORAGE_SCHEMA_VERSION_KEY,
   AUTH_ROUTES,
   BaseAuthDO,
-  ConnectionRecord,
   recordConnection,
 } from './auth-do.js';
 import {AuthHandler, USER_DATA_HEADER_NAME} from './auth.js';
@@ -72,6 +71,34 @@ afterEach(() => {
 
 function isAuthRequest(request: Request) {
   return request.url.indexOf('/api/auth/') !== -1;
+}
+
+async function recordConnectionHelper(
+  userID: string,
+  roomID: string,
+  clientID: string,
+) {
+  recordConnection(
+    {
+      userID,
+      roomID,
+      clientID,
+    },
+    storage,
+    {
+      connectTimestamp: 1000,
+    },
+  );
+  await storage.sync();
+}
+
+async function storeTestConnectionState() {
+  await recordConnectionHelper('testUserID1', 'testRoomID1', 'testClientID1');
+  await recordConnectionHelper('testUserID1', 'testRoomID1', 'testClientID2');
+  await recordConnectionHelper('testUserID1', 'testRoomID2', 'testClientID3');
+  await recordConnectionHelper('testUserID2', 'testRoomID1', 'testClientID4');
+  await recordConnectionHelper('testUserID2', 'testRoomID3', 'testClientID5');
+  await recordConnectionHelper('testUserID3', 'testRoomID3', 'testClientID6');
 }
 
 function createCreateRoomTestFixture() {
@@ -1190,12 +1217,22 @@ test('connect percent escapes components of the connection key', async () => {
   expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
     encodedTestAuth,
   );
-  expect((await storage.list({prefix: 'connection/'})).size).toEqual(1);
-  const connectionRecord = (await storage.get(
-    'connection/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F/',
-  )) as ConnectionRecord;
-  expect(connectionRecord).toBeDefined();
-  expect(connectionRecord.connectTimestamp).toEqual(testTime);
+  expect(await storage.list({prefix: 'connection/'})).toEqual(
+    new Map([
+      [
+        'connection/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F/',
+        {connectTimestamp: testTime},
+      ],
+    ]),
+  );
+  expect(await storage.list({prefix: 'connection_room/'})).toEqual(
+    new Map([
+      [
+        'connection_room/testRoomID/%2FtestUserID%2F%3F/%2FtestClientID%2F/',
+        {},
+      ],
+    ]),
+  );
 });
 
 describe('connect pipes 401 over ws without calling Room DO if', () => {
@@ -1507,27 +1544,22 @@ test('authInvalidateForUser when connection ids have chars that need to be perce
     },
   );
 
-  await storage.put(
-    'connection/%2FtestUserID%2F%3F/testRoomID1/%2FtestClientID%2F/',
-    {
-      connectTimestamp: 1000,
-    },
+  await recordConnectionHelper(
+    '/testUserID/?',
+    'testRoomID1',
+    '/testClientID1/&',
   );
-  await storage.put(
-    'connection/%2FtestUserID%2F%3F/testRoomID1/%2FtestClientID2%2F/',
-    {
-      connectTimestamp: 1000,
-    },
+  await recordConnectionHelper(
+    '/testUserID/?',
+    'testRoomID1',
+    '/testClientID2/&',
   );
-  await storage.put(
-    'connection/%2FtestUserID%2F%3F/testRoomID2/%2FtestClientID%2F/',
-    {
-      connectTimestamp: 1000,
-    },
+  await recordConnectionHelper(
+    '/testUserID/?',
+    'testRoomID2',
+    '/testClientID3/&',
   );
-  await storage.put('connection/testUserID2/testRoomID1/testClientID1/', {
-    connectTimestamp: 1000,
-  });
+  await recordConnectionHelper('testUserID2', 'testRoomID1', 'testClientID1');
 
   const roomDORequestCountsByRoomID = new Map();
   const testRoomDO: DurableObjectNamespace = {
@@ -1586,6 +1618,7 @@ test('authInvalidateForUser when any request to roomDOs returns error response',
   );
 
   await storeTestConnectionState();
+  await recordConnectionHelper('testUserID1', 'testRoomID3', 'testClientID6');
 
   const roomDORequestCountsByRoomID = new Map();
   const testRoomDO: DurableObjectNamespace = {
@@ -1691,76 +1724,6 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
   expect(response.status).toEqual(200);
 });
 
-async function storeTestConnectionState() {
-  recordConnection(
-    {
-      userID: 'testUserID1',
-      roomID: 'testRoomID1',
-      clientID: 'testClientID1',
-    },
-    storage,
-    {
-      connectTimestamp: 1000,
-    },
-  );
-  recordConnection(
-    {
-      userID: 'testUserID1',
-      roomID: 'testRoomID1',
-      clientID: 'testClientID2',
-    },
-    storage,
-    {
-      connectTimestamp: 1000,
-    },
-  );
-  recordConnection(
-    {
-      userID: 'testUserID1',
-      roomID: 'testRoomID2',
-      clientID: 'testClientID4',
-    },
-    storage,
-    {
-      connectTimestamp: 1000,
-    },
-  );
-  recordConnection(
-    {
-      userID: 'testUserID2',
-      roomID: 'testRoomID1',
-      clientID: 'testClientID3',
-    },
-    storage,
-    {
-      connectTimestamp: 1000,
-    },
-  );
-  recordConnection(
-    {
-      userID: 'testUserID2',
-      roomID: 'testRoomID3',
-      clientID: 'testClientID5',
-    },
-    storage,
-    {
-      connectTimestamp: 1000,
-    },
-  );
-  recordConnection(
-    {
-      userID: 'testUserID3',
-      roomID: 'testRoomID3',
-      clientID: 'testClientID6',
-    },
-    storage,
-    {
-      connectTimestamp: 1000,
-    },
-  );
-  await storage.sync();
-}
-
 async function connectAndTestThatRoomGotCreated(
   authDO: BaseAuthDO,
   testRequest: Request,
@@ -1789,12 +1752,18 @@ async function connectAndTestThatRoomGotCreated(
     )) as Record<string, unknown> | undefined;
     assert(connectionRecord);
     expect(connectionRecord.connectTimestamp).toEqual(testTime);
+    expect(await storage.list({prefix: 'connection_room/'})).toEqual(
+      new Map([
+        [`connection_room/testRoomID1/${testUserID}/testClientID1/`, {}],
+      ]),
+    );
   } else {
     expect((await storage.list({prefix: 'connection/'})).size).toEqual(0);
     const connectionRecord = await storage.get(
       `connection/${testUserID}/testRoomID1/testClientID1/`,
     );
     expect(connectionRecord).toBeUndefined();
+    expect((await storage.list({prefix: 'connection_room/'})).size).toEqual(0);
   }
 }
 
@@ -2040,13 +2009,13 @@ async function createRevalidateConnectionsTestFixture({
               return new Response(
                 JSON.stringify([
                   {userID: 'testUserID1', clientID: 'testClientID1'},
-                  {userID: 'testUserID2', clientID: 'testClientID3'},
+                  {userID: 'testUserID2', clientID: 'testClientID4'},
                 ]),
               );
             case 'testRoomID2':
               return new Response(
                 JSON.stringify([
-                  {userID: 'testUserID1', clientID: 'testClientID4'},
+                  {userID: 'testUserID1', clientID: 'testClientID3'},
                 ]),
               );
             case 'testRoomID3':
@@ -2084,18 +2053,17 @@ test('revalidateConnections', async () => {
   expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(1);
 
-  console.log([...(await storage.list({prefix: 'connection/'})).keys()]);
   expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([
     'connection/testUserID1/testRoomID1/testClientID1/',
-    'connection/testUserID1/testRoomID2/testClientID4/',
-    'connection/testUserID2/testRoomID1/testClientID3/',
+    'connection/testUserID1/testRoomID2/testClientID3/',
+    'connection/testUserID2/testRoomID1/testClientID4/',
   ]);
   expect([
     ...(await storage.list({prefix: 'connection_room/'})).keys(),
   ]).toEqual([
     'connection_room/testRoomID1/testUserID1/testClientID1/',
-    'connection_room/testRoomID1/testUserID2/testClientID3/',
-    'connection_room/testRoomID2/testUserID1/testClientID4/',
+    'connection_room/testRoomID1/testUserID2/testClientID4/',
+    'connection_room/testRoomID2/testUserID1/testClientID3/',
   ]);
 });
 
@@ -2116,16 +2084,16 @@ test('revalidateConnections continues if one storage delete throws an error', as
   expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([
     'connection/testUserID1/testRoomID1/testClientID1/',
     'connection/testUserID1/testRoomID1/testClientID2/',
-    'connection/testUserID1/testRoomID2/testClientID4/',
-    'connection/testUserID2/testRoomID1/testClientID3/',
+    'connection/testUserID1/testRoomID2/testClientID3/',
+    'connection/testUserID2/testRoomID1/testClientID4/',
   ]);
   expect([
     ...(await storage.list({prefix: 'connection_room/'})).keys(),
   ]).toEqual([
     'connection_room/testRoomID1/testUserID1/testClientID1/',
     'connection_room/testRoomID1/testUserID1/testClientID2/',
-    'connection_room/testRoomID1/testUserID2/testClientID3/',
-    'connection_room/testRoomID2/testUserID1/testClientID4/',
+    'connection_room/testRoomID1/testUserID2/testClientID4/',
+    'connection_room/testRoomID2/testUserID1/testClientID3/',
   ]);
 });
 
@@ -2144,9 +2112,135 @@ test('revalidateConnections continues if one roomDO returns an error', async () 
   expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([
     'connection/testUserID1/testRoomID1/testClientID1/',
     'connection/testUserID1/testRoomID1/testClientID2/',
-    'connection/testUserID1/testRoomID2/testClientID4/',
-    'connection/testUserID2/testRoomID1/testClientID3/',
+    'connection/testUserID1/testRoomID2/testClientID3/',
+    'connection/testUserID2/testRoomID1/testClientID4/',
+  ]);
+  expect([
+    ...(await storage.list({prefix: 'connection_room/'})).keys(),
+  ]).toEqual([
+    'connection_room/testRoomID1/testUserID1/testClientID1/',
+    'connection_room/testRoomID1/testUserID1/testClientID2/',
+    'connection_room/testRoomID1/testUserID2/testClientID4/',
+    'connection_room/testRoomID2/testUserID1/testClientID3/',
   ]);
 });
 
-// TODO test migration
+test('test migration from schema 0 to schema 1, basic', async () => {
+  const {testRequest, testRoomDO, state} = await createCreateRoomTestFixture();
+
+  const authDO = new BaseAuthDO({
+    roomDO: testRoomDO,
+    state,
+    authHandler: () => Promise.reject('should not be called'),
+    authApiKey: TEST_AUTH_API_KEY,
+    logSink: new TestLogSink(),
+    logLevel: 'debug',
+  });
+  await storage.deleteAll();
+
+  await storage.put('connection/testUserID1/testRoomID1/testClientID1/', {
+    connectTimestamp: 1000,
+  });
+  await storage.put('connection/testUserID1/testRoomID1/testClientID2/', {
+    connectTimestamp: 1000,
+  });
+  await storage.put('connection/testUserID2/testRoomID1/testClientID3/', {
+    connectTimestamp: 1000,
+  });
+  await storage.put('connection/testUserID1/testRoomID2/testClientID4/', {
+    connectTimestamp: 1000,
+  });
+  await storage.put('connection/testUserID2/testRoomID3/testClientID5/', {
+    connectTimestamp: 1000,
+  });
+  await storage.put(
+    'connection/%2FtestUserID%2F%3F/%2FtestRoomID%2F%3F/%2FtestClientID%2F/',
+    {
+      connectTimestamp: 1000,
+    },
+  );
+
+  expect(await storage.get(AUTH_DO_STORAGE_SCHEMA_VERSION_KEY)).toEqual(
+    undefined,
+  );
+  expect([
+    ...(await storage.list({prefix: 'connection_room/'})).keys(),
+  ]).toEqual([]);
+
+  // Create the room for the first time.
+  await authDO.fetch(testRequest);
+
+  expect(await storage.get(AUTH_DO_STORAGE_SCHEMA_VERSION_KEY)).toEqual(1);
+
+  expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([
+    'connection/%2FtestUserID%2F%3F/%2FtestRoomID%2F%3F/%2FtestClientID%2F/',
+    'connection/testUserID1/testRoomID1/testClientID1/',
+    'connection/testUserID1/testRoomID1/testClientID2/',
+    'connection/testUserID1/testRoomID2/testClientID4/',
+    'connection/testUserID2/testRoomID1/testClientID3/',
+    'connection/testUserID2/testRoomID3/testClientID5/',
+  ]);
+  expect([
+    ...(await storage.list({prefix: 'connection_room/'})).keys(),
+  ]).toEqual([
+    'connection_room/%2FtestRoomID%2F%3F/%2FtestUserID%2F%3F/%2FtestClientID%2F/',
+    'connection_room/testRoomID1/testUserID1/testClientID1/',
+    'connection_room/testRoomID1/testUserID1/testClientID2/',
+    'connection_room/testRoomID1/testUserID2/testClientID3/',
+    'connection_room/testRoomID2/testUserID1/testClientID4/',
+    'connection_room/testRoomID3/testUserID2/testClientID5/',
+  ]);
+});
+
+// 3333 is chosen is it is >3 x the limit used to page through the connections
+// an is not a multiple of the limit
+test('test migration from schema 0 to schema 1, 3333 connections', async () => {
+  const {testRequest, testRoomDO, state} = await createCreateRoomTestFixture();
+
+  const authDO = new BaseAuthDO({
+    roomDO: testRoomDO,
+    state,
+    authHandler: () => Promise.reject('should not be called'),
+    authApiKey: TEST_AUTH_API_KEY,
+    logSink: new TestLogSink(),
+    logLevel: 'debug',
+  });
+  await storage.deleteAll();
+
+  const expectedConnectionKeys = [];
+  const expectedConnectionRoomIndexKeys = [];
+  for (let i = 0; i < 3333; i++) {
+    const connectionKeyString = `connection/testUserID${i % 10}/testRoomID${
+      i % 10
+    }/testClientID${i}/`;
+    await storage.put(connectionKeyString, {
+      connectTimestamp: 1000,
+    });
+    expectedConnectionKeys.push(connectionKeyString);
+    expectedConnectionRoomIndexKeys.push(
+      `connection_room/testRoomID${i % 10}/testUserID${
+        i % 10
+      }/testClientID${i}/`,
+    );
+  }
+  expectedConnectionKeys.sort();
+  expectedConnectionRoomIndexKeys.sort();
+  expect(await storage.get(AUTH_DO_STORAGE_SCHEMA_VERSION_KEY)).toEqual(
+    undefined,
+  );
+  expect([
+    ...(await storage.list({prefix: 'connection_room/'})).keys(),
+  ]).toEqual([]);
+
+  // Create the room for the first time.
+  await authDO.fetch(testRequest);
+
+  expect(await storage.get(AUTH_DO_STORAGE_SCHEMA_VERSION_KEY)).toEqual(1);
+
+  expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual(
+    expectedConnectionKeys,
+  );
+  expect([
+    ...(await storage.list({prefix: 'connection_room/'})).keys(),
+  ]).toEqual(expectedConnectionRoomIndexKeys);
+});
