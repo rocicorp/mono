@@ -595,18 +595,18 @@ export class BaseAuthDO implements DurableObject {
     this._requireAPIKey((ctx, req) => {
       const {lc} = ctx;
       lc.debug?.(`authInvalidateAll waiting for lock.`);
-      return this._authLock.withWrite(async () => {
+      return this._authLock.withWrite(() => {
         lc.debug?.('got lock.');
-        const connectionKeys = (
-          await this._state.storage.list({
-            prefix: CONNECTION_KEY_PREFIX,
-          })
-        ).keys();
         // The request to the Room DOs must be completed inside the write lock
         // to avoid races with connect requests.
-        return this._forwardInvalidateRequest(lc, 'authInvalidateAll', req, [
-          ...connectionKeys,
-        ]);
+        return this._forwardInvalidateRequest(
+          lc,
+          'authInvalidateAll',
+          req,
+          // Use async generator because the full list of connections
+          // may exceed the DO's memory limits.
+          createConnectionKeyStringsGenerator(this._state.storage),
+        );
       });
     }),
   );
@@ -706,19 +706,15 @@ export class BaseAuthDO implements DurableObject {
     lc: LogContext,
     invalidateRequestName: string,
     request: Request,
-    connectionKeyStrings: string[],
+    connectionKeyStrings: Iterable<string> | AsyncGenerator<string>,
   ): Promise<Response> {
-    const connectionKeys = connectionKeyStrings.map(keyString => {
-      const connectionKey = connectionKeyFromString(keyString);
-      if (!connectionKey) {
-        lc.error?.('Failed to parse connection key', keyString);
-      }
-      return connectionKey;
-    });
     const roomIDSet = new Set<string>();
-    for (const connectionKey of connectionKeys) {
+    for await (const keyString of connectionKeyStrings) {
+      const connectionKey = connectionKeyFromString(keyString);
       if (connectionKey) {
         roomIDSet.add(connectionKey.roomID);
+      } else {
+        lc.error?.('Failed to parse connection key', keyString);
       }
     }
 
@@ -885,7 +881,7 @@ async function* createConnectionsByRoomGenerator(
     if (nextRoomListResult.size === 0) {
       return;
     }
-    const firstRoomIndexString: string = nextRoomListResult.keys().next().value;
+    const firstRoomIndexString: string = [...nextRoomListResult.keys()][0];
     const connectionKey =
       connectionKeyFromRoomIndexString(firstRoomIndexString);
     if (!connectionKey) {
@@ -904,6 +900,25 @@ async function* createConnectionsByRoomGenerator(
         ? connectionKeys[connectionKeys.length - 1]
         : connectionKey,
     );
+  }
+}
+
+async function* createConnectionKeyStringsGenerator(
+  storage: DurableObjectStorage,
+) {
+  let lastKey = '';
+  let done = false;
+  while (!done) {
+    const connectionsListResult = await storage.list({
+      startAfter: lastKey,
+      prefix: CONNECTION_KEY_PREFIX,
+      limit: 1000,
+    });
+    for (const connectionKeyString of connectionsListResult.keys()) {
+      yield connectionKeyString;
+      lastKey = connectionKeyString;
+    }
+    done = connectionsListResult.size === 0;
   }
 }
 
@@ -945,25 +960,14 @@ async function maybeMigrateStorageSchema(
     lc.info?.(
       'Migrating from storage schema version 0 to storage schema version 1.',
     );
-    let lastKey = '';
-    let done = false;
-    while (!done) {
-      const connectionsListResult = await storage.list({
-        startAfter: lastKey,
-        prefix: CONNECTION_KEY_PREFIX,
-        limit: 1000,
-      });
-      for (const connectionKeyString of connectionsListResult.keys()) {
-        const connectionKey = must(
-          connectionKeyFromString(connectionKeyString),
-        );
-        void storage.put(
-          connectionKeyToConnectionRoomIndexString(connectionKey),
-          {},
-        );
-        lastKey = connectionKeyString;
-      }
-      done = connectionsListResult.size === 0;
+    const connectionKeyStringsGenerator =
+      createConnectionKeyStringsGenerator(storage);
+    for await (const connectionKeyString of connectionKeyStringsGenerator) {
+      const connectionKey = must(connectionKeyFromString(connectionKeyString));
+      void storage.put(
+        connectionKeyToConnectionRoomIndexString(connectionKey),
+        {},
+      );
     }
     void storage.put(AUTH_DO_STORAGE_SCHEMA_VERSION_KEY, 1);
     await storage.sync();
