@@ -1225,10 +1225,10 @@ test('connect percent escapes components of the connection key', async () => {
       ],
     ]),
   );
-  expect(await storage.list({prefix: 'connection_room/'})).toEqual(
+  expect(await storage.list({prefix: 'connections_by_room/'})).toEqual(
     new Map([
       [
-        'connection_room/testRoomID/%2FtestUserID%2F%3F/%2FtestClientID%2F/',
+        'connections_by_room/testRoomID/connection/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F/',
         {},
       ],
     ]),
@@ -1752,9 +1752,12 @@ async function connectAndTestThatRoomGotCreated(
     )) as Record<string, unknown> | undefined;
     assert(connectionRecord);
     expect(connectionRecord.connectTimestamp).toEqual(testTime);
-    expect(await storage.list({prefix: 'connection_room/'})).toEqual(
+    expect(await storage.list({prefix: 'connections_by_room/'})).toEqual(
       new Map([
-        [`connection_room/testRoomID1/${testUserID}/testClientID1/`, {}],
+        [
+          `connections_by_room/testRoomID1/connection/${testUserID}/testRoomID1/testClientID1/`,
+          {},
+        ],
       ]),
     );
   } else {
@@ -1763,7 +1766,9 @@ async function connectAndTestThatRoomGotCreated(
       `connection/${testUserID}/testRoomID1/testClientID1/`,
     );
     expect(connectionRecord).toBeUndefined();
-    expect((await storage.list({prefix: 'connection_room/'})).size).toEqual(0);
+    expect((await storage.list({prefix: 'connections_by_room/'})).size).toEqual(
+      0,
+    );
   }
 }
 
@@ -2059,11 +2064,11 @@ test('revalidateConnections', async () => {
     'connection/testUserID2/testRoomID1/testClientID4/',
   ]);
   expect([
-    ...(await storage.list({prefix: 'connection_room/'})).keys(),
+    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
   ]).toEqual([
-    'connection_room/testRoomID1/testUserID1/testClientID1/',
-    'connection_room/testRoomID1/testUserID2/testClientID4/',
-    'connection_room/testRoomID2/testUserID1/testClientID3/',
+    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID1/',
+    'connections_by_room/testRoomID1/connection/testUserID2/testRoomID1/testClientID4/',
+    'connections_by_room/testRoomID2/connection/testUserID1/testRoomID2/testClientID3/',
   ]);
 });
 
@@ -2088,12 +2093,12 @@ test('revalidateConnections continues if one storage delete throws an error', as
     'connection/testUserID2/testRoomID1/testClientID4/',
   ]);
   expect([
-    ...(await storage.list({prefix: 'connection_room/'})).keys(),
+    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
   ]).toEqual([
-    'connection_room/testRoomID1/testUserID1/testClientID1/',
-    'connection_room/testRoomID1/testUserID1/testClientID2/',
-    'connection_room/testRoomID1/testUserID2/testClientID4/',
-    'connection_room/testRoomID2/testUserID1/testClientID3/',
+    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID1/',
+    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID2/',
+    'connections_by_room/testRoomID1/connection/testUserID2/testRoomID1/testClientID4/',
+    'connections_by_room/testRoomID2/connection/testUserID1/testRoomID2/testClientID3/',
   ]);
 });
 
@@ -2116,12 +2121,12 @@ test('revalidateConnections continues if one roomDO returns an error', async () 
     'connection/testUserID2/testRoomID1/testClientID4/',
   ]);
   expect([
-    ...(await storage.list({prefix: 'connection_room/'})).keys(),
+    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
   ]).toEqual([
-    'connection_room/testRoomID1/testUserID1/testClientID1/',
-    'connection_room/testRoomID1/testUserID1/testClientID2/',
-    'connection_room/testRoomID1/testUserID2/testClientID4/',
-    'connection_room/testRoomID2/testUserID1/testClientID3/',
+    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID1/',
+    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID2/',
+    'connections_by_room/testRoomID1/connection/testUserID2/testRoomID1/testClientID4/',
+    'connections_by_room/testRoomID2/connection/testUserID1/testRoomID2/testClientID3/',
   ]);
 });
 
@@ -2164,7 +2169,7 @@ test('test migration from schema 0 to schema 1, basic', async () => {
     undefined,
   );
   expect([
-    ...(await storage.list({prefix: 'connection_room/'})).keys(),
+    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
   ]).toEqual([]);
 
   // Create the room for the first time.
@@ -2181,19 +2186,19 @@ test('test migration from schema 0 to schema 1, basic', async () => {
     'connection/testUserID2/testRoomID3/testClientID5/',
   ]);
   expect([
-    ...(await storage.list({prefix: 'connection_room/'})).keys(),
+    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
   ]).toEqual([
-    'connection_room/%2FtestRoomID%2F%3F/%2FtestUserID%2F%3F/%2FtestClientID%2F/',
-    'connection_room/testRoomID1/testUserID1/testClientID1/',
-    'connection_room/testRoomID1/testUserID1/testClientID2/',
-    'connection_room/testRoomID1/testUserID2/testClientID3/',
-    'connection_room/testRoomID2/testUserID1/testClientID4/',
-    'connection_room/testRoomID3/testUserID2/testClientID5/',
+    'connections_by_room/%2FtestRoomID%2F%3F/connection/%2FtestUserID%2F%3F/%2FtestRoomID%2F%3F/%2FtestClientID%2F/',
+    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID1/',
+    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID2/',
+    'connections_by_room/testRoomID1/connection/testUserID2/testRoomID1/testClientID3/',
+    'connections_by_room/testRoomID2/connection/testUserID1/testRoomID2/testClientID4/',
+    'connections_by_room/testRoomID3/connection/testUserID2/testRoomID3/testClientID5/',
   ]);
 });
 
-// 3333 is chosen is it is >3 x the limit used to page through the connections
-// an is not a multiple of the limit
+// 3333 is chosen because it is >3 x the limit used to page through the
+// connections and is not a multiple of the limit
 test('test migration from schema 0 to schema 1, 3333 connections', async () => {
   const {testRequest, testRoomDO, state} = await createCreateRoomTestFixture();
 
@@ -2218,9 +2223,9 @@ test('test migration from schema 0 to schema 1, 3333 connections', async () => {
     });
     expectedConnectionKeys.push(connectionKeyString);
     expectedConnectionRoomIndexKeys.push(
-      `connection_room/testRoomID${i % 10}/testUserID${
+      `connections_by_room/testRoomID${i % 10}/connection/testUserID${
         i % 10
-      }/testClientID${i}/`,
+      }/testRoomID${i % 10}/testClientID${i}/`,
     );
   }
   expectedConnectionKeys.sort();
@@ -2229,7 +2234,7 @@ test('test migration from schema 0 to schema 1, 3333 connections', async () => {
     undefined,
   );
   expect([
-    ...(await storage.list({prefix: 'connection_room/'})).keys(),
+    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
   ]).toEqual([]);
 
   // Create the room for the first time.
@@ -2241,6 +2246,6 @@ test('test migration from schema 0 to schema 1, 3333 connections', async () => {
     expectedConnectionKeys,
   );
   expect([
-    ...(await storage.list({prefix: 'connection_room/'})).keys(),
+    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
   ]).toEqual(expectedConnectionRoomIndexKeys);
 });

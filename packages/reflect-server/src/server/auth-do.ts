@@ -96,10 +96,6 @@ export const AUTH_ROUTES = {
   ...AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER,
 } as const;
 
-export const AUTH_DO_STORAGE_SCHEMA_VERSION_KEY =
-  'auth_do_storage_schema_version';
-export const AUTH_DO_STORAGE_SCHEMA_VERSION = 1;
-
 export class BaseAuthDO implements DurableObject {
   private readonly _router = new Router();
   private readonly _roomDO: DurableObjectNamespace;
@@ -147,7 +143,7 @@ export class BaseAuthDO implements DurableObject {
     const lc = addRequestIDFromHeadersOrRandomID(this._lc, request);
     lc.debug?.('Handling request:', request.url);
     try {
-      await maybeMigrateStorageSchema(this._state.storage, lc);
+      await ensureStorageSchemaMigrated(this._state.storage, lc);
       const resp = await this._router.dispatch(request, {lc});
       lc.debug?.(`Returning response: ${resp.status} ${resp.statusText}`);
       return resp;
@@ -760,7 +756,7 @@ export class BaseAuthDO implements DurableObject {
 }
 
 const CONNECTION_KEY_PREFIX = 'connection/';
-const CONNECTION_ROOM_INDEX_PREFIX = 'connection_room/';
+const CONNECTIONS_BY_ROOM_INDEX_PREFIX = 'connections_by_room/';
 
 function createWSAndCloseWithError(
   lc: LogContext,
@@ -796,9 +792,9 @@ function createWSAndCloseWithError(
 }
 
 function connectionKeyToString(key: ConnectionKey): string {
-  return `${CONNECTION_KEY_PREFIX}${encodeURIComponent(
-    key.userID,
-  )}/${encodeURIComponent(key.roomID)}/${encodeURIComponent(key.clientID)}/`;
+  return `${getConnectionKeyStringUserPrefix(key.userID)}${encodeURIComponent(
+    key.roomID,
+  )}/${encodeURIComponent(key.clientID)}/`;
 }
 
 function getConnectionKeyStringUserPrefix(userID: string): string {
@@ -806,13 +802,13 @@ function getConnectionKeyStringUserPrefix(userID: string): string {
 }
 
 function connectionKeyToConnectionRoomIndexString(key: ConnectionKey): string {
-  return `${CONNECTION_ROOM_INDEX_PREFIX}${encodeURIComponent(
-    key.roomID,
-  )}/${encodeURIComponent(key.userID)}/${encodeURIComponent(key.clientID)}/`;
+  return `${getConnectionRoomIndexPrefix(key.roomID)}${connectionKeyToString(
+    key,
+  )}`;
 }
 
 function getConnectionRoomIndexPrefix(roomID: string): string {
-  return `${CONNECTION_ROOM_INDEX_PREFIX}${encodeURIComponent(roomID)}/`;
+  return `${CONNECTIONS_BY_ROOM_INDEX_PREFIX}${encodeURIComponent(roomID)}/`;
 }
 
 export function connectionKeyFromString(
@@ -835,18 +831,19 @@ export function connectionKeyFromString(
 export function connectionKeyFromRoomIndexString(
   key: string,
 ): ConnectionKey | undefined {
-  if (!key.startsWith(CONNECTION_ROOM_INDEX_PREFIX)) {
+  if (!key.startsWith(CONNECTIONS_BY_ROOM_INDEX_PREFIX)) {
     return undefined;
   }
-  const parts = key.split('/');
-  if (parts.length !== 5 || parts[4] !== '') {
+  const indexOfFirstSlashAfterPrefix = key.indexOf(
+    '/',
+    CONNECTIONS_BY_ROOM_INDEX_PREFIX.length,
+  );
+  if (indexOfFirstSlashAfterPrefix === -1) {
     return undefined;
   }
-  return {
-    userID: decodeURIComponent(parts[2]),
-    roomID: decodeURIComponent(parts[1]),
-    clientID: decodeURIComponent(parts[3]),
-  };
+  return connectionKeyFromString(
+    key.substring(indexOfFirstSlashAfterPrefix + 1),
+  );
 }
 
 async function getConnectionKeysForRoomID(
@@ -875,7 +872,7 @@ async function* createConnectionsByRoomGenerator(
   while (true) {
     const nextRoomListResult = await storage.list({
       startAfter: lastKey,
-      prefix: CONNECTION_ROOM_INDEX_PREFIX,
+      prefix: CONNECTIONS_BY_ROOM_INDEX_PREFIX,
       limit: 1,
     });
     if (nextRoomListResult.size === 0) {
@@ -947,7 +944,11 @@ function deleteConnection(
   void storage.delete(connectionRoomIndexString);
 }
 
-async function maybeMigrateStorageSchema(
+export const AUTH_DO_STORAGE_SCHEMA_VERSION_KEY =
+  'auth_do_storage_schema_version';
+export const AUTH_DO_STORAGE_SCHEMA_VERSION = 1;
+
+async function ensureStorageSchemaMigrated(
   storage: DurableObjectStorage,
   lc: LogContext,
 ) {
