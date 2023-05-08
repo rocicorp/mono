@@ -601,7 +601,7 @@ export class BaseAuthDO implements DurableObject {
           req,
           // Use async generator because the full list of connections
           // may exceed the DO's memory limits.
-          createConnectionKeyStringsGenerator(this._state.storage),
+          generateConnectionKeyStrings(this._state.storage),
         );
       });
     }),
@@ -611,7 +611,7 @@ export class BaseAuthDO implements DurableObject {
     this._requireAPIKey(async ctx => {
       const {lc} = ctx;
       lc.info?.('Revalidating connections.');
-      const connectionsByRoomGenerator = createConnectionsByRoomGenerator(
+      const connectionsByRoomGenerator = generateConnectionsByRoom(
         this._state.storage,
         lc,
       );
@@ -864,7 +864,7 @@ async function getConnectionKeysForRoomID(
   return connectionKeys;
 }
 
-async function* createConnectionsByRoomGenerator(
+async function* generateConnectionsByRoom(
   storage: DurableObjectStorage,
   lc: LogContext,
 ) {
@@ -900,9 +900,7 @@ async function* createConnectionsByRoomGenerator(
   }
 }
 
-async function* createConnectionKeyStringsGenerator(
-  storage: DurableObjectStorage,
-) {
+async function* generateConnectionKeyStrings(storage: DurableObjectStorage) {
   let lastKey = '';
   let done = false;
   while (!done) {
@@ -961,8 +959,7 @@ async function ensureStorageSchemaMigrated(
     lc.info?.(
       'Migrating from storage schema version 0 to storage schema version 1.',
     );
-    const connectionKeyStringsGenerator =
-      createConnectionKeyStringsGenerator(storage);
+    const connectionKeyStringsGenerator = generateConnectionKeyStrings(storage);
     for await (const connectionKeyString of connectionKeyStringsGenerator) {
       const connectionKey = must(connectionKeyFromString(connectionKeyString));
       void storage.put(
