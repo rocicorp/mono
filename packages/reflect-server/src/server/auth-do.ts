@@ -9,6 +9,7 @@ import {
   invalidateForUserRequestSchema,
 } from 'reflect-protocol';
 import {assert} from 'shared/asserts.js';
+import {must} from 'shared/must.js';
 import * as valita from 'shared/valita.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {encodeHeaderValue} from '../util/headers.js';
@@ -142,6 +143,7 @@ export class BaseAuthDO implements DurableObject {
     const lc = addRequestIDFromHeadersOrRandomID(this._lc, request);
     lc.debug?.('Handling request:', request.url);
     try {
+      await ensureStorageSchemaMigrated(this._state.storage, lc);
       const resp = await this._router.dispatch(request, {lc});
       lc.debug?.(`Returning response: ${resp.status} ${resp.statusText}`);
       return resp;
@@ -359,7 +361,6 @@ export class BaseAuthDO implements DurableObject {
       );
       return closeWithErrorLocal('VersionNotSupported', 'unsupported version');
     }
-
     const {searchParams} = new URL(url);
     // TODO apparently many of these checks are not tested :(
     const clientID = searchParams.get('clientID');
@@ -488,15 +489,17 @@ export class BaseAuthDO implements DurableObject {
       const roomObjectID = this._roomDO.idFromString(roomRecord.objectIDString);
 
       // Record the connection in DO storage
-      const connectionKey = connectionKeyToString({
-        userID: userData.userID,
-        roomID,
-        clientID,
-      });
-      const connectionRecord: ConnectionRecord = {
-        connectTimestamp: Date.now(),
-      };
-      await this._state.storage.put(connectionKey, connectionRecord);
+      recordConnection(
+        {
+          userID: userData.userID,
+          roomID,
+          clientID,
+        },
+        this._state.storage,
+        {
+          connectTimestamp: Date.now(),
+        },
+      );
 
       // Forward the request to the Room Durable Object...
       const stub = this._roomDO.get(roomObjectID);
@@ -588,18 +591,18 @@ export class BaseAuthDO implements DurableObject {
     this._requireAPIKey((ctx, req) => {
       const {lc} = ctx;
       lc.debug?.(`authInvalidateAll waiting for lock.`);
-      return this._authLock.withWrite(async () => {
+      return this._authLock.withWrite(() => {
         lc.debug?.('got lock.');
-        const connectionKeys = (
-          await this._state.storage.list({
-            prefix: CONNECTION_KEY_PREFIX,
-          })
-        ).keys();
         // The request to the Room DOs must be completed inside the write lock
         // to avoid races with connect requests.
-        return this._forwardInvalidateRequest(lc, 'authInvalidateAll', req, [
-          ...connectionKeys,
-        ]);
+        return this._forwardInvalidateRequest(
+          lc,
+          'authInvalidateAll',
+          req,
+          // Use async generator because the full list of connections
+          // may exceed the DO's memory limits.
+          createConnectionKeyStringsGenerator(this._state.storage),
+        );
       });
     }),
   );
@@ -607,33 +610,19 @@ export class BaseAuthDO implements DurableObject {
   private _authRevalidateConnections = post(
     this._requireAPIKey(async ctx => {
       const {lc} = ctx;
-      const connectionRecords = await this._state.storage.list({
-        prefix: CONNECTION_KEY_PREFIX,
-      });
-      const connectionKeyStringsByRoomID = new Map<string, Set<string>>();
-      for (const keyString of connectionRecords.keys()) {
-        const connectionKey = connectionKeyFromString(keyString);
-        if (!connectionKey) {
-          lc.error?.('Failed to parse connection key', keyString);
-          continue;
-        }
-        const {roomID} = connectionKey;
-        let keyStringSet = connectionKeyStringsByRoomID.get(roomID);
-        if (!keyStringSet) {
-          keyStringSet = new Set();
-          connectionKeyStringsByRoomID.set(roomID, keyStringSet);
-        }
-        keyStringSet.add(keyString);
-      }
-      lc.info?.(
-        `Revalidating ${connectionRecords.size} ConnectionRecords across ${connectionKeyStringsByRoomID.size} rooms.`,
+      lc.info?.('Revalidating connections.');
+      const connectionsByRoomGenerator = createConnectionsByRoomGenerator(
+        this._state.storage,
+        lc,
       );
+      let connectionCount = 0;
+      let revalidatedCount = 0;
       let deleteCount = 0;
-      for (const [
-        roomID,
-        connectionKeyStringsForRoomID,
-      ] of connectionKeyStringsByRoomID) {
-        lc.debug?.(`revalidating connections for ${roomID} waiting for lock.`);
+      for await (const {roomID, connectionKeys} of connectionsByRoomGenerator) {
+        connectionCount += connectionKeys.length;
+        lc.info?.(
+          `Revalidating ${connectionKeys.length} connections for room ${roomID}.`,
+        );
         await this._authLock.withWrite(async () => {
           lc.debug?.('got lock.');
           const roomObjectID = await this._roomRecordLock.withRead(() =>
@@ -653,7 +642,7 @@ export class BaseAuthDO implements DurableObject {
               },
             ),
           );
-          let connectionsResponse: ConnectionsResponse | undefined;
+          let connectionsResponse: ConnectionsResponse;
           try {
             const responseJSON = valita.parse(
               await response.json(),
@@ -662,33 +651,48 @@ export class BaseAuthDO implements DurableObject {
             connectionsResponse = responseJSON;
           } catch (e) {
             lc.error?.(
-              `Bad ${ROOM_ROUTES.authConnections} response from roomDO`,
+              `Bad ${ROOM_ROUTES.authConnections} response from roomDO ${roomID}`,
               e,
             );
+            return;
           }
-          if (connectionsResponse) {
-            const openConnectionKeyStrings = new Set(
-              connectionsResponse.map(({userID, clientID}) =>
-                connectionKeyToString({
-                  roomID,
-                  userID,
-                  clientID,
-                }),
-              ),
+          const openConnectionKeyStrings = new Set(
+            connectionsResponse.map(({userID, clientID}) =>
+              connectionKeyToString({
+                roomID,
+                userID,
+                clientID,
+              }),
+            ),
+          );
+          const toDelete: [ConnectionKey, string][] = connectionKeys
+            .map((key): [ConnectionKey, string] => [
+              key,
+              connectionKeyToString(key),
+            ])
+            .filter(
+              ([_, keyString]) => !openConnectionKeyStrings.has(keyString),
             );
-            const keysToDelete: string[] = [
-              ...connectionKeyStringsForRoomID,
-            ].filter(keyString => !openConnectionKeyStrings.has(keyString));
-            try {
-              deleteCount += await this._state.storage.delete(keysToDelete);
-            } catch (e) {
-              lc.info?.('Failed to delete connections for roomID', roomID);
+          try {
+            for (const [keyToDelete] of toDelete) {
+              deleteConnection(keyToDelete, this._state.storage);
             }
+            await this._state.storage.sync();
+          } catch (e) {
+            lc.info?.('Failed to delete connections for roomID', roomID);
+            return;
           }
+          revalidatedCount += connectionKeys.length;
+          deleteCount += toDelete.length;
+          lc.info?.(
+            `Revalidated ${connectionKeys.length} connections for room ${roomID}, deleted ${deleteCount} connections.`,
+          );
         });
       }
       lc.info?.(
-        `Revalidated ${connectionRecords.size} ConnectionRecords, deleted ${deleteCount} ConnectionRecords.`,
+        `Revalidated ${revalidatedCount} connections, deleted ${deleteCount} connections.  Failed to revalidate ${
+          connectionCount - revalidatedCount
+        } connections.`,
       );
       return new Response('Complete', {status: 200});
     }),
@@ -698,19 +702,15 @@ export class BaseAuthDO implements DurableObject {
     lc: LogContext,
     invalidateRequestName: string,
     request: Request,
-    connectionKeyStrings: string[],
+    connectionKeyStrings: Iterable<string> | AsyncGenerator<string>,
   ): Promise<Response> {
-    const connectionKeys = connectionKeyStrings.map(keyString => {
-      const connectionKey = connectionKeyFromString(keyString);
-      if (!connectionKey) {
-        lc.error?.('Failed to parse connection key', keyString);
-      }
-      return connectionKey;
-    });
     const roomIDSet = new Set<string>();
-    for (const connectionKey of connectionKeys) {
+    for await (const keyString of connectionKeyStrings) {
+      const connectionKey = connectionKeyFromString(keyString);
       if (connectionKey) {
         roomIDSet.add(connectionKey.roomID);
+      } else {
+        lc.error?.('Failed to parse connection key', keyString);
       }
     }
 
@@ -756,6 +756,7 @@ export class BaseAuthDO implements DurableObject {
 }
 
 const CONNECTION_KEY_PREFIX = 'connection/';
+const CONNECTIONS_BY_ROOM_INDEX_PREFIX = 'connections_by_room/';
 
 function createWSAndCloseWithError(
   lc: LogContext,
@@ -791,13 +792,23 @@ function createWSAndCloseWithError(
 }
 
 function connectionKeyToString(key: ConnectionKey): string {
-  return `${CONNECTION_KEY_PREFIX}${encodeURIComponent(
-    key.userID,
-  )}/${encodeURIComponent(key.roomID)}/${encodeURIComponent(key.clientID)}/`;
+  return `${getConnectionKeyStringUserPrefix(key.userID)}${encodeURIComponent(
+    key.roomID,
+  )}/${encodeURIComponent(key.clientID)}/`;
 }
 
 function getConnectionKeyStringUserPrefix(userID: string): string {
   return `${CONNECTION_KEY_PREFIX}${encodeURIComponent(userID)}/`;
+}
+
+function connectionKeyToConnectionRoomIndexString(key: ConnectionKey): string {
+  return `${getConnectionRoomIndexPrefix(key.roomID)}${connectionKeyToString(
+    key,
+  )}`;
+}
+
+function getConnectionRoomIndexPrefix(roomID: string): string {
+  return `${CONNECTIONS_BY_ROOM_INDEX_PREFIX}${encodeURIComponent(roomID)}/`;
 }
 
 export function connectionKeyFromString(
@@ -815,4 +826,154 @@ export function connectionKeyFromString(
     roomID: decodeURIComponent(parts[2]),
     clientID: decodeURIComponent(parts[3]),
   };
+}
+
+export function connectionKeyFromRoomIndexString(
+  key: string,
+): ConnectionKey | undefined {
+  if (!key.startsWith(CONNECTIONS_BY_ROOM_INDEX_PREFIX)) {
+    return undefined;
+  }
+  const indexOfFirstSlashAfterPrefix = key.indexOf(
+    '/',
+    CONNECTIONS_BY_ROOM_INDEX_PREFIX.length,
+  );
+  if (indexOfFirstSlashAfterPrefix === -1) {
+    return undefined;
+  }
+  return connectionKeyFromString(
+    key.substring(indexOfFirstSlashAfterPrefix + 1),
+  );
+}
+
+async function getConnectionKeysForRoomID(
+  roomID: string,
+  storage: DurableObjectStorage,
+): Promise<ConnectionKey[]> {
+  const connectionKeys = [];
+  for (const key of (
+    await storage.list({
+      prefix: getConnectionRoomIndexPrefix(roomID),
+    })
+  ).keys()) {
+    const connectionKey = connectionKeyFromRoomIndexString(key);
+    if (connectionKey) {
+      connectionKeys.push(connectionKey);
+    }
+  }
+  return connectionKeys;
+}
+
+async function* createConnectionsByRoomGenerator(
+  storage: DurableObjectStorage,
+  lc: LogContext,
+) {
+  let lastKey = '';
+  while (true) {
+    const nextRoomListResult = await storage.list({
+      startAfter: lastKey,
+      prefix: CONNECTIONS_BY_ROOM_INDEX_PREFIX,
+      limit: 1,
+    });
+    if (nextRoomListResult.size === 0) {
+      return;
+    }
+    const firstRoomIndexString: string = [...nextRoomListResult.keys()][0];
+    const connectionKey =
+      connectionKeyFromRoomIndexString(firstRoomIndexString);
+    if (!connectionKey) {
+      lc.error?.(
+        'Failed to parse connection room index key',
+        firstRoomIndexString,
+      );
+      lastKey = firstRoomIndexString;
+      continue;
+    }
+    const {roomID} = connectionKey;
+    const connectionKeys = await getConnectionKeysForRoomID(roomID, storage);
+    yield {roomID, connectionKeys};
+    lastKey = connectionKeyToConnectionRoomIndexString(
+      connectionKeys.length > 0
+        ? connectionKeys[connectionKeys.length - 1]
+        : connectionKey,
+    );
+  }
+}
+
+async function* createConnectionKeyStringsGenerator(
+  storage: DurableObjectStorage,
+) {
+  let lastKey = '';
+  let done = false;
+  while (!done) {
+    const connectionsListResult = await storage.list({
+      startAfter: lastKey,
+      prefix: CONNECTION_KEY_PREFIX,
+      limit: 1000,
+    });
+    for (const connectionKeyString of connectionsListResult.keys()) {
+      yield connectionKeyString;
+      lastKey = connectionKeyString;
+    }
+    done = connectionsListResult.size === 0;
+  }
+}
+
+export function recordConnection(
+  connectionKey: ConnectionKey,
+  storage: DurableObjectStorage,
+  record: ConnectionRecord,
+) {
+  const connectionKeyString = connectionKeyToString(connectionKey);
+  const connectionRoomIndexString =
+    connectionKeyToConnectionRoomIndexString(connectionKey);
+  // no await to ensure the two puts are coalesced and done atomically
+  void storage.put(connectionKeyString, record);
+  void storage.put(connectionRoomIndexString, {});
+}
+
+function deleteConnection(
+  connectionKey: ConnectionKey,
+  storage: DurableObjectStorage,
+) {
+  const connectionKeyString = connectionKeyToString(connectionKey);
+  const connectionRoomIndexString =
+    connectionKeyToConnectionRoomIndexString(connectionKey);
+  // no await to ensure the two deletes are coalesced and done atomically
+  void storage.delete(connectionKeyString);
+  void storage.delete(connectionRoomIndexString);
+}
+
+export const AUTH_DO_STORAGE_SCHEMA_VERSION_KEY =
+  'auth_do_storage_schema_version';
+export const AUTH_DO_STORAGE_SCHEMA_VERSION = 1;
+
+async function ensureStorageSchemaMigrated(
+  storage: DurableObjectStorage,
+  lc: LogContext,
+) {
+  const storageSchemaVersion =
+    (await storage.get(AUTH_DO_STORAGE_SCHEMA_VERSION_KEY)) ?? 0;
+  if (storageSchemaVersion >= AUTH_DO_STORAGE_SCHEMA_VERSION) {
+    return;
+  }
+  if (storageSchemaVersion === 0) {
+    lc.info?.(
+      'Migrating from storage schema version 0 to storage schema version 1.',
+    );
+    const connectionKeyStringsGenerator =
+      createConnectionKeyStringsGenerator(storage);
+    for await (const connectionKeyString of connectionKeyStringsGenerator) {
+      const connectionKey = must(connectionKeyFromString(connectionKeyString));
+      void storage.put(
+        connectionKeyToConnectionRoomIndexString(connectionKey),
+        {},
+      );
+    }
+    void storage.put(AUTH_DO_STORAGE_SCHEMA_VERSION_KEY, 1);
+    await storage.sync();
+    lc.info?.(
+      'Successfully migrated from storage schema version 0 to storage schema version 1.',
+    );
+  }
 }
