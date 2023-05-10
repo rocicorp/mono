@@ -63,9 +63,8 @@ export class Router<InitialContext extends BaseContext = BaseContext> {
       const result = pattern.exec(request.url);
       if (result) {
         const {handler} = route;
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         return handler(
-          {...context, parsedURL: result!} as InitialContext,
+          {...context, parsedURL: result} as InitialContext,
           request,
         );
       }
