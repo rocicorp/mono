@@ -58,28 +58,21 @@ export class Router<InitialContext extends BaseContext = BaseContext> {
     request: Request,
     context: Omit<InitialContext, 'parsedURL'>,
   ): MaybePromise<Response> {
-    const {lc} = context;
-    // TODO(arv): This can be simpler using a for-of loop. No need to iterate
-    // over all of them to find the first match.
-    const matches = this._routes
-      .map(route => {
-        const {pattern} = route;
-        const result = pattern.exec(request.url);
-        return {route, result};
-      })
-      .filter(({result}) => result);
-
-    if (matches.length === 0) {
-      lc.debug?.(`no matching route for ${request.url}`);
-      return new Response('not found', {status: 404});
+    for (const route of this._routes) {
+      const {pattern} = route;
+      const result = pattern.exec(request.url);
+      if (result) {
+        const {handler} = route;
+        return handler(
+          {...context, parsedURL: result} as InitialContext,
+          request,
+        );
+      }
     }
 
-    const [match] = matches;
-    const {route, result} = match;
-    const {handler} = route;
-
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return handler({...context, parsedURL: result!} as InitialContext, request);
+    const {lc} = context;
+    lc.debug?.(`no matching route for ${request.url}`);
+    return new Response('not found', {status: 404});
   }
 }
 
