@@ -685,7 +685,7 @@ export class BaseAuthDO implements DurableObject {
           revalidatedCount += connectionKeys.length;
           deleteCount += toDelete.length;
           lc.info?.(
-            `Revalidated ${connectionKeys.length} connections for room ${roomID}, deleted ${deleteCount} connections.`,
+            `Revalidated ${connectionKeys.length} connections for room ${roomID}, deleted ${toDelete.length} connections.`,
           );
         });
       }
