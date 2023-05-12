@@ -88,7 +88,9 @@ export class EntryCache implements Storage {
         }),
     );
 
-    this._cache.clear();
+    // TODO: Add flushed(): Patch method to replace the current use of pending().
+    // Then the cache can be cleared here.
+    // this._cache.clear();
   }
 
   async list<T extends ReadonlyJSONValue>(
