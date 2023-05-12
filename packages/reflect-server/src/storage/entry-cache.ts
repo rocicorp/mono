@@ -48,6 +48,14 @@ export class EntryCache implements Storage {
     return value;
   }
 
+  /**
+   * @returns Whether there are any pending writes in the cache. Note that
+   * redundant writes (e.g. deleting a non-existing key) are still considered writes.
+   */
+  isDirty(): boolean {
+    return this._cache.size > 0;
+  }
+
   pending(): Patch {
     const res: Patch = [];
     for (const [key, {value, dirty}] of this._cache.entries()) {
@@ -63,6 +71,11 @@ export class EntryCache implements Storage {
   }
 
   async flush(): Promise<void> {
+    // Note the order of operations: all del()` and put() calls are
+    // invoked before await. This ensures atomicity of the flushed
+    // writes, as described in:
+    //
+    // https://developers.cloudflare.com/workers/learning/using-durable-objects/#accessing-persistent-storage-from-a-durable-object
     await Promise.all(
       [...this._cache.entries()]
         // Destructure ALL the things
@@ -74,6 +87,8 @@ export class EntryCache implements Storage {
           return this._storage.put(k, value);
         }),
     );
+
+    this._cache.clear();
   }
 
   async list<T extends ReadonlyJSONValue>(
