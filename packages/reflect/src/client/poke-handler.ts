@@ -3,8 +3,8 @@ import type {LogContext} from '@rocicorp/logger';
 import type {Poke, PokeBody} from 'reflect-protocol';
 import type {ClientID, MaybePromise, Poke as ReplicachePoke} from 'replicache';
 import {assert} from 'shared/asserts.js';
-import {mergePokes} from './merge-pokes.js';
 import {BufferSizer} from 'shared/buffer-sizer.js';
+import {mergePokes} from './merge-pokes.js';
 
 export const BUFFER_SIZER_OPTIONS = {
   initialBufferSizeMs: 250,
@@ -129,28 +129,29 @@ export class PokeHandler {
   private _startPlaybackLoop(lc: LogContext) {
     lc.debug?.('starting playback loop');
     this._pokePlaybackLoopRunning = true;
-    const rafCallback = async () => {
-      const rafLC = (await this._lcPromise).addContext(
-        'rafAt',
-        Math.floor(performance.now()),
-      );
-      if (this._pokeBuffer.length === 0) {
-        rafLC.debug?.('stopping playback loop');
-        this._pokePlaybackLoopRunning = false;
-        return;
-      }
-      requestAnimationFrame(rafCallback);
-      const start = performance.now();
-      rafLC.debug?.(
-        'raf fired, processing pokes.  Since last raf',
-        start - this._lastRafPerfTimestamp,
-      );
-      this._lastRafPerfTimestamp = start;
-      await this._processPokesForFrame(rafLC);
-      rafLC.debug?.('processing pokes took', performance.now() - start);
-    };
-    requestAnimationFrame(rafCallback);
+    requestAnimationFrame(this._rafCallback);
   }
+
+  private _rafCallback = async () => {
+    const rafLC = (await this._lcPromise).addContext(
+      'rafAt',
+      Math.floor(performance.now()),
+    );
+    if (this._pokeBuffer.length === 0) {
+      rafLC.debug?.('stopping playback loop');
+      this._pokePlaybackLoopRunning = false;
+      return;
+    }
+    requestAnimationFrame(this._rafCallback);
+    const start = performance.now();
+    rafLC.debug?.(
+      'raf fired, processing pokes.  Since last raf',
+      start - this._lastRafPerfTimestamp,
+    );
+    this._lastRafPerfTimestamp = start;
+    await this._processPokesForFrame(rafLC);
+    rafLC.debug?.('processing pokes took', performance.now() - start);
+  };
 
   private async _processPokesForFrame(lc: LogContext) {
     await this._pokeLock.withLock(async () => {
