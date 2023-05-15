@@ -53,7 +53,12 @@ export class EntryCache implements Storage {
    * redundant writes (e.g. deleting a non-existing key) are still considered writes.
    */
   isDirty(): boolean {
-    return this._cache.size > 0;
+    for (const value of this._cache.values()) {
+      if (value.dirty) {
+        return true;
+      }
+    }
+    return false;
   }
 
   pending(): Patch {
