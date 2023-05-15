@@ -234,6 +234,8 @@ describe('entry-cache', () => {
       const cache = new EntryCache(durable);
 
       expect(cache.isDirty()).toBe(false);
+      expect(await cache.get('foo-1', valita.string())).toEqual('orig-foo-1');
+      expect(cache.isDirty()).toBe(false);
 
       for (const k of c.pendingKeys) {
         await cache.put(k, `new-${k}`);
