@@ -79,7 +79,10 @@
     "zod": "^3.21.4"
   },
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config"
+    "extends": [
+      "next/core-web-vitals",
+      "@rocicorp/eslint-config"
+    ]
   },
   "prettier": "@rocicorp/prettier-config"
 }
