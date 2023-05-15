@@ -2,6 +2,7 @@ import {consoleLogSink, LogLevel, LogSink, TeeLogSink} from '@rocicorp/logger';
 import type {MutatorDefs} from 'replicache';
 import {BaseAuthDO} from './auth-do.js';
 import type {AuthHandler} from './auth.js';
+import type {RoomStartHandler} from './room-start.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {BaseRoomDO} from './room-do.js';
 import {createWorker, MetricsSink} from './worker.js';
@@ -9,6 +10,8 @@ import {createWorker, MetricsSink} from './worker.js';
 export interface ReflectServerOptions<MD extends MutatorDefs> {
   mutators: MD;
   authHandler?: AuthHandler | undefined;
+
+  roomStartHandler?: RoomStartHandler | undefined;
 
   disconnectHandler?: DisconnectHandler | undefined;
 
@@ -45,6 +48,7 @@ export interface ReflectServerOptions<MD extends MutatorDefs> {
 export type NormalizedOptions<MD extends MutatorDefs> = {
   mutators: MD;
   authHandler?: AuthHandler | undefined;
+  roomStartHandler: RoomStartHandler;
   disconnectHandler: DisconnectHandler;
   logSink: LogSink;
   logLevel: LogLevel;
@@ -127,6 +131,7 @@ export function makeNormalizedOptionsGetter<
     const {
       mutators,
       authHandler,
+      roomStartHandler = () => Promise.resolve(),
       disconnectHandler = () => Promise.resolve(),
       logSinks,
       logLevel = 'debug',
@@ -137,6 +142,7 @@ export function makeNormalizedOptionsGetter<
     normalizedOptions = {
       mutators,
       authHandler,
+      roomStartHandler,
       disconnectHandler,
       logSink,
       logLevel,
@@ -155,6 +161,7 @@ function createRoomDOClass<
     constructor(state: DurableObjectState, env: Env) {
       const {
         mutators,
+        roomStartHandler,
         disconnectHandler,
         logSink,
         logLevel,
@@ -163,6 +170,7 @@ function createRoomDOClass<
       super({
         mutators,
         state,
+        roomStartHandler,
         disconnectHandler,
         authApiKey: getAPIKey(env),
         logSink,

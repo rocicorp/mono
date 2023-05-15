@@ -10,6 +10,10 @@ import {createSilentLogContext, TestLogSink} from '../util/test-utils.js';
 import {version} from '../util/version.js';
 import {TestDurableObjectId} from './do-test-utils.js';
 import {BaseRoomDO} from './room-do.js';
+import {getVersion, putVersion} from '../types/version.js';
+import {DurableStorage} from '../storage/durable-storage.js';
+import {getUserValue, putUserValue} from '../types/user-value.js';
+import type {WriteTransaction} from 'replicache';
 
 test('sets roomID in createRoom', async () => {
   const testLogSink = new TestLogSink();
@@ -17,6 +21,7 @@ test('sets roomID in createRoom', async () => {
   const storage = await getMiniflareDurableObjectStorage(doID);
   const roomDO = new BaseRoomDO({
     mutators: {},
+    roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
     state: {
       id: doID,
@@ -39,6 +44,89 @@ test('sets roomID in createRoom', async () => {
   expect(roomID).toBe('testRoomID');
 });
 
+test('runs roomHandler exactly once', async () => {
+  const testLogSink = new TestLogSink();
+  const doID = new TestDurableObjectId('test-do-id');
+  const durable = await getMiniflareDurableObjectStorage(doID);
+
+  const storage = new DurableStorage(durable);
+  const startingVersion = 23;
+  await putVersion(startingVersion, storage);
+  await putUserValue(
+    'foo',
+    {version: 1, deleted: false, value: 'bar'},
+    storage,
+  );
+
+  const roomDO = new BaseRoomDO({
+    mutators: {},
+    roomStartHandler: async (tx: WriteTransaction) => {
+      const value = await tx.get('foo');
+      await tx.put('foo', `${value}+`);
+    },
+    disconnectHandler: () => Promise.resolve(),
+    state: {
+      id: doID,
+      storage: durable,
+    } as unknown as DurableObjectState,
+    authApiKey: 'API KEY',
+    logSink: testLogSink,
+    logLevel: 'info',
+    allowUnconfirmedWrites: true,
+  });
+
+  const createRoomRequest = newCreateRoomRequest(
+    'http://example.com/',
+    'API KEY',
+    'testRoomID',
+  );
+
+  // Send 10 requests in parallel.
+  const requests = Array(10)
+    .fill(0)
+    .map(() => roomDO.fetch(createRoomRequest));
+  const responses = await Promise.all(requests);
+  for (const response of responses) {
+    expect(response.status).toBe(200);
+  }
+
+  // The roomHandler should have been run exactly once.
+  expect(await getVersion(storage)).toBe(startingVersion + 1);
+  expect(await getUserValue('foo', storage)).toEqual({
+    version: startingVersion,
+    deleted: false,
+    value: 'bar+',
+  });
+});
+
+test('failing roomHandler results in request error', async () => {
+  const testLogSink = new TestLogSink();
+  const doID = new TestDurableObjectId('test-do-id');
+  const durable = await getMiniflareDurableObjectStorage(doID);
+  const roomDO = new BaseRoomDO({
+    mutators: {},
+    roomStartHandler: () => Promise.reject('room start failed'),
+    disconnectHandler: () => Promise.resolve(),
+    state: {
+      id: doID,
+      storage: durable,
+    } as unknown as DurableObjectState,
+    authApiKey: 'API KEY',
+    logSink: testLogSink,
+    logLevel: 'info',
+    allowUnconfirmedWrites: true,
+  });
+
+  const createRoomRequest = newCreateRoomRequest(
+    'http://example.com/',
+    'API KEY',
+    'testRoomID',
+  );
+
+  const response = await roomDO.fetch(createRoomRequest);
+  expect(response.status).toBe(500);
+});
+
 test('deleteAllData deletes all data', async () => {
   const testLogSink = new TestLogSink();
   const doID = new TestDurableObjectId('test-do-id');
@@ -49,6 +137,7 @@ test('deleteAllData deletes all data', async () => {
 
   const roomDO = new BaseRoomDO({
     mutators: {},
+    roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
     state: {
       id: doID,
@@ -86,6 +175,7 @@ test('after deleteAllData the roomDO just 410s', async () => {
 
   const roomDO = new BaseRoomDO({
     mutators: {},
+    roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
     state: {
       id: doID,
@@ -172,6 +262,7 @@ test('401s if wrong auth api key', async () => {
 
     const roomDO = new BaseRoomDO({
       mutators: {},
+      roomStartHandler: () => Promise.resolve(),
       disconnectHandler: () => Promise.resolve(),
       state: {
         id: doID,
@@ -192,6 +283,7 @@ test('Logs version during construction', () => {
   const testLogSink = new TestLogSink();
   new BaseRoomDO({
     mutators: {},
+    roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
     state: {
       id: new TestDurableObjectId('test-do-id'),
@@ -220,6 +312,7 @@ test('Sets turn duration based on allowUnconfirmedWrites flag', () => {
 
     const room = new BaseRoomDO({
       mutators: {},
+      roomStartHandler: () => Promise.resolve(),
       disconnectHandler: () => Promise.resolve(),
       state: {
         id: new TestDurableObjectId('test-do-id'),
@@ -261,6 +354,7 @@ test('good, bad, invalid connect requests', async () => {
   const storage = await getMiniflareDurableObjectStorage(doID);
   const roomDO = new BaseRoomDO({
     mutators: {},
+    roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
     state: {
       id: doID,
