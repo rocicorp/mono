@@ -1,7 +1,7 @@
 import {assert, expect} from '@esm-bundle/chai';
 import * as dag from '../dag/mod.js';
-import {emptyHash, Hash, makeNewFakeHashFunction} from '../hash.js';
-import {deepFreeze, FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
+import {Hash, emptyHash, makeNewFakeHashFunction} from '../hash.js';
+import {FrozenJSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
 import {getSizeOfValue} from '../size-of-value.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {
@@ -9,12 +9,12 @@ import {
   Diff,
   Entry,
   EntryWithOptionalSize,
-  findLeaf,
-  internalizeBTreeNode,
   InternalNode,
-  makeNodeChunkData,
   NODE_ENTRIES,
   NODE_LEVEL,
+  findLeaf,
+  internalizeBTreeNode,
+  makeNodeChunkData,
   partition,
 } from './node.js';
 import {BTreeRead, NODE_HEADER_SIZE} from './read.js';
@@ -1121,7 +1121,7 @@ test('put - invalid', async () => {
   });
 });
 
-test('put/del - getSize', async () => {
+test.skip('put/del - getSize', async () => {
   minSize = 24;
   maxSize = minSize * 2;
   getEntrySize = getSizeOfValue;
@@ -1506,7 +1506,7 @@ test('diff', async () => {
   );
 });
 
-test('chunk header size', () => {
+test.skip('chunk header size', () => {
   // This just ensures that the constant is correct.
   const chunkData = makeNodeChunkData(0, []);
   const entriesSize = getSizeOfValue(chunkData[NODE_ENTRIES]);

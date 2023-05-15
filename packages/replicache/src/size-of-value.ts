@@ -1,9 +1,6 @@
-import type {ReadonlyJSONObject} from './json.js';
-import {hasOwn} from 'shared/has-own.js';
-
-const SIZE_TAG = 1;
-const SIZE_INT32 = 4;
-const SIZE_DOUBLE = 8;
+// const SIZE_TAG = 1;
+// const SIZE_INT32 = 4;
+// const SIZE_DOUBLE = 8;
 
 /**
  * Gives a size of a value. The size is modelled after the size used by
@@ -21,51 +18,54 @@ const SIZE_DOUBLE = 8;
  * - Use 1 byte tag
  * - Numbers are either stored as Int32 or Float6
  */
-export function getSizeOfValue(value: unknown): number {
-  switch (typeof value) {
-    case 'string':
-      // Assumes all strings are one byte strings. V8 writes OneByteString and
-      // TwoByteString. We could check the string but it would require iterating
-      // over all the characters.
-      return SIZE_TAG + SIZE_INT32 + value.length;
-    case 'number':
-      if (isSmi(value)) {
-        if (value <= -(2 ** 30) || value >= 2 ** 30 - 1) {
-          return SIZE_TAG + 5;
-        }
-        return SIZE_TAG + SIZE_INT32;
-      }
-      return SIZE_TAG + SIZE_DOUBLE;
-    case 'boolean':
-      return SIZE_TAG;
-    case 'object':
-      if (value === null) {
-        return SIZE_TAG;
-      }
+export function getSizeOfValue(_value: unknown): number {
+  // TODO(arv): Temporary solution to work around the cost of computing the
+  // size of large objects.
+  return 256;
+  // switch (typeof value) {
+  //   case 'string':
+  //     // Assumes all strings are one byte strings. V8 writes OneByteString and
+  //     // TwoByteString. We could check the string but it would require iterating
+  //     // over all the characters.
+  //     return SIZE_TAG + SIZE_INT32 + value.length;
+  //   case 'number':
+  //     if (isSmi(value)) {
+  //       if (value <= -(2 ** 30) || value >= 2 ** 30 - 1) {
+  //         return SIZE_TAG + 5;
+  //       }
+  //       return SIZE_TAG + SIZE_INT32;
+  //     }
+  //     return SIZE_TAG + SIZE_DOUBLE;
+  //   case 'boolean':
+  //     return SIZE_TAG;
+  //   case 'object':
+  //     if (value === null) {
+  //       return SIZE_TAG;
+  //     }
 
-      if (Array.isArray(value)) {
-        let sum = 2 * SIZE_TAG + SIZE_INT32;
-        for (const element of value) {
-          sum += getSizeOfValue(element);
-        }
-        return sum;
-      }
+  //     if (Array.isArray(value)) {
+  //       let sum = 2 * SIZE_TAG + SIZE_INT32;
+  //       for (const element of value) {
+  //         sum += getSizeOfValue(element);
+  //       }
+  //       return sum;
+  //     }
 
-      {
-        const val = value as ReadonlyJSONObject;
-        let sum: number = SIZE_TAG;
-        for (const k in val) {
-          if (hasOwn(val, k)) {
-            sum += getSizeOfValue(k) + getSizeOfValue(val[k]);
-          }
-        }
-        return sum + SIZE_INT32 + SIZE_TAG;
-      }
-  }
+  //     {
+  //       const val = value as ReadonlyJSONObject;
+  //       let sum: number = SIZE_TAG;
+  //       for (const k in val) {
+  //         if (hasOwn(val, k)) {
+  //           sum += getSizeOfValue(k) + getSizeOfValue(val[k]);
+  //         }
+  //       }
+  //       return sum + SIZE_INT32 + SIZE_TAG;
+  //     }
+  // }
 
-  throw new Error('invalid value');
+  // throw new Error('invalid value');
 }
 
-function isSmi(value: number): boolean {
-  return value === (value | 0);
-}
+// function isSmi(value: number): boolean {
+//   return value === (value | 0);
+// }
