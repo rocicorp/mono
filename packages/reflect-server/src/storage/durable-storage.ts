@@ -2,6 +2,7 @@ import type {ReadonlyJSONValue} from 'shared/json.js';
 import type * as valita from 'shared/valita.js';
 import {delEntry, getEntry, listEntries, putEntry} from '../db/data.js';
 import type {ListOptions, Storage} from './storage.js';
+import {AbstractStorage} from './abstract-storage.js';
 
 const baseAllowConcurrency = true;
 
@@ -18,11 +19,12 @@ const baseOptions = {
 /**
  * Implements the Storage interface in terms of the database.
  */
-export class DurableStorage implements Storage {
+export class DurableStorage extends AbstractStorage implements Storage {
   private _durable: DurableObjectStorage;
   private readonly _baseOptions: Readonly<DurableObjectPutOptions>;
 
   constructor(durable: DurableObjectStorage, allowUnconfirmed = true) {
+    super();
     this._durable = durable;
     this._baseOptions = {
       allowConcurrency: baseAllowConcurrency,

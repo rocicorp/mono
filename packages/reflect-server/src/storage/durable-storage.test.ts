@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {expect, test} from '@jest/globals';
+import {describe, expect, test} from '@jest/globals';
 import * as valita from 'shared/valita.js';
 import {DurableStorage} from './durable-storage.js';
 import type {ListOptions} from './storage.js';
 
-test('list', async () => {
+describe('list and scan', () => {
   type Case = {
     name: string;
     expected: [string, number][];
@@ -75,18 +75,37 @@ test('list', async () => {
     },
   ];
 
-  const {roomDO} = getMiniflareBindings();
-  const id = roomDO.newUniqueId();
-  const storage = new DurableStorage(
-    await getMiniflareDurableObjectStorage(id),
-  );
-
-  for (const [k, v] of Object.entries(entries)) {
-    await storage.put(k, v);
-  }
-
   for (const c of cases) {
-    const entries = [...(await storage.list(c.opts || {}, valita.number()))];
-    expect(entries).toEqual(c.expected);
+    test(c.name, async () => {
+      const {roomDO} = getMiniflareBindings();
+      const id = roomDO.newUniqueId();
+      const storage = new DurableStorage(
+        await getMiniflareDurableObjectStorage(id),
+      );
+
+      for (const [k, v] of Object.entries(entries)) {
+        await storage.put(k, v);
+      }
+
+      const results = [...(await storage.list(c.opts || {}, valita.number()))];
+      expect(results).toEqual(c.expected);
+
+      // Test scan() with a variety of batch sizes.
+      for (const safeBatchSize of [1, 2, 3, 128, undefined]) {
+        const scanResults: [string, number][] = [];
+        await storage.scan(
+          c.opts || {},
+          valita.number(),
+          async (batch: Map<string, number>) => {
+            if (batch.size === 0) {
+              scanResults.push(['done', 0]);
+            }
+            scanResults.push(...batch.entries());
+          },
+          safeBatchSize,
+        );
+        expect(scanResults).toEqual([...c.expected, ['done', 0]]);
+      }
+    });
   }
 });

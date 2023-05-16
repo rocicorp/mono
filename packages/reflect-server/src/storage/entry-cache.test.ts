@@ -252,8 +252,24 @@ describe('entry-cache', () => {
       );
 
       const entries = [...(await cache.list(c.opts || {}, valita.string()))];
-
       expect(entries).toEqual(c.expected);
+
+      // Test scan() with a variety of batch sizes.
+      for (const safeBatchSize of [1, 2, 3, 128, undefined]) {
+        const results: [string, string][] = [];
+        await cache.scan(
+          c.opts || {},
+          valita.string(),
+          async (batch: Map<string, string>) => {
+            if (batch.size === 0) {
+              results.push(['done', 'yo']);
+            }
+            results.push(...batch.entries());
+          },
+          safeBatchSize,
+        );
+        expect(results).toEqual([...c.expected, ['done', 'yo']]);
+      }
 
       const durableEntriesBeforeFlush = [
         ...(await durable.list({}, valita.string())),

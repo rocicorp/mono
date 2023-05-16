@@ -3,6 +3,7 @@ import type {Patch} from 'reflect-protocol';
 import type {ReadonlyJSONValue} from 'shared/json.js';
 import * as valita from 'shared/valita.js';
 import type {ListOptions, Storage} from './storage.js';
+import {AbstractStorage} from './abstract-storage.js';
 
 /**
  * Implements a read/write cache for key/value pairs on top of some lower-level
@@ -13,7 +14,7 @@ import type {ListOptions, Storage} from './storage.js';
  *
  * TODO: We can remove the read side of this since DO does caching itself internally!
  */
-export class EntryCache implements Storage {
+export class EntryCache extends AbstractStorage implements Storage {
   private _storage: Storage;
   private _cache: Map<
     string,
@@ -21,6 +22,7 @@ export class EntryCache implements Storage {
   > = new Map();
 
   constructor(storage: Storage) {
+    super();
     this._storage = storage;
   }
 
