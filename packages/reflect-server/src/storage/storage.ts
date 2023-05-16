@@ -41,7 +41,7 @@ export interface Storage {
    * `safeBatchSize` is used as a hint for a reasonable number of results to fetch
    * in each batch. If unspecified, the implementation will choose a reasonable default.
    * Because of layered Storage implementations, the actual size of batches may be more
-   * or less than `safeBatchSize`; callers should not any assumptions from the
+   * or less than `safeBatchSize`; callers should not make any assumptions from the
    * size of the batch, except for the empty batch signaling that there are no more results.
    */
   scan<T extends ReadonlyJSONValue>(
