@@ -257,19 +257,15 @@ describe('entry-cache', () => {
       // Test scan() with a variety of batch sizes.
       for (const safeBatchSize of [1, 2, 3, 128, undefined]) {
         const results: [string, string][] = [];
-        await cache.scan(
+        for await (const batch of await cache.scan(
           c.opts || {},
           valita.string(),
-          (batch: Map<string, string>) => {
-            if (batch.size === 0) {
-              results.push(['done', 'yo']);
-            }
-            results.push(...batch.entries());
-            return Promise.resolve();
-          },
           safeBatchSize,
-        );
-        expect(results).toEqual([...c.expected, ['done', 'yo']]);
+        )) {
+          results.push(...batch.entries());
+          return Promise.resolve();
+        }
+        expect(results).toEqual(c.expected);
       }
 
       const durableEntriesBeforeFlush = [

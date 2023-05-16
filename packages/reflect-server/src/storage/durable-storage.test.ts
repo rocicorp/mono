@@ -93,19 +93,15 @@ describe('list and scan', () => {
       // Test scan() with a variety of batch sizes.
       for (const safeBatchSize of [1, 2, 3, 128, undefined]) {
         const scanResults: [string, number][] = [];
-        await storage.scan(
+        for await (const batch of storage.scan(
           c.opts || {},
           valita.number(),
-          (batch: Map<string, number>) => {
-            if (batch.size === 0) {
-              scanResults.push(['done', 0]);
-            }
-            scanResults.push(...batch.entries());
-            return Promise.resolve();
-          },
           safeBatchSize,
-        );
-        expect(scanResults).toEqual([...c.expected, ['done', 0]]);
+        )) {
+          scanResults.push(...batch.entries());
+          return Promise.resolve();
+        }
+        expect(scanResults).toEqual(c.expected);
       }
     });
   }

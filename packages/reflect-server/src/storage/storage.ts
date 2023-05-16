@@ -33,21 +33,16 @@ export interface Storage {
 
   /**
    * Scans a contiguous sequence of keys and values based on the specified
-   * `options`, sending the result in batches to `processBatch`. The keys of
-   * batches are guaranteed to be in ascending UTF-8 key order. All non-final
-   * batches are guaranteed to be non-empty, with a final empty batch signaling
-   * that the scan is complete.
+   * `options`, yielding UTF-8 ordered key results in batches of a `safeBatchSize`.
    *
    * `safeBatchSize` is used as a hint for a reasonable number of results to fetch
    * in each batch. If unspecified, the implementation will choose a reasonable default.
    * Because of layered Storage implementations, the actual size of batches may be more
-   * or less than `safeBatchSize`; callers should not make any assumptions from the
-   * size of the batch, except for the empty batch signaling that there are no more results.
+   * or less than `safeBatchSize`.
    */
   scan<T extends ReadonlyJSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
-    processBatch: (batch: Map<string, T>) => Promise<void>,
     safeBatchSize?: number,
-  ): Promise<void>;
+  ): AsyncIterable<Map<string, T>>;
 }

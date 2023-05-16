@@ -15,12 +15,11 @@ export abstract class AbstractStorage {
     schema: valita.Type<T>,
   ): Promise<Map<string, T>>;
 
-  async scan<T extends ReadonlyJSONValue>(
+  async *scan<T extends ReadonlyJSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
-    processBatch: (batch: Map<string, T>) => Promise<void>,
     safeBatchSize?: number,
-  ): Promise<void> {
+  ): AsyncIterable<Map<string, T>> {
     safeBatchSize = safeBatchSize || defaultSafeBatchSize;
     let remainingLimit = options.limit;
     const batchOptions = {
@@ -35,7 +34,7 @@ export abstract class AbstractStorage {
       }
 
       // Guaranteed to be non-empty.
-      await processBatch(batch);
+      yield batch;
 
       let lastKey = '';
       for (const key of batch.keys()) {
@@ -50,8 +49,5 @@ export abstract class AbstractStorage {
         batchOptions.limit = Math.min(safeBatchSize, remainingLimit);
       }
     }
-
-    // Final empty batch signals that the results have been fully scanned.
-    await processBatch(new Map());
   }
 }
