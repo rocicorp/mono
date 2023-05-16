@@ -96,11 +96,12 @@ describe('list and scan', () => {
         await storage.scan(
           c.opts || {},
           valita.number(),
-          async (batch: Map<string, number>) => {
+          (batch: Map<string, number>) => {
             if (batch.size === 0) {
               scanResults.push(['done', 0]);
             }
             scanResults.push(...batch.entries());
+            return Promise.resolve();
           },
           safeBatchSize,
         );

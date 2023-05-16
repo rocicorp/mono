@@ -260,11 +260,12 @@ describe('entry-cache', () => {
         await cache.scan(
           c.opts || {},
           valita.string(),
-          async (batch: Map<string, string>) => {
+          (batch: Map<string, string>) => {
             if (batch.size === 0) {
               results.push(['done', 'yo']);
             }
             results.push(...batch.entries());
+            return Promise.resolve();
           },
           safeBatchSize,
         );

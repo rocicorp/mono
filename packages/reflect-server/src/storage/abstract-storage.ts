@@ -30,7 +30,7 @@ export abstract class AbstractStorage {
 
     while (batchOptions.limit > 0) {
       const batch = await this.list(batchOptions, schema);
-      if (batch.size == 0) {
+      if (batch.size === 0) {
         break;
       }
 
