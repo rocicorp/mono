@@ -91,12 +91,12 @@ describe('list and scan', () => {
       expect(results).toEqual(c.expected);
 
       // Test scan() with a variety of batch sizes.
-      for (const safeBatchSize of [1, 2, 3, 128, undefined]) {
+      for (const batchSize of [1, 2, 3, 128]) {
         const scanResults: [string, number][] = [];
-        for await (const batch of storage.scan(
+        for await (const batch of storage.batchScan(
           c.opts || {},
           valita.number(),
-          safeBatchSize,
+          batchSize,
         )) {
           scanResults.push(...batch);
         }

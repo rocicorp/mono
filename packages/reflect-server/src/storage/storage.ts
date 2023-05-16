@@ -22,7 +22,7 @@ export interface Storage {
    * thus should only be used in situations in which the result is
    * guaranteed to be small (i.e. < 10 MB).
    *
-   * For potentially larger result sets, use {@link scan}.
+   * For potentially larger result sets, use {@link scan} or {@link batchScan}.
    *
    * @returns A map of key-value results, sorted by (UTF-8) key
    */
@@ -32,17 +32,31 @@ export interface Storage {
   ): Promise<Map<string, T>>;
 
   /**
-   * Scans a contiguous sequence of keys and values based on the specified
-   * `options`, yielding UTF-8 ordered key results in batches of a `safeBatchSize`.
+   * Scans a contiguous sequence of entries based on the specified `options`,
+   * yielding UTF-8 key-ordered results.
    *
-   * `safeBatchSize` is used as a hint for a reasonable number of results to fetch
-   * in each batch. If unspecified, the implementation will choose a reasonable default.
-   * Because of layered Storage implementations, the actual size of batches may be more
-   * or less than `safeBatchSize`.
+   * Unlike {@link list}, `scan` avoids loading an arbitrary amount of data
+   * into memory and is thus recommended when scanning a potentially large
+   * amount of data.
+   *
+   * Also see {@link batchScan} for processing batches of objects efficiently.
    */
   scan<T extends ReadonlyJSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
-    safeBatchSize?: number,
+  ): AsyncIterable<[key: string, value: T]>;
+
+  /**
+   * Scans a contiguous sequence of keys and values based on the specified
+   * `options`, yielding UTF-8 ordered key results in batches of up to a
+   * specified `batchSize`.
+   *
+   * This is similar to {@link scan} but allows the caller to
+   * efficiently process larger numbers of entries as a batch.
+   */
+  batchScan<T extends ReadonlyJSONValue>(
+    options: ListOptions,
+    schema: valita.Type<T>,
+    batchSize: number,
   ): AsyncIterable<Map<string, T>>;
 }

@@ -255,12 +255,12 @@ describe('entry-cache', () => {
       expect(entries).toEqual(c.expected);
 
       // Test scan() with a variety of batch sizes.
-      for (const safeBatchSize of [1, 2, 3, 128, undefined]) {
+      for (const batchSize of [1, 2, 3, 128]) {
         const results: [string, string][] = [];
-        for await (const batch of await cache.scan(
+        for await (const batch of await cache.batchScan(
           c.opts || {},
           valita.string(),
-          safeBatchSize,
+          batchSize,
         )) {
           results.push(...batch);
         }
