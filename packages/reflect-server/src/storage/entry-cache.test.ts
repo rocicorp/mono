@@ -254,10 +254,17 @@ describe('entry-cache', () => {
       const entries = [...(await cache.list(c.opts || {}, valita.string()))];
       expect(entries).toEqual(c.expected);
 
-      // Test scan() with a variety of batch sizes.
+      // Test scan()
+      const results: [string, string][] = [];
+      for await (const entry of cache.scan(c.opts || {}, valita.string())) {
+        results.push(entry);
+      }
+      expect(results).toEqual(c.expected);
+
+      // Test batchScan() with a variety of batch sizes.
       for (const batchSize of [1, 2, 3, 128]) {
         const results: [string, string][] = [];
-        for await (const batch of await cache.batchScan(
+        for await (const batch of cache.batchScan(
           c.opts || {},
           valita.string(),
           batchSize,
