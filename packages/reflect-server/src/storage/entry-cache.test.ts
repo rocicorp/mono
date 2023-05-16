@@ -263,7 +263,6 @@ describe('entry-cache', () => {
           safeBatchSize,
         )) {
           results.push(...batch.entries());
-          return Promise.resolve();
         }
         expect(results).toEqual(c.expected);
       }

@@ -99,7 +99,6 @@ describe('list and scan', () => {
           safeBatchSize,
         )) {
           scanResults.push(...batch.entries());
-          return Promise.resolve();
         }
         expect(scanResults).toEqual(c.expected);
       }
