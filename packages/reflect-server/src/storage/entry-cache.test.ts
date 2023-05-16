@@ -262,7 +262,7 @@ describe('entry-cache', () => {
           valita.string(),
           safeBatchSize,
         )) {
-          results.push(...batch.entries());
+          results.push(...batch);
         }
         expect(results).toEqual(c.expected);
       }

@@ -98,7 +98,7 @@ describe('list and scan', () => {
           valita.number(),
           safeBatchSize,
         )) {
-          scanResults.push(...batch.entries());
+          scanResults.push(...batch);
         }
         expect(scanResults).toEqual(c.expected);
       }
