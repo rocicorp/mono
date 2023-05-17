@@ -19,6 +19,7 @@ import {
   invalidateForRoomRequestSchema,
 } from 'reflect-protocol';
 import {closeConnections, getConnections} from './connections.js';
+import type {RoomStartHandler} from './room-start.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import * as valita from 'shared/valita.js';
@@ -43,6 +44,7 @@ import {
 } from './paths.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import {BufferSizer} from 'shared/buffer-sizer.js';
+import {processRoomStart} from '../process/process-room-start.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -51,6 +53,7 @@ export interface RoomDOOptions<MD extends MutatorDefs> {
   mutators: MD;
   state: DurableObjectState;
   authApiKey: string;
+  roomStartHandler: RoomStartHandler;
   disconnectHandler: DisconnectHandler;
   logSink: LogSink;
   logLevel: LogLevel;
@@ -82,6 +85,8 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   private _maxProcessedMutationTimestamp = 0;
   private readonly _lock = new Lock();
   private readonly _mutators: MutatorMap;
+  private _roomStarted = false;
+  private readonly _roomStartHandler: RoomStartHandler;
   private readonly _disconnectHandler: DisconnectHandler;
   private _lcHasRoomIdContext = false;
   private _lc: LogContext;
@@ -92,10 +97,18 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   private readonly _router = new Router();
 
   constructor(options: RoomDOOptions<MD>) {
-    const {mutators, disconnectHandler, state, authApiKey, logSink, logLevel} =
-      options;
+    const {
+      mutators,
+      roomStartHandler,
+      disconnectHandler,
+      state,
+      authApiKey,
+      logSink,
+      logLevel,
+    } = options;
 
     this._mutators = new Map([...Object.entries(mutators)]) as MutatorMap;
+    this._roomStartHandler = roomStartHandler;
     this._disconnectHandler = disconnectHandler;
     this._storage = new DurableStorage(
       state.storage,
@@ -186,6 +199,15 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         addRequestIDFromHeadersOrRandomID(this._lc, request),
         request,
       );
+
+      if (!this._roomStarted) {
+        await this._lock.withLock(async () => {
+          if (!this._roomStarted) {
+            await processRoomStart(lc, this._roomStartHandler, this._storage);
+            this._roomStarted = true;
+          }
+        });
+      }
 
       return await this._router.dispatch(request, {lc});
     } catch (e) {
