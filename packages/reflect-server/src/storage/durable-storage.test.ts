@@ -90,13 +90,20 @@ describe('list and scan', () => {
       const results = [...(await storage.list(c.opts || {}, valita.number()))];
       expect(results).toEqual(c.expected);
 
-      // Test scan() with a variety of batch sizes.
-      for (const safeBatchSize of [1, 2, 3, 128, undefined]) {
+      // Test scan()
+      const scanResults: [string, number][] = [];
+      for await (const entry of storage.scan(c.opts || {}, valita.number())) {
+        scanResults.push(entry);
+      }
+      expect(scanResults).toEqual(c.expected);
+
+      // Test batchScan() with a variety of batch sizes.
+      for (const batchSize of [1, 2, 3, 128]) {
         const scanResults: [string, number][] = [];
-        for await (const batch of storage.scan(
+        for await (const batch of storage.batchScan(
           c.opts || {},
           valita.number(),
-          safeBatchSize,
+          batchSize,
         )) {
           scanResults.push(...batch);
         }

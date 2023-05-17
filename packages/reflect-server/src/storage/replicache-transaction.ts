@@ -109,15 +109,13 @@ export class ReplicacheTransaction implements WriteTransaction {
       start: start && {key: userValueKey(start.key)}, // remove exclusive option, as makeScanResult will take care of it
     };
 
-    for await (const entriesMap of this._storage.scan(
+    for await (const [k, v] of this._storage.scan(
       optsInternal,
       userValueSchema,
     )) {
-      for (const [k, v] of entriesMap) {
-        if (!v.deleted) {
-          const entry: [string, ReadonlyJSONValue] = [stripPrefix(k), v.value];
-          yield entry;
-        }
+      if (!v.deleted) {
+        const entry: [string, ReadonlyJSONValue] = [stripPrefix(k), v.value];
+        yield entry;
       }
     }
   }

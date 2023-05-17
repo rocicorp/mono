@@ -3,7 +3,7 @@ import type {Patch} from 'reflect-protocol';
 import type {ReadonlyJSONValue} from 'shared/json.js';
 import * as valita from 'shared/valita.js';
 import type {ListOptions, Storage} from './storage.js';
-import {AbstractStorage} from './abstract-storage.js';
+import {scan, batchScan} from './scan-storage.js';
 
 /**
  * Implements a read/write cache for key/value pairs on top of some lower-level
@@ -14,7 +14,7 @@ import {AbstractStorage} from './abstract-storage.js';
  *
  * TODO: We can remove the read side of this since DO does caching itself internally!
  */
-export class EntryCache extends AbstractStorage implements Storage {
+export class EntryCache implements Storage {
   private _storage: Storage;
   private _cache: Map<
     string,
@@ -22,7 +22,6 @@ export class EntryCache extends AbstractStorage implements Storage {
   > = new Map();
 
   constructor(storage: Storage) {
-    super();
     this._storage = storage;
   }
 
@@ -96,6 +95,21 @@ export class EntryCache extends AbstractStorage implements Storage {
     );
 
     this._cache.clear();
+  }
+
+  scan<T extends ReadonlyJSONValue>(
+    options: ListOptions,
+    schema: valita.Type<T>,
+  ): AsyncIterable<[key: string, value: T]> {
+    return scan(this, options, schema);
+  }
+
+  batchScan<T extends ReadonlyJSONValue>(
+    options: ListOptions,
+    schema: valita.Type<T>,
+    batchSize: number,
+  ): AsyncIterable<Map<string, T>> {
+    return batchScan(this, options, schema, batchSize);
   }
 
   async list<T extends ReadonlyJSONValue>(
