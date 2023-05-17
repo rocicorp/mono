@@ -93,11 +93,11 @@ export class ReplicacheTransaction implements WriteTransaction {
     }
 
     return makeScanResult<ScanNoIndexOptions>(options, () =>
-      this._list(options),
+      this._scan(options),
     );
   }
 
-  private async *_list(options: ScanNoIndexOptions) {
+  private async *_scan(options: ScanNoIndexOptions) {
     const {prefix, start} = options;
 
     const optsInternal = {
@@ -109,9 +109,10 @@ export class ReplicacheTransaction implements WriteTransaction {
       start: start && {key: userValueKey(start.key)}, // remove exclusive option, as makeScanResult will take care of it
     };
 
-    const entriesMap = await this._storage.list(optsInternal, userValueSchema);
-
-    for (const [k, v] of entriesMap) {
+    for await (const [k, v] of this._storage.scan(
+      optsInternal,
+      userValueSchema,
+    )) {
       if (!v.deleted) {
         const entry: [string, ReadonlyJSONValue] = [stripPrefix(k), v.value];
         yield entry;
