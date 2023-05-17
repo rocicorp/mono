@@ -1,21 +1,16 @@
 import type {ReadonlyJSONValue} from 'shared/json.js';
 import type * as valita from 'shared/valita.js';
-import type {ListOptions} from './storage.js';
+import type {ListOptions, Storage} from './storage.js';
 
 // The default safe batch size for scans is based on the CF limit for multi-keyed get(),
 // which is a semi-arbitrary heuristic/value for avoiding loading too much data at once.
 const defaultSafeBatchSize = 128;
 
 // Subset of the Storage interface used by the `scan` implementations.
-interface StorageLister {
-  list<T extends ReadonlyJSONValue>(
-    options: ListOptions,
-    schema: valita.Type<T>,
-  ): Promise<Map<string, T>>;
-}
+type Lister = Pick<Storage, 'list'>;
 
 export async function* scan<T extends ReadonlyJSONValue>(
-  storage: StorageLister,
+  storage: Lister,
   options: ListOptions,
   schema: valita.Type<T>,
 ): AsyncIterable<[key: string, value: T]> {
@@ -32,7 +27,7 @@ export async function* scan<T extends ReadonlyJSONValue>(
 }
 
 export async function* batchScan<T extends ReadonlyJSONValue>(
-  storage: StorageLister,
+  storage: Lister,
   options: ListOptions,
   schema: valita.Type<T>,
   batchSize: number,
