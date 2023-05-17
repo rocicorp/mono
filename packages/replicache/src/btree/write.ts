@@ -1,21 +1,21 @@
 import {Lock} from '@rocicorp/lock';
-import type {FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
+import {assert} from 'shared/asserts.js';
+import type {CreateChunk} from '../dag/chunk.js';
 import type * as dag from '../dag/mod.js';
 import {Hash, emptyHash, newUUIDHash} from '../hash.js';
-import {BTreeRead} from './read.js';
+import type {FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
+import {getSizeOfEntry} from '../size-of-value.js';
 import {
   DataNodeImpl,
+  Entry,
   InternalNodeImpl,
-  newNodeImpl,
-  partition,
+  createNewInternalEntryForNode,
   emptyDataNode,
   isDataNodeImpl,
-  EntryWithOptionalSize,
-  createNewInternalEntryForNode,
-  Entry,
+  newNodeImpl,
+  partition,
 } from './node.js';
-import type {CreateChunk} from '../dag/chunk.js';
-import {assert} from 'shared/asserts.js';
+import {BTreeRead} from './read.js';
 
 export class BTreeWrite extends BTreeRead {
   /**
@@ -43,17 +43,22 @@ export class BTreeWrite extends BTreeRead {
   readonly minSize: number;
   readonly maxSize: number;
 
+  readonly getEntrySize: <K, V>(k: K, v: V) => number;
+
   constructor(
     dagWrite: dag.Write,
     root: Hash = emptyHash,
     minSize = 8 * 1024,
     maxSize = 16 * 1024,
-    getEntrySize?: <T>(e: T) => number,
+    getEntrySize: <K, V>(k: K, v: V) => number = getSizeOfEntry,
     chunkHeaderSize?: number,
   ) {
-    super(dagWrite, root, getEntrySize, chunkHeaderSize);
+    super(dagWrite, root, chunkHeaderSize);
+
     this.minSize = minSize;
+
     this.maxSize = maxSize;
+    this.getEntrySize = getEntrySize;
   }
 
   getNode(hash: Hash): Promise<DataNodeImpl | InternalNodeImpl> {
@@ -66,8 +71,10 @@ export class BTreeWrite extends BTreeRead {
 
   protected override _chunkEntriesToTreeEntries<V>(
     entries: readonly Entry<V>[],
-  ): EntryWithOptionalSize<V>[] {
-    return entries.map(entry => [entry[0], entry[1], this.getEntrySize(entry)]);
+  ): Entry<V>[] {
+    // Remove readonly modifier.
+    // TODO(arv): Is this safe?
+    return entries as Entry<V>[];
   }
 
   private _addToModified(node: DataNodeImpl | InternalNodeImpl): void {
@@ -83,7 +90,7 @@ export class BTreeWrite extends BTreeRead {
   }
 
   newInternalNodeImpl(
-    entries: Array<EntryWithOptionalSize<Hash>>,
+    entries: Array<Entry<Hash>>,
     level: number,
   ): InternalNodeImpl {
     const n = new InternalNodeImpl(entries, newUUIDHash(), level, true);
@@ -91,32 +98,20 @@ export class BTreeWrite extends BTreeRead {
     return n;
   }
 
-  newDataNodeImpl(
-    entries: EntryWithOptionalSize<FrozenJSONValue>[],
-  ): DataNodeImpl {
+  newDataNodeImpl(entries: Entry<FrozenJSONValue>[]): DataNodeImpl {
     const n = new DataNodeImpl(entries, newUUIDHash(), true);
     this._addToModified(n);
     return n;
   }
 
+  newNodeImpl(entries: Entry<FrozenJSONValue>[], level: number): DataNodeImpl;
+  newNodeImpl(entries: Entry<Hash>[], level: number): InternalNodeImpl;
   newNodeImpl(
-    entries: EntryWithOptionalSize<FrozenJSONValue>[],
-    level: number,
-  ): DataNodeImpl;
-  newNodeImpl(
-    entries: EntryWithOptionalSize<Hash>[],
-    level: number,
-  ): InternalNodeImpl;
-  newNodeImpl(
-    entries:
-      | EntryWithOptionalSize<Hash>[]
-      | EntryWithOptionalSize<FrozenJSONValue>[],
+    entries: Entry<Hash>[] | Entry<FrozenJSONValue>[],
     level: number,
   ): InternalNodeImpl | DataNodeImpl;
   newNodeImpl(
-    entries:
-      | EntryWithOptionalSize<Hash>[]
-      | EntryWithOptionalSize<FrozenJSONValue>[],
+    entries: Entry<Hash>[] | Entry<FrozenJSONValue>[],
     level: number,
   ): InternalNodeImpl | DataNodeImpl {
     const n = newNodeImpl(entries, newUUIDHash(), level, true);
@@ -127,28 +122,23 @@ export class BTreeWrite extends BTreeRead {
   put(key: string, value: FrozenJSONValue): Promise<void> {
     return this._lock.withLock(async () => {
       const oldRootNode = await this.getNode(this.rootHash);
-      const entrySize = this.getEntrySize([key, value]);
+      const entrySize = this.getEntrySize(key, value);
       const rootNode = await oldRootNode.set(key, value, entrySize, this);
 
       // We do the rebalancing in the parent so we need to do it here as well.
       if (rootNode.getChildNodeSize(this) > this.maxSize) {
         const headerSize = this.chunkHeaderSize;
         const partitions = partition(
-          rootNode.entries as EntryWithOptionalSize<Hash>[],
-          value => {
-            assert(value[2]);
-            return value[2];
-          },
+          rootNode.entries,
+          value => value[2],
           this.minSize - headerSize,
           this.maxSize - headerSize,
         );
         const {level} = rootNode;
-        const entries: EntryWithOptionalSize<Hash>[] = partitions.map(
-          entries => {
-            const node = this.newNodeImpl(entries, level);
-            return createNewInternalEntryForNode(node, this.getEntrySize);
-          },
-        );
+        const entries: Entry<Hash>[] = partitions.map(entries => {
+          const node = this.newNodeImpl(entries, level);
+          return createNewInternalEntryForNode(node, this.getEntrySize);
+        });
         const newRoot = this.newInternalNodeImpl(entries, level + 1);
         this.rootHash = newRoot.hash;
         return;
@@ -243,7 +233,8 @@ function gatherNewChunks(
     );
     if (newChildHash !== childHash) {
       // MUTATES the entries!
-      entries[i] = [entry[0], newChildHash];
+      // Hashes do not change the size of the entry because all hashes have the same length
+      entries[i] = [entry[0], newChildHash, entry[2]];
     }
     refs.push(newChildHash);
   }

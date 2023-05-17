@@ -1045,7 +1045,9 @@ test('begin try pull DD31', async () => {
           db.whenceHash(syncHead.chunk.hash),
           read,
         );
-        const gotValueMap = await asyncIterableToArray(bTreeRead.entries());
+        const gotValueMap = (
+          await asyncIterableToArray(bTreeRead.entries())
+        ).map(e => [e[0], e[1]] as const);
         gotValueMap.sort((a, b) => stringCompare(a[0], b[0]));
         const expValueMap = Array.from(expSyncHead.valueMap);
         expValueMap.sort((a, b) => stringCompare(a[0], b[0]));

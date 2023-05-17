@@ -1,43 +1,49 @@
 import {assert, expect} from '@esm-bundle/chai';
 import * as dag from '../dag/mod.js';
-import {emptyHash, Hash, makeNewFakeHashFunction} from '../hash.js';
-import {deepFreeze, FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
-import {getSizeOfValue} from '../size-of-value.js';
+import {Hash, emptyHash, makeNewFakeHashFunction} from '../hash.js';
+import {FrozenJSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
+import {getSizeOfEntry, getSizeOfValue} from '../size-of-value.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {
   DataNode,
   Diff,
   Entry,
-  EntryWithOptionalSize,
-  findLeaf,
-  internalizeBTreeNode,
   InternalNode,
-  makeNodeChunkData,
   NODE_ENTRIES,
   NODE_LEVEL,
+  findLeaf,
+  internalizeBTreeNode,
+  makeNodeChunkData,
   partition,
 } from './node.js';
 import {BTreeRead, NODE_HEADER_SIZE} from './read.js';
 import {BTreeWrite} from './write.js';
 
+function createSizedEntry<K, V>(
+  key: K,
+  value: V,
+): [key: K, value: V, sizeOfEntry: number] {
+  return [key, value, getEntrySize(key, value)];
+}
+
 test('findLeaf', async () => {
   const dagStore = new dag.TestStore();
 
   const leaf0 = makeNodeChunkData(0, [
-    ['a', 0],
-    ['b', 1],
-    ['c', 2],
+    createSizedEntry('a', 0),
+    createSizedEntry('b', 1),
+    createSizedEntry('c', 2),
   ]);
 
   const leaf1 = makeNodeChunkData(0, [
-    ['d', 3],
-    ['e', 4],
-    ['f', 5],
+    createSizedEntry('d', 3),
+    createSizedEntry('e', 4),
+    createSizedEntry('f', 5),
   ]);
   const leaf2: DataNode = makeNodeChunkData(0, [
-    ['g', 6],
-    ['h', 7],
-    ['i', 8],
+    createSizedEntry('g', 6),
+    createSizedEntry('h', 7),
+    createSizedEntry('i', 8),
   ]);
 
   let h0: Hash, h1: Hash, h2: Hash;
@@ -55,9 +61,9 @@ test('findLeaf', async () => {
     h2 = c2.hash;
 
     root = makeNodeChunkData(1, [
-      ['c', h0],
-      ['f', h1],
-      ['i', h2],
+      createSizedEntry('c', h0),
+      createSizedEntry('f', h1),
+      createSizedEntry('i', h2),
     ]);
 
     const rootChunk = dagWrite.createChunk(root, [h0, h1, h2]);
@@ -72,12 +78,7 @@ test('findLeaf', async () => {
   });
 
   await withRead(dagStore, async dagRead => {
-    const source = new BTreeRead(
-      dagRead,
-      rootHash,
-      getEntrySize,
-      chunkHeaderSize,
-    );
+    const source = new BTreeRead(dagRead, rootHash, chunkHeaderSize);
 
     const t = async (
       key: string,
@@ -128,7 +129,7 @@ function makeTree(node: TreeData, dagStore: dag.Store): Promise<Hash> {
     if (node.$level === 0) {
       const dataNode = makeNodeChunkData(
         0,
-        entries.map(entry => [entry[0], entry[1]]),
+        entries.map(entry => createSizedEntry(...entry)),
       );
       const chunk = dagWrite.createChunk(dataNode, []);
       await dagWrite.putChunk(chunk);
@@ -139,7 +140,7 @@ function makeTree(node: TreeData, dagStore: dag.Store): Promise<Hash> {
     const ps = entries.map(async ([key, child]) => {
       const [hash, lvl] = await makeTreeInner(child as TreeData, dagWrite);
       level = Math.max(level, lvl);
-      return [key, hash] as [string, Hash];
+      return createSizedEntry(key, hash);
     });
     const entries2 = await Promise.all(ps);
 
@@ -196,7 +197,7 @@ async function expectTree(
 
 let minSize: number;
 let maxSize: number;
-let getEntrySize: <T>(e: T) => number;
+let getEntrySize: <K, V>(k: K, v: V) => number;
 let chunkHeaderSize: number;
 
 setup(() => {
@@ -212,7 +213,7 @@ function doRead<R>(
   fn: (r: BTreeRead) => R | Promise<R>,
 ): Promise<R> {
   return withRead(dagStore, dagWrite => {
-    const r = new BTreeRead(dagWrite, rootHash, getEntrySize, chunkHeaderSize);
+    const r = new BTreeRead(dagWrite, rootHash, chunkHeaderSize);
     return fn(r);
   });
 }
@@ -336,12 +337,7 @@ test('get', async () => {
   const rootHash = await makeTree(tree, dagStore);
 
   await withRead(dagStore, async dagRead => {
-    const source = new BTreeRead(
-      dagRead,
-      rootHash,
-      getEntrySize,
-      chunkHeaderSize,
-    );
+    const source = new BTreeRead(dagRead, rootHash, chunkHeaderSize);
 
     expect(await source.get('b')).to.equal(0);
     expect(await source.get('d')).to.equal(1);
@@ -394,12 +390,7 @@ test('has', async () => {
   const rootHash = await makeTree(tree, dagStore);
 
   await withRead(dagStore, async dagRead => {
-    const source = new BTreeRead(
-      dagRead,
-      rootHash,
-      getEntrySize,
-      chunkHeaderSize,
-    );
+    const source = new BTreeRead(dagRead, rootHash, chunkHeaderSize);
 
     expect(await source.has('b')).to.be.true;
     expect(await source.has('d')).to.be.true;
@@ -1122,9 +1113,9 @@ test('put - invalid', async () => {
 });
 
 test('put/del - getSize', async () => {
-  minSize = 24;
+  minSize = 30;
   maxSize = minSize * 2;
-  getEntrySize = getSizeOfValue;
+  getEntrySize = (k, v) => getSizeOfEntry(k, v);
 
   const dagStore = new dag.TestStore();
 
@@ -1142,7 +1133,7 @@ test('put/del - getSize', async () => {
 
   expect(getSizeOfValue('aaaa')).to.equal(9);
   expect(getSizeOfValue('a1')).to.equal(7);
-  expect(getEntrySize(['aaaa', 'a1'])).to.equal(22);
+  expect(getSizeOfEntry('aaaa', 'a1')).to.equal(27);
   await expectTree(rootHash, dagStore, {
     $level: 0,
     aaaa: 'a1',
@@ -1151,7 +1142,7 @@ test('put/del - getSize', async () => {
   rootHash = await doWrite(rootHash, dagStore, async w => {
     await w.put('c', '');
   });
-  expect(getEntrySize(['c', ''])).to.equal(17);
+  expect(getSizeOfEntry('c', '')).to.equal(22);
   await expectTree(rootHash, dagStore, {
     $level: 0,
     aaaa: 'a1',
@@ -1161,7 +1152,7 @@ test('put/del - getSize', async () => {
   rootHash = await doWrite(rootHash, dagStore, async w => {
     await w.put('b', 'b234');
   });
-  expect(getEntrySize(['b', 'b234'])).to.equal(21);
+  expect(getSizeOfEntry('b', 'b234')).to.equal(26);
   await expectTree(rootHash, dagStore, {
     $level: 1,
 
@@ -1207,7 +1198,7 @@ test('scan', async () => {
     });
 
     await doRead(rootHash, dagStore, async r => {
-      const res: EntryWithOptionalSize<FrozenJSONValue>[] = [];
+      const res: Entry<FrozenJSONValue>[] = [];
       const scanResult = r.scan(fromKey);
       for await (const e of scanResult) {
         res.push(e);
@@ -1217,56 +1208,53 @@ test('scan', async () => {
   };
 
   await t([]);
-  await t([['a', 1]]);
+  await t([createSizedEntry('a', 1)]);
+  await t([createSizedEntry('a', 1), createSizedEntry('b', 2)]);
   await t([
-    ['a', 1],
-    ['b', 2],
+    createSizedEntry('a', 1),
+    createSizedEntry('b', 2),
+    createSizedEntry('c', 3),
   ]);
   await t([
-    ['a', 1],
-    ['b', 2],
-    ['c', 3],
+    createSizedEntry('a', 1),
+    createSizedEntry('b', 2),
+    createSizedEntry('c', 3),
+    createSizedEntry('d', 4),
   ]);
   await t([
-    ['a', 1],
-    ['b', 2],
-    ['c', 3],
-    ['d', 4],
-  ]);
-  await t([
-    ['a', 1],
-    ['b', 2],
-    ['c', 3],
-    ['d', 4],
-    ['e', 5],
+    createSizedEntry('a', 1),
+    createSizedEntry('b', 2),
+    createSizedEntry('c', 3),
+    createSizedEntry('d', 4),
+    createSizedEntry('e', 5),
   ]);
 
   await t(
     [
-      ['a', 0],
-      ['aa', 1],
-      ['aaa', 2],
-      ['aab', 3],
-      ['ab', 4],
-      ['b', 5],
+      createSizedEntry('a', 0),
+      createSizedEntry('aa', 1),
+      createSizedEntry('aaa', 2),
+      createSizedEntry('aab', 3),
+      createSizedEntry('ab', 4),
+      createSizedEntry('b', 5),
     ],
     'aa',
     [
-      ['aa', 1],
-      ['aaa', 2],
-      ['aab', 3],
-      ['ab', 4],
-      ['b', 5],
+      createSizedEntry('aa', 1),
+      createSizedEntry('aaa', 2),
+      createSizedEntry('aab', 3),
+      createSizedEntry('ab', 4),
+      createSizedEntry('b', 5),
     ],
   );
 
   await t(
     [
-      ['a', 1],
-      ['b', 2],
-      ['c', 3],
-      ['d', 4],
-      ['e', 5],
+      createSizedEntry('a', 1),
+      createSizedEntry('b', 2),
+      createSizedEntry('c', 3),
+      createSizedEntry('d', 4),
+      createSizedEntry('e', 5),
     ],
     'f',
     [],
@@ -1274,14 +1262,14 @@ test('scan', async () => {
 
   await t(
     [
-      ['a', 1],
-      ['b', 2],
-      ['c', 3],
-      ['d', 4],
-      ['e', 5],
+      createSizedEntry('a', 1),
+      createSizedEntry('b', 2),
+      createSizedEntry('c', 3),
+      createSizedEntry('d', 4),
+      createSizedEntry('e', 5),
     ],
     'e',
-    [['e', 5]],
+    [createSizedEntry('e', 5)],
   );
 });
 
@@ -1329,18 +1317,8 @@ test('diff', async () => {
     });
 
     await withRead(dagStore, async dagRead => {
-      const oldTree = new BTreeRead(
-        dagRead,
-        oldHash,
-        getEntrySize,
-        chunkHeaderSize,
-      );
-      const newTree = new BTreeRead(
-        dagRead,
-        newHash,
-        getEntrySize,
-        chunkHeaderSize,
-      );
+      const oldTree = new BTreeRead(dagRead, oldHash, chunkHeaderSize);
+      const newTree = new BTreeRead(dagRead, newHash, chunkHeaderSize);
 
       const actual = [];
       for await (const diffRes of newTree.diff(oldTree)) {
@@ -1352,24 +1330,18 @@ test('diff', async () => {
 
   await t([], [], []);
 
-  await t([['a', 0]], [], [{op: 'del', key: 'a', oldValue: 0}]);
-  await t([], [['a', 0]], [{op: 'add', key: 'a', newValue: 0}]);
-  await t([['a', 0]], [['a', 0]], []);
+  await t([createSizedEntry('a', 0)], [], [{op: 'del', key: 'a', oldValue: 0}]);
+  await t([], [createSizedEntry('a', 0)], [{op: 'add', key: 'a', newValue: 0}]);
+  await t([createSizedEntry('a', 0)], [createSizedEntry('a', 0)], []);
   await t(
-    [['a', 0]],
-    [['a', 1]],
+    [createSizedEntry('a', 0)],
+    [createSizedEntry('a', 1)],
     [{op: 'change', key: 'a', oldValue: 0, newValue: 1}],
   );
 
   await t(
-    [
-      ['b', 1],
-      ['d', 2],
-    ],
-    [
-      ['d', 2],
-      ['f', 3],
-    ],
+    [createSizedEntry('b', 1), createSizedEntry('d', 2)],
+    [createSizedEntry('d', 2), createSizedEntry('f', 3)],
     [
       {op: 'del', key: 'b', oldValue: 1},
       {op: 'add', key: 'f', newValue: 3},
@@ -1378,14 +1350,11 @@ test('diff', async () => {
 
   await t(
     [
-      ['b', 1],
-      ['d', 2],
-      ['e', 4],
+      createSizedEntry('b', 1),
+      createSizedEntry('d', 2),
+      createSizedEntry('e', 4),
     ],
-    [
-      ['d', 22],
-      ['f', 3],
-    ],
+    [createSizedEntry('d', 22), createSizedEntry('f', 3)],
     [
       {op: 'del', key: 'b', oldValue: 1},
       {op: 'change', key: 'd', oldValue: 2, newValue: 22},
@@ -1396,19 +1365,16 @@ test('diff', async () => {
 
   await t(
     [
-      ['b', 1],
-      ['d', 2],
-      ['e', 4],
-      ['h', 5],
-      ['i', 6],
-      ['j', 7],
-      ['k', 8],
-      ['l', 9],
+      createSizedEntry('b', 1),
+      createSizedEntry('d', 2),
+      createSizedEntry('e', 4),
+      createSizedEntry('h', 5),
+      createSizedEntry('i', 6),
+      createSizedEntry('j', 7),
+      createSizedEntry('k', 8),
+      createSizedEntry('l', 9),
     ],
-    [
-      ['d', 22],
-      ['f', 3],
-    ],
+    [createSizedEntry('d', 22), createSizedEntry('f', 3)],
     [
       {op: 'del', key: 'b', oldValue: 1},
       {op: 'change', key: 'd', oldValue: 2, newValue: 22},
@@ -1425,41 +1391,41 @@ test('diff', async () => {
 
   await t(
     [
-      ['b', 1],
-      ['b1', 11],
-      ['d', 2],
-      ['d1', 12],
-      ['e', 4],
-      ['e1', 14],
-      ['h', 5],
-      ['h1', 15],
-      ['i', 6],
-      ['i1', 16],
-      ['j', 7],
-      ['j1', 17],
-      ['k', 8],
-      ['k1', 18],
-      ['l', 9],
-      ['l1', 19],
+      createSizedEntry('b', 1),
+      createSizedEntry('b1', 11),
+      createSizedEntry('d', 2),
+      createSizedEntry('d1', 12),
+      createSizedEntry('e', 4),
+      createSizedEntry('e1', 14),
+      createSizedEntry('h', 5),
+      createSizedEntry('h1', 15),
+      createSizedEntry('i', 6),
+      createSizedEntry('i1', 16),
+      createSizedEntry('j', 7),
+      createSizedEntry('j1', 17),
+      createSizedEntry('k', 8),
+      createSizedEntry('k1', 18),
+      createSizedEntry('l', 9),
+      createSizedEntry('l1', 19),
     ],
     [
-      ['l1', 19],
-      ['l', 9],
-      ['k1', 18],
-      // ['k', 8],
-      ['j1', 17],
-      ['j', 7],
-      ['i1', 16],
-      ['i', 6],
-      ['h1', 15],
-      ['h', 5],
-      ['e1', 141],
-      ['e', 0],
-      ['d1', 0],
-      ['d', 0],
-      ['b2', 0],
-      ['b1', 0],
-      ['b', 1],
+      createSizedEntry('l1', 19),
+      createSizedEntry('l', 9),
+      createSizedEntry('k1', 18),
+      // createSizedEntry('k', 8),
+      createSizedEntry('j1', 17),
+      createSizedEntry('j', 7),
+      createSizedEntry('i1', 16),
+      createSizedEntry('i', 6),
+      createSizedEntry('h1', 15),
+      createSizedEntry('h', 5),
+      createSizedEntry('e1', 141),
+      createSizedEntry('e', 0),
+      createSizedEntry('d1', 0),
+      createSizedEntry('d', 0),
+      createSizedEntry('b2', 0),
+      createSizedEntry('b1', 0),
+      createSizedEntry('b', 1),
     ],
     [
       {

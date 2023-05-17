@@ -1,10 +1,10 @@
-import type {ReadonlyJSONObject} from './json.js';
 import {hasOwn} from 'shared/has-own.js';
+import type {ReadonlyJSONObject} from './json.js';
 
 const SIZE_TAG = 1;
 const SIZE_INT32 = 4;
+const SIZE_SMI = 5;
 const SIZE_DOUBLE = 8;
-
 /**
  * Gives a size of a value. The size is modelled after the size used by
  * Chromium/V8's structuredClone algorithm. It does not match exactly so the
@@ -31,7 +31,7 @@ export function getSizeOfValue(value: unknown): number {
     case 'number':
       if (isSmi(value)) {
         if (value <= -(2 ** 30) || value >= 2 ** 30 - 1) {
-          return SIZE_TAG + 5;
+          return SIZE_TAG + SIZE_SMI;
         }
         return SIZE_TAG + SIZE_INT32;
       }
@@ -53,13 +53,13 @@ export function getSizeOfValue(value: unknown): number {
 
       {
         const val = value as ReadonlyJSONObject;
-        let sum: number = SIZE_TAG;
+        let sum: number = 2 * SIZE_TAG + SIZE_INT32;
         for (const k in val) {
           if (hasOwn(val, k)) {
             sum += getSizeOfValue(k) + getSizeOfValue(val[k]);
           }
         }
-        return sum + SIZE_INT32 + SIZE_TAG;
+        return sum;
       }
   }
 
@@ -68,4 +68,11 @@ export function getSizeOfValue(value: unknown): number {
 
 function isSmi(value: number): boolean {
   return value === (value | 0);
+}
+
+const entryFixed = 2 * SIZE_TAG + SIZE_INT32 + SIZE_TAG + SIZE_INT32;
+
+export function getSizeOfEntry<K, V>(key: K, value: V): number {
+  // Entries are stored as [key, value, sizeOfEntry]
+  return entryFixed + getSizeOfValue(key) + getSizeOfValue(value);
 }
