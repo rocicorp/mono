@@ -2,6 +2,7 @@ import type {ReadonlyJSONValue} from 'shared/json.js';
 import type * as valita from 'shared/valita.js';
 import {delEntry, getEntry, listEntries, putEntry} from '../db/data.js';
 import type {ListOptions, Storage} from './storage.js';
+import {scan, batchScan} from './scan-storage.js';
 
 const baseAllowConcurrency = true;
 
@@ -43,6 +44,21 @@ export class DurableStorage implements Storage {
     schema: valita.Type<T>,
   ): Promise<T | undefined> {
     return getEntry(this._durable, key, schema, baseOptions);
+  }
+
+  scan<T extends ReadonlyJSONValue>(
+    options: ListOptions,
+    schema: valita.Type<T>,
+  ): AsyncIterable<[key: string, value: T]> {
+    return scan(this, options, schema);
+  }
+
+  batchScan<T extends ReadonlyJSONValue>(
+    options: ListOptions,
+    schema: valita.Type<T>,
+    batchSize: number,
+  ): AsyncIterable<Map<string, T>> {
+    return batchScan(this, options, schema, batchSize);
   }
 
   list<T extends ReadonlyJSONValue>(
