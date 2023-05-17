@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {expect, test} from '@jest/globals';
+import {describe, expect, test} from '@jest/globals';
 import * as valita from 'shared/valita.js';
 import {DurableStorage} from './durable-storage.js';
 import type {ListOptions} from './storage.js';
 
-test('list', async () => {
+describe('list and scan', () => {
   type Case = {
     name: string;
     expected: [string, number][];
@@ -75,18 +75,40 @@ test('list', async () => {
     },
   ];
 
-  const {roomDO} = getMiniflareBindings();
-  const id = roomDO.newUniqueId();
-  const storage = new DurableStorage(
-    await getMiniflareDurableObjectStorage(id),
-  );
-
-  for (const [k, v] of Object.entries(entries)) {
-    await storage.put(k, v);
-  }
-
   for (const c of cases) {
-    const entries = [...(await storage.list(c.opts || {}, valita.number()))];
-    expect(entries).toEqual(c.expected);
+    test(c.name, async () => {
+      const {roomDO} = getMiniflareBindings();
+      const id = roomDO.newUniqueId();
+      const storage = new DurableStorage(
+        await getMiniflareDurableObjectStorage(id),
+      );
+
+      for (const [k, v] of Object.entries(entries)) {
+        await storage.put(k, v);
+      }
+
+      const results = [...(await storage.list(c.opts || {}, valita.number()))];
+      expect(results).toEqual(c.expected);
+
+      // Test scan()
+      const scanResults: [string, number][] = [];
+      for await (const entry of storage.scan(c.opts || {}, valita.number())) {
+        scanResults.push(entry);
+      }
+      expect(scanResults).toEqual(c.expected);
+
+      // Test batchScan() with a variety of batch sizes.
+      for (const batchSize of [1, 2, 3, 128]) {
+        const scanResults: [string, number][] = [];
+        for await (const batch of storage.batchScan(
+          c.opts || {},
+          valita.number(),
+          batchSize,
+        )) {
+          scanResults.push(...batch);
+        }
+        expect(scanResults).toEqual(c.expected);
+      }
+    });
   }
 });

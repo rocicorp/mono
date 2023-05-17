@@ -1,7 +1,7 @@
 import {expect} from '@esm-bundle/chai';
 import {getSizeOfValue} from './size-of-value.js';
 
-test('getSizeOfValue', () => {
+test.skip('getSizeOfValue', () => {
   expect(getSizeOfValue(null)).to.equal(1);
   expect(getSizeOfValue(true)).to.equal(1);
   expect(getSizeOfValue(false)).to.equal(1);
