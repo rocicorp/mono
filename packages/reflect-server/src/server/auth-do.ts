@@ -972,7 +972,7 @@ export type StorageSchemaMeta = {
   minSafeRollbackVersion: number;
 };
 
-async function migrateStorageSchema(
+async function migrateStorageSchemaToVersion(
   storage: DurableObjectStorage,
   lc: LogContext,
   existingStorageSchemaMeta: StorageSchemaMeta,
@@ -1030,7 +1030,7 @@ async function ensureStorageSchemaMigrated(
     );
   }
   if (storageSchemaMeta.version >= STORAGE_SCHEMA_VERSION) {
-    storageSchemaMeta = await migrateStorageSchema(
+    storageSchemaMeta = await migrateStorageSchemaToVersion(
       storage,
       lc,
       storageSchemaMeta,
@@ -1044,7 +1044,7 @@ async function ensureStorageSchemaMigrated(
     return;
   }
   if (storageSchemaMeta.version === 0) {
-    storageSchemaMeta = await migrateStorageSchema(
+    storageSchemaMeta = await migrateStorageSchemaToVersion(
       storage,
       lc,
       storageSchemaMeta,
