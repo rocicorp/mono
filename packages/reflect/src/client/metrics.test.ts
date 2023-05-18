@@ -19,6 +19,7 @@ test('Gauge', () => {
   type Case = {
     name: string;
     value: number | undefined;
+    tags: string[];
     time: number;
     expected: Point[];
   };
@@ -29,18 +30,21 @@ test('Gauge', () => {
       value: undefined,
       time: 100 * 1000,
       expected: [],
+      tags: [],
     },
     {
       name: 'val-10',
       value: 10,
       time: 200 * 1000,
       expected: [[200, [10]]],
+      tags: ['tag'],
     },
     {
       name: 'val-20',
       value: 20,
       time: 500 * 1000,
       expected: [[500, [20]]],
+      tags: ['tag1', 'tag2'],
     },
   ];
 
@@ -50,10 +54,14 @@ test('Gauge', () => {
   for (const c of cases) {
     clock.setSystemTime(c.time);
     if (c.value !== undefined) {
-      g.set(c.value);
+      g.set(c.value, c.tags);
     }
     const series = g.flush();
-    expect(series, c.name).deep.equal({metric: 'mygauge', points: c.expected});
+    expect(series, c.name).deep.equal({
+      metric: 'mygauge',
+      points: c.expected,
+      tags: c.tags,
+    });
   }
 });
 
