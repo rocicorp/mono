@@ -103,10 +103,11 @@ export class MetricManager {
     for (const metric of this._metrics) {
       const series = metric.flush();
       if (series !== undefined) {
+        const tags = series.tags ? [...this.tags, ...series.tags] : this.tags;
         allSeries.push({
           ...series,
           host: this._host,
-          tags: [...this.tags, ...(series.tags ?? [])],
+          tags,
         });
       }
     }
