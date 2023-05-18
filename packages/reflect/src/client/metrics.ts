@@ -33,6 +33,7 @@ export class MetricManager {
   private _host: string;
   private _reporter: MetricsReporter;
   private _lc: Promise<LogContext>;
+  private _timerID: number | null;
 
   constructor(opts: MetricManagerOptions) {
     this._reportIntervalMs = opts.reportIntervalMs;
@@ -44,7 +45,7 @@ export class MetricManager {
 
     this.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
 
-    setInterval(() => {
+    this._timerID = setInterval(() => {
       void this.flush();
     }, this._reportIntervalMs);
   }
@@ -93,6 +94,11 @@ export class MetricManager {
   // Flushes all metrics to an array of time series (plural), one Series
   // per metric.
   public async flush() {
+    const lc = await this._lc;
+    if (this._timerID === null) {
+      lc.error?.('MetricManager.flush() called but already stopped');
+      return;
+    }
     const allSeries: Series[] = [];
     for (const metric of this._metrics) {
       const series = metric.flush();
@@ -104,7 +110,6 @@ export class MetricManager {
         });
       }
     }
-    const lc = await this._lc;
     if (allSeries.length === 0) {
       lc?.debug?.('No metrics to report');
       return;
@@ -114,6 +119,17 @@ export class MetricManager {
     } catch (e) {
       lc?.error?.(`Error reporting metrics: ${e}`);
     }
+  }
+
+  public stop() {
+    if (this._timerID === null) {
+      void this._lc.then(l =>
+        l.error?.('MetricManager.stop() called but already stopped'),
+      );
+      return;
+    }
+    clearInterval(this._timerID);
+    this._timerID = null;
   }
 
   private _register<M extends Flushable>(metric: M) {

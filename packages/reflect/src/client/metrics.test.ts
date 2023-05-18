@@ -254,3 +254,44 @@ test('MetricManager', async () => {
     reporter.resetHistory();
   }
 });
+
+test('MetricManager.stop', async () => {
+  const clock = sinon.useFakeTimers();
+
+  const reporter = sinon.mock().returns(Promise.resolve());
+  const mm = new MetricManager({
+    reportIntervalMs: REPORT_INTERVAL_MS,
+    host: 'test-host',
+    source: 'test-source',
+    reporter,
+    lc: Promise.resolve(new LogContext()),
+  });
+
+  mm.timeToConnectMs.set(100);
+  mm.lastConnectError.set('bonk');
+
+  await clock.tickAsync(REPORT_INTERVAL_MS);
+
+  expect(
+    reporter.calledOnceWithExactly([
+      {
+        metric: 'time_to_connect_ms',
+        points: [[REPORT_INTERVAL_MS / 1000, [100]]],
+        host: 'test-host',
+        tags: ['source:test-source'],
+      },
+      {
+        metric: 'last_connect_error_bonk',
+        points: [[REPORT_INTERVAL_MS / 1000, [1]]],
+        host: 'test-host',
+        tags: ['source:test-source'],
+      },
+    ]),
+  ).true;
+
+  reporter.resetHistory();
+  mm.stop();
+
+  await clock.tickAsync(REPORT_INTERVAL_MS * 2);
+  expect(reporter.notCalled);
+});
