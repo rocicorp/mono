@@ -597,24 +597,32 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   private async _fetchCanary(l: LogContext): Promise<CanaryResultTagType> {
-    const HTTP_OK = 200;
     const canaryUrl = this._socketOrigin.replace(/^ws/, 'http') + 'api/canary';
 
-    function fetchTimeout(url: string, ms: number): Promise<Response> {
+    function fetchTimeout(
+      url: string,
+      ms: number,
+    ): Promise<Response | 'canary:timeout'> {
       const controller = new AbortController();
       const {signal} = controller;
       const fetchPromise = fetch(url, {method: 'GET', signal});
-      const timeoutPromise = new Promise<Response>((_resolve, reject) => {
-        setTimeout(() => {
-          reject('timeout');
-          controller.abort();
-        }, ms);
-      });
+
+      const timeoutPromise = (async (): Promise<'canary:timeout'> => {
+        await sleep(ms);
+        controller.abort();
+        return 'canary:timeout';
+      })();
+
       return Promise.race([fetchPromise, timeoutPromise]);
     }
     try {
-      const response = await fetchTimeout(canaryUrl, CONNECT_TIMEOUT_MS);
-      if (response.status === HTTP_OK) {
+      const result = await fetchTimeout(canaryUrl, CONNECT_TIMEOUT_MS);
+      if (result === 'canary:timeout') {
+        l.debug?.('timeout from canary');
+        return result;
+      }
+      const response = result;
+      if (response.ok) {
         l.debug?.('200 response from canary');
         return 'canary:success';
       }
@@ -624,10 +632,6 @@ export class Reflect<MD extends MutatorDefs> {
       });
       return 'canary:failure';
     } catch (e) {
-      if (e === 'timeout') {
-        l.debug?.('timeout from canary');
-        return 'canary:timeout';
-      }
       l.debug?.('error from canary', e);
       return 'canary:failure';
     }
@@ -733,19 +737,18 @@ export class Reflect<MD extends MutatorDefs> {
         if (canaryRequestResultTag === undefined) {
           this._metrics.lastConnectError.set(getLastConnectMetricState(reason));
         } else {
-          canaryRequestResultTag
-            .then(tag => {
-              this._metrics.lastConnectError.set(
-                getLastConnectMetricState(reason),
-                [tag],
-              );
-            })
-            .catch(() => {
-              // log unexpected error
-              this._metrics.lastConnectError.set(
-                getLastConnectMetricState(reason),
-              );
-            });
+          try {
+            const tag = await canaryRequestResultTag;
+            this._metrics.lastConnectError.set(
+              getLastConnectMetricState(reason),
+              [tag],
+            );
+          } catch (error) {
+            // log unexpected error
+            this._metrics.lastConnectError.set(
+              getLastConnectMetricState(reason),
+            );
+          }
         }
         if (this._connectingStart === undefined) {
           l.error?.(
