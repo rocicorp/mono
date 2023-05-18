@@ -120,6 +120,11 @@ export class BaseAuthDO implements DurableObject {
   // acquired first.
   private readonly _roomRecordLock = new RWLock();
 
+  /**
+   * @param ensureStorageSchemaMigratedWrapperForTests provides a seam for
+   *     tests to wait for migrations to complete, and catch/assert about
+   *     any errors thrown by the migrations
+   */
   constructor(
     options: AuthDOOptions,
     ensureStorageSchemaMigratedWrapperForTests: (
