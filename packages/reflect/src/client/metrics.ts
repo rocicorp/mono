@@ -103,7 +103,10 @@ export class MetricManager {
     for (const metric of this._metrics) {
       const series = metric.flush();
       if (series !== undefined) {
-        const tags = series.tags ? [...this.tags, ...series.tags] : this.tags;
+        const tags =
+          series.tags && series.tags.length > 0
+            ? [...this.tags, ...series.tags]
+            : this.tags;
         allSeries.push({
           ...series,
           host: this._host,
@@ -237,6 +240,7 @@ export class State implements Flushable {
 
   public clear() {
     this._current = undefined;
+    this._currentTags = [];
   }
 
   public flush() {
@@ -249,6 +253,6 @@ export class State implements Flushable {
     if (this._clearOnFlush) {
       this.clear();
     }
-    return {...series, tags: this._currentTags};
+    return series;
   }
 }
