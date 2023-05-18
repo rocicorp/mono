@@ -22,7 +22,7 @@ export class DatadogLogSink implements LogSink {
   private _flushLock = new Lock();
 
   constructor(options: DatadogLogSinkOptions) {
-    const {apiKey, source, service, host, interval = 10_000} = options;
+    const {apiKey, source, service, host, interval = 5_000} = options;
 
     this._apiKey = apiKey;
     this._source = source;
