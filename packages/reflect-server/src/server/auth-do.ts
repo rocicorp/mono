@@ -120,7 +120,12 @@ export class BaseAuthDO implements DurableObject {
   // acquired first.
   private readonly _roomRecordLock = new RWLock();
 
-  constructor(options: AuthDOOptions) {
+  constructor(
+    options: AuthDOOptions,
+    ensureStorageSchemaMigratedWrapperForTests: (
+      p: Promise<void>,
+    ) => Promise<void> = p => p,
+  ) {
     const {roomDO, state, authHandler, authApiKey, logSink, logLevel} = options;
     this._roomDO = roomDO;
     this._state = state;
@@ -138,7 +143,9 @@ export class BaseAuthDO implements DurableObject {
     this._lc.info?.('Starting server');
     this._lc.info?.('Version:', version);
     void state.blockConcurrencyWhile(() =>
-      ensureStorageSchemaMigrated(state.storage, this._lc),
+      ensureStorageSchemaMigratedWrapperForTests(
+        ensureStorageSchemaMigrated(state.storage, this._lc),
+      ),
     );
   }
 
@@ -959,9 +966,9 @@ async function deleteConnection(
   await storage.delete([connectionKeyString, connectionRoomIndexString]);
 }
 
-const STORAGE_SCHEMA_META_KEY = 'storage_schema_meta';
-const STORAGE_SCHEMA_VERSION = 1;
-const STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION = 0;
+export const STORAGE_SCHEMA_META_KEY = 'storage_schema_meta';
+export const STORAGE_SCHEMA_VERSION = 1;
+export const STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION = 0;
 
 export type StorageSchemaMeta = {
   version: number;
@@ -1018,10 +1025,7 @@ async function ensureStorageSchemaMigrated(
   let storageSchemaMeta: StorageSchemaMeta = (await storage.get(
     STORAGE_SCHEMA_META_KEY,
   )) ?? {version: 0, maxVersion: 0, minSafeRollbackVersion: 0};
-  if (
-    storageSchemaMeta.minSafeRollbackVersion >
-    STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION
-  ) {
+  if (storageSchemaMeta.minSafeRollbackVersion > STORAGE_SCHEMA_VERSION) {
     throw new Error(
       `Cannot safely migrate to schema version ${STORAGE_SCHEMA_VERSION}, schema is currently version ${storageSchemaMeta.version}, min safe rollback version is ${storageSchemaMeta.minSafeRollbackVersion}`,
     );
@@ -1061,4 +1065,5 @@ async function ensureStorageSchemaMigrated(
       },
     );
   }
+  lc.info?.('Storage schema update complete.');
 }

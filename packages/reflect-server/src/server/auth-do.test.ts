@@ -26,8 +26,9 @@ import {
   createAuthAPIHeaders,
 } from './auth-api-headers.js';
 import {
-  AUTH_DO_STORAGE_SCHEMA_VERSION,
-  AUTH_DO_STORAGE_SCHEMA_VERSION_KEY,
+  STORAGE_SCHEMA_META_KEY,
+  STORAGE_SCHEMA_VERSION,
+  STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
   AUTH_ROUTES,
   BaseAuthDO,
   recordConnection,
@@ -56,10 +57,11 @@ let state: TestDurableObjectState;
 beforeEach(async () => {
   storage = await getMiniflareDurableObjectStorage(authDOID);
   await storage.deleteAll();
-  await storage.put(
-    AUTH_DO_STORAGE_SCHEMA_VERSION_KEY,
-    AUTH_DO_STORAGE_SCHEMA_VERSION,
-  );
+  await storage.put(STORAGE_SCHEMA_META_KEY, {
+    version: STORAGE_SCHEMA_VERSION,
+    maxVersion: STORAGE_SCHEMA_VERSION,
+    minSafeRollbackVersion: STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
+  });
   state = new TestDurableObjectState(authDOID, storage);
   jest.useFakeTimers();
   jest.setSystemTime(0);
@@ -78,7 +80,7 @@ async function recordConnectionHelper(
   roomID: string,
   clientID: string,
 ) {
-  recordConnection(
+  await recordConnection(
     {
       userID,
       roomID,
@@ -89,7 +91,6 @@ async function recordConnectionHelper(
       connectTimestamp: 1000,
     },
   );
-  await storage.sync();
 }
 
 async function storeTestConnectionState() {
@@ -100,6 +101,23 @@ async function storeTestConnectionState() {
   await recordConnectionHelper('testUserID2', 'testRoomID3', 'testClientID5');
   await recordConnectionHelper('testUserID3', 'testRoomID3', 'testClientID6');
 }
+
+const expectedConnectionKeysForTestConnectionState = [
+  'connection/testUserID1/testRoomID1/testClientID1/',
+  'connection/testUserID1/testRoomID1/testClientID2/',
+  'connection/testUserID1/testRoomID2/testClientID3/',
+  'connection/testUserID2/testRoomID1/testClientID4/',
+  'connection/testUserID2/testRoomID3/testClientID5/',
+  'connection/testUserID3/testRoomID3/testClientID6/',
+];
+const expectedConnectionsByRoomKeysForTestConnectionState = [
+  'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID1/',
+  'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID2/',
+  'connections_by_room/testRoomID1/connection/testUserID2/testRoomID1/testClientID4/',
+  'connections_by_room/testRoomID2/connection/testUserID1/testRoomID2/testClientID3/',
+  'connections_by_room/testRoomID3/connection/testUserID2/testRoomID3/testClientID5/',
+  'connections_by_room/testRoomID3/connection/testUserID3/testRoomID3/testClientID6/',
+];
 
 function createCreateRoomTestFixture() {
   const testRoomID = 'testRoomID1';
@@ -2131,16 +2149,7 @@ test('revalidateConnections continues if one roomDO returns an error', async () 
 });
 
 test('test migration from schema 0 to schema 1, basic', async () => {
-  const {testRequest, testRoomDO, state} = await createCreateRoomTestFixture();
-
-  const authDO = new BaseAuthDO({
-    roomDO: testRoomDO,
-    state,
-    authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
-    logSink: new TestLogSink(),
-    logLevel: 'debug',
-  });
+  const {testRoomDO, state} = await createCreateRoomTestFixture();
   await storage.deleteAll();
 
   await storage.put('connection/testUserID1/testRoomID1/testClientID1/', {
@@ -2165,18 +2174,34 @@ test('test migration from schema 0 to schema 1, basic', async () => {
     },
   );
 
-  expect(await storage.get(AUTH_DO_STORAGE_SCHEMA_VERSION_KEY)).toEqual(
-    undefined,
-  );
+  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual(undefined);
   expect([
     ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
   ]).toEqual([]);
 
-  // Create the room for the first time.
-  await authDO.fetch(testRequest);
+  const ensureStorageSchemaMigratedCalls: Promise<void>[] = [];
+  new BaseAuthDO(
+    {
+      roomDO: testRoomDO,
+      state,
+      authHandler: () => Promise.reject('should not be called'),
+      authApiKey: TEST_AUTH_API_KEY,
+      logSink: new TestLogSink(),
+      logLevel: 'debug',
+    },
+    p => {
+      ensureStorageSchemaMigratedCalls.push(p);
+      return p;
+    },
+  );
+  expect(ensureStorageSchemaMigratedCalls.length).toEqual(1);
+  await ensureStorageSchemaMigratedCalls[0];
 
-  expect(await storage.get(AUTH_DO_STORAGE_SCHEMA_VERSION_KEY)).toEqual(1);
-
+  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual({
+    version: STORAGE_SCHEMA_VERSION,
+    maxVersion: STORAGE_SCHEMA_VERSION,
+    minSafeRollbackVersion: STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
+  });
   expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([
     'connection/%2FtestUserID%2F%3F/%2FtestRoomID%2F%3F/%2FtestClientID%2F/',
     'connection/testUserID1/testRoomID1/testClientID1/',
@@ -2200,16 +2225,7 @@ test('test migration from schema 0 to schema 1, basic', async () => {
 // 3333 is chosen because it is >3 x the limit used to page through the
 // connections and is not a multiple of the limit
 test('test migration from schema 0 to schema 1, 3333 connections', async () => {
-  const {testRequest, testRoomDO, state} = await createCreateRoomTestFixture();
-
-  const authDO = new BaseAuthDO({
-    roomDO: testRoomDO,
-    state,
-    authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
-    logSink: new TestLogSink(),
-    logLevel: 'debug',
-  });
+  const {testRoomDO, state} = await createCreateRoomTestFixture();
   await storage.deleteAll();
 
   const expectedConnectionKeys = [];
@@ -2230,22 +2246,119 @@ test('test migration from schema 0 to schema 1, 3333 connections', async () => {
   }
   expectedConnectionKeys.sort();
   expectedConnectionRoomIndexKeys.sort();
-  expect(await storage.get(AUTH_DO_STORAGE_SCHEMA_VERSION_KEY)).toEqual(
-    undefined,
-  );
+  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual(undefined);
   expect([
     ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
   ]).toEqual([]);
 
-  // Create the room for the first time.
-  await authDO.fetch(testRequest);
+  const ensureStorageSchemaMigratedCalls: Promise<void>[] = [];
+  new BaseAuthDO(
+    {
+      roomDO: testRoomDO,
+      state,
+      authHandler: () => Promise.reject('should not be called'),
+      authApiKey: TEST_AUTH_API_KEY,
+      logSink: new TestLogSink(),
+      logLevel: 'debug',
+    },
+    p => {
+      ensureStorageSchemaMigratedCalls.push(p);
+      return p;
+    },
+  );
+  expect(ensureStorageSchemaMigratedCalls.length).toEqual(1);
+  await ensureStorageSchemaMigratedCalls[0];
 
-  expect(await storage.get(AUTH_DO_STORAGE_SCHEMA_VERSION_KEY)).toEqual(1);
-
+  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual({
+    version: STORAGE_SCHEMA_VERSION,
+    maxVersion: STORAGE_SCHEMA_VERSION,
+    minSafeRollbackVersion: STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
+  });
   expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual(
     expectedConnectionKeys,
   );
   expect([
     ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
   ]).toEqual(expectedConnectionRoomIndexKeys);
+});
+
+describe('test down migrate', () => {
+  const testWithMinSafeRollbackVersion = async (
+    version: number,
+    minSafeRollbackVersion: number,
+    expectedErrorMessage?: string,
+  ) => {
+    await storage.deleteAll();
+    const {testRoomDO, state} = await createCreateRoomTestFixture();
+
+    await storage.put(STORAGE_SCHEMA_META_KEY, {
+      version,
+      maxVersion: version,
+      minSafeRollbackVersion,
+    });
+    await storeTestConnectionState();
+
+    const ensureStorageSchemaMigratedCalls: Promise<void>[] = [];
+    const ensureStorageSchemaMigratedCallErrorMessages: string[] = [];
+    new BaseAuthDO(
+      {
+        roomDO: testRoomDO,
+        state,
+        authHandler: () => Promise.reject('should not be called'),
+        authApiKey: TEST_AUTH_API_KEY,
+        logSink: new TestLogSink(),
+        logLevel: 'debug',
+      },
+      p => {
+        const catchErrors = async () => {
+          try {
+            await p;
+          } catch (e) {
+            ensureStorageSchemaMigratedCallErrorMessages.push(
+              (e as Error).message,
+            );
+          }
+        };
+        const wrappedP = catchErrors();
+        ensureStorageSchemaMigratedCalls.push(wrappedP);
+        return wrappedP;
+      },
+    );
+    expect(ensureStorageSchemaMigratedCalls.length).toEqual(1);
+    await ensureStorageSchemaMigratedCalls[0];
+    if (expectedErrorMessage) {
+      expect(ensureStorageSchemaMigratedCallErrorMessages).toEqual([
+        expectedErrorMessage,
+      ]);
+      expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual({
+        version,
+        maxVersion: version,
+        minSafeRollbackVersion,
+      });
+    } else {
+      expect(ensureStorageSchemaMigratedCallErrorMessages.length).toEqual(0);
+      expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual({
+        version: STORAGE_SCHEMA_VERSION,
+        maxVersion: version,
+        minSafeRollbackVersion,
+      });
+    }
+    expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual(
+      expectedConnectionKeysForTestConnectionState,
+    );
+    expect([
+      ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
+    ]).toEqual(expectedConnectionsByRoomKeysForTestConnectionState);
+  };
+
+  test('from 2 with minSafeRollbackVersion 0', () =>
+    testWithMinSafeRollbackVersion(2, 0));
+  test('from 2 with minSafeRollbackVersion 1', () =>
+    testWithMinSafeRollbackVersion(2, 1));
+  test('from 3 with minSafeRollbackVersion 2', () =>
+    testWithMinSafeRollbackVersion(
+      3,
+      2,
+      'Cannot safely migrate to schema version 1, schema is currently version 3, min safe rollback version is 2',
+    ));
 });
