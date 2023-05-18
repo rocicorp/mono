@@ -11,7 +11,10 @@ import {
   VersionIndexMeta,
 } from '../types/version-index.js';
 
-async function initVersionIndex(lc: LogContext, storage: Storage) {
+async function initVersionIndex(
+  lc: LogContext,
+  storage: Storage,
+): Promise<void> {
   const current = await storage.get(
     versionIndexMetaKey,
     versionIndexMetaSchema,
@@ -26,7 +29,7 @@ async function initVersionIndex(lc: LogContext, storage: Storage) {
   // The initial v0 version index is a null index; however, `{ schemaVersion: 0 }` must be
   // tracked so that if code is rolled back from v1 to v0 and then to v1, the v1
   // migration code will be run again.
-  cache.put<VersionIndexMeta>(versionIndexMetaKey, {
+  await cache.put<VersionIndexMeta>(versionIndexMetaKey, {
     schemaVersion: versionIndexSchemaVersion,
   });
   await cache.flush();
