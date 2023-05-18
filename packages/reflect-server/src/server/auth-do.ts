@@ -9,7 +9,6 @@ import {
   invalidateForUserRequestSchema,
 } from 'reflect-protocol';
 import {assert} from 'shared/asserts.js';
-import {must} from 'shared/must.js';
 import * as valita from 'shared/valita.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {encodeHeaderValue} from '../util/headers.js';
@@ -616,7 +615,7 @@ export class BaseAuthDO implements DurableObject {
           req,
           // Use async generator because the full list of connections
           // may exceed the DO's memory limits.
-          getConnectionKeyStrings(this._state.storage),
+          getKeyStrings(this._state.storage, CONNECTION_KEY_PREFIX),
         );
       });
     }),
@@ -922,26 +921,28 @@ async function* getConnectionsByRoom(
 }
 
 /**
- * Provides a way to iterate over all stored connection keys in a way that
- * will not exceed memory limits even if not all stored connection keys
- * can fit in memory at once.
+ * Provides a way to iterate over keys with a prefix in a way that
+ * will not exceed memory limits even if not all entries with keys
+ * with the given prefix can fit in memory at once.  Assumes at least
+ * 1000 entries can fit in memory at a time.
  */
-async function* getConnectionKeyStrings(
+async function* getKeyStrings(
   storage: DurableObjectStorage,
+  prefix: string,
 ): AsyncGenerator<string> {
   let lastKey = '';
   let done = false;
   while (!done) {
-    const connectionsListResult = await storage.list({
+    const listResult = await storage.list({
       startAfter: lastKey,
-      prefix: CONNECTION_KEY_PREFIX,
+      prefix,
       limit: 1000,
     });
-    for (const connectionKeyString of connectionsListResult.keys()) {
-      yield connectionKeyString;
-      lastKey = connectionKeyString;
+    for (const keyString of listResult.keys()) {
+      yield keyString;
+      lastKey = keyString;
     }
-    done = connectionsListResult.size === 0;
+    done = listResult.size === 0;
   }
 }
 
@@ -1050,6 +1051,7 @@ async function ensureStorageSchemaMigrated(
     return;
   }
   if (storageSchemaMeta.version === 0) {
+    // Adds the "connections by room" index.
     storageSchemaMeta = await migrateStorageSchemaToVersion(
       storage,
       lc,
@@ -1057,15 +1059,22 @@ async function ensureStorageSchemaMigrated(
       STORAGE_SCHEMA_VERSION,
       STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
       async () => {
-        const connectionKeyStrings = getConnectionKeyStrings(storage);
-        for await (const connectionKeyString of connectionKeyStrings) {
-          const connectionKey = must(
-            connectionKeyFromString(connectionKeyString),
-          );
-          await storage.put(
-            connectionKeyToConnectionRoomIndexString(connectionKey),
-            {},
-          );
+        // The code deploy triggering this migration will have restarted
+        // all room do's causing all the connections to be closed.
+        // Instead of building the "connections by room" index from
+        // the "connection" entries, simply delete all "connection" entries
+        // and any existing "connections by room" index entries.
+        for await (const connectionKeyString of getKeyStrings(
+          storage,
+          CONNECTION_KEY_PREFIX,
+        )) {
+          await storage.delete(connectionKeyString);
+        }
+        for await (const connectionsByRoomKeyString of getKeyStrings(
+          storage,
+          CONNECTIONS_BY_ROOM_INDEX_PREFIX,
+        )) {
+          await storage.delete(connectionsByRoomKeyString);
         }
       },
     );

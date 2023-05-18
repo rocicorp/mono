@@ -2202,59 +2202,28 @@ test('test migration from schema 0 to schema 1, basic', async () => {
     maxVersion: STORAGE_SCHEMA_VERSION,
     minSafeRollbackVersion: STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
   });
-  expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([
-    'connection/%2FtestUserID%2F%3F/%2FtestRoomID%2F%3F/%2FtestClientID%2F/',
-    'connection/testUserID1/testRoomID1/testClientID1/',
-    'connection/testUserID1/testRoomID1/testClientID2/',
-    'connection/testUserID1/testRoomID2/testClientID4/',
-    'connection/testUserID2/testRoomID1/testClientID3/',
-    'connection/testUserID2/testRoomID3/testClientID5/',
-  ]);
-  expect([
-    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
-  ]).toEqual([
-    'connections_by_room/%2FtestRoomID%2F%3F/connection/%2FtestUserID%2F%3F/%2FtestRoomID%2F%3F/%2FtestClientID%2F/',
-    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID1/',
-    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID2/',
-    'connections_by_room/testRoomID1/connection/testUserID2/testRoomID1/testClientID3/',
-    'connections_by_room/testRoomID2/connection/testUserID1/testRoomID2/testClientID4/',
-    'connections_by_room/testRoomID3/connection/testUserID2/testRoomID3/testClientID5/',
-  ]);
-});
-
-// 3333 is chosen because it is >3 x the limit used to page through the
-// connections and is not a multiple of the limit
-test('test migration from schema 0 to schema 1, 3333 connections', async () => {
-  const {testRoomDO, state} = await createCreateRoomTestFixture();
-  await storage.deleteAll();
-
-  const expectedConnectionKeys = [];
-  const expectedConnectionRoomIndexKeys = [];
-  for (let i = 0; i < 3333; i++) {
-    const connectionKeyString = `connection/testUserID${i % 10}/testRoomID${
-      i % 10
-    }/testClientID${i}/`;
-    await storage.put(connectionKeyString, {
-      connectTimestamp: 1000,
-    });
-    expectedConnectionKeys.push(connectionKeyString);
-    expectedConnectionRoomIndexKeys.push(
-      `connections_by_room/testRoomID${i % 10}/connection/testUserID${
-        i % 10
-      }/testRoomID${i % 10}/testClientID${i}/`,
-    );
-  }
-  expectedConnectionKeys.sort();
-  expectedConnectionRoomIndexKeys.sort();
-  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual(undefined);
+  expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([]);
   expect([
     ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
   ]).toEqual([]);
+});
+
+test('test migration from schema 0 to schema 1, existing connections by room index entries', async () => {
+  await storage.deleteAll();
+  await storeTestConnectionState();
+
+  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual(undefined);
+  expect(
+    [...(await storage.list({prefix: 'connection/'})).keys()].length,
+  ).toBeGreaterThan(0);
+  expect(
+    [...(await storage.list({prefix: 'connections_by_room/'})).keys()].length,
+  ).toBeGreaterThan(0);
 
   const ensureStorageSchemaMigratedCalls: Promise<void>[] = [];
   new BaseAuthDO(
     {
-      roomDO: testRoomDO,
+      roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
       state,
       authHandler: () => Promise.reject('should not be called'),
       authApiKey: TEST_AUTH_API_KEY,
@@ -2274,12 +2243,57 @@ test('test migration from schema 0 to schema 1, 3333 connections', async () => {
     maxVersion: STORAGE_SCHEMA_VERSION,
     minSafeRollbackVersion: STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
   });
-  expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual(
-    expectedConnectionKeys,
-  );
+  expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([]);
   expect([
     ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
-  ]).toEqual(expectedConnectionRoomIndexKeys);
+  ]).toEqual([]);
+});
+
+// 3333 is chosen because it is >3 x the limit used to page through the
+// connections and is not a multiple of the limit
+test('test migration from schema 0 to schema 1, 3333 connections', async () => {
+  await storage.deleteAll();
+
+  for (let i = 0; i < 3333; i++) {
+    const connectionKeyString = `connection/testUserID${i % 10}/testRoomID${
+      i % 10
+    }/testClientID${i}/`;
+    await storage.put(connectionKeyString, {
+      connectTimestamp: 1000,
+    });
+  }
+  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual(undefined);
+  expect([
+    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
+  ]).toEqual([]);
+
+  const ensureStorageSchemaMigratedCalls: Promise<void>[] = [];
+  new BaseAuthDO(
+    {
+      roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
+      state,
+      authHandler: () => Promise.reject('should not be called'),
+      authApiKey: TEST_AUTH_API_KEY,
+      logSink: new TestLogSink(),
+      logLevel: 'debug',
+    },
+    p => {
+      ensureStorageSchemaMigratedCalls.push(p);
+      return p;
+    },
+  );
+  expect(ensureStorageSchemaMigratedCalls.length).toEqual(1);
+  await ensureStorageSchemaMigratedCalls[0];
+
+  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual({
+    version: STORAGE_SCHEMA_VERSION,
+    maxVersion: STORAGE_SCHEMA_VERSION,
+    minSafeRollbackVersion: STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
+  });
+  expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([]);
+  expect([
+    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
+  ]).toEqual([]);
 });
 
 describe('test down migrate', () => {
@@ -2289,7 +2303,6 @@ describe('test down migrate', () => {
     expectedErrorMessage?: string,
   ) => {
     await storage.deleteAll();
-    const {testRoomDO, state} = await createCreateRoomTestFixture();
 
     await storage.put(STORAGE_SCHEMA_META_KEY, {
       version,
@@ -2302,7 +2315,7 @@ describe('test down migrate', () => {
     const ensureStorageSchemaMigratedCallErrorMessages: string[] = [];
     new BaseAuthDO(
       {
-        roomDO: testRoomDO,
+        roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
         state,
         authHandler: () => Promise.reject('should not be called'),
         authApiKey: TEST_AUTH_API_KEY,
