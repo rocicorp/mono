@@ -6,6 +6,10 @@ import {createSilentLogContext} from '../util/test-utils.js';
 import {processRoomStart} from './process-room-start.js';
 import type {RoomStartHandler} from '../server/room-start.js';
 import type {WriteTransaction} from 'replicache';
+import {
+  versionIndexMetaKey,
+  versionIndexMetaSchema,
+} from '../types/version-index.js';
 
 const {roomDO} = getMiniflareBindings();
 
@@ -82,4 +86,30 @@ describe('processRoomStart', () => {
       expect(await getVersion(storage)).toEqual(c.endingVersion);
     });
   }
+
+  describe('sets version index schema version', () => {
+    for (const startingVersion of [undefined, 0, 1, 2]) {
+      test(`from ${startingVersion}`, async () => {
+        const id = roomDO.newUniqueId();
+        const durable = await getMiniflareDurableObjectStorage(id);
+        const storage = new DurableStorage(durable);
+
+        if (startingVersion !== undefined) {
+          await storage.put(versionIndexMetaKey, {
+            schemaVersion: startingVersion,
+          });
+        }
+
+        await processRoomStart(
+          createSilentLogContext(),
+          () => Promise.resolve(),
+          storage,
+        );
+
+        expect(
+          await storage.get(versionIndexMetaKey, versionIndexMetaSchema),
+        ).toEqual({schemaVersion: 0});
+      });
+    }
+  });
 });
