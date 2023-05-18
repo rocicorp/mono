@@ -629,12 +629,7 @@ test('canary', async () => {
       testEnv,
       new TestExecutionContext(),
     );
-    if (response.status !== tc.expectedStatus) {
-      fail(
-        `Expected status ${tc.expectedStatus} but got ${response.status} ` +
-          `Response body: ${await response.text()}`,
-      );
-    }
+    expect(response.status).toBe(tc.expectedStatus);
 
     jest.resetAllMocks();
   }

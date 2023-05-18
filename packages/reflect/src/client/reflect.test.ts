@@ -976,7 +976,7 @@ const testCanary = async (c: CanaryCase) => {
     ([level, args]: [LogLevel, unknown[]]) =>
       level === 'debug' &&
       args[4] &&
-      (JSON.stringify(args[4]) as string).includes(c.debugMessage),
+      JSON.stringify(args[4]).includes(c.debugMessage),
   );
 
   expect(index).to.not.equal(-1);
