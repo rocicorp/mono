@@ -865,7 +865,7 @@ async function getConnectionKeysForRoomID(
 }
 
 /**
- * Provides away to iterate over all stored connection keys grouped by
+ * Provides a way to iterate over all stored connection keys grouped by
  * room id, in a way that will not exceed memory limits even if not all stored
  * connection keys can fit in memory at once.  It does assume that
  * all connection keys for a given room id can fit in memory.
@@ -910,7 +910,7 @@ async function* getConnectionsByRoom(
 }
 
 /**
- * Provides away to iterate over all stored connection keys in a way that
+ * Provides a way to iterate over all stored connection keys in a way that
  * will not exceed memory limits even if not all stored connection keys
  * can fit in memory at once.
  */
