@@ -137,6 +137,9 @@ export class BaseAuthDO implements DurableObject {
     this._initRoutes();
     this._lc.info?.('Starting server');
     this._lc.info?.('Version:', version);
+    void state.blockConcurrencyWhile(() =>
+      ensureStorageSchemaMigrated(state.storage, this._lc),
+    );
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -489,7 +492,7 @@ export class BaseAuthDO implements DurableObject {
       const roomObjectID = this._roomDO.idFromString(roomRecord.objectIDString);
 
       // Record the connection in DO storage
-      recordConnection(
+      await recordConnection(
         {
           userID: userData.userID,
           roomID,
@@ -601,7 +604,7 @@ export class BaseAuthDO implements DurableObject {
           req,
           // Use async generator because the full list of connections
           // may exceed the DO's memory limits.
-          generateConnectionKeyStrings(this._state.storage),
+          getConnectionKeyStrings(this._state.storage),
         );
       });
     }),
@@ -611,7 +614,7 @@ export class BaseAuthDO implements DurableObject {
     this._requireAPIKey(async ctx => {
       const {lc} = ctx;
       lc.info?.('Revalidating connections.');
-      const connectionsByRoomGenerator = generateConnectionsByRoom(
+      const connectionsByRoomGenerator = getConnectionsByRoom(
         this._state.storage,
         lc,
       );
@@ -675,7 +678,7 @@ export class BaseAuthDO implements DurableObject {
             );
           try {
             for (const [keyToDelete] of toDelete) {
-              deleteConnection(keyToDelete, this._state.storage);
+              await deleteConnection(keyToDelete, this._state.storage);
             }
             await this._state.storage.sync();
           } catch (e) {
@@ -864,10 +867,19 @@ async function getConnectionKeysForRoomID(
   return connectionKeys;
 }
 
-async function* generateConnectionsByRoom(
+/**
+ * Provides away to iterate over all stored connection keys grouped by
+ * room id, in a way that will not exceed memory limits even if not all stored
+ * connection keys can fit in memory at once.  It does assume that
+ * all connection keys for a given room id can fit in memory.
+ */
+async function* getConnectionsByRoom(
   storage: DurableObjectStorage,
   lc: LogContext,
-) {
+): AsyncGenerator<{
+  roomID: string;
+  connectionKeys: ConnectionKey[];
+}> {
   let lastKey = '';
   while (true) {
     const nextRoomListResult = await storage.list({
@@ -878,7 +890,7 @@ async function* generateConnectionsByRoom(
     if (nextRoomListResult.size === 0) {
       return;
     }
-    const firstRoomIndexString: string = [...nextRoomListResult.keys()][0];
+    const firstRoomIndexString: string = nextRoomListResult.keys().next().value;
     const connectionKey =
       connectionKeyFromRoomIndexString(firstRoomIndexString);
     if (!connectionKey) {
@@ -900,7 +912,14 @@ async function* generateConnectionsByRoom(
   }
 }
 
-async function* generateConnectionKeyStrings(storage: DurableObjectStorage) {
+/**
+ * Provides away to iterate over all stored connection keys in a way that
+ * will not exceed memory limits even if not all stored connection keys
+ * can fit in memory at once.
+ */
+async function* getConnectionKeyStrings(
+  storage: DurableObjectStorage,
+): AsyncGenerator<string> {
   let lastKey = '';
   let done = false;
   while (!done) {
@@ -917,7 +936,7 @@ async function* generateConnectionKeyStrings(storage: DurableObjectStorage) {
   }
 }
 
-export function recordConnection(
+export async function recordConnection(
   connectionKey: ConnectionKey,
   storage: DurableObjectStorage,
   record: ConnectionRecord,
@@ -925,52 +944,124 @@ export function recordConnection(
   const connectionKeyString = connectionKeyToString(connectionKey);
   const connectionRoomIndexString =
     connectionKeyToConnectionRoomIndexString(connectionKey);
-  // no await to ensure the two puts are coalesced and done atomically
-  void storage.put(connectionKeyString, record);
-  void storage.put(connectionRoomIndexString, {});
+  // done in a single put to ensure atomicity
+  await storage.put({
+    [connectionKeyString]: record,
+    [connectionRoomIndexString]: {},
+  });
 }
 
-function deleteConnection(
+async function deleteConnection(
   connectionKey: ConnectionKey,
   storage: DurableObjectStorage,
 ) {
   const connectionKeyString = connectionKeyToString(connectionKey);
   const connectionRoomIndexString =
     connectionKeyToConnectionRoomIndexString(connectionKey);
-  // no await to ensure the two deletes are coalesced and done atomically
-  void storage.delete(connectionKeyString);
-  void storage.delete(connectionRoomIndexString);
+  // done in a single delete to ensure atomicity
+  await storage.delete([connectionKeyString, connectionRoomIndexString]);
 }
 
-export const AUTH_DO_STORAGE_SCHEMA_VERSION_KEY =
-  'auth_do_storage_schema_version';
-export const AUTH_DO_STORAGE_SCHEMA_VERSION = 1;
+const STORAGE_SCHEMA_META_KEY = 'storage_schema_meta';
+const STORAGE_SCHEMA_VERSION = 1;
+const STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION = 0;
+
+export type StorageSchemaMeta = {
+  version: number;
+  maxVersion: number;
+  minSafeRollbackVersion: number;
+};
+
+async function migrateStorageSchema(
+  storage: DurableObjectStorage,
+  lc: LogContext,
+  existingStorageSchemaMeta: StorageSchemaMeta,
+  version: number,
+  minSafeRollbackVersion: number,
+  migrate: () => Promise<void>,
+) {
+  lc.info?.(
+    `Migrating from storage schema version ${existingStorageSchemaMeta.version} to storage schema version ${version}.`,
+  );
+  assert(version >= existingStorageSchemaMeta.minSafeRollbackVersion);
+  if (
+    minSafeRollbackVersion > existingStorageSchemaMeta.minSafeRollbackVersion
+  ) {
+    const preUpdate = {
+      ...existingStorageSchemaMeta,
+      minSafeRollbackVersion,
+    };
+    await storage.put(STORAGE_SCHEMA_META_KEY, preUpdate);
+    await storage.sync();
+  }
+  await migrate();
+  const postUpdate = {
+    ...existingStorageSchemaMeta,
+    version,
+    maxVersion: Math.max(version, existingStorageSchemaMeta.maxVersion),
+    minSafeRollbackVersion: Math.max(
+      minSafeRollbackVersion,
+      existingStorageSchemaMeta.minSafeRollbackVersion,
+    ),
+  };
+  await storage.put(STORAGE_SCHEMA_META_KEY, postUpdate);
+  await storage.sync();
+  lc.info?.(
+    `Successfully migrated from storage schema version ${existingStorageSchemaMeta.version} to storage schema version ${version}.`,
+  );
+  return postUpdate;
+}
 
 async function ensureStorageSchemaMigrated(
   storage: DurableObjectStorage,
   lc: LogContext,
 ) {
-  const storageSchemaVersion =
-    (await storage.get(AUTH_DO_STORAGE_SCHEMA_VERSION_KEY)) ?? 0;
-  if (storageSchemaVersion >= AUTH_DO_STORAGE_SCHEMA_VERSION) {
+  lc.addContext('SchemaUpdate');
+  lc.info?.('Ensuring storage schema is up to date.');
+  let storageSchemaMeta: StorageSchemaMeta = (await storage.get(
+    STORAGE_SCHEMA_META_KEY,
+  )) ?? {version: 0, maxVersion: 0, minSafeRollbackVersion: 0};
+  if (
+    storageSchemaMeta.minSafeRollbackVersion >
+    STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION
+  ) {
+    throw new Error(
+      `Cannot safely migrate to schema version ${STORAGE_SCHEMA_VERSION}, schema is currently version ${storageSchemaMeta.version}, min safe rollback version is ${storageSchemaMeta.minSafeRollbackVersion}`,
+    );
+  }
+  if (storageSchemaMeta.version >= STORAGE_SCHEMA_VERSION) {
+    storageSchemaMeta = await migrateStorageSchema(
+      storage,
+      lc,
+      storageSchemaMeta,
+      STORAGE_SCHEMA_VERSION,
+      STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      async () => {
+        /* noop */
+      },
+    );
     return;
   }
-  if (storageSchemaVersion === 0) {
-    lc.info?.(
-      'Migrating from storage schema version 0 to storage schema version 1.',
-    );
-    const connectionKeyStringsGenerator = generateConnectionKeyStrings(storage);
-    for await (const connectionKeyString of connectionKeyStringsGenerator) {
-      const connectionKey = must(connectionKeyFromString(connectionKeyString));
-      void storage.put(
-        connectionKeyToConnectionRoomIndexString(connectionKey),
-        {},
-      );
-    }
-    void storage.put(AUTH_DO_STORAGE_SCHEMA_VERSION_KEY, 1);
-    await storage.sync();
-    lc.info?.(
-      'Successfully migrated from storage schema version 0 to storage schema version 1.',
+  if (storageSchemaMeta.version === 0) {
+    storageSchemaMeta = await migrateStorageSchema(
+      storage,
+      lc,
+      storageSchemaMeta,
+      STORAGE_SCHEMA_VERSION,
+      STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
+      async () => {
+        const connectionKeyStringsGenerator = getConnectionKeyStrings(storage);
+        for await (const connectionKeyString of connectionKeyStringsGenerator) {
+          const connectionKey = must(
+            connectionKeyFromString(connectionKeyString),
+          );
+          await storage.put(
+            connectionKeyToConnectionRoomIndexString(connectionKey),
+            {},
+          );
+        }
+      },
     );
   }
 }
