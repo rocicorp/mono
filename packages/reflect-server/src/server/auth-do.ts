@@ -614,14 +614,11 @@ export class BaseAuthDO implements DurableObject {
     this._requireAPIKey(async ctx => {
       const {lc} = ctx;
       lc.info?.('Revalidating connections.');
-      const connectionsByRoomGenerator = getConnectionsByRoom(
-        this._state.storage,
-        lc,
-      );
+      const connectionsByRoom = getConnectionsByRoom(this._state.storage, lc);
       let connectionCount = 0;
       let revalidatedCount = 0;
       let deleteCount = 0;
-      for await (const {roomID, connectionKeys} of connectionsByRoomGenerator) {
+      for await (const {roomID, connectionKeys} of connectionsByRoom) {
         connectionCount += connectionKeys.length;
         lc.info?.(
           `Revalidating ${connectionKeys.length} connections for room ${roomID}.`,
@@ -1051,8 +1048,8 @@ async function ensureStorageSchemaMigrated(
       STORAGE_SCHEMA_VERSION,
       STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
       async () => {
-        const connectionKeyStringsGenerator = getConnectionKeyStrings(storage);
-        for await (const connectionKeyString of connectionKeyStringsGenerator) {
+        const connectionKeyStrings = getConnectionKeyStrings(storage);
+        for await (const connectionKeyString of connectionKeyStrings) {
           const connectionKey = must(
             connectionKeyFromString(connectionKeyString),
           );
