@@ -2,7 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import type {RoomStartHandler} from '../server/room-start.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {ReplicacheTransaction} from '../storage/replicache-transaction.js';
-import type {Storage} from '../storage/storage.js';
+import type {DurableStorage} from '../storage/durable-storage.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {
   versionIndexMetaKey,
@@ -13,7 +13,7 @@ import {
 
 async function initVersionIndex(
   lc: LogContext,
-  storage: Storage,
+  storage: DurableStorage,
 ): Promise<void> {
   const current = await storage.get(
     versionIndexMetaKey,
@@ -41,7 +41,7 @@ async function initVersionIndex(
 export async function processRoomStart(
   lc: LogContext,
   roomStartHandler: RoomStartHandler,
-  storage: Storage,
+  storage: DurableStorage,
 ): Promise<void> {
   lc.debug?.('processing room start');
 
