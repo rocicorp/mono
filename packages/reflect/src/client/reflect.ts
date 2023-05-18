@@ -389,6 +389,7 @@ export class Reflect<MD extends MutatorDefs> {
       });
     }
     this.#closeAbortController.abort();
+    this._metrics.stop();
     return this._rep.close();
   }
 
