@@ -767,7 +767,8 @@ export class BaseAuthDO implements DurableObject {
 }
 
 // In the past this prefix was 'connection/',
-// and some old reflect deployments may have legacy entries with these prefixes.
+// and some old reflect deployments may have legacy entries with the
+// 'connection/' prefix.
 // The prefix was changed due to a customer that had built up so many
 // entries that the connection revalidation process was exceeding memory.
 // Deleting this large number of entries would take a long time, so instead
