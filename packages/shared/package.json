@@ -65,6 +65,10 @@
     "./abort-error.js": {
       "import": "./src/abort-error.ts",
       "types": "./src/abort-error.ts"
+    },
+    "./timed.js": {
+      "import": "./src/timed.ts",
+      "types": "./src/timed.ts"
     }
   },
   "eslintConfig": {
