@@ -118,16 +118,16 @@ export function makeNormalizedOptionsGetter<
   options: ((env: Env) => ReflectServerOptions<MD>) | ReflectServerOptions<MD>,
 ): (env: Env) => NormalizedOptions<MD> {
   let normalizedOptions: NormalizedOptions<MD> | undefined;
-  let originalEnv: Env | undefined;
+  // let originalEnv: Env | undefined;
   let logSink: LogSink;
   return (env: Env) => {
-    if (normalizedOptions) {
-      if (originalEnv !== env) {
-        logSink.log('info', 'get options called with different env');
-      }
-      return normalizedOptions;
-    }
-    originalEnv = env;
+    // if (normalizedOptions) {
+    //   if (originalEnv !== env) {
+    //     logSink.log('info', 'get options called with different env');
+    //   }
+    //   return normalizedOptions;
+    // }
+    // originalEnv = env;
     const {
       mutators,
       authHandler,

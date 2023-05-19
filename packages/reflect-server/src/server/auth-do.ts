@@ -1070,6 +1070,9 @@ async function ensureStorageSchemaMigrated(
           storage,
           CONNECTION_KEY_PREFIX,
         )) {
+          if (connectionKeyStringDelCount === 0) {
+            lc.info?.('First connection entry delete', connectionKeyString);
+          }
           await storage.delete(connectionKeyString);
           connectionKeyStringDelCount++;
           if (connectionKeyStringDelCount % 1000 === 0) {
@@ -1091,6 +1094,12 @@ async function ensureStorageSchemaMigrated(
           storage,
           CONNECTIONS_BY_ROOM_INDEX_PREFIX,
         )) {
+          if (connectionsByRoomKeyStringDelCount === 0) {
+            lc.info?.(
+              'First connections by room index entry delete',
+              connectionsByRoomKeyString,
+            );
+          }
           await storage.delete(connectionsByRoomKeyString);
           connectionsByRoomKeyStringDelCount++;
           if (connectionsByRoomKeyStringDelCount % 1000 === 0) {
