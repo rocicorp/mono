@@ -103,20 +103,20 @@ async function storeTestConnectionState() {
 }
 
 const expectedConnectionKeysForTestConnectionState = [
-  'connection/testUserID1/testRoomID1/testClientID1/',
-  'connection/testUserID1/testRoomID1/testClientID2/',
-  'connection/testUserID1/testRoomID2/testClientID3/',
-  'connection/testUserID2/testRoomID1/testClientID4/',
-  'connection/testUserID2/testRoomID3/testClientID5/',
-  'connection/testUserID3/testRoomID3/testClientID6/',
+  'conn/testUserID1/testRoomID1/testClientID1/',
+  'conn/testUserID1/testRoomID1/testClientID2/',
+  'conn/testUserID1/testRoomID2/testClientID3/',
+  'conn/testUserID2/testRoomID1/testClientID4/',
+  'conn/testUserID2/testRoomID3/testClientID5/',
+  'conn/testUserID3/testRoomID3/testClientID6/',
 ];
 const expectedConnectionsByRoomKeysForTestConnectionState = [
-  'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID1/',
-  'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID2/',
-  'connections_by_room/testRoomID1/connection/testUserID2/testRoomID1/testClientID4/',
-  'connections_by_room/testRoomID2/connection/testUserID1/testRoomID2/testClientID3/',
-  'connections_by_room/testRoomID3/connection/testUserID2/testRoomID3/testClientID5/',
-  'connections_by_room/testRoomID3/connection/testUserID3/testRoomID3/testClientID6/',
+  'conns_by_room/testRoomID1/conn/testUserID1/testRoomID1/testClientID1/',
+  'conns_by_room/testRoomID1/conn/testUserID1/testRoomID1/testClientID2/',
+  'conns_by_room/testRoomID1/conn/testUserID2/testRoomID1/testClientID4/',
+  'conns_by_room/testRoomID2/conn/testUserID1/testRoomID2/testClientID3/',
+  'conns_by_room/testRoomID3/conn/testUserID2/testRoomID3/testClientID5/',
+  'conns_by_room/testRoomID3/conn/testUserID3/testRoomID3/testClientID6/',
 ];
 
 function createCreateRoomTestFixture() {
@@ -1235,18 +1235,18 @@ test('connect percent escapes components of the connection key', async () => {
   expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
     encodedTestAuth,
   );
-  expect(await storage.list({prefix: 'connection/'})).toEqual(
+  expect(await storage.list({prefix: 'conn/'})).toEqual(
     new Map([
       [
-        'connection/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F/',
+        'conn/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F/',
         {connectTimestamp: testTime},
       ],
     ]),
   );
-  expect(await storage.list({prefix: 'connections_by_room/'})).toEqual(
+  expect(await storage.list({prefix: 'conns_by_room/'})).toEqual(
     new Map([
       [
-        'connections_by_room/testRoomID/connection/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F/',
+        'conns_by_room/testRoomID/conn/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F/',
         {},
       ],
     ]),
@@ -1764,29 +1764,27 @@ async function connectAndTestThatRoomGotCreated(
 
   if (jurisdiction !== 'invalid') {
     expect(response.webSocket).toBe(mocket);
-    expect((await storage.list({prefix: 'connection/'})).size).toEqual(1);
+    expect((await storage.list({prefix: 'conn/'})).size).toEqual(1);
     const connectionRecord = (await storage.get(
-      `connection/${testUserID}/testRoomID1/testClientID1/`,
+      `conn/${testUserID}/testRoomID1/testClientID1/`,
     )) as Record<string, unknown> | undefined;
     assert(connectionRecord);
     expect(connectionRecord.connectTimestamp).toEqual(testTime);
-    expect(await storage.list({prefix: 'connections_by_room/'})).toEqual(
+    expect(await storage.list({prefix: 'conns_by_room/'})).toEqual(
       new Map([
         [
-          `connections_by_room/testRoomID1/connection/${testUserID}/testRoomID1/testClientID1/`,
+          `conns_by_room/testRoomID1/conn/${testUserID}/testRoomID1/testClientID1/`,
           {},
         ],
       ]),
     );
   } else {
-    expect((await storage.list({prefix: 'connection/'})).size).toEqual(0);
+    expect((await storage.list({prefix: 'conn/'})).size).toEqual(0);
     const connectionRecord = await storage.get(
-      `connection/${testUserID}/testRoomID1/testClientID1/`,
+      `conn/${testUserID}/testRoomID1/testClientID1/`,
     );
     expect(connectionRecord).toBeUndefined();
-    expect((await storage.list({prefix: 'connections_by_room/'})).size).toEqual(
-      0,
-    );
+    expect((await storage.list({prefix: 'conns_by_room/'})).size).toEqual(0);
   }
 }
 
@@ -2076,17 +2074,15 @@ test('revalidateConnections', async () => {
   expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(1);
 
-  expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([
-    'connection/testUserID1/testRoomID1/testClientID1/',
-    'connection/testUserID1/testRoomID2/testClientID3/',
-    'connection/testUserID2/testRoomID1/testClientID4/',
+  expect([...(await storage.list({prefix: 'conn/'})).keys()]).toEqual([
+    'conn/testUserID1/testRoomID1/testClientID1/',
+    'conn/testUserID1/testRoomID2/testClientID3/',
+    'conn/testUserID2/testRoomID1/testClientID4/',
   ]);
-  expect([
-    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
-  ]).toEqual([
-    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID1/',
-    'connections_by_room/testRoomID1/connection/testUserID2/testRoomID1/testClientID4/',
-    'connections_by_room/testRoomID2/connection/testUserID1/testRoomID2/testClientID3/',
+  expect([...(await storage.list({prefix: 'conns_by_room/'})).keys()]).toEqual([
+    'conns_by_room/testRoomID1/conn/testUserID1/testRoomID1/testClientID1/',
+    'conns_by_room/testRoomID1/conn/testUserID2/testRoomID1/testClientID4/',
+    'conns_by_room/testRoomID2/conn/testUserID1/testRoomID2/testClientID3/',
   ]);
 });
 
@@ -2104,19 +2100,17 @@ test('revalidateConnections continues if one storage delete throws an error', as
   expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(1);
 
-  expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([
-    'connection/testUserID1/testRoomID1/testClientID1/',
-    'connection/testUserID1/testRoomID1/testClientID2/',
-    'connection/testUserID1/testRoomID2/testClientID3/',
-    'connection/testUserID2/testRoomID1/testClientID4/',
+  expect([...(await storage.list({prefix: 'conn/'})).keys()]).toEqual([
+    'conn/testUserID1/testRoomID1/testClientID1/',
+    'conn/testUserID1/testRoomID1/testClientID2/',
+    'conn/testUserID1/testRoomID2/testClientID3/',
+    'conn/testUserID2/testRoomID1/testClientID4/',
   ]);
-  expect([
-    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
-  ]).toEqual([
-    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID1/',
-    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID2/',
-    'connections_by_room/testRoomID1/connection/testUserID2/testRoomID1/testClientID4/',
-    'connections_by_room/testRoomID2/connection/testUserID1/testRoomID2/testClientID3/',
+  expect([...(await storage.list({prefix: 'conns_by_room/'})).keys()]).toEqual([
+    'conns_by_room/testRoomID1/conn/testUserID1/testRoomID1/testClientID1/',
+    'conns_by_room/testRoomID1/conn/testUserID1/testRoomID1/testClientID2/',
+    'conns_by_room/testRoomID1/conn/testUserID2/testRoomID1/testClientID4/',
+    'conns_by_room/testRoomID2/conn/testUserID1/testRoomID2/testClientID3/',
   ]);
 });
 
@@ -2132,168 +2126,18 @@ test('revalidateConnections continues if one roomDO returns an error', async () 
   expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(1);
 
-  expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([
-    'connection/testUserID1/testRoomID1/testClientID1/',
-    'connection/testUserID1/testRoomID1/testClientID2/',
-    'connection/testUserID1/testRoomID2/testClientID3/',
-    'connection/testUserID2/testRoomID1/testClientID4/',
+  expect([...(await storage.list({prefix: 'conn/'})).keys()]).toEqual([
+    'conn/testUserID1/testRoomID1/testClientID1/',
+    'conn/testUserID1/testRoomID1/testClientID2/',
+    'conn/testUserID1/testRoomID2/testClientID3/',
+    'conn/testUserID2/testRoomID1/testClientID4/',
   ]);
-  expect([
-    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
-  ]).toEqual([
-    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID1/',
-    'connections_by_room/testRoomID1/connection/testUserID1/testRoomID1/testClientID2/',
-    'connections_by_room/testRoomID1/connection/testUserID2/testRoomID1/testClientID4/',
-    'connections_by_room/testRoomID2/connection/testUserID1/testRoomID2/testClientID3/',
+  expect([...(await storage.list({prefix: 'conns_by_room/'})).keys()]).toEqual([
+    'conns_by_room/testRoomID1/conn/testUserID1/testRoomID1/testClientID1/',
+    'conns_by_room/testRoomID1/conn/testUserID1/testRoomID1/testClientID2/',
+    'conns_by_room/testRoomID1/conn/testUserID2/testRoomID1/testClientID4/',
+    'conns_by_room/testRoomID2/conn/testUserID1/testRoomID2/testClientID3/',
   ]);
-});
-
-test('test migration from schema 0 to schema 1, basic', async () => {
-  const {testRoomDO, state} = await createCreateRoomTestFixture();
-  await storage.deleteAll();
-
-  await storage.put('connection/testUserID1/testRoomID1/testClientID1/', {
-    connectTimestamp: 1000,
-  });
-  await storage.put('connection/testUserID1/testRoomID1/testClientID2/', {
-    connectTimestamp: 1000,
-  });
-  await storage.put('connection/testUserID2/testRoomID1/testClientID3/', {
-    connectTimestamp: 1000,
-  });
-  await storage.put('connection/testUserID1/testRoomID2/testClientID4/', {
-    connectTimestamp: 1000,
-  });
-  await storage.put('connection/testUserID2/testRoomID3/testClientID5/', {
-    connectTimestamp: 1000,
-  });
-  await storage.put(
-    'connection/%2FtestUserID%2F%3F/%2FtestRoomID%2F%3F/%2FtestClientID%2F/',
-    {
-      connectTimestamp: 1000,
-    },
-  );
-
-  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual(undefined);
-  expect([
-    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
-  ]).toEqual([]);
-
-  const ensureStorageSchemaMigratedCalls: Promise<void>[] = [];
-  new BaseAuthDO(
-    {
-      roomDO: testRoomDO,
-      state,
-      authHandler: () => Promise.reject('should not be called'),
-      authApiKey: TEST_AUTH_API_KEY,
-      logSink: new TestLogSink(),
-      logLevel: 'debug',
-    },
-    p => {
-      ensureStorageSchemaMigratedCalls.push(p);
-      return p;
-    },
-  );
-  expect(ensureStorageSchemaMigratedCalls.length).toEqual(1);
-  await ensureStorageSchemaMigratedCalls[0];
-
-  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual({
-    version: STORAGE_SCHEMA_VERSION,
-    maxVersion: STORAGE_SCHEMA_VERSION,
-    minSafeRollbackVersion: STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
-  });
-  expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([]);
-  expect([
-    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
-  ]).toEqual([]);
-});
-
-test('test migration from schema 0 to schema 1, existing connections by room index entries', async () => {
-  await storage.deleteAll();
-  await storeTestConnectionState();
-
-  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual(undefined);
-  expect(
-    [...(await storage.list({prefix: 'connection/'})).keys()].length,
-  ).toBeGreaterThan(0);
-  expect(
-    [...(await storage.list({prefix: 'connections_by_room/'})).keys()].length,
-  ).toBeGreaterThan(0);
-
-  const ensureStorageSchemaMigratedCalls: Promise<void>[] = [];
-  new BaseAuthDO(
-    {
-      roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
-      state,
-      authHandler: () => Promise.reject('should not be called'),
-      authApiKey: TEST_AUTH_API_KEY,
-      logSink: new TestLogSink(),
-      logLevel: 'debug',
-    },
-    p => {
-      ensureStorageSchemaMigratedCalls.push(p);
-      return p;
-    },
-  );
-  expect(ensureStorageSchemaMigratedCalls.length).toEqual(1);
-  await ensureStorageSchemaMigratedCalls[0];
-
-  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual({
-    version: STORAGE_SCHEMA_VERSION,
-    maxVersion: STORAGE_SCHEMA_VERSION,
-    minSafeRollbackVersion: STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
-  });
-  expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([]);
-  expect([
-    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
-  ]).toEqual([]);
-});
-
-// 3333 is chosen because it is >3 x the limit used to page through the
-// connections and is not a multiple of the limit
-test('test migration from schema 0 to schema 1, 3333 connections', async () => {
-  await storage.deleteAll();
-
-  for (let i = 0; i < 3333; i++) {
-    const connectionKeyString = `connection/testUserID${i % 10}/testRoomID${
-      i % 10
-    }/testClientID${i}/`;
-    await storage.put(connectionKeyString, {
-      connectTimestamp: 1000,
-    });
-  }
-  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual(undefined);
-  expect([
-    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
-  ]).toEqual([]);
-
-  const ensureStorageSchemaMigratedCalls: Promise<void>[] = [];
-  new BaseAuthDO(
-    {
-      roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
-      state,
-      authHandler: () => Promise.reject('should not be called'),
-      authApiKey: TEST_AUTH_API_KEY,
-      logSink: new TestLogSink(),
-      logLevel: 'debug',
-    },
-    p => {
-      ensureStorageSchemaMigratedCalls.push(p);
-      return p;
-    },
-  );
-  expect(ensureStorageSchemaMigratedCalls.length).toEqual(1);
-  await ensureStorageSchemaMigratedCalls[0];
-
-  expect(await storage.get(STORAGE_SCHEMA_META_KEY)).toEqual({
-    version: STORAGE_SCHEMA_VERSION,
-    maxVersion: STORAGE_SCHEMA_VERSION,
-    minSafeRollbackVersion: STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
-  });
-  expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual([]);
-  expect([
-    ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
-  ]).toEqual([]);
 });
 
 describe('test down migrate', () => {
@@ -2356,11 +2200,11 @@ describe('test down migrate', () => {
         minSafeRollbackVersion,
       });
     }
-    expect([...(await storage.list({prefix: 'connection/'})).keys()]).toEqual(
+    expect([...(await storage.list({prefix: 'conn/'})).keys()]).toEqual(
       expectedConnectionKeysForTestConnectionState,
     );
     expect([
-      ...(await storage.list({prefix: 'connections_by_room/'})).keys(),
+      ...(await storage.list({prefix: 'conns_by_room/'})).keys(),
     ]).toEqual(expectedConnectionsByRoomKeysForTestConnectionState);
   };
 

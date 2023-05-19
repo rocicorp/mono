@@ -66,11 +66,8 @@ function combineLogSinks(sinks: LogSink[]): LogSink {
 export interface ReflectServerBaseEnv {
   roomDO: DurableObjectNamespace;
   authDO: DurableObjectNamespace;
-  /**
-   * If not bound the Auth API will be disabled.
-   */
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  REFLECT_AUTH_API_KEY?: string;
+  REFLECT_AUTH_API_KEY: string;
 }
 
 export type DurableObjectCtor<Env> = new (
