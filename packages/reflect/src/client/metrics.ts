@@ -103,10 +103,14 @@ export class MetricManager {
     for (const metric of this._metrics) {
       const series = metric.flush();
       if (series !== undefined) {
+        const tags =
+          series.tags && series.tags.length > 0
+            ? [...this.tags, ...series.tags]
+            : this.tags;
         allSeries.push({
           ...series,
           host: this._host,
-          tags: this.tags,
+          tags,
         });
       }
     }
@@ -162,7 +166,7 @@ function makePoint(ts: number, value: number): Point {
 }
 
 type Flushable = {
-  flush(): Pick<Series, 'metric' | 'points'> | undefined;
+  flush(): Pick<Series, 'metric' | 'points' | 'tags'> | undefined;
 };
 
 /**
@@ -182,13 +186,14 @@ type Flushable = {
 export class Gauge implements Flushable {
   private readonly _name: string;
   private _value: number | undefined = undefined;
-
+  private _tags: string[] = [];
   constructor(name: string) {
     this._name = name;
   }
 
-  public set(value: number) {
+  public set(value: number, tags: string[] = []) {
     this._value = value;
+    this._tags = tags;
   }
 
   public flush() {
@@ -196,7 +201,7 @@ export class Gauge implements Flushable {
     // recorded.
     const points =
       this._value === undefined ? [] : [makePoint(t(), this._value)];
-    return {metric: this._name, points};
+    return {metric: this._name, points, tags: this._tags};
   }
 }
 
@@ -221,18 +226,21 @@ export class State implements Flushable {
   private readonly _prefix: string;
   private readonly _clearOnFlush: boolean;
   private _current: string | undefined = undefined;
+  private _currentTags: string[] = [];
 
   constructor(prefix: string, clearOnFlush = false) {
     this._prefix = prefix;
     this._clearOnFlush = clearOnFlush;
   }
 
-  public set(state: string) {
+  public set(state: string, tags: string[] = []) {
     this._current = state;
+    this._currentTags = tags;
   }
 
   public clear() {
     this._current = undefined;
+    this._currentTags = [];
   }
 
   public flush() {
@@ -240,7 +248,7 @@ export class State implements Flushable {
       return undefined;
     }
     const gauge = new Gauge([this._prefix, this._current].join('_'));
-    gauge.set(1);
+    gauge.set(1, this._currentTags);
     const series = gauge.flush();
     if (this._clearOnFlush) {
       this.clear();

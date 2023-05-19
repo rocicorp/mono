@@ -7,10 +7,11 @@ import {
   AUTH_ROUTES_AUTHED_BY_API_KEY,
   AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER,
 } from './auth-do.js';
-import {REPORT_METRICS_PATH} from './paths.js';
+import {CANARY_PATH, REPORT_METRICS_PATH} from './paths.js';
 import {
   BaseContext,
   checkAuthAPIKey,
+  get,
   Handler,
   post,
   Router,
@@ -102,6 +103,8 @@ const reportMetrics = post<WorkerContext, Response>(
     return new Response('ok');
   }),
 );
+
+const canary = get<WorkerContext, Response>(() => new Response('ok'));
 
 function requireAPIKeyMatchesEnv(next: Handler<WorkerContext, Response>) {
   return (ctx: WorkerContext, req: Request) => {
@@ -289,4 +292,5 @@ async function sendToAuthDO(
 
 export const WORKER_ROUTES = {
   [REPORT_METRICS_PATH]: reportMetrics,
+  [CANARY_PATH]: canary,
 } as const;
