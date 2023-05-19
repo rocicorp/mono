@@ -1066,61 +1066,32 @@ async function ensureStorageSchemaMigrated(
         // Instead of building the "connections by room" index from
         // the "connection" entries, simply delete all "connection" entries
         // and any existing "connections by room" index entries.
-        let connectionKeyStringDelCount = 0;
-        for await (const connectionKeyString of getKeyStrings(
-          storage,
-          CONNECTION_KEY_PREFIX,
-        )) {
-          if (connectionKeyStringDelCount === 0) {
-            lc.info?.('First connection entry delete', connectionKeyString);
+        for (const [prefix, desc] of [
+          [CONNECTION_KEY_PREFIX, 'connection entries'],
+          [
+            CONNECTIONS_BY_ROOM_INDEX_PREFIX,
+            'connections by room index entries',
+          ],
+        ]) {
+          let deleteCount = 0;
+          for await (const keyString of getKeyStrings(storage, prefix)) {
+            if (deleteCount === 0) {
+              lc.info?.('First delete of', desc, keyString);
+            }
+            await storage.delete(keyString);
+            deleteCount++;
+            // Every 10,000 deletes force sync of pending writes to disk
+            // to ensure that if migration runs out of time and is killed
+            // at least some forward progress has been sync'd to disk.
+            // Also flush logs about this progress.
+            if (deleteCount % 10000 === 0) {
+              await storage.sync();
+              lc.info?.('Deleted', deleteCount, desc, 'so far.', keyString);
+              await logSink.flush?.();
+            }
           }
-          await storage.delete(connectionKeyString);
-          connectionKeyStringDelCount++;
-          if (connectionKeyStringDelCount % 10000 === 0) {
-            await storage.sync();
-            lc.info?.(
-              'Deleted',
-              connectionKeyStringDelCount,
-              'connection entries so far.',
-              connectionKeyString,
-            );
-            await logSink.flush?.();
-          }
+          lc.info?.('Deleted', deleteCount, desc, 'in total.');
         }
-        lc.info?.(
-          'Deleted',
-          connectionKeyStringDelCount,
-          'connection entries in total.',
-        );
-        let connectionsByRoomKeyStringDelCount = 0;
-        for await (const connectionsByRoomKeyString of getKeyStrings(
-          storage,
-          CONNECTIONS_BY_ROOM_INDEX_PREFIX,
-        )) {
-          if (connectionsByRoomKeyStringDelCount === 0) {
-            lc.info?.(
-              'First connections by room index entry delete',
-              connectionsByRoomKeyString,
-            );
-          }
-          await storage.delete(connectionsByRoomKeyString);
-          connectionsByRoomKeyStringDelCount++;
-          if (connectionsByRoomKeyStringDelCount % 10000 === 0) {
-            await storage.sync();
-            lc.info?.(
-              'Deleted',
-              connectionsByRoomKeyStringDelCount,
-              'connections by room index entries so far.',
-              connectionsByRoomKeyStringDelCount,
-            );
-            await logSink.flush?.();
-          }
-        }
-        lc.info?.(
-          'Deleted',
-          connectionsByRoomKeyStringDelCount,
-          'connections by room index entries in total.',
-        );
       },
     );
   }
