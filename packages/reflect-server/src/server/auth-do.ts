@@ -994,6 +994,7 @@ async function migrateStorageSchemaToVersion(
     `Migrating from storage schema version ${existingStorageSchemaMeta.version} to storage schema version ${version}.`,
   );
   assert(version >= existingStorageSchemaMeta.minSafeRollbackVersion);
+  assert(version <= STORAGE_SCHEMA_VERSION);
   if (
     minSafeRollbackVersion > existingStorageSchemaMeta.minSafeRollbackVersion
   ) {
@@ -1056,8 +1057,8 @@ async function ensureStorageSchemaMigrated(
       storage,
       lc,
       storageSchemaMeta,
-      STORAGE_SCHEMA_VERSION,
-      STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
+      1,
+      0,
       async () => {
         // The code deploy triggering this migration will have restarted
         // all room do's causing all the connections to be closed.
