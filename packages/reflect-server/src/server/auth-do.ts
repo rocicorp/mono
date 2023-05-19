@@ -1037,7 +1037,7 @@ async function ensureStorageSchemaMigrated(
       `Cannot safely migrate to schema version ${STORAGE_SCHEMA_VERSION}, schema is currently version ${storageSchemaMeta.version}, min safe rollback version is ${storageSchemaMeta.minSafeRollbackVersion}`,
     );
   }
-  if (storageSchemaMeta.version >= STORAGE_SCHEMA_VERSION) {
+  if (storageSchemaMeta.version > STORAGE_SCHEMA_VERSION) {
     storageSchemaMeta = await migrateStorageSchemaToVersion(
       storage,
       lc,
@@ -1077,6 +1077,7 @@ async function ensureStorageSchemaMigrated(
               'Deleted',
               connectionKeyStringDelCount,
               'connection entries so far.',
+              connectionKeyString,
             );
           }
         }
@@ -1097,6 +1098,7 @@ async function ensureStorageSchemaMigrated(
               'Deleted',
               connectionsByRoomKeyStringDelCount,
               'connections by room index entries so far.',
+              connectionsByRoomKeyStringDelCount,
             );
           }
         }
