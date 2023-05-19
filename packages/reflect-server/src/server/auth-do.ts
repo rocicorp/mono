@@ -12,6 +12,7 @@ import {assert} from 'shared/asserts.js';
 import * as valita from 'shared/valita.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {encodeHeaderValue} from '../util/headers.js';
+import {randomID} from '../util/rand.js';
 import {closeWithError} from '../util/socket.js';
 import {version} from '../util/version.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
@@ -148,7 +149,7 @@ export class BaseAuthDO implements DurableObject {
     this._lc.info?.('Version:', version);
     void state.blockConcurrencyWhile(() =>
       ensureStorageSchemaMigratedWrapperForTests(
-        ensureStorageSchemaMigrated(state.storage, this._lc),
+        ensureStorageSchemaMigrated(state.storage, this._lc, logSink),
       ),
     );
   }
@@ -157,7 +158,6 @@ export class BaseAuthDO implements DurableObject {
     const lc = addRequestIDFromHeadersOrRandomID(this._lc, request);
     lc.debug?.('Handling request:', request.url);
     try {
-      await ensureStorageSchemaMigrated(this._state.storage, lc);
       const resp = await this._router.dispatch(request, {lc});
       lc.debug?.(`Returning response: ${resp.status} ${resp.statusText}`);
       return resp;
@@ -1026,8 +1026,9 @@ async function migrateStorageSchemaToVersion(
 async function ensureStorageSchemaMigrated(
   storage: DurableObjectStorage,
   lc: LogContext,
+  logSink: LogSink,
 ) {
-  lc.addContext('SchemaUpdate');
+  lc = lc.addContext('schemaUpdateID', randomID());
   lc.info?.('Ensuring storage schema is up to date.');
   let storageSchemaMeta: StorageSchemaMeta = (await storage.get(
     STORAGE_SCHEMA_META_KEY,
@@ -1037,7 +1038,7 @@ async function ensureStorageSchemaMigrated(
       `Cannot safely migrate to schema version ${STORAGE_SCHEMA_VERSION}, schema is currently version ${storageSchemaMeta.version}, min safe rollback version is ${storageSchemaMeta.minSafeRollbackVersion}`,
     );
   }
-  if (storageSchemaMeta.version >= STORAGE_SCHEMA_VERSION) {
+  if (storageSchemaMeta.version > STORAGE_SCHEMA_VERSION) {
     storageSchemaMeta = await migrateStorageSchemaToVersion(
       storage,
       lc,
@@ -1049,6 +1050,7 @@ async function ensureStorageSchemaMigrated(
         /* noop */
       },
     );
+    lc.info?.('Storage schema is already up to date.');
     return;
   }
   if (storageSchemaMeta.version === 0) {
@@ -1065,20 +1067,35 @@ async function ensureStorageSchemaMigrated(
         // Instead of building the "connections by room" index from
         // the "connection" entries, simply delete all "connection" entries
         // and any existing "connections by room" index entries.
-        for await (const connectionKeyString of getKeyStrings(
-          storage,
-          CONNECTION_KEY_PREFIX,
-        )) {
-          await storage.delete(connectionKeyString);
-        }
-        for await (const connectionsByRoomKeyString of getKeyStrings(
-          storage,
-          CONNECTIONS_BY_ROOM_INDEX_PREFIX,
-        )) {
-          await storage.delete(connectionsByRoomKeyString);
+        for (const [prefix, desc] of [
+          [CONNECTION_KEY_PREFIX, 'connection entries'],
+          [
+            CONNECTIONS_BY_ROOM_INDEX_PREFIX,
+            'connections by room index entries',
+          ],
+        ]) {
+          let deleteCount = 0;
+          for await (const keyString of getKeyStrings(storage, prefix)) {
+            if (deleteCount === 0) {
+              lc.info?.('First delete of', desc, keyString);
+            }
+            await storage.delete(keyString);
+            deleteCount++;
+            // Every 10,000 deletes force sync of pending writes to disk
+            // to ensure that if migration runs out of time and is killed
+            // at least some forward progress has been sync'd to disk.
+            // Also flush logs about this progress.
+            if (deleteCount % 10000 === 0) {
+              await storage.sync();
+              lc.info?.('Deleted', deleteCount, desc, 'so far.', keyString);
+              await logSink.flush?.();
+            }
+          }
+          lc.info?.('Deleted', deleteCount, desc, 'in total.');
         }
       },
     );
   }
   lc.info?.('Storage schema update complete.');
+  await logSink.flush?.();
 }
