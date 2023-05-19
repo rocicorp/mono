@@ -727,6 +727,9 @@ export class Reflect<MD extends MutatorDefs> {
             reason.client === 'AbruptClose' ||
             reason.client === 'CleanClose')
         ) {
+          l.debug?.(
+            'Failed to connect using websocket. Checking state of server using a canary request',
+          );
           const tag = await this._fetchCanary(l);
           this._metrics.lastConnectError.set(
             getLastConnectMetricState(reason),

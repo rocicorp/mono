@@ -186,12 +186,12 @@ type Flushable = {
 export class Gauge implements Flushable {
   private readonly _name: string;
   private _value: number | undefined = undefined;
-  private _tags: string[] | undefined = undefined;
+  private _tags: string[] = [];
   constructor(name: string) {
     this._name = name;
   }
 
-  public set(value: number, tags?: string[] | undefined) {
+  public set(value: number, tags: string[] = []) {
     this._value = value;
     this._tags = tags;
   }
@@ -201,7 +201,7 @@ export class Gauge implements Flushable {
     // recorded.
     const points =
       this._value === undefined ? [] : [makePoint(t(), this._value)];
-    return {metric: this._name, points, tags: this._tags ?? []};
+    return {metric: this._name, points, tags: this._tags};
   }
 }
 
