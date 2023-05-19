@@ -9,6 +9,7 @@ import {
   invalidateForUserRequestSchema,
 } from 'reflect-protocol';
 import {assert} from 'shared/asserts.js';
+import {timed} from 'shared/timed.js';
 import * as valita from 'shared/valita.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {encodeHeaderValue} from '../util/headers.js';
@@ -26,7 +27,6 @@ import {
 import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
 import {ROOM_ROUTES} from './room-do.js';
 import {
-  RoomRecord,
   RoomStatus,
   closeRoom,
   createRoom,
@@ -422,125 +422,155 @@ export class BaseAuthDO implements DurableObject {
         );
       }
     }
-    return this._authLock.withRead(async () => {
-      let userData: UserData = {
-        userID,
-      };
 
-      if (this._authHandler) {
-        const auth = decodedAuth;
-        assert(auth);
-        let authHandlerUserData: UserData | null;
+    return timed(lc.debug, 'inside authLock', () =>
+      this._authLock.withRead(async () => {
+        let userData: UserData = {
+          userID,
+        };
 
-        try {
-          authHandlerUserData = await this._authHandler(auth, roomID);
-        } catch (e) {
-          return closeWithErrorLocal('Unauthorized', 'authHandler rejected');
-        }
-        if (!authHandlerUserData || !authHandlerUserData.userID) {
-          if (!authHandlerUserData) {
-            lc.info?.('userData returned by authHandler is not an object.');
-          } else if (!authHandlerUserData.userID) {
-            lc.info?.('userData returned by authHandler has no userID.');
-          }
-          return closeWithErrorLocal('Unauthorized', 'no userData');
-        }
-        if (authHandlerUserData.userID !== userID) {
-          lc.info?.('userData returned by authHandler has a different userID.');
-          return closeWithErrorLocal(
-            'Unauthorized',
-            'userID returned by authHandler does not match userID url parameter',
+        if (this._authHandler) {
+          const auth = decodedAuth;
+          assert(auth);
+          const authHandler = this._authHandler;
+
+          const [authHandlerUserData, response] = await timed(
+            lc.debug,
+            'calling authHandler',
+            async () => {
+              try {
+                return [await authHandler(auth, roomID), undefined] as const;
+              } catch (e) {
+                return [
+                  undefined,
+                  closeWithErrorLocal('Unauthorized', 'authHandler rejected'),
+                ] as const;
+              }
+            },
           );
+          if (response !== undefined) {
+            return response;
+          }
+
+          if (!authHandlerUserData || !authHandlerUserData.userID) {
+            if (!authHandlerUserData) {
+              lc.info?.('userData returned by authHandler is not an object.');
+            } else if (!authHandlerUserData.userID) {
+              lc.info?.('userData returned by authHandler has no userID.');
+            }
+            return closeWithErrorLocal('Unauthorized', 'no userData');
+          }
+          if (authHandlerUserData.userID !== userID) {
+            lc.info?.(
+              'userData returned by authHandler has a different userID.',
+            );
+            return closeWithErrorLocal(
+              'Unauthorized',
+              'userID returned by authHandler does not match userID url parameter',
+            );
+          }
+          userData = authHandlerUserData;
         }
-        userData = authHandlerUserData;
-      }
 
-      // Find the room's objectID so we can connect to it. Do this BEFORE
-      // writing the connection record, in case it doesn't exist or is
-      // closed/deleted.
+        // Find the room's objectID so we can connect to it. Do this BEFORE
+        // writing the connection record, in case it doesn't exist or is
+        // closed/deleted.
 
-      let roomRecord: RoomRecord | undefined =
-        await this._roomRecordLock.withRead(
-          // Check if room already exists.
-          () => roomRecordByRoomID(this._durableStorage, roomID),
+        let roomRecord = await timed(lc.debug, 'looking up roomRecord', () =>
+          this._roomRecordLock.withRead(
+            // Check if room already exists.
+            () => roomRecordByRoomID(this._durableStorage, roomID),
+          ),
         );
 
-      if (!roomRecord) {
-        roomRecord = await this._roomRecordLock.withWrite(async () => {
-          // checking again in case it was created while we were waiting for writeLock
-          const rr = await roomRecordByRoomID(this._durableStorage, roomID);
-          if (rr) {
-            return rr;
-          }
-          lc.debug?.('room not found, trying to create it');
+        if (!roomRecord) {
+          roomRecord = await timed(lc.debug, 'creating roomRecord', () =>
+            this._roomRecordLock.withWrite(async () => {
+              // checking again in case it was created while we were waiting for writeLock
+              const rr = await roomRecordByRoomID(this._durableStorage, roomID);
+              if (rr) {
+                return rr;
+              }
+              lc.debug?.('room not found, trying to create it');
 
-          const resp = await internalCreateRoom(
-            lc,
-            this._roomDO,
-            this._durableStorage,
-            roomID,
-            jurisdiction,
+              const resp = await internalCreateRoom(
+                lc,
+                this._roomDO,
+                this._durableStorage,
+                roomID,
+                jurisdiction,
+              );
+              if (!resp.ok) {
+                return undefined;
+              }
+              return roomRecordByRoomID(this._durableStorage, roomID);
+            }),
           );
-          if (!resp.ok) {
-            return undefined;
-          }
-          return roomRecordByRoomID(this._durableStorage, roomID);
+        }
+
+        // If the room is closed or we failed to implicitly create it, we need to
+        // give the client some visibility into this. If we just return a 404 here
+        // without accepting the connection the client doesn't have any access to
+        // the return code or body. So we accept the connection and send an error
+        // message to the client, then close the connection. We trust it will be
+        // logged by onSocketError in the client.
+
+        if (roomRecord === undefined || roomRecord.status !== RoomStatus.Open) {
+          const kind = roomRecord ? 'RoomClosed' : 'RoomNotFound';
+          return createWSAndCloseWithError(lc, url, kind, roomID, encodedAuth);
+        }
+
+        const roomObjectID = this._roomDO.idFromString(
+          roomRecord.objectIDString,
+        );
+
+        // Record the connection in DO storage
+
+        await timed(lc.debug, 'writing connection record', () =>
+          recordConnection(
+            {
+              userID: userData.userID,
+              roomID,
+              clientID,
+            },
+            this._state.storage,
+            {
+              connectTimestamp: Date.now(),
+            },
+          ),
+        );
+
+        // Forward the request to the Room Durable Object...
+        const stub = this._roomDO.get(roomObjectID);
+        const requestToDO = new Request(request);
+        requestToDO.headers.set(
+          USER_DATA_HEADER_NAME,
+          encodeHeaderValue(JSON.stringify(userData)),
+        );
+        const responseFromDO = await timed(
+          lc.debug,
+          'fetching response from DO',
+          () => stub.fetch(requestToDO),
+        );
+        const responseHeaders = new Headers(responseFromDO.headers);
+        // While Sec-WebSocket-Protocol is just being used as a mechanism for
+        // sending `auth` since custom headers are not supported by the browser
+        // WebSocket API, the Sec-WebSocket-Protocol semantics must be followed.
+        // Send a Sec-WebSocket-Protocol response header with a value
+        // matching the Sec-WebSocket-Protocol request header, to indicate
+        // support for the protocol, otherwise the client will close the connection.
+        if (encodedAuth !== null) {
+          responseHeaders.set('Sec-WebSocket-Protocol', encodedAuth);
+        }
+        const response = new Response(responseFromDO.body, {
+          status: responseFromDO.status,
+          statusText: responseFromDO.statusText,
+          webSocket: responseFromDO.webSocket,
+          headers: responseHeaders,
         });
-      }
-
-      // If the room is closed or we failed to implicitly create it, we need to
-      // give the client some visibility into this. If we just return a 404 here
-      // without accepting the connection the client doesn't have any access to
-      // the return code or body. So we accept the connection and send an error
-      // message to the client, then close the connection. We trust it will be
-      // logged by onSocketError in the client.
-
-      if (roomRecord === undefined || roomRecord.status !== RoomStatus.Open) {
-        const kind = roomRecord ? 'RoomClosed' : 'RoomNotFound';
-        return createWSAndCloseWithError(lc, url, kind, roomID, encodedAuth);
-      }
-
-      const roomObjectID = this._roomDO.idFromString(roomRecord.objectIDString);
-
-      // Record the connection in DO storage
-      await recordConnection(
-        {
-          userID: userData.userID,
-          roomID,
-          clientID,
-        },
-        this._state.storage,
-        {
-          connectTimestamp: Date.now(),
-        },
-      );
-
-      // Forward the request to the Room Durable Object...
-      const stub = this._roomDO.get(roomObjectID);
-      const requestToDO = new Request(request);
-      requestToDO.headers.set(
-        USER_DATA_HEADER_NAME,
-        encodeHeaderValue(JSON.stringify(userData)),
-      );
-      const responseFromDO = await stub.fetch(requestToDO);
-      const responseHeaders = new Headers(responseFromDO.headers);
-      // While Sec-WebSocket-Protocol is just being used as a mechanism for
-      // sending `auth` since custom headers are not supported by the browser
-      // WebSocket API, the Sec-WebSocket-Protocol semantics must be followed.
-      // Send a Sec-WebSocket-Protocol response header with a value
-      // matching the Sec-WebSocket-Protocol request header, to indicate
-      // support for the protocol, otherwise the client will close the connection.
-      if (encodedAuth !== null) {
-        responseHeaders.set('Sec-WebSocket-Protocol', encodedAuth);
-      }
-      const response = new Response(responseFromDO.body, {
-        status: responseFromDO.status,
-        statusText: responseFromDO.statusText,
-        webSocket: responseFromDO.webSocket,
-        headers: responseHeaders,
-      });
-      return response;
-    });
+        return response;
+      }),
+    );
   }
 
   private _authInvalidateForRoom = post(
