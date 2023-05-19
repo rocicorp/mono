@@ -1061,7 +1061,7 @@ async function ensureStorageSchemaMigrated(
       0,
       async () => {
         // The code deploy triggering this migration will have restarted
-        // all room do's causing all the connections to be closed.
+        // all room dos causing all connections to be closed.
         // Instead of building the "connections by room" index from
         // the "connection" entries, simply delete all "connection" entries
         // and any existing "connections by room" index entries.
