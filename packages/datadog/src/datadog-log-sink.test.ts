@@ -27,7 +27,7 @@ test('calling error also calls flush', () => {
   const flushSpy = jest
     .spyOn(l, 'flush')
     .mockImplementation(() => Promise.resolve(undefined));
-  l.log('error', 'aaa');
+  l.log('error', {usr: {name: 'bob'}}, 'aaa');
   expect(flushSpy).toHaveBeenCalledTimes(1);
 });
 
@@ -36,9 +36,9 @@ test('flush calls fetch', async () => {
     apiKey: 'apiKey',
   });
   jest.setSystemTime(1);
-  l.log('debug', 'debug message');
+  l.log('debug', {usr: {name: 'bob'}}, 'debug message');
   jest.setSystemTime(2);
-  l.log('info', 'info message');
+  l.log('info', {usr: {name: 'bob'}}, 'info message');
 
   await l.flush();
 
@@ -48,11 +48,12 @@ test('flush calls fetch', async () => {
     {
       body: stringifyMany(
         {
+          usr: {name: 'bob'},
           date: 1,
           message: 'debug message',
           status: 'debug',
         },
-        {date: 2, message: 'info message', status: 'info'},
+        {usr: {name: 'bob'}, date: 2, message: 'info message', status: 'info'},
       ),
       method: 'POST',
       keepalive: true,
@@ -66,7 +67,13 @@ test('Errors in multi arg messages are converted to JSON', async () => {
   });
 
   jest.setSystemTime(1);
-  l.log('info', 'Logging an error', new Error('Test error msg'), 'after');
+  l.log(
+    'info',
+    {usr: {name: 'bob'}},
+    'Logging an error',
+    new Error('Test error msg'),
+    'after',
+  );
 
   await l.flush();
 
@@ -102,7 +109,7 @@ test('Errors in single arg messages are converted to JSON', async () => {
   });
 
   jest.setSystemTime(1);
-  l.log('info', new Error('Test error msg'));
+  l.log('info', {usr: {name: 'bob'}}, new Error('Test error msg'));
 
   await l.flush();
 
@@ -135,9 +142,9 @@ test('flush calls fetch but includes logs after the error', async () => {
   });
   jest.useFakeTimers();
   jest.setSystemTime(3);
-  l.log('error', 'error message');
+  l.log('error', {usr: {name: 'bob'}}, 'error message');
   jest.setSystemTime(4);
-  l.log('info', 'info message');
+  l.log('info', {usr: {name: 'bob'}}, 'info message');
 
   await l.flush();
 
@@ -147,12 +154,13 @@ test('flush calls fetch but includes logs after the error', async () => {
     {
       body: stringifyMany(
         {
+          usr: {name: 'bob'},
           date: 3,
           message: 'error message',
           status: 'error',
           error: {origin: 'logger'},
         },
-        {date: 4, message: 'info message', status: 'info'},
+        {usr: {name: 'bob'}, date: 4, message: 'info message', status: 'info'},
       ),
       method: 'POST',
       keepalive: true,
@@ -167,7 +175,7 @@ test('flush is called 1s after a log', async () => {
   });
 
   jest.setSystemTime(3);
-  l.log('info', 'info message');
+  l.log('info', {usr: {name: 'bob'}}, 'info message');
   jest.advanceTimersByTime(1000);
 
   await microtasksUntil(() => fetch.mock.calls.length >= 1);
@@ -176,7 +184,12 @@ test('flush is called 1s after a log', async () => {
   expect(fetch).toHaveBeenCalledWith(
     'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
     {
-      body: stringifyMany({date: 3, message: 'info message', status: 'info'}),
+      body: stringifyMany({
+        usr: {name: 'bob'},
+        date: 3,
+        message: 'info message',
+        status: 'info',
+      }),
       method: 'POST',
       keepalive: true,
     },
@@ -191,7 +204,7 @@ test('flush is called again in case of failure', async () => {
 
   fetch.mockReturnValue(Promise.reject(new Error('error')));
   jest.setSystemTime(3);
-  l.log('info', 'info message');
+  l.log('info', {usr: {name: 'bob'}}, 'info message');
   jest.advanceTimersByTime(1000);
 
   await microtasksUntil(() => fetch.mock.calls.length >= 1);
@@ -200,14 +213,19 @@ test('flush is called again in case of failure', async () => {
   expect(fetch).toHaveBeenCalledWith(
     'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
     {
-      body: stringifyMany({date: 3, message: 'info message', status: 'info'}),
+      body: stringifyMany({
+        usr: {name: 'bob'},
+        date: 3,
+        message: 'info message',
+        status: 'info',
+      }),
       method: 'POST',
       keepalive: true,
     },
   );
 
   fetch.mockReturnValue(Promise.resolve(new Response('{}')));
-  l.log('info', 'info message 2');
+  l.log('info', {usr: {name: 'bob'}}, 'info message 2');
   jest.advanceTimersByTime(1000);
 
   await microtasksUntil(() => fetch.mock.calls.length >= 2);
@@ -217,8 +235,13 @@ test('flush is called again in case of failure', async () => {
     'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
     {
       body: stringifyMany(
-        {date: 3, message: 'info message', status: 'info'},
-        {date: 1003, message: 'info message 2', status: 'info'},
+        {usr: {name: 'bob'}, date: 3, message: 'info message', status: 'info'},
+        {
+          usr: {name: 'bob'},
+          date: 1003,
+          message: 'info message 2',
+          status: 'info',
+        },
       ),
       method: 'POST',
       keepalive: true,
