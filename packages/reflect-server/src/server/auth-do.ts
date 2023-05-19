@@ -766,8 +766,15 @@ export class BaseAuthDO implements DurableObject {
   }
 }
 
-const CONNECTION_KEY_PREFIX = 'connection/';
-const CONNECTIONS_BY_ROOM_INDEX_PREFIX = 'connections_by_room/';
+// In the past this prefix was 'connection/',
+// and some old reflect deployments may have legacy entries with the
+// 'connection/' prefix.
+// The prefix was changed due to a customer that had built up so many
+// entries that the connection revalidation process was exceeding memory.
+// Deleting this large number of entries would take a long time, so instead
+// we simply changed prefixes and abandoned the old entries.
+const CONNECTION_KEY_PREFIX = 'conn/';
+const CONNECTIONS_BY_ROOM_INDEX_PREFIX = 'conns_by_room/';
 
 function createWSAndCloseWithError(
   lc: LogContext,
@@ -1052,49 +1059,6 @@ async function ensureStorageSchemaMigrated(
     );
     lc.info?.('Storage schema is already up to date.');
     return;
-  }
-  if (storageSchemaMeta.version === 0) {
-    // Adds the "connections by room" index.
-    storageSchemaMeta = await migrateStorageSchemaToVersion(
-      storage,
-      lc,
-      storageSchemaMeta,
-      1,
-      0,
-      async () => {
-        // The code deploy triggering this migration will have restarted
-        // all room dos causing all connections to be closed.
-        // Instead of building the "connections by room" index from
-        // the "connection" entries, simply delete all "connection" entries
-        // and any existing "connections by room" index entries.
-        for (const [prefix, desc] of [
-          [CONNECTION_KEY_PREFIX, 'connection entries'],
-          [
-            CONNECTIONS_BY_ROOM_INDEX_PREFIX,
-            'connections by room index entries',
-          ],
-        ]) {
-          let deleteCount = 0;
-          for await (const keyString of getKeyStrings(storage, prefix)) {
-            if (deleteCount === 0) {
-              lc.info?.('First delete of', desc, keyString);
-            }
-            await storage.delete(keyString);
-            deleteCount++;
-            // Every 10,000 deletes force sync of pending writes to disk
-            // to ensure that if migration runs out of time and is killed
-            // at least some forward progress has been sync'd to disk.
-            // Also flush logs about this progress.
-            if (deleteCount % 10000 === 0) {
-              await storage.sync();
-              lc.info?.('Deleted', deleteCount, desc, 'so far.', keyString);
-              await logSink.flush?.();
-            }
-          }
-          lc.info?.('Deleted', deleteCount, desc, 'in total.');
-        }
-      },
-    );
   }
   lc.info?.('Storage schema update complete.');
   await logSink.flush?.();
