@@ -1065,18 +1065,46 @@ async function ensureStorageSchemaMigrated(
         // Instead of building the "connections by room" index from
         // the "connection" entries, simply delete all "connection" entries
         // and any existing "connections by room" index entries.
+        let connectionKeyStringDelCount = 0;
         for await (const connectionKeyString of getKeyStrings(
           storage,
           CONNECTION_KEY_PREFIX,
         )) {
           await storage.delete(connectionKeyString);
+          connectionKeyStringDelCount++;
+          if (connectionKeyStringDelCount % 1000 === 0) {
+            lc.info?.(
+              'Deleted',
+              connectionKeyStringDelCount,
+              'connection entries so far.',
+            );
+          }
         }
+        lc.info?.(
+          'Deleted',
+          connectionKeyStringDelCount,
+          'connection entries in total.',
+        );
+        let connectionsByRoomKeyStringDelCount = 0;
         for await (const connectionsByRoomKeyString of getKeyStrings(
           storage,
           CONNECTIONS_BY_ROOM_INDEX_PREFIX,
         )) {
           await storage.delete(connectionsByRoomKeyString);
+          connectionsByRoomKeyStringDelCount++;
+          if (connectionsByRoomKeyStringDelCount % 1000 === 0) {
+            lc.info?.(
+              'Deleted',
+              connectionsByRoomKeyStringDelCount,
+              'connections by room index entries so far.',
+            );
+          }
         }
+        lc.info?.(
+          'Deleted',
+          connectionsByRoomKeyStringDelCount,
+          'connections by room index entries in total.',
+        );
       },
     );
   }
