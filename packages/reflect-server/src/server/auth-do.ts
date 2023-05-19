@@ -12,6 +12,7 @@ import {assert} from 'shared/asserts.js';
 import * as valita from 'shared/valita.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {encodeHeaderValue} from '../util/headers.js';
+import {randomID} from '../util/rand.js';
 import {closeWithError} from '../util/socket.js';
 import {version} from '../util/version.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
@@ -148,7 +149,7 @@ export class BaseAuthDO implements DurableObject {
     this._lc.info?.('Version:', version);
     void state.blockConcurrencyWhile(() =>
       ensureStorageSchemaMigratedWrapperForTests(
-        ensureStorageSchemaMigrated(state.storage, this._lc),
+        ensureStorageSchemaMigrated(state.storage, this._lc, logSink),
       ),
     );
   }
@@ -157,7 +158,6 @@ export class BaseAuthDO implements DurableObject {
     const lc = addRequestIDFromHeadersOrRandomID(this._lc, request);
     lc.debug?.('Handling request:', request.url);
     try {
-      await ensureStorageSchemaMigrated(this._state.storage, lc);
       const resp = await this._router.dispatch(request, {lc});
       lc.debug?.(`Returning response: ${resp.status} ${resp.statusText}`);
       return resp;
@@ -1026,8 +1026,9 @@ async function migrateStorageSchemaToVersion(
 async function ensureStorageSchemaMigrated(
   storage: DurableObjectStorage,
   lc: LogContext,
+  logSink: LogSink,
 ) {
-  lc.addContext('SchemaUpdate');
+  lc.addContext('schemaUpdateID', randomID());
   lc.info?.('Ensuring storage schema is up to date.');
   let storageSchemaMeta: StorageSchemaMeta = (await storage.get(
     STORAGE_SCHEMA_META_KEY,
@@ -1075,13 +1076,15 @@ async function ensureStorageSchemaMigrated(
           }
           await storage.delete(connectionKeyString);
           connectionKeyStringDelCount++;
-          if (connectionKeyStringDelCount % 1000 === 0) {
+          if (connectionKeyStringDelCount % 10000 === 0) {
+            await storage.sync();
             lc.info?.(
               'Deleted',
               connectionKeyStringDelCount,
               'connection entries so far.',
               connectionKeyString,
             );
+            await logSink.flush?.();
           }
         }
         lc.info?.(
@@ -1102,13 +1105,15 @@ async function ensureStorageSchemaMigrated(
           }
           await storage.delete(connectionsByRoomKeyString);
           connectionsByRoomKeyStringDelCount++;
-          if (connectionsByRoomKeyStringDelCount % 1000 === 0) {
+          if (connectionsByRoomKeyStringDelCount % 10000 === 0) {
+            await storage.sync();
             lc.info?.(
               'Deleted',
               connectionsByRoomKeyStringDelCount,
               'connections by room index entries so far.',
               connectionsByRoomKeyStringDelCount,
             );
+            await logSink.flush?.();
           }
         }
         lc.info?.(
@@ -1120,4 +1125,5 @@ async function ensureStorageSchemaMigrated(
     );
   }
   lc.info?.('Storage schema update complete.');
+  await logSink.flush?.();
 }
