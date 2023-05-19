@@ -249,9 +249,6 @@ export class Reflect<MD extends MutatorDefs> {
   // See comment on _metrics.timeToConnectMs for how _connectingStart is used.
   protected _connectingStart: number | undefined = undefined;
 
-  private _canaryRequestResultTag: Promise<CanaryResultTagType> | undefined =
-    undefined;
-
   readonly #options: ReflectOptions<MD>;
 
   private _metrics: MetricManager;
@@ -527,11 +524,7 @@ export class Reflect<MD extends MutatorDefs> {
 
     const closeKind = wasClean ? 'CleanClose' : 'AbruptClose';
     this._connectResolver.reject(new CloseError(closeKind));
-    await this._disconnect(
-      l,
-      {client: closeKind},
-      this._canaryRequestResultTag,
-    );
+    await this._disconnect(l, {client: closeKind});
   };
 
   // An error on the connection is fatal for the connection.
@@ -668,7 +661,6 @@ export class Reflect<MD extends MutatorDefs> {
     assert(this._connectingStart === undefined);
 
     this._connectingStart = Date.now();
-    this._canaryRequestResultTag = this._fetchCanary(l);
 
     const baseCookie = await this._getBaseCookie();
     this._baseCookie = baseCookie;
@@ -677,13 +669,9 @@ export class Reflect<MD extends MutatorDefs> {
     const id = setTimeout(async () => {
       l.debug?.('Rejecting connect resolver due to timeout');
       this._connectResolver.reject(new TimedOutError('Connect'));
-      await this._disconnect(
-        l,
-        {
-          client: 'ConnectTimeout',
-        },
-        this._canaryRequestResultTag,
-      );
+      await this._disconnect(l, {
+        client: 'ConnectTimeout',
+      });
     }, CONNECT_TIMEOUT_MS);
     const clear = () => clearTimeout(id);
     this._connectResolver.promise.then(clear, clear);
@@ -711,7 +699,6 @@ export class Reflect<MD extends MutatorDefs> {
   private async _disconnect(
     l: LogContext,
     reason: DisconnectReason,
-    canaryRequestResultTag?: Promise<CanaryResultTagType> | undefined,
   ): Promise<void> {
     l.info?.('disconnecting', {
       navigatorOnline: navigator.onLine,
@@ -734,21 +721,19 @@ export class Reflect<MD extends MutatorDefs> {
         break;
       }
       case ConnectionState.Connecting: {
-        if (canaryRequestResultTag === undefined) {
-          this._metrics.lastConnectError.set(getLastConnectMetricState(reason));
+        if (
+          'client' in reason &&
+          (reason.client === 'ConnectTimeout' ||
+            reason.client === 'AbruptClose' ||
+            reason.client === 'CleanClose')
+        ) {
+          const tag = await this._fetchCanary(l);
+          this._metrics.lastConnectError.set(
+            getLastConnectMetricState(reason),
+            [tag],
+          );
         } else {
-          try {
-            const tag = await canaryRequestResultTag;
-            this._metrics.lastConnectError.set(
-              getLastConnectMetricState(reason),
-              [tag],
-            );
-          } catch (error) {
-            // log unexpected error
-            this._metrics.lastConnectError.set(
-              getLastConnectMetricState(reason),
-            );
-          }
+          this._metrics.lastConnectError.set(getLastConnectMetricState(reason));
         }
         if (this._connectingStart === undefined) {
           l.error?.(
