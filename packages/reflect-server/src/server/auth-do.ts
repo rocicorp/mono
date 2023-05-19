@@ -1028,7 +1028,7 @@ async function ensureStorageSchemaMigrated(
   lc: LogContext,
   logSink: LogSink,
 ) {
-  lc.addContext('schemaUpdateID', randomID());
+  lc = lc.addContext('schemaUpdateID', randomID());
   lc.info?.('Ensuring storage schema is up to date.');
   let storageSchemaMeta: StorageSchemaMeta = (await storage.get(
     STORAGE_SCHEMA_META_KEY,
