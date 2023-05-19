@@ -1050,6 +1050,7 @@ async function ensureStorageSchemaMigrated(
         /* noop */
       },
     );
+    lc.info?.('Storage schema is already up to date.');
     return;
   }
   if (storageSchemaMeta.version === 0) {
