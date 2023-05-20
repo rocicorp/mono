@@ -28,8 +28,8 @@
   },
   "dependencies": {
     "@rocicorp/logger": "^2.2.0",
-    "@rocicorp/reflect": "file:vendor/rocicorp-reflect-0.14.0-beta.0-4799e47b1fa95dba5823257e4c5cf3d1c2e7813d.tgz",
-    "@rocicorp/reflect-server": "file:vendor/rocicorp-reflect-server-0.23.0-beta.0-4799e47b1fa95dba5823257e4c5cf3d1c2e7813d.tgz",
+    "@rocicorp/reflect": "file:vendor/rocicorp-reflect-0.15.0-6d97281dbad321271f9abb428b5f9b7196bf9688.tgz",
+    "@rocicorp/reflect-server": "file:vendor/rocicorp-reflect-server-0.24.0-6d97281dbad321271f9abb428b5f9b7196bf9688.tgz",
     "nanoid": "^3.3.4",
     "nextjs-google-analytics": "^2.3.3",
     "react-confetti-explosion": "^2.1.2",
