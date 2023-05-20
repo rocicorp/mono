@@ -1,5 +1,4 @@
 export const REPORT_METRICS_PATH = '/api/metrics/v0/report';
-export const CANARY_PATH = '/api/canary';
 
 export const CONNECT_URL_PATTERN = '/api/sync/:version/connect';
 export const LEGACY_CONNECT_PATH = '/connect';
