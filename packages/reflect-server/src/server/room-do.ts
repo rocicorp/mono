@@ -45,6 +45,7 @@ import {
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import {BufferSizer} from 'shared/buffer-sizer.js';
 import {processRoomStart} from '../process/process-room-start.js';
+import {initRoomSchema} from './room-schema.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -125,6 +126,11 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
     this._lc.info?.('Starting server');
     this._lc.info?.('Version:', version);
+
+    void state.blockConcurrencyWhile(async () => {
+      await initRoomSchema(this._lc, this._storage);
+      // TODO: Invoke roomStartHandler here instead.
+    });
   }
 
   private _initRoutes() {
