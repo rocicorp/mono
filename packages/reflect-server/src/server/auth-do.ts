@@ -53,6 +53,9 @@ import {
   withVersion,
 } from './router.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import {sleep} from '../util/sleep.js';
+
+export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
 
 export interface AuthDOOptions {
   roomDO: DurableObjectNamespace;
@@ -434,16 +437,27 @@ export class BaseAuthDO implements DurableObject {
           assert(auth);
           const authHandler = this._authHandler;
 
+          const timeout = async () => {
+            await sleep(AUTH_HANDLER_TIMEOUT_MS);
+            throw new Error('authHandler timed out');
+          };
+
+          const callHandlerWithTimeout = () =>
+            Promise.race([authHandler(auth, roomID), timeout()]);
+
           const [authHandlerUserData, response] = await timed(
             lc.debug,
             'calling authHandler',
             async () => {
               try {
-                return [await authHandler(auth, roomID), undefined] as const;
+                return [await callHandlerWithTimeout(), undefined] as const;
               } catch (e) {
                 return [
                   undefined,
-                  closeWithErrorLocal('Unauthorized', 'authHandler rejected'),
+                  closeWithErrorLocal(
+                    'Unauthorized',
+                    `authHandler rejected: ${String(e)}`,
+                  ),
                 ] as const;
               }
             },

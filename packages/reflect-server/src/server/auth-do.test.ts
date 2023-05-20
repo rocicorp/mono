@@ -32,6 +32,7 @@ import {
   AUTH_ROUTES,
   BaseAuthDO,
   recordConnection,
+  AUTH_HANDLER_TIMEOUT_MS,
 } from './auth-do.js';
 import {AuthHandler, USER_DATA_HEADER_NAME} from './auth.js';
 import {
@@ -47,6 +48,7 @@ import {
   roomRecordByRoomID as getRoomRecordOriginal,
   type RoomRecord,
 } from './rooms.js';
+import {sleep} from '../util/sleep.js';
 
 const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
 const {authDO} = getMiniflareBindings();
@@ -1282,8 +1284,17 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
         logLevel: 'debug',
       });
 
-      const response = await authDO.fetch(testRequest);
+      const responseP = authDO.fetch(testRequest);
 
+      // Have to wait a bit for the authHandler to get to the point of waiting on timers.
+      for (let i = 0; i < 100; i++) {
+        await Promise.resolve();
+      }
+
+      // This is arbitrary just has to be higher than authHandler timeout.
+      jest.advanceTimersByTime(AUTH_HANDLER_TIMEOUT_MS + 1);
+
+      const response = await responseP;
       expect(response.status).toEqual(101);
       expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(testAuth);
       expect(response.webSocket).toBe(clientWS);
@@ -1301,7 +1312,7 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
       expect(roomID).toEqual(testRoomID);
       throw new Error('Test authHandler reject');
     },
-    'authHandler rejected',
+    'authHandler rejected: Error: Test authHandler reject',
   );
 
   t(
@@ -1311,7 +1322,7 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
       expect(roomID).toEqual(testRoomID);
       return Promise.reject(new Error('Test authHandler reject'));
     },
-    'authHandler rejected',
+    'authHandler rejected: Error: Test authHandler reject',
   );
 
   t(
@@ -1332,6 +1343,17 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
       return Promise.resolve(null);
     },
     'no userData',
+  );
+
+  t(
+    'authHandler takes a very long time',
+    async (auth, roomID) => {
+      expect(auth).toEqual(testAuth);
+      expect(roomID).toEqual(testRoomID);
+      await sleep(30000, setTimeout);
+      return {userID: 'bonk'};
+    },
+    'authHandler rejected: Error: authHandler timed out',
   );
 });
 
