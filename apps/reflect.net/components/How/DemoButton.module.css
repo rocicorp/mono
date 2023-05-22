@@ -1,0 +1,40 @@
+.demoContainer {
+  height: 11.55rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.demoContainer .demoButton {
+  display: inline-block;
+  outline: none;
+  border: 0;
+  text-decoration: none;
+  cursor: pointer;
+  padding: 1rem 1.6rem;
+  border: 1px solid #fc208a;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 6px -2px rgb(0 0 0 / 37%);
+  transition: transform 200ms cubic-bezier(0.645, 0.045, 0.355, 1);
+  color: #fc208a;
+  font-size: 1rem;
+  line-height: 1.2;
+  font-weight: 600;
+  position: relative;
+  -webkit-user-select: none; /* Safari */
+  -ms-user-select: none; /* IE 10 and IE 11 */
+  user-select: none; /* Standard syntax */
+}
+
+.demoContainer .demoButton:active {
+  box-shadow: none;
+  transform: scale(0.99);
+}
+
+@media (max-width: 600px) {
+  .demoContainer {
+    height: 7.4rem;
+  }
+}

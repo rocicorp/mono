@@ -1,0 +1,3 @@
+{
+  "buildCommand": "next build && ./publish-if-production.sh"
+}
