@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {Range, getTrackBackground} from 'react-range';
 import style from './Slider.module.css';
-import { event } from "nextjs-google-analytics";
+import {event} from 'nextjs-google-analytics';
 
 const STEP = 1;
 const MIN = 0;
@@ -57,10 +57,10 @@ const RotateSlider = ({
           if (touched) {
             setTouched(false);
           }
-          event("demo_2_rotate", {
-            category: "How it Works",
-            action: "Adjust rotation of shape in demo 2",
-            label: "Demo 2",
+          event('demo_2_rotate', {
+            category: 'How it Works',
+            action: 'Adjust rotation of shape in demo 2',
+            label: 'Demo 2',
           });
         }}
         renderTrack={({props, children}) => (

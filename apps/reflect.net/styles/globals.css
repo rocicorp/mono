@@ -36,7 +36,7 @@ html.game-mode body {
   position: fixed;
   overflow: hidden;
   height: 100vh;
-  touch-action: none; 
+  touch-action: none;
   user-select: none;
 }
 

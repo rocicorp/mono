@@ -8,7 +8,9 @@ import realtimeCollab from '@/public/benefits/realtimeCollab.svg';
 import persistence from '@/public/benefits/persistence.svg';
 import conflictResolution from '@/public/benefits/conflict-resolution.svg';
 import offline from '@/public/benefits/offline.svg';
-{/* import itworks from '@/public/benefits/itworks-white.svg'; */}
+{
+  /* import itworks from '@/public/benefits/itworks-white.svg'; */
+}
 import textedit from '@/public/benefits/text-editing.svg';
 import onprem from '@/public/benefits/onprem.svg';
 

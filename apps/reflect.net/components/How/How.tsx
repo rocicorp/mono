@@ -75,21 +75,23 @@ function initDemo(
     latency2,
   });
 
-  void Promise.all([r1.clientID, r2.clientID]).then(([clientID1, clientID2]) => {
-    const latencyMapping = [0, 300, 950];
-    setLatency(clientID1, latencyMapping[latency1]);
-    setLatency(clientID2, latencyMapping[latency2]);
-    setState((prev: DemoReflectState | undefined) => {
-      if (prev && prev.reflect1 === r1 && prev.reflect2 === r2) {
-        return {
-          ...prev,
-          clientID1,
-          clientID2,
-        };
-      }
-      return prev;
-    });
-  });
+  void Promise.all([r1.clientID, r2.clientID]).then(
+    ([clientID1, clientID2]) => {
+      const latencyMapping = [0, 300, 950];
+      setLatency(clientID1, latencyMapping[latency1]);
+      setLatency(clientID2, latencyMapping[latency2]);
+      setState((prev: DemoReflectState | undefined) => {
+        if (prev && prev.reflect1 === r1 && prev.reflect2 === r2) {
+          return {
+            ...prev,
+            clientID1,
+            clientID2,
+          };
+        }
+        return prev;
+      });
+    },
+  );
 }
 
 const DemoWrapperInternal = (

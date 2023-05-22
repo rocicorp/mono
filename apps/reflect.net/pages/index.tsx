@@ -103,10 +103,7 @@ export default function Home() {
         {/* Twitter Meta Tags */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta property="twitter:domain" content="reflect.net" />
-        <meta
-          property="twitter:url"
-          content="https://reflect.net"
-        />
+        <meta property="twitter:url" content="https://reflect.net" />
         <meta
           name="twitter:title"
           content="Reflect: High-performance sync for multiplayer web apps."

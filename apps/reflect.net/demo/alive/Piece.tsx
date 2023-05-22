@@ -4,7 +4,7 @@ import React, {PointerEventHandler} from 'react';
 import type {PieceInfo} from './piece-info';
 import type {ClientModel} from './client-model';
 import {center} from './util';
-import {event} from "nextjs-google-analytics";
+import {event} from 'nextjs-google-analytics';
 
 export function Piece({
   piece,

@@ -7,7 +7,7 @@ import type {Reflect} from '@rocicorp/reflect';
 import {M, registerClientConsole} from '@/demo/shared/mutators';
 import {useClientConsoleReducer, useCount} from './howtoUtils';
 import type {Latency} from '@/demo/shared/types';
-import { event } from "nextjs-google-analytics";
+import {event} from 'nextjs-google-analytics';
 
 function IncrementClient({
   title,
@@ -24,10 +24,10 @@ function IncrementClient({
 
   const increment = useCallback(async (reflect: Reflect<M> | undefined) => {
     await reflect?.mutate.increment({key: 'count', delta: 1});
-    event("demo_increment", {
-      category: "How it Works",
-      action: "Press increment button",
-      label: "Demo 2",
+    event('demo_increment', {
+      category: 'How it Works',
+      action: 'Press increment button',
+      label: 'Demo 2',
     });
   }, []);
 
