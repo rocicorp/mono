@@ -25,7 +25,7 @@ export function useCount(
 }
 
 export function useServerLogs(reflect: Reflect<M> | undefined) {
-  return useSubscribe(reflect, async tx => await getServerLogs(tx), []);
+  return useSubscribe(reflect, tx => getServerLogs(tx), []);
 }
 
 export type ConsoleAction = {type: 'APPEND'; payload: string} | {type: 'CLEAR'};

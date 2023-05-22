@@ -24,15 +24,11 @@ export default function ClientConsole({logs}: {logs: string[] | undefined}) {
       <h4 className={styles.panelLabel}>Console</h4>
       <div className={styles.consoleOutput}>
         {logs &&
-          logs.map((log, i) => {
-            return (
-              <p className={styles.consoleItem} key={i}>
-                {log
-                  .replace(client1ID, 'client1')
-                  .replace(client2ID, 'client2')}
-              </p>
-            );
-          })}
+          logs.map((log, i) => (
+            <p className={styles.consoleItem} key={i}>
+              {log.replace(client1ID, 'client1').replace(client2ID, 'client2')}
+            </p>
+          ))}
       </div>
     </div>
   );

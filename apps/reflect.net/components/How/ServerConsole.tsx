@@ -32,15 +32,11 @@ export default function ServerConsole({
       <h4 className={styles.panelLabel}>Server Console</h4>
       <div className={styles.consoleOutput}>
         {logs &&
-          logs.slice(-10).map((log, i) => {
-            return (
-              <p className={styles.consoleItem} key={i}>
-                {log
-                  .replace(client1ID, 'client1')
-                  .replace(client2ID, 'client2')}
-              </p>
-            );
-          })}
+          logs.slice(-10).map((log, i) => (
+            <p className={styles.consoleItem} key={i}>
+              {log.replace(client1ID, 'client1').replace(client2ID, 'client2')}
+            </p>
+          ))}
       </div>
     </div>
   );

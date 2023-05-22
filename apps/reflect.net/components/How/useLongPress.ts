@@ -60,9 +60,7 @@ const useLongPress = (
   };
 };
 
-const isTouchEvent = (event: any): event is TouchEvent => {
-  return 'touches' in event;
-};
+const isTouchEvent = (event: any): event is TouchEvent => 'touches' in event;
 
 const preventDefault = (event: any) => {
   if (!isTouchEvent(event)) return;

@@ -194,9 +194,7 @@ export default function How() {
     };
   }, []);
 
-  const DemoWrapper = useMemo(() => {
-    return DemoWrapperInternal;
-  }, []);
+  const DemoWrapper = useMemo(() => DemoWrapperInternal, []);
 
   return (
     <div ref={ref}>
