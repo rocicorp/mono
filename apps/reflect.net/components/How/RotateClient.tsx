@@ -25,7 +25,7 @@ function RotateClient({
 
   const incrementCount = useCallback(
     (deg: number) => {
-      reflect?.mutate.degree({key: 'degree', deg});
+      void reflect?.mutate.degree({key: 'degree', deg});
     },
     [reflect],
   );
@@ -35,12 +35,12 @@ function RotateClient({
   const count = useCount(reflect, 'degree', (key: string, val: number) => {
     clientConsoleDispatch({
       type: 'APPEND',
-      payload: `Key  \"${key}\" changed to: ${val}`,
+      payload: `Key  "${key}" changed to: ${val}`,
     });
   });
 
   useEffect(() => {
-    reflect?.clientID.then(id => {
+    void reflect?.clientID.then(id => {
       setCurrentClientID(id);
       registerClientConsole(id, (log: string) =>
         clientConsoleDispatch({type: 'APPEND', payload: log}),

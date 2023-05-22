@@ -15,7 +15,7 @@ export default function BetaSignup() {
     setButtonText('Submitting...');
 
     const data = form.current;
-    if (data == null) return;
+    if (data === null) return;
     const formData = new FormData(data);
     const endpoint = '/api/submit-beta-form';
     const options = {

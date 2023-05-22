@@ -75,7 +75,7 @@ function initDemo(
     latency2,
   });
 
-  Promise.all([r1.clientID, r2.clientID]).then(([clientID1, clientID2]) => {
+  void Promise.all([r1.clientID, r2.clientID]).then(([clientID1, clientID2]) => {
     const latencyMapping = [0, 300, 950];
     setLatency(clientID1, latencyMapping[latency1]);
     setLatency(clientID2, latencyMapping[latency2]);
@@ -188,7 +188,7 @@ export default function How() {
     };
 
     return () => {
-      cleanup();
+      void cleanup();
     };
   }, []);
 

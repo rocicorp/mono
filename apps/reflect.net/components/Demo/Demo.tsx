@@ -61,7 +61,7 @@ function usePuzzleRoomID() {
     );
     const aliveIfVisible = () => {
       if (document.visibilityState === 'visible') {
-        orchestratorClient.mutate.alive();
+        void orchestratorClient.mutate.alive();
       }
     };
     aliveIfVisible();
@@ -73,7 +73,7 @@ function usePuzzleRoomID() {
       aliveIfVisible();
     };
     document.addEventListener('visibilitychange', visibilityChangeListener);
-    const pageHideListener = async () => {
+    const pageHideListener = () => {
       void orchestratorClient.mutate.unload();
     };
     window.addEventListener('pagehide', pageHideListener);
@@ -128,14 +128,14 @@ function useReflect(
     const url = new URL(location.href);
     if (url.searchParams.has('reset')) {
       console.info('Resetting replicache');
-      reflect.mutate.resetRoom();
+      void reflect.mutate.resetRoom();
     }
     if (url.searchParams.has('solve')) {
       console.info('Solving puzzle');
-      reflect.mutate.solve();
+      void reflect.mutate.solve();
     }
 
-    reflect.mutate.initializePuzzle({
+    void reflect.mutate.initializePuzzle({
       pieces: generateRandomPieces(home, stage),
       force: false,
     });
@@ -145,13 +145,13 @@ function useReflect(
     };
 
     const onBlur = async () => {
-      reflect.mutate.updateClient({
+      void reflect.mutate.updateClient({
         id: await reflect.clientID,
         focused: false,
       });
     };
     const onFocus = async () => {
-      reflect.mutate.updateClient({
+      void reflect.mutate.updateClient({
         id: await reflect.clientID,
         focused: true,
       });
@@ -168,7 +168,7 @@ function useReflect(
     };
     // we only want to do this once per page-load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [home != null, stage !== null, puzzleRoomID]);
+  }, [home !== null, stage !== null, puzzleRoomID]);
 
   return {r, online};
 }
@@ -215,7 +215,7 @@ function useEnsureMyClient(
 
   const ensure = async () => {
     const cid = await r.clientID;
-    r.mutate.ensureClient({
+    await r.mutate.ensureClient({
       id: cid,
       selectedPieceID: '',
       // off the page, so not visible till user moves cursor
@@ -230,7 +230,7 @@ function useEnsureMyClient(
     });
   };
 
-  ensure();
+  void ensure();
 
   return undefined;
 }
@@ -240,10 +240,10 @@ function useEnsureLocation(
   myClientID: string | undefined,
 ) {
   const [location, setLocation] = useState<Location | null>(null);
-  let ignore = false;
+  const ignore = false;
 
   useEffect(() => {
-    fetch('/api/get-location')
+    void fetch('/api/get-location')
       .then(resp => resp.json())
       .then(data => {
         if (ignore) {
@@ -257,7 +257,7 @@ function useEnsureLocation(
     if (r === null || location === null || myClientID === undefined) {
       return;
     }
-    r.mutate.updateClient({
+    void r.mutate.updateClient({
       id: myClientID,
       location: getLocationString(location),
     });
@@ -371,7 +371,7 @@ const Demo = ({
     if (!r || !home || !stage) {
       return;
     }
-    r.mutate.initializePuzzle({
+    void r.mutate.initializePuzzle({
       pieces: generateRandomPieces(home, stage),
       force: true,
     });

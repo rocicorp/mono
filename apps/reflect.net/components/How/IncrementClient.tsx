@@ -42,7 +42,7 @@ function IncrementClient({
     }) ?? 0;
 
   useEffect(() => {
-    reflect?.clientID.then(id => {
+    void reflect?.clientID.then(id => {
       registerClientConsole(id, (log: string) =>
         clientConsoleDispatch({type: 'APPEND', payload: log}),
       );
