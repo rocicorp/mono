@@ -1,0 +1,85 @@
+.infoPopContainer {
+  position: relative;
+  display: inline-block;
+  margin-left: 0.4rem;
+}
+
+.infoIcon {
+  opacity: 0.5;
+  padding: 2px;
+  width: 18px;
+  height: 18px;
+  cursor: help;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+.messageContainer {
+  opacity: 0;
+  visibility: hidden;
+  padding: 0.7rem 1rem;
+  font-weight: 400;
+  color: #fff;
+  background: rgba(42, 44, 46, 0.96);
+  font-size: 0.75rem;
+  position: absolute;
+  left: 150%;
+  top: 50%;
+  transform: translateY(-50%);
+  box-shadow: 0 8px 24px rgba(140, 149, 159, 0.6);
+  border-radius: 0.5rem;
+  width: max-content;
+  max-width: 16rem;
+  line-height: 1.4;
+  transition: opacity 300ms ease-in;
+}
+
+.messageContainer::after {
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  margin-top: -6px;
+  width: 0;
+  height: 0;
+  border-top: solid 6px transparent;
+  border-bottom: solid 6px transparent;
+  border-left: none;
+  border-right: solid 6px rgba(42, 44, 46, 0.96);
+}
+
+.infoIcon:hover + .messageContainer {
+  opacity: 1;
+  visibility: visible;
+}
+
+.infoAreaMobile {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .infoIcon {
+    display: none;
+  }
+
+  .infoPopContainer {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    margin: 0;
+    overflow: visible;
+  }
+
+  .infoPopContainer:hover .messageContainer {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .messageContainer {
+    left: 110%;
+    max-width: 32vw;
+  }
+}

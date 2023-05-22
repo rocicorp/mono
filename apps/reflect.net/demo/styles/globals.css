@@ -1,0 +1,34 @@
+@font-face {
+  font-family: 'Muoto Black';
+  src: url('/font/muoto-black.otf');
+  src: url('/font/muoto-black.woff');
+  src: url('/font/muoto-black.woff2');
+}
+@font-face {
+  font-family: 'Muoto Regular';
+  src: url('/font/muoto-reg.otf');
+  src: url('/font/muoto-reg.woff');
+  src: url('/font/muoto-reg.woff2');
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  font-family: 'Muoto Regular', -apple-system, BlinkMacSystemFont, Segoe UI,
+    Roboto, Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue,
+    sans-serif;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  color: #2a2c2e;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+* {
+  box-sizing: border-box;
+}
