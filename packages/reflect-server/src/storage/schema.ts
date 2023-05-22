@@ -5,11 +5,17 @@ import type {DurableStorage} from './durable-storage.js';
 import type {Storage} from './storage.js';
 
 /**
- * Encapsulates schema upgrade logic to move to another schema version.
- * Note that Migrations do *not* need to flush (i.e. await their mutations),
- * as the schema update code will always follow a Migration with a flushing
- * update to the version. However, Migrations *can* flush if necessary
- * (e.g. for large, incremental migrations).
+ * Encapsulates the logic for upgrading to a new schema. After the
+ * Migration code successfully completes, {@link initStorageSchema}
+ * will flush an update of the storage version.
+ *
+ * Note that this means that a Migration need not flush (i.e. await)
+ * its mutations, as any pending mutations will be flushed atomically
+ * with the storage version update.
+ *
+ * However, Migrations are free to flush mutations if needed. For example,
+ * this may be necessary for large migrations that must be flushed
+ * incrementally in order to avoid exceeding memory limits.
  */
 export type Migration = (
   log: LogContext,
@@ -22,8 +28,8 @@ export type VersionMigrationMap = {
 };
 
 /**
- * Ensures that the storage schema is compatible with the code, updating
- * and migrating the schema if necessary.
+ * Ensures that the storage schema is compatible with the current code,
+ * updating and migrating the schema if necessary.
  */
 export async function initStorageSchema(
   log: LogContext,
