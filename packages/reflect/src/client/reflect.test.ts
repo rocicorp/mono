@@ -1,8 +1,6 @@
 import {assert, expect} from '@esm-bundle/chai';
 import {resolver} from '@rocicorp/resolver';
-import type {NullableVersion} from 'reflect-protocol';
-import {Mutation, pushMessageSchema} from 'reflect-protocol';
-import {version} from './version.js';
+import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
 import {
   ExperimentalMemKVStore,
   JSONValue,
@@ -792,164 +790,12 @@ test('Metrics', async () => {
     await r.triggerPong();
   }
 
-  expect(
-    fetchStub.calledWithMatch('https://example.com/api/metrics/v0/report', {
-      method: 'POST',
-      body: `{"series":[{"metric":"time_to_connect_ms","points":[[1678829455,[0]]],"tags":["source:client","version:${version}"],"host":"localhost:8000"}]}`,
-      keepalive: true,
-    }),
-  ).to.be.true;
-});
-
-type CanaryCase = {
-  name: string;
-  canaryEndpointMock: Promise<Response>;
-  debugMessage: string;
-  metricBody: string;
-  shouldTimeOut: boolean;
-  shouldCloseSocket: boolean;
-  canaryToTimeout: boolean;
-};
-
-test('does not call canary on connect', async () => {
-  const fetchStub = sinon.stub(window, 'fetch');
-  const r = reflectForTest();
-  await r.waitForConnectionState(ConnectionState.Connecting);
-  await r.triggerConnected();
-  await r.waitForConnectionState(ConnectionState.Connected);
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
-  expect(
-    fetchStub.calledWithMatch('https://example.com/api/canary', {
-      method: 'GET',
-    }),
-  ).to.be.false;
-});
-
-test('canary logs and metrics: connect times-out but canary is ok', async () => {
-  const failedRequest = `{"series":[{"metric":"time_to_connect_ms","points":[[1678829465,[100000]]],"tags":["source:client","version:${version}"],"host":"localhost:8000"},{"metric":"last_connect_error_client_connect_timeout","points":[[1678829465,[1]]],"tags":["source:client","version:${version}","canary:success"],"host":"localhost:8000"}]}`;
-  const OK_CANARY = Promise.resolve(
-    new Response('ok', {
-      status: 200,
-    }),
-  );
-
-  const c: CanaryCase = {
-    name: 'connect timesout but canary is ok',
-    canaryEndpointMock: OK_CANARY,
-    debugMessage: '200 response from canary',
-    metricBody: failedRequest,
-    shouldTimeOut: true,
-    shouldCloseSocket: false,
-    canaryToTimeout: false,
-  };
-  await testCanary(c);
-});
-
-test('canary logs and metrics: canary mock rejects', async () => {
-  const failedRequest = `{"series":[{"metric":"time_to_connect_ms","points":[[1678829465,[100000]]],"tags":["source:client","version:${version}"],"host":"localhost:8000"},{"metric":"last_connect_error_client_connect_timeout","points":[[1678829465,[1]]],"tags":["source:client","version:${version}","canary:failure"],"host":"localhost:8000"}]}`;
-  const REJECT_CANARY = Promise.reject(new Error('test canary fetcher'));
-
-  const c: CanaryCase = {
-    name: 'connect timeouts and canary mock rejects',
-    canaryEndpointMock: REJECT_CANARY,
-    debugMessage: 'error from canary',
-    metricBody: failedRequest,
-    shouldTimeOut: true,
-    shouldCloseSocket: false,
-    canaryToTimeout: false,
-  };
-  await testCanary(c);
-});
-
-test('canary logs and metrics: timeout', async () => {
-  const failedRequest = `{"series":[{"metric":"time_to_connect_ms","points":[[1678829475,[100000]]],"tags":["source:client","version:${version}"],"host":"localhost:8000"},{"metric":"last_connect_error_client_connect_timeout","points":[[1678829475,[1]]],"tags":["source:client","version:${version}","canary:timeout"],"host":"localhost:8000"}]}`;
-  const TIMEOUT_CANARY = new Promise<Response>(() => undefined);
-
-  const c: CanaryCase = {
-    name: 'timeout canary request',
-    canaryEndpointMock: TIMEOUT_CANARY,
-    debugMessage: 'timeout from canary',
-    metricBody: failedRequest,
-    shouldTimeOut: true,
-    shouldCloseSocket: false,
-    canaryToTimeout: true,
-  };
-  await testCanary(c);
-});
-
-const testCanary = async (c: CanaryCase) => {
-  const fetchStub = sinon.stub(window, 'fetch');
-  const log: [LogLevel, unknown[]][] = [];
-  fetchStub
-    .withArgs('https://example.com/api/canary')
-    .returns(c.canaryEndpointMock);
-
-  const r = reflectForTest({
-    logLevel: 'debug',
-    logSinks: [
-      {
-        log: (level, ...args) => {
-          log.push([level, args]);
-        },
-      },
-    ],
+  fetchStub.calledOnceWithExactly('https://example.com/api/metrics/v0/report', {
+    method: 'POST',
+    body: '{"series":[{"metric":"time_to_connect_ms","points":[[120,[0]]]}]}',
+    keepalive: true,
   });
-  await r.waitForConnectionState(ConnectionState.Connecting);
-
-  // Need to drain the microtask queue without changing the clock because we are
-  // using the time below to check when the connect times out.
-  for (let i = 0; i < 10; i++) {
-    await clock.tickAsync(0);
-  }
-
-  expect(r.connectionState).to.equal(ConnectionState.Connecting);
-  if (c.shouldTimeOut || c.shouldCloseSocket) {
-    if (c.shouldTimeOut) {
-      await clock.tickAsync(CONNECT_TIMEOUT_MS - 1);
-      expect(r.connectionState).to.equal(ConnectionState.Connecting);
-      await clock.tickAsync(1);
-      if (c.canaryToTimeout) {
-        await clock.tickAsync(CONNECT_TIMEOUT_MS);
-      }
-    }
-    if (c.shouldCloseSocket) {
-      await r.triggerClose();
-    }
-    await clock.tickAsync(REPORT_INTERVAL_MS);
-  } else {
-    await r.triggerConnected();
-    expect(r.connectionState).to.equal(ConnectionState.Connected);
-    for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
-      await clock.tickAsync(PING_INTERVAL_MS);
-      await r.triggerPong();
-    }
-  }
-
-  //debugging logs if needed
-  // console.log(fetchStub.getCalls().map(c => c.args));
-  // log.map(([_level, args]) => {
-  //   if (args && args[4]) {
-  //     console.log(args[4]);
-  //   }
-  // });
-
-  expect(
-    fetchStub.calledWithMatch('https://example.com/api/metrics/v0/report', {
-      method: 'POST',
-      body: c.metricBody,
-      keepalive: true,
-    }),
-  ).to.be.true;
-
-  const index: number = log.findIndex(
-    ([level, args]: [LogLevel, unknown[]]) =>
-      level === 'debug' &&
-      args[4] &&
-      JSON.stringify(args[4]).includes(c.debugMessage),
-  );
-
-  expect(index).to.not.equal(-1);
-};
+});
 
 test('Authentication', async () => {
   const log: number[] = [];
@@ -1122,15 +968,6 @@ test('Ping timeout', async () => {
 });
 
 test('Connect timeout', async () => {
-  const fetchStub = sinon.stub(window, 'fetch');
-  fetchStub.withArgs('https://example.com/api/canary').returns(
-    Promise.resolve(
-      new Response('ok', {
-        status: 200,
-      }),
-    ),
-  );
-
   const r = reflectForTest();
 
   await r.waitForConnectionState(ConnectionState.Connecting);
@@ -1146,11 +983,6 @@ test('Connect timeout', async () => {
     await clock.tickAsync(CONNECT_TIMEOUT_MS - 1);
     expect(r.connectionState).to.equal(ConnectionState.Connecting);
     await clock.tickAsync(1);
-    expect(
-      fetchStub.calledWithMatch('https://example.com/api/canary', {
-        method: 'GET',
-      }),
-    ).to.be.true;
     expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
     // We got disconnected so we sleep for RUN_LOOP_INTERVAL_MS before trying again

@@ -1,3 +1,12 @@
+export class TestExecutionContext implements ExecutionContext {
+  waitUntil(_promise: Promise<unknown>): void {
+    return;
+  }
+  passThroughOnException(): void {
+    return;
+  }
+}
+
 export class TestDurableObjectId implements DurableObjectId {
   readonly name?: string;
   private readonly _objectIDString: string;
@@ -42,6 +51,8 @@ export async function createTestDurableObjectState(
 export class TestDurableObjectState implements DurableObjectState {
   readonly id: DurableObjectId;
   readonly storage: DurableObjectStorage;
+  private readonly _blockingCallbacks: Promise<unknown>[] = [];
+
   constructor(id: DurableObjectId, storage: DurableObjectStorage) {
     this.id = id;
     this.storage = storage;
@@ -50,7 +61,12 @@ export class TestDurableObjectState implements DurableObjectState {
     return;
   }
   blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T> {
-    return callback();
+    const promise = callback();
+    this._blockingCallbacks.push(promise);
+    return promise;
+  }
+  concurrencyBlockingCallbacks(): Promise<unknown[]> {
+    return Promise.all(this._blockingCallbacks);
   }
 }
 

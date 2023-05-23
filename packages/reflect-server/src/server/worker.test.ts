@@ -9,20 +9,12 @@ import {
   createTestDurableObjectNamespace,
   TestDurableObjectId,
   TestDurableObjectStub,
+  TestExecutionContext,
 } from './do-test-utils.js';
-import {CANARY_PATH, REPORT_METRICS_PATH} from './paths.js';
+import {REPORT_METRICS_PATH} from './paths.js';
 import {BaseWorkerEnv, createWorker} from './worker.js';
 
 const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
-
-class TestExecutionContext implements ExecutionContext {
-  waitUntil(_promise: Promise<unknown>): void {
-    return;
-  }
-  passThroughOnException(): void {
-    return;
-  }
-}
 
 function createTestFixture(
   createTestResponse: (req: Request) => Response = () =>
@@ -578,58 +570,6 @@ test('reportMetrics', async () => {
     } else {
       expect(fetchSpy).not.toHaveBeenCalled();
     }
-
-    jest.resetAllMocks();
-  }
-});
-
-test('canary', async () => {
-  const canaryURL = new URL(CANARY_PATH, 'https://test.roci.dev/');
-  type TestCase = {
-    name: string;
-    method: string;
-    expectedStatus: number;
-  };
-  const testCases: TestCase[] = [
-    {
-      name: 'good request',
-      method: 'get',
-      expectedStatus: 200,
-    },
-    {
-      name: 'bad method',
-      method: 'post',
-      expectedStatus: 405,
-    },
-  ];
-  for (const tc of testCases) {
-    await testCanary(tc);
-  }
-
-  async function testCanary(tc: TestCase) {
-    const testEnv: BaseWorkerEnv = {
-      authDO: {
-        ...createTestDurableObjectNamespace(),
-      },
-    };
-
-    const worker = createWorker(() => ({
-      logSink: new TestLogSink(),
-      logLevel: 'error',
-    }));
-
-    const testRequest = new Request(canaryURL.toString(), {
-      method: tc.method,
-    });
-    if (worker.fetch === undefined) {
-      throw new Error('Expect fetch to be defined');
-    }
-    const response = await worker.fetch(
-      testRequest,
-      testEnv,
-      new TestExecutionContext(),
-    );
-    expect(response.status).toBe(tc.expectedStatus);
 
     jest.resetAllMocks();
   }

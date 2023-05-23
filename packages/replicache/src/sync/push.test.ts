@@ -1,22 +1,23 @@
-import {LogContext} from '@rocicorp/logger';
 import {expect} from '@esm-bundle/chai';
+import {LogContext} from '@rocicorp/logger';
 import * as dag from '../dag/mod.js';
 import {DEFAULT_HEAD_NAME} from '../db/commit.js';
 import {fromWhence, whenceHead} from '../db/read.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {SYNC_HEAD_NAME} from './sync-head-name.js';
+import {REPLICACHE_FORMAT_VERSION_SDD} from '../format-version.js';
+import {deepFreeze} from '../json.js';
+import type {Pusher, PusherResult} from '../pusher.js';
+import {withRead, withWrite} from '../with-transactions.js';
+import type {ClientGroupID} from './ids.js';
 import {
-  push,
+  PUSH_VERSION_DD31,
+  PUSH_VERSION_SDD,
+  PushRequest,
   PushRequestV0,
   PushRequestV1,
-  PUSH_VERSION_SDD,
-  PUSH_VERSION_DD31,
-  PushRequest,
+  push,
 } from './push.js';
-import type {Pusher, PusherResult} from '../pusher.js';
-import type {ClientGroupID} from './ids.js';
-import {deepFreeze} from '../json.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {SYNC_HEAD_NAME} from './sync-head-name.js';
 
 type FakePusherArgs = {
   expPush: boolean;
@@ -70,7 +71,7 @@ test('try push [SDD]', async () => {
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
   const lc = new LogContext();
-  const b = new ChainBuilder(store, undefined, false);
+  const b = new ChainBuilder(store, undefined, REPLICACHE_FORMAT_VERSION_SDD);
   await b.addGenesis(clientID);
   await b.addSnapshot([['foo', 'bar']], clientID);
   // chain[2] is an index change
