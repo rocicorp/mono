@@ -10,6 +10,7 @@ import {
   REPLICACHE_FORMAT_VERSION_DD31,
   REPLICACHE_FORMAT_VERSION_SDD,
   REPLICACHE_FORMAT_VERSION_V6,
+  REPLICACHE_FORMAT_VERSION_V7,
   ReplicacheFormatVersion,
   parseReplicacheFormatVersion,
 } from './format-version.js';
@@ -120,6 +121,7 @@ export class MutationRecovery {
             case REPLICACHE_FORMAT_VERSION_SDD:
             case REPLICACHE_FORMAT_VERSION_DD31:
             case REPLICACHE_FORMAT_VERSION_V6:
+            case REPLICACHE_FORMAT_VERSION_V7:
               await recoverMutationsWithNewPerdag(
                 database,
                 this._options,
