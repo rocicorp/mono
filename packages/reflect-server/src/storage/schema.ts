@@ -7,15 +7,16 @@ import type {Storage} from './storage.js';
 /**
  * Encapsulates the logic for upgrading to a new schema. After the
  * Migration code successfully completes, {@link initStorageSchema}
- * will flush an update of the storage version.
+ * will update the storage version and flush() all mutations.
  *
- * Note that this means that a Migration need not flush (i.e. await)
- * its mutations, as any pending mutations will be flushed atomically
- * with the storage version update.
+ * Note that this means that a Migration need not flush manually,
+ * as its changes will be flushed atomically with the version update.
  *
  * However, Migrations are free to flush mutations if needed. For example,
  * this may be necessary for large migrations that must be flushed
- * incrementally in order to avoid exceeding memory limits.
+ * incrementally in order to avoid exceeding memory or cpu limits.
+ *
+ * @see https://developers.cloudflare.com/workers/runtime-apis/durable-objects/#in-memory-state
  */
 export type Migration = (
   log: LogContext,
@@ -38,11 +39,13 @@ export async function initStorageSchema(
 ): Promise<void> {
   const versionMigrations = sorted(versionMigrationMap);
   if (versionMigrations.length === 0) {
-    log.debug?.(`No versions/migrations to manage.`);
+    log.info?.(`No versions/migrations to manage.`);
     return;
   }
   const codeSchemaVersion = versionMigrations[versionMigrations.length - 1][0];
-  log.debug?.(`Running server at schema v${codeSchemaVersion}`);
+  log.info?.(
+    `Checking schema for compatibility with server at schema v${codeSchemaVersion}`,
+  );
 
   let meta = await getStorageSchemaMeta(storage);
   if (codeSchemaVersion < meta.minSafeRollbackVersion) {
@@ -65,8 +68,8 @@ export async function initStorageSchema(
       }
     }
   }
-
   assert(meta.version === codeSchemaVersion);
+  log.info?.(`Running server at schema v${codeSchemaVersion}`);
 }
 
 function sorted(
@@ -112,6 +115,7 @@ async function setStorageSchemaVersion(
   meta.maxVersion = Math.max(newVersion, meta.maxVersion);
 
   await storage.put(STORAGE_SCHEMA_META_KEY, meta);
+  await storage.flush();
   return meta;
 }
 
@@ -122,7 +126,9 @@ async function migrateStorageSchemaVersion(
   migration: Migration,
 ): Promise<StorageSchemaMeta> {
   await migration(log, storage);
-  return setStorageSchemaVersion(storage, destinationVersion);
+  const meta = await setStorageSchemaVersion(storage, destinationVersion);
+  await storage.flush();
+  return meta;
 }
 
 /**
@@ -141,7 +147,7 @@ export function rollbackLimitMigration(toAtLeast: number): Migration {
     if (meta.minSafeRollbackVersion >= toAtLeast) {
       // The rollback limit must never move backwards.
       log.debug?.(
-        `rollback limit is already at ${meta.minSafeRollbackVersion}`,
+        `rollback limit is already at ${meta.minSafeRollbackVersion}, don't need to bump to ${toAtLeast}`,
       );
     } else {
       log.info?.(
