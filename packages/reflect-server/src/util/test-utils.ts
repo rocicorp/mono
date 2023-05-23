@@ -29,7 +29,6 @@ export function client(
   socket: Socket = new Mocket(),
   clockBehindByMs?: number | undefined,
   debugPerf = false,
-  lastActivityTimestamp = Date.now(),
 ): [ClientID, ClientState] {
   return [
     id,
@@ -38,7 +37,6 @@ export function client(
       userData: {userID},
       clientGroupID,
       clockOffsetMs: clockBehindByMs,
-      lastActivityTimestamp,
       debugPerf,
     },
   ];
