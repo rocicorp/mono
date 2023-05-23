@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from 'shared/asserts.js';
 import * as btree from '../btree/mod.js';
 import {BTreeRead} from '../btree/mod.js';
 import {compareCookies, Cookie} from '../cookies.js';
@@ -7,6 +8,10 @@ import {assertSnapshotMetaDD31, commitIsLocalDD31} from '../db/commit.js';
 import * as db from '../db/mod.js';
 import {updateIndexes} from '../db/write.js';
 import {isErrorResponse} from '../error-responses.js';
+import {
+  REPLICACHE_FORMAT_VERSION_SDD,
+  ReplicacheFormatVersion,
+} from '../format-version.js';
 import {
   assertPullerResultV0,
   assertPullerResultV1,
@@ -103,6 +108,7 @@ export async function beginPullV0(
   puller: Puller,
   requestID: string,
   store: dag.Store,
+  replicacheFormatVersion: ReplicacheFormatVersion,
   lc: LogContext,
   createSyncBranch = true,
 ): Promise<BeginPullResponseV0> {
@@ -157,6 +163,7 @@ export async function beginPullV0(
     baseCookie,
     response,
     clientID,
+    replicacheFormatVersion,
   );
   if (result.type === HandlePullResponseResultType.CookieMismatch) {
     throw new Error('Overlapping sync');
@@ -179,6 +186,7 @@ export async function beginPullV1(
   puller: Puller,
   requestID: string,
   store: dag.Store,
+  replicacheFormatVersion: ReplicacheFormatVersion,
   lc: LogContext,
   createSyncBranch = true,
 ): Promise<BeginPullResponseV1> {
@@ -231,6 +239,7 @@ export async function beginPullV1(
     baseCookie,
     response,
     clientID,
+    replicacheFormatVersion,
   );
 
   return {
@@ -278,10 +287,12 @@ export function handlePullResponseV0(
   expectedBaseCookie: ReadonlyJSONValue,
   response: PullResponseOKV0,
   clientID: ClientID,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
   // that is not the case by re-checking the base snapshot.
   return withWrite(store, async dagWrite => {
+    assert(replicacheFormatVersion <= REPLICACHE_FORMAT_VERSION_SDD);
     const dagRead = dagWrite;
     const mainHead = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
 
@@ -372,6 +383,7 @@ export function handlePullResponseV0(
       dagWrite,
       db.readIndexesForWrite(lastIntegrated, dagWrite),
       clientID,
+      replicacheFormatVersion,
     );
 
     await patch.apply(lc, dbWrite, response.patch);
@@ -427,6 +439,7 @@ export function handlePullResponseV1(
   expectedBaseCookie: FrozenJSONValue,
   response: PullResponseOKV1,
   clientID: ClientID,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
   // that is not the case by re-checking the base snapshot.
@@ -500,6 +513,7 @@ export function handlePullResponseV1(
       frozenResponseCookie,
       dagWrite,
       clientID,
+      replicacheFormatVersion,
     );
 
     await patch.apply(lc, dbWrite, response.patch);

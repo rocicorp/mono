@@ -73,17 +73,24 @@ export async function createAndPersistClientWithPendingLocalSDD(
   perdag: dag.Store,
   numLocal: number,
 ): Promise<db.LocalMetaSDD[]> {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION_SDD;
   const testMemdag = new dag.LazyStore(
     perdag,
     100 * 2 ** 20, // 100 MB,
     dag.uuidChunkHasher,
     assertHash,
   );
-  const b = new ChainBuilder(testMemdag, undefined, false);
+  const b = new ChainBuilder(testMemdag, undefined, replicacheFormatVersion);
   await b.addGenesis(clientID);
   await b.addSnapshot([['unique', uuid()]], clientID);
 
-  await initClientWithClientID(clientID, perdag, [], {}, false);
+  await initClientWithClientID(
+    clientID,
+    perdag,
+    [],
+    {},
+    replicacheFormatVersion,
+  );
 
   const localMetas: db.LocalMetaSDD[] = [];
   for (let i = 0; i < numLocal; i++) {

@@ -944,6 +944,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
             this._mutatorRegistry,
             lc,
             db.isLocalMetaDD31(meta) ? meta.clientID : clientID,
+            REPLICACHE_FORMAT_VERSION,
           ),
         );
       }
@@ -1233,6 +1234,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       deepFreeze(poke.baseCookie),
       pullResponse,
       clientID,
+      REPLICACHE_FORMAT_VERSION,
     );
 
     switch (result.type) {
@@ -1266,6 +1268,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           this.puller,
           requestID,
           this._memdag,
+          REPLICACHE_FORMAT_VERSION,
           requestLc,
         );
         return {
@@ -1307,6 +1310,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           this._perdag,
           this._mutatorRegistry,
           () => this.closed,
+          REPLICACHE_FORMAT_VERSION,
         );
       } catch (e) {
         if (e instanceof persist.ClientStateNotFoundError) {
@@ -1343,6 +1347,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         this._mutatorRegistry,
         this._subscriptions,
         () => this.closed,
+        REPLICACHE_FORMAT_VERSION,
       );
     } catch (e) {
       if (e instanceof persist.ClientStateNotFoundError) {
@@ -1585,7 +1590,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           dagWrite,
           timestamp,
           clientID,
-          true,
+          REPLICACHE_FORMAT_VERSION,
         );
 
         const tx = new WriteTransactionImpl(
