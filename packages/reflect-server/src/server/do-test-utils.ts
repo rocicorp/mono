@@ -42,7 +42,7 @@ export async function createTestDurableObjectState(
 export class TestDurableObjectState implements DurableObjectState {
   readonly id: DurableObjectId;
   readonly storage: DurableObjectStorage;
-  private readonly blockingCallbacks: Promise<unknown>[] = [];
+  private readonly _blockingCallbacks: Promise<unknown>[] = [];
 
   constructor(id: DurableObjectId, storage: DurableObjectStorage) {
     this.id = id;
@@ -53,11 +53,11 @@ export class TestDurableObjectState implements DurableObjectState {
   }
   blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T> {
     const promise = callback();
-    this.blockingCallbacks.push(promise);
+    this._blockingCallbacks.push(promise);
     return promise;
   }
   concurrencyBlockingCallbacks(): Promise<unknown[]> {
-    return Promise.all(this.blockingCallbacks);
+    return Promise.all(this._blockingCallbacks);
   }
 }
 
