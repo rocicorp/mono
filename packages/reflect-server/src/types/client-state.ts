@@ -22,9 +22,6 @@ export type ClientState = {
   // because socket setup overhead is substantial and we will get a value
   // that is far too high if we use connection.
   clockOffsetMs: number | undefined;
-  // Time of the last message received or the connect time if no message
-  // has been received yet.
-  lastActivityTimestamp: number;
   // Should extra performance debug information be sent to this client?
   debugPerf: boolean;
 };

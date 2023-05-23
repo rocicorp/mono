@@ -39,10 +39,6 @@ export async function handleMessage(
     closeWithError(lc, ws, 'ClientNotFound', clientID);
     return;
   }
-  clients.set(clientID, {
-    ...client,
-    lastActivityTimestamp: Date.now(),
-  });
 
   lc = lc.addContext('msgType', message[0]);
   switch (message[0]) {
@@ -65,12 +61,7 @@ export async function handleMessage(
       await handlePull(storage, message[1], ws);
       break;
     default:
-      sendError(
-        lc,
-        ws,
-        'InvalidMessage',
-        `Unknown message type: ${message[0]}`,
-      );
+      throw new Error(`Unknown message type: ${message[0]}`);
   }
 }
 
