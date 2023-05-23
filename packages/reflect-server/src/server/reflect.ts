@@ -78,8 +78,10 @@ export type DurableObjectCtor<Env> = new (
 /**
  * Creates the different parts of a reflect server.
  * @param makeOptions Function for creating the options for the server.  May
- *     be called multiple times and should return newly constructed options (do
- *     not cache options and return the same instance).
+ *     be called multiple times and should construct new options on each call.
+ *     It is important to not cache options or parts of options
+ *     (e.g. a log sink), but instead construct completely independent and
+ *     new options.
  */
 export function createReflectServer<
   Env extends ReflectServerBaseEnv,
