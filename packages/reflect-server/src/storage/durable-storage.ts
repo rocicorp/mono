@@ -72,10 +72,6 @@ export class DurableStorage implements Storage {
   deleteAll(): Promise<void> {
     return this._durable.deleteAll();
   }
-
-  flush(): Promise<void> {
-    return this._durable.sync();
-  }
 }
 
 function doListOptions(opts: ListOptions): DurableObjectListOptions {
