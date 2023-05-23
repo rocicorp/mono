@@ -1,28 +1,30 @@
 import type * as dag from '../dag/mod.js';
-import {emptyHash, Hash} from '../hash.js';
-import {deepEqual, FrozenJSONValue} from '../json.js';
+import type {ReplicacheFormatVersion} from '../format-version.js';
+import {Hash, emptyHash} from '../hash.js';
+import {FrozenJSONValue, deepEqual} from '../json.js';
+import {getSizeOfEntry} from '../size-of-value.js';
 import {
-  binarySearch,
-  binarySearchFound,
   DataNodeImpl,
-  emptyDataNodeImpl,
   Entry,
-  findLeaf,
   InternalDiff,
   InternalDiffOperation,
-  internalizeBTreeNode,
   InternalNodeImpl,
-  isDataNodeImpl,
-  newNodeImpl,
   NODE_ENTRIES,
   NODE_LEVEL,
+  binarySearch,
+  binarySearchFound,
+  emptyDataNodeImpl,
+  findLeaf,
+  isDataNodeImpl,
+  newNodeImpl,
+  parseBTreeNode,
 } from './node.js';
 import {
-  computeSplices,
   SPLICE_ADDED,
   SPLICE_AT,
   SPLICE_FROM,
   SPLICE_REMOVED,
+  computeSplices,
 } from './splice.js';
 
 /**
@@ -34,20 +36,26 @@ import {
 export const NODE_HEADER_SIZE = 11;
 
 export class BTreeRead implements AsyncIterable<Entry<FrozenJSONValue>> {
-  rootHash: Hash;
-  protected readonly _dagRead: dag.Read;
   private readonly _cache: Map<Hash, DataNodeImpl | InternalNodeImpl> =
     new Map();
 
+  protected readonly _dagRead: dag.Read;
+  protected readonly _replicacheFormatVersion: ReplicacheFormatVersion;
+  rootHash: Hash;
+  readonly getEntrySize: <K, V>(k: K, v: V) => number;
   readonly chunkHeaderSize: number;
 
   constructor(
     dagRead: dag.Read,
+    replicacheFormatVersion: ReplicacheFormatVersion,
     root: Hash = emptyHash,
+    getEntrySize: <K, V>(k: K, v: V) => number = getSizeOfEntry,
     chunkHeaderSize = NODE_HEADER_SIZE,
   ) {
-    this.rootHash = root;
     this._dagRead = dagRead;
+    this._replicacheFormatVersion = replicacheFormatVersion;
+    this.rootHash = root;
+    this.getEntrySize = getEntrySize;
     this.chunkHeaderSize = chunkHeaderSize;
   }
 
@@ -61,8 +69,12 @@ export class BTreeRead implements AsyncIterable<Entry<FrozenJSONValue>> {
       return cached;
     }
 
-    const {data} = await this._dagRead.mustGetChunk(hash);
-    internalizeBTreeNode(data);
+    const chunk = await this._dagRead.mustGetChunk(hash);
+    const data = parseBTreeNode(
+      chunk.data,
+      this._replicacheFormatVersion,
+      this.getEntrySize,
+    );
     const impl = newNodeImpl(
       this._chunkEntriesToTreeEntries(
         data[NODE_ENTRIES] as readonly Entry<FrozenJSONValue>[],
@@ -123,11 +135,14 @@ export class BTreeRead implements AsyncIterable<Entry<FrozenJSONValue>> {
           return [
             cached.level,
             cached.isMutable ? cached.entries.slice() : cached.entries,
-          ] as ReadNodeResult;
+          ];
         }
-        const {data} = await this._dagRead.mustGetChunk(hash);
-        internalizeBTreeNode(data);
-        return data as ReadNodeResult;
+        const chunk = await this._dagRead.mustGetChunk(hash);
+        return parseBTreeNode(
+          chunk.data,
+          this._replicacheFormatVersion,
+          this.getEntrySize,
+        );
       },
     );
   }

@@ -226,7 +226,11 @@ suite('rebaseMutationAndCommit', () => {
     expect(fixture.testMutator2CallCount).to.equal(0);
     await withRead(fixture.store, async read => {
       const [, rebasedLocalCommit1, btreeRead] =
-        await db.readCommitForBTreeRead(db.whenceHead(SYNC_HEAD_NAME), read);
+        await db.readCommitForBTreeRead(
+          db.whenceHead(SYNC_HEAD_NAME),
+          read,
+          fixture.replicacheFormatVersion,
+        );
       expect(hashOfRebasedLocalCommit1).to.equal(
         rebasedLocalCommit1.chunk.hash,
       );
@@ -248,7 +252,11 @@ suite('rebaseMutationAndCommit', () => {
     expect(fixture.testMutator2CallCount).to.equal(1);
     await withRead(fixture.store, async read => {
       const [, rebasedLocalCommit2, btreeRead] =
-        await db.readCommitForBTreeRead(db.whenceHead(SYNC_HEAD_NAME), read);
+        await db.readCommitForBTreeRead(
+          db.whenceHead(SYNC_HEAD_NAME),
+          read,
+          fixture.replicacheFormatVersion,
+        );
       expect(hashOfRebasedLocalCommit2).to.equal(
         rebasedLocalCommit2.chunk.hash,
       );
@@ -278,6 +286,7 @@ suite('rebaseMutationAndCommit', () => {
       const [, rebasedLocalCommit, btreeRead] = await db.readCommitForBTreeRead(
         db.whenceHead(SYNC_HEAD_NAME),
         read,
+        fixture.replicacheFormatVersion,
       );
       expect(hashOfRebasedLocalCommit).to.equal(rebasedLocalCommit.chunk.hash);
       await fixture.expectRebasedCommit(rebasedLocalCommit, btreeRead);
@@ -322,7 +331,11 @@ suite('rebaseMutationAndPutCommit', () => {
         );
         await fixture.expectRebasedCommit1(
           commit,
-          new BTreeRead(write, commit.valueHash),
+          new BTreeRead(
+            write,
+            fixture.replicacheFormatVersion,
+            commit.valueHash,
+          ),
         );
         await write.setHead(TEST_HEAD_NAME, commit.chunk.hash);
         await write.commit();
@@ -333,7 +346,11 @@ suite('rebaseMutationAndPutCommit', () => {
     expect(fixture.testMutator2CallCount).to.equal(0);
     await withRead(fixture.store, async read => {
       const [, rebasedLocalCommit1, btreeRead] =
-        await db.readCommitForBTreeRead(db.whenceHead(TEST_HEAD_NAME), read);
+        await db.readCommitForBTreeRead(
+          db.whenceHead(TEST_HEAD_NAME),
+          read,
+          fixture.replicacheFormatVersion,
+        );
       expect(hashOfRebasedLocalCommit1).to.equal(
         rebasedLocalCommit1.chunk.hash,
       );
@@ -353,7 +370,11 @@ suite('rebaseMutationAndPutCommit', () => {
         );
         await fixture.expectRebasedCommit2(
           commit,
-          new BTreeRead(write, commit.valueHash),
+          new BTreeRead(
+            write,
+            fixture.replicacheFormatVersion,
+            commit.valueHash,
+          ),
           hashOfRebasedLocalCommit1,
         );
         await write.setHead(TEST_HEAD_NAME, commit.chunk.hash);
@@ -365,7 +386,11 @@ suite('rebaseMutationAndPutCommit', () => {
     expect(fixture.testMutator2CallCount).to.equal(1);
     await withRead(fixture.store, async read => {
       const [, rebasedLocalCommit2, btreeRead] =
-        await db.readCommitForBTreeRead(db.whenceHead(TEST_HEAD_NAME), read);
+        await db.readCommitForBTreeRead(
+          db.whenceHead(TEST_HEAD_NAME),
+          read,
+          fixture.replicacheFormatVersion,
+        );
       expect(hashOfRebasedLocalCommit2).to.equal(
         rebasedLocalCommit2.chunk.hash,
       );
@@ -394,7 +419,11 @@ suite('rebaseMutationAndPutCommit', () => {
         );
         await fixture.expectRebasedCommit(
           commit,
-          new BTreeRead(write, commit.valueHash),
+          new BTreeRead(
+            write,
+            fixture.replicacheFormatVersion,
+            commit.valueHash,
+          ),
         );
         await write.setHead(TEST_HEAD_NAME, commit.chunk.hash);
         await write.commit();
@@ -405,6 +434,7 @@ suite('rebaseMutationAndPutCommit', () => {
       const [, rebasedLocalCommit, btreeRead] = await db.readCommitForBTreeRead(
         db.whenceHead(TEST_HEAD_NAME),
         read,
+        fixture.replicacheFormatVersion,
       );
       expect(hashOfRebasedLocalCommit).to.equal(rebasedLocalCommit.chunk.hash);
       await fixture.expectRebasedCommit(rebasedLocalCommit, btreeRead);

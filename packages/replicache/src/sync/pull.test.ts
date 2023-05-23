@@ -428,6 +428,7 @@ test('begin try pull SDD', async () => {
         const read = await db.fromWhence(
           db.whenceHead(DEFAULT_HEAD_NAME),
           dagRead,
+          replicacheFormatVersion,
         );
         let got = false;
 
@@ -496,6 +497,7 @@ test('begin try pull SDD', async () => {
         const [, , bTreeRead] = await db.readCommitForBTreeRead(
           db.whenceHash(syncHead.chunk.hash),
           read,
+          replicacheFormatVersion,
         );
         const gotValueMap = await asyncIterableToArray(bTreeRead.entries());
         gotValueMap.sort((a, b) => stringCompare(a[0], b[0]));
@@ -523,6 +525,7 @@ test('begin try pull SDD', async () => {
             const read = await db.fromWhence(
               db.whenceHead(SYNC_HEAD_NAME),
               dagRead,
+              replicacheFormatVersion,
             );
             const indexMap = read.getMapForIndex('2');
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -974,6 +977,7 @@ test('begin try pull DD31', async () => {
         const read = await db.fromWhence(
           db.whenceHead(DEFAULT_HEAD_NAME),
           dagRead,
+          replicacheFormatVersion,
         );
         let got = false;
 
@@ -1044,6 +1048,7 @@ test('begin try pull DD31', async () => {
         const [, , bTreeRead] = await db.readCommitForBTreeRead(
           db.whenceHash(syncHead.chunk.hash),
           read,
+          replicacheFormatVersion,
         );
         const gotValueMap = (
           await asyncIterableToArray(bTreeRead.entries())
@@ -1067,6 +1072,7 @@ test('begin try pull DD31', async () => {
             const read = await db.fromWhence(
               db.whenceHead(SYNC_HEAD_NAME),
               dagRead,
+              replicacheFormatVersion,
             );
             const indexMap = read.getMapForIndex('2');
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1201,7 +1207,11 @@ suite('maybe end try pull', () => {
                 0,
                 'sync_cookie',
                 dagWrite,
-                db.readIndexesForWrite(b.chain[0], dagWrite),
+                db.readIndexesForWrite(
+                  b.chain[0],
+                  dagWrite,
+                  replicacheFormatVersion,
+                ),
                 clientID,
                 replicacheFormatVersion,
               );
@@ -1249,6 +1259,7 @@ suite('maybe end try pull', () => {
           syncHead,
           clientID,
           testSubscriptionsManagerOptions,
+          replicacheFormatVersion,
         );
       } catch (e) {
         result = (e as Error).message;
@@ -1489,6 +1500,7 @@ suite('changed keys', () => {
         pullResult.syncHead,
         clientID,
         testSubscriptionsManagerOptions,
+        replicacheFormatVersion,
       );
       expect(Object.fromEntries(result.diffs)).to.deep.equal(
         Object.fromEntries(expectedDiffsMap),
@@ -1889,7 +1901,11 @@ suite('handlePullResponseDD31', () => {
         );
 
         if (expectedMap) {
-          const map = new BTreeRead(dagRead, head.valueHash);
+          const map = new BTreeRead(
+            dagRead,
+            replicacheFormatVersion,
+            head.valueHash,
+          );
           expect(
             Object.fromEntries(await asyncIterableToArray(map.entries())),
           ).deep.equal(expectedMap);
@@ -1897,7 +1913,11 @@ suite('handlePullResponseDD31', () => {
         if (expectedIndex) {
           expect(head.indexes.length).to.equal(1);
           expect(head.indexes[0].definition.name).to.equal(expectedIndex[0]);
-          const map = new BTreeRead(dagRead, head.indexes[0].valueHash);
+          const map = new BTreeRead(
+            dagRead,
+            replicacheFormatVersion,
+            head.indexes[0].valueHash,
+          );
           expect(
             Object.fromEntries(await asyncIterableToArray(map.entries())),
           ).deep.equal(expectedIndex[1]);

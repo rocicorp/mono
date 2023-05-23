@@ -8,6 +8,7 @@ import {
   REPLICACHE_FORMAT_VERSION,
   REPLICACHE_FORMAT_VERSION_DD31,
   REPLICACHE_FORMAT_VERSION_SDD,
+  REPLICACHE_FORMAT_VERSION_V7,
   ReplicacheFormatVersion,
 } from '../format-version.js';
 import {assertHash, makeNewFakeHashFunction} from '../hash.js';
@@ -147,7 +148,14 @@ suite(
             : {type: MetaType.LocalSDD, ...metaBase};
         expect(Object.fromEntries(visitor.gatheredChunks)).to.deep.equal({
           ['face0000000040008000000000000000' + '' + '000000000004']: {
-            data: [0, [['local', '2', 27]]],
+            data: [
+              0,
+              [
+                replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_V7
+                  ? ['local', '2', 27]
+                  : ['local', '2'],
+              ],
+            ],
             hash: 'face0000000040008000000000000000' + '' + '000000000004',
             meta: [],
           },
@@ -327,7 +335,6 @@ suite(
                         {
                           name: 'b-name',
                         },
-                        51,
                       ],
                     ],
                   ],
@@ -368,20 +375,18 @@ suite(
                   data: [
                     0,
                     [
-                      ['a', 1, 22],
+                      ['a', 1],
                       [
                         'b',
                         {
                           name: 'b-name',
                         },
-                        43,
                       ],
                       [
                         'c',
                         {
                           name: 'c-name',
                         },
-                        43,
                       ],
                     ],
                   ],
@@ -397,14 +402,12 @@ suite(
                         {
                           name: 'b-name',
                         },
-                        51,
                       ],
                       [
                         '\u0000c-name\u0000c',
                         {
                           name: 'c-name',
                         },
-                        51,
                       ],
                     ],
                   ],

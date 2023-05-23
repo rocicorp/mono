@@ -7,6 +7,11 @@ import {
 } from 'shared/asserts.js';
 import {binarySearch as binarySearchWithFunc} from '../binary-search.js';
 import {skipBTreeNodeAsserts} from '../config.js';
+import {
+  REPLICACHE_FORMAT_VERSION,
+  REPLICACHE_FORMAT_VERSION_V7,
+  ReplicacheFormatVersion,
+} from '../format-version.js';
 import {Hash, emptyHash, newUUIDHash} from '../hash.js';
 import {joinIterables} from '../iterables.js';
 import {
@@ -15,7 +20,7 @@ import {
   JSONValue,
   ReadonlyJSONValue,
   assertDeepFrozen,
-  assertFrozenJSONValue,
+  assertJSONValue,
   deepFreeze,
 } from '../json.js';
 import type {IndexKey} from '../mod.js';
@@ -40,10 +45,13 @@ export type DataNode = BaseNode<FrozenJSONValue>;
 export function makeNodeChunkData<V>(
   level: number,
   entries: ReadonlyArray<Entry<V>>,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): BaseNode<V> {
   return deepFreeze([
     level,
-    entries as readonly ReadonlyJSONValue[],
+    (replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_V7
+      ? entries
+      : entries.map(e => e.slice(0, 2))) as readonly ReadonlyJSONValue[],
   ]) as BaseNode<V>;
 }
 
@@ -169,48 +177,69 @@ export function binarySearchFound(
   return i !== entries.length && entries[i][0] === key;
 }
 
-/**
- * Asserts `v` is a valid B+Tree node. This includes checking that the node is
- * deep frozen as well.
- */
-export function internalizeBTreeNode(
+export function parseBTreeNode(
   v: unknown,
-): asserts v is InternalNode | DataNode {
-  assertBTreeNodeShape(v);
-}
-
-function assertBTreeNodeShape(
-  v: unknown,
-): asserts v is InternalNode | DataNode {
-  if (skipBTreeNodeAsserts) {
-    return;
+  replicacheFormatVersion: ReplicacheFormatVersion,
+  getSizeOfEntry: <K, V>(key: K, value: V) => number,
+): InternalNode | DataNode {
+  if (
+    skipBTreeNodeAsserts &&
+    replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_V7
+  ) {
+    return v as InternalNode | DataNode;
   }
+
+  // For non v7 we convert
+
   assertArray(v);
   assertDeepFrozen(v);
 
-  function assertEntry(
-    entry: unknown,
-    f:
-      | ((v: unknown) => asserts v is Hash)
-      | ((v: unknown) => asserts v is JSONValue),
-  ): asserts entry is Entry<Hash | JSONValue> {
-    assertArray(entry);
-    assert(entry.length === 3);
-    assertDeepFrozen(entry);
-    assertString(entry[0]);
-    f(entry[1]);
-    assertNumber(entry[2]);
-  }
-
-  assert(v.length >= 2);
+  assert(v.length === 2);
   const [level, entries] = v;
-
   assertNumber(level);
   assertArray(entries);
 
-  for (const e of entries) {
-    assertEntry(e, level > 0 ? assertString : assertFrozenJSONValue);
+  const f = level > 0 ? assertString : assertJSONValue;
+
+  if (replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_V7) {
+    for (const e of entries) {
+      assertEntry(e, f);
+    }
+    return v as unknown as InternalNode | DataNode;
   }
+
+  const newEntries = entries.map(e => parseEntry(e, f, getSizeOfEntry));
+
+  return [level, newEntries] as unknown as InternalNode | DataNode;
+}
+
+function assertEntry(
+  entry: unknown,
+  f:
+    | ((v: unknown) => asserts v is Hash)
+    | ((v: unknown) => asserts v is JSONValue),
+): asserts entry is Entry<Hash | JSONValue> {
+  assertArray(entry);
+  assert(entry.length === 3);
+  assertString(entry[0]);
+  f(entry[1]);
+  assertNumber(entry[2]);
+}
+
+function parseEntry(
+  entry: unknown,
+  f:
+    | ((v: unknown) => asserts v is Hash)
+    | ((v: unknown) => asserts v is JSONValue),
+  getSizeOfEntry: <K, V>(key: K, value: V) => number,
+): Entry<Hash | JSONValue> {
+  assertArray(entry);
+  // TODO(arv): XXX
+  assert(entry.length >= 2);
+  assertString(entry[0]);
+  f(entry[1]);
+  const entrySize = getSizeOfEntry(entry[0], entry[1]);
+  return [entry[0], entry[1], entrySize] as Entry<Hash | JSONValue>;
 }
 
 export function isInternalNode(node: Node): node is InternalNode {
@@ -247,10 +276,6 @@ abstract class NodeImpl<Value> {
     return this.entries[this.entries.length - 1][0];
   }
 
-  toChunkData(): BaseNode<Value> {
-    return makeNodeChunkData(this.level, this.entries);
-  }
-
   getChildNodeSize(tree: BTreeRead): number {
     if (this._childNodeSize !== -1) {
       return this._childNodeSize;
@@ -269,6 +294,13 @@ abstract class NodeImpl<Value> {
       this as NodeImpl<unknown> as DataNodeImpl | InternalNodeImpl,
     );
   }
+}
+
+export function toChunkData<V>(
+  node: NodeImpl<V>,
+  replicacheFormatVersion: ReplicacheFormatVersion,
+): BaseNode<V> {
+  return makeNodeChunkData(node.level, node.entries, replicacheFormatVersion);
 }
 
 export class DataNodeImpl extends NodeImpl<FrozenJSONValue> {
@@ -670,7 +702,11 @@ export function partition<T>(
   return partitions;
 }
 
-export const emptyDataNode = makeNodeChunkData<ReadonlyJSONValue>(0, []);
+export const emptyDataNode = makeNodeChunkData<ReadonlyJSONValue>(
+  0,
+  [],
+  REPLICACHE_FORMAT_VERSION,
+);
 export const emptyDataNodeImpl = new DataNodeImpl([], emptyHash, false);
 
 export function createNewInternalEntryForNode(
