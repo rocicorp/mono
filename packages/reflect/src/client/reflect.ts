@@ -642,6 +642,7 @@ export class Reflect<MD extends MutatorDefs> {
       this._lastMutationIDReceived,
       wsid,
       this.#options.logLevel === 'debug',
+      l,
     );
 
     ws.addEventListener('message', this._onMessage);
@@ -1181,6 +1182,7 @@ export function createSocket(
   lmid: number,
   wsid: string,
   debugPerf: boolean,
+  lc: LogContext,
 ): WebSocket {
   const url = new URL(socketOrigin);
   // Keep this in sync with the server.
@@ -1200,6 +1202,9 @@ export function createSocket(
   if (debugPerf) {
     searchParams.set('debugPerf', true.toString());
   }
+
+  lc.info?.('Connecting to', url.toString());
+
   // Pass auth to the server via the `Sec-WebSocket-Protocol` header by passing
   // it as a `protocol` to the `WebSocket` constructor.  The empty string is an
   // invalid `protocol`, and will result in an exception, so pass undefined

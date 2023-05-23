@@ -35,6 +35,7 @@ import {
   waitForUpstreamMessage,
   idbExists,
 } from './test-utils.js'; // Why use fakes when we can use the real thing!
+import {LogContext} from '@rocicorp/logger';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -266,6 +267,7 @@ test('createSocket', () => {
       lmid,
       'wsidx',
       debugPerf,
+      new LogContext('error', new TestLogSink()),
     ) as unknown as MockSocket;
     expect(`${mockSocket.url}`).equal(expectedURL);
     expect(mockSocket.protocol).equal(expectedProtocol);
