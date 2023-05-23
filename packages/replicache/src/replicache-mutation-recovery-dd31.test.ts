@@ -17,11 +17,7 @@ import {
   createAndPersistClientWithPendingLocalSDD,
   createPerdag,
 } from './replicache-mutation-recovery.test.js';
-import {
-  MutatorDefs,
-  REPLICACHE_FORMAT_VERSION_SDD,
-  REPLICACHE_FORMAT_VERSION_V6,
-} from './replicache.js';
+import type {MutatorDefs} from './replicache.js';
 import {stringCompare} from './string-compare.js';
 import {
   PULL_VERSION_DD31,
@@ -50,6 +46,10 @@ import {withRead} from './with-transactions.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import {
+  REPLICACHE_FORMAT_VERSION_SDD,
+  REPLICACHE_FORMAT_VERSION_V6,
+} from './format-version.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
 
 async function createAndPersistClientWithPendingLocalDD31(

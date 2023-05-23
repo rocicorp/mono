@@ -6,6 +6,11 @@ import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from './error-responses.js';
+import {
+  REPLICACHE_FORMAT_VERSION_DD31,
+  REPLICACHE_FORMAT_VERSION_SDD,
+  REPLICACHE_FORMAT_VERSION_V6,
+} from './format-version.js';
 import {assertHash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {CreateStore} from './kv/store.js';
@@ -13,12 +18,7 @@ import {assertClientV4, setClients} from './persist/clients.js';
 import * as persist from './persist/mod.js';
 import type {PullResponseV0, PullResponseV1, Puller} from './puller.js';
 import type {Pusher} from './pusher.js';
-import {
-  MaybePromise,
-  REPLICACHE_FORMAT_VERSION_DD31,
-  REPLICACHE_FORMAT_VERSION_SDD,
-  REPLICACHE_FORMAT_VERSION_V6,
-} from './replicache.js';
+import type {MaybePromise} from './replicache.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
 import * as sync from './sync/mod.js';
 import {PUSH_VERSION_DD31, PUSH_VERSION_SDD} from './sync/push.js';
