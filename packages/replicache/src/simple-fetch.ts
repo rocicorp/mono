@@ -22,9 +22,14 @@ export async function mustSimpleFetch(
   method: string,
   url: string,
   body: string | null,
-  headers: [string, string][],
+  headers: Record<string, string>,
 ): Promise<FetchResponse> {
-  const resp = await browserSimpleFetch(method, url, body, headers);
+  const resp = await browserSimpleFetch(
+    method,
+    url,
+    body,
+    Object.entries(headers),
+  );
   if (resp.status !== 200) {
     throw new Error(`Got ${resp.status} fetching ${url}: ${await resp.text()}`);
   }
