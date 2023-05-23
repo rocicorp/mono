@@ -10,6 +10,7 @@ import {
   createMutatorName,
   getChunkSnapshot,
 } from '../db/test-helpers.js';
+import {REPLICACHE_FORMAT_VERSION} from '../format-version.js';
 import {Hash, assertHash, makeNewFakeHashFunction} from '../hash.js';
 import type {JSONValue} from '../json.js';
 import type {MutatorDefs} from '../replicache.js';
@@ -909,6 +910,7 @@ async function setupPersistTest() {
       perdag,
       mutators,
       () => false,
+      REPLICACHE_FORMAT_VERSION,
       onGatherMemOnlyChunksForTest,
     );
     const persistedChunkHashes: Hash[] = [];

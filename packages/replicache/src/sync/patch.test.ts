@@ -1,15 +1,21 @@
-import {LogContext} from '@rocicorp/logger';
 import {expect} from '@esm-bundle/chai';
+import {LogContext} from '@rocicorp/logger';
 import * as dag from '../dag/mod.js';
 import * as db from '../db/mod.js';
-import type {JSONValue} from '../json.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {apply} from './patch.js';
+import {
+  REPLICACHE_FORMAT_VERSION,
+  REPLICACHE_FORMAT_VERSION_DD31,
+  REPLICACHE_FORMAT_VERSION_SDD,
+  ReplicacheFormatVersion,
+} from '../format-version.js';
+import type {JSONValue} from '../json.js';
 import {assertPatchOperations} from '../patch-operation.js';
 import {withWrite} from '../with-transactions.js';
+import {apply} from './patch.js';
 
 suite('patch', () => {
-  const t = async (dd31: boolean) => {
+  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
     const clientID = 'client-id';
     const store = new dag.TestStore();
     const lc = new LogContext();
@@ -158,17 +164,18 @@ suite('patch', () => {
     ];
 
     for (const c of cases) {
-      const b = new ChainBuilder(store, undefined, dd31);
+      const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
       await b.addGenesis(clientID);
       await withWrite(store, async dagWrite => {
         let dbWrite;
-        if (dd31) {
+        if (replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31) {
           dbWrite = await db.newWriteSnapshotDD31(
             db.whenceHash(b.chain[0].chunk.hash),
             {[clientID]: 1},
             'cookie',
             dagWrite,
             clientID,
+            replicacheFormatVersion,
           );
         } else {
           dbWrite = await db.newWriteSnapshotSDD(
@@ -178,6 +185,7 @@ suite('patch', () => {
             dagWrite,
             db.readIndexesForWrite(b.chain[0], dagWrite),
             clientID,
+            replicacheFormatVersion,
           );
         }
         await dbWrite.put(lc, 'key', 'value');
@@ -208,6 +216,6 @@ suite('patch', () => {
     }
   };
 
-  test('dd31', () => t(true));
-  test('sdd', () => t(false));
+  test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
+  test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
 });

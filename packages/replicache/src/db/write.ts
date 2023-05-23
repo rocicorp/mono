@@ -6,6 +6,11 @@ import type {InternalDiff} from '../btree/node.js';
 import {allEntriesAsDiff} from '../btree/read.js';
 import type {FrozenCookie} from '../cookies.js';
 import type * as dag from '../dag/mod.js';
+import {
+  REPLICACHE_FORMAT_VERSION_DD31,
+  REPLICACHE_FORMAT_VERSION_SDD,
+  ReplicacheFormatVersion,
+} from '../format-version.js';
 import {Hash, emptyHash} from '../hash.js';
 import type {FrozenJSONValue} from '../json.js';
 import {lazy} from '../lazy.js';
@@ -43,7 +48,7 @@ export class Write extends Read {
 
   declare readonly indexes: Map<string, IndexWrite>;
   private readonly _clientID: ClientID;
-  private readonly _dd31: boolean;
+  private readonly _replicacheFormatVersion: ReplicacheFormatVersion;
 
   constructor(
     dagWrite: dag.Write,
@@ -52,7 +57,7 @@ export class Write extends Read {
     meta: CommitMeta,
     indexes: Map<string, IndexWrite>,
     clientID: ClientID,
-    dd31: boolean,
+    replicacheFormatVersion: ReplicacheFormatVersion,
   ) {
     // TypeScript has trouble
     super(dagWrite, map, indexes);
@@ -60,7 +65,7 @@ export class Write extends Read {
     this._basis = basis;
     this._meta = meta;
     this._clientID = clientID;
-    this._dd31 = dd31;
+    this._replicacheFormatVersion = replicacheFormatVersion;
 
     // TODO(arv): if (DEBUG) { ...
     if (basis === undefined) {
@@ -158,7 +163,7 @@ export class Write extends Read {
       }
 
       case MetaType.LocalDD31: {
-        assert(this._dd31);
+        assert(this._replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31);
         const {
           basisHash,
           mutationID,
@@ -184,7 +189,7 @@ export class Write extends Read {
       }
 
       case MetaType.SnapshotSDD: {
-        assert(!this._dd31);
+        assert(this._replicacheFormatVersion <= REPLICACHE_FORMAT_VERSION_SDD);
         const {basisHash, lastMutationID, cookieJSON} = meta;
         commit = commitNewSnapshotSDD(
           this._dagWrite.createChunk,
@@ -198,7 +203,7 @@ export class Write extends Read {
       }
 
       case MetaType.SnapshotDD31: {
-        assert(this._dd31);
+        assert(this._replicacheFormatVersion > REPLICACHE_FORMAT_VERSION_DD31);
         const {basisHash, lastMutationIDs, cookieJSON} = meta;
         commit = commitNewSnapshotDD31(
           this._dagWrite.createChunk,
@@ -323,7 +328,7 @@ export async function newWriteLocal(
   dagWrite: dag.Write,
   timestamp: number,
   clientID: ClientID,
-  dd31: boolean,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<Write> {
   const [basisHash, basis, bTreeWrite] = await readCommitForBTreeWrite(
     whence,
@@ -336,7 +341,7 @@ export async function newWriteLocal(
     dagWrite,
     bTreeWrite,
     basis,
-    dd31
+    replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31
       ? {
           type: MetaType.LocalDD31,
           basisHash,
@@ -359,7 +364,7 @@ export async function newWriteLocal(
         },
     indexes,
     clientID,
-    dd31,
+    replicacheFormatVersion,
   );
 }
 
@@ -370,7 +375,9 @@ export async function newWriteSnapshotSDD(
   dagWrite: dag.Write,
   indexes: Map<string, IndexWrite>,
   clientID: ClientID,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<Write> {
+  assert(replicacheFormatVersion <= REPLICACHE_FORMAT_VERSION_SDD);
   const [, basis, bTreeWrite] = await readCommitForBTreeWrite(whence, dagWrite);
   const basisHash = basis.chunk.hash;
   return new Write(
@@ -380,7 +387,7 @@ export async function newWriteSnapshotSDD(
     {basisHash, type: MetaType.SnapshotSDD, lastMutationID, cookieJSON},
     indexes,
     clientID,
-    false,
+    replicacheFormatVersion,
   );
 }
 
@@ -390,6 +397,7 @@ export async function newWriteSnapshotDD31(
   cookieJSON: FrozenCookie,
   dagWrite: dag.Write,
   clientID: ClientID,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<Write> {
   const [basisHash, basis, bTreeWrite] = await readCommitForBTreeWrite(
     whence,
@@ -402,7 +410,7 @@ export async function newWriteSnapshotDD31(
     {basisHash, type: MetaType.SnapshotDD31, lastMutationIDs, cookieJSON},
     readIndexesForWrite(basis, dagWrite),
     clientID,
-    true,
+    replicacheFormatVersion,
   );
 }
 

@@ -15,8 +15,11 @@ export type ReplicacheFormatVersion =
 export function parseReplicacheFormatVersion(
   v: number,
 ): ReplicacheFormatVersion {
-  v = v | 0;
-  if (v < REPLICACHE_FORMAT_VERSION_SDD || v > REPLICACHE_FORMAT_VERSION) {
+  if (
+    v !== (v | 0) ||
+    v < REPLICACHE_FORMAT_VERSION_SDD ||
+    v > REPLICACHE_FORMAT_VERSION
+  ) {
     throw new Error(`Unsupported format version: ${v}`);
   }
   return v as ReplicacheFormatVersion;

@@ -47,8 +47,10 @@ import {withRead} from './with-transactions.js';
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
 import {
+  REPLICACHE_FORMAT_VERSION,
   REPLICACHE_FORMAT_VERSION_SDD,
   REPLICACHE_FORMAT_VERSION_V6,
+  ReplicacheFormatVersion,
 } from './format-version.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
 
@@ -60,6 +62,7 @@ async function createAndPersistClientWithPendingLocalDD31(
   cookie: string | number,
   snapshotLastMutationIDs?: Record<ClientID, number> | undefined,
 ): Promise<db.LocalMetaDD31[]> {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
   const testMemdag = new dag.LazyStore(
     perdag,
     100 * 2 ** 20, // 100 MB,
@@ -67,7 +70,7 @@ async function createAndPersistClientWithPendingLocalDD31(
     assertHash,
   );
 
-  const b = new ChainBuilder(testMemdag, undefined, true);
+  const b = new ChainBuilder(testMemdag, undefined, replicacheFormatVersion);
 
   await b.addGenesis(clientID);
   await b.addSnapshot(
@@ -77,7 +80,13 @@ async function createAndPersistClientWithPendingLocalDD31(
     snapshotLastMutationIDs,
   );
 
-  await initClientWithClientID(clientID, perdag, mutatorNames, {}, true);
+  await initClientWithClientID(
+    clientID,
+    perdag,
+    mutatorNames,
+    {},
+    replicacheFormatVersion,
+  );
 
   const localMetas: db.LocalMetaDD31[] = [];
   for (let i = 0; i < numLocal; i++) {
@@ -98,6 +107,7 @@ async function createAndPersistClientWithPendingLocalDD31(
     perdag,
     mutators,
     () => false,
+    replicacheFormatVersion,
   );
 
   return localMetas;
@@ -109,6 +119,7 @@ async function persistSnapshotDD31(
   cookie: string | number,
   mutatorNames: string[],
   snapshotLastMutationIDs: Record<ClientID, number>,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<void> {
   const testMemdag = new dag.LazyStore(
     perdag,
@@ -117,7 +128,7 @@ async function persistSnapshotDD31(
     assertHash,
   );
 
-  const b = new ChainBuilder(testMemdag, undefined, true);
+  const b = new ChainBuilder(testMemdag, undefined, REPLICACHE_FORMAT_VERSION);
 
   await b.addGenesis(clientID);
   await b.addSnapshot(
@@ -138,6 +149,7 @@ async function persistSnapshotDD31(
     perdag,
     mutators,
     () => false,
+    replicacheFormatVersion,
   );
 }
 
@@ -196,6 +208,7 @@ suite('DD31', () => {
       },
     } = args;
 
+    const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
     const auth = '1';
     const pushURL = 'https://test.replicache.dev/push';
     const pullURL = 'https://test.replicache.dev/pull';
@@ -277,6 +290,7 @@ suite('DD31', () => {
           'cookie_1',
           mutatorNames,
           snapshotLastMutationIDsAfterPull,
+          replicacheFormatVersion,
         );
       }
       return pullResponse;
