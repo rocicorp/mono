@@ -11,12 +11,7 @@ import {initClientWithClientID} from './persist/clients-test-helpers.js';
 import {assertClientV4} from './persist/clients.js';
 import * as persist from './persist/mod.js';
 import {persistSDD} from './persist/persist-test-helpers.js';
-import {
-  REPLICACHE_FORMAT_VERSION_DD31,
-  REPLICACHE_FORMAT_VERSION_SDD,
-  REPLICACHE_FORMAT_VERSION_V6,
-  makeIDBNameForTesting,
-} from './replicache.js';
+import {makeIDBNameForTesting} from './replicache.js';
 import {PUSH_VERSION_SDD} from './sync/push.js';
 import {
   clock,
@@ -34,6 +29,10 @@ import {withRead} from './with-transactions.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import {
+  REPLICACHE_FORMAT_VERSION_SDD,
+  ReplicacheFormatVersion,
+} from './format-version.js';
 import type {ClientID} from './sync/ids.js';
 
 initReplicacheTesting();
@@ -41,10 +40,7 @@ initReplicacheTesting();
 export async function createPerdag(args: {
   replicacheName: string;
   schemaVersion: string;
-  replicacheFormatVersion:
-    | typeof REPLICACHE_FORMAT_VERSION_SDD
-    | typeof REPLICACHE_FORMAT_VERSION_DD31
-    | typeof REPLICACHE_FORMAT_VERSION_V6;
+  replicacheFormatVersion: ReplicacheFormatVersion;
 }): Promise<dag.Store> {
   const {replicacheName, schemaVersion, replicacheFormatVersion} = args;
   const idbName = makeIDBNameForTesting(

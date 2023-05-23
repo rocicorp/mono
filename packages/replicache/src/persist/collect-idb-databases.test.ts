@@ -2,14 +2,14 @@ import {expect} from '@esm-bundle/chai';
 import {assertNotUndefined} from 'shared/asserts.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import * as dag from '../dag/mod.js';
-import {fakeHash} from '../hash.js';
-import {IDBStore} from '../kv/idb-store.js';
-import {TestMemStore} from '../kv/test-mem-store.js';
 import {
   REPLICACHE_FORMAT_VERSION,
   REPLICACHE_FORMAT_VERSION_SDD,
   REPLICACHE_FORMAT_VERSION_V6,
-} from '../replicache.js';
+} from '../format-version.js';
+import {fakeHash} from '../hash.js';
+import {IDBStore} from '../kv/idb-store.js';
+import {TestMemStore} from '../kv/test-mem-store.js';
 import {withWrite} from '../with-transactions.js';
 import {ClientGroupMap, setClientGroups} from './client-groups.js';
 import {makeClientGroupMap} from './client-groups.test.js';

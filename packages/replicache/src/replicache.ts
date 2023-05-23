@@ -21,6 +21,7 @@ import {
   isVersionNotSupportedResponse,
   VersionNotSupportedResponse,
 } from './error-responses.js';
+import {REPLICACHE_FORMAT_VERSION} from './format-version.js';
 import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
 import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.js';
 import {assertHash, emptyHash, Hash} from './hash.js';
@@ -78,12 +79,6 @@ export type Poke = {
 };
 
 export const httpStatusUnauthorized = 401;
-
-export const REPLICACHE_FORMAT_VERSION_SDD = 4;
-export const REPLICACHE_FORMAT_VERSION_DD31 = 5;
-export const REPLICACHE_FORMAT_VERSION_V6 = 6;
-
-export const REPLICACHE_FORMAT_VERSION = REPLICACHE_FORMAT_VERSION_V6;
 
 const LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 100 * 2 ** 20; // 100 MB
 
