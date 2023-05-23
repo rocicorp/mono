@@ -130,9 +130,7 @@ async function migrateStorageSchemaVersion(
   } else {
     await ensureRollbackLimit(migration.minSafeRollbackVersion, log, storage);
   }
-  const meta = await setStorageSchemaVersion(storage, destinationVersion);
-  await storage.flush();
-  return meta;
+  return await setStorageSchemaVersion(storage, destinationVersion);
 }
 
 /**
