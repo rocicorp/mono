@@ -114,6 +114,7 @@ async function setStorageSchemaVersion(
   meta.version = newVersion;
   meta.maxVersion = Math.max(newVersion, meta.maxVersion);
 
+  // No need to await the put; flush() will take care of it.
   void storage.put(STORAGE_SCHEMA_META_KEY, meta);
   await storage.flush();
   return meta;
@@ -130,7 +131,7 @@ async function migrateStorageSchemaVersion(
   } else {
     await ensureRollbackLimit(migration.minSafeRollbackVersion, log, storage);
   }
-  return await setStorageSchemaVersion(storage, destinationVersion);
+  return setStorageSchemaVersion(storage, destinationVersion);
 }
 
 /**
