@@ -18,10 +18,10 @@ import type {Storage} from './storage.js';
  *
  * @see https://developers.cloudflare.com/workers/runtime-apis/durable-objects/#in-memory-state
  */
-export type Migration = (
-  log: LogContext,
-  storage: DurableStorage,
-) => Promise<void>;
+export type Migration =
+  | ((log: LogContext, storage: DurableStorage) => Promise<void>)
+  // A special Migration type that pushes the rollback limit forward.
+  | {minSafeRollbackVersion: number};
 
 /** Mapping from schema version to their respective migrations. */
 export type VersionMigrationMap = {
@@ -125,39 +125,44 @@ async function migrateStorageSchemaVersion(
   destinationVersion: number,
   migration: Migration,
 ): Promise<StorageSchemaMeta> {
-  await migration(log, storage);
+  if (typeof migration === 'function') {
+    await migration(log, storage);
+  } else {
+    await ensureRollbackLimit(migration.minSafeRollbackVersion, log, storage);
+  }
   const meta = await setStorageSchemaVersion(storage, destinationVersion);
   await storage.flush();
   return meta;
 }
 
 /**
- * Creates a Migration that bumps the rollback limit [[toAtLeast]]
- * the specified version. Leaves the rollback limit unchanged if it
- * is equal or greater.
+ * Bumps the rollback limit [[toAtLeast]] the specified version.
+ * Leaves the rollback limit unchanged if it is equal or greater.
  */
-export function rollbackLimitMigration(toAtLeast: number): Migration {
-  return async (log: LogContext, storage: DurableStorage) => {
-    const meta = await getStorageSchemaMeta(storage);
+async function ensureRollbackLimit(
+  toAtLeast: number,
+  log: LogContext,
+  storage: DurableStorage,
+): Promise<void> {
+  const meta = await getStorageSchemaMeta(storage);
 
-    // Sanity check to maintain the invariant that running code is never
-    // earlier than the rollback limit.
-    assert(toAtLeast <= meta.version + 1);
+  // Sanity check to maintain the invariant that running code is never
+  // earlier than the rollback limit.
+  assert(toAtLeast <= meta.version + 1);
 
-    if (meta.minSafeRollbackVersion >= toAtLeast) {
-      // The rollback limit must never move backwards.
-      log.debug?.(
-        `rollback limit is already at ${meta.minSafeRollbackVersion}, don't need to bump to ${toAtLeast}`,
-      );
-    } else {
-      log.info?.(
-        `bumping rollback limit from ${meta.minSafeRollbackVersion} to ${toAtLeast}`,
-      );
-      // Don't [[await]]. Let the put() be atomically flushed with the version update.
-      void storage.put(STORAGE_SCHEMA_META_KEY, {
-        ...meta,
-        minSafeRollbackVersion: toAtLeast,
-      });
-    }
-  };
+  if (meta.minSafeRollbackVersion >= toAtLeast) {
+    // The rollback limit must never move backwards.
+    log.debug?.(
+      `rollback limit is already at ${meta.minSafeRollbackVersion}, don't need to bump to ${toAtLeast}`,
+    );
+  } else {
+    log.info?.(
+      `bumping rollback limit from ${meta.minSafeRollbackVersion} to ${toAtLeast}`,
+    );
+    // Don't [[await]]. Let the put() be atomically flushed with the version update.
+    void storage.put(STORAGE_SCHEMA_META_KEY, {
+      ...meta,
+      minSafeRollbackVersion: toAtLeast,
+    });
+  }
 }

@@ -7,7 +7,6 @@ import {
   StorageSchemaMeta,
   VersionMigrationMap,
   initStorageSchema,
-  rollbackLimitMigration,
 } from './schema.js';
 import {createSilentLogContext} from '../util/test-utils.js';
 
@@ -42,7 +41,7 @@ describe('storage schema', () => {
       migrations: {
         5: logMigrationHistory('second'),
         4: logMigrationHistory('first'),
-        7: rollbackLimitMigration(2),
+        7: {minSafeRollbackVersion: 2},
         8: logMigrationHistory('third'),
       },
       expectedMigrationHistory: ' first-at(2) second-at(4) third-at(7)',
@@ -126,7 +125,7 @@ describe('storage schema', () => {
         maxVersion: 10,
         minSafeRollbackVersion: 0,
       },
-      migrations: {11: rollbackLimitMigration(3)},
+      migrations: {11: {minSafeRollbackVersion: 3}},
       postSchema: {
         version: 11,
         maxVersion: 11,
@@ -140,7 +139,7 @@ describe('storage schema', () => {
         maxVersion: 10,
         minSafeRollbackVersion: 6,
       },
-      migrations: {11: rollbackLimitMigration(3)},
+      migrations: {11: {minSafeRollbackVersion: 3}},
       postSchema: {
         version: 11,
         maxVersion: 11,
