@@ -1,21 +1,26 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/asserts.js';
 import type * as dag from '../dag/mod.js';
+import {
+  REPLICACHE_FORMAT_VERSION_DD31,
+  ReplicacheFormatVersion,
+} from '../format-version.js';
 import type {Hash} from '../hash.js';
 import type {MutatorDefs} from '../replicache.js';
 import type {ClientID} from '../sync/ids.js';
 import {WriteTransactionImpl} from '../transactions.js';
 import {
   Commit,
-  fromHash,
-  isLocalMetaDD31,
   LocalMeta,
   LocalMetaDD31,
   LocalMetaSDD,
   Meta,
+  assertLocalMetaDD31,
+  fromHash,
+  isLocalMetaDD31,
 } from './commit.js';
 import {whenceHash} from './read.js';
-import {newWriteLocal, Write} from './write.js';
+import {Write, newWriteLocal} from './write.js';
 
 async function rebaseMutation(
   mutation: Commit<LocalMetaDD31 | LocalMetaSDD>,
@@ -24,11 +29,11 @@ async function rebaseMutation(
   mutators: MutatorDefs,
   lc: LogContext,
   mutationClientID: ClientID,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<Write> {
   const localMeta = mutation.meta;
   const name = localMeta.mutatorName;
-  const dd31 = isLocalMetaDD31(localMeta);
-  if (dd31) {
+  if (isLocalMetaDD31(localMeta)) {
     assert(
       localMeta.clientID === mutationClientID,
       'mutationClientID must match clientID of LocalMeta',
@@ -65,6 +70,10 @@ async function rebaseMutation(
     );
   }
 
+  if (replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31) {
+    assertLocalMetaDD31(localMeta);
+  }
+
   const dbWrite = await newWriteLocal(
     whenceHash(basis),
     name,
@@ -73,7 +82,7 @@ async function rebaseMutation(
     dagWrite,
     localMeta.timestamp,
     mutationClientID,
-    dd31,
+    replicacheFormatVersion,
   );
 
   const tx = new WriteTransactionImpl(
@@ -96,6 +105,7 @@ export async function rebaseMutationAndPutCommit(
   // TODO(greg): mutationClientID can be retrieved from mutation if LocalMeta
   // is a LocalMetaDD31.  As part of DD31 cleanup we can remove this arg.
   mutationClientID: ClientID,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<Commit<Meta>> {
   const tx = await rebaseMutation(
     mutation,
@@ -104,6 +114,7 @@ export async function rebaseMutationAndPutCommit(
     mutators,
     lc,
     mutationClientID,
+    replicacheFormatVersion,
   );
   return tx.putCommit();
 }
@@ -118,6 +129,7 @@ export async function rebaseMutationAndCommit(
   // TODO(greg): mutationClientID can be retrieved from mutation if LocalMeta
   // is a LocalMetaDD31.  As part of DD31 cleanup we can remove this arg.
   mutationClientID: ClientID,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<Hash> {
   const dbWrite = await rebaseMutation(
     mutation,
@@ -126,6 +138,7 @@ export async function rebaseMutationAndCommit(
     mutators,
     lc,
     mutationClientID,
+    replicacheFormatVersion,
   );
   return dbWrite.commit(headName);
 }

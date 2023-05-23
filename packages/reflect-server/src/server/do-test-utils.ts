@@ -1,3 +1,12 @@
+export class TestExecutionContext implements ExecutionContext {
+  waitUntil(_promise: Promise<unknown>): void {
+    return;
+  }
+  passThroughOnException(): void {
+    return;
+  }
+}
+
 export class TestDurableObjectId implements DurableObjectId {
   readonly name?: string;
   private readonly _objectIDString: string;

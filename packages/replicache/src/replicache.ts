@@ -21,6 +21,7 @@ import {
   isVersionNotSupportedResponse,
   VersionNotSupportedResponse,
 } from './error-responses.js';
+import {REPLICACHE_FORMAT_VERSION} from './format-version.js';
 import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
 import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.js';
 import {assertHash, emptyHash, Hash} from './hash.js';
@@ -78,12 +79,6 @@ export type Poke = {
 };
 
 export const httpStatusUnauthorized = 401;
-
-export const REPLICACHE_FORMAT_VERSION_SDD = 4;
-export const REPLICACHE_FORMAT_VERSION_DD31 = 5;
-export const REPLICACHE_FORMAT_VERSION_V6 = 6;
-
-export const REPLICACHE_FORMAT_VERSION = REPLICACHE_FORMAT_VERSION_V6;
 
 const LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 100 * 2 ** 20; // 100 MB
 
@@ -949,6 +944,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
             this._mutatorRegistry,
             lc,
             db.isLocalMetaDD31(meta) ? meta.clientID : clientID,
+            REPLICACHE_FORMAT_VERSION,
           ),
         );
       }
@@ -1238,6 +1234,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       deepFreeze(poke.baseCookie),
       pullResponse,
       clientID,
+      REPLICACHE_FORMAT_VERSION,
     );
 
     switch (result.type) {
@@ -1271,6 +1268,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           this.puller,
           requestID,
           this._memdag,
+          REPLICACHE_FORMAT_VERSION,
           requestLc,
         );
         return {
@@ -1312,6 +1310,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           this._perdag,
           this._mutatorRegistry,
           () => this.closed,
+          REPLICACHE_FORMAT_VERSION,
         );
       } catch (e) {
         if (e instanceof persist.ClientStateNotFoundError) {
@@ -1348,6 +1347,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         this._mutatorRegistry,
         this._subscriptions,
         () => this.closed,
+        REPLICACHE_FORMAT_VERSION,
       );
     } catch (e) {
       if (e instanceof persist.ClientStateNotFoundError) {
@@ -1590,7 +1590,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           dagWrite,
           timestamp,
           clientID,
-          true,
+          REPLICACHE_FORMAT_VERSION,
         );
 
         const tx = new WriteTransactionImpl(

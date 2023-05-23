@@ -1,37 +1,49 @@
 import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
 import sinon from 'sinon';
-import * as dag from '../dag/mod.js';
-import * as db from './mod.js';
-import {ChainBuilder} from './test-helpers.js';
-import type {WriteTransaction} from '../transactions.js';
-import {rebaseMutationAndCommit, rebaseMutationAndPutCommit} from './rebase.js';
-import {SYNC_HEAD_NAME} from '../sync/sync-head-name.js';
 import {BTreeRead} from '../btree/read.js';
+import * as dag from '../dag/mod.js';
+import {
+  REPLICACHE_FORMAT_VERSION,
+  REPLICACHE_FORMAT_VERSION_DD31,
+  REPLICACHE_FORMAT_VERSION_SDD,
+  ReplicacheFormatVersion,
+} from '../format-version.js';
 import type {Hash} from '../hash.js';
+import {SYNC_HEAD_NAME} from '../sync/sync-head-name.js';
+import type {WriteTransaction} from '../transactions.js';
+import {withRead, withWrite} from '../with-transactions.js';
 import {
   assertLocalCommitDD31,
   commitIsLocal,
   commitIsLocalDD31,
 } from './commit.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import * as db from './mod.js';
+import {rebaseMutationAndCommit, rebaseMutationAndPutCommit} from './rebase.js';
+import {ChainBuilder} from './test-helpers.js';
 
 teardown(() => {
   sinon.restore();
 });
 
 async function createMutationSequenceFixture() {
+  const replicacheFormatVersion: ReplicacheFormatVersion =
+    REPLICACHE_FORMAT_VERSION;
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
-  const b = new ChainBuilder(store);
+  const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
   await b.addGenesis(clientID);
   await b.addSnapshot([['foo', 'bar']], clientID);
   await b.addLocal(clientID);
-  const localCommit1 = b.chain[b.chain.length - 1] as db.Commit<db.LocalMeta>;
+  const localCommit1 = b.chain[
+    b.chain.length - 1
+  ] as db.Commit<db.LocalMetaDD31>;
   await b.addLocal(clientID);
-  const localCommit2 = b.chain[b.chain.length - 1] as db.Commit<db.LocalMeta>;
+  const localCommit2 = b.chain[
+    b.chain.length - 1
+  ] as db.Commit<db.LocalMetaDD31>;
   const syncChain = await b.addSyncSnapshot(1, clientID);
-  const syncSnapshotCommit = syncChain[0] as db.Commit<db.SnapshotMetaSDD>;
+  const syncSnapshotCommit = syncChain[0] as db.Commit<db.SnapshotMetaDD31>;
 
   const testMutator1 = async (tx: WriteTransaction, args?: unknown) => {
     await tx.put('whiz', 'bang');
@@ -45,6 +57,7 @@ async function createMutationSequenceFixture() {
   };
 
   const fixture = {
+    replicacheFormatVersion,
     clientID,
     store,
     localCommit1,
@@ -129,18 +142,23 @@ async function createMutationSequenceFixture() {
 }
 
 async function createMissingMutatorFixture() {
+  const replicacheFormatVersion: ReplicacheFormatVersion =
+    REPLICACHE_FORMAT_VERSION;
   const consoleErrorStub = sinon.stub(console, 'error');
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
-  const b = new ChainBuilder(store);
+  const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
   await b.addGenesis(clientID);
   await b.addSnapshot([['foo', 'bar']], clientID);
   await b.addLocal(clientID);
-  const localCommit = b.chain[b.chain.length - 1] as db.Commit<db.LocalMeta>;
+  const localCommit = b.chain[
+    b.chain.length - 1
+  ] as db.Commit<db.LocalMetaDD31>;
   const syncChain = await b.addSyncSnapshot(1, clientID);
-  const syncSnapshotCommit = syncChain[0] as db.Commit<db.SnapshotMeta>;
+  const syncSnapshotCommit = syncChain[0] as db.Commit<db.SnapshotMetaDD31>;
 
   const fixture = {
+    replicacheFormatVersion,
     clientID,
     store,
     localCommit,
@@ -201,6 +219,7 @@ suite('rebaseMutationAndCommit', () => {
         fixture.mutators,
         new LogContext(),
         fixture.clientID,
+        fixture.replicacheFormatVersion,
       ),
     );
     expect(fixture.testMutator1CallCount).to.equal(1);
@@ -222,6 +241,7 @@ suite('rebaseMutationAndCommit', () => {
         fixture.mutators,
         new LogContext(),
         fixture.clientID,
+        fixture.replicacheFormatVersion,
       ),
     );
     expect(fixture.testMutator1CallCount).to.equal(1);
@@ -251,6 +271,7 @@ suite('rebaseMutationAndCommit', () => {
         {}, // empty
         new LogContext(),
         fixture.clientID,
+        fixture.replicacheFormatVersion,
       ),
     );
     await withRead(fixture.store, async read => {
@@ -265,11 +286,17 @@ suite('rebaseMutationAndCommit', () => {
   });
 
   test("throws error if DD31 and mutationClientID does not match mutation's clientID", async () => {
-    await testThrowsErrorOnClientIDMismatch('commit', true);
+    await testThrowsErrorOnClientIDMismatch(
+      'commit',
+      REPLICACHE_FORMAT_VERSION,
+    );
   });
 
   test("throws error if SDD and mutationClientID does not match mutation's clientID", async () => {
-    await testThrowsErrorOnClientIDMismatch('commit', false);
+    await testThrowsErrorOnClientIDMismatch(
+      'commit',
+      REPLICACHE_FORMAT_VERSION_SDD,
+    );
   });
 
   test("throws error if next mutation id for mutationClientID does not match mutation's mutationID", async () => {
@@ -291,6 +318,7 @@ suite('rebaseMutationAndPutCommit', () => {
           fixture.mutators,
           new LogContext(),
           fixture.clientID,
+          fixture.replicacheFormatVersion,
         );
         await fixture.expectRebasedCommit1(
           commit,
@@ -321,6 +349,7 @@ suite('rebaseMutationAndPutCommit', () => {
           fixture.mutators,
           new LogContext(),
           fixture.clientID,
+          fixture.replicacheFormatVersion,
         );
         await fixture.expectRebasedCommit2(
           commit,
@@ -361,6 +390,7 @@ suite('rebaseMutationAndPutCommit', () => {
           {}, // empty
           new LogContext(),
           fixture.clientID,
+          fixture.replicacheFormatVersion,
         );
         await fixture.expectRebasedCommit(
           commit,
@@ -383,11 +413,17 @@ suite('rebaseMutationAndPutCommit', () => {
   });
 
   test("throws error if DD31 and mutationClientID does not match mutation's clientID", async () => {
-    await testThrowsErrorOnClientIDMismatch('putCommit', true);
+    await testThrowsErrorOnClientIDMismatch(
+      'putCommit',
+      REPLICACHE_FORMAT_VERSION,
+    );
   });
 
   test("throws error if SDD and mutationClientID does not match mutation's clientID", async () => {
-    await testThrowsErrorOnClientIDMismatch('putCommit', false);
+    await testThrowsErrorOnClientIDMismatch(
+      'putCommit',
+      REPLICACHE_FORMAT_VERSION_SDD,
+    );
   });
 
   test("throws error if next mutation id for mutationClientID does not match mutation's mutationID", async () => {
@@ -397,11 +433,11 @@ suite('rebaseMutationAndPutCommit', () => {
 
 async function testThrowsErrorOnClientIDMismatch(
   variant: 'commit' | 'putCommit',
-  dd31: boolean,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ) {
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
-  const b = new ChainBuilder(store, undefined, dd31);
+  const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
   await b.addGenesis(clientID);
   await b.addSnapshot([['foo', 'bar']], clientID);
   await b.addLocal(clientID);
@@ -428,6 +464,7 @@ async function testThrowsErrorOnClientIDMismatch(
             },
             new LogContext(),
             'wrong_client_id',
+            replicacheFormatVersion,
           )
         : await rebaseMutationAndPutCommit(
             localCommit,
@@ -438,19 +475,27 @@ async function testThrowsErrorOnClientIDMismatch(
             },
             new LogContext(),
             'wrong_client_id',
+            replicacheFormatVersion,
           );
     } catch (expected) {
-      expect(dd31).to.be.true;
+      expect(replicacheFormatVersion).to.be.greaterThanOrEqual(
+        REPLICACHE_FORMAT_VERSION_DD31,
+      );
       return;
     }
-    expect(dd31).to.be.false;
+    expect(replicacheFormatVersion).to.be.lessThanOrEqual(
+      REPLICACHE_FORMAT_VERSION_SDD,
+    );
   });
-  expect(testMutatorCallCount).to.equal(dd31 ? 0 : 1);
+  expect(testMutatorCallCount).to.equal(
+    replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31 ? 0 : 1,
+  );
 }
 
 async function testThrowsErrorOnMutationIDMismatch(
   variant: 'commit' | 'putCommit',
 ) {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION_SDD;
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
   const b = new ChainBuilder(store);
@@ -495,6 +540,7 @@ async function testThrowsErrorOnMutationIDMismatch(
             mutators,
             new LogContext(),
             clientID,
+            replicacheFormatVersion,
           )
         : await rebaseMutationAndPutCommit(
             localCommit2,
@@ -503,6 +549,7 @@ async function testThrowsErrorOnMutationIDMismatch(
             mutators,
             new LogContext(),
             clientID,
+            replicacheFormatVersion,
           );
     } catch (e) {
       expectedError = e;

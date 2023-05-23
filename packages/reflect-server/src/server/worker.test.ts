@@ -9,20 +9,12 @@ import {
   createTestDurableObjectNamespace,
   TestDurableObjectId,
   TestDurableObjectStub,
+  TestExecutionContext,
 } from './do-test-utils.js';
 import {REPORT_METRICS_PATH} from './paths.js';
 import {BaseWorkerEnv, createWorker} from './worker.js';
 
 const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
-
-class TestExecutionContext implements ExecutionContext {
-  waitUntil(_promise: Promise<unknown>): void {
-    return;
-  }
-  passThroughOnException(): void {
-    return;
-  }
-}
 
 function createTestFixture(
   createTestResponse: (req: Request) => Response = () =>

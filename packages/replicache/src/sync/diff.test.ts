@@ -1,11 +1,12 @@
 import {expect} from '@esm-bundle/chai';
 import type {InternalDiff} from '../btree/node.js';
 import * as dag from '../dag/mod.js';
-import {diff} from './diff.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {testSubscriptionsManagerOptions} from '../test-util.js';
+import {REPLICACHE_FORMAT_VERSION_SDD} from '../format-version.js';
 import type {IndexDefinitions} from '../index-defs.js';
+import {testSubscriptionsManagerOptions} from '../test-util.js';
 import {withRead} from '../with-transactions.js';
+import {diff} from './diff.js';
 
 type DiffsRecord = Record<string, InternalDiff>;
 
@@ -203,7 +204,7 @@ test('db diff dd31', async () => {
 
 test('db diff sdd', async () => {
   const clientID = 'client-id-1';
-  const dd31 = false;
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION_SDD;
 
   const t = async ({
     iOld,
@@ -217,7 +218,7 @@ test('db diff sdd', async () => {
     setupChain?: (b: ChainBuilder) => Promise<void>;
   }) => {
     const store = new dag.TestStore();
-    const b = new ChainBuilder(store, undefined, dd31);
+    const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
     await b.addGenesis(clientID);
     await b.addLocal(clientID, [['a', 'a2']]);
     await b.addLocal(clientID, [['b', 'b1']]);
