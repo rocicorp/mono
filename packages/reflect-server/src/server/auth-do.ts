@@ -1110,6 +1110,7 @@ async function ensureStorageSchemaMigrated(
     );
   } catch (e) {
     lc.error?.('Error in ensureStorageSchemaMigrated', e);
+    throw e;
   } finally {
     void logSink.flush?.();
   }
