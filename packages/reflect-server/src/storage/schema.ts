@@ -114,7 +114,7 @@ async function setStorageSchemaVersion(
   meta.version = newVersion;
   meta.maxVersion = Math.max(newVersion, meta.maxVersion);
 
-  await storage.put(STORAGE_SCHEMA_META_KEY, meta);
+  void storage.put(STORAGE_SCHEMA_META_KEY, meta);
   await storage.flush();
   return meta;
 }
