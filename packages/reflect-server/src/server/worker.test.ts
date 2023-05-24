@@ -13,6 +13,7 @@ import {
 } from './do-test-utils.js';
 import {REPORT_METRICS_PATH} from './paths.js';
 import {BaseWorkerEnv, createWorker} from './worker.js';
+import {version} from '../mod.js';
 
 const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
 
@@ -573,4 +574,33 @@ test('reportMetrics', async () => {
 
     jest.resetAllMocks();
   }
+});
+
+test('hello', async () => {
+  const testEnv: BaseWorkerEnv = {
+    authDO: {
+      ...createTestDurableObjectNamespace(),
+    },
+  };
+
+  const worker = createWorker(() => ({
+    logSink: new TestLogSink(),
+    logLevel: 'error',
+    metricsSink: createDatadogMetricsSink({
+      apiKey: 'test-dd-key',
+      service: 'test-service',
+    }),
+  }));
+
+  const testRequest = new Request('https://test.roci.dev/'.toString());
+  if (worker.fetch === undefined) {
+    throw new Error('Expect fetch to be defined');
+  }
+  const response = await worker.fetch(
+    testRequest,
+    testEnv,
+    new TestExecutionContext(),
+  );
+  expect(response.status).toEqual(200);
+  expect(await response.json()).toEqual({reflectServerVersion: version});
 });
