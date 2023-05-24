@@ -63,6 +63,8 @@ export async function initStorageSchema(
     for (const [dest, migration] of versionMigrations) {
       if (meta.version < dest) {
         log.info?.(`Migrating storage from v${meta.version} to v${dest}`);
+        await log.flush(); // Flush logs before each migration to help debug crash-y migrations.
+
         meta = await migrateStorageSchemaVersion(log, storage, dest, migration);
         assert(meta.version === dest);
       }
