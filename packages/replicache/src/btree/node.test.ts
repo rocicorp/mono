@@ -1,5 +1,6 @@
 import {assert, expect} from '@esm-bundle/chai';
 import * as dag from '../dag/mod.js';
+import {ChainBuilder} from '../db/test-helpers.js';
 import {
   REPLICACHE_FORMAT_VERSION_V6,
   REPLICACHE_FORMAT_VERSION_V7,
@@ -1383,7 +1384,6 @@ suite('btree node', () => {
       };
 
       await t([]);
-      debugger;
       await t([createSizedEntry('a', 1)]);
       await t([createSizedEntry('a', 1), createSizedEntry('b', 2)]);
       await t([
@@ -1678,4 +1678,64 @@ suite('btree node', () => {
       expect(chunkSize - entriesSize).to.equal(NODE_HEADER_SIZE);
     });
   }
+});
+
+suite('Write nodes using ChainBuilder', () => {
+  // This test ensures that we write the correct data chunks for btree nodes
+  // depending in the replicache format version.
+
+  function looksLikeBTreeChunk(
+    v: unknown,
+  ): v is readonly [level: number, entries: unknown[]] {
+    return (
+      Array.isArray(v) &&
+      v.length === 2 &&
+      typeof v[0] === 'number' &&
+      Array.isArray(v[1])
+    );
+  }
+
+  const getBTreeNodes = async (
+    replicacheFormatVersion: ReplicacheFormatVersion,
+  ) => {
+    const dagStore = new dag.TestStore();
+    const clientID = 'client1';
+    const b = new ChainBuilder(dagStore, undefined, replicacheFormatVersion);
+    await b.addGenesis(clientID);
+    await b.addLocal(clientID, [['a', 'a']]);
+    await b.addLocal(clientID, [['b', 'bb']]);
+
+    return dagStore
+      .chunks()
+      .map(c => c.data)
+      .filter(looksLikeBTreeChunk);
+  };
+
+  test('v6', async () => {
+    expect(await getBTreeNodes(REPLICACHE_FORMAT_VERSION_V6)).to.deep.equal([
+      [0, []],
+      [0, [['a', 'a']]],
+      [
+        0,
+        [
+          ['a', 'a'],
+          ['b', 'bb'],
+        ],
+      ],
+    ]);
+  });
+
+  test('v7', async () => {
+    expect(await getBTreeNodes(REPLICACHE_FORMAT_VERSION_V7)).to.deep.equal([
+      [0, []],
+      [0, [['a', 'a', 23]]],
+      [
+        0,
+        [
+          ['a', 'a', 23],
+          ['b', 'bb', 24],
+        ],
+      ],
+    ]);
+  });
 });
