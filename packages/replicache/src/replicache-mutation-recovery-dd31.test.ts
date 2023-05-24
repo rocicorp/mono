@@ -1,24 +1,28 @@
 import {expect} from '@esm-bundle/chai';
-import {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/asserts.js';
 import sinon from 'sinon';
 import * as dag from './dag/mod.js';
-import {assertLocalMetaDD31} from './db/commit.js';
-import type * as db from './db/mod.js';
-import {ChainBuilder} from './db/test-helpers.js';
-import {assertHash} from './hash.js';
-import {JSONObject, ReadonlyJSONObject, assertJSONObject} from './json.js';
-import {initClientWithClientID} from './persist/clients-test-helpers.js';
+import {
+  REPLICACHE_FORMAT_VERSION,
+  REPLICACHE_FORMAT_VERSION_SDD,
+  REPLICACHE_FORMAT_VERSION_V6,
+  REPLICACHE_FORMAT_VERSION_V7,
+  ReplicacheFormatVersion,
+} from './format-version.js';
+import {JSONObject, assertJSONObject} from './json.js';
+import {
+  createAndPersistClientWithPendingLocalDD31,
+  createAndPersistClientWithPendingLocalSDD,
+  createPerdag,
+  createPushRequestBodyDD31,
+  persistSnapshotDD31,
+} from './mutation-recovery-test-helper.js';
 import {assertClientV4, assertClientV6} from './persist/clients.js';
 import * as persist from './persist/mod.js';
 import type {PullResponseV0, PullResponseV1} from './puller.js';
 import type {PushResponse} from './pusher.js';
-import {
-  createAndPersistClientWithPendingLocalSDD,
-  createPerdag,
-} from './replicache-mutation-recovery.test.js';
-import type {MutatorDefs} from './replicache.js';
 import {stringCompare} from './string-compare.js';
+import type {ClientID} from './sync/ids.js';
 import {
   PULL_VERSION_DD31,
   PULL_VERSION_SDD,
@@ -46,149 +50,10 @@ import {withRead} from './with-transactions.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {
-  REPLICACHE_FORMAT_VERSION,
-  REPLICACHE_FORMAT_VERSION_DD31,
-  REPLICACHE_FORMAT_VERSION_SDD,
-  REPLICACHE_FORMAT_VERSION_V6,
-  REPLICACHE_FORMAT_VERSION_V7,
-  ReplicacheFormatVersion,
-} from './format-version.js';
-import type {ClientGroupID, ClientID} from './sync/ids.js';
-
-async function createAndPersistClientWithPendingLocalDD31({
-  clientID,
-  perdag,
-  numLocal,
-  mutatorNames,
-  cookie,
-  replicacheFormatVersion,
-  snapshotLastMutationIDs,
-}: {
-  clientID: ClientID;
-  perdag: dag.Store;
-  numLocal: number;
-  mutatorNames: string[];
-  cookie: string | number;
-  replicacheFormatVersion: ReplicacheFormatVersion;
-  snapshotLastMutationIDs?: Record<ClientID, number> | undefined;
-}): Promise<db.LocalMetaDD31[]> {
-  assert(replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31);
-  const testMemdag = new dag.LazyStore(
-    perdag,
-    100 * 2 ** 20, // 100 MB,
-    dag.uuidChunkHasher,
-    assertHash,
-  );
-
-  const b = new ChainBuilder(testMemdag, undefined, replicacheFormatVersion);
-
-  await b.addGenesis(clientID);
-  await b.addSnapshot(
-    [['unique', uuid()]],
-    clientID,
-    cookie,
-    snapshotLastMutationIDs,
-  );
-
-  await initClientWithClientID(
-    clientID,
-    perdag,
-    mutatorNames,
-    {},
-    replicacheFormatVersion,
-  );
-
-  const localMetas: db.LocalMetaDD31[] = [];
-  for (let i = 0; i < numLocal; i++) {
-    await b.addLocal(clientID);
-    const {meta} = b.chain[b.chain.length - 1];
-    assertLocalMetaDD31(meta);
-    localMetas.push(meta);
-  }
-
-  const mutators: MutatorDefs = Object.fromEntries(
-    mutatorNames.map(n => [n, () => Promise.resolve()]),
-  );
-
-  await persist.persistDD31(
-    new LogContext(),
-    clientID,
-    testMemdag,
-    perdag,
-    mutators,
-    () => false,
-    replicacheFormatVersion,
-  );
-
-  return localMetas;
-}
-
-async function persistSnapshotDD31(
-  clientID: ClientID,
-  perdag: dag.Store,
-  cookie: string | number,
-  mutatorNames: string[],
-  snapshotLastMutationIDs: Record<ClientID, number>,
-  replicacheFormatVersion: ReplicacheFormatVersion,
-): Promise<void> {
-  const testMemdag = new dag.LazyStore(
-    perdag,
-    100 * 2 ** 20, // 100 MB,
-    dag.uuidChunkHasher,
-    assertHash,
-  );
-
-  const b = new ChainBuilder(testMemdag, undefined, REPLICACHE_FORMAT_VERSION);
-
-  await b.addGenesis(clientID);
-  await b.addSnapshot(
-    [['unique', uuid()]],
-    clientID,
-    cookie,
-    snapshotLastMutationIDs,
-  );
-
-  const mutators: MutatorDefs = Object.fromEntries(
-    mutatorNames.map(n => [n, () => Promise.resolve()]),
-  );
-
-  await persist.persistDD31(
-    new LogContext(),
-    clientID,
-    testMemdag,
-    perdag,
-    mutators,
-    () => false,
-    replicacheFormatVersion,
-  );
-}
 
 // Add test for ClientV5, logic is same as ClientV6
 suite('DD31', () => {
   initReplicacheTesting();
-
-  function createPushRequestBodyDD31(
-    profileID: string,
-    clientGroupID: ClientGroupID,
-    clientID: ClientID,
-    localMetas: db.LocalMetaDD31[],
-    schemaVersion: string,
-  ): ReadonlyJSONObject {
-    return {
-      profileID,
-      clientGroupID,
-      mutations: localMetas.map(localMeta => ({
-        clientID,
-        id: localMeta.mutationID,
-        name: localMeta.mutatorName,
-        args: localMeta.mutatorArgsJSON,
-        timestamp: localMeta.timestamp,
-      })),
-      pushVersion: PUSH_VERSION_DD31,
-      schemaVersion,
-    };
-  }
 
   async function testRecoveringMutationsOfClientV6(args: {
     schemaVersionOfClientWPendingMutations: string;
