@@ -7,10 +7,12 @@ import {
   AUTH_ROUTES_AUTHED_BY_API_KEY,
   AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER,
 } from './auth-do.js';
-import {REPORT_METRICS_PATH} from './paths.js';
+import {HELLO, REPORT_METRICS_PATH} from './paths.js';
 import {
+  asJSON,
   BaseContext,
   checkAuthAPIKey,
+  get,
   Handler,
   post,
   Router,
@@ -19,6 +21,7 @@ import {
 } from './router.js';
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import type {MaybePromise} from 'replicache';
+import {version} from '../mod.js';
 
 export type MetricsSink = (
   allSeries: Series[],
@@ -101,6 +104,12 @@ const reportMetrics = post<WorkerContext, Response>(
 
     return new Response('ok');
   }),
+);
+
+const hello = get<WorkerContext, Response>(
+  asJSON(() => ({
+    reflectServerVersion: version,
+  })),
 );
 
 function requireAPIKeyMatchesEnv(next: Handler<WorkerContext, Response>) {
@@ -289,4 +298,5 @@ async function sendToAuthDO(
 
 export const WORKER_ROUTES = {
   [REPORT_METRICS_PATH]: reportMetrics,
+  [HELLO]: hello,
 } as const;
