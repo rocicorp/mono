@@ -1,5 +1,4 @@
 import {deepEqual, ReadonlyJSONValue} from '../json.js';
-import type {EntryWithOptionalSize} from './node.js';
 
 export type Splice = [at: number, removed: number, added: number, from: number];
 
@@ -12,9 +11,11 @@ export const SPLICE_FROM = 3;
 const KEY = 0;
 const VALUE = 1;
 
+type Entry<V> = readonly [key: string, value: V, ...rest: unknown[]];
+
 export function* computeSplices<T>(
-  previous: readonly EntryWithOptionalSize<T>[],
-  current: readonly EntryWithOptionalSize<T>[],
+  previous: readonly Entry<T>[],
+  current: readonly Entry<T>[],
 ): Generator<Splice, void> {
   let previousIndex = 0;
   let currentIndex = 0;

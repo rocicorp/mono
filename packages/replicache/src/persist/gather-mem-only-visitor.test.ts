@@ -4,12 +4,19 @@ import {TestLazyStore} from '../dag/test-lazy-store.js';
 import {MetaType} from '../db/commit.js';
 import * as db from '../db/mod.js';
 import {ChainBuilder} from '../db/test-helpers.js';
+import {
+  REPLICACHE_FORMAT_VERSION,
+  REPLICACHE_FORMAT_VERSION_DD31,
+  REPLICACHE_FORMAT_VERSION_SDD,
+  REPLICACHE_FORMAT_VERSION_V7,
+  ReplicacheFormatVersion,
+} from '../format-version.js';
 import {assertHash, makeNewFakeHashFunction} from '../hash.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
 
 suite('dag with no memory-only hashes gathers nothing', () => {
-  const t = async (dd31: boolean) => {
+  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
     const clientID = 'client-id';
     const hashFunction = makeNewFakeHashFunction();
     const perdag = new dag.TestStore(undefined, hashFunction);
@@ -20,10 +27,10 @@ suite('dag with no memory-only hashes gathers nothing', () => {
       assertHash,
     );
 
-    const pb = new ChainBuilder(perdag, undefined, dd31);
+    const pb = new ChainBuilder(perdag, undefined, replicacheFormatVersion);
     await pb.addGenesis(clientID);
     await pb.addLocal(clientID);
-    if (!dd31) {
+    if (replicacheFormatVersion <= REPLICACHE_FORMAT_VERSION_SDD) {
       await pb.addIndexChange(clientID);
     }
     await pb.addLocal(clientID);
@@ -45,12 +52,12 @@ suite('dag with no memory-only hashes gathers nothing', () => {
     });
   };
 
-  test('dd31', () => t(true));
-  test('sdd', () => t(false));
+  test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
+  test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
 });
 
 suite('dag with only memory-only hashes gathers everything', () => {
-  const t = async (dd31: boolean) => {
+  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
     const clientID = 'client-id';
     const hashFunction = makeNewFakeHashFunction();
     const perdag = new dag.TestStore(undefined, hashFunction);
@@ -61,7 +68,7 @@ suite('dag with only memory-only hashes gathers everything', () => {
       assertHash,
     );
 
-    const mb = new ChainBuilder(memdag, undefined, dd31);
+    const mb = new ChainBuilder(memdag, undefined, replicacheFormatVersion);
 
     const testGatheredChunks = async () => {
       await withRead(memdag, async dagRead => {
@@ -79,7 +86,7 @@ suite('dag with only memory-only hashes gathers everything', () => {
 
     await mb.addLocal(clientID);
     await testGatheredChunks();
-    if (!dd31) {
+    if (replicacheFormatVersion <= REPLICACHE_FORMAT_VERSION_SDD) {
       await mb.addIndexChange(clientID);
     }
 
@@ -87,14 +94,14 @@ suite('dag with only memory-only hashes gathers everything', () => {
     await testGatheredChunks();
   };
 
-  test('dd31', () => t(true));
-  test('sdd', () => t(false));
+  test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
+  test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
 });
 
 suite(
   'dag with some persisted hashes and some memory-only hashes on top',
   () => {
-    const t = async (dd31: boolean) => {
+    const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
       const clientID = 'client-id';
       const hashFunction = makeNewFakeHashFunction();
       const perdag = new dag.TestStore(undefined, hashFunction);
@@ -105,8 +112,8 @@ suite(
         assertHash,
       );
 
-      const pb = new ChainBuilder(perdag, undefined, dd31);
-      const mb = new ChainBuilder(memdag, undefined, dd31);
+      const pb = new ChainBuilder(perdag, undefined, replicacheFormatVersion);
+      const mb = new ChainBuilder(memdag, undefined, replicacheFormatVersion);
 
       await pb.addGenesis(clientID);
       await pb.addLocal(clientID);
@@ -129,18 +136,26 @@ suite(
           originalHash: null,
           timestamp: 42,
         };
-        const meta = dd31
-          ? {
-              type: MetaType.LocalDD31,
-              ...metaBase,
-              baseSnapshotHash:
-                'face0000000040008000000000000000' + '' + '000000000001',
-              clientID,
-            }
-          : {type: MetaType.LocalSDD, ...metaBase};
+        const meta =
+          replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31
+            ? {
+                type: MetaType.LocalDD31,
+                ...metaBase,
+                baseSnapshotHash:
+                  'face0000000040008000000000000000' + '' + '000000000001',
+                clientID,
+              }
+            : {type: MetaType.LocalSDD, ...metaBase};
         expect(Object.fromEntries(visitor.gatheredChunks)).to.deep.equal({
           ['face0000000040008000000000000000' + '' + '000000000004']: {
-            data: [0, [['local', '2']]],
+            data: [
+              0,
+              [
+                replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_V7
+                  ? ['local', '2', 27]
+                  : ['local', '2'],
+              ],
+            ],
             hash: 'face0000000040008000000000000000' + '' + '000000000004',
             meta: [],
           },
@@ -160,15 +175,15 @@ suite(
         });
       });
     };
-    test('dd31', () => t(true));
-    test('sdd', () => t(false));
+    test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
+    test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
   },
 );
 
 suite(
   'dag with some permanent hashes and some memory-only hashes on top w index',
   () => {
-    const t = async (dd31: boolean) => {
+    const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
       const clientID = 'client-id';
       const hashFunction = makeNewFakeHashFunction();
       const perdag = new dag.TestStore(undefined, hashFunction);
@@ -179,8 +194,8 @@ suite(
         assertHash,
       );
 
-      const mb = new ChainBuilder(memdag, undefined, dd31);
-      const pb = new ChainBuilder(perdag, undefined, dd31);
+      const mb = new ChainBuilder(memdag, undefined, replicacheFormatVersion);
+      const pb = new ChainBuilder(perdag, undefined, replicacheFormatVersion);
 
       await pb.addGenesis(clientID, {
         testIndex: {prefix: '', jsonPointer: '/name', allowEmpty: true},
@@ -201,7 +216,7 @@ suite(
       });
 
       mb.chain = pb.chain.slice();
-      if (!dd31) {
+      if (replicacheFormatVersion <= REPLICACHE_FORMAT_VERSION_SDD) {
         await mb.addIndexChange(clientID, 'testIndex', {
           prefix: '',
           jsonPointer: '/name',
@@ -214,7 +229,7 @@ suite(
         const visitor = new GatherMemoryOnlyVisitor(dagRead);
         await visitor.visit(mb.headHash);
         expect(Object.fromEntries(visitor.gatheredChunks)).to.deep.equal(
-          dd31
+          replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31
             ? {
                 ['face0000000040008000000000000000' + '' + '000000000008']: {
                   hash:
@@ -266,18 +281,20 @@ suite(
                   data: [
                     0,
                     [
-                      ['a', 1],
+                      ['a', 1, 22],
                       [
                         'b',
                         {
                           name: 'b-name',
                         },
+                        43,
                       ],
                       [
                         'c',
                         {
                           name: 'c-name',
                         },
+                        43,
                       ],
                     ],
                   ],
@@ -294,12 +311,14 @@ suite(
                         {
                           name: 'b-name',
                         },
+                        51,
                       ],
                       [
                         '\u0000c-name\u0000c',
                         {
                           name: 'c-name',
                         },
+                        51,
                       ],
                     ],
                   ],
@@ -434,7 +453,7 @@ suite(
       });
     };
 
-    test('dd31', () => t(true));
-    test('sdd', () => t(false));
+    test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
+    test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
   },
 );

@@ -45,6 +45,7 @@ import {
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import {BufferSizer} from 'shared/buffer-sizer.js';
 import {processRoomStart} from '../process/process-room-start.js';
+import {initRoomSchema} from './room-schema.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -119,12 +120,19 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
     this._turnDuration = 1000 / (options.allowUnconfirmedWrites ? 60 : 15);
     this._authApiKey = authApiKey;
-    const lc = new LogContext(logLevel, logSink).addContext('RoomDO');
+    const lc = new LogContext(logLevel, undefined, logSink).withContext(
+      'RoomDO',
+    );
     registerUnhandledRejectionHandler(lc);
-    this._lc = lc.addContext('doID', state.id.toString());
+    this._lc = lc.withContext('doID', state.id.toString());
 
     this._lc.info?.('Starting server');
     this._lc.info?.('Version:', version);
+
+    void state.blockConcurrencyWhile(async () => {
+      await initRoomSchema(this._lc, this._storage);
+      // TODO: Invoke roomStartHandler here instead.
+    });
   }
 
   private _initRoutes() {
@@ -189,7 +197,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         }
 
         if (roomID) {
-          this._lc = this._lc.addContext('roomID', roomID);
+          this._lc = this._lc.withContext('roomID', roomID);
           this._lc.info?.('initializing room');
           this._lcHasRoomIdContext = true;
         }
@@ -380,7 +388,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     data: string,
     ws: Socket,
   ): Promise<void> => {
-    lc = lc.addContext('msg', randomID());
+    lc = lc.withContext('msg', randomID());
     lc.debug?.('handling message', data, 'waiting for lock');
 
     try {
@@ -462,7 +470,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
  * random ID is generated.
  */
 function addWebSocketIDToLogContext(lc: LogContext, url: string): LogContext {
-  return lc.addContext(
+  return lc.withContext(
     'wsid',
     new URL(url).searchParams.get('wsid') ?? randomID(),
   );
@@ -477,5 +485,5 @@ function addWebSocketIDToLogContext(lc: LogContext, url: string): LogContext {
  */
 function addClientIPToLogContext(lc: LogContext, request: Request): LogContext {
   const ip = request.headers.get('CF-Connecting-IP');
-  return ip ? lc.addContext('clientIP', ip) : lc;
+  return ip ? lc.withContext('clientIP', ip) : lc;
 }

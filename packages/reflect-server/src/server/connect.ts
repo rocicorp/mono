@@ -60,7 +60,7 @@ export async function handleConnection(
   }
 
   const {clientID, baseCookie, lmid, wsid, userData} = result;
-  lc = lc.addContext('client', clientID).addContext('wsid', wsid);
+  lc = lc.withContext('client', clientID).withContext('wsid', wsid);
   lc.info?.('parsed request', {
     ...result,
     userData: 'redacted',
@@ -172,7 +172,6 @@ export async function handleConnection(
     userData,
     clockOffsetMs: undefined,
     clientGroupID: requestClientGroupID,
-    lastActivityTimestamp: Date.now(),
     debugPerf: result.debugPerf,
   };
   lc.debug?.('Setting client map entry', clientID, client);

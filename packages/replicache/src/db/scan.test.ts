@@ -1,17 +1,22 @@
 import {expect} from '@esm-bundle/chai';
-import type {ScanItem} from './scan.js';
-import * as dag from '../dag/mod.js';
 import {BTreeWrite} from '../btree/mod.js';
-import {decodeIndexKey} from './index.js';
+import * as dag from '../dag/mod.js';
+import {
+  REPLICACHE_FORMAT_VERSION,
+  ReplicacheFormatVersion,
+} from '../format-version.js';
 import {fromKeyForIndexScanInternal} from '../scan-iterator.js';
 import {withWrite} from '../with-transactions.js';
+import {decodeIndexKey} from './index.js';
+import type {ScanItem} from './scan.js';
 
 test('scan', async () => {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
   const t = async (fromKey: string, expected: string[]) => {
     const dagStore = new dag.TestStore();
 
     await withWrite(dagStore, async dagWrite => {
-      const map = new BTreeWrite(dagWrite);
+      const map = new BTreeWrite(dagWrite, replicacheFormatVersion);
       await map.put('foo', 'foo');
       await map.put('bar', 'bar');
       await map.put('baz', 'baz');
@@ -38,8 +43,9 @@ test('scan', async () => {
 async function makeBTreeWrite(
   dagWrite: dag.Write,
   entries: Iterable<[string, string]>,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<BTreeWrite> {
-  const map = new BTreeWrite(dagWrite);
+  const map = new BTreeWrite(dagWrite, replicacheFormatVersion);
   for (const [k, v] of entries) {
     await map.put(k, v);
   }
@@ -47,6 +53,7 @@ async function makeBTreeWrite(
 }
 
 test('scan index startKey', async () => {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
   const t = async (
     entries: Iterable<[string, string]>,
     {
@@ -61,7 +68,11 @@ test('scan index startKey', async () => {
     const dagStore = new dag.TestStore();
 
     await withWrite(dagStore, async dagWrite => {
-      const map = await makeBTreeWrite(dagWrite, entries);
+      const map = await makeBTreeWrite(
+        dagWrite,
+        entries,
+        replicacheFormatVersion,
+      );
       await map.flush();
 
       const fromKey = fromKeyForIndexScanInternal({

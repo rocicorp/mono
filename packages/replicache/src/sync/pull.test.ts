@@ -22,47 +22,54 @@ import {
   isVersionNotSupportedResponse,
 } from '../error-responses.js';
 import {
+  REPLICACHE_FORMAT_VERSION,
+  REPLICACHE_FORMAT_VERSION_DD31,
+  REPLICACHE_FORMAT_VERSION_SDD,
+  ReplicacheFormatVersion,
+} from '../format-version.js';
+import {
   assertPullResponseV0,
   assertPullResponseV1,
 } from '../get-default-puller.js';
 import {assertHash, emptyHash} from '../hash.js';
 import type {HTTPRequestInfo} from '../http-request-info.js';
 import type {IndexDefinitions} from '../index-defs.js';
-import {deepFreeze, FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
+import {FrozenJSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
 import type {PatchOperation} from '../patch-operation.js';
 import type {
-  Puller,
-  PullerResultV0,
-  PullerResultV1,
   PullResponseOKV1,
   PullResponseV0,
   PullResponseV1,
+  Puller,
+  PullerResultV0,
+  PullerResultV1,
 } from '../puller.js';
 import {stringCompare} from '../string-compare.js';
 import {testSubscriptionsManagerOptions} from '../test-util.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import type {DiffsMap} from './diff.js';
 import {
-  beginPullV1,
   BeginPullResponseV0,
   BeginPullResponseV1,
-  beginPullV0,
-  handlePullResponseV1,
   HandlePullResponseResultType,
-  isPullRequestV1,
-  maybeEndPull,
   MaybeEndPullResultV0,
-  PullRequestV0,
-  PullRequestV1,
   PULL_VERSION_DD31,
   PULL_VERSION_SDD,
+  PullRequestV0,
+  PullRequestV1,
+  beginPullV0,
+  beginPullV1,
+  handlePullResponseV1,
+  isPullRequestV1,
+  maybeEndPull,
 } from './pull.js';
 import {SYNC_HEAD_NAME} from './sync-head-name.js';
 
 test('begin try pull SDD', async () => {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION_SDD;
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
-  const b = new ChainBuilder(store, undefined, false);
+  const b = new ChainBuilder(store, undefined, REPLICACHE_FORMAT_VERSION_SDD);
   await b.addGenesis(clientID);
   const baseSnapshot = await b.addSnapshot([['foo', '"bar"']], clientID);
   await b.addIndexChange(clientID);
@@ -421,6 +428,7 @@ test('begin try pull SDD', async () => {
         const read = await db.fromWhence(
           db.whenceHead(DEFAULT_HEAD_NAME),
           dagRead,
+          replicacheFormatVersion,
         );
         let got = false;
 
@@ -461,6 +469,7 @@ test('begin try pull SDD', async () => {
         fakePuller,
         requestID,
         store,
+        replicacheFormatVersion,
         new LogContext(),
         c.createSyncBranch,
       );
@@ -488,6 +497,7 @@ test('begin try pull SDD', async () => {
         const [, , bTreeRead] = await db.readCommitForBTreeRead(
           db.whenceHash(syncHead.chunk.hash),
           read,
+          replicacheFormatVersion,
         );
         const gotValueMap = await asyncIterableToArray(bTreeRead.entries());
         gotValueMap.sort((a, b) => stringCompare(a[0], b[0]));
@@ -515,6 +525,7 @@ test('begin try pull SDD', async () => {
             const read = await db.fromWhence(
               db.whenceHead(SYNC_HEAD_NAME),
               dagRead,
+              replicacheFormatVersion,
             );
             const indexMap = read.getMapForIndex('2');
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -558,6 +569,7 @@ test('begin try pull SDD', async () => {
 });
 
 test('begin try pull DD31', async () => {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
   const clientID = 'test_client_id';
   const clientGroupID = 'test_client_group_id';
   const baseCookie = 'cookie_1';
@@ -965,6 +977,7 @@ test('begin try pull DD31', async () => {
         const read = await db.fromWhence(
           db.whenceHead(DEFAULT_HEAD_NAME),
           dagRead,
+          replicacheFormatVersion,
         );
         let got = false;
 
@@ -1007,6 +1020,7 @@ test('begin try pull DD31', async () => {
         fakePuller,
         requestID,
         store,
+        replicacheFormatVersion,
         new LogContext(),
         c.createSyncBranch,
       );
@@ -1034,8 +1048,11 @@ test('begin try pull DD31', async () => {
         const [, , bTreeRead] = await db.readCommitForBTreeRead(
           db.whenceHash(syncHead.chunk.hash),
           read,
+          replicacheFormatVersion,
         );
-        const gotValueMap = await asyncIterableToArray(bTreeRead.entries());
+        const gotValueMap = (
+          await asyncIterableToArray(bTreeRead.entries())
+        ).map(e => [e[0], e[1]] as const);
         gotValueMap.sort((a, b) => stringCompare(a[0], b[0]));
         const expValueMap = Array.from(expSyncHead.valueMap);
         expValueMap.sort((a, b) => stringCompare(a[0], b[0]));
@@ -1055,6 +1072,7 @@ test('begin try pull DD31', async () => {
             const read = await db.fromWhence(
               db.whenceHead(SYNC_HEAD_NAME),
               dagRead,
+              replicacheFormatVersion,
             );
             const indexMap = read.getMapForIndex('2');
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1098,7 +1116,7 @@ test('begin try pull DD31', async () => {
 });
 
 suite('maybe end try pull', () => {
-  const t = async (dd31: boolean) => {
+  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
     const clientID = 'client-id';
     type Case = {
       name: string;
@@ -1174,22 +1192,29 @@ suite('maybe end try pull', () => {
         );
 
         // Add snapshot and replayed commits to the sync chain.
-        const w = dd31
-          ? await db.newWriteSnapshotDD31(
-              db.whenceHash(b.chain[0].chunk.hash),
-              {[clientID]: 0},
-              'sync_cookie',
-              dagWrite,
-              clientID,
-            )
-          : await db.newWriteSnapshotSDD(
-              db.whenceHash(b.chain[0].chunk.hash),
-              0,
-              'sync_cookie',
-              dagWrite,
-              db.readIndexesForWrite(b.chain[0], dagWrite),
-              clientID,
-            );
+        const w =
+          replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31
+            ? await db.newWriteSnapshotDD31(
+                db.whenceHash(b.chain[0].chunk.hash),
+                {[clientID]: 0},
+                'sync_cookie',
+                dagWrite,
+                clientID,
+                replicacheFormatVersion,
+              )
+            : await db.newWriteSnapshotSDD(
+                db.whenceHash(b.chain[0].chunk.hash),
+                0,
+                'sync_cookie',
+                dagWrite,
+                db.readIndexesForWrite(
+                  b.chain[0],
+                  dagWrite,
+                  replicacheFormatVersion,
+                ),
+                clientID,
+                replicacheFormatVersion,
+              );
         await w.put(lc, `key/${i}`, `${i}`);
         return w.commit(SYNC_HEAD_NAME);
       });
@@ -1219,7 +1244,7 @@ suite('maybe end try pull', () => {
             dagWrite,
             original.meta.timestamp,
             clientID,
-            dd31,
+            replicacheFormatVersion,
           );
           return w.commit(SYNC_HEAD_NAME);
         });
@@ -1234,6 +1259,7 @@ suite('maybe end try pull', () => {
           syncHead,
           clientID,
           testSubscriptionsManagerOptions,
+          replicacheFormatVersion,
         );
       } catch (e) {
         result = (e as Error).message;
@@ -1281,8 +1307,8 @@ suite('maybe end try pull', () => {
     }
   };
 
-  test('dd31', () => t(true));
-  test('sdd', () => t(false));
+  test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
+  test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
 });
 
 type FakePullerArgs = {
@@ -1351,7 +1377,7 @@ function makeFakePuller(options: FakePullerArgs): Puller {
 }
 
 suite('changed keys', () => {
-  const t = async (dd31: boolean) => {
+  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
     type IndexDef = {
       name: string;
       prefix: string;
@@ -1367,7 +1393,7 @@ suite('changed keys', () => {
       const clientGroupID = 'test_client_group__id';
       const store = new dag.TestStore();
       const lc = new LogContext();
-      const b = new ChainBuilder(store, undefined, dd31);
+      const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
 
       if (indexDef) {
         const {name, prefix, jsonPointer} = indexDef;
@@ -1379,7 +1405,7 @@ suite('changed keys', () => {
           },
         };
 
-        if (dd31) {
+        if (replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31) {
           await b.addGenesis(clientID, indexDefinitions);
           await b.addSnapshot([], clientID, undefined, undefined);
         } else {
@@ -1406,34 +1432,36 @@ suite('changed keys', () => {
 
       const newCookie = 'new_cookie';
 
-      const expPullReq: PullRequestV0 | PullRequestV1 = dd31
-        ? {
-            profileID,
-            clientGroupID,
-            cookie: baseCookie as FrozenCookie,
-            pullVersion: PULL_VERSION_DD31,
-            schemaVersion,
-          }
-        : {
-            profileID,
-            clientID,
-            cookie: baseCookie,
-            lastMutationID: baseLastMutationID,
-            pullVersion: PULL_VERSION_SDD,
-            schemaVersion,
-          };
+      const expPullReq: PullRequestV0 | PullRequestV1 =
+        replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31
+          ? {
+              profileID,
+              clientGroupID,
+              cookie: baseCookie as FrozenCookie,
+              pullVersion: PULL_VERSION_DD31,
+              schemaVersion,
+            }
+          : {
+              profileID,
+              clientID,
+              cookie: baseCookie,
+              lastMutationID: baseLastMutationID,
+              pullVersion: PULL_VERSION_SDD,
+              schemaVersion,
+            };
 
-      const pullResp: PullResponseV1 | PullResponseV0 = dd31
-        ? {
-            cookie: newCookie,
-            lastMutationIDChanges: {[clientID]: baseLastMutationID},
-            patch,
-          }
-        : {
-            cookie: newCookie,
-            lastMutationID: baseLastMutationID,
-            patch,
-          };
+      const pullResp: PullResponseV1 | PullResponseV0 =
+        replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31
+          ? {
+              cookie: newCookie,
+              lastMutationIDChanges: {[clientID]: baseLastMutationID},
+              patch,
+            }
+          : {
+              cookie: newCookie,
+              lastMutationID: baseLastMutationID,
+              patch,
+            };
 
       const puller = makeFakePuller({
         expPullReq,
@@ -1442,26 +1470,29 @@ suite('changed keys', () => {
         err: undefined,
       });
 
-      const pullResult = dd31
-        ? await beginPullV1(
-            profileID,
-            clientID,
-            clientGroupID,
-            schemaVersion,
-            puller,
-            requestID,
-            store,
-            new LogContext(),
-          )
-        : await beginPullV0(
-            profileID,
-            clientID,
-            schemaVersion,
-            puller,
-            requestID,
-            store,
-            new LogContext(),
-          );
+      const pullResult =
+        replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31
+          ? await beginPullV1(
+              profileID,
+              clientID,
+              clientGroupID,
+              schemaVersion,
+              puller,
+              requestID,
+              store,
+              replicacheFormatVersion,
+              new LogContext(),
+            )
+          : await beginPullV0(
+              profileID,
+              clientID,
+              schemaVersion,
+              puller,
+              requestID,
+              store,
+              replicacheFormatVersion,
+              new LogContext(),
+            );
 
       const result = await maybeEndPull(
         store,
@@ -1469,6 +1500,7 @@ suite('changed keys', () => {
         pullResult.syncHead,
         clientID,
         testSubscriptionsManagerOptions,
+        replicacheFormatVersion,
       );
       expect(Object.fromEntries(result.diffs)).to.deep.equal(
         Object.fromEntries(expectedDiffsMap),
@@ -1685,11 +1717,12 @@ suite('changed keys', () => {
     );
   };
 
-  test('dd31', () => t(true));
-  test('sdd', () => t(false));
+  test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
+  test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
 });
 
 test('pull for client group with multiple client local changes', async () => {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
   const profileID = 'test-profile-id';
   const requestID = 'test-request-id';
   const clientID1 = 'test-client-id-1';
@@ -1740,6 +1773,7 @@ test('pull for client group with multiple client local changes', async () => {
     puller,
     requestID,
     store,
+    replicacheFormatVersion,
     lc,
   );
 
@@ -1754,6 +1788,7 @@ test('pull for client group with multiple client local changes', async () => {
 });
 
 suite('beginPull DD31', () => {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
   const profileID = 'test-profile-id';
   const clientID1 = 'test-client-id-1';
   const clientGroupID1 = 'test-client-group-id-1';
@@ -1789,6 +1824,7 @@ suite('beginPull DD31', () => {
       puller,
       requestID,
       store,
+      replicacheFormatVersion,
       lc,
     );
 
@@ -1803,6 +1839,7 @@ suite('beginPull DD31', () => {
 });
 
 suite('handlePullResponseDD31', () => {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
   const clientID1 = 'test-client-id-1';
   const clientID2 = 'test-client-id-2';
 
@@ -1849,6 +1886,7 @@ suite('handlePullResponseDD31', () => {
       expectedBaseCookie,
       response,
       clientID1,
+      replicacheFormatVersion,
     );
 
     expect(result.type).to.equal(expectedResultType);
@@ -1863,7 +1901,11 @@ suite('handlePullResponseDD31', () => {
         );
 
         if (expectedMap) {
-          const map = new BTreeRead(dagRead, head.valueHash);
+          const map = new BTreeRead(
+            dagRead,
+            replicacheFormatVersion,
+            head.valueHash,
+          );
           expect(
             Object.fromEntries(await asyncIterableToArray(map.entries())),
           ).deep.equal(expectedMap);
@@ -1871,7 +1913,11 @@ suite('handlePullResponseDD31', () => {
         if (expectedIndex) {
           expect(head.indexes.length).to.equal(1);
           expect(head.indexes[0].definition.name).to.equal(expectedIndex[0]);
-          const map = new BTreeRead(dagRead, head.indexes[0].valueHash);
+          const map = new BTreeRead(
+            dagRead,
+            replicacheFormatVersion,
+            head.indexes[0].valueHash,
+          );
           expect(
             Object.fromEntries(await asyncIterableToArray(map.entries())),
           ).deep.equal(expectedIndex[1]);

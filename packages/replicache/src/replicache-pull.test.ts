@@ -315,10 +315,9 @@ test('Client Group not found on server', async () => {
   const args = testLogSink.messages[0];
   assert.lengthOf(args, 3);
   assert.equal(args[0], 'error');
-  assert(typeof args[1] === 'string');
-  assert.match(args[1], /^name=/);
-  assert(args[2] instanceof Error);
-  assert.match(args[2].message, /Client group (\S)+ is unknown on server/);
+  assert(typeof args[1]?.name === 'string');
+  assert(args[2][0] instanceof Error);
+  assert.match(args[2][0].message, /Client group (\S)+ is unknown on server/);
 });
 
 test('Version not supported on server', async () => {

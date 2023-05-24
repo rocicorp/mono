@@ -21,6 +21,7 @@ import {
   isVersionNotSupportedResponse,
   VersionNotSupportedResponse,
 } from './error-responses.js';
+import {REPLICACHE_FORMAT_VERSION} from './format-version.js';
 import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
 import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.js';
 import {assertHash, emptyHash, Hash} from './hash.js';
@@ -78,12 +79,6 @@ export type Poke = {
 };
 
 export const httpStatusUnauthorized = 401;
-
-export const REPLICACHE_FORMAT_VERSION_SDD = 4;
-export const REPLICACHE_FORMAT_VERSION_DD31 = 5;
-export const REPLICACHE_FORMAT_VERSION_V6 = 6;
-
-export const REPLICACHE_FORMAT_VERSION = REPLICACHE_FORMAT_VERSION_V6;
 
 const LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 100 * 2 ** 20; // 100 MB
 
@@ -457,7 +452,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     const logSink =
       logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
-    this._lc = new LogContext(logLevel, logSink).addContext('name', name);
+    this._lc = new LogContext(logLevel, {name}, logSink);
     this._lc.debug?.('Constructing Replicache', {
       name,
       'replicache version': version,
@@ -510,7 +505,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       new PullDelegate(
         this,
         () => this._invokePull(),
-        this._lc.addContext('PULL'),
+        this._lc.withContext('PULL'),
       ),
     );
 
@@ -518,7 +513,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       new PushDelegate(
         this,
         () => this._invokePush(),
-        this._lc.addContext('PUSH'),
+        this._lc.withContext('PUSH'),
       ),
     );
 
@@ -581,6 +576,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         this._perdag,
         Object.keys(this._mutatorRegistry),
         indexes,
+        REPLICACHE_FORMAT_VERSION,
       );
 
     resolveClientGroupID(client.clientGroupID);
@@ -914,14 +910,15 @@ export class Replicache<MD extends MutatorDefs = {}> {
       await this._ready;
       const clientID = await this._clientIDPromise;
       const lc = this._lc
-        .addContext('maybeEndPull')
-        .addContext('requestID', requestID);
+        .withContext('maybeEndPull')
+        .withContext('requestID', requestID);
       const {replayMutations, diffs} = await sync.maybeEndPull<db.LocalMeta>(
         this._memdag,
         lc,
         syncHead,
         clientID,
         this._subscriptions,
+        REPLICACHE_FORMAT_VERSION,
       );
 
       if (!replayMutations || replayMutations.length === 0) {
@@ -949,6 +946,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
             this._mutatorRegistry,
             lc,
             db.isLocalMetaDD31(meta) ? meta.clientID : clientID,
+            REPLICACHE_FORMAT_VERSION,
           ),
         );
       }
@@ -1046,10 +1044,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const clientID = await this.clientID;
     let reauthAttempts = 0;
     let lastResult;
-    lc = lc.addContext(verb);
+    lc = lc.withContext(verb);
     do {
       const requestID = sync.newRequestID(clientID);
-      const requestLc = lc.addContext('requestID', requestID);
+      const requestLc = lc.withContext('requestID', requestID);
       const {httpRequestInfo, result} = await f(requestID, requestLc);
       lastResult = result;
       if (!httpRequestInfo) {
@@ -1217,8 +1215,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const clientID = await this._clientIDPromise;
     const requestID = sync.newRequestID(clientID);
     const lc = this._lc
-      .addContext('handlePullResponse')
-      .addContext('requestID', requestID);
+      .withContext('handlePullResponse')
+      .withContext('requestID', requestID);
 
     const {pullResponse} = poke;
 
@@ -1238,6 +1236,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       deepFreeze(poke.baseCookie),
       pullResponse,
       clientID,
+      REPLICACHE_FORMAT_VERSION,
     );
 
     switch (result.type) {
@@ -1271,6 +1270,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           this.puller,
           requestID,
           this._memdag,
+          REPLICACHE_FORMAT_VERSION,
           requestLc,
         );
         return {
@@ -1312,6 +1312,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           this._perdag,
           this._mutatorRegistry,
           () => this.closed,
+          REPLICACHE_FORMAT_VERSION,
         );
       } catch (e) {
         if (e instanceof persist.ClientStateNotFoundError) {
@@ -1348,6 +1349,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         this._mutatorRegistry,
         this._subscriptions,
         () => this.closed,
+        REPLICACHE_FORMAT_VERSION,
       );
     } catch (e) {
       if (e instanceof persist.ClientStateNotFoundError) {
@@ -1517,7 +1519,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const clientID = await this._clientIDPromise;
     return withRead(this._memdag, async dagRead => {
       try {
-        const dbRead = await db.readFromDefaultHead(dagRead);
+        const dbRead = await db.readFromDefaultHead(
+          dagRead,
+          REPLICACHE_FORMAT_VERSION,
+        );
         const tx = new ReadTransactionImpl(clientID, dbRead, this._lc);
         return await body(tx);
       } catch (ex) {
@@ -1590,7 +1595,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           dagWrite,
           timestamp,
           clientID,
-          true,
+          REPLICACHE_FORMAT_VERSION,
         );
 
         const tx = new WriteTransactionImpl(

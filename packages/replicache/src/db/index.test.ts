@@ -1,23 +1,24 @@
-import {LogContext} from '@rocicorp/logger';
 import {expect} from '@esm-bundle/chai';
+import {LogContext} from '@rocicorp/logger';
+import {asyncIterableToArray} from '../async-iterable-to-array.js';
+import {BTreeWrite} from '../btree/mod.js';
+import * as dag from '../dag/mod.js';
+import {REPLICACHE_FORMAT_VERSION} from '../format-version.js';
 import {JSONValue, deepFreeze} from '../json.js';
 import {stringCompare} from '../string-compare.js';
-import * as dag from '../dag/mod.js';
+import {withWrite} from '../with-transactions.js';
 import {
+  IndexKey,
+  IndexOperation,
+  KEY_SEPARATOR,
+  KEY_VERSION_0,
   decodeIndexKey,
   encodeIndexKey,
   encodeIndexScanKey,
   evaluateJSONPointer,
   getIndexKeys,
-  IndexKey,
-  IndexOperation,
   indexValue,
-  KEY_SEPARATOR,
-  KEY_VERSION_0,
 } from './index.js';
-import {BTreeWrite} from '../btree/mod.js';
-import {asyncIterableToArray} from '../async-iterable-to-array.js';
-import {withWrite} from '../with-transactions.js';
 
 test('test index key', () => {
   const testValid = (secondary: string, primary: string) => {
@@ -191,6 +192,7 @@ test('json pointer', () => {
 });
 
 test('index value', async () => {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
   const t = async (
     key: string,
     value: JSONValue,
@@ -200,7 +202,7 @@ test('index value', async () => {
   ) => {
     const dagStore = new dag.TestStore();
     await withWrite(dagStore, async dagWrite => {
-      const index = new BTreeWrite(dagWrite);
+      const index = new BTreeWrite(dagWrite, replicacheFormatVersion);
       await index.put(encodeIndexKey(['s1', '1']), 'v1');
       await index.put(encodeIndexKey(['s2', '2']), 'v2');
 

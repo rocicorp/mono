@@ -2,14 +2,15 @@ import {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/asserts.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
 import * as dag from '../dag/mod.js';
-import {assertHash} from '../hash.js';
-import {dropStore} from '../kv/idb-util.js';
-import * as kv from '../kv/mod.js';
 import {
   REPLICACHE_FORMAT_VERSION,
   REPLICACHE_FORMAT_VERSION_DD31,
   REPLICACHE_FORMAT_VERSION_V6,
-} from '../replicache.js';
+  REPLICACHE_FORMAT_VERSION_V7,
+} from '../format-version.js';
+import {assertHash} from '../hash.js';
+import {dropStore} from '../kv/idb-util.js';
+import * as kv from '../kv/mod.js';
 import {withRead} from '../with-transactions.js';
 import {
   clientGroupHasPendingMutations,
@@ -159,7 +160,8 @@ async function canCollectDatabase(
     // logic.
     assert(
       db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_DD31 ||
-        db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_V6,
+        db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_V6 ||
+        db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_V7,
     );
     return !(await anyPendingMutationsInClientGroups(newDagStore(db.name)));
   }

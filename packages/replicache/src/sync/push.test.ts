@@ -1,22 +1,26 @@
-import {LogContext} from '@rocicorp/logger';
 import {expect} from '@esm-bundle/chai';
+import {LogContext} from '@rocicorp/logger';
 import * as dag from '../dag/mod.js';
 import {DEFAULT_HEAD_NAME} from '../db/commit.js';
 import {fromWhence, whenceHead} from '../db/read.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {SYNC_HEAD_NAME} from './sync-head-name.js';
 import {
-  push,
+  REPLICACHE_FORMAT_VERSION,
+  REPLICACHE_FORMAT_VERSION_SDD,
+} from '../format-version.js';
+import {deepFreeze} from '../json.js';
+import type {Pusher, PusherResult} from '../pusher.js';
+import {withRead, withWrite} from '../with-transactions.js';
+import type {ClientGroupID} from './ids.js';
+import {
+  PUSH_VERSION_DD31,
+  PUSH_VERSION_SDD,
+  PushRequest,
   PushRequestV0,
   PushRequestV1,
-  PUSH_VERSION_SDD,
-  PUSH_VERSION_DD31,
-  PushRequest,
+  push,
 } from './push.js';
-import type {Pusher, PusherResult} from '../pusher.js';
-import type {ClientGroupID} from './ids.js';
-import {deepFreeze} from '../json.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {SYNC_HEAD_NAME} from './sync-head-name.js';
 
 type FakePusherArgs = {
   expPush: boolean;
@@ -66,11 +70,12 @@ function makeFakePusher(options: FakePusherArgs): Pusher {
 }
 
 test('try push [SDD]', async () => {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION_SDD;
   const clientGroupID = undefined;
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
   const lc = new LogContext();
-  const b = new ChainBuilder(store, undefined, false);
+  const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
   await b.addGenesis(clientID);
   await b.addSnapshot([['foo', 'bar']], clientID);
   // chain[2] is an index change
@@ -218,7 +223,11 @@ test('try push [SDD]', async () => {
     // rebuilt.
     if (c.numPendingMutations > 0) {
       await withRead(store, async dagRead => {
-        const read = await fromWhence(whenceHead(DEFAULT_HEAD_NAME), dagRead);
+        const read = await fromWhence(
+          whenceHead(DEFAULT_HEAD_NAME),
+          dagRead,
+          replicacheFormatVersion,
+        );
         let got = false;
 
         const indexMap = read.getMapForIndex('2');
@@ -269,6 +278,7 @@ test('try push [SDD]', async () => {
 });
 
 test('try push [DD31]', async () => {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
   const clientGroupID = 'test_client_group_id';
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
@@ -463,7 +473,11 @@ test('try push [DD31]', async () => {
     // rebuilt.
     if (c.numPendingMutations > 0) {
       await withRead(store, async dagRead => {
-        const read = await fromWhence(whenceHead(DEFAULT_HEAD_NAME), dagRead);
+        const read = await fromWhence(
+          whenceHead(DEFAULT_HEAD_NAME),
+          dagRead,
+          replicacheFormatVersion,
+        );
         let got = false;
 
         const indexMap = read.getMapForIndex('2');

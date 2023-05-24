@@ -1,19 +1,18 @@
 import {greaterThan} from 'compare-utf8';
+import {asyncIterableToArray} from './async-iterable-to-array.js';
+import {IndexKey, encodeIndexScanKey} from './db/index.js';
+import type {IterableUnion} from './iterable-union.js';
 import type {ReadonlyJSONValue} from './json.js';
-import {Closed, throwIfClosed} from './transaction-closed-error.js';
 import {
-  isScanIndexOptions,
   KeyTypeForScanOptions,
-  normalizeScanOptionIndexedStartKey,
   ScanIndexOptions,
   ScanOptionIndexedStartKey,
   ScanOptions,
+  isScanIndexOptions,
+  normalizeScanOptionIndexedStartKey,
 } from './scan-options.js';
-import {asyncIterableToArray} from './async-iterable-to-array.js';
-import type {Entry} from './btree/node.js';
-import {encodeIndexScanKey, IndexKey} from './db/index.js';
+import {Closed, throwIfClosed} from './transaction-closed-error.js';
 import {EntryForOptions, fromKeyForNonIndexScan} from './transactions.js';
-import type {IterableUnion} from './iterable-union.js';
 
 type ScanKey = string | IndexKey;
 
@@ -234,6 +233,8 @@ function shouldSkipIndexScan(
 function shouldSkipNonIndexScan(key: string, startKey: string): boolean {
   return key === startKey;
 }
+
+export type Entry<V> = readonly [key: string, value: V];
 
 /**
  * This is called when doing a {@link ReadTransaction.scan | scan} without an

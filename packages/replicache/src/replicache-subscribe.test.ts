@@ -1050,8 +1050,8 @@ test('Errors in subscriptions are logged if no onError', async () => {
       assert.equal(testLogSink.messages.length, 1);
       assert.deepEqual(testLogSink.messages[0], [
         'error',
-        `name=${rep.name}`,
-        err,
+        {name: rep.name},
+        [err],
       ]);
     }
 
