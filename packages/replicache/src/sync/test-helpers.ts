@@ -56,7 +56,11 @@ export async function addSyncSnapshot(
       );
       await w.commit(sync.SYNC_HEAD_NAME);
     } else {
-      const indexes = db.readIndexesForWrite(chain[takeIndexesFrom], dagWrite);
+      const indexes = db.readIndexesForWrite(
+        chain[takeIndexesFrom],
+        dagWrite,
+        replicacheFormatVersion,
+      );
       const w = await db.newWriteSnapshotSDD(
         db.whenceHash(baseSnapshot.chunk.hash),
         await baseSnapshot.getMutationID(clientID, dagWrite),

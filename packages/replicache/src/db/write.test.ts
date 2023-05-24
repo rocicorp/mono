@@ -201,6 +201,7 @@ suite('basics w/ putCommit', () => {
 });
 
 test('clear', async () => {
+  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
   const clientID = 'client-id';
   const ds = new dag.TestStore();
   const lc = new LogContext();
@@ -270,8 +271,9 @@ test('clear', async () => {
     const [, c, r] = await readCommitForBTreeRead(
       whenceHead(DEFAULT_HEAD_NAME),
       dagRead,
+      replicacheFormatVersion,
     );
-    const indexes = readIndexesForRead(c, dagRead);
+    const indexes = readIndexesForRead(c, dagRead, replicacheFormatVersion);
     const keys = await asyncIterableToArray(r.keys());
     expect(keys).to.have.lengthOf(0);
     const index = indexes.get('idx');

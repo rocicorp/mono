@@ -6,6 +6,7 @@ import {
   REPLICACHE_FORMAT_VERSION,
   REPLICACHE_FORMAT_VERSION_DD31,
   REPLICACHE_FORMAT_VERSION_V6,
+  REPLICACHE_FORMAT_VERSION_V7,
 } from '../format-version.js';
 import {assertHash} from '../hash.js';
 import {dropStore} from '../kv/idb-util.js';
@@ -159,7 +160,8 @@ async function canCollectDatabase(
     // logic.
     assert(
       db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_DD31 ||
-        db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_V6,
+        db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_V6 ||
+        db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_V7,
     );
     return !(await anyPendingMutationsInClientGroups(newDagStore(db.name)));
   }

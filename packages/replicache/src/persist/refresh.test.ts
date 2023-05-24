@@ -615,7 +615,7 @@ suite('refresh', () => {
     }): Promise<db.Commit<db.SnapshotMetaDD31>> {
       return withWrite(store, async dagWrite => {
         if (!valueHash) {
-          const map = new btree.BTreeWrite(dagWrite);
+          const map = new btree.BTreeWrite(dagWrite, replicacheFormatVersion);
           valueHash = await map.flush();
         }
         const c = db.newSnapshotDD31(
@@ -663,7 +663,11 @@ suite('refresh', () => {
       entries?: readonly btree.Entry<ReadonlyJSONValue>[];
     }): Promise<db.Commit<db.LocalMetaDD31>> {
       return withWrite(store, async dagWrite => {
-        const m = new btree.BTreeWrite(dagWrite, valueHash);
+        const m = new btree.BTreeWrite(
+          dagWrite,
+          replicacheFormatVersion,
+          valueHash,
+        );
         for (const [k, v] of entries) {
           await m.put(k, deepFreeze(v));
         }

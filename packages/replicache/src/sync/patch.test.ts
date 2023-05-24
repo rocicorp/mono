@@ -183,7 +183,11 @@ suite('patch', () => {
             1,
             'cookie',
             dagWrite,
-            db.readIndexesForWrite(b.chain[0], dagWrite),
+            db.readIndexesForWrite(
+              b.chain[0],
+              dagWrite,
+              replicacheFormatVersion,
+            ),
             clientID,
             replicacheFormatVersion,
           );

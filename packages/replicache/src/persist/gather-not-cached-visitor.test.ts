@@ -151,11 +151,11 @@ suite('GatherNotCachedVisitor', () => {
             data: [
               0,
               [
-                ['localOne', {id: 'local1'}],
-                ['localThree', {id: 'local3'}],
-                ['localTwo', {id: 'local2'}],
-                ['snapOne', {id: 'snap1'}],
-                ['snapTwo', {id: 'snap2'}],
+                ['localOne', {id: 'local1'}, 48],
+                ['localThree', {id: 'local3'}, 50],
+                ['localTwo', {id: 'local2'}, 48],
+                ['snapOne', {id: 'snap1'}, 46],
+                ['snapTwo', {id: 'snap2'}, 46],
               ],
             ],
             meta: [],
@@ -168,11 +168,11 @@ suite('GatherNotCachedVisitor', () => {
             data: [
               0,
               [
-                ['\u0000local1\u0000localOne', {id: 'local1'}],
-                ['\u0000local2\u0000localTwo', {id: 'local2'}],
-                ['\u0000local3\u0000localThree', {id: 'local3'}],
-                ['\u0000snap1\u0000snapOne', {id: 'snap1'}],
-                ['\u0000snap2\u0000snapTwo', {id: 'snap2'}],
+                ['\u0000local1\u0000localOne', {id: 'local1'}, 56],
+                ['\u0000local2\u0000localTwo', {id: 'local2'}, 56],
+                ['\u0000local3\u0000localThree', {id: 'local3'}, 58],
+                ['\u0000snap1\u0000snapOne', {id: 'snap1'}, 53],
+                ['\u0000snap2\u0000snapTwo', {id: 'snap2'}, 53],
               ],
             ],
             meta: [],
@@ -260,10 +260,10 @@ const allChunksInVisitOrder = {
       data: [
         0,
         [
-          ['localOne', {id: 'local1'}],
-          ['localTwo', {id: 'local2'}],
-          ['snapOne', {id: 'snap1'}],
-          ['snapTwo', {id: 'snap2'}],
+          ['localOne', {id: 'local1'}, 48],
+          ['localTwo', {id: 'local2'}, 48],
+          ['snapOne', {id: 'snap1'}, 46],
+          ['snapTwo', {id: 'snap2'}, 46],
         ],
       ],
       meta: [],
@@ -312,10 +312,10 @@ const allChunksInVisitOrder = {
       data: [
         0,
         [
-          ['\u0000local1\u0000localOne', {id: 'local1'}],
-          ['\u0000local2\u0000localTwo', {id: 'local2'}],
-          ['\u0000snap1\u0000snapOne', {id: 'snap1'}],
-          ['\u0000snap2\u0000snapTwo', {id: 'snap2'}],
+          ['\u0000local1\u0000localOne', {id: 'local1'}, 56],
+          ['\u0000local2\u0000localTwo', {id: 'local2'}, 56],
+          ['\u0000snap1\u0000snapOne', {id: 'snap1'}, 53],
+          ['\u0000snap2\u0000snapTwo', {id: 'snap2'}, 53],
         ],
       ],
       meta: [],
@@ -328,9 +328,9 @@ const allChunksInVisitOrder = {
       data: [
         0,
         [
-          ['localOne', {id: 'local1'}],
-          ['snapOne', {id: 'snap1'}],
-          ['snapTwo', {id: 'snap2'}],
+          ['localOne', {id: 'local1'}, 48],
+          ['snapOne', {id: 'snap1'}, 46],
+          ['snapTwo', {id: 'snap2'}, 46],
         ],
       ],
       meta: [],
@@ -375,9 +375,9 @@ const allChunksInVisitOrder = {
       data: [
         0,
         [
-          ['\u0000local1\u0000localOne', {id: 'local1'}],
-          ['\u0000snap1\u0000snapOne', {id: 'snap1'}],
-          ['\u0000snap2\u0000snapTwo', {id: 'snap2'}],
+          ['\u0000local1\u0000localOne', {id: 'local1'}, 56],
+          ['\u0000snap1\u0000snapOne', {id: 'snap1'}, 53],
+          ['\u0000snap2\u0000snapTwo', {id: 'snap2'}, 53],
         ],
       ],
       meta: [],
@@ -390,8 +390,8 @@ const allChunksInVisitOrder = {
       data: [
         0,
         [
-          ['snapOne', {id: 'snap1'}],
-          ['snapTwo', {id: 'snap2'}],
+          ['snapOne', {id: 'snap1'}, 46],
+          ['snapTwo', {id: 'snap2'}, 46],
         ],
       ],
       meta: [],
@@ -404,8 +404,8 @@ const allChunksInVisitOrder = {
       data: [
         0,
         [
-          ['\u0000snap1\u0000snapOne', {id: 'snap1'}],
-          ['\u0000snap2\u0000snapTwo', {id: 'snap2'}],
+          ['\u0000snap1\u0000snapOne', {id: 'snap1'}, 53],
+          ['\u0000snap2\u0000snapTwo', {id: 'snap2'}, 53],
         ],
       ],
       meta: [],

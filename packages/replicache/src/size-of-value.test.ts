@@ -1,7 +1,7 @@
 import {expect} from '@esm-bundle/chai';
-import {getSizeOfValue} from './size-of-value.js';
+import {getSizeOfEntry, getSizeOfValue} from './size-of-value.js';
 
-test.skip('getSizeOfValue', () => {
+test('getSizeOfValue', () => {
   expect(getSizeOfValue(null)).to.equal(1);
   expect(getSizeOfValue(true)).to.equal(1);
   expect(getSizeOfValue(false)).to.equal(1);
@@ -48,4 +48,18 @@ test.skip('getSizeOfValue', () => {
 
   expect(getSizeOfValue({})).to.equal(1 + 4 + 1);
   expect(getSizeOfValue({abc: 'def'})).to.equal(1 + 4 + 8 + 8 + 1);
+});
+
+test('getSizeOfEntry', () => {
+  const t = (key: unknown, value: unknown) => {
+    expect(getSizeOfEntry(key, value)).to.equal(
+      getSizeOfValue([key, value, 1234]),
+    );
+  };
+
+  t('a', 1);
+  t('a', 'b');
+  t('a', true);
+  t('a', false);
+  t('aa', []);
 });

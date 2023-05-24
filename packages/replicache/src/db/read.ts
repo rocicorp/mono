@@ -1,14 +1,15 @@
-import {IndexRead} from './index.js';
+import {BTreeRead, BTreeWrite} from '../btree/mod.js';
 import type * as dag from '../dag/mod.js';
+import type {ReplicacheFormatVersion} from '../format-version.js';
+import type {Hash} from '../hash.js';
+import type {FrozenJSONValue} from '../json.js';
 import {
   Commit,
   DEFAULT_HEAD_NAME,
-  fromHash as commitFromHash,
   Meta,
+  fromHash as commitFromHash,
 } from './commit.js';
-import {BTreeRead, BTreeWrite} from '../btree/mod.js';
-import type {Hash} from '../hash.js';
-import type {FrozenJSONValue} from '../json.js';
+import {IndexRead} from './index.js';
 
 export class Read {
   private readonly _dagRead: dag.Read;
@@ -83,16 +84,28 @@ export function whenceHash(hash: Hash): Whence {
   };
 }
 
-export function readFromDefaultHead(dagRead: dag.Read): Promise<Read> {
-  return fromWhence(whenceHead(DEFAULT_HEAD_NAME), dagRead);
+export function readFromDefaultHead(
+  dagRead: dag.Read,
+  replicacheFormatVersion: ReplicacheFormatVersion,
+): Promise<Read> {
+  return fromWhence(
+    whenceHead(DEFAULT_HEAD_NAME),
+    dagRead,
+    replicacheFormatVersion,
+  );
 }
 
 export async function fromWhence(
   whence: Whence,
   dagRead: dag.Read,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<Read> {
-  const [, basis, map] = await readCommitForBTreeRead(whence, dagRead);
-  const indexes = readIndexesForRead(basis, dagRead);
+  const [, basis, map] = await readCommitForBTreeRead(
+    whence,
+    dagRead,
+    replicacheFormatVersion,
+  );
+  const indexes = readIndexesForRead(basis, dagRead, replicacheFormatVersion);
   return new Read(dagRead, map, indexes);
 }
 
@@ -123,28 +136,42 @@ export async function readCommit(
 export async function readCommitForBTreeRead(
   whence: Whence,
   dagRead: dag.Read,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<[Hash, Commit<Meta>, BTreeRead]> {
   const [hash, commit] = await readCommit(whence, dagRead);
-  return [hash, commit, new BTreeRead(dagRead, commit.valueHash)];
+  return [
+    hash,
+    commit,
+    new BTreeRead(dagRead, replicacheFormatVersion, commit.valueHash),
+  ];
 }
 
 export async function readCommitForBTreeWrite(
   whence: Whence,
   dagWrite: dag.Write,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<[Hash, Commit<Meta>, BTreeWrite]> {
   const [hash, commit] = await readCommit(whence, dagWrite);
-  return [hash, commit, new BTreeWrite(dagWrite, commit.valueHash)];
+  return [
+    hash,
+    commit,
+    new BTreeWrite(dagWrite, replicacheFormatVersion, commit.valueHash),
+  ];
 }
 
 export function readIndexesForRead(
   commit: Commit<Meta>,
   dagRead: dag.Read,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Map<string, IndexRead> {
   const m = new Map();
   for (const index of commit.indexes) {
     m.set(
       index.definition.name,
-      new IndexRead(index, new BTreeRead(dagRead, index.valueHash)),
+      new IndexRead(
+        index,
+        new BTreeRead(dagRead, replicacheFormatVersion, index.valueHash),
+      ),
     );
   }
   return m;

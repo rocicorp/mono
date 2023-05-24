@@ -215,6 +215,7 @@ async function createIndex(
       w.indexes,
       dagWrite,
       w.map,
+      replicacheFormatVersion,
     );
     await w.commit(headName);
   });
@@ -262,7 +263,11 @@ async function addSnapshot(
         await chain[chain.length - 1].getNextMutationID(clientID, dagWrite),
         deepFreeze(cookie),
         dagWrite,
-        readIndexesForWrite(chain[chain.length - 1], dagWrite),
+        readIndexesForWrite(
+          chain[chain.length - 1],
+          dagWrite,
+          replicacheFormatVersion,
+        ),
         clientID,
         replicacheFormatVersion,
       );
@@ -422,7 +427,11 @@ export async function initDB(
   replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<Hash> {
   const basisHash = emptyHash;
-  const indexes = await createEmptyIndexMaps(indexDefinitions, dagWrite);
+  const indexes = await createEmptyIndexMaps(
+    indexDefinitions,
+    dagWrite,
+    replicacheFormatVersion,
+  );
   const meta =
     replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31
       ? ({
@@ -440,7 +449,7 @@ export async function initDB(
 
   const w = new Write(
     dagWrite,
-    new BTreeWrite(dagWrite),
+    new BTreeWrite(dagWrite, replicacheFormatVersion),
     undefined,
     meta,
     indexes,
@@ -454,6 +463,7 @@ export async function initDB(
 async function createEmptyIndexMaps(
   indexDefinitions: IndexDefinitions,
   dagWrite: dag.Write,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<Map<string, IndexWrite>> {
   const indexes = new Map();
 
@@ -470,7 +480,10 @@ async function createEmptyIndexMaps(
     };
     indexes.set(
       name,
-      new IndexWrite(indexRecord, new BTreeWrite(dagWrite, emptyTreeHash)),
+      new IndexWrite(
+        indexRecord,
+        new BTreeWrite(dagWrite, replicacheFormatVersion, emptyTreeHash),
+      ),
     );
   }
   return indexes;
@@ -506,9 +519,10 @@ async function newWriteIndexChange(
   const [basisHash, basis, bTreeWrite] = await readCommitForBTreeWrite(
     whence,
     dagWrite,
+    replicacheFormatVersion,
   );
   const lastMutationID = await basis.getMutationID(clientID, dagWrite);
-  const indexes = readIndexesForWrite(basis, dagWrite);
+  const indexes = readIndexesForWrite(basis, dagWrite, replicacheFormatVersion);
   return new Write(
     dagWrite,
     bTreeWrite,
@@ -529,6 +543,7 @@ async function createIndexForTesting(
   indexes: Map<string, IndexWrite>,
   dagWrite: dag.Write,
   map: btree.BTreeRead,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<void> {
   const chunkIndexDefinition: ChunkIndexDefinition = {
     name,
@@ -558,6 +573,7 @@ async function createIndexForTesting(
     prefix,
     jsonPointer,
     allowEmpty,
+    replicacheFormatVersion,
   );
 
   indexes.set(
