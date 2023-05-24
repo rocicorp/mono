@@ -26,7 +26,7 @@
     "generate-puzzle-pieces": "node raw-assets/puzzle-pieces/generate-puzzle-pieces.js"
   },
   "dependencies": {
-    "@rocicorp/logger": "^5.0.0",
+    "@rocicorp/logger": "^5.1.0",
     "@rocicorp/reflect": "0.25.0",
     "@rocicorp/reflect-server": "0.25.0",
     "nanoid": "^3.3.4",
