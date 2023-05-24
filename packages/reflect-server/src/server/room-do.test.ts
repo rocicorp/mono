@@ -8,7 +8,7 @@ import {newCreateRoomRequest, newDeleteRoomRequest} from '../client/room.js';
 import {newAuthConnectionsRequest} from '../util/auth-test-util.js';
 import {createSilentLogContext, TestLogSink} from '../util/test-utils.js';
 import {version} from '../util/version.js';
-import {TestDurableObjectId} from './do-test-utils.js';
+import {createTestDurableObjectState} from './do-test-utils.js';
 import {BaseRoomDO} from './room-do.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {DurableStorage} from '../storage/durable-storage.js';
@@ -17,16 +17,11 @@ import type {WriteTransaction} from 'replicache';
 
 test('sets roomID in createRoom', async () => {
   const testLogSink = new TestLogSink();
-  const doID = new TestDurableObjectId('test-do-id');
-  const storage = await getMiniflareDurableObjectStorage(doID);
   const roomDO = new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
-    state: {
-      id: doID,
-      storage,
-    } as unknown as DurableObjectState,
+    state: await createTestDurableObjectState('test-do-id'),
     authApiKey: 'API KEY',
     logSink: testLogSink,
     logLevel: 'info',
@@ -44,12 +39,35 @@ test('sets roomID in createRoom', async () => {
   expect(roomID).toBe('testRoomID');
 });
 
+test('inits storage schema', async () => {
+  const testLogSink = new TestLogSink();
+  const state = await createTestDurableObjectState('test-do-id');
+
+  expect(await state.storage.get('storage_schema_meta')).toBeUndefined();
+
+  new BaseRoomDO({
+    mutators: {},
+    roomStartHandler: () => Promise.resolve(),
+    disconnectHandler: () => Promise.resolve(),
+    state,
+    authApiKey: 'API KEY',
+    logSink: testLogSink,
+    logLevel: 'info',
+    allowUnconfirmedWrites: true,
+  });
+
+  await state.concurrencyBlockingCallbacks();
+
+  // This just asserts that the storage schema was initialized by the room constructor.
+  // The actual storage schema update logic is tested in the room-schema.test
+  expect(await state.storage.get('storage_schema_meta')).not.toBeUndefined();
+});
+
 test('runs roomHandler exactly once', async () => {
   const testLogSink = new TestLogSink();
-  const doID = new TestDurableObjectId('test-do-id');
-  const durable = await getMiniflareDurableObjectStorage(doID);
+  const state = await createTestDurableObjectState('test-do-id');
 
-  const storage = new DurableStorage(durable);
+  const storage = new DurableStorage(state.storage);
   const startingVersion = 23;
   await putVersion(startingVersion, storage);
   await putUserValue(
@@ -65,10 +83,7 @@ test('runs roomHandler exactly once', async () => {
       await tx.put('foo', `${value}+`);
     },
     disconnectHandler: () => Promise.resolve(),
-    state: {
-      id: doID,
-      storage: durable,
-    } as unknown as DurableObjectState,
+    state,
     authApiKey: 'API KEY',
     logSink: testLogSink,
     logLevel: 'info',
@@ -101,16 +116,11 @@ test('runs roomHandler exactly once', async () => {
 
 test('failing roomHandler results in request error', async () => {
   const testLogSink = new TestLogSink();
-  const doID = new TestDurableObjectId('test-do-id');
-  const durable = await getMiniflareDurableObjectStorage(doID);
   const roomDO = new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.reject('room start failed'),
     disconnectHandler: () => Promise.resolve(),
-    state: {
-      id: doID,
-      storage: durable,
-    } as unknown as DurableObjectState,
+    state: await createTestDurableObjectState('test-do-id'),
     authApiKey: 'API KEY',
     logSink: testLogSink,
     logLevel: 'info',
@@ -129,20 +139,16 @@ test('failing roomHandler results in request error', async () => {
 
 test('deleteAllData deletes all data', async () => {
   const testLogSink = new TestLogSink();
-  const doID = new TestDurableObjectId('test-do-id');
-  const storage = await getMiniflareDurableObjectStorage(doID);
+  const state = await createTestDurableObjectState('test-do-id');
   const someKey = 'foo';
-  await storage.put(someKey, 'bar');
-  expect(await (await storage.list()).size).toBeGreaterThan(0);
+  await state.storage.put(someKey, 'bar');
+  expect(await (await state.storage.list()).size).toBeGreaterThan(0);
 
   const roomDO = new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
-    state: {
-      id: doID,
-      storage,
-    } as unknown as DurableObjectState,
+    state,
     authApiKey: 'API KEY',
     logSink: testLogSink,
     logLevel: 'info',
@@ -163,24 +169,21 @@ test('deleteAllData deletes all data', async () => {
   );
   const response = await roomDO.fetch(deleteRequest);
   expect(response.status).toBe(200);
-  const gotValue = await storage.get(someKey);
+  const gotValue = await state.storage.get(someKey);
   expect(gotValue).toBeUndefined();
-  expect(await (await storage.list()).size).toEqual(1 /* deleted record */);
+  expect(await (await state.storage.list()).size).toEqual(
+    1 /* deleted record */,
+  );
 });
 
 test('after deleteAllData the roomDO just 410s', async () => {
   const testLogSink = new TestLogSink();
-  const doID = new TestDurableObjectId('test-do-id');
-  const storage = await getMiniflareDurableObjectStorage(doID);
 
   const roomDO = new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
-    state: {
-      id: doID,
-      storage,
-    } as unknown as DurableObjectState,
+    state: await createTestDurableObjectState('test-do-id'),
     authApiKey: 'API KEY',
     logSink: testLogSink,
     logLevel: 'info',
@@ -257,17 +260,12 @@ test('401s if wrong auth api key', async () => {
 
   for (const testRequest of testRequests) {
     const testLogSink = new TestLogSink();
-    const doID = new TestDurableObjectId('test-do-id');
-    const storage = await getMiniflareDurableObjectStorage(doID);
 
     const roomDO = new BaseRoomDO({
       mutators: {},
       roomStartHandler: () => Promise.resolve(),
       disconnectHandler: () => Promise.resolve(),
-      state: {
-        id: doID,
-        storage,
-      } as unknown as DurableObjectState,
+      state: await createTestDurableObjectState('test-do-id'),
       authApiKey: 'API KEY',
       logSink: testLogSink,
       logLevel: 'info',
@@ -279,15 +277,13 @@ test('401s if wrong auth api key', async () => {
   }
 });
 
-test('Logs version during construction', () => {
+test('Logs version during construction', async () => {
   const testLogSink = new TestLogSink();
   new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
-    state: {
-      id: new TestDurableObjectId('test-do-id'),
-    } as unknown as DurableObjectState,
+    state: await createTestDurableObjectState('test-do-id'),
     authApiKey: 'foo',
     logSink: testLogSink,
     logLevel: 'info',
@@ -295,14 +291,16 @@ test('Logs version during construction', () => {
   });
   expect(testLogSink.messages).toEqual(
     expect.arrayContaining([
-      ['info', 'RoomDO', 'doID=test-do-id', 'Starting server'],
-      ['info', 'RoomDO', 'doID=test-do-id', 'Version:', version],
+      /* eslint-disable @typescript-eslint/naming-convention */
+      ['info', {RoomDO: undefined, doID: 'test-do-id'}, ['Starting server']],
+      ['info', {RoomDO: undefined, doID: 'test-do-id'}, ['Version:', version]],
+      /* eslint-enable @typescript-eslint/naming-convention */
     ]),
   );
-  expect(testLogSink.messages[1][4]).toMatch(/^\d+\.\d+\.\d+/);
+  expect(testLogSink.messages[1][2][1]).toMatch(/^\d+\.\d+\.\d+/);
 });
 
-test('Sets turn duration based on allowUnconfirmedWrites flag', () => {
+test('Sets turn duration based on allowUnconfirmedWrites flag', async () => {
   const cases: {allowUnconfirmed: boolean; turnDuration: number}[] = [
     {allowUnconfirmed: true, turnDuration: 1000 / 60},
     {allowUnconfirmed: false, turnDuration: 1000 / 15},
@@ -314,9 +312,7 @@ test('Sets turn duration based on allowUnconfirmedWrites flag', () => {
       mutators: {},
       roomStartHandler: () => Promise.resolve(),
       disconnectHandler: () => Promise.resolve(),
-      state: {
-        id: new TestDurableObjectId('test-do-id'),
-      } as unknown as DurableObjectState,
+      state: await createTestDurableObjectState('test-do-id'),
       authApiKey: 'foo',
       logSink: testLogSink,
       logLevel: 'info',
@@ -350,16 +346,12 @@ test('good, bad, invalid connect requests', async () => {
   };
 
   const testLogSink = new TestLogSink();
-  const doID = new TestDurableObjectId('test-do-id');
-  const storage = await getMiniflareDurableObjectStorage(doID);
+  const state = await createTestDurableObjectState('test-do-id');
   const roomDO = new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
-    state: {
-      id: doID,
-      storage,
-    } as unknown as DurableObjectState,
+    state,
     authApiKey: 'API KEY',
     logSink: testLogSink,
     logLevel: 'info',

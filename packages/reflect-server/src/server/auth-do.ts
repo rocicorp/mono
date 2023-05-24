@@ -143,9 +143,11 @@ export class BaseAuthDO implements DurableObject {
     );
     this._authHandler = authHandler;
     this._authApiKey = authApiKey;
-    const lc = new LogContext(logLevel, logSink).addContext('AuthDO');
+    const lc = new LogContext(logLevel, undefined, logSink).withContext(
+      'AuthDO',
+    );
     registerUnhandledRejectionHandler(lc);
-    this._lc = lc.addContext('doID', state.id.toString());
+    this._lc = lc.withContext('doID', state.id.toString());
 
     this._initRoutes();
     this._lc.info?.('Starting server');
@@ -413,7 +415,7 @@ export class BaseAuthDO implements DurableObject {
     }
     assert(jurisdiction === undefined || jurisdiction === 'eu');
 
-    lc = lc.addContext('client', clientID).addContext('room', roomID);
+    lc = lc.withContext('client', clientID).withContext('room', roomID);
     let decodedAuth: string | undefined;
     if (encodedAuth) {
       try {
@@ -1024,7 +1026,7 @@ async function deleteConnection(
 }
 
 export const STORAGE_SCHEMA_META_KEY = 'storage_schema_meta';
-export const STORAGE_SCHEMA_VERSION = 1;
+export const STORAGE_SCHEMA_VERSION = 0;
 export const STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION = 0;
 
 export type StorageSchemaMeta = {
@@ -1079,31 +1081,39 @@ async function ensureStorageSchemaMigrated(
   lc: LogContext,
   logSink: LogSink,
 ) {
-  lc = lc.addContext('schemaUpdateID', randomID());
-  lc.info?.('Ensuring storage schema is up to date.');
-  let storageSchemaMeta: StorageSchemaMeta = (await storage.get(
-    STORAGE_SCHEMA_META_KEY,
-  )) ?? {version: 0, maxVersion: 0, minSafeRollbackVersion: 0};
-  if (storageSchemaMeta.minSafeRollbackVersion > STORAGE_SCHEMA_VERSION) {
-    throw new Error(
-      `Cannot safely migrate to schema version ${STORAGE_SCHEMA_VERSION}, schema is currently version ${storageSchemaMeta.version}, min safe rollback version is ${storageSchemaMeta.minSafeRollbackVersion}`,
-    );
-  }
-  if (storageSchemaMeta.version > STORAGE_SCHEMA_VERSION) {
-    storageSchemaMeta = await migrateStorageSchemaToVersion(
-      storage,
-      lc,
+  try {
+    lc = lc.withContext('schemaUpdateID', randomID());
+    lc.info?.('Ensuring storage schema is up to date.');
+    let storageSchemaMeta: StorageSchemaMeta = (await storage.get(
+      STORAGE_SCHEMA_META_KEY,
+    )) ?? {version: 0, maxVersion: 0, minSafeRollbackVersion: 0};
+    lc.info?.('Existing storage schema meta is', storageSchemaMeta);
+    if (storageSchemaMeta.minSafeRollbackVersion > STORAGE_SCHEMA_VERSION) {
+      const errMessage = `Cannot safely migrate storage to schema version ${STORAGE_SCHEMA_VERSION}, storage schema is currently version ${storageSchemaMeta.version} and min safe rollback version is ${storageSchemaMeta.minSafeRollbackVersion}`;
+      throw new Error(errMessage);
+    }
+    if (storageSchemaMeta.version > STORAGE_SCHEMA_VERSION) {
+      lc.info?.('Down migrating');
+      storageSchemaMeta = await migrateStorageSchemaToVersion(
+        storage,
+        lc,
+        storageSchemaMeta,
+        STORAGE_SCHEMA_VERSION,
+        STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        async () => {
+          /* noop */
+        },
+      );
+    } // else {} do forward migrations, none currently exist
+    lc.info?.(
+      'Storage schema update complete. New storage schema meta is',
       storageSchemaMeta,
-      STORAGE_SCHEMA_VERSION,
-      STORAGE_SCHEMA_MIN_SAFE_ROLLBACK_VERSION,
-      // eslint-disable-next-line @typescript-eslint/no-empty-function
-      async () => {
-        /* noop */
-      },
     );
-    lc.info?.('Storage schema is already up to date.');
-    return;
+  } catch (e) {
+    lc.error?.('Error in ensureStorageSchemaMigrated', e);
+    throw e;
+  } finally {
+    void logSink.flush?.();
   }
-  lc.info?.('Storage schema update complete.');
-  await logSink.flush?.();
 }

@@ -77,15 +77,17 @@ export type DurableObjectCtor<Env> = new (
 
 /**
  * Creates the different parts of a reflect server.
- * @param options The options for the server. If you need access to the `Env`
- * you can use a function form. When using a function form, the function may
- * be called multiple times so it should be idempotent.
+ * @param makeOptions Function for creating the options for the server.
+ *     IMPORTANT: Do not cache the return value from this function (or any of
+ *     its parts, ie a log sink) across invocations. You should return a brand
+ *     new instance each time this function is called.
+ *     TODO: Add reference to CF bug.
  */
 export function createReflectServer<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
 >(
-  options: ReflectServerOptions<MD> | ((env: Env) => ReflectServerOptions<MD>),
+  makeOptions: (env: Env) => ReflectServerOptions<MD>,
 ): {
   worker: ExportedHandler<Env>;
   // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -93,7 +95,7 @@ export function createReflectServer<
   // eslint-disable-next-line @typescript-eslint/naming-convention
   AuthDO: DurableObjectCtor<Env>;
 } {
-  const normalizedOptionsGetter = makeNormalizedOptionsGetter(options);
+  const normalizedOptionsGetter = makeNormalizedOptionsGetter(makeOptions);
   const roomDOClass = createRoomDOClass(normalizedOptionsGetter);
   const authDOClass = createAuthDOClass(normalizedOptionsGetter);
   const worker = createWorker<Env>(normalizedOptionsGetter);
@@ -107,24 +109,13 @@ type GetNormalizedOptions<
   MD extends MutatorDefs,
 > = (env: Env) => NormalizedOptions<MD>;
 
-// exported for testing.
-export function makeNormalizedOptionsGetter<
+function makeNormalizedOptionsGetter<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
 >(
-  options: ((env: Env) => ReflectServerOptions<MD>) | ReflectServerOptions<MD>,
+  makeOptions: (env: Env) => ReflectServerOptions<MD>,
 ): (env: Env) => NormalizedOptions<MD> {
-  let normalizedOptions: NormalizedOptions<MD> | undefined;
-  let originalEnv: Env | undefined;
-  let logSink: LogSink;
   return (env: Env) => {
-    if (normalizedOptions) {
-      if (originalEnv !== env) {
-        logSink.log('info', 'get options called with different env');
-      }
-      return normalizedOptions;
-    }
-    originalEnv = env;
     const {
       mutators,
       authHandler,
@@ -134,9 +125,9 @@ export function makeNormalizedOptionsGetter<
       logLevel = 'debug',
       allowUnconfirmedWrites = false,
       metricsSink = undefined,
-    } = typeof options === 'function' ? options(env) : options;
-    logSink = logSinks ? combineLogSinks(logSinks) : consoleLogSink;
-    normalizedOptions = {
+    } = makeOptions(env);
+    const logSink = logSinks ? combineLogSinks(logSinks) : consoleLogSink;
+    return {
       mutators,
       authHandler,
       roomStartHandler,
@@ -146,7 +137,6 @@ export function makeNormalizedOptionsGetter<
       allowUnconfirmedWrites,
       metricsSink,
     };
-    return normalizedOptions;
   };
 }
 

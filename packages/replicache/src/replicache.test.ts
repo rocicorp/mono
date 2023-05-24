@@ -8,7 +8,7 @@ import {
   LICENSE_ACTIVE_PATH,
   LICENSE_STATUS_PATH,
 } from '@rocicorp/licensing/src/server/api-types.js';
-import type {LogLevel} from '@rocicorp/logger';
+import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {assert} from 'shared/asserts.js';
 import {sleep} from 'shared/sleep.js';
@@ -1077,7 +1077,7 @@ test('logSinks length 1', async () => {
   };
 
   const logSink = {
-    log: (level: LogLevel, ..._args: unknown[]) => {
+    log: (level: LogLevel, _ctx: Context | undefined, ..._args: unknown[]) => {
       logCounts[level]++;
     },
   };
@@ -1126,7 +1126,7 @@ test('logSinks length 3', async () => {
   };
 
   const logSinks = Array.from({length: 3}, (_, i) => ({
-    log: (level: LogLevel, ..._args: unknown[]) => {
+    log: (level: LogLevel, _ctx: Context | undefined, ..._args: unknown[]) => {
       logCounts[i][level]++;
     },
   }));

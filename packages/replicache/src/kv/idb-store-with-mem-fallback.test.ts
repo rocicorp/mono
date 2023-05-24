@@ -45,9 +45,7 @@ test('race condition', async () => {
 
   const name = `ff-race-${Math.random()}`;
   const store = storeThatErrorsInOpen(
-    new LogContext('debug', {
-      log: logFake,
-    }),
+    new LogContext('debug', {my: 'context'}, {log: logFake}),
     name,
   );
 
@@ -59,6 +57,7 @@ test('race condition', async () => {
   expect(logFake.callCount).to.equal(1);
   expect(logFake.firstCall.args).to.deep.equal([
     'info',
+    {my: 'context'},
     'Switching to MemStore because of Firefox private browsing error',
   ]);
 });

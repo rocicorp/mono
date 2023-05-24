@@ -642,6 +642,7 @@ export class Reflect<MD extends MutatorDefs> {
       this._lastMutationIDReceived,
       wsid,
       this.#options.logLevel === 'debug',
+      l,
     );
 
     ws.addEventListener('message', this._onMessage);
@@ -739,7 +740,7 @@ export class Reflect<MD extends MutatorDefs> {
   ) {
     this.#abortPingTimeout();
     const body = pullResponseMessage[1];
-    lc = lc.addContext('requestID', body.requestID);
+    lc = lc.withContext('requestID', body.requestID);
     lc.debug?.('Handling pull response', body);
     const resolver = this._pendingPullsByRequestID.get(body.requestID);
     if (!resolver) {
@@ -757,7 +758,7 @@ export class Reflect<MD extends MutatorDefs> {
   ): Promise<PusherResult> {
     // If we are connecting we wait until we are connected.
     await this._connectResolver.promise;
-    const l = (await this._l).addContext('requestID', requestID);
+    const l = (await this._l).withContext('requestID', requestID);
     l.debug?.(`pushing ${req.mutations.length} mutations`);
 
     // If pushVersion is 0 this is a mutation recovery push for a pre dd31
@@ -848,7 +849,7 @@ export class Reflect<MD extends MutatorDefs> {
       if (this._socket) {
         lc = addWebSocketIDFromSocketToLogContext(this._socket, lc);
       }
-      return lc.addContext('runLoopCounter', runLoopCounter);
+      return lc.withContext('runLoopCounter', runLoopCounter);
     };
 
     await this.#updateAuthToken(bareLogContext);
@@ -1002,7 +1003,7 @@ export class Reflect<MD extends MutatorDefs> {
     req: PullRequestV0 | PullRequestV1,
     requestID: string,
   ): Promise<PullerResultV0 | PullerResultV1> {
-    const l = (await this._l).addContext('requestID', requestID);
+    const l = (await this._l).withContext('requestID', requestID);
     l.debug?.('Pull', req);
     // If pullVersion === 0 this is a mutation recovery pull for a pre dd31
     // client.  Reflect didn't support mutation recovery pre dd31, so don't
@@ -1181,6 +1182,7 @@ export function createSocket(
   lmid: number,
   wsid: string,
   debugPerf: boolean,
+  lc: LogContext,
 ): WebSocket {
   const url = new URL(socketOrigin);
   // Keep this in sync with the server.
@@ -1200,6 +1202,9 @@ export function createSocket(
   if (debugPerf) {
     searchParams.set('debugPerf', true.toString());
   }
+
+  lc.info?.('Connecting to', url.toString());
+
   // Pass auth to the server via the `Sec-WebSocket-Protocol` header by passing
   // it as a `protocol` to the `WebSocket` constructor.  The empty string is an
   // invalid `protocol`, and will result in an exception, so pass undefined
@@ -1218,9 +1223,11 @@ async function getLogContext<MD extends MutatorDefs>(
   const {logSinks = [consoleLogSink]} = options;
   const logSink =
     logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
-  return new LogContext(options.logLevel, logSink)
-    .addContext('roomID', options.roomID)
-    .addContext('clientID', await rep.clientID);
+  return new LogContext(
+    options.logLevel,
+    {roomID: options.roomID, clientID: await rep.clientID},
+    logSink,
+  );
 }
 
 /**
@@ -1236,7 +1243,7 @@ function addWebSocketIDFromSocketToLogContext(
 }
 
 function addWebSocketIDToLogContext(wsid: string, lc: LogContext): LogContext {
-  return lc.addContext('wsid', wsid);
+  return lc.withContext('wsid', wsid);
 }
 
 /**

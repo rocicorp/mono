@@ -2230,14 +2230,14 @@ describe('test down migrate', () => {
     ]).toEqual(expectedConnectionsByRoomKeysForTestConnectionState);
   };
 
+  test('from 1 with minSafeRollbackVersion 0', () =>
+    testWithMinSafeRollbackVersion(1, 0));
   test('from 2 with minSafeRollbackVersion 0', () =>
     testWithMinSafeRollbackVersion(2, 0));
   test('from 2 with minSafeRollbackVersion 1', () =>
-    testWithMinSafeRollbackVersion(2, 1));
-  test('from 3 with minSafeRollbackVersion 2', () =>
     testWithMinSafeRollbackVersion(
-      3,
       2,
-      'Cannot safely migrate to schema version 1, schema is currently version 3, min safe rollback version is 2',
+      1,
+      'Cannot safely migrate storage to schema version 0, storage schema is currently version 2 and min safe rollback version is 1',
     ));
 });

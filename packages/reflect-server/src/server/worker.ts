@@ -7,10 +7,12 @@ import {
   AUTH_ROUTES_AUTHED_BY_API_KEY,
   AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER,
 } from './auth-do.js';
-import {REPORT_METRICS_PATH} from './paths.js';
+import {HELLO, REPORT_METRICS_PATH} from './paths.js';
 import {
+  asJSON,
   BaseContext,
   checkAuthAPIKey,
+  get,
   Handler,
   post,
   Router,
@@ -19,6 +21,7 @@ import {
 } from './router.js';
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import type {MaybePromise} from 'replicache';
+import {version} from '../mod.js';
 
 export type MetricsSink = (
   allSeries: Series[],
@@ -103,6 +106,12 @@ const reportMetrics = post<WorkerContext, Response>(
   }),
 );
 
+const hello = get<WorkerContext, Response>(
+  asJSON(() => ({
+    reflectServerVersion: version,
+  })),
+);
+
 function requireAPIKeyMatchesEnv(next: Handler<WorkerContext, Response>) {
   return (ctx: WorkerContext, req: Request) => {
     const resp = checkAuthAPIKey(ctx.env.REFLECT_AUTH_API_KEY, req);
@@ -147,7 +156,7 @@ export function createWorker<Env extends BaseWorkerEnv>(
 }
 
 async function scheduled(env: BaseWorkerEnv, lc: LogContext): Promise<void> {
-  lc = lc.addContext('scheduled', randomID());
+  lc = lc.withContext('scheduled', randomID());
   lc.info?.('Handling scheduled event');
   if (!env.REFLECT_AUTH_API_KEY) {
     lc.debug?.(
@@ -178,7 +187,7 @@ async function fetch(
 ): Promise<Response> {
   // TODO: pass request id through so request can be traced across
   // worker and DOs.
-  lc = lc.addContext('req', randomID());
+  lc = lc.withContext('req', randomID());
   lc.debug?.('Handling request:', request.method, request.url);
   try {
     const resp = await withAllowAllCORS(
@@ -262,7 +271,7 @@ async function withLogContext<R>(
   logLevel: LogLevel,
   fn: (lc: LogContext) => Promise<R>,
 ): Promise<R> {
-  const lc = new LogContext(logLevel, logSink).addContext('Worker');
+  const lc = new LogContext(logLevel, undefined, logSink).withContext('Worker');
   try {
     return await fn(lc);
   } finally {
@@ -289,4 +298,5 @@ async function sendToAuthDO(
 
 export const WORKER_ROUTES = {
   [REPORT_METRICS_PATH]: reportMetrics,
+  [HELLO]: hello,
 } as const;

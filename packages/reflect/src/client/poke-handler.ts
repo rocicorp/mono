@@ -59,12 +59,12 @@ export class PokeHandler {
     this._replicachePoke = replicachePoke;
     this._onOutOfOrderPoke = onOutOfOrderPoke;
     this._clientIDPromise = clientIDPromise;
-    this._lcPromise = lcPromise.then(lc => lc.addContext('PokeHandler'));
+    this._lcPromise = lcPromise.then(lc => lc.withContext('PokeHandler'));
     this._bufferSizer = bufferSizer;
   }
 
   async handlePoke(pokeBody: PokeBody): Promise<number | undefined> {
-    const lc = (await this._lcPromise).addContext(
+    const lc = (await this._lcPromise).withContext(
       'requestID',
       pokeBody.requestID,
     );
@@ -133,7 +133,7 @@ export class PokeHandler {
   }
 
   private _rafCallback = async () => {
-    const rafLC = (await this._lcPromise).addContext(
+    const rafLC = (await this._lcPromise).withContext(
       'rafAt',
       Math.floor(performance.now()),
     );

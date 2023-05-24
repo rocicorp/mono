@@ -22,13 +22,13 @@
   },
   "dependencies": {
     "@rocicorp/lock": "^1.0.1",
-    "@rocicorp/logger": "^4.1.0",
+    "@rocicorp/logger": "^5.0.0",
     "@rocicorp/resolver": "^1.0.0"
   },
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4-fix.0",
     "@rocicorp/eslint-config": "^0.3.0",
-    "@rocicorp/licensing": "^5.0.0",
+    "@rocicorp/licensing": "^7.0.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "@rollup/plugin-node-resolve": "^15.0.1",
     "@types/command-line-usage": "^5.0.2",

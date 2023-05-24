@@ -1,5 +1,5 @@
 import {expect} from '@esm-bundle/chai';
-import {LogContext, LogLevel} from '@rocicorp/logger';
+import {Context, LogContext, LogLevel} from '@rocicorp/logger';
 import * as sinon from 'sinon';
 import {
   BUFFER_SIZER_OPTIONS,
@@ -976,10 +976,14 @@ test(`playback offset is reset for new pokes if timestamp offset delta is > ${RE
 test('playback stats', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
-  const log: [LogLevel, unknown[]][] = [];
-  const logContext = new LogContext('debug', {
-    log: (level, ...args) => {
-      log.push([level, args]);
+  const log: [LogLevel, Context | undefined, unknown[]][] = [];
+  const logContext = new LogContext('debug', undefined, {
+    log: (
+      level: LogLevel,
+      context: Context | undefined,
+      ...args: unknown[]
+    ) => {
+      log.push([level, context, args]);
     },
   });
   const expectStats = (
@@ -996,30 +1000,33 @@ test('playback stats', async () => {
       log.find(
         logCall =>
           logCall[0] === 'debug' &&
-          logCall[1].find(
+          logCall[2].find(
             logCallArg =>
               logCallArg ===
               'playback stats (misses / total = percent missed):',
           ),
-      )?.[1],
+      ),
     ).to.deep.equal([
-      'PokeHandler',
-      `rafAt=${rafAtTime}`,
-      'playback stats (misses / total = percent missed):',
-      '\npokes:',
-      expectedStats.missedTimedPokeCount,
-      '/',
-      expectedStats.timedPokeCount,
-      '=',
-      expectedStats.missedTimedPokeCount / expectedStats.timedPokeCount,
-      '\nframes:',
-      expectedStats.missedTimedFrameCount,
-      '/',
-      expectedStats.timedFrameCount,
-      '=',
-      expectedStats.missedTimedFrameCount / expectedStats.timedFrameCount,
-      '\navg poke latency:',
-      expectedStats.avgLatency,
+      'debug',
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      {PokeHandler: undefined, rafAt: rafAtTime},
+      [
+        'playback stats (misses / total = percent missed):',
+        '\npokes:',
+        expectedStats.missedTimedPokeCount,
+        '/',
+        expectedStats.timedPokeCount,
+        '=',
+        expectedStats.missedTimedPokeCount / expectedStats.timedPokeCount,
+        '\nframes:',
+        expectedStats.missedTimedFrameCount,
+        '/',
+        expectedStats.timedFrameCount,
+        '=',
+        expectedStats.missedTimedFrameCount / expectedStats.timedFrameCount,
+        '\navg poke latency:',
+        expectedStats.avgLatency,
+      ],
     ]);
   };
 

@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, jest} from '@jest/globals';
-import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import {Context, LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import type {Mutation, NullableVersion} from 'reflect-protocol';
 import type {ReadonlyJSONValue} from 'shared/json.js';
 import type {ClientRecord} from '../../src/types/client-record.js';
@@ -29,7 +29,6 @@ export function client(
   socket: Socket = new Mocket(),
   clockBehindByMs?: number | undefined,
   debugPerf = false,
-  lastActivityTimestamp = Date.now(),
 ): [ClientID, ClientState] {
   return [
     id,
@@ -38,7 +37,6 @@ export function client(
       userData: {userID},
       clientGroupID,
       clockOffsetMs: clockBehindByMs,
-      lastActivityTimestamp,
       debugPerf,
     },
   ];
@@ -158,21 +156,21 @@ export function fail(s: string): never {
 }
 
 export class TestLogSink implements LogSink {
-  messages: [LogLevel, ...unknown[]][] = [];
+  messages: [LogLevel, Context | undefined, unknown[]][] = [];
 
-  log(level: LogLevel, ...args: unknown[]): void {
-    this.messages.push([level, ...args]);
+  log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
+    this.messages.push([level, context, args]);
   }
 }
 
 export class SilentLogSink implements LogSink {
-  log(_level: LogLevel, ..._args: unknown[]): void {
+  log(_l: LogLevel, _c: Context | undefined, ..._args: unknown[]): void {
     return;
   }
 }
 
 export function createSilentLogContext() {
-  return new LogContext('error', new SilentLogSink());
+  return new LogContext('error', undefined, new SilentLogSink());
 }
 
 export function mockMathRandom() {
