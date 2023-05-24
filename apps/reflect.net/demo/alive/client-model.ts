@@ -7,7 +7,7 @@ const DEAD_BOT_CONTROLLER_THRESHHOLD_MS = 5_000;
 const botControllerKey = 'botControllerKey';
 const botControllerSchema = z.object({
   clientID: z.string(),
-  aliveTimestamp: z.number().optional(),
+  aliveTimestamp: z.number().default(0)
 });
 export type BotControllerModel = z.infer<typeof botControllerSchema>;
 
@@ -19,16 +19,12 @@ export const getBotController = async (
     ? botController
     : botControllerSchema.parse(botController);
 };
-const setBotController = async (
+const setBotController = (
   tx: WriteTransaction,
   value: BotControllerModel,
-) => {
-  return tx.put(botControllerKey, value);
-};
+) => tx.put(botControllerKey, value);
 
-const deleteBotController = async (tx: WriteTransaction) => {
-  return tx.del(botControllerKey);
-};
+const deleteBotController = (tx: WriteTransaction) => tx.del(botControllerKey);
 
 export const clientModelSchema = entitySchema.extend({
   selectedPieceID: z.string(),
@@ -43,7 +39,7 @@ export const clientModelSchema = entitySchema.extend({
   // True if this client is a bot that was manually triggered
   // (in which case botControllerID is the client that manually
   // triggered it)
-  manuallyTriggeredBot: z.boolean().optional(),
+  manuallyTriggeredBot: z.boolean(),
 });
 
 // Export generated interface.
@@ -59,7 +55,7 @@ export const {
 } = clientGenerateResult;
 
 export const deleteClient = async (tx: WriteTransaction, id: string) => {
-  let botController = await getBotController(tx);
+  const botController = await getBotController(tx);
   if (tx.environment === 'server') {
     const clients = await listClients(tx);
     let potentialNewBotControllerClient = undefined;

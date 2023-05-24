@@ -1,7 +1,7 @@
 import classNames from 'classnames';
 import type {Reflect} from '@rocicorp/reflect';
 import type {M} from '../shared/mutators';
-import {getClient} from './client-model';
+import {ClientModel, getClient} from './client-model';
 import {useSubscribe} from 'replicache-react';
 import {Rect, coordinateToPosition, simpleHash} from './util';
 import useIsomorphicLayoutEffect from '@/hooks/use-isomorphic-layout-effect';
@@ -23,7 +23,7 @@ export function Cursor({
   hideArrow: boolean;
   setBodyClass: (cls: string, enabled: boolean) => void;
 }) {
-  const client = useSubscribe(r, async tx => getClient(tx, clientID), null);
+  const client = useSubscribe<ClientModel | undefined>(r, tx => getClient(tx, clientID), undefined);
   const pos = client && coordinateToPosition(client, home, stage);
   const hash = simpleHash(clientID);
 
