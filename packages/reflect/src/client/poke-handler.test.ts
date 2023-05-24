@@ -1008,6 +1008,7 @@ test('playback stats', async () => {
       ),
     ).to.deep.equal([
       'debug',
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       {PokeHandler: undefined, rafAt: rafAtTime},
       [
         'playback stats (misses / total = percent missed):',

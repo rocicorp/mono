@@ -452,7 +452,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     const logSink =
       logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
-    this._lc = new LogContext(logLevel, {name: name}, logSink);
+    this._lc = new LogContext(logLevel, {name}, logSink);
     this._lc.debug?.('Constructing Replicache', {
       name,
       'replicache version': version,
