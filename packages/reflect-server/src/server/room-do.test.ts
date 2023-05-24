@@ -63,7 +63,7 @@ test('inits storage schema', async () => {
   expect(await state.storage.get('storage_schema_meta')).not.toBeUndefined();
 });
 
-test('runs roomHandler exactly once', async () => {
+test('runs roomStartHandler', async () => {
   const testLogSink = new TestLogSink();
   const state = await createTestDurableObjectState('test-do-id');
 
@@ -76,7 +76,7 @@ test('runs roomHandler exactly once', async () => {
     storage,
   );
 
-  const roomDO = new BaseRoomDO({
+  new BaseRoomDO({
     mutators: {},
     roomStartHandler: async (tx: WriteTransaction) => {
       const value = await tx.get('foo');
@@ -90,20 +90,7 @@ test('runs roomHandler exactly once', async () => {
     allowUnconfirmedWrites: true,
   });
 
-  const createRoomRequest = newCreateRoomRequest(
-    'http://example.com/',
-    'API KEY',
-    'testRoomID',
-  );
-
-  // Send 10 requests in parallel.
-  const requests = Array(10)
-    .fill(0)
-    .map(() => roomDO.fetch(createRoomRequest));
-  const responses = await Promise.all(requests);
-  for (const response of responses) {
-    expect(response.status).toBe(200);
-  }
+  await state.concurrencyBlockingCallbacks();
 
   // The roomHandler should have been run exactly once.
   expect(await getVersion(storage)).toBe(startingVersion + 1);
@@ -112,29 +99,6 @@ test('runs roomHandler exactly once', async () => {
     deleted: false,
     value: 'bar+',
   });
-});
-
-test('failing roomHandler results in request error', async () => {
-  const testLogSink = new TestLogSink();
-  const roomDO = new BaseRoomDO({
-    mutators: {},
-    roomStartHandler: () => Promise.reject('room start failed'),
-    disconnectHandler: () => Promise.resolve(),
-    state: await createTestDurableObjectState('test-do-id'),
-    authApiKey: 'API KEY',
-    logSink: testLogSink,
-    logLevel: 'info',
-    allowUnconfirmedWrites: true,
-  });
-
-  const createRoomRequest = newCreateRoomRequest(
-    'http://example.com/',
-    'API KEY',
-    'testRoomID',
-  );
-
-  const response = await roomDO.fetch(createRoomRequest);
-  expect(response.status).toBe(500);
 });
 
 test('deleteAllData deletes all data', async () => {
