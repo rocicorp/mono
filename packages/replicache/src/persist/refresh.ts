@@ -231,6 +231,7 @@ export async function refresh(
           await db.commitFromHash(newMemdagHeadHash, memdagWrite),
           memdagWrite,
           diffConfig,
+          replicacheFormatVersion,
         );
 
         await memdagWrite.setHead(db.DEFAULT_HEAD_NAME, newMemdagHeadHash);

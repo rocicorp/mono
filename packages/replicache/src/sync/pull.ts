@@ -381,14 +381,18 @@ export function handlePullResponseV0(
       response.lastMutationID,
       frozenCookie,
       dagWrite,
-      db.readIndexesForWrite(lastIntegrated, dagWrite),
+      db.readIndexesForWrite(lastIntegrated, dagWrite, replicacheFormatVersion),
       clientID,
       replicacheFormatVersion,
     );
 
     await patch.apply(lc, dbWrite, response.patch);
 
-    const lastIntegratedMap = new BTreeRead(dagRead, lastIntegrated.valueHash);
+    const lastIntegratedMap = new BTreeRead(
+      dagRead,
+      replicacheFormatVersion,
+      lastIntegrated.valueHash,
+    );
 
     for await (const change of dbWrite.map.diff(lastIntegratedMap)) {
       await updateIndexes(
@@ -539,6 +543,7 @@ export function maybeEndPull<M extends db.LocalMeta>(
   expectedSyncHead: Hash,
   clientID: ClientID,
   diffConfig: DiffComputationConfig,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): Promise<{
   syncHead: Hash;
   replayMutations: db.Commit<M>[];
@@ -624,8 +629,16 @@ export function maybeEndPull<M extends db.LocalMeta>(
     // Compute diffs (changed keys) for value map and index maps.
     const mainHead = await db.commitFromHash(mainHeadHash, dagRead);
     if (diffConfig.shouldComputeDiffs()) {
-      const mainHeadMap = new BTreeRead(dagRead, mainHead.valueHash);
-      const syncHeadMap = new BTreeRead(dagRead, syncHead.valueHash);
+      const mainHeadMap = new BTreeRead(
+        dagRead,
+        replicacheFormatVersion,
+        mainHead.valueHash,
+      );
+      const syncHeadMap = new BTreeRead(
+        dagRead,
+        replicacheFormatVersion,
+        syncHead.valueHash,
+      );
       const valueDiff = await btree.diff(mainHeadMap, syncHeadMap);
       diffsMap.set('', valueDiff);
       await addDiffsForIndexes(
@@ -634,6 +647,7 @@ export function maybeEndPull<M extends db.LocalMeta>(
         dagRead,
         diffsMap,
         diffConfig,
+        replicacheFormatVersion,
       );
     }
 
