@@ -1,0 +1,76 @@
+.pricingGrid {
+  display: -ms-grid;
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-column-gap: 2.25rem;
+  grid-row-gap: 2.25rem;
+  -ms-grid-columns: 2fr 1fr 1fr 1fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+  -ms-grid-rows: auto auto auto;
+  grid-template-rows: auto auto auto;
+  margin-top: 4rem;
+  margin-bottom: 4rem;
+  text-align: left;
+  overflow-y: visible;
+}
+
+.pricingGridHeader {
+  font-weight: bold;
+  position: relative;
+  overflow-y: visible;
+}
+
+.infinity {
+  font-size: 1.6rem;
+  line-height: 1rem;
+  font-weight: 300;
+}
+
+.pricingGridCheck {
+  height: 1rem;
+  width: 1rem;
+  display: block;
+}
+
+.pricingGridX {
+  height: 0.75rem;
+  width: 0.75rem;
+  display: block;
+  margin: 2px 0;
+}
+
+.pricingContainer .pricingNote {
+  font-size: 1rem;
+}
+
+.pricingExamplesHead {
+  font-size: 1.5rem;
+  font-weight: 400;
+  text-align: left;
+  margin-bottom: 1rem;
+}
+
+.pricingExample {
+  font-size: 1rem !important;
+  line-height: 28px !important;
+  text-align: left;
+  padding-left: 1rem;
+}
+
+.pricingExample > li {
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 600px) {
+  .pricingGrid {
+    overflow-x: scroll;
+    padding: 3rem 0;
+    margin: 2rem 0;
+  }
+
+  .extraInfo {
+    text-decoration: underline;
+    text-decoration-style: dashed;
+    text-decoration-color: #fc208a;
+  }
+}

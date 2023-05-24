@@ -1,0 +1,34 @@
+name = "reflect-net-east"
+main = "demo/worker/index.ts"
+compatibility_date = "2022-11-30"
+account_id = "085f6d8eb08e5b23debfb08b21bda1eb"
+logpush = false
+
+[build]
+# don't watch all resources because we want to run without --persist when
+# possible, so restarts delete data.
+watch_dir = "demo/worker"
+
+[durable_objects]
+bindings = [
+  { name = "roomDO", class_name = "RoomDO" },
+  { name = "authDO", class_name = "AuthDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["Server"]
+
+[[migrations]]
+tag = "v2"
+renamed_classes = [{from = "Server", to = "RoomDO" }]
+new_classes = ["AuthDO"]
+
+[triggers]
+crons = [ "*/5 * * * *" ] # ever 5 mins for AuthDO connection revalidation
+
+#[secrets]
+#DATADOG_LOGS_API_KEY
+#DATADOG_METRICS_API_KEY
+#REFLECT_AUTH_API_KEY
+#NEW_ROOM_SECRET

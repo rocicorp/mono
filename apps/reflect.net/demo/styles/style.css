@@ -1,0 +1,29 @@
+html {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  min-height: 100%;
+  user-select: none;
+}
+
+.hero-text {
+  font-family: 'Muoto Black';
+  width: 720px;
+  height: 115px;
+  margin: 90px 121px 19px 124px;
+  font-size: 96px;
+  font-weight: 900;
+  font-stretch: normal;
+  font-style: normal;
+  line-height: normal;
+  letter-spacing: -2px;
+  text-align: left;
+  color: #2a2c2e;
+}
+
+fieldset {
+  border: none;
+}

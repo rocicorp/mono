@@ -1,0 +1,25 @@
+.resetButton {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.5;
+  transition: opacity 0.5s linear;
+  color: #2a2c2e;
+}
+
+.resetButton:hover {
+  opacity: 1;
+}
+
+.resetIcon {
+  margin-right: 0.5rem;
+  line-height: 24px;
+  display: inline-block;
+}
+
+.resetLabel {
+  line-height: 16px;
+  font-size: 1rem;
+  vertical-align: top;
+}

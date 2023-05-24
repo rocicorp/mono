@@ -1,0 +1,48 @@
+.consoleBlock {
+  position: relative;
+  margin: 3rem auto;
+  padding: 2rem 6rem 2rem 2rem;
+  border-radius: 0.5rem;
+  background-color: #2a2c2e;
+  max-width: 44rem;
+}
+
+.consoleCopyButton {
+  line-height: inherit;
+  padding: 0.5625rem 0.9375rem;
+  opacity: 0.5;
+  color: #2a2c2e;
+  background-color: #fff;
+  border-radius: 0.5rem;
+  width: auto;
+  display: block;
+  top: 26px;
+  right: 26px;
+  cursor: pointer;
+  white-space: nowrap;
+  position: absolute;
+}
+
+.consoleCopyButton:hover {
+  opacity: 1;
+}
+
+.consoleText {
+  font-family: 'Inconsolata', monospace;
+  color: #949494;
+  font-size: 1.5rem;
+  text-align: left;
+}
+
+.consoleHighlightOne {
+  color: #82aaff;
+}
+
+.consoleHighlightTwo {
+  color: #bfc7d5;
+}
+
+.getStarted .getStartedNote {
+  font-size: 1rem;
+  text-align: center;
+}
