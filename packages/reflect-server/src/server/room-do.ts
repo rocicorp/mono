@@ -86,8 +86,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   private _maxProcessedMutationTimestamp = 0;
   private readonly _lock = new Lock();
   private readonly _mutators: MutatorMap;
-  private _roomStarted = false;
-  private readonly _roomStartHandler: RoomStartHandler;
   private readonly _disconnectHandler: DisconnectHandler;
   private _lcHasRoomIdContext = false;
   private _lc: LogContext;
@@ -109,7 +107,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     } = options;
 
     this._mutators = new Map([...Object.entries(mutators)]) as MutatorMap;
-    this._roomStartHandler = roomStartHandler;
     this._disconnectHandler = disconnectHandler;
     this._storage = new DurableStorage(
       state.storage,
@@ -131,7 +128,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
     void state.blockConcurrencyWhile(async () => {
       await initRoomSchema(this._lc, this._storage);
-      // TODO: Invoke roomStartHandler here instead.
+      await processRoomStart(this._lc, roomStartHandler, this._storage);
     });
   }
 
@@ -207,15 +204,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         addRequestIDFromHeadersOrRandomID(this._lc, request),
         request,
       );
-
-      if (!this._roomStarted) {
-        await this._lock.withLock(async () => {
-          if (!this._roomStarted) {
-            await processRoomStart(lc, this._roomStartHandler, this._storage);
-            this._roomStarted = true;
-          }
-        });
-      }
 
       return await this._router.dispatch(request, {lc});
     } catch (e) {
