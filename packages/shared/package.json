@@ -16,7 +16,7 @@
     "@badrap/valita": "^0.2.0",
     "@rocicorp/eslint-config": "^0.3.0",
     "@rocicorp/prettier-config": "^0.1.1",
-    "@rocicorp/logger": "^5.0.0",
+    "@rocicorp/logger": "^5.1.0",
     "@types/jest": "^29.4.2",
     "ts-jest": "^29.0.5",
     "typescript": "^4.9.5"
