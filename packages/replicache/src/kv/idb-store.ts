@@ -153,7 +153,7 @@ class WriteImpl extends WriteImplBase {
         }
       }
       tx.oncomplete = () => resolve();
-      tx.onerror = tx.onabort = () => reject(tx.error);
+      tx.onerror = () => reject(tx.error);
     });
   }
 
