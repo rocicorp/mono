@@ -12,7 +12,7 @@ export function addRequestIDFromHeadersOrRandomID(
   lc: LogContext,
   request: Request,
 ): LogContext {
-  return lc.addContext(
+  return lc.withContext(
     'requestID',
     getRequestIDFromRequest(request) ?? randomID(),
   );

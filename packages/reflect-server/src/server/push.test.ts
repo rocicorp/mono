@@ -748,11 +748,11 @@ describe('handlePush', () => {
   class TestLogContext extends LogContext {
     resolver = resolver<unknown>();
 
-    addContext(key: string, value?: unknown): LogContext {
+    withContext(key: string, value?: unknown): LogContext {
       if (key === 'requestID') {
         this.resolver.resolve(value);
       }
-      return super.addContext(key, value);
+      return super.withContext(key, value);
     }
   }
 
@@ -778,7 +778,7 @@ describe('handlePush', () => {
         requestID,
       };
 
-      const lc = new TestLogContext('info', new SilentLogSink());
+      const lc = new TestLogContext('info', undefined, new SilentLogSink());
       const pendingMutationsPrePush = [...c.pendingMutations];
       const clientMapPrePush = new Map(c.clientMap);
       const clientRecordsPrePush = new Map(c.clientRecords);

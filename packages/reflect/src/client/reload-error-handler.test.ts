@@ -19,9 +19,9 @@ test('reloadWithReason', () => {
   });
 
   const sink = new TestLogSink();
-  reportReloadReason(new LogContext('debug', sink), storage);
+  reportReloadReason(new LogContext('debug', {foo: 'bar'}, sink), storage);
   expect(sink.messages).deep.equal([
-    ['error', 'Reflect reloaded the page.', 'myreason'],
+    ['error', {foo: 'bar'}, ['Reflect reloaded the page.', 'myreason']],
   ]);
   expect(storage).deep.equal({unrelated: 'foo'});
 });

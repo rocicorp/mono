@@ -45,7 +45,7 @@ export class BufferSizer {
       return;
     }
 
-    lc = lc.addContext('BufferSizer');
+    lc = lc.withContext('BufferSizer');
     this._bufferNeededMsHistory.push(bufferNeededMs);
     this._missableCountSinceLastBufferAdjust++;
     if (missed) {
