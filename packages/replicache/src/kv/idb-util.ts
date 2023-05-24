@@ -1,10 +1,7 @@
-export function wrap<T>(req: IDBRequest<T>): Promise<T> {
+export function dropStore(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
+    const req = indexedDB.deleteDatabase(name);
+    req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error);
   });
-}
-
-export async function dropStore(name: string): Promise<void> {
-  await wrap(indexedDB.deleteDatabase(name));
 }

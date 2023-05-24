@@ -1,18 +1,12 @@
-import {deleteSentinel, WriteImplBase} from './write-impl-base.js';
-import type {Read, Store, Write} from './store.js';
 import {resolver} from '@rocicorp/resolver';
 import {assertNotNull} from 'shared/asserts.js';
-import {wrap} from './idb-util.js';
-import {FrozenJSONValue, deepFreeze} from '../json.js';
+import {deepFreeze, FrozenJSONValue} from '../json.js';
+import {promiseVoid} from '../resolved-promises.js';
+import type {Read, Store, Write} from './store.js';
+import {deleteSentinel, WriteImplBase} from './write-impl-base.js';
 
-const RELAXED = {durability: 'relaxed'};
+const RELAXED = {durability: 'relaxed'} as const;
 const OBJECT_STORE = 'chunks';
-
-const enum WriteState {
-  OPEN,
-  COMMITTED,
-  ABORTED,
-}
 
 export class IDBStore implements Store {
   private _db: Promise<IDBDatabase>;
@@ -107,13 +101,20 @@ class ReadImpl implements Read {
     this._tx = tx;
   }
 
-  async has(key: string): Promise<boolean> {
-    return (await wrap(objectStore(this._tx).count(key))) > 0;
+  has(key: string): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      const req = objectStore(this._tx).count(key);
+      req.onsuccess = () => resolve(req.result > 0);
+      req.onerror = () => reject(req.error);
+    });
   }
 
-  async get(key: string): Promise<FrozenJSONValue | undefined> {
-    const v = await wrap(objectStore(this._tx).get(key));
-    return deepFreeze(v);
+  get(key: string): Promise<FrozenJSONValue | undefined> {
+    return new Promise((resolve, reject) => {
+      const req = objectStore(this._tx).get(key);
+      req.onsuccess = () => resolve(deepFreeze(req.result));
+      req.onerror = () => reject(req.error);
+    });
   }
 
   release(): void {
@@ -128,46 +129,31 @@ class ReadImpl implements Read {
 
 class WriteImpl extends WriteImplBase {
   private readonly _tx: IDBTransaction;
-  private readonly _onTxEnd: Promise<void>;
-  private _txState = WriteState.OPEN;
   private _closed = false;
 
   constructor(tx: IDBTransaction) {
     super(new ReadImpl(tx));
     this._tx = tx;
-    this._onTxEnd = this._addTransactionListeners();
   }
 
-  private async _addTransactionListeners(): Promise<void> {
-    const tx = this._tx;
-    const p: Promise<WriteState> = new Promise((resolve, reject) => {
-      tx.onabort = () => resolve(WriteState.ABORTED);
-      tx.oncomplete = () => resolve(WriteState.COMMITTED);
+  commit(): Promise<void> {
+    if (this._pending.size === 0) {
+      return promiseVoid;
+    }
+
+    return new Promise((resolve, reject) => {
+      const tx = this._tx;
+      const store = objectStore(tx);
+      for (const [key, val] of this._pending) {
+        if (val === deleteSentinel) {
+          store.delete(key);
+        } else {
+          store.put(val, key);
+        }
+      }
+      tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
-
-    // When the transaction completes/aborts, set the state.
-    this._txState = await p;
-  }
-
-  async commit(): Promise<void> {
-    if (this._pending.size === 0) {
-      return;
-    }
-
-    const store = objectStore(this._tx);
-    for (const [key, val] of this._pending) {
-      if (val === deleteSentinel) {
-        store.delete(key);
-      } else {
-        store.put(val, key);
-      }
-    }
-    await this._onTxEnd;
-
-    if (this._txState === WriteState.ABORTED) {
-      throw new Error('Transaction aborted');
-    }
   }
 
   release(): void {
@@ -180,15 +166,12 @@ class WriteImpl extends WriteImplBase {
   }
 }
 
-function writeImpl(db: IDBDatabase) {
-  // TS does not have type defs for the third options argument yet.
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore Expected 1-2 arguments, but got 3.ts(2554)
+function writeImpl(db: IDBDatabase): Write {
   const tx = db.transaction(OBJECT_STORE, 'readwrite', RELAXED);
   return new WriteImpl(tx);
 }
 
-function readImpl(db: IDBDatabase) {
+function readImpl(db: IDBDatabase): Read {
   const tx = db.transaction(OBJECT_STORE, 'readonly');
   return new ReadImpl(tx);
 }
@@ -197,15 +180,20 @@ function objectStore(tx: IDBTransaction): IDBObjectStore {
   return tx.objectStore(OBJECT_STORE);
 }
 
-async function openDatabase(name: string): Promise<IDBDatabase> {
-  const req = indexedDB.open(name);
-  req.onupgradeneeded = () => {
-    req.result.createObjectStore(OBJECT_STORE);
-  };
-  const db = await wrap(req);
-  // Another tab/process wants to modify the db, so release it.
-  db.onversionchange = () => db.close();
-  return db;
+function openDatabase(name: string): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(name);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(OBJECT_STORE);
+    };
+    req.onsuccess = () => {
+      const db = req.result;
+      // Another tab/process wants to modify the db, so release it.
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
+    req.onerror = () => reject(req.error);
+  });
 }
 
 /**
