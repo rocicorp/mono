@@ -103,8 +103,7 @@ class ReadImpl implements Read {
 
   has(key: string): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      const tx = this._tx;
-      const req = objectStore(tx).count(key);
+      const req = objectStore(this._tx).count(key);
       req.onsuccess = () => resolve(req.result > 0);
       req.onerror = () => reject(req.error);
     });
