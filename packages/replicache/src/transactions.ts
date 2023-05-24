@@ -107,8 +107,8 @@ export class ReadTransactionImpl implements ReadTransaction {
     this.clientID = clientID;
     this.dbtx = dbRead;
     this._lc = lc
-      .addContext(rpcName)
-      .addContext('txid', transactionIDCounter++);
+      .withContext(rpcName)
+      .withContext('txid', transactionIDCounter++);
     this.environment = 'client';
   }
 

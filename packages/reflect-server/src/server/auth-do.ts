@@ -143,9 +143,11 @@ export class BaseAuthDO implements DurableObject {
     );
     this._authHandler = authHandler;
     this._authApiKey = authApiKey;
-    const lc = new LogContext(logLevel, logSink).addContext('AuthDO');
+    const lc = new LogContext(logLevel, undefined, logSink).withContext(
+      'AuthDO',
+    );
     registerUnhandledRejectionHandler(lc);
-    this._lc = lc.addContext('doID', state.id.toString());
+    this._lc = lc.withContext('doID', state.id.toString());
 
     this._initRoutes();
     this._lc.info?.('Starting server');
@@ -413,7 +415,7 @@ export class BaseAuthDO implements DurableObject {
     }
     assert(jurisdiction === undefined || jurisdiction === 'eu');
 
-    lc = lc.addContext('client', clientID).addContext('room', roomID);
+    lc = lc.withContext('client', clientID).withContext('room', roomID);
     let decodedAuth: string | undefined;
     if (encodedAuth) {
       try {
@@ -1080,7 +1082,7 @@ async function ensureStorageSchemaMigrated(
   logSink: LogSink,
 ) {
   try {
-    lc = lc.addContext('schemaUpdateID', randomID());
+    lc = lc.withContext('schemaUpdateID', randomID());
     lc.info?.('Ensuring storage schema is up to date.');
     let storageSchemaMeta: StorageSchemaMeta = (await storage.get(
       STORAGE_SCHEMA_META_KEY,

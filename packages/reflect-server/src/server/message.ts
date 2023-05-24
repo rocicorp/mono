@@ -40,7 +40,7 @@ export async function handleMessage(
     return;
   }
 
-  lc = lc.addContext('msgType', message[0]);
+  lc = lc.withContext('msgType', message[0]);
   switch (message[0]) {
     case 'ping':
       handlePing(lc, ws);

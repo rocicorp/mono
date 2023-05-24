@@ -1,5 +1,5 @@
 import {Lock} from '@rocicorp/lock';
-import type {LogLevel, LogSink} from '@rocicorp/logger';
+import type {LogLevel, LogSink, Context} from '@rocicorp/logger';
 
 export interface DatadogLogSinkOptions {
   apiKey: string;
@@ -31,8 +31,8 @@ export class DatadogLogSink implements LogSink {
     this._interval = interval;
   }
 
-  log(level: LogLevel, ...args: unknown[]): void {
-    this._messages.push(makeMessage(args, level));
+  log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
+    this._messages.push(makeMessage(args, context, level));
     if (level === 'error') {
       // Do not await. Later calls to flush will await as needed.
       void this.flush();
@@ -108,7 +108,7 @@ export class DatadogLogSink implements LogSink {
   }
 }
 
-type Message = {
+type Message = Context & {
   status: LogLevel;
   date: number;
   message: unknown;
@@ -152,8 +152,13 @@ function convertErrors(message: unknown): unknown {
   return message;
 }
 
-function makeMessage(message: unknown, logLevel: LogLevel): Message {
+function makeMessage(
+  message: unknown,
+  context: Context | undefined,
+  logLevel: LogLevel,
+): Message {
   const msg: Message = {
+    ...context,
     date: Date.now(),
     message: convertErrors(flattenMessage(message)),
     status: logLevel,

@@ -1,4 +1,4 @@
-import type {LogLevel, LogSink} from '@rocicorp/logger';
+import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {
   ConnectedMessage,
@@ -194,10 +194,10 @@ teardown(async () => {
 });
 
 export class TestLogSink implements LogSink {
-  messages: [LogLevel, ...unknown[]][] = [];
+  messages: [LogLevel, Context | undefined, unknown[]][] = [];
 
-  log(level: LogLevel, ...args: unknown[]): void {
-    this.messages.push([level, ...args]);
+  log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
+    this.messages.push([level, context, args]);
   }
 }
 

@@ -22,7 +22,7 @@ async function runBgIntervalProcess(
   if (signal.aborted) {
     return;
   }
-  lc = lc.addContext('bgIntervalProcess', processName);
+  lc = lc.withContext('bgIntervalProcess', processName);
   lc.debug?.('Starting');
   while (!signal.aborted) {
     try {

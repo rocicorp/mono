@@ -345,9 +345,9 @@ test('ClientStateNotFound on server', async () => {
   assert.isTrue(rep.isClientGroupDisabled);
 
   assert.equal(testLogSink.messages.length, 1);
-  assert(testLogSink.messages[0][2] instanceof Error);
+  assert(testLogSink.messages[0][2][0] instanceof Error);
   assert.match(
-    testLogSink.messages[0][2].message,
+    testLogSink.messages[0][2][0].message,
     /Client group \S+ is unknown on server/,
   );
 });

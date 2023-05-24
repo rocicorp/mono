@@ -452,7 +452,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     const logSink =
       logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
-    this._lc = new LogContext(logLevel, logSink).addContext('name', name);
+    this._lc = new LogContext(logLevel, {name}, logSink);
     this._lc.debug?.('Constructing Replicache', {
       name,
       'replicache version': version,
@@ -505,7 +505,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       new PullDelegate(
         this,
         () => this._invokePull(),
-        this._lc.addContext('PULL'),
+        this._lc.withContext('PULL'),
       ),
     );
 
@@ -513,7 +513,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       new PushDelegate(
         this,
         () => this._invokePush(),
-        this._lc.addContext('PUSH'),
+        this._lc.withContext('PUSH'),
       ),
     );
 
@@ -909,8 +909,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
       await this._ready;
       const clientID = await this._clientIDPromise;
       const lc = this._lc
-        .addContext('maybeEndPull')
-        .addContext('requestID', requestID);
+        .withContext('maybeEndPull')
+        .withContext('requestID', requestID);
       const {replayMutations, diffs} = await sync.maybeEndPull<db.LocalMeta>(
         this._memdag,
         lc,
@@ -1042,10 +1042,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const clientID = await this.clientID;
     let reauthAttempts = 0;
     let lastResult;
-    lc = lc.addContext(verb);
+    lc = lc.withContext(verb);
     do {
       const requestID = sync.newRequestID(clientID);
-      const requestLc = lc.addContext('requestID', requestID);
+      const requestLc = lc.withContext('requestID', requestID);
       const {httpRequestInfo, result} = await f(requestID, requestLc);
       lastResult = result;
       if (!httpRequestInfo) {
@@ -1213,8 +1213,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const clientID = await this._clientIDPromise;
     const requestID = sync.newRequestID(clientID);
     const lc = this._lc
-      .addContext('handlePullResponse')
-      .addContext('requestID', requestID);
+      .withContext('handlePullResponse')
+      .withContext('requestID', requestID);
 
     const {pullResponse} = poke;
 

@@ -50,7 +50,7 @@ export async function handlePush(
   now: Now,
   processUntilDone: ProcessUntilDone,
 ) {
-  lc = lc.addContext('requestID', body.requestID);
+  lc = lc.withContext('requestID', body.requestID);
   lc.debug?.('handling push', JSON.stringify(body));
 
   const client = must(clients.get(clientID));
