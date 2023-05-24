@@ -576,6 +576,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         this._perdag,
         Object.keys(this._mutatorRegistry),
         indexes,
+        REPLICACHE_FORMAT_VERSION,
       );
 
     resolveClientGroupID(client.clientGroupID);
@@ -917,6 +918,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         syncHead,
         clientID,
         this._subscriptions,
+        REPLICACHE_FORMAT_VERSION,
       );
 
       if (!replayMutations || replayMutations.length === 0) {
@@ -1517,7 +1519,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const clientID = await this._clientIDPromise;
     return withRead(this._memdag, async dagRead => {
       try {
-        const dbRead = await db.readFromDefaultHead(dagRead);
+        const dbRead = await db.readFromDefaultHead(
+          dagRead,
+          REPLICACHE_FORMAT_VERSION,
+        );
         const tx = new ReadTransactionImpl(clientID, dbRead, this._lc);
         return await body(tx);
       } catch (ex) {

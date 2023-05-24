@@ -1,36 +1,33 @@
 import {compareUTF8} from 'compare-utf8';
 import {
-  assertDeepFrozen,
-  assertFrozenJSONValue,
-  FrozenJSONValue,
-  FrozenTag,
-  JSONValue,
-  ReadonlyJSONValue,
-  deepFreeze,
-} from '../json.js';
-import {
   assert,
   assertArray,
   assertNumber,
   assertString,
 } from 'shared/asserts.js';
+import {binarySearch as binarySearchWithFunc} from '../binary-search.js';
+import {skipBTreeNodeAsserts} from '../config.js';
+import {
+  REPLICACHE_FORMAT_VERSION,
+  REPLICACHE_FORMAT_VERSION_V7,
+  ReplicacheFormatVersion,
+} from '../format-version.js';
 import {Hash, emptyHash, newUUIDHash} from '../hash.js';
+import {joinIterables} from '../iterables.js';
+import {
+  FrozenJSONValue,
+  FrozenTag,
+  JSONValue,
+  ReadonlyJSONValue,
+  assertDeepFrozen,
+  assertJSONValue,
+  deepFreeze,
+} from '../json.js';
+import type {IndexKey} from '../mod.js';
 import type {BTreeRead} from './read.js';
 import type {BTreeWrite} from './write.js';
-import {skipBTreeNodeAsserts} from '../config.js';
-import {binarySearch as binarySearchWithFunc} from '../binary-search.js';
-import type {IndexKey} from '../mod.js';
-import {joinIterables} from '../iterables.js';
 
-export type Entry<V> = readonly [key: string, value: V];
-
-type EntryWithSize<V> = readonly [key: string, value: V, size: number];
-
-export type EntryWithOptionalSize<V> = readonly [
-  key: string,
-  value: V,
-  size?: number,
-];
+export type Entry<V> = readonly [key: string, value: V, sizeOfEntry: number];
 
 export const NODE_LEVEL = 0;
 export const NODE_ENTRIES = 1;
@@ -48,10 +45,13 @@ export type DataNode = BaseNode<FrozenJSONValue>;
 export function makeNodeChunkData<V>(
   level: number,
   entries: ReadonlyArray<Entry<V>>,
+  replicacheFormatVersion: ReplicacheFormatVersion,
 ): BaseNode<V> {
   return deepFreeze([
     level,
-    entries as readonly ReadonlyJSONValue[],
+    (replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_V7
+      ? entries
+      : entries.map(e => e.slice(0, 2))) as readonly ReadonlyJSONValue[],
   ]) as BaseNode<V>;
 }
 
@@ -150,7 +150,7 @@ export async function findLeaf(
   return findLeaf(key, entry[1], source, expectedRootHash);
 }
 
-type BinarySearchEntries = readonly EntryWithOptionalSize<unknown>[];
+type BinarySearchEntries = readonly Entry<unknown>[];
 
 /**
  * Does a binary search over entries
@@ -177,46 +177,69 @@ export function binarySearchFound(
   return i !== entries.length && entries[i][0] === key;
 }
 
-/**
- * Asserts `v` is a valid B+Tree node. This includes checking that the node is
- * deep frozen as well.
- */
-export function internalizeBTreeNode(
+export function parseBTreeNode(
   v: unknown,
-): asserts v is InternalNode | DataNode {
-  assertBTreeNodeShape(v);
-}
-
-function assertBTreeNodeShape(
-  v: unknown,
-): asserts v is InternalNode | DataNode {
-  if (skipBTreeNodeAsserts) {
-    return;
+  replicacheFormatVersion: ReplicacheFormatVersion,
+  getSizeOfEntry: <K, V>(key: K, value: V) => number,
+): InternalNode | DataNode {
+  if (
+    skipBTreeNodeAsserts &&
+    replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_V7
+  ) {
+    return v as InternalNode | DataNode;
   }
+
+  // For non v7 we convert
+
   assertArray(v);
   assertDeepFrozen(v);
 
-  function assertEntry(
-    v: unknown,
-    f:
-      | ((v: unknown) => asserts v is Hash)
-      | ((v: unknown) => asserts v is JSONValue),
-  ): asserts v is Entry<Hash | JSONValue> {
-    assertArray(v);
-    assertDeepFrozen(v);
-    assertString(v[0]);
-    f(v[1]);
-  }
-
-  assert(v.length >= 2);
+  assert(v.length === 2);
   const [level, entries] = v;
-
   assertNumber(level);
   assertArray(entries);
 
-  for (const e of entries) {
-    assertEntry(e, level > 0 ? assertString : assertFrozenJSONValue);
+  const f = level > 0 ? assertString : assertJSONValue;
+
+  if (replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_V7) {
+    for (const e of entries) {
+      assertEntry(e, f);
+    }
+    return v as unknown as InternalNode | DataNode;
   }
+
+  const newEntries = entries.map(e => parseEntry(e, f, getSizeOfEntry));
+
+  return [level, newEntries] as unknown as InternalNode | DataNode;
+}
+
+function assertEntry(
+  entry: unknown,
+  f:
+    | ((v: unknown) => asserts v is Hash)
+    | ((v: unknown) => asserts v is JSONValue),
+): asserts entry is Entry<Hash | JSONValue> {
+  assertArray(entry);
+  assert(entry.length === 3);
+  assertString(entry[0]);
+  f(entry[1]);
+  assertNumber(entry[2]);
+}
+
+function parseEntry(
+  entry: unknown,
+  f:
+    | ((v: unknown) => asserts v is Hash)
+    | ((v: unknown) => asserts v is JSONValue),
+  getSizeOfEntry: <K, V>(key: K, value: V) => number,
+): Entry<Hash | JSONValue> {
+  assertArray(entry);
+  // TODO(arv): XXX
+  assert(entry.length >= 2);
+  assertString(entry[0]);
+  f(entry[1]);
+  const entrySize = getSizeOfEntry(entry[0], entry[1]);
+  return [entry[0], entry[1], entrySize] as Entry<Hash | JSONValue>;
 }
 
 export function isInternalNode(node: Node): node is InternalNode {
@@ -224,18 +247,14 @@ export function isInternalNode(node: Node): node is InternalNode {
 }
 
 abstract class NodeImpl<Value> {
-  entries: Array<EntryWithOptionalSize<Value>>;
+  entries: Array<Entry<Value>>;
   hash: Hash;
   abstract readonly level: number;
   readonly isMutable: boolean;
 
   private _childNodeSize = -1;
 
-  constructor(
-    entries: Array<EntryWithOptionalSize<Value>>,
-    hash: Hash,
-    isMutable: boolean,
-  ) {
+  constructor(entries: Array<Entry<Value>>, hash: Hash, isMutable: boolean) {
     this.entries = entries;
     this.hash = hash;
     this.isMutable = isMutable;
@@ -244,7 +263,7 @@ abstract class NodeImpl<Value> {
   abstract set(
     key: string,
     value: FrozenJSONValue,
-    size: number,
+    entrySize: number,
     tree: BTreeWrite,
   ): Promise<NodeImpl<Value>>;
 
@@ -257,13 +276,6 @@ abstract class NodeImpl<Value> {
     return this.entries[this.entries.length - 1][0];
   }
 
-  toChunkData(): BaseNode<Value> {
-    return makeNodeChunkData(
-      this.level,
-      this.entries.map(e => [e[0], e[1]]),
-    );
-  }
-
   getChildNodeSize(tree: BTreeRead): number {
     if (this._childNodeSize !== -1) {
       return this._childNodeSize;
@@ -271,7 +283,6 @@ abstract class NodeImpl<Value> {
 
     let sum = tree.chunkHeaderSize;
     for (const entry of this.entries) {
-      assertNumber(entry[2]);
       sum += entry[2];
     }
     return (this._childNodeSize = sum);
@@ -283,6 +294,13 @@ abstract class NodeImpl<Value> {
       this as NodeImpl<unknown> as DataNodeImpl | InternalNodeImpl,
     );
   }
+}
+
+export function toChunkData<V>(
+  node: NodeImpl<V>,
+  replicacheFormatVersion: ReplicacheFormatVersion,
+): BaseNode<V> {
+  return makeNodeChunkData(node.level, node.entries, replicacheFormatVersion);
 }
 
 export class DataNodeImpl extends NodeImpl<FrozenJSONValue> {
@@ -312,7 +330,7 @@ export class DataNodeImpl extends NodeImpl<FrozenJSONValue> {
     tree: BTreeWrite,
     start: number,
     deleteCount: number,
-    ...items: EntryWithSize<FrozenJSONValue>[]
+    ...items: Entry<FrozenJSONValue>[]
   ): DataNodeImpl {
     if (this.isMutable) {
       this.entries.splice(start, deleteCount, ...items);
@@ -343,7 +361,7 @@ export class DataNodeImpl extends NodeImpl<FrozenJSONValue> {
 
   async *entriesIter(
     _tree: BTreeRead,
-  ): AsyncGenerator<EntryWithOptionalSize<FrozenJSONValue>, void> {
+  ): AsyncGenerator<Entry<FrozenJSONValue>, void> {
     for (const entry of this.entries) {
       yield entry;
     }
@@ -370,7 +388,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
   readonly level: number;
 
   constructor(
-    entries: Array<EntryWithOptionalSize<Hash>>,
+    entries: Array<Entry<Hash>>,
     hash: Hash,
     level: number,
     isMutable: boolean,
@@ -420,7 +438,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
     const level = this.level - 1;
     const thisEntries = this.entries;
 
-    type IterableHashEntries = Iterable<EntryWithSize<Hash>>;
+    type IterableHashEntries = Iterable<Entry<Hash>>;
 
     let values: IterableHashEntries;
     let startIndex: number;
@@ -451,18 +469,14 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
 
     const partitions = partition(
       values,
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      value => {
-        assertNumber(value[2]);
-        return value[2];
-      },
+      value => value[2],
       tree.minSize - tree.chunkHeaderSize,
       tree.maxSize - tree.chunkHeaderSize,
     );
 
     // TODO: There are cases where we can reuse the old nodes. Creating new ones
     // means more memory churn but also more writes to the underlying KV store.
-    const newEntries: EntryWithOptionalSize<Hash>[] = [];
+    const newEntries: Entry<Hash>[] = [];
     for (const entries of partitions) {
       const node = tree.newNodeImpl(entries, level);
       const newHashEntry = createNewInternalEntryForNode(
@@ -491,7 +505,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
   private _replaceChild(
     tree: BTreeWrite,
     index: number,
-    newEntry: EntryWithSize<Hash>,
+    newEntry: Entry<Hash>,
   ): InternalNodeImpl {
     if (this.isMutable) {
       this.entries.splice(index, 1, newEntry);
@@ -554,7 +568,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
 
   async *entriesIter(
     tree: BTreeRead,
-  ): AsyncGenerator<EntryWithOptionalSize<FrozenJSONValue>, void> {
+  ): AsyncGenerator<Entry<FrozenJSONValue>, void> {
     for (const entry of this.entries) {
       const childNode = await tree.getNode(entry[1]);
       yield* childNode.entriesIter(tree);
@@ -587,7 +601,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
     const output = await this.getChildren(start, start + length, tree);
 
     if (level > 1) {
-      const entries: EntryWithOptionalSize<Hash>[] = [];
+      const entries: Entry<Hash>[] = [];
       for (const child of output as InternalNodeImpl[]) {
         entries.push(...child.entries);
       }
@@ -595,7 +609,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
     }
 
     assert(level === 1);
-    const entries: EntryWithOptionalSize<FrozenJSONValue>[] = [];
+    const entries: Entry<FrozenJSONValue>[] = [];
     for (const child of output as DataNodeImpl[]) {
       entries.push(...child.entries);
     }
@@ -604,46 +618,37 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
 }
 
 export function newNodeImpl(
-  entries: Array<EntryWithOptionalSize<FrozenJSONValue>>,
+  entries: Array<Entry<FrozenJSONValue>>,
   hash: Hash,
   level: number,
   isMutable: boolean,
 ): DataNodeImpl;
 export function newNodeImpl(
-  entries: Array<EntryWithOptionalSize<Hash>>,
+  entries: Array<Entry<Hash>>,
   hash: Hash,
   level: number,
   isMutable: boolean,
 ): InternalNodeImpl;
 export function newNodeImpl(
-  entries:
-    | Array<EntryWithOptionalSize<FrozenJSONValue>>
-    | Array<EntryWithOptionalSize<Hash>>,
+  entries: Array<Entry<FrozenJSONValue>> | Array<Entry<Hash>>,
   hash: Hash,
   level: number,
   isMutable: boolean,
 ): DataNodeImpl | InternalNodeImpl;
 export function newNodeImpl(
-  entries:
-    | Array<EntryWithOptionalSize<FrozenJSONValue>>
-    | Array<EntryWithOptionalSize<Hash>>,
+  entries: Array<Entry<FrozenJSONValue>> | Array<Entry<Hash>>,
   hash: Hash,
   level: number,
   isMutable: boolean,
 ): DataNodeImpl | InternalNodeImpl {
   if (level === 0) {
     return new DataNodeImpl(
-      entries as EntryWithOptionalSize<FrozenJSONValue>[],
+      entries as Entry<FrozenJSONValue>[],
       hash,
       isMutable,
     );
   }
-  return new InternalNodeImpl(
-    entries as EntryWithOptionalSize<Hash>[],
-    hash,
-    level,
-    isMutable,
-  );
+  return new InternalNodeImpl(entries as Entry<Hash>[], hash, level, isMutable);
 }
 
 export function isDataNodeImpl(
@@ -654,7 +659,8 @@ export function isDataNodeImpl(
 
 export function partition<T>(
   values: Iterable<T>,
-  getSize: (v: T) => number,
+  // This is the size of each Entry
+  getSizeOfEntry: (v: T) => number,
   min: number,
   max: number,
 ): T[][] {
@@ -663,7 +669,7 @@ export function partition<T>(
   let sum = 0;
   let accum: T[] = [];
   for (const value of values) {
-    const size = getSize(value);
+    const size = getSizeOfEntry(value);
     if (size >= max) {
       if (accum.length > 0) {
         partitions.push(accum);
@@ -696,18 +702,19 @@ export function partition<T>(
   return partitions;
 }
 
-export const emptyDataNode = makeNodeChunkData<ReadonlyJSONValue>(0, []);
+export const emptyDataNode = makeNodeChunkData<ReadonlyJSONValue>(
+  0,
+  [],
+  REPLICACHE_FORMAT_VERSION,
+);
 export const emptyDataNodeImpl = new DataNodeImpl([], emptyHash, false);
 
 export function createNewInternalEntryForNode(
   node: NodeImpl<unknown>,
-  getSizeOfValue: <T>(v: T) => number,
+  getSizeOfEntry: <K, V>(k: K, v: V) => number,
 ): [string, Hash, number] {
-  const e: [key: string, value: Hash, size?: number] = [
-    node.maxKey(),
-    node.hash,
-  ];
-  const size = getSizeOfValue(e);
-  e[2] = size;
-  return e as [string, Hash, number];
+  const key = node.maxKey();
+  const value = node.hash;
+  const size = getSizeOfEntry(key, value);
+  return [key, value, size];
 }

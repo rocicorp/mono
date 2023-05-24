@@ -108,6 +108,7 @@ export async function initClientWithClientID(
       dagStore,
       mutatorNames,
       indexes,
+      replicacheFormatVersion,
     );
   } else {
     [generatedClientID, client, clientMap] = await initClientV4(dagStore);

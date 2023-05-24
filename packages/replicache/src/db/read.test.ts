@@ -37,7 +37,11 @@ suite('basics', () => {
     await w.commit(DEFAULT_HEAD_NAME);
 
     const dr = await ds.read();
-    const r = await fromWhence(whenceHead(DEFAULT_HEAD_NAME), dr);
+    const r = await fromWhence(
+      whenceHead(DEFAULT_HEAD_NAME),
+      dr,
+      replicacheFormatVersion,
+    );
     const val = await r.get('foo');
     expect(val).to.deep.equal('bar');
   };
