@@ -67,12 +67,12 @@ function makeFakePusher(options: FakePusherArgs): Pusher {
 }
 
 test('try push [SDD]', async () => {
-  const replicacheFormatVersion = FormatVersion.SDD;
+  const formatVersion = FormatVersion.SDD;
   const clientGroupID = undefined;
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
   const lc = new LogContext();
-  const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
+  const b = new ChainBuilder(store, undefined, formatVersion);
   await b.addGenesis(clientID);
   await b.addSnapshot([['foo', 'bar']], clientID);
   // chain[2] is an index change
@@ -223,7 +223,7 @@ test('try push [SDD]', async () => {
         const read = await fromWhence(
           whenceHead(DEFAULT_HEAD_NAME),
           dagRead,
-          replicacheFormatVersion,
+          formatVersion,
         );
         let got = false;
 
@@ -275,7 +275,7 @@ test('try push [SDD]', async () => {
 });
 
 test('try push [DD31]', async () => {
-  const replicacheFormatVersion = FormatVersion.Latest;
+  const formatVersion = FormatVersion.Latest;
   const clientGroupID = 'test_client_group_id';
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
@@ -473,7 +473,7 @@ test('try push [DD31]', async () => {
         const read = await fromWhence(
           whenceHead(DEFAULT_HEAD_NAME),
           dagRead,
-          replicacheFormatVersion,
+          formatVersion,
         );
         let got = false;
 

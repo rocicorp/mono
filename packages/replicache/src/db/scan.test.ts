@@ -8,12 +8,12 @@ import {decodeIndexKey} from './index.js';
 import type {ScanItem} from './scan.js';
 
 test('scan', async () => {
-  const replicacheFormatVersion = FormatVersion.Latest;
+  const formatVersion = FormatVersion.Latest;
   const t = async (fromKey: string, expected: string[]) => {
     const dagStore = new dag.TestStore();
 
     await withWrite(dagStore, async dagWrite => {
-      const map = new BTreeWrite(dagWrite, replicacheFormatVersion);
+      const map = new BTreeWrite(dagWrite, formatVersion);
       await map.put('foo', 'foo');
       await map.put('bar', 'bar');
       await map.put('baz', 'baz');
@@ -40,9 +40,9 @@ test('scan', async () => {
 async function makeBTreeWrite(
   dagWrite: dag.Write,
   entries: Iterable<[string, string]>,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<BTreeWrite> {
-  const map = new BTreeWrite(dagWrite, replicacheFormatVersion);
+  const map = new BTreeWrite(dagWrite, formatVersion);
   for (const [k, v] of entries) {
     await map.put(k, v);
   }
@@ -50,7 +50,7 @@ async function makeBTreeWrite(
 }
 
 test('scan index startKey', async () => {
-  const replicacheFormatVersion = FormatVersion.Latest;
+  const formatVersion = FormatVersion.Latest;
   const t = async (
     entries: Iterable<[string, string]>,
     {
@@ -65,11 +65,7 @@ test('scan index startKey', async () => {
     const dagStore = new dag.TestStore();
 
     await withWrite(dagStore, async dagWrite => {
-      const map = await makeBTreeWrite(
-        dagWrite,
-        entries,
-        replicacheFormatVersion,
-      );
+      const map = await makeBTreeWrite(dagWrite, entries, formatVersion);
       await map.flush();
 
       const fromKey = fromKeyForIndexScanInternal({

@@ -21,13 +21,13 @@ import {uuid} from './uuid.js';
 export async function createPerdag(args: {
   replicacheName: string;
   schemaVersion: string;
-  replicacheFormatVersion: FormatVersion;
+  formatVersion: FormatVersion;
 }): Promise<dag.Store> {
-  const {replicacheName, schemaVersion, replicacheFormatVersion} = args;
+  const {replicacheName, schemaVersion, formatVersion: formatVersion} = args;
   const idbName = makeIDBNameForTesting(
     replicacheName,
     schemaVersion,
-    replicacheFormatVersion,
+    formatVersion,
   );
   const idb = new kv.IDBStore(idbName);
   closeablesToClose.add(idb);
@@ -40,7 +40,7 @@ export async function createPerdag(args: {
       name: idbName,
       replicacheName,
       schemaVersion,
-      replicacheFormatVersion,
+      replicacheFormatVersion: formatVersion,
     });
   } finally {
     await idbDatabases.close();
@@ -54,24 +54,18 @@ export async function createAndPersistClientWithPendingLocalSDD(
   perdag: dag.Store,
   numLocal: number,
 ): Promise<db.LocalMetaSDD[]> {
-  const replicacheFormatVersion = FormatVersion.SDD;
+  const formatVersion = FormatVersion.SDD;
   const testMemdag = new dag.LazyStore(
     perdag,
     100 * 2 ** 20,
     dag.uuidChunkHasher,
     assertHash,
   );
-  const b = new ChainBuilder(testMemdag, undefined, replicacheFormatVersion);
+  const b = new ChainBuilder(testMemdag, undefined, formatVersion);
   await b.addGenesis(clientID);
   await b.addSnapshot([['unique', uuid()]], clientID);
 
-  await initClientWithClientID(
-    clientID,
-    perdag,
-    [],
-    {},
-    replicacheFormatVersion,
-  );
+  await initClientWithClientID(clientID, perdag, [], {}, formatVersion);
 
   const localMetas: db.LocalMetaSDD[] = [];
   for (let i = 0; i < numLocal; i++) {
@@ -89,7 +83,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
   numLocal,
   mutatorNames,
   cookie,
-  replicacheFormatVersion,
+  formatVersion,
   snapshotLastMutationIDs,
 }: {
   clientID: ClientID;
@@ -97,10 +91,10 @@ export async function createAndPersistClientWithPendingLocalDD31({
   numLocal: number;
   mutatorNames: string[];
   cookie: string | number;
-  replicacheFormatVersion: FormatVersion;
+  formatVersion: FormatVersion;
   snapshotLastMutationIDs?: Record<ClientID, number> | undefined;
 }): Promise<db.LocalMetaDD31[]> {
-  assert(replicacheFormatVersion >= FormatVersion.DD31);
+  assert(formatVersion >= FormatVersion.DD31);
   const testMemdag = new dag.LazyStore(
     perdag,
     100 * 2 ** 20, // 100 MB,
@@ -108,7 +102,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
     assertHash,
   );
 
-  const b = new ChainBuilder(testMemdag, undefined, replicacheFormatVersion);
+  const b = new ChainBuilder(testMemdag, undefined, formatVersion);
 
   await b.addGenesis(clientID);
   await b.addSnapshot(
@@ -123,7 +117,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
     perdag,
     mutatorNames,
     {},
-    replicacheFormatVersion,
+    formatVersion,
   );
 
   const localMetas: db.LocalMetaDD31[] = [];
@@ -145,7 +139,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
     perdag,
     mutators,
     () => false,
-    replicacheFormatVersion,
+    formatVersion,
   );
 
   return localMetas;
@@ -157,7 +151,7 @@ export async function persistSnapshotDD31(
   cookie: string | number,
   mutatorNames: string[],
   snapshotLastMutationIDs: Record<ClientID, number>,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<void> {
   const testMemdag = new dag.LazyStore(
     perdag,
@@ -187,7 +181,7 @@ export async function persistSnapshotDD31(
     perdag,
     mutators,
     () => false,
-    replicacheFormatVersion,
+    formatVersion,
   );
 }
 

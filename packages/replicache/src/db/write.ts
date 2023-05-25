@@ -53,7 +53,7 @@ export class Write extends Read {
     meta: CommitMeta,
     indexes: Map<string, IndexWrite>,
     clientID: ClientID,
-    replicacheFormatVersion: FormatVersion,
+    formatVersion: FormatVersion,
   ) {
     // TypeScript has trouble
     super(dagWrite, map, indexes);
@@ -61,7 +61,7 @@ export class Write extends Read {
     this._basis = basis;
     this._meta = meta;
     this._clientID = clientID;
-    this._formatVersion = replicacheFormatVersion;
+    this._formatVersion = formatVersion;
 
     // TODO(arv): if (DEBUG) { ...
     if (basis === undefined) {
@@ -332,21 +332,21 @@ export async function newWriteLocal(
   dagWrite: dag.Write,
   timestamp: number,
   clientID: ClientID,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Write> {
   const [basisHash, basis, bTreeWrite] = await readCommitForBTreeWrite(
     whence,
     dagWrite,
-    replicacheFormatVersion,
+    formatVersion,
   );
 
   const mutationID = await basis.getNextMutationID(clientID, dagWrite);
-  const indexes = readIndexesForWrite(basis, dagWrite, replicacheFormatVersion);
+  const indexes = readIndexesForWrite(basis, dagWrite, formatVersion);
   return new Write(
     dagWrite,
     bTreeWrite,
     basis,
-    replicacheFormatVersion >= FormatVersion.DD31
+    formatVersion >= FormatVersion.DD31
       ? {
           type: MetaType.LocalDD31,
           basisHash,
@@ -369,7 +369,7 @@ export async function newWriteLocal(
         },
     indexes,
     clientID,
-    replicacheFormatVersion,
+    formatVersion,
   );
 }
 
@@ -380,13 +380,13 @@ export async function newWriteSnapshotSDD(
   dagWrite: dag.Write,
   indexes: Map<string, IndexWrite>,
   clientID: ClientID,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Write> {
-  assert(replicacheFormatVersion <= FormatVersion.SDD);
+  assert(formatVersion <= FormatVersion.SDD);
   const [, basis, bTreeWrite] = await readCommitForBTreeWrite(
     whence,
     dagWrite,
-    replicacheFormatVersion,
+    formatVersion,
   );
   const basisHash = basis.chunk.hash;
   return new Write(
@@ -396,7 +396,7 @@ export async function newWriteSnapshotSDD(
     {basisHash, type: MetaType.SnapshotSDD, lastMutationID, cookieJSON},
     indexes,
     clientID,
-    replicacheFormatVersion,
+    formatVersion,
   );
 }
 
@@ -406,21 +406,21 @@ export async function newWriteSnapshotDD31(
   cookieJSON: FrozenCookie,
   dagWrite: dag.Write,
   clientID: ClientID,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Write> {
   const [basisHash, basis, bTreeWrite] = await readCommitForBTreeWrite(
     whence,
     dagWrite,
-    replicacheFormatVersion,
+    formatVersion,
   );
   return new Write(
     dagWrite,
     bTreeWrite,
     basis,
     {basisHash, type: MetaType.SnapshotDD31, lastMutationIDs, cookieJSON},
-    readIndexesForWrite(basis, dagWrite, replicacheFormatVersion),
+    readIndexesForWrite(basis, dagWrite, formatVersion),
     clientID,
-    replicacheFormatVersion,
+    formatVersion,
   );
 }
 
@@ -470,7 +470,7 @@ export async function updateIndexes(
 export function readIndexesForWrite(
   commit: Commit<CommitMeta>,
   dagWrite: dag.Write,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Map<string, IndexWrite> {
   const m = new Map();
   for (const index of commit.indexes) {
@@ -478,7 +478,7 @@ export function readIndexesForWrite(
       index.definition.name,
       new IndexWrite(
         index,
-        new BTreeWrite(dagWrite, replicacheFormatVersion, index.valueHash),
+        new BTreeWrite(dagWrite, formatVersion, index.valueHash),
       ),
     );
   }
@@ -492,9 +492,9 @@ export async function createIndexBTree(
   prefix: string,
   jsonPointer: string,
   allowEmpty: boolean,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<BTreeWrite> {
-  const indexMap = new BTreeWrite(dagWrite, replicacheFormatVersion);
+  const indexMap = new BTreeWrite(dagWrite, formatVersion);
   for await (const entry of valueMap.scan(prefix)) {
     const key = entry[0];
     if (!key.startsWith(prefix)) {

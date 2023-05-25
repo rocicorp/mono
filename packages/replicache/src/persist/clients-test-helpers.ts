@@ -96,16 +96,16 @@ export async function initClientWithClientID(
   dagStore: dag.Store,
   mutatorNames: string[],
   indexes: IndexDefinitions,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<void> {
   let generatedClientID, client, clientMap;
-  if (replicacheFormatVersion >= FormatVersion.DD31) {
+  if (formatVersion >= FormatVersion.DD31) {
     [generatedClientID, client, , clientMap] = await initClientV6(
       new LogContext(),
       dagStore,
       mutatorNames,
       indexes,
-      replicacheFormatVersion,
+      formatVersion,
     );
   } else {
     [generatedClientID, client, clientMap] = await initClientV4(dagStore);

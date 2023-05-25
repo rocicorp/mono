@@ -192,7 +192,7 @@ test('json pointer', () => {
 });
 
 test('index value', async () => {
-  const replicacheFormatVersion = FormatVersion.Latest;
+  const formatVersion = FormatVersion.Latest;
   const t = async (
     key: string,
     value: JSONValue,
@@ -202,7 +202,7 @@ test('index value', async () => {
   ) => {
     const dagStore = new dag.TestStore();
     await withWrite(dagStore, async dagWrite => {
-      const index = new BTreeWrite(dagWrite, replicacheFormatVersion);
+      const index = new BTreeWrite(dagWrite, formatVersion);
       await index.put(encodeIndexKey(['s1', '1']), 'v1');
       await index.put(encodeIndexKey(['s2', '2']), 'v2');
 

@@ -47,20 +47,14 @@ export class BTreeWrite extends BTreeRead {
 
   constructor(
     dagWrite: dag.Write,
-    replicacheFormatVersion: FormatVersion,
+    formatVersion: FormatVersion,
     root: Hash = emptyHash,
     minSize = 8 * 1024,
     maxSize = 16 * 1024,
     getEntrySize: <K, V>(k: K, v: V) => number = getSizeOfEntry,
     chunkHeaderSize?: number,
   ) {
-    super(
-      dagWrite,
-      replicacheFormatVersion,
-      root,
-      getEntrySize,
-      chunkHeaderSize,
-    );
+    super(dagWrite, formatVersion, root, getEntrySize, chunkHeaderSize);
 
     this.minSize = minSize;
     this.maxSize = maxSize;
@@ -213,7 +207,7 @@ function gatherNewChunks(
   newChunks: dag.Chunk[],
   createChunk: CreateChunk,
   modified: Map<Hash, DataNodeImpl | InternalNodeImpl>,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Hash {
   const node = modified.get(hash);
   if (node === undefined) {
@@ -222,7 +216,7 @@ function gatherNewChunks(
   }
 
   if (isDataNodeImpl(node)) {
-    const chunk = createChunk(toChunkData(node, replicacheFormatVersion), []);
+    const chunk = createChunk(toChunkData(node, formatVersion), []);
     newChunks.push(chunk);
     return chunk.hash;
   }
@@ -237,7 +231,7 @@ function gatherNewChunks(
       newChunks,
       createChunk,
       modified,
-      replicacheFormatVersion,
+      formatVersion,
     );
     if (newChildHash !== childHash) {
       // MUTATES the entries!
@@ -246,7 +240,7 @@ function gatherNewChunks(
     }
     refs.push(newChildHash);
   }
-  const chunk = createChunk(toChunkData(node, replicacheFormatVersion), refs);
+  const chunk = createChunk(toChunkData(node, formatVersion), refs);
   newChunks.push(chunk);
   return chunk.hash;
 }

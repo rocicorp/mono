@@ -61,7 +61,7 @@ import {
 import {SYNC_HEAD_NAME} from './sync-head-name.js';
 
 test('begin try pull SDD', async () => {
-  const replicacheFormatVersion = FormatVersion.SDD;
+  const formatVersion = FormatVersion.SDD;
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
   const b = new ChainBuilder(store, undefined, FormatVersion.SDD);
@@ -423,7 +423,7 @@ test('begin try pull SDD', async () => {
         const read = await db.fromWhence(
           db.whenceHead(DEFAULT_HEAD_NAME),
           dagRead,
-          replicacheFormatVersion,
+          formatVersion,
         );
         let got = false;
 
@@ -464,7 +464,7 @@ test('begin try pull SDD', async () => {
         fakePuller,
         requestID,
         store,
-        replicacheFormatVersion,
+        formatVersion,
         new LogContext(),
         c.createSyncBranch,
       );
@@ -492,7 +492,7 @@ test('begin try pull SDD', async () => {
         const [, , bTreeRead] = await db.readCommitForBTreeRead(
           db.whenceHash(syncHead.chunk.hash),
           read,
-          replicacheFormatVersion,
+          formatVersion,
         );
         const gotValueMap = await asyncIterableToArray(bTreeRead.entries());
         gotValueMap.sort((a, b) => stringCompare(a[0], b[0]));
@@ -520,7 +520,7 @@ test('begin try pull SDD', async () => {
             const read = await db.fromWhence(
               db.whenceHead(SYNC_HEAD_NAME),
               dagRead,
-              replicacheFormatVersion,
+              formatVersion,
             );
             const indexMap = read.getMapForIndex('2');
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -564,7 +564,7 @@ test('begin try pull SDD', async () => {
 });
 
 test('begin try pull DD31', async () => {
-  const replicacheFormatVersion = FormatVersion.Latest;
+  const formatVersion = FormatVersion.Latest;
   const clientID = 'test_client_id';
   const clientGroupID = 'test_client_group_id';
   const baseCookie = 'cookie_1';
@@ -972,7 +972,7 @@ test('begin try pull DD31', async () => {
         const read = await db.fromWhence(
           db.whenceHead(DEFAULT_HEAD_NAME),
           dagRead,
-          replicacheFormatVersion,
+          formatVersion,
         );
         let got = false;
 
@@ -1015,7 +1015,7 @@ test('begin try pull DD31', async () => {
         fakePuller,
         requestID,
         store,
-        replicacheFormatVersion,
+        formatVersion,
         new LogContext(),
         c.createSyncBranch,
       );
@@ -1043,7 +1043,7 @@ test('begin try pull DD31', async () => {
         const [, , bTreeRead] = await db.readCommitForBTreeRead(
           db.whenceHash(syncHead.chunk.hash),
           read,
-          replicacheFormatVersion,
+          formatVersion,
         );
         const gotValueMap = (
           await asyncIterableToArray(bTreeRead.entries())
@@ -1067,7 +1067,7 @@ test('begin try pull DD31', async () => {
             const read = await db.fromWhence(
               db.whenceHead(SYNC_HEAD_NAME),
               dagRead,
-              replicacheFormatVersion,
+              formatVersion,
             );
             const indexMap = read.getMapForIndex('2');
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1111,7 +1111,7 @@ test('begin try pull DD31', async () => {
 });
 
 suite('maybe end try pull', () => {
-  const t = async (replicacheFormatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     type Case = {
       name: string;
@@ -1188,27 +1188,23 @@ suite('maybe end try pull', () => {
 
         // Add snapshot and replayed commits to the sync chain.
         const w =
-          replicacheFormatVersion >= FormatVersion.DD31
+          formatVersion >= FormatVersion.DD31
             ? await db.newWriteSnapshotDD31(
                 db.whenceHash(b.chain[0].chunk.hash),
                 {[clientID]: 0},
                 'sync_cookie',
                 dagWrite,
                 clientID,
-                replicacheFormatVersion,
+                formatVersion,
               )
             : await db.newWriteSnapshotSDD(
                 db.whenceHash(b.chain[0].chunk.hash),
                 0,
                 'sync_cookie',
                 dagWrite,
-                db.readIndexesForWrite(
-                  b.chain[0],
-                  dagWrite,
-                  replicacheFormatVersion,
-                ),
+                db.readIndexesForWrite(b.chain[0], dagWrite, formatVersion),
                 clientID,
-                replicacheFormatVersion,
+                formatVersion,
               );
         await w.put(lc, `key/${i}`, `${i}`);
         return w.commit(SYNC_HEAD_NAME);
@@ -1239,7 +1235,7 @@ suite('maybe end try pull', () => {
             dagWrite,
             original.meta.timestamp,
             clientID,
-            replicacheFormatVersion,
+            formatVersion,
           );
           return w.commit(SYNC_HEAD_NAME);
         });
@@ -1254,7 +1250,7 @@ suite('maybe end try pull', () => {
           syncHead,
           clientID,
           testSubscriptionsManagerOptions,
-          replicacheFormatVersion,
+          formatVersion,
         );
       } catch (e) {
         result = (e as Error).message;
@@ -1372,7 +1368,7 @@ function makeFakePuller(options: FakePullerArgs): Puller {
 }
 
 suite('changed keys', () => {
-  const t = async (replicacheFormatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     type IndexDef = {
       name: string;
       prefix: string;
@@ -1388,7 +1384,7 @@ suite('changed keys', () => {
       const clientGroupID = 'test_client_group__id';
       const store = new dag.TestStore();
       const lc = new LogContext();
-      const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
+      const b = new ChainBuilder(store, undefined, formatVersion);
 
       if (indexDef) {
         const {name, prefix, jsonPointer} = indexDef;
@@ -1400,7 +1396,7 @@ suite('changed keys', () => {
           },
         };
 
-        if (replicacheFormatVersion >= FormatVersion.DD31) {
+        if (formatVersion >= FormatVersion.DD31) {
           await b.addGenesis(clientID, indexDefinitions);
           await b.addSnapshot([], clientID, undefined, undefined);
         } else {
@@ -1428,7 +1424,7 @@ suite('changed keys', () => {
       const newCookie = 'new_cookie';
 
       const expPullReq: PullRequestV0 | PullRequestV1 =
-        replicacheFormatVersion >= FormatVersion.DD31
+        formatVersion >= FormatVersion.DD31
           ? {
               profileID,
               clientGroupID,
@@ -1446,7 +1442,7 @@ suite('changed keys', () => {
             };
 
       const pullResp: PullResponseV1 | PullResponseV0 =
-        replicacheFormatVersion >= FormatVersion.DD31
+        formatVersion >= FormatVersion.DD31
           ? {
               cookie: newCookie,
               lastMutationIDChanges: {[clientID]: baseLastMutationID},
@@ -1466,7 +1462,7 @@ suite('changed keys', () => {
       });
 
       const pullResult =
-        replicacheFormatVersion >= FormatVersion.DD31
+        formatVersion >= FormatVersion.DD31
           ? await beginPullV1(
               profileID,
               clientID,
@@ -1475,7 +1471,7 @@ suite('changed keys', () => {
               puller,
               requestID,
               store,
-              replicacheFormatVersion,
+              formatVersion,
               new LogContext(),
             )
           : await beginPullV0(
@@ -1485,7 +1481,7 @@ suite('changed keys', () => {
               puller,
               requestID,
               store,
-              replicacheFormatVersion,
+              formatVersion,
               new LogContext(),
             );
 
@@ -1495,7 +1491,7 @@ suite('changed keys', () => {
         pullResult.syncHead,
         clientID,
         testSubscriptionsManagerOptions,
-        replicacheFormatVersion,
+        formatVersion,
       );
       expect(Object.fromEntries(result.diffs)).to.deep.equal(
         Object.fromEntries(expectedDiffsMap),
@@ -1717,7 +1713,7 @@ suite('changed keys', () => {
 });
 
 test('pull for client group with multiple client local changes', async () => {
-  const replicacheFormatVersion = FormatVersion.Latest;
+  const formatVersion = FormatVersion.Latest;
   const profileID = 'test-profile-id';
   const requestID = 'test-request-id';
   const clientID1 = 'test-client-id-1';
@@ -1768,7 +1764,7 @@ test('pull for client group with multiple client local changes', async () => {
     puller,
     requestID,
     store,
-    replicacheFormatVersion,
+    formatVersion,
     lc,
   );
 
@@ -1783,7 +1779,7 @@ test('pull for client group with multiple client local changes', async () => {
 });
 
 suite('beginPull DD31', () => {
-  const replicacheFormatVersion = FormatVersion.Latest;
+  const formatVersion = FormatVersion.Latest;
   const profileID = 'test-profile-id';
   const clientID1 = 'test-client-id-1';
   const clientGroupID1 = 'test-client-group-id-1';
@@ -1819,7 +1815,7 @@ suite('beginPull DD31', () => {
       puller,
       requestID,
       store,
-      replicacheFormatVersion,
+      formatVersion,
       lc,
     );
 
@@ -1834,7 +1830,7 @@ suite('beginPull DD31', () => {
 });
 
 suite('handlePullResponseDD31', () => {
-  const replicacheFormatVersion = FormatVersion.Latest;
+  const formatVersion = FormatVersion.Latest;
   const clientID1 = 'test-client-id-1';
   const clientID2 = 'test-client-id-2';
 
@@ -1881,7 +1877,7 @@ suite('handlePullResponseDD31', () => {
       expectedBaseCookie,
       response,
       clientID1,
-      replicacheFormatVersion,
+      formatVersion,
     );
 
     expect(result.type).to.equal(expectedResultType);
@@ -1896,11 +1892,7 @@ suite('handlePullResponseDD31', () => {
         );
 
         if (expectedMap) {
-          const map = new BTreeRead(
-            dagRead,
-            replicacheFormatVersion,
-            head.valueHash,
-          );
+          const map = new BTreeRead(dagRead, formatVersion, head.valueHash);
           expect(
             Object.fromEntries(await asyncIterableToArray(map.entries())),
           ).deep.equal(expectedMap);
@@ -1910,7 +1902,7 @@ suite('handlePullResponseDD31', () => {
           expect(head.indexes[0].definition.name).to.equal(expectedIndex[0]);
           const map = new BTreeRead(
             dagRead,
-            replicacheFormatVersion,
+            formatVersion,
             head.indexes[0].valueHash,
           );
           expect(

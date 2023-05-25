@@ -10,7 +10,7 @@ import {withWrite} from '../with-transactions.js';
 import {apply} from './patch.js';
 
 suite('patch', () => {
-  const t = async (replicacheFormatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new dag.TestStore();
     const lc = new LogContext();
@@ -159,18 +159,18 @@ suite('patch', () => {
     ];
 
     for (const c of cases) {
-      const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
+      const b = new ChainBuilder(store, undefined, formatVersion);
       await b.addGenesis(clientID);
       await withWrite(store, async dagWrite => {
         let dbWrite;
-        if (replicacheFormatVersion >= FormatVersion.DD31) {
+        if (formatVersion >= FormatVersion.DD31) {
           dbWrite = await db.newWriteSnapshotDD31(
             db.whenceHash(b.chain[0].chunk.hash),
             {[clientID]: 1},
             'cookie',
             dagWrite,
             clientID,
-            replicacheFormatVersion,
+            formatVersion,
           );
         } else {
           dbWrite = await db.newWriteSnapshotSDD(
@@ -178,13 +178,9 @@ suite('patch', () => {
             1,
             'cookie',
             dagWrite,
-            db.readIndexesForWrite(
-              b.chain[0],
-              dagWrite,
-              replicacheFormatVersion,
-            ),
+            db.readIndexesForWrite(b.chain[0], dagWrite, formatVersion),
             clientID,
-            replicacheFormatVersion,
+            formatVersion,
           );
         }
         await dbWrite.put(lc, 'key', 'value');

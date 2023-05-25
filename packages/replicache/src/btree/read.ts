@@ -47,13 +47,13 @@ export class BTreeRead implements AsyncIterable<Entry<FrozenJSONValue>> {
 
   constructor(
     dagRead: dag.Read,
-    replicacheFormatVersion: FormatVersion,
+    formatVersion: FormatVersion,
     root: Hash = emptyHash,
     getEntrySize: <K, V>(k: K, v: V) => number = getSizeOfEntry,
     chunkHeaderSize = NODE_HEADER_SIZE,
   ) {
     this._dagRead = dagRead;
-    this._formatVersion = replicacheFormatVersion;
+    this._formatVersion = formatVersion;
     this.rootHash = root;
     this.getEntrySize = getEntrySize;
     this.chunkHeaderSize = chunkHeaderSize;

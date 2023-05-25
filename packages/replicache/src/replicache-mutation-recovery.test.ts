@@ -62,7 +62,7 @@ suite('SDD', () => {
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersionOfClientWPendingMutations,
-      replicacheFormatVersion: FormatVersion.SDD,
+      formatVersion: FormatVersion.SDD,
     });
 
     const client1PendingLocalMetas =
@@ -174,7 +174,7 @@ suite('SDD', () => {
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersionOfClientWPendingMutations,
-      replicacheFormatVersion: FormatVersion.SDD,
+      formatVersion: FormatVersion.SDD,
     });
 
     const client1PendingLocalMetas =
@@ -250,7 +250,7 @@ suite('SDD', () => {
     const testPerdag = await createPerdag({
       replicacheName: replicacheNameOfClientWPendingMutations,
       schemaVersion,
-      replicacheFormatVersion: FormatVersion.SDD,
+      formatVersion: FormatVersion.SDD,
     });
 
     await createAndPersistClientWithPendingLocalSDD(
@@ -307,7 +307,7 @@ suite('SDD', () => {
     const testPerdagForClients1Thru3 = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersionOfClients1Thru3AndClientRecoveringMutations,
-      replicacheFormatVersion: FormatVersion.SDD,
+      formatVersion: FormatVersion.SDD,
     });
 
     const client1PendingLocalMetas =
@@ -333,7 +333,7 @@ suite('SDD', () => {
     const testPerdagForClient4 = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersionOfClient4,
-      replicacheFormatVersion: FormatVersion.SDD,
+      formatVersion: FormatVersion.SDD,
     });
     const client4PendingLocalMetas =
       await createAndPersistClientWithPendingLocalSDD(
@@ -519,7 +519,7 @@ suite('SDD', () => {
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
       schemaVersion,
-      replicacheFormatVersion: FormatVersion.SDD,
+      formatVersion: FormatVersion.SDD,
     });
 
     const client1PendingLocalMetas =
@@ -687,7 +687,7 @@ suite('SDD', () => {
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
       schemaVersion,
-      replicacheFormatVersion: FormatVersion.SDD,
+      formatVersion: FormatVersion.SDD,
     });
 
     const client1PendingLocalMetas =
@@ -841,7 +841,7 @@ suite('SDD', () => {
     const testPerdagForClient1 = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersionOfClient1,
-      replicacheFormatVersion: FormatVersion.SDD,
+      formatVersion: FormatVersion.SDD,
     });
     await createAndPersistClientWithPendingLocalSDD(
       client1ID,
@@ -852,7 +852,7 @@ suite('SDD', () => {
     const testPerdagForClient2 = await createPerdag({
       replicacheName: rep.name,
       schemaVersion: schemaVersionOfClient2,
-      replicacheFormatVersion: FormatVersion.SDD,
+      formatVersion: FormatVersion.SDD,
     });
     const client2PendingLocalMetas =
       await createAndPersistClientWithPendingLocalSDD(
@@ -975,7 +975,7 @@ suite('SDD', () => {
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
       schemaVersion,
-      replicacheFormatVersion: FormatVersion.SDD,
+      formatVersion: FormatVersion.SDD,
     });
 
     const client1PendingLocalMetas =

@@ -43,7 +43,7 @@ export async function persistDD31(
   perdag: dag.Store,
   mutators: MutatorDefs,
   closed: () => boolean,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
   onGatherMemOnlyChunksForTest = () => Promise.resolve(),
 ): Promise<void> {
   if (closed()) {
@@ -188,7 +188,7 @@ export async function persistDD31(
           mutators,
           mutationIDs,
           lc,
-          replicacheFormatVersion,
+          formatVersion,
         );
       }
     }
@@ -200,7 +200,7 @@ export async function persistDD31(
       mutators,
       mutationIDs,
       lc,
-      replicacheFormatVersion,
+      formatVersion,
     );
 
     const newMainClientGroup = {
@@ -241,7 +241,7 @@ async function rebase(
   mutators: MutatorDefs,
   mutationIDs: Record<ClientID, number>,
   lc: LogContext,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Hash> {
   for (let i = mutations.length - 1; i >= 0; i--) {
     const mutationCommit = mutations[i];
@@ -260,7 +260,7 @@ async function rebase(
           mutators,
           lc,
           meta.clientID,
-          replicacheFormatVersion,
+          formatVersion,
         )
       ).chunk.hash;
     }

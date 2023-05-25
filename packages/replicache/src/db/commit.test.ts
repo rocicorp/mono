@@ -28,10 +28,10 @@ import {
 import {ChainBuilder} from './test-helpers.js';
 
 suite('base snapshot', () => {
-  const t = async (replicacheFormatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new dag.TestStore();
-    const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
+    const b = new ChainBuilder(store, undefined, formatVersion);
     await b.addGenesis(clientID);
     let genesisHash = b.chain[0].chunk.hash;
     await withRead(store, async dagRead => {
@@ -41,7 +41,7 @@ suite('base snapshot', () => {
     });
 
     await b.addLocal(clientID);
-    if (!replicacheFormatVersion) {
+    if (!formatVersion) {
       await b.addIndexChange(clientID);
     }
     await b.addLocal(clientID);
@@ -90,10 +90,10 @@ suite('base snapshot', () => {
 });
 
 suite('local mutations', () => {
-  const t = async (replicacheFormatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new dag.TestStore();
-    const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
+    const b = new ChainBuilder(store, undefined, formatVersion);
     await b.addGenesis(clientID);
     const genesisHash = b.chain[0].chunk.hash;
     await withRead(store, async dagRead => {
@@ -101,21 +101,18 @@ suite('local mutations', () => {
     });
 
     await b.addLocal(clientID);
-    if (!replicacheFormatVersion) {
+    if (!formatVersion) {
       await b.addIndexChange(clientID);
     }
     await b.addLocal(clientID);
-    if (!replicacheFormatVersion) {
+    if (!formatVersion) {
       await b.addIndexChange(clientID);
     }
     const headHash = b.chain[b.chain.length - 1].chunk.hash;
     const commits = await withRead(store, dagRead =>
       localMutations(headHash, dagRead),
     );
-    expect(commits).to.deep.equal([
-      b.chain[replicacheFormatVersion ? 2 : 3],
-      b.chain[1],
-    ]);
+    expect(commits).to.deep.equal([b.chain[formatVersion ? 2 : 3], b.chain[1]]);
   };
 
   test('DD31', () => t(FormatVersion.Latest));
@@ -198,10 +195,10 @@ test('local mutations greater than', async () => {
 });
 
 suite('chain', () => {
-  const t = async (replicacheFormatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new dag.TestStore();
-    const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
+    const b = new ChainBuilder(store, undefined, formatVersion);
     await b.addGenesis(clientID);
 
     let got: Commit<Meta>[] = await withRead(store, dagRead =>
@@ -213,7 +210,7 @@ suite('chain', () => {
 
     await b.addSnapshot(undefined, clientID);
     await b.addLocal(clientID);
-    if (!replicacheFormatVersion) {
+    if (!formatVersion) {
       await b.addIndexChange(clientID);
     } else {
       await b.addLocal(clientID);

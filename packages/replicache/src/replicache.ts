@@ -103,9 +103,9 @@ export function makeIDBName(name: string, schemaVersion?: string): string {
 function makeIDBNameInternal(
   name: string,
   schemaVersion: string | undefined,
-  replicacheFormatVersion: number,
+  formatVersion: number,
 ): string {
-  const n = `rep:${name}:${replicacheFormatVersion}`;
+  const n = `rep:${name}:${formatVersion}`;
   return schemaVersion ? `${n}:${schemaVersion}` : n;
 }
 

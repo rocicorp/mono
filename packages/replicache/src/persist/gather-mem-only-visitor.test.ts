@@ -10,7 +10,7 @@ import {withRead, withWrite} from '../with-transactions.js';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
 
 suite('dag with no memory-only hashes gathers nothing', () => {
-  const t = async (replicacheFormatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const hashFunction = makeNewFakeHashFunction();
     const perdag = new dag.TestStore(undefined, hashFunction);
@@ -21,10 +21,10 @@ suite('dag with no memory-only hashes gathers nothing', () => {
       assertHash,
     );
 
-    const pb = new ChainBuilder(perdag, undefined, replicacheFormatVersion);
+    const pb = new ChainBuilder(perdag, undefined, formatVersion);
     await pb.addGenesis(clientID);
     await pb.addLocal(clientID);
-    if (replicacheFormatVersion <= FormatVersion.SDD) {
+    if (formatVersion <= FormatVersion.SDD) {
       await pb.addIndexChange(clientID);
     }
     await pb.addLocal(clientID);
@@ -51,7 +51,7 @@ suite('dag with no memory-only hashes gathers nothing', () => {
 });
 
 suite('dag with only memory-only hashes gathers everything', () => {
-  const t = async (replicacheFormatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const hashFunction = makeNewFakeHashFunction();
     const perdag = new dag.TestStore(undefined, hashFunction);
@@ -62,7 +62,7 @@ suite('dag with only memory-only hashes gathers everything', () => {
       assertHash,
     );
 
-    const mb = new ChainBuilder(memdag, undefined, replicacheFormatVersion);
+    const mb = new ChainBuilder(memdag, undefined, formatVersion);
 
     const testGatheredChunks = async () => {
       await withRead(memdag, async dagRead => {
@@ -80,7 +80,7 @@ suite('dag with only memory-only hashes gathers everything', () => {
 
     await mb.addLocal(clientID);
     await testGatheredChunks();
-    if (replicacheFormatVersion <= FormatVersion.SDD) {
+    if (formatVersion <= FormatVersion.SDD) {
       await mb.addIndexChange(clientID);
     }
 
@@ -95,7 +95,7 @@ suite('dag with only memory-only hashes gathers everything', () => {
 suite(
   'dag with some persisted hashes and some memory-only hashes on top',
   () => {
-    const t = async (replicacheFormatVersion: FormatVersion) => {
+    const t = async (formatVersion: FormatVersion) => {
       const clientID = 'client-id';
       const hashFunction = makeNewFakeHashFunction();
       const perdag = new dag.TestStore(undefined, hashFunction);
@@ -106,8 +106,8 @@ suite(
         assertHash,
       );
 
-      const pb = new ChainBuilder(perdag, undefined, replicacheFormatVersion);
-      const mb = new ChainBuilder(memdag, undefined, replicacheFormatVersion);
+      const pb = new ChainBuilder(perdag, undefined, formatVersion);
+      const mb = new ChainBuilder(memdag, undefined, formatVersion);
 
       await pb.addGenesis(clientID);
       await pb.addLocal(clientID);
@@ -131,7 +131,7 @@ suite(
           timestamp: 42,
         };
         const meta =
-          replicacheFormatVersion >= FormatVersion.DD31
+          formatVersion >= FormatVersion.DD31
             ? {
                 type: MetaType.LocalDD31,
                 ...metaBase,
@@ -145,7 +145,7 @@ suite(
             data: [
               0,
               [
-                replicacheFormatVersion >= FormatVersion.V7
+                formatVersion >= FormatVersion.V7
                   ? ['local', '2', 27]
                   : ['local', '2'],
               ],
@@ -177,7 +177,7 @@ suite(
 suite(
   'dag with some permanent hashes and some memory-only hashes on top w index',
   () => {
-    const t = async (replicacheFormatVersion: FormatVersion) => {
+    const t = async (formatVersion: FormatVersion) => {
       const clientID = 'client-id';
       const hashFunction = makeNewFakeHashFunction();
       const perdag = new dag.TestStore(undefined, hashFunction);
@@ -188,8 +188,8 @@ suite(
         assertHash,
       );
 
-      const mb = new ChainBuilder(memdag, undefined, replicacheFormatVersion);
-      const pb = new ChainBuilder(perdag, undefined, replicacheFormatVersion);
+      const mb = new ChainBuilder(memdag, undefined, formatVersion);
+      const pb = new ChainBuilder(perdag, undefined, formatVersion);
 
       await pb.addGenesis(clientID, {
         testIndex: {prefix: '', jsonPointer: '/name', allowEmpty: true},
@@ -210,7 +210,7 @@ suite(
       });
 
       mb.chain = pb.chain.slice();
-      if (replicacheFormatVersion <= FormatVersion.SDD) {
+      if (formatVersion <= FormatVersion.SDD) {
         await mb.addIndexChange(clientID, 'testIndex', {
           prefix: '',
           jsonPointer: '/name',
@@ -223,7 +223,7 @@ suite(
         const visitor = new GatherMemoryOnlyVisitor(dagRead);
         await visitor.visit(mb.headHash);
         expect(Object.fromEntries(visitor.gatheredChunks)).to.deep.equal(
-          replicacheFormatVersion >= FormatVersion.DD31
+          formatVersion >= FormatVersion.DD31
             ? {
                 ['face0000000040008000000000000000' + '' + '000000000008']: {
                   hash:

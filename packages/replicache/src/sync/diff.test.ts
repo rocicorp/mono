@@ -26,9 +26,9 @@ test('db diff dd31', async () => {
     indexDefinitions?: IndexDefinitions;
     setupChain?: (b: ChainBuilder) => Promise<void>;
   }) => {
-    const replicacheFormatVersion = FormatVersion.Latest;
+    const formatVersion = FormatVersion.Latest;
     const store = new dag.TestStore();
-    const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
+    const b = new ChainBuilder(store, undefined, formatVersion);
     await b.addGenesis(clientID, indexDefinitions);
     await b.addLocal(clientID, [['a', 'a2']]);
     await b.addLocal(clientID, [['b', 'b1']]);
@@ -40,7 +40,7 @@ test('db diff dd31', async () => {
         b.chain[iNew].chunk.hash,
         read,
         testSubscriptionsManagerOptions,
-        replicacheFormatVersion,
+        formatVersion,
       );
       expect(Object.fromEntries(diffsMap)).to.deep.equal(expectedDiff);
     });
@@ -206,7 +206,7 @@ test('db diff dd31', async () => {
 
 test('db diff sdd', async () => {
   const clientID = 'client-id-1';
-  const replicacheFormatVersion = FormatVersion.SDD;
+  const formatVersion = FormatVersion.SDD;
 
   const t = async ({
     iOld,
@@ -220,7 +220,7 @@ test('db diff sdd', async () => {
     setupChain?: (b: ChainBuilder) => Promise<void>;
   }) => {
     const store = new dag.TestStore();
-    const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
+    const b = new ChainBuilder(store, undefined, formatVersion);
     await b.addGenesis(clientID);
     await b.addLocal(clientID, [['a', 'a2']]);
     await b.addLocal(clientID, [['b', 'b1']]);
@@ -231,7 +231,7 @@ test('db diff sdd', async () => {
         b.chain[iNew].chunk.hash,
         read,
         testSubscriptionsManagerOptions,
-        replicacheFormatVersion,
+        formatVersion,
       );
       expect(Object.fromEntries(diffsMap)).to.deep.equal(expectedDiff);
     });

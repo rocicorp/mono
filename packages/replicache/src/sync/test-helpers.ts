@@ -21,7 +21,7 @@ export async function addSyncSnapshot(
   store: dag.Store,
   takeIndexesFrom: number,
   clientID: ClientID,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Chain> {
   expect(chain.length >= 2).to.be.true;
 
@@ -42,21 +42,21 @@ export async function addSyncSnapshot(
   // Add sync snapshot.
   const cookie = `sync_cookie_${chain.length}`;
   await withWrite(store, async dagWrite => {
-    if (replicacheFormatVersion >= FormatVersion.DD31) {
+    if (formatVersion >= FormatVersion.DD31) {
       const w = await db.newWriteSnapshotDD31(
         db.whenceHash(baseSnapshot.chunk.hash),
         {[clientID]: await baseSnapshot.getMutationID(clientID, dagWrite)},
         cookie,
         dagWrite,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       await w.commit(sync.SYNC_HEAD_NAME);
     } else {
       const indexes = db.readIndexesForWrite(
         chain[takeIndexesFrom],
         dagWrite,
-        replicacheFormatVersion,
+        formatVersion,
       );
       const w = await db.newWriteSnapshotSDD(
         db.whenceHash(baseSnapshot.chunk.hash),
@@ -65,7 +65,7 @@ export async function addSyncSnapshot(
         dagWrite,
         indexes,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       await w.commit(sync.SYNC_HEAD_NAME);
     }

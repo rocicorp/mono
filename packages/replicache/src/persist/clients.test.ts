@@ -335,7 +335,7 @@ test('updateClients throws errors if chunk pointed to by clients head does not c
 });
 
 test('initClient creates new empty snapshot when no existing snapshot to bootstrap from', async () => {
-  const replicacheFormatVersion = FormatVersion.Latest;
+  const formatVersion = FormatVersion.Latest;
   const dagStore = new dag.TestStore();
   clock.tick(4000);
   const [clientID, client, headHash, clients] = await initClientV6(
@@ -343,7 +343,7 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
     dagStore,
     [],
     {},
-    replicacheFormatVersion,
+    formatVersion,
   );
 
   expect(clients).to.deep.equal(
@@ -376,11 +376,7 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
     expect(await commit.getMutationID(clientID, dagRead)).to.equal(0);
     expect(commit.indexes).to.be.empty;
     expect(
-      await new BTreeRead(
-        dagRead,
-        replicacheFormatVersion,
-        commit.valueHash,
-      ).isEmpty(),
+      await new BTreeRead(dagRead, formatVersion, commit.valueHash).isEmpty(),
     ).to.be.true;
   });
 });
@@ -678,7 +674,7 @@ suite('initClientV6', () => {
   });
 
   test('new client for empty db', async () => {
-    const replicacheFormatVersion = FormatVersion.Latest;
+    const formatVersion = FormatVersion.Latest;
     const lc = new LogContext();
     const perdag = new dag.TestStore();
     const mutatorNames: string[] = [];
@@ -689,7 +685,7 @@ suite('initClientV6', () => {
       perdag,
       mutatorNames,
       indexes,
-      replicacheFormatVersion,
+      formatVersion,
     );
     expect(clientID).to.be.a('string');
     assertClientV6(client);
@@ -699,7 +695,7 @@ suite('initClientV6', () => {
   });
 
   test('reuse head', async () => {
-    const replicacheFormatVersion = FormatVersion.Latest;
+    const formatVersion = FormatVersion.Latest;
     const lc = new LogContext();
 
     const perdag = new dag.TestStore();
@@ -740,7 +736,7 @@ suite('initClientV6', () => {
       perdag,
       mutatorNames,
       indexes,
-      replicacheFormatVersion,
+      formatVersion,
     );
     expect(clientID2).to.not.equal(clientID1);
     expect(clientMap.size).to.equal(2);
@@ -767,7 +763,7 @@ suite('initClientV6', () => {
   });
 
   test('fork snapshot due to incompatible defs', async () => {
-    const replicacheFormatVersion = FormatVersion.Latest;
+    const formatVersion = FormatVersion.Latest;
     const lc = new LogContext();
 
     const perdag = new dag.TestStore();
@@ -810,7 +806,7 @@ suite('initClientV6', () => {
       perdag,
       newMutatorNames,
       newIndexes,
-      replicacheFormatVersion,
+      formatVersion,
     );
     expect(clientID2).to.not.equal(clientID1);
     assertClientV6(client2);
@@ -840,7 +836,7 @@ suite('initClientV6', () => {
   });
 
   test('fork snapshot due to incompatible index names - reuse index maps', async () => {
-    const replicacheFormatVersion = FormatVersion.Latest;
+    const formatVersion = FormatVersion.Latest;
     const lc = new LogContext();
 
     const perdag = new dag.TestStore();
@@ -899,7 +895,7 @@ suite('initClientV6', () => {
       perdag,
       newMutatorNames,
       newIndexes,
-      replicacheFormatVersion,
+      formatVersion,
     );
     expect(clientID2).to.not.equal(clientID1);
     assertClientV6(client2);

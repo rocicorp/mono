@@ -6,7 +6,10 @@ import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from './error-responses.js';
-import {FormatVersion, parseReplicacheFormatVersion} from './format-version.js';
+import {
+  FormatVersion,
+  parseReplicacheFormatVersion as parseFormatVersion,
+} from './format-version.js';
 import {assertHash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {CreateStore} from './kv/store.js';
@@ -165,7 +168,7 @@ async function recoverMutationsOfClientV4(
   perdag: dag.Store,
   database: persist.IndexedDBDatabase,
   options: MutationRecoveryOptions,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<persist.ClientMap | undefined> {
   assert(database.replicacheFormatVersion === FormatVersion.SDD);
   assertClientV4(client);
@@ -264,7 +267,7 @@ async function recoverMutationsOfClientV4(
             puller,
             requestID,
             dagForOtherClient,
-            replicacheFormatVersion,
+            formatVersion,
             requestLc,
             false,
           );
@@ -408,9 +411,7 @@ async function recoverMutationsFromPerdagSDD(
   const stepDescription = `Recovering mutations from db ${database.name}.`;
   lc.debug?.('Start:', stepDescription);
   try {
-    const replicacheFormatVersion = parseReplicacheFormatVersion(
-      database.replicacheFormatVersion,
-    );
+    const formatVersion = parseFormatVersion(database.replicacheFormatVersion);
     let clientMap: persist.ClientMap | undefined =
       preReadClientMap ||
       (await withRead(perdag, read => persist.getClients(read)));
@@ -430,7 +431,7 @@ async function recoverMutationsFromPerdagSDD(
             perdag,
             database,
             options,
-            replicacheFormatVersion,
+            formatVersion,
           );
           if (newClientMap) {
             break;
@@ -454,9 +455,7 @@ async function recoverMutationsFromPerdagDD31(
   const stepDescription = `Recovering mutations from db ${database.name}.`;
   lc.debug?.('Start:', stepDescription);
   try {
-    const replicacheFormatVersion = parseReplicacheFormatVersion(
-      database.replicacheFormatVersion,
-    );
+    const formatVersion = parseFormatVersion(database.replicacheFormatVersion);
     let clientGroups: persist.ClientGroupMap | undefined = await withRead(
       perdag,
       read => persist.getClientGroups(read),
@@ -477,7 +476,7 @@ async function recoverMutationsFromPerdagDD31(
             perdag,
             database,
             options,
-            replicacheFormatVersion,
+            formatVersion,
           );
           if (newClientGroups) {
             break;
@@ -503,7 +502,7 @@ async function recoverMutationsOfClientGroupDD31(
   perdag: dag.Store,
   database: persist.IndexedDBDatabase,
   options: MutationRecoveryOptions,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<persist.ClientGroupMap | undefined> {
   assert(database.replicacheFormatVersion >= FormatVersion.DD31);
 
@@ -644,7 +643,7 @@ async function recoverMutationsOfClientGroupDD31(
             puller,
             requestID,
             dagForOtherClientGroup,
-            replicacheFormatVersion,
+            formatVersion,
             requestLc,
             false,
           );

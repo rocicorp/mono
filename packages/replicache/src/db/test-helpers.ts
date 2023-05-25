@@ -56,7 +56,7 @@ async function addGenesis(
   clientID: ClientID,
   headName = DEFAULT_HEAD_NAME,
   indexDefinitions: IndexDefinitions,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Chain> {
   expect(chain).to.have.length(0);
   const commit = await createGenesis(
@@ -64,7 +64,7 @@ async function addGenesis(
     clientID,
     headName,
     indexDefinitions,
-    replicacheFormatVersion,
+    formatVersion,
   );
   chain.push(commit);
   return chain;
@@ -75,16 +75,10 @@ async function createGenesis(
   clientID: ClientID,
   headName: string,
   indexDefinitions: IndexDefinitions,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Commit<Meta>> {
   await withWrite(store, async w => {
-    await initDB(
-      w,
-      headName,
-      clientID,
-      indexDefinitions,
-      replicacheFormatVersion,
-    );
+    await initDB(w, headName, clientID, indexDefinitions, formatVersion);
   });
   return withRead(store, async read => {
     const [, commit] = await readCommit(whenceHead(headName), read);
@@ -100,7 +94,7 @@ async function addLocal(
   clientID: ClientID,
   entries: [string, JSONValue][] | undefined,
   headName: string,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Chain> {
   expect(chain).to.have.length.greaterThan(0);
   const i = chain.length;
@@ -110,7 +104,7 @@ async function addLocal(
     i,
     clientID,
     headName,
-    replicacheFormatVersion,
+    formatVersion,
   );
 
   chain.push(commit);
@@ -123,7 +117,7 @@ async function createLocal(
   i: number,
   clientID: ClientID,
   headName: string,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Commit<Meta>> {
   const lc = new LogContext();
   await withWrite(store, async dagWrite => {
@@ -135,7 +129,7 @@ async function createLocal(
       dagWrite,
       42,
       clientID,
-      replicacheFormatVersion,
+      formatVersion,
     );
     for (const [key, val] of entries) {
       await w.put(lc, key, deepFreeze(val));
@@ -156,9 +150,9 @@ async function addIndexChange(
   indexName: string | undefined,
   indexDefinition: IndexDefinition | undefined,
   headName: string,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Chain> {
-  assert(replicacheFormatVersion <= FormatVersion.SDD);
+  assert(formatVersion <= FormatVersion.SDD);
   expect(chain).to.have.length.greaterThan(0);
   const i = chain.length;
   const name = indexName ?? `${i}`;
@@ -176,7 +170,7 @@ async function addIndexChange(
     jsonPointer,
     allowEmpty,
     headName,
-    replicacheFormatVersion,
+    formatVersion,
   );
   chain.push(commit);
   return chain;
@@ -190,16 +184,16 @@ async function createIndex(
   jsonPointer: string,
   allowEmpty: boolean,
   headName: string,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Commit<Meta>> {
-  assert(replicacheFormatVersion <= FormatVersion.SDD);
+  assert(formatVersion <= FormatVersion.SDD);
   const lc = new LogContext();
   await withWrite(store, async dagWrite => {
     const w = await newWriteIndexChange(
       whenceHead(headName),
       dagWrite,
       clientID,
-      replicacheFormatVersion,
+      formatVersion,
     );
     await createIndexForTesting(
       lc,
@@ -210,7 +204,7 @@ async function createIndex(
       w.indexes,
       dagWrite,
       w.map,
-      replicacheFormatVersion,
+      formatVersion,
     );
     await w.commit(headName);
   });
@@ -232,13 +226,13 @@ async function addSnapshot(
   cookie: Cookie = `cookie_${chain.length}`,
   lastMutationIDs: Record<ClientID, number> | undefined,
   headName: string,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Chain> {
   expect(chain).to.have.length.greaterThan(0);
   const lc = new LogContext();
   await withWrite(store, async dagWrite => {
     let w;
-    if (replicacheFormatVersion >= FormatVersion.DD31) {
+    if (formatVersion >= FormatVersion.DD31) {
       w = await newWriteSnapshotDD31(
         whenceHead(headName),
         lastMutationIDs ?? {
@@ -250,7 +244,7 @@ async function addSnapshot(
         deepFreeze(cookie),
         dagWrite,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
     } else {
       w = await newWriteSnapshotSDD(
@@ -258,13 +252,9 @@ async function addSnapshot(
         await chain[chain.length - 1].getNextMutationID(clientID, dagWrite),
         deepFreeze(cookie),
         dagWrite,
-        readIndexesForWrite(
-          chain[chain.length - 1],
-          dagWrite,
-          replicacheFormatVersion,
-        ),
+        readIndexesForWrite(chain[chain.length - 1], dagWrite, formatVersion),
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
     }
 
@@ -286,17 +276,17 @@ export class ChainBuilder {
   readonly store: dag.Store;
   readonly headName: string;
   chain: Chain;
-  readonly replicacheFormatVersion: FormatVersion;
+  readonly formatVersion: FormatVersion;
 
   constructor(
     store: dag.Store,
     headName = DEFAULT_HEAD_NAME,
-    replicacheFormatVersion: FormatVersion = FormatVersion.Latest,
+    formatVersion: FormatVersion = FormatVersion.Latest,
   ) {
     this.store = store;
     this.headName = headName;
     this.chain = [];
-    this.replicacheFormatVersion = replicacheFormatVersion;
+    this.formatVersion = formatVersion;
   }
 
   async addGenesis(
@@ -309,11 +299,11 @@ export class ChainBuilder {
       clientID,
       this.headName,
       indexDefinitions,
-      this.replicacheFormatVersion,
+      this.formatVersion,
     );
     const commit = this.chain.at(-1);
     assertNotUndefined(commit);
-    if (this.replicacheFormatVersion >= FormatVersion.DD31) {
+    if (this.formatVersion >= FormatVersion.DD31) {
       assertSnapshotCommitDD31(commit);
     } else {
       assertSnapshotCommitSDD(commit);
@@ -331,11 +321,11 @@ export class ChainBuilder {
       clientID,
       entries,
       this.headName,
-      this.replicacheFormatVersion,
+      this.formatVersion,
     );
     const commit = this.chain.at(-1);
     assertNotUndefined(commit);
-    if (this.replicacheFormatVersion >= FormatVersion.DD31) {
+    if (this.formatVersion >= FormatVersion.DD31) {
       assertLocalCommitDD31(commit);
     } else {
       assertLocalCommitSDD(commit);
@@ -357,11 +347,11 @@ export class ChainBuilder {
       cookie,
       lastMutationIDs,
       this.headName,
-      this.replicacheFormatVersion,
+      this.formatVersion,
     );
     const commit = this.chain.at(-1);
     assertNotUndefined(commit);
-    if (this.replicacheFormatVersion >= FormatVersion.DD31) {
+    if (this.formatVersion >= FormatVersion.DD31) {
       assertSnapshotCommitDD31(commit);
     } else {
       assertSnapshotCommitSDD(commit);
@@ -374,7 +364,7 @@ export class ChainBuilder {
     indexName?: string,
     indexDefinition?: IndexDefinition,
   ): Promise<Commit<Meta>> {
-    assert(this.replicacheFormatVersion <= FormatVersion.SDD);
+    assert(this.formatVersion <= FormatVersion.SDD);
     await addIndexChange(
       this.chain,
       this.store,
@@ -382,7 +372,7 @@ export class ChainBuilder {
       indexName,
       indexDefinition,
       this.headName,
-      this.replicacheFormatVersion,
+      this.formatVersion,
     );
     const commit = this.chain.at(-1);
     assertNotUndefined(commit);
@@ -396,7 +386,7 @@ export class ChainBuilder {
       this.store,
       takeIndexesFrom,
       clientID,
-      this.replicacheFormatVersion,
+      this.formatVersion,
     );
   }
 
@@ -419,16 +409,16 @@ export async function initDB(
   headName: string,
   clientID: ClientID,
   indexDefinitions: IndexDefinitions,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Hash> {
   const basisHash = emptyHash;
   const indexes = await createEmptyIndexMaps(
     indexDefinitions,
     dagWrite,
-    replicacheFormatVersion,
+    formatVersion,
   );
   const meta =
-    replicacheFormatVersion >= FormatVersion.DD31
+    formatVersion >= FormatVersion.DD31
       ? ({
           basisHash,
           type: MetaType.SnapshotDD31,
@@ -444,13 +434,13 @@ export async function initDB(
 
   const w = new Write(
     dagWrite,
-    new BTreeWrite(dagWrite, replicacheFormatVersion),
+    new BTreeWrite(dagWrite, formatVersion),
     undefined,
     meta,
     indexes,
     clientID,
     // TODO(arv): Pass format here too
-    replicacheFormatVersion,
+    formatVersion,
   );
   return w.commit(headName);
 }
@@ -458,7 +448,7 @@ export async function initDB(
 async function createEmptyIndexMaps(
   indexDefinitions: IndexDefinitions,
   dagWrite: dag.Write,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Map<string, IndexWrite>> {
   const indexes = new Map();
 
@@ -477,7 +467,7 @@ async function createEmptyIndexMaps(
       name,
       new IndexWrite(
         indexRecord,
-        new BTreeWrite(dagWrite, replicacheFormatVersion, emptyTreeHash),
+        new BTreeWrite(dagWrite, formatVersion, emptyTreeHash),
       ),
     );
   }
@@ -508,16 +498,16 @@ async function newWriteIndexChange(
   whence: Whence,
   dagWrite: dag.Write,
   clientID: ClientID,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Write> {
-  assert(replicacheFormatVersion <= FormatVersion.SDD);
+  assert(formatVersion <= FormatVersion.SDD);
   const [basisHash, basis, bTreeWrite] = await readCommitForBTreeWrite(
     whence,
     dagWrite,
-    replicacheFormatVersion,
+    formatVersion,
   );
   const lastMutationID = await basis.getMutationID(clientID, dagWrite);
-  const indexes = readIndexesForWrite(basis, dagWrite, replicacheFormatVersion);
+  const indexes = readIndexesForWrite(basis, dagWrite, formatVersion);
   return new Write(
     dagWrite,
     bTreeWrite,
@@ -525,7 +515,7 @@ async function newWriteIndexChange(
     {basisHash, type: MetaType.IndexChangeSDD, lastMutationID},
     indexes,
     clientID,
-    replicacheFormatVersion,
+    formatVersion,
   );
 }
 
@@ -538,7 +528,7 @@ async function createIndexForTesting(
   indexes: Map<string, IndexWrite>,
   dagWrite: dag.Write,
   map: btree.BTreeRead,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<void> {
   const chunkIndexDefinition: ChunkIndexDefinition = {
     name,
@@ -568,7 +558,7 @@ async function createIndexForTesting(
     prefix,
     jsonPointer,
     allowEmpty,
-    replicacheFormatVersion,
+    formatVersion,
   );
 
   indexes.set(

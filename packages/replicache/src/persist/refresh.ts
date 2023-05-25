@@ -49,7 +49,7 @@ export async function refresh(
   mutators: MutatorDefs,
   diffConfig: sync.DiffComputationConfig,
   closed: () => boolean,
-  replicacheFormatVersion: FormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<[Hash, sync.DiffsMap] | undefined> {
   if (closed()) {
     return;
@@ -221,7 +221,7 @@ export async function refresh(
               mutators,
               lc,
               newMemdagMutations[i].meta.clientID,
-              replicacheFormatVersion,
+              formatVersion,
             )
           ).chunk.hash;
         }
@@ -231,7 +231,7 @@ export async function refresh(
           await db.commitFromHash(newMemdagHeadHash, memdagWrite),
           memdagWrite,
           diffConfig,
-          replicacheFormatVersion,
+          formatVersion,
         );
 
         await memdagWrite.setHead(db.DEFAULT_HEAD_NAME, newMemdagHeadHash);

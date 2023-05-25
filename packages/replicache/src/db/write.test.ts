@@ -16,7 +16,7 @@ import {initDB} from './test-helpers.js';
 import {newWriteLocal} from './write.js';
 
 suite('basics w/ commit', () => {
-  const t = async (replicacheFormatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const ds = new dag.TestStore();
     const lc = new LogContext();
@@ -25,7 +25,7 @@ suite('basics w/ commit', () => {
       DEFAULT_HEAD_NAME,
       clientID,
       {},
-      replicacheFormatVersion,
+      formatVersion,
     );
 
     // Put.
@@ -38,7 +38,7 @@ suite('basics w/ commit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       await w.put(lc, 'foo', 'bar');
       // Assert we can read the same value from within this transaction.;
@@ -57,7 +57,7 @@ suite('basics w/ commit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       const val = await w.get('foo');
       expect(val).to.deep.equal('bar');
@@ -73,7 +73,7 @@ suite('basics w/ commit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       await w.del(lc, 'foo');
       // Assert it is gone while still within this transaction.
@@ -92,7 +92,7 @@ suite('basics w/ commit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       const val = await w.get(`foo`);
       expect(val).to.be.undefined;
@@ -104,7 +104,7 @@ suite('basics w/ commit', () => {
 });
 
 suite('basics w/ putCommit', () => {
-  const t = async (replicacheFormatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const ds = new dag.TestStore();
     const lc = new LogContext();
@@ -113,7 +113,7 @@ suite('basics w/ putCommit', () => {
       DEFAULT_HEAD_NAME,
       clientID,
       {},
-      replicacheFormatVersion,
+      formatVersion,
     );
 
     // Put.
@@ -126,7 +126,7 @@ suite('basics w/ putCommit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       await w.put(lc, 'foo', 'bar');
       // Assert we can read the same value from within this transaction.;
@@ -148,7 +148,7 @@ suite('basics w/ putCommit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       const val = await w.get('foo');
       expect(val).to.deep.equal('bar');
@@ -164,7 +164,7 @@ suite('basics w/ putCommit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       await w.del(lc, 'foo');
       // Assert it is gone while still within this transaction.
@@ -186,7 +186,7 @@ suite('basics w/ putCommit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       const val = await w.get(`foo`);
       expect(val).to.be.undefined;
@@ -197,7 +197,7 @@ suite('basics w/ putCommit', () => {
 });
 
 test('clear', async () => {
-  const replicacheFormatVersion = FormatVersion.Latest;
+  const formatVersion = FormatVersion.Latest;
   const clientID = 'client-id';
   const ds = new dag.TestStore();
   const lc = new LogContext();
@@ -267,9 +267,9 @@ test('clear', async () => {
     const [, c, r] = await readCommitForBTreeRead(
       whenceHead(DEFAULT_HEAD_NAME),
       dagRead,
-      replicacheFormatVersion,
+      formatVersion,
     );
-    const indexes = readIndexesForRead(c, dagRead, replicacheFormatVersion);
+    const indexes = readIndexesForRead(c, dagRead, formatVersion);
     const keys = await asyncIterableToArray(r.keys());
     expect(keys).to.have.lengthOf(0);
     const index = indexes.get('idx');
