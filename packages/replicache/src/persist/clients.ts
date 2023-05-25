@@ -20,7 +20,7 @@ import {
 } from '../db/commit.js';
 import * as db from '../db/mod.js';
 import {createIndexBTree} from '../db/write.js';
-import type {ReplicacheFormatVersion} from '../format-version.js';
+import type {FormatVersion} from '../format-version.js';
 import {Hash, assertHash} from '../hash.js';
 import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
 import {FrozenJSONValue, deepFreeze} from '../json.js';
@@ -311,7 +311,7 @@ export function initClientV6(
   perdag: dag.Store,
   mutatorNames: string[],
   indexes: IndexDefinitions,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<InitClientV6Result> {
   return withWrite(perdag, async dagWrite => {
     async function setClientsAndClientGroupAndCommit(

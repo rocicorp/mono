@@ -1,11 +1,7 @@
 import {assert, expect} from '@esm-bundle/chai';
 import * as dag from '../dag/mod.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {
-  REPLICACHE_FORMAT_VERSION_V6,
-  REPLICACHE_FORMAT_VERSION_V7,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {Hash, emptyHash, makeNewFakeHashFunction} from '../hash.js';
 import {FrozenJSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
 import {getSizeOfEntry, getSizeOfValue} from '../size-of-value.js';
@@ -42,7 +38,7 @@ suite('btree node', () => {
   function makeTree(
     node: TreeData,
     dagStore: dag.Store,
-    replicacheFormatVersion: ReplicacheFormatVersion,
+    replicacheFormatVersion: FormatVersion,
   ): Promise<Hash> {
     return withWrite(dagStore, async dagWrite => {
       const [h] = await makeTreeInner(node, dagWrite);
@@ -92,7 +88,7 @@ suite('btree node', () => {
   async function readTreeData(
     rootHash: Hash,
     dagRead: dag.Read,
-    replicacheFormatVersion: ReplicacheFormatVersion,
+    replicacheFormatVersion: FormatVersion,
   ): Promise<Record<string, unknown>> {
     const chunk = await dagRead.getChunk(rootHash);
     const node = parseBTreeNode(
@@ -129,7 +125,7 @@ suite('btree node', () => {
   async function expectTree(
     rootHash: Hash,
     dagStore: dag.Store,
-    replicacheFormatVersion: ReplicacheFormatVersion,
+    replicacheFormatVersion: FormatVersion,
     expected: TreeData,
   ) {
     await withRead(dagStore, async dagRead => {
@@ -154,7 +150,7 @@ suite('btree node', () => {
   function doRead<R>(
     rootHash: Hash,
     dagStore: dag.Store,
-    replicacheFormatVersion: ReplicacheFormatVersion,
+    replicacheFormatVersion: FormatVersion,
     fn: (r: BTreeRead) => R | Promise<R>,
   ): Promise<R> {
     return withRead(dagStore, dagWrite => {
@@ -172,7 +168,7 @@ suite('btree node', () => {
   function doWrite(
     rootHash: Hash,
     dagStore: dag.Store,
-    replicacheFormatVersion: ReplicacheFormatVersion,
+    replicacheFormatVersion: FormatVersion,
     fn: (w: BTreeWrite) => void | Promise<void>,
   ): Promise<Hash> {
     return withWrite(dagStore, async dagWrite => {
@@ -202,8 +198,8 @@ suite('btree node', () => {
   }
 
   for (const replicacheFormatVersion of [
-    REPLICACHE_FORMAT_VERSION_V6,
-    REPLICACHE_FORMAT_VERSION_V7,
+    FormatVersion.V6,
+    FormatVersion.V7,
   ] as const) {
     test(`findLeaf > v${replicacheFormatVersion}`, async () => {
       const dagStore = new dag.TestStore();
@@ -1695,9 +1691,7 @@ suite('Write nodes using ChainBuilder', () => {
     );
   }
 
-  const getBTreeNodes = async (
-    replicacheFormatVersion: ReplicacheFormatVersion,
-  ) => {
+  const getBTreeNodes = async (replicacheFormatVersion: FormatVersion) => {
     const dagStore = new dag.TestStore();
     const clientID = 'client1';
     const b = new ChainBuilder(dagStore, undefined, replicacheFormatVersion);
@@ -1712,7 +1706,7 @@ suite('Write nodes using ChainBuilder', () => {
   };
 
   test('v6', async () => {
-    expect(await getBTreeNodes(REPLICACHE_FORMAT_VERSION_V6)).to.deep.equal([
+    expect(await getBTreeNodes(FormatVersion.V6)).to.deep.equal([
       [0, []],
       [0, [['a', 'a']]],
       [
@@ -1726,7 +1720,7 @@ suite('Write nodes using ChainBuilder', () => {
   });
 
   test('v7', async () => {
-    expect(await getBTreeNodes(REPLICACHE_FORMAT_VERSION_V7)).to.deep.equal([
+    expect(await getBTreeNodes(FormatVersion.V7)).to.deep.equal([
       [0, []],
       [0, [['a', 'a', 23]]],
       [

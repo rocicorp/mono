@@ -21,12 +21,7 @@ import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from '../error-responses.js';
-import {
-  REPLICACHE_FORMAT_VERSION,
-  REPLICACHE_FORMAT_VERSION_DD31,
-  REPLICACHE_FORMAT_VERSION_SDD,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {
   assertPullResponseV0,
   assertPullResponseV1,
@@ -66,10 +61,10 @@ import {
 import {SYNC_HEAD_NAME} from './sync-head-name.js';
 
 test('begin try pull SDD', async () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION_SDD;
+  const replicacheFormatVersion = FormatVersion.SDD;
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
-  const b = new ChainBuilder(store, undefined, REPLICACHE_FORMAT_VERSION_SDD);
+  const b = new ChainBuilder(store, undefined, FormatVersion.SDD);
   await b.addGenesis(clientID);
   const baseSnapshot = await b.addSnapshot([['foo', '"bar"']], clientID);
   await b.addIndexChange(clientID);
@@ -569,7 +564,7 @@ test('begin try pull SDD', async () => {
 });
 
 test('begin try pull DD31', async () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const replicacheFormatVersion = FormatVersion.Latest;
   const clientID = 'test_client_id';
   const clientGroupID = 'test_client_group_id';
   const baseCookie = 'cookie_1';
@@ -1116,7 +1111,7 @@ test('begin try pull DD31', async () => {
 });
 
 suite('maybe end try pull', () => {
-  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
+  const t = async (replicacheFormatVersion: FormatVersion) => {
     const clientID = 'client-id';
     type Case = {
       name: string;
@@ -1193,7 +1188,7 @@ suite('maybe end try pull', () => {
 
         // Add snapshot and replayed commits to the sync chain.
         const w =
-          replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31
+          replicacheFormatVersion >= FormatVersion.DD31
             ? await db.newWriteSnapshotDD31(
                 db.whenceHash(b.chain[0].chunk.hash),
                 {[clientID]: 0},
@@ -1307,8 +1302,8 @@ suite('maybe end try pull', () => {
     }
   };
 
-  test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
-  test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
+  test('dd31', () => t(FormatVersion.Latest));
+  test('sdd', () => t(FormatVersion.SDD));
 });
 
 type FakePullerArgs = {
@@ -1377,7 +1372,7 @@ function makeFakePuller(options: FakePullerArgs): Puller {
 }
 
 suite('changed keys', () => {
-  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
+  const t = async (replicacheFormatVersion: FormatVersion) => {
     type IndexDef = {
       name: string;
       prefix: string;
@@ -1405,7 +1400,7 @@ suite('changed keys', () => {
           },
         };
 
-        if (replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31) {
+        if (replicacheFormatVersion >= FormatVersion.DD31) {
           await b.addGenesis(clientID, indexDefinitions);
           await b.addSnapshot([], clientID, undefined, undefined);
         } else {
@@ -1433,7 +1428,7 @@ suite('changed keys', () => {
       const newCookie = 'new_cookie';
 
       const expPullReq: PullRequestV0 | PullRequestV1 =
-        replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31
+        replicacheFormatVersion >= FormatVersion.DD31
           ? {
               profileID,
               clientGroupID,
@@ -1451,7 +1446,7 @@ suite('changed keys', () => {
             };
 
       const pullResp: PullResponseV1 | PullResponseV0 =
-        replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31
+        replicacheFormatVersion >= FormatVersion.DD31
           ? {
               cookie: newCookie,
               lastMutationIDChanges: {[clientID]: baseLastMutationID},
@@ -1471,7 +1466,7 @@ suite('changed keys', () => {
       });
 
       const pullResult =
-        replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31
+        replicacheFormatVersion >= FormatVersion.DD31
           ? await beginPullV1(
               profileID,
               clientID,
@@ -1717,12 +1712,12 @@ suite('changed keys', () => {
     );
   };
 
-  test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
-  test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
+  test('dd31', () => t(FormatVersion.Latest));
+  test('sdd', () => t(FormatVersion.SDD));
 });
 
 test('pull for client group with multiple client local changes', async () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const replicacheFormatVersion = FormatVersion.Latest;
   const profileID = 'test-profile-id';
   const requestID = 'test-request-id';
   const clientID1 = 'test-client-id-1';
@@ -1788,7 +1783,7 @@ test('pull for client group with multiple client local changes', async () => {
 });
 
 suite('beginPull DD31', () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const replicacheFormatVersion = FormatVersion.Latest;
   const profileID = 'test-profile-id';
   const clientID1 = 'test-client-id-1';
   const clientGroupID1 = 'test-client-group-id-1';
@@ -1839,7 +1834,7 @@ suite('beginPull DD31', () => {
 });
 
 suite('handlePullResponseDD31', () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const replicacheFormatVersion = FormatVersion.Latest;
   const clientID1 = 'test-client-id-1';
   const clientID2 = 'test-client-id-2';
 

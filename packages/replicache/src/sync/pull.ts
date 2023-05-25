@@ -8,10 +8,7 @@ import {assertSnapshotMetaDD31, commitIsLocalDD31} from '../db/commit.js';
 import * as db from '../db/mod.js';
 import {updateIndexes} from '../db/write.js';
 import {isErrorResponse} from '../error-responses.js';
-import {
-  REPLICACHE_FORMAT_VERSION_SDD,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {
   assertPullerResultV0,
   assertPullerResultV1,
@@ -108,7 +105,7 @@ export async function beginPullV0(
   puller: Puller,
   requestID: string,
   store: dag.Store,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
   lc: LogContext,
   createSyncBranch = true,
 ): Promise<BeginPullResponseV0> {
@@ -186,7 +183,7 @@ export async function beginPullV1(
   puller: Puller,
   requestID: string,
   store: dag.Store,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
   lc: LogContext,
   createSyncBranch = true,
 ): Promise<BeginPullResponseV1> {
@@ -287,12 +284,12 @@ export function handlePullResponseV0(
   expectedBaseCookie: ReadonlyJSONValue,
   response: PullResponseOKV0,
   clientID: ClientID,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
   // that is not the case by re-checking the base snapshot.
   return withWrite(store, async dagWrite => {
-    assert(replicacheFormatVersion <= REPLICACHE_FORMAT_VERSION_SDD);
+    assert(replicacheFormatVersion <= FormatVersion.SDD);
     const dagRead = dagWrite;
     const mainHead = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
 
@@ -443,7 +440,7 @@ export function handlePullResponseV1(
   expectedBaseCookie: FrozenJSONValue,
   response: PullResponseOKV1,
   clientID: ClientID,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
   // that is not the case by re-checking the base snapshot.
@@ -543,7 +540,7 @@ export function maybeEndPull<M extends db.LocalMeta>(
   expectedSyncHead: Hash,
   clientID: ClientID,
   diffConfig: DiffComputationConfig,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<{
   syncHead: Hash;
   replayMutations: db.Commit<M>[];

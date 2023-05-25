@@ -1,10 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/asserts.js';
 import type * as dag from '../dag/mod.js';
-import {
-  REPLICACHE_FORMAT_VERSION_DD31,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
 import type {MutatorDefs} from '../replicache.js';
 import type {ClientID} from '../sync/ids.js';
@@ -29,7 +26,7 @@ async function rebaseMutation(
   mutators: MutatorDefs,
   lc: LogContext,
   mutationClientID: ClientID,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<Write> {
   const localMeta = mutation.meta;
   const name = localMeta.mutatorName;
@@ -70,7 +67,7 @@ async function rebaseMutation(
     );
   }
 
-  if (replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31) {
+  if (replicacheFormatVersion >= FormatVersion.DD31) {
     assertLocalMetaDD31(localMeta);
   }
 
@@ -105,7 +102,7 @@ export async function rebaseMutationAndPutCommit(
   // TODO(greg): mutationClientID can be retrieved from mutation if LocalMeta
   // is a LocalMetaDD31.  As part of DD31 cleanup we can remove this arg.
   mutationClientID: ClientID,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<Commit<Meta>> {
   const tx = await rebaseMutation(
     mutation,
@@ -129,7 +126,7 @@ export async function rebaseMutationAndCommit(
   // TODO(greg): mutationClientID can be retrieved from mutation if LocalMeta
   // is a LocalMetaDD31.  As part of DD31 cleanup we can remove this arg.
   mutationClientID: ClientID,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<Hash> {
   const dbWrite = await rebaseMutation(
     mutation,

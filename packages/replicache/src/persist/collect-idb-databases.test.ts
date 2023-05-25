@@ -2,11 +2,7 @@ import {expect} from '@esm-bundle/chai';
 import {assertNotUndefined} from 'shared/asserts.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import * as dag from '../dag/mod.js';
-import {
-  REPLICACHE_FORMAT_VERSION,
-  REPLICACHE_FORMAT_VERSION_SDD,
-  REPLICACHE_FORMAT_VERSION_V6,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {fakeHash} from '../hash.js';
 import {IDBStore} from '../kv/idb-store.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
@@ -46,7 +42,7 @@ suite('collectIDBDatabases', () => {
   const makeIndexedDBDatabase = ({
     name,
     lastOpenedTimestampMS = Date.now(),
-    replicacheFormatVersion = REPLICACHE_FORMAT_VERSION,
+    replicacheFormatVersion = FormatVersion.Latest,
     schemaVersion = 'schemaVersion-' + name,
     replicacheName = 'replicacheName-' + name,
   }: {
@@ -233,7 +229,7 @@ suite('collectIDBDatabases', () => {
         makeIndexedDBDatabase({
           name: 'a',
           lastOpenedTimestampMS: 0,
-          replicacheFormatVersion: REPLICACHE_FORMAT_VERSION + 1,
+          replicacheFormatVersion: FormatVersion.Latest + 1,
         }),
         makeClientMapDD31({
           clientA1: {
@@ -254,7 +250,7 @@ suite('collectIDBDatabases', () => {
         makeIndexedDBDatabase({
           name: 'a',
           lastOpenedTimestampMS: 0,
-          replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_SDD - 1,
+          replicacheFormatVersion: FormatVersion.SDD - 1,
         }),
         makeClientMapDD31({
           clientA1: {
@@ -274,7 +270,7 @@ suite('collectIDBDatabases', () => {
         makeIndexedDBDatabase({
           name: 'a',
           lastOpenedTimestampMS: 0,
-          replicacheFormatVersion: REPLICACHE_FORMAT_VERSION_V6,
+          replicacheFormatVersion: FormatVersion.V6,
         }),
         makeClientMapDD31({
           clientA1: {

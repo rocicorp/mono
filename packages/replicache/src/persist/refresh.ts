@@ -3,7 +3,7 @@ import {sleep} from 'shared/sleep.js';
 import type * as dag from '../dag/mod.js';
 import {assertSnapshotCommitDD31} from '../db/commit.js';
 import * as db from '../db/mod.js';
-import type {ReplicacheFormatVersion} from '../format-version.js';
+import type {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
 import type {MutatorDefs} from '../replicache.js';
 import type {ClientID} from '../sync/ids.js';
@@ -49,7 +49,7 @@ export async function refresh(
   mutators: MutatorDefs,
   diffConfig: sync.DiffComputationConfig,
   closed: () => boolean,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<[Hash, sync.DiffsMap] | undefined> {
   if (closed()) {
     return;

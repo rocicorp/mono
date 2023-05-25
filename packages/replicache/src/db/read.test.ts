@@ -1,18 +1,14 @@
 import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
 import * as dag from '../dag/mod.js';
-import {
-  REPLICACHE_FORMAT_VERSION,
-  REPLICACHE_FORMAT_VERSION_SDD,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {DEFAULT_HEAD_NAME} from './commit.js';
 import {fromWhence, whenceHead} from './read.js';
 import {initDB} from './test-helpers.js';
 import {newWriteLocal} from './write.js';
 
 suite('basics', () => {
-  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
+  const t = async (replicacheFormatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const ds = new dag.TestStore();
     const lc = new LogContext();
@@ -45,6 +41,6 @@ suite('basics', () => {
     const val = await r.get('foo');
     expect(val).to.deep.equal('bar');
   };
-  test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
-  test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
+  test('dd31', () => t(FormatVersion.Latest));
+  test('sdd', () => t(FormatVersion.SDD));
 });

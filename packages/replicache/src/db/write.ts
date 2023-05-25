@@ -6,11 +6,7 @@ import type {InternalDiff} from '../btree/node.js';
 import {allEntriesAsDiff} from '../btree/read.js';
 import type {FrozenCookie} from '../cookies.js';
 import type * as dag from '../dag/mod.js';
-import {
-  REPLICACHE_FORMAT_VERSION_DD31,
-  REPLICACHE_FORMAT_VERSION_SDD,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {Hash, emptyHash} from '../hash.js';
 import type {FrozenJSONValue} from '../json.js';
 import {lazy} from '../lazy.js';
@@ -48,7 +44,7 @@ export class Write extends Read {
 
   declare readonly indexes: Map<string, IndexWrite>;
   private readonly _clientID: ClientID;
-  private readonly _replicacheFormatVersion: ReplicacheFormatVersion;
+  private readonly _formatVersion: FormatVersion;
 
   constructor(
     dagWrite: dag.Write,
@@ -57,7 +53,7 @@ export class Write extends Read {
     meta: CommitMeta,
     indexes: Map<string, IndexWrite>,
     clientID: ClientID,
-    replicacheFormatVersion: ReplicacheFormatVersion,
+    replicacheFormatVersion: FormatVersion,
   ) {
     // TypeScript has trouble
     super(dagWrite, map, indexes);
@@ -65,7 +61,7 @@ export class Write extends Read {
     this._basis = basis;
     this._meta = meta;
     this._clientID = clientID;
-    this._replicacheFormatVersion = replicacheFormatVersion;
+    this._formatVersion = replicacheFormatVersion;
 
     // TODO(arv): if (DEBUG) { ...
     if (basis === undefined) {
@@ -163,7 +159,7 @@ export class Write extends Read {
       }
 
       case MetaType.LocalDD31: {
-        assert(this._replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31);
+        assert(this._formatVersion >= FormatVersion.DD31);
         const {
           basisHash,
           mutationID,
@@ -189,7 +185,7 @@ export class Write extends Read {
       }
 
       case MetaType.SnapshotSDD: {
-        assert(this._replicacheFormatVersion <= REPLICACHE_FORMAT_VERSION_SDD);
+        assert(this._formatVersion <= FormatVersion.SDD);
         const {basisHash, lastMutationID, cookieJSON} = meta;
         commit = commitNewSnapshotSDD(
           this._dagWrite.createChunk,
@@ -203,7 +199,7 @@ export class Write extends Read {
       }
 
       case MetaType.SnapshotDD31: {
-        assert(this._replicacheFormatVersion > REPLICACHE_FORMAT_VERSION_DD31);
+        assert(this._formatVersion > FormatVersion.DD31);
         const {basisHash, lastMutationIDs, cookieJSON} = meta;
         commit = commitNewSnapshotDD31(
           this._dagWrite.createChunk,
@@ -278,7 +274,7 @@ export class Write extends Read {
     if (this._basis) {
       const basisMap = new BTreeRead(
         this._dagWrite,
-        this._replicacheFormatVersion,
+        this._formatVersion,
         this._basis.valueHash,
       );
       valueDiff = await btree.diff(basisMap, this.map);
@@ -289,7 +285,7 @@ export class Write extends Read {
       basisIndexes = readIndexesForRead(
         this._basis,
         this._dagWrite,
-        this._replicacheFormatVersion,
+        this._formatVersion,
       );
     } else {
       basisIndexes = new Map();
@@ -336,7 +332,7 @@ export async function newWriteLocal(
   dagWrite: dag.Write,
   timestamp: number,
   clientID: ClientID,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<Write> {
   const [basisHash, basis, bTreeWrite] = await readCommitForBTreeWrite(
     whence,
@@ -350,7 +346,7 @@ export async function newWriteLocal(
     dagWrite,
     bTreeWrite,
     basis,
-    replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31
+    replicacheFormatVersion >= FormatVersion.DD31
       ? {
           type: MetaType.LocalDD31,
           basisHash,
@@ -384,9 +380,9 @@ export async function newWriteSnapshotSDD(
   dagWrite: dag.Write,
   indexes: Map<string, IndexWrite>,
   clientID: ClientID,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<Write> {
-  assert(replicacheFormatVersion <= REPLICACHE_FORMAT_VERSION_SDD);
+  assert(replicacheFormatVersion <= FormatVersion.SDD);
   const [, basis, bTreeWrite] = await readCommitForBTreeWrite(
     whence,
     dagWrite,
@@ -410,7 +406,7 @@ export async function newWriteSnapshotDD31(
   cookieJSON: FrozenCookie,
   dagWrite: dag.Write,
   clientID: ClientID,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<Write> {
   const [basisHash, basis, bTreeWrite] = await readCommitForBTreeWrite(
     whence,
@@ -474,7 +470,7 @@ export async function updateIndexes(
 export function readIndexesForWrite(
   commit: Commit<CommitMeta>,
   dagWrite: dag.Write,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Map<string, IndexWrite> {
   const m = new Map();
   for (const index of commit.indexes) {
@@ -496,7 +492,7 @@ export async function createIndexBTree(
   prefix: string,
   jsonPointer: string,
   allowEmpty: boolean,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<BTreeWrite> {
   const indexMap = new BTreeWrite(dagWrite, replicacheFormatVersion);
   for await (const entry of valueMap.scan(prefix)) {

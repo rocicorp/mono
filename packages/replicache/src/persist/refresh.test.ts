@@ -6,7 +6,7 @@ import type {Cookie} from '../cookies.js';
 import * as dag from '../dag/mod.js';
 import * as db from '../db/mod.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {REPLICACHE_FORMAT_VERSION} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {Hash, assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {JSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
 import {
@@ -153,7 +153,7 @@ function assertRefreshHashes(
 }
 
 suite('refresh', () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const replicacheFormatVersion = FormatVersion.Latest;
   test('identical dags', async () => {
     // If the dags are the same then refresh is a no op.
     const {perdag, memdag} = makeStores();

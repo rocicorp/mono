@@ -1,17 +1,14 @@
 import {expect} from '@esm-bundle/chai';
 import {BTreeWrite} from '../btree/mod.js';
 import * as dag from '../dag/mod.js';
-import {
-  REPLICACHE_FORMAT_VERSION,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {fromKeyForIndexScanInternal} from '../scan-iterator.js';
 import {withWrite} from '../with-transactions.js';
 import {decodeIndexKey} from './index.js';
 import type {ScanItem} from './scan.js';
 
 test('scan', async () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const replicacheFormatVersion = FormatVersion.Latest;
   const t = async (fromKey: string, expected: string[]) => {
     const dagStore = new dag.TestStore();
 
@@ -43,7 +40,7 @@ test('scan', async () => {
 async function makeBTreeWrite(
   dagWrite: dag.Write,
   entries: Iterable<[string, string]>,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<BTreeWrite> {
   const map = new BTreeWrite(dagWrite, replicacheFormatVersion);
   for (const [k, v] of entries) {
@@ -53,7 +50,7 @@ async function makeBTreeWrite(
 }
 
 test('scan index startKey', async () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const replicacheFormatVersion = FormatVersion.Latest;
   const t = async (
     entries: Iterable<[string, string]>,
     {

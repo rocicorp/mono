@@ -1,6 +1,6 @@
 import {BTreeRead, BTreeWrite} from '../btree/mod.js';
 import type * as dag from '../dag/mod.js';
-import type {ReplicacheFormatVersion} from '../format-version.js';
+import type {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
 import type {FrozenJSONValue} from '../json.js';
 import {
@@ -86,7 +86,7 @@ export function whenceHash(hash: Hash): Whence {
 
 export function readFromDefaultHead(
   dagRead: dag.Read,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<Read> {
   return fromWhence(
     whenceHead(DEFAULT_HEAD_NAME),
@@ -98,7 +98,7 @@ export function readFromDefaultHead(
 export async function fromWhence(
   whence: Whence,
   dagRead: dag.Read,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<Read> {
   const [, basis, map] = await readCommitForBTreeRead(
     whence,
@@ -136,7 +136,7 @@ export async function readCommit(
 export async function readCommitForBTreeRead(
   whence: Whence,
   dagRead: dag.Read,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<[Hash, Commit<Meta>, BTreeRead]> {
   const [hash, commit] = await readCommit(whence, dagRead);
   return [
@@ -149,7 +149,7 @@ export async function readCommitForBTreeRead(
 export async function readCommitForBTreeWrite(
   whence: Whence,
   dagWrite: dag.Write,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<[Hash, Commit<Meta>, BTreeWrite]> {
   const [hash, commit] = await readCommit(whence, dagWrite);
   return [
@@ -162,7 +162,7 @@ export async function readCommitForBTreeWrite(
 export function readIndexesForRead(
   commit: Commit<Meta>,
   dagRead: dag.Read,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Map<string, IndexRead> {
   const m = new Map();
   for (const index of commit.indexes) {

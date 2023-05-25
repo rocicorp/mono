@@ -4,10 +4,7 @@ import * as dag from '../dag/mod.js';
 import {DEFAULT_HEAD_NAME} from '../db/commit.js';
 import {fromWhence, whenceHead} from '../db/read.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {
-  REPLICACHE_FORMAT_VERSION,
-  REPLICACHE_FORMAT_VERSION_SDD,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {deepFreeze} from '../json.js';
 import type {Pusher, PusherResult} from '../pusher.js';
 import {withRead, withWrite} from '../with-transactions.js';
@@ -70,7 +67,7 @@ function makeFakePusher(options: FakePusherArgs): Pusher {
 }
 
 test('try push [SDD]', async () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION_SDD;
+  const replicacheFormatVersion = FormatVersion.SDD;
   const clientGroupID = undefined;
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
@@ -278,7 +275,7 @@ test('try push [SDD]', async () => {
 });
 
 test('try push [DD31]', async () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const replicacheFormatVersion = FormatVersion.Latest;
   const clientGroupID = 'test_client_group_id';
   const clientID = 'test_client_id';
   const store = new dag.TestStore();

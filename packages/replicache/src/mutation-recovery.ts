@@ -6,14 +6,7 @@ import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from './error-responses.js';
-import {
-  REPLICACHE_FORMAT_VERSION_DD31,
-  REPLICACHE_FORMAT_VERSION_SDD,
-  REPLICACHE_FORMAT_VERSION_V6,
-  REPLICACHE_FORMAT_VERSION_V7,
-  ReplicacheFormatVersion,
-  parseReplicacheFormatVersion,
-} from './format-version.js';
+import {FormatVersion, parseReplicacheFormatVersion} from './format-version.js';
 import {assertHash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {CreateStore} from './kv/store.js';
@@ -118,10 +111,10 @@ export class MutationRecovery {
           database.name !== delegate.idbName
         ) {
           switch (database.replicacheFormatVersion) {
-            case REPLICACHE_FORMAT_VERSION_SDD:
-            case REPLICACHE_FORMAT_VERSION_DD31:
-            case REPLICACHE_FORMAT_VERSION_V6:
-            case REPLICACHE_FORMAT_VERSION_V7:
+            case FormatVersion.SDD:
+            case FormatVersion.DD31:
+            case FormatVersion.V6:
+            case FormatVersion.V7:
               await recoverMutationsWithNewPerdag(
                 database,
                 this._options,
@@ -172,9 +165,9 @@ async function recoverMutationsOfClientV4(
   perdag: dag.Store,
   database: persist.IndexedDBDatabase,
   options: MutationRecoveryOptions,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<persist.ClientMap | undefined> {
-  assert(database.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_SDD);
+  assert(database.replicacheFormatVersion === FormatVersion.SDD);
   assertClientV4(client);
 
   const {
@@ -394,7 +387,7 @@ function recoverMutationsFromPerdag(
   perdag: dag.Store,
   preReadClientMap: persist.ClientMap | undefined,
 ): Promise<void> {
-  if (database.replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31) {
+  if (database.replicacheFormatVersion >= FormatVersion.DD31) {
     return recoverMutationsFromPerdagDD31(database, options, perdag);
   }
   return recoverMutationsFromPerdagSDD(
@@ -510,9 +503,9 @@ async function recoverMutationsOfClientGroupDD31(
   perdag: dag.Store,
   database: persist.IndexedDBDatabase,
   options: MutationRecoveryOptions,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ): Promise<persist.ClientGroupMap | undefined> {
-  assert(database.replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31);
+  assert(database.replicacheFormatVersion >= FormatVersion.DD31);
 
   const {
     delegate,

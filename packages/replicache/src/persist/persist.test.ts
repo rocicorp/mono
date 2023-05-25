@@ -10,7 +10,7 @@ import {
   createMutatorName,
   getChunkSnapshot,
 } from '../db/test-helpers.js';
-import {REPLICACHE_FORMAT_VERSION} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {Hash, assertHash, makeNewFakeHashFunction} from '../hash.js';
 import type {JSONValue} from '../json.js';
 import type {MutatorDefs} from '../replicache.js';
@@ -501,7 +501,7 @@ suite('persistDD31', () => {
   });
 
   test('memdag newer snapshot no locals', async () => {
-    const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+    const replicacheFormatVersion = FormatVersion.Latest;
     const {memdagHeadHash: memdagSnapshotCommitHash} = await setupSnapshots({
       perdagClientGroupCookie: 'cookie1',
       memdagCookie: 'cookie2',
@@ -563,7 +563,7 @@ suite('persistDD31', () => {
   });
 
   test('memdag newer snapshot with locals', async () => {
-    const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+    const replicacheFormatVersion = FormatVersion.Latest;
     const memdagCookie = 'cookie2';
     const memdagMutationIDs = {
       [clients[0].clientID]: 1,
@@ -853,7 +853,7 @@ function expectUpdatedClientPersistHash(
 }
 
 async function setupPersistTest() {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const replicacheFormatVersion = FormatVersion.Latest;
   const hashFunction = makeNewFakeHashFunction();
   const perdag = new dag.TestStore(undefined, hashFunction);
   const memdag = new dag.LazyStore(
@@ -916,7 +916,7 @@ async function setupPersistTest() {
       perdag,
       mutators,
       () => false,
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
       onGatherMemOnlyChunksForTest,
     );
     const persistedChunkHashes: Hash[] = [];

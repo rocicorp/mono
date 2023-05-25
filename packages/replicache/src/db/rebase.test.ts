@@ -3,12 +3,7 @@ import {LogContext} from '@rocicorp/logger';
 import sinon from 'sinon';
 import {BTreeRead} from '../btree/read.js';
 import * as dag from '../dag/mod.js';
-import {
-  REPLICACHE_FORMAT_VERSION,
-  REPLICACHE_FORMAT_VERSION_DD31,
-  REPLICACHE_FORMAT_VERSION_SDD,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
 import {SYNC_HEAD_NAME} from '../sync/sync-head-name.js';
 import type {WriteTransaction} from '../transactions.js';
@@ -27,8 +22,7 @@ teardown(() => {
 });
 
 async function createMutationSequenceFixture() {
-  const replicacheFormatVersion: ReplicacheFormatVersion =
-    REPLICACHE_FORMAT_VERSION;
+  const replicacheFormatVersion: FormatVersion = FormatVersion.Latest;
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
   const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
@@ -142,8 +136,7 @@ async function createMutationSequenceFixture() {
 }
 
 async function createMissingMutatorFixture() {
-  const replicacheFormatVersion: ReplicacheFormatVersion =
-    REPLICACHE_FORMAT_VERSION;
+  const replicacheFormatVersion: FormatVersion = FormatVersion.Latest;
   const consoleErrorStub = sinon.stub(console, 'error');
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
@@ -295,17 +288,11 @@ suite('rebaseMutationAndCommit', () => {
   });
 
   test("throws error if DD31 and mutationClientID does not match mutation's clientID", async () => {
-    await testThrowsErrorOnClientIDMismatch(
-      'commit',
-      REPLICACHE_FORMAT_VERSION,
-    );
+    await testThrowsErrorOnClientIDMismatch('commit', FormatVersion.Latest);
   });
 
   test("throws error if SDD and mutationClientID does not match mutation's clientID", async () => {
-    await testThrowsErrorOnClientIDMismatch(
-      'commit',
-      REPLICACHE_FORMAT_VERSION_SDD,
-    );
+    await testThrowsErrorOnClientIDMismatch('commit', FormatVersion.SDD);
   });
 
   test("throws error if next mutation id for mutationClientID does not match mutation's mutationID", async () => {
@@ -443,17 +430,11 @@ suite('rebaseMutationAndPutCommit', () => {
   });
 
   test("throws error if DD31 and mutationClientID does not match mutation's clientID", async () => {
-    await testThrowsErrorOnClientIDMismatch(
-      'putCommit',
-      REPLICACHE_FORMAT_VERSION,
-    );
+    await testThrowsErrorOnClientIDMismatch('putCommit', FormatVersion.Latest);
   });
 
   test("throws error if SDD and mutationClientID does not match mutation's clientID", async () => {
-    await testThrowsErrorOnClientIDMismatch(
-      'putCommit',
-      REPLICACHE_FORMAT_VERSION_SDD,
-    );
+    await testThrowsErrorOnClientIDMismatch('putCommit', FormatVersion.SDD);
   });
 
   test("throws error if next mutation id for mutationClientID does not match mutation's mutationID", async () => {
@@ -463,7 +444,7 @@ suite('rebaseMutationAndPutCommit', () => {
 
 async function testThrowsErrorOnClientIDMismatch(
   variant: 'commit' | 'putCommit',
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  replicacheFormatVersion: FormatVersion,
 ) {
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
@@ -509,23 +490,21 @@ async function testThrowsErrorOnClientIDMismatch(
           );
     } catch (expected) {
       expect(replicacheFormatVersion).to.be.greaterThanOrEqual(
-        REPLICACHE_FORMAT_VERSION_DD31,
+        FormatVersion.DD31,
       );
       return;
     }
-    expect(replicacheFormatVersion).to.be.lessThanOrEqual(
-      REPLICACHE_FORMAT_VERSION_SDD,
-    );
+    expect(replicacheFormatVersion).to.be.lessThanOrEqual(FormatVersion.SDD);
   });
   expect(testMutatorCallCount).to.equal(
-    replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31 ? 0 : 1,
+    replicacheFormatVersion >= FormatVersion.DD31 ? 0 : 1,
   );
 }
 
 async function testThrowsErrorOnMutationIDMismatch(
   variant: 'commit' | 'putCommit',
 ) {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION_SDD;
+  const replicacheFormatVersion = FormatVersion.SDD;
   const clientID = 'test_client_id';
   const store = new dag.TestStore();
   const b = new ChainBuilder(store);

@@ -2,10 +2,7 @@ import {expect} from '@esm-bundle/chai';
 import type {InternalDiff} from '../btree/node.js';
 import * as dag from '../dag/mod.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {
-  REPLICACHE_FORMAT_VERSION,
-  REPLICACHE_FORMAT_VERSION_SDD,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import type {IndexDefinitions} from '../index-defs.js';
 import {testSubscriptionsManagerOptions} from '../test-util.js';
 import {withRead} from '../with-transactions.js';
@@ -29,7 +26,7 @@ test('db diff dd31', async () => {
     indexDefinitions?: IndexDefinitions;
     setupChain?: (b: ChainBuilder) => Promise<void>;
   }) => {
-    const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+    const replicacheFormatVersion = FormatVersion.Latest;
     const store = new dag.TestStore();
     const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
     await b.addGenesis(clientID, indexDefinitions);
@@ -209,7 +206,7 @@ test('db diff dd31', async () => {
 
 test('db diff sdd', async () => {
   const clientID = 'client-id-1';
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION_SDD;
+  const replicacheFormatVersion = FormatVersion.SDD;
 
   const t = async ({
     iOld,

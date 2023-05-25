@@ -3,11 +3,7 @@ import {LogContext} from '@rocicorp/logger';
 import {assertNotUndefined} from 'shared/asserts.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import * as dag from '../dag/mod.js';
-import {
-  REPLICACHE_FORMAT_VERSION,
-  REPLICACHE_FORMAT_VERSION_SDD,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {DEFAULT_HEAD_NAME} from './commit.js';
 import {
@@ -20,7 +16,7 @@ import {initDB} from './test-helpers.js';
 import {newWriteLocal} from './write.js';
 
 suite('basics w/ commit', () => {
-  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
+  const t = async (replicacheFormatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const ds = new dag.TestStore();
     const lc = new LogContext();
@@ -103,12 +99,12 @@ suite('basics w/ commit', () => {
     });
   };
 
-  test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
-  test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
+  test('dd31', () => t(FormatVersion.Latest));
+  test('sdd', () => t(FormatVersion.SDD));
 });
 
 suite('basics w/ putCommit', () => {
-  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
+  const t = async (replicacheFormatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const ds = new dag.TestStore();
     const lc = new LogContext();
@@ -196,12 +192,12 @@ suite('basics w/ putCommit', () => {
       expect(val).to.be.undefined;
     });
   };
-  test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
-  test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
+  test('dd31', () => t(FormatVersion.Latest));
+  test('sdd', () => t(FormatVersion.SDD));
 });
 
 test('clear', async () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const replicacheFormatVersion = FormatVersion.Latest;
   const clientID = 'client-id';
   const ds = new dag.TestStore();
   const lc = new LogContext();
@@ -214,7 +210,7 @@ test('clear', async () => {
       {
         idx: {prefix: '', jsonPointer: '', allowEmpty: false},
       },
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
     ),
   );
   await withWrite(ds, async dagWrite => {
@@ -226,7 +222,7 @@ test('clear', async () => {
       dagWrite,
       42,
       clientID,
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
     );
     await w.put(lc, 'foo', 'bar');
     await w.commit(DEFAULT_HEAD_NAME);
@@ -241,7 +237,7 @@ test('clear', async () => {
       dagWrite,
       42,
       clientID,
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
     );
     await w.put(lc, 'hot', 'dog');
 
@@ -298,7 +294,7 @@ test('mutationID on newWriteLocal', async () => {
       {
         idx: {prefix: '', jsonPointer: '', allowEmpty: false},
       },
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
     ),
   );
   await withWrite(ds, async dagWrite => {
@@ -310,7 +306,7 @@ test('mutationID on newWriteLocal', async () => {
       dagWrite,
       42,
       clientID,
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
     );
     await w.put(lc, 'foo', 'bar');
     await w.commit(DEFAULT_HEAD_NAME);
@@ -326,7 +322,7 @@ test('mutationID on newWriteLocal', async () => {
       dagWrite,
       42,
       clientID,
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
     );
     await w.put(lc, 'hot', 'dog');
     await w.commit(DEFAULT_HEAD_NAME);

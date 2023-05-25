@@ -13,7 +13,7 @@ import {
   fromHash,
 } from '../db/commit.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {REPLICACHE_FORMAT_VERSION} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {assertHash, fakeHash, newUUIDHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';
 import {deepFreeze} from '../json.js';
@@ -335,7 +335,7 @@ test('updateClients throws errors if chunk pointed to by clients head does not c
 });
 
 test('initClient creates new empty snapshot when no existing snapshot to bootstrap from', async () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const replicacheFormatVersion = FormatVersion.Latest;
   const dagStore = new dag.TestStore();
   clock.tick(4000);
   const [clientID, client, headHash, clients] = await initClientV6(
@@ -678,7 +678,7 @@ suite('initClientV6', () => {
   });
 
   test('new client for empty db', async () => {
-    const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+    const replicacheFormatVersion = FormatVersion.Latest;
     const lc = new LogContext();
     const perdag = new dag.TestStore();
     const mutatorNames: string[] = [];
@@ -699,7 +699,7 @@ suite('initClientV6', () => {
   });
 
   test('reuse head', async () => {
-    const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+    const replicacheFormatVersion = FormatVersion.Latest;
     const lc = new LogContext();
 
     const perdag = new dag.TestStore();
@@ -767,7 +767,7 @@ suite('initClientV6', () => {
   });
 
   test('fork snapshot due to incompatible defs', async () => {
-    const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+    const replicacheFormatVersion = FormatVersion.Latest;
     const lc = new LogContext();
 
     const perdag = new dag.TestStore();
@@ -840,7 +840,7 @@ suite('initClientV6', () => {
   });
 
   test('fork snapshot due to incompatible index names - reuse index maps', async () => {
-    const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+    const replicacheFormatVersion = FormatVersion.Latest;
     const lc = new LogContext();
 
     const perdag = new dag.TestStore();
