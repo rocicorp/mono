@@ -1,3 +1,3 @@
 {
-  "buildCommand": "next build && ./publish-if-production.sh"
+  "buildCommand": "npm run build --prefix=../.. && ./publish-if-production.sh"
 }
