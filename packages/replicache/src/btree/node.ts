@@ -189,18 +189,17 @@ export function parseBTreeNode(
     return v as InternalNode | DataNode;
   }
 
-  // For non v7 we convert
-
   assertArray(v);
   assertDeepFrozen(v);
-
-  assert(v.length === 2);
+  // Be relaxed about what we accept.
+  assert(v.length >= 2);
   const [level, entries] = v;
   assertNumber(level);
   assertArray(entries);
 
   const f = level > 0 ? assertString : assertJSONValue;
 
+  // For V7 we do not need to change the entries. Just assert that they are correct.
   if (replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_V7) {
     for (const e of entries) {
       assertEntry(e, f);
@@ -208,8 +207,7 @@ export function parseBTreeNode(
     return v as unknown as InternalNode | DataNode;
   }
 
-  const newEntries = entries.map(e => parseEntry(e, f, getSizeOfEntry));
-
+  const newEntries = entries.map(e => convertNonV7Entry(e, f, getSizeOfEntry));
   return [level, newEntries] as unknown as InternalNode | DataNode;
 }
 
@@ -220,13 +218,18 @@ function assertEntry(
     | ((v: unknown) => asserts v is JSONValue),
 ): asserts entry is Entry<Hash | JSONValue> {
   assertArray(entry);
-  assert(entry.length === 3);
+  // Be relaxed about what we accept.
+  assert(entry.length >= 3);
   assertString(entry[0]);
   f(entry[1]);
   assertNumber(entry[2]);
 }
 
-function parseEntry(
+/**
+ * Converts an entry that was from a format version before V7 to the format
+ * wanted by V7.
+ */
+function convertNonV7Entry(
   entry: unknown,
   f:
     | ((v: unknown) => asserts v is Hash)
@@ -234,7 +237,6 @@ function parseEntry(
   getSizeOfEntry: <K, V>(key: K, value: V) => number,
 ): Entry<Hash | JSONValue> {
   assertArray(entry);
-  // TODO(arv): XXX
   assert(entry.length >= 2);
   assertString(entry[0]);
   f(entry[1]);
