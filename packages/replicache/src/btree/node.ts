@@ -7,11 +7,7 @@ import {
 } from 'shared/asserts.js';
 import {binarySearch as binarySearchWithFunc} from '../binary-search.js';
 import {skipBTreeNodeAsserts} from '../config.js';
-import {
-  REPLICACHE_FORMAT_VERSION,
-  REPLICACHE_FORMAT_VERSION_V7,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {Hash, emptyHash, newUUIDHash} from '../hash.js';
 import {joinIterables} from '../iterables.js';
 import {
@@ -45,11 +41,11 @@ export type DataNode = BaseNode<FrozenJSONValue>;
 export function makeNodeChunkData<V>(
   level: number,
   entries: ReadonlyArray<Entry<V>>,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
 ): BaseNode<V> {
   return deepFreeze([
     level,
-    (replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_V7
+    (formatVersion >= FormatVersion.V7
       ? entries
       : entries.map(e => e.slice(0, 2))) as readonly ReadonlyJSONValue[],
   ]) as BaseNode<V>;
@@ -179,13 +175,10 @@ export function binarySearchFound(
 
 export function parseBTreeNode(
   v: unknown,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
   getSizeOfEntry: <K, V>(key: K, value: V) => number,
 ): InternalNode | DataNode {
-  if (
-    skipBTreeNodeAsserts &&
-    replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_V7
-  ) {
+  if (skipBTreeNodeAsserts && formatVersion >= FormatVersion.V7) {
     return v as InternalNode | DataNode;
   }
 
@@ -200,7 +193,7 @@ export function parseBTreeNode(
   const f = level > 0 ? assertString : assertJSONValue;
 
   // For V7 we do not need to change the entries. Just assert that they are correct.
-  if (replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_V7) {
+  if (formatVersion >= FormatVersion.V7) {
     for (const e of entries) {
       assertEntry(e, f);
     }
@@ -300,9 +293,9 @@ abstract class NodeImpl<Value> {
 
 export function toChunkData<V>(
   node: NodeImpl<V>,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
 ): BaseNode<V> {
-  return makeNodeChunkData(node.level, node.entries, replicacheFormatVersion);
+  return makeNodeChunkData(node.level, node.entries, formatVersion);
 }
 
 export class DataNodeImpl extends NodeImpl<FrozenJSONValue> {
@@ -707,7 +700,7 @@ export function partition<T>(
 export const emptyDataNode = makeNodeChunkData<ReadonlyJSONValue>(
   0,
   [],
-  REPLICACHE_FORMAT_VERSION,
+  FormatVersion.Latest,
 );
 export const emptyDataNodeImpl = new DataNodeImpl([], emptyHash, false);
 

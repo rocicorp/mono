@@ -2,7 +2,7 @@ import {Lock} from '@rocicorp/lock';
 import {assert} from 'shared/asserts.js';
 import type {CreateChunk} from '../dag/chunk.js';
 import type * as dag from '../dag/mod.js';
-import type {ReplicacheFormatVersion} from '../format-version.js';
+import type {FormatVersion} from '../format-version.js';
 import {Hash, emptyHash, newUUIDHash} from '../hash.js';
 import type {FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
 import {getSizeOfEntry} from '../size-of-value.js';
@@ -47,20 +47,14 @@ export class BTreeWrite extends BTreeRead {
 
   constructor(
     dagWrite: dag.Write,
-    replicacheFormatVersion: ReplicacheFormatVersion,
+    formatVersion: FormatVersion,
     root: Hash = emptyHash,
     minSize = 8 * 1024,
     maxSize = 16 * 1024,
     getEntrySize: <K, V>(k: K, v: V) => number = getSizeOfEntry,
     chunkHeaderSize?: number,
   ) {
-    super(
-      dagWrite,
-      replicacheFormatVersion,
-      root,
-      getEntrySize,
-      chunkHeaderSize,
-    );
+    super(dagWrite, formatVersion, root, getEntrySize, chunkHeaderSize);
 
     this.minSize = minSize;
     this.maxSize = maxSize;
@@ -198,7 +192,7 @@ export class BTreeWrite extends BTreeRead {
         newChunks,
         dagWrite.createChunk,
         this._modified,
-        this._replicacheFormatVersion,
+        this._formatVersion,
       );
       await Promise.all(newChunks.map(chunk => dagWrite.putChunk(chunk)));
       this._modified.clear();
@@ -213,7 +207,7 @@ function gatherNewChunks(
   newChunks: dag.Chunk[],
   createChunk: CreateChunk,
   modified: Map<Hash, DataNodeImpl | InternalNodeImpl>,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
 ): Hash {
   const node = modified.get(hash);
   if (node === undefined) {
@@ -222,7 +216,7 @@ function gatherNewChunks(
   }
 
   if (isDataNodeImpl(node)) {
-    const chunk = createChunk(toChunkData(node, replicacheFormatVersion), []);
+    const chunk = createChunk(toChunkData(node, formatVersion), []);
     newChunks.push(chunk);
     return chunk.hash;
   }
@@ -237,7 +231,7 @@ function gatherNewChunks(
       newChunks,
       createChunk,
       modified,
-      replicacheFormatVersion,
+      formatVersion,
     );
     if (newChildHash !== childHash) {
       // MUTATES the entries!
@@ -246,7 +240,7 @@ function gatherNewChunks(
     }
     refs.push(newChildHash);
   }
-  const chunk = createChunk(toChunkData(node, replicacheFormatVersion), refs);
+  const chunk = createChunk(toChunkData(node, formatVersion), refs);
   newChunks.push(chunk);
   return chunk.hash;
 }

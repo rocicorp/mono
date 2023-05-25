@@ -4,10 +4,7 @@ import * as btree from '../btree/mod.js';
 import * as dag from '../dag/mod.js';
 import {getRefs, newSnapshotCommitDataSDD} from '../db/commit.js';
 import * as db from '../db/mod.js';
-import {
-  REPLICACHE_FORMAT_VERSION_DD31,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {newUUIDHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';
 import type {ClientID} from '../sync/ids.js';
@@ -99,16 +96,16 @@ export async function initClientWithClientID(
   dagStore: dag.Store,
   mutatorNames: string[],
   indexes: IndexDefinitions,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<void> {
   let generatedClientID, client, clientMap;
-  if (replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31) {
+  if (formatVersion >= FormatVersion.DD31) {
     [generatedClientID, client, , clientMap] = await initClientV6(
       new LogContext(),
       dagStore,
       mutatorNames,
       indexes,
-      replicacheFormatVersion,
+      formatVersion,
     );
   } else {
     [generatedClientID, client, clientMap] = await initClientV4(dagStore);

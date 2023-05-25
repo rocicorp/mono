@@ -21,7 +21,7 @@ import {
   isVersionNotSupportedResponse,
   VersionNotSupportedResponse,
 } from './error-responses.js';
-import {REPLICACHE_FORMAT_VERSION} from './format-version.js';
+import {FormatVersion} from './format-version.js';
 import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
 import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.js';
 import {assertHash, emptyHash, Hash} from './hash.js';
@@ -97,15 +97,15 @@ type ToPromise<P> = P extends Promise<unknown> ? P : Promise<P>;
  * @returns
  */
 export function makeIDBName(name: string, schemaVersion?: string): string {
-  return makeIDBNameInternal(name, schemaVersion, REPLICACHE_FORMAT_VERSION);
+  return makeIDBNameInternal(name, schemaVersion, FormatVersion.Latest);
 }
 
 function makeIDBNameInternal(
   name: string,
   schemaVersion: string | undefined,
-  replicacheFormatVersion: number,
+  formatVersion: number,
 ): string {
-  const n = `rep:${name}:${replicacheFormatVersion}`;
+  const n = `rep:${name}:${formatVersion}`;
   return schemaVersion ? `${n}:${schemaVersion}` : n;
 }
 
@@ -250,7 +250,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     return {
       name: this.idbName,
       replicacheName: this.name,
-      replicacheFormatVersion: REPLICACHE_FORMAT_VERSION,
+      replicacheFormatVersion: FormatVersion.Latest,
       schemaVersion: this.schemaVersion,
     };
   }
@@ -576,7 +576,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         this._perdag,
         Object.keys(this._mutatorRegistry),
         indexes,
-        REPLICACHE_FORMAT_VERSION,
+        FormatVersion.Latest,
       );
 
     resolveClientGroupID(client.clientGroupID);
@@ -918,7 +918,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         syncHead,
         clientID,
         this._subscriptions,
-        REPLICACHE_FORMAT_VERSION,
+        FormatVersion.Latest,
       );
 
       if (!replayMutations || replayMutations.length === 0) {
@@ -946,7 +946,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
             this._mutatorRegistry,
             lc,
             db.isLocalMetaDD31(meta) ? meta.clientID : clientID,
-            REPLICACHE_FORMAT_VERSION,
+            FormatVersion.Latest,
           ),
         );
       }
@@ -1236,7 +1236,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       deepFreeze(poke.baseCookie),
       pullResponse,
       clientID,
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
     );
 
     switch (result.type) {
@@ -1270,7 +1270,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           this.puller,
           requestID,
           this._memdag,
-          REPLICACHE_FORMAT_VERSION,
+          FormatVersion.Latest,
           requestLc,
         );
         return {
@@ -1312,7 +1312,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           this._perdag,
           this._mutatorRegistry,
           () => this.closed,
-          REPLICACHE_FORMAT_VERSION,
+          FormatVersion.Latest,
         );
       } catch (e) {
         if (e instanceof persist.ClientStateNotFoundError) {
@@ -1349,7 +1349,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         this._mutatorRegistry,
         this._subscriptions,
         () => this.closed,
-        REPLICACHE_FORMAT_VERSION,
+        FormatVersion.Latest,
       );
     } catch (e) {
       if (e instanceof persist.ClientStateNotFoundError) {
@@ -1521,7 +1521,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       try {
         const dbRead = await db.readFromDefaultHead(
           dagRead,
-          REPLICACHE_FORMAT_VERSION,
+          FormatVersion.Latest,
         );
         const tx = new ReadTransactionImpl(clientID, dbRead, this._lc);
         return await body(tx);
@@ -1595,7 +1595,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           dagWrite,
           timestamp,
           clientID,
-          REPLICACHE_FORMAT_VERSION,
+          FormatVersion.Latest,
         );
 
         const tx = new WriteTransactionImpl(

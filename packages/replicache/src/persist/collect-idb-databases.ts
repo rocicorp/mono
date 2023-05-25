@@ -2,12 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/asserts.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
 import * as dag from '../dag/mod.js';
-import {
-  REPLICACHE_FORMAT_VERSION,
-  REPLICACHE_FORMAT_VERSION_DD31,
-  REPLICACHE_FORMAT_VERSION_V6,
-  REPLICACHE_FORMAT_VERSION_V7,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {assertHash} from '../hash.js';
 import {dropStore} from '../kv/idb-util.js';
 import * as kv from '../kv/mod.js';
@@ -137,13 +132,13 @@ async function canCollectDatabase(
   dd31MaxAge: number,
   newDagStore: typeof defaultNewDagStore,
 ): Promise<boolean> {
-  if (db.replicacheFormatVersion > REPLICACHE_FORMAT_VERSION) {
+  if (db.replicacheFormatVersion > FormatVersion.Latest) {
     return false;
   }
 
   // 0 is used in testing
   if (db.lastOpenedTimestampMS !== undefined) {
-    const isDD31 = db.replicacheFormatVersion >= REPLICACHE_FORMAT_VERSION_DD31;
+    const isDD31 = db.replicacheFormatVersion >= FormatVersion.DD31;
 
     // - For SDD we can delete the database if it is older than maxAge.
     // - For DD31 we can delete the database if it is older than dd31MaxAge and
@@ -159,9 +154,9 @@ async function canCollectDatabase(
     // If increase the format version we need to decide how to deal with this
     // logic.
     assert(
-      db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_DD31 ||
-        db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_V6 ||
-        db.replicacheFormatVersion === REPLICACHE_FORMAT_VERSION_V7,
+      db.replicacheFormatVersion === FormatVersion.DD31 ||
+        db.replicacheFormatVersion === FormatVersion.V6 ||
+        db.replicacheFormatVersion === FormatVersion.V7,
     );
     return !(await anyPendingMutationsInClientGroups(newDagStore(db.name)));
   }

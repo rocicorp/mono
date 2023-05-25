@@ -3,11 +3,7 @@ import {LogContext} from '@rocicorp/logger';
 import {assertNotUndefined} from 'shared/asserts.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import * as dag from '../dag/mod.js';
-import {
-  REPLICACHE_FORMAT_VERSION,
-  REPLICACHE_FORMAT_VERSION_SDD,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {DEFAULT_HEAD_NAME} from './commit.js';
 import {
@@ -20,7 +16,7 @@ import {initDB} from './test-helpers.js';
 import {newWriteLocal} from './write.js';
 
 suite('basics w/ commit', () => {
-  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const ds = new dag.TestStore();
     const lc = new LogContext();
@@ -29,7 +25,7 @@ suite('basics w/ commit', () => {
       DEFAULT_HEAD_NAME,
       clientID,
       {},
-      replicacheFormatVersion,
+      formatVersion,
     );
 
     // Put.
@@ -42,7 +38,7 @@ suite('basics w/ commit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       await w.put(lc, 'foo', 'bar');
       // Assert we can read the same value from within this transaction.;
@@ -61,7 +57,7 @@ suite('basics w/ commit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       const val = await w.get('foo');
       expect(val).to.deep.equal('bar');
@@ -77,7 +73,7 @@ suite('basics w/ commit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       await w.del(lc, 'foo');
       // Assert it is gone while still within this transaction.
@@ -96,19 +92,19 @@ suite('basics w/ commit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       const val = await w.get(`foo`);
       expect(val).to.be.undefined;
     });
   };
 
-  test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
-  test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
+  test('dd31', () => t(FormatVersion.Latest));
+  test('sdd', () => t(FormatVersion.SDD));
 });
 
 suite('basics w/ putCommit', () => {
-  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const ds = new dag.TestStore();
     const lc = new LogContext();
@@ -117,7 +113,7 @@ suite('basics w/ putCommit', () => {
       DEFAULT_HEAD_NAME,
       clientID,
       {},
-      replicacheFormatVersion,
+      formatVersion,
     );
 
     // Put.
@@ -130,7 +126,7 @@ suite('basics w/ putCommit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       await w.put(lc, 'foo', 'bar');
       // Assert we can read the same value from within this transaction.;
@@ -152,7 +148,7 @@ suite('basics w/ putCommit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       const val = await w.get('foo');
       expect(val).to.deep.equal('bar');
@@ -168,7 +164,7 @@ suite('basics w/ putCommit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       await w.del(lc, 'foo');
       // Assert it is gone while still within this transaction.
@@ -190,18 +186,18 @@ suite('basics w/ putCommit', () => {
         dagWrite,
         42,
         clientID,
-        replicacheFormatVersion,
+        formatVersion,
       );
       const val = await w.get(`foo`);
       expect(val).to.be.undefined;
     });
   };
-  test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
-  test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
+  test('dd31', () => t(FormatVersion.Latest));
+  test('sdd', () => t(FormatVersion.SDD));
 });
 
 test('clear', async () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const formatVersion = FormatVersion.Latest;
   const clientID = 'client-id';
   const ds = new dag.TestStore();
   const lc = new LogContext();
@@ -214,7 +210,7 @@ test('clear', async () => {
       {
         idx: {prefix: '', jsonPointer: '', allowEmpty: false},
       },
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
     ),
   );
   await withWrite(ds, async dagWrite => {
@@ -226,7 +222,7 @@ test('clear', async () => {
       dagWrite,
       42,
       clientID,
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
     );
     await w.put(lc, 'foo', 'bar');
     await w.commit(DEFAULT_HEAD_NAME);
@@ -241,7 +237,7 @@ test('clear', async () => {
       dagWrite,
       42,
       clientID,
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
     );
     await w.put(lc, 'hot', 'dog');
 
@@ -271,9 +267,9 @@ test('clear', async () => {
     const [, c, r] = await readCommitForBTreeRead(
       whenceHead(DEFAULT_HEAD_NAME),
       dagRead,
-      replicacheFormatVersion,
+      formatVersion,
     );
-    const indexes = readIndexesForRead(c, dagRead, replicacheFormatVersion);
+    const indexes = readIndexesForRead(c, dagRead, formatVersion);
     const keys = await asyncIterableToArray(r.keys());
     expect(keys).to.have.lengthOf(0);
     const index = indexes.get('idx');
@@ -298,7 +294,7 @@ test('mutationID on newWriteLocal', async () => {
       {
         idx: {prefix: '', jsonPointer: '', allowEmpty: false},
       },
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
     ),
   );
   await withWrite(ds, async dagWrite => {
@@ -310,7 +306,7 @@ test('mutationID on newWriteLocal', async () => {
       dagWrite,
       42,
       clientID,
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
     );
     await w.put(lc, 'foo', 'bar');
     await w.commit(DEFAULT_HEAD_NAME);
@@ -326,7 +322,7 @@ test('mutationID on newWriteLocal', async () => {
       dagWrite,
       42,
       clientID,
-      REPLICACHE_FORMAT_VERSION,
+      FormatVersion.Latest,
     );
     await w.put(lc, 'hot', 'dog');
     await w.commit(DEFAULT_HEAD_NAME);

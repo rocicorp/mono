@@ -3,7 +3,7 @@ import {LogContext} from '@rocicorp/logger';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import {BTreeWrite} from '../btree/mod.js';
 import * as dag from '../dag/mod.js';
-import {REPLICACHE_FORMAT_VERSION} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {JSONValue, deepFreeze} from '../json.js';
 import {stringCompare} from '../string-compare.js';
 import {withWrite} from '../with-transactions.js';
@@ -192,7 +192,7 @@ test('json pointer', () => {
 });
 
 test('index value', async () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const formatVersion = FormatVersion.Latest;
   const t = async (
     key: string,
     value: JSONValue,
@@ -202,7 +202,7 @@ test('index value', async () => {
   ) => {
     const dagStore = new dag.TestStore();
     await withWrite(dagStore, async dagWrite => {
-      const index = new BTreeWrite(dagWrite, replicacheFormatVersion);
+      const index = new BTreeWrite(dagWrite, formatVersion);
       await index.put(encodeIndexKey(['s1', '1']), 'v1');
       await index.put(encodeIndexKey(['s2', '2']), 'v2');
 

@@ -6,7 +6,7 @@ import type {Cookie} from '../cookies.js';
 import * as dag from '../dag/mod.js';
 import * as db from '../db/mod.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {REPLICACHE_FORMAT_VERSION} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {Hash, assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {JSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
 import {
@@ -153,7 +153,7 @@ function assertRefreshHashes(
 }
 
 suite('refresh', () => {
-  const replicacheFormatVersion = REPLICACHE_FORMAT_VERSION;
+  const formatVersion = FormatVersion.Latest;
   test('identical dags', async () => {
     // If the dags are the same then refresh is a no op.
     const {perdag, memdag} = makeStores();
@@ -171,7 +171,7 @@ suite('refresh', () => {
       mutators,
       testSubscriptionsManagerOptions,
       () => false,
-      replicacheFormatVersion,
+      formatVersion,
     );
     assert(result);
     expect(result[0]).to.deep.equal(
@@ -221,7 +221,7 @@ suite('refresh', () => {
       mutators,
       testSubscriptionsManagerOptions,
       () => false,
-      replicacheFormatVersion,
+      formatVersion,
     );
     assert(result);
     expect(result[0]).to.deep.equal(
@@ -256,7 +256,7 @@ suite('refresh', () => {
       mutators,
       testSubscriptionsManagerOptions,
       () => false,
-      replicacheFormatVersion,
+      formatVersion,
     );
     assert(result);
     expect(result[0]).to.deep.equal(
@@ -305,7 +305,7 @@ suite('refresh', () => {
       mutators,
       testSubscriptionsManagerOptions,
       () => false,
-      replicacheFormatVersion,
+      formatVersion,
     );
     expect(diffs).undefined;
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
@@ -335,7 +335,7 @@ suite('refresh', () => {
       mutators,
       testSubscriptionsManagerOptions,
       () => false,
-      replicacheFormatVersion,
+      formatVersion,
     );
     expect(diffs).undefined;
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
@@ -366,7 +366,7 @@ suite('refresh', () => {
       mutators,
       testSubscriptionsManagerOptions,
       () => false,
-      replicacheFormatVersion,
+      formatVersion,
     );
     assert(result);
     expect(result[0]).to.deep.equal(
@@ -432,7 +432,7 @@ suite('refresh', () => {
       mutators,
       testSubscriptionsManagerOptions,
       () => false,
-      replicacheFormatVersion,
+      formatVersion,
     );
     assert(result);
     expect(result[0]).to.deep.equal(
@@ -500,7 +500,7 @@ suite('refresh', () => {
       mutators,
       testSubscriptionsManagerOptions,
       () => false,
-      replicacheFormatVersion,
+      formatVersion,
     );
     expect(diffs).undefined;
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
@@ -550,7 +550,7 @@ suite('refresh', () => {
         mutators,
         testSubscriptionsManagerOptions,
         () => false,
-        replicacheFormatVersion,
+        formatVersion,
       );
     } catch (e) {
       expectedE = e;
@@ -615,7 +615,7 @@ suite('refresh', () => {
     }): Promise<db.Commit<db.SnapshotMetaDD31>> {
       return withWrite(store, async dagWrite => {
         if (!valueHash) {
-          const map = new btree.BTreeWrite(dagWrite, replicacheFormatVersion);
+          const map = new btree.BTreeWrite(dagWrite, formatVersion);
           valueHash = await map.flush();
         }
         const c = db.newSnapshotDD31(
@@ -663,11 +663,7 @@ suite('refresh', () => {
       entries?: readonly btree.Entry<ReadonlyJSONValue>[];
     }): Promise<db.Commit<db.LocalMetaDD31>> {
       return withWrite(store, async dagWrite => {
-        const m = new btree.BTreeWrite(
-          dagWrite,
-          replicacheFormatVersion,
-          valueHash,
-        );
+        const m = new btree.BTreeWrite(dagWrite, formatVersion, valueHash);
         for (const [k, v] of entries) {
           await m.put(k, deepFreeze(v));
         }
@@ -806,7 +802,7 @@ suite('refresh', () => {
       },
       testSubscriptionsManagerOptions,
       () => false,
-      replicacheFormatVersion,
+      formatVersion,
     );
     assert(result);
     expect(result[0]).to.deep.equal(

@@ -20,7 +20,7 @@ import {
 } from '../db/commit.js';
 import * as db from '../db/mod.js';
 import {createIndexBTree} from '../db/write.js';
-import type {ReplicacheFormatVersion} from '../format-version.js';
+import type {FormatVersion} from '../format-version.js';
 import {Hash, assertHash} from '../hash.js';
 import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
 import {FrozenJSONValue, deepFreeze} from '../json.js';
@@ -311,7 +311,7 @@ export function initClientV6(
   perdag: dag.Store,
   mutatorNames: string[],
   indexes: IndexDefinitions,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<InitClientV6Result> {
   return withWrite(perdag, async dagWrite => {
     async function setClientsAndClientGroupAndCommit(
@@ -423,11 +423,7 @@ export function initClientV6(
     // Create indexes
     const indexRecords: db.IndexRecord[] = [];
     const {valueHash, indexes: oldIndexes} = snapshot;
-    const map = new btree.BTreeRead(
-      dagWrite,
-      replicacheFormatVersion,
-      valueHash,
-    );
+    const map = new btree.BTreeRead(dagWrite, formatVersion, valueHash);
 
     for (const [name, indexDefinition] of Object.entries(indexes)) {
       const {prefix = '', jsonPointer, allowEmpty = false} = indexDefinition;
@@ -452,7 +448,7 @@ export function initClientV6(
           prefix,
           jsonPointer,
           allowEmpty,
-          replicacheFormatVersion,
+          formatVersion,
         );
         indexRecords.push({
           definition: chunkIndexDefinition,

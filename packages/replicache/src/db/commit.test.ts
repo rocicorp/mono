@@ -1,10 +1,6 @@
 import {expect} from '@esm-bundle/chai';
 import * as dag from '../dag/mod.js';
-import {
-  REPLICACHE_FORMAT_VERSION,
-  REPLICACHE_FORMAT_VERSION_SDD,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {Hash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {deepFreeze} from '../json.js';
 import {withRead} from '../with-transactions.js';
@@ -32,10 +28,10 @@ import {
 import {ChainBuilder} from './test-helpers.js';
 
 suite('base snapshot', () => {
-  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new dag.TestStore();
-    const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
+    const b = new ChainBuilder(store, undefined, formatVersion);
     await b.addGenesis(clientID);
     let genesisHash = b.chain[0].chunk.hash;
     await withRead(store, async dagRead => {
@@ -45,7 +41,7 @@ suite('base snapshot', () => {
     });
 
     await b.addLocal(clientID);
-    if (!replicacheFormatVersion) {
+    if (!formatVersion) {
       await b.addIndexChange(clientID);
     }
     await b.addLocal(clientID);
@@ -89,15 +85,15 @@ suite('base snapshot', () => {
     });
   };
 
-  test('DD31', () => t(REPLICACHE_FORMAT_VERSION));
-  test('SDD', () => t(REPLICACHE_FORMAT_VERSION_SDD));
+  test('DD31', () => t(FormatVersion.Latest));
+  test('SDD', () => t(FormatVersion.SDD));
 });
 
 suite('local mutations', () => {
-  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new dag.TestStore();
-    const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
+    const b = new ChainBuilder(store, undefined, formatVersion);
     await b.addGenesis(clientID);
     const genesisHash = b.chain[0].chunk.hash;
     await withRead(store, async dagRead => {
@@ -105,25 +101,22 @@ suite('local mutations', () => {
     });
 
     await b.addLocal(clientID);
-    if (!replicacheFormatVersion) {
+    if (!formatVersion) {
       await b.addIndexChange(clientID);
     }
     await b.addLocal(clientID);
-    if (!replicacheFormatVersion) {
+    if (!formatVersion) {
       await b.addIndexChange(clientID);
     }
     const headHash = b.chain[b.chain.length - 1].chunk.hash;
     const commits = await withRead(store, dagRead =>
       localMutations(headHash, dagRead),
     );
-    expect(commits).to.deep.equal([
-      b.chain[replicacheFormatVersion ? 2 : 3],
-      b.chain[1],
-    ]);
+    expect(commits).to.deep.equal([b.chain[formatVersion ? 2 : 3], b.chain[1]]);
   };
 
-  test('DD31', () => t(REPLICACHE_FORMAT_VERSION));
-  test('SDD', () => t(REPLICACHE_FORMAT_VERSION_SDD));
+  test('DD31', () => t(FormatVersion.Latest));
+  test('SDD', () => t(FormatVersion.SDD));
 });
 test('local mutations greater than', async () => {
   const clientID1 = 'client-id-1';
@@ -202,10 +195,10 @@ test('local mutations greater than', async () => {
 });
 
 suite('chain', () => {
-  const t = async (replicacheFormatVersion: ReplicacheFormatVersion) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new dag.TestStore();
-    const b = new ChainBuilder(store, undefined, replicacheFormatVersion);
+    const b = new ChainBuilder(store, undefined, formatVersion);
     await b.addGenesis(clientID);
 
     let got: Commit<Meta>[] = await withRead(store, dagRead =>
@@ -217,7 +210,7 @@ suite('chain', () => {
 
     await b.addSnapshot(undefined, clientID);
     await b.addLocal(clientID);
-    if (!replicacheFormatVersion) {
+    if (!formatVersion) {
       await b.addIndexChange(clientID);
     } else {
       await b.addLocal(clientID);
@@ -230,8 +223,8 @@ suite('chain', () => {
     expect(got[2]).to.deep.equal(b.chain[1]);
   };
 
-  test('dd31', () => t(REPLICACHE_FORMAT_VERSION));
-  test('sdd', () => t(REPLICACHE_FORMAT_VERSION_SDD));
+  test('dd31', () => t(FormatVersion.Latest));
+  test('sdd', () => t(FormatVersion.SDD));
 });
 
 test('load roundtrip', () => {

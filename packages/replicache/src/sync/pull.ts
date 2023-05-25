@@ -8,10 +8,7 @@ import {assertSnapshotMetaDD31, commitIsLocalDD31} from '../db/commit.js';
 import * as db from '../db/mod.js';
 import {updateIndexes} from '../db/write.js';
 import {isErrorResponse} from '../error-responses.js';
-import {
-  REPLICACHE_FORMAT_VERSION_SDD,
-  ReplicacheFormatVersion,
-} from '../format-version.js';
+import {FormatVersion} from '../format-version.js';
 import {
   assertPullerResultV0,
   assertPullerResultV1,
@@ -108,7 +105,7 @@ export async function beginPullV0(
   puller: Puller,
   requestID: string,
   store: dag.Store,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
   lc: LogContext,
   createSyncBranch = true,
 ): Promise<BeginPullResponseV0> {
@@ -163,7 +160,7 @@ export async function beginPullV0(
     baseCookie,
     response,
     clientID,
-    replicacheFormatVersion,
+    formatVersion,
   );
   if (result.type === HandlePullResponseResultType.CookieMismatch) {
     throw new Error('Overlapping sync');
@@ -186,7 +183,7 @@ export async function beginPullV1(
   puller: Puller,
   requestID: string,
   store: dag.Store,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
   lc: LogContext,
   createSyncBranch = true,
 ): Promise<BeginPullResponseV1> {
@@ -239,7 +236,7 @@ export async function beginPullV1(
     baseCookie,
     response,
     clientID,
-    replicacheFormatVersion,
+    formatVersion,
   );
 
   return {
@@ -287,12 +284,12 @@ export function handlePullResponseV0(
   expectedBaseCookie: ReadonlyJSONValue,
   response: PullResponseOKV0,
   clientID: ClientID,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
   // that is not the case by re-checking the base snapshot.
   return withWrite(store, async dagWrite => {
-    assert(replicacheFormatVersion <= REPLICACHE_FORMAT_VERSION_SDD);
+    assert(formatVersion <= FormatVersion.SDD);
     const dagRead = dagWrite;
     const mainHead = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
 
@@ -381,16 +378,16 @@ export function handlePullResponseV0(
       response.lastMutationID,
       frozenCookie,
       dagWrite,
-      db.readIndexesForWrite(lastIntegrated, dagWrite, replicacheFormatVersion),
+      db.readIndexesForWrite(lastIntegrated, dagWrite, formatVersion),
       clientID,
-      replicacheFormatVersion,
+      formatVersion,
     );
 
     await patch.apply(lc, dbWrite, response.patch);
 
     const lastIntegratedMap = new BTreeRead(
       dagRead,
-      replicacheFormatVersion,
+      formatVersion,
       lastIntegrated.valueHash,
     );
 
@@ -443,7 +440,7 @@ export function handlePullResponseV1(
   expectedBaseCookie: FrozenJSONValue,
   response: PullResponseOKV1,
   clientID: ClientID,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
   // that is not the case by re-checking the base snapshot.
@@ -517,7 +514,7 @@ export function handlePullResponseV1(
       frozenResponseCookie,
       dagWrite,
       clientID,
-      replicacheFormatVersion,
+      formatVersion,
     );
 
     await patch.apply(lc, dbWrite, response.patch);
@@ -543,7 +540,7 @@ export function maybeEndPull<M extends db.LocalMeta>(
   expectedSyncHead: Hash,
   clientID: ClientID,
   diffConfig: DiffComputationConfig,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<{
   syncHead: Hash;
   replayMutations: db.Commit<M>[];
@@ -631,12 +628,12 @@ export function maybeEndPull<M extends db.LocalMeta>(
     if (diffConfig.shouldComputeDiffs()) {
       const mainHeadMap = new BTreeRead(
         dagRead,
-        replicacheFormatVersion,
+        formatVersion,
         mainHead.valueHash,
       );
       const syncHeadMap = new BTreeRead(
         dagRead,
-        replicacheFormatVersion,
+        formatVersion,
         syncHead.valueHash,
       );
       const valueDiff = await btree.diff(mainHeadMap, syncHeadMap);
@@ -647,7 +644,7 @@ export function maybeEndPull<M extends db.LocalMeta>(
         dagRead,
         diffsMap,
         diffConfig,
-        replicacheFormatVersion,
+        formatVersion,
       );
     }
 

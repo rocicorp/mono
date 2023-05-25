@@ -3,7 +3,7 @@ import {assert} from 'shared/asserts.js';
 import type * as dag from '../dag/mod.js';
 import {assertSnapshotCommitDD31} from '../db/commit.js';
 import * as db from '../db/mod.js';
-import type {ReplicacheFormatVersion} from '../format-version.js';
+import type {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
 import type {MutatorDefs} from '../replicache.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
@@ -43,7 +43,7 @@ export async function persistDD31(
   perdag: dag.Store,
   mutators: MutatorDefs,
   closed: () => boolean,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
   onGatherMemOnlyChunksForTest = () => Promise.resolve(),
 ): Promise<void> {
   if (closed()) {
@@ -188,7 +188,7 @@ export async function persistDD31(
           mutators,
           mutationIDs,
           lc,
-          replicacheFormatVersion,
+          formatVersion,
         );
       }
     }
@@ -200,7 +200,7 @@ export async function persistDD31(
       mutators,
       mutationIDs,
       lc,
-      replicacheFormatVersion,
+      formatVersion,
     );
 
     const newMainClientGroup = {
@@ -241,7 +241,7 @@ async function rebase(
   mutators: MutatorDefs,
   mutationIDs: Record<ClientID, number>,
   lc: LogContext,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<Hash> {
   for (let i = mutations.length - 1; i >= 0; i--) {
     const mutationCommit = mutations[i];
@@ -260,7 +260,7 @@ async function rebase(
           mutators,
           lc,
           meta.clientID,
-          replicacheFormatVersion,
+          formatVersion,
         )
       ).chunk.hash;
     }

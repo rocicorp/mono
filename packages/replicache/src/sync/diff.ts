@@ -5,7 +5,7 @@ import {allEntriesAsDiff, BTreeRead} from '../btree/read.js';
 import type * as dag from '../dag/mod.js';
 import {Commit, fromHash, Meta} from '../db/commit.js';
 import {readIndexesForRead} from '../db/read.js';
-import type {ReplicacheFormatVersion} from '../format-version.js';
+import type {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
 
 /**
@@ -38,20 +38,14 @@ export async function diff(
   newHash: Hash,
   read: dag.Read,
   diffConfig: DiffComputationConfig,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<DiffsMap> {
   const [oldCommit, newCommit] = await Promise.all([
     fromHash(oldHash, read),
     fromHash(newHash, read),
   ]);
 
-  return diffCommits(
-    oldCommit,
-    newCommit,
-    read,
-    diffConfig,
-    replicacheFormatVersion,
-  );
+  return diffCommits(oldCommit, newCommit, read, diffConfig, formatVersion);
 }
 
 /**
@@ -64,23 +58,15 @@ export async function diffCommits(
   newCommit: Commit<Meta>,
   read: dag.Read,
   diffConfig: DiffComputationConfig,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
 ): Promise<DiffsMap> {
   const diffsMap = new DiffsMap();
   if (!diffConfig.shouldComputeDiffs()) {
     return diffsMap;
   }
 
-  const oldMap = new BTreeRead(
-    read,
-    replicacheFormatVersion,
-    oldCommit.valueHash,
-  );
-  const newMap = new BTreeRead(
-    read,
-    replicacheFormatVersion,
-    newCommit.valueHash,
-  );
+  const oldMap = new BTreeRead(read, formatVersion, oldCommit.valueHash);
+  const newMap = new BTreeRead(read, formatVersion, newCommit.valueHash);
   const valueDiff = await btree.diff(oldMap, newMap);
   diffsMap.set('', valueDiff);
 
@@ -90,7 +76,7 @@ export async function diffCommits(
     read,
     diffsMap,
     diffConfig,
-    replicacheFormatVersion,
+    formatVersion,
   );
 
   return diffsMap;
@@ -102,18 +88,10 @@ export async function addDiffsForIndexes(
   read: dag.Read,
   diffsMap: DiffsMap,
   diffConfig: DiffComputationConfig,
-  replicacheFormatVersion: ReplicacheFormatVersion,
+  formatVersion: FormatVersion,
 ) {
-  const oldIndexes = readIndexesForRead(
-    mainCommit,
-    read,
-    replicacheFormatVersion,
-  );
-  const newIndexes = readIndexesForRead(
-    syncCommit,
-    read,
-    replicacheFormatVersion,
-  );
+  const oldIndexes = readIndexesForRead(mainCommit, read, formatVersion);
+  const newIndexes = readIndexesForRead(syncCommit, read, formatVersion);
 
   for (const [oldIndexName, oldIndex] of oldIndexes) {
     if (!diffConfig.shouldComputeDiffsForIndex(oldIndexName)) {
