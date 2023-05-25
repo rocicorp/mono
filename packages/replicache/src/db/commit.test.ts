@@ -41,7 +41,7 @@ suite('base snapshot', () => {
     });
 
     await b.addLocal(clientID);
-    if (!formatVersion) {
+    if (formatVersion <= FormatVersion.SDD) {
       await b.addIndexChange(clientID);
     }
     await b.addLocal(clientID);
@@ -101,18 +101,21 @@ suite('local mutations', () => {
     });
 
     await b.addLocal(clientID);
-    if (!formatVersion) {
+    if (formatVersion <= FormatVersion.SDD) {
       await b.addIndexChange(clientID);
     }
     await b.addLocal(clientID);
-    if (!formatVersion) {
+    if (formatVersion <= FormatVersion.SDD) {
       await b.addIndexChange(clientID);
     }
     const headHash = b.chain[b.chain.length - 1].chunk.hash;
     const commits = await withRead(store, dagRead =>
       localMutations(headHash, dagRead),
     );
-    expect(commits).to.deep.equal([b.chain[formatVersion ? 2 : 3], b.chain[1]]);
+    expect(commits).to.deep.equal([
+      b.chain[formatVersion >= FormatVersion.DD31 ? 2 : 3],
+      b.chain[1],
+    ]);
   };
 
   test('DD31', () => t(FormatVersion.Latest));
@@ -210,7 +213,7 @@ suite('chain', () => {
 
     await b.addSnapshot(undefined, clientID);
     await b.addLocal(clientID);
-    if (!formatVersion) {
+    if (formatVersion <= FormatVersion.SDD) {
       await b.addIndexChange(clientID);
     } else {
       await b.addLocal(clientID);
