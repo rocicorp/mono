@@ -3,6 +3,7 @@ import {assert} from 'shared/asserts.js';
 import type {LogContext} from '@rocicorp/logger';
 import type {DurableStorage} from './durable-storage.js';
 import type {Storage} from './storage.js';
+import {randomID} from '../util/rand.js';
 
 /**
  * Encapsulates the logic for upgrading to a new schema. After the
@@ -37,41 +38,55 @@ export async function initStorageSchema(
   storage: DurableStorage,
   versionMigrationMap: VersionMigrationMap,
 ): Promise<void> {
-  const versionMigrations = sorted(versionMigrationMap);
-  if (versionMigrations.length === 0) {
-    log.info?.(`No versions/migrations to manage.`);
-    return;
-  }
-  const codeSchemaVersion = versionMigrations[versionMigrations.length - 1][0];
-  log.info?.(
-    `Checking schema for compatibility with server at schema v${codeSchemaVersion}`,
-  );
-
-  let meta = await getStorageSchemaMeta(storage);
-  if (codeSchemaVersion < meta.minSafeRollbackVersion) {
-    throw new Error(
-      `Cannot run server at schema v${codeSchemaVersion} because rollback limit is v${meta.minSafeRollbackVersion}`,
-    );
-  }
-
-  if (meta.version > codeSchemaVersion) {
+  log = log.withContext('initStorageSchema', randomID());
+  try {
+    const versionMigrations = sorted(versionMigrationMap);
+    if (versionMigrations.length === 0) {
+      log.info?.(`No versions/migrations to manage.`);
+      return;
+    }
+    const codeSchemaVersion =
+      versionMigrations[versionMigrations.length - 1][0];
     log.info?.(
-      `Storage is at v${meta.version}. Resetting to v${codeSchemaVersion}`,
+      `Checking schema for compatibility with server at schema v${codeSchemaVersion}`,
     );
-    meta = await setStorageSchemaVersion(storage, codeSchemaVersion);
-  } else {
-    for (const [dest, migration] of versionMigrations) {
-      if (meta.version < dest) {
-        log.info?.(`Migrating storage from v${meta.version} to v${dest}`);
-        await log.flush(); // Flush logs before each migration to help debug crash-y migrations.
 
-        meta = await migrateStorageSchemaVersion(log, storage, dest, migration);
-        assert(meta.version === dest);
+    let meta = await getStorageSchemaMeta(storage);
+    if (codeSchemaVersion < meta.minSafeRollbackVersion) {
+      throw new Error(
+        `Cannot run server at schema v${codeSchemaVersion} because rollback limit is v${meta.minSafeRollbackVersion}`,
+      );
+    }
+
+    if (meta.version > codeSchemaVersion) {
+      log.info?.(
+        `Storage is at v${meta.version}. Resetting to v${codeSchemaVersion}`,
+      );
+      meta = await setStorageSchemaVersion(storage, codeSchemaVersion);
+    } else {
+      for (const [dest, migration] of versionMigrations) {
+        if (meta.version < dest) {
+          log.info?.(`Migrating storage from v${meta.version} to v${dest}`);
+          await log.flush(); // Flush logs before each migration to help debug crash-y migrations.
+
+          meta = await migrateStorageSchemaVersion(
+            log,
+            storage,
+            dest,
+            migration,
+          );
+          assert(meta.version === dest);
+        }
       }
     }
+    assert(meta.version === codeSchemaVersion);
+    log.info?.(`Running server at schema v${codeSchemaVersion}`);
+  } catch (e) {
+    log.error?.('Error in ensureStorageSchemaMigrated', e);
+    throw e;
+  } finally {
+    await log.flush();
   }
-  assert(meta.version === codeSchemaVersion);
-  log.info?.(`Running server at schema v${codeSchemaVersion}`);
 }
 
 function sorted(
