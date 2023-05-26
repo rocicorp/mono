@@ -40,9 +40,8 @@ describe('room schema', () => {
         new DurableStorage(storage),
       );
 
-      for (const [key, value] of Object.entries(c.postState)) {
-        expect(await storage.get(key)).toEqual(value);
-      }
+      const storageState = Object.fromEntries((await storage.list()).entries());
+      expect(c.postState).toEqual(storageState);
     });
   }
 });
