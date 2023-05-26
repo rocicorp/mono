@@ -3,9 +3,9 @@ import {assert} from 'shared/asserts.js';
 import {TestLogSink} from '../util/test-utils.js';
 import {TestDurableObjectState, TestExecutionContext} from './do-test-utils.js';
 import {
+  ReflectServerOptions,
   createReflectServer,
   type ReflectServerBaseEnv,
-  ReflectServerOptions,
 } from './reflect.js';
 
 test('Make sure makeOptions is called every time DO is constructed or worker fetch is called', async () => {
@@ -23,6 +23,7 @@ test('Make sure makeOptions is called every time DO is constructed or worker fet
       disconnectHandler: () => Promise.resolve(),
     };
   };
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   const {worker, AuthDO, RoomDO} = createReflectServer(options);
 
   const {authDO, roomDO} = getMiniflareBindings();

@@ -5,6 +5,7 @@ declare global {
     id: DurableObjectId,
   ): Promise<DurableObjectStorage>;
 
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   const MINIFLARE: boolean | undefined;
 }
 
