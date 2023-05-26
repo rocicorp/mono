@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
 import {describe, expect, test} from '@jest/globals';
 import * as valita from 'shared/valita.js';
 import {DurableStorage} from './durable-storage.js';

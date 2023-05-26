@@ -1,25 +1,25 @@
-import {describe, test, expect} from '@jest/globals';
+import {describe, expect, test} from '@jest/globals';
 import {LogContext} from '@rocicorp/logger';
 import type {Mutation} from 'reflect-protocol';
 import {handlePush} from '../server/push.js';
-import {resolver} from '../util/resolver.js';
-import {randomID} from '../util/rand.js';
-import {
-  client,
-  clientRecord,
-  Mocket,
-  mutation,
-  pendingMutation,
-  SilentLogSink,
-} from '../util/test-utils.js';
-import type {ClientID, ClientMap, ClientState} from '../types/client-state.js';
-import type {PendingMutation} from '../types/mutation.js';
+import {DurableStorage} from '../storage/durable-storage.js';
 import {
   ClientRecordMap,
   listClientRecords,
   putClientRecord,
 } from '../types/client-record.js';
-import {DurableStorage} from '../storage/durable-storage.js';
+import type {ClientID, ClientMap, ClientState} from '../types/client-state.js';
+import type {PendingMutation} from '../types/mutation.js';
+import {randomID} from '../util/rand.js';
+import {resolver} from '../util/resolver.js';
+import {
+  Mocket,
+  SilentLogSink,
+  client,
+  clientRecord,
+  mutation,
+  pendingMutation,
+} from '../util/test-utils.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -47,7 +47,7 @@ function clientMapSansSockets(
   return new Map(
     [...clientMap.entries()].map(([clientID, clientState]) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const {socket, ...clientStateSansSocket} = clientState;
+      const {socket: _, ...clientStateSansSocket} = clientState;
       return [clientID, clientStateSansSocket];
     }),
   );

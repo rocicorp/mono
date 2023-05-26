@@ -374,7 +374,7 @@ export function handlePullResponseV0(
     }
 
     const dbWrite = await db.newWriteSnapshotSDD(
-      db.whenceHash(baseSnapshot.chunk.hash),
+      baseSnapshot.chunk.hash,
       response.lastMutationID,
       frozenCookie,
       dagWrite,
@@ -509,7 +509,7 @@ export function handlePullResponseV1(
     }
 
     const dbWrite = await db.newWriteSnapshotDD31(
-      db.whenceHash(baseSnapshot.chunk.hash),
+      baseSnapshot.chunk.hash,
       {...baseSnapshotMeta.lastMutationIDs, ...response.lastMutationIDChanges},
       frozenResponseCookie,
       dagWrite,

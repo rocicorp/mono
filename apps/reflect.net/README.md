@@ -8,4 +8,4 @@ In separate terminals, run:
 
 `npm run dev-worker`
 
-`npm start`
+`npm run dev-next`

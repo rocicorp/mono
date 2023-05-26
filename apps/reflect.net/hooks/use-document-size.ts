@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import useIsomorphicLayoutEffect from './use-isomorphic-layout-effect';
+import {useIsomorphicLayoutEffect} from './use-isomorphic-layout-effect';
 
 export function useDocumentSize() {
   const [docSize, setDocSize] = useState<{

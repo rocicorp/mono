@@ -1,19 +1,19 @@
-import {test, expect} from '@jest/globals';
+import {expect, test} from '@jest/globals';
+import type {WriteTransaction} from 'replicache';
 import {
   newInvalidateAllAuthRequest,
   newInvalidateForRoomAuthRequest,
   newInvalidateForUserAuthRequest,
 } from '../client/auth.js';
 import {newCreateRoomRequest, newDeleteRoomRequest} from '../client/room.js';
+import {DurableStorage} from '../storage/durable-storage.js';
+import {getUserValue, putUserValue} from '../types/user-value.js';
+import {getVersion, putVersion} from '../types/version.js';
 import {newAuthConnectionsRequest} from '../util/auth-test-util.js';
-import {createSilentLogContext, TestLogSink} from '../util/test-utils.js';
+import {TestLogSink, createSilentLogContext} from '../util/test-utils.js';
 import {version} from '../util/version.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
 import {BaseRoomDO} from './room-do.js';
-import {getVersion, putVersion} from '../types/version.js';
-import {DurableStorage} from '../storage/durable-storage.js';
-import {getUserValue, putUserValue} from '../types/user-value.js';
-import type {WriteTransaction} from 'replicache';
 
 test('sets roomID in createRoom', async () => {
   const testLogSink = new TestLogSink();
@@ -255,14 +255,12 @@ test('Logs version during construction', async () => {
   });
   expect(testLogSink.messages).toEqual(
     expect.arrayContaining([
-      /* eslint-disable @typescript-eslint/naming-convention */
       ['info', {component: 'RoomDO', doID: 'test-do-id'}, ['Starting server']],
       [
         'info',
         {component: 'RoomDO', doID: 'test-do-id'},
         ['Version:', version],
       ],
-      /* eslint-enable @typescript-eslint/naming-convention */
     ]),
   );
   expect(testLogSink.messages[1][2][1]).toMatch(/^\d+\.\d+\.\d+/);

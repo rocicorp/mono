@@ -1,10 +1,6 @@
 import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
-import {
-  assertNotUndefined,
-  assertObject,
-  assertString,
-} from 'shared/asserts.js';
+import {assertObject, assertString} from 'shared/asserts.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import {BTreeRead} from '../btree/read.js';
 import type {Cookie, FrozenCookie} from '../cookies.js';
@@ -420,15 +416,10 @@ test('begin try pull SDD', async () => {
     // the index no longer returns values, demonstrating that it was rebuilt.
     if (c.numPendingMutations > 0) {
       await withRead(store, async dagRead => {
-        const read = await db.fromWhence(
-          db.whenceHead(DEFAULT_HEAD_NAME),
-          dagRead,
-          formatVersion,
-        );
+        const read = await db.readFromDefaultHead(dagRead, formatVersion);
         let got = false;
 
         const indexMap = read.getMapForIndex('2');
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         for await (const _ of indexMap.scan('')) {
           got = true;
           break;
@@ -476,23 +467,19 @@ test('begin try pull SDD', async () => {
     await withRead(store, async read => {
       if (c.expNewSyncHead !== undefined) {
         const expSyncHead = c.expNewSyncHead;
-        const syncHeadHash = await read.getHead(SYNC_HEAD_NAME);
-        assertString(syncHeadHash);
-        const chunk = await read.getChunk(syncHeadHash);
-        assertNotUndefined(chunk);
-        const syncHead = db.fromChunk(chunk);
-        assertSnapshotCommitSDD(syncHead);
+        const syncHeadCommit = await db.commitFromHead(SYNC_HEAD_NAME, read);
+        assertSnapshotCommitSDD(syncHeadCommit);
         const [gotLastMutationID, gotCookie] = db.snapshotMetaParts(
-          syncHead,
+          syncHeadCommit,
           clientID,
         );
         expect(expSyncHead.lastMutationID).to.equal(gotLastMutationID);
         expect(expSyncHead.cookie).to.deep.equal(gotCookie);
         // Check the value is what's expected.
-        const [, , bTreeRead] = await db.readCommitForBTreeRead(
-          db.whenceHash(syncHead.chunk.hash),
+        const bTreeRead = new BTreeRead(
           read,
           formatVersion,
+          syncHeadCommit.valueHash,
         );
         const gotValueMap = await asyncIterableToArray(bTreeRead.entries());
         gotValueMap.sort((a, b) => stringCompare(a[0], b[0]));
@@ -501,7 +488,9 @@ test('begin try pull SDD', async () => {
         expect(expValueMap.length).to.equal(gotValueMap.length);
 
         // Check we have the expected index definitions.
-        const indexes: string[] = syncHead.indexes.map(i => i.definition.name);
+        const indexes: string[] = syncHeadCommit.indexes.map(
+          i => i.definition.name,
+        );
         expect(expSyncHead.indexes.length).to.equal(
           indexes.length,
           `${c.name}: expected indexes ${expSyncHead.indexes}, got ${indexes}`,
@@ -517,20 +506,19 @@ test('begin try pull SDD', async () => {
         // change's index ("2").
         if (expSyncHead.indexes.length > 1) {
           await withRead(store, async dagRead => {
-            const read = await db.fromWhence(
-              db.whenceHead(SYNC_HEAD_NAME),
+            const read = await db.readFromHead(
+              SYNC_HEAD_NAME,
               dagRead,
               formatVersion,
             );
             const indexMap = read.getMapForIndex('2');
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             for await (const _ of indexMap.scan('')) {
               expect(false).to.be.true;
             }
           });
 
           assertObject(result);
-          expect(syncHeadHash).to.equal(result.syncHead);
+          expect(syncHeadCommit.chunk.hash).to.equal(result.syncHead);
         }
       } else {
         const gotHead = await read.getHead(SYNC_HEAD_NAME);
@@ -969,15 +957,10 @@ test('begin try pull DD31', async () => {
     // the index no longer returns values, demonstrating that it was rebuilt.
     if (c.numPendingMutations > 0) {
       await withRead(store, async dagRead => {
-        const read = await db.fromWhence(
-          db.whenceHead(DEFAULT_HEAD_NAME),
-          dagRead,
-          formatVersion,
-        );
+        const read = await db.readFromDefaultHead(dagRead, formatVersion);
         let got = false;
 
         const indexMap = read.getMapForIndex('2');
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         for await (const _ of indexMap.scan('')) {
           got = true;
           break;
@@ -1027,23 +1010,19 @@ test('begin try pull DD31', async () => {
     await withRead(store, async read => {
       if (c.expNewSyncHead !== undefined) {
         const expSyncHead = c.expNewSyncHead;
-        const syncHeadHash = await read.getHead(SYNC_HEAD_NAME);
-        assertString(syncHeadHash);
-        const chunk = await read.getChunk(syncHeadHash);
-        assertNotUndefined(chunk);
-        const syncHead = db.fromChunk(chunk);
-        assertSnapshotCommitDD31(syncHead);
+        const syncHeadCommit = await db.commitFromHead(SYNC_HEAD_NAME, read);
+        assertSnapshotCommitDD31(syncHeadCommit);
         const [gotLastMutationID, gotCookie] = db.snapshotMetaParts(
-          syncHead,
+          syncHeadCommit,
           clientID,
         );
         expect(expSyncHead.lastMutationID).to.equal(gotLastMutationID);
         expect(expSyncHead.cookie).to.deep.equal(gotCookie);
         // Check the value is what's expected.
-        const [, , bTreeRead] = await db.readCommitForBTreeRead(
-          db.whenceHash(syncHead.chunk.hash),
+        const bTreeRead = new BTreeRead(
           read,
           formatVersion,
+          syncHeadCommit.valueHash,
         );
         const gotValueMap = (
           await asyncIterableToArray(bTreeRead.entries())
@@ -1054,7 +1033,9 @@ test('begin try pull DD31', async () => {
         expect(expValueMap).to.deep.equal(gotValueMap);
 
         // Check we have the expected index definitions.
-        const indexes: string[] = syncHead.indexes.map(i => i.definition.name);
+        const indexes: string[] = syncHeadCommit.indexes.map(
+          i => i.definition.name,
+        );
         expect(expSyncHead.indexes).to.deep.equal(indexes);
 
         // Check that we *don't* have old indexed values. The indexes should
@@ -1064,20 +1045,19 @@ test('begin try pull DD31', async () => {
         // change's index ("2").
         if (expSyncHead.indexes.length > 1) {
           await withRead(store, async dagRead => {
-            const read = await db.fromWhence(
-              db.whenceHead(SYNC_HEAD_NAME),
+            const read = await db.readFromHead(
+              SYNC_HEAD_NAME,
               dagRead,
               formatVersion,
             );
             const indexMap = read.getMapForIndex('2');
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             for await (const _ of indexMap.scan('')) {
               expect(false).to.be.true;
             }
           });
 
           assertObject(result);
-          expect(syncHeadHash).to.equal(result.syncHead);
+          expect(syncHeadCommit.chunk.hash).to.equal(result.syncHead);
         }
       } else {
         const gotHead = await read.getHead(SYNC_HEAD_NAME);
@@ -1190,7 +1170,7 @@ suite('maybe end try pull', () => {
         const w =
           formatVersion >= FormatVersion.DD31
             ? await db.newWriteSnapshotDD31(
-                db.whenceHash(b.chain[0].chunk.hash),
+                b.chain[0].chunk.hash,
                 {[clientID]: 0},
                 'sync_cookie',
                 dagWrite,
@@ -1198,7 +1178,7 @@ suite('maybe end try pull', () => {
                 formatVersion,
               )
             : await db.newWriteSnapshotSDD(
-                db.whenceHash(b.chain[0].chunk.hash),
+                b.chain[0].chunk.hash,
                 0,
                 'sync_cookie',
                 dagWrite,
@@ -1228,7 +1208,7 @@ suite('maybe end try pull', () => {
         }
         basisHash = await withWrite(store, async dagWrite => {
           const w = await db.newWriteLocal(
-            db.whenceHash(basisHash),
+            basisHash,
             mutatorName,
             mutatorArgs,
             original.chunk.hash,

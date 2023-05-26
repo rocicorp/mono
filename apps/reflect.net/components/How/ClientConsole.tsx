@@ -3,7 +3,7 @@ import {useContext, useEffect, useState} from 'react';
 import styles from './ClientConsole.module.css';
 import {ClientIDContext} from './ClientIDContext';
 
-export default function ClientConsole({logs}: {logs: string[] | undefined}) {
+export function ClientConsole({logs}: {logs: string[] | undefined}) {
   const {client1ID, client2ID} = useContext(ClientIDContext);
   const [bright, setBright] = useState(false);
 

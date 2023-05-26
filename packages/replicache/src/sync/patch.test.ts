@@ -165,7 +165,7 @@ suite('patch', () => {
         let dbWrite;
         if (formatVersion >= FormatVersion.DD31) {
           dbWrite = await db.newWriteSnapshotDD31(
-            db.whenceHash(b.chain[0].chunk.hash),
+            b.chain[0].chunk.hash,
             {[clientID]: 1},
             'cookie',
             dagWrite,
@@ -174,7 +174,7 @@ suite('patch', () => {
           );
         } else {
           dbWrite = await db.newWriteSnapshotSDD(
-            db.whenceHash(b.chain[0].chunk.hash),
+            b.chain[0].chunk.hash,
             1,
             'cookie',
             dagWrite,

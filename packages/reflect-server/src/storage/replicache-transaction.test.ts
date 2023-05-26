@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
 import {expect, test} from '@jest/globals';
 import {compareUTF8} from 'compare-utf8';
 import type {ScanOptions} from 'replicache';

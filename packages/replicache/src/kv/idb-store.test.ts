@@ -1,8 +1,8 @@
-import {runAll} from './store-test-util.js';
-import {IDBNotFoundError, IDBStore} from './idb-store.js';
-import {dropStore} from './idb-util.js';
 import {expect} from '@esm-bundle/chai';
 import {withRead, withWrite} from '../with-transactions.js';
+import {IDBNotFoundError, IDBStore} from './idb-store.js';
+import {dropStore} from './idb-util.js';
+import {runAll} from './store-test-util.js';
 
 async function newRandomIDBStore() {
   const name = `test-idbstore-${Math.random()}`;
@@ -49,11 +49,8 @@ suite('reopening IDB', () => {
     await dropStore(name);
 
     store = new IDBStore(name);
-    const propAccessor = store as unknown as {
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      _db: Promise<IDBDatabase>;
-    };
-    idb = propAccessor._db;
+    // @ts-expect-error _db is private
+    idb = store._db;
   });
 
   test('succeeds if IDB still exists', async () => {

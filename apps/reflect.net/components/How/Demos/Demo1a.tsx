@@ -1,7 +1,7 @@
 import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter';
 import {vscDarkPlus} from 'react-syntax-highlighter/dist/cjs/styles/prism';
 
-const Demo1a = () => {
+export function Demo1a() {
   const codeString = `export default {
   async increment(tx, args: {key: string, delta: number}) {
     const {key, delta} = args;
@@ -28,6 +28,4 @@ const Demo1a = () => {
       {codeString}
     </SyntaxHighlighter>
   );
-};
-
-export default Demo1a;
+}

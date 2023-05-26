@@ -14,6 +14,7 @@ import {initBgIntervalProcess} from './bg-interval.js';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
 import * as dag from './dag/mod.js';
+import {mustGetHeadHash} from './dag/store.js';
 import {assertLocalCommitDD31} from './db/commit.js';
 import * as db from './db/mod.js';
 import {
@@ -1584,11 +1585,11 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const clientID = await this._clientIDPromise;
     return withWrite(this._memdag, async dagWrite => {
       try {
-        const whence: db.Whence = db.whenceHead(db.DEFAULT_HEAD_NAME);
+        const headHash = await mustGetHeadHash(db.DEFAULT_HEAD_NAME, dagWrite);
         const originalHash = null;
 
         const dbWrite = await db.newWriteLocal(
-          whence,
+          headHash,
           name,
           frozenArgs,
           originalHash,

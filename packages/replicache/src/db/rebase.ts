@@ -13,16 +13,15 @@ import {
   LocalMetaSDD,
   Meta,
   assertLocalMetaDD31,
-  fromHash,
+  commitFromHash,
   isLocalMetaDD31,
 } from './commit.js';
-import {whenceHash} from './read.js';
 import {Write, newWriteLocal} from './write.js';
 
 async function rebaseMutation(
   mutation: Commit<LocalMetaDD31 | LocalMetaSDD>,
   dagWrite: dag.Write,
-  basis: Hash,
+  basisHash: Hash,
   mutators: MutatorDefs,
   lc: LogContext,
   mutationClientID: ClientID,
@@ -56,7 +55,7 @@ async function rebaseMutation(
 
   const args = localMeta.mutatorArgsJSON;
 
-  const basisCommit = await fromHash(basis, dagWrite);
+  const basisCommit = await commitFromHash(basisHash, dagWrite);
   const nextMutationID = await basisCommit.getNextMutationID(
     mutationClientID,
     dagWrite,
@@ -72,7 +71,7 @@ async function rebaseMutation(
   }
 
   const dbWrite = await newWriteLocal(
-    whenceHash(basis),
+    basisHash,
     name,
     args,
     mutation.chunk.hash,

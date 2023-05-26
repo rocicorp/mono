@@ -5,13 +5,17 @@ import {
   createWorkerDatadogLogSink,
   ReflectServerBaseEnv,
 } from '@rocicorp/reflect-server';
-import {mutators} from '../shared/mutators';
 import {deleteClient} from '../alive/client-model';
+import {mutators} from '../shared/mutators';
 
 type ReflectNetServerEnv = {
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   NEW_ROOM_SECRET?: string;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   CLEAN_ROOM_UID?: string;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   DATADOG_METRICS_API_KEY?: string;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   DATADOG_LOGS_API_KEY?: string;
 } & ReflectServerBaseEnv;
 
@@ -48,13 +52,15 @@ function getLogSinks(env: ReflectNetServerEnv) {
 const DATADOG_SERVICE_LABEL = 'reflect.net';
 const {
   worker,
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   RoomDO: SuperRoomDO,
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   AuthDO,
 } = createReflectServer((env: ReflectNetServerEnv) => ({
   mutators,
   metricsSink: getMetricsSink(env),
   logSinks: getLogSinks(env),
-  logLevel: 'info',
+  logLevel: 'debug',
   disconnectHandler: async tx => {
     console.log('deleting old client', tx.clientID);
     await deleteClient(tx, tx.clientID);
@@ -68,4 +74,4 @@ class RoomDO extends SuperRoomDO {
 }
 
 export {RoomDO, AuthDO};
-export default worker;
+export {worker as default};

@@ -1,13 +1,13 @@
 // components/Nav/Nav.tsx
 
-import React, {useState} from 'react';
-import NavLogo from './NavLogo';
-import styles from './Nav.module.css';
-import MobileNav from './MobileNav';
+import {useIsomorphicLayoutEffect} from '@/hooks/use-isomorphic-layout-effect';
+import {useState} from 'react';
 import {Link} from 'react-scroll';
-import useIsomorphicLayoutEffect from '@/hooks/use-isomorphic-layout-effect';
+import {MobileNav} from './MobileNav';
+import styles from './Nav.module.css';
+import {NavLogo} from './NavLogo';
 
-export default function Nav({gameMode}: {gameMode: boolean}) {
+export function Nav({gameMode}: {gameMode: boolean}) {
   const [showNavBorder, setShowNavBorder] = useState(false);
 
   useIsomorphicLayoutEffect(() => {

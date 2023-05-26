@@ -10,7 +10,7 @@ import {
 import {skipCommitDataAsserts} from '../config.js';
 import {FrozenCookie, compareCookies} from '../cookies.js';
 import type * as dag from '../dag/mod.js';
-import type {MustGetChunk} from '../dag/store.js';
+import {MustGetChunk, mustGetHeadHash} from '../dag/store.js';
 import {Hash, assertHash} from '../hash.js';
 import type {IndexDefinition} from '../index-defs.js';
 import {
@@ -30,12 +30,6 @@ export const enum MetaType {
   SnapshotSDD = 3,
   LocalDD31 = 4,
   SnapshotDD31 = 5,
-}
-
-export function IndexChangeSDD(
-  commit: Commit<Meta>,
-): commit is Commit<IndexChangeMetaSDD> {
-  return isIndexChangeSDD(commit.meta);
 }
 
 export function commitIsLocalSDD(
@@ -133,7 +127,7 @@ export async function getMutationID(
         return meta.mutationID;
       }
       const {basisHash} = meta;
-      const basisCommit = await fromHash(basisHash, dagRead);
+      const basisCommit = await commitFromHash(basisHash, dagRead);
       return getMutationID(clientID, dagRead, basisCommit.meta);
     }
 
@@ -156,7 +150,7 @@ export async function localMutations(
   fromCommitHash: Hash,
   dagRead: dag.Read,
 ): Promise<Commit<LocalMetaSDD | LocalMetaDD31>[]> {
-  const commits = await chain(fromCommitHash, dagRead);
+  const commits = await commitChain(fromCommitHash, dagRead);
   // Filter does not deal with type narrowing.
   return commits.filter(c => commitIsLocal(c)) as Commit<
     LocalMetaSDD | LocalMetaDD31
@@ -167,7 +161,7 @@ export async function localMutationsDD31(
   fromCommitHash: Hash,
   dagRead: dag.Read,
 ): Promise<Commit<LocalMetaDD31>[]> {
-  const commits = await chain(fromCommitHash, dagRead);
+  const commits = await commitChain(fromCommitHash, dagRead);
   // Filter does not deal with type narrowing.
   return commits.filter(c => commitIsLocalDD31(c)) as Commit<LocalMetaDD31>[];
 }
@@ -195,7 +189,7 @@ export async function localMutationsGreaterThan(
     if (basisHash === null) {
       throw new Error(`Commit ${commit.chunk.hash} has no basis`);
     }
-    commit = await fromHash(basisHash, dagRead);
+    commit = await commitFromHash(basisHash, dagRead);
   }
   return commits;
 }
@@ -220,7 +214,7 @@ export async function baseSnapshotFromHash(
   hash: Hash,
   dagRead: dag.Read,
 ): Promise<Commit<SnapshotMetaSDD | SnapshotMetaDD31>> {
-  const commit = await fromHash(hash, dagRead);
+  const commit = await commitFromHash(hash, dagRead);
   return baseSnapshotFromCommit(commit, dagRead);
 }
 
@@ -231,13 +225,13 @@ export async function baseSnapshotFromCommit(
   while (!commitIsSnapshot(commit)) {
     const {meta} = commit;
     if (isLocalMetaDD31(meta)) {
-      commit = await fromHash(meta.baseSnapshotHash, dagRead);
+      commit = await commitFromHash(meta.baseSnapshotHash, dagRead);
     } else {
       const {basisHash} = meta;
       if (basisHash === null) {
         throw new Error(`Commit ${commit.chunk.hash} has no basis`);
       }
-      commit = await fromHash(basisHash, dagRead);
+      commit = await commitFromHash(basisHash, dagRead);
     }
   }
   return commit;
@@ -267,11 +261,11 @@ export function compareCookiesForSnapshots(
  * inclusive of both. Resulting vector is in chain-head-first order (so snapshot
  * comes last).
  */
-export async function chain(
+export async function commitChain(
   fromCommitHash: Hash,
   dagRead: dag.Read,
 ): Promise<Commit<Meta>[]> {
-  let commit = await fromHash(fromCommitHash, dagRead);
+  let commit = await commitFromHash(fromCommitHash, dagRead);
   const commits = [];
   while (!commitIsSnapshot(commit)) {
     const {meta} = commit;
@@ -280,13 +274,13 @@ export async function chain(
       throw new Error(`Commit ${commit.chunk.hash} has no basis`);
     }
     commits.push(commit);
-    commit = await fromHash(basisHash, dagRead);
+    commit = await commitFromHash(basisHash, dagRead);
   }
   commits.push(commit);
   return commits;
 }
 
-export async function fromHash(
+export async function commitFromHash(
   hash: Hash,
   dagRead: MustGetChunk,
 ): Promise<Commit<Meta>> {
@@ -294,13 +288,12 @@ export async function fromHash(
   return fromChunk(chunk);
 }
 
-export async function fromHead(
+export async function commitFromHead(
   name: string,
   dagRead: dag.Read,
 ): Promise<Commit<Meta>> {
-  const hash = await dagRead.getHead(name);
-  assert(hash, `Missing head ${name}`);
-  return fromHash(hash, dagRead);
+  const hash = await mustGetHeadHash(name, dagRead);
+  return commitFromHash(hash, dagRead);
 }
 
 export type IndexChangeMetaSDD = {
@@ -463,10 +456,6 @@ function isSnapshotMetaDD31(meta: Meta): meta is SnapshotMetaDD31 {
 
 function isSnapshotMetaSDD(meta: Meta): meta is SnapshotMetaSDD {
   return meta.type === MetaType.SnapshotSDD;
-}
-
-function isIndexChangeSDD(meta: Meta): meta is IndexChangeMetaSDD {
-  return meta.type === MetaType.IndexChangeSDD;
 }
 
 function assertMeta(v: unknown): asserts v is Meta {

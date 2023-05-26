@@ -4,7 +4,7 @@ export const config = {
   runtime: 'edge',
 };
 
-const foo = (req: NextRequest) => {
+function foo(req: NextRequest) {
   const country = (req.headers.get('x-vercel-ip-country') as string) ?? '';
   const city = (req.headers.get('x-vercel-ip-city') as string) ?? '';
   const region =
@@ -19,6 +19,6 @@ const foo = (req: NextRequest) => {
     city,
     region,
   });
-};
+}
 
-export default foo;
+export {foo as default};

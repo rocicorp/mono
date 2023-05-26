@@ -44,7 +44,7 @@ export async function addSyncSnapshot(
   await withWrite(store, async dagWrite => {
     if (formatVersion >= FormatVersion.DD31) {
       const w = await db.newWriteSnapshotDD31(
-        db.whenceHash(baseSnapshot.chunk.hash),
+        baseSnapshot.chunk.hash,
         {[clientID]: await baseSnapshot.getMutationID(clientID, dagWrite)},
         cookie,
         dagWrite,
@@ -59,7 +59,7 @@ export async function addSyncSnapshot(
         formatVersion,
       );
       const w = await db.newWriteSnapshotSDD(
-        db.whenceHash(baseSnapshot.chunk.hash),
+        baseSnapshot.chunk.hash,
         await baseSnapshot.getMutationID(clientID, dagWrite),
         cookie,
         dagWrite,
@@ -70,8 +70,8 @@ export async function addSyncSnapshot(
       await w.commit(sync.SYNC_HEAD_NAME);
     }
   });
-  const [, commit] = await withRead(store, dagRead =>
-    db.readCommit(db.whenceHead(sync.SYNC_HEAD_NAME), dagRead),
+  const commit = await withRead(store, dagRead =>
+    db.commitFromHead(sync.SYNC_HEAD_NAME, dagRead),
   );
   syncChain.push(commit);
 
