@@ -185,9 +185,6 @@ async function fetch(
   lc: LogContext,
   metricsSink: MetricsSink | undefined,
 ): Promise<Response> {
-  // TODO: pass request id through so request can be traced across
-  // worker and DOs.
-  lc = lc.withContext('req', randomID());
   lc.debug?.('Handling request:', request.method, request.url);
   try {
     const resp = await withAllowAllCORS(

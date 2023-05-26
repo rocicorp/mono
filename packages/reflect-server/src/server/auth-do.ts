@@ -416,7 +416,7 @@ export class BaseAuthDO implements DurableObject {
     }
     assert(jurisdiction === undefined || jurisdiction === 'eu');
 
-    lc = lc.withContext('client', clientID).withContext('room', roomID);
+    lc = lc.withContext('clientID', clientID).withContext('roomID', roomID);
     let decodedAuth: string | undefined;
     if (encodedAuth) {
       try {
