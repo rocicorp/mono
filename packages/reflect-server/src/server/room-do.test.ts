@@ -256,8 +256,12 @@ test('Logs version during construction', async () => {
   expect(testLogSink.messages).toEqual(
     expect.arrayContaining([
       /* eslint-disable @typescript-eslint/naming-convention */
-      ['info', {RoomDO: undefined, doID: 'test-do-id'}, ['Starting server']],
-      ['info', {RoomDO: undefined, doID: 'test-do-id'}, ['Version:', version]],
+      ['info', {component: 'RoomDO', doID: 'test-do-id'}, ['Starting server']],
+      [
+        'info',
+        {component: 'RoomDO', doID: 'test-do-id'},
+        ['Version:', version],
+      ],
       /* eslint-enable @typescript-eslint/naming-convention */
     ]),
   );
