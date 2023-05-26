@@ -144,6 +144,7 @@ export class BaseAuthDO implements DurableObject {
     this._authHandler = authHandler;
     this._authApiKey = authApiKey;
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
+      'component',
       'AuthDO',
     );
     registerUnhandledRejectionHandler(lc);
