@@ -60,7 +60,7 @@ const {
   mutators,
   metricsSink: getMetricsSink(env),
   logSinks: getLogSinks(env),
-  logLevel: 'info',
+  logLevel: 'debug',
   disconnectHandler: async tx => {
     console.log('deleting old client', tx.clientID);
     await deleteClient(tx, tx.clientID);

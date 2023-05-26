@@ -24,7 +24,6 @@ import {
   LEGACY_CONNECT_PATH,
   LEGACY_CREATE_ROOM_PATH,
 } from './paths.js';
-import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
 import {ROOM_ROUTES} from './room-do.js';
 import {
   RoomStatus,
@@ -54,6 +53,7 @@ import {
 } from './router.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import {sleep} from '../util/sleep.js';
+import {populateLogContextFromRequest} from '../util/log-context-common.js';
 
 export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
 
@@ -161,7 +161,7 @@ export class BaseAuthDO implements DurableObject {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const lc = addRequestIDFromHeadersOrRandomID(this._lc, request);
+    const lc = populateLogContextFromRequest(this._lc, request);
     lc.debug?.('Handling request:', request.url);
     try {
       const resp = await this._router.dispatch(request, {lc});
@@ -416,7 +416,6 @@ export class BaseAuthDO implements DurableObject {
     }
     assert(jurisdiction === undefined || jurisdiction === 'eu');
 
-    lc = lc.withContext('clientID', clientID).withContext('roomID', roomID);
     let decodedAuth: string | undefined;
     if (encodedAuth) {
       try {

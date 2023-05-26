@@ -22,6 +22,7 @@ import {
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import type {MaybePromise} from 'replicache';
 import {version} from '../mod.js';
+import {populateLogContextFromRequest} from '../util/log-context-common.js';
 
 export type MetricsSink = (
   allSeries: Series[],
@@ -134,6 +135,7 @@ export function createWorker<Env extends BaseWorkerEnv>(
         ctx,
         logSink,
         logLevel,
+        request,
         withUnhandledRejectionHandler(lc =>
           fetch(request, env, router, lc, metricsSink),
         ),
@@ -149,6 +151,7 @@ export function createWorker<Env extends BaseWorkerEnv>(
         ctx,
         logSink,
         logLevel,
+        undefined,
         withUnhandledRejectionHandler(lc => scheduled(env, lc)),
       );
     },
@@ -266,12 +269,16 @@ async function withLogContext<R>(
   ctx: ExecutionContext,
   logSink: LogSink,
   logLevel: LogLevel,
+  req: Request | undefined,
   fn: (lc: LogContext) => Promise<R>,
 ): Promise<R> {
-  const lc = new LogContext(logLevel, undefined, logSink).withContext(
+  let lc = new LogContext(logLevel, undefined, logSink).withContext(
     'component',
     'Worker',
   );
+  if (req !== undefined) {
+    lc = populateLogContextFromRequest(lc, req);
+  }
   try {
     return await fn(lc);
   } finally {

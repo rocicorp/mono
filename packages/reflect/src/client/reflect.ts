@@ -1148,6 +1148,11 @@ export class Reflect<MD extends MutatorDefs> {
   private async _reportMetrics(allSeries: Series[]) {
     const body = JSON.stringify({series: allSeries});
     const url = new URL('/api/metrics/v0/report', this._socketOrigin);
+    url.searchParams.set('clientID', await this.clientID);
+    url.searchParams.set('clientGroupID', await this.clientGroupID);
+    url.searchParams.set('roomID', this.roomID);
+    url.searchParams.set('userID', this.userID);
+    url.searchParams.set('requestID', nanoid());
     url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
     const res = await fetch(url.toString(), {
       method: 'POST',

@@ -60,7 +60,6 @@ export async function handleConnection(
   }
 
   const {clientID, baseCookie, lmid, wsid, userData} = result;
-  lc = lc.withContext('clientID', clientID).withContext('wsid', wsid);
   lc.info?.('parsed request', {
     ...result,
     userData: 'redacted',
