@@ -2,16 +2,13 @@ import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
 import {assertNotUndefined} from 'shared/asserts.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
+import {BTreeRead} from '../btree/read.js';
 import * as dag from '../dag/mod.js';
+import {mustGetHeadHash} from '../dag/store.js';
 import {FormatVersion} from '../format-version.js';
 import {withRead, withWrite} from '../with-transactions.js';
-import {DEFAULT_HEAD_NAME} from './commit.js';
-import {
-  readCommitForBTreeRead,
-  readIndexesForRead,
-  whenceHash,
-  whenceHead,
-} from './read.js';
+import {DEFAULT_HEAD_NAME, commitFromHead} from './commit.js';
+import {readIndexesForRead} from './read.js';
 import {initDB} from './test-helpers.js';
 import {newWriteLocal} from './write.js';
 
@@ -30,8 +27,9 @@ suite('basics w/ commit', () => {
 
     // Put.
     await withWrite(ds, async dagWrite => {
+      const headHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite);
       const w = await newWriteLocal(
-        whenceHead(DEFAULT_HEAD_NAME),
+        headHash,
         'mutator_name',
         JSON.stringify([]),
         null,
@@ -50,7 +48,7 @@ suite('basics w/ commit', () => {
     // As well as after it has committed.
     await withWrite(ds, async dagWrite => {
       const w = await newWriteLocal(
-        whenceHead(DEFAULT_HEAD_NAME),
+        await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
         'mutator_name',
         JSON.stringify(null),
         null,
@@ -66,7 +64,7 @@ suite('basics w/ commit', () => {
     // Del.
     await withWrite(ds, async dagWrite => {
       const w = await newWriteLocal(
-        whenceHead(DEFAULT_HEAD_NAME),
+        await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
         'mutator_name',
         JSON.stringify([]),
         null,
@@ -85,7 +83,7 @@ suite('basics w/ commit', () => {
     // As well as after it has committed.
     await withWrite(ds, async dagWrite => {
       const w = await newWriteLocal(
-        whenceHead(DEFAULT_HEAD_NAME),
+        await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
         'mutator_name',
         JSON.stringify(null),
         null,
@@ -119,7 +117,7 @@ suite('basics w/ putCommit', () => {
     // Put.
     const commit1 = await withWrite(ds, async dagWrite => {
       const w = await newWriteLocal(
-        whenceHead(DEFAULT_HEAD_NAME),
+        await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
         'mutator_name',
         JSON.stringify([]),
         null,
@@ -141,7 +139,7 @@ suite('basics w/ putCommit', () => {
     // As well as from the Commit that was put.
     await withWrite(ds, async dagWrite => {
       const w = await newWriteLocal(
-        whenceHash(commit1.chunk.hash),
+        commit1.chunk.hash,
         'mutator_name',
         JSON.stringify(null),
         null,
@@ -157,7 +155,7 @@ suite('basics w/ putCommit', () => {
     // Del.
     const commit2 = await withWrite(ds, async dagWrite => {
       const w = await newWriteLocal(
-        whenceHash(commit1.chunk.hash),
+        commit1.chunk.hash,
         'mutator_name',
         JSON.stringify([]),
         null,
@@ -179,7 +177,7 @@ suite('basics w/ putCommit', () => {
     // As well as from the commit after it was put.
     await withWrite(ds, async dagWrite => {
       const w = await newWriteLocal(
-        whenceHash(commit2.chunk.hash),
+        commit2.chunk.hash,
         'mutator_name',
         JSON.stringify(null),
         null,
@@ -215,7 +213,7 @@ test('clear', async () => {
   );
   await withWrite(ds, async dagWrite => {
     const w = await newWriteLocal(
-      whenceHead(DEFAULT_HEAD_NAME),
+      await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
       'mutator_name',
       JSON.stringify([]),
       null,
@@ -230,7 +228,7 @@ test('clear', async () => {
 
   await withWrite(ds, async dagWrite => {
     const w = await newWriteLocal(
-      whenceHead(DEFAULT_HEAD_NAME),
+      await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
       'mutator_name',
       JSON.stringify([]),
       null,
@@ -264,11 +262,8 @@ test('clear', async () => {
   });
 
   await withRead(ds, async dagRead => {
-    const [, c, r] = await readCommitForBTreeRead(
-      whenceHead(DEFAULT_HEAD_NAME),
-      dagRead,
-      formatVersion,
-    );
+    const c = await commitFromHead(DEFAULT_HEAD_NAME, dagRead);
+    const r = new BTreeRead(dagRead, formatVersion, c.valueHash);
     const indexes = readIndexesForRead(c, dagRead, formatVersion);
     const keys = await asyncIterableToArray(r.keys());
     expect(keys).to.have.lengthOf(0);
@@ -298,8 +293,9 @@ test('mutationID on newWriteLocal', async () => {
     ),
   );
   await withWrite(ds, async dagWrite => {
+    const headHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite);
     const w = await newWriteLocal(
-      whenceHead(DEFAULT_HEAD_NAME),
+      headHash,
       'mutator_name',
       JSON.stringify([]),
       null,
@@ -314,8 +310,9 @@ test('mutationID on newWriteLocal', async () => {
   });
 
   await withWrite(ds, async dagWrite => {
+    const headHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite);
     const w = await newWriteLocal(
-      whenceHead(DEFAULT_HEAD_NAME),
+      headHash,
       'mutator_name',
       JSON.stringify([]),
       null,

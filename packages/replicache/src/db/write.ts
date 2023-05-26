@@ -28,12 +28,8 @@ import {
   getMutationID,
 } from './commit.js';
 import {IndexOperation, IndexRead, IndexWrite, indexValue} from './index.js';
-import {
-  Read,
-  Whence,
-  readCommitForBTreeWrite,
-  readIndexesForRead,
-} from './read.js';
+import {commitFromHash} from './mod.js';
+import {Read, readIndexesForRead} from './read.js';
 
 export class Write extends Read {
   private readonly _dagWrite: dag.Write;
@@ -325,7 +321,7 @@ export class Write extends Read {
 }
 
 export async function newWriteLocal(
-  whence: Whence,
+  basisHash: Hash,
   mutatorName: string,
   mutatorArgsJSON: FrozenJSONValue,
   originalHash: Hash | null,
@@ -334,12 +330,8 @@ export async function newWriteLocal(
   clientID: ClientID,
   formatVersion: FormatVersion,
 ): Promise<Write> {
-  const [basisHash, basis, bTreeWrite] = await readCommitForBTreeWrite(
-    whence,
-    dagWrite,
-    formatVersion,
-  );
-
+  const basis = await commitFromHash(basisHash, dagWrite);
+  const bTreeWrite = new BTreeWrite(dagWrite, formatVersion, basis.valueHash);
   const mutationID = await basis.getNextMutationID(clientID, dagWrite);
   const indexes = readIndexesForWrite(basis, dagWrite, formatVersion);
   return new Write(
@@ -374,7 +366,7 @@ export async function newWriteLocal(
 }
 
 export async function newWriteSnapshotSDD(
-  whence: Whence,
+  basisHash: Hash,
   lastMutationID: number,
   cookieJSON: FrozenJSONValue,
   dagWrite: dag.Write,
@@ -383,12 +375,8 @@ export async function newWriteSnapshotSDD(
   formatVersion: FormatVersion,
 ): Promise<Write> {
   assert(formatVersion <= FormatVersion.SDD);
-  const [, basis, bTreeWrite] = await readCommitForBTreeWrite(
-    whence,
-    dagWrite,
-    formatVersion,
-  );
-  const basisHash = basis.chunk.hash;
+  const basis = await commitFromHash(basisHash, dagWrite);
+  const bTreeWrite = new BTreeWrite(dagWrite, formatVersion, basis.valueHash);
   return new Write(
     dagWrite,
     bTreeWrite,
@@ -401,18 +389,15 @@ export async function newWriteSnapshotSDD(
 }
 
 export async function newWriteSnapshotDD31(
-  whence: Whence,
+  basisHash: Hash,
   lastMutationIDs: Record<ClientID, number>,
   cookieJSON: FrozenCookie,
   dagWrite: dag.Write,
   clientID: ClientID,
   formatVersion: FormatVersion,
 ): Promise<Write> {
-  const [basisHash, basis, bTreeWrite] = await readCommitForBTreeWrite(
-    whence,
-    dagWrite,
-    formatVersion,
-  );
+  const basis = await commitFromHash(basisHash, dagWrite);
+  const bTreeWrite = new BTreeWrite(dagWrite, formatVersion, basis.valueHash);
   return new Write(
     dagWrite,
     bTreeWrite,

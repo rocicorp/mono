@@ -2,6 +2,7 @@ import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
 import {assert, assertNotNull, assertNotUndefined} from 'shared/asserts.js';
 import sinon from 'sinon';
+import {BTreeRead} from '../btree/read.js';
 import * as dag from '../dag/mod.js';
 import {assertLocalMetaDD31, assertSnapshotCommitDD31} from '../db/commit.js';
 import * as db from '../db/mod.js';
@@ -552,10 +553,14 @@ suite('persistDD31', () => {
     );
     // expect values from memdag snapshot are persisted to perdag client group
     await withRead(perdag, async perdagRead => {
-      const [, , btreeRead] = await db.readCommitForBTreeRead(
-        db.whenceHash(afterPersist.perdagClientGroupHeadHash),
+      const commit = await db.commitFromHash(
+        afterPersist.perdagClientGroupHeadHash,
+        perdagRead,
+      );
+      const btreeRead = new BTreeRead(
         perdagRead,
         formatVersion,
+        commit.valueHash,
       );
       expect(await btreeRead.get('k1')).to.equal('value1');
       expect(await btreeRead.get('k2')).to.equal('value2');
@@ -657,10 +662,14 @@ suite('persistDD31', () => {
         ).to.deep.equal(memdagMutationIDs);
 
         // expect values from memdag snapshot are persisted to perdag client group
-        const [, , btreeRead] = await db.readCommitForBTreeRead(
-          db.whenceHash(afterPersist.perdagClientGroupHeadHash),
+        const commit = await db.commitFromHash(
+          afterPersist.perdagClientGroupHeadHash,
+          perdagRead,
+        );
+        const btreeRead = new BTreeRead(
           perdagRead,
           formatVersion,
+          commit.valueHash,
         );
         expect(await btreeRead.get('k1')).to.equal('value1');
         expect(await btreeRead.get('k2')).to.equal('value2');

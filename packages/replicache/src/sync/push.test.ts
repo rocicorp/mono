@@ -2,7 +2,7 @@ import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
 import * as dag from '../dag/mod.js';
 import {DEFAULT_HEAD_NAME} from '../db/commit.js';
-import {fromWhence, whenceHead} from '../db/read.js';
+import {readFromDefaultHead} from '../db/read.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
 import {deepFreeze} from '../json.js';
@@ -220,11 +220,7 @@ test('try push [SDD]', async () => {
     // rebuilt.
     if (c.numPendingMutations > 0) {
       await withRead(store, async dagRead => {
-        const read = await fromWhence(
-          whenceHead(DEFAULT_HEAD_NAME),
-          dagRead,
-          formatVersion,
-        );
+        const read = await readFromDefaultHead(dagRead, formatVersion);
         let got = false;
 
         const indexMap = read.getMapForIndex('2');
@@ -470,11 +466,7 @@ test('try push [DD31]', async () => {
     // rebuilt.
     if (c.numPendingMutations > 0) {
       await withRead(store, async dagRead => {
-        const read = await fromWhence(
-          whenceHead(DEFAULT_HEAD_NAME),
-          dagRead,
-          formatVersion,
-        );
+        const read = await readFromDefaultHead(dagRead, formatVersion);
         let got = false;
 
         const indexMap = read.getMapForIndex('2');

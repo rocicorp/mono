@@ -13,7 +13,7 @@ import {
   MetaType,
   baseSnapshotFromHash,
   chunkIndexDefinitionEqualIgnoreName,
-  chain as commitChain,
+  commitChain,
   newIndexChange as commitNewIndexChange,
   newLocalDD31 as commitNewLocalDD31,
   newLocalSDD as commitNewLocalSDD,
