@@ -70,9 +70,14 @@ export type ConnectionKey = {
   roomID: string;
   clientID: string;
 };
-export type ConnectionRecord = {
-  connectTimestamp: number;
-};
+
+const connectionRecordSchema = valita.object({
+  connectTimestamp: valita.number(),
+});
+
+const connectionsByRoomSchema = valita.object({});
+
+export type ConnectionRecord = valita.Infer<typeof connectionRecordSchema>;
 
 export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
   roomStatusByRoomID: '/api/room/v0/room/:roomID/status',
@@ -102,12 +107,10 @@ export const AUTH_ROUTES = {
 export class BaseAuthDO implements DurableObject {
   private readonly _router = new Router();
   private readonly _roomDO: DurableObjectNamespace;
-  private readonly _state: DurableObjectState;
   // _durableStorage is a type-aware wrapper around _state.storage. It
   // always disables the input gate. The output gate is configured in the
   // constructor below. Anything that needs to read *values* out of
-  // storage should probably use _durableStorage, and not _state.storage
-  // directly.
+  // storage should probably use _durableStorage.
   private readonly _durableStorage: DurableStorage;
   private readonly _authHandler: AuthHandler | undefined;
   private readonly _authApiKey: string;
@@ -136,7 +139,6 @@ export class BaseAuthDO implements DurableObject {
   ) {
     const {roomDO, state, authHandler, authApiKey, logSink, logLevel} = options;
     this._roomDO = roomDO;
-    this._state = state;
     this._durableStorage = new DurableStorage(
       state.storage,
       false, // don't allow unconfirmed
@@ -550,7 +552,7 @@ export class BaseAuthDO implements DurableObject {
               roomID,
               clientID,
             },
-            this._state.storage,
+            this._durableStorage,
             {
               connectTimestamp: Date.now(),
             },
@@ -630,18 +632,19 @@ export class BaseAuthDO implements DurableObject {
         lc.debug?.(`_authInvalidateForUser waiting for lock.`);
         return this._authLock.withWrite(async () => {
           lc.debug?.('got lock.');
-          const connectionKeys = (
-            await this._state.storage.list({
+          const connections = await this._durableStorage.list(
+            {
               prefix: getConnectionKeyStringUserPrefix(userID),
-            })
-          ).keys();
+            },
+            connectionRecordSchema,
+          );
           // The requests to the Room DOs must be completed inside the write lock
           // to avoid races with new connect requests for this user.
           return this._forwardInvalidateRequest(
             lc,
             'authInvalidateForUser',
             req,
-            [...connectionKeys],
+            connections,
           );
         });
       }),
@@ -662,7 +665,7 @@ export class BaseAuthDO implements DurableObject {
           req,
           // Use async generator because the full list of connections
           // may exceed the DO's memory limits.
-          getKeyStrings(this._state.storage, CONNECTION_KEY_PREFIX),
+          getConnections(this._durableStorage),
         );
       });
     }),
@@ -672,7 +675,7 @@ export class BaseAuthDO implements DurableObject {
     this._requireAPIKey(async ctx => {
       const {lc} = ctx;
       lc.info?.('Revalidating connections.');
-      const connectionsByRoom = getConnectionsByRoom(this._state.storage, lc);
+      const connectionsByRoom = getConnectionsByRoom(this._durableStorage, lc);
       let connectionCount = 0;
       let revalidatedCount = 0;
       let deleteCount = 0;
@@ -733,9 +736,9 @@ export class BaseAuthDO implements DurableObject {
             );
           try {
             for (const [keyToDelete] of toDelete) {
-              await deleteConnection(keyToDelete, this._state.storage);
+              await deleteConnection(keyToDelete, this._durableStorage);
             }
-            await this._state.storage.sync();
+            await this._durableStorage.flush();
           } catch (e) {
             lc.info?.('Failed to delete connections for roomID', roomID);
             return;
@@ -760,10 +763,12 @@ export class BaseAuthDO implements DurableObject {
     lc: LogContext,
     invalidateRequestName: string,
     request: Request,
-    connectionKeyStrings: Iterable<string> | AsyncGenerator<string>,
+    connections:
+      | Iterable<[string, ConnectionRecord]>
+      | AsyncGenerator<[string, ConnectionRecord]>,
   ): Promise<Response> {
     const roomIDSet = new Set<string>();
-    for await (const keyString of connectionKeyStrings) {
+    for await (const [keyString] of connections) {
       const connectionKey = connectionKeyFromString(keyString);
       if (connectionKey) {
         roomIDSet.add(connectionKey.roomID);
@@ -911,24 +916,6 @@ export function connectionKeyFromRoomIndexString(
   );
 }
 
-async function getConnectionKeysForRoomID(
-  roomID: string,
-  storage: DurableObjectStorage,
-): Promise<ConnectionKey[]> {
-  const connectionKeys = [];
-  for (const key of (
-    await storage.list({
-      prefix: getConnectionRoomIndexPrefix(roomID),
-    })
-  ).keys()) {
-    const connectionKey = connectionKeyFromRoomIndexString(key);
-    if (connectionKey) {
-      connectionKeys.push(connectionKey);
-    }
-  }
-  return connectionKeys;
-}
-
 /**
  * Provides a way to iterate over all stored connection keys grouped by
  * room id, in a way that will not exceed memory limits even if not all stored
@@ -936,80 +923,79 @@ async function getConnectionKeysForRoomID(
  * all connection keys for a given room id can fit in memory.
  */
 async function* getConnectionsByRoom(
-  storage: DurableObjectStorage,
+  storage: DurableStorage,
   lc: LogContext,
 ): AsyncGenerator<{
   roomID: string;
   connectionKeys: ConnectionKey[];
 }> {
-  let lastKey = '';
-  while (true) {
-    const nextRoomListResult = await storage.list({
-      startAfter: lastKey,
-      prefix: CONNECTIONS_BY_ROOM_INDEX_PREFIX,
-      limit: 1,
-    });
-    if (nextRoomListResult.size === 0) {
-      return;
+  connectionsByRoomSchema;
+  let connectionsForRoom:
+    | {
+        roomID: string;
+        connectionKeys: ConnectionKey[];
+      }
+    | undefined;
+  for await (const batch of storage.batchScan(
+    {prefix: CONNECTIONS_BY_ROOM_INDEX_PREFIX},
+    connectionsByRoomSchema,
+    1000,
+  )) {
+    for (const [key] of batch) {
+      const connectionKey = connectionKeyFromRoomIndexString(key);
+      if (!connectionKey) {
+        lc.error?.('Failed to parse connection room index key', key);
+        continue;
+      }
+      if (
+        connectionsForRoom === undefined ||
+        connectionsForRoom.roomID !== connectionKey.roomID
+      ) {
+        if (connectionsForRoom !== undefined) {
+          yield connectionsForRoom;
+        }
+        connectionsForRoom = {
+          roomID: connectionKey.roomID,
+          connectionKeys: [],
+        };
+      }
+      connectionsForRoom.connectionKeys.push(connectionKey);
     }
-    const firstRoomIndexString: string = nextRoomListResult.keys().next().value;
-    const connectionKey =
-      connectionKeyFromRoomIndexString(firstRoomIndexString);
-    if (!connectionKey) {
-      lc.error?.(
-        'Failed to parse connection room index key',
-        firstRoomIndexString,
-      );
-      lastKey = firstRoomIndexString;
-      continue;
+    if (connectionsForRoom !== undefined) {
+      yield connectionsForRoom;
     }
-    const {roomID} = connectionKey;
-    const connectionKeys = await getConnectionKeysForRoomID(roomID, storage);
-    yield {roomID, connectionKeys};
-    lastKey = connectionKeyToConnectionRoomIndexString(
-      connectionKeys.length > 0
-        ? connectionKeys[connectionKeys.length - 1]
-        : connectionKey,
-    );
   }
 }
 
 /**
- * Provides a way to iterate over keys with a prefix in a way that
- * will not exceed memory limits even if not all entries with keys
- * with the given prefix can fit in memory at once.  Assumes at least
- * 1000 entries can fit in memory at a time.
+ * Provides a way to iterate over connection records in a way that
+ * will not exceed memory limits even if not all connection records can fit in
+ * memory at once.  Assumes at least 1000 entries can fit in memory at a time.
  */
-async function* getKeyStrings(
-  storage: DurableObjectStorage,
-  prefix: string,
-): AsyncGenerator<string> {
-  let lastKey = '';
-  let done = false;
-  while (!done) {
-    const listResult = await storage.list({
-      startAfter: lastKey,
-      prefix,
-      limit: 1000,
-    });
-    for (const keyString of listResult.keys()) {
-      yield keyString;
-      lastKey = keyString;
+async function* getConnections(
+  storage: DurableStorage,
+): AsyncGenerator<[string, ConnectionRecord]> {
+  for await (const batch of storage.batchScan(
+    {prefix: CONNECTION_KEY_PREFIX},
+    connectionRecordSchema,
+    1000,
+  )) {
+    for (const entry of batch) {
+      yield entry;
     }
-    done = listResult.size === 0;
   }
 }
 
 export async function recordConnection(
   connectionKey: ConnectionKey,
-  storage: DurableObjectStorage,
+  storage: DurableStorage,
   record: ConnectionRecord,
 ) {
   const connectionKeyString = connectionKeyToString(connectionKey);
   const connectionRoomIndexString =
     connectionKeyToConnectionRoomIndexString(connectionKey);
   // done in a single put to ensure atomicity
-  await storage.put({
+  await storage.putEntries({
     [connectionKeyString]: record,
     [connectionRoomIndexString]: {},
   });
@@ -1017,13 +1003,13 @@ export async function recordConnection(
 
 async function deleteConnection(
   connectionKey: ConnectionKey,
-  storage: DurableObjectStorage,
+  storage: DurableStorage,
 ) {
   const connectionKeyString = connectionKeyToString(connectionKey);
   const connectionRoomIndexString =
     connectionKeyToConnectionRoomIndexString(connectionKey);
   // done in a single delete to ensure atomicity
-  await storage.delete([connectionKeyString, connectionRoomIndexString]);
+  await storage.delEntries([connectionKeyString, connectionRoomIndexString]);
 }
 
 export const STORAGE_SCHEMA_META_KEY = 'storage_schema_meta';

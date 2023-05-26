@@ -35,19 +35,19 @@ export async function listEntries<T extends ReadonlyJSONValue>(
   return result;
 }
 
-export async function putEntry<T extends ReadonlyJSONValue>(
+export function putEntry<T extends ReadonlyJSONValue>(
   durable: DurableObjectStorage,
   key: string,
   value: T,
   options: DurableObjectPutOptions,
 ): Promise<void> {
-  await durable.put(key, value, options);
+  return durable.put(key, value, options);
 }
 
-export async function delEntry(
+export function delEntry(
   durable: DurableObjectStorage,
   key: string,
   options: DurableObjectPutOptions,
 ): Promise<void> {
-  await durable.delete(key, options);
+  return durable.delete(key, options).then(() => undefined);
 }

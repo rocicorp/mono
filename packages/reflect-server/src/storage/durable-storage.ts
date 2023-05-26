@@ -35,8 +35,18 @@ export class DurableStorage implements Storage {
     return putEntry(this._durable, key, value, this._baseOptions);
   }
 
+  putEntries<T extends ReadonlyJSONValue>(
+    entries: Record<string, T>,
+  ): Promise<void> {
+    return this._durable.put(entries, this._baseOptions);
+  }
+
   del(key: string): Promise<void> {
     return delEntry(this._durable, key, this._baseOptions);
+  }
+
+  delEntries(keys: string[]): Promise<void> {
+    return this._durable.delete(keys, this._baseOptions).then(() => undefined);
   }
 
   get<T extends ReadonlyJSONValue>(
