@@ -10,7 +10,15 @@ export type ListOptions = ScanNoIndexOptions;
  */
 export interface Storage {
   put<T extends ReadonlyJSONValue>(key: string, value: T): Promise<void>;
+  /**
+   * Supports up to 128 key-value pairs at a time.
+   */
+  putEntries<T extends ReadonlyJSONValue>(
+    entries: Record<string, T>,
+  ): Promise<void>;
   del(key: string): Promise<void>;
+  /** Supports up to 128 keys at a time. */
+  delEntries(key: string[]): Promise<void>;
   get<T extends ReadonlyJSONValue>(
     key: string,
     schema: valita.Type<T>,

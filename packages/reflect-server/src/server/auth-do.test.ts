@@ -88,7 +88,7 @@ async function recordConnectionHelper(
       roomID,
       clientID,
     },
-    storage,
+    new DurableStorage(storage, false),
     {
       connectTimestamp: 1000,
     },

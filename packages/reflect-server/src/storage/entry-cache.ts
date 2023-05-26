@@ -25,14 +25,40 @@ export class EntryCache implements Storage {
     this._storage = storage;
   }
 
-  // eslint-disable-next-line require-await
-  async put<T extends ReadonlyJSONValue>(key: string, value: T): Promise<void> {
+  private _put<T extends ReadonlyJSONValue>(key: string, value: T) {
     this._cache.set(key, {value, dirty: true});
   }
+
   // eslint-disable-next-line require-await
-  async del(key: string): Promise<void> {
+  async put<T extends ReadonlyJSONValue>(key: string, value: T): Promise<void> {
+    this._put(key, value);
+  }
+
+  // eslint-disable-next-line require-await
+  async putEntries<T extends ReadonlyJSONValue>(
+    entries: Record<string, T>,
+  ): Promise<void> {
+    for (const [key, value] of Object.entries(entries)) {
+      this._put(key, value);
+    }
+  }
+
+  private _del(key: string) {
     this._cache.set(key, {value: undefined, dirty: true});
   }
+
+  // eslint-disable-next-line require-await
+  async del(key: string): Promise<void> {
+    this._del(key);
+  }
+
+  // eslint-disable-next-line require-await
+  async delEntries(keys: string[]): Promise<void> {
+    for (const key of keys) {
+      this._del(key);
+    }
+  }
+
   async get<T extends ReadonlyJSONValue>(
     key: string,
     schema: valita.Type<T>,
