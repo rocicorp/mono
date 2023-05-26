@@ -118,6 +118,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     this._turnDuration = 1000 / (options.allowUnconfirmedWrites ? 60 : 15);
     this._authApiKey = authApiKey;
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
+      'component',
       'RoomDO',
     );
     registerUnhandledRejectionHandler(lc);

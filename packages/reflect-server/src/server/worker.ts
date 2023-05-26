@@ -271,7 +271,10 @@ async function withLogContext<R>(
   logLevel: LogLevel,
   fn: (lc: LogContext) => Promise<R>,
 ): Promise<R> {
-  const lc = new LogContext(logLevel, undefined, logSink).withContext('Worker');
+  const lc = new LogContext(logLevel, undefined, logSink).withContext(
+    'component',
+    'Worker',
+  );
   try {
     return await fn(lc);
   } finally {
