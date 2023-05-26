@@ -109,7 +109,7 @@ export class BaseAuthDO implements DurableObject {
   private readonly _roomDO: DurableObjectNamespace;
   // _durableStorage is a type-aware wrapper around _state.storage. It
   // always disables the input gate. The output gate is configured in the
-  // constructor below to be enable. Anything that needs to read *values* out of
+  // constructor below. Anything that needs to read *values* out of
   // storage should probably use _durableStorage.
   private readonly _durableStorage: DurableStorage;
   private readonly _authHandler: AuthHandler | undefined;
