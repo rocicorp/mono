@@ -58,14 +58,13 @@ const jurisdictionSchema = valita.union(
   valita.literal(''),
   valita.literal('eu'),
 );
-const roomRecordSchema = valita.object({
+// The type annotation here that RoomRecord and roomRecordSchema stay in sync.
+const roomRecordSchema: valita.Type<RoomRecord> = valita.object({
   roomID: valita.string(),
   objectIDString: valita.string(),
   jurisdiction: jurisdictionSchema,
   status: roomStatusSchema,
 });
-// This assignment ensures that RoomRecord and roomRecordSchema stay in sync.
-const RoomRecord: valita.Type<RoomRecord> = roomRecordSchema;
 
 export function internalCreateRoom(
   lc: LogContext,

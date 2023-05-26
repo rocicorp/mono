@@ -420,7 +420,6 @@ test('begin try pull SDD', async () => {
         let got = false;
 
         const indexMap = read.getMapForIndex('2');
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         for await (const _ of indexMap.scan('')) {
           got = true;
           break;
@@ -513,7 +512,6 @@ test('begin try pull SDD', async () => {
               formatVersion,
             );
             const indexMap = read.getMapForIndex('2');
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             for await (const _ of indexMap.scan('')) {
               expect(false).to.be.true;
             }
@@ -963,7 +961,6 @@ test('begin try pull DD31', async () => {
         let got = false;
 
         const indexMap = read.getMapForIndex('2');
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         for await (const _ of indexMap.scan('')) {
           got = true;
           break;
@@ -1054,7 +1051,6 @@ test('begin try pull DD31', async () => {
               formatVersion,
             );
             const indexMap = read.getMapForIndex('2');
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             for await (const _ of indexMap.scan('')) {
               expect(false).to.be.true;
             }

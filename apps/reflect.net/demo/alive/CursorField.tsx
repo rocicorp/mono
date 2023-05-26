@@ -1,8 +1,8 @@
-import {Cursor} from './Cursor';
-import {Rect, Size, positionToCoordinate} from './util';
+import {useIsomorphicLayoutEffect} from '@/hooks/use-isomorphic-layout-effect';
 import type {Reflect} from '@rocicorp/reflect';
 import type {M} from '../shared/mutators';
-import useIsomorphicLayoutEffect from '@/hooks/use-isomorphic-layout-effect';
+import {Cursor} from './Cursor';
+import {Rect, Size, positionToCoordinate} from './util';
 
 export function CursorField({
   home,
@@ -25,13 +25,12 @@ export function CursorField({
   setBodyClass: (cls: string, enabled: boolean) => void;
 }) {
   useIsomorphicLayoutEffect(() => {
-    const handlePointerMove = (e: PointerEvent) => {
+    const handlePointerMove = async (e: PointerEvent) => {
       const coord = positionToCoordinate({x: e.pageX, y: e.pageY}, home, stage);
-      r.clientID.then(cid => {
-        r.mutate.updateClient({
-          id: cid,
-          ...coord,
-        });
+      const cid = await r.clientID;
+      await r.mutate.updateClient({
+        id: cid,
+        ...coord,
       });
     };
     window.addEventListener('pointermove', handlePointerMove);
@@ -52,8 +51,8 @@ export function CursorField({
           key={cid}
           r={r}
           clientID={cid}
-          isSelf={cid == myClientID}
-          hideArrow={cid == myClientID && hideLocalArrow}
+          isSelf={cid === myClientID}
+          hideArrow={cid === myClientID && hideLocalArrow}
           setBodyClass={setBodyClass}
           home={home}
           stage={stage}

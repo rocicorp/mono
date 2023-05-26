@@ -1,4 +1,24 @@
+import {useIsomorphicLayoutEffect} from '@/hooks/use-isomorphic-layout-effect';
+import {useEventTimeout} from '@/hooks/use-timeout';
+import type {Reflect} from '@rocicorp/reflect';
+import {useRef} from 'react';
+import {useSubscribe} from 'replicache-react';
+import type {M} from '../shared/mutators';
 import {Piece} from './Piece';
+import {Bots} from './bots';
+import {ClientModel, getClient} from './client-model';
+import {
+  PIECE_DEFINITIONS,
+  PieceDefinition,
+  SVG_ORIGINAL_SIZE,
+} from './piece-definitions';
+import {PieceInfo, getPieceInfos} from './piece-info';
+import type {PieceModel} from './piece-model';
+import {
+  checkSnap as sharedCheckSnap,
+  handleDrag as sharedHandleDrag,
+  selectIfAvailable as sharedSelectIfAvailable,
+} from './puzzle-biz';
 import {
   Position,
   Rect,
@@ -7,26 +27,6 @@ import {
   coordinateToPosition,
   getAngle,
 } from './util';
-import {useSubscribe} from 'replicache-react';
-import type {Reflect} from '@rocicorp/reflect';
-import type {M} from '../shared/mutators';
-import {useRef} from 'react';
-import {
-  PIECE_DEFINITIONS,
-  PieceDefinition,
-  SVG_ORIGINAL_SIZE,
-} from './piece-definitions';
-import {ClientModel, getClient} from './client-model';
-import {getPieceInfos, PieceInfo} from './piece-info';
-import {
-  handleDrag as sharedHandleDrag,
-  checkSnap as sharedCheckSnap,
-  selectIfAvailable as sharedSelectIfAvailable,
-} from './puzzle-biz';
-import type {PieceModel} from './piece-model';
-import {Bots} from './bots';
-import {useEventTimeout} from '@/hooks/use-timeout';
-import useIsomorphicLayoutEffect from '@/hooks/use-isomorphic-layout-effect';
 
 export function Puzzle({
   r,
@@ -44,12 +44,10 @@ export function Puzzle({
     myClient: ClientModel | null;
   }>(
     r,
-    async tx => {
-      return {
-        pieces: await getPieceInfos(tx),
-        myClient: (await getClient(tx, tx.clientID)) ?? null,
-      };
-    },
+    async tx => ({
+      pieces: await getPieceInfos(tx),
+      myClient: (await getClient(tx, tx.clientID)) ?? null,
+    }),
     {pieces: {}, myClient: null},
   );
 
@@ -63,10 +61,7 @@ export function Puzzle({
 
   const isMouseDown = useRef(false);
 
-  const handlePieceHover = async (
-    model: PieceInfo,
-    event: React.PointerEvent,
-  ) => {
+  const handlePieceHover = (model: PieceInfo, event: React.PointerEvent) => {
     // only select if topmost piece at this position
     if (
       document
@@ -104,7 +99,7 @@ export function Puzzle({
     return sharedSelectIfAvailable(myClient.id, model, r);
   };
 
-  const handlePiecePointerDown = async (
+  const handlePiecePointerDown = (
     model: PieceInfo,
     event: React.PointerEvent,
     piecePos: Position,
@@ -169,7 +164,7 @@ export function Puzzle({
     }
   };
 
-  const handleDrag = async (
+  const handleDrag = (
     e: React.PointerEvent,
     dragInfo: {pieceID: string; offset: Position},
   ) => {
@@ -250,9 +245,7 @@ export function Puzzle({
     piece: PieceModel,
     def: PieceDefinition,
     currPos: Position,
-  ) => {
-    return sharedCheckSnap(piece, def, currPos, r, home, stage);
-  };
+  ) => sharedCheckSnap(piece, def, currPos, r, home, stage);
 
   const handleLostPointerCapture = (e: React.PointerEvent) => {
     dragging.current.delete(e.pointerId);

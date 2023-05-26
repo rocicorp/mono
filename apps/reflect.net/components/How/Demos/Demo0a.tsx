@@ -1,7 +1,7 @@
 import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter';
 import {vscDarkPlus} from 'react-syntax-highlighter/dist/cjs/styles/prism';
 
-const Demo0a = () => {
+export function Demo0a() {
   const codeString = `import {Reflect} from "@rocicorp/reflect";
 
 const reflect = new Reflect({
@@ -28,6 +28,4 @@ reflect.onConnect(({roomID}) => {
       {codeString}
     </SyntaxHighlighter>
   );
-};
-
-export default Demo0a;
+}

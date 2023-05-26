@@ -41,10 +41,10 @@ import {persistDD31} from './persist.js';
 const PERDAG_TEST_SETUP_HEAD_NAME = 'test-setup-head';
 
 enum PersistedExpectation {
-  SNAPSHOT,
-  SNAPSHOT_AND_LOCALS,
-  LOCALS,
-  NOTHING,
+  Snapshot,
+  SnapshotAndLocals,
+  Locals,
+  Nothing,
 }
 
 suite('persistDD31', () => {
@@ -268,7 +268,7 @@ suite('persistDD31', () => {
       perdagClientGroupHeadHash,
     );
 
-    await testPersist(PersistedExpectation.NOTHING);
+    await testPersist(PersistedExpectation.Nothing);
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
     // memdag, perdag client group, perdag client map all unchanged
@@ -299,7 +299,7 @@ suite('persistDD31', () => {
     );
     const memdagSnapshot = await getChunkSnapshot(memdag, memdagHeadHash);
 
-    await testPersist(PersistedExpectation.LOCALS);
+    await testPersist(PersistedExpectation.Locals);
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
     expect(afterPersist.clientGroup).to.deep.equal({
@@ -362,7 +362,7 @@ suite('persistDD31', () => {
       perdagClientGroupHeadHash,
     );
 
-    await testPersist(PersistedExpectation.NOTHING);
+    await testPersist(PersistedExpectation.Nothing);
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
     // memdag and perdag client group both unchanged
@@ -396,7 +396,7 @@ suite('persistDD31', () => {
     );
     const memdagSnapshot = await getChunkSnapshot(memdag, memdagHeadHash);
 
-    await testPersist(PersistedExpectation.LOCALS);
+    await testPersist(PersistedExpectation.Locals);
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
     expect(afterPersist.clientGroup).to.deep.equal({
@@ -477,7 +477,7 @@ suite('persistDD31', () => {
     );
     const memdagSnapshot = await getChunkSnapshot(memdag, memdagHeadHash);
 
-    await testPersist(PersistedExpectation.NOTHING);
+    await testPersist(PersistedExpectation.Nothing);
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
     expect(afterPersist.clientGroup).to.deep.equal({
@@ -521,7 +521,7 @@ suite('persistDD31', () => {
       perdag,
       clientGroupID,
     );
-    await testPersist(PersistedExpectation.SNAPSHOT);
+    await testPersist(PersistedExpectation.Snapshot);
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
 
@@ -602,7 +602,7 @@ suite('persistDD31', () => {
       perdag,
       clientGroupID,
     );
-    await testPersist(PersistedExpectation.SNAPSHOT_AND_LOCALS);
+    await testPersist(PersistedExpectation.SnapshotAndLocals);
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
 
@@ -759,7 +759,7 @@ suite('persistDD31', () => {
     );
     const memdagSnapshot = await getChunkSnapshot(memdag, memdagHeadHash);
 
-    await testPersist(PersistedExpectation.LOCALS, async () => {
+    await testPersist(PersistedExpectation.Locals, async () => {
       await ensurePerdagClientGroupUpdatedToNewerSnapshot();
     });
 
@@ -835,7 +835,7 @@ suite('persistDD31', () => {
 
     let err;
     try {
-      await testPersist(PersistedExpectation.NOTHING);
+      await testPersist(PersistedExpectation.Nothing);
     } catch (e) {
       err = e;
     }
@@ -945,14 +945,14 @@ async function setupPersistTest() {
       }
     }
     switch (persistedExpectation) {
-      case PersistedExpectation.SNAPSHOT:
+      case PersistedExpectation.Snapshot:
         expect(persistedChunkHashes.length).to.be.greaterThan(0);
         expect(chunksPersistedSpy.callCount).to.equal(1);
         expect(chunksPersistedSpy.firstCall.args[0]).to.deep.equal(
           persistedChunkHashes,
         );
         break;
-      case PersistedExpectation.SNAPSHOT_AND_LOCALS:
+      case PersistedExpectation.SnapshotAndLocals:
         expect(persistedChunkHashes.length).to.be.greaterThan(0);
         expect(chunksPersistedSpy.callCount).to.equal(1);
         // Persisted chunks is a superset of chunks passed to
@@ -961,11 +961,11 @@ async function setupPersistTest() {
           chunksPersistedSpy.firstCall.args[0],
         );
         break;
-      case PersistedExpectation.LOCALS:
+      case PersistedExpectation.Locals:
         expect(persistedChunkHashes.length).to.be.greaterThan(0);
         expect(chunksPersistedSpy.callCount).to.equal(0);
         break;
-      case PersistedExpectation.NOTHING:
+      case PersistedExpectation.Nothing:
         expect(persistedChunkHashes.length).to.equal(0);
         expect(chunksPersistedSpy.callCount).to.equal(0);
         break;

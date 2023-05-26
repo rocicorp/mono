@@ -1,19 +1,19 @@
-import React, {useState, useEffect, useMemo} from 'react';
 import {init} from '@/demo/howto-frontend';
-import {nanoid} from 'nanoid';
-import {delayWebSocket, setLatency} from './delayWebSocket';
 import {M, deregisterClientConsole} from '@/demo/shared/mutators';
-import Demo1 from './Demo1';
-import Demo2 from './Demo2';
-import {ClientIDContext} from './ClientIDContext';
-import Demo0 from './Demo0';
-import {useInView} from 'react-intersection-observer';
-import styles from './How.module.css';
-import type {Reflect} from '@rocicorp/reflect';
 import type {Latency} from '@/demo/shared/types';
 import {closeReflect} from '@/util/reflect';
 import {getWorkerHost} from '@/util/worker-host';
+import type {Reflect} from '@rocicorp/reflect';
+import {nanoid} from 'nanoid';
 import {event} from 'nextjs-google-analytics';
+import React, {useEffect, useMemo, useState} from 'react';
+import {useInView} from 'react-intersection-observer';
+import {ClientIDContext} from './ClientIDContext';
+import {Demo0} from './Demo0';
+import {Demo1} from './Demo1';
+import {Demo2} from './Demo2';
+import styles from './How.module.css';
+import {delayWebSocket, setLatency} from './delayWebSocket';
 
 export type DemoReflectState = {
   roomID: string;
@@ -94,13 +94,14 @@ function initDemo(
   );
 }
 
-const DemoWrapperInternal = (
+function DemoWrapperInternal(
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   Demo: DemoComponent,
   state: DemoReflectState | undefined,
   setState: React.Dispatch<React.SetStateAction<DemoReflectState | undefined>>,
   prepend: string,
   intialized: boolean,
-) => {
+) {
   useEffect(() => {
     if (intialized) {
       initDemo(state, setState, prepend);
@@ -154,8 +155,9 @@ const DemoWrapperInternal = (
       />
     </ClientIDContext.Provider>
   );
-};
-export default function How() {
+}
+
+export function How() {
   const [initialized, setInitialized] = useState(false);
 
   const {ref} = useInView({
@@ -194,6 +196,7 @@ export default function How() {
     };
   }, []);
 
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   const DemoWrapper = useMemo(() => DemoWrapperInternal, []);
 
   return (

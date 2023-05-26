@@ -1,8 +1,7 @@
-import * as React from 'react';
-import {Range, getTrackBackground} from 'react-range';
-import style from './Slider.module.css';
 import type {Latency} from '@/demo/shared/types';
 import {event} from 'nextjs-google-analytics';
+import {Range, getTrackBackground} from 'react-range';
+import style from './Slider.module.css';
 
 const STEP = 1;
 const MIN = 0;
@@ -12,14 +11,14 @@ function getLatencyName(latency: Latency): string {
   return ['low', 'med', 'high'][latency];
 }
 
-const Slider = ({
+export function Slider({
   clientLatency,
   setClientLatency,
 }: {
   clientID: string;
   clientLatency: Latency | undefined;
   setClientLatency: (l: Latency) => void;
-}) => {
+}) {
   const latencyName = getLatencyName(clientLatency ?? 0);
   return (
     <div
@@ -96,6 +95,4 @@ const Slider = ({
       />
     </div>
   );
-};
-
-export default Slider;
+}

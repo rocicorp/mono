@@ -1,16 +1,16 @@
-import React, {useEffect, useState, useCallback} from 'react';
-import Slider from './Slider';
-import ClientConsole from './ClientConsole';
-import styles from './How.module.css';
-import buttonStyles from './RotateButton.module.css';
-import type {Reflect} from '@rocicorp/reflect';
 import {M, registerClientConsole} from '@/demo/shared/mutators';
-import Roci from './Roci';
-import {useClientConsoleReducer, useCount} from './howtoUtils';
-import RotateSlider from './RotateSlider';
 import type {Latency} from '@/demo/shared/types';
+import type {Reflect} from '@rocicorp/reflect';
+import {useCallback, useEffect, useState} from 'react';
+import {ClientConsole} from './ClientConsole';
+import styles from './How.module.css';
+import {Roci} from './Roci';
+import buttonStyles from './RotateButton.module.css';
+import {RotateSlider} from './RotateSlider';
+import {Slider} from './Slider';
+import {useClientConsoleReducer, useCount} from './howtoUtils';
 
-function RotateClient({
+export function RotateClient({
   title,
   reflect,
   latency,
@@ -66,5 +66,3 @@ function RotateClient({
     </div>
   );
 }
-
-export default RotateClient;

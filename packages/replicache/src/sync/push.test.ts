@@ -225,7 +225,6 @@ test('try push [SDD]', async () => {
 
         const indexMap = read.getMapForIndex('2');
 
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         for await (const _ of indexMap.scan('')) {
           got = true;
           break;
@@ -471,7 +470,6 @@ test('try push [DD31]', async () => {
 
         const indexMap = read.getMapForIndex('2');
 
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         for await (const _ of indexMap.scan('')) {
           got = true;
           break;

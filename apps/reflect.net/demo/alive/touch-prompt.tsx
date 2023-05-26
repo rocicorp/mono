@@ -1,8 +1,7 @@
+import {useIsomorphicLayoutEffect} from '@/hooks/use-isomorphic-layout-effect';
 import classNames from 'classnames';
 import {useRef, useState} from 'react';
 import type {Rect, Size} from './util';
-import useIsomorphicLayoutEffect from '@/hooks/use-isomorphic-layout-effect';
-//import useIsomorphicLayoutEffect from '@/hooks/use-isomorphic-layout-effect';
 
 type Mode = 'off' | 'prompt-rotate' | 'prompt-tap' | 'prompt-desktop';
 
@@ -24,16 +23,13 @@ function getMode(gameMode: boolean, isPortrait: boolean): Mode {
   if (isPortrait) {
     if (canGameMode()) {
       return 'prompt-rotate';
-    } else {
-      return 'prompt-desktop';
     }
-  } else {
-    if (canGameMode()) {
-      return 'prompt-tap';
-    } else {
-      return 'prompt-desktop';
-    }
+    return 'prompt-desktop';
   }
+  if (canGameMode()) {
+    return 'prompt-tap';
+  }
+  return 'prompt-desktop';
 }
 
 function canGameMode() {

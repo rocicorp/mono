@@ -247,7 +247,7 @@ export class LazyRead implements Read {
     }
     let chunk = this._sourceChunksCache.get(hash);
     if (chunk === undefined) {
-      chunk = await (await this.getSourceRead()).getChunk(hash);
+      chunk = await (await this._getSourceRead()).getChunk(hash);
       if (chunk !== undefined) {
         this._sourceChunksCache.put(chunk);
       }
@@ -280,7 +280,7 @@ export class LazyRead implements Read {
     return this._closed;
   }
 
-  protected getSourceRead(): Promise<Read> {
+  protected _getSourceRead(): Promise<Read> {
     if (!this._sourceRead) {
       this._sourceRead = this._sourceStore.read();
     }
@@ -392,7 +392,7 @@ export class LazyWrite
     }
     let chunk = this._sourceChunksCache.get(hash);
     if (chunk === undefined) {
-      chunk = await (await this.getSourceRead()).getChunk(hash);
+      chunk = await (await this._getSourceRead()).getChunk(hash);
       if (chunk !== undefined) {
         this._pendingCachedChunks.set(chunk.hash, {chunk, size: -1});
       }

@@ -1,6 +1,6 @@
-import {type Rect, getAbsoluteRect} from '@/demo/alive/util';
+import {getAbsoluteRect, type Rect} from '@/demo/alive/util';
 import {useRef, useState} from 'react';
-import useIsomorphicLayoutEffect from './use-isomorphic-layout-effect';
+import {useIsomorphicLayoutEffect} from './use-isomorphic-layout-effect';
 
 export function useElementSize<T extends Element>(deps: unknown[]) {
   const ref = useRef<T>(null);

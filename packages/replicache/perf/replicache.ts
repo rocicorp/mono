@@ -1,28 +1,28 @@
 import {resolver} from '@rocicorp/resolver';
-import {deepEqual} from '../src/json.js';
 import {assert} from 'shared/asserts.js';
 import {
+  IndexDefinitions,
+  JSONValue,
   MutatorDefs,
   PatchOperation,
   ReadTransaction,
   Replicache,
   ReplicacheOptions,
   TEST_LICENSE_KEY,
-  WriteTransaction,
-  IndexDefinitions,
-  JSONValue,
   UpdateNeededReason,
+  WriteTransaction,
 } from '../out/replicache.js';
+import {deepEqual} from '../src/json.js';
+import {dropStore as dropIDBStore} from '../src/kv/idb-util.js';
+import type {ReplicacheInternalAPI} from '../src/replicache-options.js';
+import {uuid} from '../src/uuid.js';
 import {
-  jsonArrayTestData,
   TestDataObject,
-  jsonObjectTestData,
   getTmcwData,
+  jsonArrayTestData,
+  jsonObjectTestData,
 } from './data.js';
 import type {Bencher, Benchmark} from './perf.js';
-import {dropStore as dropIDBStore} from '../src/kv/idb-util.js';
-import {uuid} from '../src/uuid.js';
-import type {ReplicacheInternalAPI} from '../src/replicache-options.js';
 
 const valSize = 1024;
 
@@ -199,7 +199,6 @@ export function benchmarkRefresh(opts: {
       const initialScanResolver = resolver<void>();
       const cancel = repA.subscribe(
         async tx => {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           for await (const _ of tx.scan({prefix: 'key'})) {
             return true;
           }

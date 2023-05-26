@@ -21,6 +21,7 @@ export const delayWebSocket = (host: string) => {
     .catch(() => {
       console.debug('Failed to fetch ping, using default value of 0ms');
     });
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   const OriginalWebSocket = WebSocket;
   globalThis.WebSocket = class extends OriginalWebSocket {
     private readonly _userID: string;

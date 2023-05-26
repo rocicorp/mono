@@ -1,19 +1,19 @@
+import {event} from 'nextjs-google-analytics';
 import {useEffect, useState} from 'react';
 import {Range, getTrackBackground} from 'react-range';
 import style from './Slider.module.css';
-import {event} from 'nextjs-google-analytics';
 
 const STEP = 1;
 const MIN = 0;
 const MAX = 360;
 
-const RotateSlider = ({
+export function RotateSlider({
   increment,
   degree,
 }: {
   increment: (delta: number) => void;
   degree: number | undefined;
-}) => {
+}) {
   const [value, setValue] = useState(0);
   const [touched, setTouched] = useState(false);
 
@@ -119,6 +119,4 @@ const RotateSlider = ({
       />
     </div>
   );
-};
-
-export default RotateSlider;
+}

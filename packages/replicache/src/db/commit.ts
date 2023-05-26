@@ -32,12 +32,6 @@ export const enum MetaType {
   SnapshotDD31 = 5,
 }
 
-export function IndexChangeSDD(
-  commit: Commit<Meta>,
-): commit is Commit<IndexChangeMetaSDD> {
-  return isIndexChangeSDD(commit.meta);
-}
-
 export function commitIsLocalSDD(
   commit: Commit<Meta>,
 ): commit is Commit<LocalMetaSDD> {
@@ -462,10 +456,6 @@ function isSnapshotMetaDD31(meta: Meta): meta is SnapshotMetaDD31 {
 
 function isSnapshotMetaSDD(meta: Meta): meta is SnapshotMetaSDD {
   return meta.type === MetaType.SnapshotSDD;
-}
-
-function isIndexChangeSDD(meta: Meta): meta is IndexChangeMetaSDD {
-  return meta.type === MetaType.IndexChangeSDD;
 }
 
 function assertMeta(v: unknown): asserts v is Meta {

@@ -12,7 +12,7 @@ import {generateRandomPieces, getStage, Rect, Size} from '@/demo/alive/util';
 import {loggingOptions} from '@/demo/frontend/logging-options';
 import {mutators, type M} from '@/demo/shared/mutators';
 import {useElementSize} from '@/hooks/use-element-size';
-import useIsomorphicLayoutEffect from '@/hooks/use-isomorphic-layout-effect';
+import {useIsomorphicLayoutEffect} from '@/hooks/use-isomorphic-layout-effect';
 import styles from '@/styles/Home.module.css';
 import {getLocationString, Location} from '@/util/get-location-string';
 import {closeReflect} from '@/util/reflect';
@@ -324,7 +324,7 @@ function useBodyClasses() {
   return [classes, setClass] as const;
 }
 
-const Demo = ({
+export function Demo({
   winSize,
   docSize,
   gameMode,
@@ -334,7 +334,7 @@ const Demo = ({
   docSize: Size | null;
   gameMode: boolean;
   onSetGameMode: (gameMode: boolean) => void;
-}) => {
+}) {
   const tabIsVisible = useTabIsVisible();
   const [homeRef, home] = useElementSize<SVGSVGElement>([
     winSize,
@@ -489,6 +489,4 @@ const Demo = ({
       )}
     </section>
   );
-};
-
-export default Demo;
+}

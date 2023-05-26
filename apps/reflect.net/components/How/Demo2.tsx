@@ -1,15 +1,15 @@
-import {useState} from 'react';
-import styles from './How.module.css';
-import ServerConsole from './ServerConsole';
-import Demo2a from './Demos/Demo2a';
-import Demo2b from './Demos/Demo2b';
-import type {Reflect} from '@rocicorp/reflect';
 import type {M} from '@/demo/shared/mutators';
-import RotateClient from './RotateClient';
-import Reset from './Reset';
 import type {Latency} from '@/demo/shared/types';
+import type {Reflect} from '@rocicorp/reflect';
+import {useState} from 'react';
+import {Demo2a} from './Demos/Demo2a';
+import {Demo2b} from './Demos/Demo2b';
+import styles from './How.module.css';
+import {Reset} from './Reset';
+import {RotateClient} from './RotateClient';
+import {ServerConsole} from './ServerConsole';
 
-export default function Demo2({
+export function Demo2({
   reflect1,
   reflect2,
   reflectServer,

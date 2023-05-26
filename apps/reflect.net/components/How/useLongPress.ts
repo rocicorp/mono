@@ -5,11 +5,11 @@ type UseLongPressOptions = {
   delay?: number;
 };
 
-const useLongPress = (
+export function useLongPress(
   onLongPress: (event: React.SyntheticEvent) => void,
   onClick: (event: React.SyntheticEvent) => void,
   options?: UseLongPressOptions | undefined,
-) => {
+) {
   const {shouldPreventDefault = true, delay = 8} = options || {};
   const [longPressTriggered, setLongPressTriggered] = useState(false);
   const timeout = useRef<NodeJS.Timeout | null>(null);
@@ -58,7 +58,7 @@ const useLongPress = (
     onMouseLeave: (e: React.MouseEvent) => clear(e, false),
     onTouchEnd: (e: React.TouchEvent) => clear(e),
   };
-};
+}
 
 const isTouchEvent = (event: any): event is TouchEvent => 'touches' in event;
 
@@ -69,5 +69,3 @@ const preventDefault = (event: any) => {
     event.preventDefault();
   }
 };
-
-export default useLongPress;

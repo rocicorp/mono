@@ -1,14 +1,14 @@
-import styles from './Included.module.css';
-import Image from 'next/image';
 import included from '@/public/pricing/pricing-check.svg';
+import Image from 'next/image';
+import styles from './Included.module.css';
 
-const Included = () => (
-  <Image
-    src={included}
-    className={styles.pricingGridCheck}
-    alt="Included"
-    title="Included"
-  />
-);
-
-export default Included;
+export function Included() {
+  return (
+    <Image
+      src={included}
+      className={styles.pricingGridCheck}
+      alt="Included"
+      title="Included"
+    />
+  );
+}

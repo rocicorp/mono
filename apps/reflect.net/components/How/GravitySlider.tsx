@@ -8,13 +8,13 @@ const MAX = 360;
 const DRIFT_RATE = 36; // adjust this to change the rate of drift
 const INTERVAL_MS = 8;
 
-const GravitySlider = ({
+export function GravitySlider({
   increment,
   degree,
 }: {
   increment: (delta: number) => void;
   degree: number | null;
-}) => {
+}) {
   const [value, setValue] = useState(0);
   const [drifting, setDrifting] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -145,6 +145,4 @@ const GravitySlider = ({
       />
     </div>
   );
-};
-
-export default GravitySlider;
+}

@@ -1,6 +1,6 @@
 import type {NextApiRequest, NextApiResponse} from 'next';
 
-const handler = async (req: NextApiRequest, res: NextApiResponse) => {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).end(); // Method Not Allowed
   }
@@ -22,6 +22,6 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
 
   const data = await response.json();
   return res.status(200).json(data);
-};
+}
 
-export default handler;
+export {handler as default};

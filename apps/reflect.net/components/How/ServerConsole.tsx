@@ -1,16 +1,12 @@
-import React, {useContext, useEffect, useState} from 'react';
+import type {M} from '@/demo/shared/mutators';
+import type {Reflect} from '@rocicorp/reflect';
+import classNames from 'classnames';
+import {useContext, useEffect, useState} from 'react';
 import {ClientIDContext} from './ClientIDContext';
 import styles from './ServerConsole.module.css';
-import type {Reflect} from '@rocicorp/reflect';
-import type {M} from '@/demo/shared/mutators';
 import {useServerLogs} from './howtoUtils';
-import classNames from 'classnames';
 
-export default function ServerConsole({
-  reflect,
-}: {
-  reflect: Reflect<M> | undefined;
-}) {
+export function ServerConsole({reflect}: {reflect: Reflect<M> | undefined}) {
   const logs = useServerLogs(reflect);
   const {client1ID, client2ID} = useContext(ClientIDContext);
   const [bright, setBright] = useState(false);
