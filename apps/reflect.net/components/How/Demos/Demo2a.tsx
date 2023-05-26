@@ -1,7 +1,7 @@
 import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter';
 import {vscDarkPlus} from 'react-syntax-highlighter/dist/cjs/styles/prism';
 
-const Demo2a = () => {
+export function Demo2a() {
   const codeString = `export default {
     async setDegree(tx, degree: number) {
       console.log(\`Running mutation \${tx.clientID}@\${tx.mutationID} \` +
@@ -26,6 +26,4 @@ const Demo2a = () => {
       {codeString}
     </SyntaxHighlighter>
   );
-};
-
-export default Demo2a;
+}

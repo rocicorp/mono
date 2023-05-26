@@ -1,8 +1,7 @@
-import '@/styles/globals.css';
 import '@/styles/demo.css';
-import type {AppProps} from 'next/app';
+import '@/styles/globals.css';
+import type {AppProps, NextWebVitalsMetric} from 'next/app';
 import {GoogleAnalytics, event} from 'nextjs-google-analytics';
-import type {NextWebVitalsMetric} from 'next/app';
 
 export function reportWebVitals({id, name, label, value}: NextWebVitalsMetric) {
   event(name, {
@@ -13,7 +12,11 @@ export function reportWebVitals({id, name, label, value}: NextWebVitalsMetric) {
   });
 }
 
-export default function App({Component, pageProps}: AppProps) {
+export default function App({
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  Component,
+  pageProps,
+}: AppProps) {
   return (
     <>
       <GoogleAnalytics trackPageViews />

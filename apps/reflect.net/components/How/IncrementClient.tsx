@@ -1,15 +1,15 @@
-import React, {useCallback, useEffect, useState} from 'react';
-import Slider from './Slider';
-import ClientConsole from './ClientConsole';
-import styles from './How.module.css';
-import demoButtonStyles from './DemoButton.module.css';
-import type {Reflect} from '@rocicorp/reflect';
 import {M, registerClientConsole} from '@/demo/shared/mutators';
-import {useClientConsoleReducer, useCount} from './howtoUtils';
 import type {Latency} from '@/demo/shared/types';
+import type {Reflect} from '@rocicorp/reflect';
 import {event} from 'nextjs-google-analytics';
+import {useCallback, useEffect, useState} from 'react';
+import {ClientConsole} from './ClientConsole';
+import demoButtonStyles from './DemoButton.module.css';
+import styles from './How.module.css';
+import {Slider} from './Slider';
+import {useClientConsoleReducer, useCount} from './howtoUtils';
 
-function IncrementClient({
+export function IncrementClient({
   title,
   reflect,
   latency,
@@ -71,5 +71,3 @@ function IncrementClient({
     </div>
   );
 }
-
-export default IncrementClient;

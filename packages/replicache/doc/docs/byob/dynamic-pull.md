@@ -18,7 +18,7 @@ import {tx} from '../../db.js';
 import {defaultSpaceID} from './init.js';
 import {getLastMutationID} from './replicache-push.js';
 
-export default handlePull;
+export {handlePull as default};
 
 async function handlePull(req, res) {
   const pull = req.body;

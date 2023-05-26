@@ -26,7 +26,7 @@ import {tx} from '../../db.js';
 import Pusher from 'pusher';
 import {defaultSpaceID} from './init.js';
 
-export default handlePush;
+export {handlePush as default};
 
 async function handlePush(req, res) {
   const push = req.body;

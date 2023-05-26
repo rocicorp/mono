@@ -1,7 +1,7 @@
+import {Demo0a} from './Demos/Demo0a';
 import styles from './How.module.css';
-import Demo0a from './Demos/Demo0a';
 
-export default function Demo0() {
+export function Demo0() {
   return (
     <div className={styles.howStep}>
       <h3 className={styles.howHeader}>

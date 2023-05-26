@@ -1,8 +1,8 @@
-import styles from './GetStarted.module.css';
-import BetaSignup from './BetaSignup';
 import Link from 'next/link';
+import {BetaSignup} from './BetaSignup';
+import styles from './GetStarted.module.css';
 
-export default function GetStarted() {
+export function GetStarted() {
   return (
     <div className={styles.getStarted}>
       <p>

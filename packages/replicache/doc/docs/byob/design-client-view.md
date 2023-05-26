@@ -39,7 +39,7 @@ Now that we know what our schema will look like, let's serve it. Initially, we'l
 Create a file in the project at `pages/api/replicache-pull.js` with the following contents:
 
 ```js
-export default handlePull;
+export {handlePull as default};
 
 async function handlePull(req, res) {
   res.json({

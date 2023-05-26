@@ -1,4 +1,4 @@
-export default function Roci({rotation}: {rotation: number}) {
+export function Roci({rotation}: {rotation: number}) {
   const style = {
     transform: `rotate(${rotation}deg)`,
   };

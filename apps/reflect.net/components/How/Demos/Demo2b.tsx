@@ -1,7 +1,7 @@
 import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter';
 import {vscDarkPlus} from 'react-syntax-highlighter/dist/cjs/styles/prism';
 
-const Demo2b = () => {
+export function Demo2b() {
   const codeString = `import {Reflect} from "@rocicorp/reflect";
 import mutators from "./mutators";
 const authToken = "$your-auth-token";
@@ -37,6 +37,4 @@ r.subscribe(tx => tx.get("degree"), val => {
       {codeString}
     </SyntaxHighlighter>
   );
-};
-
-export default Demo2b;
+}

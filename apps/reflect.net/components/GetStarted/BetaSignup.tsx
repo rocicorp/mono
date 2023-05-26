@@ -1,8 +1,8 @@
-import styles from './BetaSignup.module.css';
-import {useState, useRef} from 'react';
 import {event} from 'nextjs-google-analytics';
+import {useRef, useState} from 'react';
+import styles from './BetaSignup.module.css';
 
-export default function BetaSignup() {
+export function BetaSignup() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');

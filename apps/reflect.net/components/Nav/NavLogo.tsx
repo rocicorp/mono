@@ -7,7 +7,8 @@ const checkSaturation = (props: any) => {
   return '0%';
 };
 
-const NavLogo = styled.img`
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export const NavLogo = styled.img`
   transition: filter 0.1s ease-in-out;
   width: auto;
   height: 44px;
@@ -17,5 +18,3 @@ const NavLogo = styled.img`
   object-position: 0% 50%;
   filter: saturate(${checkSaturation});
 `;
-
-export default NavLogo;
