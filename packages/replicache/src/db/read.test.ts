@@ -1,30 +1,32 @@
 import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
 import * as dag from '../dag/mod.js';
+import {mustGetHeadHash} from '../dag/store.js';
 import {FormatVersion} from '../format-version.js';
 import {DEFAULT_HEAD_NAME} from './commit.js';
-import {fromWhence, whenceHead} from './read.js';
+import {readFromDefaultHead} from './read.js';
 import {initDB} from './test-helpers.js';
 import {newWriteLocal} from './write.js';
 
 suite('basics', () => {
   const t = async (replicacheFormatVersion: FormatVersion) => {
     const clientID = 'client-id';
-    const ds = new dag.TestStore();
+    const dagStore = new dag.TestStore();
     const lc = new LogContext();
     await initDB(
-      await ds.write(),
+      await dagStore.write(),
       DEFAULT_HEAD_NAME,
       clientID,
       {},
       replicacheFormatVersion,
     );
+    const dagWrite = await dagStore.write();
     const w = await newWriteLocal(
-      whenceHead(DEFAULT_HEAD_NAME),
+      await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
       'mutator_name',
       JSON.stringify([]),
       null,
-      await ds.write(),
+      dagWrite,
       42,
       clientID,
       replicacheFormatVersion,
@@ -32,13 +34,9 @@ suite('basics', () => {
     await w.put(lc, 'foo', 'bar');
     await w.commit(DEFAULT_HEAD_NAME);
 
-    const dr = await ds.read();
-    const r = await fromWhence(
-      whenceHead(DEFAULT_HEAD_NAME),
-      dr,
-      replicacheFormatVersion,
-    );
-    const val = await r.get('foo');
+    const dagRead = await dagStore.read();
+    const dbRead = await readFromDefaultHead(dagRead, replicacheFormatVersion);
+    const val = await dbRead.get('foo');
     expect(val).to.deep.equal('bar');
   };
   test('dd31', () => t(FormatVersion.Latest));

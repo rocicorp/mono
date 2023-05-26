@@ -6,9 +6,9 @@ export {
   baseSnapshotFromHash,
   baseSnapshotFromHead,
   baseSnapshotHashFromHash,
-  chain as commitChain,
-  fromHash as commitFromHash,
-  fromHead as commitFromHead,
+  commitChain,
+  commitFromHash,
+  commitFromHead,
   compareCookiesForSnapshots,
   fromChunk,
   isLocalMetaDD31,
@@ -38,16 +38,11 @@ export {decodeIndexKey, encodeIndexKey} from './index.js';
 export type {IndexKey} from './index.js';
 export {
   Read,
-  fromWhence,
-  readCommit,
-  readCommitForBTreeRead,
-  readCommitForBTreeWrite,
   readFromDefaultHead,
+  readFromHash,
+  readFromHead,
   readIndexesForRead,
-  whenceHash,
-  whenceHead,
 } from './read.js';
-export type {Whence} from './read.js';
 export {rebaseMutationAndCommit, rebaseMutationAndPutCommit} from './rebase.js';
 export {getRoot} from './root.js';
 export type {ScanOptions} from './scan.js';

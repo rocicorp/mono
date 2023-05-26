@@ -1,4 +1,4 @@
-import {BTreeRead, BTreeWrite} from '../btree/mod.js';
+import {BTreeRead} from '../btree/mod.js';
 import type * as dag from '../dag/mod.js';
 import type {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
@@ -7,7 +7,8 @@ import {
   Commit,
   DEFAULT_HEAD_NAME,
   Meta,
-  fromHash as commitFromHash,
+  commitFromHash,
+  commitFromHead,
 } from './commit.js';
 import {IndexRead} from './index.js';
 
@@ -55,104 +56,39 @@ export class Read {
   }
 }
 
-const enum WhenceType {
-  Head,
-  Hash,
-}
-
-export type Whence =
-  | {
-      type: WhenceType.Hash;
-      hash: Hash;
-    }
-  | {
-      type: WhenceType.Head;
-      name: string;
-    };
-
-export function whenceHead(name: string): Whence {
-  return {
-    type: WhenceType.Head,
-    name,
-  };
-}
-
-export function whenceHash(hash: Hash): Whence {
-  return {
-    type: WhenceType.Hash,
-    hash,
-  };
-}
-
 export function readFromDefaultHead(
   dagRead: dag.Read,
   formatVersion: FormatVersion,
 ): Promise<Read> {
-  return fromWhence(whenceHead(DEFAULT_HEAD_NAME), dagRead, formatVersion);
+  return readFromHead(DEFAULT_HEAD_NAME, dagRead, formatVersion);
 }
 
-export async function fromWhence(
-  whence: Whence,
+export async function readFromHead(
+  name: string,
   dagRead: dag.Read,
   formatVersion: FormatVersion,
 ): Promise<Read> {
-  const [, basis, map] = await readCommitForBTreeRead(
-    whence,
-    dagRead,
-    formatVersion,
-  );
-  const indexes = readIndexesForRead(basis, dagRead, formatVersion);
-  return new Read(dagRead, map, indexes);
+  const commit = await commitFromHead(name, dagRead);
+  return readFromCommit(commit, dagRead, formatVersion);
 }
 
-export async function readCommit(
-  whence: Whence,
+export async function readFromHash(
+  hash: Hash,
   dagRead: dag.Read,
-): Promise<[Hash, Commit<Meta>]> {
-  let hash: Hash;
-  switch (whence.type) {
-    case WhenceType.Hash:
-      hash = whence.hash;
-      break;
-    case WhenceType.Head: {
-      const h = await dagRead.getHead(whence.name);
-      if (h === undefined) {
-        throw new Error(`Unknown head: ${whence.name}`);
-      }
-      hash = h;
-      break;
-    }
-  }
-
+  formatVersion: FormatVersion,
+): Promise<Read> {
   const commit = await commitFromHash(hash, dagRead);
-  return [hash, commit];
+  return readFromCommit(commit, dagRead, formatVersion);
 }
 
-// TODO(arv): It looks like never read index 0 of the result.
-export async function readCommitForBTreeRead(
-  whence: Whence,
+function readFromCommit(
+  commit: Commit<Meta>,
   dagRead: dag.Read,
   formatVersion: FormatVersion,
-): Promise<[Hash, Commit<Meta>, BTreeRead]> {
-  const [hash, commit] = await readCommit(whence, dagRead);
-  return [
-    hash,
-    commit,
-    new BTreeRead(dagRead, formatVersion, commit.valueHash),
-  ];
-}
-
-export async function readCommitForBTreeWrite(
-  whence: Whence,
-  dagWrite: dag.Write,
-  formatVersion: FormatVersion,
-): Promise<[Hash, Commit<Meta>, BTreeWrite]> {
-  const [hash, commit] = await readCommit(whence, dagWrite);
-  return [
-    hash,
-    commit,
-    new BTreeWrite(dagWrite, formatVersion, commit.valueHash),
-  ];
+): Read {
+  const indexes = readIndexesForRead(commit, dagRead, formatVersion);
+  const map = new BTreeRead(dagRead, formatVersion, commit.valueHash);
+  return new Read(dagRead, map, indexes);
 }
 
 export function readIndexesForRead(

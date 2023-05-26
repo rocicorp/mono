@@ -3,7 +3,7 @@ import * as btree from '../btree/mod.js';
 import type {InternalDiff} from '../btree/node.js';
 import {allEntriesAsDiff, BTreeRead} from '../btree/read.js';
 import type * as dag from '../dag/mod.js';
-import {Commit, fromHash, Meta} from '../db/commit.js';
+import {Commit, commitFromHash, Meta} from '../db/commit.js';
 import {readIndexesForRead} from '../db/read.js';
 import type {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
@@ -41,8 +41,8 @@ export async function diff(
   formatVersion: FormatVersion,
 ): Promise<DiffsMap> {
   const [oldCommit, newCommit] = await Promise.all([
-    fromHash(oldHash, read),
-    fromHash(newHash, read),
+    commitFromHash(oldHash, read),
+    commitFromHash(newHash, read),
   ]);
 
   return diffCommits(oldCommit, newCommit, read, diffConfig, formatVersion);

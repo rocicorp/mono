@@ -5,6 +5,7 @@ import * as btree from '../btree/mod.js';
 import {BTreeWrite} from '../btree/mod.js';
 import type {Cookie} from '../cookies.js';
 import type * as dag from '../dag/mod.js';
+import {mustGetHeadHash} from '../dag/store.js';
 import {Visitor} from '../dag/visitor.js';
 import {FormatVersion} from '../format-version.js';
 import {Hash, emptyHash} from '../hash.js';
@@ -29,16 +30,11 @@ import {
   assertSnapshotCommitDD31,
   assertSnapshotCommitSDD,
   chunkIndexDefinitionEqualIgnoreName,
-  fromHead,
+  commitFromHead,
   toChunkIndexDefinition,
 } from './commit.js';
 import {IndexWrite} from './index.js';
-import {
-  Whence,
-  readCommit,
-  readCommitForBTreeWrite,
-  whenceHead,
-} from './read.js';
+import {commitFromHash} from './mod.js';
 import {
   Write,
   createIndexBTree,
@@ -80,10 +76,7 @@ async function createGenesis(
   await withWrite(store, async w => {
     await initDB(w, headName, clientID, indexDefinitions, formatVersion);
   });
-  return withRead(store, async read => {
-    const [, commit] = await readCommit(whenceHead(headName), read);
-    return commit;
-  });
+  return withRead(store, read => commitFromHead(headName, read));
 }
 
 // Local commit has mutator name and args according to its index in the
@@ -122,7 +115,7 @@ async function createLocal(
   const lc = new LogContext();
   await withWrite(store, async dagWrite => {
     const w = await newWriteLocal(
-      whenceHead(headName),
+      await mustGetHeadHash(headName, dagWrite),
       createMutatorName(i),
       deepFreeze([i]),
       null,
@@ -136,7 +129,7 @@ async function createLocal(
     }
     await w.commit(headName);
   });
-  return withRead(store, dagRead => fromHead(headName, dagRead));
+  return withRead(store, dagRead => commitFromHead(headName, dagRead));
 }
 
 export function createMutatorName(chainIndex: number): string {
@@ -190,7 +183,7 @@ async function createIndex(
   const lc = new LogContext();
   await withWrite(store, async dagWrite => {
     const w = await newWriteIndexChange(
-      whenceHead(headName),
+      await mustGetHeadHash(headName, dagWrite),
       dagWrite,
       clientID,
       formatVersion,
@@ -208,10 +201,7 @@ async function createIndex(
     );
     await w.commit(headName);
   });
-  return withRead(store, async dagRead => {
-    const [, commit] = await readCommit(whenceHead(headName), dagRead);
-    return commit;
-  });
+  return withRead(store, dagRead => commitFromHead(headName, dagRead));
 }
 
 // See also sync.test_helpers for addSyncSnapshot, which can't go here because
@@ -234,7 +224,7 @@ async function addSnapshot(
     let w;
     if (formatVersion >= FormatVersion.DD31) {
       w = await newWriteSnapshotDD31(
-        whenceHead(headName),
+        await mustGetHeadHash(headName, dagWrite),
         lastMutationIDs ?? {
           [clientID]: await chain[chain.length - 1].getNextMutationID(
             clientID,
@@ -248,7 +238,7 @@ async function addSnapshot(
       );
     } else {
       w = await newWriteSnapshotSDD(
-        whenceHead(DEFAULT_HEAD_NAME),
+        await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
         await chain[chain.length - 1].getNextMutationID(clientID, dagWrite),
         deepFreeze(cookie),
         dagWrite,
@@ -266,7 +256,7 @@ async function addSnapshot(
     await w.commit(headName);
   });
   return withRead(store, async dagRead => {
-    const [, commit] = await readCommit(whenceHead(headName), dagRead);
+    const commit = await commitFromHead(headName, dagRead);
     chain.push(commit);
     return chain;
   });
@@ -495,17 +485,14 @@ export function getChunkSnapshot(
 }
 
 async function newWriteIndexChange(
-  whence: Whence,
+  basisHash: Hash,
   dagWrite: dag.Write,
   clientID: ClientID,
   formatVersion: FormatVersion,
 ): Promise<Write> {
   assert(formatVersion <= FormatVersion.SDD);
-  const [basisHash, basis, bTreeWrite] = await readCommitForBTreeWrite(
-    whence,
-    dagWrite,
-    formatVersion,
-  );
+  const basis = await commitFromHash(basisHash, dagWrite);
+  const bTreeWrite = new BTreeWrite(dagWrite, formatVersion, basis.valueHash);
   const lastMutationID = await basis.getMutationID(clientID, dagWrite);
   const indexes = readIndexesForWrite(basis, dagWrite, formatVersion);
   return new Write(

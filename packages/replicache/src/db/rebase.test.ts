@@ -200,6 +200,16 @@ async function createMissingMutatorFixture() {
   return fixture;
 }
 
+async function commitAndBTree(
+  name = SYNC_HEAD_NAME,
+  read: dag.Read,
+  formatVersion: FormatVersion,
+): Promise<[db.Commit<db.Meta>, BTreeRead]> {
+  const commit = await db.commitFromHead(name, read);
+  const btreeRead = new BTreeRead(read, formatVersion, commit.valueHash);
+  return [commit, btreeRead];
+}
+
 suite('rebaseMutationAndCommit', () => {
   test('with sequence of mutations', async () => {
     const fixture = await createMutationSequenceFixture();
@@ -218,12 +228,11 @@ suite('rebaseMutationAndCommit', () => {
     expect(fixture.testMutator1CallCount).to.equal(1);
     expect(fixture.testMutator2CallCount).to.equal(0);
     await withRead(fixture.store, async read => {
-      const [, rebasedLocalCommit1, btreeRead] =
-        await db.readCommitForBTreeRead(
-          db.whenceHead(SYNC_HEAD_NAME),
-          read,
-          fixture.formatVersion,
-        );
+      const [rebasedLocalCommit1, btreeRead] = await commitAndBTree(
+        SYNC_HEAD_NAME,
+        read,
+        fixture.formatVersion,
+      );
       expect(hashOfRebasedLocalCommit1).to.equal(
         rebasedLocalCommit1.chunk.hash,
       );
@@ -244,12 +253,11 @@ suite('rebaseMutationAndCommit', () => {
     expect(fixture.testMutator1CallCount).to.equal(1);
     expect(fixture.testMutator2CallCount).to.equal(1);
     await withRead(fixture.store, async read => {
-      const [, rebasedLocalCommit2, btreeRead] =
-        await db.readCommitForBTreeRead(
-          db.whenceHead(SYNC_HEAD_NAME),
-          read,
-          fixture.formatVersion,
-        );
+      const [rebasedLocalCommit2, btreeRead] = await commitAndBTree(
+        SYNC_HEAD_NAME,
+        read,
+        fixture.formatVersion,
+      );
       expect(hashOfRebasedLocalCommit2).to.equal(
         rebasedLocalCommit2.chunk.hash,
       );
@@ -276,8 +284,8 @@ suite('rebaseMutationAndCommit', () => {
       ),
     );
     await withRead(fixture.store, async read => {
-      const [, rebasedLocalCommit, btreeRead] = await db.readCommitForBTreeRead(
-        db.whenceHead(SYNC_HEAD_NAME),
+      const [rebasedLocalCommit, btreeRead] = await commitAndBTree(
+        SYNC_HEAD_NAME,
         read,
         fixture.formatVersion,
       );
@@ -328,12 +336,11 @@ suite('rebaseMutationAndPutCommit', () => {
     expect(fixture.testMutator1CallCount).to.equal(1);
     expect(fixture.testMutator2CallCount).to.equal(0);
     await withRead(fixture.store, async read => {
-      const [, rebasedLocalCommit1, btreeRead] =
-        await db.readCommitForBTreeRead(
-          db.whenceHead(TEST_HEAD_NAME),
-          read,
-          fixture.formatVersion,
-        );
+      const [rebasedLocalCommit1, btreeRead] = await commitAndBTree(
+        TEST_HEAD_NAME,
+        read,
+        fixture.formatVersion,
+      );
       expect(hashOfRebasedLocalCommit1).to.equal(
         rebasedLocalCommit1.chunk.hash,
       );
@@ -364,12 +371,11 @@ suite('rebaseMutationAndPutCommit', () => {
     expect(fixture.testMutator1CallCount).to.equal(1);
     expect(fixture.testMutator2CallCount).to.equal(1);
     await withRead(fixture.store, async read => {
-      const [, rebasedLocalCommit2, btreeRead] =
-        await db.readCommitForBTreeRead(
-          db.whenceHead(TEST_HEAD_NAME),
-          read,
-          fixture.formatVersion,
-        );
+      const [rebasedLocalCommit2, btreeRead] = await commitAndBTree(
+        TEST_HEAD_NAME,
+        read,
+        fixture.formatVersion,
+      );
       expect(hashOfRebasedLocalCommit2).to.equal(
         rebasedLocalCommit2.chunk.hash,
       );
@@ -406,8 +412,8 @@ suite('rebaseMutationAndPutCommit', () => {
       },
     );
     await withRead(fixture.store, async read => {
-      const [, rebasedLocalCommit, btreeRead] = await db.readCommitForBTreeRead(
-        db.whenceHead(TEST_HEAD_NAME),
+      const [rebasedLocalCommit, btreeRead] = await commitAndBTree(
+        TEST_HEAD_NAME,
         read,
         fixture.formatVersion,
       );

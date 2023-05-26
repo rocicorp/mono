@@ -8,9 +8,9 @@ import {
   Commit,
   SnapshotMetaDD31,
   SnapshotMetaSDD,
+  commitFromHash,
   commitIsSnapshot,
   fromChunk,
-  fromHash,
 } from '../db/commit.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
@@ -924,10 +924,10 @@ suite('initClientV6', () => {
     });
 
     await withRead(perdag, async read => {
-      const c1 = await fromHash(client1.headHash, read);
+      const c1 = await commitFromHash(client1.headHash, read);
       expect(c1.chunk.data.indexes).length(1);
 
-      const c2 = await fromHash(client2HeadHash, read);
+      const c2 = await commitFromHash(client2HeadHash, read);
       expect(c2.chunk.data.indexes).length(2);
 
       expect(c1.chunk.data.indexes[0].valueHash).to.equal(
