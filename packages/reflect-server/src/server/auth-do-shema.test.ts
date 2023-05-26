@@ -15,8 +15,8 @@ describe('auth do schema migration', () => {
 
   const cases: Case[] = [
     {
-      preState: {},
       name: 'migrate from none to v0',
+      preState: {},
     },
     {
       name: 'migrate from v0 to v0',
@@ -31,7 +31,7 @@ describe('auth do schema migration', () => {
       },
     },
     {
-      name: 'migrate from v1 with minSafeRollbackVersion 0',
+      name: 'migrate from v1 with minSafeRollbackVersion 0 to v0',
       preState: {
         // eslint-disable-next-line @typescript-eslint/naming-convention
         storage_schema_meta: {
@@ -50,7 +50,7 @@ describe('auth do schema migration', () => {
       },
     },
     {
-      name: 'migrate from v1 with minSafeRollbackVersion 1',
+      name: 'migrate from v1 with minSafeRollbackVersion 1 to v0',
       preState: {
         // eslint-disable-next-line @typescript-eslint/naming-convention
         storage_schema_meta: {
