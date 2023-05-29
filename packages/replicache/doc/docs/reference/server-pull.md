@@ -63,35 +63,29 @@ When pulling we `POST` an HTTP request with a [JSON encoded body](/api#pullreque
 
 ```ts
 type PullRequest = {
-  clientID: string;
+  pullVersion: 1;
+  clientGroupID: string;
   cookie: JSONValue;
-  lastMutationID: number;
   profileID: string;
-  pullVersion: number;
   schemaVersion: string;
 };
 ```
 
-### `clientID`
+### `pullVersion`
 
-The [`clientID`](api/classes/Replicache#clientID) of the requesting Replicache instance.
+Version of the type Replicache uses for the response JSON. The current version is `1`.
+
+### `clientGroupID`
+
+The `clientGroupID` of the requesting Replicache client group.
 
 ### `cookie`
 
 The cookie that was received last time a pull was done. `null` if this is the first pull from this client.
 
-### `lastMutationID`
-
-The `lastMutationID` the client received in the last [pull
-response](#http-response).
-
 ### `profileID`
 
 The [`profileID`](api/classes/Replicache#profileid) of the requesting Replicache instance. All clients within a browser profile share the same `profileID`. It can be used for windowing the Client View, which one typically wants to do per-browser-profile, not per-client.
-
-### `pullVersion`
-
-Version of the type Replicache uses for the response JSON. The current version is `0`.
 
 ### `schemaVersion`
 
@@ -117,25 +111,41 @@ Replicache will exponentially back off sending pushes in the case of both networ
 
 The response body is a JSON object of the [`PullResponse`](api#PullResponse) type:
 
-<!-- TODO(DD31): In DD31 we use ClientStateNotFoundResponse for when the client group
- cannot be found. That should only happen when you are developing the server or the
- server is using an ephemeral storage -->
-
 ```ts
 export type PullResponse =
   | PullResponseOK
-  | DeprecatedClientStateNotFoundResponse;
+  | ClientStateNotFoundResponse
+  | VersionNotSupportedResponse;
 
 export type PullResponseOK = {
-  cookie?: ReadonlyJSONValue;
-  lastMutationID: number;
+  cookie: Cookie;
+  lastMutationIDChanges: Record<ClientID, number>;
   patch: PatchOperation[];
 };
 
-// This response is no longer recommended. See "Handling Unknown Clients" below.
-// If returned, it causes the [onClientStateNotFound](https://doc.replicache.dev/api/classes/Replicache#onclientstatenotfound) method on the client to be called.
-export type DeprecatedClientStateNotFoundResponse = {
+export type Cookie =
+  | null
+  | string
+  | number
+  | (ReadonlyJSONValue & {readonly order: number | string});
+
+/**
+ * In certain scenarios the server can signal that it does not know about the
+ * client. For example, the server might have lost all of its state (this might
+ * happen during the development of the server).
+ */
+export type ClientStateNotFoundResponse = {
   error: 'ClientStateNotFound';
+};
+
+/**
+ * The server endpoint may respond with a `VersionNotSupported` error if it does
+ * not know how to handle the {@link pullVersion}, {@link pushVersion} or the
+ * {@link schemaVersion}.
+ */
+export type VersionNotSupportedResponse = {
+  error: 'VersionNotSupported';
+  versionType?: 'pull' | 'push' | 'schema' | undefined;
 };
 ```
 
@@ -143,14 +153,13 @@ export type DeprecatedClientStateNotFoundResponse = {
 
 The `cookie` is an opaque-to-the-client value set by the server that is returned by the client in the next `PullRequest`. The server uses it to create the patch that will bring the client's Client View up to date with the server's.
 
-The cookie can be any [`JSONValue`](api#JSONValue) but just like with HTTP cookies
-you want to limit its size since it get sent on every request.
+The cookie must be orderable (string or number) or an object with a special `order` field with the same constraints.
 
 For more information on how to use the cookie see [Computing Changes for Pull](#computing-changes-for-pull).
 
-### `lastMutationID`
+### `lastMutationIDChanges`
 
-The ID of the last mutation that was successfully applied to the server from this client.
+A map of clients whose `lastMutationID` have changed since the last pull.
 
 ### `patch`
 

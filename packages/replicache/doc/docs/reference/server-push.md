@@ -64,14 +64,15 @@ When pushing we `POST` an HTTP request with a [JSON encoded body](/api#pushreque
 
 ```ts
 type PushRequest = {
-  clientID: string;
+  pushVersion: 1;
+  clientGroupID: string;
   mutations: Mutation[];
   profileID: string;
-  pushVersion: number;
   schemaVersion: string;
 };
 
 type Mutation = {
+  clientID: string;
   id: number;
   name: string;
   args: ReadonlyJSONValue;
@@ -79,15 +80,20 @@ type Mutation = {
 };
 ```
 
-### `clientID`
+### `pushVersion`
 
-The [`clientID`](api/classes/Replicache#clientID) of the requesting Replicache
-instance.
+Version of the type Replicache uses for the request body. The current version is `1`.
+
+### `clientGroupID`
+
+The [`clientGroupID`](api/classes/Replicache#clientID) of the requesting Replicache
+client group.
 
 ### `mutations`
 
 An array of mutations to be applied to the server, each having:
 
+- `clientID`: The ID of the client within the group that created the mutation.
 - `id`: A sequential per-client unsigned integer. Each mutation will have an ID exactly one greater than the previous one in the list.
 - `name`: The name of the mutator that was invoked (e.g., from [Replicache.mutate](api/classes/Replicache#mutate)).
 - `args`: The arguments that were passed to the mutator.
@@ -96,10 +102,6 @@ An array of mutations to be applied to the server, each having:
 ### `profileID`
 
 The [`profileID`](api/classes/Replicache#profileid) of the requesting Replicache instance. All clients within a browser profile share the same `profileID`.
-
-### `pushVersion`
-
-Version of the type Replicache uses for the request body. The current version is `0`.
 
 ### `schemaVersion`
 
