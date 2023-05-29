@@ -94,10 +94,7 @@ export const PING_TIMEOUT_MS = 5_000;
  */
 export const PULL_TIMEOUT_MS = 5_000;
 
-/**
- * The amount of time to wait before we consider a tab hidden.
- */
-export const HIDDEN_INTERVAL_MS = 5_000;
+export const DEFAULT_DISCONNECT_HIDDEN_DELAY_MS = 5_000;
 
 /**
  * The amount of time we wait for a connection to be established before we
@@ -220,11 +217,7 @@ export class Reflect<MD extends MutatorDefs> {
 
   #closeAbortController = new AbortController();
 
-  readonly #visibilityWatcher = getDocumentVisibilityWatcher(
-    getDocument(),
-    HIDDEN_INTERVAL_MS,
-    this.#closeAbortController.signal,
-  );
+  readonly #visibilityWatcher;
 
   // We use an accessor pair to allow the subclass to override the setter.
   #connectionState: ConnectionState = ConnectionState.Disconnected;
@@ -256,8 +249,14 @@ export class Reflect<MD extends MutatorDefs> {
    * Constructs a new Reflect client.
    */
   constructor(options: ReflectOptions<MD>) {
-    const {userID, roomID, socketOrigin, onOnlineChange, jurisdiction} =
-      options;
+    const {
+      userID,
+      roomID,
+      socketOrigin,
+      onOnlineChange,
+      jurisdiction,
+      disconnectHiddenDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
+    } = options;
     if (!userID) {
       throw new Error('ReflectOptions.userID must not be empty.');
     }
@@ -272,6 +271,11 @@ export class Reflect<MD extends MutatorDefs> {
     }
     if (jurisdiction !== undefined && jurisdiction !== 'eu') {
       throw new Error('ReflectOptions.jurisdiction must be "eu" if present.');
+    }
+    if (disconnectHiddenDelay < 0) {
+      throw new Error(
+        'ReflectOptions.disconnectHiddenDelay must not be negative.',
+      );
     }
 
     this.onOnlineChange = onOnlineChange;
@@ -326,6 +330,12 @@ export class Reflect<MD extends MutatorDefs> {
       () => this._onOutOfOrderPoke(),
       this.clientID,
       this._l,
+    );
+
+    this.#visibilityWatcher = getDocumentVisibilityWatcher(
+      getDocument(),
+      disconnectHiddenDelay,
+      this.#closeAbortController.signal,
     );
 
     void this._runLoop();

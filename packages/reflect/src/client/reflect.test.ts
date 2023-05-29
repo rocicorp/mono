@@ -17,13 +17,13 @@ import {REPORT_INTERVAL_MS} from './metrics.js';
 import {
   CONNECT_TIMEOUT_MS,
   ConnectionState,
-  HIDDEN_INTERVAL_MS,
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
   createSocket,
   serverAheadReloadReason,
+  DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
 } from './reflect.js';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
 import {ServerError} from './server-error.js';
@@ -1169,32 +1169,186 @@ test('server ahead', async () => {
   );
 });
 
+test('Constructing Reflect with a negative disconnectHiddenDelay option throws an error', () => {
+  let expected;
+  try {
+    reflectForTest({disconnectHiddenDelay: -1});
+  } catch (e) {
+    expected = e;
+  }
+  expect(expected)
+    .instanceOf(Error)
+    .property(
+      'message',
+      'ReflectOptions.disconnectHiddenDelay must not be negative.',
+    );
+});
+
 suite('Disconnect on hide', () => {
   type Case = {
     name: string;
-    duringPing: boolean;
+    disconnectHiddenDelay?: number | undefined;
+    test: (
+      r: TestReflect<MutatorDefs>,
+      changeVisibilityState: (
+        newVisibilityState: DocumentVisibilityState,
+      ) => void,
+    ) => Promise<void>;
   };
 
   const cases: Case[] = [
-    {name: 'no ping', duringPing: false},
-    {name: 'during ping', duringPing: true},
+    {
+      name: 'default delay not during ping',
+      test: async (r, changeVisibilityState) => {
+        expect(PING_INTERVAL_MS).lessThanOrEqual(
+          DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
+        );
+        expect(PING_INTERVAL_MS * 2).greaterThanOrEqual(
+          DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
+        );
+        let timeTillHiddenDisconnect = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS;
+        changeVisibilityState('hidden');
+        await clock.tickAsync(PING_INTERVAL_MS); // sends ping
+        timeTillHiddenDisconnect -= PING_INTERVAL_MS;
+        await r.triggerPong();
+        await clock.tickAsync(timeTillHiddenDisconnect);
+      },
+    },
+    {
+      name: 'default delay during ping',
+      test: async (r, changeVisibilityState) => {
+        expect(PING_INTERVAL_MS).lessThanOrEqual(
+          DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
+        );
+        expect(PING_INTERVAL_MS + PING_TIMEOUT_MS).greaterThanOrEqual(
+          DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
+        );
+        await clock.tickAsync(PING_INTERVAL_MS / 2);
+        let timeTillHiddenDisconnect = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS;
+        changeVisibilityState('hidden');
+        await clock.tickAsync(PING_INTERVAL_MS / 2); // sends ping
+        timeTillHiddenDisconnect -= PING_INTERVAL_MS / 2;
+        await clock.tickAsync(timeTillHiddenDisconnect);
+        // Disconnect due to visibility does not happen until pong is received
+        // and microtask queue is processed.
+        expect(r.connectionState).to.equal(ConnectionState.Connected);
+        await r.triggerPong();
+        await clock.tickAsync(0);
+      },
+    },
+    {
+      name: 'custom delay longer than ping interval not during ping',
+      disconnectHiddenDelay: Math.floor(PING_INTERVAL_MS * 6.3),
+      test: async (r, changeVisibilityState) => {
+        let timeTillHiddenDisconnect = Math.floor(PING_INTERVAL_MS * 6.3);
+        changeVisibilityState('hidden');
+        while (timeTillHiddenDisconnect > PING_INTERVAL_MS) {
+          await clock.tickAsync(PING_INTERVAL_MS); // sends ping
+          timeTillHiddenDisconnect -= PING_INTERVAL_MS;
+          await r.triggerPong();
+        }
+        await clock.tickAsync(timeTillHiddenDisconnect);
+      },
+    },
+    {
+      name: 'custom delay longer than ping interval during ping',
+      disconnectHiddenDelay: Math.floor(PING_INTERVAL_MS * 6.3),
+      test: async (r, changeVisibilityState) => {
+        let timeTillHiddenDisconnect = Math.floor(PING_INTERVAL_MS * 6.3);
+        expect(timeTillHiddenDisconnect > PING_INTERVAL_MS + PING_TIMEOUT_MS);
+        changeVisibilityState('hidden');
+        while (timeTillHiddenDisconnect > PING_INTERVAL_MS + PING_TIMEOUT_MS) {
+          await clock.tickAsync(PING_INTERVAL_MS);
+          timeTillHiddenDisconnect -= PING_INTERVAL_MS;
+          await r.triggerPong();
+        }
+        expect(timeTillHiddenDisconnect).lessThan(
+          PING_INTERVAL_MS + PING_TIMEOUT_MS,
+        );
+        expect(timeTillHiddenDisconnect).greaterThan(PING_INTERVAL_MS);
+        await clock.tickAsync(PING_INTERVAL_MS); // sends ping
+        timeTillHiddenDisconnect -= PING_INTERVAL_MS;
+        await clock.tickAsync(timeTillHiddenDisconnect);
+        // Disconnect due to visibility does not happen until pong is received
+        // and microtask queue is processed.
+        expect(r.connectionState).to.equal(ConnectionState.Connected);
+        await r.triggerPong();
+        await clock.tickAsync(0);
+      },
+    },
+    {
+      name: 'custom delay shorter than ping interval not during ping',
+      disconnectHiddenDelay: Math.floor(PING_INTERVAL_MS * 0.3),
+      test: async (r, changeVisibilityState) => {
+        await clock.tickAsync(PING_INTERVAL_MS);
+        await r.triggerPong();
+        const timeTillHiddenDisconnect = Math.floor(PING_INTERVAL_MS * 0.3);
+        changeVisibilityState('hidden');
+        await clock.tickAsync(timeTillHiddenDisconnect);
+      },
+    },
+    {
+      name: 'custom delay shorter than ping interval during ping',
+      disconnectHiddenDelay: Math.floor(PING_INTERVAL_MS * 0.3),
+      test: async (r, changeVisibilityState) => {
+        await clock.tickAsync(PING_INTERVAL_MS);
+        const timeTillHiddenDisconnect = Math.floor(PING_INTERVAL_MS * 0.3);
+        changeVisibilityState('hidden');
+        await clock.tickAsync(timeTillHiddenDisconnect);
+        // Disconnect due to visibility does not happen until pong is received
+        // and microtask queue is processed.
+        expect(r.connectionState).to.equal(ConnectionState.Connected);
+        await r.triggerPong();
+        await clock.tickAsync(0);
+      },
+    },
+    {
+      name: 'custom delay 0, not during ping',
+      disconnectHiddenDelay: 0,
+      test: async (r, changeVisibilityState) => {
+        await clock.tickAsync(PING_INTERVAL_MS);
+        await r.triggerPong();
+        changeVisibilityState('hidden');
+        await clock.tickAsync(0);
+      },
+    },
+    {
+      name: 'custom delay 0, during ping',
+      disconnectHiddenDelay: 0,
+      test: async (r, changeVisibilityState) => {
+        await clock.tickAsync(PING_INTERVAL_MS);
+        changeVisibilityState('hidden');
+        await clock.tickAsync(0);
+        // Disconnect due to visibility does not happen until pong is received
+        // and microtask queue is processed.
+        expect(r.connectionState).to.equal(ConnectionState.Connected);
+        await r.triggerPong();
+        await clock.tickAsync(0);
+      },
+    },
   ];
 
   for (const c of cases) {
     test(c.name, async () => {
-      // This test makes the assumption that the ping interval is less than
-      // the hidden interval.
-      expect(PING_INTERVAL_MS).lessThanOrEqual(HIDDEN_INTERVAL_MS);
+      const {disconnectHiddenDelay} = c;
 
       let visibilityState = 'visible';
       sinon.stub(document, 'visibilityState').get(() => visibilityState);
+      const changeVisibilityState = (
+        newVisibilityState: DocumentVisibilityState,
+      ) => {
+        assert(visibilityState !== newVisibilityState);
+        visibilityState = newVisibilityState;
+        document.dispatchEvent(new Event('visibilitychange'));
+      };
 
+      const r = reflectForTest({
+        disconnectHiddenDelay,
+      });
       const makeOnOnlineChangePromise = () =>
         new Promise(resolve => {
           r.onOnlineChange = resolve;
         });
-
-      const r = reflectForTest();
       let onOnlineChangeP = makeOnOnlineChangePromise();
 
       await r.triggerConnected();
@@ -1202,41 +1356,9 @@ suite('Disconnect on hide', () => {
       expect(await onOnlineChangeP).true;
       expect(r.online).true;
 
-      if (c.duringPing) {
-        // - The intention of duringPing is to have the visibilityWatcher
-        //   trigger when a ping is in flight.
-        // - We start the ping after PING_INTERVAL_MS.
-        //   - A ping times out after PING_TIMEOUT_MS.
-        // - The visibilityWatcher will trigger after HIDDEN_INTERVAL_MS after
-        //   the event was dispatched.
-        // - We therefore want the visibilityWatcher to trigger between
-        //   [PING_INTERVAL_MS, PING_INTERVAL_MS + PING_TIMEOUT_MS])
-        // - Trigger the visibility change at PING_INTERVAL_MS + PING_TIMEOUT_MS
-        //   / 2
-        // - That gives us that we we should dispatch the event at
-        //   PING_INTERVAL_MS + PING_TIMEOUT_MS / 2 - HIDDEN_INTERVAL_MS
-        await clock.tickAsync(
-          PING_INTERVAL_MS + PING_TIMEOUT_MS / 2 - HIDDEN_INTERVAL_MS,
-        );
-      }
-      visibilityState = 'hidden';
-      document.dispatchEvent(new Event('visibilitychange'));
-
       onOnlineChangeP = makeOnOnlineChangePromise();
 
-      let sleep = 0;
-      if (c.duringPing) {
-        await waitForUpstreamMessage(r, 'ping', clock);
-        await clock.tickAsync(PING_TIMEOUT_MS / 2);
-        // Now the visibilityWatcher triggers.
-        await r.triggerPong();
-      } else {
-        // We need a ping before PING_INTERVAL_MS to not get disconnected.
-        await clock.tickAsync(PING_INTERVAL_MS);
-        await r.triggerPong();
-        sleep = HIDDEN_INTERVAL_MS - PING_INTERVAL_MS;
-      }
-      await clock.tickAsync(sleep);
+      await c.test(r, changeVisibilityState);
 
       expect(r.connectionState).to.equal(ConnectionState.Disconnected);
       expect(await onOnlineChangeP).false;

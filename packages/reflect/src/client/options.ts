@@ -166,6 +166,16 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   onOnlineChange?: ((online: boolean) => void) | undefined;
 
   /**
+   * The number of milliseconds to wait before disconnecting a Reflect
+   * instance whose tab has become hidden.
+   *
+   * Instances in hidden tabs are disconnected to save resources.
+   *
+   * Default is 5_000.
+   */
+  disconnectHiddenDelay?: number | undefined;
+
+  /**
    * Allows providing a custom implementation of the underlying storage layer.
    */
   createKVStore?: CreateKVStore | undefined;
