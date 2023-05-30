@@ -17,5 +17,13 @@
     "experimentalSpecifierResolution": "node"
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
-  "exclude": [".next", "dist", "node_modules", "out", "next.config.js", "reps", ".parcel-cache"]
+  "exclude": [
+    ".next",
+    "dist",
+    "node_modules",
+    "out",
+    "next.config.js",
+    "reps",
+    ".parcel-cache"
+  ]
 }

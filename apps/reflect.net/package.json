@@ -19,7 +19,7 @@
     "publish-worker-prod": "npm run wrangler-prod -- publish",
     "worker-logs-staging": "npm run wrangler-staging -- tail",
     "worker-logs-prod": "npm run wrangler-prod -- tail",
-    "wrangler-staging": "npx wrangler --config wrangler-staging.toml",
+    "wrangler-staging": "npx wrangler --config wrangler.toml --env=staging",
     "wrangler-prod": "npx wrangler --config wrangler.toml",
     "update-reflect": "./build-latest-reflect.sh",
     "update-reflect-pull": "./build-latest-reflect.sh pull",
