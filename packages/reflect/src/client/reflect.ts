@@ -1128,7 +1128,10 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   /**
-   * @returns True if the pinged timed out.
+   * Starts a a ping and waits for a pong.
+   *
+   * If it takes too long to get a pong we disconnect and this returns
+   * {@code PingResult.TimedOut}.
    */
   private async _ping(
     l: LogContext,
