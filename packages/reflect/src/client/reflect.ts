@@ -130,6 +130,11 @@ function convertOnUpdateNeededReason(
   return {type: reason.type};
 }
 
+const enum PingResult {
+  TimedOut = 0,
+  Success = 1,
+}
+
 export class Reflect<MD extends MutatorDefs> {
   readonly version = version;
 
@@ -940,11 +945,11 @@ export class Reflect<MD extends MutatorDefs> {
 
             switch (raceResult) {
               case RaceCases.Ping: {
-                const timedOut = await this._ping(
+                const pingResult = await this._ping(
                   lc,
                   this.#rejectMessageError.promise,
                 );
-                if (timedOut) {
+                if (pingResult === PingResult.TimedOut) {
                   errorCount++;
                 }
                 break;
@@ -1123,12 +1128,12 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   /**
-   * Throws an error if the ping times out.
+   * @returns True if the pinged timed out.
    */
   private async _ping(
     l: LogContext,
     messageErrorRejectionPromise: Promise<never>,
-  ): Promise<boolean> {
+  ): Promise<PingResult> {
     l.debug?.('pinging');
     const {promise, resolve} = resolver();
     this._onPong = resolve;
@@ -1144,21 +1149,17 @@ export class Reflect<MD extends MutatorDefs> {
         messageErrorRejectionPromise,
       ])) === 0;
 
-    if (this._connectionState !== ConnectionState.Connected) {
-      return false;
-    }
-
     const delta = performance.now() - t0;
     if (!connected) {
       l.info?.('ping failed in', delta, 'ms - disconnecting');
       await this._disconnect(l, {
         client: 'PingTimeout',
       });
-      return true;
+      return PingResult.TimedOut;
     }
 
     l.debug?.('ping succeeded in', delta, 'ms');
-    return false;
+    return PingResult.Success;
   }
 
   // Sends a set of metrics to the server. Throws unless the server
