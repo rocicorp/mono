@@ -871,7 +871,7 @@ export class Reflect<MD extends MutatorDefs> {
     await this.#updateAuthToken(bareLogContext);
 
     let needsReauth = false;
-    let errorCount = 0;
+    let gotError = false;
 
     while (!this.closed) {
       runLoopCounter++;
@@ -895,7 +895,7 @@ export class Reflect<MD extends MutatorDefs> {
             lc = getLogContext();
 
             lc.debug?.('Connected successfully');
-            errorCount = 0;
+            gotError = false;
             needsReauth = false;
             this.#setOnline(true);
             break;
@@ -905,7 +905,7 @@ export class Reflect<MD extends MutatorDefs> {
             // Can't get here because Disconnected waits for Connected or
             // rejection.
             lc.error?.('unreachable');
-            errorCount++;
+            gotError = true;
             break;
 
           case ConnectionState.Connected: {
@@ -950,7 +950,7 @@ export class Reflect<MD extends MutatorDefs> {
                   this.#rejectMessageError.promise,
                 );
                 if (pingResult === PingResult.TimedOut) {
-                  errorCount++;
+                  gotError = true;
                 }
                 break;
               }
@@ -995,7 +995,7 @@ export class Reflect<MD extends MutatorDefs> {
           ex instanceof TimedOutError ||
           ex instanceof CloseError
         ) {
-          errorCount++;
+          gotError = true;
         }
       }
 
@@ -1004,15 +1004,13 @@ export class Reflect<MD extends MutatorDefs> {
       // time. We specifically do not use a backoff for consecutive errors
       // because it's a bad experience to wait many seconds for reconnection.
 
-      if (errorCount > 0) {
+      if (gotError) {
         this.#setOnline(false);
 
         lc.debug?.(
           'Sleeping',
           RUN_LOOP_INTERVAL_MS,
-          'ms before reconnecting due to error count',
-          errorCount,
-          'state:',
+          'ms before reconnecting due to error, state:',
           this._connectionState,
         );
         await sleep(RUN_LOOP_INTERVAL_MS);
