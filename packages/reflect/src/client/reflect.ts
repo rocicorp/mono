@@ -130,6 +130,11 @@ function convertOnUpdateNeededReason(
   return {type: reason.type};
 }
 
+const enum PingResult {
+  TimedOut = 0,
+  Success = 1,
+}
+
 export class Reflect<MD extends MutatorDefs> {
   readonly version = version;
 
@@ -467,7 +472,7 @@ export class Reflect<MD extends MutatorDefs> {
     return this._rep.experimentalWatch(callback, options);
   }
 
-  private _onMessage = async (e: MessageEvent<string>) => {
+  private _onMessage = async (e: MessageEvent<string>): Promise<void> => {
     const l = await this._l;
     l.debug?.('received message', e.data);
     if (this.closed) {
@@ -495,24 +500,19 @@ export class Reflect<MD extends MutatorDefs> {
     this._messageCount++;
     switch (downMessage[0]) {
       case 'connected':
-        this._handleConnectedMessage(l, downMessage);
-        return;
+        return this._handleConnectedMessage(l, downMessage);
 
       case 'error':
-        await this._handleErrorMessage(l, downMessage);
-        return;
+        return this._handleErrorMessage(l, downMessage);
 
       case 'pong':
-        this._onPong();
-        return;
+        return this._onPong();
 
       case 'poke':
-        await this._handlePoke(l, downMessage);
-        return;
+        return this._handlePoke(l, downMessage);
 
       case 'pull':
-        this._handlePullResponse(l, downMessage);
-        return;
+        return this._handlePullResponse(l, downMessage);
 
       default:
         rejectInvalidMessage();
@@ -571,7 +571,6 @@ export class Reflect<MD extends MutatorDefs> {
   ) {
     lc = addWebSocketIDToLogContext(connectedMessage[1].wsid, lc);
 
-    this._connectionState = ConnectionState.Connected;
     this._connectedAt = Date.now();
     this._metrics.lastConnectError.clear();
 
@@ -590,7 +589,9 @@ export class Reflect<MD extends MutatorDefs> {
     }
 
     this._lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+
     lc.debug?.('Resolving connect resolver');
+    this._connectionState = ConnectionState.Connected;
     this._connectResolver.resolve();
   }
 
@@ -637,8 +638,6 @@ export class Reflect<MD extends MutatorDefs> {
         client: 'ConnectTimeout',
       });
     }, CONNECT_TIMEOUT_MS);
-    const clear = () => clearTimeout(id);
-    this._connectResolver.promise.then(clear, clear);
 
     const ws = createSocket(
       this._socketOrigin,
@@ -659,6 +658,13 @@ export class Reflect<MD extends MutatorDefs> {
     ws.addEventListener('close', this._onClose);
     this._socket = ws;
     this._socketResolver.resolve(ws);
+
+    try {
+      l.debug?.('Waiting for connection to be acknowledged');
+      await this._connectResolver.promise;
+    } finally {
+      clearTimeout(id);
+    }
   }
 
   private async _disconnect(
@@ -888,8 +894,6 @@ export class Reflect<MD extends MutatorDefs> {
             assert(this._socket);
             lc = getLogContext();
 
-            lc.debug?.('Waiting for connection to be acknowledged');
-            await this._connectResolver.promise;
             lc.debug?.('Connected successfully');
             errorCount = 0;
             needsReauth = false;
@@ -940,9 +944,16 @@ export class Reflect<MD extends MutatorDefs> {
             }
 
             switch (raceResult) {
-              case RaceCases.Ping:
-                await this._ping(lc, this.#rejectMessageError.promise);
+              case RaceCases.Ping: {
+                const pingResult = await this._ping(
+                  lc,
+                  this.#rejectMessageError.promise,
+                );
+                if (pingResult === PingResult.TimedOut) {
+                  errorCount++;
+                }
                 break;
+              }
               case RaceCases.Hidden:
                 await this._disconnect(lc, {
                   client: 'Hidden',
@@ -1117,12 +1128,15 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   /**
-   * Throws an error if the ping times out.
+   * Starts a a ping and waits for a pong.
+   *
+   * If it takes too long to get a pong we disconnect and this returns
+   * {@code PingResult.TimedOut}.
    */
   private async _ping(
     l: LogContext,
     messageErrorRejectionPromise: Promise<never>,
-  ): Promise<void> {
+  ): Promise<PingResult> {
     l.debug?.('pinging');
     const {promise, resolve} = resolver();
     this._onPong = resolve;
@@ -1137,20 +1151,18 @@ export class Reflect<MD extends MutatorDefs> {
         sleep(PING_TIMEOUT_MS),
         messageErrorRejectionPromise,
       ])) === 0;
-    if (this._connectionState !== ConnectionState.Connected) {
-      return;
-    }
 
     const delta = performance.now() - t0;
-    if (connected) {
-      l.debug?.('ping succeeded in', delta, 'ms');
-    } else {
+    if (!connected) {
       l.info?.('ping failed in', delta, 'ms - disconnecting');
       await this._disconnect(l, {
         client: 'PingTimeout',
       });
-      throw new TimedOutError('Ping');
+      return PingResult.TimedOut;
     }
+
+    l.debug?.('ping succeeded in', delta, 'ms');
+    return PingResult.Success;
   }
 
   // Sends a set of metrics to the server. Throws unless the server
