@@ -77,7 +77,8 @@ Version of the type Replicache uses for the response JSON. The current version i
 
 ### `clientGroupID`
 
-The `clientGroupID` of the requesting Replicache client group.
+The [`clientGroupID`](api/classes/Replicache#clientGroupID) of the requesting Replicache
+client group.
 
 ### `cookie`
 

@@ -86,7 +86,7 @@ Version of the type Replicache uses for the request body. The current version is
 
 ### `clientGroupID`
 
-The [`clientGroupID`](api/classes/Replicache#clientID) of the requesting Replicache
+The [`clientGroupID`](api/classes/Replicache#clientGroupID) of the requesting Replicache
 client group.
 
 ### `mutations`
