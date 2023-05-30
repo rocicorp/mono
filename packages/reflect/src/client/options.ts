@@ -173,7 +173,7 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    *
    * Default is 5_000.
    */
-  disconnectHiddenDelay?: number | undefined;
+  hiddenTabDisconnectDelay?: number | undefined;
 
   /**
    * Allows providing a custom implementation of the underlying storage layer.
