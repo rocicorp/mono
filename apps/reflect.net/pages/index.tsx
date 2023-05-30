@@ -87,6 +87,7 @@ export default function Home() {
         {/* Facebook Meta Tags */}
         <meta property="og:url" content="reflect.net" />
         <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Reflect" />
         <meta
           property="og:title"
           content="Reflect: High-performance sync for multiplayer web apps."
