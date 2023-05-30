@@ -9,9 +9,13 @@ packages/replicache/out
 packages/replicache/doc/build/
 packages/replicache/doc/docs/api
 packages/replicache/doc/.docusaurus/
+public/*
 **/.next
 **/.vercel
 renderer
 vendor
 !/renderer/src/constants.ts
 **/bot-recordings.ts
+*.sh
+*.toml
+*.tsbuildinfo
