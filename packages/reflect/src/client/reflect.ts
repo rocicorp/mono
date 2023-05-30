@@ -260,7 +260,7 @@ export class Reflect<MD extends MutatorDefs> {
       socketOrigin,
       onOnlineChange,
       jurisdiction,
-      disconnectHiddenDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
+      hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
     } = options;
     if (!userID) {
       throw new Error('ReflectOptions.userID must not be empty.');
@@ -277,9 +277,9 @@ export class Reflect<MD extends MutatorDefs> {
     if (jurisdiction !== undefined && jurisdiction !== 'eu') {
       throw new Error('ReflectOptions.jurisdiction must be "eu" if present.');
     }
-    if (disconnectHiddenDelay < 0) {
+    if (hiddenTabDisconnectDelay < 0) {
       throw new Error(
-        'ReflectOptions.disconnectHiddenDelay must not be negative.',
+        'ReflectOptions.hiddenTabDisconnectDelay must not be negative.',
       );
     }
 
@@ -339,7 +339,7 @@ export class Reflect<MD extends MutatorDefs> {
 
     this.#visibilityWatcher = getDocumentVisibilityWatcher(
       getDocument(),
-      disconnectHiddenDelay,
+      hiddenTabDisconnectDelay,
       this.#closeAbortController.signal,
     );
 
