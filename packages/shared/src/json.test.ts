@@ -54,8 +54,7 @@ test('JSON deep equal', () => {
   t({a: 1, b: 2}, {b: 2, a: 1});
 
   t({a: undefined}, {a: undefined});
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  t({a: 1}, {__proto__: {a: 1}}, false);
+  t({a: 1}, Object.create({a: 1}), false);
 });
 
 test('assertJSONValue', () => {
