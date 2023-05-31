@@ -99,7 +99,8 @@ function deepFreezeArray(
 function deepFreezeObject(v: ReadonlyJSONObject, seen: object[]): void {
   for (const k in v) {
     if (hasOwn(v, k)) {
-      deepFreezeInternal(v[k], seen);
+      const value = v[k];
+      value !== undefined && deepFreezeInternal(value, seen);
     }
   }
 }
@@ -141,6 +142,7 @@ export function isDeepFrozen(v: unknown, seen: object[]): boolean {
     case 'boolean':
     case 'number':
     case 'string':
+    case 'undefined':
       return true;
     case 'object':
       if (v === null) {

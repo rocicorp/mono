@@ -1,5 +1,5 @@
 import {expect, test} from '@jest/globals';
-import {assertJSONValue, deepEqual, isJSONValue, JSONValue} from './json.js';
+import {JSONValue, assertJSONValue, deepEqual, isJSONValue} from './json.js';
 
 test('JSON deep equal', () => {
   const t = (
@@ -8,6 +8,8 @@ test('JSON deep equal', () => {
     expected = true,
   ) => {
     const res = deepEqual(a, b);
+    const res2 = deepEqual(b, a);
+    expect(res).toBe(res2);
     if (res !== expected) {
       throw new Error(
         JSON.stringify(a) + (expected ? ' === ' : ' !== ') + JSON.stringify(b),
@@ -50,6 +52,10 @@ test('JSON deep equal', () => {
   }
 
   t({a: 1, b: 2}, {b: 2, a: 1});
+
+  t({a: undefined}, {a: undefined});
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  t({a: 1}, {__proto__: {a: 1}}, false);
 });
 
 test('assertJSONValue', () => {
@@ -65,6 +71,9 @@ test('assertJSONValue', () => {
   assertJSONValue({});
   assertJSONValue({a: 1, b: 2});
   assertJSONValue({a: 1, b: 2, c: [3, 4, 5]});
+  assertJSONValue({a: 1, b: undefined});
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  assertJSONValue({a: 1, __proto__: {b: Symbol()}});
 
   expect(() => assertJSONValue(Symbol())).toThrow(Error);
   expect(() => assertJSONValue(() => 0)).toThrow(Error);
@@ -100,12 +109,14 @@ test('isJSONValue', () => {
   t({});
   t({a: 1, b: 2});
   t({a: 1, b: 2, c: [3, 4, 5]});
+  t({x: undefined});
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  t({a: 1, __proto__: {b: Symbol()}});
 
   t(Symbol(), []);
   t(() => 0, []);
   t(undefined, []);
   t(123n, []);
-  t({x: undefined}, ['x']);
   t([undefined], [0]);
   t({x: [undefined]}, ['x', 0]);
 });

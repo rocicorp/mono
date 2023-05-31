@@ -12,9 +12,20 @@ export type JSONValue =
   | JSONObject;
 
 /**
- * A JSON object. This is a map from strings to JSON values.
+ * A JSON object. This is a map from strings to JSON values or `undefined`. We
+ * allow `undefined` values as a convenience... but beware that the `undefined`
+ * values do not round trip to the server. For example:
+ *
+ * ```
+ * // Time t1
+ * await tx.put('a', {a: undefined});
+ *
+ * // time passes, in a new transaction
+ * const v = await tx.get('a');
+ * console.log(v); // either {a: undefined} or {}
+ * ```
  */
-export type JSONObject = {[key: string]: JSONValue};
+export type JSONObject = {[key: string]: JSONValue | undefined};
 
 /** Like {@link JSONValue} but deeply readonly */
 export type ReadonlyJSONValue =
@@ -27,7 +38,7 @@ export type ReadonlyJSONValue =
 
 /** Like {@link JSONObject} but deeply readonly */
 export type ReadonlyJSONObject = {
-  readonly [key: string]: ReadonlyJSONValue;
+  readonly [key: string]: ReadonlyJSONValue | undefined;
 };
 
 /**
@@ -137,6 +148,14 @@ export function assertJSONValue(v: unknown): asserts v is JSONValue {
   throwInvalidType(v, 'JSON value');
 }
 
+function assertJSONValueOrUndefined(
+  v: unknown,
+): asserts v is JSONValue | undefined {
+  if (v !== undefined) {
+    assertJSONValue(v);
+  }
+}
+
 export function assertJSONObject(v: unknown): asserts v is JSONObject {
   assertObject(v);
   assertObjectIsJSONObject(v);
@@ -147,7 +166,7 @@ function assertObjectIsJSONObject(
 ): asserts v is JSONObject {
   for (const k in v) {
     if (hasOwn(v, k)) {
-      assertJSONValue(v[k]);
+      assertJSONValueOrUndefined(v[k]);
     }
   }
 }
@@ -185,6 +204,13 @@ export function isJSONValue(v: unknown, path: Path): v is JSONValue {
   return false;
 }
 
+function isJSONValueOrUndefined(
+  v: unknown,
+  path: Path,
+): v is JSONValue | undefined {
+  return isJSONValue(v, path) || v === undefined;
+}
+
 function objectIsJSONObject(
   v: Record<string, unknown>,
   path: Path,
@@ -192,7 +218,7 @@ function objectIsJSONObject(
   for (const k in v) {
     if (hasOwn(v, k)) {
       path.push(k);
-      if (!isJSONValue(v[k], path)) {
+      if (!isJSONValueOrUndefined(v[k], path)) {
         return false;
       }
       path.pop();
