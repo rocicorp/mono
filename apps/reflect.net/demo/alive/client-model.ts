@@ -7,7 +7,7 @@ const DEAD_BOT_CONTROLLER_THRESHHOLD_MS = 5_000;
 const botControllerKey = 'botControllerKey';
 const botControllerSchema = z.object({
   clientID: z.string(),
-  aliveTimestamp: z.number().default(0)
+  aliveTimestamp: z.number().default(0),
 });
 export type BotControllerModel = z.infer<typeof botControllerSchema>;
 
@@ -19,10 +19,8 @@ export const getBotController = async (
     ? botController
     : botControllerSchema.parse(botController);
 };
-const setBotController = (
-  tx: WriteTransaction,
-  value: BotControllerModel,
-) => tx.put(botControllerKey, value);
+const setBotController = (tx: WriteTransaction, value: BotControllerModel) =>
+  tx.put(botControllerKey, value);
 
 const deleteBotController = (tx: WriteTransaction) => tx.del(botControllerKey);
 
