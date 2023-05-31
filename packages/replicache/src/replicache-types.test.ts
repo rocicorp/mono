@@ -412,7 +412,7 @@ test.skip('mutator return read only [type checking only]', async () => {
   use(rep);
 });
 
-test.skip('Allowing undefined in JSONObject', async () => {
+test.skip('Allowing undefined in JSONObject [type checking only]', async () => {
   const rep = new Replicache({
     name: 'test-types',
     licenseKey: TEST_LICENSE_KEY,

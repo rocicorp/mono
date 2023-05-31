@@ -148,14 +148,6 @@ export function assertJSONValue(v: unknown): asserts v is JSONValue {
   throwInvalidType(v, 'JSON value');
 }
 
-function assertJSONValueOrUndefined(
-  v: unknown,
-): asserts v is JSONValue | undefined {
-  if (v !== undefined) {
-    assertJSONValue(v);
-  }
-}
-
 export function assertJSONObject(v: unknown): asserts v is JSONObject {
   assertObject(v);
   assertObjectIsJSONObject(v);
@@ -166,7 +158,10 @@ function assertObjectIsJSONObject(
 ): asserts v is JSONObject {
   for (const k in v) {
     if (hasOwn(v, k)) {
-      assertJSONValueOrUndefined(v[k]);
+      const value = v[k];
+      if (value !== undefined) {
+        assertJSONValue(value);
+      }
     }
   }
 }
@@ -204,13 +199,6 @@ export function isJSONValue(v: unknown, path: Path): v is JSONValue {
   return false;
 }
 
-function isJSONValueOrUndefined(
-  v: unknown,
-  path: Path,
-): v is JSONValue | undefined {
-  return isJSONValue(v, path) || v === undefined;
-}
-
 function objectIsJSONObject(
   v: Record<string, unknown>,
   path: Path,
@@ -218,7 +206,8 @@ function objectIsJSONObject(
   for (const k in v) {
     if (hasOwn(v, k)) {
       path.push(k);
-      if (!isJSONValueOrUndefined(v[k], path)) {
+      const value = v[k];
+      if (value !== undefined && !isJSONValue(value, path)) {
         return false;
       }
       path.pop();

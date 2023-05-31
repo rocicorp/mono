@@ -142,7 +142,6 @@ export function isDeepFrozen(v: unknown, seen: object[]): boolean {
     case 'boolean':
     case 'number':
     case 'string':
-    case 'undefined':
       return true;
     case 'object':
       if (v === null) {
@@ -172,12 +171,12 @@ export function isDeepFrozen(v: unknown, seen: object[]): boolean {
         }
       } else {
         for (const k in v) {
-          if (
-            hasOwn(v, k) &&
-            !isDeepFrozen((v as Record<string, unknown>)[k], seen)
-          ) {
-            seen.pop();
-            return false;
+          if (hasOwn(v, k)) {
+            const value = (v as Record<string, unknown>)[k];
+            if (value !== undefined && !isDeepFrozen(value, seen)) {
+              seen.pop();
+              return false;
+            }
           }
         }
       }
