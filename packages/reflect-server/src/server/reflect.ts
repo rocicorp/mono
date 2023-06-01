@@ -5,7 +5,12 @@ import type {AuthHandler} from './auth.js';
 import type {RoomStartHandler} from './room-start.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {BaseRoomDO} from './room-do.js';
-import {createWorker, MetricsSink} from './worker.js';
+import {createWorker} from './worker.js';
+
+export type DatadogMetricsOptions = {
+  apiKey: string;
+  service?: string | undefined;
+};
 
 export interface ReflectServerOptions<MD extends MutatorDefs> {
   mutators: MD;
@@ -26,10 +31,9 @@ export interface ReflectServerOptions<MD extends MutatorDefs> {
   logLevel?: LogLevel | undefined;
 
   /**
-   * Where to send metrics. By default metrics are sent nowhere. A Datadog implementation
-   * exists at {@link createDatadogMetricsSink}.
+   * Options for reporting metrics to Datadog. By default metrics are sent nowhere.
    */
-  metricsSink?: MetricsSink | undefined;
+  datadogMetricsOptions?: DatadogMetricsOptions | undefined;
 
   /**
    * If `true`, outgoing network messages are sent before the writes they
@@ -52,7 +56,7 @@ export type NormalizedOptions<MD extends MutatorDefs> = {
   disconnectHandler: DisconnectHandler;
   logSink: LogSink;
   logLevel: LogLevel;
-  metricsSink?: MetricsSink | undefined;
+  datadogMetricsOptions?: DatadogMetricsOptions | undefined;
   allowUnconfirmedWrites: boolean;
 };
 
@@ -124,7 +128,7 @@ function makeNormalizedOptionsGetter<
       logSinks,
       logLevel = 'debug',
       allowUnconfirmedWrites = false,
-      metricsSink = undefined,
+      datadogMetricsOptions = undefined,
     } = makeOptions(env);
     const logSink = logSinks ? combineLogSinks(logSinks) : consoleLogSink;
     return {
@@ -135,7 +139,7 @@ function makeNormalizedOptionsGetter<
       logSink,
       logLevel,
       allowUnconfirmedWrites,
-      metricsSink,
+      datadogMetricsOptions,
     };
   };
 }

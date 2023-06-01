@@ -22,6 +22,8 @@ import {
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import type {MaybePromise} from 'replicache';
 import {version} from '../mod.js';
+import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
+import type {DatadogMetricsOptions} from './reflect.js';
 
 export type MetricsSink = (
   allSeries: Series[],
@@ -31,7 +33,7 @@ export type MetricsSink = (
 export interface WorkerOptions {
   logSink: LogSink;
   logLevel: LogLevel;
-  metricsSink?: MetricsSink | undefined;
+  datadogMetricsOptions?: DatadogMetricsOptions | undefined;
 }
 
 export interface BaseWorkerEnv {
@@ -129,7 +131,11 @@ export function createWorker<Env extends BaseWorkerEnv>(
   registerRoutes(router);
   return {
     fetch: (request: Request, env: Env, ctx: ExecutionContext) => {
-      const {logSink, logLevel, metricsSink} = getOptions(env);
+      const {logSink, logLevel, datadogMetricsOptions} = getOptions(env);
+      const metricsSink =
+        datadogMetricsOptions === undefined
+          ? undefined
+          : createDatadogMetricsSink(datadogMetricsOptions);
       return withLogContext(
         ctx,
         logSink,

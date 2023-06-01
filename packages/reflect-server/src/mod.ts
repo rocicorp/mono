@@ -18,8 +18,6 @@ export {version} from './util/version.js';
 export const ROUTES = {
   reportMetrics: REPORT_METRICS_PATH,
 };
-export {createDatadogMetricsSink} from './server/datadog-metrics-sink.js';
-
 export type WorkerDatadogLogSinkOptions = {
   apiKey: string;
   service?: string | undefined;
