@@ -1,5 +1,5 @@
 import {describe, test, expect, afterEach} from '@jest/globals';
-import {LogLevel, consoleLogSink} from '@rocicorp/logger';
+import type {LogLevel} from '@rocicorp/logger';
 import type {Series} from '../types/report-metrics.js';
 import {fail, Mocket, TestLogSink} from '../util/test-utils.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
@@ -560,7 +560,7 @@ describe('reportMetrics', () => {
     };
 
     const worker = createWorker(() => ({
-      logSink: consoleLogSink, // new TestLogSink(),
+      logSink: new TestLogSink(),
       logLevel: 'error',
       datadogMetricsOptions: {
         apiKey: 'test-dd-key',
