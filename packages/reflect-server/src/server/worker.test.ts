@@ -547,9 +547,11 @@ describe('reportMetrics', () => {
 
   async function testReportMetrics(tc: TestCase) {
     nock.recorder.rec({
+      /* eslint-disable @typescript-eslint/naming-convention */
       dont_print: true,
       output_objects: true,
       enable_reqheaders_recording: true,
+      /* eslint-enable @typescript-eslint/naming-convention */
     });
     nock('https://api.datadoghq.com').post(/.*/).reply(200, '{}');
 

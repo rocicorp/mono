@@ -9,17 +9,17 @@ export const pointSchema = v.union(
 export type Point = v.Infer<typeof pointSchema>;
 
 // https://docs.datadoghq.com/api/latest/metrics/#submit-metrics (v1)
-export const CountMetricType = 'count';
-export const RateMetricType = 'rate';
-export const GaugeMetricType = 'gauge';
+export const COUNT_METRIC_TYPE = 'count';
+export const RATE_METRIC_TYPE = 'rate';
+export const GAUGE_METRIC_TYPE = 'gauge';
 // https://docs.datadoghq.com/api/latest/metrics/#submit-distribution-points
-export const DistributionMetricType = 'distribution';
+export const DISTRIBUTION_METRIC_TYPE = 'distribution';
 
 export const metricsTypeSchema = v.union(
-  v.literal(CountMetricType),
-  v.literal(RateMetricType),
-  v.literal(GaugeMetricType),
-  v.literal(DistributionMetricType),
+  v.literal(COUNT_METRIC_TYPE),
+  v.literal(RATE_METRIC_TYPE),
+  v.literal(GAUGE_METRIC_TYPE),
+  v.literal(DISTRIBUTION_METRIC_TYPE),
 );
 
 export const seriesSchema = v.object({

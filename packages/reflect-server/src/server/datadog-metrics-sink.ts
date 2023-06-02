@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {Series, DistributionMetricType} from '../types/report-metrics.js';
+import {Series, DISTRIBUTION_METRIC_TYPE} from '../types/report-metrics.js';
 import {default as datadog} from 'datadog-metrics';
 
 export type DatadogMetricsSinkOptions = {
@@ -13,7 +13,7 @@ export function createDatadogMetricsSink(options: DatadogMetricsSinkOptions) {
     const series = allSeries.map(s => ({
       ...s,
       tags: [...(s.tags ?? []), `service:${options.service}`],
-      type: s.type ?? DistributionMetricType, // Backwards compatibility
+      type: s.type ?? DISTRIBUTION_METRIC_TYPE, // Backwards compatibility
     }));
 
     lc.debug?.('Reporting metrics to Datadog', {
