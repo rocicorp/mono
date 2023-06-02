@@ -3,7 +3,7 @@ import type {DurableStorage} from '../storage/durable-storage.js';
 import {initStorageSchema, VersionMigrationMap} from '../storage/schema.js';
 
 const VERSION_MIGRATION_MAP: VersionMigrationMap = {
-  // The inaugural v1 understands the rollback limit.
+  // The inaugural v0 understands the rollback limit.
   0: {minSafeRollbackVersion: 0},
 };
 
