@@ -9,8 +9,9 @@ const externals = [
     'helmet',
     'firebase-functions',
     'firebase-admin',
-    'multer',
-    'express'
+    'express',
+    'body-parser',
+    'busboy'
 ];
 
 export default {

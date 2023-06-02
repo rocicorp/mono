@@ -1,8 +1,7 @@
 import { NextFunction, Request, Response } from "express";
-import multer from "multer";
+import busboy from "busboy";
 
 // Prepare the multer middleware with memory storage
-const upload = multer({ storage: multer.memoryStorage() });
 
 export async function handlePublish(
   req: Request,
@@ -10,21 +9,23 @@ export async function handlePublish(
   next: NextFunction
 ): Promise<void> {
   try {
-    upload.single('file')(req, res, function (err: any) {
-      if (err instanceof multer.MulterError) {
-        // A Multer error occurred when uploading.
-        next(Error(`Failed to upload file: ${err.message}`));
-      } else if (err) {
-        // An unknown error occurred when uploading.
-        next(Error(`Failed to upload file: ${err}`));
-      }
+    const bb = busboy({
+      headers: req.headers,
+    });
 
-      // If no errors, file is available in req.file object
-      // You can do something with the uploaded file data here.
-      console.log(req.file);
-      res.status(200).send({ message: "OK", file: req.file.filename });
-    })
-  } catch (e) {
-    next(Error(`Failed to upload file: ${(e as Error).message}`));
+    await new Promise((resolve, reject) => {
+      bb.once('finish', resolve)
+        .once('error', reject)
+        .on('file', (fieldname, file, info) => {
+          file.resume();
+          file.pipe(process.stdout);
+          console.dir({ fieldname, file, info }, { depth: null });
+        })
+        .end(req.body);
+    });
+
+    res.sendStatus(200);
+  } catch (error) {
+    next(error);
   }
 }

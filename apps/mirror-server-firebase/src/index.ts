@@ -5,15 +5,19 @@ import helmet from 'helmet';
 import type Express from 'express';
 import {functionsConfig} from './functions-config.js';
 import {handleRequest} from './handle-request.js';
-
 // CORS configuration.
 const options: cors.CorsOptions = {
   origin: functionsConfig.whitelist,
 };
+
+
+
 const VERSION = 'v1';
 const app = express();
+
 app.use(helmet());
 app.use(cors(options));
+
 
 app.post(
   `/${VERSION}/mirror/:op`,
@@ -25,6 +29,10 @@ app.post(
     await handleRequest(req, res, next);
   },
 );
+
+
+
+
 
 app.get(
   `/${VERSION}/mirror/heartbeat`,

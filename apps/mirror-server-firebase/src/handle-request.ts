@@ -12,11 +12,11 @@ export async function handleRequest(
   }
 
   const { op } = req.params;
-  console.log(`Handling request ${JSON.stringify(req.body)}, op: ${op}`);
+  console.log(`Handling request op: ${op}`);
 
   switch (op) {
     case "publish":
-      return await handlePublish(req, res, next,);
+      return await handlePublish(req, res, next);
     case "tail":
     case "status":
         res.status(400).send({ error: "Not implemented" });
