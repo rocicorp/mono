@@ -63,10 +63,18 @@ module.exports = {
     {
       HOWTO: [
         'howto/licensing',
-        'howto/blobs',
+        {
+          'Diff Strategies': [
+            'howto/diff-overview',
+            'howto/diff-reset',
+            'howto/diff-global-version',
+            'howto/diff-per-space-version',
+            'howto/diff-row-version',
+          ],
+        },
         'howto/share-mutators',
+        'howto/blobs',
         'howto/launch',
-        //'howto/undo',
       ],
     },
   ],
