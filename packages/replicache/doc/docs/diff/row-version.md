@@ -1,17 +1,17 @@
 ---
 title: Row Version Diff Strategy
-slug: /howto/diff/row-version
+slug: /concepts/diff/row-version
 ---
 
-# 🚣‍♀️ The Row Version Strategy
+# 🚣 The Row Version Strategy
 
-This strategy has a few big advantages over most other strategies:
+This strategy has a few big advantages over the other strategies:
 
-- The client view can be **computed** dynamically — it can be any arbitrary query over the database, including filters, joins, windows, auth, etc. This **pull query** can even change per-user. If the user checks something in the UI, it can change to “all active threads, or first 20 inactive threads ordered by modified-date”.
-- It does not require a global lock or the concept of spaces.
-- It does not require a soft deletes (the `deleted` column). Entities can be fully deleted.
+- The client view can be **computed** dynamically — it can be any arbitrary query over the database, including filters, joins, windows, auth, etc. This _pull query_ can even change per-user. If the user checks a box in the UI, the query might change from _“all active threads"_ to _"all active threads, or first 20 inactive threads ordered by modified-date”_.
+- It does not require global locks or the concept of spaces.
+- It does not require a soft deletes. Entities can be fully deleted.
 
-The disadvantage is that it pays for this flexibility in increased implementation complexity and read cost. Pulls become more expensive because they require a few queries, they aren’t a simple index scan. However, database reads are typically easier to scale than writes.
+The disadvantage is that it pays for this flexibility in increased implementation complexity and read cost. Pulls become more expensive because they require a few queries, and they aren’t a simple index scan. However because there are no global locks, the database should be easier to scale.
 
 ## How it Works
 
@@ -29,20 +29,21 @@ A Client View Record (CVR) is a map of ID/version pairs. It captures the minimum
 }
 ```
 
-One CVR is generated for each pull response and stored in some ephemeral storage. The storage doesn’t need to be durable — if the CVR is lost, the server can just send a full sync. And the storage doesn’t need to be transactional with the database. Redis is perfect.
+One CVR is generated for each pull response and stored in some ephemeral storage. The storage doesn’t need to be durable — if the CVR is lost, the server can just send a reset patch. And the storage doesn’t need to be transactional with the database. Redis is fine.
 
 The CVRs are stored keyed under some unique ID. It can be a GUID, or a hash of the serialized CVR.
 
-## Database Schema
+## Setup
 
-The minimum requirement is just that each entity has a `version` column.
+1. Add a `Version` field to each entity in your backend database.
+2. Add storage for `ReplicacheClient`s in your backend database. Each record will have a `lastMutationID` field, the last mutation ID that the backend has processed.
 
-There is no need for soft deletes (`deleted` column) or spaces. Though they don’t hurt anything either.
+There is no need for soft deletes (`deleted` column) on the entities, or spaces.
 
 ## Push
 
-- Process the push as normal
-- Whenever any entity is updated, transactionally bump its `version` column. Note this is different than the way this column works in the Global Version strategy — each entity’s version is bumped independently on write, they aren’t all sharing one global or per-space version.
+- Process the push as normal with other strategies.
+- Whenever any entity is updated, transactionally bump its `version` column. Note this is different than the way this column works in the [Global Version](/concepts/diff/global-version) or [Per-Space Version](/concepts/diff/per-space-version) strategies — each entity’s version is bumped independently on write, they aren’t all sharing one global or per-space version.
 
 ## Pull
 
@@ -73,6 +74,10 @@ The solution is to sync the current query with Replicache (🤯). That way it wi
 ## Variations
 
 - The CVR can be passed into the database as an argument enabling the pull to be computed in a single DB round-trip.
-- The CVR can be **\*\***stored**\*\*** in the primary database, allowing the pull to be computed with a single network round trip (no redis required). The downside is you must expire the CVR entries manually as you can’t rely on Redis caching.
+- The CVR can be **stored** in the primary database, allowing the pull to be computed with a single network round trip (no redis required). The downside is you must expire the CVR entries manually as you can’t rely on Redis caching.
 - The per-row version number can also be a hash over the row serialization, or even a random GUID. These approaches might perform better in some datastores since it eliminates a read of the existing row during write.
 - It is still totally fine to partition data into spaces and have a per-space `version` column ([aka a “semaphore”](https://dev.mysql.com/doc/refman/5.7/en/innodb-deadlocks-handling.html)) to enforce serialization and avoid deadlocks. This just becomes orthogonal to computing pulls.
+
+## Examples
+
+[Todo Row Versioning](https://github.com/rocicorp/todo-row-versioning) implements this strategy.
