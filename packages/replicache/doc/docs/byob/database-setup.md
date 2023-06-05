@@ -17,34 +17,28 @@ If this invariant is violated by the server then Replicache may not function pro
 
 :::
 
-## Supabase Setup
+## Pg-mem Setup
 
-For this demo, we'll use [Supabase](https://supabase.io/) — a nice hosted Postgres service. Head over to [supabase.io](https://supabase.io) and create a free account and an empty database.
+For this demo, we'll use [pg-mem](https://github.com/oguimbal/pg-mem) — an in-memory implementation of Postgres. This is a nice easy way to play locally, but you can easily adapt this sample to use a remote Postgres implementation like [Render](https://render.com/) or [Supabase](https://supabase.com/).
 
-:::caution
-
-Make sure to take note of your database password when you create your Supabase instance. You need it to construct your connection string in the next step, and it can't be retrieved after creation!
-
-:::
-
-Then add Supabase's PSQL connection string to your environment. You can get it from your Supabase project by clicking on ⚙️ (Gear/Cog) > Database > Connection String.
-
-```bash
-export REPLICHAT_DB_CONNECTION_STRING='<your connection string>'
-```
-
-Finally, create a new file `db.js` with this code:
+Create a new file `db.js` with this code:
 
 ```js
-import pgInit from 'pg-promise';
-
-const pgp = pgInit();
-export const db = pgp(process.env.REPLICHAT_DB_CONNECTION_STRING);
+import {newDb} from 'pg-mem';
+import pgp from 'pg-promise';
 
 const {isolationLevel} = pgp.txMode;
 
+const dbPromise = initDb();
+
+async function initDb() {
+  const db = newDb().adapters.createPgPromise();
+  return db;
+}
+
 // Helper to make sure we always access database at serializable level.
-export async function tx(f) {
+export async function tx(f, dbp = dbPromise) {
+  const db = await dbp;
   return await db.tx({mode: isolationLevel.serializable}, f);
 }
 ```

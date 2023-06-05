@@ -15,6 +15,8 @@ Let's use a subscription to implement our chat UI. Replace `index.js` with the b
 import React, {useRef} from 'react';
 import {Replicache, TEST_LICENSE_KEY} from 'replicache';
 import {useSubscribe} from 'replicache-react';
+import {nanoid} from 'nanoid';
+import Pusher from 'pusher-js';
 
 const rep = process.browser
   ? new Replicache({

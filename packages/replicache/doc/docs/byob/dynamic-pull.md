@@ -3,19 +3,35 @@ title: Dynamic Pull
 slug: /byob/dynamic-pull
 ---
 
-Even though in the previous step we're making persistent changes in the remote database, we still aren't _serving_ that data in the pull endpoint (it's still static 🤣).
+Even though in the previous step we're making persistent changes in the database, we still aren't _serving_ that data in the pull endpoint (it's still static 🤣).
 
-Let's fix that now. [Pull](/reference/server-pull.md) needs to return three things:
+Referring back to the [Global Version](/concepts/diff/global-version) doc again, the basic steps for pull are:
 
-1. A _cookie_ that identifies the current state of the requested space. We use the space's `version` for this purpose.
-1. All domain objects that have changed since the last pull, formatted as [JSON Patch](https://jsonpatch.com/). This is easy to do because on each pull request includes the `cookie` the client last received. All we have to do is find domain objects with a bigger `version` than this value.
-1. The last-processed `mutationID` for the calling client. This is how the client knows which mutations have been processed authoritatively and can therefore have their optimistic versions dropped.
+<ul>
+  <li>Open an exclusive (serializable) transaction</li>
+  <li>Read the current value of the global version</li>
+  <li>Read the current value of the requesting client's lastMutationID</li>
+  <li>If the request cookie is `null`:
+    <ul>
+      <li>Read all entities that where `IsDeleted=False`</li>
+      <li>Create a _reset patch_ - a patch with a `clear` op followed by `put` ops for each read entity</li>
+    </ul>
+  </li>
+  <li>Otherwise:
+    <ul>
+      <li>Read all entities whose `Version` is greater than the cookie value</li>
+      <li>Create a patch having `del` ops for each entity where `IsDeleted=True`, and `put` ops for other entities</li>
+    </ul>
+  </li>
+  <li>Return the calculated patch, the current value of the `GlobalVersion` field. and the requesting client's current `lastMutationID` as the pull response.</li>
+</ul>
+
+## Implement Pull
 
 Replace the contents of `pages/api/replicache-pull.js` with this code:
 
 ```js
 import {tx} from '../../db.js';
-import {defaultSpaceID} from './init.js';
 import {getLastMutationID} from './replicache-push.js';
 
 export {handlePull as default};
@@ -28,10 +44,9 @@ async function handlePull(req, res) {
   try {
     // Read all data in a single transaction so it's consistent.
     await tx(async t => {
-      // Get current version for space.
-      const version = (
-        await t.one('select version from space where key = $1', defaultSpaceID)
-      ).version;
+      // Get current version.
+      const version = (await t.one('select version from replicache_version'))
+        .version;
 
       // Get lmid for requesting client.
       const isExistingClient = pull.lastMutationID > 0;

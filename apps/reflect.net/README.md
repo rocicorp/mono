@@ -1,5 +1,9 @@
 ## Reflect.net
 
+Build everything at the top level first:
+
+`cd ../.. && npm run build && cd -`
+
 Copy the .env files:
 
 `cp .env.example .env; cp .dev.vars.example .dev.vars`
