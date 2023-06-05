@@ -1,9 +1,9 @@
 import * as functions from 'firebase-functions';
 
 /**
- * Heartbeat function.
+ * Healthcheck function.
  */
-export function heartbeat(
+export function healthcheck(
   request: functions.Request,
   response: functions.Response,
 ): void {

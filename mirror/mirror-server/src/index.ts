@@ -2,7 +2,7 @@ import * as functions from 'firebase-functions';
 import cors from 'cors';
 import {functionsConfig} from './functions-config.js';
 import {publish as p} from './functions/publish.function.js';
-import {heartbeat as h} from './functions/heartbeat.function.js';
+import {healthcheck as h} from './functions/healthcheck.function.js';
 
 // CORS configuration.
 const options: cors.CorsOptions = {
@@ -18,4 +18,4 @@ const withCors = fn => {
 };
 
 export const publish = withCors(p);
-export const heartbeat = withCors(h);
+export const healthcheck = withCors(h);
