@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev-next": "./keepalive.sh NODE_ENV=development next dev",
+    "dev-next": "NODE_ENV=development next dev",
     "dev-worker": "npm run dev-worker-prod -- --experimental-local",
-    "dev-worker-staging": "./keepalive.sh npm run wrangler-staging -- dev",
-    "dev-worker-prod": "./keepalive.sh npm run wrangler-prod -- dev",
+    "dev-worker-staging": "npm run wrangler-staging -- dev",
+    "dev-worker-prod": "npm run wrangler-prod -- dev",
     "reset-data-staging": "./write-secret.sh CLEAN_ROOM_UID $RANDOM staging",
     "reset-data-prod": "./write-secret.sh CLEAN_ROOM_UID $RANDOM",
     "nuke-it-from-orbit": "rm -rf node_modules package-lock.json .wrangler .mf .next .vercel; npm i",

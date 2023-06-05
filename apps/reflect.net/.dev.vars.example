@@ -1,5 +1,2 @@
 # https://github.com/cloudflare/cloudflare-docs/issues/4770
 REFLECT_AUTH_API_KEY=define-your-api-key
-# "new-room"
-NEW_ROOM_SECRET=35,64,233,103,251,191,48,83,27,128,32,123,19,178,29,119,35,5,246,57,198,52,251,43,171,239,195,195,249,175,153,1
-CLEAN_ROOM_UID=change-me-to-reset-data
