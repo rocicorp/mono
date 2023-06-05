@@ -4,7 +4,6 @@
     "target": "ESNext",
     "declaration": true,
     "moduleResolution": "node",
-    "emitDeclarationOnly": true,
     "strict": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
