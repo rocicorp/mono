@@ -52,9 +52,6 @@ export function createCLIParser(argv: string[]) {
       describe: 'Environment to use for operations and .env files',
       type: 'string',
       requiresArg: true,
-    })
-    .check(_args => {
-      return true;
     });
 
   reflectCLI.help().alias('h', 'help');
@@ -64,7 +61,7 @@ export function createCLIParser(argv: string[]) {
     false,
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},
-    async args => {
+    args => {
       if (args._.length > 0) {
         throw new CommandLineArgsError(`Unknown command: ${args._}.`);
       } else {
@@ -117,7 +114,7 @@ export function createCLIParser(argv: string[]) {
     false,
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},
-    async () => {
+    () => {
       console.log(VERSION);
     },
   );

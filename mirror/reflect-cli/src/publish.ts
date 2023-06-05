@@ -10,12 +10,11 @@ import type {
 } from './yarg-types';
 
 export function publishOptions(yargs: CommonYargsArgv) {
-  return yargs
-    .option('name', {
-      describe: 'Name of the worker',
-      type: 'string',
-      requiresArg: true,
-    })
+  return yargs.option('name', {
+    describe: 'Name of the worker',
+    type: 'string',
+    requiresArg: true,
+  });
 }
 
 export async function publishHandler(
