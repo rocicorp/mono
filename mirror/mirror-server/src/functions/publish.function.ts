@@ -22,7 +22,7 @@ export async function publish(
         resolve([bundleBuffer, sourcemapBuffer]);
       })
         .once('error', reject)
-        .on('file', async (fieldname, file, info) => {
+        .on('file', async (fieldname, file) => {
           const chunks: any[] = [];
           file.on('data', data => chunks.push(data));
           file.on('end', () => {

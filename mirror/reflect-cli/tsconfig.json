@@ -15,7 +15,6 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "verbatimModuleSyntax": true,
     "outDir": "out",
     "lib": ["esnext"],
     "skipLibCheck": true,

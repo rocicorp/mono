@@ -9,13 +9,13 @@ const options: cors.CorsOptions = {
   origin: functionsConfig.whitelist,
 };
 
-const withCors = (fn) => {
+const withCors = fn => {
   return functions.https.onRequest((req, res) => {
     cors(options)(req, res, () => {
       fn(req, res);
     });
   });
-}
+};
 
 export const publish = withCors(p);
 export const heartbeat = withCors(h);
