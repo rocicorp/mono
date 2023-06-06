@@ -39,13 +39,7 @@ async function sendPoke() {
 }
 ```
 
-Then on the client, in `index.js`, import the client library:
-
-```js
-import Pusher from 'pusher-js';
-```
-
-... and replace the implementation of `listen()` to tell Replicache to `pull()` whenever a poke is received:
+Then on the client, in `index.js`, replace the implementation of `listen()` to tell Replicache to `pull()` whenever a poke is received:
 
 ```js
 function listen(rep) {

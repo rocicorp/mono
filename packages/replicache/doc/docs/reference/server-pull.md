@@ -199,41 +199,9 @@ This is useful in case the request cookie is invalid or not known to the server,
 
 ## Computing Changes for Pull
 
-A `cookie` is returned in the `PullResponse` and passed in the next pull as part of the `PullRequest`. As mentioned, the server uses the cookie to identify the state that client currently has so it can compute a diff (patch) between that state and the current state of the server. The patch is returned in the `PullResponse`.
+See [Diff Strategies](/concepts/diff/overview) for information on different approaches to implementing pull.
 
-In the simplest case, the server could not bother with `cookie`s or sending a patch, and instead just return the full Client View to the client on each pull. This is fine for tiny amounts of data or in development, but with Client Views of any significant size, this is massively inefficient and can noticably slow sync. Typically only small amounts of data in the Client View are changing at any time, so it's usually the case that the server implements a `cookie` / patching strategy so that it only returns what's changed since the last pull.
-
-### Global Version Number Strategy
-
-The easiest way to generate patches uses a monotonically increasing global version number to track when entities in your datastore change. On push, in a single serialized transaction, the next version number is acquired and updates to datastore entities are marked with this version. For example, you might have a `Version` column on a database table and set it to the current version when a row is inserted or modified. The pull handler returns the current version number in the `cookie` in pull. To compute the patch from a client's state to the current state of the server, select all the entities in the datastore with a version number greater than that passed in the client's `PullRequest`. This strategy requires using soft deletes.
-
-:::caution
-
-It is important with this strategy to ensure that transactions are in fact serialized by the global version number. For example it would _not_ be correct to use a [Postgres sequence](https://www.postgresql.org/docs/current/sql-createsequence.html) to generate this version because the sequence number changes independently from push transactions. It would allow the following anomaly:
-
-1. Transaction A obtains sequence number 1
-2. Transaction B obtains sequence number 2
-3. Transaction B commits
-4. Client Q pulls with cookie 0
-5. Transaction A commits
-
-Client Q receives Transaction B's changes, but then is at version 2 and thus never sees transaction A's changes. It is now permanently out of sync. For the same reason, you should not use a timestamp like SQL `NOW()` or `Date.now()` as a global version number.
-
-:::
-
-At scale, contention for the global version number could be a performance bottleneck. It limits the sustained rate of pushes your application can process to about `1000/<average-push-transaction-duration-in-ms>/s`.
-
-This performance can be improved by partitioning the datastore into separate _spaces_ which each have their own global version number and which are each synced independently. For example, a project management app might partition by project.
-
-The [example Todo app](https://github.com/rocicorp/replicache-todo/) uses this strategy, see [`createSpace()`](https://github.com/rocicorp/replicache-todo/blob/main/pages/index.tsx#L19) and the corresponding implementation in [replicache-nextjs](https://github.com/rocicorp/replicache-nextjs/blob/main/src/backend/data.ts#L77).
-
-This simple strategy is the one we recommend starting with, and what you get by default if you start your project with the example Todo app as a base.
-
-### Additional options
-
-Tere are other strategies you could use to compute the patch, and we plan to document the space of possibilities better in the future. Until then, please [contact us](https://replicache.dev/#contact) if you'd like to discuss options and tradeoffs.
-
-### Handling Unknown Clients
+## Handling Unknown Clients
 
 Replicache does not currently support [deleting client records from the server](https://github.com/rocicorp/replicache/issues/1033).
 

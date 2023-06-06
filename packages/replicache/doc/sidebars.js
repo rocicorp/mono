@@ -39,11 +39,19 @@ module.exports = {
     {
       'Understand Replicache': [
         'concepts/how-it-works',
+        {
+          'Diff Strategies': [
+            'diff/overview',
+            'diff/reset',
+            'diff/global-version',
+            'diff/per-space-version',
+            'diff/row-version',
+          ],
+        },
         'concepts/performance',
         'concepts/offline',
         'concepts/consistency',
-        'concepts/faq', // TODO review
-        // TODO what replicache is good for
+        'concepts/faq',
       ],
     },
     {
@@ -63,10 +71,9 @@ module.exports = {
     {
       HOWTO: [
         'howto/licensing',
-        'howto/blobs',
         'howto/share-mutators',
+        'howto/blobs',
         'howto/launch',
-        //'howto/undo',
       ],
     },
   ],

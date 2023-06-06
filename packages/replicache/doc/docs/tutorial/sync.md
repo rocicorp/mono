@@ -20,9 +20,7 @@ Replicache can sync with any server that implements the Replicache sync protocol
 
 What's that `initSpace()` call?
 
-For each run of this demo, we create a new _space_ on the server to store data in. Spaces are how Replicache data is partitioned server-side. Each space syncs separately from any others.
-
-We use this feature here so that each visitor to this demo sees only their own counts and isn't confused by seeing other users incrementing the count at the same time.
+For each run of this demo, we create a new _space_ on the server to store data in. This ensures each visitor to this demo sees only their own counts and isn't confused by seeing other users incrementing the count at the same time.
 
 :::
 

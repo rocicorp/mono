@@ -2,14 +2,20 @@ import {z} from 'zod';
 import {entitySchema, generate} from '@rocicorp/rails';
 import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect';
 
-export const ORCHESTRATOR_ROOM = 'orch-a';
-// These values should be tweaked higher for production but our useful for testing
+// Changing this string to the next in the sequence a-z,aa-zz,aaa-zzz,..
+// will force all new orchestrator and puzzle rooms.  This
+// can be useful if we make breaking schema changes or simply want
+// rooms with less garbage built up (which can slow down initial sync).
+const ROOMS_VERSION = 'a';
+
+export const ORCHESTRATOR_ROOM = `orch-${ROOMS_VERSION}`;
+
 const MAX_CLIENTS_PER_ROOM = 15;
 const CLIENT_ROOM_ASSIGNMENT_GC_THRESHOLD_MS = 3 * 60_000;
 const CLIENT_ROOM_ASSIGNMENT_GC_INTERVAL_MS = 10_000;
 
 const roomIndexToRoomID = (index: number) =>
-  'puzzle-a-' + index.toString(10).padStart(7, '0');
+  `puzzle-${ROOMS_VERSION}-${index.toString(10).padStart(7, '0')}`;
 
 const roomModelSchema = entitySchema.extend({
   clientCount: z.number(),
