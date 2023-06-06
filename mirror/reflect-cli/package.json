@@ -9,7 +9,7 @@
   },
   "scripts": {
     "format": "prettier --write .",
-    "check-format": "prettier --check *",
+    "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "start": "jiti ./src/index.ts",
     "build": "unbuild",
