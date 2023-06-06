@@ -1,10 +1,10 @@
-import type {RelaxedJSONValue} from 'reflect-protocol';
+import type {ReadonlyJSONValue} from 'replicache';
 import {createAuthAPIHeaders} from '../server/auth-api-headers.js';
 
 export function newAuthedPostRequest(
   url: URL,
   authApiKey: string,
-  req?: RelaxedJSONValue | undefined,
+  req?: ReadonlyJSONValue | undefined,
 ) {
   return new Request(url.toString(), {
     method: 'POST',

@@ -1,6 +1,6 @@
 import {expect} from '@esm-bundle/chai';
-import type {ReadonlyJSONValue} from './json.js';
 import {deepFreeze, isDeepFrozen} from './frozen-json.js';
+import type {ReadonlyJSONValue} from './json.js';
 
 test('toDeepFrozen', () => {
   expect(deepFreeze(null)).to.equal(null);
@@ -26,12 +26,21 @@ test('toDeepFrozen', () => {
   expectFrozen({a: 1, b: 2});
   expectFrozen({a: 1, b: 2, c: [3, 4, 5]});
 
-  const o = [0, 1, {a: 2, b: 3, c: [4, 5, 6]}] as const;
-  const o2 = deepFreeze(o);
-  expect(o2).equal(o);
-  expect(o2).frozen;
-  expect(o[2]).frozen;
-  expect(o[2].c).frozen;
+  {
+    const o = [0, 1, {a: 2, b: 3, c: [4, 5, 6]}] as const;
+    const o2 = deepFreeze(o);
+    expect(o2).equal(o);
+    expect(o2).frozen;
+    expect(o[2]).frozen;
+    expect(o[2].c).frozen;
+  }
+
+  {
+    const o = {a: undefined};
+    const o2 = deepFreeze(o);
+    expect(o2).equal(o);
+    expect(o2).frozen;
+  }
 });
 
 test('isDeepFrozen', () => {
@@ -79,5 +88,12 @@ test('isDeepFrozen', () => {
     expect(Object.isFrozen(o[2])).to.be.true;
     expect(isDeepFrozen(o[2].c, [])).to.be.true;
     expect(Object.isFrozen(o[2].c)).to.be.true;
+  }
+
+  {
+    const o = {a: undefined};
+    expect(isDeepFrozen(o, [])).to.be.false;
+    Object.freeze(o);
+    expect(isDeepFrozen(o, [])).to.be.true;
   }
 });
