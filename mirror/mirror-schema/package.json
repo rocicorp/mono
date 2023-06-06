@@ -32,6 +32,46 @@
     ".": {
       "import": "./src/mod.ts",
       "types": "./src/mod.ts"
+    },
+    "./agent.js": {
+      "import": "./src/agent.ts",
+      "types": "./src/agent.ts"
+    },
+    "./app-key.js": {
+      "import": "./src/app-key.ts",
+      "types": "./src/app-key.ts"
+    },
+    "./app.js": {
+      "import": "./src/app.ts",
+      "types": "./src/app.ts"
+    },
+    "./cloudflare.js": {
+      "import": "./src/cloudflare.ts",
+      "types": "./src/cloudflare.ts"
+    },
+    "./deployment.js": {
+      "import": "./src/deployment.ts",
+      "types": "./src/deployment.ts"
+    },
+    "./membership.js": {
+      "import": "./src/membership.ts",
+      "types": "./src/membership.ts"
+    },
+    "./server.js": {
+      "import": "./src/server.ts",
+      "types": "./src/server.ts"
+    },
+    "./team.js": {
+      "import": "./src/team.ts",
+      "types": "./src/team.ts"
+    },
+    "./timestamp.js": {
+      "import": "./src/timestamp.ts",
+      "types": "./src/timestamp.ts"
+    },
+    "./user.js": {
+      "import": "./src/user.ts",
+      "types": "./src/user.ts"
     }
   },
   "eslintConfig": {
