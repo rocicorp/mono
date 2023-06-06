@@ -3,12 +3,14 @@
   "scripts": {
     "build:dev": "rimraf ./lib/**/* && tsc --watch",
     "build": "rimraf ./lib/**/* && npm run lint && rollup -c rollup.config.js",
-    "serve:dev": "firebase emulators:start --only functions",
-    "serve": "npm run build && firebase emulators:start --only functions",
-    "shell": "firebase functions:shell",
+    "serve:dev": "npx firebase-tools emulators:start --project staging --only functions",
+    "serve": "npm run build && npx firebase-tools emulators:start --project staging --only functions",
+    "shell": "npx firebase-tools functions:shell",
     "start": "npm run build && npm run shell",
-    "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log",
+    "deploy-functions-staging": "npx firebase-tools deploy --project staging --only functions",
+    "deploy-functions-prod": "npx firebase-tools deploy --project prod --only functions",
+    "logs-staging": "npx firebase-tools --project staging functions:log",
+    "logs-prod": "npx firebase-tools --project prod functions:log",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
@@ -35,6 +37,9 @@
     "rollup-plugin-dts": "^5.2.0",
     "ts-jest": "^29.0.5",
     "typescript": "^4.9.5"
+  },
+  "peerDependencies": {
+    "firebase-tools": "^12.3.0"
   },
   "private": true,
   "engines": {
