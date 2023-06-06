@@ -8,7 +8,7 @@
     "yargs": "^17.7.2"
   },
   "scripts": {
-    "format": "prettier --write *",
+    "format": "prettier --write .",
     "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "start": "jiti ./src/index.ts",

@@ -19,7 +19,7 @@ import FormData from 'form-data';
 export async function publishHandler(
   yargs: StrictYargsOptionsToInterface<typeof publishOptions>,
 ) {
-  const resolvedEntryPointPath = './example/customer.ts';
+  const resolvedEntryPointPath = './example/customer.ts.example';
   const content = readFileSync(resolvedEntryPointPath);
 
   yargs.name = yargs.name || 'customer';

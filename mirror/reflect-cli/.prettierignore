@@ -1,2 +1,4 @@
-out/
+**/out/
 *.tgz
+**/example
+*.example
