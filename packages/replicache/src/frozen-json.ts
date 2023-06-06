@@ -99,7 +99,8 @@ function deepFreezeArray(
 function deepFreezeObject(v: ReadonlyJSONObject, seen: object[]): void {
   for (const k in v) {
     if (hasOwn(v, k)) {
-      deepFreezeInternal(v[k], seen);
+      const value = v[k];
+      value !== undefined && deepFreezeInternal(value, seen);
     }
   }
 }
@@ -170,12 +171,12 @@ export function isDeepFrozen(v: unknown, seen: object[]): boolean {
         }
       } else {
         for (const k in v) {
-          if (
-            hasOwn(v, k) &&
-            !isDeepFrozen((v as Record<string, unknown>)[k], seen)
-          ) {
-            seen.pop();
-            return false;
+          if (hasOwn(v, k)) {
+            const value = (v as Record<string, unknown>)[k];
+            if (value !== undefined && !isDeepFrozen(value, seen)) {
+              seen.pop();
+              return false;
+            }
           }
         }
       }

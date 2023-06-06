@@ -1,0 +1,45 @@
+{
+  "name": "refliect-cli",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "undici": "^5.20.0",
+    "yargs": "^17.7.2"
+  },
+  "scripts": {
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "start": "jiti ./src/index.ts",
+    "build": "unbuild",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.4.1",
+    "@rocicorp/prettier-config": "^0.1.1",
+    "@types/node": "18",
+    "@types/yargs": "^17.0.24",
+    "jiti": "^1.17.0",
+    "typescript": "^4.9.5",
+    "unbuild": "^1.1.1"
+  },
+  "exports": {
+    ".": {
+      "import": "./out/index.mjs",
+      "require": "./out/index.cjs"
+    }
+  },
+  "main": "./out/index.cjs",
+  "types": "./out/index.d.ts",
+  "files": [
+    "out"
+  ],
+  "bin": {
+    "reflect-cli": "index.js"
+  },
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}

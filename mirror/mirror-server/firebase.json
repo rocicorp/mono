@@ -1,0 +1,15 @@
+{
+  "functions": {
+    "predeploy": "npm run build",
+    "source": "./",
+    "ignore": ["firebase.json", "**/node_modules/**", ".git"]
+  },
+  "emulators": {
+    "functions": {
+      "port": 5001
+    },
+    "ui": {
+      "enabled": true
+    }
+  }
+}

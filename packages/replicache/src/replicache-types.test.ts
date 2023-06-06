@@ -1,9 +1,10 @@
 /* eslint-disable require-await */
 
-import {Replicache} from './replicache.js';
-import type {WriteTransaction} from './transactions.js';
 import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
 import type {IndexKey} from './db/index.js';
+import type {ReadonlyJSONObject} from './mod.js';
+import {Replicache} from './replicache.js';
+import type {WriteTransaction} from './transactions.js';
 
 function use(..._args: unknown[]) {
   // do nothing
@@ -409,4 +410,18 @@ test.skip('mutator return read only [type checking only]', async () => {
   });
 
   use(rep);
+});
+
+test.skip('Allowing undefined in JSONObject [type checking only]', async () => {
+  const rep = new Replicache({
+    name: 'test-types',
+    licenseKey: TEST_LICENSE_KEY,
+    mutators: {
+      mut: (tx: WriteTransaction, x: ReadonlyJSONObject) => {
+        use(tx);
+        use(x);
+      },
+    },
+  });
+  await rep.mutate.mut({a: undefined});
 });
