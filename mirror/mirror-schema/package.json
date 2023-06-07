@@ -1,5 +1,6 @@
 {
   "name": "mirror-schema",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "module": "./src/mod.ts",
@@ -12,7 +13,8 @@
     "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "deploy-rules-staging": "npx firebase-tools --project staging deploy --only firestore:rules",
-    "deploy-rules-prod": "npx firebase-tools --project prod deploy --only firestore:rules"
+    "deploy-rules-prod": "npx firebase-tools --project prod deploy --only firestore:rules",
+    "build": "unbuild"
   },
   "dependencies": {
     "@badrap/valita": "^0.2.0"
@@ -21,59 +23,61 @@
     "@rocicorp/eslint-config": "^0.4.1",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/jest": "^29.4.2",
-    "shared": "*",
+    "shared": "0.0.0",
     "ts-jest": "^29.0.5",
-    "typescript": "^4.9.5"
+    "typescript": "^4.9.5",
+    "unbuild": "^1.1.1"
   },
   "peerDependencies": {
     "firebase-tools": "^12.3.0"
   },
   "exports": {
     ".": {
-      "import": "./src/mod.ts",
-      "types": "./src/mod.ts"
+      "import": "./dist/mod.mjs",
+      "require": "./dist/mod.cjs"
     },
     "./agent.js": {
-      "import": "./src/agent.ts",
-      "types": "./src/agent.ts"
+      "import": "./dist/agent.mjs",
+      "require": "./dist/agent.cjs"
     },
     "./app-key.js": {
-      "import": "./src/app-key.ts",
-      "types": "./src/app-key.ts"
+      "import": "./dist/app-key.mjs",
+      "require": "./dist/app-key.cjs"
     },
     "./app.js": {
-      "import": "./src/app.ts",
-      "types": "./src/app.ts"
+      "import": "./dist/app.mjs",
+      "require": "./dist/app.cjs"
     },
     "./cloudflare.js": {
-      "import": "./src/cloudflare.ts",
-      "types": "./src/cloudflare.ts"
+      "import": "./dist/cloudflare.mjs",
+      "require": "./dist/cloudflare.cjs"
     },
     "./deployment.js": {
-      "import": "./src/deployment.ts",
-      "types": "./src/deployment.ts"
+      "import": "./dist/deployment.mjs",
+      "require": "./dist/deployment.cjs"
     },
     "./membership.js": {
-      "import": "./src/membership.ts",
-      "types": "./src/membership.ts"
+      "import": "./dist/membership.mjs",
+      "require": "./dist/membership.cjs"
     },
     "./server.js": {
-      "import": "./src/server.ts",
-      "types": "./src/server.ts"
+      "import": "./dist/server.mjs",
+      "require": "./dist/server.cjs"
     },
     "./team.js": {
-      "import": "./src/team.ts",
-      "types": "./src/team.ts"
+      "import": "./dist/team.mjs",
+      "require": "./dist/team.cjs"
     },
     "./timestamp.js": {
-      "import": "./src/timestamp.ts",
-      "types": "./src/timestamp.ts"
+      "import": "./dist/timestamp.mjs",
+      "require": "./dist/timestamp.cjs"
     },
     "./user.js": {
-      "import": "./src/user.ts",
-      "types": "./src/user.ts"
+      "import": "./dist/user.mjs",
+      "require": "./dist/user.cjs"
     }
   },
+  "files": ["dist"],
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },
