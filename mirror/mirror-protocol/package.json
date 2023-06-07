@@ -1,6 +1,6 @@
 {
   "name": "mirror-protocol",
-  "version": "0.0.1",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "module": "./src/mod.ts",
@@ -11,7 +11,8 @@
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "build": "unbuild"
   },
   "dependencies": {
     "@badrap/valita": "^0.2.0"
@@ -20,24 +21,28 @@
     "@rocicorp/eslint-config": "^0.4.1",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/jest": "^29.4.2",
-    "shared": "*",
+    "shared": "0.0.0",
     "ts-jest": "^29.0.5",
-    "typescript": "^4.9.5"
+    "typescript": "^4.9.5",
+    "unbuild": "^1.1.1"
   },
   "exports": {
     ".": {
-      "import": "./src/mod.ts",
-      "types": "./src/mod.ts"
+      "import": "./dist/mod.mjs",
+      "require": "./dist/mod.cjs"
     },
     "./base.js": {
-      "import": "./src/base.ts",
-      "types": "./src/base.ts"
+      "import": "./dist/base.mjs",
+      "require": "./dist/base.cjs"
     },
     "./user.js": {
-      "import": "./src/user.ts",
-      "types": "./src/user.ts"
+      "import": "./dist/user.mjs",
+      "require": "./dist/user.cjs"
     }
   },
+  "files": [
+    "dist"
+  ],
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },
