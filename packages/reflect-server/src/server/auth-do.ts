@@ -16,7 +16,7 @@ import {encodeHeaderValue} from '../util/headers.js';
 import {closeWithError} from '../util/socket.js';
 import {version} from '../util/version.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
-import {AuthHandler, USER_DATA_HEADER_NAME, UserData} from './auth.js';
+import {AuthHandler, USER_DATA_HEADER_NAME} from './auth.js';
 import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
@@ -54,6 +54,7 @@ import {
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import {sleep} from '../util/sleep.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
+import type {UserData} from 'reflect-types';
 
 export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
 

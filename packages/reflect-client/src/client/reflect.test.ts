@@ -7,12 +7,11 @@ import {
   ExperimentalMemKVStore,
   JSONValue,
   LogLevel,
-  MutatorDefs,
   PullRequestV1,
   PushRequestV1,
-  WriteTransaction,
 } from 'replicache';
 import {assert} from 'shared/asserts.js';
+import type {WriteTransaction, MutatorDefs} from 'reflect-types';
 import * as valita from 'shared/valita.js';
 import * as sinon from 'sinon';
 import {REPORT_INTERVAL_MS} from './metrics.js';

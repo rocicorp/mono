@@ -12,7 +12,7 @@ import {
   PullResponseMessage,
   upstreamSchema,
 } from 'reflect-protocol';
-import type {MutatorDefs} from 'replicache';
+import type {MutatorDefs} from 'reflect-types';
 import {assert} from 'shared/asserts.js';
 import type {SinonFakeTimers} from 'sinon';
 import type {ReflectOptions} from './options.js';

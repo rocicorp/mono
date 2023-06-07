@@ -1,4 +1,4 @@
-import type {MutatorDefs} from 'replicache';
+import type {MutatorDefs} from 'reflect-types';
 import {processPending} from '../process/process-pending.js';
 import type {MutatorMap} from '../process/process-mutation.js';
 import type {

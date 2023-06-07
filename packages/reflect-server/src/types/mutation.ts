@@ -1,3 +1,4 @@
+import type {UserData} from 'reflect-types';
 import type {ClientGroupID} from 'replicache';
 import type {ReadonlyJSONValue} from 'shared/json.js';
 import type {ClientID} from './client-state.js';
@@ -16,4 +17,5 @@ export type PendingMutation = {
         serverReceivedTimestamp: number;
       }
     | undefined;
+  readonly userData: UserData;
 };

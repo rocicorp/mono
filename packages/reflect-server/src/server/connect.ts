@@ -11,7 +11,6 @@ import type {
 } from '../types/client-state.js';
 import type {LogContext} from '@rocicorp/logger';
 import type {ConnectedMessage} from 'reflect-protocol';
-import type {UserData} from './auth.js';
 import {USER_DATA_HEADER_NAME} from './auth.js';
 import {decodeHeaderValue} from '../util/headers.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
@@ -20,6 +19,7 @@ import type {NullableVersion, Version} from 'reflect-protocol';
 import {send, closeWithError} from '../util/socket.js';
 import {assert} from 'shared/asserts.js';
 import type {ErrorKind} from 'reflect-protocol';
+import type {UserData} from 'reflect-types';
 
 export type MessageHandler = (
   lc: LogContext,
