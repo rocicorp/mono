@@ -5,7 +5,7 @@
     "build:dev": "rimraf ./lib/**/* && tsc --watch",
     "build": "rimraf ./lib/**/* && npm run lint && unbuild",
     "serve:dev": "npx firebase-tools emulators:start --only functions",
-    "serve": "npm run build && npx firebase-tools emulators:start --only functions",
+    "serve": "npm run build && npx firebase-tools emulators:start --project staging --only functions",
     "shell": "npx firebase-tools functions:shell",
     "start": "npm run build && npm run shell",
     "deploy-functions-staging": "npx firebase-tools deploy --project staging --only functions",
@@ -23,9 +23,9 @@
     "cors": "^2.8.5",
     "firebase-admin": "^11.9.0",
     "firebase-functions": "^4.4.0",
-    "mirror-protocol": "*",
-    "mirror-schema": "*",
-    "shared": "*",
+    "mirror-protocol": "0.0.0",
+    "mirror-schema": "0.0.0",
+    "shared": "0.0.0",
     "tslib": "^2.5.2"
   },
   "devDependencies": {
