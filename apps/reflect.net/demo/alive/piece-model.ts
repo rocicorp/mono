@@ -1,6 +1,6 @@
-import {z} from 'zod';
 import {entitySchema, generate, Update} from '@rocicorp/rails';
-import type {WriteTransaction} from '@rocicorp/reflect';
+import type {WriteTransaction} from '@rocicorp/reflect/client';
+import {z} from 'zod';
 
 // Note, we use the stringified index inside PIECE_DEFINITIONS (aka the "piece num") as the ID.
 export const pieceModelSchema = entitySchema.extend({

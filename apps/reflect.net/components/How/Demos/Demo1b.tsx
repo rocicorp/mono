@@ -2,7 +2,7 @@ import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter';
 import {vscDarkPlus} from 'react-syntax-highlighter/dist/cjs/styles/prism';
 
 export function Demo1b() {
-  const codeString = `import {Reflect} from "@rocicorp/reflect";
+  const codeString = `import {Reflect} from "@rocicorp/reflect/client";
 import mutators from "./mutators";
 const roomID = "myFirstRoom";
 

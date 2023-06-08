@@ -3,7 +3,7 @@ import {M, deregisterClientConsole} from '@/demo/shared/mutators';
 import type {Latency} from '@/demo/shared/types';
 import {closeReflect} from '@/util/reflect';
 import {getWorkerHost} from '@/util/worker-host';
-import type {Reflect} from '@rocicorp/reflect';
+import type {Reflect} from '@rocicorp/reflect/client';
 import {nanoid} from 'nanoid';
 import {event} from 'nextjs-google-analytics';
 import React, {useEffect, useMemo, useState} from 'react';

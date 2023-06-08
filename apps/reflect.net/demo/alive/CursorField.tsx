@@ -1,5 +1,5 @@
 import {useIsomorphicLayoutEffect} from '@/hooks/use-isomorphic-layout-effect';
-import type {Reflect} from '@rocicorp/reflect';
+import type {Reflect} from '@rocicorp/reflect/client';
 import type {M} from '../shared/mutators';
 import {Cursor} from './Cursor';
 import {Rect, Size, positionToCoordinate} from './util';

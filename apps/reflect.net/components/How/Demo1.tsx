@@ -1,6 +1,6 @@
 import type {M} from '@/demo/shared/mutators';
 import type {Latency} from '@/demo/shared/types';
-import type {Reflect} from '@rocicorp/reflect';
+import type {Reflect} from '@rocicorp/reflect/client';
 import {useState} from 'react';
 import {Demo1a} from './Demos/Demo1a';
 import {Demo1b} from './Demos/Demo1b';

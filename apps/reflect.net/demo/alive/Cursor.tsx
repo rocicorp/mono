@@ -1,5 +1,5 @@
 import {useIsomorphicLayoutEffect} from '@/hooks/use-isomorphic-layout-effect';
-import type {Reflect} from '@rocicorp/reflect';
+import type {Reflect} from '@rocicorp/reflect/client';
 import classNames from 'classnames';
 import {useSubscribe} from 'replicache-react';
 import type {M} from '../shared/mutators';

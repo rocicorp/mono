@@ -1,7 +1,7 @@
 /* eslint-env node */
 
-import dts from 'rollup-plugin-dts';
 import {nodeResolve} from '@rollup/plugin-node-resolve';
+import dts from 'rollup-plugin-dts';
 
 // We only use rollup for creating a bundled d.ts file.
 // We use esbuild for building the actual code.
@@ -9,7 +9,7 @@ import {nodeResolve} from '@rollup/plugin-node-resolve';
 export default {
   input: 'out/.dts/mod.d.ts',
   output: {
-    file: `./out/reflect.d.ts`,
+    file: `./out/reflect-client.d.ts`,
   },
   plugins: [
     nodeResolve(),

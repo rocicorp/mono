@@ -1,5 +1,5 @@
 import {consoleLogSink, LogLevel, LogSink} from '@rocicorp/logger';
-import {createClientDatadogLogSink} from '@rocicorp/reflect';
+import {createClientDatadogLogSink} from '@rocicorp/reflect/client';
 
 const DATADOG_SERVICE_LABEL = 'reflect.net';
 

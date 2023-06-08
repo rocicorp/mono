@@ -3,7 +3,7 @@ import {
   createReflectServer,
   createWorkerDatadogLogSink,
   ReflectServerBaseEnv,
-} from '@rocicorp/reflect-server';
+} from '@rocicorp/reflect/server';
 import {deleteClient} from '../alive/client-model';
 import {mutators} from '../shared/mutators';
 

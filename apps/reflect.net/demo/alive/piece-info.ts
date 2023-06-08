@@ -1,6 +1,6 @@
-import type {ReadTransaction} from '@rocicorp/reflect';
+import type {ReadTransaction} from '@rocicorp/reflect/client';
 import {ClientModel, listClients} from './client-model';
-import {listPieces, PieceModel} from './piece-model';
+import {PieceModel, listPieces} from './piece-model';
 
 // Synced model + derived/runtime state.
 export type PieceInfo = PieceModel & {
