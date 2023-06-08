@@ -6,3 +6,5 @@
 /server.d.ts
 /server.js
 /server.js.map
+
+tsconfig.tsbuildinfo

@@ -36,8 +36,9 @@ function copyFiles() {
 }
 
 function createVersionFiles() {
-  const pkg = JSON.parse(fs.readFileSync(basePath('package.json'), 'utf8'));
-  const version = pkg.version;
+  const {version} = JSON.parse(
+    fs.readFileSync(basePath('package.json'), 'utf8'),
+  );
 
   fs.writeFileSync(
     basePath('index.js'),
