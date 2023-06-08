@@ -21,7 +21,7 @@ async function buildESM() {
   // minified builds we can re-enable this.
   const minify = false;
   const shared = sharedOptions(minify, metafile);
-  const outfile = path.join(dirname, 'out', 'reflect.js');
+  const outfile = path.join(dirname, 'out', 'reflect-client.js');
   const define = await makeDefine(mode);
   const result = await esbuild.build({
     ...shared,

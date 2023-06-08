@@ -17,7 +17,7 @@ import styles from '@/styles/Home.module.css';
 import {getLocationString, Location} from '@/util/get-location-string';
 import {closeReflect} from '@/util/reflect';
 import {getWorkerHost} from '@/util/worker-host';
-import {ExperimentalMemKVStore, Reflect} from '@rocicorp/reflect';
+import {ExperimentalMemKVStore, Reflect} from '@rocicorp/reflect/client';
 import classNames from 'classnames';
 import {event} from 'nextjs-google-analytics';
 import {useCallback, useEffect, useState} from 'react';

@@ -1,7 +1,7 @@
-import {ExperimentalMemKVStore, Reflect} from '@rocicorp/reflect';
-import {loggingOptions} from '../frontend/logging-options';
-import {mutators, M} from '../shared/mutators';
 import {getWorkerHost} from '@/util/worker-host';
+import {ExperimentalMemKVStore, Reflect} from '@rocicorp/reflect/client';
+import {loggingOptions} from '../frontend/logging-options';
+import {M, mutators} from '../shared/mutators';
 
 export const init = (roomID: string, userID: string): Reflect<M> => {
   // Set up our connection to reflect

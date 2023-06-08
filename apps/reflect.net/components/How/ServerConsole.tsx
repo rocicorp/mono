@@ -1,5 +1,5 @@
 import type {M} from '@/demo/shared/mutators';
-import type {Reflect} from '@rocicorp/reflect';
+import type {Reflect} from '@rocicorp/reflect/client';
 import classNames from 'classnames';
 import {useContext, useEffect, useState} from 'react';
 import {ClientIDContext} from './ClientIDContext';

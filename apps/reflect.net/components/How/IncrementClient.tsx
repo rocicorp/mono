@@ -1,6 +1,6 @@
 import {M, registerClientConsole} from '@/demo/shared/mutators';
 import type {Latency} from '@/demo/shared/types';
-import type {Reflect} from '@rocicorp/reflect';
+import type {Reflect} from '@rocicorp/reflect/client';
 import {event} from 'nextjs-google-analytics';
 import {useCallback, useEffect, useState} from 'react';
 import {ClientConsole} from './ClientConsole';

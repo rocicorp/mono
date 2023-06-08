@@ -1,4 +1,4 @@
-import {version, type WriteTransaction} from '@rocicorp/reflect-server';
+import {version, type WriteTransaction} from '@rocicorp/reflect/server';
 
 export const mutators = {
   async init(tx: WriteTransaction) {

@@ -7,9 +7,9 @@
     "url": "git+https://github.com/rocicorp/reflect.git"
   },
   "license": "SEE LICENSE IN https://roci.dev/terms.html",
-  "main": "out/reflect.js",
-  "module": "out/reflect.js",
-  "types": "out/reflect.d.ts",
+  "main": "out/reflect-client.js",
+  "module": "out/reflect-client.js",
+  "types": "out/reflect-client.d.ts",
   "type": "module",
   "scripts": {
     "format": "prettier --write *",
@@ -51,8 +51,8 @@
     "typescript": "^4.9.5"
   },
   "files": [
-    "out/reflect.d.ts",
-    "out/reflect.js"
+    "out/reflect-client.d.ts",
+    "out/reflect-client.js"
   ],
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

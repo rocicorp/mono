@@ -1,4 +1,4 @@
-import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect';
+import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect/client';
 import {
   deleteClient,
   ensureClient,

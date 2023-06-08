@@ -1,15 +1,15 @@
-import type {Reflect} from '@rocicorp/reflect';
+import type {Reflect} from '@rocicorp/reflect/client';
+import {event} from 'nextjs-google-analytics';
 import type {M} from '../shared/mutators';
-import {PieceDefinition, PIECE_DEFINITIONS} from './piece-definitions';
+import {PIECE_DEFINITIONS, PieceDefinition} from './piece-definitions';
 import type {PieceInfo} from './piece-info';
 import type {PieceModel} from './piece-model';
-import {event} from 'nextjs-google-analytics';
 import {
+  Position,
+  Rect,
   coordinateToPosition,
   distance,
-  Position,
   positionToCoordinate,
-  Rect,
 } from './util';
 
 export const handleDrag = (

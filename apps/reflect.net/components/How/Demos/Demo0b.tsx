@@ -2,7 +2,7 @@ import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter';
 import {vscDarkPlus} from 'react-syntax-highlighter/dist/cjs/styles/prism';
 
 export function Demo0b() {
-  const codeString = `import {createReflectServer} from "@rocicorp/reflect";
+  const codeString = `import {createReflectServer} from "@rocicorp/reflect/client";
 
 export createReflectServer({
   authHandler: (authToken) => {

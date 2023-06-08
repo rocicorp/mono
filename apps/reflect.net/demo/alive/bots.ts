@@ -1,4 +1,4 @@
-import type {ClientID, Reflect} from '@rocicorp/reflect';
+import type {ClientID, Reflect} from '@rocicorp/reflect/client';
 import {nanoid} from 'nanoid';
 import type {M} from '../shared/mutators';
 import {BotMove, BotRecording, BotType, botRecordings} from './bot-recordings';
