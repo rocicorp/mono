@@ -664,15 +664,6 @@ suite('findMatchingClient', () => {
 });
 
 suite('initClientV6', () => {
-  let clock: SinonFakeTimers;
-  setup(() => {
-    clock = useFakeTimers(0);
-  });
-
-  teardown(() => {
-    clock.restore();
-  });
-
   test('new client for empty db', async () => {
     const formatVersion = FormatVersion.Latest;
     const lc = new LogContext();
