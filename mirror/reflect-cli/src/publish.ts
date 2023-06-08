@@ -21,8 +21,11 @@ export async function publishHandler(
   const formData = new FormData();
   formData.append('bundle', content, 'customer.ts');
 
-  await fetch(`http://127.0.0.1:5001/reflect-mirror-dev/us-central1/publish`, {
-    method: 'POST',
-    body: formData,
-  });
+  await fetch(
+    `http://127.0.0.1:5001/reflect-mirror-staging/us-central1/publish`,
+    {
+      method: 'POST',
+      body: formData,
+    },
+  );
 }
