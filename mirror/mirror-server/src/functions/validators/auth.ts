@@ -1,10 +1,11 @@
-import {AsyncHandler} from './types';
 import {CallableRequest, HttpsError} from 'firebase-functions/v2/https';
 import {BaseRequest} from 'mirror-protocol/base.js';
+import {AsyncHandler} from './types';
 
 export function withAuthorization<Request extends BaseRequest, Response>(
   handler: AsyncHandler<Request, Response>,
 ): AsyncHandler<Request, Response> {
+  // eslint-disable-next-line require-await
   return async (payload: Request, context: CallableRequest<Request>) => {
     if (context.auth?.uid === undefined) {
       throw new HttpsError('unauthenticated', 'missing authentication');

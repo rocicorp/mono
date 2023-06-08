@@ -4,7 +4,7 @@ import * as functions from 'firebase-functions';
  * Healthcheck function.
  */
 export function healthcheck(
-  request: functions.Request,
+  _request: functions.Request,
   response: functions.Response,
 ): void {
   const result = JSON.stringify({message: 'ok'});

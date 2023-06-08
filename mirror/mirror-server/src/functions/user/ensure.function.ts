@@ -1,13 +1,13 @@
 import {getFirestore} from 'firebase-admin/firestore';
-import {withSchema} from '../validators/schema';
-import {withAuthorization} from '../validators/auth';
 import {
-  ensureUserRequestSchema,
-  ensureUserResponseSchema,
   EnsureUserRequest,
   EnsureUserResponse,
+  ensureUserRequestSchema,
+  ensureUserResponseSchema,
 } from 'mirror-protocol/user.js';
 import {userPath} from 'mirror-schema/user.js';
+import {withAuthorization} from '../validators/auth';
+import {withSchema} from '../validators/schema';
 
 export const ensure = withSchema(
   ensureUserRequestSchema,
@@ -19,7 +19,7 @@ async function ensureHandler(
   payload: EnsureUserRequest,
 ): Promise<EnsureUserResponse> {
   const firestore = getFirestore();
-  const userID = payload.requester.userID;
+  const {userID} = payload.requester;
   const userDocRef = firestore.doc(userPath(userID));
   await firestore.runTransaction(async txn => {
     const userDoc = await txn.get(userDocRef);
