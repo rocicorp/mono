@@ -4,7 +4,13 @@
   "pipeline": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["out/**", "dist/**", ".next/**"]
+      "outputs": [
+        "out/**",
+        "dist/**",
+        ".next/**",
+        "packages/reflect/*.js",
+        "packages/reflect/*.d.ts"
+      ]
     },
     "lint": {
       "outputs": []
