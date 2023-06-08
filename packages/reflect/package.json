@@ -1,0 +1,34 @@
+{
+  "name": "@rocicorp/reflect",
+  "description": "",
+  "version": "0.26.0",
+  "license": "SEE LICENSE IN https://roci.dev/terms.html",
+  "type": "module",
+  "main": "index.js",
+  "module": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "build": "node tool/build.js"
+  },
+  "dependencies": {
+    "@rocicorp/reflect-client": "0.0.0",
+    "@rocicorp/reflect-server": "0.0.0"
+  },
+  "files": [
+    "client.d.ts",
+    "client.js",
+    "server.d.ts",
+    "server.js",
+    "index.d.ts",
+    "index.js"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./server": "./server.js"
+  },
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}
