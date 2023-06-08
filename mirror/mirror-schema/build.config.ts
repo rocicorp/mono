@@ -12,5 +12,6 @@ export default {
     './src/timestamp',
     './src/user',
   ],
+  declaration: true,
   preset: './build.preset',
 };

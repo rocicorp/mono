@@ -1,1 +1,1 @@
-export {ensure} from './ensure.function';
+export {ensure} from './ensure.function.js';

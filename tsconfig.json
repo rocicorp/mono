@@ -8,8 +8,8 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "esModuleInterop": true,
     "importsNotUsedAsValues": "error",
+    "esModuleInterop": true,
     "declarationMap": true,
     "sourceMap": true,
     "declaration": true,
@@ -19,6 +19,7 @@
     "preserveSymlinks": true,
     "types": [],
     "resolveJsonModule": true,
-    "incremental": true
+    "incremental": true,
+    "ignoreDeprecations": "5.0"
   }
 }

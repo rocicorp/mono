@@ -3,7 +3,7 @@ import {initializeApp} from 'firebase-admin/app';
 import {functionsConfig} from './functions-config.js';
 import {publish as publishHandler} from './functions/publish.function.js';
 import {healthcheck as healthcheckHandler} from './functions/healthcheck.function.js';
-import * as userFunctions from './functions/user';
+import * as userFunctions from './functions/user/index.js';
 
 // Initializes firestore and auth clients.
 initializeApp();

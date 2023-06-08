@@ -6,8 +6,8 @@ import {
   ensureUserResponseSchema,
 } from 'mirror-protocol/user.js';
 import {userPath} from 'mirror-schema/user.js';
-import {withAuthorization} from '../validators/auth';
-import {withSchema} from '../validators/schema';
+import {withAuthorization} from '../validators/auth.js';
+import {withSchema} from '../validators/schema.js';
 
 export const ensure = withSchema(
   ensureUserRequestSchema,
