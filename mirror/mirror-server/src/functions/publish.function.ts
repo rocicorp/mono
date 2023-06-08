@@ -14,9 +14,9 @@ export async function publish(
       headers: req.headers,
     });
 
-    const bundle: Buffer[] = [];
-    const sourcemap: Buffer[] = [];
-    const files = await new Promise<Buffer[]>((resolve, reject) => {
+    const bundle: Uint8Array[] = [];
+    const sourcemap: Uint8Array[] = [];
+    const files = await new Promise<Uint8Array[]>((resolve, reject) => {
       bb.once('finish', () => {
         const bundleBuffer = Buffer.concat(bundle);
         const sourcemapBuffer = Buffer.concat(sourcemap);
@@ -38,8 +38,8 @@ export async function publish(
     });
     const bundleFile = files[0];
     const sourceMapFile = files[1];
-    console.log('bundleFile', bundleFile.toString('utf8'));
-    console.log('sourceMapFile', sourceMapFile.toString('utf8'));
+    console.log('bundleFile', bundleFile.toString());
+    console.log('sourceMapFile', sourceMapFile.toString());
     console.log("Now calling Erik's code to publish!!");
     res.sendStatus(200);
   } catch (error) {

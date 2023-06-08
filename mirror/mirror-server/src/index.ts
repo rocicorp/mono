@@ -9,14 +9,14 @@ import * as userFunctions from './functions/user';
 initializeApp();
 
 export const publish = https.onRequest(
-  {cors: functionsConfig.whitelist},
+  {cors: functionsConfig.allowlist},
   publishHandler,
 );
 export const healthcheck = https.onRequest(
-  {cors: functionsConfig.whitelist},
+  {cors: functionsConfig.allowlist},
   healthcheckHandler,
 );
 
 export const user = {
-  ensure: https.onCall({cors: functionsConfig.whitelist}, userFunctions.ensure),
+  ensure: https.onCall({cors: functionsConfig.allowlist}, userFunctions.ensure),
 };

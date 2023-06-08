@@ -1,6 +1,7 @@
 {
   "projects": {
     "staging": "reflect-mirror-staging",
-    "prod": "reflect-mirror-prod"
+    "prod": "reflect-mirror-prod",
+    "default": "reflect-mirror-staging"
   }
 }

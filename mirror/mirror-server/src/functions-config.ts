@@ -2,5 +2,5 @@
  * Functions configuration.
  */
 export const functionsConfig = {
-  whitelist: ['*'],
+  allowlist: ['*'],
 };

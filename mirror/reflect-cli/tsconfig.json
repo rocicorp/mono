@@ -1,22 +1,4 @@
 {
-  "compilerOptions": {
-    "module": "ESNext",
-    "target": "ESNext",
-    "declaration": true,
-    "moduleResolution": "node",
-    "strict": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "allowJs": true,
-    "types": ["node"],
-    "exactOptionalPropertyTypes": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "outDir": "out",
-    "lib": ["esnext"],
-    "skipLibCheck": true,
-    "resolveJsonModule": true
-  }
+  "extends": "../../tsconfig.json",
+  "include": ["src/**/*.ts"]
 }

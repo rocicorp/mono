@@ -4,7 +4,7 @@ import {definePreset} from 'unbuild';
 export default definePreset({
   clean: true,
   rollup: {
-    emitCJS: true,
+    emitCJS: false,
     inlineDependencies: true,
     esbuild: {
       minify: false,

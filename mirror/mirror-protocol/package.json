@@ -27,18 +27,9 @@
     "unbuild": "^1.1.1"
   },
   "exports": {
-    ".": {
-      "import": "./dist/mod.mjs",
-      "require": "./dist/mod.cjs"
-    },
-    "./base.js": {
-      "import": "./dist/base.mjs",
-      "require": "./dist/base.cjs"
-    },
-    "./user.js": {
-      "import": "./dist/user.mjs",
-      "require": "./dist/user.cjs"
-    }
+    ".": "./dist/mod.mjs",
+    "./base.js": "./dist/base.mjs",
+    "./user.js": "./dist/user.mjs"
   },
   "files": [
     "dist"

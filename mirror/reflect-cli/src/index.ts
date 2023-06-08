@@ -1,9 +1,8 @@
 import makeCLI from 'yargs';
 import {hideBin} from 'yargs/helpers';
 import process from 'process';
-import {publishHandler, publishOptions} from './publish';
+import {publishHandler, publishOptions} from './publish.js';
 import {ProxyAgent, setGlobalDispatcher} from 'undici';
-import type {CommonYargsArgv} from './yarg-types';
 
 const proxy =
   process.env.https_proxy ||
@@ -24,7 +23,7 @@ const VERSION = '0.1.0';
 export function createCLIParser(argv: string[]) {
   // Type check result against CommonYargsOptions to make sure we've included
   // all common options
-  const reflectCLI: CommonYargsArgv = makeCLI(argv)
+  const reflectCLI = makeCLI(argv)
     .strict()
     .showHelpOnFail(true)
     .fail((msg, error) => {
