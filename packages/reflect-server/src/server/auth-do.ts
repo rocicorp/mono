@@ -471,6 +471,8 @@ export class BaseAuthDO implements DurableObject {
           if (authHandlerUserData.userID !== userID) {
             lc.info?.(
               'userData returned by authHandler has a different userID.',
+              authHandlerUserData.userID,
+              userID,
             );
             return closeWithErrorLocal(
               'Unauthorized',
