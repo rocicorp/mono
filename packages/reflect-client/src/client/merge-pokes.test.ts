@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {mergePokes} from './merge-pokes.js';
 
 test('mergePokes with empty array returns undefined', () => {

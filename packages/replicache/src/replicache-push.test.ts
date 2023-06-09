@@ -1,21 +1,22 @@
+import {expect} from 'chai';
+import * as sinon from 'sinon';
+import type {VersionNotSupportedResponse, WriteTransaction} from './mod.js';
+import type {Pusher} from './pusher.js';
 import {
+  TestLogSink,
   disableAllBackgroundProcesses,
   initReplicacheTesting,
   replicacheForTesting,
-  TestLogSink,
   tickAFewTimes,
 } from './test-util.js';
-import type {VersionNotSupportedResponse, WriteTransaction} from './mod.js';
-import {expect, assert} from '@esm-bundle/chai';
-import type {Pusher} from './pusher.js';
-import * as sinon from 'sinon';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import type {UpdateNeededReason} from './replicache.js';
+import {assert} from 'shared/asserts.js';
 import {getDefaultPusher} from './get-default-pusher.js';
+import type {UpdateNeededReason} from './replicache.js';
 
 initReplicacheTesting();
 
@@ -340,14 +341,14 @@ test('ClientStateNotFound on server', async () => {
   await rep.mutate.noop();
   await rep.invokePush();
 
-  assert.equal(onUpdateNeededStub.callCount, 0);
+  expect(onUpdateNeededStub.callCount).equal(0);
 
-  assert.isTrue(rep.isClientGroupDisabled);
+  expect(rep.isClientGroupDisabled).true;
 
-  assert.equal(testLogSink.messages.length, 1);
+  expect(testLogSink.messages.length).equal(1);
+  expect(testLogSink.messages[0][2][0]).instanceOf(Error);
   assert(testLogSink.messages[0][2][0] instanceof Error);
-  assert.match(
-    testLogSink.messages[0][2][0].message,
+  expect(testLogSink.messages[0][2][0].message).match(
     /Client group \S+ is unknown on server/,
   );
 });

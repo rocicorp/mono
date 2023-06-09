@@ -1,8 +1,8 @@
-import {runAll} from './store-test-util.js';
-import {expect} from '@esm-bundle/chai';
-import {clearAllNamedMemStoresForTesting, MemStore} from './mem-store.js';
 import {resolver} from '@rocicorp/resolver';
+import {expect} from 'chai';
 import {withRead, withWrite} from '../with-transactions.js';
+import {clearAllNamedMemStoresForTesting, MemStore} from './mem-store.js';
+import {runAll} from './store-test-util.js';
 
 runAll('NamedMemStore', () => new MemStore('test'));
 

@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {binarySearch} from './binary-search.js';
 
 test('binarySearch', () => {

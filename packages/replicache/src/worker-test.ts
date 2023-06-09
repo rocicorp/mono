@@ -1,12 +1,11 @@
 // This test file is loaded by worker.test.ts
 
-import {ReplicacheTest} from './test-util.js';
-import type {ReadTransaction, WriteTransaction} from './transactions.js';
-import {asyncIterableToArray} from './async-iterable-to-array.js';
-import {expect} from '@esm-bundle/chai';
-import type {JSONValue} from './json.js';
-import {closeAllReps, reps} from './test-util.js';
 import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
+import {expect} from 'chai';
+import {asyncIterableToArray} from './async-iterable-to-array.js';
+import type {JSONValue} from './json.js';
+import {ReplicacheTest, closeAllReps, reps} from './test-util.js';
+import type {ReadTransaction, WriteTransaction} from './transactions.js';
 
 onmessage = async (e: MessageEvent) => {
   const {name} = e.data;

@@ -1,4 +1,4 @@
-import {assert, expect} from '@esm-bundle/chai';
+import {assert, expect} from 'chai';
 import * as dag from '../dag/mod.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';

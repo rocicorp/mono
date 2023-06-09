@@ -1,9 +1,9 @@
-import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
+import {expect} from 'chai';
 import sinon from 'sinon';
 import {
-  reloadWithReason,
   RELOAD_REASON_STORAGE_KEY,
+  reloadWithReason,
   reportReloadReason,
 } from './reload-error-handler.js';
 import {TestLogSink} from './test-utils.js';

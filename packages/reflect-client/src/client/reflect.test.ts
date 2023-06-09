@@ -1,6 +1,7 @@
-import {assert, expect} from '@esm-bundle/chai';
-import {resolver} from '@rocicorp/resolver';
 import type {Context} from '@rocicorp/logger';
+import {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
+import {expect} from 'chai';
 import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
 import {
   ExperimentalMemKVStore,
@@ -11,19 +12,20 @@ import {
   PushRequestV1,
   WriteTransaction,
 } from 'replicache';
+import {assert} from 'shared/asserts.js';
 import * as valita from 'shared/valita.js';
 import * as sinon from 'sinon';
 import {REPORT_INTERVAL_MS} from './metrics.js';
 import {
   CONNECT_TIMEOUT_MS,
   ConnectionState,
+  DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
   createSocket,
   serverAheadReloadReason,
-  DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
 } from './reflect.js';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
 import {ServerError} from './server-error.js';
@@ -31,12 +33,11 @@ import {
   MockSocket,
   TestLogSink,
   TestReflect,
+  idbExists,
   reflectForTest,
   tickAFewTimes,
   waitForUpstreamMessage,
-  idbExists,
 } from './test-utils.js'; // Why use fakes when we can use the real thing!
-import {LogContext} from '@rocicorp/logger';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -1397,14 +1398,14 @@ test('InvalidConnectionRequest', async () => {
   const msg = testLogSink.messages.at(-1);
   assert(msg);
 
-  assert.equal(msg[0], 'error');
+  expect(msg[0]).equal('error');
 
   const err = msg[2].at(-2);
   assert(err instanceof ServerError);
-  assert.equal(err.message, 'InvalidConnectionRequest: test');
+  expect(err.message).equal('InvalidConnectionRequest: test');
 
   const data = msg[2].at(-1);
-  assert.deepEqual(data, {
+  expect(data).deep.equal({
     lmid: 0,
     baseCookie: null,
   });

@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {fakeHash, Hash} from '../hash.js';
 import {computeRefCountUpdates, RefCountUpdatesDelegate} from './gc.js';
 

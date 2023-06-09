@@ -1,5 +1,5 @@
-import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
+import {expect} from 'chai';
 import sinon from 'sinon';
 import {
   DID_NOT_CONNECT_VALUE,

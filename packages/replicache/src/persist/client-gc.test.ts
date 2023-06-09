@@ -1,13 +1,13 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
+import {assertNotUndefined} from 'shared/asserts.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import * as dag from '../dag/mod.js';
-import {ClientMap, getClients, setClient} from './clients.js';
 import {newUUIDHash} from '../hash.js';
-import {initClientGC, getLatestGCUpdate} from './client-gc.js';
-import {makeClientV4, setClientsForTesting} from './clients-test-helpers.js';
-import {assertNotUndefined} from 'shared/asserts.js';
 import {withRead, withWrite} from '../with-transactions.js';
+import {getLatestGCUpdate, initClientGC} from './client-gc.js';
+import {makeClientV4, setClientsForTesting} from './clients-test-helpers.js';
+import {ClientMap, getClients, setClient} from './clients.js';
 
 let clock: SinonFakeTimers;
 const START_TIME = 0;

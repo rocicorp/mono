@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import * as sinon from 'sinon';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 

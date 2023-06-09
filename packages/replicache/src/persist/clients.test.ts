@@ -1,5 +1,5 @@
-import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
+import {expect} from 'chai';
 import {assert, assertNotUndefined} from 'shared/asserts.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {BTreeRead} from '../btree/read.js';

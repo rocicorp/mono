@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import * as dag from '../dag/mod.js';
 import {MetaType} from '../db/commit.js';
 import {ChainBuilder} from '../db/test-helpers.js';

@@ -1,21 +1,21 @@
 import {LogContext, LogSink} from '@rocicorp/logger';
-import {expect, assert} from '@esm-bundle/chai';
+import {resolver} from '@rocicorp/resolver';
+import {expect} from 'chai';
+import {assert, assertNotUndefined} from 'shared/asserts.js';
 import * as sinon from 'sinon';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import * as dag from '../dag/mod.js';
+import {assertHash, fakeHash} from '../hash.js';
+import {IDBNotFoundError, IDBStore} from '../kv/idb-store.js';
+import {dropIDBStore} from '../kv/mod.js';
+import {withRead} from '../with-transactions.js';
+import {makeClientV5, setClientsForTesting} from './clients-test-helpers.js';
+import {ClientMap, ClientStateNotFoundError, getClients} from './clients.js';
 import {
   latestHeartbeatUpdate,
   startHeartbeats,
   writeHeartbeat,
 } from './heartbeat.js';
-import {ClientMap, ClientStateNotFoundError, getClients} from './clients.js';
-import {assertHash, fakeHash} from '../hash.js';
-import {makeClientV5, setClientsForTesting} from './clients-test-helpers.js';
-import {assertNotUndefined} from 'shared/asserts.js';
-import {IDBNotFoundError, IDBStore} from '../kv/idb-store.js';
-import {dropIDBStore} from '../kv/mod.js';
-import {resolver} from '@rocicorp/resolver';
-import {withRead} from '../with-transactions.js';
 
 let clock: SinonFakeTimers;
 const START_TIME = 100000;
@@ -275,13 +275,13 @@ test('heartbeat with dropped idb throws', async () => {
 
   await clock.tickAsync(ONE_MIN_IN_MS / 2);
 
-  assert.equal(onClientStateNotFound.callCount, 0);
+  expect(onClientStateNotFound.callCount).equal(0);
 
   await promise;
 
-  assert.equal(message.length, 3);
+  expect(message).lengthOf(3);
   assert(message[2] instanceof IDBNotFoundError);
-  assert.equal(message[2].message, `Replicache IndexedDB not found: ${name}`);
+  expect(message[2].message).equal(`Replicache IndexedDB not found: ${name}`);
 
   controller.abort();
 });

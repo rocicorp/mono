@@ -1,5 +1,5 @@
+import {expect} from 'chai';
 import {PeekIterator} from '../util/peek-iterator.js';
-import {expect} from '@esm-bundle/chai';
 
 test('PeekIterator', () => {
   const c = new PeekIterator('abc'[Symbol.iterator]());

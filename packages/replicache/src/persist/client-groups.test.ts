@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import * as dag from '../dag/mod.js';
 import {assertHash, fakeHash, Hash} from '../hash.js';
 import type {ClientGroupID} from '../sync/ids.js';
