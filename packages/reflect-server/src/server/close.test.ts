@@ -14,14 +14,14 @@ test('handleClose deletes client map entry for client id if socket matches', () 
       [client1ID]: {
         clientGroupID: 'cg1',
         socket: client1Socket,
-        userData: {userID: 'userID1'},
+        auth: {userID: 'userID1'},
         clockOffsetMs: 1000,
         debugPerf: false,
       },
       [client2ID]: {
         clientGroupID: 'cg1',
         socket: client2Socket,
-        userData: {userID: 'userID2'},
+        auth: {userID: 'userID2'},
         clockOffsetMs: 2000,
         debugPerf: false,
       },
@@ -33,7 +33,7 @@ test('handleClose deletes client map entry for client id if socket matches', () 
   expect(clientMap.get(client2ID)).toEqual({
     clientGroupID: 'cg1',
     socket: client2Socket,
-    userData: {userID: 'userID2'},
+    auth: {userID: 'userID2'},
     clockOffsetMs: 2000,
     debugPerf: false,
   });
@@ -51,14 +51,14 @@ test('handleClose does not delete client map entry for client id if socket does 
       [client1ID]: {
         clientGroupID: 'cg1',
         socket: client1Socket2,
-        userData: {userID: 'userID1'},
+        auth: {userID: 'userID1'},
         clockOffsetMs: 1000,
         debugPerf: false,
       },
       [client2ID]: {
         clientGroupID: 'cg1',
         socket: client2Socket,
-        userData: {userID: 'userID2'},
+        auth: {userID: 'userID2'},
         clockOffsetMs: 2000,
         debugPerf: false,
       },
@@ -68,14 +68,14 @@ test('handleClose does not delete client map entry for client id if socket does 
   expect(clientMap.get(client1ID)).toEqual({
     clientGroupID: 'cg1',
     socket: client1Socket2,
-    userData: {userID: 'userID1'},
+    auth: {userID: 'userID1'},
     clockOffsetMs: 1000,
     debugPerf: false,
   });
   expect(clientMap.get(client2ID)).toEqual({
     clientGroupID: 'cg1',
     socket: client2Socket,
-    userData: {userID: 'userID2'},
+    auth: {userID: 'userID2'},
     clockOffsetMs: 2000,
     debugPerf: false,
   });

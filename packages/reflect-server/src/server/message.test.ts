@@ -83,7 +83,7 @@ describe('handleMessage', () => {
             originTimestamp: 10,
             serverReceivedTimestamp: 0,
           },
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID: 'c1',
@@ -94,7 +94,7 @@ describe('handleMessage', () => {
             originTimestamp: 20,
             serverReceivedTimestamp: 0,
           },
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
     },

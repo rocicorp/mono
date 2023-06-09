@@ -31,7 +31,7 @@ import {
   recordConnection,
   AUTH_HANDLER_TIMEOUT_MS,
 } from './auth-do.js';
-import {AuthHandler, USER_DATA_HEADER_NAME} from './auth.js';
+import {AuthHandler, AUTH_DATA_HEADER_NAME} from './auth.js';
 import {
   TestDurableObjectId,
   TestDurableObjectState,
@@ -973,7 +973,7 @@ function createConnectTestFixture(
           return new Response();
         }
         expect(request.url).toEqual(testRequest.url);
-        expect(request.headers.get(USER_DATA_HEADER_NAME)).toEqual(
+        expect(request.headers.get(AUTH_DATA_HEADER_NAME)).toEqual(
           encodeHeaderValue(JSON.stringify({userID: testUserID})),
         );
         if (encodedTestAuth !== undefined) {
@@ -1053,7 +1053,7 @@ describe("connect will implicitly create a room that doesn't exist", () => {
   t('invalid');
 });
 
-test('connect calls authHandler and sends resolved UserData in header to Room DO', async () => {
+test('connect calls authHandler and sends resolved AuthData in header to Room DO', async () => {
   const {
     testAuth,
     testUserID,
@@ -1091,7 +1091,7 @@ test('connect calls authHandler and sends resolved UserData in header to Room DO
   );
 });
 
-describe('connect with undefined authHandler sends UserData with url param userID to roomDO', () => {
+describe('connect with undefined authHandler sends AuthData with url param userID to roomDO', () => {
   const t = (
     tTestAuth: string | undefined,
     tEncodedTestAuth: string | undefined,
@@ -1307,7 +1307,7 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
       expect(roomID).toEqual(testRoomID);
       return null;
     },
-    'no userData',
+    'no authData',
   );
 
   t(
@@ -1317,7 +1317,7 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
       expect(roomID).toEqual(testRoomID);
       return Promise.resolve(null);
     },
-    'no userData',
+    'no authData',
   );
 
   t(

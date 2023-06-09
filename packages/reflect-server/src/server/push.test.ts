@@ -94,7 +94,7 @@ describe('handlePush', () => {
           id: 3,
           timestamps: timestamps(10),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
     },
@@ -113,7 +113,7 @@ describe('handlePush', () => {
           id: 3,
           timestamps: timestamps(10),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -121,7 +121,7 @@ describe('handlePush', () => {
           id: 4,
           timestamps: timestamps(20),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
     },
@@ -145,7 +145,7 @@ describe('handlePush', () => {
           id: 3,
           timestamps: undefined,
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -153,7 +153,7 @@ describe('handlePush', () => {
           id: 4,
           timestamps: undefined,
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -161,7 +161,7 @@ describe('handlePush', () => {
           id: 5,
           timestamps: timestamps(51),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
     },
@@ -188,7 +188,7 @@ describe('handlePush', () => {
           id: 3,
           timestamps: timestamps(10),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID: 'c2',
@@ -196,7 +196,7 @@ describe('handlePush', () => {
           id: 5,
           timestamps: undefined,
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -204,7 +204,7 @@ describe('handlePush', () => {
           id: 4,
           timestamps: timestamps(20),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
     },
@@ -227,7 +227,7 @@ describe('handlePush', () => {
           id: 3,
           timestamps: timestamps(10),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID: 'c2',
@@ -235,7 +235,7 @@ describe('handlePush', () => {
           id: 1,
           timestamps: undefined,
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -243,7 +243,7 @@ describe('handlePush', () => {
           id: 4,
           timestamps: timestamps(20),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
       expectedClientRecords: new Map([
@@ -274,7 +274,7 @@ describe('handlePush', () => {
           id: 5,
           timestamps: undefined,
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -282,7 +282,7 @@ describe('handlePush', () => {
           id: 4,
           timestamps: timestamps(20),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
     },
@@ -299,7 +299,7 @@ describe('handlePush', () => {
           id: 3,
           timestamps: timestamps(10),
           pusherClientIDs: new Set(['c3']),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -307,7 +307,7 @@ describe('handlePush', () => {
           id: 4,
           timestamps: timestamps(20),
           pusherClientIDs: new Set(['c3']),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
       mutations: [
@@ -326,7 +326,7 @@ describe('handlePush', () => {
           id: 3,
           timestamps: timestamps(10),
           pusherClientIDs: new Set([clientID, 'c3']),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID: 'c2',
@@ -334,7 +334,7 @@ describe('handlePush', () => {
           id: 5,
           timestamps: undefined,
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -342,7 +342,7 @@ describe('handlePush', () => {
           id: 4,
           timestamps: timestamps(20),
           pusherClientIDs: new Set([clientID, 'c3']),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
     },
@@ -428,7 +428,7 @@ describe('handlePush', () => {
             serverReceivedTimestamp: 500,
           },
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
       expectedClientMap: new Map([
@@ -456,7 +456,7 @@ describe('handlePush', () => {
             serverReceivedTimestamp: 700,
           },
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
       expectedClientMap: new Map([
@@ -484,7 +484,7 @@ describe('handlePush', () => {
             serverReceivedTimestamp: 1110,
           },
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
       expectedClientMap: new Map([
@@ -522,7 +522,7 @@ describe('handlePush', () => {
           id: 3,
           timestamps: timestamps(10),
           pusherClientIDs: new Set(['c2']),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID: 'c2',
@@ -530,7 +530,7 @@ describe('handlePush', () => {
           id: 4,
           timestamps: timestamps(30),
           pusherClientIDs: new Set(['c2']),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
       mutations: [
@@ -552,7 +552,7 @@ describe('handlePush', () => {
           id: 5,
           timestamps: timestamps(1),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -560,7 +560,7 @@ describe('handlePush', () => {
           id: 6,
           timestamps: timestamps(9),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID: 'c2',
@@ -568,7 +568,7 @@ describe('handlePush', () => {
           id: 3,
           timestamps: timestamps(10),
           pusherClientIDs: new Set(['c2']),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -576,7 +576,7 @@ describe('handlePush', () => {
           id: 7,
           timestamps: timestamps(10),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -584,7 +584,7 @@ describe('handlePush', () => {
           id: 8,
           timestamps: timestamps(29),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID: 'c2',
@@ -592,7 +592,7 @@ describe('handlePush', () => {
           id: 4,
           timestamps: timestamps(30),
           pusherClientIDs: new Set(['c2']),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -600,7 +600,7 @@ describe('handlePush', () => {
           id: 9,
           timestamps: timestamps(30),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -608,7 +608,7 @@ describe('handlePush', () => {
           id: 10,
           timestamps: timestamps(70),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
     },
@@ -625,7 +625,7 @@ describe('handlePush', () => {
           id: 3,
           timestamps: timestamps(10),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID: 'c2',
@@ -633,7 +633,7 @@ describe('handlePush', () => {
           id: 4,
           timestamps: timestamps(30),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
       mutations: [
@@ -654,7 +654,7 @@ describe('handlePush', () => {
           id: 3,
           timestamps: timestamps(10),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID: 'c2',
@@ -662,7 +662,7 @@ describe('handlePush', () => {
           id: 4,
           timestamps: timestamps(30),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -670,7 +670,7 @@ describe('handlePush', () => {
           id: 5,
           timestamps: timestamps(5),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID: 'c2',
@@ -678,7 +678,7 @@ describe('handlePush', () => {
           id: 5,
           timestamps: undefined,
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -686,7 +686,7 @@ describe('handlePush', () => {
           id: 6,
           timestamps: timestamps(25),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -694,7 +694,7 @@ describe('handlePush', () => {
           id: 7,
           timestamps: timestamps(80),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -702,7 +702,7 @@ describe('handlePush', () => {
           id: 8,
           timestamps: timestamps(70),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
     },
@@ -719,7 +719,7 @@ describe('handlePush', () => {
           id: 3,
           timestamps: timestamps(10),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u2'},
+          auth: {userID: 'u2'},
         }),
         pendingMutation({
           clientID: 'c2',
@@ -727,7 +727,7 @@ describe('handlePush', () => {
           id: 4,
           timestamps: timestamps(30),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u2'},
+          auth: {userID: 'u2'},
         }),
       ],
       mutations: [
@@ -747,7 +747,7 @@ describe('handlePush', () => {
           id: 5,
           timestamps: timestamps(5),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID: 'c2',
@@ -755,7 +755,7 @@ describe('handlePush', () => {
           id: 3,
           timestamps: timestamps(10),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u2'},
+          auth: {userID: 'u2'},
         }),
         pendingMutation({
           clientID,
@@ -763,7 +763,7 @@ describe('handlePush', () => {
           id: 6,
           timestamps: timestamps(25),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID: 'c2',
@@ -771,7 +771,7 @@ describe('handlePush', () => {
           id: 4,
           timestamps: timestamps(30),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u2'},
+          auth: {userID: 'u2'},
         }),
         pendingMutation({
           clientID,
@@ -779,7 +779,7 @@ describe('handlePush', () => {
           id: 7,
           timestamps: timestamps(80),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
         pendingMutation({
           clientID,
@@ -787,7 +787,7 @@ describe('handlePush', () => {
           id: 8,
           timestamps: timestamps(70),
           pusherClientIDs: new Set([clientID]),
-          userData: {userID: 'u1'},
+          auth: {userID: 'u1'},
         }),
       ],
     },

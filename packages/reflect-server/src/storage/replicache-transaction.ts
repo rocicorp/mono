@@ -7,7 +7,7 @@ import {
   TransactionEnvironment,
   TransactionReason,
 } from 'replicache';
-import type {WriteTransaction, UserData} from 'reflect-types';
+import type {WriteTransaction, AuthData} from 'reflect-types';
 import type {ReadonlyJSONValue} from 'shared/json.js';
 import * as v from 'shared/valita.js';
 import type {ClientID} from '../types/client-state.js';
@@ -25,7 +25,7 @@ import type {Storage} from './storage.js';
 export class ReplicacheTransaction implements WriteTransaction {
   readonly clientID: ClientID;
   readonly mutationID: number;
-  readonly userData?: UserData | undefined;
+  readonly auth?: AuthData | undefined;
   private _storage: Storage;
   private _version: Version;
 
@@ -37,13 +37,13 @@ export class ReplicacheTransaction implements WriteTransaction {
     clientID: string,
     mutationID: number,
     version: Version,
-    userData: UserData | undefined,
+    auth: AuthData | undefined,
   ) {
     this._storage = storage;
     this.clientID = clientID;
     this._version = version;
     this.mutationID = mutationID;
-    this.userData = userData;
+    this.auth = auth;
   }
 
   async put(key: string, value: ReadonlyJSONValue): Promise<void> {

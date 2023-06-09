@@ -64,7 +64,7 @@ export async function processMutation(
       clientID,
       pendingMutation.id,
       version,
-      pendingMutation.userData,
+      pendingMutation.auth,
     );
     try {
       const mutator = mutators.get(pendingMutation.name);

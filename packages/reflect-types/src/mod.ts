@@ -6,21 +6,26 @@ import type {
 } from 'replicache';
 
 /**
- * `UserData` must include a `userID` which is unique stable identifier
+ * `AuthData` must include a `userID` which is unique stable identifier
  * for the user.
- * `UserData` has a size limit of 6 KB.
- * `UserData` is passed via {@link WriteTransaction.userData} to mutators
+ * `AuthData` has a size limit of 6 KB.
+ * `AuthData` is passed via {@link WriteTransaction.auth} to mutators
  * when they are run on the server, which can use it to supplement
- * mutator args and to validate the mutation.
+ * mutator args and to authorize the mutation.
  */
-export type UserData = ReadonlyJSONObject & {userID: string};
+export type AuthData = ReadonlyJSONObject & {readonly userID: string};
+
+/**
+ * Alias for {@link AuthData}, kept for backward compatibility.
+ */
+export type UserData = AuthData;
 
 export interface ReadTransaction extends ReplicacheReadTransaction {
-  readonly userData?: UserData | undefined;
+  readonly auth?: AuthData | undefined;
 }
 
 export interface WriteTransaction extends ReplicacheWriteTransaction {
-  readonly userData?: UserData | undefined;
+  readonly auth?: AuthData | undefined;
 }
 
 export type MutatorDefs = {

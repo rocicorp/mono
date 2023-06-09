@@ -26,6 +26,7 @@ export function createClientDatadogLogSink(opts: ClientDatadogLogSinkOptions) {
 export {
   ReadTransaction,
   WriteTransaction,
+  AuthData,
   UserData,
   MutatorDefs,
 } from 'reflect-types';

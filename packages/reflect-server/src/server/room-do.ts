@@ -337,7 +337,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
           `Closing user ${userID}'s connections fulfilling auth api invalidateForUser request.`,
         );
         await this._closeConnections(
-          clientState => clientState.userData.userID === userID,
+          clientState => clientState.auth.userID === userID,
         );
         return new Response('Success', {status: 200});
       }),

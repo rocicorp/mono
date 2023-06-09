@@ -1,7 +1,7 @@
 import {afterEach, beforeEach, jest} from '@jest/globals';
 import {Context, LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import type {Mutation, NullableVersion} from 'reflect-protocol';
-import type {UserData} from 'reflect-types';
+import type {AuthData} from 'reflect-types';
 import type {ReadonlyJSONValue} from 'shared/json.js';
 import type {ClientRecord} from '../../src/types/client-record.js';
 import type {
@@ -35,7 +35,7 @@ export function client(
     id,
     {
       socket,
-      userData: {userID},
+      auth: {userID},
       clientGroupID,
       clockOffsetMs: clockBehindByMs,
       debugPerf,
@@ -74,7 +74,7 @@ export function pendingMutation(opts: {
   pusherClientIDs?: Set<ClientID>;
   name?: string;
   args?: ReadonlyJSONValue;
-  userData?: UserData | undefined;
+  auth?: AuthData | undefined;
 }): PendingMutation {
   const {
     clientID,
@@ -84,7 +84,7 @@ export function pendingMutation(opts: {
     pusherClientIDs = new Set([clientID]),
     name = 'foo',
     args = [],
-    userData = {userID: 'testUser1'},
+    auth = {userID: 'testUser1'},
   } = opts;
   return {
     clientID,
@@ -101,7 +101,7 @@ export function pendingMutation(opts: {
           }
         : timestamps,
     pusherClientIDs,
-    userData,
+    auth,
   };
 }
 

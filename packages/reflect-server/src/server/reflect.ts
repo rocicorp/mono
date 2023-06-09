@@ -1,5 +1,5 @@
 import {consoleLogSink, LogLevel, LogSink, TeeLogSink} from '@rocicorp/logger';
-import type {MutatorDefs} from 'replicache';
+import type {MutatorDefs} from 'reflect-types';
 import {BaseAuthDO} from './auth-do.js';
 import type {AuthHandler} from './auth.js';
 import type {RoomStartHandler} from './room-start.js';
