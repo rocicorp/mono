@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import type {IndexKey} from './db/index.js';
 import type {ReadonlyJSONValue} from './json.js';

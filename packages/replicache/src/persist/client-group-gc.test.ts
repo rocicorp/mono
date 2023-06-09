@@ -1,5 +1,10 @@
-import {SinonFakeTimers, useFakeTimers} from 'sinon';
+import {LogContext} from '@rocicorp/logger';
+import {expect} from 'chai';
 import {assertNotUndefined} from 'shared/asserts.js';
+import {SinonFakeTimers, useFakeTimers} from 'sinon';
+import * as dag from '../dag/mod.js';
+import {fakeHash} from '../hash.js';
+import {withRead, withWrite} from '../with-transactions.js';
 import {getLatestGCUpdate, initClientGroupGC} from './client-group-gc.js';
 import {
   ClientGroup,
@@ -8,12 +13,7 @@ import {
   setClientGroup,
   setClientGroups,
 } from './client-groups.js';
-import * as dag from '../dag/mod.js';
-import {fakeHash} from '../hash.js';
 import {makeClientV6, setClientsForTesting} from './clients-test-helpers.js';
-import {LogContext} from '@rocicorp/logger';
-import {expect} from '@esm-bundle/chai';
-import {withRead, withWrite} from '../with-transactions.js';
 
 let clock: SinonFakeTimers;
 const START_TIME = 0;

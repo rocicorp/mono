@@ -1,4 +1,3 @@
-import {assert as chaiAssert, expect} from '@esm-bundle/chai';
 import {
   LicenseStatus,
   PROD_LICENSE_SERVER_URL,
@@ -10,6 +9,7 @@ import {
 } from '@rocicorp/licensing/src/server/api-types.js';
 import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {assert as chaiAssert, expect} from 'chai';
 import {assert} from 'shared/asserts.js';
 import {sleep} from 'shared/sleep.js';
 import * as sinon from 'sinon';

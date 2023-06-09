@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import type * as dag from '../dag/mod.js';
 import {commitIsSnapshot} from '../db/commit.js';
 import * as db from '../db/mod.js';

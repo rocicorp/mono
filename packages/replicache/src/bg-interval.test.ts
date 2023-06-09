@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import sinon, {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {initBgIntervalProcess} from './bg-interval.js';
 

@@ -1,12 +1,12 @@
+import {expect} from 'chai';
+import type {JSONValue} from './json.js';
+import type {WriteTransaction} from './mod.js';
 import {
   initReplicacheTesting,
   makePullResponseV1,
   replicacheForTesting,
   tickAFewTimes,
 } from './test-util.js';
-import type {WriteTransaction} from './mod.js';
-import type {JSONValue} from './json.js';
-import {expect} from '@esm-bundle/chai';
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error

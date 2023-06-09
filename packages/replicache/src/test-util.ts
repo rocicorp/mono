@@ -1,35 +1,35 @@
-import {expect} from '@esm-bundle/chai';
-import {MutatorDefs, Replicache, BeginPullResult} from './replicache.js';
-import type {
-  ReplicacheOptions,
-  ReplicacheInternalOptions,
-  ReplicacheInternalAPI,
-} from './replicache-options.js';
-import * as kv from './kv/mod.js';
-import {SinonFakeTimers, useFakeTimers} from 'sinon';
+import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
+import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
+import {expect} from 'chai';
 import * as sinon from 'sinon';
+import {SinonFakeTimers, useFakeTimers} from 'sinon';
+import type {Cookie} from './cookies.js';
+import type {Hash} from './hash.js';
 import type {JSONValue} from './json.js';
+import {MemStore} from './kv/mem-store.js';
+import * as kv from './kv/mod.js';
+import type {PatchOperation} from './patch-operation.js';
+import {
+  setupForTest as setupIDBDatabasesStoreForTest,
+  teardownForTest as teardownIDBDatabasesStoreForTest,
+} from './persist/idb-databases-store-db-name.js';
+import type {PullResponseV1} from './puller.js';
+import type {
+  ReplicacheInternalAPI,
+  ReplicacheInternalOptions,
+  ReplicacheOptions,
+} from './replicache-options.js';
+import {BeginPullResult, MutatorDefs, Replicache} from './replicache.js';
+import type {DiffComputationConfig} from './sync/diff.js';
+import type {ClientID} from './sync/ids.js';
+import type {WriteTransaction} from './transactions.js';
+import {uuid} from './uuid.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {uuid} from './uuid.js';
-import type {WriteTransaction} from './transactions.js';
-import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
-import type {DiffComputationConfig} from './sync/diff.js';
-import type {ClientID} from './sync/ids.js';
-import type {PullResponseV1} from './puller.js';
-import type {Hash} from './hash.js';
-import {
-  setupForTest as setupIDBDatabasesStoreForTest,
-  teardownForTest as teardownIDBDatabasesStoreForTest,
-} from './persist/idb-databases-store-db-name.js';
-import {resolver} from '@rocicorp/resolver';
-import type {Cookie} from './cookies.js';
-import type {PatchOperation} from './patch-operation.js';
-import {MemStore} from './kv/mem-store.js';
-import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
 
 export class ReplicacheTest<
   // eslint-disable-next-line @typescript-eslint/ban-types

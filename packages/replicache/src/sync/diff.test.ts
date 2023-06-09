@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import type {InternalDiff} from '../btree/node.js';
 import * as dag from '../dag/mod.js';
 import {ChainBuilder} from '../db/test-helpers.js';

@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {BTreeWrite} from '../btree/mod.js';
 import * as dag from '../dag/mod.js';
 import {FormatVersion} from '../format-version.js';

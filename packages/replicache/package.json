@@ -26,11 +26,11 @@
     "@rocicorp/resolver": "^1.0.0"
   },
   "devDependencies": {
-    "@esm-bundle/chai": "^4.3.4-fix.0",
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/licensing": "^7.0.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "@rollup/plugin-node-resolve": "^15.0.1",
+    "@types/chai": "^4.3.5",
     "@types/command-line-usage": "^5.0.2",
     "@types/mocha": "^9.1.0",
     "@types/sinon": "^10.0.11",
@@ -39,6 +39,7 @@
     "@web/test-runner": "^0.15.1",
     "@web/test-runner-playwright": "^0.9.0",
     "benchmark": "^2.1.4",
+    "chai": "^5.0.0-alpha.0",
     "command-line-args": "^5.2.1",
     "command-line-usage": "^6.1.2",
     "compare-utf8": "^0.1.1",

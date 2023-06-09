@@ -1,6 +1,6 @@
-import {expect} from '@esm-bundle/chai';
-import {uuid, uuidFromNumbers, uuidNoNative} from './uuid.js';
+import {expect} from 'chai';
 import * as sinon from 'sinon';
+import {uuid, uuidFromNumbers, uuidNoNative} from './uuid.js';
 
 teardown(() => {
   sinon.restore();

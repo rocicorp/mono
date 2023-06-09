@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import {filterAsyncIterable} from './filter-async-iterable.js';
 import {makeAsyncIterable} from './merge-async-iterables.test.js';

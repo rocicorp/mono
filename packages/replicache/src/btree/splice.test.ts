@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import type {ReadonlyJSONValue} from '../json.js';
 import {computeSplices, Splice} from './splice.js';
 

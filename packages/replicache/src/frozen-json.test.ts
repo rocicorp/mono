@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {deepFreeze, isDeepFrozen} from './frozen-json.js';
 import type {ReadonlyJSONValue} from './json.js';
 

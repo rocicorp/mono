@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import * as dag from '../dag/mod.js';
 import {fakeHash, Hash} from '../hash.js';
 import {withWrite} from '../with-transactions.js';

@@ -1,5 +1,5 @@
-import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
+import {expect} from 'chai';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import {BTreeWrite} from '../btree/mod.js';
 import * as dag from '../dag/mod.js';

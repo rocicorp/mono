@@ -1,27 +1,28 @@
+import {resolver} from '@rocicorp/resolver';
+import {expect} from 'chai';
+import * as sinon from 'sinon';
+import {getDefaultPuller} from './get-default-puller.js';
+import {Hash, emptyHash} from './hash.js';
+import type {VersionNotSupportedResponse, WriteTransaction} from './mod.js';
+import type {Puller} from './puller.js';
+import {UpdateNeededReason, httpStatusUnauthorized} from './replicache.js';
 import {
+  TestLogSink,
   disableAllBackgroundProcesses,
   expectConsoleLogContextStub,
   initReplicacheTesting,
   makePullResponseV1,
   replicacheForTesting,
   requestIDLogContextRegex,
-  TestLogSink,
   tickAFewTimes,
   waitForSync,
 } from './test-util.js';
-import type {VersionNotSupportedResponse, WriteTransaction} from './mod.js';
-import {expect, assert} from '@esm-bundle/chai';
-import {emptyHash, Hash} from './hash.js';
-import * as sinon from 'sinon';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {httpStatusUnauthorized, UpdateNeededReason} from './replicache.js';
-import type {Puller} from './puller.js';
-import {getDefaultPuller} from './get-default-puller.js';
-import {resolver} from '@rocicorp/resolver';
+import {assert} from 'shared/asserts.js';
 
 initReplicacheTesting();
 
@@ -302,22 +303,22 @@ test('Client Group not found on server', async () => {
     },
   });
 
-  assert.isFalse(rep.isClientGroupDisabled);
+  expect(rep.isClientGroupDisabled).false;
 
   rep.puller = puller;
   rep.pull();
 
   await waitForSync(rep);
 
-  assert.isTrue(rep.isClientGroupDisabled);
+  expect(rep.isClientGroupDisabled).true;
 
-  assert.lengthOf(testLogSink.messages, 1);
+  expect(testLogSink.messages).lengthOf(1);
   const args = testLogSink.messages[0];
-  assert.lengthOf(args, 3);
-  assert.equal(args[0], 'error');
+  expect(args).lengthOf(3);
+  expect(args[0]).equal('error');
   assert(typeof args[1]?.name === 'string');
   assert(args[2][0] instanceof Error);
-  assert.match(args[2][0].message, /Client group (\S)+ is unknown on server/);
+  expect(args[2][0].message).match(/Client group (\S)+ is unknown on server/);
 });
 
 test('Version not supported on server', async () => {

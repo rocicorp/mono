@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {arrayCompare} from './array-compare.js';
 
 test('array compare', () => {

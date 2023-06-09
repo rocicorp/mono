@@ -1,13 +1,13 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {
-  emptyHash,
-  isHash,
-  parse,
-  newUUIDHash,
-  makeNewFakeHashFunction,
-  fakeHash,
-  STRING_LENGTH,
   Hash,
+  STRING_LENGTH,
+  emptyHash,
+  fakeHash,
+  isHash,
+  makeNewFakeHashFunction,
+  newUUIDHash,
+  parse,
 } from './hash.js';
 
 const emptyUUID = '00000000-0000-4000-8000-000000000000';

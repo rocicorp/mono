@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {assert} from 'shared/asserts.js';
 import sinon from 'sinon';
 import * as dag from './dag/mod.js';

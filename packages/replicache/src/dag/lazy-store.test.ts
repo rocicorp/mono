@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {assertHash, fakeHash, Hash, makeNewFakeHashFunction} from '../hash.js';
 import {deepFreeze} from '../json.js';
 import {withRead, withWrite} from '../with-transactions.js';

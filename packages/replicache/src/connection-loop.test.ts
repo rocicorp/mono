@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {sleep} from 'shared/sleep.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {

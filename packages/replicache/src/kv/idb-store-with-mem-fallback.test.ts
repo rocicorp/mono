@@ -1,13 +1,13 @@
-import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
-import * as sinon from 'sinon';
+import {expect} from 'chai';
 import {assert} from 'shared/asserts.js';
-import {IDBStore} from './idb-store.js';
+import * as sinon from 'sinon';
+import {withRead, withWrite} from '../with-transactions.js';
 import {
   IDBStoreWithMemFallback,
   newIDBStoreWithMemFallback,
 } from './idb-store-with-mem-fallback.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {IDBStore} from './idb-store.js';
 
 teardown(() => {
   sinon.restore();
