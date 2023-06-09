@@ -19,9 +19,10 @@ import {
   assertJSONValue,
   deepFreeze,
 } from '../json.js';
-import type {IndexKey} from '../mod.js';
+
 import type {BTreeRead} from './read.js';
 import type {BTreeWrite} from './write.js';
+import type {IndexKey} from '../db/index.js';
 
 export type Entry<V> = readonly [key: string, value: V, sizeOfEntry: number];
 

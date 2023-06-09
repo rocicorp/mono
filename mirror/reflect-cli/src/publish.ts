@@ -19,7 +19,7 @@ export async function publishHandler(
   yargs.name = yargs.name || 'customer';
 
   const formData = new FormData();
-  formData.append('bundle', content, 'customer.ts');
+  formData.append('bundle', new Blob([content]), 'customer.ts');
 
   await fetch(
     `http://127.0.0.1:5001/reflect-mirror-staging/us-central1/publish`,

@@ -5,6 +5,7 @@ import {
   isScanIndexOptions,
   KeyTypeForScanOptions,
   ScanIndexOptions,
+  ScanNoIndexOptions,
   ScanOptions,
   toDbScanOptions,
 } from './scan-options.js';
@@ -13,9 +14,9 @@ import type {ScanResult} from './scan-iterator.js';
 import {rejectIfClosed, throwIfClosed} from './transaction-closed-error.js';
 import type * as db from './db/mod.js';
 import type {ScanSubscriptionInfo} from './subscriptions.js';
-import type {ClientID, ScanNoIndexOptions} from './mod.js';
 import {decodeIndexKey, IndexKey} from './db/index.js';
 import type {IndexDefinition} from './index-defs.js';
+import type {ClientID} from './sync/ids.js';
 
 export type TransactionEnvironment = 'client' | 'server';
 export type TransactionReason = 'initial' | 'rebase' | 'authoritative';

@@ -17,13 +17,13 @@
   "dependencies": {
     "@badrap/valita": "^0.2.0",
     "@rocicorp/lock": "^1.0.1",
-    "@rocicorp/logger": "^5.1.0",
+    "@rocicorp/logger": "^5.2.0",
     "@rocicorp/resolver": "^1.0.0"
   },
   "devDependencies": {
-    "@types/node": "18",
     "@rocicorp/reflect-client": "0.0.0",
-    "@rocicorp/reflect-server": "0.0.0"
+    "@rocicorp/reflect-server": "0.0.0",
+    "@types/node": "18"
   },
   "files": [
     "client.d.ts",
