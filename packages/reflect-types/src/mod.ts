@@ -21,10 +21,20 @@ export type AuthData = ReadonlyJSONObject & {readonly userID: string};
 export type UserData = AuthData;
 
 export interface ReadTransaction extends ReplicacheReadTransaction {
+  /**
+   * When a mutation is run on the server, the `AuthData` for the connection
+   * that pushed the mutation.  Always undefined on the client. This can be
+   * used to implement fine-grained server-side authorization of mutations.
+   */
   readonly auth?: AuthData | undefined;
 }
 
 export interface WriteTransaction extends ReplicacheWriteTransaction {
+  /**
+   * When a mutation is run on the server, the `AuthData` for the connection
+   * that pushed the mutation.  Always undefined on the client. This can be
+   * used to implement fine-grained server-side authorization of mutations.
+   */
   readonly auth?: AuthData | undefined;
 }
 

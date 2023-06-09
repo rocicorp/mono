@@ -8,7 +8,10 @@ import type {AuthData} from 'reflect-types';
  * @return A promise which resolves to `AuthData` for the user if authentication
  * and authorization is successful. If authentication fails you can return
  * `null`. Exceptions and promise rejections are treated as authentication
- * failures.
+ * failures.  The returned `AuthData` is passed via
+ * {@link WriteTransaction.auth} to mutators when they are run on the server,
+ * and can be used to implement fine-grained server-side authorization of
+ * mutations.
  */
 export type AuthHandler = (
   auth: string,
