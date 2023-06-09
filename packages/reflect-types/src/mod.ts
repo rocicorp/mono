@@ -22,18 +22,22 @@ export type UserData = AuthData;
 
 export interface ReadTransaction extends ReplicacheReadTransaction {
   /**
-   * When a mutation is run on the server, the `AuthData` for the connection
-   * that pushed the mutation.  Always undefined on the client. This can be
-   * used to implement fine-grained server-side authorization of mutations.
+   * When a mutator is run on the server, the `AuthData` for the connection
+   * that pushed the mutation (i.e. the `AuthData` returned by the
+   * {@link ReflectServerOptions.authHandler} when it authenticated the
+   * connection).  Always undefined on the client. This can be used to implement
+   * fine-grained server-side authorization of mutations.
    */
   readonly auth?: AuthData | undefined;
 }
 
 export interface WriteTransaction extends ReplicacheWriteTransaction {
   /**
-   * When a mutation is run on the server, the `AuthData` for the connection
-   * that pushed the mutation.  Always undefined on the client. This can be
-   * used to implement fine-grained server-side authorization of mutations.
+   * When a mutator is run on the server, the `AuthData` for the connection
+   * that pushed the mutation (i.e. the `AuthData` returned by the
+   * {@link ReflectServerOptions.authHandler} when it authenticated the
+   * connection).  Always undefined on the client. This can be used to implement
+   * fine-grained server-side authorization of mutations.
    */
   readonly auth?: AuthData | undefined;
 }
