@@ -29,9 +29,6 @@
   },
   "prettier": "@rocicorp/prettier-config",
   "exports": {
-    ".": {
-      "import": "./src/mod.ts",
-      "types": "./src/mod.ts"
-    }
+    ".": "./src/mod.ts"
   }
 }

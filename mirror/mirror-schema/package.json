@@ -32,50 +32,17 @@
     "firebase-tools": "^12.3.0"
   },
   "exports": {
-    ".": {
-      "import": "./dist/mod.mjs",
-      "types": "./dist/mod.d.ts"
-    },
-    "./agent.js": {
-      "import": "./dist/agent.mjs",
-      "types": "./dist/agent.d.ts"
-    },
-    "./app-key.js": {
-      "import": "./dist/app-key.mjs",
-      "types": "./dist/app-key.d.ts"
-    },
-    "./app.js": {
-      "import": "./dist/app.mjs",
-      "types": "./dist/app.d.ts"
-    },
-    "./cloudflare.js": {
-      "import": "./dist/cloudflare.mjs",
-      "types": "./dist/cloudflare.d.ts"
-    },
-    "./deployment.js": {
-      "import": "./dist/deployment.mjs",
-      "types": "./dist/deployment.d.ts"
-    },
-    "./membership.js": {
-      "import": "./dist/membership.mjs",
-      "types": "./dist/membership.d.ts"
-    },
-    "./server.js": {
-      "import": "./dist/server.mjs",
-      "types": "./dist/server.d.ts"
-    },
-    "./team.js": {
-      "import": "./dist/team.mjs",
-      "types": "./dist/team.d.ts"
-    },
-    "./timestamp.js": {
-      "import": "./dist/timestamp.mjs",
-      "types": "./dist/timestamp.d.ts"
-    },
-    "./user.js": {
-      "import": "./dist/user.mjs",
-      "types": "./dist/user.d.ts"
-    }
+    ".": "./dist/mod.mjs",
+    "./agent.js": "./dist/agent.mjs",
+    "./app-key.js": "./dist/app-key.mjs",
+    "./app.js": "./dist/app.mjs",
+    "./cloudflare.js": "./dist/cloudflare.mjs",
+    "./deployment.js": "./dist/deployment.mjs",
+    "./membership.js": "./dist/membership.mjs",
+    "./server.js": "./dist/server.mjs",
+    "./team.js": "./dist/team.mjs",
+    "./timestamp.js": "./dist/timestamp.mjs",
+    "./user.js": "./dist/user.mjs"
   },
   "files": [
     "dist"
