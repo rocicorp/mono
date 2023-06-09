@@ -29,7 +29,7 @@
     "tslib": "^2.5.2"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.4.1",
+    "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/busboy": "^1.5.0",
     "@types/cors": "^2.8.12",

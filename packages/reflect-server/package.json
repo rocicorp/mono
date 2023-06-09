@@ -36,7 +36,7 @@
   "//1": "Note: we need these precise versions of miniflare and jest-environment-miniflare due to: https://github.com/rocicorp/reflect-server/issues/148",
   "devDependencies": {
     "@cloudflare/workers-types": "^3.8.0",
-    "@rocicorp/eslint-config": "^0.4.1",
+    "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
     "@rollup/plugin-node-resolve": "^15.0.1",
     "compare-utf8": "^0.1.1",

@@ -5,7 +5,7 @@
   "module": "./src/mod.ts",
   "types": "./src/mod.ts",
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.4.1",
+    "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/lock": "^1.0.1",
     "@rocicorp/logger": "^5.1.0",
     "@rocicorp/prettier-config": "^0.1.1",

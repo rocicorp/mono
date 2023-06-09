@@ -15,7 +15,7 @@
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.4.1",
+    "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/node": "18",
     "@types/yargs": "^17.0.10",
