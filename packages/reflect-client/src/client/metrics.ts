@@ -93,7 +93,7 @@ export class MetricManager {
 
   // Flushes all metrics to an array of time series (plural), one Series
   // per metric.
-  public async flush() {
+  async flush() {
     const lc = await this._lc;
     if (this._timerID === null) {
       lc.error?.('MetricManager.flush() called but already stopped');
@@ -121,7 +121,7 @@ export class MetricManager {
     }
   }
 
-  public stop() {
+  stop() {
     if (this._timerID === null) {
       void this._lc.then(l =>
         l.error?.('MetricManager.stop() called but already stopped'),
@@ -187,11 +187,11 @@ export class Gauge implements Flushable {
     this._name = name;
   }
 
-  public set(value: number) {
+  set(value: number) {
     this._value = value;
   }
 
-  public flush() {
+  flush() {
     // Gauge reports the timestamp at flush time, not at the point the value was
     // recorded.
     const points =
@@ -227,15 +227,15 @@ export class State implements Flushable {
     this._clearOnFlush = clearOnFlush;
   }
 
-  public set(state: string) {
+  set(state: string) {
     this._current = state;
   }
 
-  public clear() {
+  clear() {
     this._current = undefined;
   }
 
-  public flush() {
+  flush() {
     if (this._current === undefined) {
       return undefined;
     }
