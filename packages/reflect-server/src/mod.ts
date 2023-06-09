@@ -35,6 +35,5 @@ export {
   ReadTransaction,
   WriteTransaction,
   AuthData,
-  UserData,
   MutatorDefs,
 } from 'reflect-types';

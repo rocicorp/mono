@@ -15,11 +15,6 @@ import type {
  */
 export type AuthData = ReadonlyJSONObject & {readonly userID: string};
 
-/**
- * Alias for {@link AuthData}, kept for backward compatibility.
- */
-export type UserData = AuthData;
-
 export interface ReadTransaction extends ReplicacheReadTransaction {
   /**
    * When a mutator is run on the server, the `AuthData` for the connection
