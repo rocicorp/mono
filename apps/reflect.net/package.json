@@ -41,7 +41,7 @@
     "@cloudflare/workers-types": "^3.8.0",
     "@datadog/browser-logs": "^4.11.3",
     "@next/font": "13.1.5",
-    "@rocicorp/eslint-config": "^0.4.1",
+    "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
     "@rocicorp/rails": "^0.5.0-beta.0",
     "@rocicorp/resolver": "^1.0.0",
