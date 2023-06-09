@@ -1,0 +1,28 @@
+{
+  "name": "reflect-types",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "module": "./src/mod.ts",
+  "types": "./src/mod.ts",
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "format": "prettier --write *",
+    "check-format": "prettier --check *",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+  },
+  "devDependencies": {
+    "replicache": "13.0.0-beta.0",
+    "typescript": "^4.9.5"
+  },
+  "exports": {
+    ".": {
+      "import": "./src/mod.ts",
+      "types": "./src/mod.ts"
+    }
+  },
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}

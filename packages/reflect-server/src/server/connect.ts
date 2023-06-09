@@ -11,8 +11,7 @@ import type {
 } from '../types/client-state.js';
 import type {LogContext} from '@rocicorp/logger';
 import type {ConnectedMessage} from 'reflect-protocol';
-import type {UserData} from './auth.js';
-import {USER_DATA_HEADER_NAME} from './auth.js';
+import {AUTH_DATA_HEADER_NAME} from './auth.js';
 import {decodeHeaderValue} from '../util/headers.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {compareVersions, getVersion} from '../types/version.js';
@@ -20,6 +19,7 @@ import type {NullableVersion, Version} from 'reflect-protocol';
 import {send, closeWithError} from '../util/socket.js';
 import {assert} from 'shared/asserts.js';
 import type {ErrorKind} from 'reflect-protocol';
+import type {AuthData} from 'reflect-types';
 
 export type MessageHandler = (
   lc: LogContext,
@@ -59,11 +59,11 @@ export async function handleConnection(
     return;
   }
 
-  const {clientID, baseCookie, lmid, wsid, userData} = result;
+  const {clientID, baseCookie, lmid, wsid, auth} = result;
   lc = lc.withContext('clientID', clientID).withContext('wsid', wsid);
   lc.info?.('parsed request', {
     ...result,
-    userData: 'redacted',
+    auth: 'redacted',
   });
 
   const {
@@ -169,7 +169,7 @@ export async function handleConnection(
 
   const client: ClientState = {
     socket: ws,
-    userData,
+    auth,
     clockOffsetMs: undefined,
     clientGroupID: requestClientGroupID,
     debugPerf: result.debugPerf,
@@ -189,7 +189,7 @@ export function getConnectRequest(
       result: {
         clientID: string;
         clientGroupID: string;
-        userData: UserData;
+        auth: AuthData;
         baseCookie: NullableVersion;
         timestamp: number;
         lmid: number;
@@ -239,8 +239,8 @@ export function getConnectRequest(
     return value === 'true';
   }
 
-  const getUserData = (headers: Headers): UserData => {
-    const encodedValue = headers.get(USER_DATA_HEADER_NAME);
+  const getAuthData = (headers: Headers): AuthData => {
+    const encodedValue = headers.get(AUTH_DATA_HEADER_NAME);
     if (!encodedValue) {
       throw new Error('missing user-data');
     }
@@ -269,12 +269,12 @@ export function getConnectRequest(
     const wsid = getParam('wsid', false) ?? '';
     const debugPerf = getBooleanParam('debugPerf');
 
-    const userData = getUserData(headers);
+    const auth = getAuthData(headers);
     return {
       result: {
         clientID,
         clientGroupID,
-        userData,
+        auth,
         baseCookie,
         timestamp,
         lmid,

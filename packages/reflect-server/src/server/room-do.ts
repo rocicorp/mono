@@ -1,4 +1,4 @@
-import type {MutatorDefs} from 'replicache';
+import type {MutatorDefs} from 'reflect-types';
 import {processPending} from '../process/process-pending.js';
 import type {MutatorMap} from '../process/process-mutation.js';
 import type {
@@ -337,7 +337,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
           `Closing user ${userID}'s connections fulfilling auth api invalidateForUser request.`,
         );
         await this._closeConnections(
-          clientState => clientState.userData.userID === userID,
+          clientState => clientState.auth.userID === userID,
         );
         return new Response('Success', {status: 200});
       }),

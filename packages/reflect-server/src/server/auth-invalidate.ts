@@ -9,7 +9,7 @@ export function handleAuthInvalidate(
 ): Response {
   let closedCount = 0;
   for (const clientState of clients.values()) {
-    if (userID === undefined || userID === clientState.userData.userID) {
+    if (userID === undefined || userID === clientState.auth.userID) {
       closeWithError(lc, clientState.socket, 'AuthInvalidated');
       closedCount++;
     }

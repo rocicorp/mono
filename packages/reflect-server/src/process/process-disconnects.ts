@@ -38,6 +38,7 @@ export async function processDisconnects(
         clientID,
         NOOP_MUTATION_ID,
         nextVersion,
+        undefined,
       );
       try {
         await disconnectHandler(tx);

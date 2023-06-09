@@ -1,6 +1,9 @@
 export {Reflect} from './client/reflect.js';
 export type {ReflectOptions} from './client/options.js';
+// TODO(arv): Only export the types that are actually used.
+// https://github.com/rocicorp/mono/issues/362
 export * from 'replicache';
+
 import {DatadogLogSink, DatadogLogSinkOptions} from 'datadog';
 
 export type ClientDatadogLogSinkOptions = {
@@ -19,3 +22,10 @@ export function createClientDatadogLogSink(opts: ClientDatadogLogSinkOptions) {
   };
   return new DatadogLogSink(opts2);
 }
+
+export {
+  ReadTransaction,
+  WriteTransaction,
+  AuthData,
+  MutatorDefs,
+} from 'reflect-types';

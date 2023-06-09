@@ -4,7 +4,7 @@ import type {ConnectionsResponse} from 'reflect-protocol';
 export function getConnections(clients: ClientMap): ConnectionsResponse {
   const connections: ConnectionsResponse = [];
   for (const [clientID, clientState] of clients) {
-    connections.push({userID: clientState.userData.userID, clientID});
+    connections.push({userID: clientState.auth.userID, clientID});
   }
   return connections;
 }

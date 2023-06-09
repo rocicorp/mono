@@ -27,6 +27,7 @@ export async function processRoomStart(
     '', // clientID,
     -1, // mutationID,
     startVersion,
+    undefined,
   );
   try {
     await roomStartHandler(tx);
