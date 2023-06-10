@@ -1,5 +1,5 @@
-import {expect} from '@esm-bundle/chai';
 import {resolver} from '@rocicorp/resolver';
+import {expect} from 'chai';
 import {initOnPersistChannel, PersistInfo} from './on-persist-channel.js';
 
 suite('initOnPersistChannel', () => {

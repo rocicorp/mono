@@ -1,5 +1,5 @@
-import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
+import {expect} from 'chai';
 import * as dag from '../dag/mod.js';
 import * as db from '../db/mod.js';
 import {ChainBuilder} from '../db/test-helpers.js';

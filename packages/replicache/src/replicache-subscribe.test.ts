@@ -1,5 +1,5 @@
-import {assert, expect} from '@esm-bundle/chai';
 import {resolver} from '@rocicorp/resolver';
+import {assert, expect} from 'chai';
 import {sleep} from 'shared/sleep.js';
 import * as sinon from 'sinon';
 import type * as dag from './dag/mod.js';

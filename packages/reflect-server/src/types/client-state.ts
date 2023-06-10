@@ -1,4 +1,4 @@
-import type {UserData} from '../server/auth.js';
+import type {AuthData} from 'reflect-types';
 
 export type ClientID = string;
 export type ClientGroupID = string;
@@ -14,7 +14,7 @@ export interface Socket extends EventTarget<WebSocketEventMap> {
 
 export type ClientState = {
   socket: Socket;
-  userData: UserData;
+  auth: AuthData;
   clientGroupID: ClientGroupID;
   // How long is the client's timestamp behind the local timestamp?
   // This is initialized in the first push message from the client, not

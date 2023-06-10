@@ -29,7 +29,7 @@ test('with userId closes all connections for that userID and sends each an error
   handleAuthInvalidate(createSilentLogContext(), clients, 'testUserID2');
   for (const client of clients.values()) {
     const mocket = client.socket as Mocket;
-    if (client.userData.userID === 'testUserID2') {
+    if (client.auth.userID === 'testUserID2') {
       expect(mocket.log).toEqual([
         ['send', JSON.stringify(['error', 'AuthInvalidated', ''])],
         ['close'],

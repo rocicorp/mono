@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {getSizeOfEntry, getSizeOfValue} from './size-of-value.js';
 
 test('getSizeOfValue', () => {

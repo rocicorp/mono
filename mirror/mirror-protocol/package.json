@@ -18,7 +18,7 @@
     "@badrap/valita": "^0.2.0"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.4.1",
+    "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/jest": "^29.4.2",
     "shared": "0.0.0",
@@ -27,18 +27,9 @@
     "unbuild": "^1.1.1"
   },
   "exports": {
-    ".": {
-      "import": "./dist/mod.mjs",
-      "types": "./dist/mod.d.ts"
-    },
-    "./base.js": {
-      "import": "./dist/base.mjs",
-      "types": "./dist/base.d.ts"
-    },
-    "./user.js": {
-      "import": "./dist/user.mjs",
-      "types": "./dist/user.d.ts"
-    }
+    ".": "./dist/mod.mjs",
+    "./base.js": "./dist/base.mjs",
+    "./user.js": "./dist/user.mjs"
   },
   "files": [
     "dist"

@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {scanInfoMatchesKey} from './subscriptions.js';
 
 test('scanInfoMatchesKey', () => {

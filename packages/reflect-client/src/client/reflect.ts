@@ -15,13 +15,15 @@ import {
   ErrorKind as ServerErrorKind,
   type ErrorMessage,
 } from 'reflect-protocol';
+import type {MutatorDefs, ReadTransaction} from 'reflect-types';
 import {
+  ClientGroupID,
+  ClientID,
   dropDatabase,
   ExperimentalWatchCallbackForOptions,
   ExperimentalWatchNoIndexCallback,
   ExperimentalWatchOptions,
   MaybePromise,
-  MutatorDefs,
   PullerResultV0,
   PullerResultV1,
   PullRequestV0,
@@ -30,7 +32,6 @@ import {
   PushRequestV0,
   PushRequestV1,
   ReadonlyJSONValue,
-  ReadTransaction,
   Replicache,
   ReplicacheOptions,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
@@ -366,11 +367,11 @@ export class Reflect<MD extends MutatorDefs> {
    * The client ID for this instance of Reflect. Each instance
    * gets a unique client ID.
    */
-  get clientID(): Promise<string> {
+  get clientID(): Promise<ClientID> {
     return this._rep.clientID;
   }
 
-  get clientGroupID(): Promise<string> {
+  get clientGroupID(): Promise<ClientGroupID> {
     return this._rep.clientGroupID;
   }
 

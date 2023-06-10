@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {withRead, withWrite} from '../with-transactions.js';
 import {IDBNotFoundError, IDBStore} from './idb-store.js';
 import {dropStore} from './idb-util.js';

@@ -1,5 +1,5 @@
-import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
+import {expect} from 'chai';
 import * as dag from '../dag/mod.js';
 import {DEFAULT_HEAD_NAME} from '../db/commit.js';
 import {readFromDefaultHead} from '../db/read.js';

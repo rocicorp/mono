@@ -1,4 +1,5 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
+import * as sinon from 'sinon';
 import type {VersionNotSupportedResponse} from './error-responses.js';
 import type {Poke, UpdateNeededReason} from './replicache.js';
 import {
@@ -9,7 +10,6 @@ import {
   replicacheForTesting,
 } from './test-util.js';
 import type {WriteTransaction} from './transactions.js';
-import * as sinon from 'sinon';
 
 initReplicacheTesting();
 

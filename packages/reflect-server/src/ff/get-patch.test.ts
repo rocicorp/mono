@@ -155,6 +155,7 @@ describe('getPatch', () => {
           'c1',
           p.mutationID,
           p.version,
+          undefined,
         );
         if (p.value !== undefined) {
           await tx.put(p.key, p.value);

@@ -190,6 +190,7 @@ export async function handlePush(
             serverReceivedTimestamp: timestamp,
           }
         : undefined,
+      auth: client.auth,
     };
 
     let insertIndex =

@@ -1,12 +1,12 @@
-import {expect} from '@esm-bundle/chai';
 import {Context, LogContext, LogLevel} from '@rocicorp/logger';
+import {expect} from 'chai';
+import {BufferSizer} from 'shared/buffer-sizer.js';
 import * as sinon from 'sinon';
 import {
   BUFFER_SIZER_OPTIONS,
   PokeHandler,
   RESET_PLAYBACK_OFFSET_THRESHOLD_MS,
 } from './poke-handler.js';
-import {BufferSizer} from 'shared/buffer-sizer.js';
 
 let clock: sinon.SinonFakeTimers;
 let rafStub: sinon.SinonStub;

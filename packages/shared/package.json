@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@badrap/valita": "^0.2.0",
-    "@rocicorp/eslint-config": "^0.4.1",
+    "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/logger": "^5.1.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/jest": "^29.4.2",
@@ -23,54 +23,18 @@
     "typescript": "^4.9.5"
   },
   "exports": {
-    ".": {
-      "import": "./src/mod.ts",
-      "types": "./src/mod.ts"
-    },
-    "./valita.js": {
-      "import": "./src/valita.ts",
-      "types": "./src/valita.ts"
-    },
-    "./must.js": {
-      "import": "./src/must.ts",
-      "types": "./src/must.ts"
-    },
-    "./has-own.js": {
-      "import": "./src/has-own.ts",
-      "types": "./src/has-own.ts"
-    },
-    "./asserts.js": {
-      "import": "./src/asserts.ts",
-      "types": "./src/asserts.ts"
-    },
-    "./json.js": {
-      "import": "./src/json.ts",
-      "types": "./src/json.ts"
-    },
-    "./deep-clone.js": {
-      "import": "./src/deep-clone.ts",
-      "types": "./src/deep-clone.ts"
-    },
-    "./config.js": {
-      "import": "./src/config.ts",
-      "types": "./src/config.ts"
-    },
-    "./buffer-sizer.js": {
-      "import": "./src/buffer-sizer.ts",
-      "types": "./src/buffer-sizer.ts"
-    },
-    "./sleep.js": {
-      "import": "./src/sleep.ts",
-      "types": "./src/sleep.ts"
-    },
-    "./abort-error.js": {
-      "import": "./src/abort-error.ts",
-      "types": "./src/abort-error.ts"
-    },
-    "./timed.js": {
-      "import": "./src/timed.ts",
-      "types": "./src/timed.ts"
-    }
+    ".": "./src/mod.ts",
+    "./valita.js": "./src/valita.ts",
+    "./must.js": "./src/must.ts",
+    "./has-own.js": "./src/has-own.ts",
+    "./asserts.js": "./src/asserts.ts",
+    "./json.js": "./src/json.ts",
+    "./deep-clone.js": "./src/deep-clone.ts",
+    "./config.js": "./src/config.ts",
+    "./buffer-sizer.js": "./src/buffer-sizer.ts",
+    "./sleep.js": "./src/sleep.ts",
+    "./abort-error.js": "./src/abort-error.ts",
+    "./timed.js": "./src/timed.ts"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

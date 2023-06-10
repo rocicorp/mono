@@ -1,5 +1,5 @@
-import {expect} from '@esm-bundle/chai';
 import {LogContext} from '@rocicorp/logger';
+import {expect} from 'chai';
 import {assert, assertNotNull, assertNotUndefined} from 'shared/asserts.js';
 import sinon from 'sinon';
 import {BTreeRead} from '../btree/read.js';

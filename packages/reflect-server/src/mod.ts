@@ -6,7 +6,7 @@ export {
   ReflectServerOptions,
   ReflectServerBaseEnv,
 } from './server/reflect.js';
-export type {AuthHandler, UserData} from './server/auth.js';
+export type {AuthHandler} from './server/auth.js';
 export type {DisconnectHandler} from './server/disconnect.js';
 export {
   consoleLogSink,
@@ -28,5 +28,12 @@ export function createWorkerDatadogLogSink(opts: WorkerDatadogLogSinkOptions) {
 }
 
 // TODO(arv): Only export the types that are actually used.
-// https://github.com/rocicorp/reflect-server/issues/117
+// https://github.com/rocicorp/mono/issues/362
 export * from 'replicache';
+
+export {
+  ReadTransaction,
+  WriteTransaction,
+  AuthData,
+  MutatorDefs,
+} from 'reflect-types';

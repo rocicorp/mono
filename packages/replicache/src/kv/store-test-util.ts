@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import type {FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import type {Read, Store, Write} from './store.js';

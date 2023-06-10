@@ -1,4 +1,4 @@
-import {expect} from '@esm-bundle/chai';
+import {expect} from 'chai';
 import {assert} from 'shared/asserts.js';
 import {Hash, fakeHash} from '../hash.js';
 import {Chunk} from './chunk.js';

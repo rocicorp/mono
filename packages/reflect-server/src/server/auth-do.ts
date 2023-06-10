@@ -16,7 +16,7 @@ import {encodeHeaderValue} from '../util/headers.js';
 import {closeWithError} from '../util/socket.js';
 import {version} from '../util/version.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
-import {AuthHandler, USER_DATA_HEADER_NAME, UserData} from './auth.js';
+import {AuthHandler, AUTH_DATA_HEADER_NAME} from './auth.js';
 import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
@@ -54,6 +54,7 @@ import {
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import {sleep} from '../util/sleep.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
+import type {AuthData} from 'reflect-types';
 
 export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
 
@@ -421,7 +422,7 @@ export class BaseAuthDO implements DurableObject {
 
     return timed(lc.debug, 'inside authLock', () =>
       this._authLock.withRead(async () => {
-        let userData: UserData = {
+        let authData: AuthData = {
           userID,
         };
 
@@ -438,7 +439,7 @@ export class BaseAuthDO implements DurableObject {
           const callHandlerWithTimeout = () =>
             Promise.race([authHandler(auth, roomID), timeout()]);
 
-          const [authHandlerUserData, response] = await timed(
+          const [authHandlerAuthData, response] = await timed(
             lc.debug,
             'calling authHandler',
             async () => {
@@ -459,24 +460,26 @@ export class BaseAuthDO implements DurableObject {
             return response;
           }
 
-          if (!authHandlerUserData || !authHandlerUserData.userID) {
-            if (!authHandlerUserData) {
-              lc.info?.('userData returned by authHandler is not an object.');
-            } else if (!authHandlerUserData.userID) {
-              lc.info?.('userData returned by authHandler has no userID.');
+          if (!authHandlerAuthData || !authHandlerAuthData.userID) {
+            if (!authHandlerAuthData) {
+              lc.info?.('authData returned by authHandler is not an object.');
+            } else if (!authHandlerAuthData.userID) {
+              lc.info?.('authData returned by authHandler has no userID.');
             }
-            return closeWithErrorLocal('Unauthorized', 'no userData');
+            return closeWithErrorLocal('Unauthorized', 'no authData');
           }
-          if (authHandlerUserData.userID !== userID) {
+          if (authHandlerAuthData.userID !== userID) {
             lc.info?.(
-              'userData returned by authHandler has a different userID.',
+              'authData returned by authHandler has a different userID.',
+              authHandlerAuthData.userID,
+              userID,
             );
             return closeWithErrorLocal(
               'Unauthorized',
               'userID returned by authHandler does not match userID url parameter',
             );
           }
-          userData = authHandlerUserData;
+          authData = authHandlerAuthData;
         }
 
         // Find the room's objectID so we can connect to it. Do this BEFORE
@@ -532,11 +535,10 @@ export class BaseAuthDO implements DurableObject {
         );
 
         // Record the connection in DO storage
-
         await timed(lc.debug, 'writing connection record', () =>
           recordConnection(
             {
-              userID: userData.userID,
+              userID: authData.userID,
               roomID,
               clientID,
             },
@@ -551,8 +553,8 @@ export class BaseAuthDO implements DurableObject {
         const stub = this._roomDO.get(roomObjectID);
         const requestToDO = new Request(request);
         requestToDO.headers.set(
-          USER_DATA_HEADER_NAME,
-          encodeHeaderValue(JSON.stringify(userData)),
+          AUTH_DATA_HEADER_NAME,
+          encodeHeaderValue(JSON.stringify(authData)),
         );
         const responseFromDO = await timed(
           lc.debug,

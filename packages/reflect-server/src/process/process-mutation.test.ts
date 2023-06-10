@@ -1,5 +1,5 @@
 import {test, expect} from '@jest/globals';
-import type {WriteTransaction} from 'replicache';
+import type {WriteTransaction, AuthData} from 'reflect-types';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
 import {
   ClientRecord,
@@ -22,6 +22,7 @@ import type {PendingMutation} from '../types/mutation.js';
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
 const version = 2;
+const auth: AuthData = {userID: 'testUser1', foo: 'bar'};
 
 test('processMutation', async () => {
   type Case = {
@@ -42,6 +43,7 @@ test('processMutation', async () => {
         clientGroupID: 'cg1',
         id: 1,
         timestamps: 100,
+        auth,
       }),
       expectedError: 'Error: Client c1 not found',
       expectAppWrite: false,
@@ -55,6 +57,7 @@ test('processMutation', async () => {
         clientGroupID: 'cg1',
         id: 1,
         timestamps: 100,
+        auth,
       }),
       expectedRecord: clientRecord('cg1', null, 1, 1),
       expectAppWrite: false,
@@ -68,6 +71,7 @@ test('processMutation', async () => {
         clientGroupID: 'cg1',
         id: 3,
         timestamps: 100,
+        auth,
       }),
       expectedRecord: clientRecord('cg1', null, 1, 1),
       expectAppWrite: false,
@@ -82,6 +86,7 @@ test('processMutation', async () => {
         id: 2,
         timestamps: 100,
         name: 'unknown',
+        auth,
       }),
       expectedRecord: clientRecord('cg1', null, 2, version),
       expectAppWrite: false,
@@ -96,6 +101,7 @@ test('processMutation', async () => {
         id: 2,
         timestamps: 100,
         name: 'throws',
+        auth,
       }),
       expectedRecord: clientRecord('cg1', null, 2, version),
       expectAppWrite: false,
@@ -110,6 +116,7 @@ test('processMutation', async () => {
         id: 2,
         timestamps: 100,
         name: 'foo',
+        auth,
       }),
       expectedRecord: clientRecord('cg1', null, 2, version),
       expectAppWrite: true,
@@ -121,12 +128,14 @@ test('processMutation', async () => {
     [
       'foo',
       async (tx: WriteTransaction) => {
+        expect(tx.auth).toEqual(auth);
         await tx.put('foo', 'bar');
       },
     ],
     [
       'throws',
       async (tx: WriteTransaction) => {
+        expect(tx.auth).toEqual(auth);
         await tx.put('foo', 'bar');
         throw new Error('bonk');
       },

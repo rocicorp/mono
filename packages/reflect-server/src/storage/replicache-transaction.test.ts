@@ -21,7 +21,7 @@ test('ReplicacheTransaction', async () => {
   );
 
   const entryCache = new EntryCache(storage);
-  const writeTx = new ReplicacheTransaction(entryCache, 'c1', 1, 1);
+  const writeTx = new ReplicacheTransaction(entryCache, 'c1', 1, 1, undefined);
 
   expect(!(await writeTx.has('foo')));
   expect(await writeTx.get('foo')).toBeUndefined;
@@ -38,6 +38,7 @@ test('ReplicacheTransaction', async () => {
     'c1',
     2,
     2,
+    undefined,
   );
   expect(!(await writeTx2.has('foo')));
   expect(await writeTx2.get('foo')).toBeUndefined;
@@ -47,7 +48,7 @@ test('ReplicacheTransaction', async () => {
 
   // Go ahead and flush one
   await entryCache.flush();
-  const writeTx3 = new ReplicacheTransaction(entryCache, 'c1', 3, 3);
+  const writeTx3 = new ReplicacheTransaction(entryCache, 'c1', 3, 3, undefined);
   expect(await writeTx3.has('foo'));
   expect(await writeTx3.get('foo')).toEqual('bar');
 
@@ -72,7 +73,7 @@ test('ReplicacheTransaction environment and reason', async () => {
   );
 
   const entryCache = new EntryCache(storage);
-  const tx = new ReplicacheTransaction(entryCache, 'c1', 1, 1);
+  const tx = new ReplicacheTransaction(entryCache, 'c1', 1, 1, undefined);
   expect(tx.environment).toEqual('server');
   expect(tx.reason).toEqual('authoritative');
 });
@@ -88,7 +89,13 @@ test('ReplicacheTransaction scan()', async () => {
 
   function makeTx(): [ReplicacheTransaction, EntryCache] {
     const cache = new EntryCache(durableStorage);
-    const tx = new ReplicacheTransaction(cache, 'name', mutationID, version);
+    const tx = new ReplicacheTransaction(
+      cache,
+      'name',
+      mutationID,
+      version,
+      undefined,
+    );
     version++;
     mutationID++;
     return [tx, cache];
@@ -283,7 +290,7 @@ test('put with non JSON value', async () => {
   );
 
   const entryCache = new EntryCache(storage);
-  const writeTx = new ReplicacheTransaction(entryCache, 'c1', 1, 1);
+  const writeTx = new ReplicacheTransaction(entryCache, 'c1', 1, 1, undefined);
 
   let err;
   try {
