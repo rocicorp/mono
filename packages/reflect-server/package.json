@@ -46,7 +46,7 @@
     "miniflare": "^2.11.0",
     "nock": "^13.3.1",
     "reflect-protocol": "0.0.0",
-    "replicache": "13.0.0-beta.0",
+    "replicache": "13.0.0-beta.1",
     "rollup": "^3.19.1",
     "rollup-plugin-dts": "^5.2.0",
     "shared": "0.0.0",
