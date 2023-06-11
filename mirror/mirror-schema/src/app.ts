@@ -1,6 +1,7 @@
 import * as v from 'shared/valita.js';
 import * as path from './path.js';
 import {releaseChannelSchema} from './server.js';
+import {firestoreDataConverter} from './converter.js';
 
 export const appSchema = v.object({
   teamID: v.string(),
@@ -11,6 +12,8 @@ export const appSchema = v.object({
 });
 
 export type App = v.Infer<typeof appSchema>;
+
+export const appDataConverter = firestoreDataConverter(appSchema);
 
 export const APP_COLLECTION = 'apps';
 

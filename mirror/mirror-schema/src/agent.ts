@@ -1,5 +1,6 @@
 import * as v from 'shared/valita.js';
 import * as path from './path.js';
+import {firestoreDataConverter} from './converter.js';
 
 export const agentVersionsSchema = v.object({
   minVersion: v.string(),
@@ -8,6 +9,9 @@ export const agentVersionsSchema = v.object({
 });
 
 export type AgentVersions = v.Infer<typeof agentVersionsSchema>;
+
+export const agentVersionsDataConverter =
+  firestoreDataConverter(agentVersionsSchema);
 
 export const SUPPORTED_AGENTS_COLLECTION = 'supportedAgents';
 

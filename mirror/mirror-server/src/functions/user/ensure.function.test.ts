@@ -1,14 +1,102 @@
-import {test, expect} from '@jest/globals';
+import {describe, test, expect} from '@jest/globals';
 import {https} from 'firebase-functions/v2';
 import {ensure} from './ensure.function.js';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-import {FirestoreMock} from 'firestore-mock';
+import {firebaseStub} from 'firestore-jest-mock/mocks/firebase.js';
+import type {Firestore} from 'firebase-admin/firestore';
 import type {DecodedIdToken} from 'firebase-admin/auth';
-import type {Request} from 'firebase-functions/v2/https';
+import {
+  FunctionsErrorCode,
+  HttpsError,
+  Request,
+} from 'firebase-functions/v2/https';
+import type {AuthData} from 'firebase-functions/v2/tasks';
+import type {EnsureUserRequest} from 'mirror-protocol/user.js';
+
+function fakeFirestore(): Firestore {
+  return firebaseStub(
+    {database: {}},
+    {mutable: true},
+  ).firestore() as unknown as Firestore;
+}
+
+describe('request validation', () => {
+  const goodRequest = {
+    requester: {
+      userID: 'foo',
+      userAgent: {type: 'reflect-cli', version: '0.0.1'},
+    },
+  };
+
+  type Case = {
+    name: string;
+    request: EnsureUserRequest;
+    auth: AuthData;
+    errorCode: FunctionsErrorCode;
+  };
+  const cases: Case[] = [
+    {
+      name: 'missing authentication',
+      auth: {} as AuthData,
+      request: goodRequest,
+      errorCode: 'unauthenticated',
+    },
+    {
+      name: 'missing email',
+      auth: {
+        uid: 'foo',
+        token: {
+          /* no email field */
+        } as DecodedIdToken,
+      },
+      request: goodRequest,
+      errorCode: 'failed-precondition',
+    },
+    {
+      name: 'wrong authenticated user',
+      auth: {
+        uid: 'bar',
+        token: {email: 'foo@bar.com'},
+      } as AuthData,
+      request: goodRequest,
+      errorCode: 'permission-denied',
+    },
+    {
+      name: 'bad request',
+      auth: {
+        uid: 'foo',
+        token: {email: 'foo@bar.com'},
+      } as AuthData,
+      request: {not: 'a valid request'} as unknown as EnsureUserRequest,
+      errorCode: 'invalid-argument',
+    },
+  ];
+
+  for (const c of cases) {
+    test(c.name, async () => {
+      const firestore = fakeFirestore();
+      const ensureFunction = https.onCall(ensure(firestore));
+
+      let error: HttpsError | undefined = undefined;
+      try {
+        await ensureFunction.run({
+          auth: c.auth,
+          data: c.request,
+          rawRequest: null as unknown as Request,
+        });
+      } catch (e) {
+        expect(e).toBeInstanceOf(HttpsError);
+        error = e as HttpsError;
+      }
+
+      expect(error?.code).toBe(c.errorCode);
+      const fooDoc = await firestore.doc('users/foo').get();
+      expect(fooDoc.exists).toBe(false);
+    });
+  }
+});
 
 test('creates user doc', async () => {
-  const firestore = new FirestoreMock();
+  const firestore = fakeFirestore();
   const ensureFunction = https.onCall(ensure(firestore));
 
   const resp = await ensureFunction.run({
@@ -25,49 +113,19 @@ test('creates user doc', async () => {
     rawRequest: null as unknown as Request,
   });
   expect(resp).toEqual({success: true});
-  const fooDoc = firestore.doc('users/foo').get();
+  const fooDoc = await firestore.doc('users/foo').get();
   expect(fooDoc.exists).toBe(true);
-  expect(fooDoc.data).toEqual({
+  expect(fooDoc.data()).toEqual({
     email: 'foo@bar.com',
     roles: {},
   });
 });
 
-test('rejects auth without email', async () => {
-  const firestore = new FirestoreMock();
-  const ensureFunction = https.onCall(ensure(firestore));
-
-  let error = undefined;
-  try {
-    await ensureFunction.run({
-      data: {
-        requester: {
-          userID: 'foo',
-          userAgent: {type: 'reflect-cli', version: '0.0.1'},
-        },
-      },
-      auth: {
-        uid: 'foo',
-        token: {
-          /* no email field */
-        } as DecodedIdToken,
-      },
-      rawRequest: null as unknown as Request,
-    });
-  } catch (e) {
-    error = e;
-  }
-  expect(error).not.toBeUndefined;
-  expect(String(error)).toBe('Authenticated user must have an email address');
-  const fooDoc = firestore.doc('users/foo').get();
-  expect(fooDoc.exists).toBe(false);
-});
-
 test('does not overwrite existing user doc', async () => {
-  const firestore = new FirestoreMock();
+  const firestore = fakeFirestore();
   const ensureFunction = https.onCall(ensure(firestore));
 
-  await firestore.doc('users/foo').create({
+  await firestore.doc('users/foo').set({
     email: 'foo@bar.com',
     name: 'Foo Bar',
     roles: {fooTeam: 'a'},
@@ -87,9 +145,9 @@ test('does not overwrite existing user doc', async () => {
     rawRequest: null as unknown as Request,
   });
   expect(resp).toEqual({success: true});
-  const fooDoc = firestore.doc('users/foo').get();
+  const fooDoc = await firestore.doc('users/foo').get();
   expect(fooDoc.exists).toBe(true);
-  expect(fooDoc.data).toEqual({
+  expect(fooDoc.data()).toEqual({
     email: 'foo@bar.com',
     name: 'Foo Bar',
     roles: {fooTeam: 'a'},

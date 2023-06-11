@@ -1,5 +1,6 @@
 import * as v from 'shared/valita.js';
 import * as path from './path.js';
+import {firestoreDataConverter} from './converter.js';
 
 export const releaseChannelSchema = v.union(
   v.literal('canary'),
@@ -15,6 +16,8 @@ export const serverSchema = v.object({
 });
 
 export type Server = v.Infer<typeof serverSchema>;
+
+export const serverDataConverter = firestoreDataConverter(serverSchema);
 
 export const SERVER_COLLECTION = 'servers';
 

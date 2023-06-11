@@ -1,14 +1,14 @@
-import type {Firestore, DocumentReference} from 'firebase-admin/firestore';
-import {withSchema} from '../validators/schema';
-import {withAuthorization} from '../validators/auth';
-import type {AsyncCallable} from '../validators/types';
+import type {Firestore} from 'firebase-admin/firestore';
+import {withSchema} from '../validators/schema.js';
+import {withAuthorization} from '../validators/auth.js';
+import type {AsyncCallable} from '../validators/types.js';
 import {
   EnsureUserRequest,
   EnsureUserResponse,
   ensureUserRequestSchema,
   ensureUserResponseSchema,
 } from 'mirror-protocol/user.js';
-import {userPath, User} from 'mirror-schema/user.js';
+import {userPath, userDataConverter} from 'mirror-schema/user.js';
 import {HttpsError} from 'firebase-functions/v2/https';
 
 export function ensure(
@@ -21,9 +21,11 @@ export function ensure(
       const {
         requester: {userID},
       } = ensureUserRequest;
-      const userDocRef = firestore.doc(
-        userPath(userID),
-      ) as DocumentReference<User>;
+
+      const userDocRef = firestore
+        .doc(userPath(userID))
+        .withConverter(userDataConverter);
+
       await firestore.runTransaction(async txn => {
         const userDoc = await txn.get(userDocRef);
         if (userDoc.exists) {

@@ -28,8 +28,14 @@
   },
   "exports": {
     ".": "./dist/mod.mjs",
-    "./base.js": "./dist/base.mjs",
-    "./user.js": "./dist/user.mjs"
+    "./base.js": {
+      "import": "./dist/base.mjs",
+      "types": "./dist/base.d.ts"
+    },
+    "./user.js": {
+      "import": "./dist/user.mjs",
+      "types": "./dist/user.d.ts"
+    }
   },
   "files": [
     "dist"

@@ -10,7 +10,7 @@ export function withAuthorization<Request extends BaseRequest, Response>(
     if (context.auth?.uid === undefined) {
       throw new HttpsError('unauthenticated', 'missing authentication');
     }
-    if (context.auth.uid === payload.requester.userID) {
+    if (context.auth.uid !== payload.requester.userID) {
       // TODO: Add support for admin access / impersonation.
       throw new HttpsError(
         'permission-denied',

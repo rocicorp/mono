@@ -1,5 +1,6 @@
 import * as v from 'shared/valita.js';
 import * as path from './path.js';
+import {firestoreDataConverter} from './converter.js';
 
 export const teamSchema = v.object({
   name: v.string(),
@@ -15,6 +16,8 @@ export const teamSchema = v.object({
 });
 
 export type Team = v.Infer<typeof teamSchema>;
+
+export const teamDataConveter = firestoreDataConverter(teamSchema);
 
 export const TEAM_COLLECTION = 'teams';
 

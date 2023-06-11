@@ -2,6 +2,7 @@ import * as v from 'shared/valita.js';
 import * as path from './path.js';
 import {timestampSchema} from './timestamp.js';
 import {appPath} from './app.js';
+import {firestoreDataConverter} from './converter.js';
 
 export const deploymentTypeSchema = v.union(
   v.literal('USER_UPLOAD'),
@@ -33,6 +34,8 @@ export const deploymentSchema = v.object({
 });
 
 export type Deployment = v.Infer<typeof deploymentSchema>;
+
+export const deploymentDataConverter = firestoreDataConverter(deploymentSchema);
 
 export const APP_DEPLOYMENTS_COLLECTION_ID = 'deployments';
 
