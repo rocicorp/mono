@@ -93,6 +93,9 @@ module.exports = {
       indexName: 'replicache',
       contextualSearch: false,
     },
+    prism: {
+      additionalLanguages: ['yaml'],
+    },
   },
   presets: [
     [

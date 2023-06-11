@@ -17,7 +17,7 @@ If this invariant is violated by the server then Replicache may not function pro
 
 :::
 
-## Pg-mem Setup
+## Database Setup
 
 For this demo, we'll use [pg-mem](https://github.com/oguimbal/pg-mem) — an in-memory implementation of Postgres. This is a nice easy way to play locally, but you can easily adapt this sample to use a remote Postgres implementation like [Render](https://render.com/) or [Supabase](https://supabase.com/).
 

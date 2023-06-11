@@ -5,9 +5,9 @@ slug: /byob/remote-schema
 
 There are a number of ways to implement Replicache backends.
 
-The Replicache client doesn't actually care how your backend works internally — it only cares that you provide correctly implemented [push](/reference/server-push.md) and [pull](/reference/server-pull.md) endpoints.
+The Replicache client doesn't actually care _how_ your backend works internally — it only cares that you provide correctly implemented [push](/reference/server-push.md) and [pull](/reference/server-pull.md) endpoints.
 
-This walkthrough implements the [Global Version Strategy](/concepts/diff/global-version), which is a simple strategy that we usually recommend users start with. See [Diff Strategies](/concepts/diff/overview) for information on other commonly used diff strategies.
+This walkthrough implements the [Global Version](/concepts/diff/global-version) backend strategy, which is a simple strategy that we usually recommend users start with. See [Backend Strategies](/concepts/diff/overview) for information on other commonly used strategies.
 
 ## Define the Schema
 

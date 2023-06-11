@@ -49,9 +49,7 @@ const onSubmit = e => {
 
 Previously we mentioned that Replicache has a mechanism that ensures that local, speculative changes are always applied on top of changes from the server. The way this works is that when Replicache pulls and applies changes from the server, any mutator invocations that have not yet been confirmed by the server are _replayed_ on top of the new server state. This is much like a git rebase, and the effects of the patch-and-replay are revealed atomically to your app.
 
-An important consequence of the fact that Replicache will re-run mutations during sync against new versions of the cache is that a mutator's behavior should not depend on anything other than its parameters and the cache itself (it should be a pure function of its parameters, including `tx`).
-
-For example here, we pass the generated unique ID _into_ the mutator as a param, rather than creating it inside the implementation. This may be counter-intuitive at first, but it makes sense when you remember that Replicache is going to replay this transaction during sync, and we don't want the ID to change!
+An important consequence of this is that unique IDs should often be passed into mutators as parameters, and not generated inside the mutator. This may be counter-intuitive at first, but it makes sense when you remember that Replicache is going to replay this transaction during sync, and we don't want the ID to change!
 
 :::note info
 
