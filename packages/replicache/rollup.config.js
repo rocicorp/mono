@@ -11,7 +11,6 @@ export default {
   output: {
     file: `./out/replicache.d.ts`,
   },
-  external: ['@esm-bundle/chai'],
   plugins: [
     nodeResolve(),
     dts({

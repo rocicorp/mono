@@ -19,7 +19,6 @@ import {
   assertJSONValue,
   deepFreeze,
 } from '../json.js';
-
 import type {BTreeRead} from './read.js';
 import type {BTreeWrite} from './write.js';
 import type {IndexKey} from '../db/index.js';
