@@ -21,9 +21,9 @@ import {
 } from './router.js';
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import type {MaybePromise} from 'replicache';
-import {version} from '../mod.js';
 import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
 import type {DatadogMetricsOptions} from './reflect.js';
+import {version} from '../util/version.js';
 
 export type MetricsSink = (
   allSeries: Series[],

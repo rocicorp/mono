@@ -7,14 +7,14 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/lock": "^1.0.1",
-    "@rocicorp/logger": "^5.1.0",
+    "@rocicorp/logger": "^5.2.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/jest": "^29.4.2",
     "@types/node-fetch": "^2.6.2",
     "cross-fetch": "^3.1.5",
     "replicache": "13.0.0-beta.1",
     "ts-jest": "^29.0.5",
-    "typescript": "^4.9.5"
+    "typescript": "^5.1.3"
   },
   "scripts": {
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
