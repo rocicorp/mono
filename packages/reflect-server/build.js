@@ -46,6 +46,8 @@ function buildCLI() {
 function buildInternal(options) {
   const shared = sharedOptions(true, metafile);
   return esbuild.build({
+    // Remove process.env. It does not exist in CF workers.
+    define: {'process.env': '{}'},
     ...shared,
     ...options,
   });
