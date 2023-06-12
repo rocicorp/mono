@@ -21,7 +21,6 @@ import {
 } from './router.js';
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import type {MaybePromise} from 'replicache';
-
 import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
 import type {DatadogMetricsOptions} from './reflect.js';
 import {version} from '../util/version.js';
