@@ -3,8 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "module": "./src/mod.ts",
-  "types": "./src/mod.ts",
   "scripts": {
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
@@ -34,48 +32,48 @@
   },
   "exports": {
     ".": {
-      "import": "./dist/mod.mjs",
-      "types": "./dist/mod.d.ts"
+      "types": "./dist/mod.d.ts",
+      "import": "./dist/mod.mjs"
     },
     "./agent.js": {
-      "import": "./dist/agent.mjs",
-      "types": "./dist/agent.d.ts"
+      "types": "./dist/agent.d.ts",
+      "import": "./dist/agent.mjs"
     },
     "./app-key.js": {
-      "import": "./dist/app-key.mjs",
-      "types": "./dist/app-key.d.ts"
+      "types": "./dist/app-key.d.ts",
+      "import": "./dist/app-key.mjs"
     },
     "./app.js": {
-      "import": "./dist/app.mjs",
-      "types": "./dist/app.d.ts"
+      "types": "./dist/app.d.ts",
+      "import": "./dist/app.mjs"
     },
     "./cloudflare.js": {
-      "import": "./dist/cloudflare.mjs",
-      "types": "./dist/cloudflare.d.ts"
+      "types": "./dist/cloudflare.d.ts",
+      "import": "./dist/cloudflare.mjs"
     },
     "./deployment.js": {
-      "import": "./dist/deployment.mjs",
-      "types": "./dist/deployment.d.ts"
+      "types": "./dist/deployment.d.ts",
+      "import": "./dist/deployment.mjs"
     },
     "./membership.js": {
-      "import": "./dist/membership.mjs",
-      "types": "./dist/membership.d.ts"
+      "types": "./dist/membership.d.ts",
+      "import": "./dist/membership.mjs"
     },
     "./server.js": {
-      "import": "./dist/server.mjs",
-      "types": "./dist/server.d.ts"
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.mjs"
     },
     "./team.js": {
-      "import": "./dist/team.mjs",
-      "types": "./dist/team.d.ts"
+      "types": "./dist/team.d.ts",
+      "import": "./dist/team.mjs"
     },
     "./timestamp.js": {
-      "import": "./dist/timestamp.mjs",
-      "types": "./dist/timestamp.d.ts"
+      "types": "./dist/timestamp.d.ts",
+      "import": "./dist/timestamp.mjs"
     },
     "./user.js": {
-      "import": "./dist/user.mjs",
-      "types": "./dist/user.d.ts"
+      "types": "./dist/user.d.ts",
+      "import": "./dist/user.mjs"
     }
   },
   "files": [
