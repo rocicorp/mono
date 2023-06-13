@@ -1010,7 +1010,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         online = false;
         this._lc.info?.(`${name} threw:\n`, e, '\nwith cause:\n', e.causedBy);
       } else if (e instanceof ReportError) {
-        this._lc.error?.(`${name} threw:\n`, e);
+        this._lc.error?.(e);
       } else {
         this._lc.info?.(`${name} threw:\n`, e);
       }
