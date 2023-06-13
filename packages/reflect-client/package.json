@@ -4,9 +4,6 @@
   "version": "0.0.0",
   "private": true,
   "license": "SEE LICENSE IN https://roci.dev/terms.html",
-  "main": "out/reflect-client.js",
-  "module": "out/reflect-client.js",
-  "types": "out/reflect-client.d.ts",
   "type": "module",
   "scripts": {
     "format": "prettier --write *",
@@ -48,10 +45,9 @@
     "sinon": "^13.0.1",
     "typescript": "^5.1.3"
   },
-  "files": [
-    "out/reflect-client.d.ts",
-    "out/reflect-client.js"
-  ],
+  "exports": {
+    ".": "./src/mod.ts"
+  },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },

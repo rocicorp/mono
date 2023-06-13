@@ -3,8 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "module": "./src/mod.ts",
-  "types": "./src/mod.ts",
   "scripts": {
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
@@ -27,14 +25,17 @@
     "unbuild": "^1.1.1"
   },
   "exports": {
-    ".": "./dist/mod.mjs",
+    ".": {
+      "types": "./dist/mod.d.ts",
+      "import": "./dist/mod.mjs"
+    },
     "./base.js": {
-      "import": "./dist/base.mjs",
-      "types": "./dist/base.d.ts"
+      "types": "./dist/base.d.ts",
+      "import": "./dist/base.mjs"
     },
     "./user.js": {
-      "import": "./dist/user.mjs",
-      "types": "./dist/user.d.ts"
+      "types": "./dist/user.d.ts",
+      "import": "./dist/user.mjs"
     }
   },
   "files": [

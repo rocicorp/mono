@@ -23,10 +23,6 @@
     "typescript": "^5.1.3",
     "unbuild": "^1.1.1"
   },
-  "exports": {
-    ".": "./out/index.mjs"
-  },
-  "main": "./out/index.mjs",
   "files": [
     "out"
   ],
