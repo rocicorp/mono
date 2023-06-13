@@ -520,6 +520,25 @@ export class Reflect<MD extends MutatorDefs> {
     }
   };
 
+  private _onOpen = async (e: Event) => {
+    const l = addWebSocketIDFromSocketToLogContext(
+      e.target as WebSocket,
+      await this._l,
+    );
+    if (this._connectingStart === undefined) {
+      l.error?.(
+        'Got open event but connect start time is undefined. This should not happen.',
+      );
+    } else {
+      const now = Date.now();
+      const timeToOpenMs = now - this._connectingStart;
+      l.info?.('Got socket open event', {
+        navigatorOnline: navigator.onLine,
+        timeToOpenMs,
+      });
+    }
+  };
+
   private _onClose = async (e: CloseEvent) => {
     const l = addWebSocketIDFromSocketToLogContext(
       e.target as WebSocket,
@@ -570,7 +589,8 @@ export class Reflect<MD extends MutatorDefs> {
     lc: LogContext,
     connectedMessage: ConnectedMessage,
   ) {
-    lc = addWebSocketIDToLogContext(connectedMessage[1].wsid, lc);
+    const [, connectBody] = connectedMessage;
+    lc = addWebSocketIDToLogContext(connectBody.wsid, lc);
 
     this._connectedAt = Date.now();
     this._metrics.lastConnectError.clear();
@@ -580,11 +600,17 @@ export class Reflect<MD extends MutatorDefs> {
         'Got connected message but connect start time is undefined. This should not happen.',
       );
     } else {
-      const timeToConnectMs = Date.now() - this._connectingStart;
+      const now = Date.now();
+      const timeToConnectMs = now - this._connectingStart;
       this._metrics.timeToConnectMs.set(timeToConnectMs);
+      const connectMsgLatencyMs =
+        connectBody.timestamp !== undefined
+          ? now - connectBody.timestamp
+          : undefined;
       lc.info?.('Connected', {
         navigatorOnline: navigator.onLine,
         timeToConnectMs,
+        connectMsgLatencyMs,
       });
       this._connectingStart = undefined;
     }
@@ -656,6 +682,7 @@ export class Reflect<MD extends MutatorDefs> {
     );
 
     ws.addEventListener('message', this._onMessage);
+    ws.addEventListener('open', this._onOpen);
     ws.addEventListener('close', this._onClose);
     this._socket = ws;
     this._socketResolver.resolve(ws);
