@@ -193,10 +193,14 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
           );
           return new Response('Unexpected roomID', {status: 400});
         }
-
-        if (roomID) {
-          this._lc = this._lc.withContext('roomID', roomID);
-          this._lc.info?.('initializing room');
+        if (urlRoomID !== null && roomID === undefined) {
+          this._lc.error?.('Expected roomID to be present in storage', {
+            urlRoomID,
+          });
+        }
+        if (roomID || urlRoomID) {
+          this._lc = this._lc.withContext('roomID', roomID ?? urlRoomID);
+          this._lc.info?.('initialized roomID context');
           this._lcHasRoomIdContext = true;
         }
       }
@@ -254,7 +258,10 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
    */
   private _internalCreateRoom = withBody(createRoomRequestSchema, async ctx => {
     const {roomID} = ctx.body;
+    this._lc.info?.('Handling create room request for roomID', roomID);
     await this._setRoomID(roomID);
+    await this._storage.flush();
+    this._lc.debug?.('Flushed roomID to storage', roomID);
     return new Response('ok');
   });
 
