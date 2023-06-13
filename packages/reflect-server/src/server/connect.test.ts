@@ -1,4 +1,11 @@
-import {test, describe, expect} from '@jest/globals';
+import {
+  test,
+  describe,
+  expect,
+  beforeEach,
+  afterEach,
+  jest,
+} from '@jest/globals';
 import {
   ClientRecord,
   clientRecordKey,
@@ -24,6 +31,17 @@ import {DurableStorage} from '../storage/durable-storage.js';
 import {putVersion} from '../types/version.js';
 import type {NullableVersion} from 'reflect-protocol';
 import type {ErrorKind} from 'reflect-protocol';
+
+const START_TIME = 1686690000000;
+
+beforeEach(() => {
+  jest.useFakeTimers();
+  jest.setSystemTime(START_TIME);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -340,7 +358,10 @@ describe('handleConnection', () => {
 
       try {
         expect(mocket.log).toEqual([
-          ['send', JSON.stringify(['connected', {wsid}])],
+          [
+            'send',
+            JSON.stringify(['connected', {wsid, timestamp: START_TIME}]),
+          ],
         ]);
         const expectedClients = c.expectedClients(mocket);
         expect(clients).toEqual(expectedClients);
