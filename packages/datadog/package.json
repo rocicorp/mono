@@ -2,8 +2,6 @@
   "name": "datadog",
   "private": true,
   "type": "module",
-  "module": "./src/mod.ts",
-  "types": "./src/mod.ts",
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/lock": "^1.0.1",
