@@ -30,11 +30,11 @@ import {
   assertSnapshotCommitDD31,
   assertSnapshotCommitSDD,
   chunkIndexDefinitionEqualIgnoreName,
+  commitFromHash,
   commitFromHead,
   toChunkIndexDefinition,
 } from './commit.js';
 import {IndexWrite} from './index.js';
-import {commitFromHash} from './mod.js';
 import {
   Write,
   createIndexBTree,

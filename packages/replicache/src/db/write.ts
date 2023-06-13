@@ -20,6 +20,7 @@ import {
   Meta,
   MetaType,
   baseSnapshotHashFromHash,
+  commitFromHash,
   newIndexChange as commitNewIndexChange,
   newLocalDD31 as commitNewLocalDD31,
   newLocalSDD as commitNewLocalSDD,
@@ -28,7 +29,6 @@ import {
   getMutationID,
 } from './commit.js';
 import {IndexOperation, IndexRead, IndexWrite, indexValue} from './index.js';
-import {commitFromHash} from './mod.js';
 import {Read, readIndexesForRead} from './read.js';
 
 export class Write extends Read {

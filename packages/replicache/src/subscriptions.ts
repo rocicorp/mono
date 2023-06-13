@@ -436,7 +436,7 @@ export class SubscriptionsManager implements DiffComputationConfig {
         if (s.onError) {
           s.onError(result.reason);
         } else {
-          this._lc.error?.(result.reason);
+          this._lc.error?.('Error in subscription body:', result.reason);
         }
       }
     }
