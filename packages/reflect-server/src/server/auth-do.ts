@@ -561,6 +561,11 @@ export class BaseAuthDO implements DurableObject {
           'fetching response from DO',
           () => stub.fetch(requestToDO),
         );
+        lc.debug?.(
+          'received DO response',
+          responseFromDO.status,
+          responseFromDO.statusText,
+        );
         const responseHeaders = new Headers(responseFromDO.headers);
         // While Sec-WebSocket-Protocol is just being used as a mechanism for
         // sending `auth` since custom headers are not supported by the browser
