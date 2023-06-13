@@ -1468,7 +1468,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * {@link experimentalWatch}.
    *
    * If an error occurs in the `body` the `onError` function is called if
-   * present. Otherwise, the error is thrown.
+   * present. Otherwise, the error is logged at log level 'error'.
    *
    * To cancel the subscription, call the returned function.
    */
