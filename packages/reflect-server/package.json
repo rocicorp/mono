@@ -54,9 +54,6 @@
     "typescript": "^5.1.3",
     "util": "^0.12.5"
   },
-  "peerDependencies": {
-    "wrangler": "^2.13.0"
-  },
   "files": [
     "out/reflect-server.d.ts",
     "out/reflect-server.js",
