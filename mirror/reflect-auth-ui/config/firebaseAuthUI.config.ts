@@ -12,12 +12,13 @@ const Firebase = firebase.initializeApp(firebaseConfig);
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export const Providers = {
   github: new GithubAuthProvider(),
-  facebook: new EmailAuthProvider(),
+  email: new EmailAuthProvider(),
 };
 
 export const uiConfig: firebaseUiAuth.Config = {
-  signInOptions: [Providers.github.providerId],
-  // Other config options...
+  signInOptions: [Providers.github.providerId, Providers.email.providerId],
+  signInFlow: 'popup',
+  signInSuccessUrl: 'localhost:3000',
 };
 
 export const auth = getAuth();
