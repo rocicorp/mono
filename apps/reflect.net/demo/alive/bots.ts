@@ -1,7 +1,7 @@
 import type {ClientID, Reflect} from '@rocicorp/reflect/client';
 import {nanoid} from 'nanoid';
 import type {M} from '../shared/mutators';
-import {BotMove, BotRecording, BotType, botRecordings} from './bot-recordings';
+import type {BotMove, BotRecording, BotType} from './bot-recordings';
 import {getBotController} from './client-model';
 import {colorToString, idToColor} from './colors';
 import type {PieceInfo} from './piece-info';
@@ -62,6 +62,10 @@ const botLocations: Location[] = [
   },
 ];
 
+async function getBotRecordings(): Promise<BotRecording[]> {
+  return (await import('./bot-recordings')).botRecordings;
+}
+
 export class Bots {
   private _home: Rect;
   private _stage: Rect;
@@ -74,7 +78,7 @@ export class Bots {
   private _lastRecording: BotMove[] | undefined = undefined;
   private _botPlaybackByClientID: Map<string, BotPlayback> = new Map();
   private readonly _cleanup: () => void;
-  private _raf: number = 0;
+  private _raf = 0;
 
   private _r: Reflect<M>;
   private _clientID: ClientID | undefined = undefined;
@@ -102,7 +106,7 @@ export class Bots {
     };
 
     window.addEventListener('pointermove', handlePointerMove);
-    const handleKeyPress = (e: KeyboardEvent) => {
+    const handleKeyPress = async (e: KeyboardEvent) => {
       if (!this._clientID) {
         return;
       }
@@ -134,7 +138,7 @@ export class Bots {
         for (let i = 0; i < parseInt(multiply); i++) {
           for (const bot of e.key === '@' && this._lastRecording
             ? [{clientID: 'latest-bot', moves: this._lastRecording}]
-            : botRecordings) {
+            : await getBotRecordings()) {
             const transformedMoves = bot.moves.map(move => ({
               time: move.time,
               coordX: move.coordX - i * 0.1,
@@ -156,7 +160,7 @@ export class Bots {
     };
     window.addEventListener('keypress', handleKeyPress);
 
-    const maybeLaunchBots = () => {
+    const maybeLaunchBots = async () => {
       if (this._clientID && this._isBotController) {
         const currentNumPuzzleBots = [
           ...this._botPlaybackByClientID.values(),
@@ -165,8 +169,8 @@ export class Bots {
           ...this._botPlaybackByClientID.values(),
         ].filter(p => p.type === 'wander').length;
 
-        let toPlayback: BotRecording[] = [];
-        const shuffled = shuffle(botRecordings);
+        const toPlayback: BotRecording[] = [];
+        const shuffled = shuffle(await getBotRecordings());
         if (
           currentNumPuzzleBots === 0 ||
           (currentNumPuzzleBots === 1 && Math.random() > 0.9)
@@ -195,7 +199,7 @@ export class Bots {
     };
 
     // Launch them once at startup, then every 3 seconds.
-    maybeLaunchBots();
+    void maybeLaunchBots();
     const interval = setInterval(maybeLaunchBots, 3_000);
 
     r.clientID.then(clientID => (this._clientID = clientID));
@@ -208,12 +212,12 @@ export class Bots {
         };
       },
       {
-        onData: result => {
+        onData: async result => {
           console.log('botController change', result);
           this._isBotController = result.isBotController;
           if (this._isBotController) {
             // Don't wait for 3s to expire to launch bots.
-            maybeLaunchBots();
+            await maybeLaunchBots();
           } else {
             // No longer bot controller, stop playing bots
             for (const [botClientID, {manuallyTriggeredBot}] of this
