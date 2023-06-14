@@ -2,7 +2,7 @@ import * as v from 'shared/valita.js';
 
 export const connectedBodySchema = v.object({
   wsid: v.string(),
-  timestamp: v.number().optional()
+  timestamp: v.number().optional(),
 });
 
 export const connectedMessageSchema = v.tuple([
