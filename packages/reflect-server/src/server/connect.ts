@@ -48,7 +48,7 @@ export async function handleConnection(
   onMessage: MessageHandler,
   onClose: CloseHandler,
 ): Promise<void> {
-  lc.info?.('roomDO: handling connect', url.toString());
+  lc.info?.('handling connect', url.toString());
   const closeWithErrorLocal = (ek: ErrorKind, msg: string) => {
     closeWithError(lc, ws, ek, msg);
   };
@@ -177,7 +177,11 @@ export async function handleConnection(
   lc.debug?.('Setting client map entry', clientID, client);
   clients.set(clientID, client);
 
-  const connectedMessage: ConnectedMessage = ['connected', {wsid}];
+  const connectedMessage: ConnectedMessage = [
+    'connected',
+    {wsid, timestamp: Date.now()},
+  ];
+  lc.debug?.('sending connect message', url.toString());
   send(ws, connectedMessage);
 }
 

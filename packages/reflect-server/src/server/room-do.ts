@@ -172,39 +172,48 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         });
       }
 
-      if (!this._lcHasRoomIdContext) {
-        const roomID = await this.maybeRoomID();
-        const url = new URL(request.url);
-        const urlRoomID = url.searchParams.get('roomID');
-        if (
-          // roomID is not going to be set on the createRoom request, or after
-          // the room has been deleted.
-          roomID !== undefined &&
-          // roomID is not going to be set for all calls, eg to delete the room.
-          urlRoomID !== null &&
-          urlRoomID !== roomID
-        ) {
-          this._lc.error?.(
-            'roomID mismatch',
-            'urlRoomID',
-            urlRoomID,
-            'roomID',
-            roomID,
-          );
-          return new Response('Unexpected roomID', {status: 400});
-        }
-
-        if (roomID) {
-          this._lc = this._lc.withContext('roomID', roomID);
-          this._lc.info?.('initializing room');
-          this._lcHasRoomIdContext = true;
-        }
-      }
-
-      const lc = addClientIPToLogContext(
+      let lc = addClientIPToLogContext(
         addRequestIDFromHeadersOrRandomID(this._lc, request),
         request,
       );
+
+      const roomID = await this.maybeRoomID();
+      const url = new URL(request.url);
+      const urlRoomID = url.searchParams.get('roomID');
+      if (
+        // roomID is not going to be set on the createRoom request, or after
+        // the room has been deleted.
+        roomID !== undefined &&
+        // roomID is not going to be set for all calls, eg to delete the room.
+        urlRoomID !== null &&
+        urlRoomID !== roomID
+      ) {
+        lc.error?.('roomID mismatch', 'urlRoomID', urlRoomID, 'roomID', roomID);
+        return new Response('Unexpected roomID', {status: 400});
+      }
+
+      if (!this._lcHasRoomIdContext) {
+        lc.debug?.('awaiting lock to initialize roomID context');
+        await this._lock.withLock(() => {
+          lc.debug?.('got lock to initialize roomID context');
+          if (this._lcHasRoomIdContext) {
+            lc.debug?.('roomID context already initialized, returning');
+            return;
+          }
+          if (urlRoomID !== null && roomID === undefined) {
+            lc.error?.('Expected roomID to be present in storage', {
+              urlRoomID,
+            });
+          }
+          if (roomID || urlRoomID) {
+            const roomIDForContext = roomID ?? urlRoomID;
+            this._lc = this._lc.withContext('roomID', roomIDForContext);
+            lc = lc.withContext('roomID', roomIDForContext);
+            this._lcHasRoomIdContext = true;
+            lc.info?.('initialized roomID context');
+          }
+        });
+      }
 
       return await this._router.dispatch(request, {lc});
     } catch (e) {
@@ -254,7 +263,10 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
    */
   private _internalCreateRoom = withBody(createRoomRequestSchema, async ctx => {
     const {roomID} = ctx.body;
+    this._lc.info?.('Handling create room request for roomID', roomID);
     await this._setRoomID(roomID);
+    await this._storage.flush();
+    this._lc.debug?.('Flushed roomID to storage', roomID);
     return new Response('ok');
   });
 

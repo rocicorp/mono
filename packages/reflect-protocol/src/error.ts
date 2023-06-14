@@ -2,7 +2,7 @@ import * as v from 'shared/valita.js';
 
 // Note: Metric names depend on these values,
 // so if you add or change on here a corresponding dashboard
-// change will likely needed.
+// change will likely be needed.
 
 export const errorKindSchema = v.union(
   v.literal('AuthInvalidated'),
