@@ -9,8 +9,7 @@
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "build": "tsc"
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "devDependencies": {
     "@badrap/valita": "^0.2.0",
@@ -20,22 +19,19 @@
     "ts-jest": "^29.1.0",
     "typescript": "^5.1.3"
   },
-  "files": [
-    "out"
-  ],
   "exports": {
-    ".": "./out/mod.js",
-    "./valita.js": "./out/valita.js",
-    "./must.js": "./out/must.js",
-    "./has-own.js": "./out/has-own.js",
-    "./asserts.js": "./out/asserts.js",
-    "./json.js": "./out/json.js",
-    "./deep-clone.js": "./out/deep-clone.js",
-    "./config.js": "./out/config.js",
-    "./buffer-sizer.js": "./out/buffer-sizer.js",
-    "./sleep.js": "./out/sleep.js",
-    "./abort-error.js": "./out/abort-error.js",
-    "./timed.js": "./out/timed.js"
+    ".": "./src/mod.ts",
+    "./valita.js": "./src/valita.ts",
+    "./must.js": "./src/must.ts",
+    "./has-own.js": "./src/has-own.ts",
+    "./asserts.js": "./src/asserts.ts",
+    "./json.js": "./src/json.ts",
+    "./deep-clone.js": "./src/deep-clone.ts",
+    "./config.js": "./src/config.ts",
+    "./buffer-sizer.js": "./src/buffer-sizer.ts",
+    "./sleep.js": "./src/sleep.ts",
+    "./abort-error.js": "./src/abort-error.ts",
+    "./timed.js": "./src/timed.ts"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
