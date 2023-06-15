@@ -9,8 +9,7 @@
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "build": "unbuild"
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "dependencies": {
     "@badrap/valita": "^0.2.0"
@@ -20,26 +19,13 @@
     "@rocicorp/prettier-config": "^0.1.1",
     "shared": "0.0.0",
     "ts-jest": "^29.1.0",
-    "typescript": "^5.1.3",
-    "unbuild": "^1.1.1"
+    "typescript": "^5.1.3"
   },
   "exports": {
-    ".": {
-      "types": "./dist/mod.d.ts",
-      "import": "./dist/mod.mjs"
-    },
-    "./base.js": {
-      "types": "./dist/base.d.ts",
-      "import": "./dist/base.mjs"
-    },
-    "./user.js": {
-      "types": "./dist/user.d.ts",
-      "import": "./dist/user.mjs"
-    }
+    ".": "./src/mod.ts",
+    "./base.js": "./src/base.ts",
+    "./user.js": "./src/user.ts"
   },
-  "files": [
-    "dist"
-  ],
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },
