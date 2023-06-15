@@ -11,8 +11,7 @@
     "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "deploy-rules-staging": "npx firebase-tools --project staging deploy --only firestore:rules",
-    "deploy-rules-prod": "npx firebase-tools --project prod deploy --only firestore:rules",
-    "build": "unbuild"
+    "deploy-rules-prod": "npx firebase-tools --project prod deploy --only firestore:rules"
   },
   "dependencies": {
     "@badrap/valita": "^0.2.0",
@@ -21,63 +20,24 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
+    "firebase-tools": "^12.3.0",
     "shared": "0.0.0",
     "ts-jest": "^29.1.0",
-    "typescript": "^5.1.3",
-    "unbuild": "^1.1.1"
-  },
-  "peerDependencies": {
-    "firebase-tools": "^12.3.0"
+    "typescript": "^5.1.3"
   },
   "exports": {
-    ".": {
-      "types": "./dist/mod.d.ts",
-      "import": "./dist/mod.mjs"
-    },
-    "./agent.js": {
-      "types": "./dist/agent.d.ts",
-      "import": "./dist/agent.mjs"
-    },
-    "./app-key.js": {
-      "types": "./dist/app-key.d.ts",
-      "import": "./dist/app-key.mjs"
-    },
-    "./app.js": {
-      "types": "./dist/app.d.ts",
-      "import": "./dist/app.mjs"
-    },
-    "./cloudflare.js": {
-      "types": "./dist/cloudflare.d.ts",
-      "import": "./dist/cloudflare.mjs"
-    },
-    "./deployment.js": {
-      "types": "./dist/deployment.d.ts",
-      "import": "./dist/deployment.mjs"
-    },
-    "./membership.js": {
-      "types": "./dist/membership.d.ts",
-      "import": "./dist/membership.mjs"
-    },
-    "./server.js": {
-      "types": "./dist/server.d.ts",
-      "import": "./dist/server.mjs"
-    },
-    "./team.js": {
-      "types": "./dist/team.d.ts",
-      "import": "./dist/team.mjs"
-    },
-    "./timestamp.js": {
-      "types": "./dist/timestamp.d.ts",
-      "import": "./dist/timestamp.mjs"
-    },
-    "./user.js": {
-      "types": "./dist/user.d.ts",
-      "import": "./dist/user.mjs"
-    }
+    ".": "./src/mod.ts",
+    "./agent.js": "./src/agent.ts",
+    "./app-key.js": "./src/app-key.ts",
+    "./app.js": "./src/app.ts",
+    "./cloudflare.js": "./src/cloudflare.ts",
+    "./deployment.js": "./src/deployment.ts",
+    "./membership.js": "./src/membership.ts",
+    "./server.js": "./src/server.ts",
+    "./team.js": "./src/team.ts",
+    "./timestamp.js": "./src/timestamp.ts",
+    "./user.js": "./src/user.ts"
   },
-  "files": [
-    "dist"
-  ],
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },
