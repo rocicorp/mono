@@ -40,12 +40,12 @@ module.exports = {
       'Understand Replicache': [
         'concepts/how-it-works',
         {
-          'Diff Strategies': [
-            'diff/overview',
-            'diff/reset',
-            'diff/global-version',
-            'diff/per-space-version',
-            'diff/row-version',
+          'Backend Strategies': [
+            'strategies/overview',
+            'strategies/reset',
+            'strategies/global-version',
+            'strategies/per-space-version',
+            'strategies/row-version',
           ],
         },
         'concepts/performance',
