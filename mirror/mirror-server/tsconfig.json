@@ -5,5 +5,5 @@
     "types": ["node"],
     "lib": ["ESNext"]
   },
-  "include": ["src", "fix-firestore-jest-mock.js"]
+  "include": ["src", "tool/fix-firestore-jest-mock.js"]
 }

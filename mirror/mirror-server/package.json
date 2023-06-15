@@ -17,7 +17,7 @@
     "check-format": "prettier --check *",
     "check-types": "tsc --noEmit",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "postinstall": "node fix-firestore-jest-mock.js"
+    "postinstall": "node tool/fix-firestore-jest-mock.js"
   },
   "main": "lib/index.mjs",
   "dependencies": {

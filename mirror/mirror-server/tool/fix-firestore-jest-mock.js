@@ -24,9 +24,14 @@ const invalidFiles = [
  * @param {string} basename
  */
 function fixFile(basename) {
-  const pathName = require.resolve(
-    `firestore-jest-mock/mocks/${basename}.d.ts`,
-  );
+  let pathName;
+  try {
+    pathName = require.resolve(`firestore-jest-mock/mocks/${basename}.d.ts`);
+  } catch {
+    // ignore if not found
+    return;
+  }
+
   const content = readFileSync(pathName, 'utf8');
   const newContent = content.replaceAll(
     'jest.Mock',
