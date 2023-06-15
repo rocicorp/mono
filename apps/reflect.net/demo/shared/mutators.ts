@@ -110,7 +110,7 @@ export const mutators = {
     tx: WriteTransaction,
     {key, delta}: {key: string; delta: number},
   ) => {
-    const prev = ((await tx.get(key)) as number) ?? 0;
+    const prev = (await tx.get(key)) ?? 0;
     const next = prev + delta;
     await tx.put(key, next);
 
