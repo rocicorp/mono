@@ -15,7 +15,9 @@
     "logs-prod": "npx firebase-tools --project prod functions:log",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+    "check-types": "tsc --noEmit",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "postinstall": "node fix-firestore-jest-mock.js"
   },
   "main": "lib/index.mjs",
   "dependencies": {
@@ -38,7 +40,7 @@
     "isolate-package": "^1.1.1",
     "rollup": "^3.24.0",
     "rollup-plugin-dts": "^5.3.0",
-    "ts-jest": "^29.0.5",
+    "ts-jest": "^29.1.0",
     "typescript": "^5.1.3",
     "unbuild": "^1.1.1"
   },
