@@ -746,6 +746,7 @@ export class Reflect<MD extends MutatorDefs> {
     this._connectingStart = undefined;
     this._connectedAt = 0;
     this._socket?.removeEventListener('message', this._onMessage);
+    this._socket?.removeEventListener('open', this._onOpen);
     this._socket?.removeEventListener('close', this._onClose);
     this._socket?.close();
     this._socket = undefined;
