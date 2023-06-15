@@ -34,7 +34,7 @@
     "@web/test-runner-playwright": "^0.9.0",
     "chai": "^5.0.0-alpha.0",
     "datadog": "*",
-    "esbuild": "^0.17.11",
+    "esbuild": "^0.18.3",
     "mocha": "^9.2.1",
     "reflect-protocol": "0.0.0",
     "replicache": "13.0.0-beta.1",

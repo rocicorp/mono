@@ -33,7 +33,7 @@
     "compare-utf8": "^0.1.1",
     "datadog-metrics": "^0.11.0",
     "datadog": "*",
-    "esbuild": "^0.17.11",
+    "esbuild": "^0.18.3",
     "jest-environment-miniflare": "^2.11.0",
     "miniflare": "^2.11.0",
     "nock": "^13.3.1",
