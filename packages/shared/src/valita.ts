@@ -113,28 +113,28 @@ function getMessage(err: v.Err, v: unknown): string {
   }
 }
 
-export function parse<T>(v: unknown, s: Type<T>): T {
-  const res = test(v, s);
+export function parse<T>(value: unknown, schema: Type<T>): T {
+  const res = test(value, schema);
   if (!res.ok) {
     throw new TypeError(res.error);
   }
   return res.value;
 }
 
-export function is<T>(v: unknown, s: Type<T>): v is T {
-  return (s as v.Type<T>).try(v).ok;
+export function is<T>(value: unknown, schema: Type<T>): value is T {
+  return (schema as v.Type<T>).try(value).ok;
 }
 
-export function assert<T>(v: unknown, s: Type<T>): asserts v is T {
-  parse(v, s);
+export function assert<T>(value: unknown, schema: Type<T>): asserts value is T {
+  parse(value, schema);
 }
 
 type Result<T> = {ok: true; value: T} | {ok: false; error: string};
 
-export function test<T>(v: unknown, s: Type<T>): Result<T> {
-  const res = (s as v.Type<T>).try(v);
+export function test<T>(value: unknown, schema: Type<T>): Result<T> {
+  const res = (schema as v.Type<T>).try(value);
   if (!res.ok) {
-    return {ok: false, error: getMessage(res, v)};
+    return {ok: false, error: getMessage(res, value)};
   }
   return res;
 }
