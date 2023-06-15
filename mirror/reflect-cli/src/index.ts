@@ -4,6 +4,8 @@ import makeCLI from 'yargs';
 import {hideBin} from 'yargs/helpers';
 import {publishHandler, publishOptions} from './publish.js';
 import {version} from './version.js';
+import {ProxyAgent, setGlobalDispatcher} from 'undici';
+import {loginHandler} from './login.js';
 
 const proxy =
   process.env.https_proxy ||
@@ -82,9 +84,19 @@ export function createCLIParser(argv: string[]) {
   );
 
   // dev
+
+  reflectCLI.command(
+    'login [script]',
+    '🔓 Login to Reflect',
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    () => {},
+    loginHandler,
+  );
+
+  // dev
   reflectCLI.command(
     'dev [script]',
-    '👂 Start a local server for developing your worker',
+    '👂 Start a local server for developing your ',
     // devOptions,
     // devHandler
   );
