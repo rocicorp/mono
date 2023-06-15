@@ -1,9 +1,4 @@
 {
   "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "outDir": "lib",
-    "types": ["node"],
-    "lib": ["ESNext"]
-  },
-  "include": ["src", "tool/fix-firestore-jest-mock.js"]
+  "include": ["src", "tool/fix-firestore-jest-mock.js", "tool/build.js"]
 }

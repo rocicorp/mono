@@ -1,7 +1,7 @@
 {
   "functions": {
-    "predeploy": ["npm run build", "isolate"],
-    "source": "./isolate",
+    "predeploy": ["npm run build"],
+    "source": "./",
     "ignore": ["firebase.json", "**/node_modules/**", ".git"]
   },
   "emulators": {
