@@ -41,6 +41,7 @@ import {sleep, sleepWithAbort} from 'shared/sleep.js';
 import * as valita from 'shared/valita.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
+import {checkConnectivity} from './connect-checks.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 import {
   DID_NOT_CONNECT_VALUE,
@@ -320,7 +321,12 @@ export class Reflect<MD extends MutatorDefs> {
     this._jurisdiction = jurisdiction;
     this._l = getLogContext(options, this._rep);
 
-    void this._l.then(lc => reportReloadReason(lc, localStorage));
+    void this._l.then(lc => {
+      reportReloadReason(lc, localStorage);
+      void checkConnectivity('startup', this._socketOrigin, lc).catch(e =>
+        lc.info?.('Error checking connectivity', e),
+      );
+    });
 
     this._metrics = new MetricManager({
       reportIntervalMs: REPORT_INTERVAL_MS,
@@ -707,6 +713,7 @@ export class Reflect<MD extends MutatorDefs> {
         ? Date.now() - this._connectedAt
         : 0,
       messageCount: this._messageCount,
+      connectionState: this._connectionState,
     });
 
     switch (this._connectionState) {
@@ -721,6 +728,7 @@ export class Reflect<MD extends MutatorDefs> {
         break;
       }
       case ConnectionState.Connecting: {
+        // log here
         this._metrics.lastConnectError.set(getLastConnectMetricState(reason));
         if (this._connectingStart === undefined) {
           l.error?.(
