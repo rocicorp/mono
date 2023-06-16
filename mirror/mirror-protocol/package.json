@@ -24,6 +24,8 @@
   "exports": {
     ".": "./src/mod.ts",
     "./base.js": "./src/base.ts",
+    "./publish.js": "./src/publish.ts",
+    "./user-agent.js": "./src/user-agent.ts",
     "./user.js": "./src/user.ts"
   },
   "eslintConfig": {

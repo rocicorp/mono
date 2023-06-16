@@ -1,10 +1,5 @@
 import * as v from 'shared/valita.js';
-
-export const userAgentSchema = v.object({
-  type: v.string(),
-  version: v.string(),
-});
-export type UserAgent = v.Infer<typeof userAgentSchema>;
+import {userAgentSchema} from './user-agent.js';
 
 export const baseRequestFields = {
   requester: v.object({
