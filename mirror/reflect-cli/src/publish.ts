@@ -1,31 +1,62 @@
-import {readFileSync} from 'fs';
-
+import type {PublishRequest} from 'mirror-protocol/publish.js';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import {callFirebase} from './call-firebase.js';
+import {compile} from './compile.js';
+import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
-  return yargs.option('name', {
-    describe: 'Name of the worker',
-    type: 'string',
-    requiresArg: true,
-  });
+  return yargs
+    .option('name', {
+      describe: 'Name of the worker',
+      type: 'string',
+      demandOption: true,
+    })
+    .positional('script', {
+      describe: 'Path to the worker script',
+      type: 'string',
+      demandOption: true,
+    });
 }
 
-export async function publishHandler(
-  yargs: YargvToInterface<ReturnType<typeof publishOptions>>,
-) {
-  const resolvedEntryPointPath = './example/customer.ts.example';
-  const content = readFileSync(resolvedEntryPointPath, 'utf-8');
+async function exists(path: string) {
+  try {
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-  yargs.name = yargs.name || 'customer';
+type PublishHandlerArgs = YargvToInterface<ReturnType<typeof publishOptions>>;
 
-  const formData = new FormData();
-  formData.append('bundle', new Blob([content]), 'customer.ts');
+export async function publishHandler(yargs: PublishHandlerArgs) {
+  const {script, name} = yargs;
 
-  await fetch(
-    `http://127.0.0.1:5001/reflect-mirror-staging/us-central1/publish`,
-    {
-      method: 'POST',
-      body: formData,
+  const absPath = path.resolve(script);
+
+  if (!(await exists(absPath))) {
+    throw new Error(`File not found: ${absPath}`);
+  }
+
+  const {code, sourcemap} = await compile(absPath);
+
+  // TODO(arv): Implement userID
+  const userID = 'USERID';
+
+  const data: PublishRequest = {
+    requester: makeRequester(userID),
+    name,
+    source: {
+      content: code.text,
+      name: path.basename(code.path),
     },
-  );
+    sourcemap: {
+      content: sourcemap.text,
+      name: path.basename(sourcemap.path),
+    },
+  };
+
+  await callFirebase('publish', data);
 }

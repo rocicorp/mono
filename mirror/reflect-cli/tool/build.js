@@ -20,10 +20,11 @@ var require = ${createRequireAlias}(import.meta.url);
 }
 
 const external = [
-  'firebase-functions',
-  'firebase-admin',
-  'busboy',
   '@badrap/valita',
+  'busboy',
+  'esbuild',
+  'firebase-admin',
+  'firebase-functions',
 ];
 
 async function main() {
