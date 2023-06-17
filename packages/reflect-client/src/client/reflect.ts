@@ -321,12 +321,7 @@ export class Reflect<MD extends MutatorDefs> {
     this._jurisdiction = jurisdiction;
     this._l = getLogContext(options, this._rep);
 
-    void this._l.then(lc => {
-      reportReloadReason(lc, localStorage);
-      void checkConnectivity('startup', this._socketOrigin, lc).catch(e =>
-        lc.info?.('Error checking connectivity', e),
-      );
-    });
+    void this._l.then(lc => reportReloadReason(lc, localStorage));
 
     this._metrics = new MetricManager({
       reportIntervalMs: REPORT_INTERVAL_MS,
@@ -651,6 +646,9 @@ export class Reflect<MD extends MutatorDefs> {
     const wsid = nanoid();
     l = addWebSocketIDToLogContext(wsid, l);
     l.info?.('Connecting...', {navigatorOnline: navigator.onLine});
+    void checkConnectivity('connect', this._socketOrigin, l).catch(e => {
+      l.info?.('Error checking connectivity', e);
+    });
 
     this._connectionState = ConnectionState.Connecting;
 
@@ -708,6 +706,7 @@ export class Reflect<MD extends MutatorDefs> {
     l.info?.('disconnecting', {
       navigatorOnline: navigator.onLine,
       reason,
+      connectingStart: this._connectingStart,
       connectedAt: this._connectedAt,
       connectionDuration: this._connectedAt
         ? Date.now() - this._connectedAt

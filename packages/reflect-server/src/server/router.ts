@@ -191,7 +191,7 @@ async function validateBody<T>(
     // log line we could consume the original request body here and then
     // both create and pass the validated request as well as the body
     // in case something downstream wants it.
-    json = await request.json();
+    json = await request.clone().json();
   } catch (e) {
     return {
       errorResponse: new Response('Body must be valid json.', {status: 400}),

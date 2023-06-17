@@ -365,27 +365,27 @@ export class BaseAuthDO implements DurableObject {
     serverWS.accept();
     lc.info?.('Sending hello message');
     serverWS.send('hello');
-    // let closed = false;
-    // const onClose = () => {
-    //   lc.info?.('Socket closed');
-    //   closed = true;
-    //   serverWS.removeEventListener('close', onClose);
-    // };
-    // serverWS.addEventListener('close', onClose);
-    // // The client should close the socket after receiving the first message, but
-    // // if the socket is still open after 10 seconds close it.
-    // // We don't aggressively close it because it results in very noisy workerd
-    // // exception messsages like
-    // // "disconnected: other end of WebSocketPipe was destroyed"
-    // // when running locally.
-    // setTimeout(() => {
-    //   if (!closed) {
-    //     closed = true;
-    //     serverWS.removeEventListener('close', onClose);
-    //     lc.info?.('Closing socket');
-    //     serverWS.close();
-    //   }
-    // }, 10_000);
+    let closed = false;
+    const onClose = () => {
+      lc.info?.('Socket closed');
+      closed = true;
+      serverWS.removeEventListener('close', onClose);
+    };
+    serverWS.addEventListener('close', onClose);
+    // The client should close the socket after receiving the first message, but
+    // if the socket is still open after 10 seconds close it.
+    // We don't aggressively close it because it results in very noisy workerd
+    // exception messsages like
+    // "disconnected: other end of WebSocketPipe was destroyed"
+    // when running locally.
+    setTimeout(() => {
+      if (!closed) {
+        closed = true;
+        serverWS.removeEventListener('close', onClose);
+        lc.info?.('Closing socket');
+        serverWS.close();
+      }
+    }, 10_000);
     lc.info?.('Returning response', {
       status: 101,
       headers: responseHeaders.toString(),

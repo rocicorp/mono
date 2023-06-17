@@ -14,12 +14,18 @@ export async function checkConnectivity(
   assert(socketOrigin.startsWith('ws://') || socketOrigin.startsWith('wss://'));
   const id = nanoid();
   lc = lc.withContext('connectCheckID', id).withContext('checkReason', reason);
-  lc.info?.('Starting connectivity checks.');
+  lc.info?.('Starting connectivity checks.', {
+    navigatorOnline: navigator.onLine,
+  });
   const checks: Checks = {
     cfGet: _ => checkCfGet(id, socketOrigin),
     cfWebSocket: l => checkCfSocket(id, socketOrigin, false, l),
     cfWebSocketWSecWebSocketProtocolHeader: l =>
       checkCfSocket(id, socketOrigin, true, l),
+    renderGet: _ => checkRenderGet(id),
+    renderWebSocket: l => checkRenderSocket(id, false, l),
+    renderWebSocketWSecWebSocketProtocolHeader: l =>
+      checkRenderSocket(id, true, l),
   };
 
   const resultPs: Promise<unknown[]>[] = [];
@@ -49,36 +55,73 @@ export async function checkConnectivity(
   );
 }
 
+function checkRenderGet(id: string) {
+  return checkGet(id, 'https://canary-render.onrender.com/canary/get');
+}
+
 function checkCfGet(id: string, socketOrigin: string) {
-  const cfGetCheckUrl = new URL(socketOrigin.replace(/^ws/, 'http'));
-  cfGetCheckUrl.pathname = '/api/debug/v0/get';
-  cfGetCheckUrl.searchParams.set('id', id);
+  const cfGetCheckBaseURL = new URL(socketOrigin.replace(/^ws/, 'http'));
+  cfGetCheckBaseURL.pathname = '/api/debug/v0/get';
+  return checkGet(id, cfGetCheckBaseURL.toString());
+}
+
+function checkGet(id: string, baseURL: string) {
+  const getCheckURL = new URL(baseURL);
+  getCheckURL.searchParams.set('id', id);
   return Promise.race([
     timeout(),
     (async () => {
-      const response = await fetch(cfGetCheckUrl);
-      return `Got response ${response.status} ${await response.text()}.`;
+      const response = await fetch(getCheckURL);
+      return `Got response ${response.status} "${await response.text()}"`;
     })(),
   ]);
 }
 
-async function checkCfSocket(
+function checkRenderSocket(
+  id: string,
+  wSecWebSocketProtocolHeader: boolean,
+  lc: LogContext,
+) {
+  return checkSocket(
+    id,
+    'wss://canary-render.onrender.com/canary/websocket',
+    wSecWebSocketProtocolHeader,
+    lc,
+  );
+}
+
+function checkCfSocket(
   id: string,
   socketOrigin: string,
   wSecWebSocketProtocolHeader: boolean,
   lc: LogContext,
 ) {
-  const cfSocketCheckUrl = new URL(socketOrigin);
-  cfSocketCheckUrl.pathname = '/api/debug/v0/websocket';
-  cfSocketCheckUrl.searchParams.set('id', id);
-  cfSocketCheckUrl.searchParams.set(
+  const cfSocketCheckBaseURL = new URL(socketOrigin);
+  cfSocketCheckBaseURL.pathname = '/api/debug/v0/websocket';
+  return checkSocket(
+    id,
+    cfSocketCheckBaseURL.toString(),
+    wSecWebSocketProtocolHeader,
+    lc,
+  );
+}
+
+async function checkSocket(
+  id: string,
+  socketBaseURL: string,
+  wSecWebSocketProtocolHeader: boolean,
+  lc: LogContext,
+) {
+  const socketCheckURL = new URL(socketBaseURL);
+  socketCheckURL.searchParams.set('id', id);
+  socketCheckURL.searchParams.set(
     'wSecWebSocketProtocolHeader',
     wSecWebSocketProtocolHeader ? 'true' : 'false',
   );
 
   const cfWebSocket = wSecWebSocketProtocolHeader
-    ? new WebSocket(cfSocketCheckUrl, 'check-' + id)
-    : new WebSocket(cfSocketCheckUrl);
+    ? new WebSocket(socketCheckURL, 'check-' + id)
+    : new WebSocket(socketCheckURL);
 
   const {promise, resolve} = resolver<string>();
   const onMessage = (e: MessageEvent<string>) => {
@@ -96,7 +139,7 @@ async function checkCfSocket(
       wasClean,
     };
     lc.info?.('Received close', closeInfo);
-    resolve(`Closed before connected ${JSON.stringify(closeInfo)}`);
+    resolve(`Closed before connected ${JSON.stringify(closeInfo)}.`);
   };
   try {
     cfWebSocket.addEventListener('message', onMessage);
