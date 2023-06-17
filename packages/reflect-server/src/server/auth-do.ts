@@ -100,9 +100,14 @@ export const AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER = {
   connect: CONNECT_URL_PATTERN,
 } as const;
 
+export const AUTH_ROUTES_UNAUTHED = {
+  canaryWebSocket: '/api/canary/v0/websocket',
+} as const;
+
 export const AUTH_ROUTES = {
   ...AUTH_ROUTES_AUTHED_BY_API_KEY,
   ...AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER,
+  ...AUTH_ROUTES_UNAUTHED,
 } as const;
 
 export class BaseAuthDO implements DurableObject {
@@ -314,7 +319,83 @@ export class BaseAuthDO implements DurableObject {
 
     this._router.register(AUTH_ROUTES.legacyConnect, this._legacyConnect);
     this._router.register(AUTH_ROUTES.connect, this._connect);
+    this._router.register(AUTH_ROUTES.canaryWebSocket, this._canaryWebSocket);
   }
+
+  private _canaryWebSocket = get((ctx: BaseContext, request) => {
+    const url = new URL(request.url);
+    const checkID = url.searchParams.get('id') ?? 'missing';
+    const wSecWebSocketProtocolHeader =
+      url.searchParams.get('wSecWebSocketProtocolHeader') === 'true';
+
+    const lc = ctx.lc
+      .withContext('connectCheckID', checkID)
+      .withContext(
+        'checkName',
+        wSecWebSocketProtocolHeader
+          ? 'cfWebSocketWSecWebSocketProtocolHeader'
+          : 'cfWebSocket',
+      );
+    lc.info?.('Handling WebSocket connection check.');
+    if (request.headers.get('Upgrade') !== 'websocket') {
+      lc.error?.('returning 400 bc missing Upgrade header:', url);
+      return new Response('expected websocket', {status: 400});
+    }
+
+    const secWebSocketProtocolHeader = request.headers.get(
+      'Sec-WebSocket-Protocol',
+    );
+    const responseHeaders = new Headers();
+    if (wSecWebSocketProtocolHeader) {
+      if (secWebSocketProtocolHeader === null) {
+        return new Response('expected Sec-WebSocket-Protocol', {status: 400});
+      }
+      lc.info?.(
+        'Setting response Sec-WebSocket-Protocol to',
+        secWebSocketProtocolHeader,
+      );
+      responseHeaders.set('Sec-WebSocket-Protocol', secWebSocketProtocolHeader);
+    } else if (secWebSocketProtocolHeader !== null) {
+      lc.info?.(
+        'Unexpected Sec-WebSocket-Protocol header',
+        secWebSocketProtocolHeader,
+      );
+    }
+    const {0: clientWS, 1: serverWS} = new WebSocketPair();
+    serverWS.accept();
+    lc.info?.('Sending hello message');
+    serverWS.send('hello');
+    let closed = false;
+    const onClose = () => {
+      lc.info?.('Socket closed');
+      closed = true;
+      serverWS.removeEventListener('close', onClose);
+    };
+    serverWS.addEventListener('close', onClose);
+    // The client should close the socket after receiving the first message, but
+    // if the socket is still open after 10 seconds close it.
+    // We don't aggressively close it because it results in very noisy workerd
+    // exception messsages like
+    // "disconnected: other end of WebSocketPipe was destroyed"
+    // when running locally.
+    setTimeout(() => {
+      if (!closed) {
+        closed = true;
+        serverWS.removeEventListener('close', onClose);
+        lc.info?.('Closing socket');
+        serverWS.close();
+      }
+    }, 10_000);
+    lc.info?.('Returning response', {
+      status: 101,
+      headers: responseHeaders.toString(),
+    });
+    return new Response(null, {
+      status: 101,
+      headers: responseHeaders,
+      webSocket: clientWS,
+    });
+  });
 
   private _connect = get(
     withVersion((ctx: BaseContext & WithVersion, request) => {

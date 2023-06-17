@@ -6,8 +6,9 @@ import {
   AUTH_ROUTES,
   AUTH_ROUTES_AUTHED_BY_API_KEY,
   AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER,
+  AUTH_ROUTES_UNAUTHED,
 } from './auth-do.js';
-import {HELLO, REPORT_METRICS_PATH} from './paths.js';
+import {CANARY_GET, HELLO, REPORT_METRICS_PATH} from './paths.js';
 import {
   asJSON,
   BaseContext,
@@ -69,6 +70,9 @@ function registerRoutes(router: WorkerRouter) {
   for (const pattern of Object.values(AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER)) {
     router.register(pattern, sendToAuthDO);
   }
+  for (const pattern of Object.values(AUTH_ROUTES_UNAUTHED)) {
+    router.register(pattern, sendToAuthDO);
+  }
 }
 
 // The datadog metrics http endpoint does not support CORS, so we
@@ -113,6 +117,18 @@ const hello = get<WorkerContext, Response>(
   asJSON(() => ({
     reflectServerVersion: version,
   })),
+);
+
+const debugGet = get<WorkerContext, Response>(
+  (ctx: WorkerContext, req: Request) => {
+    const url = new URL(req.url);
+    const checkID = url.searchParams.get('id') ?? 'missing';
+    const lc = ctx.lc
+      .withContext('connectCheckID', checkID)
+      .withContext('checkName', 'cfGet');
+    lc.info?.('Handling get connection check.');
+    return new Response('hello');
+  },
 );
 
 function requireAPIKeyMatchesEnv(next: Handler<WorkerContext, Response>) {
@@ -302,4 +318,5 @@ async function sendToAuthDO(
 export const WORKER_ROUTES = {
   [REPORT_METRICS_PATH]: reportMetrics,
   [HELLO]: hello,
+  [CANARY_GET]: debugGet,
 } as const;

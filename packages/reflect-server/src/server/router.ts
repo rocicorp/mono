@@ -145,7 +145,7 @@ export function withVersion<Context extends BaseContext, Resp>(
   return (ctx: Context, req: Request) => {
     const {version: versionString} = ctx.parsedURL.pathname.groups;
     if (versionString === undefined) {
-      throw new Error('version not found by withVersion');
+      throw new Error('version not found by withVersion' + req.url);
     }
     if (!/^v\d+$/.test(versionString)) {
       throw new Error(`invalid version found by withVersion, ${versionString}`);

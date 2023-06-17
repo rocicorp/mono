@@ -41,6 +41,7 @@ import {sleep, sleepWithAbort} from 'shared/sleep.js';
 import * as valita from 'shared/valita.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
+import {checkConnectivity} from './connect-checks.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 import {
   DID_NOT_CONNECT_VALUE,
@@ -645,6 +646,9 @@ export class Reflect<MD extends MutatorDefs> {
     const wsid = nanoid();
     l = addWebSocketIDToLogContext(wsid, l);
     l.info?.('Connecting...', {navigatorOnline: navigator.onLine});
+    void checkConnectivity('connect', this._socketOrigin, l).catch(e => {
+      l.info?.('Error checking connectivity', e);
+    });
 
     this._connectionState = ConnectionState.Connecting;
 
@@ -702,11 +706,13 @@ export class Reflect<MD extends MutatorDefs> {
     l.info?.('disconnecting', {
       navigatorOnline: navigator.onLine,
       reason,
+      connectingStart: this._connectingStart,
       connectedAt: this._connectedAt,
       connectionDuration: this._connectedAt
         ? Date.now() - this._connectedAt
         : 0,
       messageCount: this._messageCount,
+      connectionState: this._connectionState,
     });
 
     switch (this._connectionState) {
