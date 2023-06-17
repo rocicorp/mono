@@ -119,7 +119,7 @@ const hello = get<WorkerContext, Response>(
   })),
 );
 
-const debugGet = get<WorkerContext, Response>(
+const canaryGet = get<WorkerContext, Response>(
   (ctx: WorkerContext, req: Request) => {
     const url = new URL(req.url);
     const checkID = url.searchParams.get('id') ?? 'missing';
@@ -318,5 +318,5 @@ async function sendToAuthDO(
 export const WORKER_ROUTES = {
   [REPORT_METRICS_PATH]: reportMetrics,
   [HELLO]: hello,
-  [CANARY_GET]: debugGet,
+  [CANARY_GET]: canaryGet,
 } as const;
