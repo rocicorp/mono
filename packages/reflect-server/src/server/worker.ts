@@ -8,7 +8,7 @@ import {
   AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER,
   AUTH_ROUTES_UNAUTHED,
 } from './auth-do.js';
-import {DEBUG_GET, HELLO, REPORT_METRICS_PATH} from './paths.js';
+import {CANARY_GET, HELLO, REPORT_METRICS_PATH} from './paths.js';
 import {
   asJSON,
   BaseContext,
@@ -318,5 +318,5 @@ async function sendToAuthDO(
 export const WORKER_ROUTES = {
   [REPORT_METRICS_PATH]: reportMetrics,
   [HELLO]: hello,
-  [DEBUG_GET]: debugGet,
+  [CANARY_GET]: debugGet,
 } as const;

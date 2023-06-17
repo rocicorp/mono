@@ -61,7 +61,7 @@ function checkRenderGet(id: string) {
 
 function checkCfGet(id: string, socketOrigin: string) {
   const cfGetCheckBaseURL = new URL(socketOrigin.replace(/^ws/, 'http'));
-  cfGetCheckBaseURL.pathname = '/api/debug/v0/get';
+  cfGetCheckBaseURL.pathname = '/api/canary/v0/get';
   return checkGet(id, cfGetCheckBaseURL.toString());
 }
 
@@ -97,7 +97,7 @@ function checkCfSocket(
   lc: LogContext,
 ) {
   const cfSocketCheckBaseURL = new URL(socketOrigin);
-  cfSocketCheckBaseURL.pathname = '/api/debug/v0/websocket';
+  cfSocketCheckBaseURL.pathname = '/api/canary/v0/websocket';
   return checkSocket(
     id,
     cfSocketCheckBaseURL.toString(),

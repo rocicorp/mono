@@ -727,7 +727,6 @@ export class Reflect<MD extends MutatorDefs> {
         break;
       }
       case ConnectionState.Connecting: {
-        // log here
         this._metrics.lastConnectError.set(getLastConnectMetricState(reason));
         if (this._connectingStart === undefined) {
           l.error?.(

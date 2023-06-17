@@ -101,7 +101,7 @@ export const AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER = {
 } as const;
 
 export const AUTH_ROUTES_UNAUTHED = {
-  debugWebSocket: '/api/debug/v0/websocket',
+  canaryWebSocket: '/api/canary/v0/websocket',
 } as const;
 
 export const AUTH_ROUTES = {
@@ -319,10 +319,10 @@ export class BaseAuthDO implements DurableObject {
 
     this._router.register(AUTH_ROUTES.legacyConnect, this._legacyConnect);
     this._router.register(AUTH_ROUTES.connect, this._connect);
-    this._router.register(AUTH_ROUTES.debugWebSocket, this._debugWebSocket);
+    this._router.register(AUTH_ROUTES.canaryWebSocket, this._canaryWebSocket);
   }
 
-  private _debugWebSocket = get((ctx: BaseContext, request) => {
+  private _canaryWebSocket = get((ctx: BaseContext, request) => {
     const url = new URL(request.url);
     const checkID = url.searchParams.get('id') ?? 'missing';
     const wSecWebSocketProtocolHeader =
