@@ -27,7 +27,6 @@
   },
   "prettier": "@rocicorp/prettier-config",
   "exports": {
-    ".": "./out/mod.js",
-    "./src/": "./out/"
+    ".": "./out/mod.js"
   }
 }
