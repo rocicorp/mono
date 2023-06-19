@@ -1,14 +1,7 @@
-import {version, type WriteTransaction} from '@rocicorp/reflect/server';
+import type {AuthHandler, ReflectServerOptions} from '@rocicorp/reflect/server';
+import {mutators, type Mutators} from './mutators.js';
 
-export const mutators = {
-  async init(tx: WriteTransaction) {
-    await tx.put('init', {});
-    await tx.put('version', version);
-  },
-};
-
-// eslint-disable-next-line require-await
-export async function authHandler(auth: string, _roomID: string) {
+const authHandler: AuthHandler = (auth: string, _roomID: string) => {
   if (auth) {
     // A real implementation could:
     // 1. if using session auth make a fetch call to a service to
@@ -22,17 +15,18 @@ export async function authHandler(auth: string, _roomID: string) {
     };
   }
   return null;
-}
+};
 
 // declare function createReflectServer<
 //   Env extends ReflectServerBaseEnv,
 //   MD extends MutatorDefs,
 // >(makeOptions: (env: Env) => ReflectServerOptions<MD>);
 
-function makeOptions() {
+function makeOptions(): ReflectServerOptions<Mutators> {
   return {
-    mutators: {},
+    mutators,
     authHandler,
+    logLevel: 'debug',
   };
 }
 
