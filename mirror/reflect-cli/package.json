@@ -19,7 +19,7 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
-    "@types/node": "18",
+    "@types/node": "^18.16.0",
     "@types/yargs": "^17.0.10",
     "esbuild": "^0.18.3",
     "ts-jest": "^29.1.0",
