@@ -1,18 +1,16 @@
 import assert from 'node:assert';
-import {mkdirSync, writeFileSync} from 'node:fs';
 import http from 'node:http';
-import path from 'node:path';
 import url from 'node:url';
 import open from 'open';
-import fs from 'node:fs';
-import os from 'node:os';
-import XDGAppPaths from 'xdg-app-paths';
+import {writeAuthConfigFile} from './auth-config.js';
+
 export async function loginHandler() {
   await login();
 }
 
 export async function login(): Promise<boolean> {
-  const urlToOpen = await 'https://auth.reflect.net';
+  //const urlToOpen = await 'https://auth.reflect.net';
+  const urlToOpen = await 'http://localhost:3000';
   let server: http.Server;
   let loginTimeoutHandle: NodeJS.Timeout;
   const timerPromise = new Promise<boolean>(resolve => {
@@ -21,6 +19,7 @@ export async function login(): Promise<boolean> {
         'Timed out waiting for authorization code, please try again.',
       );
       server.close();
+
       clearTimeout(loginTimeoutHandle);
       resolve(false);
     }, 120000); // wait for 120 seconds for the user to authorize
@@ -38,37 +37,48 @@ export async function login(): Promise<boolean> {
       }
 
       assert(req.url, "This request doesn't have a URL"); // This should never happen
-      const {pathname} = url.parse(req.url, true);
+      const {pathname, query} = url.parse(req.url, true);
+      console.log(`pathname: ${pathname}`);
       switch (pathname) {
         case '/oauth/callback': {
-          let hasAuthCode = false;
-          try {
-            hasAuthCode = true;
-            //hasAuthCode = isReturningFromAuthServer(query);
-          } catch (err: unknown) {
-            finish(false, err as Error);
-            return;
-          }
-
-          if (!hasAuthCode) {
+          //log request headers post
+          console.log(req.headers);
+          // eslint-disable-next-line prefer-destructuring
+          //get idToken from url parameter
+          const {idToken, refreshToken, expiresIn} = query;
+          if (!idToken || !refreshToken || !expiresIn) {
             // render an error page here
-            finish(false, new Error('No auth code returned'));
+            res.end(() => {
+              finish(false, new Error('No idToken or refreshToken provided'));
+            });
             return;
           }
-          //const exchange = await exchangeAuthCodeForAccessToken();
-          writeAuthConfigFile({
+          if (
+            idToken instanceof Array ||
+            refreshToken instanceof Array ||
+            expiresIn instanceof Array ||
+            isNaN(parseInt(expiresIn))
+          ) {
+            res.end(() => {
+              finish(
+                false,
+                new Error(
+                  'Invalid idToken or refreshToken or expiresIn provided',
+                ),
+              );
+            });
+          } else {
+            writeAuthConfigFile({
+              idToken,
+              refreshToken,
+              expiresIn: parseInt(expiresIn),
+            });
+          }
+          // todo: have a success page on auth-ui
+          res.writeHead(307, {
             // eslint-disable-next-line @typescript-eslint/naming-convention
-            oauth_token: 'a',
-            // eslint-disable-next-line @typescript-eslint/naming-convention
-            expiration_time: 'b',
-            // eslint-disable-next-line @typescript-eslint/naming-convention
-            refresh_token: 'c',
+            Location: 'http://localhost:3000/reflect-auth-welcome',
           });
-          //   res.writeHead(307, {
-          //     // eslint-disable-next-line @typescript-eslint/naming-convention
-          //     Location:
-          //       'https://welcome.developers.workers.dev/wrangler-oauth-consent-granted',
-          //   });
           res.end(() => {
             finish(true);
           });
@@ -99,63 +109,4 @@ export default async function openInBrowser(url: string): Promise<void> {
   childProcess.on('error', () => {
     console.warn('Failed to open');
   });
-}
-
-/**
- * The path to the config file that holds user authentication data,
- * relative to the user's home directory.
- */
-export const USER_AUTH_CONFIG_FILE = 'config/default.json';
-
-/**
- * The data that may be read from the `USER_CONFIG_FILE`.
- */
-export interface UserAuthConfig {
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  oauth_token?: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  refresh_token?: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  expiration_time?: string;
-}
-
-/**
- * Writes a a wrangler config file (auth credentials) to disk,
- * and updates the user auth state with the new credentials.
- */
-
-export function writeAuthConfigFile(config: UserAuthConfig) {
-  const authConfigFilePath = path.join(
-    getGlobalWranglerConfigPath(),
-    USER_AUTH_CONFIG_FILE,
-  );
-  mkdirSync(path.dirname(authConfigFilePath), {
-    recursive: true,
-  });
-  writeFileSync(
-    path.join(authConfigFilePath),
-    JSON.stringify(config, null, 2),
-    {encoding: 'utf-8'},
-  );
-}
-
-function isDirectory(configPath: string) {
-  try {
-    return fs.statSync(configPath).isDirectory();
-  } catch (error) {
-    // ignore error
-    return false;
-  }
-}
-
-export function getGlobalWranglerConfigPath() {
-  //TODO: We should implement a custom path --global-config and/or the WRANGLER_HOME type environment variable
-  const configDir = XDGAppPaths.default({suffix: '.reflect'}).config(); // New XDG compliant config path
-  const legacyConfigDir = path.join(os.homedir(), '.reflect'); // Legacy config in user's home directory
-
-  // Check for the .wrangler directory in root if it is not there then use the XDG compliant path.
-  if (isDirectory(legacyConfigDir)) {
-    return legacyConfigDir;
-  }
-  return configDir;
 }
