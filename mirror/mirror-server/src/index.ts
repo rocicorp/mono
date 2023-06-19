@@ -1,16 +1,19 @@
-import {https} from 'firebase-functions/v2';
 import {initializeApp} from 'firebase-admin/app';
-import {functionsConfig} from './functions-config.js';
-import {publish as publishHandler} from './functions/publish.function.js';
-import {healthcheck as healthcheckHandler} from './functions/healthcheck.function.js';
-import * as userFunctions from './functions/user/index.js';
 import {getFirestore} from 'firebase-admin/firestore';
+import {https} from 'firebase-functions/v2';
+import {functionsConfig} from './functions-config.js';
+import {healthcheck as healthcheckHandler} from './functions/healthcheck.function.js';
+import {publish as publishHandler} from './functions/publish.function.js';
+import * as userFunctions from './functions/user/index.js';
 
 // Initializes firestore et al. (e.g. for subsequent calls to getFirestore())
 initializeApp();
 
-export const publish = https.onRequest(
-  {cors: functionsConfig.allowlist},
+export const publish = https.onCall(
+  {
+    cors: functionsConfig.allowlist,
+    secrets: ['CLOUDFLARE_API_TOKEN'],
+  },
   publishHandler,
 );
 export const healthcheck = https.onRequest(

@@ -1,45 +1,40 @@
-import busboy from 'busboy';
-import type {Request, Response} from 'firebase-functions';
+import {defineSecret, defineString} from 'firebase-functions/params';
+import {
+  publishRequestSchema,
+  publishResponseSchema,
+} from 'mirror-protocol/publish.js';
+import type {CfModule} from '../cloudflare/create-worker-upload-form.js';
+import {publish as publishToCloudflare} from '../cloudflare/publish.js';
+import {withSchema} from './validators/schema.js';
 
-/**
- * Publish function.
- * NOTE: This function will probably not use a multi/part form in the future and just handle a standard JSON payload.
- */
-export async function publish(req: Request, res: Response): Promise<void> {
-  try {
-    const bb = busboy({
-      headers: req.headers,
-    });
+// This is the API token for reflect-server.net
+// https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
+const cloudflareApiToken = defineSecret('CLOUDFLARE_API_TOKEN');
+const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
-    const bundle: Uint8Array[] = [];
-    const sourcemap: Uint8Array[] = [];
-    const files = await new Promise<Uint8Array[]>((resolve, reject) => {
-      bb.once('finish', () => {
-        const bundleBuffer = Buffer.concat(bundle);
-        const sourcemapBuffer = Buffer.concat(sourcemap);
-        resolve([bundleBuffer, sourcemapBuffer]);
-      })
-        .once('error', reject)
-        .on('file', (fieldname, file) => {
-          const chunks: Uint8Array[] = [];
-          file.on('data', data => chunks.push(data));
-          file.on('end', () => {
-            if (fieldname === 'bundle') {
-              bundle.push(Buffer.concat(chunks));
-            } else if (fieldname === 'sourcemap') {
-              sourcemap.push(Buffer.concat(chunks));
-            }
-          });
-        })
-        .end(req.body);
-    });
-    const bundleFile = files[0];
-    const sourceMapFile = files[1];
-    console.log('bundleFile', bundleFile.toString());
-    console.log('sourceMapFile', sourceMapFile.toString());
-    console.log("Now calling Erik's code to publish!!");
-    res.sendStatus(200);
-  } catch (error) {
-    res.sendStatus(500);
-  }
-}
+export const publish = withSchema(
+  publishRequestSchema,
+  publishResponseSchema,
+  async publishRequest => {
+    const appName = publishRequest.name;
+
+    const config = {
+      accountID: cloudflareAccountId.value(),
+      // TODO(arv): This is not the right name.
+      scriptName: appName,
+      apiToken: cloudflareApiToken.value(),
+    } as const;
+    const sourceModule: CfModule = {
+      ...publishRequest.source,
+      type: 'esm',
+    };
+    const sourcemapModule: CfModule = {
+      ...publishRequest.sourcemap,
+      type: 'text',
+    };
+
+    await publishToCloudflare(config, sourceModule, sourcemapModule, appName);
+
+    return {success: true};
+  },
+);
