@@ -19,13 +19,13 @@ export interface UserAuthConfig {
 }
 
 /**
- * Writes a a wrangler config file (auth credentials) to disk,
+ * Writes a a reflect config file (auth credentials) to disk,
  * and updates the user auth state with the new credentials.
  */
 
 export function writeAuthConfigFile(config: UserAuthConfig) {
   const authConfigFilePath = path.join(
-    getGlobalWranglerConfigPath(),
+    getGlobalReflectConfigPath(),
     USER_AUTH_CONFIG_FILE,
   );
   mkdirSync(path.dirname(authConfigFilePath), {
@@ -47,7 +47,7 @@ function isDirectory(configPath: string) {
   }
 }
 
-export function getGlobalWranglerConfigPath() {
+export function getGlobalReflectConfigPath() {
   const legacyConfigDir = path.join(os.homedir(), '.reflect'); // Legacy config in user's home directory
   if (!isDirectory(legacyConfigDir)) {
     //make the directory if it doesn't exist
@@ -59,7 +59,7 @@ export function getGlobalWranglerConfigPath() {
 //todo: make test
 export function readAuthConfigFile(): UserAuthConfig | undefined {
   const authConfigFilePath = path.join(
-    getGlobalWranglerConfigPath(),
+    getGlobalReflectConfigPath(),
     USER_AUTH_CONFIG_FILE,
   );
   try {
