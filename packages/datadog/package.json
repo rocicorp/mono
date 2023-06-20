@@ -19,13 +19,14 @@
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "build": "tsc"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },
   "prettier": "@rocicorp/prettier-config",
   "exports": {
-    ".": "./src/mod.ts"
+    ".": "./out/mod.js"
   }
 }
