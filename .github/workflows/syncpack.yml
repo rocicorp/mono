@@ -26,4 +26,4 @@ jobs:
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
       - run: npm ci
-      - run: syncpack list-mismatches
+      - run: npx syncpack list-mismatches
