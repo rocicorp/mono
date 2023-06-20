@@ -78,7 +78,7 @@ const migrations: Migration[] = [
   },
 ];
 
-function mainModuleContent(appFileName: string) {
+function workerModuleContent(appFileName: string) {
   return `
 import {createReflectServer} from './reflect-server.js';
 import {default as makeOptions} from './${appFileName}';
@@ -101,9 +101,9 @@ export async function publish(
   appName: string,
 ) {
   console.log('publishing', appName);
-  const mainModule = {
+  const workerModule = {
     name: 'worker.js',
-    content: mainModuleContent(sourceModule.name),
+    content: workerModuleContent(sourceModule.name),
     type: 'esm',
   } as const;
   const serverContent = await getServerContent();
@@ -113,7 +113,7 @@ export async function publish(
     type: 'esm',
   } as const;
   const modules: CfModule[] = [sourceModule, sourcemapModule, serverModule];
-  await createWorker(config, mainModule, modules);
+  await createWorker(config, workerModule, modules);
 
   // TODO(arv): Set up the custom domain. The below code does not seem to do
   // enough.

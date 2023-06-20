@@ -24,9 +24,6 @@ export async function compile(
     plugins: [replaceReflectServerPlugin],
     minify: false,
     write: false,
-    loader: {
-      '.example': 'ts',
-    },
     outdir: '.',
   });
   const {errors, outputFiles} = res;
