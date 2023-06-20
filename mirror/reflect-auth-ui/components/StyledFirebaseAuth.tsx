@@ -1,7 +1,7 @@
-import {useEffect, useRef, useState} from 'react';
-import {onAuthStateChanged} from 'firebase/auth';
-import 'firebaseui/dist/firebaseui.css';
+import {Auth, onAuthStateChanged} from 'firebase/auth';
 import type {auth} from 'firebaseui';
+import 'firebaseui/dist/firebaseui.css';
+import {useEffect, useRef, useState} from 'react';
 
 interface Props {
   // The Firebase UI Web UI Config object.
@@ -12,7 +12,7 @@ interface Props {
   // disableAutoSignIn().
   uiCallback?(ui: auth.AuthUI): void;
   // The Firebase App auth instance to use.
-  firebaseAuth: any; // As firebaseui-web
+  firebaseAuth: Auth;
   className?: string;
 }
 

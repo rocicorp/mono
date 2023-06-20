@@ -1,25 +1,18 @@
-import * as firebase from 'firebase/app';
-import {EmailAuthProvider, getAuth} from 'firebase/auth';
-import {GithubAuthProvider} from 'firebase/auth';
+import {initializeApp} from 'firebase/app';
+import {EmailAuthProvider, GithubAuthProvider, getAuth} from 'firebase/auth';
 import type {auth as firebaseUiAuth} from 'firebaseui';
+import {firebaseConfig} from './firebaseApp.config';
 
-import {firebaseConfig} from '@/config/firebaseApp.config';
+const firebase = initializeApp(firebaseConfig);
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const Firebase = firebase.initializeApp(firebaseConfig);
-
-// Add or Remove authentification methods here.
-// eslint-disable-next-line @typescript-eslint/naming-convention
-export const Providers = {
-  github: new GithubAuthProvider(),
-  email: new EmailAuthProvider(),
-};
+const githubAuthProvider = new GithubAuthProvider();
+const emailAuthProvider = new EmailAuthProvider();
 
 export const uiConfig: firebaseUiAuth.Config = {
-  signInOptions: [Providers.github.providerId, Providers.email.providerId],
+  signInOptions: [githubAuthProvider.providerId, emailAuthProvider.providerId],
   signInFlow: 'popup',
   signInSuccessUrl: 'localhost:3000',
 };
 
 export const auth = getAuth();
-export default Firebase;
+export default firebase;
