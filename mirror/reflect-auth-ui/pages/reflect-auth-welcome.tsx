@@ -1,4 +1,3 @@
-
 export default function ReflectAuthWelcome() {
-    return <div>Reflect OAuth consent granted</div>;
+  return <div>Reflect OAuth consent granted</div>;
 }

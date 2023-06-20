@@ -2,7 +2,7 @@ import {initializeApp} from 'firebase/app';
 import {EmailAuthProvider, GithubAuthProvider, getAuth} from 'firebase/auth';
 import type {auth as firebaseUiAuth} from 'firebaseui';
 import {firebaseConfig} from './firebaseApp.config';
-import type { redirect } from 'next/dist/server/api-utils';
+import type {redirect} from 'next/dist/server/api-utils';
 
 const firebase = initializeApp(firebaseConfig);
 
@@ -14,7 +14,7 @@ export const uiConfig: firebaseUiAuth.Config = {
   signInFlow: 'popup',
   signInSuccessUrl: '/reflect-auth-welcome',
   callbacks: {
-    signInSuccessWithAuthResult: (authResult) => {
+    signInSuccessWithAuthResult: authResult => {
       const {refreshToken, expiresIn} = authResult.user;
       authResult.user.getIdToken().then((idToken: string) => {
         const callbackUrl = new URL('http://localhost:8976/oauth/callback');

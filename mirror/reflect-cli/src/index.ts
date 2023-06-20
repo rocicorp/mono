@@ -6,6 +6,7 @@ import {publishHandler, publishOptions} from './publish.js';
 import {version} from './version.js';
 import {ProxyAgent, setGlobalDispatcher} from 'undici';
 import {loginHandler} from './login.js';
+import {statusHandler} from './status.js';
 
 const proxy =
   process.env.https_proxy ||
@@ -83,14 +84,21 @@ export function createCLIParser(argv: string[]) {
     //initHandler
   );
 
-  // dev
-
+  // login
   reflectCLI.command(
-    'login [script]',
+    'login',
     '🔓 Login to Reflect',
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},
     loginHandler,
+  );
+
+  reflectCLI.command(
+    'status',
+    '🚥 Get your status',
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    () => {},
+    statusHandler,
   );
 
   // dev
