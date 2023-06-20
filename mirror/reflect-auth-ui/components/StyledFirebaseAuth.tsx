@@ -31,6 +31,7 @@ export function StyledFirebaseAuth({
   useEffect(() => {
     // Firebase UI only works on the Client. So we're loading the package only after
     // the component has mounted, so that this works when doing server-side rendering.
+    // todo: this is the wrong way to do this, you can have next ignore the entire component on server render, maybe use a dynamic import
     // eslint-disable-next-line @typescript-eslint/no-var-requires, no-undef
     setFirebaseui(require('firebaseui'));
   }, []);

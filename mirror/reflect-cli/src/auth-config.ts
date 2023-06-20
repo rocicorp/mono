@@ -56,7 +56,8 @@ export function getGlobalWranglerConfigPath() {
   return legacyConfigDir;
 }
 
-export function readAuthConfigFile(): UserAuthConfig {
+//todo: make test
+export function readAuthConfigFile(): UserAuthConfig | undefined {
   const authConfigFilePath = path.join(
     getGlobalWranglerConfigPath(),
     USER_AUTH_CONFIG_FILE,
@@ -68,6 +69,6 @@ export function readAuthConfigFile(): UserAuthConfig {
   } catch (error) {
     // If the file does not exist or it cannot be parsed, return an empty object
     console.warn(`Unable to read or parse auth config file: ${error}`);
-    return {};
+    return undefined;
   }
 }

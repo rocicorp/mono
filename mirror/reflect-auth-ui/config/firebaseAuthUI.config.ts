@@ -1,16 +1,14 @@
 import {initializeApp} from 'firebase/app';
-import {EmailAuthProvider, GithubAuthProvider, getAuth} from 'firebase/auth';
+import {GithubAuthProvider, getAuth} from 'firebase/auth';
 import type {auth as firebaseUiAuth} from 'firebaseui';
 import {firebaseConfig} from './firebaseApp.config';
-import type {redirect} from 'next/dist/server/api-utils';
 
 const firebase = initializeApp(firebaseConfig);
 
 const githubAuthProvider = new GithubAuthProvider();
-const emailAuthProvider = new EmailAuthProvider();
 
 export const uiConfig: firebaseUiAuth.Config = {
-  signInOptions: [githubAuthProvider.providerId, emailAuthProvider.providerId],
+  signInOptions: [githubAuthProvider.providerId],
   signInFlow: 'popup',
   signInSuccessUrl: '/reflect-auth-welcome',
   callbacks: {

@@ -5,7 +5,7 @@ import {ensureUserResponseSchema} from 'mirror-protocol/user.js';
 import jwt_decode from 'jwt-decode';
 
 export async function statusHandler() {
-  const {idToken} = readAuthConfigFile();
+  const idToken = readAuthConfigFile()?.idToken;
   if (!idToken) {
     throw new Error(
       'No idToken found. Please run `@rocicorp/reflect auth` to authenticate.',

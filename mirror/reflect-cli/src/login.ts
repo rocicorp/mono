@@ -4,13 +4,13 @@ import url from 'node:url';
 import open from 'open';
 import {writeAuthConfigFile} from './auth-config.js';
 
+//add test
 export async function loginHandler() {
   await login();
 }
 
 export async function login(): Promise<boolean> {
-  //const urlToOpen = await 'https://auth.reflect.net';
-  const urlToOpen = await 'http://localhost:3000';
+  const urlToOpen = process.env.AUTH_URL || 'https://auth.reflect.net';
   let server: http.Server;
   let loginTimeoutHandle: NodeJS.Timeout;
   const timerPromise = new Promise<boolean>(resolve => {
@@ -74,7 +74,6 @@ export async function login(): Promise<boolean> {
               expiresIn: parseInt(expiresIn),
             });
           }
-          // todo: have a success page on auth-ui
           res.writeHead(307, {
             // eslint-disable-next-line @typescript-eslint/naming-convention
             Location: 'http://localhost:3000/reflect-auth-welcome',
@@ -87,7 +86,7 @@ export async function login(): Promise<boolean> {
         }
       }
     });
-
+    // todo: maybe we should not hardcode this call
     server.listen(8976);
   });
   console.log(`Opening a link in your default browser: ${urlToOpen}`);
