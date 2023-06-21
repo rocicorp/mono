@@ -1,15 +1,14 @@
 import assert from 'node:assert';
 import http from 'node:http';
-import url from 'node:url';
 import open from 'open';
-import {writeAuthConfigFile} from './auth-config.js';
+import {
+  UserAuthConfig,
+  userAuthConfigSchema,
+  writeAuthConfigFile,
+} from './auth-config.js';
+import {parse} from 'shared/valita.js';
 
-//add test
-export async function loginHandler() {
-  await login();
-}
-
-export async function login(): Promise<boolean> {
+export async function loginHandler(): Promise<boolean> {
   const urlToOpen = process.env.AUTH_URL || 'https://auth.reflect.net';
   let server: http.Server;
   let loginTimeoutHandle: NodeJS.Timeout;
@@ -26,67 +25,66 @@ export async function login(): Promise<boolean> {
   });
 
   const loginPromise = new Promise<boolean>((resolve, reject) => {
-    server = http.createServer((req, res) => {
+    const server = http.createServer((req, res) => {
       function finish(status: boolean, error?: Error) {
         clearTimeout(loginTimeoutHandle);
         server.close((closeErr?: Error) => {
           if (error || closeErr) {
             reject(error || closeErr);
-          } else resolve(status);
+          } else {
+            resolve(status);
+          }
         });
       }
 
       assert(req.url, "This request doesn't have a URL"); // This should never happen
-      const {pathname, query} = url.parse(req.url, true);
+      const reqUrl = new URL(req.url);
+      const {pathname, searchParams} = reqUrl;
       console.log(`pathname: ${pathname}`);
+
       switch (pathname) {
         case '/oauth/callback': {
-          //log request headers post
-          console.log(req.headers);
-          // eslint-disable-next-line prefer-destructuring
-          //get idToken from url parameter
-          const {idToken, refreshToken, expiresIn} = query;
-          if (!idToken || !refreshToken || !expiresIn) {
-            // render an error page here
-            res.end(() => {
-              finish(false, new Error('No idToken or refreshToken provided'));
-            });
-            return;
-          }
-          if (
-            idToken instanceof Array ||
-            refreshToken instanceof Array ||
-            expiresIn instanceof Array ||
-            isNaN(parseInt(expiresIn))
-          ) {
+          const idToken = searchParams.get('idToken');
+          const refreshToken = searchParams.get('refreshToken');
+          const expiresIn = searchParams.get('expiresIn');
+
+          try {
+            if (!idToken || !refreshToken || !expiresIn) {
+              throw new Error(
+                'Invalid idToken, refreshToken, or expiresIn from the auth provider.',
+              );
+            }
+
+            const authConfig: UserAuthConfig = {
+              idToken,
+              refreshToken,
+              expiresIn: parseInt(expiresIn),
+            };
+
+            parse(authConfig, userAuthConfigSchema);
+            writeAuthConfigFile(authConfig);
+          } catch (error) {
             res.end(() => {
               finish(
                 false,
                 new Error(
-                  'Invalid idToken or refreshToken or expiresIn provided',
+                  'Invalid idToken, refreshToken, or expiresIn from the auth provider.',
                 ),
               );
             });
-          } else {
-            writeAuthConfigFile({
-              idToken,
-              refreshToken,
-              expiresIn: parseInt(expiresIn),
-            });
+            return;
           }
-          res.writeHead(307, {
-            // eslint-disable-next-line @typescript-eslint/naming-convention
-            Location: 'http://localhost:3000/reflect-auth-welcome',
-          });
+
           res.end(() => {
             finish(true);
           });
-          console.log(`Successfully logged in.`);
+          console.log('Successfully logged in.');
           return;
         }
       }
     });
-    // todo: maybe we should not hardcode this call
+
+    // Todo: Avoid hardcoding the port number
     server.listen(8976);
   });
   console.log(`Opening a link in your default browser: ${urlToOpen}`);

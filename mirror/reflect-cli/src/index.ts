@@ -1,26 +1,10 @@
 import process from 'process';
-import {ProxyAgent, setGlobalDispatcher} from 'undici';
 import makeCLI from 'yargs';
 import {hideBin} from 'yargs/helpers';
 import {publishHandler, publishOptions} from './publish.js';
 import {version} from './version.js';
-import {ProxyAgent, setGlobalDispatcher} from 'undici';
 import {loginHandler} from './login.js';
 import {statusHandler} from './status.js';
-
-const proxy =
-  process.env.https_proxy ||
-  process.env.HTTPS_PROXY ||
-  process.env.http_proxy ||
-  process.env.HTTP_PROXY ||
-  undefined;
-
-if (proxy) {
-  setGlobalDispatcher(new ProxyAgent(proxy));
-  console.log(
-    `Proxy environment variables detected. We'll use your proxy for fetch requests.`,
-  );
-}
 
 export class CommandLineArgsError extends Error {}
 
@@ -90,7 +74,7 @@ export function createCLIParser(argv: string[]) {
     '🔓 Login to Reflect',
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},
-    loginHandler,
+    void loginHandler,
   );
 
   reflectCLI.command(

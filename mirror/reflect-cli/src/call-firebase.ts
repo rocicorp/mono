@@ -1,7 +1,7 @@
 import type {ReadonlyJSONValue} from 'shared/json.js';
 import * as v from 'shared/valita.js';
 
-type FunctionName = 'publish';
+type FunctionName = 'publish' | 'user-ensure';
 
 const firebaseErrorResponseSchema = v.object({
   error: v.object({
@@ -29,6 +29,7 @@ export async function callFirebase<
   functionName: FunctionName,
   data: Data,
   returnValueSchema?: v.Type<Return>,
+  apiToken?: string,
 ): Promise<ReadonlyJSONValue> {
   // TODO(arv): Pass along auth token.
   const body = JSON.stringify({data});
@@ -40,6 +41,8 @@ export async function callFirebase<
       method: 'POST',
       headers: {
         'Content-type': 'application/json',
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        'Authorization': `Bearer ${apiToken}`,
       },
       body,
     },
