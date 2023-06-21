@@ -1,7 +1,7 @@
 import * as esbuild from 'esbuild';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import packageJSON from '../package.json' assert { type: 'json' };
+import {fileURLToPath} from 'node:url';
+import packageJSON from '../package.json' assert {type: 'json'};
 
 const {dependencies, devDependencies, bundleDependencies} = packageJSON;
 const external = new Set(
