@@ -1,8 +1,15 @@
 {
   "functions": {
-    "predeploy": ["npm run build"],
+    "predeploy": ["npm run build", "node tool/process-deps.js --remove"],
+    "postdeploy": ["node tool/process-deps.js --restore"],
     "source": "./",
-    "ignore": ["firebase.json", "**/node_modules/**", ".git"]
+    "ignore": [
+      "firebase.json",
+      "**/node_modules/**",
+      ".git",
+      "tsconfig.tsbuildinfo",
+      "ui-debug.log"
+    ]
   },
   "emulators": {
     "functions": {
