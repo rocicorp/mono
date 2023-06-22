@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import * as v from 'shared/valita.js';
+import {parse} from 'shared/valita.js';
 /**
  * The path to the config file that holds user authentication data,
  * relative to the user's home directory.
@@ -66,8 +67,7 @@ export function mustReadAuthConfigFile(): UserAuthConfig | undefined {
   try {
     const rawData = readFileSync(authConfigFilePath, 'utf-8');
     const config: UserAuthConfig = JSON.parse(rawData);
-    v.assert(config, userAuthConfigSchema);
-    return config;
+    return parse(config, userAuthConfigSchema);
   } catch (error) {
     // If the file does not exist or it cannot be parsed, return an empty object
     console.warn(`Unable to read or parse auth config file: ${error}`);
