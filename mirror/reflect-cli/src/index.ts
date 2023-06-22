@@ -75,7 +75,11 @@ export function createCLIParser(argv: string[]) {
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},
     async () => {
-      await loginHandler();
+      try {
+        await loginHandler();
+      } catch (e) {
+        console.error(e);
+      }
     },
   );
 

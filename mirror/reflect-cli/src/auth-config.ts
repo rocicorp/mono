@@ -59,7 +59,7 @@ export function getGlobalReflectConfigPath() {
 }
 
 //todo: make test
-export function mustReadAuthConfigFile(): UserAuthConfig | undefined {
+export function mustReadAuthConfigFile(): UserAuthConfig {
   const authConfigFilePath = path.join(
     getGlobalReflectConfigPath(),
     USER_AUTH_CONFIG_FILE,
@@ -71,6 +71,6 @@ export function mustReadAuthConfigFile(): UserAuthConfig | undefined {
   } catch (error) {
     // If the file does not exist or it cannot be parsed, return an empty object
     console.warn(`Unable to read or parse auth config file: ${error}`);
-    return undefined;
+    throw new Error(`Unable to read or parse auth config file: ${error}`);
   }
 }
