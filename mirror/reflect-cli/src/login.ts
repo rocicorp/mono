@@ -9,6 +9,7 @@ import {
 import {parse} from 'shared/valita.js';
 import {sleep} from 'shared/sleep.js';
 import {resolver} from '@rocicorp/resolver';
+import type {Socket} from 'node:net';
 
 async function timeout(signal: AbortSignal) {
   await sleep(120_000, signal);
@@ -65,6 +66,15 @@ export async function loginHandler(): Promise<void> {
       }
     }
   });
+
+  const connections = new Set<Socket>();
+  server.on('connection', (conn: Socket) => {
+    connections.add(conn);
+    conn.on('close', () => {
+      connections.delete(conn);
+    });
+  });
+
   server.listen(8976);
 
   console.log(`Opening a link in your default browser: ${urlToOpen}`);
@@ -82,6 +92,9 @@ export async function loginHandler(): Promise<void> {
         console.warn('login credential server failed to close', closeErr);
       }
     });
+    for (const socket of connections.values()) {
+      socket.destroy();
+    }
   }
 }
 

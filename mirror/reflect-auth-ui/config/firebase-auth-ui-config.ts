@@ -39,7 +39,6 @@ async function handleAuth(authResult: AuthResult) {
   callbackUrl.searchParams.set('refreshToken', refreshToken);
   callbackUrl.searchParams.set('expirationTime', expirationTime.toString());
   //browser navigate to callbackUrl
-  console.log(callbackUrl.toString());
   window.location.replace(callbackUrl.toString());
 }
 
