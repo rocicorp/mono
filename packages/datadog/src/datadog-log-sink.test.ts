@@ -61,6 +61,36 @@ test('flush calls fetch', async () => {
   );
 });
 
+test('reserved keys are prefixed', async () => {
+  const l = new DatadogLogSink({
+    apiKey: 'apiKey',
+  });
+  jest.setSystemTime(1);
+  l.log('debug', {usr: {name: 'bob'}}, 'debug message');
+  jest.setSystemTime(2);
+  l.log('info', {usr: {name: 'bob'}}, 'info message');
+
+  await l.flush();
+
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledWith(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
+    {
+      body: stringifyMany(
+        {
+          usr: {name: 'bob'},
+          date: 1,
+          message: 'debug message',
+          status: 'debug',
+        },
+        {usr: {name: 'bob'}, date: 2, message: 'info message', status: 'info'},
+      ),
+      method: 'POST',
+      keepalive: true,
+    },
+  );
+});
+
 test('Errors in multi arg messages are converted to JSON', async () => {
   const l = new DatadogLogSink({
     apiKey: 'apiKey',

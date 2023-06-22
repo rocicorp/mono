@@ -152,11 +152,26 @@ function convertErrors(message: unknown): unknown {
   return message;
 }
 
+const RESERVED_KEY_PREFIX = 'DATADOG_RESERVED_KEY_';
+const RESERVED_KEYS: ReadonlyArray<string> = [
+  'msg',
+  'date',
+  'message',
+  'status',
+];
+
 function makeMessage(
   message: unknown,
   context: Context | undefined,
   logLevel: LogLevel,
 ): Message {
+  const safeContext = {...context};
+  for (const reservedKey of RESERVED_KEYS) {
+    if (Object.hasOwn(safeContext, reservedKey)) {
+      safeContext[RESERVED_KEY_PREFIX + reservedKey] = safeContext[reservedKey];
+      delete safeContext[reservedKey];
+    }
+  }
   const msg: Message = {
     ...context,
     date: Date.now(),
