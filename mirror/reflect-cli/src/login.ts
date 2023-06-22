@@ -18,8 +18,6 @@ export async function loginHandler(): Promise<boolean> {
         'Timed out waiting for authorization code, please try again.',
       );
       server.close();
-
-      clearTimeout(loginTimeoutHandle);
       resolve(false);
     }, 120000); // wait for 120 seconds for the user to authorize
   });

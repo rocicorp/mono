@@ -3,12 +3,34 @@ import {GithubAuthProvider, getAuth} from 'firebase/auth';
 import type {auth as firebaseUiAuth} from 'firebaseui';
 import {firebaseConfig} from './firebase.config';
 
-const firebase = initializeApp(firebaseConfig);
+export const firebase = initializeApp(firebaseConfig);
 
 const githubAuthProvider = new GithubAuthProvider();
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleAuth(authResult: any) {
+/**
+ * Authentication
+ */
+export type FirebaseUser = {
+  getIdToken(): Promise<string>;
+  displayName: string;
+  email: string;
+  emailVerified: boolean;
+  isAnonymous: boolean;
+  photoURL: string;
+  refreshToken: string;
+  uid: string;
+  stsTokenManager: {
+    accessToken: string;
+    apiKey: string;
+    expirationTime: number;
+    refreshToken: string;
+  };
+};
+export type AuthResult = {
+  user: FirebaseUser;
+};
+
+async function handleAuth(authResult: AuthResult) {
   try {
     const {refreshToken} = authResult.user;
     const {expirationTime} = authResult.user.stsTokenManager;
@@ -16,7 +38,7 @@ async function handleAuth(authResult: any) {
     const callbackUrl = new URL('http://localhost:8976/oauth/callback');
     callbackUrl.searchParams.set('idToken', idToken);
     callbackUrl.searchParams.set('refreshToken', refreshToken);
-    callbackUrl.searchParams.set('expirationTime', expirationTime);
+    callbackUrl.searchParams.set('expirationTime', expirationTime.toString());
     const response = await fetch(callbackUrl);
     if (!response.ok) {
       throw new Error('Fetch error');
@@ -33,8 +55,7 @@ export const uiConfig: firebaseUiAuth.Config = {
   signInFlow: 'popup',
   signInSuccessUrl: '/reflect-auth-welcome',
   callbacks: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    signInSuccessWithAuthResult: (authResult: any) => {
+    signInSuccessWithAuthResult: authResult => {
       void handleAuth(authResult);
       return true;
     },
@@ -42,4 +63,3 @@ export const uiConfig: firebaseUiAuth.Config = {
 };
 
 export const auth = getAuth();
-export default firebase;

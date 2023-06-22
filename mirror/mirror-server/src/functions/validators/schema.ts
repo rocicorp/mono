@@ -13,6 +13,7 @@ export function withSchema<Request, Response>(
     try {
       payload = parse(req.data, requestSchema);
     } catch (e) {
+      console.log(String(e));
       throw new HttpsError('invalid-argument', String(e));
     }
     const res = await handler(payload, req);

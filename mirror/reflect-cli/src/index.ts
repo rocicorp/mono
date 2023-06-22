@@ -74,7 +74,9 @@ export function createCLIParser(argv: string[]) {
     '🔓 Login to Reflect',
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},
-    void loginHandler(),
+    () => {
+      void loginHandler();
+    },
   );
 
   reflectCLI.command(

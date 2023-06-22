@@ -1,32 +1,25 @@
 import {callFirebase} from './call-firebase.js';
-import {readAuthConfigFile} from './auth-config.js';
-import type {EnsureUserRequest} from 'mirror-protocol/user.js';
+import {mustReadAuthConfigFile} from './auth-config.js';
 import {ensureUserResponseSchema} from 'mirror-protocol/user.js';
-import jwt_decode from 'jwt-decode';
+import jwtDecode from 'jwt-decode';
+import {makeRequester} from './requester.js';
 
 export async function statusHandler() {
-  const idToken = readAuthConfigFile()?.idToken;
-  if (!idToken) {
+  const config = mustReadAuthConfigFile();
+  if (!config) {
     throw new Error(
-      'No idToken found. Please run `@rocicorp/reflect auth` to authenticate.',
+      'No config file found. Please run `@rocicorp/reflect auth` to authenticate.',
     );
   }
+
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  const token = jwt_decode.default<{user_id: string}>(idToken);
-  const data: EnsureUserRequest = {
-    requester: {
-      userAgent: {
-        type: 'reflect-cli',
-        version: '0.0.1',
-      },
-      userID: token.user_id,
-    },
-  };
+  const token = jwtDecode.default<{user_id: string}>(config.idToken);
+  const data = makeRequester(token.user_id);
   const user = await callFirebase(
     'user-ensure',
     data,
     ensureUserResponseSchema,
-    idToken,
+    config.idToken,
   );
   console.log(user);
 }
