@@ -22,7 +22,16 @@ export async function loginHandler(): Promise<void> {
     assert(req.url, "This request doesn't have a URL"); // This should never happen
     const reqUrl = new URL(req.url, `https://${req.headers.host}`);
     const {pathname, searchParams} = reqUrl;
-
+    //add cors headers on OPTIONS
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      });
+      res.end();
+      return;
+    }
     switch (pathname) {
       case '/oauth/callback': {
         const idToken = searchParams.get('idToken');
