@@ -31,33 +31,25 @@ export type AuthResult = {
 };
 
 async function handleAuth(authResult: AuthResult) {
-  try {
-    const {refreshToken} = authResult.user;
-    const {expirationTime} = authResult.user.stsTokenManager;
-    const idToken = await authResult.user.getIdToken();
-    const callbackUrl = new URL('http://localhost:8976/oauth/callback');
-    callbackUrl.searchParams.set('idToken', idToken);
-    callbackUrl.searchParams.set('refreshToken', refreshToken);
-    callbackUrl.searchParams.set('expirationTime', expirationTime.toString());
-    const response = await fetch(callbackUrl, {mode: 'no-cors'});
-    if (!response.ok) {
-      throw new Error('Fetch error');
-    }
-    const data = await response.json();
-    console.log('Success:', data);
-  } catch (error) {
-    console.error('Error:', error);
-  }
+  const {refreshToken} = authResult.user;
+  const {expirationTime} = authResult.user.stsTokenManager;
+  const idToken = await authResult.user.getIdToken();
+  const callbackUrl = new URL('http://localhost:8976/oauth/callback');
+  callbackUrl.searchParams.set('idToken', idToken);
+  callbackUrl.searchParams.set('refreshToken', refreshToken);
+  callbackUrl.searchParams.set('expirationTime', expirationTime.toString());
+  //browser navigate to callbackUrl
+  console.log(callbackUrl.toString());
+  window.location.replace(callbackUrl.toString());
 }
 
 export const uiConfig: firebaseUiAuth.Config = {
   signInOptions: [githubAuthProvider.providerId],
   signInFlow: 'popup',
-  signInSuccessUrl: '/reflect-auth-welcome',
   callbacks: {
     signInSuccessWithAuthResult: authResult => {
       void handleAuth(authResult);
-      return true;
+      return false;
     },
   },
 };

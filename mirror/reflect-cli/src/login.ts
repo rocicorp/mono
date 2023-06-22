@@ -53,6 +53,10 @@ export async function loginHandler(): Promise<void> {
           });
           return;
         }
+        res.writeHead(307, {
+          // eslint-disable-next-line @typescript-eslint/naming-convention
+          Location: `https://auth.reflect.net/reflect-auth-welcome`,
+        });
         res.end(() => {
           loginResolver.resolve();
         });
