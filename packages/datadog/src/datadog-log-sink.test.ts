@@ -66,9 +66,21 @@ test('reserved keys are prefixed', async () => {
     apiKey: 'apiKey',
   });
   jest.setSystemTime(1);
-  l.log('debug', {usr: {name: 'bob'}}, 'debug message');
-  jest.setSystemTime(2);
-  l.log('info', {usr: {name: 'bob'}}, 'info message');
+  l.log(
+    'debug',
+    {
+      usr: {name: 'bob'},
+      host: 'testHost',
+      source: 'testSource',
+      status: 'testStatus',
+      service: 'testService',
+      ['trace_id']: 'testTrace_id',
+      message: 'testMessage',
+      msg: 'testMsg',
+      date: 'test-date',
+    },
+    'debug message',
+  );
 
   await l.flush();
 
@@ -76,15 +88,20 @@ test('reserved keys are prefixed', async () => {
   expect(fetch).toHaveBeenCalledWith(
     'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
     {
-      body: stringifyMany(
-        {
-          usr: {name: 'bob'},
-          date: 1,
-          message: 'debug message',
-          status: 'debug',
-        },
-        {usr: {name: 'bob'}, date: 2, message: 'info message', status: 'info'},
-      ),
+      body: stringifyMany({
+        usr: {name: 'bob'},
+        ['@DATADOG_RESERVED_host']: 'testHost',
+        ['@DATADOG_RESERVED_source']: 'testSource',
+        ['@DATADOG_RESERVED_status']: 'testStatus',
+        ['@DATADOG_RESERVED_service']: 'testService',
+        ['@DATADOG_RESERVED_trace_id']: 'testTrace_id',
+        ['@DATADOG_RESERVED_message']: 'testMessage',
+        ['@DATADOG_RESERVED_msg']: 'testMsg',
+        ['@DATADOG_RESERVED_date']: 'test-date',
+        date: 1,
+        message: 'debug message',
+        status: 'debug',
+      }),
       method: 'POST',
       keepalive: true,
     },
