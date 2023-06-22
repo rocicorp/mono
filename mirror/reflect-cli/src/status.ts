@@ -14,7 +14,7 @@ export async function statusHandler() {
 
   // eslint-disable-next-line @typescript-eslint/naming-convention
   const token = jwtDecode.default<{user_id: string}>(config.idToken);
-  const data = makeRequester(token.user_id);
+  const data = {requester: makeRequester(token.user_id)};
   const user = await callFirebase(
     'user-ensure',
     data,
