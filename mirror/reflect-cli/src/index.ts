@@ -1,64 +1,29 @@
-import process from 'process';
-import makeCLI from 'yargs';
 import {hideBin} from 'yargs/helpers';
-import {publishHandler, publishOptions} from './publish.js';
-import {version} from './version.js';
+import {
+  CommandLineArgsError,
+  createCLIParserBase,
+} from './create-cli-parser.js';
 import {loginHandler} from './login.js';
+import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
 
-export class CommandLineArgsError extends Error {}
+async function main(argv: string[]): Promise<void> {
+  const reflectCLI = createCLIParser(argv);
 
-export function createCLIParser(argv: string[]) {
-  // Type check result against CommonYargsOptions to make sure we've included
-  // all common options
-  const reflectCLI = makeCLI(argv)
-    .strict()
-    .showHelpOnFail(true)
-    .fail((msg, error) => {
-      if (!error || error.name === 'YError') {
-        error = new CommandLineArgsError(msg);
-      }
-      throw error;
-    })
-    .scriptName(`npx @rocicorp/reflect`)
-    .wrap(null)
-    .version(false)
-    .option('v', {
-      describe: 'Show version number',
-      alias: 'version',
-      type: 'boolean',
-    })
-    .option('config', {
-      alias: 'c',
-      describe: 'Path to .toml configuration file',
-      type: 'string',
-      requiresArg: true,
-    })
-    .option('env', {
-      alias: 'e',
-      describe: 'Environment to use for operations and .env files',
-      type: 'string',
-      requiresArg: true,
-    });
+  try {
+    await reflectCLI.parse();
+  } catch (e) {
+    if (e instanceof CommandLineArgsError) {
+      console.log(e.message);
+      await createCLIParser([...argv, '--help']).parse();
+    } else {
+      throw e;
+    }
+  }
+}
 
-  reflectCLI.help().alias('h', 'help');
-
-  reflectCLI.command(
-    ['*'],
-    false,
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    () => {},
-    args => {
-      if (args._.length > 0) {
-        throw new CommandLineArgsError(`Unknown command: ${args._}.`);
-      } else {
-        if (args.v) {
-          reflectCLI.showVersion();
-        }
-        reflectCLI.showHelp();
-      }
-    },
-  );
+function createCLIParser(argv: string[]) {
+  const reflectCLI = createCLIParserBase(argv);
 
   // init
   reflectCLI.command(
@@ -99,6 +64,14 @@ export function createCLIParser(argv: string[]) {
     // devHandler
   );
 
+  // tail
+  reflectCLI.command(
+    'tail [worker]',
+    '🦚 Starts a log tailing session running worker',
+    // tailOptions,
+    // tailHandler
+  );
+
   // publish
   reflectCLI.command(
     'publish <script>',
@@ -107,45 +80,8 @@ export function createCLIParser(argv: string[]) {
     publishHandler,
   );
 
-  // tail
-  reflectCLI.command(
-    'tail [worker]',
-    '🦚 Starts a log tailing session ruinning worker',
-    // tailOptions,
-    // tailHandler
-  );
-
-  // This set to false to allow overwrite of default behaviour
-  reflectCLI.version(false);
-
-  // version
-  reflectCLI.command(
-    'version',
-    false,
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    () => {},
-    () => {
-      console.log(version);
-    },
-  );
-
-  reflectCLI.exitProcess(false);
-
   return reflectCLI;
 }
 
-async function main(argv: string[]): Promise<void> {
-  const reflectCLI = createCLIParser(argv);
-  try {
-    await reflectCLI.parse();
-  } catch (e) {
-    if (e instanceof CommandLineArgsError) {
-      console.log(e.message);
-      await createCLIParser([...argv, '--help']).parse();
-    } else {
-      throw e;
-    }
-  }
-}
 // eslint-disable-next-line @typescript-eslint/no-floating-promises
 main(hideBin(process.argv));
