@@ -7,87 +7,78 @@ import {
   writeAuthConfigFile,
 } from './auth-config.js';
 import {parse} from 'shared/valita.js';
+import {sleep} from 'shared/sleep.js';
+import {resolver} from '@rocicorp/resolver';
 
-export async function loginHandler(): Promise<boolean> {
+async function timeout(signal: AbortSignal) {
+  await sleep(120_000, signal);
+  throw new Error('Login did not complete within 2 minutes');
+}
+
+export async function loginHandler(): Promise<void> {
   const urlToOpen = process.env.AUTH_URL || 'https://auth.reflect.net';
-  let server: http.Server;
-  let loginTimeoutHandle: NodeJS.Timeout;
-  const timerPromise = new Promise<boolean>(resolve => {
-    loginTimeoutHandle = setTimeout(() => {
-      console.error(
-        'Timed out waiting for authorization code, please try again.',
-      );
-      server.close();
-      resolve(false);
-    }, 120000); // wait for 120 seconds for the user to authorize
-  });
+  const loginResolver = resolver<void>();
+  const server = http.createServer((req, res) => {
+    assert(req.url, "This request doesn't have a URL"); // This should never happen
+    const reqUrl = new URL(req.url, `https://${req.headers.host}`);
+    const {pathname, searchParams} = reqUrl;
 
-  const loginPromise = new Promise<boolean>((resolve, reject) => {
-    const server = http.createServer((req, res) => {
-      function finish(status: boolean, error?: Error) {
-        clearTimeout(loginTimeoutHandle);
-        server.close((closeErr?: Error) => {
-          if (error || closeErr) {
-            reject(error || closeErr);
-          } else {
-            resolve(status);
-          }
-        });
-      }
+    switch (pathname) {
+      case '/oauth/callback': {
+        const idToken = searchParams.get('idToken');
+        const refreshToken = searchParams.get('refreshToken');
+        const expirationTime = searchParams.get('expirationTime');
 
-      assert(req.url, "This request doesn't have a URL"); // This should never happen
-      const reqUrl = new URL(req.url, `https://${req.headers.host}`);
-      const {pathname, searchParams} = reqUrl;
-      console.log(`pathname: ${pathname}`);
-
-      switch (pathname) {
-        case '/oauth/callback': {
-          const idToken = searchParams.get('idToken');
-          const refreshToken = searchParams.get('refreshToken');
-          const expirationTime = searchParams.get('expirationTime');
-
-          try {
-            if (!idToken || !refreshToken || !expirationTime) {
-              throw new Error(
-                'Missing idToken, refreshToken, or expiresIn from the auth provider.',
-              );
-            }
-
-            const authConfig: UserAuthConfig = {
-              idToken,
-              refreshToken,
-              expirationTime: parseInt(expirationTime),
-            };
-            parse(authConfig, userAuthConfigSchema);
-            writeAuthConfigFile(authConfig);
-          } catch (error) {
-            res.end(() => {
-              finish(
-                false,
-                new Error(
-                  'Invalid idToken, refreshToken, or expiresIn from the auth provider.',
-                ),
-              );
-            });
-            return;
+        try {
+          if (!idToken || !refreshToken || !expirationTime) {
+            throw new Error(
+              'Missing idToken, refreshToken, or expiresIn from the auth provider.',
+            );
           }
 
+          const authConfig: UserAuthConfig = {
+            idToken,
+            refreshToken,
+            expirationTime: parseInt(expirationTime),
+          };
+          parse(authConfig, userAuthConfigSchema);
+          writeAuthConfigFile(authConfig);
+        } catch (error) {
           res.end(() => {
-            finish(true);
+            loginResolver.reject(
+              new Error(
+                'Invalid idToken, refreshToken, or expiresIn from the auth provider.',
+              ),
+            );
           });
-          console.log('Successfully logged in.');
           return;
         }
+        res.end(() => {
+          loginResolver.resolve();
+        });
+        console.log('Successfully logged in.');
+        return;
       }
-    });
-
-    // Todo: Avoid hardcoding the port number
-    server.listen(8976);
+    }
   });
+  server.listen(8976);
+
   console.log(`Opening a link in your default browser: ${urlToOpen}`);
   await openInBrowser(urlToOpen);
-
-  return Promise.race([timerPromise, loginPromise]);
+  const timeoutController = new AbortController();
+  try {
+    await Promise.race([
+      timeout(timeoutController.signal),
+      loginResolver.promise,
+    ]);
+  } finally {
+    timeoutController.abort();
+    server.close((closeErr?: Error) => {
+      if (closeErr) {
+        console.warn('login credential server failed to close', closeErr);
+      }
+    });
+  }
 }
 
 /**
