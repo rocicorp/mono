@@ -10,13 +10,13 @@ const githubAuthProvider = new GithubAuthProvider();
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handleAuth(authResult: any) {
   try {
-    const {refreshToken, expiresIn} = authResult.user;
+    const {refreshToken} = authResult.user;
+    const {expirationTime} = authResult.user.stsTokenManager;
     const idToken = await authResult.user.getIdToken();
     const callbackUrl = new URL('http://localhost:8976/oauth/callback');
     callbackUrl.searchParams.set('idToken', idToken);
     callbackUrl.searchParams.set('refreshToken', refreshToken);
-    callbackUrl.searchParams.set('expiresIn', expiresIn);
-
+    callbackUrl.searchParams.set('expirationTime', expirationTime);
     const response = await fetch(callbackUrl);
     if (!response.ok) {
       throw new Error('Fetch error');

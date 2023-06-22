@@ -38,7 +38,7 @@ export async function loginHandler(): Promise<boolean> {
       }
 
       assert(req.url, "This request doesn't have a URL"); // This should never happen
-      const reqUrl = new URL(req.url);
+      const reqUrl = new URL(req.url, `https://${req.headers.host}`);
       const {pathname, searchParams} = reqUrl;
       console.log(`pathname: ${pathname}`);
 
@@ -46,21 +46,20 @@ export async function loginHandler(): Promise<boolean> {
         case '/oauth/callback': {
           const idToken = searchParams.get('idToken');
           const refreshToken = searchParams.get('refreshToken');
-          const expiresIn = searchParams.get('expiresIn');
+          const expirationTime = searchParams.get('expirationTime');
 
           try {
-            if (!idToken || !refreshToken || !expiresIn) {
+            if (!idToken || !refreshToken || !expirationTime) {
               throw new Error(
-                'Invalid idToken, refreshToken, or expiresIn from the auth provider.',
+                'Missing idToken, refreshToken, or expiresIn from the auth provider.',
               );
             }
 
             const authConfig: UserAuthConfig = {
               idToken,
               refreshToken,
-              expiresIn: parseInt(expiresIn),
+              expirationTime: parseInt(expirationTime),
             };
-
             parse(authConfig, userAuthConfigSchema);
             writeAuthConfigFile(authConfig);
           } catch (error) {

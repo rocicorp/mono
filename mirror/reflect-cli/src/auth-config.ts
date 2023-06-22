@@ -17,7 +17,7 @@ export const USER_AUTH_CONFIG_FILE = 'config/default.json';
 export const userAuthConfigSchema = v.object({
   idToken: v.string(),
   refreshToken: v.string(),
-  expiresIn: v.number(),
+  expirationTime: v.number(),
 });
 export type UserAuthConfig = v.Infer<typeof userAuthConfigSchema>;
 
