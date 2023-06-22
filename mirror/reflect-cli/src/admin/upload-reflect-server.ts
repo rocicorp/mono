@@ -1,5 +1,8 @@
 import * as esbuild from 'esbuild';
+import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
+import {pkgUp} from 'pkg-up';
+import {assert, assertObject, assertString} from 'shared/asserts.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 
 const require = createRequire(import.meta.url);
@@ -22,11 +25,27 @@ export async function uploadReflectServerHandler(
   console.log(
     'Make sure you run `npm run build` from the root of the repo first',
   );
-  console.log('TODO: Implement upload-reflect-server');
-  console.log('yargs', yargs.semver);
 
   const source = await buildReflectServerContent();
-  console.log('source', source);
+  console.log('Version (from @rocicorp/reflect):', await findVersion());
+  if (yargs.semver) {
+    console.log('Version (from --semver):         ', yargs.semver);
+  }
+  console.log('Source: ...\n', source.split('\n').slice(-30).join('\n'));
+
+  console.log('TODO: Implement upload-reflect-server');
+}
+
+async function findVersion() {
+  const serverPath = require.resolve('@rocicorp/reflect');
+  const pkg = await pkgUp({cwd: serverPath});
+  console.log('pkg', pkg);
+  assert(pkg);
+  const s = await readFile(pkg, 'utf8');
+  const v = JSON.parse(s);
+  assertObject(v);
+  assertString(v.version);
+  return v.version;
 }
 
 async function buildReflectServerContent() {
