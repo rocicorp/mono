@@ -39,7 +39,7 @@ async function handleAuth(authResult: AuthResult) {
     callbackUrl.searchParams.set('idToken', idToken);
     callbackUrl.searchParams.set('refreshToken', refreshToken);
     callbackUrl.searchParams.set('expirationTime', expirationTime.toString());
-    const response = await fetch(callbackUrl);
+    const response = await fetch(callbackUrl, {mode: 'no-cors'});
     if (!response.ok) {
       throw new Error('Fetch error');
     }
