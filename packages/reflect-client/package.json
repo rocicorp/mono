@@ -36,7 +36,6 @@
     "chai": "^5.0.0-alpha.0",
     "datadog": "0.0.0",
     "esbuild": "^0.18.3",
-    "pkg-up": "^4.0.0",
     "reflect-protocol": "0.0.0",
     "reflect-types": "0.0.0",
     "replicache": "13.0.0-beta.1",
