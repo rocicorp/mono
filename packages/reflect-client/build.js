@@ -5,8 +5,7 @@ import * as esbuild from 'esbuild';
 import {writeFile} from 'fs/promises';
 import * as path from 'path';
 import {fileURLToPath} from 'url';
-import {sharedOptions} from '../shared/src/build.js';
-import {makeDefine} from './make-define.js';
+import {makeDefine, sharedOptions} from '../shared/src/build.js';
 
 // You can then visualize the metafile at https://esbuild.github.io/analyze/
 const metafile = process.argv.includes('--metafile');
@@ -22,7 +21,7 @@ async function buildESM() {
   const minify = false;
   const shared = sharedOptions(minify, metafile);
   const outfile = path.join(dirname, 'out', 'reflect-client.js');
-  const define = await makeDefine(mode);
+  const define = makeDefine(mode);
   const result = await esbuild.build({
     ...shared,
     // Use neutral to remove the automatic define for process.env.NODE_ENV
@@ -40,6 +39,7 @@ async function buildESM() {
 
 try {
   await buildESM();
-} catch {
-  process.exitCode = 1;
+} catch (e) {
+  console.error(e);
+  process.exit(1);
 }

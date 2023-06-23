@@ -1,10 +1,10 @@
+import {expect, test} from '@jest/globals';
 import {version as reflectVersion} from '@rocicorp/reflect';
-import {expect} from 'chai';
 import {version as modVersion} from './../mod.js';
 import {version} from './version.js';
 
 test('version', () => {
-  expect(version).is.string;
-  expect(version).equal(reflectVersion);
-  expect(version).equal(modVersion);
+  expect(typeof version).toBe('string');
+  expect(version).toBe(reflectVersion);
+  expect(version).toBe(modVersion);
 });

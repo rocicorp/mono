@@ -4,12 +4,12 @@
 
 import {esbuildPlugin} from '@web/dev-server-esbuild';
 import {playwrightLauncher} from '@web/test-runner-playwright';
-import {makeDefine} from './make-define.js';
+import {makeDefine} from '../shared/src/build.js';
 
 const chromium = playwrightLauncher({product: 'chromium'});
 const webkit = playwrightLauncher({product: 'webkit'});
 const firefox = playwrightLauncher({product: 'firefox'});
-const define = await makeDefine('unknown');
+const define = makeDefine('unknown');
 
 /** @type {import('@web/test-runner').TestRunnerConfig} */
 const config = {
