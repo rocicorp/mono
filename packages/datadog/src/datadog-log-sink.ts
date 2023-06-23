@@ -65,6 +65,10 @@ export class DatadogLogSink implements LogSink {
       const flushTime = Date.now();
       const body = messages
         .map(m => {
+          // As a small perf optimization, we directly mutate
+          // the message rather than making a shallow copy.
+          // The LOG_SINK_FLUSH_DELAY_ATTRIBUTE will be clobbered by
+          // the next flush if this flush fails (which is the desired behavior).
           m[LOG_SINK_FLUSH_DELAY_ATTRIBUTE] = flushTime - m.date;
           return JSON.stringify(m);
         })
