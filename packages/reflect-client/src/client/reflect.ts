@@ -169,10 +169,13 @@ export class Reflect<MD extends MutatorDefs> {
   private _onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
   private readonly _jurisdiction: 'eu' | undefined;
   private _baseCookie: number | null = null;
-  // Total number of WebSockets successfully connected by this client
+  // Total number of sockets successfully connected by this client
   private _connectedCount = 0;
+  // Number of messages received over currently connected socket.  Reset
+  // on disconnect.
   private _messageCount = 0;
   private _connectedAt = 0;
+  // Reset on successful connection.
   private _connectErrorCount = 0;
 
   #abortPingTimeout = () => {
