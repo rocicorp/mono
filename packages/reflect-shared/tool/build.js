@@ -28,7 +28,7 @@ async function buildESM() {
     platform: 'neutral',
     define: {
       ...define,
-      REFLECT_VERSION: JSON.stringify(await getVersion()),
+      REFLECT_VERSION: JSON.stringify(getVersion()),
     },
     format: 'esm',
     entryPoints: [path.join(dirname, '..', 'src', 'mod.ts')],
