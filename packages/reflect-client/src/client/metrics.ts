@@ -19,8 +19,8 @@ export const REPORT_INTERVAL_MS = 5_000;
 
 export const TIME_TO_CONNECT_V2_SPECIAL_VALUES = {
   initialValue: 100_000,
-  connectError: 100_001,
-  disconnectedWaitingForVisible: 100_002,
+  connectError: 200_000,
+  disconnectedWaitingForVisible: 300_000,
 } as const;
 
 type ClientDisconnectReason =
