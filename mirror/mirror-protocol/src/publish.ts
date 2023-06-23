@@ -12,6 +12,7 @@ export const publishRequestSchema = v.object({
   name: v.string(),
   source: fileSchema,
   sourcemap: fileSchema,
+  desiredVersion: v.string(),
 });
 
 export type PublishRequest = v.Infer<typeof publishRequestSchema>;

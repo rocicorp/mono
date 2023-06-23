@@ -1,15 +1,36 @@
+import type {
+  PublishRequest,
+  PublishResponse,
+} from 'mirror-protocol/src/publish.js';
+import type {
+  UploadRequest,
+  UploadResponse,
+} from 'mirror-protocol/src/reflect-server.js';
+import type {
+  EnsureUserRequest,
+  EnsureUserResponse,
+} from 'mirror-protocol/src/user.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as v from 'shared/src/valita.js';
 
-type FunctionName = 'publish' | 'user-ensure';
+// type FunctionName = 'publish' | 'user-ensure' | 'reflectServer-upload';
+
+type CallMapping = {
+  'publish': [PublishRequest, PublishResponse];
+  'user-ensure': [EnsureUserRequest, EnsureUserResponse];
+  'reflectServer-upload': [UploadRequest, UploadResponse];
+  [name: string]: [ReadonlyJSONValue, ReadonlyJSONValue];
+};
 
 const firebaseErrorResponseSchema = v.object({
   error: v.object({
     message: v.string(),
-    status: v.number(),
+    status: v.string(),
     details: v.string().optional(),
   }),
 });
+
+type FirebaseErrorObject = v.Infer<typeof firebaseErrorResponseSchema>['error'];
 
 const firebaseResultResponseSchema = v.object({
   result: v.unknown(),
@@ -22,15 +43,12 @@ const firebaseResultResponseSchema = v.object({
  * The return value is extracted from the response and parsed using the given
  * schema.
  */
-export async function callFirebase<
-  Data extends ReadonlyJSONValue,
-  Return extends ReadonlyJSONValue = ReadonlyJSONValue,
->(
-  functionName: FunctionName,
-  data: Data,
-  returnValueSchema?: v.Type<Return>,
+export async function callFirebase<K extends keyof CallMapping>(
+  functionName: K,
+  data: CallMapping[K][0],
+  returnValueSchema?: v.Type<CallMapping[K][1]>,
   apiToken?: string,
-): Promise<ReadonlyJSONValue> {
+): Promise<CallMapping[K][1]> {
   // TODO(arv): Pass along auth token.
   const body = JSON.stringify({data});
   const headers = apiToken
@@ -52,27 +70,55 @@ export async function callFirebase<
     },
   );
 
-  if (!resp.ok) {
-    throw new Error(`HTTP error ${resp.status}: ${resp.statusText}`);
+  let json: unknown;
+
+  try {
+    json = await resp.json();
+  } catch (e) {
+    // Even when the response is not ok, Firebase functions should send an error object.
+    if (resp.ok) {
+      // Not valid JSON.
+      throw new Error(
+        `Unexpected response from Firebase. Invalid JSON: ${
+          (e as {message: unknown}).message
+        }`,
+      );
+    }
   }
 
-  const json = await resp.json();
-
-  if (v.is(json, firebaseErrorResponseSchema)) {
-    throw new Error(
-      `Firebase error ${json.error.status}: ${json.error.message}` +
-        (json.error.details ? `, ${json.error.details}` : ''),
-    );
-  }
-
-  if (v.is(json, firebaseResultResponseSchema)) {
-    if (returnValueSchema) {
-      return v.parse(json.result, returnValueSchema);
+  if (json !== undefined) {
+    if (v.is(json, firebaseErrorResponseSchema)) {
+      throw new FirebaseError(json.error);
     }
 
-    // We know this must be JSON.
-    return json.result as ReadonlyJSONValue;
-  }
+    if (v.is(json, firebaseResultResponseSchema)) {
+      if (returnValueSchema) {
+        return v.parse(json.result, returnValueSchema);
+      }
 
+      // We know this must be JSON.
+      return json.result as CallMapping[K][1];
+    }
+  } else {
+    throw new Error(
+      `Unexpected response from Firebase: ${resp.status}: ${resp.statusText}`,
+    );
+  }
   throw new Error(`Unexpected response from Firebase: ${JSON.stringify(json)}`);
+}
+
+export class FirebaseError extends Error {
+  readonly name = 'FirebaseError';
+  readonly status: string;
+  readonly details: string | undefined;
+
+  constructor(error: FirebaseErrorObject) {
+    super(
+      `${error.status}, ${error.message}${
+        error.details ? `, ${error.details}` : ''
+      }`,
+    );
+    this.status = error.status;
+    this.details = error.details;
+  }
 }

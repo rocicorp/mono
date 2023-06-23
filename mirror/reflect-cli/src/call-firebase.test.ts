@@ -8,16 +8,16 @@ function makeFetchSpy(
 ) {
   const fetchSpy = jest.spyOn(globalThis, 'fetch');
   fetchSpy.mockImplementationOnce(url => {
-    expect(url).toMatch(/\/publish$/);
+    expect(url).toMatch(/\/unknown$/);
     return Promise.resolve(new Response(body, init));
   });
   return fetchSpy;
 }
 
 test('it should throw if response is not ok', async () => {
-  makeFetchSpy(null, {status: 500, statusText: 'NOT OK'});
-  await expect(callFirebase('publish', {})).rejects.toMatchInlineSnapshot(
-    `[Error: HTTP error 500: NOT OK]`,
+  makeFetchSpy('+null', {status: 500, statusText: 'NOT JSON'});
+  await expect(callFirebase('unknown', {})).rejects.toMatchInlineSnapshot(
+    `[Error: Unexpected response from Firebase: 500: NOT JSON]`,
   );
 });
 
@@ -25,14 +25,14 @@ test('it should throw if response contains error', async () => {
   makeFetchSpy(
     JSON.stringify({
       error: {
-        message: 'NOT OK',
-        status: 501,
+        message: 'MESSAGE',
+        status: 'STATUS',
       },
     }),
   );
 
-  await expect(callFirebase('publish', {})).rejects.toMatchInlineSnapshot(
-    `[Error: Firebase error 501: NOT OK]`,
+  await expect(callFirebase('unknown', {})).rejects.toMatchInlineSnapshot(
+    `[FirebaseError: STATUS, MESSAGE]`,
   );
 });
 
@@ -40,14 +40,14 @@ test('it should throw if response contains error with details', async () => {
   makeFetchSpy(
     JSON.stringify({
       error: {
-        message: 'NOT OK',
-        status: 501,
+        message: 'MESSAGE',
+        status: 'STATUS',
         details: 'DETAILS',
       },
     }),
   );
-  await expect(callFirebase('publish', {})).rejects.toMatchInlineSnapshot(
-    `[Error: Firebase error 501: NOT OK, DETAILS]`,
+  await expect(callFirebase('unknown', {})).rejects.toMatchInlineSnapshot(
+    `[FirebaseError: STATUS, MESSAGE, DETAILS]`,
   );
 });
 
@@ -57,15 +57,15 @@ test('it should throw if response is not valid shape', async () => {
       foo: 42,
     }),
   );
-  await expect(callFirebase('publish', {})).rejects.toMatchInlineSnapshot(
+  await expect(callFirebase('unknown', {})).rejects.toMatchInlineSnapshot(
     `[Error: Unexpected response from Firebase: {"foo":42}]`,
   );
 });
 
 test('it should throw if response is not JSON', async () => {
   makeFetchSpy('x');
-  await expect(callFirebase('publish', {})).rejects.toMatchInlineSnapshot(
-    `[SyntaxError: Unexpected token x in JSON at position 0]`,
+  await expect(callFirebase('unknown', {})).rejects.toMatchInlineSnapshot(
+    `[Error: Unexpected response from Firebase. Invalid JSON: Unexpected token x in JSON at position 0]`,
   );
 });
 
@@ -77,7 +77,7 @@ test('it should return result', async () => {
       },
     }),
   );
-  await expect(callFirebase('publish', {})).resolves.toEqual({
+  await expect(callFirebase('unknown', {})).resolves.toEqual({
     foo: 42,
   });
 });
@@ -89,7 +89,7 @@ test('it should return result if matches schema', async () => {
     }),
   );
   const schema = v.array(v.number());
-  await expect(callFirebase('publish', {}, schema)).resolves.toEqual([1, 2, 3]);
+  await expect(callFirebase('unknown', {}, schema)).resolves.toEqual([1, 2, 3]);
 });
 
 test('it should throw if result does not match schema', async () => {
@@ -100,6 +100,6 @@ test('it should throw if result does not match schema', async () => {
   );
   const schema = v.array(v.string());
   await expect(
-    callFirebase('publish', {}, schema),
+    callFirebase('unknown', {}, schema),
   ).rejects.toMatchInlineSnapshot(`[TypeError: Expected string at 0. Got 1]`);
 });

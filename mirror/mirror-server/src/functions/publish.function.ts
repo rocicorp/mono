@@ -1,3 +1,5 @@
+import type {Firestore} from 'firebase-admin/firestore';
+import type {Storage} from 'firebase-admin/storage';
 import {defineSecret, defineString} from 'firebase-functions/params';
 import {
   publishRequestSchema,
@@ -12,29 +14,43 @@ import {withSchema} from './validators/schema.js';
 const cloudflareApiToken = defineSecret('CLOUDFLARE_API_TOKEN');
 const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
-export const publish = withSchema(
-  publishRequestSchema,
-  publishResponseSchema,
-  async publishRequest => {
-    const appName = publishRequest.name;
+export const publish = (
+  firestore: Firestore,
+  storage: Storage,
+  bucketName: string,
+) =>
+  withSchema(
+    publishRequestSchema,
+    publishResponseSchema,
+    async publishRequest => {
+      const appName = publishRequest.name;
 
-    const config = {
-      accountID: cloudflareAccountId.value(),
-      // TODO(arv): This is not the right name.
-      scriptName: appName,
-      apiToken: cloudflareApiToken.value(),
-    } as const;
-    const sourceModule: CfModule = {
-      ...publishRequest.source,
-      type: 'esm',
-    };
-    const sourcemapModule: CfModule = {
-      ...publishRequest.sourcemap,
-      type: 'text',
-    };
+      const config = {
+        accountID: cloudflareAccountId.value(),
+        // TODO(arv): This is not the right name.
+        scriptName: appName,
+        apiToken: cloudflareApiToken.value(),
+      } as const;
+      const sourceModule: CfModule = {
+        ...publishRequest.source,
+        type: 'esm',
+      };
+      const sourcemapModule: CfModule = {
+        ...publishRequest.sourcemap,
+        type: 'text',
+      };
 
-    await publishToCloudflare(config, sourceModule, sourcemapModule, appName);
+      await publishToCloudflare(
+        firestore,
+        storage,
+        bucketName,
+        config,
+        sourceModule,
+        sourcemapModule,
+        appName,
+        publishRequest.desiredVersion,
+      );
 
-    return {success: true};
-  },
-);
+      return {success: true};
+    },
+  );

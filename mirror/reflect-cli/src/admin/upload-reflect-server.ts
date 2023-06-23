@@ -1,17 +1,23 @@
 import * as esbuild from 'esbuild';
+import {
+  uploadResponseSchema,
+  type UploadRequest,
+} from 'mirror-protocol/src/reflect-server.js';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
+import * as path from 'node:path';
 import {pkgUp} from 'pkg-up';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
+import {FirebaseError, callFirebase} from '../call-firebase.js';
+import {makeRequester} from '../requester.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 
 const require = createRequire(import.meta.url);
 
 export function uploadReflectServerOptions(yargs: CommonYargsArgv) {
-  return yargs.option('semver', {
-    describe: 'The semver of @rocicorp/reflect',
-    type: 'string',
-    demandOption: true,
+  return yargs.option('force', {
+    describe: 'Overwrite existing version',
+    type: 'boolean',
   });
 }
 
@@ -27,19 +33,47 @@ export async function uploadReflectServerHandler(
   );
 
   const source = await buildReflectServerContent();
-  console.log('Version (from @rocicorp/reflect):', await findVersion());
-  if (yargs.semver) {
-    console.log('Version (from --semver):         ', yargs.semver);
-  }
-  console.log('Source: ...\n', source.split('\n').slice(-30).join('\n'));
+  const versionFromPackage = await findVersion();
+  const workerTemplate = await getWorkerTemplate();
+  console.log('Version (from @rocicorp/reflect):', versionFromPackage);
 
-  console.log('TODO: Implement upload-reflect-server');
+  // TODO(arv) Implement userID
+  const userID = 'USERID';
+  const data: UploadRequest = {
+    requester: makeRequester(userID),
+    version: versionFromPackage,
+    main: {
+      content: source,
+      name: 'reflect-server.js',
+      type: 'esm',
+    },
+    modules: [
+      {
+        content: workerTemplate,
+        name: 'worker.template.js',
+        type: 'text',
+      },
+    ],
+    force: yargs.force,
+  };
+
+  try {
+    await callFirebase('reflectServer-upload', data, uploadResponseSchema);
+  } catch (e) {
+    if (e instanceof FirebaseError && e.status === 'ALREADY_EXISTS') {
+      console.log(e.message);
+      console.log('Use --force to overwrite');
+      process.exit(1);
+    }
+
+    throw e;
+  }
+  console.log(`Uploaded version ${versionFromPackage} successfully`);
 }
 
 async function findVersion() {
   const serverPath = require.resolve('@rocicorp/reflect');
   const pkg = await pkgUp({cwd: serverPath});
-  console.log('pkg', pkg);
   assert(pkg);
   const s = await readFile(pkg, 'utf8');
   const v = JSON.parse(s);
@@ -81,4 +115,16 @@ async function buildReflectServerContent() {
   }
 
   return outputFiles[0].text;
+}
+
+async function getWorkerTemplate() {
+  const serverPath = require.resolve('@rocicorp/reflect-server');
+  const pkg = await pkgUp({cwd: serverPath});
+  assert(pkg);
+  const templatePath = path.join(
+    path.dirname(pkg),
+    'templates',
+    'worker.template.js',
+  );
+  return readFile(templatePath, 'utf-8');
 }

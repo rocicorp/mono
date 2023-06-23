@@ -45,6 +45,9 @@ export async function publishHandler(yargs: PublishHandlerArgs) {
   // TODO(arv): Implement userID
   const userID = 'USERID';
 
+  // TODO(arv): Find this...
+  const desiredVersion = '0.28.1';
+
   const data: PublishRequest = {
     requester: makeRequester(userID),
     name,
@@ -56,6 +59,7 @@ export async function publishHandler(yargs: PublishHandlerArgs) {
       content: sourcemap.text,
       name: path.basename(sourcemap.path),
     },
+    desiredVersion,
   };
 
   await callFirebase('publish', data);

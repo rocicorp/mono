@@ -18,9 +18,7 @@ export function ensure(
     ensureUserRequestSchema,
     ensureUserResponseSchema,
     withAuthorization(async (ensureUserRequest, context) => {
-      const {
-        requester: {userID},
-      } = ensureUserRequest;
+      const {userID} = ensureUserRequest.requester;
 
       const userDocRef = firestore
         .doc(userPath(userID))

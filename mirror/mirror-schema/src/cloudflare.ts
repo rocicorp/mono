@@ -9,7 +9,7 @@ export const cloudflareSchema = v.object({
 
 export type Cloudflare = v.Infer<typeof cloudflareSchema>;
 
-export const cloudflareDataConveter = firestoreDataConverter(cloudflareSchema);
+export const cloudflareDataConverter = firestoreDataConverter(cloudflareSchema);
 
 export const CLOUDFLARE_COLLECTION = 'cloudflares';
 

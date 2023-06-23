@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {readFile} from 'node:fs/promises';
-import * as path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import type {Firestore} from 'firebase-admin/firestore';
+import type {Storage} from 'firebase-admin/storage';
+import {HttpsError} from 'firebase-functions/v2/https';
+import * as schema from 'mirror-schema/src/reflect-server.js';
+import assert from 'node:assert';
 import {cfFetch} from './cf-fetch.js';
 import {CfModule, createWorkerUploadForm} from './create-worker-upload-form.js';
 import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
@@ -78,41 +80,58 @@ const migrations: Migration[] = [
   },
 ];
 
-function workerModuleContent(appFileName: string) {
-  return `
-import {createReflectServer} from './reflect-server.js';
-import {default as makeOptions} from './${appFileName}';
-const {worker, RoomDO, AuthDO} = createReflectServer(makeOptions);
-export {worker as default, RoomDO, AuthDO};
-`;
-}
-
-function getServerContent() {
-  // TODO(arv): This is a hack to get to the server source code.
-  const dirname = path.dirname(fileURLToPath(import.meta.url));
-  const serverPath = path.join(dirname, '../out/data/reflect-server.js');
-  return readFile(serverPath, 'utf8');
+function assertAllModulesHaveUniqueNames(modules: Iterable<CfModule>) {
+  const names = new Set<string>();
+  for (const m of modules) {
+    assert(!names.has(m.name), `Duplicate module name: ${m.name}`);
+    names.add(m.name);
+  }
 }
 
 export async function publish(
+  firestore: Firestore,
+  storage: Storage,
+  bucketName: string,
   config: Config,
-  sourceModule: CfModule,
-  sourcemapModule: CfModule,
+  appModule: CfModule,
+  appSourcemapModule: CfModule,
   appName: string,
+  desiredVersion: string,
 ) {
   console.log('publishing', appName);
-  const workerModule = {
-    name: 'worker.js',
-    content: workerModuleContent(sourceModule.name),
-    type: 'esm',
-  } as const;
-  const serverContent = await getServerContent();
-  const serverModule = {
-    name: 'reflect-server.js',
-    content: serverContent,
-    type: 'esm',
-  } as const;
-  const modules: CfModule[] = [sourceModule, sourcemapModule, serverModule];
+
+  const [serverModule, ...otherServerModules] = await getServerModules(
+    firestore,
+    storage,
+    bucketName,
+    desiredVersion,
+  );
+
+  let workerModule: CfModule | undefined;
+  const otherModules: CfModule[] = [];
+  for (const m of otherServerModules) {
+    if (m.name === 'worker.template.js') {
+      const content = m.content
+        .replaceAll('<REFLECT_SERVER>', serverModule.name)
+        .replaceAll('<APP>', appModule.name);
+      workerModule = {content, name: 'worker.js', type: 'esm'};
+    } else {
+      otherModules.push(m);
+    }
+  }
+  assert(workerModule);
+
+  const modules: CfModule[] = [
+    appModule,
+    appSourcemapModule,
+    serverModule,
+    ...otherModules,
+  ];
+
+  // Make sure that all the names are unique.
+  assertAllModulesHaveUniqueNames([workerModule, ...modules]);
+
+  console.log('publishing', appName);
   await createWorker(config, workerModule, modules);
 
   // TODO(arv): Set up the custom domain. The below code does not seem to do
@@ -120,4 +139,43 @@ export async function publish(
   // reflect.net/wrangler.toml has:
   // route = { pattern = "reflect-server.net", custom_domain = true }
   await enableSubdomain(config);
+}
+
+async function getServerModules(
+  firestore: Firestore,
+  storage: Storage,
+  bucketName: string,
+  desiredVersion: string,
+): Promise<CfModule[]> {
+  // TODO(arv): Find compatible version.
+  const version = desiredVersion;
+
+  const docRef = firestore
+    .doc(schema.reflectServerPath(version))
+    .withConverter(schema.reflectServerDataConverter);
+
+  const serverModule = await firestore.runTransaction(
+    async txn => {
+      const doc = await txn.get(docRef);
+      const {exists} = doc;
+      if (!exists) {
+        throw new HttpsError('not-found', `Version ${version} does not exist`);
+      }
+
+      return doc.data();
+    },
+    {readOnly: true},
+  );
+  assert(serverModule);
+
+  const modules = [serverModule.main, ...serverModule.modules];
+  const bucket = storage.bucket(bucketName);
+
+  return Promise.all(
+    modules.map(async module => {
+      const {name, filename, type} = module;
+      const content = await bucket.file(filename).download();
+      return {name, content: content[0].toString('utf-8'), type};
+    }),
+  );
 }

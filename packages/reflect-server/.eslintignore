@@ -1,4 +1,4 @@
 out
 .eslintrc.cjs
 jest.config.js
-build.js
+templates/*

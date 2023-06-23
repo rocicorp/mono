@@ -1,8 +1,5 @@
 import * as esbuild from 'esbuild';
 
-// npx esbuild src/index.ts --bundle --outfile=lib/index2.js --external:firebase-functions --external:firebase-admin --external:busboy --platform=node --target=esnext --format=esm
-
-/** quasi-random identifier generator, good for less than 10k values in series */
 function createRandomIdentifier(name) {
   return `${name}_${Math.random() * 10000}`.replace('.', '');
 }
