@@ -54,15 +54,15 @@ export async function checkConnectivity(
   const results = await Promise.all(resultPs);
   lc.info?.(
     'Connectivity checks summary\n',
-    ...Object.keys(checks).map((checkName, i) => {
-      `${checkName}=${results[i].success}\n`;
-    }),
+    ...Object.keys(checks).map(
+      (checkName, i) => `${checkName}=${results[i].success}\n`,
+    ),
   );
   lc.info?.(
     'Connectivity checks detail\n',
-    ...Object.keys(checks).flatMap((checkName, i) => {
-      `${checkName}=${results[i].detail}\n`;
-    }),
+    ...Object.keys(checks).flatMap(
+      (checkName, i) => `${checkName}=${results[i].detail}\n`,
+    ),
   );
 }
 
