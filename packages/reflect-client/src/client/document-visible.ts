@@ -16,7 +16,6 @@ export function getDocumentVisibilityWatcher(
 }
 
 interface DocumentVisibilityWatcher {
-  visibilityState: DocumentVisibilityState;
   waitForVisible(): Promise<unknown>;
   waitForHidden(): Promise<unknown>;
 }
@@ -29,7 +28,7 @@ class DocumentVisibilityWatcherImpl implements DocumentVisibilityWatcher {
   // This trails doc.visibilityState by hiddenIntervalMS when being hidden. This
   // is because we want to wait for the tab to be hidden for a while before
   // disconnecting.
-  visibilityState: DocumentVisibilityState;
+  #visibilityState: DocumentVisibilityState;
 
   readonly #promises = new Set<{
     resolve: () => void;
@@ -43,7 +42,7 @@ class DocumentVisibilityWatcherImpl implements DocumentVisibilityWatcher {
   ) {
     this.#doc = doc;
     this.#hiddenIntervalMS = hiddenIntervalMS;
-    this.visibilityState = doc.visibilityState;
+    this.#visibilityState = doc.visibilityState;
     // Safari got support for abort signal in addEventListener in version
     // 15 (Released 2021-09-20)
     this.#doc.addEventListener('visibilitychange', this.#onVisibilityChange, {
@@ -63,10 +62,10 @@ class DocumentVisibilityWatcherImpl implements DocumentVisibilityWatcher {
   };
 
   #setVisibilityState(visibilityState: DocumentVisibilityState) {
-    if (visibilityState === this.visibilityState) {
+    if (visibilityState === this.#visibilityState) {
       return;
     }
-    this.visibilityState = visibilityState;
+    this.#visibilityState = visibilityState;
     for (const entry of this.#promises) {
       const {resolve, state} = entry;
       if (state === visibilityState) {
@@ -85,7 +84,7 @@ class DocumentVisibilityWatcherImpl implements DocumentVisibilityWatcher {
   }
 
   #waitFor(state: DocumentVisibilityState): Promise<unknown> {
-    if (this.visibilityState === state) {
+    if (this.#visibilityState === state) {
       return Promise.resolve();
     }
 
@@ -99,7 +98,6 @@ const resolvedPromise = Promise.resolve();
 const promiseThatNeverResolves = new Promise(() => undefined);
 
 class DocumentVisibilityWatcherNoDoc implements DocumentVisibilityWatcher {
-  visibilityState: DocumentVisibilityState = 'visible';
   waitForVisible(): Promise<unknown> {
     return resolvedPromise;
   }
