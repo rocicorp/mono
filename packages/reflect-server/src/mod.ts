@@ -26,15 +26,13 @@ export function createWorkerDatadogLogSink(opts: WorkerDatadogLogSinkOptions) {
   return new DatadogLogSink({...opts, source: 'worker'});
 }
 
-// TODO(arv): Only export the types that are actually used.
-// https://github.com/rocicorp/mono/issues/362
-export * from 'replicache';
+export * from './replicache-mod.js';
 
-// export type {
-//   AuthData,
-//   MutatorDefs,
-//   ReadTransaction,
-//   WriteTransaction,
-// } from 'reflect-types';
+export type {
+  AuthData,
+  MutatorDefs,
+  ReadTransaction,
+  WriteTransaction,
+} from 'reflect-types';
 
 export {version} from './util/version.js';

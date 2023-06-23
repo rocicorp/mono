@@ -2,7 +2,7 @@ export type {ReflectOptions} from './client/options.js';
 export {Reflect} from './client/reflect.js';
 // TODO(arv): Only export the types that are actually used.
 // https://github.com/rocicorp/mono/issues/362
-export * from 'replicache';
+export * from './replicache-mod.js';
 
 import {DatadogLogSink, DatadogLogSinkOptions} from 'datadog';
 
@@ -23,12 +23,12 @@ export function createClientDatadogLogSink(opts: ClientDatadogLogSinkOptions) {
   return new DatadogLogSink(opts2);
 }
 
-// export type {
-//   AuthData,
-//   MutatorDefs,
-//   ReadTransaction,
-//   WriteTransaction,
-// } from 'reflect-types';
+export type {
+  AuthData,
+  MutatorDefs,
+  ReadTransaction,
+  WriteTransaction,
+} from 'reflect-types';
 
 // Export the deprecated version to shadow the version from replicache
 export {version} from './client/version.js';
