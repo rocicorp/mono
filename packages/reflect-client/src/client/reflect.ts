@@ -169,6 +169,7 @@ export class Reflect<MD extends MutatorDefs> {
   private _onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
   private readonly _jurisdiction: 'eu' | undefined;
   private _baseCookie: number | null = null;
+  // Total number of WebSockets successfully connected by this client
   private _connectedCount = 0;
   private _messageCount = 0;
   private _connectedAt = 0;
@@ -597,7 +598,7 @@ export class Reflect<MD extends MutatorDefs> {
     const [, connectBody] = connectedMessage;
     lc = addWebSocketIDToLogContext(connectBody.wsid, lc);
 
-    if (this._connectedCount === 1) {
+    if (this._connectedCount === 0) {
       this._checkConnectivity('firstConnect');
     } else if (this._connectErrorCount > 0) {
       this._checkConnectivity('connectAfterError');
