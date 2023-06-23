@@ -1,5 +1,7 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import {reportMetricsSchema, Series} from '../types/report-metrics.js';
+import {version} from 'reflect-shared';
+import type {MaybePromise} from 'replicache';
+import {Series, reportMetricsSchema} from '../types/report-metrics.js';
 import {randomID} from '../util/rand.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {
@@ -8,23 +10,21 @@ import {
   AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER,
   AUTH_ROUTES_UNAUTHED,
 } from './auth-do.js';
+import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
 import {CANARY_GET, HELLO, REPORT_METRICS_PATH} from './paths.js';
+import type {DatadogMetricsOptions} from './reflect.js';
 import {
-  asJSON,
   BaseContext,
+  Handler,
+  Router,
+  WithLogContext,
+  asJSON,
   checkAuthAPIKey,
   get,
-  Handler,
   post,
-  Router,
   withBody,
-  WithLogContext,
 } from './router.js';
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
-import type {MaybePromise} from 'replicache';
-import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
-import type {DatadogMetricsOptions} from './reflect.js';
-import {version} from '../util/version.js';
 
 export type MetricsSink = (
   allSeries: Series[],

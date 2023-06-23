@@ -3,7 +3,6 @@
   "description": "",
   "version": "0.0.0",
   "private": true,
-  "license": "SEE LICENSE IN https://roci.dev/terms.html",
   "type": "module",
   "scripts": {
     "format": "prettier --write *",
@@ -14,8 +13,7 @@
     "check-types": "tsc --noEmit",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "build-min": "node build.js",
-    "build": "rm -rf out && npm run build-dts && npm run build-min",
-    "prepack": "npm run lint && npm run test && npm run build"
+    "build": "rm -rf out && npm run build-dts && npm run build-min"
   },
   "dependencies": {
     "@badrap/valita": "^0.2.0",
@@ -27,20 +25,21 @@
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
     "@rollup/plugin-node-resolve": "^15.0.1",
+    "@types/mocha": "^10.0.1",
     "@types/sinon": "^10.0.11",
     "@web/dev-server": "^0.1.36",
     "@web/dev-server-esbuild": "^0.3.4",
-    "@types/mocha": "^10.0.1",
     "@web/test-runner": "^0.15.1",
     "@web/test-runner-playwright": "^0.9.0",
     "chai": "^5.0.0-alpha.0",
     "datadog": "0.0.0",
     "esbuild": "^0.18.3",
     "reflect-protocol": "0.0.0",
+    "reflect-shared": "0.0.0",
+    "reflect-types": "0.0.0",
     "replicache": "13.0.0-beta.1",
     "rollup": "^3.24.0",
     "rollup-plugin-dts": "^5.3.0",
-    "reflect-types": "0.0.0",
     "shared": "0.0.0",
     "sinon": "^13.0.1",
     "typescript": "^5.1.3"

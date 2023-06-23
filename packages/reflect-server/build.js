@@ -55,6 +55,7 @@ function buildInternal(options) {
 
 try {
   await Promise.all([buildESM(), buildExample(), buildCLI()]);
-} catch {
-  process.exitCode = 1;
+} catch (e) {
+  console.error(e);
+  process.exit(1);
 }

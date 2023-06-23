@@ -15,6 +15,7 @@ import {
   ErrorKind as ServerErrorKind,
   type ErrorMessage,
 } from 'reflect-protocol';
+import {version} from 'reflect-shared';
 import type {MutatorDefs, ReadTransaction} from 'reflect-types';
 import {
   ClientGroupID,
@@ -53,7 +54,6 @@ import type {ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {isAuthError, isServerError, ServerError} from './server-error.js';
-import {version} from './version.js';
 
 export const enum ConnectionState {
   Disconnected,

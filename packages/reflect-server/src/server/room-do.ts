@@ -1,40 +1,31 @@
+import {Lock} from '@rocicorp/lock';
+import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import {
+  createRoomRequestSchema,
+  invalidateForRoomRequestSchema,
+  invalidateForUserRequestSchema,
+} from 'reflect-protocol';
+import {version} from 'reflect-shared';
 import type {MutatorDefs} from 'reflect-types';
-import {processPending} from '../process/process-pending.js';
+import {BufferSizer} from 'shared/buffer-sizer.js';
+import * as valita from 'shared/valita.js';
 import type {MutatorMap} from '../process/process-mutation.js';
+import {processPending} from '../process/process-pending.js';
+import {processRoomStart} from '../process/process-room-start.js';
+import {DurableStorage} from '../storage/durable-storage.js';
 import type {
   ClientID,
   ClientMap,
   ClientState,
   Socket,
 } from '../types/client-state.js';
-import {Lock} from '@rocicorp/lock';
-import {LogSink, LogContext, LogLevel} from '@rocicorp/logger';
+import type {PendingMutation} from '../types/mutation.js';
+import {randomID} from '../util/rand.js';
 import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
-import {handleMessage} from './message.js';
-import {randomID} from '../util/rand.js';
-import {version} from '../util/version.js';
-import {
-  invalidateForUserRequestSchema,
-  invalidateForRoomRequestSchema,
-} from 'reflect-protocol';
 import {closeConnections, getConnections} from './connections.js';
-import type {RoomStartHandler} from './room-start.js';
 import type {DisconnectHandler} from './disconnect.js';
-import {DurableStorage} from '../storage/durable-storage.js';
-import * as valita from 'shared/valita.js';
-import {createRoomRequestSchema} from 'reflect-protocol';
-import {
-  get,
-  post,
-  requireAuthAPIKey,
-  Router,
-  Handler,
-  BaseContext,
-  withBody,
-} from './router.js';
-import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
-import type {PendingMutation} from '../types/mutation.js';
+import {handleMessage} from './message.js';
 import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
@@ -42,10 +33,19 @@ import {
   LEGACY_CONNECT_PATH,
   LEGACY_CREATE_ROOM_PATH,
 } from './paths.js';
-import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
-import {BufferSizer} from 'shared/buffer-sizer.js';
-import {processRoomStart} from '../process/process-room-start.js';
+import {addRequestIDFromHeadersOrRandomID} from './request-id.js';
 import {initRoomSchema} from './room-schema.js';
+import type {RoomStartHandler} from './room-start.js';
+import {
+  BaseContext,
+  Handler,
+  Router,
+  get,
+  post,
+  requireAuthAPIKey,
+  withBody,
+} from './router.js';
+import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';

@@ -1,11 +1,11 @@
 // @ts-check
-/* eslint-env node, es2022 */
 
 import * as esbuild from 'esbuild';
-import {writeFile} from 'fs/promises';
-import * as path from 'path';
-import {fileURLToPath} from 'url';
-import {makeDefine, sharedOptions} from '../shared/src/build.js';
+import {writeFile} from 'node:fs/promises';
+import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {makeDefine, sharedOptions} from '../../shared/src/build.js';
+import {getVersion} from './get-version.js';
 
 // You can then visualize the metafile at https://esbuild.github.io/analyze/
 const metafile = process.argv.includes('--metafile');
@@ -20,15 +20,18 @@ async function buildESM() {
   // minified builds we can re-enable this.
   const minify = false;
   const shared = sharedOptions(minify, metafile);
-  const outfile = path.join(dirname, 'out', 'reflect-client.js');
+  const outfile = path.join(dirname, '..', 'out', 'reflect-shared.js');
   const define = makeDefine(mode);
   const result = await esbuild.build({
     ...shared,
     // Use neutral to remove the automatic define for process.env.NODE_ENV
     platform: 'neutral',
-    define,
+    define: {
+      ...define,
+      REFLECT_VERSION: JSON.stringify(getVersion()),
+    },
     format: 'esm',
-    entryPoints: [path.join(dirname, 'src', 'mod.ts')],
+    entryPoints: [path.join(dirname, '..', 'src', 'mod.ts')],
     outfile,
     metafile,
   });

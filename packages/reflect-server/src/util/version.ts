@@ -1,2 +1,6 @@
-import json from '../../package.json' assert {type: 'json'};
-export const {version} = json;
+import {version as sharedVersion} from 'reflect-shared';
+
+/**
+ * @deprecated Use `version` from `@rocicorp/reflect` instead.
+ */
+export const version = sharedVersion;
