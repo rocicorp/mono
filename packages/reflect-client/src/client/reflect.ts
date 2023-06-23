@@ -12,7 +12,6 @@ import {
   PullResponseBody,
   PullResponseMessage,
   PushMessage,
-  ErrorKind as ServerErrorKind,
   type ErrorMessage,
 } from 'reflect-protocol';
 import {version} from 'reflect-shared';
@@ -45,10 +44,10 @@ import {send} from '../util/socket.js';
 import {checkConnectivity} from './connect-checks.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 import {
-  DID_NOT_CONNECT_VALUE,
   MetricManager,
   REPORT_INTERVAL_MS,
   Series,
+  DisconnectReason,
 } from './metrics.js';
 import type {ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
@@ -62,23 +61,6 @@ export const enum ConnectionState {
 }
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
-
-type ClientDisconnectReason =
-  | 'AbruptClose'
-  | 'CleanClose'
-  | 'ReflectClosed'
-  | 'ConnectTimeout'
-  | 'UnexpectedBaseCookie'
-  | 'PingTimeout'
-  | 'Hidden';
-
-export type DisconnectReason =
-  | {
-      server: ServerErrorKind;
-    }
-  | {
-      client: ClientDisconnectReason;
-    };
 
 /**
  * How frequently we should ping the server to keep the connection alive.
@@ -608,9 +590,9 @@ export class Reflect<MD extends MutatorDefs> {
     }
     this._connectedCount++;
     this._connectedAt = Date.now();
-    this._metrics.lastConnectError.clear();
     this._connectErrorCount = 0;
 
+    const now = Date.now();
     let timeToConnectMs = undefined;
     let connectMsgLatencyMs = undefined;
     if (this._connectingStart === undefined) {
@@ -618,15 +600,15 @@ export class Reflect<MD extends MutatorDefs> {
         'Got connected message but connect start time is undefined. This should not happen.',
       );
     } else {
-      const now = Date.now();
       timeToConnectMs = now - this._connectingStart;
-      this._metrics.timeToConnectMs.set(timeToConnectMs);
-      connectMsgLatencyMs =
-        connectBody.timestamp !== undefined
-          ? now - connectBody.timestamp
-          : undefined;
-      this._connectingStart = undefined;
     }
+    this._metrics.setConnected(timeToConnectMs ?? 0);
+
+    connectMsgLatencyMs =
+      connectBody.timestamp !== undefined
+        ? now - connectBody.timestamp
+        : undefined;
+    this._connectingStart = undefined;
 
     lc.info?.('Connected', {
       navigatorOnline: navigator.onLine,
@@ -736,18 +718,16 @@ export class Reflect<MD extends MutatorDefs> {
 
     switch (this._connectionState) {
       case ConnectionState.Connected: {
+        // this._connectingStart reset below.
         if (this._connectingStart !== undefined) {
           l.error?.(
             'disconnect() called while connected but connect start time is defined. This should not happen.',
           );
-          // this._connectingStart reset below.
         }
-
         break;
       }
       case ConnectionState.Connecting: {
-        this._metrics.lastConnectError.set(getLastConnectMetricState(reason));
-        this._metrics.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
+        this._metrics.setConnectError(reason);
         if (
           this._connectErrorCount % CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY ===
           1
@@ -762,7 +742,6 @@ export class Reflect<MD extends MutatorDefs> {
             'disconnect() called while connecting but connect start time is undefined. This should not happen.',
           );
         }
-
         break;
       }
       case ConnectionState.Disconnected:
@@ -942,6 +921,10 @@ export class Reflect<MD extends MutatorDefs> {
         switch (this._connectionState) {
           case ConnectionState.Disconnected: {
             // If hidden, we wait for the tab to become visible before trying again.
+
+            if (this.#visibilityWatcher.visibilityState === 'hidden') {
+              this._metrics.setDisconnectedWaitingForVisible();
+            }
             await this.#visibilityWatcher.waitForVisible();
 
             // If we got an auth error we try to get a new auth token before reconnecting.
@@ -1352,23 +1335,6 @@ function getDocument(): Document | undefined {
  */
 function promiseRace(ps: Promise<unknown>[]): Promise<number> {
   return Promise.race(ps.map((p, i) => p.then(() => i)));
-}
-
-function getLastConnectMetricState(reason: DisconnectReason): string {
-  if ('server' in reason) {
-    return `server_${camelToSnake(reason.server)}`;
-  }
-  return `client_${camelToSnake(reason.client)}`;
-}
-
-// camelToSnake is used to convert a protocol ErrorKind into a suitable
-// metric name, eg AuthInvalidated => auth_invalidated. It converts
-// both PascalCase and camelCase to snake_case.
-function camelToSnake(s: string): string {
-  return s
-    .split(/\.?(?=[A-Z])/)
-    .join('_')
-    .toLowerCase();
 }
 
 class TimedOutError extends Error {

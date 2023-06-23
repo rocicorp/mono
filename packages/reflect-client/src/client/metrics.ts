@@ -1,16 +1,55 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {MaybePromise} from 'replicache';
+import type {ErrorKind as ServerErrorKind} from 'reflect-protocol';
 
 export enum MetricName {
-  TimeToConnectMs = 'time_to_connect_ms',
-  LastConnectError = 'last_connect_error',
+  TimeToConnectMs = 'time_to_connect_ms_v2',
+  LastConnectError = 'last_connect_error_v2',
 }
 
 // This value is used to indicate that the client's last connection attempt
 // failed. We don't make this -1 because we want to stack this never connected
 // state in a graph on top of actual connection times, so it should be greater
 // than any other value.
-export const DID_NOT_CONNECT_VALUE = 100 * 1000;
+export const TIME_TO_CONNECT_SPECIAL_VALUES = {
+  initialValue: 100_000,
+  connectError: 100_001,
+  disconnectedWaitingForVisible: 100_002,
+} as const;
+
+type ClientDisconnectReason =
+  | 'AbruptClose'
+  | 'CleanClose'
+  | 'ReflectClosed'
+  | 'ConnectTimeout'
+  | 'UnexpectedBaseCookie'
+  | 'PingTimeout'
+  | 'Hidden';
+
+export type DisconnectReason =
+  | {
+      server: ServerErrorKind;
+    }
+  | {
+      client: ClientDisconnectReason;
+    };
+
+function getLastConnectErrorValue(reason: DisconnectReason): string {
+  if ('server' in reason) {
+    return `server_${camelToSnake(reason.server)}`;
+  }
+  return `client_${camelToSnake(reason.client)}`;
+}
+
+// camelToSnake is used to convert a protocol ErrorKind into a suitable
+// metric name, eg AuthInvalidated => auth_invalidated. It converts
+// both PascalCase and camelCase to snake_case.
+function camelToSnake(s: string): string {
+  return s
+    .split(/\.?(?=[A-Z])/)
+    .join('_')
+    .toLowerCase();
+}
 
 export const REPORT_INTERVAL_MS = 5_000;
 
@@ -43,7 +82,7 @@ export class MetricManager {
 
     this.tags.push(`source:${opts.source}`);
 
-    this.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
+    this._timeToConnectMs.set(TIME_TO_CONNECT_SPECIAL_VALUES.initialValue);
 
     this._timerID = setInterval(() => {
       void this.flush();
@@ -71,15 +110,34 @@ export class MetricManager {
   // In that world the metric gauge(s) and bookkeeping like _connectingStart would
   // be encapsulated with the ConnectionState. This will probably happen as part
   // of https://github.com/rocicorp/reflect-server/issues/255.
-  readonly timeToConnectMs = this._register(
+  private readonly _timeToConnectMs = this._register(
     new Gauge(MetricName.TimeToConnectMs),
   );
 
   // lastConnectError records the last error that occurred when connecting,
-  // if any. It is cleared upon successfully connecting.
-  readonly lastConnectError = this._register(
+  // if any. If this is set, then _timeToConnectMs should have value connectError.
+  // It is cleared upon successfully connecting or pausing connect attempts due
+  // to being hidden.
+  private readonly _lastConnectError = this._register(
     new State(MetricName.LastConnectError),
   );
+
+  setConnected(timeToConnectMs: number) {
+    this._lastConnectError.clear();
+    this._timeToConnectMs.set(timeToConnectMs);
+  }
+
+  setDisconnectedWaitingForVisible() {
+    this._lastConnectError.clear();
+    this._timeToConnectMs.set(
+      TIME_TO_CONNECT_SPECIAL_VALUES.disconnectedWaitingForVisible,
+    );
+  }
+
+  setConnectError(reason: DisconnectReason) {
+    this._lastConnectError.set(getLastConnectErrorValue(reason));
+    this._timeToConnectMs.set(TIME_TO_CONNECT_SPECIAL_VALUES.connectError);
+  }
 
   /**
    * Tags to include in all metrics.
