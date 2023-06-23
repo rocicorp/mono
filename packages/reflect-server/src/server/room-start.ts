@@ -1,4 +1,4 @@
-import type {WriteTransaction} from 'replicache';
+import type {WriteTransaction} from 'reflect-types';
 
 /**
  * The `RoomStartHandler` is invoked when the room is started, before

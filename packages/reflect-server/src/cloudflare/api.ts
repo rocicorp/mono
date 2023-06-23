@@ -1,4 +1,4 @@
-import type {JSONValue} from 'replicache';
+import type {JSONValue} from 'shared/json.js';
 
 // https://api.cloudflare.com/#durable-objects-namespace-list-namespaces
 export function listDONamespaces(accountID: string, apiToken: string) {

@@ -23,12 +23,12 @@ export function createClientDatadogLogSink(opts: ClientDatadogLogSinkOptions) {
   return new DatadogLogSink(opts2);
 }
 
-export type {
-  AuthData,
-  MutatorDefs,
-  ReadTransaction,
-  WriteTransaction,
-} from 'reflect-types';
+// export type {
+//   AuthData,
+//   MutatorDefs,
+//   ReadTransaction,
+//   WriteTransaction,
+// } from 'reflect-types';
 
 // Export the deprecated version to shadow the version from replicache
 export {version} from './client/version.js';

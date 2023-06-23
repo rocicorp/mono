@@ -31,12 +31,12 @@ import {
   PusherResult,
   PushRequestV0,
   PushRequestV1,
-  ReadonlyJSONValue,
   Replicache,
   ReplicacheOptions,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from 'replicache';
 import {assert} from 'shared/asserts.js';
+import type {ReadonlyJSONValue} from 'shared/json.js';
 import {sleep, sleepWithAbort} from 'shared/sleep.js';
 import * as valita from 'shared/valita.js';
 import {nanoid} from '../util/nanoid.js';

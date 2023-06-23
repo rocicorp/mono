@@ -1,4 +1,5 @@
-import type {JSONValue, WriteTransaction} from '../src/mod.js';
+import type {WriteTransaction} from 'reflect-types';
+import type {JSONValue} from '../src/mod.js';
 import {createReflectServer} from '../src/mod.js';
 
 const mutators = {
@@ -30,4 +31,4 @@ const {worker, RoomDO, AuthDO} = createReflectServer(_env => ({
   mutators,
   authHandler,
 }));
-export {worker as default, RoomDO, AuthDO};
+export {AuthDO, RoomDO, worker as default};

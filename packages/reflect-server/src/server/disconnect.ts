@@ -1,4 +1,4 @@
-import type {WriteTransaction} from 'replicache';
+import type {WriteTransaction} from 'reflect-types';
 
 /**
  * A `DisconnectHandler` can modify room state in response to a client

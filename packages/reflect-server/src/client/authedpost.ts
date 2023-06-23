@@ -1,4 +1,4 @@
-import type {ReadonlyJSONValue} from 'replicache';
+import type {ReadonlyJSONValue} from 'shared/json.js';
 import {createAuthAPIHeaders} from '../server/auth-api-headers.js';
 
 export function newAuthedPostRequest(

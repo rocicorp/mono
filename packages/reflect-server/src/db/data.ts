@@ -1,5 +1,5 @@
 import {compareUTF8} from 'compare-utf8';
-import type {ReadonlyJSONValue} from 'replicache';
+import type {ReadonlyJSONValue} from 'shared/json.js';
 import * as valita from 'shared/valita.js';
 import {assertMapValues as valitaAssertMapValues} from '../util/valita.js';
 
