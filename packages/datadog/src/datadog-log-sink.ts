@@ -62,7 +62,13 @@ export class DatadogLogSink implements LogSink {
       const messages = this._messages;
       this._messages = [];
 
-      const body = messages.map(m => JSON.stringify(m)).join('\n');
+      const flushTime = Date.now();
+      const body = messages
+        .map(m => {
+          m[LOG_SINK_FLUSH_DELAY_ATTRIBUTE] = flushTime - m.date;
+          return JSON.stringify(m);
+        })
+        .join('\n');
 
       const url = new URL(DD_URL);
       url.searchParams.set('dd-api-key', this._apiKey);
@@ -152,6 +158,7 @@ function convertErrors(message: unknown): unknown {
   return message;
 }
 
+const LOG_SINK_FLUSH_DELAY_ATTRIBUTE = 'flushDelayMs';
 // This code assumes that no context keys will start with
 // @DATADOG_RESERVED_ (a fairly safe assumption).
 const RESERVED_KEY_PREFIX = '@DATADOG_RESERVED_';
@@ -170,6 +177,9 @@ const RESERVED_KEYS: ReadonlyArray<string> = [
   'message',
   'msg', // alias for message
   'date',
+  // The following are attributes reserved by the DataDogLogSink
+  // itself (as opposed to DataDog), to report on its own behavior.
+  LOG_SINK_FLUSH_DELAY_ATTRIBUTE,
 ];
 
 function makeMessage(
