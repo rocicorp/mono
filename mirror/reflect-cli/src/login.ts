@@ -72,7 +72,7 @@ export async function loginHandler(
   // keeping track of connections so that when we call a server close it
   // does not hold the process from exiting until all kee-alive connections are closed
   const connections = new Set<Socket>();
-  server.on('connection', (conn: Socket) => {
+  credentialReceiverServer.on('connection', (conn: Socket) => {
     connections.add(conn);
     conn.on('close', () => {
       connections.delete(conn);

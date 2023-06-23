@@ -15,6 +15,7 @@ export function mockHttpServer() {
       .mockImplementation((...args: unknown[]) => {
         listener = args.pop() as http.RequestListener;
         return {
+          on: jest.fn(),
           listen: jest.fn(),
           close(callback?: (err?: Error) => void) {
             callback?.();
