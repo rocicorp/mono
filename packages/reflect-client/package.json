@@ -3,7 +3,6 @@
   "description": "",
   "version": "0.0.0",
   "private": true,
-  "license": "SEE LICENSE IN https://roci.dev/terms.html",
   "type": "module",
   "scripts": {
     "format": "prettier --write *",
@@ -14,8 +13,7 @@
     "check-types": "tsc --noEmit",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "build-min": "node build.js",
-    "build": "rm -rf out && npm run build-dts && npm run build-min",
-    "prepack": "npm run lint && npm run test && npm run build"
+    "build": "rm -rf out && npm run build-dts && npm run build-min"
   },
   "dependencies": {
     "@badrap/valita": "^0.2.0",
@@ -37,6 +35,7 @@
     "datadog": "0.0.0",
     "esbuild": "^0.18.3",
     "reflect-protocol": "0.0.0",
+    "reflect-shared": "0.0.0",
     "reflect-types": "0.0.0",
     "replicache": "13.0.0-beta.1",
     "rollup": "^3.24.0",

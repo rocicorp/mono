@@ -1,19 +1,19 @@
-import {describe, test, expect, afterEach} from '@jest/globals';
+import {afterEach, describe, expect, test} from '@jest/globals';
 import type {LogLevel} from '@rocicorp/logger';
+import nock from 'nock';
+import {version} from 'reflect-shared';
 import type {Series} from '../types/report-metrics.js';
-import {fail, Mocket, TestLogSink} from '../util/test-utils.js';
+import {Mocket, TestLogSink, fail} from '../util/test-utils.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {AUTH_ROUTES} from './auth-do.js';
 import {
-  createTestDurableObjectNamespace,
   TestDurableObjectId,
   TestDurableObjectStub,
   TestExecutionContext,
+  createTestDurableObjectNamespace,
 } from './do-test-utils.js';
 import {REPORT_METRICS_PATH} from './paths.js';
 import {BaseWorkerEnv, createWorker} from './worker.js';
-import {version} from '../mod.js';
-import nock from 'nock';
 
 const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
 

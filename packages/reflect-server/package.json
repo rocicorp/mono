@@ -11,10 +11,9 @@
     "build": "rm -rf out && npm run build-dts && node build.js",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "dev": "miniflare --live-reload --debug",
-    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
-    "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
-    "check-types": "tsc --noEmit",
-    "prepack": "npm run lint && npm run test && npm run build"
+    "test": "node --no-warnings --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
+    "test:watch": "node --no-warnings --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
+    "check-types": "tsc --noEmit"
   },
   "bin": {
     "reflect": "out/cli.js"
@@ -38,6 +37,7 @@
     "miniflare": "^2.11.0",
     "nock": "^13.3.1",
     "reflect-protocol": "0.0.0",
+    "reflect-shared": "0.0.0",
     "reflect-types": "0.0.0",
     "replicache": "13.0.0-beta.1",
     "rollup-plugin-dts": "^5.3.0",

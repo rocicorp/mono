@@ -8,15 +8,18 @@ import {
   invalidateForRoomRequestSchema,
   invalidateForUserRequestSchema,
 } from 'reflect-protocol';
+import {version} from 'reflect-shared';
+import type {AuthData} from 'reflect-types';
 import {assert} from 'shared/asserts.js';
 import {timed} from 'shared/timed.js';
 import * as valita from 'shared/valita.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {encodeHeaderValue} from '../util/headers.js';
+import {sleep} from '../util/sleep.js';
 import {closeWithError} from '../util/socket.js';
-import {version} from '../util/version.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
-import {AuthHandler, AUTH_DATA_HEADER_NAME} from './auth.js';
+import {initAuthDOSchema} from './auth-do-schema.js';
+import {AUTH_DATA_HEADER_NAME, AuthHandler} from './auth.js';
 import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
@@ -52,9 +55,6 @@ import {
   withVersion,
 } from './router.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
-import {sleep} from '../util/sleep.js';
-import {initAuthDOSchema} from './auth-do-schema.js';
-import type {AuthData} from 'reflect-types';
 
 export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
 

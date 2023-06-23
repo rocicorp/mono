@@ -23,7 +23,8 @@
   "devDependencies": {
     "@rocicorp/reflect-client": "0.0.0",
     "@rocicorp/reflect-server": "0.0.0",
-    "@types/node": "^18.16.0"
+    "@types/node": "^18.16.0",
+    "reflect-shared": "0.0.0"
   },
   "peerDependencies": {
     "wrangler": "^2.13.0"

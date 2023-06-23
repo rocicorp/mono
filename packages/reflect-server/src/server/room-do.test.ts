@@ -1,4 +1,5 @@
 import {expect, test} from '@jest/globals';
+import {version} from 'reflect-shared';
 import type {WriteTransaction} from 'replicache';
 import {
   newInvalidateAllAuthRequest,
@@ -11,7 +12,6 @@ import {getUserValue, putUserValue} from '../types/user-value.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {newAuthConnectionsRequest} from '../util/auth-test-util.js';
 import {TestLogSink, createSilentLogContext} from '../util/test-utils.js';
-import {version} from '../util/version.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
 import {BaseRoomDO} from './room-do.js';
 

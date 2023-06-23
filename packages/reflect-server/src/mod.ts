@@ -1,20 +1,19 @@
-import {REPORT_METRICS_PATH} from './server/paths.js';
 import {DatadogLogSink} from 'datadog';
+import {REPORT_METRICS_PATH} from './server/paths.js';
 
 export {
-  createReflectServer,
-  ReflectServerOptions,
-  ReflectServerBaseEnv,
-} from './server/reflect.js';
+  TeeLogSink,
+  consoleLogSink,
+  type LogLevel,
+  type LogSink,
+} from '@rocicorp/logger';
 export type {AuthHandler} from './server/auth.js';
 export type {DisconnectHandler} from './server/disconnect.js';
 export {
-  consoleLogSink,
-  TeeLogSink,
-  type LogSink,
-  type LogLevel,
-} from '@rocicorp/logger';
-export {version} from './util/version.js';
+  ReflectServerBaseEnv,
+  ReflectServerOptions,
+  createReflectServer,
+} from './server/reflect.js';
 export const ROUTES = {
   reportMetrics: REPORT_METRICS_PATH,
 };
@@ -31,9 +30,11 @@ export function createWorkerDatadogLogSink(opts: WorkerDatadogLogSinkOptions) {
 // https://github.com/rocicorp/mono/issues/362
 export * from 'replicache';
 
-export {
-  ReadTransaction,
-  WriteTransaction,
+export type {
   AuthData,
   MutatorDefs,
+  ReadTransaction,
+  WriteTransaction,
 } from 'reflect-types';
+
+export {version} from './util/version.js';
