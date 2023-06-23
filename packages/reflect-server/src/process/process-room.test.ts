@@ -1,5 +1,7 @@
-import {describe, test, expect} from '@jest/globals';
-import type {WriteTransaction} from 'replicache';
+import {describe, expect, test} from '@jest/globals';
+import type {Version} from 'reflect-protocol';
+import type {WriteTransaction} from 'reflect-types';
+import {processRoom} from '../process/process-room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import type {ClientPoke} from '../types/client-poke.js';
 import {
@@ -8,9 +10,9 @@ import {
   putClientRecord,
 } from '../types/client-record.js';
 import type {ClientMap} from '../types/client-state.js';
-import {getUserValue, UserValue} from '../types/user-value.js';
+import type {PendingMutation} from '../types/mutation.js';
+import {UserValue, getUserValue} from '../types/user-value.js';
 import {getVersion, versionKey} from '../types/version.js';
-import type {Version} from 'reflect-protocol';
 import {
   client,
   clientRecord,
@@ -19,8 +21,6 @@ import {
   mockMathRandom,
   pendingMutation,
 } from '../util/test-utils.js';
-import {processRoom} from '../process/process-room.js';
-import type {PendingMutation} from '../types/mutation.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();

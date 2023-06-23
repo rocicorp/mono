@@ -1,17 +1,12 @@
-import type {Context} from '@rocicorp/logger';
+import type {Context, LogLevel} from '@rocicorp/logger';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
-import {
-  ExperimentalMemKVStore,
-  JSONValue,
-  LogLevel,
-  PullRequestV1,
-  PushRequestV1,
-} from 'replicache';
+import type {MutatorDefs, WriteTransaction} from 'reflect-types';
+import {ExperimentalMemKVStore, PullRequestV1, PushRequestV1} from 'replicache';
 import {assert} from 'shared/asserts.js';
-import type {WriteTransaction, MutatorDefs} from 'reflect-types';
+import type {JSONValue} from 'shared/json.js';
 import * as valita from 'shared/valita.js';
 import * as sinon from 'sinon';
 import {REPORT_INTERVAL_MS} from './metrics.js';

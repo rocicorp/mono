@@ -30,11 +30,11 @@ export function createWorkerDatadogLogSink(opts: WorkerDatadogLogSinkOptions) {
 // https://github.com/rocicorp/mono/issues/362
 export * from 'replicache';
 
-export type {
-  AuthData,
-  MutatorDefs,
-  ReadTransaction,
-  WriteTransaction,
-} from 'reflect-types';
+// export type {
+//   AuthData,
+//   MutatorDefs,
+//   ReadTransaction,
+//   WriteTransaction,
+// } from 'reflect-types';
 
 export {version} from './util/version.js';

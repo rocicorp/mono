@@ -1,18 +1,18 @@
 import {expect, test} from '@jest/globals';
-import type {JSONObject, ReadonlyJSONValue} from 'replicache';
 import {assert} from 'shared/asserts.js';
+import type {JSONObject, ReadonlyJSONValue} from 'shared/json.js';
 import {must} from 'shared/must.js';
 import * as valita from 'shared/valita.js';
 import {createSilentLogContext} from '../util/test-utils.js';
 import {
-  asJSON,
   BaseContext,
+  Handler,
+  Router,
+  asJSON,
   checkAuthAPIKey,
   get,
-  Handler,
   post,
   requireAuthAPIKey,
-  Router,
   withBody,
   withRoomID,
   withVersion,

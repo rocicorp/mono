@@ -1,18 +1,18 @@
 import {
-  jest,
-  expect,
-  test,
-  describe,
-  beforeEach,
   afterEach,
+  beforeEach,
+  describe,
+  expect,
+  jest,
+  test,
 } from '@jest/globals';
-import {jsonSchema, Version} from 'reflect-protocol';
-import type {WriteTransaction} from 'replicache';
+import {Version, jsonSchema} from 'reflect-protocol';
+import type {WriteTransaction} from 'reflect-types';
 import type {ReadonlyJSONValue} from 'shared/json.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
 import {
-  clientRecordKey,
   ClientRecordMap,
+  clientRecordKey,
   putClientRecord,
 } from '../../src/types/client-record.js';
 import type {ClientID, ClientMap} from '../../src/types/client-state.js';

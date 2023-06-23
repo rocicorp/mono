@@ -1,13 +1,15 @@
 import {
-  describe,
-  test,
-  expect,
-  beforeEach,
   afterEach,
+  beforeEach,
+  describe,
+  expect,
   jest,
+  test,
 } from '@jest/globals';
-import type {WriteTransaction} from 'replicache';
-import type {PokeBody} from 'reflect-protocol';
+import type {LogContext} from '@rocicorp/logger';
+import type {PokeBody, Version} from 'reflect-protocol';
+import type {WriteTransaction} from 'reflect-types';
+import {BufferSizer} from 'shared/buffer-sizer.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
 import {
   ClientRecordMap,
@@ -15,25 +17,22 @@ import {
   putClientRecord,
 } from '../../src/types/client-record.js';
 import type {ClientID, ClientMap} from '../../src/types/client-state.js';
-import {getUserValue, UserValue} from '../../src/types/user-value.js';
+import {UserValue, getUserValue} from '../../src/types/user-value.js';
 import {getVersion, putVersion} from '../../src/types/version.js';
-import type {Version} from 'reflect-protocol';
-import {
-  client,
-  clientRecord,
-  createSilentLogContext,
-  Mocket,
-  mockMathRandom,
-  pendingMutation,
-} from '../util/test-utils.js';
 import {processPending} from '../process/process-pending.js';
-import type {PendingMutation} from '../types/mutation.js';
 import {
   getConnectedClients,
   putConnectedClients,
 } from '../types/connected-clients.js';
-import {BufferSizer} from 'shared/buffer-sizer.js';
-import type {LogContext} from '@rocicorp/logger';
+import type {PendingMutation} from '../types/mutation.js';
+import {
+  Mocket,
+  client,
+  clientRecord,
+  createSilentLogContext,
+  mockMathRandom,
+  pendingMutation,
+} from '../util/test-utils.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
