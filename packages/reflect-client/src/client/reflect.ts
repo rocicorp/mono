@@ -44,7 +44,6 @@ import {send} from '../util/socket.js';
 import {checkConnectivity} from './connect-checks.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 import {
-  TIME_TO_CONNECT_SPECIAL_VALUES,
   MetricManager,
   REPORT_INTERVAL_MS,
   Series,
@@ -717,7 +716,6 @@ export class Reflect<MD extends MutatorDefs> {
       connectErrorCount: this._connectErrorCount,
     });
 
-    this._metrics.setDisconnected();
     switch (this._connectionState) {
       case ConnectionState.Connected: {
         // this._connectingStart reset below.

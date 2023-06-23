@@ -3,19 +3,18 @@ import type {MaybePromise} from 'replicache';
 import type {ErrorKind as ServerErrorKind} from 'reflect-protocol';
 
 export enum MetricName {
-  TimeToConnectMs = 'time_to_connect_ms',
-  LastConnectError = 'last_connect_error',
+  TimeToConnectMs = 'time_to_connect_ms_v2',
+  LastConnectError = 'last_connect_error_v2',
 }
 
 // This value is used to indicate that the client's last connection attempt
 // failed. We don't make this -1 because we want to stack this never connected
 // state in a graph on top of actual connection times, so it should be greater
 // than any other value.
-const TIME_TO_CONNECT_SPECIAL_VALUES = {
+export const TIME_TO_CONNECT_SPECIAL_VALUES = {
   initialValue: 100_000,
   connectError: 100_001,
-  disconnected: 100_002,
-  disconnectedWaitingForVisible: 100_003,
+  disconnectedWaitingForVisible: 100_002,
 } as const;
 
 type ClientDisconnectReason =
@@ -126,11 +125,6 @@ export class MetricManager {
   setConnected(timeToConnectMs: number) {
     this._lastConnectError.clear();
     this._timeToConnectMs.set(timeToConnectMs);
-  }
-
-  setDisconnected() {
-    this._lastConnectError.clear();
-    this._timeToConnectMs.set(TIME_TO_CONNECT_SPECIAL_VALUES.disconnected);
   }
 
   setDisconnectedWaitingForVisible() {
