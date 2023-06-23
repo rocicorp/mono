@@ -152,13 +152,46 @@ function convertErrors(message: unknown): unknown {
   return message;
 }
 
+// This code assumes that no context keys will start with
+// @DATADOG_RESERVED_ (a fairly safe assumption).
+const RESERVED_KEY_PREFIX = '@DATADOG_RESERVED_';
+// See https://docs.datadoghq.com/logs/log_configuration/attributes_naming_convention/#reserved-attributes
+// Note 'msg' and 'date' are not documented.
+// We should avoid using these as context keys.  We escape them here
+// because otherwise the impact on the data dog log UI is very confusing
+// (e.g. using 'msg' as a context key results, in the context value
+// replacing the log message.)
+const RESERVED_KEYS: ReadonlyArray<string> = [
+  'host',
+  'source',
+  'status',
+  'service',
+  'trace_id',
+  'message',
+  'msg', // alias for message
+  'date',
+];
+
 function makeMessage(
   message: unknown,
   context: Context | undefined,
   logLevel: LogLevel,
 ): Message {
+  let safeContext = undefined;
+  if (context !== undefined) {
+    for (const reservedKey of RESERVED_KEYS) {
+      if (Object.hasOwn(context, reservedKey)) {
+        if (safeContext === undefined) {
+          safeContext = {...context};
+        }
+        safeContext[RESERVED_KEY_PREFIX + reservedKey] =
+          safeContext[reservedKey];
+        delete safeContext[reservedKey];
+      }
+    }
+  }
   const msg: Message = {
-    ...context,
+    ...(safeContext ?? context),
     date: Date.now(),
     message: convertErrors(flattenMessage(message)),
     status: logLevel,
