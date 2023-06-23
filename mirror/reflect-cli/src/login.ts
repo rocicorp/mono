@@ -4,9 +4,9 @@ import open from 'open';
 import {
   UserAuthConfig,
   userAuthConfigSchema,
-  writeAuthConfigFile,
+  writeAuthConfigFile as writeAuthConfigFileImpl,
 } from './auth-config.js';
-import {parse} from 'shared/valita.js';
+import * as v from 'shared/valita.js';
 import {sleep} from 'shared/sleep.js';
 import {resolver} from '@rocicorp/resolver';
 import type {Socket} from 'node:net';
@@ -18,6 +18,7 @@ async function timeout(signal: AbortSignal) {
 
 export async function loginHandler(
   openInBrowser = openInBrowserImpl,
+  writeAuthConfigFile = writeAuthConfigFileImpl,
 ): Promise<void> {
   const urlToOpen = process.env.AUTH_URL || 'https://auth.reflect.net';
   const loginResolver = resolver<void>();
@@ -30,27 +31,29 @@ export async function loginHandler(
       case '/oauth/callback': {
         const idToken = searchParams.get('idToken');
         const refreshToken = searchParams.get('refreshToken');
-        const expirationTime = searchParams.get('expirationTime');
-
+        const expirationTimeStr = searchParams.get('expirationTime');
         try {
-          if (!idToken || !refreshToken || !expirationTime) {
+          if (!idToken || !refreshToken || !expirationTimeStr) {
             throw new Error(
-              'Missing idToken, refreshToken, or expiresIn from the auth provider.',
+              'Missing idToken, refreshToken, or expirationTime from the auth provider.',
             );
           }
+          const expirationTime = parseInt(expirationTimeStr);
+          assert(!isNaN(expirationTime), 'expirationTime is not a number');
 
           const authConfig: UserAuthConfig = {
             idToken,
             refreshToken,
-            expirationTime: parseInt(expirationTime),
+            expirationTime,
           };
-          parse(authConfig, userAuthConfigSchema);
+
+          v.assert(authConfig, userAuthConfigSchema);
           writeAuthConfigFile(authConfig);
         } catch (error) {
           res.end(() => {
             loginResolver.reject(
               new Error(
-                'Invalid idToken, refreshToken, or expiresIn from the auth provider.',
+                'Invalid idToken, refreshToken, or expirationTime from the auth provider.',
               ),
             );
           });
