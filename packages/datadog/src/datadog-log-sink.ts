@@ -177,15 +177,21 @@ function makeMessage(
   context: Context | undefined,
   logLevel: LogLevel,
 ): Message {
-  const safeContext = {...context};
-  for (const reservedKey of RESERVED_KEYS) {
-    if (Object.hasOwn(safeContext, reservedKey)) {
-      safeContext[RESERVED_KEY_PREFIX + reservedKey] = safeContext[reservedKey];
-      delete safeContext[reservedKey];
+  let safeContext = undefined;
+  if (context !== undefined) {
+    for (const reservedKey of RESERVED_KEYS) {
+      if (Object.hasOwn(context, reservedKey)) {
+        if (safeContext === undefined) {
+          safeContext = {...context};
+        }
+        safeContext[RESERVED_KEY_PREFIX + reservedKey] =
+          safeContext[reservedKey];
+        delete safeContext[reservedKey];
+      }
     }
   }
   const msg: Message = {
-    ...safeContext,
+    ...(safeContext ?? context),
     date: Date.now(),
     message: convertErrors(flattenMessage(message)),
     status: logLevel,
