@@ -76,14 +76,9 @@ export class MetricManager {
   );
 
   // lastConnectError records the last error that occurred when connecting,
-  // if any. It is cleared when connecting successfully or when reported, so this
-  // state only gets reported if there was a failure during the reporting period and
-  // we are still not connected.
+  // if any. It is cleared upon successfully connecting.
   readonly lastConnectError = this._register(
-    new State(
-      MetricName.LastConnectError,
-      true, // clearOnFlush
-    ),
+    new State(MetricName.LastConnectError),
   );
 
   /**
