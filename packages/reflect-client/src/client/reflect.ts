@@ -104,6 +104,8 @@ export const DEFAULT_DISCONNECT_HIDDEN_DELAY_MS = 5_000;
  */
 export const CONNECT_TIMEOUT_MS = 10_000;
 
+const CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY = 6;
+
 const NULL_LAST_MUTATION_ID_SENT = {clientID: '', id: -1} as const;
 
 // When the protocol changes (pull, push, poke,...) we need to bump this.
@@ -167,8 +169,14 @@ export class Reflect<MD extends MutatorDefs> {
   private _onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
   private readonly _jurisdiction: 'eu' | undefined;
   private _baseCookie: number | null = null;
+  // Total number of sockets successfully connected by this client
+  private _connectedCount = 0;
+  // Number of messages received over currently connected socket.  Reset
+  // on disconnect.
   private _messageCount = 0;
   private _connectedAt = 0;
+  // Reset on successful connection.
+  private _connectErrorCount = 0;
 
   #abortPingTimeout = () => {
     // intentionally empty
@@ -593,29 +601,39 @@ export class Reflect<MD extends MutatorDefs> {
     const [, connectBody] = connectedMessage;
     lc = addWebSocketIDToLogContext(connectBody.wsid, lc);
 
+    if (this._connectedCount === 0) {
+      this._checkConnectivity('firstConnect');
+    } else if (this._connectErrorCount > 0) {
+      this._checkConnectivity('connectAfterError');
+    }
+    this._connectedCount++;
     this._connectedAt = Date.now();
     this._metrics.lastConnectError.clear();
+    this._connectErrorCount = 0;
 
+    let timeToConnectMs = undefined;
+    let connectMsgLatencyMs = undefined;
     if (this._connectingStart === undefined) {
       lc.error?.(
         'Got connected message but connect start time is undefined. This should not happen.',
       );
     } else {
       const now = Date.now();
-      const timeToConnectMs = now - this._connectingStart;
+      timeToConnectMs = now - this._connectingStart;
       this._metrics.timeToConnectMs.set(timeToConnectMs);
-      const connectMsgLatencyMs =
+      connectMsgLatencyMs =
         connectBody.timestamp !== undefined
           ? now - connectBody.timestamp
           : undefined;
-      lc.info?.('Connected', {
-        navigatorOnline: navigator.onLine,
-        timeToConnectMs,
-        connectMsgLatencyMs,
-      });
       this._connectingStart = undefined;
     }
 
+    lc.info?.('Connected', {
+      navigatorOnline: navigator.onLine,
+      timeToConnectMs,
+      connectMsgLatencyMs,
+      connectedCount: this._connectedCount,
+    });
     this._lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
 
     lc.debug?.('Resolving connect resolver');
@@ -646,9 +664,6 @@ export class Reflect<MD extends MutatorDefs> {
     const wsid = nanoid();
     l = addWebSocketIDToLogContext(wsid, l);
     l.info?.('Connecting...', {navigatorOnline: navigator.onLine});
-    void checkConnectivity('connect', this._socketOrigin, l).catch(e => {
-      l.info?.('Error checking connectivity', e);
-    });
 
     this._connectionState = ConnectionState.Connecting;
 
@@ -703,6 +718,9 @@ export class Reflect<MD extends MutatorDefs> {
     l: LogContext,
     reason: DisconnectReason,
   ): Promise<void> {
+    if (this._connectionState === ConnectionState.Connecting) {
+      this._connectErrorCount++;
+    }
     l.info?.('disconnecting', {
       navigatorOnline: navigator.onLine,
       reason,
@@ -713,6 +731,7 @@ export class Reflect<MD extends MutatorDefs> {
         : 0,
       messageCount: this._messageCount,
       connectionState: this._connectionState,
+      connectErrorCount: this._connectErrorCount,
     });
 
     switch (this._connectionState) {
@@ -728,13 +747,20 @@ export class Reflect<MD extends MutatorDefs> {
       }
       case ConnectionState.Connecting: {
         this._metrics.lastConnectError.set(getLastConnectMetricState(reason));
+        this._metrics.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
+        if (
+          this._connectErrorCount % CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY ===
+          1
+        ) {
+          this._checkConnectivity(
+            `connectErrorCount=${this._connectErrorCount}`,
+          );
+        }
+        // this._connectingStart reset below.
         if (this._connectingStart === undefined) {
           l.error?.(
             'disconnect() called while connecting but connect start time is undefined. This should not happen.',
           );
-        } else {
-          this._metrics.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
-          // this._connectingStart reset below.
         }
 
         break;
@@ -1217,6 +1243,17 @@ export class Reflect<MD extends MutatorDefs> {
     }
   }
 
+  private _checkConnectivity(reason: string) {
+    void this._checkConnectivityAsync(reason);
+  }
+
+  private async _checkConnectivityAsync(reason: string) {
+    try {
+      await checkConnectivity(reason, this._socketOrigin, await this._l);
+    } catch (e) {
+      (await this._l).info?.('Error checking connectivity for', reason, e);
+    }
+  }
   // Total hack to get base cookie, see _puller for how the promise is resolved.
   private _getBaseCookie(): Promise<NullableVersion> {
     this._baseCookieResolver ??= resolver();

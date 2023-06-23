@@ -4,7 +4,9 @@ import {assert} from 'shared/asserts.js';
 import {sleep} from 'shared/sleep.js';
 import type {LogContext} from '@rocicorp/logger';
 
-type Checks = Record<string, (l: LogContext) => Promise<string>>;
+type CheckResult = {success: boolean; detail: string};
+type Check = (l: LogContext) => Promise<CheckResult>;
+type Checks = Record<string, Check>;
 
 export async function checkConnectivity(
   reason: string,
@@ -28,21 +30,22 @@ export async function checkConnectivity(
       checkRenderSocket(id, true, l),
   };
 
-  const resultPs: Promise<unknown[]>[] = [];
+  const resultPs: Promise<CheckResult>[] = [];
   for (const [checkName, check] of Object.entries(checks)) {
     resultPs.push(
       (async () => {
         const checkLc = lc.withContext('checkName', checkName);
         checkLc.info?.('Starting check');
-        let result;
+        let result: CheckResult;
         try {
-          result = [`${checkName} result:`, await check(checkLc)];
+          result = await check(checkLc);
         } catch (e) {
-          const eDetails =
-            e instanceof Error ? {name: e.name, message: e.message} : e;
-          result = [`${checkName} error:`, eDetails];
+          const detail = `Error: ${
+            e instanceof Error ? {name: e.name, message: e.message} : e
+          }`;
+          result = {success: false, detail};
         }
-        checkLc.info?.(...result);
+        checkLc.info?.(checkName, result);
         return result;
       })(),
     );
@@ -50,8 +53,16 @@ export async function checkConnectivity(
 
   const results = await Promise.all(resultPs);
   lc.info?.(
-    'Connectivity check results\n',
-    ...results.flatMap(r => [...r, '\n']),
+    'Connectivity checks summary\n',
+    ...Object.keys(checks).map((checkName, i) => {
+      `${checkName}=${results[i].success}\n`;
+    }),
+  );
+  lc.info?.(
+    'Connectivity checks detail\n',
+    ...Object.keys(checks).flatMap((checkName, i) => {
+      `${checkName}=${results[i].detail}\n`;
+    }),
   );
 }
 
@@ -72,7 +83,10 @@ function checkGet(id: string, baseURL: string) {
     timeout(),
     (async () => {
       const response = await fetch(getCheckURL);
-      return `Got response ${response.status} "${await response.text()}"`;
+      return {
+        success: response.status === 200,
+        detail: `Got response ${response.status} "${await response.text()}"`,
+      };
     })(),
   ]);
 }
@@ -123,10 +137,13 @@ async function checkSocket(
     ? new WebSocket(socketCheckURL, 'check-' + id)
     : new WebSocket(socketCheckURL);
 
-  const {promise, resolve} = resolver<string>();
+  const {promise, resolve} = resolver<CheckResult>();
   const onMessage = (e: MessageEvent<string>) => {
     lc.info?.('Received message', e.data);
-    resolve(`Connected and received message "${e.data}"`);
+    resolve({
+      success: true,
+      detail: `Connected and received message "${e.data}"`,
+    });
   };
   const onOpen = () => {
     lc.info?.('Open event');
@@ -139,7 +156,10 @@ async function checkSocket(
       wasClean,
     };
     lc.info?.('Received close', closeInfo);
-    resolve(`Closed before connected ${JSON.stringify(closeInfo)}.`);
+    resolve({
+      success: false,
+      detail: `Closed before connected ${JSON.stringify(closeInfo)}.`,
+    });
   };
   try {
     cfWebSocket.addEventListener('message', onMessage);
@@ -156,7 +176,7 @@ async function checkSocket(
 
 const TIMEOUT_MS = 10_000;
 
-async function timeout(): Promise<string> {
+async function timeout(): Promise<CheckResult> {
   await sleep(TIMEOUT_MS);
-  return 'Timed out.';
+  return {success: false, detail: 'Timed out.'};
 }
