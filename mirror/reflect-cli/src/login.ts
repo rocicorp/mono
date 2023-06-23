@@ -16,10 +16,12 @@ async function timeout(signal: AbortSignal) {
   throw new Error('Login did not complete within 2 minutes');
 }
 
-export async function loginHandler(): Promise<void> {
+export async function loginHandler(
+  openInBrowser = openInBrowserImpl,
+): Promise<void> {
   const urlToOpen = process.env.AUTH_URL || 'https://auth.reflect.net';
   const loginResolver = resolver<void>();
-  const server = http.createServer((req, res) => {
+  const credentialReceiverServer = http.createServer((req, res) => {
     assert(req.url, "This request doesn't have a URL"); // This should never happen
     const reqUrl = new URL(req.url, `https://${req.headers.host}`);
     const {pathname, searchParams} = reqUrl;
@@ -77,7 +79,7 @@ export async function loginHandler(): Promise<void> {
     });
   });
 
-  server.listen(8976);
+  credentialReceiverServer.listen(8976);
 
   console.log(`Opening a link in your default browser: ${urlToOpen}`);
   await openInBrowser(urlToOpen);
@@ -89,7 +91,7 @@ export async function loginHandler(): Promise<void> {
     ]);
   } finally {
     timeoutController.abort();
-    server.close((closeErr?: Error) => {
+    credentialReceiverServer.close((closeErr?: Error) => {
       if (closeErr) {
         console.warn('login credential server failed to close', closeErr);
       }
@@ -110,7 +112,7 @@ export async function loginHandler(): Promise<void> {
  *
  * @param url the URL to point the browser at
  */
-export default async function openInBrowser(url: string): Promise<void> {
+export default async function openInBrowserImpl(url: string): Promise<void> {
   const childProcess = await open(url);
   childProcess.on('error', () => {
     console.warn('Failed to open');
