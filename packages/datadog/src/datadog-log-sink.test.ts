@@ -40,6 +40,7 @@ test('flush calls fetch', async () => {
   jest.setSystemTime(2);
   l.log('info', {usr: {name: 'bob'}}, 'info message');
 
+  jest.setSystemTime(10);
   await l.flush();
 
   expect(fetch).toHaveBeenCalledTimes(1);
@@ -52,8 +53,15 @@ test('flush calls fetch', async () => {
           date: 1,
           message: 'debug message',
           status: 'debug',
+          flushDelayMs: 9,
         },
-        {usr: {name: 'bob'}, date: 2, message: 'info message', status: 'info'},
+        {
+          usr: {name: 'bob'},
+          date: 2,
+          message: 'info message',
+          status: 'info',
+          flushDelayMs: 8,
+        },
       ),
       method: 'POST',
       keepalive: true,
@@ -78,10 +86,12 @@ test('reserved keys are prefixed', async () => {
       message: 'testMessage',
       msg: 'testMsg',
       date: 'test-date',
+      flushDelayMs: 'test-flushDelayMs',
     },
     'debug message',
   );
 
+  jest.setSystemTime(10);
   await l.flush();
 
   expect(fetch).toHaveBeenCalledTimes(1);
@@ -98,9 +108,11 @@ test('reserved keys are prefixed', async () => {
         ['@DATADOG_RESERVED_message']: 'testMessage',
         ['@DATADOG_RESERVED_msg']: 'testMsg',
         ['@DATADOG_RESERVED_date']: 'test-date',
+        ['@DATADOG_RESERVED_flushDelayMs']: 'test-flushDelayMs',
         date: 1,
         message: 'debug message',
         status: 'debug',
+        flushDelayMs: 9,
       }),
       method: 'POST',
       keepalive: true,
@@ -193,6 +205,7 @@ test('flush calls fetch but includes logs after the error', async () => {
   jest.setSystemTime(4);
   l.log('info', {usr: {name: 'bob'}}, 'info message');
 
+  jest.setSystemTime(10);
   await l.flush();
 
   expect(fetch).toHaveBeenCalledTimes(1);
@@ -206,8 +219,15 @@ test('flush calls fetch but includes logs after the error', async () => {
           message: 'error message',
           status: 'error',
           error: {origin: 'logger'},
+          flushDelayMs: 7,
         },
-        {usr: {name: 'bob'}, date: 4, message: 'info message', status: 'info'},
+        {
+          usr: {name: 'bob'},
+          date: 4,
+          message: 'info message',
+          status: 'info',
+          flushDelayMs: 6,
+        },
       ),
       method: 'POST',
       keepalive: true,
@@ -236,6 +256,7 @@ test('flush is called 1s after a log', async () => {
         date: 3,
         message: 'info message',
         status: 'info',
+        flushDelayMs: 1000,
       }),
       method: 'POST',
       keepalive: true,
@@ -265,6 +286,7 @@ test('flush is called again in case of failure', async () => {
         date: 3,
         message: 'info message',
         status: 'info',
+        flushDelayMs: 1000,
       }),
       method: 'POST',
       keepalive: true,
@@ -282,12 +304,19 @@ test('flush is called again in case of failure', async () => {
     'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
     {
       body: stringifyMany(
-        {usr: {name: 'bob'}, date: 3, message: 'info message', status: 'info'},
+        {
+          usr: {name: 'bob'},
+          date: 3,
+          message: 'info message',
+          status: 'info',
+          flushDelayMs: 2000,
+        },
         {
           usr: {name: 'bob'},
           date: 1003,
           message: 'info message 2',
           status: 'info',
+          flushDelayMs: 1000,
         },
       ),
       method: 'POST',
