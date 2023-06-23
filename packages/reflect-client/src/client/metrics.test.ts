@@ -218,6 +218,12 @@ test('MetricManager', async () => {
           host: 'test-host',
           tags: ['source:test-source'],
         },
+        {
+          metric: 'last_connect_error_nuts',
+          points: [[(REPORT_INTERVAL_MS * 6) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
       ],
     },
     {
@@ -226,6 +232,12 @@ test('MetricManager', async () => {
       expected: [
         {
           metric: 'time_to_connect_ms',
+          points: [[(REPORT_INTERVAL_MS * 7) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source', 'foo:bar', 'hotdog'],
+        },
+        {
+          metric: 'last_connect_error_nuts',
           points: [[(REPORT_INTERVAL_MS * 7) / 1000, [1]]],
           host: 'test-host',
           tags: ['source:test-source', 'foo:bar', 'hotdog'],
