@@ -44,10 +44,12 @@ import {send} from '../util/socket.js';
 import {checkConnectivity} from './connect-checks.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 import {
+  DID_NOT_CONNECT_VALUE,
+  DisconnectReason,
+  getLastConnectErrorValue,
   MetricManager,
   REPORT_INTERVAL_MS,
   Series,
-  DisconnectReason,
 } from './metrics.js';
 import type {ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
@@ -590,9 +592,9 @@ export class Reflect<MD extends MutatorDefs> {
     }
     this._connectedCount++;
     this._connectedAt = Date.now();
+    this._metrics.lastConnectError.clear();
     this._connectErrorCount = 0;
 
-    const now = Date.now();
     let timeToConnectMs = undefined;
     let connectMsgLatencyMs = undefined;
     if (this._connectingStart === undefined) {
@@ -600,15 +602,17 @@ export class Reflect<MD extends MutatorDefs> {
         'Got connected message but connect start time is undefined. This should not happen.',
       );
     } else {
+      const now = Date.now();
       timeToConnectMs = now - this._connectingStart;
+      this._metrics.timeToConnectMs.set(timeToConnectMs);
+      connectMsgLatencyMs =
+        connectBody.timestamp !== undefined
+          ? now - connectBody.timestamp
+          : undefined;
+      this._connectingStart = undefined;
     }
-    this._metrics.setConnected(timeToConnectMs ?? 0);
 
-    connectMsgLatencyMs =
-      connectBody.timestamp !== undefined
-        ? now - connectBody.timestamp
-        : undefined;
-    this._connectingStart = undefined;
+    this._metrics.setConnected(timeToConnectMs ?? 0);
 
     lc.info?.('Connected', {
       navigatorOnline: navigator.onLine,
@@ -718,15 +722,18 @@ export class Reflect<MD extends MutatorDefs> {
 
     switch (this._connectionState) {
       case ConnectionState.Connected: {
-        // this._connectingStart reset below.
         if (this._connectingStart !== undefined) {
           l.error?.(
             'disconnect() called while connected but connect start time is defined. This should not happen.',
           );
+          // this._connectingStart reset below.
         }
+
         break;
       }
       case ConnectionState.Connecting: {
+        this._metrics.lastConnectError.set(getLastConnectErrorValue(reason));
+        this._metrics.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
         this._metrics.setConnectError(reason);
         if (
           this._connectErrorCount % CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY ===
@@ -742,6 +749,7 @@ export class Reflect<MD extends MutatorDefs> {
             'disconnect() called while connecting but connect start time is undefined. This should not happen.',
           );
         }
+
         break;
       }
       case ConnectionState.Disconnected:
@@ -920,11 +928,10 @@ export class Reflect<MD extends MutatorDefs> {
       try {
         switch (this._connectionState) {
           case ConnectionState.Disconnected: {
-            // If hidden, we wait for the tab to become visible before trying again.
-
             if (this.#visibilityWatcher.visibilityState === 'hidden') {
               this._metrics.setDisconnectedWaitingForVisible();
             }
+            // If hidden, we wait for the tab to become visible before trying again.
             await this.#visibilityWatcher.waitForVisible();
 
             // If we got an auth error we try to get a new auth token before reconnecting.

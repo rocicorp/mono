@@ -3,15 +3,21 @@ import type {MaybePromise} from 'replicache';
 import type {ErrorKind as ServerErrorKind} from 'reflect-protocol';
 
 export enum MetricName {
-  TimeToConnectMs = 'time_to_connect_ms_v2',
-  LastConnectError = 'last_connect_error_v2',
+  TimeToConnectMs = 'time_to_connect_ms',
+  LastConnectError = 'last_connect_error',
+  TimeToConnectMsV2 = 'time_to_connect_ms_v2',
+  LastConnectErrorV2 = 'last_connect_error_v2',
 }
 
 // This value is used to indicate that the client's last connection attempt
 // failed. We don't make this -1 because we want to stack this never connected
 // state in a graph on top of actual connection times, so it should be greater
 // than any other value.
-export const TIME_TO_CONNECT_SPECIAL_VALUES = {
+export const DID_NOT_CONNECT_VALUE = 100 * 1000;
+
+export const REPORT_INTERVAL_MS = 5_000;
+
+export const TIME_TO_CONNECT_V2_SPECIAL_VALUES = {
   initialValue: 100_000,
   connectError: 100_001,
   disconnectedWaitingForVisible: 100_002,
@@ -34,7 +40,7 @@ export type DisconnectReason =
       client: ClientDisconnectReason;
     };
 
-function getLastConnectErrorValue(reason: DisconnectReason): string {
+export function getLastConnectErrorValue(reason: DisconnectReason): string {
   if ('server' in reason) {
     return `server_${camelToSnake(reason.server)}`;
   }
@@ -50,8 +56,6 @@ function camelToSnake(s: string): string {
     .join('_')
     .toLowerCase();
 }
-
-export const REPORT_INTERVAL_MS = 5_000;
 
 type MetricsReporter = (metrics: Series[]) => MaybePromise<void>;
 
@@ -82,7 +86,8 @@ export class MetricManager {
 
     this.tags.push(`source:${opts.source}`);
 
-    this._timeToConnectMs.set(TIME_TO_CONNECT_SPECIAL_VALUES.initialValue);
+    this.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
+    this._timeToConnectMsV2.set(TIME_TO_CONNECT_V2_SPECIAL_VALUES.initialValue);
 
     this._timerID = setInterval(() => {
       void this.flush();
@@ -110,33 +115,53 @@ export class MetricManager {
   // In that world the metric gauge(s) and bookkeeping like _connectingStart would
   // be encapsulated with the ConnectionState. This will probably happen as part
   // of https://github.com/rocicorp/reflect-server/issues/255.
-  private readonly _timeToConnectMs = this._register(
+  readonly timeToConnectMs = this._register(
     new Gauge(MetricName.TimeToConnectMs),
   );
 
   // lastConnectError records the last error that occurred when connecting,
-  // if any. If this is set, then _timeToConnectMs should have value connectError.
-  // It is cleared upon successfully connecting or pausing connect attempts due
-  // to being hidden.
-  private readonly _lastConnectError = this._register(
-    new State(MetricName.LastConnectError),
+  // if any. It is cleared when connecting successfully or when reported, so this
+  // state only gets reported if there was a failure during the reporting period and
+  // we are still not connected.
+  readonly lastConnectError = this._register(
+    new State(
+      MetricName.LastConnectError,
+      true, // clearOnFlush
+    ),
+  );
+
+  /**
+   * The time from the call to connect() to receiving the 'connected' ws message
+   * for the last successful connect, or one of the special values in
+   * TIME_TO_CONNECT_SPECIAL_VALUES.
+   */
+  private readonly _timeToConnectMsV2 = this._register(
+    new Gauge(MetricName.TimeToConnectMsV2),
+  );
+  // lastConnectErrorV2 records the last error that occurred when connecting,
+  // if any. It is cleared when connecting successfully, or
+  // lastConnectErrorV2 and timeToConnectMsV2 should be kept in sync
+  // so that lastConnectErrorV2 has a value iff timeToConnectMsV2's value is
+  // TIME_TO_CONNECT_SPECIAL_VALUES.connectError
+  private readonly _lastConnectErrorV2 = this._register(
+    new State(MetricName.LastConnectErrorV2),
   );
 
   setConnected(timeToConnectMs: number) {
-    this._lastConnectError.clear();
-    this._timeToConnectMs.set(timeToConnectMs);
+    this._lastConnectErrorV2.clear();
+    this._timeToConnectMsV2.set(timeToConnectMs);
   }
 
   setDisconnectedWaitingForVisible() {
-    this._lastConnectError.clear();
-    this._timeToConnectMs.set(
-      TIME_TO_CONNECT_SPECIAL_VALUES.disconnectedWaitingForVisible,
+    this._lastConnectErrorV2.clear();
+    this._timeToConnectMsV2.set(
+      TIME_TO_CONNECT_V2_SPECIAL_VALUES.disconnectedWaitingForVisible,
     );
   }
 
   setConnectError(reason: DisconnectReason) {
-    this._lastConnectError.set(getLastConnectErrorValue(reason));
-    this._timeToConnectMs.set(TIME_TO_CONNECT_SPECIAL_VALUES.connectError);
+    this._lastConnectErrorV2.set(getLastConnectErrorValue(reason));
+    this._timeToConnectMsV2.set(TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError);
   }
 
   /**

@@ -16,7 +16,7 @@ export function getDocumentVisibilityWatcher(
 }
 
 interface DocumentVisibilityWatcher {
-  visibilityState: DocumentVisibilityState;
+  readonly visibilityState: DocumentVisibilityState;
   waitForVisible(): Promise<unknown>;
   waitForHidden(): Promise<unknown>;
 }
@@ -99,7 +99,7 @@ const resolvedPromise = Promise.resolve();
 const promiseThatNeverResolves = new Promise(() => undefined);
 
 class DocumentVisibilityWatcherNoDoc implements DocumentVisibilityWatcher {
-  visibilityState: DocumentVisibilityState = 'visible';
+  readonly visibilityState: DocumentVisibilityState = 'visible';
   waitForVisible(): Promise<unknown> {
     return resolvedPromise;
   }
