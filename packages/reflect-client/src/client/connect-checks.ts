@@ -16,7 +16,7 @@ export async function checkConnectivity(
   assert(socketOrigin.startsWith('ws://') || socketOrigin.startsWith('wss://'));
   const id = nanoid();
   lc = lc.withContext('connectCheckID', id).withContext('checkReason', reason);
-  lc.info?.('Starting connectivity checks.', {
+  lc.info?.('Starting connectivity checks', {
     navigatorOnline: navigator.onLine,
   });
   const checks: Checks = {
