@@ -35,7 +35,11 @@ export async function loginHandler(
         try {
           if (!idToken || !refreshToken || !expirationTimeStr) {
             throw new Error(
-              'Missing idToken, refreshToken, or expirationTime from the auth provider.',
+              `Missing ${!idToken ? 'idToken ' : ''}${
+                !refreshToken ? 'refreshToken ' : ''
+              }${
+                !expirationTimeStr ? 'expirationTime ' : ''
+              }from the auth provider.`,
             );
           }
           const expirationTime = parseInt(expirationTimeStr);
@@ -52,9 +56,7 @@ export async function loginHandler(
         } catch (error) {
           res.end(() => {
             loginResolver.reject(
-              new Error(
-                'Invalid idToken, refreshToken, or expirationTime from the auth provider.',
-              ),
+              new Error('Error saving credentials: ' + error),
             );
           });
           return;

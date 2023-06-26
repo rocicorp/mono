@@ -14,6 +14,8 @@ describe('loginHandler', () => {
     callbackUrl.searchParams.set('idToken', 'valid-token');
     callbackUrl.searchParams.set('refreshToken', 'valid-refresh-token');
     let openInBrowserCalled = false;
+    let writeAuthConfigFileCalled = false;
+
     const loginHandlerPromise = loginHandler(
       async url => {
         openInBrowserCalled = true;
@@ -24,14 +26,18 @@ describe('loginHandler', () => {
         expect(serverResponse).toBeDefined();
       },
       (config: UserAuthConfig) => {
-        expect(config).toBeUndefined();
+        expect(config).toBeDefined();
+        expect(config.idToken).toEqual('valid-token');
+        expect(config.refreshToken).toEqual('valid-refresh-token');
+        writeAuthConfigFileCalled = true;
       },
     );
 
     await expect(loginHandlerPromise).rejects.toThrow(
-      'Invalid idToken, refreshToken, or expirationTime from the auth provider.',
+      'Error saving credentials: Error: Missing expirationTime from the auth provider.',
     );
     expect(openInBrowserCalled).toEqual(true);
+    expect(writeAuthConfigFileCalled).toEqual(false);
   });
 
   test('should pass if idToken, refreshToken or expirationTime are valid', async () => {
@@ -41,6 +47,8 @@ describe('loginHandler', () => {
     callbackUrl.searchParams.set('refreshToken', 'valid-refresh-token');
     callbackUrl.searchParams.set('expirationTime', '0');
     let openInBrowserCalled = false;
+    let writeAuthConfigFileCalled = false;
+
     const loginHandlerPromise = loginHandler(
       async url => {
         openInBrowserCalled = true;
@@ -55,11 +63,13 @@ describe('loginHandler', () => {
         expect(config.idToken).toEqual('valid-token');
         expect(config.refreshToken).toEqual('valid-refresh-token');
         expect(config.expirationTime).toEqual(0);
+        writeAuthConfigFileCalled = true;
       },
     );
 
     await expect(loginHandlerPromise).resolves.toBeUndefined();
     expect(openInBrowserCalled).toEqual(true);
+    expect(writeAuthConfigFileCalled).toEqual(true);
   });
 
   test('should reject if expirationTime is not a number', async () => {
@@ -68,6 +78,7 @@ describe('loginHandler', () => {
     callbackUrl.searchParams.set('refreshToken', 'valid-refresh-token');
     callbackUrl.searchParams.set('expirationTime', 'invalid-expiration-time');
     let openInBrowserCalled = false;
+    let writeAuthConfigFileCalled = false;
     const loginHandlerPromise = loginHandler(
       async url => {
         openInBrowserCalled = true;
@@ -77,14 +88,15 @@ describe('loginHandler', () => {
         );
         expect(serverResponse).toBeDefined();
       },
-      (config: UserAuthConfig) => {
-        expect(config).toBeUndefined();
+      (_config: UserAuthConfig) => {
+        writeAuthConfigFileCalled = true;
       },
     );
 
     await expect(loginHandlerPromise).rejects.toThrow(
-      'Invalid idToken, refreshToken, or expirationTime from the auth provider.',
+      'Error saving credentials: AssertionError [ERR_ASSERTION]: expirationTime is not a number',
     );
     expect(openInBrowserCalled).toEqual(true);
+    expect(writeAuthConfigFileCalled).toEqual(false);
   });
 });
