@@ -10,9 +10,7 @@ import {
   AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER,
   AUTH_ROUTES_UNAUTHED,
 } from './auth-do.js';
-import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
 import {CANARY_GET, HELLO, REPORT_METRICS_PATH} from './paths.js';
-import type {DatadogMetricsOptions} from './reflect.js';
 import {
   BaseContext,
   Handler,
@@ -34,7 +32,7 @@ export type MetricsSink = (
 export interface WorkerOptions {
   logSink: LogSink;
   logLevel: LogLevel;
-  datadogMetricsOptions?: DatadogMetricsOptions | undefined;
+  metricsSink?: MetricsSink | undefined;
 }
 
 export interface BaseWorkerEnv {
@@ -49,7 +47,7 @@ type WithEnv = {
 
 type WorkerContext = BaseContext &
   WithEnv & {
-    datadogMetricsOptions?: DatadogMetricsOptions | undefined;
+    metricsSink?: MetricsSink | undefined;
   };
 
 type WorkerRouter = Router<WorkerContext>;
@@ -87,10 +85,10 @@ function registerRoutes(router: WorkerRouter) {
 //    out user as well)
 const reportMetrics = post<WorkerContext, Response>(
   withBody(reportMetricsSchema, async ctx => {
-    const {lc, body, datadogMetricsOptions} = ctx;
+    const {lc, body, metricsSink} = ctx;
 
-    if (!datadogMetricsOptions) {
-      lc.debug?.('No DatadogMetricsOptions configured, dropping metrics.');
+    if (!metricsSink) {
+      lc.debug?.('No metricsSink configured, dropping metrics.');
       return new Response('ok');
     }
 
@@ -98,7 +96,6 @@ const reportMetrics = post<WorkerContext, Response>(
       return new Response('ok');
     }
 
-    const metricsSink = createDatadogMetricsSink(datadogMetricsOptions);
     try {
       await metricsSink(body.series, lc);
       lc.debug?.('Successfully sent metrics to Datadog.');
@@ -148,13 +145,13 @@ export function createWorker<Env extends BaseWorkerEnv>(
   registerRoutes(router);
   return {
     fetch: (request: Request, env: Env, ctx: ExecutionContext) => {
-      const {logSink, logLevel, datadogMetricsOptions} = getOptions(env);
+      const {logSink, logLevel, metricsSink} = getOptions(env);
       return withLogContext(
         ctx,
         logSink,
         logLevel,
         withUnhandledRejectionHandler(lc =>
-          fetch(request, env, router, lc, datadogMetricsOptions),
+          fetch(request, env, router, lc, metricsSink),
         ),
       );
     },
@@ -202,14 +199,14 @@ async function fetch(
   env: BaseWorkerEnv,
   router: WorkerRouter,
   lc: LogContext,
-  datadogMetricsOptions: DatadogMetricsOptions | undefined,
+  metricsSink: MetricsSink | undefined,
 ): Promise<Response> {
   lc.debug?.('Handling request:', request.method, request.url);
   try {
     const resp = await withAllowAllCORS(
       request,
       async (request: Request) =>
-        (await router.dispatch(request, {lc, env, datadogMetricsOptions})) ??
+        (await router.dispatch(request, {lc, env, metricsSink})) ??
         new Response(null, {
           status: 404,
         }),
