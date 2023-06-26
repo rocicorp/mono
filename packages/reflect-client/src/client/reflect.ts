@@ -12,7 +12,6 @@ import {
   PullResponseBody,
   PullResponseMessage,
   PushMessage,
-  ErrorKind as ServerErrorKind,
   type ErrorMessage,
 } from 'reflect-protocol';
 import {version} from 'reflect-shared';
@@ -46,6 +45,8 @@ import {checkConnectivity} from './connect-checks.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 import {
   DID_NOT_CONNECT_VALUE,
+  DisconnectReason,
+  getLastConnectErrorValue,
   MetricManager,
   REPORT_INTERVAL_MS,
   Series,
@@ -62,23 +63,6 @@ export const enum ConnectionState {
 }
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
-
-type ClientDisconnectReason =
-  | 'AbruptClose'
-  | 'CleanClose'
-  | 'ReflectClosed'
-  | 'ConnectTimeout'
-  | 'UnexpectedBaseCookie'
-  | 'PingTimeout'
-  | 'Hidden';
-
-export type DisconnectReason =
-  | {
-      server: ServerErrorKind;
-    }
-  | {
-      client: ClientDisconnectReason;
-    };
 
 /**
  * How frequently we should ping the server to keep the connection alive.
@@ -628,6 +612,8 @@ export class Reflect<MD extends MutatorDefs> {
       this._connectingStart = undefined;
     }
 
+    this._metrics.setConnected(timeToConnectMs ?? 0);
+
     lc.info?.('Connected', {
       navigatorOnline: navigator.onLine,
       timeToConnectMs,
@@ -746,8 +732,9 @@ export class Reflect<MD extends MutatorDefs> {
         break;
       }
       case ConnectionState.Connecting: {
-        this._metrics.lastConnectError.set(getLastConnectMetricState(reason));
+        this._metrics.lastConnectError.set(getLastConnectErrorValue(reason));
         this._metrics.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
+        this._metrics.setConnectError(reason);
         if (
           this._connectErrorCount % CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY ===
           1
@@ -941,6 +928,9 @@ export class Reflect<MD extends MutatorDefs> {
       try {
         switch (this._connectionState) {
           case ConnectionState.Disconnected: {
+            if (this.#visibilityWatcher.visibilityState === 'hidden') {
+              this._metrics.setDisconnectedWaitingForVisible();
+            }
             // If hidden, we wait for the tab to become visible before trying again.
             await this.#visibilityWatcher.waitForVisible();
 
@@ -1352,23 +1342,6 @@ function getDocument(): Document | undefined {
  */
 function promiseRace(ps: Promise<unknown>[]): Promise<number> {
   return Promise.race(ps.map((p, i) => p.then(() => i)));
-}
-
-function getLastConnectMetricState(reason: DisconnectReason): string {
-  if ('server' in reason) {
-    return `server_${camelToSnake(reason.server)}`;
-  }
-  return `client_${camelToSnake(reason.client)}`;
-}
-
-// camelToSnake is used to convert a protocol ErrorKind into a suitable
-// metric name, eg AuthInvalidated => auth_invalidated. It converts
-// both PascalCase and camelCase to snake_case.
-function camelToSnake(s: string): string {
-  return s
-    .split(/\.?(?=[A-Z])/)
-    .join('_')
-    .toLowerCase();
 }
 
 class TimedOutError extends Error {

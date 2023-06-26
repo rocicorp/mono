@@ -1,5 +1,3 @@
-lib
-out
+out/
 *.tgz
-*.log
 *.tsbuildinfo

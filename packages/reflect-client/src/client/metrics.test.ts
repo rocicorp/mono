@@ -3,12 +3,14 @@ import {expect} from 'chai';
 import sinon from 'sinon';
 import {
   DID_NOT_CONNECT_VALUE,
+  DisconnectReason,
   Gauge,
   MetricManager,
   Point,
   REPORT_INTERVAL_MS,
   Series,
   State,
+  TIME_TO_CONNECT_V2_SPECIAL_VALUES,
 } from './metrics.js';
 
 teardown(() => {
@@ -117,7 +119,7 @@ test('State', () => {
   }
 });
 
-test('MetricManager', async () => {
+test('MetricManager v1 connect metrics', async () => {
   const clock = sinon.useFakeTimers();
 
   const reporter = sinon.mock().returns(Promise.resolve());
@@ -218,12 +220,6 @@ test('MetricManager', async () => {
           host: 'test-host',
           tags: ['source:test-source'],
         },
-        {
-          metric: 'last_connect_error_nuts',
-          points: [[(REPORT_INTERVAL_MS * 6) / 1000, [1]]],
-          host: 'test-host',
-          tags: ['source:test-source'],
-        },
       ],
     },
     {
@@ -236,16 +232,11 @@ test('MetricManager', async () => {
           host: 'test-host',
           tags: ['source:test-source', 'foo:bar', 'hotdog'],
         },
-        {
-          metric: 'last_connect_error_nuts',
-          points: [[(REPORT_INTERVAL_MS * 7) / 1000, [1]]],
-          host: 'test-host',
-          tags: ['source:test-source', 'foo:bar', 'hotdog'],
-        },
       ],
     },
   ];
 
+  let intervalTickCount = 0;
   for (const c of cases) {
     if (c.timeToConnect !== undefined) {
       mm.timeToConnectMs.set(c.timeToConnect);
@@ -258,8 +249,278 @@ test('MetricManager', async () => {
     }
 
     await clock.tickAsync(REPORT_INTERVAL_MS);
+    intervalTickCount++;
 
-    expect(reporter.calledOnceWithExactly(c.expected), c.name).true;
+    expect(reporter.callCount).equals(1);
+    expect(reporter.getCalls()[0].args[0]).to.deep.equal([
+      ...c.expected,
+      {
+        host: 'test-host',
+        metric: 'time_to_connect_ms_v2',
+        points: [
+          [
+            (REPORT_INTERVAL_MS * intervalTickCount) / 1000,
+            [TIME_TO_CONNECT_V2_SPECIAL_VALUES.initialValue],
+          ],
+        ],
+        tags: ['source:test-source', ...(c.extraTags ?? [])],
+      },
+    ]);
+
+    mm.tags.length = 1;
+
+    reporter.resetHistory();
+  }
+});
+
+test('MetricManager v2 connect metrics', async () => {
+  const clock = sinon.useFakeTimers();
+
+  const reporter = sinon.mock().returns(Promise.resolve());
+  const mm = new MetricManager({
+    reportIntervalMs: REPORT_INTERVAL_MS,
+    host: 'test-host',
+    source: 'test-source',
+    reporter,
+    lc: Promise.resolve(new LogContext()),
+  });
+
+  type Case = {
+    name: string;
+    reportMetrics?: (metricsManager: MetricManager) => void;
+    timeToConnect?: number;
+    connectError?: DisconnectReason;
+    extraTags?: string[];
+    expected: Series[];
+  };
+
+  const cases: Case[] = [
+    {
+      name: 'no metrics',
+      expected: [
+        {
+          metric: 'time_to_connect_ms_v2',
+          points: [
+            [
+              REPORT_INTERVAL_MS / 1000,
+              [TIME_TO_CONNECT_V2_SPECIAL_VALUES.initialValue],
+            ],
+          ],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+      ],
+    },
+    {
+      name: 'ttc-1',
+      reportMetrics: metricsManager => {
+        metricsManager.setConnected(2);
+      },
+      expected: [
+        {
+          metric: 'time_to_connect_ms_v2',
+          points: [[(REPORT_INTERVAL_MS * 2) / 1000, [2]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+      ],
+    },
+    {
+      name: 'ttc-2',
+      reportMetrics: metricsManager => {
+        metricsManager.setConnected(1);
+      },
+      expected: [
+        {
+          metric: 'time_to_connect_ms_v2',
+          points: [[(REPORT_INTERVAL_MS * 3) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+      ],
+    },
+    {
+      name: 'lce client AbruptClose',
+      reportMetrics: metricsManager => {
+        metricsManager.setConnectError({client: 'AbruptClose'});
+      },
+      expected: [
+        {
+          metric: 'time_to_connect_ms_v2',
+          points: [
+            [
+              (REPORT_INTERVAL_MS * 4) / 1000,
+              [TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError],
+            ],
+          ],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+        {
+          metric: 'last_connect_error_v2_client_abrupt_close',
+          points: [[(REPORT_INTERVAL_MS * 4) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+      ],
+    },
+    {
+      name: 'lce server Unauthorized',
+      reportMetrics: metricsManager => {
+        metricsManager.setConnectError({server: 'Unauthorized'});
+      },
+      expected: [
+        {
+          metric: 'time_to_connect_ms_v2',
+          points: [
+            [
+              (REPORT_INTERVAL_MS * 5) / 1000,
+              [TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError],
+            ],
+          ],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+        {
+          metric: 'last_connect_error_v2_server_unauthorized',
+          points: [[(REPORT_INTERVAL_MS * 5) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+      ],
+    },
+    {
+      name: 'lce-unchanged',
+      expected: [
+        {
+          metric: 'time_to_connect_ms_v2',
+          points: [
+            [
+              (REPORT_INTERVAL_MS * 6) / 1000,
+              [TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError],
+            ],
+          ],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+        {
+          metric: 'last_connect_error_v2_server_unauthorized',
+          points: [[(REPORT_INTERVAL_MS * 6) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+      ],
+    },
+    {
+      name: 'extra-tags',
+      extraTags: ['foo:bar', 'hotdog'],
+      expected: [
+        {
+          metric: 'time_to_connect_ms_v2',
+          points: [
+            [
+              (REPORT_INTERVAL_MS * 7) / 1000,
+              [TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError],
+            ],
+          ],
+          host: 'test-host',
+          tags: ['source:test-source', 'foo:bar', 'hotdog'],
+        },
+        {
+          metric: 'last_connect_error_v2_server_unauthorized',
+          points: [[(REPORT_INTERVAL_MS * 7) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source', 'foo:bar', 'hotdog'],
+        },
+      ],
+    },
+    {
+      name: 'connected after error',
+      reportMetrics: metricsManager => {
+        metricsManager.setConnected(5000);
+      },
+      expected: [
+        {
+          metric: 'time_to_connect_ms_v2',
+          points: [[(REPORT_INTERVAL_MS * 8) / 1000, [5000]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+      ],
+    },
+    {
+      name: 'error client ConnectTimeout',
+      reportMetrics: metricsManager => {
+        metricsManager.setConnectError({client: 'ConnectTimeout'});
+      },
+      expected: [
+        {
+          metric: 'time_to_connect_ms_v2',
+          points: [
+            [
+              (REPORT_INTERVAL_MS * 9) / 1000,
+              [TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError],
+            ],
+          ],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+        {
+          metric: 'last_connect_error_v2_client_connect_timeout',
+          points: [[(REPORT_INTERVAL_MS * 9) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+      ],
+    },
+    {
+      name: 'setDisconnectedWaitingForVisible',
+      reportMetrics: metricsManager => {
+        metricsManager.setDisconnectedWaitingForVisible();
+      },
+      expected: [
+        {
+          metric: 'time_to_connect_ms_v2',
+          points: [
+            [
+              (REPORT_INTERVAL_MS * 10) / 1000,
+              [TIME_TO_CONNECT_V2_SPECIAL_VALUES.disconnectedWaitingForVisible],
+            ],
+          ],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+      ],
+    },
+  ];
+
+  let intervalTickCount = 0;
+  for (const c of cases) {
+    if (c.reportMetrics) {
+      c.reportMetrics(mm);
+    }
+    if (c.extraTags !== undefined) {
+      mm.tags.push(...c.extraTags);
+    }
+
+    await clock.tickAsync(REPORT_INTERVAL_MS);
+    intervalTickCount++;
+
+    expect(reporter.callCount).equals(1);
+    expect(reporter.getCalls()[0].args[0]).to.deep.equal([
+      {
+        host: 'test-host',
+        metric: 'time_to_connect_ms',
+        points: [
+          [
+            (REPORT_INTERVAL_MS * intervalTickCount) / 1000,
+            [DID_NOT_CONNECT_VALUE],
+          ],
+        ],
+        tags: ['source:test-source', ...(c.extraTags ?? [])],
+      },
+      ...c.expected,
+    ]);
 
     mm.tags.length = 1;
 
@@ -281,25 +542,30 @@ test('MetricManager.stop', async () => {
 
   mm.timeToConnectMs.set(100);
   mm.lastConnectError.set('bonk');
+  mm.setConnected(100);
 
   await clock.tickAsync(REPORT_INTERVAL_MS);
-
-  expect(
-    reporter.calledOnceWithExactly([
-      {
-        metric: 'time_to_connect_ms',
-        points: [[REPORT_INTERVAL_MS / 1000, [100]]],
-        host: 'test-host',
-        tags: ['source:test-source'],
-      },
-      {
-        metric: 'last_connect_error_bonk',
-        points: [[REPORT_INTERVAL_MS / 1000, [1]]],
-        host: 'test-host',
-        tags: ['source:test-source'],
-      },
-    ]),
-  ).true;
+  expect(reporter.callCount).equals(1);
+  expect(reporter.getCalls()[0].args[0]).to.deep.equal([
+    {
+      metric: 'time_to_connect_ms',
+      points: [[REPORT_INTERVAL_MS / 1000, [100]]],
+      host: 'test-host',
+      tags: ['source:test-source'],
+    },
+    {
+      metric: 'last_connect_error_bonk',
+      points: [[REPORT_INTERVAL_MS / 1000, [1]]],
+      host: 'test-host',
+      tags: ['source:test-source'],
+    },
+    {
+      metric: 'time_to_connect_ms_v2',
+      points: [[REPORT_INTERVAL_MS / 1000, [100]]],
+      host: 'test-host',
+      tags: ['source:test-source'],
+    },
+  ]);
 
   reporter.resetHistory();
   mm.stop();

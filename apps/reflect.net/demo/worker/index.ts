@@ -7,6 +7,9 @@ import {
 import {deleteClient} from '../alive/client-model';
 import {mutators} from '../shared/mutators';
 
+import {version} from '@rocicorp/reflect';
+console.log(version);
+
 type ReflectNetServerEnv = {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   NEW_ROOM_SECRET?: string;
