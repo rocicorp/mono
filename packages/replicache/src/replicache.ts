@@ -3,7 +3,6 @@ import {
   licenseActive,
   LicenseStatus,
   PROD_LICENSE_SERVER_URL,
-  SimpleFetch,
   TEST_LICENSE_KEY,
 } from '@rocicorp/licensing/src/client';
 import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
@@ -702,8 +701,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     }
     try {
       const resp = await getLicenseStatus(
-        // TODO(arv): Fix @rocicorp/license
-        mustSimpleFetch as SimpleFetch,
+        mustSimpleFetch,
         PROD_LICENSE_SERVER_URL,
         this._licenseKey,
         this._lc,
@@ -767,8 +765,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const markActive = async () => {
       try {
         await licenseActive(
-          // TODO(arv): Update @rocicorp/licensing
-          mustSimpleFetch as SimpleFetch,
+          mustSimpleFetch,
           PROD_LICENSE_SERVER_URL,
           this._licenseKey as string,
           await this.profileID,
