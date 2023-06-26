@@ -1,11 +1,11 @@
-import {expect, jest, test} from '@jest/globals';
+import {describe, expect, jest, test} from '@jest/globals';
 import type {LogLevel} from '@rocicorp/logger';
 import {version} from 'reflect-shared';
+import {assertString} from 'shared/asserts.js';
 import type {Series} from '../types/report-metrics.js';
 import {Mocket, TestLogSink, fail} from '../util/test-utils.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {AUTH_ROUTES} from './auth-do.js';
-import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
 import {
   TestDurableObjectId,
   TestDurableObjectStub,
@@ -443,7 +443,7 @@ async function testPreflightRequest({
   );
 }
 
-test('reportMetrics', async () => {
+describe('reportMetrics', () => {
   const reportMetricsURL = new URL(
     REPORT_METRICS_PATH,
     'https://test.roci.dev/',
@@ -451,6 +451,7 @@ test('reportMetrics', async () => {
   type TestCase = {
     name: string;
     method: string;
+    path?: string;
     body: undefined | Record<string, unknown>;
     expectedStatus: number;
     expectFetch: boolean;
@@ -463,9 +464,42 @@ test('reportMetrics', async () => {
   const goodBody = {series: [series]};
   const testCases: TestCase[] = [
     {
-      name: 'good request',
+      name: 'legacy distribution request',
       method: 'post',
+      path: '/api/v1/distribution_points',
       body: goodBody,
+      expectedStatus: 200,
+      expectFetch: true,
+    },
+    {
+      name: 'explicit distribution request',
+      method: 'post',
+      path: '/api/v1/distribution_points',
+      body: {
+        series: [
+          {
+            metric: 'metric1',
+            points: [[1, [2]]],
+            type: 'distribution',
+          },
+        ],
+      },
+      expectedStatus: 200,
+      expectFetch: true,
+    },
+    {
+      name: 'count request',
+      method: 'post',
+      path: '/api/v1/series',
+      body: {
+        series: [
+          {
+            metric: 'metric1',
+            points: [[1, 2]],
+            type: 'count',
+          },
+        ],
+      },
       expectedStatus: 200,
       expectFetch: true,
     },
@@ -506,7 +540,7 @@ test('reportMetrics', async () => {
     },
   ];
   for (const tc of testCases) {
-    await testReportMetrics(tc);
+    test(tc.name, () => testReportMetrics(tc));
   }
 
   async function testReportMetrics(tc: TestCase) {
@@ -523,10 +557,10 @@ test('reportMetrics', async () => {
     const worker = createWorker(() => ({
       logSink: new TestLogSink(),
       logLevel: 'error',
-      metricsSink: createDatadogMetricsSink({
+      datadogMetricsOptions: {
         apiKey: 'test-dd-key',
         service: 'test-service',
-      }),
+      },
     }));
 
     const testRequest = new Request(reportMetricsURL.toString(), {
@@ -550,9 +584,12 @@ test('reportMetrics', async () => {
 
     if (tc.expectFetch) {
       expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const gotURL = fetchSpy.mock.calls[0][0];
-      expect(gotURL.toString()).toContain('api.datadoghq.com');
-      const gotOptions = fetchSpy.mock.calls[0][1];
+      const args = fetchSpy.mock.calls[0];
+      assertString(args[0]);
+      const gotURL = new URL(args[0]);
+      expect(gotURL.origin).toEqual('https://api.datadoghq.com');
+      expect(gotURL.pathname).toEqual(tc.path);
+      const gotOptions = args[1];
       expect(gotOptions).toEqual({
         body: tc.body
           ? JSON.stringify({
@@ -560,6 +597,7 @@ test('reportMetrics', async () => {
               series: (tc.body.series as Series[]).map(s => ({
                 ...s,
                 tags: [...(s.tags ?? []), 'service:test-service'],
+                type: s.type,
               })),
             })
           : undefined,
@@ -571,8 +609,6 @@ test('reportMetrics', async () => {
     } else {
       expect(fetchSpy).not.toHaveBeenCalled();
     }
-
-    jest.resetAllMocks();
   }
 });
 
@@ -586,10 +622,10 @@ test('hello', async () => {
   const worker = createWorker(() => ({
     logSink: new TestLogSink(),
     logLevel: 'error',
-    metricsSink: createDatadogMetricsSink({
+    datadogMetricsOptions: {
       apiKey: 'test-dd-key',
       service: 'test-service',
-    }),
+    },
   }));
 
   const testRequest = new Request('https://test.roci.dev/'.toString());

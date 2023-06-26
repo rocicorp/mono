@@ -1,6 +1,5 @@
 import {
   consoleLogSink,
-  createDatadogMetricsSink,
   createReflectServer,
   createWorkerDatadogLogSink,
   ReflectServerBaseEnv,
@@ -22,17 +21,17 @@ type ReflectNetServerEnv = {
   DATADOG_LOGS_API_KEY?: string;
 } & ReflectServerBaseEnv;
 
-function getMetricsSink(env: ReflectNetServerEnv) {
+function getDatadogMetricsOptions(env: ReflectNetServerEnv) {
   if (env.DATADOG_METRICS_API_KEY === undefined) {
     console.warn(
       'Not enabling datadog metrics because env.DATADOG_METRICS_API_KEY is undefined',
     );
     return undefined;
   }
-  return createDatadogMetricsSink({
+  return {
     apiKey: env.DATADOG_METRICS_API_KEY,
     service: DATADOG_SERVICE_LABEL,
-  });
+  };
 }
 
 function getLogSinks(env: ReflectNetServerEnv) {
@@ -61,7 +60,7 @@ const {
   AuthDO,
 } = createReflectServer((env: ReflectNetServerEnv) => ({
   mutators,
-  metricsSink: getMetricsSink(env),
+  datadogMetricsOptions: getDatadogMetricsOptions(env),
   logSinks: getLogSinks(env),
   logLevel: 'info',
   disconnectHandler: async tx => {
