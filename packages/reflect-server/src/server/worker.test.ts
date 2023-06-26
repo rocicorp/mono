@@ -1,7 +1,7 @@
-import {afterEach, describe, expect, test} from '@jest/globals';
+import {describe, expect, jest, test} from '@jest/globals';
 import type {LogLevel} from '@rocicorp/logger';
-import nock from 'nock';
 import {version} from 'reflect-shared';
+import {assertString} from 'shared/asserts.js';
 import type {Series} from '../types/report-metrics.js';
 import {Mocket, TestLogSink, fail} from '../util/test-utils.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
@@ -16,8 +16,6 @@ import {REPORT_METRICS_PATH} from './paths.js';
 import {BaseWorkerEnv, createWorker} from './worker.js';
 
 const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
-
-afterEach(() => nock.restore());
 
 function createTestFixture(
   createTestResponse: (req: Request) => Response = () =>
@@ -546,14 +544,9 @@ describe('reportMetrics', () => {
   }
 
   async function testReportMetrics(tc: TestCase) {
-    nock.recorder.rec({
-      /* eslint-disable @typescript-eslint/naming-convention */
-      dont_print: true,
-      output_objects: true,
-      enable_reqheaders_recording: true,
-      /* eslint-enable @typescript-eslint/naming-convention */
-    });
-    nock('https://api.datadoghq.com').post(/.*/).reply(200, '{}');
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockReturnValue(Promise.resolve(new Response('{}')));
 
     const testEnv: BaseWorkerEnv = {
       authDO: {
@@ -589,29 +582,32 @@ describe('reportMetrics', () => {
       );
     }
 
-    const nockCallObjects = nock.recorder.play();
-    nock.recorder.clear();
-
     if (tc.expectFetch) {
-      expect(nockCallObjects).toHaveLength(1);
-      const call = nockCallObjects[0] as nock.Definition;
-      expect(call.scope).toMatch('https://api.datadoghq.com');
-      expect(call.path).toBe(tc.path);
-      expect(call.body).toEqual(
-        tc.body
-          ? {
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const args = fetchSpy.mock.calls[0];
+      assertString(args[0]);
+      const gotURL = new URL(args[0]);
+      expect(gotURL.origin).toEqual('https://api.datadoghq.com');
+      expect(gotURL.pathname).toEqual(tc.path);
+      const gotOptions = args[1];
+      expect(gotOptions).toEqual({
+        body: tc.body
+          ? JSON.stringify({
               ...tc.body,
               series: (tc.body.series as Series[]).map(s => ({
                 ...s,
                 tags: [...(s.tags ?? []), 'service:test-service'],
-                type: s.type ?? 'distribution',
+                type: s.type,
               })),
-            }
+            })
           : undefined,
-      );
-      expect(call.reqheaders?.['dd-api-key']).toEqual(['test-dd-key']);
+        headers: {
+          'DD-API-KEY': 'test-dd-key',
+        },
+        method: 'POST',
+      });
     } else {
-      expect(nockCallObjects).toHaveLength(0);
+      expect(fetchSpy).not.toHaveBeenCalled();
     }
   }
 });

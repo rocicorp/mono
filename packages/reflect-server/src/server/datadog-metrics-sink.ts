@@ -1,6 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
-import {Series, DISTRIBUTION_METRIC_TYPE} from '../types/report-metrics.js';
-import {default as datadog} from 'datadog-metrics';
+import {
+  DISTRIBUTION_METRIC_TYPE,
+  type Series,
+} from '../types/report-metrics.js';
 
 export type DatadogMetricsSinkOptions = {
   apiKey: string;
@@ -9,19 +11,55 @@ export type DatadogMetricsSinkOptions = {
 
 export function createDatadogMetricsSink(options: DatadogMetricsSinkOptions) {
   return async (allSeries: Series[], lc: LogContext) => {
-    const reporter = new datadog.reporters.DatadogReporter(options.apiKey);
-    const series = allSeries.map(s => ({
+    const distributions = [];
+    const series = [];
+
+    for (const metric of allSeries) {
+      if (
+        metric.type === undefined ||
+        metric.type === DISTRIBUTION_METRIC_TYPE
+      ) {
+        distributions.push(metric);
+      } else {
+        series.push(metric);
+      }
+    }
+
+    await Promise.all([
+      report('series', series, lc, options),
+      report('distribution_points', distributions, lc, options),
+    ]);
+  };
+}
+
+async function report(
+  resource: 'distribution_points' | 'series',
+  series: Series[],
+  lc: LogContext,
+  options: DatadogMetricsSinkOptions,
+) {
+  if (series.length === 0) {
+    return;
+  }
+
+  const body = JSON.stringify({
+    series: series.map(s => ({
       ...s,
       tags: [...(s.tags ?? []), `service:${options.service}`],
-      type: s.type ?? DISTRIBUTION_METRIC_TYPE, // Backwards compatibility
-    }));
-
-    lc.debug?.('Reporting metrics to Datadog', {
-      series: JSON.stringify(series),
-    });
-
-    await new Promise((resolve, reject) => {
-      reporter.report(series, resolve, reject);
-    });
-  };
+      type: s.type,
+    })),
+  });
+  lc.debug?.(`Reporting ${resource} to Datadog`, {body});
+  const resp = await fetch(`https://api.datadoghq.com/api/v1/${resource}`, {
+    method: 'POST',
+    headers: {
+      'DD-API-KEY': options.apiKey,
+    },
+    body,
+  });
+  if (!resp.ok) {
+    throw new Error(
+      `Failed to report metrics to Datadog: ${resp.status} ${resp.statusText}. Dropping metrics on the floor.`,
+    );
+  }
 }
