@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@rocicorp/logger": "^5.2.0",
-    "@rocicorp/reflect": "0.28.0",
+    "@rocicorp/reflect": "0.28.1",
     "nanoid": "^3.3.4",
     "nextjs-google-analytics": "^2.3.3",
     "react-confetti-explosion": "^2.1.2",
