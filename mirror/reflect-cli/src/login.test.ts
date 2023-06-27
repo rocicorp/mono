@@ -19,7 +19,7 @@ describe('loginHandler', () => {
     const loginHandlerPromise = loginHandler(
       async url => {
         openInBrowserCalled = true;
-        expect(url).toEqual('https://auth.reflect.net');
+        expect(url).toEqual('https://reflect.net/auth');
         const serverResponse = await credentialReceiverServerFetch(
           new Request(callbackUrl.toString()),
         );
@@ -52,7 +52,7 @@ describe('loginHandler', () => {
     const loginHandlerPromise = loginHandler(
       async url => {
         openInBrowserCalled = true;
-        expect(url).toEqual('https://auth.reflect.net');
+        expect(url).toEqual('https://reflect.net/auth');
         const serverResponse = await credentialReceiverServerFetch(
           new Request(callbackUrl.toString()),
         );
@@ -82,7 +82,7 @@ describe('loginHandler', () => {
     const loginHandlerPromise = loginHandler(
       async url => {
         openInBrowserCalled = true;
-        expect(url).toEqual('https://auth.reflect.net');
+        expect(url).toEqual('https://reflect.net/auth');
         const serverResponse = await credentialReceiverServerFetch(
           new Request(callbackUrl.toString()),
         );

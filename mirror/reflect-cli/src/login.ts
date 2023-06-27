@@ -20,7 +20,7 @@ export async function loginHandler(
   openInBrowser = openInBrowserImpl,
   writeAuthConfigFile = writeAuthConfigFileImpl,
 ): Promise<void> {
-  const urlToOpen = process.env.AUTH_URL || 'https://auth.reflect.net';
+  const urlToOpen = process.env.AUTH_URL || 'https://reflect.net/auth';
   const loginResolver = resolver<void>();
   const credentialReceiverServer = http.createServer((req, res) => {
     assert(req.url, "This request doesn't have a URL"); // This should never happen
@@ -63,7 +63,7 @@ export async function loginHandler(
         }
         res.writeHead(307, {
           // eslint-disable-next-line @typescript-eslint/naming-convention
-          Location: `https://auth.reflect.net/reflect-auth-welcome`,
+          Location: `https://reflect.net/reflect-auth-welcome`,
         });
         res.end(() => {
           loginResolver.resolve();
