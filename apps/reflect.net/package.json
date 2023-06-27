@@ -35,7 +35,10 @@
     "react-intersection-observer": "^9.4.3",
     "react-range": "^1.8.14",
     "react-syntax-highlighter": "^15.5.0",
-    "replicache-react": "^2.10.1"
+    "replicache-react": "^2.10.1",
+    "firebase": "^9.22.2",
+    "firebaseui": "^6.0.2",
+    "react-firebase-hooks": "^5.1.1"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^3.8.0",
