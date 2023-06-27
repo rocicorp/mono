@@ -119,6 +119,11 @@ export default function Home() {
         />
       </Head>
 
+      <div itemScope itemType="https://schema.org/WebSite">
+        <meta itemProp="url" content="https://reflect.net/" />
+        <meta itemProp="name" content="Reflect" />
+      </div>
+
       <Nav gameMode={gameMode} />
 
       <main className={styles.main}>
