@@ -1,7 +1,7 @@
 import type {PublishRequest} from 'mirror-protocol/src/publish.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {callFirebase} from './call-firebase.js';
+import {callFirebase} from 'shared/call-firebase.js';
 import {compile} from './compile.js';
 import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';

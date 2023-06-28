@@ -1,7 +1,7 @@
+import {callFirebase} from 'shared/call-firebase.js';
 import jwtDecode from 'jwt-decode';
 import {ensureUserResponseSchema} from 'mirror-protocol/src/user.js';
 import {mustReadAuthConfigFile} from './auth-config.js';
-import {callFirebase} from './call-firebase.js';
 import {makeRequester} from './requester.js';
 
 export async function statusHandler() {

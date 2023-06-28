@@ -3,10 +3,6 @@ import {GithubAuthProvider, getAuth} from 'firebase/auth';
 import type {auth as firebaseUiAuth} from 'firebaseui';
 import {firebaseConfig} from './firebase.config';
 
-export const firebase = initializeApp(firebaseConfig);
-
-const githubAuthProvider = new GithubAuthProvider();
-
 /**
  * Authentication
  */
@@ -30,18 +26,17 @@ export type AuthResult = {
   user: FirebaseUser;
 };
 
-async function handleAuth(authResult: AuthResult) {
+export const firebase = initializeApp(firebaseConfig);
+
+const githubAuthProvider = new GithubAuthProvider();
+
+const handleAuth = async (authResult: AuthResult) => {
   const {refreshToken} = authResult.user;
   const {expirationTime} = authResult.user.stsTokenManager;
   const idToken = await authResult.user.getIdToken();
-  const callbackUrl = new URL('http://localhost:8976/oauth/callback');
-  callbackUrl.searchParams.set('idToken', idToken);
-  callbackUrl.searchParams.set('refreshToken', refreshToken);
-  callbackUrl.searchParams.set('expirationTime', expirationTime.toString());
-  //browser navigate to callbackUrl
+  const callbackUrl = `/auth-callback?refreshToken=${refreshToken}&expirationTime=${expirationTime}&idToken=${idToken}`;
   window.location.replace(callbackUrl.toString());
-}
-
+};
 export const uiConfig: firebaseUiAuth.Config = {
   signInOptions: [githubAuthProvider.providerId],
   signInFlow: 'popup',
