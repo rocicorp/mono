@@ -3,9 +3,7 @@ import {version} from './version.js';
 
 export class CommandLineArgsError extends Error {}
 
-export function createCLIParserBase(
-  argv: string[],
-): Argv<{
+export function createCLIParserBase(argv: string[]): Argv<{
   v: boolean | undefined;
   config: string | undefined;
   env: string | undefined;
