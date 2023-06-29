@@ -38,8 +38,7 @@
     "react-intersection-observer": "^9.4.3",
     "react-range": "^1.8.14",
     "react-syntax-highlighter": "^15.5.0",
-    "replicache-react": "^2.10.1",
-    "shared": "0.0.0"
+    "replicache-react": "^2.10.1"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^3.8.0",
@@ -81,11 +80,6 @@
     "shared": "0.0.0",
     "mirror-protocol": "0.0.0"
   },
-  "bundleDependencies": [
-    "mirror-protocol",
-    "mirror-schema",
-    "shared"
-  ],
   "eslintConfig": {
     "extends": [
       "@rocicorp/eslint-config",
