@@ -13,7 +13,6 @@ import {useWindowSize} from '@/hooks/use-window-size';
 import styles from '@/styles/Home.module.css';
 import Head from 'next/head';
 import {useState} from 'react';
-import * as valita from 'shared/src/valita.js';
 
 export default function Home() {
   const winSize = useWindowSize();
@@ -126,8 +125,6 @@ export default function Home() {
       </div>
 
       <Nav gameMode={gameMode} />
-
-      <p>shared: {Object.keys(valita).join(', ')}</p>
 
       <main className={styles.main}>
         <Demo
