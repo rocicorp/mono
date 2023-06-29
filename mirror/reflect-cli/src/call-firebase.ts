@@ -49,7 +49,6 @@ export async function callFirebase<K extends keyof CallMapping>(
   returnValueSchema?: v.Type<CallMapping[K][1]>,
   apiToken?: string,
 ): Promise<CallMapping[K][1]> {
-  // TODO(arv): Pass along auth token.
   const body = JSON.stringify({data});
   const headers = apiToken
     ? {
