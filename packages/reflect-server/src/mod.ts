@@ -1,4 +1,4 @@
-import {DatadogLogSink} from 'datadog';
+import {DatadogLogSink} from 'datadog/src/mod.js';
 import {REPORT_METRICS_PATH} from './server/paths.js';
 
 export {
@@ -33,6 +33,6 @@ export type {
   MutatorDefs,
   ReadTransaction,
   WriteTransaction,
-} from 'reflect-types';
+} from 'reflect-types/src/mod.js';
 
 export {version} from './util/version.js';

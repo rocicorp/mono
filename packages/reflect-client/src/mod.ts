@@ -4,7 +4,7 @@ export {Reflect} from './client/reflect.js';
 // https://github.com/rocicorp/mono/issues/362
 export * from './replicache-mod.js';
 
-import {DatadogLogSink, DatadogLogSinkOptions} from 'datadog';
+import {DatadogLogSink, DatadogLogSinkOptions} from 'datadog/src/mod.js';
 
 export type ClientDatadogLogSinkOptions = {
   clientToken: string;
@@ -28,7 +28,7 @@ export type {
   MutatorDefs,
   ReadTransaction,
   WriteTransaction,
-} from 'reflect-types';
+} from 'reflect-types/src/mod.js';
 
 // Export the deprecated version to shadow the version from replicache
 export {version} from './client/version.js';

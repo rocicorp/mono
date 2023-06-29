@@ -1,4 +1,4 @@
-import type {AuthData} from 'reflect-types';
+import type {AuthData} from 'reflect-types/src/mod.js';
 
 export type ClientID = string;
 export type ClientGroupID = string;

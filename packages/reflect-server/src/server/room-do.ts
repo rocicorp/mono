@@ -6,7 +6,7 @@ import {
   invalidateForUserRequestSchema,
 } from 'reflect-protocol';
 import {version} from 'reflect-shared';
-import type {MutatorDefs} from 'reflect-types';
+import type {MutatorDefs} from 'reflect-types/src/mod.js';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import * as valita from 'shared/src/valita.js';
 import type {MutatorMap} from '../process/process-mutation.js';

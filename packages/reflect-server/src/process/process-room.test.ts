@@ -1,6 +1,6 @@
 import {describe, expect, test} from '@jest/globals';
 import type {Version} from 'reflect-protocol';
-import type {WriteTransaction} from 'reflect-types';
+import type {WriteTransaction} from 'reflect-types/src/mod.js';
 import {processRoom} from '../process/process-room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import type {ClientPoke} from '../types/client-poke.js';

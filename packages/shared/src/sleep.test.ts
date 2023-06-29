@@ -1,7 +1,7 @@
 import {afterEach, beforeEach, expect, test} from '@jest/globals';
-import {AbortError} from 'shared/src/abort-error.js';
-import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
+import {AbortError} from './abort-error.js';
+import {sleep, sleepWithAbort} from './sleep.js';
 
 let clock: SinonFakeTimers;
 beforeEach(() => {

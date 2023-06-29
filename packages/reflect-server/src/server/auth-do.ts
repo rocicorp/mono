@@ -9,7 +9,7 @@ import {
   invalidateForUserRequestSchema,
 } from 'reflect-protocol';
 import {version} from 'reflect-shared';
-import type {AuthData} from 'reflect-types';
+import type {AuthData} from 'reflect-types/src/mod.js';
 import {assert} from 'shared/src/asserts.js';
 import {timed} from 'shared/src/timed.js';
 import * as valita from 'shared/src/valita.js';

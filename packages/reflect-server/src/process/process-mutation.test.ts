@@ -1,5 +1,9 @@
-import {test, expect} from '@jest/globals';
-import type {WriteTransaction, AuthData} from 'reflect-types';
+import {expect, test} from '@jest/globals';
+import type {AuthData, WriteTransaction} from 'reflect-types/src/mod.js';
+import {
+  MutatorMap,
+  processMutation,
+} from '../../src/process/process-mutation.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
 import {
   ClientRecord,
@@ -8,16 +12,12 @@ import {
 } from '../../src/types/client-record.js';
 import {getUserValue} from '../../src/types/user-value.js';
 import {getVersion} from '../../src/types/version.js';
+import type {PendingMutation} from '../types/mutation.js';
 import {
   clientRecord,
   createSilentLogContext,
   pendingMutation,
 } from '../util/test-utils.js';
-import {
-  MutatorMap,
-  processMutation,
-} from '../../src/process/process-mutation.js';
-import type {PendingMutation} from '../types/mutation.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();

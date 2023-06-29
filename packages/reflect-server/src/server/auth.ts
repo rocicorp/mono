@@ -1,5 +1,5 @@
+import type {AuthData} from 'reflect-types/src/mod.js';
 import type {MaybePromise} from 'replicache';
-import type {AuthData} from 'reflect-types';
 
 /**
  * An `AuthHandler` should validate that the user authenticated by `auth` is

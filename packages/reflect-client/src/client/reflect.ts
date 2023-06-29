@@ -15,7 +15,7 @@ import {
   type ErrorMessage,
 } from 'reflect-protocol';
 import {version} from 'reflect-shared';
-import type {MutatorDefs, ReadTransaction} from 'reflect-types';
+import type {MutatorDefs, ReadTransaction} from 'reflect-types/src/mod.js';
 import {
   ClientGroupID,
   ClientID,

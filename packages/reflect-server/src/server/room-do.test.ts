@@ -1,6 +1,6 @@
 import {expect, test} from '@jest/globals';
 import {version} from 'reflect-shared';
-import type {WriteTransaction} from 'reflect-types';
+import type {WriteTransaction} from 'reflect-types/src/mod.js';
 import {
   newInvalidateAllAuthRequest,
   newInvalidateForRoomAuthRequest,
