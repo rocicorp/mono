@@ -1,8 +1,11 @@
 import 'firebase/auth';
-import type {GetServerSideProps, InferGetServerSidePropsType} from 'next/types';
-import {useEffect} from 'react';
+import type {GetServerSideProps} from 'next/types';
 import jwtDecode from 'jwt-decode';
-import {ensureUserResponseSchema} from 'mirror-protocol/src/user';
+import {
+  EnsureUserRequest,
+  EnsureUserResponse,
+  ensureUserResponseSchema,
+} from 'mirror-protocol/src/user';
 import {callFirebase} from 'shared/src/call-firebase';
 
 export type ReflectAuthResult = {
@@ -20,23 +23,29 @@ function createCliCallbackUrl(reflectAuth: ReflectAuthResult): string {
   return callbackUrl.toString();
 }
 
-async function ensureUser(reflectAuth: ReflectAuthResult): Promise<string> {
+async function ensureUser(reflectAuth: ReflectAuthResult): Promise<boolean> {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   const token = jwtDecode<{user_id: string}>(reflectAuth.idToken);
+  console.log(token);
   const data = {
     requester: {
-      userId: token.user_id,
-      userAgent: 'browser',
+      userID: token.user_id,
+      userAgent: {
+        type: 'web',
+        version: '0.0.1',
+      },
     },
   };
 
-  const user = await callFirebase(
+  console.log('data', data);
+  const firebaseRet = await callFirebase<EnsureUserRequest, EnsureUserResponse>(
     'user-ensure',
     data,
     ensureUserResponseSchema,
     reflectAuth.idToken,
   );
-  return user;
+
+  return firebaseRet.success;
 }
 
 export const getServerSideProps: GetServerSideProps<{
@@ -52,20 +61,12 @@ export const getServerSideProps: GetServerSideProps<{
   if (!user) {
     throw new Error('failed to ensure user');
   }
+  const cliUrl = createCliCallbackUrl(reflectAuth);
+  context.res.setHeader('Location', cliUrl);
+  context.res.statusCode = 302;
   return {props: {authResult: {...reflectAuth}}};
 };
 
-export default function AuthCallback({
-  authResult,
-}: InferGetServerSidePropsType<typeof getServerSideProps>) {
-  const url = createCliCallbackUrl(authResult);
-  useEffect(() => {
-    window.location.replace(url);
-  }, [url]);
-
-  return authResult.idToken ? (
-    <div>Redirecting you to ${} </div>
-  ) : (
-    <div>Something went wrong with authentication</div>
-  );
+export default function AuthCallback() {
+  return <></>;
 }
