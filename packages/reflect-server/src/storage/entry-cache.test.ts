@@ -1,7 +1,7 @@
-import {describe, test, expect} from '@jest/globals';
+import {describe, expect, test} from '@jest/globals';
+import * as valita from 'shared/src/valita.js';
 import {DurableStorage} from './durable-storage.js';
 import {EntryCache} from './entry-cache.js';
-import * as valita from 'shared/valita.js';
 import type {ListOptions} from './storage.js';
 
 describe('entry-cache', () => {

@@ -1,7 +1,7 @@
 import {expect, test} from '@jest/globals';
-import {assert} from 'shared/asserts.js';
-import * as v from 'shared/valita.js';
-import {parse} from 'shared/valita.js';
+import {assert} from 'shared/src/asserts.js';
+import * as v from 'shared/src/valita.js';
+import {parse} from 'shared/src/valita.js';
 import {jsonSchema} from './json.js';
 
 test('json schema', () => {

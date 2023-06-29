@@ -1,14 +1,14 @@
-import * as v from 'shared/valita.js';
 import {describe, expect, test} from '@jest/globals';
 import type {LogContext} from '@rocicorp/logger';
+import * as v from 'shared/src/valita.js';
+import {createSilentLogContext} from '../util/test-utils.js';
 import {DurableStorage} from './durable-storage.js';
 import {
-  storageSchemaMeta,
   StorageSchemaMeta,
   VersionMigrationMap,
   initStorageSchema,
+  storageSchemaMeta,
 } from './schema.js';
-import {createSilentLogContext} from '../util/test-utils.js';
 
 describe('storage schema', () => {
   type Case = {

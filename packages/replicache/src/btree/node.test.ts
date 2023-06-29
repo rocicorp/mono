@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import * as dag from '../dag/mod.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';

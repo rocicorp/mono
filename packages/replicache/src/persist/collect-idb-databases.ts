@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
 import * as dag from '../dag/mod.js';
 import {FormatVersion} from '../format-version.js';

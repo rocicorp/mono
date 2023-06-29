@@ -1,9 +1,9 @@
-import * as v from 'shared/valita.js';
 import type {
   DocumentData,
   FirestoreDataConverter,
   QueryDocumentSnapshot,
 } from '@google-cloud/firestore';
+import * as v from 'shared/src/valita.js';
 
 export function firestoreDataConverter<T extends DocumentData>(
   schema: v.Type<T>,

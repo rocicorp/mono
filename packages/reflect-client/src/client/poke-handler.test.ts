@@ -1,6 +1,6 @@
 import {Context, LogContext, LogLevel} from '@rocicorp/logger';
 import {expect} from 'chai';
-import {BufferSizer} from 'shared/buffer-sizer.js';
+import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import * as sinon from 'sinon';
 import {
   BUFFER_SIZER_OPTIONS,

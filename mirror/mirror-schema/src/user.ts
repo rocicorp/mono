@@ -1,7 +1,7 @@
-import * as v from 'shared/valita.js';
-import * as path from './path.js';
-import {shortRoleSchema} from './membership.js';
+import * as v from 'shared/src/valita.js';
 import {firestoreDataConverter} from './converter.js';
+import {shortRoleSchema} from './membership.js';
+import * as path from './path.js';
 
 export const userSchema = v.object({
   email: v.string(),

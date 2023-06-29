@@ -1,4 +1,4 @@
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import type {Hash} from '../hash.js';
 import type {Release} from '../with-transactions.js';
 import type {Chunk} from './chunk.js';

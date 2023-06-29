@@ -1,7 +1,7 @@
 // This is taken from workers-sdk/packages/wrangler/
 // TODO(arv): Remove thing we don not need.
 
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 
 interface FetchError {
   code: number;

@@ -1,4 +1,4 @@
-import type {PublishRequest} from 'mirror-protocol/publish.js';
+import type {PublishRequest} from 'mirror-protocol/src/publish.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {callFirebase} from './call-firebase.js';

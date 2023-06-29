@@ -1,8 +1,8 @@
-import * as v from 'shared/valita.js';
-import * as path from './path.js';
-import {timestampSchema} from './timestamp.js';
+import * as v from 'shared/src/valita.js';
 import {appPath} from './app.js';
 import {firestoreDataConverter} from './converter.js';
+import * as path from './path.js';
+import {timestampSchema} from './timestamp.js';
 
 export const deploymentTypeSchema = v.union(
   v.literal('USER_UPLOAD'),

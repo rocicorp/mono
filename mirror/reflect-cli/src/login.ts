@@ -1,15 +1,15 @@
+import {resolver} from '@rocicorp/resolver';
 import assert from 'node:assert';
 import http from 'node:http';
+import type {Socket} from 'node:net';
 import open from 'open';
+import {sleep} from 'shared/src/sleep.js';
+import * as v from 'shared/src/valita.js';
 import {
   UserAuthConfig,
   userAuthConfigSchema,
   writeAuthConfigFile as writeAuthConfigFileImpl,
 } from './auth-config.js';
-import * as v from 'shared/valita.js';
-import {sleep} from 'shared/sleep.js';
-import {resolver} from '@rocicorp/resolver';
-import type {Socket} from 'node:net';
 
 async function timeout(signal: AbortSignal) {
   await sleep(120_000, signal);

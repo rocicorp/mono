@@ -16,8 +16,8 @@ import {
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {assert, assertNotUndefined} from 'shared/asserts.js';
-import {sleep} from 'shared/sleep.js';
+import {assert, assertNotUndefined} from 'shared/src/asserts.js';
+import {sleep} from 'shared/src/sleep.js';
 import * as dag from './dag/mod.js';
 import {assertHash} from './hash.js';
 import {IDBNotFoundError} from './kv/idb-store.js';

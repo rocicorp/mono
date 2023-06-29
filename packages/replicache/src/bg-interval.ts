@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {AbortError} from 'shared/abort-error.js';
-import {sleep} from 'shared/sleep.js';
+import {AbortError} from 'shared/src/abort-error.js';
+import {sleep} from 'shared/src/sleep.js';
 
 export function initBgIntervalProcess(
   processName: string,

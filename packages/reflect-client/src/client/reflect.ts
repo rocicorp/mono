@@ -35,10 +35,10 @@ import {
   ReplicacheOptions,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from 'replicache';
-import {assert} from 'shared/asserts.js';
-import type {ReadonlyJSONValue} from 'shared/json.js';
-import {sleep, sleepWithAbort} from 'shared/sleep.js';
-import * as valita from 'shared/valita.js';
+import {assert} from 'shared/src/asserts.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
+import * as valita from 'shared/src/valita.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {checkConnectivity} from './connect-checks.js';

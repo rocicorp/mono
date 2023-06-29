@@ -6,7 +6,7 @@ import {
   assertObject,
   assertString,
   unreachable,
-} from 'shared/asserts.js';
+} from 'shared/src/asserts.js';
 import {skipCommitDataAsserts} from '../config.js';
 import {FrozenCookie, compareCookies} from '../cookies.js';
 import type * as dag from '../dag/mod.js';

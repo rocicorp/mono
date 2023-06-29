@@ -1,11 +1,11 @@
-import {assertHTTPRequestInfo, HTTPRequestInfo} from './http-request-info.js';
-import {assertObject} from 'shared/asserts.js';
+import {assertObject} from 'shared/src/asserts.js';
 import {
   assertVersionNotSupportedResponse,
   ClientStateNotFoundResponse,
   isClientStateNotFoundResponse,
   VersionNotSupportedResponse,
 } from './error-responses.js';
+import {assertHTTPRequestInfo, HTTPRequestInfo} from './http-request-info.js';
 import type {PushRequest} from './sync/push.js';
 
 export type PusherResult = {

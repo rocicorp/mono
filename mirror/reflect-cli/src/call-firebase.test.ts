@@ -1,5 +1,5 @@
 import {expect, jest, test} from '@jest/globals';
-import * as v from 'shared/valita.js';
+import * as v from 'shared/src/valita.js';
 import {callFirebase} from './call-firebase.js';
 
 function makeFetchSpy(

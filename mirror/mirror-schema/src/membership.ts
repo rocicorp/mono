@@ -1,7 +1,7 @@
-import * as v from 'shared/valita.js';
+import * as v from 'shared/src/valita.js';
+import {firestoreDataConverter} from './converter.js';
 import * as path from './path.js';
 import {teamPath} from './team.js';
-import {firestoreDataConverter} from './converter.js';
 
 export const roleSchema = v.union(v.literal('member'), v.literal('admin'));
 export type Role = v.Infer<typeof roleSchema>;

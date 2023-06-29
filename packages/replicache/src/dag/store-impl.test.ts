@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import {Hash, assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {ReadonlyJSONValue, deepFreeze} from '../json.js';
 import type * as kv from '../kv/mod.js';

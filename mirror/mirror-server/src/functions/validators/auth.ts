@@ -1,5 +1,5 @@
 import {CallableRequest, HttpsError} from 'firebase-functions/v2/https';
-import type {BaseRequest} from 'mirror-protocol/base.js';
+import type {BaseRequest} from 'mirror-protocol/src/base.js';
 import type {AsyncHandler} from './types.js';
 
 export function withAuthorization<Request extends BaseRequest, Response>(

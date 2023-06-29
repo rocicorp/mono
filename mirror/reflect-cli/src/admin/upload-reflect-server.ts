@@ -2,7 +2,7 @@ import * as esbuild from 'esbuild';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {pkgUp} from 'pkg-up';
-import {assert, assertObject, assertString} from 'shared/asserts.js';
+import {assert, assertObject, assertString} from 'shared/src/asserts.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 
 const require = createRequire(import.meta.url);

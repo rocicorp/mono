@@ -7,8 +7,8 @@ import {
 } from '@rocicorp/licensing/src/client';
 import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {AbortError} from 'shared/abort-error.js';
-import {assert} from 'shared/asserts.js';
+import {AbortError} from 'shared/src/abort-error.js';
+import {assert} from 'shared/src/asserts.js';
 import {initBgIntervalProcess} from './bg-interval.js';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';

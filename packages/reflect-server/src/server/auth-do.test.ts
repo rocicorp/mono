@@ -7,7 +7,7 @@ import {
   jest,
   test,
 } from '@jest/globals';
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import {newInvalidateAllAuthRequest} from '../client/auth.js';
 import {
   newCloseRoomRequest,
@@ -20,18 +20,19 @@ import {
 import {DurableStorage} from '../storage/durable-storage.js';
 import {newAuthRevalidateConnections} from '../util/auth-test-util.js';
 import {encodeHeaderValue} from '../util/headers.js';
+import {sleep} from '../util/sleep.js';
 import {Mocket, TestLogSink, mockWebSocketPair} from '../util/test-utils.js';
 import {
   AUTH_API_KEY_HEADER_NAME,
   createAuthAPIHeaders,
 } from './auth-api-headers.js';
 import {
+  AUTH_HANDLER_TIMEOUT_MS,
   AUTH_ROUTES,
   BaseAuthDO,
   recordConnection,
-  AUTH_HANDLER_TIMEOUT_MS,
 } from './auth-do.js';
-import {AuthHandler, AUTH_DATA_HEADER_NAME} from './auth.js';
+import {AUTH_DATA_HEADER_NAME, AuthHandler} from './auth.js';
 import {
   TestDurableObjectId,
   TestDurableObjectState,
@@ -45,7 +46,6 @@ import {
   roomRecordByRoomID as getRoomRecordOriginal,
   type RoomRecord,
 } from './rooms.js';
-import {sleep} from '../util/sleep.js';
 
 const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
 const {authDO} = getMiniflareBindings();

@@ -1,7 +1,7 @@
 import {describe, expect, jest, test} from '@jest/globals';
 import type {LogLevel} from '@rocicorp/logger';
 import {version} from 'reflect-shared';
-import {assertString} from 'shared/asserts.js';
+import {assertString} from 'shared/src/asserts.js';
 import type {Series} from '../types/report-metrics.js';
 import {Mocket, TestLogSink, fail} from '../util/test-utils.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';

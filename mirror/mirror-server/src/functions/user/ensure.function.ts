@@ -1,15 +1,15 @@
 import type {Firestore} from 'firebase-admin/firestore';
-import {withSchema} from '../validators/schema.js';
-import {withAuthorization} from '../validators/auth.js';
-import type {AsyncCallable} from '../validators/types.js';
+import {HttpsError} from 'firebase-functions/v2/https';
 import {
   EnsureUserRequest,
   EnsureUserResponse,
   ensureUserRequestSchema,
   ensureUserResponseSchema,
-} from 'mirror-protocol/user.js';
-import {userPath, userDataConverter} from 'mirror-schema/user.js';
-import {HttpsError} from 'firebase-functions/v2/https';
+} from 'mirror-protocol/src/user.js';
+import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
+import {withAuthorization} from '../validators/auth.js';
+import {withSchema} from '../validators/schema.js';
+import type {AsyncCallable} from '../validators/types.js';
 
 export function ensure(
   firestore: Firestore,

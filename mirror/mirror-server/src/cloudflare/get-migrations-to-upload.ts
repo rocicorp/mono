@@ -2,7 +2,7 @@
 // TODO(arv): Remove thing we don not need.
 
 /* eslint-disable @typescript-eslint/naming-convention */
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import {cfFetch} from './cf-fetch.js';
 import type {CfDurableObjectMigrations} from './create-worker-upload-form.js';
 

@@ -1,8 +1,8 @@
 import {expect, test} from '@jest/globals';
-import {assert} from 'shared/asserts.js';
-import type {JSONObject, ReadonlyJSONValue} from 'shared/json.js';
-import {must} from 'shared/must.js';
-import * as valita from 'shared/valita.js';
+import {assert} from 'shared/src/asserts.js';
+import type {JSONObject, ReadonlyJSONValue} from 'shared/src/json.js';
+import {must} from 'shared/src/must.js';
+import * as valita from 'shared/src/valita.js';
 import {createSilentLogContext} from '../util/test-utils.js';
 import {
   BaseContext,

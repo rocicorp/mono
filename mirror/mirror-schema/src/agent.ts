@@ -1,6 +1,6 @@
-import * as v from 'shared/valita.js';
-import * as path from './path.js';
+import * as v from 'shared/src/valita.js';
 import {firestoreDataConverter} from './converter.js';
+import * as path from './path.js';
 
 export const agentVersionsSchema = v.object({
   minVersion: v.string(),

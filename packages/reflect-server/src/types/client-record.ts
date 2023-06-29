@@ -1,7 +1,7 @@
-import * as valita from 'shared/valita.js';
 import {nullableVersionSchema} from 'reflect-protocol';
-import type {ClientID} from './client-state.js';
+import * as valita from 'shared/src/valita.js';
 import type {Storage} from '../storage/storage.js';
+import type {ClientID} from './client-state.js';
 
 export const clientRecordSchema = valita.object({
   clientGroupID: valita.string(),

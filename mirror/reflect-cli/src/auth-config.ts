@@ -1,9 +1,8 @@
-import fs, {readFileSync} from 'node:fs';
+import fs, {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {mkdirSync, writeFileSync} from 'node:fs';
-import * as v from 'shared/valita.js';
-import {parse} from 'shared/valita.js';
+import * as v from 'shared/src/valita.js';
+import {parse} from 'shared/src/valita.js';
 /**
  * The path to the config file that holds user authentication data,
  * relative to the user's home directory.

@@ -3,7 +3,7 @@ import {
   assertNumber,
   assertObject,
   assertString,
-} from 'shared/asserts.js';
+} from 'shared/src/asserts.js';
 import {deepFreeze} from '../json.js';
 import type * as kv from '../kv/mod.js';
 import {uuid} from '../uuid.js';

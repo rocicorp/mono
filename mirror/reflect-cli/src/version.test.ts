@@ -1,6 +1,6 @@
 import {expect, test} from '@jest/globals';
-import {userAgentSchema} from 'mirror-protocol/user-agent.js';
-import * as v from 'shared/valita.js';
+import {userAgentSchema} from 'mirror-protocol/src/user-agent.js';
+import * as v from 'shared/src/valita.js';
 import {userAgent, version} from './version.js';
 
 test('version', () => {

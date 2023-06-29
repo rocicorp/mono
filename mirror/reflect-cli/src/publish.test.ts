@@ -2,7 +2,7 @@ import {expect, jest, test} from '@jest/globals';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {assert, assertString} from 'shared/asserts.js';
+import {assert, assertString} from 'shared/src/asserts.js';
 import {publishHandler} from './publish.js';
 
 type Args = Parameters<typeof publishHandler>[0];

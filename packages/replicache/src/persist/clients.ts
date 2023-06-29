@@ -5,8 +5,8 @@ import {
   assertNumber,
   assertObject,
   assertString,
-} from 'shared/asserts.js';
-import {hasOwn} from 'shared/has-own.js';
+} from 'shared/src/asserts.js';
+import {hasOwn} from 'shared/src/has-own.js';
 import * as btree from '../btree/mod.js';
 import {FrozenCookie, compareCookies} from '../cookies.js';
 import type * as dag from '../dag/mod.js';

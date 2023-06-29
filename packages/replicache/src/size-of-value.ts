@@ -1,4 +1,4 @@
-import {hasOwn} from 'shared/has-own.js';
+import {hasOwn} from 'shared/src/has-own.js';
 import type {ReadonlyJSONObject} from './json.js';
 
 const SIZE_TAG = 1;

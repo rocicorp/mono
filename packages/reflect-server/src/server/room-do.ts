@@ -7,8 +7,8 @@ import {
 } from 'reflect-protocol';
 import {version} from 'reflect-shared';
 import type {MutatorDefs} from 'reflect-types';
-import {BufferSizer} from 'shared/buffer-sizer.js';
-import * as valita from 'shared/valita.js';
+import {BufferSizer} from 'shared/src/buffer-sizer.js';
+import * as valita from 'shared/src/valita.js';
 import type {MutatorMap} from '../process/process-mutation.js';
 import {processPending} from '../process/process-pending.js';
 import {processRoomStart} from '../process/process-room-start.js';

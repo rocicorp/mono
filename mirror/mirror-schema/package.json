@@ -27,16 +27,7 @@
   },
   "exports": {
     ".": "./src/mod.ts",
-    "./agent.js": "./src/agent.ts",
-    "./app-key.js": "./src/app-key.ts",
-    "./app.js": "./src/app.ts",
-    "./cloudflare.js": "./src/cloudflare.ts",
-    "./deployment.js": "./src/deployment.ts",
-    "./membership.js": "./src/membership.ts",
-    "./server.js": "./src/server.ts",
-    "./team.js": "./src/team.ts",
-    "./timestamp.js": "./src/timestamp.ts",
-    "./user.js": "./src/user.ts"
+    "./src/": "./src/"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

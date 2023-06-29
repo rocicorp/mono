@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert, assertNotUndefined} from 'shared/asserts.js';
+import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import * as dag from './dag/mod.js';
 import * as db from './db/mod.js';
 import {

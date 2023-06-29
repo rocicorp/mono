@@ -4,7 +4,7 @@ import {
   assertNumber,
   assertObject,
   assertString,
-} from 'shared/asserts.js';
+} from 'shared/src/asserts.js';
 import type * as dag from '../dag/mod.js';
 import {Hash, assertHash} from '../hash.js';
 import {

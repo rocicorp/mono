@@ -1,4 +1,4 @@
-import * as v from 'shared/valita.js';
+import * as v from 'shared/src/valita.js';
 
 export const createRoomRequestSchema = v.object({
   roomID: v.string(),

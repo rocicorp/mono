@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, expect, test} from '@jest/globals';
-import {AbortError} from 'shared/abort-error.js';
-import {sleep, sleepWithAbort} from 'shared/sleep.js';
+import {AbortError} from 'shared/src/abort-error.js';
+import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 
 let clock: SinonFakeTimers;

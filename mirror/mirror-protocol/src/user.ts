@@ -1,4 +1,4 @@
-import * as v from 'shared/valita.js';
+import * as v from 'shared/src/valita.js';
 import {baseRequestFields, baseResponseFields} from './base.js';
 
 export const ensureUserRequestSchema = v.object(baseRequestFields);

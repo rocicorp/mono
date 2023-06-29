@@ -5,9 +5,9 @@ import {expect} from 'chai';
 import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
 import type {MutatorDefs, WriteTransaction} from 'reflect-types';
 import {ExperimentalMemKVStore, PullRequestV1, PushRequestV1} from 'replicache';
-import {assert} from 'shared/asserts.js';
-import type {JSONValue} from 'shared/json.js';
-import * as valita from 'shared/valita.js';
+import {assert} from 'shared/src/asserts.js';
+import type {JSONValue} from 'shared/src/json.js';
+import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
 import {REPORT_INTERVAL_MS} from './metrics.js';
 import {

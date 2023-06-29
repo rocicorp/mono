@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import * as btree from '../btree/mod.js';
 import {BTreeRead} from '../btree/mod.js';
 import {compareCookies, Cookie} from '../cookies.js';

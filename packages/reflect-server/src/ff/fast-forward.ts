@@ -1,10 +1,10 @@
 import type {NullableVersion, Patch, Poke, Version} from 'reflect-protocol';
+import {must} from 'shared/src/must.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import type {ClientPoke} from '../types/client-poke.js';
 import {listClientRecords} from '../types/client-record.js';
 import type {ClientGroupID, ClientID} from '../types/client-state.js';
 import {compareVersions} from '../types/version.js';
-import {must} from 'shared/must.js';
 import {getPatch} from './get-patch.js';
 
 /**

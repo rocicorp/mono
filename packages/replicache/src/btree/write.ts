@@ -1,5 +1,5 @@
 import {Lock} from '@rocicorp/lock';
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import type {CreateChunk} from '../dag/chunk.js';
 import type * as dag from '../dag/mod.js';
 import type {FormatVersion} from '../format-version.js';

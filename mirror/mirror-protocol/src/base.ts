@@ -1,4 +1,4 @@
-import * as v from 'shared/valita.js';
+import * as v from 'shared/src/valita.js';
 import {userAgentSchema} from './user-agent.js';
 
 export const baseRequestFields = {

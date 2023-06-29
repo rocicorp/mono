@@ -1,5 +1,5 @@
 import {describe, expect, test} from '@jest/globals';
-import * as valita from 'shared/valita.js';
+import * as valita from 'shared/src/valita.js';
 import {DurableStorage} from './durable-storage.js';
 import type {ListOptions} from './storage.js';
 

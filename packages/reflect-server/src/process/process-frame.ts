@@ -1,5 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {NullableVersion, Patch, Version} from 'reflect-protocol';
+import {assert} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {unwrapPatch} from '../storage/replicache-transaction.js';
@@ -13,8 +15,6 @@ import {
 import type {ClientID, ClientMap} from '../types/client-state.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {getVersion} from '../types/version.js';
-import {assert} from 'shared/asserts.js';
-import {must} from 'shared/must.js';
 import {processDisconnects} from './process-disconnects.js';
 import {MutatorMap, processMutation} from './process-mutation.js';
 

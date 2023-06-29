@@ -2,7 +2,7 @@ import {defineSecret, defineString} from 'firebase-functions/params';
 import {
   publishRequestSchema,
   publishResponseSchema,
-} from 'mirror-protocol/publish.js';
+} from 'mirror-protocol/src/publish.js';
 import type {CfModule} from '../cloudflare/create-worker-upload-form.js';
 import {publish as publishToCloudflare} from '../cloudflare/publish.js';
 import {withSchema} from './validators/schema.js';

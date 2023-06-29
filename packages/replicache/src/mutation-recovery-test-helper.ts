@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/asserts.js';
-import type {ReadonlyJSONObject} from 'shared/json.js';
+import {assert} from 'shared/src/asserts.js';
+import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import * as dag from './dag/mod.js';
 import {assertLocalMetaDD31} from './db/commit.js';
 import type * as db from './db/mod.js';

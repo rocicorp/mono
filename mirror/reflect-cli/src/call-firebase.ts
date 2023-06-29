@@ -1,5 +1,5 @@
-import type {ReadonlyJSONValue} from 'shared/json.js';
-import * as v from 'shared/valita.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import * as v from 'shared/src/valita.js';
 
 type FunctionName = 'publish' | 'user-ensure';
 

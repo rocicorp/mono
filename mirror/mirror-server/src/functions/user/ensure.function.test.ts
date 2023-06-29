@@ -1,16 +1,16 @@
-import {describe, test, expect} from '@jest/globals';
-import {https} from 'firebase-functions/v2';
-import {ensure} from './ensure.function.js';
-import {firebaseStub} from 'firestore-jest-mock/mocks/firebase.js';
-import type {Firestore} from 'firebase-admin/firestore';
+import {describe, expect, test} from '@jest/globals';
 import type {DecodedIdToken} from 'firebase-admin/auth';
+import type {Firestore} from 'firebase-admin/firestore';
+import {https} from 'firebase-functions/v2';
 import {
   FunctionsErrorCode,
   HttpsError,
   Request,
 } from 'firebase-functions/v2/https';
 import type {AuthData} from 'firebase-functions/v2/tasks';
-import type {EnsureUserRequest} from 'mirror-protocol/user.js';
+import {firebaseStub} from 'firestore-jest-mock/mocks/firebase.js';
+import type {EnsureUserRequest} from 'mirror-protocol/src/user.js';
+import {ensure} from './ensure.function.js';
 
 function fakeFirestore(): Firestore {
   return firebaseStub(

@@ -1,6 +1,6 @@
-import * as v from 'shared/valita.js';
-import {nullableVersionSchema, versionSchema} from './version.js';
+import * as v from 'shared/src/valita.js';
 import {patchSchema} from './patch.js';
+import {nullableVersionSchema, versionSchema} from './version.js';
 
 export const pokeSchema = v.object({
   // We always specify a Version as our cookie, but Replicache starts clients

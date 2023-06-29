@@ -1,7 +1,7 @@
-import * as v from 'shared/valita.js';
+import * as v from 'shared/src/valita.js';
+import {firestoreDataConverter} from './converter.js';
 import * as path from './path.js';
 import {timestampSchema} from './timestamp.js';
-import {firestoreDataConverter} from './converter.js';
 
 export const appKeySchema = v.object({
   appID: v.string(),

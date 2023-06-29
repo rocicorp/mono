@@ -1,4 +1,4 @@
-import * as v from 'shared/valita.js';
+import * as v from 'shared/src/valita.js';
 import {connectedMessageSchema} from './connected.js';
 import {errorMessageSchema} from './error.js';
 import {pokeMessageSchema} from './poke.js';
