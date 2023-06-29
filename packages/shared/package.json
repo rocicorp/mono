@@ -21,6 +21,7 @@
   },
   "exports": {
     ".": "./src/mod.ts",
+    "./src/": "./src/",
     "./valita.js": "./src/valita.ts",
     "./must.js": "./src/must.ts",
     "./has-own.js": "./src/has-own.ts",

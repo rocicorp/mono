@@ -2,9 +2,13 @@
 const nextConfig = {
   reactStrictMode: true,
   webpack(config) {
-    // config.output.webassemblyModuleFilename = 'static/wasm/[modulehash].wasm';
-    config.experiments = {asyncWebAssembly: true, layers: true};
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      '.js': ['.js', '.ts'],
+      '.jsx': ['.jsx', '.tsx'],
+    };
     return config;
   },
+  transpilePackages: ['shared'],
 };
 export default nextConfig;
