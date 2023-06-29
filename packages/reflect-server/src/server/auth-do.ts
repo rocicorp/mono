@@ -9,10 +9,10 @@ import {
   invalidateForUserRequestSchema,
 } from 'reflect-protocol';
 import {version} from 'reflect-shared';
-import type {AuthData} from 'reflect-types';
-import {assert} from 'shared/asserts.js';
-import {timed} from 'shared/timed.js';
-import * as valita from 'shared/valita.js';
+import type {AuthData} from 'reflect-types/src/mod.js';
+import {assert} from 'shared/src/asserts.js';
+import {timed} from 'shared/src/timed.js';
+import * as valita from 'shared/src/valita.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {encodeHeaderValue} from '../util/headers.js';
 import {sleep} from '../util/sleep.js';

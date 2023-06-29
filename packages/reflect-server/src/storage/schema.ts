@@ -1,9 +1,9 @@
-import * as v from 'shared/valita.js';
-import {assert} from 'shared/asserts.js';
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from 'shared/src/asserts.js';
+import * as v from 'shared/src/valita.js';
+import {randomID} from '../util/rand.js';
 import type {DurableStorage} from './durable-storage.js';
 import type {Storage} from './storage.js';
-import {randomID} from '../util/rand.js';
 
 /**
  * Encapsulates the logic for upgrading to a new schema. After the

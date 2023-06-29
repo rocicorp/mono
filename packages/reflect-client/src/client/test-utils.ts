@@ -12,8 +12,8 @@ import {
   PullResponseMessage,
   upstreamSchema,
 } from 'reflect-protocol';
-import type {MutatorDefs} from 'reflect-types';
-import {assert} from 'shared/asserts.js';
+import type {MutatorDefs} from 'reflect-types/src/mod.js';
+import {assert} from 'shared/src/asserts.js';
 import type {SinonFakeTimers} from 'sinon';
 import type {ReflectOptions} from './options.js';
 import {ConnectionState, Reflect} from './reflect.js';

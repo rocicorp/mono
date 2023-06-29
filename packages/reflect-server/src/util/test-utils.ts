@@ -1,8 +1,8 @@
 import {afterEach, beforeEach, jest} from '@jest/globals';
 import {Context, LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import type {Mutation, NullableVersion} from 'reflect-protocol';
-import type {AuthData} from 'reflect-types';
-import type {ReadonlyJSONValue} from 'shared/json.js';
+import type {AuthData} from 'reflect-types/src/mod.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import type {ClientRecord} from '../../src/types/client-record.js';
 import type {
   ClientGroupID,

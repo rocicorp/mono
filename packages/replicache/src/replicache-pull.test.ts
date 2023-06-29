@@ -22,7 +22,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 
 initReplicacheTesting();
 

@@ -1,8 +1,8 @@
-import type {ReadonlyJSONValue} from 'shared/json.js';
-import type * as valita from 'shared/valita.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import type * as valita from 'shared/src/valita.js';
 import {delEntry, getEntry, listEntries, putEntry} from '../db/data.js';
+import {batchScan, scan} from './scan-storage.js';
 import type {ListOptions, Storage} from './storage.js';
-import {scan, batchScan} from './scan-storage.js';
 
 const baseAllowConcurrency = true;
 

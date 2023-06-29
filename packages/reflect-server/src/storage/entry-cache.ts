@@ -1,9 +1,9 @@
 import {compareUTF8} from 'compare-utf8';
 import type {Patch} from 'reflect-protocol';
-import type {ReadonlyJSONValue} from 'shared/json.js';
-import * as valita from 'shared/valita.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import * as valita from 'shared/src/valita.js';
+import {batchScan, scan} from './scan-storage.js';
 import type {ListOptions, Storage} from './storage.js';
-import {scan, batchScan} from './scan-storage.js';
 
 /**
  * Implements a read/write cache for key/value pairs on top of some lower-level

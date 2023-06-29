@@ -1,4 +1,4 @@
-import * as v from 'shared/valita.js';
+import * as v from 'shared/src/valita.js';
 
 // TODO: Do we maybe want to send the client timestamp for any reason?
 // Server could reply with its time. Seems useful ... somehow.

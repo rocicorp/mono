@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
-import type {ReadonlyJSONValue} from 'shared/json.js';
-import * as valita from 'shared/valita.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import * as valita from 'shared/src/valita.js';
 import {assertMapValues as valitaAssertMapValues} from '../util/valita.js';
 
 export async function getEntry<T extends ReadonlyJSONValue>(

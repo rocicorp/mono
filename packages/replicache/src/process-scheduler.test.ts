@@ -1,6 +1,6 @@
 import {resolver, Resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
-import {AbortError} from 'shared/abort-error.js';
+import {AbortError} from 'shared/src/abort-error.js';
 import sinon, {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {ProcessScheduler} from './process-scheduler.js';
 import {expectPromiseToReject} from './test-util.js';

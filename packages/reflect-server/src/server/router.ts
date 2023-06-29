@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {MaybePromise} from 'replicache';
-import type {ReadonlyJSONValue} from 'shared/json.js';
-import * as valita from 'shared/valita.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import * as valita from 'shared/src/valita.js';
 import {AUTH_API_KEY_HEADER_NAME} from './auth-api-headers.js';
 import {createUnauthorizedResponse} from './create-unauthorized-response.js';
 

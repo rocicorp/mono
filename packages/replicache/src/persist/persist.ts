@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import type * as dag from '../dag/mod.js';
 import {assertSnapshotCommitDD31} from '../db/commit.js';
 import * as db from '../db/mod.js';

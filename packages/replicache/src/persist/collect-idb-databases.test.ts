@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import {assertNotUndefined} from 'shared/asserts.js';
+import {assertNotUndefined} from 'shared/src/asserts.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import * as dag from '../dag/mod.js';
 import {FormatVersion} from '../format-version.js';

@@ -1,6 +1,5 @@
-import * as v from 'shared/valita.js';
-import {jsonSchema} from 'reflect-protocol';
-import {versionSchema} from 'reflect-protocol';
+import {jsonSchema, versionSchema} from 'reflect-protocol';
+import * as v from 'shared/src/valita.js';
 import type {Storage} from '../storage/storage.js';
 
 export const userValueSchema = v.object({

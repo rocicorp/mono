@@ -1,5 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import {
   IndexDefinitions,
   JSONValue,

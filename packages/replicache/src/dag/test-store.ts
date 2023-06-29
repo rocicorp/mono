@@ -1,16 +1,15 @@
-import {StoreImpl} from './store-impl.js';
+import {assertArray, assertString} from 'shared/src/asserts.js';
+import type {Hash} from '../hash.js';
 import {
   assertHash,
   makeNewFakeHashFunction,
   parse as parseHash,
 } from '../hash.js';
-import {Chunk, ChunkHasher} from './chunk.js';
-import type {Hash} from '../hash.js';
-import {chunkMetaKey, parse as parseKey} from './key.js';
-import {KeyType} from './key.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
-import {assertArray, assertString} from 'shared/asserts.js';
 import {stringCompare} from '../string-compare.js';
+import {Chunk, ChunkHasher} from './chunk.js';
+import {KeyType, chunkMetaKey, parse as parseKey} from './key.js';
+import {StoreImpl} from './store-impl.js';
 
 export class TestStore extends StoreImpl {
   readonly kvStore: TestMemStore;

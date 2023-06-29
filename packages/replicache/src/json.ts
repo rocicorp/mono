@@ -1,11 +1,11 @@
-import {skipAssertJSONValue} from 'shared/config.js';
-import type {ReadonlyJSONValue} from 'shared/json.js';
+import {skipAssertJSONValue} from 'shared/src/config.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {skipFreeze, skipFrozenAsserts} from './config.js';
 import type {Cookie, FrozenCookie} from './cookies.js';
 import type {FrozenJSONValue} from './frozen-json.js';
 import * as frozenJSON from './frozen-json.js';
 
-export * from 'shared/json.js';
+export * from 'shared/src/json.js';
 export * from './frozen-json.js';
 
 export function assertFrozenJSONValue(

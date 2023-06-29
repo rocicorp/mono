@@ -5,4 +5,4 @@ export type {
   MutatorDefs,
   ReadTransaction,
   WriteTransaction,
-} from 'reflect-types';
+} from 'reflect-types/src/mod.js';

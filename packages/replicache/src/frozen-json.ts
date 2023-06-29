@@ -1,5 +1,5 @@
-import {throwInvalidType} from 'shared/asserts.js';
-import {hasOwn} from 'shared/has-own.js';
+import {throwInvalidType} from 'shared/src/asserts.js';
+import {hasOwn} from 'shared/src/has-own.js';
 import type {ReadonlyJSONObject, ReadonlyJSONValue} from './json.js';
 
 declare const frozenJSONTag: unique symbol;

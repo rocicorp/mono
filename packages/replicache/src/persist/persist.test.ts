@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
-import {assert, assertNotNull, assertNotUndefined} from 'shared/asserts.js';
+import {assert, assertNotNull, assertNotUndefined} from 'shared/src/asserts.js';
 import sinon from 'sinon';
 import {BTreeRead} from '../btree/read.js';
 import * as dag from '../dag/mod.js';

@@ -1,11 +1,11 @@
-import type * as kv from '../kv/mod.js';
-import {Store, Read, Write, mustGetChunk} from './store.js';
-import {assertMeta, Chunk, createChunk, ChunkHasher} from './chunk.js';
-import {chunkDataKey, chunkMetaKey, headKey, chunkRefCountKey} from './key.js';
-import {assertHash, Hash} from '../hash.js';
-import {assertNumber} from 'shared/asserts.js';
+import {assertNumber} from 'shared/src/asserts.js';
+import {Hash, assertHash} from '../hash.js';
 import type {ReadonlyJSONValue} from '../json.js';
-import {computeRefCountUpdates, RefCountUpdatesDelegate} from './gc.js';
+import type * as kv from '../kv/mod.js';
+import {Chunk, ChunkHasher, assertMeta, createChunk} from './chunk.js';
+import {RefCountUpdatesDelegate, computeRefCountUpdates} from './gc.js';
+import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.js';
+import {Read, Store, Write, mustGetChunk} from './store.js';
 
 export class StoreImpl implements Store {
   private readonly _kv: kv.Store;

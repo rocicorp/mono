@@ -1,5 +1,5 @@
-import type {ReadonlyJSONValue} from 'shared/json.js';
-import type * as valita from 'shared/valita.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import type * as valita from 'shared/src/valita.js';
 import type {ListOptions, Storage} from './storage.js';
 
 // The default safe batch size for scans is based on the CF limit for multi-keyed get(),

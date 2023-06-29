@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
-import {sleep} from 'shared/sleep.js';
+import {sleep} from 'shared/src/sleep.js';
 import {
   initNewClientChannel,
   makeChannelNameForTesting,

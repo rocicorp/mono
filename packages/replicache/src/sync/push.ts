@@ -1,6 +1,20 @@
 import type {LogContext} from '@rocicorp/logger';
-import * as db from '../db/mod.js';
+import {
+  assert,
+  assertArray,
+  assertNumber,
+  assertObject,
+  assertString,
+} from 'shared/src/asserts.js';
 import type * as dag from '../dag/mod.js';
+import {commitIsLocalDD31, commitIsLocalSDD} from '../db/commit.js';
+import * as db from '../db/mod.js';
+import {
+  assertJSONValue,
+  FrozenJSONValue,
+  ReadonlyJSONObject,
+  ReadonlyJSONValue,
+} from '../json.js';
 import {
   assertPusherResult,
   Pusher,
@@ -8,22 +22,8 @@ import {
   PushError,
 } from '../pusher.js';
 import {toError} from '../to-error.js';
-import {commitIsLocalDD31, commitIsLocalSDD} from '../db/commit.js';
-import type {ClientID, ClientGroupID} from './ids.js';
-import {
-  assert,
-  assertArray,
-  assertNumber,
-  assertObject,
-  assertString,
-} from 'shared/asserts.js';
-import {
-  assertJSONValue,
-  FrozenJSONValue,
-  ReadonlyJSONObject,
-  ReadonlyJSONValue,
-} from '../json.js';
 import {withRead} from '../with-transactions.js';
+import type {ClientGroupID, ClientID} from './ids.js';
 
 export const PUSH_VERSION_SDD = 0;
 export const PUSH_VERSION_DD31 = 1;

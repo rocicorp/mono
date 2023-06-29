@@ -1,4 +1,5 @@
 import {jsonSchema, Patch, Version} from 'reflect-protocol';
+import type {AuthData, WriteTransaction} from 'reflect-types/src/mod.js';
 import {
   isScanIndexOptions,
   makeScanResult,
@@ -7,9 +8,8 @@ import {
   TransactionEnvironment,
   TransactionReason,
 } from 'replicache';
-import type {WriteTransaction, AuthData} from 'reflect-types';
-import type {ReadonlyJSONValue} from 'shared/json.js';
-import * as v from 'shared/valita.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import * as v from 'shared/src/valita.js';
 import type {ClientID} from '../types/client-state.js';
 import {
   UserValue,

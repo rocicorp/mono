@@ -1,8 +1,8 @@
-import {nanoid} from '../util/nanoid.js';
-import {resolver} from '@rocicorp/resolver';
-import {assert} from 'shared/asserts.js';
-import {sleep} from 'shared/sleep.js';
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
+import {assert} from 'shared/src/asserts.js';
+import {sleep} from 'shared/src/sleep.js';
+import {nanoid} from '../util/nanoid.js';
 
 type CheckResult = {success: boolean; detail: string};
 type Check = (l: LogContext) => Promise<CheckResult>;

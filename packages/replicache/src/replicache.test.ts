@@ -10,8 +10,8 @@ import {
 import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {assert as chaiAssert, expect} from 'chai';
-import {assert} from 'shared/asserts.js';
-import {sleep} from 'shared/sleep.js';
+import {assert} from 'shared/src/asserts.js';
+import {sleep} from 'shared/src/sleep.js';
 import * as sinon from 'sinon';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import * as db from './db/mod.js';

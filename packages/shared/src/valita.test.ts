@@ -1,7 +1,7 @@
-import {test, expect} from '@jest/globals';
-import * as v from 'shared/valita.js';
-import {parse} from './valita.js';
+import {expect, test} from '@jest/globals';
 import {assert} from './asserts.js';
+import * as v from './valita.js';
+import {parse} from './valita.js';
 
 test('basic', () => {
   const t = <T>(s: v.Type<T>, v: unknown, message?: string) => {

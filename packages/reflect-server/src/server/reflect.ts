@@ -1,10 +1,10 @@
 import {consoleLogSink, LogLevel, LogSink, TeeLogSink} from '@rocicorp/logger';
-import type {MutatorDefs} from 'reflect-types';
+import type {MutatorDefs} from 'reflect-types/src/mod.js';
 import {BaseAuthDO} from './auth-do.js';
 import type {AuthHandler} from './auth.js';
-import type {RoomStartHandler} from './room-start.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {BaseRoomDO} from './room-do.js';
+import type {RoomStartHandler} from './room-start.js';
 import {createWorker} from './worker.js';
 
 export type DatadogMetricsOptions = {

@@ -20,14 +20,10 @@
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "build": "tsc"
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },
-  "prettier": "@rocicorp/prettier-config",
-  "exports": {
-    ".": "./out/mod.js"
-  }
+  "prettier": "@rocicorp/prettier-config"
 }

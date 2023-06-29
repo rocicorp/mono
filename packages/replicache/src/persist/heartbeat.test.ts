@@ -1,7 +1,7 @@
 import {LogContext, LogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
-import {assert, assertNotUndefined} from 'shared/asserts.js';
+import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import * as sinon from 'sinon';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import * as dag from '../dag/mod.js';

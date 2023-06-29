@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
-import {assert, assertNotUndefined} from 'shared/asserts.js';
+import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import * as btree from '../btree/mod.js';
 import {BTreeWrite} from '../btree/mod.js';
 import type {Cookie} from '../cookies.js';

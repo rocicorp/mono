@@ -1,4 +1,4 @@
-import * as v from 'shared/valita.js';
+import * as v from 'shared/src/valita.js';
 
 export const pointSchema = v.tuple([v.number(), v.number()]);
 export const pointsSchema = v.tuple([v.number(), v.array(v.number())]);

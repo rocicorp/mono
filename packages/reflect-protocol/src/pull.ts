@@ -1,4 +1,4 @@
-import * as v from 'shared/valita.js';
+import * as v from 'shared/src/valita.js';
 import {nullableVersionSchema, versionSchema} from './version.js';
 
 export const pullRequestBodySchema = v.object({

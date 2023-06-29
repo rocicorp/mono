@@ -1,7 +1,7 @@
 import {Resolver, resolver} from '@rocicorp/resolver';
-import {AbortError} from 'shared/abort-error.js';
-import {assert} from 'shared/asserts.js';
-import {sleep} from 'shared/sleep.js';
+import {AbortError} from 'shared/src/abort-error.js';
+import {assert} from 'shared/src/asserts.js';
+import {sleep} from 'shared/src/sleep.js';
 import {requestIdle as defaultRequestIdle} from './request-idle.js';
 
 export class ProcessScheduler {

@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import * as btree from '../btree/mod.js';
 import {BTreeRead, BTreeWrite} from '../btree/mod.js';
 import type {InternalDiff} from '../btree/node.js';

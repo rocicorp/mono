@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import * as btree from '../btree/mod.js';
 import * as dag from '../dag/mod.js';
 import {getRefs, newSnapshotCommitDataSDD} from '../db/commit.js';

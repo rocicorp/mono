@@ -19,20 +19,6 @@
     "ts-jest": "^29.1.0",
     "typescript": "^5.1.3"
   },
-  "exports": {
-    ".": "./src/mod.ts",
-    "./valita.js": "./src/valita.ts",
-    "./must.js": "./src/must.ts",
-    "./has-own.js": "./src/has-own.ts",
-    "./asserts.js": "./src/asserts.ts",
-    "./json.js": "./src/json.ts",
-    "./deep-clone.js": "./src/deep-clone.ts",
-    "./config.js": "./src/config.ts",
-    "./buffer-sizer.js": "./src/buffer-sizer.ts",
-    "./sleep.js": "./src/sleep.ts",
-    "./abort-error.js": "./src/abort-error.ts",
-    "./timed.js": "./src/timed.ts"
-  },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },
