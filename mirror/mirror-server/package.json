@@ -33,6 +33,7 @@
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/cors": "^2.8.12",
     "@types/node": "^18.16.0",
+    "datadog": "0.0.0",
     "esbuild": "^0.18.3",
     "firebase-tools": "^12.3.0",
     "firestore-jest-mock": "^0.21.0",
@@ -43,7 +44,6 @@
     "typescript": "^5.1.3"
   },
   "bundleDependencies": [
-    "reflect-server",
     "datadog",
     "mirror-protocol",
     "mirror-schema",
