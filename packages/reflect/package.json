@@ -18,11 +18,12 @@
     "@badrap/valita": "^0.2.0",
     "@rocicorp/lock": "^1.0.1",
     "@rocicorp/logger": "^5.2.0",
-    "@rocicorp/resolver": "^1.0.0"
+    "@rocicorp/resolver": "^1.0.0",
+    "replicache": "13.0.0-beta.1"
   },
   "devDependencies": {
-    "@rocicorp/reflect-client": "0.0.0",
-    "@rocicorp/reflect-server": "0.0.0",
+    "reflect-client": "0.0.0",
+    "reflect-server": "0.0.0",
     "@types/node": "^18.16.0",
     "reflect-shared": "0.0.0"
   },

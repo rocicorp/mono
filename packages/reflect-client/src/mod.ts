@@ -4,7 +4,7 @@ export {Reflect} from './client/reflect.js';
 // https://github.com/rocicorp/mono/issues/362
 export * from './replicache-mod.js';
 
-import {DatadogLogSink, DatadogLogSinkOptions} from 'datadog/src/mod.js';
+import {DatadogLogSink, type DatadogLogSinkOptions} from 'datadog';
 
 export type ClientDatadogLogSinkOptions = {
   clientToken: string;
