@@ -18,7 +18,6 @@ var require = ${createRequireAlias}(import.meta.url);
 
 const external = [
   '@badrap/valita',
-  'busboy',
   'esbuild',
   'firebase-admin',
   'firebase-functions',

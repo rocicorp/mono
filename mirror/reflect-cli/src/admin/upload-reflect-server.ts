@@ -83,7 +83,7 @@ async function findVersion() {
 }
 
 async function buildReflectServerContent() {
-  const serverPath = require.resolve('@rocicorp/reflect-server');
+  const serverPath = require.resolve('reflect-server');
 
   const result = await esbuild.build({
     entryPoints: [serverPath],

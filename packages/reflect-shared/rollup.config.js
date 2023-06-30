@@ -11,6 +11,7 @@ export default {
   output: {
     file: `./out/reflect-shared.d.ts`,
   },
+  external: [/^@rocicorp\//, 'replicache'],
   plugins: [
     nodeResolve(),
     dts({
