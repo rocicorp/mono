@@ -118,7 +118,7 @@ async function buildReflectServerContent() {
 }
 
 async function getWorkerTemplate() {
-  const serverPath = require.resolve('@rocicorp/reflect-server');
+  const serverPath = require.resolve('reflect-server');
   const pkg = await pkgUp({cwd: serverPath});
   assert(pkg);
   const templatePath = path.join(
