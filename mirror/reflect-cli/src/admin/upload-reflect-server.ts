@@ -8,7 +8,7 @@ import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {pkgUp} from 'pkg-up';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
-import {FirebaseError, callFirebase} from '../call-firebase.js';
+import {FirebaseError, callFirebase} from 'shared/src/call-firebase.js';
 import {makeRequester} from '../requester.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 

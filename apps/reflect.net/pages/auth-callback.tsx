@@ -1,11 +1,7 @@
 import 'firebase/auth';
 import type {GetServerSideProps} from 'next/types';
 import jwtDecode from 'jwt-decode';
-import {
-  EnsureUserRequest,
-  EnsureUserResponse,
-  ensureUserResponseSchema,
-} from 'mirror-protocol/src/user';
+import {ensureUserResponseSchema} from 'mirror-protocol/src/user';
 import {callFirebase} from 'shared/src/call-firebase';
 
 export type ReflectAuthResult = {
@@ -26,7 +22,6 @@ function createCliCallbackUrl(reflectAuth: ReflectAuthResult): string {
 async function ensureUser(reflectAuth: ReflectAuthResult): Promise<boolean> {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   const token = jwtDecode<{user_id: string}>(reflectAuth.idToken);
-  console.log(token);
   const data = {
     requester: {
       userID: token.user_id,
@@ -37,15 +32,15 @@ async function ensureUser(reflectAuth: ReflectAuthResult): Promise<boolean> {
     },
   };
 
-  console.log('data', data);
-  const firebaseRet = await callFirebase<EnsureUserRequest, EnsureUserResponse>(
+  //todo(cesar): probably should bubble up if an error is thrown here
+  const fbResponse = await callFirebase<'user-ensure'>(
     'user-ensure',
     data,
     ensureUserResponseSchema,
     reflectAuth.idToken,
   );
 
-  return firebaseRet.success;
+  return fbResponse.success;
 }
 
 export const getServerSideProps: GetServerSideProps<{
@@ -68,5 +63,5 @@ export const getServerSideProps: GetServerSideProps<{
 };
 
 export default function AuthCallback() {
-  return <></>;
+  return;
 }
