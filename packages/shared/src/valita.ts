@@ -113,26 +113,49 @@ function getMessage(err: v.Err, v: unknown): string {
   }
 }
 
-export function parse<T>(value: unknown, schema: Type<T>): T {
-  const res = test(value, schema);
+/**
+ * 'strip' allows unknown properties and removes unknown properties.
+ * 'strict' errors if there are unknown properties.
+ * 'passthrough' allows unknown properties.
+ */
+type ParseOptionsMode = 'passthrough' | 'strict' | 'strip';
+
+export function parse<T>(
+  value: unknown,
+  schema: Type<T>,
+  mode?: ParseOptionsMode,
+): T {
+  const res = test(value, schema, mode);
   if (!res.ok) {
     throw new TypeError(res.error);
   }
   return res.value;
 }
 
-export function is<T>(value: unknown, schema: Type<T>): value is T {
-  return (schema as v.Type<T>).try(value).ok;
+export function is<T>(
+  value: unknown,
+  schema: Type<T>,
+  mode?: ParseOptionsMode,
+): value is T {
+  return test(value, schema, mode).ok;
 }
 
-export function assert<T>(value: unknown, schema: Type<T>): asserts value is T {
-  parse(value, schema);
+export function assert<T>(
+  value: unknown,
+  schema: Type<T>,
+  mode?: ParseOptionsMode,
+): asserts value is T {
+  parse(value, schema, mode);
 }
 
 type Result<T> = {ok: true; value: T} | {ok: false; error: string};
 
-export function test<T>(value: unknown, schema: Type<T>): Result<T> {
-  const res = (schema as v.Type<T>).try(value);
+export function test<T>(
+  value: unknown,
+  schema: Type<T>,
+  mode?: ParseOptionsMode,
+): Result<T> {
+  const res = (schema as v.Type<T>).try(value, mode ? {mode} : undefined);
   if (!res.ok) {
     return {ok: false, error: getMessage(res, value)};
   }
@@ -148,6 +171,6 @@ export type Type<T> = Omit<
 >;
 
 // Re-export the valita type `Type` using a longer less convenient name because
-// we do need it in one place.
-// TODO(arv): Remove this.
+// we do need it in a few places.
+// TODO(arv): Figure out a better way to do this.
 export type ValitaType<T> = v.Type<T>;

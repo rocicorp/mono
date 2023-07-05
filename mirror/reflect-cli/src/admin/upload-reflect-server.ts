@@ -1,14 +1,12 @@
 import * as esbuild from 'esbuild';
-import {
-  uploadResponseSchema,
-  type UploadRequest,
-} from 'mirror-protocol/src/reflect-server.js';
+import type {UploadRequest} from 'mirror-protocol/src/reflect-server.js';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {pkgUp} from 'pkg-up';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
 import {FirebaseError, callFirebase} from 'shared/src/call-firebase.js';
+import {getUserIDFromConfig, mustReadAuthConfigFile} from '../auth-config.js';
 import {makeRequester} from '../requester.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 
@@ -32,13 +30,14 @@ export async function uploadReflectServerHandler(
     'Make sure you run `npm run build` from the root of the repo first',
   );
 
+  const config = mustReadAuthConfigFile();
+  const userID = getUserIDFromConfig(config);
+
   const source = await buildReflectServerContent();
   const versionFromPackage = await findVersion();
   const workerTemplate = await getWorkerTemplate();
   console.log('Version (from @rocicorp/reflect):', versionFromPackage);
 
-  // TODO(arv) Implement userID
-  const userID = 'USERID';
   const data: UploadRequest = {
     requester: makeRequester(userID),
     version: versionFromPackage,
@@ -58,7 +57,7 @@ export async function uploadReflectServerHandler(
   };
 
   try {
-    await callFirebase('reflectServer-upload', data, uploadResponseSchema);
+    await callFirebase('reflectServer-upload', data, config.idToken);
   } catch (e) {
     if (e instanceof FirebaseError && e.status === 'ALREADY_EXISTS') {
       console.log(e.message);

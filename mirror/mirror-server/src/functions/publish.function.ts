@@ -7,6 +7,7 @@ import {
 } from 'mirror-protocol/src/publish.js';
 import type {CfModule} from '../cloudflare/create-worker-upload-form.js';
 import {publish as publishToCloudflare} from '../cloudflare/publish.js';
+import {withAuthorization} from './validators/auth.js';
 import {withSchema} from './validators/schema.js';
 
 // This is the API token for reflect-server.net
@@ -22,7 +23,7 @@ export const publish = (
   withSchema(
     publishRequestSchema,
     publishResponseSchema,
-    async publishRequest => {
+    withAuthorization(async publishRequest => {
       const appName = publishRequest.name;
 
       const config = {
@@ -52,5 +53,5 @@ export const publish = (
       );
 
       return {success: true};
-    },
+    }),
   );

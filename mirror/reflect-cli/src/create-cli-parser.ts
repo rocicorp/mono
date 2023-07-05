@@ -3,6 +3,8 @@ import {version} from './version.js';
 
 export class CommandLineArgsError extends Error {}
 
+export const scriptName = `npx @rocicorp/reflect`;
+
 export function createCLIParserBase(argv: string[]): Argv<{
   v: boolean | undefined;
   config: string | undefined;
@@ -19,7 +21,7 @@ export function createCLIParserBase(argv: string[]): Argv<{
       }
       throw error;
     })
-    .scriptName(`npx @rocicorp/reflect`)
+    .scriptName(scriptName)
     .wrap(null)
     .version(false)
     .option('v', {

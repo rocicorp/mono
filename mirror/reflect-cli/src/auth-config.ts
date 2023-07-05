@@ -1,8 +1,10 @@
+import jwtDecode from 'jwt-decode';
 import fs, {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as v from 'shared/src/valita.js';
 import {parse} from 'shared/src/valita.js';
+import {scriptName} from './create-cli-parser.js';
 /**
  * The path to the config file that holds user authentication data,
  * relative to the user's home directory.
@@ -33,11 +35,7 @@ export function writeAuthConfigFile(config: UserAuthConfig) {
   mkdirSync(path.dirname(authConfigFilePath), {
     recursive: true,
   });
-  writeFileSync(
-    path.join(authConfigFilePath),
-    JSON.stringify(config, null, 2),
-    'utf-8',
-  );
+  writeFileSync(authConfigFilePath, JSON.stringify(config, null, 2), 'utf-8');
 }
 
 function isDirectory(configPath: string) {
@@ -67,9 +65,34 @@ export function mustReadAuthConfigFile(): UserAuthConfig {
     const rawData = readFileSync(authConfigFilePath, 'utf-8');
     const config: UserAuthConfig = JSON.parse(rawData);
     return parse(config, userAuthConfigSchema);
-  } catch (error) {
-    // If the file does not exist or it cannot be parsed, return an empty object
-    console.warn(`Unable to read or parse auth config file: ${error}`);
-    throw new Error(`Unable to read or parse auth config file: ${error}`);
+  } catch (err) {
+    if (isFileNotFoundError(err)) {
+      throw new Error(
+        `No config file found. Please run \`${scriptName} login\` to authenticate.`,
+      );
+    }
+
+    throw err;
   }
+}
+
+function isFileNotFoundError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err as unknown as {code?: unknown}).code === 'ENOENT'
+  );
+}
+
+const tokenSchema = v.object({
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  user_id: v.string(),
+});
+
+export function getUserIDFromConfig(config: UserAuthConfig) {
+  // @ts-expect-error TS reports an error about the default export not being a
+  // function but it clearly is.
+  const token = jwtDecode(config.idToken);
+  // Use passthrough to allow extra properties
+  v.assert(token, tokenSchema, 'passthrough');
+  return token.user_id;
 }

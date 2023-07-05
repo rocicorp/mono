@@ -2,6 +2,7 @@ import type {PublishRequest} from 'mirror-protocol/src/publish.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {callFirebase} from 'shared/src/call-firebase.js';
+import {getUserIDFromConfig, mustReadAuthConfigFile} from './auth-config.js';
 import {compile} from './compile.js';
 import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
@@ -32,6 +33,8 @@ async function exists(path: string) {
 type PublishHandlerArgs = YargvToInterface<ReturnType<typeof publishOptions>>;
 
 export async function publishHandler(yargs: PublishHandlerArgs) {
+  const config = mustReadAuthConfigFile();
+  const userID = getUserIDFromConfig(config);
   const {script, name} = yargs;
 
   const absPath = path.resolve(script);
@@ -41,9 +44,6 @@ export async function publishHandler(yargs: PublishHandlerArgs) {
   }
 
   const {code, sourcemap} = await compile(absPath);
-
-  // TODO(arv): Implement userID
-  const userID = 'USERID';
 
   // TODO(arv): Find this...
   const desiredVersion = '0.28.1';
@@ -62,7 +62,7 @@ export async function publishHandler(yargs: PublishHandlerArgs) {
     desiredVersion,
   };
 
-  await callFirebase('publish', data);
+  await callFirebase('publish', data, config.idToken);
 
   console.log(`🎁 Published successfully to:`);
   console.log(`https://${name}.replicache.workers.dev/`);

@@ -5,6 +5,7 @@ import {HttpsError} from 'firebase-functions/v2/https';
 import * as protocol from 'mirror-protocol/src/reflect-server.js';
 import * as schema from 'mirror-schema/src/reflect-server.js';
 import {nanoid} from 'nanoid';
+import {withAdminAuthorization} from '../validators/admin-auth.js';
 import {withSchema} from '../validators/schema.js';
 import type {AsyncCallable} from '../validators/types.js';
 
@@ -16,9 +17,7 @@ export function upload(
   return withSchema(
     protocol.uploadRequestSchema,
     protocol.uploadResponseSchema,
-    // withAuthorization
-    // withAdminAuthorization
-    async (uploadRequest, _context) => {
+    withAdminAuthorization(async uploadRequest => {
       const bucket = storage.bucket(bucketName);
 
       const {force, version} = uploadRequest;
@@ -56,7 +55,7 @@ export function upload(
         txn.set(docRef, newDoc);
       });
       return {success: true};
-    },
+    }),
   );
 }
 

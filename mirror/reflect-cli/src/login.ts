@@ -4,10 +4,8 @@ import http from 'node:http';
 import type {Socket} from 'node:net';
 import open from 'open';
 import {sleep} from 'shared/src/sleep.js';
-import * as v from 'shared/src/valita.js';
 import {
   UserAuthConfig,
-  userAuthConfigSchema,
   writeAuthConfigFile as writeAuthConfigFileImpl,
 } from './auth-config.js';
 
@@ -21,7 +19,7 @@ export async function loginHandler(
   writeAuthConfigFile = writeAuthConfigFileImpl,
 ): Promise<void> {
   const urlToOpen = process.env.AUTH_URL || 'https://reflect.net/auth';
-  const loginResolver = resolver<void>();
+  const loginResolver = resolver();
   const credentialReceiverServer = http.createServer((req, res) => {
     assert(req.url, "This request doesn't have a URL"); // This should never happen
     const reqUrl = new URL(req.url, `https://${req.headers.host}`);
@@ -42,7 +40,7 @@ export async function loginHandler(
               }from the auth provider.`,
             );
           }
-          const expirationTime = parseInt(expirationTimeStr);
+          const expirationTime = parseInt(expirationTimeStr, 10);
           assert(!isNaN(expirationTime), 'expirationTime is not a number');
 
           const authConfig: UserAuthConfig = {
@@ -51,7 +49,6 @@ export async function loginHandler(
             expirationTime,
           };
 
-          v.assert(authConfig, userAuthConfigSchema);
           writeAuthConfigFile(authConfig);
         } catch (error) {
           res.end(() => {
