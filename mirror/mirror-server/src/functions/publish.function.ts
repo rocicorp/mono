@@ -1,10 +1,13 @@
 import type {Firestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {defineSecret, defineString} from 'firebase-functions/params';
+import {HttpsError} from 'firebase-functions/v2/https';
 import {
   publishRequestSchema,
   publishResponseSchema,
 } from 'mirror-protocol/src/publish.js';
+import * as semver from 'semver';
+import {isSupportedSemverRange} from 'shared/src/is-supported-semver-range.js';
 import type {CfModule} from '../cloudflare/create-worker-upload-form.js';
 import {publish as publishToCloudflare} from '../cloudflare/publish.js';
 import {withAuthorization} from './validators/auth.js';
@@ -24,7 +27,16 @@ export const publish = (
     publishRequestSchema,
     publishResponseSchema,
     withAuthorization(async publishRequest => {
-      const appName = publishRequest.name;
+      const {desiredVersion, name: appName} = publishRequest;
+
+      if (semver.validRange(desiredVersion) === null) {
+        throw new HttpsError('invalid-argument', 'Invalid desired version');
+      }
+
+      const versionRange = new semver.Range(desiredVersion);
+      if (!isSupportedSemverRange(versionRange)) {
+        throw new HttpsError('invalid-argument', 'Unsupported desired version');
+      }
 
       const config = {
         accountID: cloudflareAccountId.value(),
@@ -49,7 +61,7 @@ export const publish = (
         sourceModule,
         sourcemapModule,
         appName,
-        publishRequest.desiredVersion,
+        versionRange,
       );
 
       return {success: true};

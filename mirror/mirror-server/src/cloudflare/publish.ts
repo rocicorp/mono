@@ -1,9 +1,9 @@
-/* eslint-disable @typescript-eslint/naming-convention */
 import type {Firestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {HttpsError} from 'firebase-functions/v2/https';
 import * as schema from 'mirror-schema/src/reflect-server.js';
 import assert from 'node:assert';
+import * as semver from 'semver';
 import {cfFetch} from './cf-fetch.js';
 import {CfModule, createWorkerUploadForm} from './create-worker-upload-form.js';
 import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
@@ -30,20 +30,25 @@ export async function createWorker(
     name: scriptName,
     main: mainModule, // await createCfModule('worker.js'),
     bindings: {
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       durable_objects: {
         bindings: [
+          // eslint-disable-next-line @typescript-eslint/naming-convention
           {name: 'roomDO', class_name: 'RoomDO'},
+          // eslint-disable-next-line @typescript-eslint/naming-convention
           {name: 'authDO', class_name: 'AuthDO'},
         ],
       },
     },
     modules,
     migrations: cfMigrations,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     compatibility_date: '2023-05-18',
   });
 
   const resource = `/accounts/${accountID}/workers/scripts/${scriptName}`;
   const searchParams = new URLSearchParams({
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     include_subdomain_availability: 'true',
     // pass excludeScript so the whole body of the
     // script doesn't get included in the response
@@ -76,6 +81,7 @@ export async function enableSubdomain(conf: Config) {
 const migrations: Migration[] = [
   {
     tag: 'v1',
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     new_classes: ['RoomDO', 'AuthDO'],
   },
 ];
@@ -96,7 +102,7 @@ export async function publish(
   appModule: CfModule,
   appSourcemapModule: CfModule,
   appName: string,
-  desiredVersion: string,
+  desiredVersion: semver.Range,
 ) {
   console.log('publishing', appName);
 
@@ -141,14 +147,45 @@ export async function publish(
   await enableSubdomain(config);
 }
 
+async function findNewestMatchingVersion(
+  firestore: Firestore,
+  desiredVersion: semver.Range,
+): Promise<string> {
+  const ref = firestore.collection(schema.REFLECT_SERVER_COLLECTION);
+  const x = await ref.listDocuments();
+  let maxVersion: string | undefined;
+  for (const docRef of x) {
+    const currentVersion = docRef.id;
+    if (desiredVersion.test(currentVersion)) {
+      if (maxVersion === undefined) {
+        maxVersion = currentVersion;
+      } else if (semver.gt(currentVersion, maxVersion)) {
+        maxVersion = currentVersion;
+      }
+    }
+  }
+
+  if (maxVersion === undefined) {
+    throw new HttpsError(
+      'invalid-argument',
+      `No matching version for ${desiredVersion} found`,
+    );
+  }
+
+  return maxVersion;
+}
+
 async function getServerModules(
   firestore: Firestore,
   storage: Storage,
   bucketName: string,
-  desiredVersion: string,
+  desiredVersion: semver.Range,
 ): Promise<CfModule[]> {
   // TODO(arv): Find compatible version.
-  const version = desiredVersion;
+  console.log('desiredVersion', desiredVersion);
+
+  const version = await findNewestMatchingVersion(firestore, desiredVersion);
+  console.log(`Found matching version for ${desiredVersion}: ${version}`);
 
   const docRef = firestore
     .doc(schema.reflectServerPath(version))
