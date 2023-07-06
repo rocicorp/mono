@@ -4,8 +4,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {assert, assertString} from 'shared/src/asserts.js';
 import {publishHandler} from './publish.js';
+import {useFakeAuthConfig} from './test-helpers.js';
 
 type Args = Parameters<typeof publishHandler>[0];
+
+useFakeAuthConfig();
 
 test('it should throw if file not found', async () => {
   const script = `./test${Math.random().toString(32).slice(2)}.ts`;
@@ -59,7 +62,7 @@ test('it should compile typescript', async () => {
             type: 'reflect-cli',
             version: '0.1.0',
           },
-          userID: expect.any(String),
+          userID: 'fake-uid',
         },
         source: {
           content: expect.stringContaining(`var x = 42;`),

@@ -55,8 +55,17 @@ export function getGlobalReflectConfigPath() {
   return configPath;
 }
 
+let authConfigForTesting: UserAuthConfig | undefined;
+
+export function setAuthConfigForTesting(config: UserAuthConfig | undefined) {
+  authConfigForTesting = config;
+}
+
 //todo: make test
 export function mustReadAuthConfigFile(): UserAuthConfig {
+  if (authConfigForTesting) {
+    return authConfigForTesting;
+  }
   const authConfigFilePath = path.join(
     getGlobalReflectConfigPath(),
     USER_AUTH_CONFIG_FILE,
