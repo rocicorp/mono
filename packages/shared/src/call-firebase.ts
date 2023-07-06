@@ -46,19 +46,16 @@ const firebaseResultResponseSchema = v.object({
 export async function callFirebase<K extends keyof CallMapping>(
   functionName: K,
   data: CallMapping[K][0],
+  apiToken: string,
   returnValueSchema?: v.Type<CallMapping[K][1]>,
-  apiToken?: string,
 ): Promise<CallMapping[K][1]> {
   const body = JSON.stringify({data});
-  const headers = apiToken
-    ? {
-        'Content-type': 'application/json',
-        // eslint-disable-next-line @typescript-eslint/naming-convention
-        'Authorization': `Bearer ${apiToken}`,
-      }
-    : {
-        'Content-type': 'application/json',
-      };
+  const headers = {
+    'Content-type': 'application/json',
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    'Authorization': `Bearer ${apiToken}`,
+  };
+
   const resp = await fetch(
     // TODO(arv): Make this a parameter/config
     `http://127.0.0.1:5001/reflect-mirror-staging/us-central1/${functionName}`,
