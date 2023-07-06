@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "jwt-decode": "^3.1.2",
+    "nanoid": "^4.0.2",
     "open": "^9.1.0",
     "pkg-up": "^4.0.0",
     "yargs": "^17.4.1"

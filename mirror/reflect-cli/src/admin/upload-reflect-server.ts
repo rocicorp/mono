@@ -1,16 +1,25 @@
+import type {Bucket} from '@google-cloud/storage';
 import * as esbuild from 'esbuild';
-import type {UploadRequest} from 'mirror-protocol/src/reflect-server.js';
+import {initializeApp} from 'firebase-admin/app';
+import type {Firestore} from 'firebase-admin/firestore';
+import {getFirestore} from 'firebase-admin/firestore';
+import type {Storage} from 'firebase-admin/storage';
+import {getStorage} from 'firebase-admin/storage';
+import * as schema from 'mirror-schema/src/reflect-server.js';
+import {nanoid} from 'nanoid';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {pkgUp} from 'pkg-up';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
-import {FirebaseError, callFirebase} from 'shared/src/call-firebase.js';
-import {getUserIDFromConfig, mustReadAuthConfigFile} from '../auth-config.js';
-import {makeRequester} from '../requester.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 
 const require = createRequire(import.meta.url);
+
+// TODO(arv): This should be a config value
+const bucketName = 'reflect-mirror-staging-servers';
+// TODO(arv): This should be a config value
+const projectId = 'reflect-mirror-staging';
 
 export function uploadReflectServerOptions(yargs: CommonYargsArgv) {
   return yargs.option('force', {
@@ -23,6 +32,12 @@ type UploadReflectServerHandlerArgs = YargvToInterface<
   ReturnType<typeof uploadReflectServerOptions>
 >;
 
+type Module = {
+  name: string;
+  content: string;
+  type: 'esm' | 'text';
+};
+
 export async function uploadReflectServerHandler(
   yargs: UploadReflectServerHandlerArgs,
 ) {
@@ -30,44 +45,26 @@ export async function uploadReflectServerHandler(
     'Make sure you run `npm run build` from the root of the repo first',
   );
 
-  const config = mustReadAuthConfigFile();
-  const userID = getUserIDFromConfig(config);
+  initializeApp({projectId});
+  const firestore = getFirestore();
+  const storage = getStorage();
 
   const source = await buildReflectServerContent();
-  const versionFromPackage = await findVersion();
+  const version = await findVersion();
   const workerTemplate = await getWorkerTemplate();
-  console.log('Version (from @rocicorp/reflect):', versionFromPackage);
+  console.log('Version (from @rocicorp/reflect):', version);
 
-  const data: UploadRequest = {
-    requester: makeRequester(userID),
-    version: versionFromPackage,
-    main: {
-      content: source,
-      name: 'reflect-server.js',
-      type: 'esm',
-    },
-    modules: [
-      {
-        content: workerTemplate,
-        name: 'worker.template.js',
-        type: 'text',
-      },
-    ],
-    force: yargs.force,
-  };
+  await upload(
+    firestore,
+    storage,
+    bucketName,
+    !!yargs.force,
+    version,
+    source,
+    workerTemplate,
+  );
 
-  try {
-    await callFirebase('reflectServer-upload', data, config.idToken);
-  } catch (e) {
-    if (e instanceof FirebaseError && e.status === 'ALREADY_EXISTS') {
-      console.log(e.message);
-      console.log('Use --force to overwrite');
-      process.exit(1);
-    }
-
-    throw e;
-  }
-  console.log(`Uploaded version ${versionFromPackage} successfully`);
+  console.log(`Uploaded version ${version} successfully`);
 }
 
 async function findVersion() {
@@ -126,4 +123,67 @@ async function getWorkerTemplate() {
     'worker.template.js',
   );
   return readFile(templatePath, 'utf-8');
+}
+
+async function upload(
+  firestore: Firestore,
+  storage: Storage,
+  bucketName: string,
+  force: boolean,
+  version: string,
+  source: string,
+  workerTemplate: string,
+) {
+  const main: Module = {
+    content: source,
+    name: 'reflect-server.js',
+    type: 'esm',
+  };
+  const workerTemplateModule: Module = {
+    content: workerTemplate,
+    name: 'worker.template.js',
+    type: 'text',
+  };
+  const bucket = storage.bucket(bucketName);
+
+  const [mainFilename, workerTemplateFilename] = await Promise.all([
+    storeModule(bucket, main),
+    storeModule(bucket, workerTemplateModule),
+  ]);
+
+  const docRef = firestore
+    .doc(schema.reflectServerPath(version))
+    .withConverter(schema.reflectServerDataConverter);
+
+  await firestore.runTransaction(async txn => {
+    const doc = await txn.get(docRef);
+    if (doc.exists && !force) {
+      console.error(`Version ${version} has already been uploaded`);
+      console.error('Use --force to overwrite');
+      process.exit(1);
+    }
+
+    const newDoc: schema.ReflectServerModule = {
+      main: {
+        name: main.name,
+        filename: mainFilename,
+        type: main.type,
+      },
+      modules: [
+        {
+          name: workerTemplateModule.name,
+          filename: workerTemplateFilename,
+          type: workerTemplateModule.type,
+        },
+      ],
+    };
+
+    txn.set(docRef, newDoc);
+  });
+}
+
+async function storeModule(bucket: Bucket, module: Module) {
+  const filename = `${encodeURIComponent(module.name)}-${nanoid()}`;
+  await bucket.file(filename).save(module.content);
+  return filename;
 }
