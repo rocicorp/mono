@@ -43,8 +43,10 @@ test('it should compile typescript', async () => {
     expect(url).toMatch(/\/publish$/);
     assert(init);
     expect(init.method).toBe('POST');
-    expect(init.headers).toEqual({
+    expect(init.headers).toMatchObject({
       'Content-type': 'application/json',
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      'Authorization': expect.stringMatching(/^Bearer /),
     });
     assertString(init.body);
     const body = JSON.parse(init.body);
@@ -57,7 +59,7 @@ test('it should compile typescript', async () => {
             type: 'reflect-cli',
             version: '0.1.0',
           },
-          userID: 'USERID',
+          userID: expect.any(String),
         },
         source: {
           content: expect.stringContaining(`var x = 42;`),

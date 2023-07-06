@@ -1,7 +1,7 @@
 import 'firebase/auth';
-import type {GetServerSideProps} from 'next/types';
 import jwtDecode from 'jwt-decode';
 import {ensureUserResponseSchema} from 'mirror-protocol/src/user';
+import type {GetServerSideProps} from 'next/types';
 import {callFirebase} from 'shared/src/call-firebase';
 
 export type ReflectAuthResult = {
@@ -36,8 +36,8 @@ async function ensureUser(reflectAuth: ReflectAuthResult): Promise<boolean> {
   const fbResponse = await callFirebase<'user-ensure'>(
     'user-ensure',
     data,
-    ensureUserResponseSchema,
     reflectAuth.idToken,
+    ensureUserResponseSchema,
   );
 
   return fbResponse.success;
@@ -46,7 +46,7 @@ async function ensureUser(reflectAuth: ReflectAuthResult): Promise<boolean> {
 export const getServerSideProps: GetServerSideProps<{
   authResult: ReflectAuthResult;
 }> = async context => {
-  const authResult = await context.query;
+  const authResult = context.query;
   const reflectAuth = {
     idToken: authResult['idToken'] as string,
     refreshToken: authResult['refreshToken'] as string,
