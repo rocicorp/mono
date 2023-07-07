@@ -181,9 +181,6 @@ async function getServerModules(
   bucketName: string,
   desiredVersion: semver.Range,
 ): Promise<CfModule[]> {
-  // TODO(arv): Find compatible version.
-  console.log('desiredVersion', desiredVersion);
-
   const version = await findNewestMatchingVersion(firestore, desiredVersion);
   console.log(`Found matching version for ${desiredVersion}: ${version}`);
 
