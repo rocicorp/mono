@@ -95,7 +95,6 @@ function assertAllModulesHaveUniqueNames(modules: Iterable<CfModule>) {
 export async function publish(
   firestore: Firestore,
   storage: Storage,
-  bucketName: string,
   config: Config,
   appModule: CfModule,
   appSourcemapModule: CfModule,
@@ -107,7 +106,6 @@ export async function publish(
   const [serverModule, ...otherServerModules] = await getServerModules(
     firestore,
     storage,
-    bucketName,
     version,
   );
 

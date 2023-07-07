@@ -4,8 +4,8 @@ import * as path from './path.js';
 
 export const moduleSchema = v.object({
   name: v.string(),
-  // filename is the filename used in Google Cloud Storage. It has a GUID in it.
-  filename: v.string(),
+  // gs://bucketname/filename. url is the filename used in Google Cloud Storage. It has a GUID in it.
+  url: v.string(),
   type: v.union(v.literal('esm'), v.literal('text')),
 });
 

@@ -58,6 +58,7 @@ export async function uploadReflectServerHandler(
   // TODO(arv): Where should this come from? Config or CLI arg?
   const channel: schema.ReleaseChannel = 'canary';
 
+  console.log('Uploading...');
   await upload(
     firestore,
     storage,
@@ -152,7 +153,7 @@ async function upload(
   };
   const bucket = storage.bucket(bucketName);
 
-  const [mainFilename, workerTemplateFilename] = await Promise.all([
+  const [mainURL, workerTemplateURL] = await Promise.all([
     storeModule(bucket, main),
     storeModule(bucket, workerTemplateModule),
   ]);
@@ -176,12 +177,12 @@ async function upload(
       modules: [
         {
           name: main.name,
-          filename: mainFilename,
+          url: mainURL,
           type: main.type,
         },
         {
           name: workerTemplateModule.name,
-          filename: workerTemplateFilename,
+          url: workerTemplateURL,
           type: workerTemplateModule.type,
         },
       ],
@@ -194,6 +195,7 @@ async function upload(
 
 async function storeModule(bucket: Bucket, module: Module) {
   const filename = `${encodeURIComponent(module.name)}-${nanoid()}`;
-  await bucket.file(filename).save(module.content);
-  return filename;
+  const file = bucket.file(filename);
+  await file.save(module.content);
+  return file.cloudStorageURI.href;
 }

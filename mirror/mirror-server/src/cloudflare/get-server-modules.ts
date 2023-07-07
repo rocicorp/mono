@@ -3,22 +3,22 @@ import type {Storage} from 'firebase-admin/storage';
 import {HttpsError} from 'firebase-functions/v2/https';
 import * as schema from 'mirror-schema/src/server.js';
 import assert from 'node:assert';
+import {parseCloudStorageURL} from '../parse-cloud-storage-url.js';
 import type {CfModule} from './create-worker-upload-form.js';
 
 export async function getServerModules(
   firestore: Firestore,
   storage: Storage,
-  bucketName: string,
   version: string,
 ): Promise<CfModule[]> {
   const server = await getServerModuleMetadata(firestore, version);
-
   const {modules} = server;
-  const bucket = storage.bucket(bucketName);
 
   const allModules = await Promise.all(
     modules.map(async module => {
-      const {name, filename, type} = module;
+      const {name, url, type} = module;
+      const {bucketName, filename} = parseCloudStorageURL(url);
+      const bucket = storage.bucket(bucketName);
       const content = await bucket.file(filename).download();
       return {name, content: content[0].toString('utf-8'), type};
     }),

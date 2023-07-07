@@ -22,7 +22,7 @@ const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 export const publish = (
   firestore: Firestore,
   storage: Storage,
-  bucketName: string,
+  _bucketName: string,
 ) =>
   withSchema(
     publishRequestSchema,
@@ -62,7 +62,6 @@ export const publish = (
       await publishToCloudflare(
         firestore,
         storage,
-        bucketName,
         config,
         sourceModule,
         sourcemapModule,
