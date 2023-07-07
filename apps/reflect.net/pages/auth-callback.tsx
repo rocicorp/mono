@@ -33,7 +33,7 @@ async function ensureUser(reflectAuth: ReflectAuthResult): Promise<boolean> {
   };
 
   //todo(cesar): probably should bubble up if an error is thrown here
-  const fbResponse = await callFirebase<'user-ensure'>(
+  const fbResponse = await callFirebase(
     'user-ensure',
     data,
     reflectAuth.idToken,

@@ -75,7 +75,7 @@ export interface CfModule {
    *
    * If absent, will default to the main module's type.
    */
-  type?: CfModuleType;
+  type?: CfModuleType | undefined;
 }
 
 /**

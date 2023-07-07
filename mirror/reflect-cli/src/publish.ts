@@ -38,6 +38,9 @@ export async function publishHandler(yargs: PublishHandlerArgs) {
   const userID = getUserIDFromConfig(config);
   const {script, name} = yargs;
 
+  // TODO(arv): This should be part of the config.
+  const appID = 'temp-app-id';
+
   const absPath = path.resolve(script);
 
   if (!(await exists(absPath))) {
@@ -61,6 +64,7 @@ export async function publishHandler(yargs: PublishHandlerArgs) {
       name: path.basename(sourcemap.path),
     },
     serverVersionRange,
+    appID,
   };
 
   await callFirebase('publish', data, config.idToken);

@@ -24,11 +24,12 @@ export type DeploymentStatus = v.Infer<typeof deploymentStatusSchema>;
 export const deploymentSchema = v.object({
   requesterID: v.string(), // userID
   type: deploymentTypeSchema,
-  appModule: v.string(),
+  appModule: v.string(), // gs:// URL
+  appSourcemap: v.string(), // gs:// URL
   appVersion: v.string().optional(),
   description: v.string().optional(),
   serverVersionRange: v.string(),
-  serverModule: v.string(),
+  serverModules: v.array(v.string()), // array of gs:// URLs
   status: deploymentStatusSchema,
   statusTime: timestampSchema,
 });
