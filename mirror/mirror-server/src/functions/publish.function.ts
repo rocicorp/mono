@@ -27,14 +27,14 @@ export const publish = (
     publishRequestSchema,
     publishResponseSchema,
     withAuthorization(async publishRequest => {
-      const {desiredVersion, name: appName} = publishRequest;
+      const {serverVersionRange, name: appName} = publishRequest;
 
-      if (semver.validRange(desiredVersion) === null) {
+      if (semver.validRange(serverVersionRange) === null) {
         throw new HttpsError('invalid-argument', 'Invalid desired version');
       }
 
-      const versionRange = new semver.Range(desiredVersion);
-      if (!isSupportedSemverRange(versionRange)) {
+      const range = new semver.Range(serverVersionRange);
+      if (!isSupportedSemverRange(range)) {
         throw new HttpsError('invalid-argument', 'Unsupported desired version');
       }
 
@@ -61,7 +61,7 @@ export const publish = (
         sourceModule,
         sourcemapModule,
         appName,
-        versionRange,
+        range,
       );
 
       return {success: true};

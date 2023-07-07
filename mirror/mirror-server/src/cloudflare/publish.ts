@@ -102,7 +102,7 @@ export async function publish(
   appModule: CfModule,
   appSourcemapModule: CfModule,
   appName: string,
-  desiredVersion: semver.Range,
+  serverVersionRange: semver.Range,
 ) {
   console.log('publishing', appName);
 
@@ -110,7 +110,7 @@ export async function publish(
     firestore,
     storage,
     bucketName,
-    desiredVersion,
+    serverVersionRange,
   );
 
   let workerModule: CfModule | undefined;
@@ -149,14 +149,14 @@ export async function publish(
 
 async function findNewestMatchingVersion(
   firestore: Firestore,
-  desiredVersion: semver.Range,
+  serverVersionRange: semver.Range,
 ): Promise<string> {
   const ref = firestore.collection(schema.REFLECT_SERVER_COLLECTION);
   const x = await ref.listDocuments();
   let maxVersion: string | undefined;
   for (const docRef of x) {
     const currentVersion = docRef.id;
-    if (desiredVersion.test(currentVersion)) {
+    if (serverVersionRange.test(currentVersion)) {
       if (maxVersion === undefined) {
         maxVersion = currentVersion;
       } else if (semver.gt(currentVersion, maxVersion)) {
@@ -168,7 +168,7 @@ async function findNewestMatchingVersion(
   if (maxVersion === undefined) {
     throw new HttpsError(
       'invalid-argument',
-      `No matching version for ${desiredVersion} found`,
+      `No matching version for ${serverVersionRange} found`,
     );
   }
 
@@ -179,10 +179,13 @@ async function getServerModules(
   firestore: Firestore,
   storage: Storage,
   bucketName: string,
-  desiredVersion: semver.Range,
+  serverVersionRange: semver.Range,
 ): Promise<CfModule[]> {
-  const version = await findNewestMatchingVersion(firestore, desiredVersion);
-  console.log(`Found matching version for ${desiredVersion}: ${version}`);
+  const version = await findNewestMatchingVersion(
+    firestore,
+    serverVersionRange,
+  );
+  console.log(`Found matching version for ${serverVersionRange}: ${version}`);
 
   const docRef = firestore
     .doc(schema.reflectServerPath(version))

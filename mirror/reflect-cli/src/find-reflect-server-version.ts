@@ -9,11 +9,11 @@ import {isSupportedSemverRange} from 'shared/src/is-supported-semver-range.js';
  * does this by finding the first package.json that has @rocicorp/reflect as a
  * dependency and returns the version from there.
  */
-export function findReflectServerVersion(appPath: string): Promise<Range> {
-  return findReflectServerVersionInternal(appPath, appPath);
+export function findServerVersionRange(appPath: string): Promise<Range> {
+  return findServerVersionRangeInternal(appPath, appPath);
 }
 
-async function findReflectServerVersionInternal(
+async function findServerVersionRangeInternal(
   appPath: string,
   startAppPath: string,
 ): Promise<Range> {
@@ -44,7 +44,7 @@ async function findReflectServerVersionInternal(
     return range;
   }
 
-  return findReflectServerVersionInternal(
+  return findServerVersionRangeInternal(
     path.join(path.dirname(pkg), '..'),
     startAppPath,
   );

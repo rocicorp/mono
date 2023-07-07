@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import {callFirebase} from 'shared/src/call-firebase.js';
 import {getUserIDFromConfig, mustReadAuthConfigFile} from './auth-config.js';
 import {compile} from './compile.js';
-import {findReflectServerVersion} from './find-reflect-server-version.js';
+import {findServerVersionRange} from './find-reflect-server-version.js';
 import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
@@ -44,8 +44,8 @@ export async function publishHandler(yargs: PublishHandlerArgs) {
     throw new Error(`File not found: ${absPath}`);
   }
 
-  const range = await findReflectServerVersion(absPath);
-  const desiredVersion = range.raw;
+  const range = await findServerVersionRange(absPath);
+  const serverVersionRange = range.raw;
 
   const {code, sourcemap} = await compile(absPath);
 
@@ -60,7 +60,7 @@ export async function publishHandler(yargs: PublishHandlerArgs) {
       content: sourcemap.text,
       name: path.basename(sourcemap.path),
     },
-    desiredVersion,
+    serverVersionRange,
   };
 
   await callFirebase('publish', data, config.idToken);
