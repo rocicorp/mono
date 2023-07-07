@@ -10,6 +10,7 @@ import * as semver from 'semver';
 import {isSupportedSemverRange} from 'shared/src/is-supported-semver-range.js';
 import type {CfModule} from '../cloudflare/create-worker-upload-form.js';
 import {publish as publishToCloudflare} from '../cloudflare/publish.js';
+import {findNewestMatchingVersion} from '../find-newest-matching-version.js';
 import {withAuthorization} from './validators/auth.js';
 import {withSchema} from './validators/schema.js';
 
@@ -38,6 +39,11 @@ export const publish = (
         throw new HttpsError('invalid-argument', 'Unsupported desired version');
       }
 
+      const version = await findNewestMatchingVersion(firestore, range);
+      console.log(
+        `Found matching version for ${serverVersionRange}: ${version}`,
+      );
+
       const config = {
         accountID: cloudflareAccountId.value(),
         // TODO(arv): This is not the right name.
@@ -61,7 +67,7 @@ export const publish = (
         sourceModule,
         sourcemapModule,
         appName,
-        range,
+        version,
       );
 
       return {success: true};

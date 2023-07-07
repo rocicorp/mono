@@ -5,12 +5,13 @@ import type {Firestore} from 'firebase-admin/firestore';
 import {getFirestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {getStorage} from 'firebase-admin/storage';
-import * as schema from 'mirror-schema/src/reflect-server.js';
+import * as schema from 'mirror-schema/src/server.js';
 import {nanoid} from 'nanoid';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {pkgUp} from 'pkg-up';
+import {SemVer} from 'semver';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 
@@ -52,7 +53,10 @@ export async function uploadReflectServerHandler(
   const source = await buildReflectServerContent();
   const version = await findVersion();
   const workerTemplate = await getWorkerTemplate();
-  console.log('Version (from @rocicorp/reflect):', version);
+  console.log('Version (from @rocicorp/reflect):', version.toString());
+
+  // TODO(arv): Where should this come from? Config or CLI arg?
+  const channel: schema.ReleaseChannel = 'canary';
 
   await upload(
     firestore,
@@ -62,12 +66,13 @@ export async function uploadReflectServerHandler(
     version,
     source,
     workerTemplate,
+    channel,
   );
 
   console.log(`Uploaded version ${version} successfully`);
 }
 
-async function findVersion() {
+async function findVersion(): Promise<SemVer> {
   const serverPath = require.resolve('@rocicorp/reflect');
   const pkg = await pkgUp({cwd: serverPath});
   assert(pkg);
@@ -75,7 +80,7 @@ async function findVersion() {
   const v = JSON.parse(s);
   assertObject(v);
   assertString(v.version);
-  return v.version;
+  return new SemVer(v.version);
 }
 
 async function buildReflectServerContent() {
@@ -130,9 +135,10 @@ async function upload(
   storage: Storage,
   bucketName: string,
   force: boolean,
-  version: string,
+  version: SemVer,
   source: string,
   workerTemplate: string,
+  channel: schema.ReleaseChannel,
 ) {
   const main: Module = {
     content: source,
@@ -152,8 +158,8 @@ async function upload(
   ]);
 
   const docRef = firestore
-    .doc(schema.reflectServerPath(version))
-    .withConverter(schema.reflectServerDataConverter);
+    .doc(schema.serverPath(version.toString()))
+    .withConverter(schema.serverDataConverter);
 
   await firestore.runTransaction(async txn => {
     const doc = await txn.get(docRef);
@@ -163,19 +169,23 @@ async function upload(
       process.exit(1);
     }
 
-    const newDoc: schema.ReflectServerModule = {
-      main: {
-        name: main.name,
-        filename: mainFilename,
-        type: main.type,
-      },
+    const newDoc: schema.Server = {
+      major: version.major,
+      minor: version.minor,
+      patch: version.patch,
       modules: [
+        {
+          name: main.name,
+          filename: mainFilename,
+          type: main.type,
+        },
         {
           name: workerTemplateModule.name,
           filename: workerTemplateFilename,
           type: workerTemplateModule.type,
         },
       ],
+      channel,
     };
 
     txn.set(docRef, newDoc);

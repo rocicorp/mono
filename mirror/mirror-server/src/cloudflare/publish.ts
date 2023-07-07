@@ -1,12 +1,10 @@
 import type {Firestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
-import {HttpsError} from 'firebase-functions/v2/https';
-import * as schema from 'mirror-schema/src/reflect-server.js';
 import assert from 'node:assert';
-import * as semver from 'semver';
 import {cfFetch} from './cf-fetch.js';
 import {CfModule, createWorkerUploadForm} from './create-worker-upload-form.js';
 import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
+import {getServerModules} from './get-server-modules.js';
 
 type Config = {
   accountID: string;
@@ -102,7 +100,7 @@ export async function publish(
   appModule: CfModule,
   appSourcemapModule: CfModule,
   appName: string,
-  serverVersionRange: semver.Range,
+  version: string,
 ) {
   console.log('publishing', appName);
 
@@ -110,7 +108,7 @@ export async function publish(
     firestore,
     storage,
     bucketName,
-    serverVersionRange,
+    version,
   );
 
   let workerModule: CfModule | undefined;
@@ -145,74 +143,4 @@ export async function publish(
   // reflect.net/wrangler.toml has:
   // route = { pattern = "reflect-server.net", custom_domain = true }
   await enableSubdomain(config);
-}
-
-async function findNewestMatchingVersion(
-  firestore: Firestore,
-  serverVersionRange: semver.Range,
-): Promise<string> {
-  const ref = firestore.collection(schema.REFLECT_SERVER_COLLECTION);
-  const x = await ref.listDocuments();
-  let maxVersion: string | undefined;
-  for (const docRef of x) {
-    const currentVersion = docRef.id;
-    if (serverVersionRange.test(currentVersion)) {
-      if (maxVersion === undefined) {
-        maxVersion = currentVersion;
-      } else if (semver.gt(currentVersion, maxVersion)) {
-        maxVersion = currentVersion;
-      }
-    }
-  }
-
-  if (maxVersion === undefined) {
-    throw new HttpsError(
-      'invalid-argument',
-      `No matching version for ${serverVersionRange} found`,
-    );
-  }
-
-  return maxVersion;
-}
-
-async function getServerModules(
-  firestore: Firestore,
-  storage: Storage,
-  bucketName: string,
-  serverVersionRange: semver.Range,
-): Promise<CfModule[]> {
-  const version = await findNewestMatchingVersion(
-    firestore,
-    serverVersionRange,
-  );
-  console.log(`Found matching version for ${serverVersionRange}: ${version}`);
-
-  const docRef = firestore
-    .doc(schema.reflectServerPath(version))
-    .withConverter(schema.reflectServerDataConverter);
-
-  const serverModule = await firestore.runTransaction(
-    async txn => {
-      const doc = await txn.get(docRef);
-      const {exists} = doc;
-      if (!exists) {
-        throw new HttpsError('not-found', `Version ${version} does not exist`);
-      }
-
-      return doc.data();
-    },
-    {readOnly: true},
-  );
-  assert(serverModule);
-
-  const modules = [serverModule.main, ...serverModule.modules];
-  const bucket = storage.bucket(bucketName);
-
-  return Promise.all(
-    modules.map(async module => {
-      const {name, filename, type} = module;
-      const content = await bucket.file(filename).download();
-      return {name, content: content[0].toString('utf-8'), type};
-    }),
-  );
 }
