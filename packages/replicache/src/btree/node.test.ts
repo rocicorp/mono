@@ -1566,6 +1566,79 @@ suite('btree node', () => {
       expect(chunkSize - entriesSize).to.equal(NODE_HEADER_SIZE);
     });
   }
+
+  test('ChunkNotFound?', async () => {
+    const dagStore = new dag.TestStore();
+
+    const tree: TreeData = {
+      $level: 2,
+      d: {
+        $level: 1,
+        b: {
+          $level: 0,
+          a: 'aaa',
+          b: 'bbb',
+        },
+        d: {
+          $level: 0,
+          c: 'ccc',
+          d: 'ddd',
+        },
+      },
+      k: {
+        $level: 1,
+        f: {
+          $level: 0,
+          e: 'eee',
+          f: 'fff',
+        },
+        h: {
+          $level: 0,
+          g: 'ggg',
+          h: 'hhh',
+        },
+        k: {
+          $level: 0,
+          i: 'iii',
+          j: 'jjj',
+          k: 'kkk',
+        },
+      },
+    };
+    const rootHash = await makeTree(tree, dagStore, FormatVersion.Latest);
+
+    await withWrite(dagStore, async dagWrite => {
+      const tree = new BTreeWrite(
+        dagWrite,
+        FormatVersion.Latest,
+        rootHash,
+        minSize,
+        maxSize,
+        getEntrySize,
+        chunkHeaderSize,
+      );
+
+      await tree.put('l', 'lll1');
+
+      const ps = [];
+      const putPromise = tree.put('l', 'lll2');
+
+      for (let i = 0; i < 5; i++) {
+        await Promise.resolve(1);
+        ps.push(tree.get('l'));
+      }
+
+      await putPromise;
+
+      expect(await Promise.all(ps)).deep.equal([
+        'lll2',
+        'lll2',
+        'lll2',
+        'lll2',
+        'lll2',
+      ]);
+    });
+  });
 });
 
 suite('Write nodes using ChainBuilder', () => {
