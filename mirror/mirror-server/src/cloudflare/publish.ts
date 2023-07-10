@@ -2,15 +2,11 @@ import type {Firestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import assert from 'node:assert';
 import {cfFetch} from './cf-fetch.js';
+import type {Config} from './config.js';
 import {CfModule, createWorkerUploadForm} from './create-worker-upload-form.js';
 import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
 import {getServerModules} from './get-server-modules.js';
-
-type Config = {
-  accountID: string;
-  scriptName: string;
-  apiToken: string;
-};
+import {publishCustomDomains} from './publish-custom-domains.js';
 
 export async function createWorker(
   {accountID, scriptName, apiToken}: Config,
@@ -61,19 +57,6 @@ export async function createWorker(
     },
     searchParams,
   );
-}
-
-export async function enableSubdomain(conf: Config) {
-  const {accountID, scriptName, apiToken} = conf;
-  const resource = `/accounts/${accountID}/workers/scripts/${scriptName}/subdomain`;
-
-  await cfFetch(apiToken, resource, {
-    method: 'POST',
-    headers: {
-      'Content-type': 'application/json',
-    },
-    body: JSON.stringify({enabled: true}),
-  });
 }
 
 const migrations: Migration[] = [
@@ -136,9 +119,6 @@ export async function publish(
   console.log('publishing', appName);
   await createWorker(config, workerModule, modules);
 
-  // TODO(arv): Set up the custom domain. The below code does not seem to do
-  // enough.
-  // reflect.net/wrangler.toml has:
-  // route = { pattern = "reflect-server.net", custom_domain = true }
-  await enableSubdomain(config);
+  console.log('Setting up custom domain');
+  await publishCustomDomains(config, `${appName}.reflect-server.net`);
 }
