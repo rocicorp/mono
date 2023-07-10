@@ -180,10 +180,10 @@ async function setDeploymentStatus(
 
   await firestore.runTransaction(async tx => {
     const doc = await tx.get(docRef);
-    if (doc.exists) {
+    if (!doc.exists) {
       throw new HttpsError(
-        'already-exists',
-        'A deployment with this ID already exists',
+        'not-found',
+        'A deployment with this ID does not exist',
       );
     }
 
