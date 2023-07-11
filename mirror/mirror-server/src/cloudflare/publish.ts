@@ -9,6 +9,7 @@ import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
 import {getServerModules} from './get-server-modules.js';
 import {publishCustomDomains} from './publish-custom-domains.js';
 import {submitSecret} from './submit-secret.js';
+import {submitTriggers} from './submit-triggers.js';
 
 export async function createWorker(
   {accountID, scriptName, apiToken}: Config,
@@ -128,10 +129,9 @@ export async function publish(
     reflectAuthApiKey = nanoid();
   }
 
-  console.log('Setting up custom domain');
-
   await Promise.all([
     publishCustomDomains(config, `${appName}.reflect-server.net`),
     submitSecret(config, 'REFLECT_AUTH_API_KEY', reflectAuthApiKey),
+    submitTriggers(config, '*/5 * * * *'),
   ]);
 }
