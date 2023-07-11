@@ -70,5 +70,5 @@ export async function publishHandler(yargs: PublishHandlerArgs) {
   await callFirebase('publish', data, config.idToken);
 
   console.log(`🎁 Published successfully to:`);
-  console.log(`https://${name}.replicache.workers.dev/`);
+  console.log(`https://${name}.reflect-server.net/`);
 }
