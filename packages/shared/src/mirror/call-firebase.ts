@@ -10,8 +10,8 @@ import type {
   EnsureUserRequest,
   EnsureUserResponse,
 } from 'mirror-protocol/src/user.js';
-import type {ReadonlyJSONValue} from './json.js';
-import * as v from './valita.js';
+import type {ReadonlyJSONValue} from '../json.js';
+import * as v from '../valita.js';
 
 // type FunctionName = 'publish' | 'user-ensure' | 'reflectServer-upload';
 

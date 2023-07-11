@@ -1,6 +1,6 @@
 import {expect, jest, test} from '@jest/globals';
+import * as v from '../valita.js';
 import {callFirebase} from './call-firebase.js';
-import * as v from './valita.js';
 
 function makeFetchSpy(
   body: BodyInit | null | undefined,
