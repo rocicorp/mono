@@ -1,5 +1,4 @@
 import {
-  CallbackQueryParams,
   callbackQueryParamsSchema,
   createCallbackUrl,
 } from '@/firebase-config/firebase-auth-ui-config';
@@ -20,28 +19,26 @@ export const reflectAuthResultSchema = v.object({
 export type ReflectAuthResult = v.Infer<typeof reflectAuthResultSchema>;
 
 export const authJwtTokenDecodedSchema = v.object({
-  // eslint-disable-next-line @typescript-eslint/naming-convention
+  /* eslint-disable @typescript-eslint/naming-convention */
   user_id: v.string(),
   name: v.string(),
   picture: v.string(),
   iss: v.string(),
   aud: v.string(),
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   auth_time: v.number(),
   sub: v.string(),
   iat: v.number(),
   exp: v.number(),
   email: v.string(),
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   email_verified: v.boolean(),
   firebase: v.object({
     identities: v.object({
       'email': v.array(v.string()),
       'github.com': v.array(v.string()),
     }),
-    // eslint-disable-next-line @typescript-eslint/naming-convention
     sign_in_provider: v.string(),
   }),
+  /* eslint-enable @typescript-eslint/naming-convention */
 });
 
 export type AuthJwtTokenDecoded = v.Infer<typeof authJwtTokenDecodedSchema>;
@@ -57,7 +54,7 @@ function createCliCallbackUrl(reflectAuth: ReflectAuthResult): string {
 
 async function ensureUser(reflectAuth: ReflectAuthResult): Promise<boolean> {
   const token = jwtDecode<AuthJwtTokenDecoded>(reflectAuth.idToken);
-  assert<AuthJwtTokenDecoded>(token, authJwtTokenDecodedSchema);
+  assert(token, authJwtTokenDecodedSchema);
   const data = {
     requester: {
       userID: token.user_id,
@@ -83,7 +80,7 @@ export const getServerSideProps: GetServerSideProps<{
   authResult: ReflectAuthResult;
 }> = async context => {
   const authResult = context.query;
-  assert<CallbackQueryParams>(authResult, callbackQueryParamsSchema);
+  assert(authResult, callbackQueryParamsSchema);
   const {idToken, refreshToken, expirationTime} = authResult;
   const reflectAuth = {
     idToken,
