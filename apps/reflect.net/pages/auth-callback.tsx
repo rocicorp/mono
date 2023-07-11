@@ -1,8 +1,8 @@
 import 'firebase/auth';
 import jwtDecode from 'jwt-decode';
-import {ensureUserResponseSchema} from 'mirror-protocol/src/user';
+import {ensureUserResponseSchema} from 'mirror-protocol/src/user.js';
 import type {GetServerSideProps} from 'next/types';
-import {callFirebase} from 'shared/src/call-firebase';
+import {callFirebase} from 'shared/src/mirror/call-firebase.js';
 
 export type ReflectAuthResult = {
   idToken: string;

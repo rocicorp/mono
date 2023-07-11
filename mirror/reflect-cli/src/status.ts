@@ -1,5 +1,5 @@
 import {ensureUserResponseSchema} from 'mirror-protocol/src/user.js';
-import {callFirebase} from 'shared/src/call-firebase.js';
+import {callFirebase} from 'shared/src/mirror/call-firebase.js';
 import {getUserIDFromConfig, mustReadAuthConfigFile} from './auth-config.js';
 import {makeRequester} from './requester.js';
 

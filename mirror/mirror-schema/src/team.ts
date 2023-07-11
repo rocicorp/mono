@@ -17,7 +17,7 @@ export const teamSchema = v.object({
 
 export type Team = v.Infer<typeof teamSchema>;
 
-export const teamDataConveter = firestoreDataConverter(teamSchema);
+export const teamDataConverter = firestoreDataConverter(teamSchema);
 
 export const TEAM_COLLECTION = 'teams';
 
