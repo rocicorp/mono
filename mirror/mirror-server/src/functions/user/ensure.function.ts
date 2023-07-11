@@ -29,7 +29,7 @@ export function ensure(
         if (userDoc.exists) {
           return;
         }
-        const email = context.auth?.token?.email;
+        const {email} = context.auth.token;
         if (!email) {
           throw new HttpsError(
             'failed-precondition',

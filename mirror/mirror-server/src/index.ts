@@ -3,6 +3,7 @@ import {getFirestore} from 'firebase-admin/firestore';
 import {getStorage} from 'firebase-admin/storage';
 import {https} from 'firebase-functions/v2';
 import {functionsConfig} from './functions-config.js';
+import * as appFunctions from './functions/app/index.js';
 import {healthcheck as healthcheckHandler} from './functions/healthcheck.function.js';
 import {publish as publishHandler} from './functions/publish.function.js';
 import * as userFunctions from './functions/user/index.js';
@@ -36,5 +37,12 @@ export const user = {
   ensure: https.onCall(
     {cors: functionsConfig.allowlist},
     userFunctions.ensure(getFirestore()),
+  ),
+};
+
+export const app = {
+  create: https.onCall(
+    {cors: functionsConfig.allowlist},
+    appFunctions.create(getFirestore()),
   ),
 };
