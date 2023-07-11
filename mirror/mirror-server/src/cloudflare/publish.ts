@@ -1,5 +1,6 @@
 import type {Firestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
+import {nanoid} from 'nanoid';
 import assert from 'node:assert';
 import {cfFetch} from './cf-fetch.js';
 import type {Config} from './config.js';
@@ -7,6 +8,7 @@ import {CfModule, createWorkerUploadForm} from './create-worker-upload-form.js';
 import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
 import {getServerModules} from './get-server-modules.js';
 import {publishCustomDomains} from './publish-custom-domains.js';
+import {submitSecret} from './submit-secret.js';
 
 export async function createWorker(
   {accountID, scriptName, apiToken}: Config,
@@ -119,6 +121,17 @@ export async function publish(
   console.log('publishing', appName);
   await createWorker(config, workerModule, modules);
 
+  let reflectAuthApiKey = process.env.REFLECT_AUTH_API_KEY;
+  if (!reflectAuthApiKey) {
+    // TODO(arv): Figure this out once and for all.
+    console.log('Missing REFLECT_AUTH_API_KEY, using a random one');
+    reflectAuthApiKey = nanoid();
+  }
+
   console.log('Setting up custom domain');
-  await publishCustomDomains(config, `${appName}.reflect-server.net`);
+
+  await Promise.all([
+    publishCustomDomains(config, `${appName}.reflect-server.net`),
+    submitSecret(config, 'REFLECT_AUTH_API_KEY', reflectAuthApiKey),
+  ]);
 }
