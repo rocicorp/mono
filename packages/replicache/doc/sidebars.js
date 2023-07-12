@@ -34,7 +34,7 @@ module.exports = {
       ],
     },
     {
-      Examples: ['examples/todo', 'examples/repliear', 'examples/replidraw'],
+      Examples: ['examples/todo', 'examples/repliear'],
     },
     {
       'Understand Replicache': [
