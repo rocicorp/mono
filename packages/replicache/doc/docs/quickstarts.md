@@ -3,7 +3,7 @@ title: Quickstarts
 slug: /quickstarts
 ---
 
-Minimal examples, demonstrating different stacks and techniques for building Replicache apps. Clone these to easily play with Replicache before building your own server.
+Minimal examples, demonstrating different stacks and techniques for building Replicache apps. You can clone these to easily play with Replicache before diving into building your own server.
 
 ## todo-react
 
