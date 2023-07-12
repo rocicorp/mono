@@ -126,4 +126,4 @@ const App = ({ rep }: { rep: Replicache<M>; undoManager: UndoManager }) => {
 };
 ```
 
-`Undo` library can handle more complex features like `grouping` and `onChange` events. You can look at full integrations of undo with the [Replidraw](http://github.com/rocicorp/replidraw) and [Repliear](http://github.com/rocicorp/repliear) projects. Please reference the [Undo](http://github.com/rocicorp/undo) library for more information.
+`Undo` library can handle more complex features like `grouping` and `onChange` events. You can look at full integrations of undo with the [Repliear](http://github.com/rocicorp/repliear) projects. Please reference the [Undo](http://github.com/rocicorp/undo) library for more information.

@@ -41,10 +41,6 @@ Many applications can also get by without a full collaborative editing solution 
 
 We do plan to offer first-class collaborative text in the future.
 
-## How can I implement presence?
-
-Replicache is a general purpose synchronization system. It doesn't have a first-class concept of presence, but it is easy to build one that works exactly how you want. See [Replidraw](https://github.com/rocicorp/replidraw) for an example.
-
 ## What is a Monthly Active Profile?
 
 A monthly active profile (MAP) is how we charge for Replicache. Specifically it's a unique browser profile that used your application during a month.
