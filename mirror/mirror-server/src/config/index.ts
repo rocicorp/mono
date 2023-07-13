@@ -12,4 +12,4 @@ function createAppOptions(): AppOptions {
 export const appOptions = createAppOptions();
 export const projectId = appOptions.projectId ?? '';
 export const serviceAccountId = appOptions.serviceAccountId ?? '';
-export const serverBucketName = `${projectId}-servers`;
+export const serversBucketName = `${projectId}-servers`;

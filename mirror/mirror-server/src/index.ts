@@ -1,7 +1,7 @@
 import {
   appOptions,
   serviceAccountId,
-  serverBucketName,
+  serversBucketName,
 } from './config/index.js';
 import {initializeApp} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
@@ -22,7 +22,7 @@ export const publish = https.onCall(
     cors: functionsConfig.allowlist,
     secrets: ['CLOUDFLARE_API_TOKEN'],
   },
-  publishHandler(getFirestore(), getStorage(), serverBucketName),
+  publishHandler(getFirestore(), getStorage(), serversBucketName),
 );
 
 export const healthcheck = https.onRequest(
