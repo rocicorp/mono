@@ -9,10 +9,8 @@ const credentialReceiverServerFetch: (
 ) => Promise<http.ServerResponse<http.IncomingMessage>> = mockHttpServer();
 
 describe('loginHandler', () => {
-  test('should reject if idToken, refreshToken or expirationTime is missing', async () => {
+  test('should reject if customToken, refreshToken or expirationTime is missing', async () => {
     const callbackUrl = new URL('http://localhost:8976/oauth/callback');
-    callbackUrl.searchParams.set('idToken', 'valid-token');
-    callbackUrl.searchParams.set('refreshToken', 'valid-refresh-token');
     let openInBrowserCalled = false;
     let writeAuthConfigFileCalled = false;
 
@@ -27,25 +25,22 @@ describe('loginHandler', () => {
       },
       (config: UserAuthConfig) => {
         expect(config).toBeDefined();
-        expect(config.idToken).toEqual('valid-token');
-        expect(config.refreshToken).toEqual('valid-refresh-token');
+        expect(config.customToken).toEqual('valid-token');
         writeAuthConfigFileCalled = true;
       },
     );
 
     await expect(loginHandlerPromise).rejects.toThrow(
-      'Error saving credentials: Error: Missing expirationTime from the auth provider.',
+      'Error saving credentials: Error: Missing customToken from the auth provider.',
     );
     expect(openInBrowserCalled).toEqual(true);
     expect(writeAuthConfigFileCalled).toEqual(false);
   });
 
-  test('should pass if idToken, refreshToken or expirationTime are valid', async () => {
+  test('should pass if customToken is valid', async () => {
     // spyOn writeAuthConfigFile
     const callbackUrl = new URL('http://localhost:8976/oauth/callback');
-    callbackUrl.searchParams.set('idToken', 'valid-token');
-    callbackUrl.searchParams.set('refreshToken', 'valid-refresh-token');
-    callbackUrl.searchParams.set('expirationTime', '0');
+    callbackUrl.searchParams.set('customToken', 'valid-token');
     let openInBrowserCalled = false;
     let writeAuthConfigFileCalled = false;
 
@@ -60,9 +55,7 @@ describe('loginHandler', () => {
       },
       (config: UserAuthConfig) => {
         expect(config).toBeDefined();
-        expect(config.idToken).toEqual('valid-token');
-        expect(config.refreshToken).toEqual('valid-refresh-token');
-        expect(config.expirationTime).toEqual(0);
+        expect(config.customToken).toEqual('valid-token');
         writeAuthConfigFileCalled = true;
       },
     );
@@ -70,33 +63,5 @@ describe('loginHandler', () => {
     await expect(loginHandlerPromise).resolves.toBeUndefined();
     expect(openInBrowserCalled).toEqual(true);
     expect(writeAuthConfigFileCalled).toEqual(true);
-  });
-
-  test('should reject if expirationTime is not a number', async () => {
-    const callbackUrl = new URL('http://localhost:8976/oauth/callback');
-    callbackUrl.searchParams.set('idToken', 'valid-token');
-    callbackUrl.searchParams.set('refreshToken', 'valid-refresh-token');
-    callbackUrl.searchParams.set('expirationTime', 'invalid-expiration-time');
-    let openInBrowserCalled = false;
-    let writeAuthConfigFileCalled = false;
-    const loginHandlerPromise = loginHandler(
-      async url => {
-        openInBrowserCalled = true;
-        expect(url).toEqual('https://reflect.net/auth');
-        const serverResponse = await credentialReceiverServerFetch(
-          new Request(callbackUrl.toString()),
-        );
-        expect(serverResponse).toBeDefined();
-      },
-      (_config: UserAuthConfig) => {
-        writeAuthConfigFileCalled = true;
-      },
-    );
-
-    await expect(loginHandlerPromise).rejects.toThrow(
-      'Error saving credentials: AssertionError [ERR_ASSERTION]: expirationTime is not a number',
-    );
-    expect(openInBrowserCalled).toEqual(true);
-    expect(writeAuthConfigFileCalled).toEqual(false);
   });
 });

@@ -30,7 +30,7 @@ export async function loginHandler(
         const customToken = searchParams.get('customToken');
         try {
           if (!customToken) {
-            throw new Error(`Missing customToken from request.`);
+            throw new Error(`Missing customToken from the auth provider.`);
           }
           const authConfig: UserAuthConfig = {customToken};
 

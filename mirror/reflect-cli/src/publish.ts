@@ -1,4 +1,7 @@
-import {publish, type PublishRequest} from 'mirror-protocol/src/publish.js';
+import {
+  publish as publishCaller,
+  type PublishRequest,
+} from 'mirror-protocol/src/publish.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {authenticate} from './auth-config.js';
@@ -32,9 +35,10 @@ async function exists(path: string) {
 
 type PublishHandlerArgs = YargvToInterface<ReturnType<typeof publishOptions>>;
 
-export async function publishHandler(yargs: PublishHandlerArgs) {
-  const user = await authenticate();
-  const userID = user.uid;
+export async function publishHandler(
+  yargs: PublishHandlerArgs,
+  publish = publishCaller, // Overridden in tests.
+) {
   const {script, name} = yargs;
 
   // TODO(arv): This should be part of the config.
@@ -50,6 +54,9 @@ export async function publishHandler(yargs: PublishHandlerArgs) {
   const serverVersionRange = range.raw;
 
   const {code, sourcemap} = await compile(absPath);
+
+  const user = await authenticate();
+  const userID = user.uid;
 
   const data: PublishRequest = {
     requester: makeRequester(userID),

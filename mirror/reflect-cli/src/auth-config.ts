@@ -73,10 +73,7 @@ export function setAuthConfigForTesting(config: UserAuthConfig | undefined) {
 }
 
 //todo: make test
-export function mustReadAuthConfigFile(): UserAuthConfig {
-  if (authConfigForTesting) {
-    return authConfigForTesting;
-  }
+function mustReadAuthConfigFile(): UserAuthConfig {
   const authConfigFilePath = path.join(
     getGlobalReflectConfigPath(),
     USER_AUTH_CONFIG_FILE,
@@ -104,6 +101,9 @@ function isFileNotFoundError(err: unknown): boolean {
 }
 
 export async function authenticate(): Promise<User> {
+  if (authConfigForTesting) {
+    return {uid: 'fake-uid'} as unknown as User;
+  }
   const config = mustReadAuthConfigFile();
   const credentials = await signInWithCustomToken(
     getAuth(),
