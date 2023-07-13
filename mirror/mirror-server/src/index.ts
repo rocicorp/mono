@@ -1,4 +1,10 @@
+import {
+  appOptions,
+  serviceAccountId,
+  serversBucketName,
+} from './config/index.js';
 import {initializeApp} from 'firebase-admin/app';
+import {getAuth} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
 import {getStorage} from 'firebase-admin/storage';
 import {https} from 'firebase-functions/v2';
@@ -8,21 +14,22 @@ import {publish as publishHandler} from './functions/publish.function.js';
 import * as userFunctions from './functions/user/index.js';
 
 // Initializes firestore et al. (e.g. for subsequent calls to getFirestore())
-initializeApp();
-
-// TODO(arv): This should be a config value
-const bucketName = 'reflect-mirror-staging-servers';
+initializeApp(appOptions);
 
 export const publish = https.onCall(
   {
+    serviceAccount: serviceAccountId,
     cors: functionsConfig.allowlist,
     secrets: ['CLOUDFLARE_API_TOKEN'],
   },
-  publishHandler(getFirestore(), getStorage(), bucketName),
+  publishHandler(getFirestore(), getStorage(), serversBucketName),
 );
 
 export const healthcheck = https.onRequest(
-  {cors: functionsConfig.allowlist},
+  {
+    serviceAccount: serviceAccountId,
+    cors: functionsConfig.allowlist,
+  },
   healthcheckHandler,
 );
 
@@ -34,7 +41,10 @@ export const healthcheck = https.onRequest(
 // or deploy individual updated functions
 export const user = {
   ensure: https.onCall(
-    {cors: functionsConfig.allowlist},
-    userFunctions.ensure(getFirestore()),
+    {
+      serviceAccount: serviceAccountId,
+      cors: functionsConfig.allowlist,
+    },
+    userFunctions.ensure(getFirestore(), getAuth()),
   ),
 };

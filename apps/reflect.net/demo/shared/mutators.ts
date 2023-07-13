@@ -14,6 +14,8 @@ import {
   putPiece,
   updatePiece,
 } from '../alive/piece-model';
+import {assert} from 'shared/src/valita';
+import * as v from 'shared/src/valita.js';
 
 export type M = typeof mutators;
 
@@ -110,7 +112,8 @@ export const mutators = {
     tx: WriteTransaction,
     {key, delta}: {key: string; delta: number},
   ) => {
-    const prev = ((await tx.get(key)) as number) ?? 0;
+    const prev = (await tx.get(key)) ?? 0;
+    assert(prev, v.number());
     const next = prev + delta;
     await tx.put(key, next);
 

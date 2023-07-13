@@ -1,10 +1,23 @@
-import jwtDecode from 'jwt-decode';
 import fs, {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as v from 'shared/src/valita.js';
 import {parse} from 'shared/src/valita.js';
 import {scriptName} from './create-cli-parser.js';
+import {getAuth, signInWithCustomToken, type User} from 'firebase/auth';
+import {initializeApp} from 'firebase/app';
+
+// TODO(darick): Make this configurable.
+const firebaseConfig = {
+  apiKey: 'AIzaSyDxHw3_wWcLkpjWgprfEPhrppFr3SgV03M',
+  authDomain: 'reflect-mirror-staging.firebaseapp.com',
+  projectId: 'reflect-mirror-staging',
+  storageBucket: 'reflect-mirror-staging.appspot.com',
+  messagingSenderId: '709901628211',
+  appId: '1:709901628211:web:8164d4a5cd28226a180446',
+};
+initializeApp(firebaseConfig);
+
 /**
  * The path to the config file that holds user authentication data,
  * relative to the user's home directory.
@@ -16,9 +29,7 @@ export const USER_AUTH_CONFIG_FILE = 'config/default.json';
  */
 
 export const userAuthConfigSchema = v.object({
-  idToken: v.string(),
-  refreshToken: v.string(),
-  expirationTime: v.number(),
+  customToken: v.string(),
 });
 export type UserAuthConfig = v.Infer<typeof userAuthConfigSchema>;
 
@@ -62,10 +73,7 @@ export function setAuthConfigForTesting(config: UserAuthConfig | undefined) {
 }
 
 //todo: make test
-export function mustReadAuthConfigFile(): UserAuthConfig {
-  if (authConfigForTesting) {
-    return authConfigForTesting;
-  }
+function mustReadAuthConfigFile(): UserAuthConfig {
   const authConfigFilePath = path.join(
     getGlobalReflectConfigPath(),
     USER_AUTH_CONFIG_FILE,
@@ -92,16 +100,14 @@ function isFileNotFoundError(err: unknown): boolean {
   );
 }
 
-const tokenSchema = v.object({
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  user_id: v.string(),
-});
-
-export function getUserIDFromConfig(config: UserAuthConfig) {
-  // @ts-expect-error TS reports an error about the default export not being a
-  // function but it clearly is.
-  const token = jwtDecode(config.idToken);
-  // Use passthrough to allow extra properties
-  v.assert(token, tokenSchema, 'passthrough');
-  return token.user_id;
+export async function authenticate(): Promise<User> {
+  if (authConfigForTesting) {
+    return {uid: 'fake-uid'} as unknown as User;
+  }
+  const config = mustReadAuthConfigFile();
+  const credentials = await signInWithCustomToken(
+    getAuth(),
+    config.customToken,
+  );
+  return credentials.user;
 }

@@ -1,11 +1,11 @@
 ---
 title: Per-Space Version Strategy
-slug: /concepts/diff/per-space-version
+slug: /concepts/strategies/per-space-version
 ---
 
 # 🛸 Per-Space Version Strategy
 
-The Per-Space Version Strategy is the same as the [The Global Version Strategy](/concepts/diff/global-version) except it partitions the database into separate _spaces_ and gives each space its own version number.
+The Per-Space Version Strategy is the same as the [The Global Version Strategy](/concepts/strategies/global-version) except it partitions the database into separate _spaces_ and gives each space its own version number.
 
 This increases throughput of the server. Instead of approximately 50 pushes per second across your entire server, you can get 50 pushes per **space**.
 
@@ -27,18 +27,18 @@ This is why partitioning makes most sense at very high-level boundaries, like or
 
 ### Setup
 
-1. Setup database as-per [The Global Version Strategy](/concepts/diff/global-version), except instead of a single global version, add storage for `Space` entities. Each space will have a unique ID and also a `version`. You may be able to simply extend some existing entity in your database, such as an organization.
+1. Setup database as-per [The Global Version Strategy](/concepts/strategies/global-version), except instead of a single global version, add storage for `Space` entities. Each space will have a unique ID and also a `version`. You may be able to simply extend some existing entity in your database, such as an organization.
 2. Each entity in your database that will be synced must be part of one (and only one) space. Add a `spaceID` attribute to each entity to keep track of the space it is part of.
 3. When constructing Replicache, specify a `name` that includes the `spaceID`, for example: `${userID}/${spaceID}` so that if a user moves between spaces, the data from two spaces won't get mixed.
 4. Also include the `spaceID` in the push and pull URLs so that the server will know which space to look in.
 
 ### On Push
 
-- Same as [The Global Version Strategy](/concepts/diff/global-version) except read and update the version from the relevant space, rather than the single global version.
+- Same as [The Global Version Strategy](/concepts/strategies/global-version) except read and update the version from the relevant space, rather than the single global version.
 
 ### On Pull
 
-- Same as [The Global Version Strategy](/concepts/diff/global-version) except return only data from the requested space.
+- Same as [The Global Version Strategy](/concepts/strategies/global-version) except return only data from the requested space.
 
 ## Challenges
 
@@ -47,7 +47,7 @@ This is why partitioning makes most sense at very high-level boundaries, like or
 
 ## Variations
 
-The same variations available to [The Global Version Strategy](/concepts/diff/global-version#variations) apply here.
+The same variations available to [The Global Version Strategy](/concepts/strategies/global-version#variations) apply here.
 
 ## Examples
 

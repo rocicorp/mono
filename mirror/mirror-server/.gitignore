@@ -2,3 +2,4 @@
 node_modules
 lib
 *.log
+.local.application_default_credentials.json

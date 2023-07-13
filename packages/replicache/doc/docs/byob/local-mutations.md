@@ -57,7 +57,7 @@ Careful readers may be wondering what happens with the order field during sync. 
 
 :::
 
-Restart the server and you should now be able to make changes!
+Restart the server and you should now be able to make changes. Note that changes are already propagating between tabs, even though we haven't done anything on the server yet. And this works even if you kill the server. This is because Replicache stores data locally that is shared between all tabs in a browser profile.
 
 <p class="text--center">
   <img src="/img/setup/local-mutation.gif" width="650"/>

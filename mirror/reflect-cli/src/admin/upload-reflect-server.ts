@@ -1,4 +1,3 @@
-import type {Bucket} from '@google-cloud/storage';
 import * as esbuild from 'esbuild';
 import {initializeApp} from 'firebase-admin/app';
 import type {Firestore} from 'firebase-admin/firestore';
@@ -6,7 +5,6 @@ import {getFirestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {getStorage} from 'firebase-admin/storage';
 import * as schema from 'mirror-schema/src/server.js';
-import {nanoid} from 'nanoid';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
@@ -14,6 +12,7 @@ import {pkgUp} from 'pkg-up';
 import {SemVer} from 'semver';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
+import {storeModule} from './store-module.js';
 
 const require = createRequire(import.meta.url);
 
@@ -149,7 +148,7 @@ async function upload(
   const workerTemplateModule: Module = {
     content: workerTemplate,
     name: 'worker.template.js',
-    type: 'text',
+    type: 'esm',
   };
   const bucket = storage.bucket(bucketName);
 
@@ -191,11 +190,4 @@ async function upload(
 
     txn.set(docRef, newDoc);
   });
-}
-
-async function storeModule(bucket: Bucket, module: Module) {
-  const filename = `${encodeURIComponent(module.name)}-${nanoid()}`;
-  const file = bucket.file(filename);
-  await file.save(module.content);
-  return file.cloudStorageURI.href;
 }

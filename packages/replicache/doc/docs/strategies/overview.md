@@ -1,6 +1,6 @@
 ---
 title: Overview
-slug: /concepts/diff/overview
+slug: /concepts/strategies/overview
 ---
 
 # Backend Strategies
@@ -33,7 +33,7 @@ Some strategies elegantly support this, while with others it's not possible or o
     </thead>
     <tbody>
         <tr>
-            <td align="center" nowrap="true"><a href="/concepts/diff/reset"><b>🤪 Reset</b></a></td>
+            <td align="center" nowrap="true"><a href="/concepts/strategies/reset"><b>🤪 Reset</b></a></td>
             <td>For very tiny or slowly-updating applications.</td>
             <td align="center">👍🏼 Little overhead compared to standard web app</td>
             <td align="center">👎🏼 Read and transmit entire client view on each pull</td>
@@ -42,7 +42,7 @@ Some strategies elegantly support this, while with others it's not possible or o
             <td align="center" nowrap="true">👍🏼 Automatic</td>
         </tr>
         <tr>
-            <td align="center" nowrap="true"><a href="/concepts/diff/global-version"><b>🌏 Global Version</b></a></td>
+            <td align="center" nowrap="true"><a href="/concepts/strategies/global-version"><b>🌏 Global Version</b></a></td>
             <td>Simple apps with low concurrency and no need for partial sync or dynamic auth</td>
             <td align="center">👎🏼 Limited to about 50/second</td>
             <td align="center">👍🏼 Efficient to compute patch</td>
@@ -51,7 +51,7 @@ Some strategies elegantly support this, while with others it's not possible or o
             <td align="center" nowrap="true">🤷🏻 Extra effort.</td>
         </tr>
         <tr>
-            <td align="center" nowrap="true"><a href="/concepts/diff/per-space-version"><b>🛸 Per-Space Version</b></a></td>
+            <td align="center" nowrap="true"><a href="/concepts/strategies/per-space-version"><b>🛸 Per-Space Version</b></a></td>
             <td>Simple apps that can be partitioned easily along some boundary like organization or account</td>
             <td align="center">👎🏼 Limited to about 50/second/space</td>
             <td align="center">👍🏼 Efficient to compute patch</td>
@@ -60,7 +60,7 @@ Some strategies elegantly support this, while with others it's not possible or o
             <td align="center" nowrap="true">🤷🏻 Extra effort.</td>
         </tr>
         <tr>
-            <td align="center" nowrap="true"><a href="/concepts/diff/row-version"><b>🚣 Row Versioning</b></a></td>
+            <td align="center" nowrap="true"><a href="/concepts/strategies/row-version"><b>🚣 Row Versioning</b></a></td>
             <td>Apps that need greater concurrency, partial sync, or dynamic auth</td>
             <td align="center">👍🏼 Little overhead compared to standard web app</td>
             <td align="center">👍🏼 More overhead than standard web app but scales well</td>

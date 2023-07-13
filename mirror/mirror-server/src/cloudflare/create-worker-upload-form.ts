@@ -75,7 +75,7 @@ export interface CfModule {
    *
    * If absent, will default to the main module's type.
    */
-  type?: CfModuleType;
+  type?: CfModuleType | undefined;
 }
 
 /**
@@ -320,24 +320,6 @@ export function toMimeType(type: CfModuleType): string {
       throw new TypeError('Unsupported module: ' + type);
   }
 }
-
-export type SimpleRoute = string;
-export type ZoneIdRoute = {
-  pattern: string;
-  zone_id: string;
-  custom_domain?: boolean;
-};
-export type ZoneNameRoute = {
-  pattern: string;
-  zone_name: string;
-  custom_domain?: boolean;
-};
-export type CustomDomainRoute = {pattern: string; custom_domain: boolean};
-export type Route =
-  | SimpleRoute
-  | ZoneIdRoute
-  | ZoneNameRoute
-  | CustomDomainRoute;
 
 export type WorkerMetadataBinding =
   // If you add any new binding types here, also add it to safeBindings

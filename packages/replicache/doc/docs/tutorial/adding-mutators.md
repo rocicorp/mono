@@ -3,7 +3,7 @@ title: Adding Mutators
 slug: /tutorial/adding-mutators
 ---
 
-<iframe src="https://codesandbox.io/embed/replicache-mutators-jvqxpb?autoresize=1&fontsize=12&hidenavigation=1&theme=light&codemirror=1&view=split"
+<iframe src="https://codesandbox.io/embed/replicache-mutators-13-f8v2k4?autoresize=1&fontsize=12&hidenavigation=1&theme=light&codemirror=1&view=split"
      style={{'width':'100%','height':'350px', 'border':'1px solid rgb(222,221,221)', 'overflow':'hidden'}}
      title="constructing-replicache"
      allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"

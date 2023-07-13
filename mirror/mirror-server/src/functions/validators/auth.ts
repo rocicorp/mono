@@ -1,9 +1,13 @@
 import {CallableRequest, HttpsError} from 'firebase-functions/v2/https';
 import type {BaseRequest} from 'mirror-protocol/src/base.js';
-import type {AsyncHandler} from './types.js';
+import type {
+  AsyncHandler,
+  AsyncHandlerWithAuth,
+  CallableRequestWithAuth,
+} from './types.js';
 
 export function withAuthorization<Request extends BaseRequest, Response>(
-  handler: AsyncHandler<Request, Response>,
+  handler: AsyncHandlerWithAuth<Request, Response>,
 ): AsyncHandler<Request, Response> {
   // eslint-disable-next-line require-await
   return async (payload: Request, context: CallableRequest<Request>) => {
@@ -17,6 +21,6 @@ export function withAuthorization<Request extends BaseRequest, Response>(
         'authenticated user is not authorized to make this request',
       );
     }
-    return handler(payload, context);
+    return handler(payload, context as CallableRequestWithAuth<Request>);
   };
 }

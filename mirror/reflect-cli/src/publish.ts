@@ -1,8 +1,10 @@
-import type {PublishRequest} from 'mirror-protocol/src/publish.js';
+import {
+  publish as publishCaller,
+  type PublishRequest,
+} from 'mirror-protocol/src/publish.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {callFirebase} from 'shared/src/call-firebase.js';
-import {getUserIDFromConfig, mustReadAuthConfigFile} from './auth-config.js';
+import {authenticate} from './auth-config.js';
 import {compile} from './compile.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
 import {makeRequester} from './requester.js';
@@ -33,10 +35,14 @@ async function exists(path: string) {
 
 type PublishHandlerArgs = YargvToInterface<ReturnType<typeof publishOptions>>;
 
-export async function publishHandler(yargs: PublishHandlerArgs) {
-  const config = mustReadAuthConfigFile();
-  const userID = getUserIDFromConfig(config);
+export async function publishHandler(
+  yargs: PublishHandlerArgs,
+  publish = publishCaller, // Overridden in tests.
+) {
   const {script, name} = yargs;
+
+  // TODO(arv): This should be part of the config.
+  const appID = 'temp-app-id';
 
   const absPath = path.resolve(script);
 
@@ -48,6 +54,9 @@ export async function publishHandler(yargs: PublishHandlerArgs) {
   const serverVersionRange = range.raw;
 
   const {code, sourcemap} = await compile(absPath);
+
+  const user = await authenticate();
+  const userID = user.uid;
 
   const data: PublishRequest = {
     requester: makeRequester(userID),
@@ -61,10 +70,11 @@ export async function publishHandler(yargs: PublishHandlerArgs) {
       name: path.basename(sourcemap.path),
     },
     serverVersionRange,
+    appID,
   };
 
-  await callFirebase('publish', data, config.idToken);
+  await publish(data);
 
   console.log(`🎁 Published successfully to:`);
-  console.log(`https://${name}.replicache.workers.dev/`);
+  console.log(`https://${name}.reflect-server.net/`);
 }

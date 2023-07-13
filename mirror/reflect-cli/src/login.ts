@@ -27,27 +27,12 @@ export async function loginHandler(
 
     switch (pathname) {
       case '/oauth/callback': {
-        const idToken = searchParams.get('idToken');
-        const refreshToken = searchParams.get('refreshToken');
-        const expirationTimeStr = searchParams.get('expirationTime');
+        const customToken = searchParams.get('customToken');
         try {
-          if (!idToken || !refreshToken || !expirationTimeStr) {
-            throw new Error(
-              `Missing ${!idToken ? 'idToken ' : ''}${
-                !refreshToken ? 'refreshToken ' : ''
-              }${
-                !expirationTimeStr ? 'expirationTime ' : ''
-              }from the auth provider.`,
-            );
+          if (!customToken) {
+            throw new Error(`Missing customToken from the auth provider.`);
           }
-          const expirationTime = parseInt(expirationTimeStr, 10);
-          assert(!isNaN(expirationTime), 'expirationTime is not a number');
-
-          const authConfig: UserAuthConfig = {
-            idToken,
-            refreshToken,
-            expirationTime,
-          };
+          const authConfig: UserAuthConfig = {customToken};
 
           writeAuthConfigFile(authConfig);
         } catch (error) {

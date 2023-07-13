@@ -4,7 +4,7 @@ import {createRequire} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {pkgUp} from 'pkg-up';
-import {assert, assertString} from 'shared/src/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import {publishHandler} from './publish.js';
 import {useFakeAuthConfig} from './test-helpers.js';
 
@@ -68,35 +68,22 @@ test('it should throw if the source has syntax errors', async () => {
 });
 
 test('it should compile typescript', async () => {
-  const fetchSpy = jest.spyOn(globalThis, 'fetch');
-  fetchSpy.mockImplementationOnce((url, init) => {
-    expect(url).toMatch(/\/publish$/);
-    assert(init);
-    expect(init.method).toBe('POST');
-    expect(init.headers).toMatchObject({
-      'Content-type': 'application/json',
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      'Authorization': expect.stringMatching(/^Bearer /),
-    });
-    assertString(init.body);
-    const body = JSON.parse(init.body);
-
+  const publishMock = jest.fn();
+  publishMock.mockImplementationOnce(body => {
     expect(body).toMatchObject({
-      data: {
-        name: 'test-name',
-        requester: {
-          userAgent: {
-            type: 'reflect-cli',
-            version: '0.1.0',
-          },
-          userID: 'fake-uid',
+      name: 'test-name',
+      requester: {
+        userAgent: {
+          type: 'reflect-cli',
+          version: '0.1.0',
         },
-        source: {
-          content: expect.stringContaining(`var x = 42;`),
-          name: 'test.js',
-        },
-        sourcemap: {content: expect.any(String), name: 'test.js.map'},
+        userID: 'fake-uid',
       },
+      source: {
+        content: expect.stringContaining(`var x = 42;`),
+        name: 'test.js',
+      },
+      sourcemap: {content: expect.any(String), name: 'test.js.map'},
     });
     return Promise.resolve(new Response('{"result":{"success":"OK"}}'));
   });
@@ -105,9 +92,12 @@ test('it should compile typescript', async () => {
     'const x: number = 42; console.log(x);',
     'test.ts',
   );
-  await publishHandler({script: testFilePath, name: 'test-name'} as Args);
+  await publishHandler(
+    {script: testFilePath, name: 'test-name'} as Args,
+    publishMock as any,
+  );
 
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(publishMock).toHaveBeenCalledTimes(1);
 });
 
 test('it should throw if invalid version', async () => {

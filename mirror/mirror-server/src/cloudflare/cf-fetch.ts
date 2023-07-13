@@ -35,7 +35,11 @@ export async function cfFetch<ResponseType = unknown>(
   assert(resource.startsWith('/'), 'resource must start with /');
   const base = 'https://api.cloudflare.com/client/v4';
   const queryString = searchParams ? `?${searchParams.toString()}` : '';
-  const response = await fetch(`${base}${resource}${queryString}`, {
+
+  const url = `${base}${resource}${queryString}`;
+  console.debug(`cfFetch: URL: ${url}`, 'init:', init);
+
+  const response = await fetch(url, {
     ...init,
     headers: {
       // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -44,6 +48,7 @@ export async function cfFetch<ResponseType = unknown>(
     },
   });
   const jsonText = await response.text();
+  console.debug(`cfFetch: URL: ${url}`, 'response:', jsonText);
 
   const method = init.method ?? 'GET';
 
