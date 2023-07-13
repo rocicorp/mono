@@ -17,6 +17,8 @@ export function createCall<Req extends v.ObjectType, Res extends v.ObjectType>(
 
     const callable = httpsCallable(functions, functionName);
     const result = await callable(req);
-    return resSchema.parse(result.data);
+
+    // Make forwards-compatible by ignoring unknown (i.e. new) fields.
+    return resSchema.parse(result.data, {mode: 'passthrough'});
   };
 }
