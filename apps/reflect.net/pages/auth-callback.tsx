@@ -21,8 +21,6 @@ export type ReflectAuthResult = v.Infer<typeof reflectAuthResultSchema>;
 export const authJwtTokenDecodedSchema = v.object({
   /* eslint-disable @typescript-eslint/naming-convention */
   user_id: v.string(),
-  name: v.string(),
-  picture: v.string(),
   iss: v.string(),
   aud: v.string(),
   auth_time: v.number(),
@@ -31,13 +29,6 @@ export const authJwtTokenDecodedSchema = v.object({
   exp: v.number(),
   email: v.string(),
   email_verified: v.boolean(),
-  firebase: v.object({
-    identities: v.object({
-      'email': v.array(v.string()),
-      'github.com': v.array(v.string()),
-    }),
-    sign_in_provider: v.string(),
-  }),
   /* eslint-enable @typescript-eslint/naming-convention */
 });
 
@@ -54,7 +45,7 @@ function createCliCallbackUrl(reflectAuth: ReflectAuthResult): string {
 
 async function ensureUser(reflectAuth: ReflectAuthResult): Promise<boolean> {
   const token = jwtDecode<AuthJwtTokenDecoded>(reflectAuth.idToken);
-  assert(token, authJwtTokenDecodedSchema);
+  assert(token, authJwtTokenDecodedSchema, 'passthrough');
   const data = {
     requester: {
       userID: token.user_id,
