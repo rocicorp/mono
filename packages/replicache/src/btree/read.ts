@@ -36,7 +36,7 @@ import {
 export const NODE_HEADER_SIZE = 11;
 
 export class BTreeRead implements AsyncIterable<Entry<FrozenJSONValue>> {
-  private readonly _cache: Map<Hash, DataNodeImpl | InternalNodeImpl> =
+  protected readonly _cache: Map<Hash, DataNodeImpl | InternalNodeImpl> =
     new Map();
 
   protected readonly _dagRead: dag.Read;
@@ -76,22 +76,13 @@ export class BTreeRead implements AsyncIterable<Entry<FrozenJSONValue>> {
       this.getEntrySize,
     );
     const impl = newNodeImpl(
-      this._chunkEntriesToTreeEntries(
-        data[NODE_ENTRIES] as readonly Entry<FrozenJSONValue>[],
-      ),
+      data[NODE_ENTRIES] as Entry<FrozenJSONValue>[],
       hash,
       data[NODE_LEVEL],
       false,
     );
     this._cache.set(hash, impl);
     return impl;
-  }
-
-  protected _chunkEntriesToTreeEntries<V>(
-    entries: readonly Entry<V>[],
-  ): Entry<V>[] {
-    // Remove readonly modifier
-    return entries as unknown as Entry<V>[];
   }
 
   async get(key: string): Promise<FrozenJSONValue | undefined> {
