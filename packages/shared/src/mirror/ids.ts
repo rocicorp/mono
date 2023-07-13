@@ -1,5 +1,4 @@
 import {objects, predicates} from 'friendly-words';
-import {nanoid} from 'nanoid';
 import * as base62 from 'shared/src/base62.js';
 
 const tempUint64Array = new BigUint64Array(1);
@@ -34,5 +33,5 @@ function randomSample<T>(arr: T[]): T {
 }
 
 export function newDeploymentID(): string {
-  return nanoid();
+  return Date.now() + '';
 }
