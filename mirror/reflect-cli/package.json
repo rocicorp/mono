@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "dependencies": {
+    "firebase": "^9.22.2",
     "jwt-decode": "^3.1.2",
     "nanoid": "^4.0.2",
     "open": "^9.1.0",
