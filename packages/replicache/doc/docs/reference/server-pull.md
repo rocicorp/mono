@@ -199,7 +199,7 @@ This is useful in case the request cookie is invalid or not known to the server,
 
 ## Computing Changes for Pull
 
-See [Diff Strategies](/concepts/diff/overview) for information on different approaches to implementing pull.
+See [Diff Strategies](/concepts/strategies/overview) for information on different approaches to implementing pull.
 
 ## Handling Unknown Clients
 

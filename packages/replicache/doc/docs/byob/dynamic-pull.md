@@ -3,27 +3,39 @@ title: Dynamic Pull
 slug: /byob/dynamic-pull
 ---
 
-Even though in the previous step we're making persistent changes in the database, we still aren't _serving_ that data in the pull endpoint (it's still static 🤣).
+Even though in the previous step we're making persistent changes in the database, we still aren't _serving_ that data in the pull endpoint (it's still static 🤣). The pull response is still static. Let's fix that now.
 
-Referring back to the [Global Version](/concepts/diff/global-version) doc again, the basic steps for pull are:
+The pull endpoint takes as input:
+
+- `clientGroupID`: The client group (roughly, the browser profile) that is making the request.
+- `cookie`: The cookie the client group received from the previous pull, if any.
+
+And it returns:
+
+- `patch`: A set of changes (puts and deletes) that have occurred since the last pull.
+- `cookie`: An opaque value that identifies the state the patch was calculated from. This value is sent back to the server on the next pull, so the next patch can be calculated.
+- `lastMutationIDChanges`: A map with an entry for each client in the group whose `lastMutationID` has changed since the last pull.
+
+See [pull endpoint reference](/reference/server-pull) for more details.
+
+The implementation of pull will depend on the backend strategy you are using. For the [Global Version](/concepts/strategies/global-version) strategy we're using, the basics steps are:
 
 <ul>
   <li>Open an exclusive (serializable) transaction</li>
-  <li>Read the current value of the global version</li>
-  <li>Read the current value of the requesting client's lastMutationID</li>
-  <li>If the request cookie is `null`:
+  <li>Read the latest global version from the database</li>
+  <li>Build the response patch:
     <ul>
-      <li>Read all entities that where `IsDeleted=False`</li>
-      <li>Create a _reset patch_ - a patch with a `clear` op followed by `put` ops for each read entity</li>
+      <li>If the request cookie is null, this patch contains a `put` for each entity in the database that isn't deleted</li>
+      <li>Otherwise, this patch contains only entries that have been changed since the request cookie</li>
     </ul>
   </li>
-  <li>Otherwise:
+  <li>Build a map of changes to client `lastMutationID` values:
     <ul>
-      <li>Read all entities whose `Version` is greater than the cookie value</li>
-      <li>Create a patch having `del` ops for each entity where `IsDeleted=True`, and `put` ops for other entities</li>
+      <li>If the request cookie is null, this map contains an entry for every client in the requesting `clientGroup`</li>
+      <li>Otherwise, it contains only entries for clients that have changed since the request cookie</li>
     </ul>
   </li>
-  <li>Return the calculated patch, the current value of the `GlobalVersion` field. and the requesting client's current `lastMutationID` as the pull response.</li>
+  <li>Return the patch, the current global `version`, and the `lastMutationID` changes as a `PullResponse` struct</li>
 </ul>
 
 ## Implement Pull
@@ -32,7 +44,6 @@ Replace the contents of `pages/api/replicache-pull.js` with this code:
 
 ```js
 import {tx} from '../../db.js';
-import {getLastMutationID} from './replicache-push.js';
 
 export {handlePull as default};
 
@@ -45,19 +56,20 @@ async function handlePull(req, res) {
     // Read all data in a single transaction so it's consistent.
     await tx(async t => {
       // Get current version.
-      const version = (await t.one('select version from replicache_version'))
-        .version;
+      const version =
+        (await t.one('select version from replicache_version')).version ?? 0;
 
       // Get lmid for requesting client.
       const isExistingClient = pull.lastMutationID > 0;
-      const lastMutationID = await getLastMutationID(
+      const lastMutationIDChanges = await getLastMutationIDChanges(
         t,
-        pull.clientID,
-        isExistingClient,
+        pull.clientGroupID,
+        version,
       );
+      // TODO: Deleted client check
+      // Requires clientID in PullRequest
 
       // Get changed domain objects since requested version.
-      const fromVersion = pull.cookie ?? 0;
       const changed = await t.manyOrNone(
         'select id, sender, content, ord, deleted from message where version > $1',
         fromVersion,
@@ -87,7 +99,7 @@ async function handlePull(req, res) {
       }
 
       res.json({
-        lastMutationID,
+        lastMutationIDChanges,
         cookie: version,
         patch,
       });
@@ -99,6 +111,17 @@ async function handlePull(req, res) {
   } finally {
     console.log('Processed pull in', Date.now() - t0);
   }
+}
+
+async function getLastMutationIDChanges(t, clientGroupID, fromVersion) {
+  const rows = await t.many(
+    `select id, last_mutation_id
+    from replicache_client
+    where clientGroupID = $1 and version > $2`,
+    clientGroupID,
+    fromVersion,
+  );
+  return Object.fromEntries(rows.map(r => [r.id, r.last_mutation_id]));
 }
 ```
 

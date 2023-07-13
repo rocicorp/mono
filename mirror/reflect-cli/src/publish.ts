@@ -1,7 +1,7 @@
 import type {PublishRequest} from 'mirror-protocol/src/publish.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {callFirebase} from 'shared/src/call-firebase.js';
+import {callFirebase} from 'shared/src/mirror/call-firebase.js';
 import {getUserIDFromConfig, mustReadAuthConfigFile} from './auth-config.js';
 import {compile} from './compile.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';

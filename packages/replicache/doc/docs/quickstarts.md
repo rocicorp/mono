@@ -3,50 +3,91 @@ title: Quickstarts
 slug: /quickstarts
 ---
 
-Templates to get you up and running quickly with a variety of frameworks.
+Minimal examples, demonstrating different stacks and techniques for building Replicache apps. Clone these to easily play with Replicache before building your own server.
 
-## React/TypeScript/Express
+## todo-react
 
-```bash
-npx degit rocicorp/todo-react my-app
-cd my-app
-npm install
+One of the most common Replicache setups.
 
-# Get a license if you don't have one already:
-# https://doc.replicache.dev/howto/licensing
+**https://github.com/rocicorp/todo-react**
 
-VITE_REPLICACHE_LICENSE_KEY=<your-license> npm run watch --ws
-```
+<table>
+  <tr>
+    <td>UI</td>
+    <td>React</td>
+  </tr>
+  <tr>
+    <td>Server</td>
+    <td>Express</td>
+  </tr>
+  <tr>
+    <td>Storage</td>
+    <td>Postgres</td>
+  </tr>
+  <tr>
+    <td>Diff Strategy</td>
+    <td>Per-Space Version</td>
+  </tr>
+  <tr>
+    <td>Pokes</td>
+    <td>Server-Sent Events</td>
+  </tr>
+</table>
 
-## Web Components/TypeScript/Express
+## todo-wc
 
-```bash
-npx degit rocicorp/todo-wc my-app
-cd my-app
-npm install
+Demonstrated usage of Replicache with Web Components/Vanilla JS. Otherwise identical to todo-react.
 
-# Get a license if you don't have one already:
-# https://doc.replicache.dev/howto/licensing
+**https://github.com/rocicorp/todo-wc**
 
-VITE_REPLICACHE_LICENSE_KEY=<your-license> npm run watch --ws
-```
+<table>
+  <tr>
+    <td>UI</td>
+    <td>Web Components</td>
+  </tr>
+  <tr>
+    <td>Server</td>
+    <td>Express</td>
+  </tr>
+  <tr>
+    <td>Storage</td>
+    <td>Postgres</td>
+  </tr>
+  <tr>
+    <td>Diff Strategy</td>
+    <td>Per-Space Version</td>
+  </tr>
+  <tr>
+    <td>Pokes</td>
+    <td>Server-Sent Events</td>
+  </tr>
+</table>
 
-## React/TypeScript/NextJS
+## todo-nextjs
 
-```bash
-npx degit rocicorp/replicache-todo my-app
-cd my-app
-npm install
+Demonstrated Replicache with serverless backends, and usage of Supabase for pokes.
 
-# Get a license if you don't have one already:
-# https://doc.replicache.dev/howto/licensing
+**https://github.com/rocicorp/todo-nextjs**
 
-NEXT_PUBLIC_REPLICACHE_LICENSE_KEY=<your-license> npm run dev
-
-# If you want to run against Supabase, you need to set up a [Supabase project](https://supabase.com/) and
-# set the following environment variables:
-
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-SUPABASE_DATABASE_PASSWORD
-NEXT_PUBLIC_SUPABASE_URL
-```
+<table>
+  <tr>
+    <td>UI</td>
+    <td>Next.js/React</td>
+  </tr>
+  <tr>
+    <td>Server</td>
+    <td>Serverless functions on Vercel</td>
+  </tr>
+  <tr>
+    <td>Storage</td>
+    <td>Supabase</td>
+  </tr>
+  <tr>
+    <td>Diff Strategy</td>
+    <td>Global Version</td>
+  </tr>
+  <tr>
+    <td>Pokes</td>
+    <td>Built on Supabase's realtime support</td>
+  </tr>
+</table>

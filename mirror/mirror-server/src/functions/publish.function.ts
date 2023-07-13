@@ -7,9 +7,9 @@ import {
   publishResponseSchema,
 } from 'mirror-protocol/src/publish.js';
 import * as schema from 'mirror-schema/src/deployment.js';
-import {nanoid} from 'nanoid';
 import * as semver from 'semver';
-import {isSupportedSemverRange} from 'shared/src/is-supported-semver-range.js';
+import {newDeploymentID} from 'shared/src/mirror/ids.js';
+import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
 import type {CfModule} from '../cloudflare/create-worker-upload-form.js';
 import {getServerModuleMetadata} from '../cloudflare/get-server-modules.js';
 import {publish as publishToCloudflare} from '../cloudflare/publish.js';
@@ -147,7 +147,7 @@ async function saveToFirestore(
   appID: string,
   data: schema.Deployment,
 ): Promise<string> {
-  const deploymentID = nanoid();
+  const deploymentID = newDeploymentID();
 
   const docRef = firestore
     .doc(schema.deploymentPath(appID, deploymentID))

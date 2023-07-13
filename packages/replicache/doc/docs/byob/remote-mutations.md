@@ -5,14 +5,14 @@ slug: /byob/remote-mutations
 
 Replicache will periodically invoke your [push endpoint](/reference/server-push) sending a list of mutations that need to be applied.
 
-The implementation of push will depend on the diff strategy you are using. For the [Global Version](/concepts/diff/global-version) strategy we're using, the basics steps are:
+The implementation of push will depend on the backend strategy you are using. For the [Global Version](/concepts/strategies/global-version) strategy we're using, the basics steps are:
 
 1. Open an exclusive (serializable) transaction.
 1. Read the current global version and compute the next one.
 1. Create a client record for the requesting client if the client is new.
 1. Validate that the received mutation is the next expected one. If the received mutation has already been processed (by a previous push), skip it. If the received mutation is not expected, then error.
 1. Run the received mutation by making the requested changes to the backend database. For any modified domain data objects, update their `version` to the new global version.
-1. Update the stored `lastMutationID` for the pushing client, so that `pull` can later report the last-processed mutationID.
+1. Update the stored `version` and `lastMutationID` for the pushing client, so that `pull` can later report the last-processed mutationID.
 1. Store the new global version.
 
 At minimum, all of these changes **must** happen atomically in a serialized transaction for each mutation in a push. However, putting multiple mutations together in a single wider transaction is also acceptable.
@@ -40,7 +40,7 @@ async function handlePush(req, res) {
       const t1 = Date.now();
 
       try {
-        await tx(t => processMutation(t, push.clientID, mutation));
+        await tx(t => processMutation(t, clientGroupID, mutation));
       } catch (e) {
         console.error('Caught error from mutation', mutation, e);
 
@@ -69,7 +69,7 @@ async function handlePush(req, res) {
         // deterministic!:
         //
         // https://doc.replicache.dev/concepts/how-it-works#speculative-execution-and-confirmation
-        await tx(t => processMutation(t, push.clientID, mutation, e));
+        await tx(t => processMutation(t, push.clientGroupID, mutation, e));
       }
 
       console.log('Processed mutation in', Date.now() - t1);
@@ -88,14 +88,16 @@ async function handlePush(req, res) {
   }
 }
 
-async function processMutation(t, clientID, mutation, error) {
+async function processMutation(t, clientGroupID, mutation, error) {
+  const {clientID} = mutation;
+
   // Get the previous version and calculate the next one.
   const {version: prevVersion} = await t.one(
     'select version from replicache_version for update',
   );
   const nextVersion = prevVersion + 1;
 
-  const lastMutationID = await getLastMutationID(t, clientID, false);
+  const lastMutationID = await getLastMutationID(t, clientID);
   const nextMutationID = lastMutationID + 1;
 
   console.log('nextVersion', nextVersion, 'nextMutationID', nextMutationID);
@@ -140,38 +142,47 @@ async function processMutation(t, clientID, mutation, error) {
 
   console.log('setting', clientID, 'last_mutation_id to', nextMutationID);
   // Update lastMutationID for requesting client.
-  await setLastMutationID(t, clientID, nextMutationID);
+  await setLastMutationID(t, clientID, clientGroupID, nextMutationID, version);
 
   // Update global version.
   await t.none('update replicache_version set version = $1', [nextVersion]);
 }
 
-export async function getLastMutationID(t, clientID, required) {
+export async function getLastMutationID(t, clientID) {
   const clientRow = await t.oneOrNone(
     'select last_mutation_id from replicache_client where id = $1',
     clientID,
   );
   if (!clientRow) {
-    // If the client is unknown ensure the request is from a new client. If it
-    // isn't, data has been deleted from the server, which isn't supported:
-    // https://github.com/rocicorp/replicache/issues/1033.
-    if (required) {
-      throw new Error(`client not found: ${clientID}`);
-    }
     return 0;
   }
   return parseInt(clientRow.last_mutation_id);
 }
 
-async function setLastMutationID(t, clientID, mutationID) {
+async function setLastMutationID(
+  t,
+  clientID,
+  clientGroupID,
+  mutationID,
+  version,
+) {
   const result = await t.result(
-    'update replicache_client set last_mutation_id = $2 where id = $1',
-    [clientID, mutationID],
+    `update replicache_client set
+      client_group_id = $2,
+      last_mutation_id = $3,
+      version = $4
+    where id = $1`,
+    [clientID, clientGroupID, mutationID, version],
   );
   if (result.rowCount === 0) {
     await t.none(
-      'insert into replicache_client (id, last_mutation_id) values ($1, $2)',
-      [clientID, mutationID],
+      `insert into replicache_client (
+        id,
+        client_group_id,
+        last_mutation_id,
+        version
+      ) values ($1, $2, $3, $4)`,
+      [clientID, clientGroupID, mutationID, version],
     );
   }
 }
@@ -202,8 +213,8 @@ Restart the server, navigate to [http://localhost:3000/](http://localhost:3000/)
   <img src="/img/setup/remote-mutation.webp" width="650"/>
 </p>
 
-But if we refresh the browser, the change disappears. And we don't see the change propagating to other browsers yet. What gives?
+But if we check another browser, or an incognito window, the change isn't there. What gives?
 
 ## Next
 
-In the next section, we implement [Dynamic Pull](./dynamic-pull.md) to propagate the result of these mutations to other Replicache clients.
+In the next section, we implement [Dynamic Pull](./dynamic-pull.md) to propagate changes between users.

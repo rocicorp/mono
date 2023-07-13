@@ -2,7 +2,7 @@ import {readFile} from 'fs/promises';
 import path from 'node:path';
 import {pkgUp} from 'pkg-up';
 import {Range, validRange} from 'semver';
-import {isSupportedSemverRange} from 'shared/src/is-supported-semver-range.js';
+import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
 
 /**
  * This finds the version of the reflect-server that an app is depending on. It

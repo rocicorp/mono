@@ -11,7 +11,6 @@ import type {Config} from './config.js';
 
 export async function publishCustomDomains(
   {apiToken, scriptName, accountID}: Config,
-
   hostname: string,
 ): Promise<void> {
   /* eslint-disable @typescript-eslint/naming-convention */
@@ -22,6 +21,8 @@ export async function publishCustomDomains(
     origins: [{hostname}],
   };
   /* eslint-enable @typescript-eslint/naming-convention */
+
+  console.log('Setting up custom domain:', hostname);
 
   // deploy to domains
   await cfFetch(

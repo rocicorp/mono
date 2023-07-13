@@ -1,6 +1,6 @@
 ---
 title: The Reset Strategy
-slug: /concepts/diff/reset
+slug: /concepts/strategies/reset
 ---
 
 # 🤪 The Reset Strategy
