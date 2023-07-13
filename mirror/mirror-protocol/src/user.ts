@@ -4,5 +4,8 @@ import {baseRequestFields, baseResponseFields} from './base.js';
 export const ensureUserRequestSchema = v.object(baseRequestFields);
 export type EnsureUserRequest = v.Infer<typeof ensureUserRequestSchema>;
 
-export const ensureUserResponseSchema = v.object(baseResponseFields);
+export const ensureUserResponseSchema = v.object({
+  ...baseResponseFields,
+  customToken: v.string(),
+});
 export type EnsureUserResponse = v.Infer<typeof ensureUserResponseSchema>;
