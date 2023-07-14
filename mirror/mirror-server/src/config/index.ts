@@ -16,5 +16,6 @@ export const serviceAccountId = appOptions.serviceAccountId ?? '';
 export const serversBucketName = `${projectId}-servers`;
 
 export const baseHttpsOptions: HttpsOptions = {
+  // TODO(darick): Convert to a limited list.
   cors: true,
 };
