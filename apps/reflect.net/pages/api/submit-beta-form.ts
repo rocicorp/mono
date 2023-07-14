@@ -6,7 +6,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   const endpoint =
-    'https://script.google.com/macros/s/AKfycbyldDa4OZdGRRj-Mkrl4PkZUmIj-6XmHiNRoBjnorltIDAf5h0GYzIbVIMr5m-FN05i3Q/exec';
+    'https://app.loops.so/api/newsletter-form/cliw1dqmq030ul20nil8cz4h2';
   const options = {
     method: 'POST',
     body: req.body,
@@ -16,7 +16,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const response = await fetch(endpoint, options);
   if (!response.ok) {
     return res.status(response.status).json({
-      message: `Could not forward the request to the Google Script: ${response.statusText}`,
+      message: `Could not forward the request to the server: ${response.statusText}`,
     });
   }
 
