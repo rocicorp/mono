@@ -637,15 +637,12 @@ export class BaseAuthDO implements DurableObject {
           AUTH_DATA_HEADER_NAME,
           encodeHeaderValue(JSON.stringify(authData)),
         );
-        const responseFromDO = await timed(
-          lc.debug,
-          'fetching response from DO',
-          () => stub.fetch(requestToDO),
-        );
-        lc.debug?.(
-          'received DO response',
-          responseFromDO.status,
-          responseFromDO.statusText,
+        const responseFromDO = await roomDOFetch(
+          requestToDO,
+          'connect',
+          stub,
+          roomID,
+          lc,
         );
         const responseHeaders = new Headers(responseFromDO.headers);
         // While Sec-WebSocket-Protocol is just being used as a mechanism for
@@ -686,7 +683,13 @@ export class BaseAuthDO implements DurableObject {
             return new Response('room not found', {status: 404});
           }
           const stub = this._roomDO.get(roomObjectID);
-          const response = await stub.fetch(req);
+          const response = await roomDOFetch(
+            req,
+            'authInvalidateForRoom',
+            stub,
+            roomID,
+            lc,
+          );
           if (!response.ok) {
             lc.debug?.(
               `Received error response from ${roomID}. ${
@@ -770,14 +773,19 @@ export class BaseAuthDO implements DurableObject {
             return;
           }
           const stub = this._roomDO.get(roomObjectID);
-          const response = await stub.fetch(
-            new Request(
-              `https://unused-reflect-room-do.dev${ROOM_ROUTES.authConnections}`,
-              {
-                method: 'POST',
-                headers: createAuthAPIHeaders(this._authApiKey),
-              },
-            ),
+          const req = new Request(
+            `https://unused-reflect-room-do.dev${ROOM_ROUTES.authConnections}`,
+            {
+              method: 'POST',
+              headers: createAuthAPIHeaders(this._authApiKey),
+            },
+          );
+          const response = await roomDOFetch(
+            req,
+            'revalidate connections',
+            stub,
+            roomID,
+            lc,
           );
           let connectionsResponse: ConnectionsResponse;
           try {
@@ -874,7 +882,9 @@ export class BaseAuthDO implements DurableObject {
 
       const stub = this._roomDO.get(roomObjectID);
       const req = roomIDs.length === 1 ? request : request.clone();
-      responsePromises.push(stub.fetch(req));
+      responsePromises.push(
+        roomDOFetch(req, 'fwd invalidate request', stub, roomID, lc),
+      );
     }
     for (let i = 0; i < responsePromises.length; i++) {
       const response = await responsePromises[i];
@@ -892,6 +902,37 @@ export class BaseAuthDO implements DurableObject {
     }
     return errorResponses[0];
   }
+}
+
+async function roomDOFetch(
+  request: Request,
+  fetchDescription: string,
+  roomDOStub: DurableObjectStub,
+  roomID: string,
+  lc: LogContext,
+): Promise<Response> {
+  lc.debug?.(`Sending request ${request.url} to roomDO with roomID ${roomID}`);
+  const responseFromDO = await timed(
+    lc.debug,
+    `RoomDO fetch for ${fetchDescription}`,
+    async () => {
+      try {
+        return await roomDOStub.fetch(request);
+      } catch (e) {
+        lc.error?.(
+          `Exception fetching ${request.url} from roomDO with roomID ${roomID}`,
+          e,
+        );
+        throw e;
+      }
+    },
+  );
+  lc.debug?.(
+    'received DO response',
+    responseFromDO.status,
+    responseFromDO.statusText,
+  );
+  return responseFromDO;
 }
 
 // In the past this prefix was 'connection/',
