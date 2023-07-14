@@ -50,49 +50,51 @@ export {handlePull as default};
 async function handlePull(req, res) {
   const pull = req.body;
   console.log(`Processing pull`, JSON.stringify(pull));
+  const {clientGroupID} = pull;
+  const fromVersion = pull.cookie ?? 0;
   const t0 = Date.now();
 
   try {
     // Read all data in a single transaction so it's consistent.
     await tx(async t => {
       // Get current version.
-      const version =
+      const currentVersion =
         (await t.one('select version from replicache_version')).version ?? 0;
 
       // Get lmid for requesting client.
-      const isExistingClient = pull.lastMutationID > 0;
       const lastMutationIDChanges = await getLastMutationIDChanges(
         t,
-        pull.clientGroupID,
-        version,
+        clientGroupID,
+        fromVersion,
       );
       // TODO: Deleted client check
       // Requires clientID in PullRequest
 
       // Get changed domain objects since requested version.
       const changed = await t.manyOrNone(
-        'select id, sender, content, ord, deleted from message where version > $1',
+        'select id, sender, content, ord, version, deleted from message where version > $1',
         fromVersion,
       );
 
       // Build and return response.
       const patch = [];
       for (const row of changed) {
-        if (row.deleted) {
-          if (fromVersion > 0) {
+        const {id, sender, content, ord, version: rowVersion, deleted} = row;
+        if (deleted) {
+          if (rowVersion > fromVersion) {
             patch.push({
               op: 'del',
-              key: `message/${row.id}`,
+              key: `message/${id}`,
             });
           }
         } else {
           patch.push({
             op: 'put',
-            key: `message/${row.id}`,
+            key: `message/${id}`,
             value: {
-              from: row.sender,
-              content: row.content,
-              order: parseInt(row.ord),
+              from: sender,
+              content: content,
+              order: parseInt(ord),
             },
           });
         }
@@ -100,7 +102,7 @@ async function handlePull(req, res) {
 
       res.json({
         lastMutationIDChanges,
-        cookie: version,
+        cookie: currentVersion,
         patch,
       });
       res.end();
@@ -114,12 +116,11 @@ async function handlePull(req, res) {
 }
 
 async function getLastMutationIDChanges(t, clientGroupID, fromVersion) {
-  const rows = await t.many(
+  const rows = await t.manyOrNone(
     `select id, last_mutation_id
     from replicache_client
-    where clientGroupID = $1 and version > $2`,
-    clientGroupID,
-    fromVersion,
+    where client_group_id = $1 and version > $2`,
+    [clientGroupID, fromVersion],
   );
   return Object.fromEntries(rows.map(r => [r.id, r.last_mutation_id]));
 }

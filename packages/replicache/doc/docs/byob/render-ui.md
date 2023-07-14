@@ -9,7 +9,7 @@ The model is that your UI is a [pure function](https://en.wikipedia.org/wiki/Pur
 
 To create a subscription, use the `useSubscribe()` React hook. You can do multiple reads and compute a result. Your React component only re-renders when the returned result changes.
 
-Let's use a subscription to implement our chat UI. Replace `index.js` with the below.
+Let's use a subscription to implement our chat UI. Delete `index.tsx`, then add `index.js` with the below code:
 
 ```js
 import React, {useRef} from 'react';

@@ -9,12 +9,12 @@ The Client View is a map from string keys to JSON-compatible values. Since we're
 
 ```js
 {
-  "messages/D1BCF6A5-F314-4ECA-B03B-EB540A59D5E3": {
+  "messages/l2WXAsRlA2Rg47sfGMdAK": {
     "from": "Jane",
     "order": 1,
     "content": "Hey, what's up for lunch?"
   },
-  "messages/1F4E7403-7112-4B5B-9863-62F49F588AAB": {
+  "messages/g0Y8yLKobt0BpXwUrVJCK": {
     "from": "Fred",
     "order": 2,
     "content": "Taaaacos"
@@ -28,7 +28,7 @@ The Client View is a map from string keys to JSON-compatible values. Since we're
 
 Unlike with classic client/server apps, Replicache apps can't rely on the server to assign unique IDs. That's because the client is going to be working with data long before it reaches the server, and the client and server need a consistent way to refer to items.
 
-Therefore, Replicache requires that clients assign IDs. Browsers have [cryptographically strong random sources](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues) now, so there's no real downside to this. If you think this might block your usage of Replicache, [reach out](https://replicache.dev/#contact) — we'd like to learn more.
+Therefore, Replicache requires that clients assign IDs. Our sample apps typically use [nanoid](https://www.npmjs.com/package/nanoid) for this purpose, but any random ID will work.
 
 :::
 
@@ -44,8 +44,8 @@ export {handlePull as default};
 async function handlePull(req, res) {
   res.json({
     // We will discuss these two fields in later steps.
-    lastMutationID: 0,
-    cookie: null,
+    lastMutationIDChanges: {},
+    cookie: 0,
     patch: [
       {op: 'clear'},
       {

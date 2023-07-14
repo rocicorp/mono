@@ -40,7 +40,7 @@ async function handlePush(req, res) {
       const t1 = Date.now();
 
       try {
-        await tx(t => processMutation(t, clientGroupID, mutation));
+        await tx(t => processMutation(t, push.clientGroupID, mutation));
       } catch (e) {
         console.error('Caught error from mutation', mutation, e);
 
@@ -142,7 +142,13 @@ async function processMutation(t, clientGroupID, mutation, error) {
 
   console.log('setting', clientID, 'last_mutation_id to', nextMutationID);
   // Update lastMutationID for requesting client.
-  await setLastMutationID(t, clientID, clientGroupID, nextMutationID, version);
+  await setLastMutationID(
+    t,
+    clientID,
+    clientGroupID,
+    nextMutationID,
+    nextVersion,
+  );
 
   // Update global version.
   await t.none('update replicache_version set version = $1', [nextVersion]);
