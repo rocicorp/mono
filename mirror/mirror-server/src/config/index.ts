@@ -1,6 +1,6 @@
 import type {AppOptions} from 'firebase-admin';
 import {logger} from 'firebase-functions';
-import {HttpsOptions} from 'firebase-functions/v2/https';
+import type {HttpsOptions} from 'firebase-functions/v2/https';
 
 function createAppOptions(): AppOptions {
   const options = JSON.parse(process.env.FIREBASE_CONFIG || '{}') as AppOptions;
