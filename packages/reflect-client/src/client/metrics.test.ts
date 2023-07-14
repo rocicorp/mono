@@ -312,6 +312,27 @@ test('MetricManager v2 connect metrics', async () => {
       ],
     },
     {
+      name: 'setDisconnectedWaitingForVisible after initial',
+      reportMetrics: metricsManager => {
+        metricsManager.setDisconnectedWaitingForVisible();
+      },
+      expected: [
+        {
+          metric: 'time_to_connect_ms_v2',
+          points: [
+            [
+              (REPORT_INTERVAL_MS * 2) / 1000,
+              [
+                TIME_TO_CONNECT_V2_SPECIAL_VALUES.disconnectedWaitingForVisiblePriorWasInitial,
+              ],
+            ],
+          ],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+      ],
+    },
+    {
       name: 'ttc-1',
       reportMetrics: metricsManager => {
         metricsManager.setConnected(2);
@@ -319,7 +340,7 @@ test('MetricManager v2 connect metrics', async () => {
       expected: [
         {
           metric: 'time_to_connect_ms_v2',
-          points: [[(REPORT_INTERVAL_MS * 2) / 1000, [2]]],
+          points: [[(REPORT_INTERVAL_MS * 3) / 1000, [2]]],
           host: 'test-host',
           tags: ['source:test-source'],
         },
@@ -333,7 +354,26 @@ test('MetricManager v2 connect metrics', async () => {
       expected: [
         {
           metric: 'time_to_connect_ms_v2',
-          points: [[(REPORT_INTERVAL_MS * 3) / 1000, [1]]],
+          points: [[(REPORT_INTERVAL_MS * 4) / 1000, [1]]],
+          host: 'test-host',
+          tags: ['source:test-source'],
+        },
+      ],
+    },
+    {
+      name: 'setDisconnectedWaitingForVisible after connect',
+      reportMetrics: metricsManager => {
+        metricsManager.setDisconnectedWaitingForVisible();
+      },
+      expected: [
+        {
+          metric: 'time_to_connect_ms_v2',
+          points: [
+            [
+              (REPORT_INTERVAL_MS * 5) / 1000,
+              [TIME_TO_CONNECT_V2_SPECIAL_VALUES.disconnectedWaitingForVisible],
+            ],
+          ],
           host: 'test-host',
           tags: ['source:test-source'],
         },
@@ -349,7 +389,7 @@ test('MetricManager v2 connect metrics', async () => {
           metric: 'time_to_connect_ms_v2',
           points: [
             [
-              (REPORT_INTERVAL_MS * 4) / 1000,
+              (REPORT_INTERVAL_MS * 6) / 1000,
               [TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError],
             ],
           ],
@@ -358,7 +398,7 @@ test('MetricManager v2 connect metrics', async () => {
         },
         {
           metric: 'last_connect_error_v2_client_abrupt_close',
-          points: [[(REPORT_INTERVAL_MS * 4) / 1000, [1]]],
+          points: [[(REPORT_INTERVAL_MS * 6) / 1000, [1]]],
           host: 'test-host',
           tags: ['source:test-source'],
         },
@@ -374,7 +414,7 @@ test('MetricManager v2 connect metrics', async () => {
           metric: 'time_to_connect_ms_v2',
           points: [
             [
-              (REPORT_INTERVAL_MS * 5) / 1000,
+              (REPORT_INTERVAL_MS * 7) / 1000,
               [TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError],
             ],
           ],
@@ -383,7 +423,7 @@ test('MetricManager v2 connect metrics', async () => {
         },
         {
           metric: 'last_connect_error_v2_server_unauthorized',
-          points: [[(REPORT_INTERVAL_MS * 5) / 1000, [1]]],
+          points: [[(REPORT_INTERVAL_MS * 7) / 1000, [1]]],
           host: 'test-host',
           tags: ['source:test-source'],
         },
@@ -396,7 +436,7 @@ test('MetricManager v2 connect metrics', async () => {
           metric: 'time_to_connect_ms_v2',
           points: [
             [
-              (REPORT_INTERVAL_MS * 6) / 1000,
+              (REPORT_INTERVAL_MS * 8) / 1000,
               [TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError],
             ],
           ],
@@ -405,7 +445,7 @@ test('MetricManager v2 connect metrics', async () => {
         },
         {
           metric: 'last_connect_error_v2_server_unauthorized',
-          points: [[(REPORT_INTERVAL_MS * 6) / 1000, [1]]],
+          points: [[(REPORT_INTERVAL_MS * 8) / 1000, [1]]],
           host: 'test-host',
           tags: ['source:test-source'],
         },
@@ -419,7 +459,7 @@ test('MetricManager v2 connect metrics', async () => {
           metric: 'time_to_connect_ms_v2',
           points: [
             [
-              (REPORT_INTERVAL_MS * 7) / 1000,
+              (REPORT_INTERVAL_MS * 9) / 1000,
               [TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError],
             ],
           ],
@@ -428,7 +468,7 @@ test('MetricManager v2 connect metrics', async () => {
         },
         {
           metric: 'last_connect_error_v2_server_unauthorized',
-          points: [[(REPORT_INTERVAL_MS * 7) / 1000, [1]]],
+          points: [[(REPORT_INTERVAL_MS * 9) / 1000, [1]]],
           host: 'test-host',
           tags: ['source:test-source', 'foo:bar', 'hotdog'],
         },
@@ -442,7 +482,7 @@ test('MetricManager v2 connect metrics', async () => {
       expected: [
         {
           metric: 'time_to_connect_ms_v2',
-          points: [[(REPORT_INTERVAL_MS * 8) / 1000, [5000]]],
+          points: [[(REPORT_INTERVAL_MS * 10) / 1000, [5000]]],
           host: 'test-host',
           tags: ['source:test-source'],
         },
@@ -458,7 +498,7 @@ test('MetricManager v2 connect metrics', async () => {
           metric: 'time_to_connect_ms_v2',
           points: [
             [
-              (REPORT_INTERVAL_MS * 9) / 1000,
+              (REPORT_INTERVAL_MS * 11) / 1000,
               [TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError],
             ],
           ],
@@ -467,14 +507,14 @@ test('MetricManager v2 connect metrics', async () => {
         },
         {
           metric: 'last_connect_error_v2_client_connect_timeout',
-          points: [[(REPORT_INTERVAL_MS * 9) / 1000, [1]]],
+          points: [[(REPORT_INTERVAL_MS * 11) / 1000, [1]]],
           host: 'test-host',
           tags: ['source:test-source'],
         },
       ],
     },
     {
-      name: 'setDisconnectedWaitingForVisible',
+      name: 'setDisconnectedWaitingForVisible after error',
       reportMetrics: metricsManager => {
         metricsManager.setDisconnectedWaitingForVisible();
       },
@@ -483,8 +523,10 @@ test('MetricManager v2 connect metrics', async () => {
           metric: 'time_to_connect_ms_v2',
           points: [
             [
-              (REPORT_INTERVAL_MS * 10) / 1000,
-              [TIME_TO_CONNECT_V2_SPECIAL_VALUES.disconnectedWaitingForVisible],
+              (REPORT_INTERVAL_MS * 12) / 1000,
+              [
+                TIME_TO_CONNECT_V2_SPECIAL_VALUES.disconnectedWaitingForVisiblePriorWasConnectError,
+              ],
             ],
           ],
           host: 'test-host',
