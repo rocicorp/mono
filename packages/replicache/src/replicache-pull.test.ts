@@ -7,7 +7,6 @@ import type {VersionNotSupportedResponse, WriteTransaction} from './mod.js';
 import type {Puller} from './puller.js';
 import {UpdateNeededReason, httpStatusUnauthorized} from './replicache.js';
 import {
-  TestLogSink,
   disableAllBackgroundProcesses,
   expectConsoleLogContextStub,
   initReplicacheTesting,
@@ -22,7 +21,6 @@ import {
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {assert} from 'shared/src/asserts.js';
 
 initReplicacheTesting();
 
@@ -285,13 +283,12 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
 });
 
 test('Client Group not found on server', async () => {
-  const testLogSink = new TestLogSink();
+  const onClientStateNotFound = sinon.stub();
 
   const rep = await replicacheForTesting('client-group-not-found-pull', {
     ...disableAllBackgroundProcesses,
     enablePullAndPushInOpen: false,
-    logSinks: [testLogSink],
-    logLevel: 'error',
+    onClientStateNotFound,
   });
 
   // eslint-disable-next-line require-await
@@ -311,14 +308,7 @@ test('Client Group not found on server', async () => {
   await waitForSync(rep);
 
   expect(rep.isClientGroupDisabled).true;
-
-  expect(testLogSink.messages).lengthOf(1);
-  const args = testLogSink.messages[0];
-  expect(args).lengthOf(3);
-  expect(args[0]).equal('error');
-  assert(typeof args[1]?.name === 'string');
-  assert(args[2][0] instanceof Error);
-  expect(args[2][0].message).match(/Client group (\S)+ is unknown on server/);
+  expect(onClientStateNotFound.callCount).to.equal(1);
 });
 
 test('Version not supported on server', async () => {
