@@ -143,7 +143,10 @@ test('overlapped pokes not supported', async () => {
 });
 
 test('Client group unknown on server', async () => {
-  const rep = await replicacheForTesting('client-group-unknown', {});
+  const onClientStateNotFound = sinon.stub();
+  const rep = await replicacheForTesting('client-group-unknown', {
+    onClientStateNotFound,
+  });
 
   expect(rep.isClientGroupDisabled).false;
 
@@ -160,11 +163,8 @@ test('Client group unknown on server', async () => {
     err = e;
   }
 
-  expect(err).instanceof(Error);
-  expect((err as Error).message).matches(
-    /Client group (\S)+ is unknown on server/,
-  );
-
+  expect(err).undefined;
+  expect(onClientStateNotFound.callCount).equal(1);
   expect(rep.isClientGroupDisabled).true;
 });
 

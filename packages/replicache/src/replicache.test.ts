@@ -2288,7 +2288,7 @@ suite('check for client not found in visibilitychange', () => {
           consoleErrorStub,
           0,
           rep,
-          `Client state not found, clientID: ${clientID}`,
+          `Client state not found on client, clientID: ${clientID}`,
         );
       } else {
         expect(onClientStateNotFound.called).false;

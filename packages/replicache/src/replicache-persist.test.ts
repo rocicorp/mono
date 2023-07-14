@@ -164,7 +164,7 @@ suite('onClientStateNotFound', () => {
       consoleErrorStub,
       0,
       rep,
-      `Client state not found, clientID: ${clientID}`,
+      `Client state not found on client, clientID: ${clientID}`,
     );
   });
 
@@ -227,7 +227,7 @@ suite('onClientStateNotFound', () => {
       consoleErrorStub,
       0,
       rep2,
-      `Client state not found, clientID: ${clientID2}`,
+      `Client state not found on client, clientID: ${clientID2}`,
     );
     expect(onClientStateNotFound.lastCall.args).to.deep.equal([]);
   });
@@ -288,7 +288,7 @@ suite('onClientStateNotFound', () => {
       consoleErrorStub,
       0,
       rep2,
-      `Client state not found, clientID: ${clientID2}`,
+      `Client state not found on client, clientID: ${clientID2}`,
     );
     expect(onClientStateNotFound.lastCall.args).to.deep.equal([]);
   });
