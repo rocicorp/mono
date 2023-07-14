@@ -25,6 +25,7 @@ import {
   withBody,
 } from './router.js';
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import {timed} from 'shared/src/timed.js';
 
 export type MetricsSink = (
   allSeries: Series[],
@@ -308,11 +309,24 @@ async function sendToAuthDO(
   const {lc, env} = ctx;
   const {authDO} = env;
 
-  lc.debug?.(`Sending request ${request.url} to authDO`);
-
   const id = authDO.idFromName('auth');
   const stub = authDO.get(id);
-  return stub.fetch(request);
+
+  lc.debug?.(`Sending request ${request.url} to authDO`);
+  const responseFromDO = await timed(lc.debug, 'authDO fetch', async () => {
+    try {
+      return await stub.fetch(request);
+    } catch (e) {
+      lc.error?.(`Exception fetching ${request.url} from authDO`, e);
+      throw e;
+    }
+  });
+  lc.debug?.(
+    'received authDO response',
+    responseFromDO.status,
+    responseFromDO.statusText,
+  );
+  return responseFromDO;
 }
 
 export const WORKER_ROUTES = {
