@@ -2,7 +2,6 @@ import {initializeApp} from 'firebase/app';
 import {getFunctions, connectFunctionsEmulator} from 'firebase/functions';
 
 export function initFirebase(stack: string) {
-  console.error('Initializing firebase', stack);
   const firebaseConfig =
     stack === 'prod'
       ? {
@@ -22,10 +21,10 @@ export function initFirebase(stack: string) {
           messagingSenderId: '709901628211',
           appId: '1:709901628211:web:8164d4a5cd28226a180446',
         };
+
   initializeApp(firebaseConfig);
 
   if (stack === 'local') {
-    console.error('connecting to emulator');
     connectFunctionsEmulator(getFunctions(), '127.0.0.1', 5001);
   }
 }
