@@ -57,12 +57,18 @@ export async function checkConnectivity(
     ...Object.keys(checks).map(
       (checkName, i) => `${checkName}=${results[i].success}\n`,
     ),
+    {
+      navigatorOnline: navigator.onLine,
+    },
   );
   lc.info?.(
     'Connectivity checks detail\n',
     ...Object.keys(checks).flatMap(
       (checkName, i) => `${checkName}=${results[i].detail}\n`,
     ),
+    {
+      navigatorOnline: navigator.onLine,
+    },
   );
 }
 
