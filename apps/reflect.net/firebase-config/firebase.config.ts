@@ -1,4 +1,7 @@
-export const firebaseConfig = process.env.NEXT_PUBLIC_FIREBASE_STAGING
+import {initializeApp} from 'firebase/app';
+import {connectFunctionsEmulator, getFunctions} from 'firebase/functions';
+
+const firebaseConfig = process.env.NEXT_PUBLIC_FIREBASE_STAGING
   ? {
       apiKey: 'AIzaSyDxHw3_wWcLkpjWgprfEPhrppFr3SgV03M',
       authDomain: 'reflect-mirror-staging.firebaseapp.com',
@@ -16,3 +19,13 @@ export const firebaseConfig = process.env.NEXT_PUBLIC_FIREBASE_STAGING
       appId: '1:246973677105:web:a0778898a794e54954df10',
       measurementId: 'G-MB8H4WDB5L',
     };
+
+const firebase = initializeApp(firebaseConfig);
+if (process.env.NEXT_PUBLIC_USE_FUNCTIONS_EMULATOR) {
+  connectFunctionsEmulator(getFunctions(), '127.0.0.1', 5001);
+}
+
+/** Must be called before using Firebase client libraries. */
+export function initFirebaseApp() {
+  return firebase;
+}

@@ -1,10 +1,8 @@
-import {initializeApp} from 'firebase/app';
-import {connectFunctionsEmulator, getFunctions} from 'firebase/functions';
 import {GithubAuthProvider, getAuth} from 'firebase/auth';
 import type {User as FirebaseUser} from 'firebase/auth';
 import type {auth as firebaseUiAuth} from 'firebaseui';
 import {ensureUser} from 'mirror-protocol/src/user.js';
-import {firebaseConfig} from './firebase.config';
+import {initFirebaseApp} from './firebase.config';
 import * as v from 'shared/src/valita.js';
 /**
  * Authentication
@@ -13,10 +11,7 @@ export type AuthResult = {
   user: FirebaseUser;
 };
 
-export const firebase = initializeApp(firebaseConfig);
-if (process.env.NEXT_PUBLIC_USE_FUNCTIONS_EMULATOR) {
-  connectFunctionsEmulator(getFunctions(), '127.0.0.1', 5001);
-}
+initFirebaseApp();
 
 const githubAuthProvider = new GithubAuthProvider();
 
