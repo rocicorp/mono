@@ -21,6 +21,8 @@ export const TIME_TO_CONNECT_V2_SPECIAL_VALUES = {
   initialValue: 100_000,
   connectError: 200_000,
   disconnectedWaitingForVisible: 300_000,
+  disconnectedWaitingForVisiblePriorWasInitial: 400_000,
+  disconnectedWaitingForVisiblePriorWasConnectError: 500_000,
 } as const;
 
 type ClientDisconnectReason =
@@ -154,9 +156,23 @@ export class MetricManager {
 
   setDisconnectedWaitingForVisible() {
     this._lastConnectErrorV2.clear();
-    this._timeToConnectMsV2.set(
-      TIME_TO_CONNECT_V2_SPECIAL_VALUES.disconnectedWaitingForVisible,
-    );
+    switch (this._timeToConnectMsV2.get()) {
+      case TIME_TO_CONNECT_V2_SPECIAL_VALUES.initialValue:
+        this._timeToConnectMsV2.set(
+          TIME_TO_CONNECT_V2_SPECIAL_VALUES.disconnectedWaitingForVisiblePriorWasInitial,
+        );
+        break;
+      case TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError:
+        this._timeToConnectMsV2.set(
+          TIME_TO_CONNECT_V2_SPECIAL_VALUES.disconnectedWaitingForVisiblePriorWasConnectError,
+        );
+        break;
+      default:
+        this._timeToConnectMsV2.set(
+          TIME_TO_CONNECT_V2_SPECIAL_VALUES.disconnectedWaitingForVisible,
+        );
+        break;
+    }
   }
 
   setConnectError(reason: DisconnectReason) {
@@ -269,6 +285,10 @@ export class Gauge implements Flushable {
     this._value = value;
   }
 
+  get() {
+    return this._value;
+  }
+
   flush() {
     // Gauge reports the timestamp at flush time, not at the point the value was
     // recorded.
@@ -307,6 +327,10 @@ export class State implements Flushable {
 
   set(state: string) {
     this._current = state;
+  }
+
+  get() {
+    return this._current;
   }
 
   clear() {
