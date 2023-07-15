@@ -7,6 +7,7 @@ export interface CommonYargsOptions {
   v: boolean | undefined;
   config: string | undefined;
   env: string | undefined;
+  stack: string;
 }
 
 export type CommonYargsArgv = Argv<CommonYargsOptions>;

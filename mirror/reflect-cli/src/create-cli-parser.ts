@@ -1,5 +1,6 @@
 import makeCLI, {Argv} from 'yargs';
 import {version} from './version.js';
+import {initFirebase} from './firebase.js';
 
 export class CommandLineArgsError extends Error {}
 
@@ -9,6 +10,7 @@ export function createCLIParserBase(argv: string[]): Argv<{
   v: boolean | undefined;
   config: string | undefined;
   env: string | undefined;
+  stack: string;
 }> {
   // Type check result against CommonYargsOptions to make sure we've included
   // all common options
@@ -40,6 +42,13 @@ export function createCLIParserBase(argv: string[]): Argv<{
       describe: 'Environment to use for operations and .env files',
       type: 'string',
       requiresArg: true,
+    })
+    .option('stack', {
+      alias: 's',
+      describe: 'prod, staging, or local (emulator) stack to connect to',
+      choices: ['prod', 'staging', 'local'],
+      default: 'prod',
+      requiresArg: true,
     });
 
   reflectCLI.help().alias('h', 'help');
@@ -61,6 +70,10 @@ export function createCLIParserBase(argv: string[]): Argv<{
   // version
   reflectCLI.command('version', false, {}, () => {
     console.log(version);
+  });
+
+  reflectCLI.middleware(argv => {
+    initFirebase(argv.stack);
   });
 
   reflectCLI.exitProcess(false);

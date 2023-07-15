@@ -5,18 +5,6 @@ import * as v from 'shared/src/valita.js';
 import {parse} from 'shared/src/valita.js';
 import {scriptName} from './create-cli-parser.js';
 import {getAuth, signInWithCustomToken, type User} from 'firebase/auth';
-import {initializeApp} from 'firebase/app';
-
-// TODO(darick): Make this configurable.
-const firebaseConfig = {
-  apiKey: 'AIzaSyDxHw3_wWcLkpjWgprfEPhrppFr3SgV03M',
-  authDomain: 'reflect-mirror-staging.firebaseapp.com',
-  projectId: 'reflect-mirror-staging',
-  storageBucket: 'reflect-mirror-staging.appspot.com',
-  messagingSenderId: '709901628211',
-  appId: '1:709901628211:web:8164d4a5cd28226a180446',
-};
-initializeApp(firebaseConfig);
 
 /**
  * The path to the config file that holds user authentication data,
