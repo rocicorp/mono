@@ -1,4 +1,4 @@
-import {describe, expect, test, jest} from '@jest/globals';
+import {describe, expect, test} from '@jest/globals';
 import type {Auth, DecodedIdToken} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
@@ -21,9 +21,7 @@ function fakeFirestore(): Firestore {
 
 function fakeAuth(): Auth {
   const auth = {
-    createCustomToken: jest
-      .fn()
-      .mockReturnValue(Promise.resolve('custom-auth-token')),
+    createCustomToken: () => Promise.resolve('custom-auth-token'),
   };
   return auth as unknown as Auth;
 }
@@ -160,5 +158,64 @@ test('does not overwrite existing user doc', async () => {
     email: 'foo@bar.com',
     name: 'Foo Bar',
     roles: {fooTeam: 'a'},
+  });
+});
+
+test('updates user doc if email is different', async () => {
+  const firestore = fakeFirestore();
+  const ensureFunction = https.onCall(ensure(firestore, fakeAuth()));
+
+  await firestore.doc('users/foo').set({
+    email: 'old@email-address.com',
+    name: 'Foo Bar',
+    roles: {fooTeam: 'a'},
+    invites: {barTeam: 'm'},
+  });
+  await firestore.doc('teams/fooTeam/memberships/foo').set({
+    email: 'old@email-address.com',
+    role: 'admin',
+  });
+  await firestore.doc('teams/barTeam/invites/foo').set({
+    email: 'old@email-address.com',
+    role: 'member',
+  });
+
+  const resp = await ensureFunction.run({
+    data: {
+      requester: {
+        userID: 'foo',
+        userAgent: {type: 'reflect-cli', version: '0.0.1'},
+      },
+    },
+    auth: {
+      uid: 'foo',
+      token: {email: 'new@email-address.com'} as DecodedIdToken,
+    },
+    rawRequest: null as unknown as Request,
+  });
+  expect(resp).toEqual({customToken: 'custom-auth-token', success: true});
+  const fooDoc = await firestore.doc('users/foo').get();
+  expect(fooDoc.exists).toBe(true);
+  expect(fooDoc.data()).toEqual({
+    email: 'new@email-address.com',
+    name: 'Foo Bar',
+    roles: {fooTeam: 'a'},
+    invites: {barTeam: 'm'},
+  });
+  const fooTeamMembershipDoc = await firestore
+    .doc('teams/fooTeam/memberships/foo')
+    .get();
+  expect(fooTeamMembershipDoc.exists).toBe(true);
+  expect(fooTeamMembershipDoc.data()).toEqual({
+    email: 'new@email-address.com',
+    role: 'admin',
+  });
+  const barTeamMembershipDoc = await firestore
+    .doc('teams/barTeam/invites/foo')
+    .get();
+  expect(barTeamMembershipDoc.exists).toBe(true);
+  expect(barTeamMembershipDoc.data()).toEqual({
+    email: 'new@email-address.com',
+    role: 'member',
   });
 });
