@@ -6,9 +6,12 @@ export const teamSchema = v.object({
   name: v.string(),
   defaultCfID: v.string(),
 
-  admins: v.array(v.string()),
-  members: v.array(v.string()),
-  invites: v.array(v.string()).optional(),
+  // Number of memberships of role 'admin'.
+  // A team must have at least one admin.
+  numAdmins: v.number(),
+  // Number of memberships of role 'member'.
+  numMembers: v.number(),
+  numInvites: v.number(),
 
   numApps: v.number(),
   // null means default max
