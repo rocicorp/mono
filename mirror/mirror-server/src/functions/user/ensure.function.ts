@@ -29,18 +29,19 @@ export function ensure(
     withAuthorization(async (ensureUserRequest, context) => {
       const {userID} = ensureUserRequest.requester;
 
+      const user = await auth.getUser(userID);
+      if (!user.email) {
+        throw new HttpsError(
+          'failed-precondition',
+          'User must have an email address',
+        );
+      }
+      const email = user.email;
       const userDocRef = firestore
         .doc(userPath(userID))
         .withConverter(userDataConverter);
 
       await firestore.runTransaction(async txn => {
-        const {email} = context.auth.token;
-        if (!email) {
-          throw new HttpsError(
-            'failed-precondition',
-            'Authenticated user must have an email address',
-          );
-        }
         const userDoc = await txn.get(userDocRef);
         if (!userDoc.exists) {
           // A new User is not part of any teams. They are associated with a Team:

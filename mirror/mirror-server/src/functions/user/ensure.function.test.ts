@@ -1,5 +1,5 @@
 import {describe, expect, test} from '@jest/globals';
-import type {Auth, DecodedIdToken} from 'firebase-admin/auth';
+import type {Auth} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {
@@ -19,8 +19,9 @@ function fakeFirestore(): Firestore {
   ).firestore() as unknown as Firestore;
 }
 
-function fakeAuth(): Auth {
+function fakeAuth(email: string): Auth {
   const auth = {
+    getUser: () => Promise.resolve({email}),
     createCustomToken: () => Promise.resolve('custom-auth-token'),
   };
   return auth as unknown as Auth;
@@ -37,42 +38,33 @@ describe('request validation', () => {
   type Case = {
     name: string;
     request: EnsureUserRequest;
-    auth: AuthData;
+    authData: AuthData;
+    auth?: Auth;
     errorCode: FunctionsErrorCode;
   };
   const cases: Case[] = [
     {
       name: 'missing authentication',
-      auth: {} as AuthData,
+      authData: {} as AuthData,
       request: goodRequest,
       errorCode: 'unauthenticated',
     },
     {
       name: 'missing email',
-      auth: {
-        uid: 'foo',
-        token: {
-          /* no email field */
-        } as DecodedIdToken,
-      },
+      authData: {uid: 'foo'} as AuthData,
+      auth: fakeAuth(''),
       request: goodRequest,
       errorCode: 'failed-precondition',
     },
     {
       name: 'wrong authenticated user',
-      auth: {
-        uid: 'bar',
-        token: {email: 'foo@bar.com'},
-      } as AuthData,
+      authData: {uid: 'bar'} as AuthData,
       request: goodRequest,
       errorCode: 'permission-denied',
     },
     {
       name: 'bad request',
-      auth: {
-        uid: 'foo',
-        token: {email: 'foo@bar.com'},
-      } as AuthData,
+      authData: {uid: 'foo'} as AuthData,
       request: {not: 'a valid request'} as unknown as EnsureUserRequest,
       errorCode: 'invalid-argument',
     },
@@ -81,12 +73,14 @@ describe('request validation', () => {
   for (const c of cases) {
     test(c.name, async () => {
       const firestore = fakeFirestore();
-      const ensureFunction = https.onCall(ensure(firestore, fakeAuth()));
+      const ensureFunction = https.onCall(
+        ensure(firestore, c.auth ?? fakeAuth('foo@bar.com')),
+      );
 
       let error: HttpsError | undefined = undefined;
       try {
         await ensureFunction.run({
-          auth: c.auth,
+          auth: c.authData,
           data: c.request,
           rawRequest: null as unknown as Request,
         });
@@ -104,7 +98,9 @@ describe('request validation', () => {
 
 test('creates user doc', async () => {
   const firestore = fakeFirestore();
-  const ensureFunction = https.onCall(ensure(firestore, fakeAuth()));
+  const ensureFunction = https.onCall(
+    ensure(firestore, fakeAuth('foo@bar.com')),
+  );
 
   const resp = await ensureFunction.run({
     data: {
@@ -113,10 +109,7 @@ test('creates user doc', async () => {
         userAgent: {type: 'reflect-cli', version: '0.0.1'},
       },
     },
-    auth: {
-      uid: 'foo',
-      token: {email: 'foo@bar.com'} as DecodedIdToken,
-    },
+    auth: {uid: 'foo'} as AuthData,
     rawRequest: null as unknown as Request,
   });
   expect(resp).toEqual({customToken: 'custom-auth-token', success: true});
@@ -130,7 +123,9 @@ test('creates user doc', async () => {
 
 test('does not overwrite existing user doc', async () => {
   const firestore = fakeFirestore();
-  const ensureFunction = https.onCall(ensure(firestore, fakeAuth()));
+  const ensureFunction = https.onCall(
+    ensure(firestore, fakeAuth('foo@bar.com')),
+  );
 
   await firestore.doc('users/foo').set({
     email: 'foo@bar.com',
@@ -145,10 +140,7 @@ test('does not overwrite existing user doc', async () => {
         userAgent: {type: 'reflect-cli', version: '0.0.1'},
       },
     },
-    auth: {
-      uid: 'foo',
-      token: {email: 'foo@bar.com'} as DecodedIdToken,
-    },
+    auth: {uid: 'foo'} as AuthData,
     rawRequest: null as unknown as Request,
   });
   expect(resp).toEqual({customToken: 'custom-auth-token', success: true});
@@ -163,7 +155,9 @@ test('does not overwrite existing user doc', async () => {
 
 test('updates user doc if email is different', async () => {
   const firestore = fakeFirestore();
-  const ensureFunction = https.onCall(ensure(firestore, fakeAuth()));
+  const ensureFunction = https.onCall(
+    ensure(firestore, fakeAuth('new@email-address.com')),
+  );
 
   await firestore.doc('users/foo').set({
     email: 'old@email-address.com',
@@ -187,10 +181,7 @@ test('updates user doc if email is different', async () => {
         userAgent: {type: 'reflect-cli', version: '0.0.1'},
       },
     },
-    auth: {
-      uid: 'foo',
-      token: {email: 'new@email-address.com'} as DecodedIdToken,
-    },
+    auth: {uid: 'foo'} as AuthData,
     rawRequest: null as unknown as Request,
   });
   expect(resp).toEqual({customToken: 'custom-auth-token', success: true});
