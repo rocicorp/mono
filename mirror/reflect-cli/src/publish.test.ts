@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {pkgUp} from 'pkg-up';
 import {assert} from 'shared/src/asserts.js';
-import {publishHandler} from './publish.js';
+import {publishHandler, type PublishCaller} from './publish.js';
 import {useFakeAuthConfig} from './test-helpers.js';
 
 type Args = Parameters<typeof publishHandler>[0];
@@ -94,7 +94,7 @@ test('it should compile typescript', async () => {
   );
   await publishHandler(
     {script: testFilePath, name: 'test-name'} as Args,
-    publishMock as any,
+    publishMock as unknown as PublishCaller,
   );
 
   expect(publishMock).toHaveBeenCalledTimes(1);

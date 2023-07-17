@@ -1,6 +1,7 @@
 import {
   publish as publishCaller,
   type PublishRequest,
+  PublishResponse,
 } from 'mirror-protocol/src/publish.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -35,9 +36,11 @@ async function exists(path: string) {
 
 type PublishHandlerArgs = YargvToInterface<ReturnType<typeof publishOptions>>;
 
+export type PublishCaller = (req: PublishRequest) => Promise<PublishResponse>;
+
 export async function publishHandler(
   yargs: PublishHandlerArgs,
-  publish = publishCaller, // Overridden in tests.
+  publish: PublishCaller = publishCaller, // Overridden in tests.
 ) {
   const {script, name} = yargs;
 
