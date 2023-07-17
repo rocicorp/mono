@@ -1,4 +1,4 @@
-import {initializeApp} from 'firebase/app';
+import {FirebaseApp, initializeApp} from 'firebase/app';
 import {connectFunctionsEmulator, getFunctions} from 'firebase/functions';
 
 const firebaseConfig = process.env.NEXT_PUBLIC_FIREBASE_STAGING
@@ -20,12 +20,15 @@ const firebaseConfig = process.env.NEXT_PUBLIC_FIREBASE_STAGING
       measurementId: 'G-MB8H4WDB5L',
     };
 
-const firebase = initializeApp(firebaseConfig);
-if (process.env.NEXT_PUBLIC_USE_FUNCTIONS_EMULATOR) {
-  connectFunctionsEmulator(getFunctions(), '127.0.0.1', 5001);
-}
+let firebase: FirebaseApp | undefined = undefined;
 
 /** Must be called before using Firebase client libraries. */
 export function initFirebaseApp() {
+  if (!firebase) {
+    firebase = initializeApp(firebaseConfig);
+    if (process.env.NEXT_PUBLIC_USE_FUNCTIONS_EMULATOR) {
+      connectFunctionsEmulator(getFunctions(), '127.0.0.1', 5001);
+    }
+  }
   return firebase;
 }
