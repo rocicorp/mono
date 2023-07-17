@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev-next": "NODE_ENV=development next dev",
+    "dev-next": "NEXT_PUBLIC_FIREBASE_STAGING=1 next dev",
+    "dev-next-local": "NEXT_PUBLIC_USE_FUNCTIONS_EMULATOR=1 npm run dev-next",
     "dev-worker": "npm run dev-worker-prod -- --experimental-local",
     "dev-worker-staging": "npm run wrangler-staging -- dev",
     "dev-worker-prod": "npm run wrangler-prod -- dev",
