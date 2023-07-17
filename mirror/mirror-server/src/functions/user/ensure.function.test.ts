@@ -19,7 +19,7 @@ function fakeFirestore(): Firestore {
   ).firestore() as unknown as Firestore;
 }
 
-function fakeAuth(email: string): Auth {
+function fakeAuth(email = 'foo@bar.com'): Auth {
   const auth = {
     getUser: () => Promise.resolve({email}),
     createCustomToken: () => Promise.resolve('custom-auth-token'),
@@ -74,7 +74,7 @@ describe('request validation', () => {
     test(c.name, async () => {
       const firestore = fakeFirestore();
       const ensureFunction = https.onCall(
-        ensure(firestore, c.auth ?? fakeAuth('foo@bar.com')),
+        ensure(firestore, c.auth ?? fakeAuth()),
       );
 
       let error: HttpsError | undefined = undefined;
@@ -98,9 +98,7 @@ describe('request validation', () => {
 
 test('creates user doc', async () => {
   const firestore = fakeFirestore();
-  const ensureFunction = https.onCall(
-    ensure(firestore, fakeAuth('foo@bar.com')),
-  );
+  const ensureFunction = https.onCall(ensure(firestore, fakeAuth()));
 
   const resp = await ensureFunction.run({
     data: {
@@ -123,9 +121,7 @@ test('creates user doc', async () => {
 
 test('does not overwrite existing user doc', async () => {
   const firestore = fakeFirestore();
-  const ensureFunction = https.onCall(
-    ensure(firestore, fakeAuth('foo@bar.com')),
-  );
+  const ensureFunction = https.onCall(ensure(firestore, fakeAuth()));
 
   await firestore.doc('users/foo').set({
     email: 'foo@bar.com',

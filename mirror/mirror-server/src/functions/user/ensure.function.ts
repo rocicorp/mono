@@ -36,7 +36,7 @@ export function ensure(
           'User must have an email address',
         );
       }
-      const email = user.email;
+      const {email} = user;
       const userDocRef = firestore
         .doc(userPath(userID))
         .withConverter(userDataConverter);
