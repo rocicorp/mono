@@ -1,7 +1,7 @@
 import {
   publish as publishCaller,
   type PublishRequest,
-  PublishResponse,
+  type PublishResponse,
 } from 'mirror-protocol/src/publish.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
