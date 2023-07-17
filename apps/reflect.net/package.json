@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@rocicorp/logger": "^5.2.0",
-    "@rocicorp/reflect": "0.29.0",
+    "@rocicorp/reflect": "0.29.1",
     "firebase": "^9.22.2",
     "firebaseui": "^6.0.2",
     "nanoid": "^4.0.2",
