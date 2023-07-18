@@ -1,6 +1,6 @@
 import {objects, predicates} from 'friendly-words';
 import {webcrypto as crypto} from 'node:crypto';
-import * as base62 from 'shared/src/base62.js';
+import * as base62 from '../base62.js';
 
 const tempUint64Array = new BigUint64Array(1);
 
@@ -19,19 +19,28 @@ export function newTeamID(): string {
   return base62.encode(n);
 }
 
-export function newAppID(): string {
-  tempUint64Array[0] = BigInt(Date.now());
-  return base62.encode(tempUint64Array[0]);
+export function newAppIDAsNumber(): number {
+  return Date.now();
 }
 
-export function newAppScriptName(appID: string): string {
+export function newAppID(n = newAppIDAsNumber()): string {
+  return base62.encode(BigInt(n));
+}
+
+/**
+ * The app script name is used for the name of the cloudflare worker script name
+ * which does not allow uppercase letters. We therefore use base36 encoding of
+ * the numeric app ID.
+ */
+export function newAppScriptName(appIDNumber: number): string {
   const pred1 = randomSample(predicates);
   const pred2 = randomSample(predicates);
-  const obj = randomSample(objects);
   if (pred1 === pred2) {
-    return newAppScriptName(appID);
+    return newAppScriptName(appIDNumber);
   }
-  return `${pred1}-${pred2}-${obj}-${appID}`;
+  const obj = randomSample(objects);
+  const appIDBase36 = appIDNumber.toString(36);
+  return `${pred1}-${pred2}-${obj}-${appIDBase36}`;
 }
 
 function randomSample<T>(arr: T[]): T {

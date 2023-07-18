@@ -1,10 +1,10 @@
 import {
   publish as publishCaller,
   type PublishRequest,
-  type PublishResponse,
 } from 'mirror-protocol/src/publish.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import {mustReadAppConfig} from './app-config.js';
 import {authenticate} from './auth-config.js';
 import {compile} from './compile.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
@@ -12,17 +12,11 @@ import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
-  return yargs
-    .option('name', {
-      describe: 'Name of the worker',
-      type: 'string',
-      demandOption: true,
-    })
-    .positional('script', {
-      describe: 'Path to the worker script',
-      type: 'string',
-      demandOption: true,
-    });
+  return yargs.positional('script', {
+    describe: 'Path to the worker script',
+    type: 'string',
+    demandOption: true,
+  });
 }
 
 async function exists(path: string) {
@@ -36,19 +30,16 @@ async function exists(path: string) {
 
 type PublishHandlerArgs = YargvToInterface<ReturnType<typeof publishOptions>>;
 
-export type PublishCaller = (req: PublishRequest) => Promise<PublishResponse>;
+export type PublishCaller = typeof publishCaller;
 
 export async function publishHandler(
   yargs: PublishHandlerArgs,
   publish: PublishCaller = publishCaller, // Overridden in tests.
 ) {
-  const {script, name} = yargs;
-
-  // TODO(arv): This should be part of the config.
-  const appID = 'temp-app-id';
+  const {script} = yargs;
+  const {appID} = mustReadAppConfig();
 
   const absPath = path.resolve(script);
-
   if (!(await exists(absPath))) {
     throw new Error(`File not found: ${absPath}`);
   }
@@ -63,7 +54,6 @@ export async function publishHandler(
 
   const data: PublishRequest = {
     requester: makeRequester(userID),
-    name,
     source: {
       content: code.text,
       name: path.basename(code.path),
@@ -76,8 +66,8 @@ export async function publishHandler(
     appID,
   };
 
-  await publish(data);
+  const {hostname} = await publish(data);
 
   console.log(`🎁 Published successfully to:`);
-  console.log(`https://${name}.reflect-server.net/`);
+  console.log(`https://${hostname}`);
 }

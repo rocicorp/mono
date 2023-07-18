@@ -6,11 +6,12 @@ import * as path from 'node:path';
 import {pkgUp} from 'pkg-up';
 import {assert} from 'shared/src/asserts.js';
 import {publishHandler, type PublishCaller} from './publish.js';
-import {useFakeAuthConfig} from './test-helpers.js';
+import {useFakeAppConfig, useFakeAuthConfig} from './test-helpers.js';
 
 type Args = Parameters<typeof publishHandler>[0];
 
 useFakeAuthConfig();
+useFakeAppConfig();
 
 test('it should throw if file not found', async () => {
   const script = `./test${Math.random().toString(32).slice(2)}.ts`;
@@ -71,7 +72,6 @@ test('it should compile typescript', async () => {
   const publishMock = jest.fn();
   publishMock.mockImplementationOnce(body => {
     expect(body).toMatchObject({
-      name: 'test-name',
       requester: {
         userAgent: {
           type: 'reflect-cli',
@@ -93,7 +93,7 @@ test('it should compile typescript', async () => {
     'test.ts',
   );
   await publishHandler(
-    {script: testFilePath, name: 'test-name'} as Args,
+    {script: testFilePath} as Args,
     publishMock as unknown as PublishCaller,
   );
 
@@ -106,9 +106,7 @@ test('it should throw if invalid version', async () => {
     'test.ts',
     '1.0.0',
   );
-  await expect(
-    publishHandler({script: testFilePath, name: 'test-name'} as Args),
-  ).rejects.toEqual(
+  await expect(publishHandler({script: testFilePath} as Args)).rejects.toEqual(
     expect.objectContaining({
       constructor: Error,
       message: expect.stringMatching(

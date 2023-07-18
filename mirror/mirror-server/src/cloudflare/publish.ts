@@ -86,7 +86,7 @@ export async function publish(
   appSourcemapModule: CfModule,
   appName: string,
   version: string,
-) {
+): Promise<string> {
   console.log('publishing', appName);
 
   const [serverModule, ...otherServerModules] = await getServerModules(
@@ -129,9 +129,12 @@ export async function publish(
     reflectAuthApiKey = nanoid();
   }
 
+  const hostname = `${appName}.reflect-server.net`;
   await Promise.all([
-    publishCustomDomains(config, `${appName}.reflect-server.net`),
+    publishCustomDomains(config, hostname),
     submitSecret(config, 'REFLECT_AUTH_API_KEY', reflectAuthApiKey),
     submitTriggers(config, '*/5 * * * *'),
   ]);
+
+  return hostname;
 }
