@@ -14,7 +14,12 @@ import {
 import {Team, teamDataConverter, teamPath} from 'mirror-schema/src/team.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import assert from 'node:assert';
-import {newAppID, newAppScriptName, newTeamID} from 'shared/src/mirror/ids.js';
+import {
+  newAppID,
+  newAppIDAsNumber,
+  newAppScriptName,
+  newTeamID,
+} from 'shared/src/mirror/ids.js';
 import {must} from 'shared/src/must.js';
 import {withAuthorization} from '../validators/auth.js';
 import {withSchema} from '../validators/schema.js';
@@ -115,8 +120,9 @@ export const create = (firestore: Firestore) =>
           }
         }
 
-        const appID = newAppID();
-        const scriptName = newAppScriptName(appID);
+        const appIDNumber = newAppIDAsNumber();
+        const appID = newAppID(appIDNumber);
+        const scriptName = newAppScriptName(appIDNumber);
 
         // TODO(arv): Ensure that Cloudflare is OK with this script name?
         const appDocRef = firestore

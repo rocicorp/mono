@@ -1,15 +1,15 @@
-import * as baseN from './base-n.js';
-
 const alphabet =
   '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
 export function encode(n: bigint): string {
-  return baseN.encode(n, alphabet);
-}
-
-const lookup = baseN.buildLookup(alphabet);
-const base = BigInt(alphabet.length);
-
-export function decode(s: string): bigint {
-  return baseN.decode(s, base, lookup);
+  if (n === 0n) {
+    return '0';
+  }
+  let result = '';
+  const base = BigInt(alphabet.length);
+  while (n > 0n) {
+    result = alphabet[Number(n % base)] + result;
+    n = n / base;
+  }
+  return result;
 }

@@ -19,22 +19,22 @@ test('appID is timestamp base62 encoded', () => {
 });
 
 test('script name', () => {
-  const appID = '1LY7VK';
+  const appIDNumber = 1689708769775;
   let i = 0;
   const values = Array.from({length: 10}, (_, i) => i / 10);
   jest
     .spyOn(Math, 'random')
     .mockImplementation(() => values[i++ % values.length]);
-  expect(newAppScriptName(appID)).toBe('aback-broad-cockatoo-14pc0mi');
+  expect(newAppScriptName(appIDNumber)).toBe('aback-broad-cockatoo-lk8oz2zz');
 });
 
 test('script name not the same', () => {
-  const appID = '1LY7VK';
+  const appIDNumber = 1689708769775;
   let i = 0;
   const values = [
     ...Array.from({length: 10}, () => 0),
     ...Array.from({length: 10}, (_, i) => i / 10),
   ];
   jest.spyOn(Math, 'random').mockImplementation(() => values[i++]);
-  expect(newAppScriptName(appID)).toBe('aback-broad-cockatoo-14pc0mi');
+  expect(newAppScriptName(appIDNumber)).toBe('aback-broad-cockatoo-lk8oz2zz');
 });
