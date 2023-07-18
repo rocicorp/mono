@@ -53,6 +53,7 @@ lerna-debug.log*
 .env*.local
 .dev.vars
 .env.reflect-mirror-staging
+.env.reflect-mirror-prod
 
 # vercel
 .vercel
