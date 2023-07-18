@@ -651,80 +651,99 @@ test('puller with normal non-mutation recovery pull', async () => {
   });
 });
 
-test('watchSmokeTest', async () => {
-  const r = reflectForTest({
-    roomID: 'watchSmokeTestRoom',
-    mutators: {
-      addData: async (
-        tx: WriteTransaction,
-        data: {[key: string]: JSONValue},
-      ) => {
-        for (const [key, value] of Object.entries(data)) {
-          await tx.put(key, value);
-        }
-      },
-      del: async (tx: WriteTransaction, key: string) => {
-        await tx.del(key);
-      },
+test('smokeTest', async () => {
+  const cases: {
+    name: string;
+    enableSocket: boolean;
+  }[] = [
+    {
+      name: 'socket enabled',
+      enableSocket: true,
     },
-  });
+    {
+      name: 'socket disabled',
+      enableSocket: false,
+    },
+  ];
 
-  const spy = sinon.spy();
-  const unwatch = r.experimentalWatch(spy);
-
-  await r.mutate.addData({a: 1, b: 2});
-
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
-    [
-      {
-        op: 'add',
-        key: 'a',
-        newValue: 1,
+  for (const c of cases) {
+    // reflectForTest adds the socket by default.
+    const socketOptions = c.enableSocket ? {} : {socketOrigin: undefined};
+    const r = reflectForTest({
+      roomID: 'smokeTestRoom',
+      mutators: {
+        addData: async (
+          tx: WriteTransaction,
+          data: {[key: string]: JSONValue},
+        ) => {
+          for (const [key, value] of Object.entries(data)) {
+            await tx.put(key, value);
+          }
+        },
+        del: async (tx: WriteTransaction, key: string) => {
+          await tx.del(key);
+        },
       },
-      {
-        op: 'add',
-        key: 'b',
-        newValue: 2,
-      },
-    ],
-  ]);
+      ...socketOptions,
+    });
 
-  spy.resetHistory();
-  await r.mutate.addData({a: 1, b: 2});
-  expect(spy.callCount).to.equal(0);
+    const spy = sinon.spy();
+    const unwatch = r.experimentalWatch(spy);
 
-  await r.mutate.addData({a: 11});
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
-    [
-      {
-        op: 'change',
-        key: 'a',
-        newValue: 11,
-        oldValue: 1,
-      },
-    ],
-  ]);
+    await r.mutate.addData({a: 1, b: 2});
 
-  spy.resetHistory();
-  await r.mutate.del('b');
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
-    [
-      {
-        op: 'del',
-        key: 'b',
-        oldValue: 2,
-      },
-    ],
-  ]);
+    expect(spy.callCount).to.equal(1);
+    expect(spy.lastCall.args).to.deep.equal([
+      [
+        {
+          op: 'add',
+          key: 'a',
+          newValue: 1,
+        },
+        {
+          op: 'add',
+          key: 'b',
+          newValue: 2,
+        },
+      ],
+    ]);
 
-  unwatch();
+    spy.resetHistory();
+    await r.mutate.addData({a: 1, b: 2});
+    expect(spy.callCount).to.equal(0);
 
-  spy.resetHistory();
-  await r.mutate.addData({c: 6});
-  expect(spy.callCount).to.equal(0);
+    await r.mutate.addData({a: 11});
+    expect(spy.callCount).to.equal(1);
+    expect(spy.lastCall.args).to.deep.equal([
+      [
+        {
+          op: 'change',
+          key: 'a',
+          newValue: 11,
+          oldValue: 1,
+        },
+      ],
+    ]);
+
+    spy.resetHistory();
+    await r.mutate.del('b');
+    expect(spy.callCount).to.equal(1);
+    expect(spy.lastCall.args).to.deep.equal([
+      [
+        {
+          op: 'del',
+          key: 'b',
+          oldValue: 2,
+        },
+      ],
+    ]);
+
+    unwatch();
+
+    spy.resetHistory();
+    await r.mutate.addData({c: 6});
+    expect(spy.callCount).to.equal(0);
+  }
 });
 
 test('poke log context includes requestID', async () => {
@@ -998,6 +1017,36 @@ test('Connect timeout', async () => {
   // And success after this...
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
+});
+
+test('socketOrigin', async () => {
+  const cases: {
+    name: string;
+    socketEnabled: boolean;
+  }[] = [
+    {
+      name: 'socket enabled',
+      socketEnabled: true,
+    },
+    {
+      name: 'socket disabled',
+      socketEnabled: false,
+    },
+  ];
+
+  for (const c of cases) {
+    const r = reflectForTest(c.socketEnabled ? {} : {socketOrigin: undefined});
+
+    for (let i = 0; i < 10; i++) {
+      await clock.tickAsync(0);
+    }
+
+    expect(r.connectionState, c.name).to.equal(
+      c.socketEnabled
+        ? ConnectionState.Connecting
+        : ConnectionState.Disconnected,
+    );
+  }
 });
 
 test('Logs errors in connect', async () => {

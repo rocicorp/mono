@@ -127,7 +127,7 @@ export class Reflect<MD extends MutatorDefs> {
   readonly version = version;
 
   private readonly _rep: Replicache<MD>;
-  private readonly _socketOrigin: string;
+  private readonly _socketOrigin: string | undefined;
   readonly userID: string;
   readonly roomID: string;
 
@@ -261,6 +261,7 @@ export class Reflect<MD extends MutatorDefs> {
     }
 
     if (
+      socketOrigin &&
       !socketOrigin.startsWith('ws://') &&
       !socketOrigin.startsWith('wss://')
     ) {
@@ -644,6 +645,10 @@ export class Reflect<MD extends MutatorDefs> {
    * attempt times out.
    */
   private async _connect(l: LogContext): Promise<void> {
+    if (this._socketOrigin === undefined) {
+      throw new Error('Invalid state, expected socketOrigin to be defined.');
+    }
+
     // All the callers check this state already.
     assert(this._connectionState === ConnectionState.Disconnected);
 
@@ -905,6 +910,13 @@ export class Reflect<MD extends MutatorDefs> {
 
   private async _runLoop() {
     (await this._l).info?.(`Starting Reflect version: ${this.version}`);
+
+    if (this._socketOrigin === undefined) {
+      (await this._l).info?.(
+        'No socket origin provided, not starting connect loop.',
+      );
+      return;
+    }
 
     let runLoopCounter = 0;
     const bareLogContext = await this._l;
@@ -1217,6 +1229,12 @@ export class Reflect<MD extends MutatorDefs> {
   // Sends a set of metrics to the server. Throws unless the server
   // returns 200.
   private async _reportMetrics(allSeries: Series[]) {
+    if (this._socketOrigin === undefined) {
+      (await this._l).info?.(
+        'Skipping metrics report, socketOrigin is undefined',
+      );
+      return;
+    }
     const body = JSON.stringify({series: allSeries});
     const url = new URL('/api/metrics/v0/report', this._socketOrigin);
     url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
@@ -1238,6 +1256,12 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   private async _checkConnectivityAsync(reason: string) {
+    if (this._socketOrigin === undefined) {
+      (await this._l).error?.(
+        'Cannot check connectivity with undefined socketOrigin',
+      );
+      return;
+    }
     try {
       await checkConnectivity(reason, this._socketOrigin, await this._l);
     } catch (e) {
