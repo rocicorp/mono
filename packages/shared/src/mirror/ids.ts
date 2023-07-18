@@ -4,7 +4,7 @@ import * as base62 from '../base62.js';
 
 const tempUint64Array = new BigUint64Array(1);
 
-export function newRandomUint64(): bigint {
+function newRandomUint64(): bigint {
   // TODO(arv): For some very odd reason Firebase functions does not have
   // crypto.getRandomValues. What version of node is it running?
 
