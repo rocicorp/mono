@@ -39,8 +39,8 @@ export function newAppScriptName(appIDNumber: number): string {
     return newAppScriptName(appIDNumber);
   }
   const obj = randomSample(objects);
-  const appIDBase32 = appIDNumber.toString(36);
-  return `${pred1}-${pred2}-${obj}-${appIDBase32}`;
+  const appIDBase36 = appIDNumber.toString(36);
+  return `${pred1}-${pred2}-${obj}-${appIDBase36}`;
 }
 
 function randomSample<T>(arr: T[]): T {
