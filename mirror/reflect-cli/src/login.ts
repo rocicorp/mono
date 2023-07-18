@@ -58,7 +58,6 @@ export async function loginHandler(
         res.end(() => {
           loginResolver.resolve();
         });
-        console.log('Successfully logged in.');
         return;
       }
     }

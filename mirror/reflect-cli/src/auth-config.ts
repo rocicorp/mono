@@ -14,6 +14,7 @@ import {
   signInWithCredential,
   type User,
 } from 'firebase/auth';
+import {loginHandler} from './login.js';
 
 /**
  * The path to the config file that holds user authentication data,
@@ -77,11 +78,7 @@ export function setAuthConfigForTesting(config: UserAuthConfig | undefined) {
 }
 
 //todo: make test
-function mustReadAuthConfigFile(): UserAuthConfig {
-  const authConfigFilePath = path.join(
-    getGlobalReflectConfigPath(),
-    USER_AUTH_CONFIG_FILE,
-  );
+function mustReadAuthConfigFile(authConfigFilePath: string): UserAuthConfig {
   try {
     const rawData = readFileSync(authConfigFilePath, 'utf-8');
     const config: UserAuthConfig = JSON.parse(rawData);
@@ -108,12 +105,23 @@ export async function authenticate(): Promise<User> {
   if (authConfigForTesting) {
     return {uid: 'fake-uid'} as unknown as User;
   }
-  const config = mustReadAuthConfigFile();
+  const authConfigFilePath = path.join(
+    getGlobalReflectConfigPath(),
+    USER_AUTH_CONFIG_FILE,
+  );
+  if (fs.statSync(authConfigFilePath, {throwIfNoEntry: false}) === undefined) {
+    console.info('Login required');
+    await loginHandler();
+  }
+  const config = mustReadAuthConfigFile(authConfigFilePath);
   const authCredential = parseAuthCredential(config.authCredential);
   if (!authCredential) {
-    throw new Error('Invalid credentials. Please login again.');
+    throw new Error(
+      `Invalid credentials. Please run \`${scriptName} login\` again.`,
+    );
   }
   const userCredentials = await signInWithCredential(getAuth(), authCredential);
+  console.info(`Logged in as ${userCredentials.user.email}`);
   return userCredentials.user;
 }
 

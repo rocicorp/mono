@@ -7,6 +7,7 @@ import {initHandler, initOptions} from './init.js';
 import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
+import {authenticate} from './auth-config.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -43,6 +44,9 @@ function createCLIParser(argv: string[]) {
     async () => {
       try {
         await loginHandler();
+        // authenticate() validates that credentials were written
+        // and outputs the logged in user to the console.
+        await authenticate();
       } catch (e) {
         console.error(e);
       }
