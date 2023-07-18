@@ -1,7 +1,7 @@
 import {expect, test} from '@jest/globals';
 import {encode} from './base62.js';
 
-test('it should encode', () => {
+test('it should encode base62', () => {
   expect(encode(0n)).toBe('0');
   expect(encode(1n)).toBe('1');
   expect(encode(9n)).toBe('9');

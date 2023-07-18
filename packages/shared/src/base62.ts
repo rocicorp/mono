@@ -1,4 +1,4 @@
-const characters =
+const alphabet =
   '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
 export function encode(n: bigint): string {
@@ -6,9 +6,10 @@ export function encode(n: bigint): string {
     return '0';
   }
   let result = '';
+  const base = BigInt(alphabet.length);
   while (n > 0n) {
-    result = characters[Number(n % 62n)] + result;
-    n = n / 62n;
+    result = alphabet[Number(n % base)] + result;
+    n = n / base;
   }
   return result;
 }
