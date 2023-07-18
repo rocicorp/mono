@@ -1,6 +1,7 @@
 import {objects, predicates} from 'friendly-words';
 import {webcrypto as crypto} from 'node:crypto';
-import * as base62 from 'shared/src/base62.js';
+import * as base32 from '../base32.js';
+import * as base62 from '../base62.js';
 
 const tempUint64Array = new BigUint64Array(1);
 
@@ -27,11 +28,15 @@ export function newAppID(): string {
 export function newAppScriptName(appID: string): string {
   const pred1 = randomSample(predicates);
   const pred2 = randomSample(predicates);
-  const obj = randomSample(objects);
   if (pred1 === pred2) {
     return newAppScriptName(appID);
   }
-  return `${pred1}-${pred2}-${obj}-${appID}`;
+  const obj = randomSample(objects);
+
+  const appIDNum = base62.decode(appID);
+  const appIDBase32 = base32.encode(appIDNum);
+
+  return `${pred1}-${pred2}-${obj}-${appIDBase32}`;
 }
 
 function randomSample<T>(arr: T[]): T {
