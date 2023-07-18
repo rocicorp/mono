@@ -1,10 +1,10 @@
 import {afterEach, beforeEach} from '@jest/globals';
-import {setAuthConfigForTesting} from './auth-config.js';
+import {setAppConfigForTesting, type AppConfig} from './app-config.js';
+import {UserAuthConfig, setAuthConfigForTesting} from './auth-config.js';
 
 export function useFakeAuthConfig() {
-  const newConfig = {
+  const newConfig: UserAuthConfig = {
     authCredential: {
-      accessToken: 'valid-token',
       providerId: 'github.com',
       signInMethod: 'github.com',
     },
@@ -16,5 +16,19 @@ export function useFakeAuthConfig() {
 
   afterEach(() => {
     setAuthConfigForTesting(undefined);
+  });
+}
+
+export function useFakeAppConfig() {
+  const appConfig: AppConfig = {
+    appID: 'test-app-id',
+  };
+
+  beforeEach(() => {
+    setAppConfigForTesting(appConfig);
+  });
+
+  afterEach(() => {
+    setAppConfigForTesting(undefined);
   });
 }

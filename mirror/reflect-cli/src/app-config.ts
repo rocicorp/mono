@@ -47,10 +47,19 @@ function mustFindConfigFilePath(): string {
 
 const configFileName = 'reflect.config.json';
 
+let appConfigForTesting: AppConfig | undefined;
+
+export function setAppConfigForTesting(config: AppConfig | undefined) {
+  appConfigForTesting = config;
+}
+
 /**
  * Reads reflect.config.json in the "project root".
  */
 export function readAppConfig(): AppConfig | undefined {
+  if (appConfigForTesting) {
+    return appConfigForTesting;
+  }
   const configFilePath = mustFindConfigFilePath();
   if (fs.existsSync(configFilePath)) {
     return JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));

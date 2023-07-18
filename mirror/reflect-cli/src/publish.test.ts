@@ -6,11 +6,12 @@ import * as path from 'node:path';
 import {pkgUp} from 'pkg-up';
 import {assert} from 'shared/src/asserts.js';
 import {publishHandler, type PublishCaller} from './publish.js';
-import {useFakeAuthConfig} from './test-helpers.js';
+import {useFakeAppConfig, useFakeAuthConfig} from './test-helpers.js';
 
 type Args = Parameters<typeof publishHandler>[0];
 
 useFakeAuthConfig();
+useFakeAppConfig();
 
 test('it should throw if file not found', async () => {
   const script = `./test${Math.random().toString(32).slice(2)}.ts`;
