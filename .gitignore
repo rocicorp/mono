@@ -67,3 +67,4 @@ next-env.d.ts
 .wrangler/*
 .mf
 
+reflect.config.json
