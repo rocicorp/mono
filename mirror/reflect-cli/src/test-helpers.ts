@@ -3,7 +3,11 @@ import {setAuthConfigForTesting} from './auth-config.js';
 
 export function useFakeAuthConfig() {
   const newConfig = {
-    customToken: 'fake-custom-token',
+    authCredential: {
+      accessToken: 'valid-token',
+      providerId: 'github.com',
+      signInMethod: 'github.com',
+    },
   };
 
   beforeEach(() => {

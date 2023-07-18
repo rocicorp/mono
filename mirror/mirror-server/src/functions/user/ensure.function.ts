@@ -26,7 +26,7 @@ export function ensure(
   return withSchema(
     ensureUserRequestSchema,
     ensureUserResponseSchema,
-    withAuthorization(async (ensureUserRequest, context) => {
+    withAuthorization(async ensureUserRequest => {
       const {userID} = ensureUserRequest.requester;
 
       const user = await auth.getUser(userID);
@@ -72,11 +72,7 @@ export function ensure(
           }
         }
       });
-      const customToken = await auth.createCustomToken(context.auth.uid);
-      return {
-        customToken,
-        success: true,
-      };
+      return {success: true};
     }),
   );
 }

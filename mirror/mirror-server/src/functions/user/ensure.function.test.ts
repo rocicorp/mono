@@ -22,7 +22,6 @@ function fakeFirestore(): Firestore {
 function fakeAuth(email = 'foo@bar.com'): Auth {
   const auth = {
     getUser: () => Promise.resolve({email}),
-    createCustomToken: () => Promise.resolve('custom-auth-token'),
   };
   return auth as unknown as Auth;
 }
@@ -110,7 +109,7 @@ test('creates user doc', async () => {
     auth: {uid: 'foo'} as AuthData,
     rawRequest: null as unknown as Request,
   });
-  expect(resp).toEqual({customToken: 'custom-auth-token', success: true});
+  expect(resp).toEqual({success: true});
   const fooDoc = await firestore.doc('users/foo').get();
   expect(fooDoc.exists).toBe(true);
   expect(fooDoc.data()).toEqual({
@@ -139,7 +138,7 @@ test('does not overwrite existing user doc', async () => {
     auth: {uid: 'foo'} as AuthData,
     rawRequest: null as unknown as Request,
   });
-  expect(resp).toEqual({customToken: 'custom-auth-token', success: true});
+  expect(resp).toEqual({success: true});
   const fooDoc = await firestore.doc('users/foo').get();
   expect(fooDoc.exists).toBe(true);
   expect(fooDoc.data()).toEqual({
@@ -180,7 +179,7 @@ test('updates user doc if email is different', async () => {
     auth: {uid: 'foo'} as AuthData,
     rawRequest: null as unknown as Request,
   });
-  expect(resp).toEqual({customToken: 'custom-auth-token', success: true});
+  expect(resp).toEqual({success: true});
   const fooDoc = await firestore.doc('users/foo').get();
   expect(fooDoc.exists).toBe(true);
   expect(fooDoc.data()).toEqual({

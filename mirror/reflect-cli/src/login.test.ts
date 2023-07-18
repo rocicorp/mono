@@ -9,7 +9,7 @@ const credentialReceiverServerFetch: (
 ) => Promise<http.ServerResponse<http.IncomingMessage>> = mockHttpServer();
 
 describe('loginHandler', () => {
-  test('should reject if customToken, refreshToken or expirationTime is missing', async () => {
+  test('should reject if authCredential is missing', async () => {
     const callbackUrl = new URL('http://localhost:8976/oauth/callback');
     let openInBrowserCalled = false;
     let writeAuthConfigFileCalled = false;
@@ -25,22 +25,29 @@ describe('loginHandler', () => {
       },
       (config: UserAuthConfig) => {
         expect(config).toBeDefined();
-        expect(config.customToken).toEqual('valid-token');
+        expect(config.authCredential).toEqual({
+          accessToken: 'valid-token',
+          signInMethod: 'github.com',
+          providerId: 'github.com',
+        });
         writeAuthConfigFileCalled = true;
       },
     );
 
     await expect(loginHandlerPromise).rejects.toThrow(
-      'Error saving credentials: Error: Missing customToken from the auth provider.',
+      'Error saving credentials: Error: Missing auth credential from the auth provider.',
     );
     expect(openInBrowserCalled).toEqual(true);
     expect(writeAuthConfigFileCalled).toEqual(false);
   });
 
-  test('should pass if customToken is valid', async () => {
+  test('should pass if authCredential is valid', async () => {
     // spyOn writeAuthConfigFile
     const callbackUrl = new URL('http://localhost:8976/oauth/callback');
-    callbackUrl.searchParams.set('customToken', 'valid-token');
+    callbackUrl.searchParams.set(
+      'authCredential',
+      '{"accessToken":"valid-token","providerId":"github.com","signInMethod":"github.com"}',
+    );
     let openInBrowserCalled = false;
     let writeAuthConfigFileCalled = false;
 
@@ -55,7 +62,11 @@ describe('loginHandler', () => {
       },
       (config: UserAuthConfig) => {
         expect(config).toBeDefined();
-        expect(config.customToken).toEqual('valid-token');
+        expect(config.authCredential).toEqual({
+          accessToken: 'valid-token',
+          signInMethod: 'github.com',
+          providerId: 'github.com',
+        });
         writeAuthConfigFileCalled = true;
       },
     );

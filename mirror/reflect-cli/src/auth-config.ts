@@ -4,7 +4,16 @@ import path from 'node:path';
 import * as v from 'shared/src/valita.js';
 import {parse} from 'shared/src/valita.js';
 import {scriptName} from './create-cli-parser.js';
-import {getAuth, signInWithCustomToken, type User} from 'firebase/auth';
+import {
+  AuthCredential,
+  EmailAuthCredential,
+  getAuth,
+  OAuthCredential,
+  PhoneAuthCredential,
+  SignInMethod,
+  signInWithCredential,
+  type User,
+} from 'firebase/auth';
 
 /**
  * The path to the config file that holds user authentication data,
@@ -12,12 +21,19 @@ import {getAuth, signInWithCustomToken, type User} from 'firebase/auth';
  */
 export const USER_AUTH_CONFIG_FILE = 'config/default.json';
 
+// https://firebase.google.com/docs/reference/js/auth.authcredential
+export const authCredentialSchema = v.object({
+  providerId: v.string(),
+  signInMethod: v.string(),
+});
+export type JSONAuthCredential = v.Infer<typeof authCredentialSchema>;
+
 /**
  * The data that may be read from the `USER_CONFIG_FILE`.
  */
 
 export const userAuthConfigSchema = v.object({
-  customToken: v.string(),
+  authCredential: authCredentialSchema,
 });
 export type UserAuthConfig = v.Infer<typeof userAuthConfigSchema>;
 
@@ -69,7 +85,7 @@ function mustReadAuthConfigFile(): UserAuthConfig {
   try {
     const rawData = readFileSync(authConfigFilePath, 'utf-8');
     const config: UserAuthConfig = JSON.parse(rawData);
-    return parse(config, userAuthConfigSchema);
+    return parse(config, userAuthConfigSchema, 'passthrough');
   } catch (err) {
     if (isFileNotFoundError(err)) {
       throw new Error(
@@ -93,9 +109,26 @@ export async function authenticate(): Promise<User> {
     return {uid: 'fake-uid'} as unknown as User;
   }
   const config = mustReadAuthConfigFile();
-  const credentials = await signInWithCustomToken(
-    getAuth(),
-    config.customToken,
-  );
-  return credentials.user;
+  const authCredential = parseAuthCredential(config.authCredential);
+  if (!authCredential) {
+    throw new Error('Invalid credentials. Please login again.');
+  }
+  const userCredentials = await signInWithCredential(getAuth(), authCredential);
+  return userCredentials.user;
+}
+
+function parseAuthCredential(json: JSONAuthCredential): AuthCredential | null {
+  switch (json.signInMethod) {
+    case SignInMethod.GITHUB:
+    case SignInMethod.GOOGLE:
+    case SignInMethod.TWITTER:
+    case SignInMethod.FACEBOOK:
+      return OAuthCredential.fromJSON(json);
+    case SignInMethod.EMAIL_PASSWORD:
+    case SignInMethod.EMAIL_LINK:
+      return EmailAuthCredential.fromJSON(json);
+    case SignInMethod.PHONE:
+      return PhoneAuthCredential.fromJSON(json);
+  }
+  throw new Error('Invalid auth credentials. Please login again.');
 }

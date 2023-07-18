@@ -4,7 +4,9 @@ import http from 'node:http';
 import type {Socket} from 'node:net';
 import open from 'open';
 import {sleep} from 'shared/src/sleep.js';
+import {parse} from 'shared/src/valita.js';
 import {
+  authCredentialSchema,
   UserAuthConfig,
   writeAuthConfigFile as writeAuthConfigFileImpl,
 } from './auth-config.js';
@@ -27,12 +29,18 @@ export async function loginHandler(
 
     switch (pathname) {
       case '/oauth/callback': {
-        const customToken = searchParams.get('customToken');
+        const authCredential = searchParams.get('authCredential');
         try {
-          if (!customToken) {
-            throw new Error(`Missing customToken from the auth provider.`);
+          if (!authCredential) {
+            throw new Error(`Missing auth credential from the auth provider.`);
           }
-          const authConfig: UserAuthConfig = {customToken};
+          const authConfig: UserAuthConfig = {
+            authCredential: parse(
+              JSON.parse(authCredential),
+              authCredentialSchema,
+              'passthrough',
+            ),
+          };
 
           writeAuthConfigFile(authConfig);
         } catch (error) {
