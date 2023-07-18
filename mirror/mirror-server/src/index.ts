@@ -1,14 +1,15 @@
-import {
-  appOptions,
-  baseHttpsOptions,
-  serviceAccountId,
-  serversBucketName,
-} from './config/index.js';
 import {initializeApp} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
 import {getStorage} from 'firebase-admin/storage';
 import {https, setGlobalOptions} from 'firebase-functions/v2';
+import {
+  appOptions,
+  baseHttpsOptions,
+  serversBucketName,
+  serviceAccountId,
+} from './config/index.js';
+import * as appFunctions from './functions/app/index.js';
 import {healthcheck as healthcheckHandler} from './functions/healthcheck.function.js';
 import {publish as publishHandler} from './functions/publish.function.js';
 import * as userFunctions from './functions/user/index.js';
@@ -41,4 +42,8 @@ export const user = {
     baseHttpsOptions,
     userFunctions.ensure(getFirestore(), getAuth()),
   ),
+};
+
+export const app = {
+  create: https.onCall(baseHttpsOptions, appFunctions.create(getFirestore())),
 };

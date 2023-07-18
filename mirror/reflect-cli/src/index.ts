@@ -3,6 +3,7 @@ import {
   CommandLineArgsError,
   createCLIParserBase,
 } from './create-cli-parser.js';
+import {initHandler, initOptions} from './init.js';
 import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
@@ -29,8 +30,8 @@ function createCLIParser(argv: string[]) {
   reflectCLI.command(
     'init [name]',
     '📥 Initialize a basic Reflect project, ',
-    //initOptions,
-    //initHandler
+    initOptions,
+    initHandler,
   );
 
   // login

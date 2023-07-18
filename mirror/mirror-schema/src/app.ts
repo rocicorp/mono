@@ -4,11 +4,11 @@ import * as path from './path.js';
 import {releaseChannelSchema} from './server.js';
 
 export const appSchema = v.object({
-  teamID: v.string(),
-  name: v.string(),
   cfID: v.string(),
   cfScriptName: v.string(),
+  name: v.string(),
   serverReleaseChannel: releaseChannelSchema,
+  teamID: v.string(),
 });
 
 export type App = v.Infer<typeof appSchema>;

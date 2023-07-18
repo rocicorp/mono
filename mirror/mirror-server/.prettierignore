@@ -3,3 +3,4 @@ out
 *.tgz
 *.log
 *.tsbuildinfo
+*.sh

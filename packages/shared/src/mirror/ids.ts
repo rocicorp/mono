@@ -1,9 +1,15 @@
 import {objects, predicates} from 'friendly-words';
+import {webcrypto as crypto} from 'node:crypto';
 import * as base62 from 'shared/src/base62.js';
 
 const tempUint64Array = new BigUint64Array(1);
 
 function newRandomUint64(): bigint {
+  // TODO(arv): For some very odd reason Firebase functions does not have
+  // crypto.getRandomValues. What version of node is it running?
+
+  // TODO(arv): Do we need this in a browser? Then we need to make it async and
+  // conditionally load the node module using dynamic import.
   crypto.getRandomValues(tempUint64Array);
   return tempUint64Array[0];
 }
