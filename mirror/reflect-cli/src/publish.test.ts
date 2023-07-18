@@ -71,7 +71,6 @@ test('it should compile typescript', async () => {
   const publishMock = jest.fn();
   publishMock.mockImplementationOnce(body => {
     expect(body).toMatchObject({
-      name: 'test-name',
       requester: {
         userAgent: {
           type: 'reflect-cli',
@@ -93,7 +92,7 @@ test('it should compile typescript', async () => {
     'test.ts',
   );
   await publishHandler(
-    {script: testFilePath, name: 'test-name'} as Args,
+    {script: testFilePath} as Args,
     publishMock as unknown as PublishCaller,
   );
 
@@ -106,9 +105,7 @@ test('it should throw if invalid version', async () => {
     'test.ts',
     '1.0.0',
   );
-  await expect(
-    publishHandler({script: testFilePath, name: 'test-name'} as Args),
-  ).rejects.toEqual(
+  await expect(publishHandler({script: testFilePath} as Args)).rejects.toEqual(
     expect.objectContaining({
       constructor: Error,
       message: expect.stringMatching(

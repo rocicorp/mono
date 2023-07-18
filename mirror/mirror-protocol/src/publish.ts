@@ -9,8 +9,6 @@ const fileSchema = v.object({
 
 export const publishRequestSchema = v.object({
   ...baseRequestFields,
-  /** The name of the Reflect App */
-  name: v.string(),
   source: fileSchema,
   sourcemap: fileSchema,
   serverVersionRange: v.string(),
@@ -19,7 +17,10 @@ export const publishRequestSchema = v.object({
 
 export type PublishRequest = v.Infer<typeof publishRequestSchema>;
 
-export const publishResponseSchema = v.object(baseResponseFields);
+export const publishResponseSchema = v.object({
+  ...baseResponseFields,
+  hostname: v.string(),
+});
 export type PublishResponse = v.Infer<typeof publishResponseSchema>;
 
 export const publish = createCall(

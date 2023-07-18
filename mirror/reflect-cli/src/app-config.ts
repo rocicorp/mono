@@ -59,6 +59,16 @@ export function readAppConfig(): AppConfig | undefined {
   return undefined;
 }
 
+export function mustReadAppConfig(): AppConfig {
+  const config = readAppConfig();
+  if (!config) {
+    throw new Error(
+      `Could not find ${configFileName}. Please run \`reflect init\` to create one.`,
+    );
+  }
+  return config;
+}
+
 export function writeAppConfig(config: AppConfig) {
   const configFilePath = mustFindConfigFilePath();
   console.log('Writing config to', configFilePath);
