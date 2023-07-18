@@ -10,9 +10,10 @@ export type CreateKVStore = ExperimentalCreateKVStore;
 export interface ReflectOptions<MD extends MutatorDefs> {
   /**
    * Origin for WebSocket connections to the Reflect server. This must have a
-   * `'ws'` or `'wss'` scheme.
+   * `'ws'` or `'wss'` scheme. If left undefined, Reflect will not connect to
+   * any server.
    */
-  socketOrigin: string;
+  socketOrigin?: string | undefined;
 
   /**
    * Identifies and authenticates the user.
