@@ -1,5 +1,6 @@
 import {Timestamp, type Firestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
+import {logger} from 'firebase-functions';
 import {defineSecret} from 'firebase-functions/params';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {
@@ -8,9 +9,11 @@ import {
 } from 'mirror-protocol/src/publish.js';
 import {appDataConverter, appPath, type App} from 'mirror-schema/src/app.js';
 import * as schema from 'mirror-schema/src/deployment.js';
+import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import * as semver from 'semver';
 import {newDeploymentID} from 'shared/src/mirror/ids.js';
 import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
+import {must} from 'shared/src/must.js';
 import type {CfModule} from '../cloudflare/create-worker-upload-form.js';
 import {getServerModuleMetadata} from '../cloudflare/get-server-modules.js';
 import {publish as publishToCloudflare} from '../cloudflare/publish.js';
@@ -35,13 +38,6 @@ export const publish = (
       const {serverVersionRange, appID} = publishRequest;
       const userID = context.auth.uid;
 
-      if (!userCanPublishApp(userID, appID)) {
-        throw new HttpsError(
-          'permission-denied',
-          'User does not have permission to publish this app',
-        );
-      }
-
       if (semver.validRange(serverVersionRange) === null) {
         throw new HttpsError('invalid-argument', 'Invalid desired version');
       }
@@ -52,14 +48,11 @@ export const publish = (
       }
 
       const version = await findNewestMatchingVersion(firestore, range);
-      console.log(
+      logger.log(
         `Found matching version for ${serverVersionRange}: ${version}`,
       );
 
-      const app = await getApp(firestore, appID);
-      if (!app) {
-        throw new HttpsError('invalid-argument', 'No app with that ID');
-      }
+      const app = await getApp(firestore, userID, appID);
 
       const config = {
         accountID: app.cfID,
@@ -100,7 +93,7 @@ export const publish = (
         statusTime: Timestamp.now(),
       });
 
-      console.log(`Saved deployment ${deploymentID} to firestore`);
+      logger.log(`Saved deployment ${deploymentID} to firestore`);
 
       let hostname: string;
       try {
@@ -124,13 +117,6 @@ export const publish = (
     }),
   );
 
-function userCanPublishApp(userID: string, appID: string): boolean {
-  console.warn(
-    `userCanPublishApp(${userID}, ${appID}) not implemented. Allowing publish for now`,
-  );
-
-  return true;
-}
 /**
  * Returns the URL (gs://...) of the uploaded file.
  */
@@ -224,13 +210,36 @@ async function setDeploymentStatusOfAll(
   });
 }
 
-async function getApp(
+function getApp(
   firestore: Firestore,
+  userID: string,
   appID: string,
-): Promise<App | undefined> {
-  const appDoc = await firestore
+): Promise<App> {
+  const appDocRef = firestore
     .doc(appPath(appID))
-    .withConverter(appDataConverter)
-    .get();
-  return appDoc.data();
+    .withConverter(appDataConverter);
+  const userDocRef = firestore
+    .doc(userPath(userID))
+    .withConverter(userDataConverter);
+  return firestore.runTransaction(async tx => {
+    const [appDoc, userDoc] = await Promise.all([
+      tx.get(appDocRef),
+      tx.get(userDocRef),
+    ]);
+    if (!userDoc.exists) {
+      throw new HttpsError('not-found', 'User does not exist');
+    }
+    if (!appDoc.exists) {
+      throw new HttpsError('not-found', 'App does not exist');
+    }
+    const app = must(appDoc.data());
+    const user = must(userDoc.data());
+    if (!(app.teamID in user.roles)) {
+      throw new HttpsError(
+        'permission-denied',
+        'User does not have permission to publish this app',
+      );
+    }
+    return app;
+  });
 }
