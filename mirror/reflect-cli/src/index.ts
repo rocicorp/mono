@@ -35,15 +35,14 @@ function createCLIParser(argv: string[]) {
     '📥 Initialize a basic Reflect project, ',
     initOptions,
     initHandler,
-  
+  );
 
   reflectCLI.command(
-   'scaffold [name]',
+    'scaffold [name]',
     '📥 Scaffold a basic Reflect project, ',
     scaffoldOptions,
     scaffoldHandler,
- );
-);
+  );
 
   // login
   reflectCLI.command(
