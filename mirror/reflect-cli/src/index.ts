@@ -9,6 +9,7 @@ import {initHandler, initOptions} from './init.js';
 import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
+import {scaffoldHandler, scaffoldOptions} from './scaffold.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -28,13 +29,21 @@ async function main(argv: string[]): Promise<void> {
 function createCLIParser(argv: string[]) {
   const reflectCLI = createCLIParserBase(argv);
 
-  // init
+  // scaffold
   reflectCLI.command(
     'init [name]',
     '📥 Initialize a basic Reflect project, ',
     initOptions,
     initHandler,
-  );
+  
+
+  reflectCLI.command(
+   'scaffold [name]',
+    '📥 Scaffold a basic Reflect project, ',
+    scaffoldOptions,
+    scaffoldHandler,
+ );
+);
 
   // login
   reflectCLI.command(

@@ -12,6 +12,7 @@
     "open": "^9.1.0",
     "pkg-up": "^4.0.0",
     "semver": "^7.5.3",
+    "validate-npm-package-name": "^5.0.0",
     "yargs": "^17.4.1"
   },
   "scripts": {
@@ -31,6 +32,7 @@
     "@rocicorp/reflect": "0.29.2",
     "@types/jwt-encode": "^1.0.0",
     "@types/node": "^18.16.0",
+    "@types/validate-npm-package-name": "^4.0.0",
     "@types/yargs": "^17.0.10",
     "esbuild": "^0.18.3",
     "jwt-encode": "^1.0.1",

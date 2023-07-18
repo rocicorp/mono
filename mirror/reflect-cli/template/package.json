@@ -1,0 +1,29 @@
+{
+  "name": "reflect-template-example",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx .",
+    "dev": "vite",
+    "build": "npm run lint && tsc && vite build",
+    "preview": "vite preview",
+    "format": "prettier --write './src/*/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.1.2",
+    "@rocicorp/reflect": "^0.28.1",
+    "@types/react": "^18.0.17",
+    "@types/react-dom": "^18.0.6",
+    "@vitejs/plugin-react": "^2.0.1",
+    "nanoid": "^4.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "replicache-react": "^2.10.0",
+    "typescript": "^4.7.4",
+    "vite": "^3.0.7"
+  },
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  }
+}
