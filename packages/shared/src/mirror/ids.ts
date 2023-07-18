@@ -23,7 +23,7 @@ export function newAppIDAsNumber(): number {
   return Date.now();
 }
 
-export function newAppID(n: number = Date.now()): string {
+export function newAppID(n: number = newAppIDAsNumber()): string {
   return base62.encode(BigInt(n));
 }
 
