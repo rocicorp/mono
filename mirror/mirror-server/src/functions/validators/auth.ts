@@ -12,6 +12,7 @@ import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {must} from 'shared/src/must.js';
 import {logger} from 'firebase-functions';
 import {SHORT_TO_LONG_ROLE, type Role} from 'mirror-schema/src/membership.js';
+import {assert} from 'shared/src/asserts.js';
 
 /**
  * Validator that checks the original authentication against the
@@ -51,6 +52,7 @@ export function appAuthorization<
   Request extends BaseAppRequest,
   Context extends UserAuthorization,
 >(firestore: Firestore, allowedRoles: Role[] = ['admin', 'member']) {
+  assert(allowedRoles.length > 0, 'allowedRoles must be non-empty');
   return async (request: Request, context: Context) => {
     const {userID} = context;
     const userDocRef = firestore
