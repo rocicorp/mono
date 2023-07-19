@@ -3,7 +3,7 @@ import color from 'picocolors';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import validateProjectName from 'validate-npm-package-name';
+import {isValidPackageName} from './create.js';
 
 export function scaffoldOptions(yargs: CommonYargsArgv) {
   return yargs.option('name', {
@@ -62,16 +62,6 @@ function copyDir(srcDir: string, destDir: string) {
 function editFile(file: string, callback: (content: string) => string) {
   const content = fs.readFileSync(file, 'utf-8');
   fs.writeFileSync(file, callback(content), 'utf-8');
-}
-
-function isValidPackageName(projectName: string): string | void {
-  const nameValidation = validateProjectName(projectName);
-  if (!nameValidation.validForNewPackages) {
-    return [
-      ...(nameValidation.errors || []),
-      ...(nameValidation.warnings || []),
-    ].join('\n');
-  }
 }
 
 function updateProjectName(targetDir: string) {
