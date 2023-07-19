@@ -9,6 +9,16 @@ export type Role = v.Infer<typeof roleSchema>;
 export const shortRoleSchema = v.union(v.literal('m'), v.literal('a'));
 export type ShortRole = v.Infer<typeof shortRoleSchema>;
 
+export const SHORT_TO_LONG_ROLE: Record<ShortRole, Role> = {
+  m: 'member',
+  a: 'admin',
+} as const;
+
+export const LONG_TO_SHORT_ROLE: Record<Role, ShortRole> = {
+  member: 'm',
+  admin: 'a',
+} as const;
+
 export const membershipSchema = v.object({
   role: roleSchema,
   email: v.string(),

@@ -1,5 +1,6 @@
 import * as v from 'shared/src/valita.js';
-import {baseRequestFields, baseResponseFields} from './base.js';
+import {baseResponseFields} from './base.js';
+import {baseAppRequestFields} from './app.js';
 import {createCall} from './call.js';
 
 const fileSchema = v.object({
@@ -8,11 +9,10 @@ const fileSchema = v.object({
 });
 
 export const publishRequestSchema = v.object({
-  ...baseRequestFields,
+  ...baseAppRequestFields,
   source: fileSchema,
   sourcemap: fileSchema,
   serverVersionRange: v.string(),
-  appID: v.string(),
 });
 
 export type PublishRequest = v.Infer<typeof publishRequestSchema>;

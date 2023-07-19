@@ -22,3 +22,11 @@ export const create = createCall(
   createRequestSchema,
   createResponseSchema,
 );
+
+export const baseAppRequestFields = {
+  ...baseRequestFields,
+  appID: v.string(),
+};
+
+export const baseAppRequestSchema = v.object(baseAppRequestFields);
+export type BaseAppRequest = v.Infer<typeof baseAppRequestSchema>;
