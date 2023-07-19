@@ -29,7 +29,6 @@ async function main(argv: string[]): Promise<void> {
 function createCLIParser(argv: string[]) {
   const reflectCLI = createCLIParserBase(argv);
 
-  // scaffold
   reflectCLI.command(
     'init [name]',
     '📥 Initialize a basic Reflect project, ',
@@ -39,7 +38,7 @@ function createCLIParser(argv: string[]) {
 
   reflectCLI.command(
     'create [name]',
-    '📥 Scaffold a basic Reflect project, ',
+    '🛠 Create, init and publish a basic Reflect project, ',
     createOptions,
     createHandler,
   );
