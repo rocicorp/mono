@@ -16,8 +16,8 @@ import {getServerModuleMetadata} from '../cloudflare/get-server-modules.js';
 import {publish as publishToCloudflare} from '../cloudflare/publish.js';
 import {findNewestMatchingVersion} from '../find-newest-matching-version.js';
 import {storeModule} from '../store-module.js';
-import {withAppAuthorization} from './validators/auth.js';
-import {withSchema} from './validators/schema.js';
+import {userAuthorization, appAuthorization} from './validators/auth.js';
+import {validateSchema} from './validators/schema.js';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
@@ -28,10 +28,10 @@ export const publish = (
   storage: Storage,
   bucketName: string,
 ) =>
-  withSchema(
-    publishRequestSchema,
-    publishResponseSchema,
-    withAppAuthorization(firestore, async (publishRequest, context) => {
+  validateSchema(publishRequestSchema, publishResponseSchema)
+    .validate(userAuthorization())
+    .validate(appAuthorization(firestore))
+    .handle(async (publishRequest, context) => {
       const {serverVersionRange, appID} = publishRequest;
       const {userID} = publishRequest.requester;
 
@@ -49,7 +49,7 @@ export const publish = (
         `Found matching version for ${serverVersionRange}: ${version}`,
       );
 
-      const {app} = context.authorized;
+      const {app} = context;
 
       const config = {
         accountID: app.cfID,
@@ -111,8 +111,7 @@ export const publish = (
       await setDeploymentStatusOfAll(firestore, appID, deploymentID);
 
       return {success: true, hostname};
-    }),
-  );
+    });
 
 /**
  * Returns the URL (gs://...) of the uploaded file.

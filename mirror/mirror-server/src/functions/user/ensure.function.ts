@@ -8,9 +8,9 @@ import {
   ensureUserResponseSchema,
 } from 'mirror-protocol/src/user.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
-import {withAuthorization} from '../validators/auth.js';
-import {withSchema} from '../validators/schema.js';
-import type {AsyncCallable} from '../validators/types.js';
+import {userAuthorization} from '../validators/auth.js';
+import {validateSchema} from '../validators/schema.js';
+import type {Callable} from '../validators/types.js';
 import {logger} from 'firebase-functions';
 import {must} from 'shared/src/must.js';
 import {
@@ -22,12 +22,11 @@ import {
 export function ensure(
   firestore: Firestore,
   auth: Auth,
-): AsyncCallable<EnsureUserRequest, EnsureUserResponse> {
-  return withSchema(
-    ensureUserRequestSchema,
-    ensureUserResponseSchema,
-    withAuthorization(async ensureUserRequest => {
-      const {userID} = ensureUserRequest.requester;
+): Callable<EnsureUserRequest, EnsureUserResponse> {
+  return validateSchema(ensureUserRequestSchema, ensureUserResponseSchema)
+    .validate(userAuthorization())
+    .handle(async (_, context) => {
+      const {userID} = context;
 
       const user = await auth.getUser(userID);
       if (!user.email) {
@@ -73,6 +72,5 @@ export function ensure(
         }
       });
       return {success: true};
-    }),
-  );
+    });
 }

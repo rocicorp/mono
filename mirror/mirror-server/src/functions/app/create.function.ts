@@ -21,19 +21,18 @@ import {
   newTeamID,
 } from 'shared/src/mirror/ids.js';
 import {must} from 'shared/src/must.js';
-import {withAuthorization} from '../validators/auth.js';
-import {withSchema} from '../validators/schema.js';
+import {userAuthorization} from '../validators/auth.js';
+import {validateSchema} from '../validators/schema.js';
 
 const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
 export const DEFAULT_MAX_APPS = null;
 
 export const create = (firestore: Firestore) =>
-  withSchema(
-    createRequestSchema,
-    createResponseSchema,
-    withAuthorization((request, context) => {
-      const {uid: userID} = context.auth;
+  validateSchema(createRequestSchema, createResponseSchema)
+    .validate(userAuthorization())
+    .handle((request, context) => {
+      const {userID} = context;
       const {serverReleaseChannel} = request;
 
       const userDocRef = firestore
@@ -153,5 +152,4 @@ export const create = (firestore: Firestore) =>
 
         return {appID, name: scriptName, success: true};
       });
-    }),
-  );
+    });

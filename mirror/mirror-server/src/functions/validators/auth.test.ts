@@ -8,12 +8,12 @@ import {
 } from 'firebase-functions/v2/https';
 import type {AuthData} from 'firebase-functions/v2/tasks';
 import {firebaseStub} from 'firestore-jest-mock/mocks/firebase.js';
-import {withSchema} from './schema.js';
-import {withAppAuthorization} from './auth.js';
+import {validateSchema} from './schema.js';
+import {appAuthorization, userAuthorization} from './auth.js';
 import {baseAppRequestFields} from 'mirror-protocol/src/app.js';
 import {baseResponseFields} from 'mirror-protocol/src/base.js';
 import * as v from 'shared/src/valita.js';
-import type {AsyncCallable} from './types.js';
+import type {Callable} from './types.js';
 import type {User} from 'mirror-schema/src/user.js';
 import type {App} from 'mirror-schema/src/app.js';
 import type {Role} from 'mirror-schema/src/membership.js';
@@ -44,23 +44,20 @@ type TestResponse = v.Infer<typeof testResponseSchema>;
 function testFunction(
   firestore: Firestore,
   allowedRoles: Role[] = ['admin', 'member'],
-): AsyncCallable<TestRequest, TestResponse> {
-  return withSchema(
-    testRequestSchema,
-    testResponseSchema,
-    withAppAuthorization(
-      firestore,
+): Callable<TestRequest, TestResponse> {
+  return validateSchema(testRequestSchema, testResponseSchema)
+    .validate(userAuthorization())
+    .validate(appAuthorization(firestore, allowedRoles))
+    .handle(
       // eslint-disable-next-line require-await
       async (testRequest, context) => ({
-        appName: context.authorized.app.name,
-        userEmail: context.authorized.user.email,
-        role: context.authorized.role,
+        appName: context.app.name,
+        userEmail: context.user.email,
+        role: context.role,
         bar: testRequest.foo,
         success: true,
       }),
-      allowedRoles,
-    ),
-  );
+    );
 }
 
 describe('user authorization failures', () => {
