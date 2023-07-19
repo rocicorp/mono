@@ -25,11 +25,8 @@ export function initOptions(yargs: CommonYargsArgv) {
     .option('new', {
       describe: 'Create a new app',
       type: 'boolean',
-    })
     .option('configDirPath', {
       describe: 'Directory location of reflect config',
-      type: 'string',
-      requiresArg: false,
     });
 }
 
@@ -84,7 +81,7 @@ export async function initHandler(yargs: InitHandlerArgs) {
     // New app.
     console.log('User is not member of any team(s) that has apps.');
     console.log('Creating new app.');
-    await createNewApp(userID, channel);
+    await createNewApp(userID, channel, configFilePath);
     return;
   }
 

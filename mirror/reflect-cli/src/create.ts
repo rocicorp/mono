@@ -3,7 +3,7 @@ import color from 'picocolors';
 
 import validateProjectName from 'validate-npm-package-name';
 import {scaffoldHandler} from './scaffold.js';
-// import {initHandler} from './init.js';
+import {initHandler} from './init.js';
 import {publishHandler} from './publish.js';
 
 export function createOptions(yargs: CommonYargsArgv) {
@@ -30,12 +30,13 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
     process.exit(1);
   }
   scaffoldHandler(createYargs);
-  // await initHandler({
-  //   ...createYargs,
-  //   name: undefined,
-  //   channel: 'stable',
-  //   new: true,
-  // });
+  await initHandler({
+    ...createYargs,
+    name: undefined,
+    channel: 'stable',
+    new: true,
+    configFilePath: `${name}/reflect.config.json`,
+  });
   await publishHandler({
     ...createYargs,
     script: `${name}/src/worker/index.ts`,
