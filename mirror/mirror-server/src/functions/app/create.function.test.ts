@@ -159,7 +159,7 @@ test(`create when too many apps`, async () => {
   const name = 'Test User';
 
   const user = await setUser(firestore, userID, email, name, {
-    [teamID]: 'a',
+    [teamID]: 'admin',
   });
 
   // Make sure to set team before membership to not trigger a bug in
