@@ -13,17 +13,21 @@ export type AppAuthorization = {
   role: Role;
 };
 
+type MaybePromise<T> = T | Promise<T>;
+
 export type RequestContextValidator<Request, InputContext, OutputContext> = (
   req: Request,
   ctx: InputContext,
-) => Promise<OutputContext>;
+) => MaybePromise<OutputContext>;
 
-export type ResponseValidator<Response> = (res: Response) => Promise<Response>;
+export type ResponseValidator<Response> = (
+  res: Response,
+) => MaybePromise<Response>;
 
 export type Handler<Request, Context, Response> = (
   req: Request,
   ctx: Context,
-) => Promise<Response>;
+) => MaybePromise<Response>;
 
 export type Callable<Request, Response> = (
   request: CallableRequest<Request>,
@@ -56,19 +60,16 @@ export class ValidatorChainer<Request, Context, Response> {
   validate<NewContext>(
     nextValidator: RequestContextValidator<Request, Context, NewContext>,
   ): ValidatorChainer<Request, NewContext, Response> {
-    return new ValidatorChainer(
-      async (request: Request, ctx: CallableRequest<Request>) => {
-        const context = await this._requestValidator(request, ctx);
-        return nextValidator(request, context);
-      },
-      this._responseValidator,
-    );
+    return new ValidatorChainer(async (request, ctx) => {
+      const context = await this._requestValidator(request, ctx);
+      return nextValidator(request, context);
+    }, this._responseValidator);
   }
 
   handle(
     handler: Handler<Request, Context, Response>,
   ): Callable<Request, Response> {
-    return async (originalContext: CallableRequest<Request>) => {
+    return async originalContext => {
       const request = originalContext.data;
       const context = await this._requestValidator(request, originalContext);
       const response = await handler(request, context);

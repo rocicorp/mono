@@ -25,7 +25,7 @@ export function userAuthorization<
   CallableRequest<Request>,
   UserAuthorization
 > {
-  return (request: Request, context: CallableRequest<Request>) => {
+  return (request, context) => {
     if (context.auth?.uid === undefined) {
       throw new HttpsError('unauthenticated', 'missing authentication');
     }
@@ -40,7 +40,7 @@ export function userAuthorization<
     // code from erroneously referencing the authenticated user
     // (i.e. context.auth.uid); subsequent logic should be based
     // on the requester.userID.
-    return Promise.resolve({userID: request.requester.userID});
+    return {userID: request.requester.userID};
   };
 }
 

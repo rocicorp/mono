@@ -8,16 +8,15 @@ export function validateSchema<Request, Response>(
   responseSchema: v.Type<Response>,
 ): ValidatorChainer<Request, CallableRequest<Request>, Response> {
   return new ValidatorChainer(
-    (request: Request, context: CallableRequest<Request>) => {
+    (request, context) => {
       if (!is(request, requestSchema, 'passthrough')) {
         throw new HttpsError(
           'invalid-argument',
           'Invalid request payload format',
         );
       }
-      return Promise.resolve(context);
+      return context;
     },
-    // eslint-disable-next-line require-await
-    async (res: Response) => parse(res, responseSchema),
+    res => parse(res, responseSchema),
   );
 }
