@@ -1,10 +1,10 @@
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import color from 'picocolors';
-
 import validateProjectName from 'validate-npm-package-name';
-import {scaffoldHandler} from './scaffold.js';
+import {scaffoldHandler, updateEnvFile} from './scaffold.js';
 import {initHandler} from './init.js';
 import {publishHandler} from './publish.js';
+import {readAppConfig} from './app-config.js';
 
 export function createOptions(yargs: CommonYargsArgv) {
   return yargs.option('name', {
@@ -35,12 +35,26 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
     name: undefined,
     channel: 'stable',
     new: true,
-    configFilePath: `${name}/reflect.config.json`,
+    configDirPath: name,
   });
   await publishHandler({
     ...createYargs,
     script: `${name}/src/worker/index.ts`,
+    configDirPath: name,
   });
+  const appConfig = readAppConfig(name);
+  if (appConfig) {
+    console.log(
+      `Updating app .env with worker wss://${appConfig.name}.reflect-server.net`,
+    );
+    updateEnvFile(name, `wss://${appConfig.name}.reflect-server.net`);
+  }
+  console.log(color.green('Finished initializing your reflect project 🎉'));
+  console.log(
+    color.blue(
+      `start-up you reflect app: \ncd ${name} && npm install && npm run dev`,
+    ),
+  );
 }
 
 export function isValidPackageName(projectName: string): string | void {

@@ -4,6 +4,7 @@ import {pkgUpSync} from 'pkg-up';
 
 export type AppConfig = {
   appID: string;
+  name: string;
 };
 
 /**

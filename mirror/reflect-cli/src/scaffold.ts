@@ -74,7 +74,7 @@ function updateProjectName(targetDir: string) {
   );
 }
 
-function updateEnvFile(targetDir: string, workerUrl: string) {
+export function updateEnvFile(targetDir: string, workerUrl: string) {
   const envExamplePath = path.resolve(targetDir, '.env.example');
   const envFinal = path.resolve(targetDir, '.env');
   fs.copyFileSync(envExamplePath, envFinal);

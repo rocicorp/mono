@@ -43,6 +43,7 @@ export async function publishHandler(
   publish: PublishCaller = publishCaller, // Overridden in tests.
 ) {
   const {script, configDirPath} = yargs;
+
   const {appID} = mustReadAppConfig(configDirPath);
 
   const absPath = path.resolve(script);
