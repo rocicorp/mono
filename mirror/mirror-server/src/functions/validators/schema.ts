@@ -9,7 +9,7 @@ export function validateSchema<Request, Response>(
 ): ValidatorChainer<Request, CallableRequest<Request>, Response> {
   return new ValidatorChainer(
     (request, context) => {
-      if (!is(request, requestSchema, 'passthrough')) {
+      if (!is(request, requestSchema)) {
         throw new HttpsError(
           'invalid-argument',
           'Invalid request payload format',
