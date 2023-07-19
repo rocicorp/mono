@@ -86,7 +86,7 @@ export const create = (firestore: Firestore) =>
             numApps: 1,
             maxApps: DEFAULT_MAX_APPS,
           };
-          user.roles[teamID] = 'a';
+          user.roles[teamID] = 'admin';
           membership = {email, role: 'admin'};
         } else {
           if (!teamDoc.exists) {

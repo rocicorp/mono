@@ -3,7 +3,7 @@ import type {DecodedIdToken} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
-import type {Membership, ShortRole} from 'mirror-schema/src/membership.js';
+import type {Membership} from 'mirror-schema/src/membership.js';
 import {
   fakeFirestore,
   getApp,
@@ -41,7 +41,6 @@ function callCreate(firestore: Firestore, userID: string, email: string) {
 
 describe('create when user is already member of a team', () => {
   for (const role of ['admin', 'member'] as const) {
-    const shortRole: ShortRole = role === 'admin' ? 'a' : 'm';
     test(`create when role was ${role}`, async () => {
       const firestore = fakeFirestore();
 
@@ -51,7 +50,7 @@ describe('create when user is already member of a team', () => {
       const name = 'Test User';
 
       const user = await setUser(firestore, userID, email, name, {
-        [teamID]: shortRole,
+        [teamID]: role,
       });
 
       // Make sure to set team before membership to not trigger a bug in
@@ -116,11 +115,11 @@ test('create when no team', async () => {
   });
 
   const newUser = await getUser(firestore, userID);
-  expect(Object.values(newUser.roles)).toEqual(['a']);
+  expect(Object.values(newUser.roles)).toEqual(['admin']);
   const teamID = Object.keys(newUser.roles)[0];
   expect(newUser).toEqual({
     ...user,
-    roles: {[teamID]: 'a'},
+    roles: {[teamID]: 'admin'},
   });
 
   const team = await getTeam(firestore, teamID);

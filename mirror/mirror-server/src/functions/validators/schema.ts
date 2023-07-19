@@ -1,6 +1,6 @@
 import {HttpsError, type CallableRequest} from 'firebase-functions/v2/https';
 import type * as v from 'shared/src/valita.js';
-import {parse, is} from 'shared/src/valita.js';
+import {parse} from 'shared/src/valita.js';
 import {ValidatorChainer} from './types.js';
 
 export function validateSchema<Request, Response>(
@@ -9,11 +9,11 @@ export function validateSchema<Request, Response>(
 ): ValidatorChainer<Request, CallableRequest<Request>, Response> {
   return new ValidatorChainer(
     (request, context) => {
-      if (!is(request, requestSchema)) {
-        throw new HttpsError(
-          'invalid-argument',
-          'Invalid request payload format',
-        );
+      try {
+        parse(request, requestSchema);
+      } catch (e) {
+        console.log(String(e));
+        throw new HttpsError('invalid-argument', String(e));
       }
       return context;
     },

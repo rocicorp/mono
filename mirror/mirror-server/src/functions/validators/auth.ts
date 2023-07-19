@@ -11,7 +11,7 @@ import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {must} from 'shared/src/must.js';
 import {logger} from 'firebase-functions';
-import {SHORT_TO_LONG_ROLE, type Role} from 'mirror-schema/src/membership.js';
+import type {Role} from 'mirror-schema/src/membership.js';
 import {assert} from 'shared/src/asserts.js';
 
 /**
@@ -81,7 +81,7 @@ export function appAuthorization<
         const user = must(userDoc.data());
         const app = must(appDoc.data());
         const {teamID} = app;
-        const role = SHORT_TO_LONG_ROLE[user.roles[teamID]];
+        const role = user.roles[teamID];
         if (allowedRoles.indexOf(role) < 0) {
           throw new HttpsError(
             'permission-denied',

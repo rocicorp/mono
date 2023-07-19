@@ -1,6 +1,6 @@
 import {describe, expect, test} from '@jest/globals';
 import type {Auth} from 'firebase-admin/auth';
-import type {Firestore} from 'firebase-admin/firestore';
+import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
 import {https} from 'firebase-functions/v2';
 import {
   FunctionsErrorCode,
@@ -8,16 +8,8 @@ import {
   Request,
 } from 'firebase-functions/v2/https';
 import type {AuthData} from 'firebase-functions/v2/tasks';
-import {firebaseStub} from 'firestore-jest-mock/mocks/firebase.js';
 import type {EnsureUserRequest} from 'mirror-protocol/src/user.js';
 import {ensure} from './ensure.function.js';
-
-function fakeFirestore(): Firestore {
-  return firebaseStub(
-    {database: {}},
-    {mutable: true},
-  ).firestore() as unknown as Firestore;
-}
 
 function fakeAuth(email = 'foo@bar.com'): Auth {
   const auth = {

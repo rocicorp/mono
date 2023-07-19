@@ -1,5 +1,6 @@
 import {describe, expect, test} from '@jest/globals';
 import type {Firestore} from 'firebase-admin/firestore';
+import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
 import {https} from 'firebase-functions/v2';
 import {
   FunctionsErrorCode,
@@ -7,7 +8,6 @@ import {
   Request,
 } from 'firebase-functions/v2/https';
 import type {AuthData} from 'firebase-functions/v2/tasks';
-import {firebaseStub} from 'firestore-jest-mock/mocks/firebase.js';
 import {validateSchema} from './schema.js';
 import {appAuthorization, userAuthorization} from './auth.js';
 import {baseAppRequestFields} from 'mirror-protocol/src/app.js';
@@ -17,13 +17,6 @@ import type {Callable} from './types.js';
 import type {User} from 'mirror-schema/src/user.js';
 import type {App} from 'mirror-schema/src/app.js';
 import type {Role} from 'mirror-schema/src/membership.js';
-
-function fakeFirestore(): Firestore {
-  return firebaseStub(
-    {database: {}},
-    {mutable: true},
-  ).firestore() as unknown as Firestore;
-}
 
 const testRequestSchema = v.object({
   ...baseAppRequestFields,
@@ -139,7 +132,7 @@ describe('app authorization', () => {
   };
   const defaultUser: User = {
     email: 'foo@bar.com',
-    roles: {[defaultApp.teamID]: 'a'},
+    roles: {[defaultApp.teamID]: 'admin'},
   };
 
   type Case = {
@@ -167,7 +160,7 @@ describe('app authorization', () => {
       name: 'member authorized',
       userDoc: {
         ...defaultUser,
-        roles: {[defaultApp.teamID]: 'm'},
+        roles: {[defaultApp.teamID]: 'member'},
       },
       appDoc: defaultApp,
       response: {
@@ -182,7 +175,7 @@ describe('app authorization', () => {
       name: 'member not authorized',
       userDoc: {
         ...defaultUser,
-        roles: {[defaultApp.teamID]: 'm'},
+        roles: {[defaultApp.teamID]: 'member'},
       },
       allowedRoles: ['admin'],
       appDoc: defaultApp,
