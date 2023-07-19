@@ -11,6 +11,7 @@ export default {
   output: {
     file: `./out/replicache.d.ts`,
   },
+  external: ['@rocicorp/lock', '@rocicorp/logger', '@rocicorp/resolver'],
   plugins: [
     nodeResolve(),
     dts({
