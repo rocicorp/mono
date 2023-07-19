@@ -2,15 +2,12 @@ import type {Firestore} from 'firebase-admin/firestore';
 import type {Auth} from 'firebase-admin/auth';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {
-  EnsureUserRequest,
-  EnsureUserResponse,
   ensureUserRequestSchema,
   ensureUserResponseSchema,
 } from 'mirror-protocol/src/user.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
-import type {Callable} from '../validators/types.js';
 import {logger} from 'firebase-functions';
 import {must} from 'shared/src/must.js';
 import {
@@ -19,11 +16,8 @@ import {
   teamMembershipPath,
 } from 'mirror-schema/src/membership.js';
 
-export function ensure(
-  firestore: Firestore,
-  auth: Auth,
-): Callable<EnsureUserRequest, EnsureUserResponse> {
-  return validateSchema(ensureUserRequestSchema, ensureUserResponseSchema)
+export const ensure = (firestore: Firestore, auth: Auth) =>
+  validateSchema(ensureUserRequestSchema, ensureUserResponseSchema)
     .validate(userAuthorization())
     .handle(async (_, context) => {
       const {userID} = context;
@@ -73,4 +67,3 @@ export function ensure(
       });
       return {success: true};
     });
-}

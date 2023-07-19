@@ -33,7 +33,7 @@ export const publish = (
     .validate(appAuthorization(firestore))
     .handle(async (publishRequest, context) => {
       const {serverVersionRange, appID} = publishRequest;
-      const {userID} = publishRequest.requester;
+      const {userID, app} = context;
 
       if (semver.validRange(serverVersionRange) === null) {
         throw new HttpsError('invalid-argument', 'Invalid desired version');
@@ -48,8 +48,6 @@ export const publish = (
       logger.log(
         `Found matching version for ${serverVersionRange}: ${version}`,
       );
-
-      const {app} = context;
 
       const config = {
         accountID: app.cfID,
