@@ -6,7 +6,6 @@ import {
   Role,
   membershipDataConverter,
   teamMembershipPath,
-  type ShortRole,
 } from 'mirror-schema/src/membership.js';
 import {
   teamDataConverter,
@@ -32,7 +31,7 @@ export async function setUser(
   userID: string,
   email: string,
   name = 'Foo Bar',
-  roles: Record<string, ShortRole> = {},
+  roles: Record<string, Role> = {},
 ): Promise<User> {
   const user: User = {
     email,
