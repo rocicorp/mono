@@ -6,7 +6,7 @@ import {https, setGlobalOptions} from 'firebase-functions/v2';
 import {
   appOptions,
   baseHttpsOptions,
-  serversBucketName,
+  modulesBucketName,
   serviceAccountId,
 } from './config/index.js';
 import * as appFunctions from './functions/app/index.js';
@@ -23,7 +23,7 @@ export const publish = https.onCall(
     ...baseHttpsOptions,
     secrets: ['CLOUDFLARE_API_TOKEN'],
   },
-  publishHandler(getFirestore(), getStorage(), serversBucketName),
+  publishHandler(getFirestore(), getStorage(), modulesBucketName),
 );
 
 export const healthcheck = https.onRequest(

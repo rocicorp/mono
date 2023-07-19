@@ -13,7 +13,7 @@ function createAppOptions(): AppOptions {
 export const appOptions = createAppOptions();
 export const {projectId = ''} = appOptions;
 export const {serviceAccountId = ''} = appOptions;
-export const serversBucketName = `${projectId}-servers`;
+export const modulesBucketName = `${projectId}-modules`;
 
 export const baseHttpsOptions: HttpsOptions = {
   // TODO(darick): Convert to a limited list.
