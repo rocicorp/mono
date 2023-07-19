@@ -23,7 +23,7 @@ test('list when missing team', async () => {
   const userID = 'foo';
   const email = 'foo@bar.com';
   const teamID = 'fooTeam';
-  await setUser(firestore, userID, email, 'Foo Bar', {[teamID]: 'a'});
+  await setUser(firestore, userID, email, 'Foo Bar', {[teamID]: 'admin'});
 
   const apps = await getExistingAppsForUser(firestore, userID);
 
@@ -35,7 +35,7 @@ test('list with one team but no apps', async () => {
   const userID = 'foo';
   const email = 'foo@bar.com';
   const teamID = 'fooTeam';
-  await setUser(firestore, userID, email, 'Foo Bar', {[teamID]: 'a'});
+  await setUser(firestore, userID, email, 'Foo Bar', {[teamID]: 'admin'});
   await setTeam(firestore, teamID, {name: 'Foo Team'});
 
   const apps = await getExistingAppsForUser(firestore, userID);
@@ -50,8 +50,8 @@ test('list with multiple teams but no apps', async () => {
   const teamID1 = 'team-1';
   const teamID2 = 'team-2';
   await setUser(firestore, userID, email, 'Foo Bar', {
-    [teamID1]: 'a',
-    [teamID2]: 'm',
+    [teamID1]: 'admin',
+    [teamID2]: 'member',
   });
   await setTeam(firestore, teamID1, {name: 'Team 1'});
   await setTeam(firestore, teamID2, {name: 'Team 2'});
@@ -68,7 +68,7 @@ test('list with one teams and one app', async () => {
   const teamID = 'team-id';
 
   await setUser(firestore, userID, email, 'Foo Bar', {
-    [teamID]: 'a',
+    [teamID]: 'admin',
   });
   await setTeam(firestore, teamID, {name: 'Team Name'});
   await setApp(firestore, 'app-id', {teamID});
@@ -94,7 +94,7 @@ test('list with one teams and two apps', async () => {
   const teamID = 'team-id';
 
   await setUser(firestore, userID, email, 'Foo Bar', {
-    [teamID]: 'a',
+    [teamID]: 'admin',
   });
   await setTeam(firestore, teamID, {name: 'Team Name'});
   await setApp(firestore, 'app-id-1', {teamID});
@@ -130,8 +130,8 @@ test('list with two teams and two apps total', async () => {
   const teamID2 = 'team-id-2';
 
   await setUser(firestore, userID, email, 'Foo Bar', {
-    [teamID1]: 'a',
-    [teamID2]: 'm',
+    [teamID1]: 'admin',
+    [teamID2]: 'member',
   });
   await setTeam(firestore, teamID1, {name: 'Team Name 1'});
   await setTeam(firestore, teamID2, {name: 'Team Name 2'});
@@ -171,8 +171,8 @@ test('list with two teams and 4 apps total', async () => {
   const teamID2 = 'team-id-2';
 
   await setUser(firestore, userID, email, 'Foo Bar', {
-    [teamID1]: 'a',
-    [teamID2]: 'm',
+    [teamID1]: 'admin',
+    [teamID2]: 'member',
   });
   await setTeam(firestore, teamID1, {name: 'Team Name 1'});
   await setTeam(firestore, teamID2, {name: 'Team Name 2'});
