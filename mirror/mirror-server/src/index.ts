@@ -46,4 +46,5 @@ export const user = {
 
 export const app = {
   create: https.onCall(baseHttpsOptions, appFunctions.create(getFirestore())),
+  rename: https.onCall(baseHttpsOptions, appFunctions.rename(getFirestore())),
 };
