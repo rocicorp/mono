@@ -26,7 +26,7 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
-    "@rocicorp/reflect": "0.29.1",
+    "@rocicorp/reflect": "0.29.2",
     "@types/jwt-encode": "^1.0.0",
     "@types/node": "^18.16.0",
     "@types/yargs": "^17.0.10",
