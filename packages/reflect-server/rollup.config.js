@@ -11,7 +11,7 @@ export default {
   output: {
     file: `./out/reflect-server.d.ts`,
   },
-  external: [/^@rocicorp\//, 'replicache'],
+  external: ['@rocicorp/lock', '@rocicorp/logger', '@rocicorp/resolver'],
   plugins: [
     nodeResolve(),
     dts({
