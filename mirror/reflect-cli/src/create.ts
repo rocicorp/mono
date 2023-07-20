@@ -1,10 +1,12 @@
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import {Firestore} from '@google-cloud/firestore';
 import color from 'picocolors';
 import validateProjectName from 'validate-npm-package-name';
 import {scaffoldHandler, updateEnvFile} from './scaffold.js';
-import {initHandler} from './init.js';
+import {getApp, initHandler} from './init.js';
 import {publishHandler} from './publish.js';
 import {readAppConfig} from './app-config.js';
+import {getFirebaseConfig} from './firebase.js';
 
 export function createOptions(yargs: CommonYargsArgv) {
   return yargs.option('name', {
@@ -17,7 +19,7 @@ export function createOptions(yargs: CommonYargsArgv) {
 type CreatedHandlerArgs = YargvToInterface<ReturnType<typeof createOptions>>;
 
 export async function createHandler(createYargs: CreatedHandlerArgs) {
-  const {name} = createYargs;
+  const {name, stack} = createYargs;
   const invalidPackageNameReason = isValidPackageName(name);
   if (invalidPackageNameReason) {
     console.log(
@@ -42,12 +44,15 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
     script: `${name}/src/worker/index.ts`,
     configDirPath: name,
   });
+  const settings = getFirebaseConfig(stack);
+  const firestore = new Firestore(settings);
   const appConfig = readAppConfig(name);
   if (appConfig) {
+    const app = await getApp(firestore, appConfig.appID);
     console.log(
-      `Updating app .env with worker wss://${appConfig.name}.reflect-server.net`,
+      `Updating app .env with worker wss://${app.name}.reflect-server.net`,
     );
-    updateEnvFile(name, `wss://${appConfig.name}.reflect-server.net`);
+    updateEnvFile(name, `wss://${app.name}.reflect-server.net`);
   }
   console.log(color.green('Finished initializing your reflect project 🎉'));
   console.log(

@@ -25,6 +25,7 @@ export function initOptions(yargs: CommonYargsArgv) {
     .option('new', {
       describe: 'Create a new app',
       type: 'boolean',
+    })
     .option('configDirPath', {
       describe: 'Directory location of reflect config',
       type: 'string',
