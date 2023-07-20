@@ -40,7 +40,7 @@ describe('app name validation', () => {
     },
     {
       desc: 'space at the end',
-      name: 'name-ending-with-space',
+      name: 'name-ending-with-space ',
     },
   ];
 
