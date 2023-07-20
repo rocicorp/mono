@@ -30,7 +30,7 @@ function findConfigRoot(): string | undefined {
   return findGitRoot();
 }
 
-function mustFindConfigRoot(): string {
+export function mustFindAppConfigRoot(): string {
   const configRoot = findConfigRoot();
   if (!configRoot) {
     throw new Error(
@@ -41,7 +41,7 @@ function mustFindConfigRoot(): string {
 }
 
 function mustFindConfigFilePath(): string {
-  const configRoot = mustFindConfigRoot();
+  const configRoot = mustFindAppConfigRoot();
   return path.join(configRoot, configFileName);
 }
 

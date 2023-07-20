@@ -1,0 +1,64 @@
+import type {OutputFile} from 'esbuild';
+import {Miniflare} from 'miniflare';
+import {nanoid} from 'nanoid';
+import * as path from 'node:path';
+import {getWorkerTemplate} from '../admin/get-worker-template.js';
+import {mustFindAppConfigRoot} from '../app-config.js';
+import {buildReflectServerContent} from '../build-reflect-server-content.js';
+
+export async function startDevServer(
+  code: OutputFile,
+  sourcemap: OutputFile,
+  port?: number,
+) {
+  debugger;
+  const appDir = path.dirname(code.path);
+  const appConfigRoot = mustFindAppConfigRoot();
+
+  // Create a new Miniflare instance, starting a workerd server
+  const mf = new Miniflare({
+    port: port ?? 8080,
+    modules: [
+      {
+        type: 'ESModule',
+        path: path.join(appDir, 'worker.js'),
+        contents: getWorkerTemplate(
+          path.basename(code.path),
+          'reflect-server.js',
+        ),
+      },
+      {
+        type: 'ESModule',
+        path: code.path,
+        contents: code.contents,
+      },
+      {
+        type: 'Text',
+        path: sourcemap.path,
+        contents: sourcemap.contents,
+      },
+      {
+        type: 'ESModule',
+        path: path.join(appDir, 'reflect-server.js'),
+        contents: await buildReflectServerContent(),
+      },
+    ],
+    bindings: {
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      REFLECT_AUTH_API_KEY: nanoid(),
+    },
+    // serviceBindings: {},
+    durableObjects: {roomDO: 'RoomDO', authDO: 'AuthDO', testDO: 'TestDO'},
+    // log: new Log(LogLevel.VERBOSE),
+    // verbose: true,
+
+    durableObjectsPersist: path.join(appConfigRoot, '.reflect-dev-data'),
+    inspectorPort: 9229,
+    compatibilityDate: '2023-05-18',
+  });
+
+  console.log((await mf.ready).href);
+
+  // Cleanup Miniflare, shutting down the workerd server
+  // await mf.dispose();
+}

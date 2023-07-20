@@ -1,4 +1,5 @@
 import * as esbuild from 'esbuild';
+import * as path from 'node:path';
 
 const reflectServerFileName = 'reflect-server.js';
 
@@ -21,10 +22,11 @@ export async function compile(
     format: 'esm',
     sourcemap: 'external',
     target: 'esnext',
+    conditions: ['workerd', 'worker', 'browser'],
     plugins: [replaceReflectServerPlugin],
     minify: false,
     write: false,
-    outdir: '.',
+    outdir: path.dirname(entryPoint),
   });
   const {errors, outputFiles} = res;
   if (errors.length > 0) {
