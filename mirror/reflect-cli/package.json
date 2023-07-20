@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "dependencies": {
-    "@google-cloud/firestore": "^6.7.0",
+    "@google-cloud/firestore": "^6.6.1",
     "firebase": "^9.22.2",
     "jwt-decode": "^3.1.2",
     "nanoid": "^4.0.2",

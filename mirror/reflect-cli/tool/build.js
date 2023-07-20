@@ -20,7 +20,7 @@ const external = [
   '@badrap/valita',
   'esbuild',
   'firebase',
-  '@google-cloud/firestore'
+  '@google-cloud/firestore',
 ];
 
 async function main() {
