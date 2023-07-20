@@ -1,4 +1,4 @@
-import {DatadogLogSink} from 'datadog/src/mod.js';
+import {DatadogLogSink} from 'datadog';
 import {REPORT_METRICS_PATH} from './server/paths.js';
 
 export {
