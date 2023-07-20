@@ -45,6 +45,12 @@ function mustFindConfigFilePath(): string {
   return path.join(configRoot, configFileName);
 }
 
+function getConfigFilePath(configDirPath?: string | undefined) {
+  return configDirPath
+    ? path.join(configDirPath, configFileName)
+    : mustFindConfigFilePath();
+}
+
 const configFileName = 'reflect.config.json';
 
 let appConfigForTesting: AppConfig | undefined;
@@ -53,11 +59,6 @@ export function setAppConfigForTesting(config: AppConfig | undefined) {
   appConfigForTesting = config;
 }
 
-export function getConfigFilePath(configDirPath?: string | undefined) {
-  return configDirPath
-    ? path.join(configDirPath, configFileName)
-    : mustFindConfigFilePath();
-}
 /**
  * Reads reflect.config.json in the "project root".
  */
