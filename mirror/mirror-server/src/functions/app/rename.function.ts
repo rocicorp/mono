@@ -9,13 +9,12 @@ import {
   appNameIndexDataConverter,
   appNameIndexPath,
   appPath,
+  isValidAppName,
 } from 'mirror-schema/src/app.js';
 import {must} from 'shared/src/must.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {logger} from 'firebase-functions';
-
-const VALID_APP_NAME = /^[a-z]([a-z0-9\\-])*[a-z0-9]$/;
 
 export const rename = (firestore: Firestore) =>
   validateSchema(renameAppRequestSchema, renameAppResponseSchema)
@@ -24,7 +23,7 @@ export const rename = (firestore: Firestore) =>
     .handle(async (request, context) => {
       const {appID, name: newName} = request;
 
-      if (!VALID_APP_NAME.test(newName)) {
+      if (!isValidAppName(newName)) {
         throw new HttpsError(
           'invalid-argument',
           'Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen',

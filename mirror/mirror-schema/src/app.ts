@@ -43,3 +43,9 @@ export const APP_NAME_INDEX_COLLECTION = 'appNames';
 export function appNameIndexPath(appName: string): string {
   return path.join(APP_NAME_INDEX_COLLECTION, appName);
 }
+
+const VALID_APP_NAME = /^[a-z]([a-z0-9\\-])*[a-z0-9]$/;
+
+export function isValidAppName(name: string): boolean {
+  return VALID_APP_NAME.test(name);
+}
