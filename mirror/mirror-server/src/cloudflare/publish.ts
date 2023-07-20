@@ -87,7 +87,9 @@ export async function publish(
   appName: string,
   version: string,
 ): Promise<string> {
-  console.log('publishing', appName);
+  console.log(
+    `publishing ${appName}.reflect-server.net (${config.scriptName})`,
+  );
 
   const [serverModule, ...otherServerModules] = await getServerModules(
     firestore,
@@ -119,7 +121,9 @@ export async function publish(
   // Make sure that all the names are unique.
   assertAllModulesHaveUniqueNames([workerModule, ...modules]);
 
-  console.log('publishing', appName);
+  console.log(
+    `publishing ${appName}.reflect-server.net (${config.scriptName})`,
+  );
   await createWorker(config, workerModule, modules);
 
   let reflectAuthApiKey = process.env.REFLECT_AUTH_API_KEY;

@@ -7,6 +7,7 @@ import type {Membership} from 'mirror-schema/src/membership.js';
 import {
   fakeFirestore,
   getApp,
+  getAppName,
   getMembership,
   getTeam,
   getUser,
@@ -97,6 +98,11 @@ describe('create when user is already member of a team', () => {
         cfScriptName: expect.any(String),
         serverReleaseChannel: 'stable',
       });
+
+      const appName = await getAppName(firestore, app.name);
+      expect(appName).toEqual({
+        appID: resp.appID,
+      });
     });
   }
 });
@@ -147,6 +153,11 @@ test('create when no team', async () => {
     cfID: 'default-cloudflare-id',
     cfScriptName: expect.any(String),
     serverReleaseChannel: 'stable',
+  });
+
+  const appName = await getAppName(firestore, app.name);
+  expect(appName).toEqual({
+    appID: resp.appID,
   });
 });
 

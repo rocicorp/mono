@@ -18,7 +18,7 @@ export const createResponseSchema = v.object({
 export type CreateResponse = v.Infer<typeof createResponseSchema>;
 
 export const create = createCall(
-  'create',
+  'app-create',
   createRequestSchema,
   createResponseSchema,
 );
@@ -30,3 +30,21 @@ export const baseAppRequestFields = {
 
 export const baseAppRequestSchema = v.object(baseAppRequestFields);
 export type BaseAppRequest = v.Infer<typeof baseAppRequestSchema>;
+
+export const renameAppRequestSchema = v.object({
+  ...baseAppRequestFields,
+  name: v.string(),
+});
+
+export type RenameAppRequest = v.Infer<typeof renameAppRequestSchema>;
+
+export const renameAppResponseSchema = v.object({
+  ...baseResponseFields,
+});
+export type RenameAppResponse = v.Infer<typeof renameAppResponseSchema>;
+
+export const rename = createCall(
+  'app-rename',
+  renameAppRequestSchema,
+  renameAppResponseSchema,
+);

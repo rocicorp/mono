@@ -1,6 +1,13 @@
 import type {Firestore} from '@google-cloud/firestore';
 import {firebaseStub} from 'firestore-jest-mock/mocks/firebase.js';
-import {App, appDataConverter, appPath} from 'mirror-schema/src/app.js';
+import {
+  App,
+  appDataConverter,
+  appPath,
+  AppNameIndex,
+  appNameIndexDataConverter,
+  appNameIndexPath,
+} from 'mirror-schema/src/app.js';
 import {
   Membership,
   Role,
@@ -163,4 +170,26 @@ export async function setApp(
     .withConverter(appDataConverter)
     .set(newApp);
   return newApp;
+}
+
+export async function getAppName(
+  firestore: Firestore,
+  appName: string,
+): Promise<AppNameIndex> {
+  const appNameDoc = await firestore
+    .doc(appNameIndexPath(appName))
+    .withConverter(appNameIndexDataConverter)
+    .get();
+  return must(appNameDoc.data());
+}
+
+export async function setAppName(
+  firestore: Firestore,
+  appID: string,
+  name: NamedCurve,
+): Promise<void> {
+  await firestore
+    .doc(appNameIndexPath(name))
+    .withConverter(appNameIndexDataConverter)
+    .set({appID});
 }

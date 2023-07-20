@@ -98,7 +98,7 @@ export const publish = (
           config,
           appModule,
           appSourcemapModule,
-          app.cfScriptName,
+          app.name,
           version,
         );
       } catch (e) {

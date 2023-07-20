@@ -5,7 +5,13 @@ import {
   createRequestSchema,
   createResponseSchema,
 } from 'mirror-protocol/src/app.js';
-import {App, appDataConverter, appPath} from 'mirror-schema/src/app.js';
+import {
+  App,
+  appDataConverter,
+  appNameIndexDataConverter,
+  appNameIndexPath,
+  appPath,
+} from 'mirror-schema/src/app.js';
 import {
   Membership,
   membershipDataConverter,
@@ -127,6 +133,9 @@ export const create = (firestore: Firestore) =>
         const appDocRef = firestore
           .doc(appPath(appID))
           .withConverter(appDataConverter);
+        const appNameDocRef = firestore
+          .doc(appNameIndexPath(scriptName))
+          .withConverter(appNameIndexDataConverter);
         const appDoc = await txn.get(appDocRef);
         if (appDoc.exists) {
           throw new HttpsError('already-exists', 'App already exists');
@@ -149,6 +158,7 @@ export const create = (firestore: Firestore) =>
           txn.update(teamDocRef, team);
         }
         txn.create(appDocRef, app);
+        txn.create(appNameDocRef, {appID});
 
         return {appID, name: scriptName, success: true};
       });
