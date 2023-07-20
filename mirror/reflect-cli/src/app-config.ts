@@ -53,6 +53,11 @@ export function setAppConfigForTesting(config: AppConfig | undefined) {
   appConfigForTesting = config;
 }
 
+export function getConfigFilePath(configDirPath?: string | undefined) {
+  return configDirPath
+    ? path.join(configDirPath, configFileName)
+    : mustFindConfigFilePath();
+}
 /**
  * Reads reflect.config.json in the "project root".
  */
@@ -62,12 +67,7 @@ export function readAppConfig(
   if (appConfigForTesting) {
     return appConfigForTesting;
   }
-  let configFilePath = undefined;
-  if (configDirPath) {
-    configFilePath = path.join(configDirPath, configFileName);
-  } else {
-    configFilePath = mustFindConfigFilePath();
-  }
+  const configFilePath = getConfigFilePath(configDirPath);
   if (fs.existsSync(configFilePath)) {
     return JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
   }
@@ -91,12 +91,7 @@ export function writeAppConfig(
   config: AppConfig,
   configDirPath?: string | undefined,
 ) {
-  let configFilePath = undefined;
-  if (configDirPath) {
-    configFilePath = path.join(configDirPath, configFileName);
-  } else {
-    configFilePath = mustFindConfigFilePath();
-  }
+  const configFilePath = getConfigFilePath(configDirPath);
   console.log('Writing config to', configFilePath);
   fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
 }
