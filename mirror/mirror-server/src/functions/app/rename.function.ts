@@ -40,7 +40,7 @@ export const rename = (firestore: Firestore) =>
 
       await firestore.runTransaction(async txn => {
         // Note: Although the app has already been looked up once in appValidation(),
-        // it's more straightforward to have the transaction logic only rely only on
+        // it's more straightforward to have the transaction logic rely only on
         // data read within the transaction.
         const appDoc = await txn.get(appDocRef);
         if (!appDoc.exists) {
@@ -66,7 +66,7 @@ export const rename = (firestore: Firestore) =>
         if (newAppNameDoc.exists) {
           throw new HttpsError(
             'already-exists',
-            `An App with the name ${newName} already exists`,
+            `An app with the name ${newName} already exists`,
           );
         }
         // Sanity check.
