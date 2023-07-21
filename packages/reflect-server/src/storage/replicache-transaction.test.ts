@@ -84,7 +84,7 @@ test('ReplicacheTransaction', async () => {
   });
 
   // The old index entry for foo@v1 should be gone.
-  expect(await storage.get('/v/01/foo', userValueVersionInfoSchema))
+  expect(await storage.get('v/01/foo', userValueVersionInfoSchema))
     .toBeUndefined;
 
   // Delete of non-existent key should not create a tombstone
