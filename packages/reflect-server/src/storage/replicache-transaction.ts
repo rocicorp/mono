@@ -48,17 +48,17 @@ export class ReplicacheTransaction implements WriteTransaction {
   }
 
   async put(key: string, value: ReadonlyJSONValue): Promise<void> {
-    const prev = await this.getUserValueEntry(key);
+    const prev = await this._getUserValueEntry(key);
     const userValue: UserValue = {
       deleted: false,
       version: this._version,
       value: v.parse(value, jsonSchema),
     };
-    await this.replaceUserValueEntry(key, userValue, prev);
+    await this._replaceUserValueEntry(key, userValue, prev);
   }
 
   async del(key: string): Promise<boolean> {
-    const prev = await this.getUserValueEntry(key);
+    const prev = await this._getUserValueEntry(key);
     if (prev === undefined) {
       return false;
     }
@@ -69,11 +69,11 @@ export class ReplicacheTransaction implements WriteTransaction {
       version: this._version,
       value: prev.value, // prev came from get which needs to be verified when it was written.
     };
-    await this.replaceUserValueEntry(key, userValue, prev);
+    await this._replaceUserValueEntry(key, userValue, prev);
     return true;
   }
 
-  private async replaceUserValueEntry(
+  private async _replaceUserValueEntry(
     userKey: string,
     newValue: UserValue,
     prevValue: UserValue | undefined,
@@ -81,7 +81,7 @@ export class ReplicacheTransaction implements WriteTransaction {
     if (prevValue) {
       const oldIndexEntry = userValueVersionEntry(userKey, prevValue);
       // Note: Purposely do not `await` this del(), in order to ensure that it is
-      // batched with the following put().
+      // batched with the following putEntries().
       void this._storage.del(oldIndexEntry.key);
     }
 
@@ -92,12 +92,12 @@ export class ReplicacheTransaction implements WriteTransaction {
     });
   }
 
-  private getUserValueEntry(key: string): Promise<UserValue | undefined> {
+  private _getUserValueEntry(key: string): Promise<UserValue | undefined> {
     return this._storage.get(userValueKey(key), userValueSchema);
   }
 
   async get(key: string): Promise<ReadonlyJSONValue | undefined> {
-    const entry = await this.getUserValueEntry(key);
+    const entry = await this._getUserValueEntry(key);
     if (entry === undefined) {
       return undefined;
     }
