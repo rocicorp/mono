@@ -4,5 +4,9 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["tool/build.js"]
+  "include": [
+    "tool/build.js",
+    "tool/check-version.js",
+    "tool/check-ambient-context.js"
+  ]
 }

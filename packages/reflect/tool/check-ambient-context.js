@@ -9,6 +9,9 @@ import {readFileSync} from 'fs';
 import * as path from 'path';
 import {fileURLToPath} from 'url';
 
+/**
+ * @param {string} fileName
+ */
 function checkFile(fileName) {
   const content = readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), '..', fileName),
