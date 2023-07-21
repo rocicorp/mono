@@ -750,7 +750,7 @@ describe('processFrame', () => {
         ),
         ...new Map<string, ReadonlyJSONValue>(
           [...c.expectedUserValues].map(([key, value]) => [
-            userValueVersionKey(key, value),
+            userValueVersionKey(key, value.version),
             {},
           ]),
         ),

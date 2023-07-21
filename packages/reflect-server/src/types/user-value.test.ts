@@ -35,13 +35,7 @@ const cases: Case[] = [
 
 test('version key encoding', () => {
   for (const c of cases) {
-    expect(
-      userValueVersionKey(c.key, {
-        version: c.version,
-        deleted: false,
-        value: {},
-      }),
-    ).toBe(c.indexKey);
+    expect(userValueVersionKey(c.key, c.version)).toBe(c.indexKey);
   }
 });
 

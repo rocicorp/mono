@@ -41,11 +41,8 @@ export type UserValueVersionInfo = v.Infer<typeof userValueVersionInfoSchema>;
 
 export const userValueVersionIndexPrefix = 'v/';
 
-export function userValueVersionKey(
-  userKey: string,
-  userValue: UserValue,
-): string {
-  const lexiVersion = versionToLexi(userValue.version);
+export function userValueVersionKey(userKey: string, version: Version): string {
+  const lexiVersion = versionToLexi(version);
   return `${userValueVersionIndexPrefix}${lexiVersion}/${userKey}`;
 }
 
@@ -53,7 +50,7 @@ export function userValueVersionEntry(
   userKey: string,
   userValue: UserValue,
 ): {key: string; value: UserValueVersionInfo} {
-  const key = userValueVersionKey(userKey, userValue);
+  const key = userValueVersionKey(userKey, userValue.version);
   const value = userValue.deleted ? {deleted: true} : {};
   return {key, value};
 }
