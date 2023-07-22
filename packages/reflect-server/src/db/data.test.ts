@@ -1,6 +1,6 @@
 import {expect, test} from '@jest/globals';
 import * as valita from 'shared/src/valita.js';
-import {delEntry, getEntry, listEntries, putEntry} from './data.js';
+import {delEntry, getEntry, getEntries, listEntries, putEntry} from './data.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -84,6 +84,32 @@ test('getEntry RoundTrip types', async () => {
       {},
     ),
   ).toEqual({a: 1, b: 2});
+});
+
+test('getEntries', async () => {
+  const storage = await getMiniflareDurableObjectStorage(id);
+
+  await putEntry(storage, 'a', 'b', {});
+  await putEntry(storage, 'c', 'is', {});
+  await putEntry(storage, 'easy', 'as', {});
+  await putEntry(storage, '1', '2', {});
+  await putEntry(storage, '3', '!', {});
+
+  const entries = await getEntries(
+    storage,
+    ['a', 'b', 'c', 'is', 'easy', 'as', '1', '2', '3'],
+    valita.string(),
+    {},
+  );
+
+  // Note: Also verifies that iteration order is sorted in UTF-8.
+  expect([...entries]).toEqual([
+    ['1', '2'],
+    ['3', '!'],
+    ['a', 'b'],
+    ['c', 'is'],
+    ['easy', 'as'],
+  ]);
 });
 
 test('listEntries', async () => {
