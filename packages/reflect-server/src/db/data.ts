@@ -2,6 +2,7 @@ import {compareUTF8} from 'compare-utf8';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import {assertMapValues as valitaAssertMapValues} from '../util/valita.js';
+import {assert} from 'shared/src/asserts.js';
 
 export async function getEntry<T extends ReadonlyJSONValue>(
   durable: DurableObjectStorage,
@@ -14,6 +15,25 @@ export async function getEntry<T extends ReadonlyJSONValue>(
     return undefined;
   }
   return valita.parse(value, schema);
+}
+
+// https://developers.cloudflare.com/workers/runtime-apis/durable-objects/#transactional-storage-api
+export const MAX_ENTRIES_TO_GET = 128;
+
+export async function getEntries<T extends ReadonlyJSONValue>(
+  durable: DurableObjectStorage,
+  keys: string[],
+  schema: valita.Type<T>,
+  options: DurableObjectGetOptions,
+): Promise<Map<string, T>> {
+  assert(
+    keys.length <= MAX_ENTRIES_TO_GET,
+    `Cannot get more than ${MAX_ENTRIES_TO_GET} entries`,
+  );
+  const values = await durable.get(keys, options);
+  return new Map(
+    [...values].map(([key, value]) => [key, valita.parse(value, schema)]),
+  );
 }
 
 export async function listEntries<T extends ReadonlyJSONValue>(
