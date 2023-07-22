@@ -69,24 +69,24 @@ export class DurableStorage implements Storage {
     keys: string[],
     schema: valita.Type<T>,
   ): Promise<Map<string, T>> {
+    // Simple case that does not require partitioning.
+    if (keys.length <= MAX_ENTRIES_TO_GET) {
+      return getEntries(this._durable, keys, schema, baseOptions);
+    }
+    // Partition the keys in groups no larger than MAX_ENTRIES_TO_GET.
     const partitionedKeys = [];
     for (let start = 0; start < keys.length; ) {
       const end = Math.min(start + MAX_ENTRIES_TO_GET, keys.length + 1);
       partitionedKeys.push(keys.slice(start, end));
       start = end;
     }
-    // Perform parallel getEntries() of groups of keys no larger than MAX_ENTRIES_TO_GET.
+    // Perform parallel getEntries()
     const partitionedEntries = await Promise.all(
       partitionedKeys.map(partition =>
         getEntries(this._durable, partition, schema, baseOptions),
       ),
     );
-    // Shortcut the common case where there was only one partition, which means
-    // everything is already sorted.
-    if (partitionedEntries.length === 1) {
-      return new Map<string, T>(partitionedEntries[0]);
-    }
-    // Otherwise, partitions must be merged and sorted.
+    // Merge and sort to adhere to the sorted-key guarantee of Durable Object APIs.
     const entries = [];
     for (const partition of partitionedEntries) {
       entries.push(...[...partition]);
