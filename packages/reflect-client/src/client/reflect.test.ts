@@ -668,7 +668,7 @@ test('smokeTest', async () => {
 
   for (const c of cases) {
     // reflectForTest adds the socket by default.
-    const socketOptions = c.enableSocket ? {} : {socketOrigin: undefined};
+    const socketOptions = c.enableSocket ? {} : {socketOrigin: null};
     const r = reflectForTest({
       roomID: 'smokeTestRoom',
       mutators: {
@@ -1035,7 +1035,7 @@ test('socketOrigin', async () => {
   ];
 
   for (const c of cases) {
-    const r = reflectForTest(c.socketEnabled ? {} : {socketOrigin: undefined});
+    const r = reflectForTest(c.socketEnabled ? {} : {socketOrigin: null});
 
     for (let i = 0; i < 10; i++) {
       await clock.tickAsync(0);

@@ -127,7 +127,7 @@ export class Reflect<MD extends MutatorDefs> {
   readonly version = version;
 
   private readonly _rep: Replicache<MD>;
-  private readonly _socketOrigin: string | undefined;
+  private readonly _socketOrigin: string | null;
   readonly userID: string;
   readonly roomID: string;
 
@@ -645,8 +645,8 @@ export class Reflect<MD extends MutatorDefs> {
    * attempt times out.
    */
   private async _connect(l: LogContext): Promise<void> {
-    if (this._socketOrigin === undefined) {
-      throw new Error('Invalid state, expected socketOrigin to be defined.');
+    if (this._socketOrigin === null) {
+      throw new Error('Invalid state, expected socketOrigin to be non-null.');
     }
 
     // All the callers check this state already.
@@ -1229,10 +1229,8 @@ export class Reflect<MD extends MutatorDefs> {
   // Sends a set of metrics to the server. Throws unless the server
   // returns 200.
   private async _reportMetrics(allSeries: Series[]) {
-    if (this._socketOrigin === undefined) {
-      (await this._l).info?.(
-        'Skipping metrics report, socketOrigin is undefined',
-      );
+    if (this._socketOrigin === null) {
+      (await this._l).info?.('Skipping metrics report, socketOrigin is null');
       return;
     }
     const body = JSON.stringify({series: allSeries});
@@ -1256,9 +1254,9 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   private async _checkConnectivityAsync(reason: string) {
-    if (this._socketOrigin === undefined) {
+    if (this._socketOrigin === null) {
       (await this._l).error?.(
-        'Cannot check connectivity with undefined socketOrigin',
+        'Cannot check connectivity with null socketOrigin',
       );
       return;
     }
