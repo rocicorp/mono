@@ -38,3 +38,24 @@ test('LexiVersion sorting', () => {
     expect(compareVersions(v1, v2)).toEqual(lexiV1.localeCompare(lexiV2));
   }
 });
+
+test('LexiVersion encode sanity checks', () => {
+  for (const badVersion of [
+    -1, // negative
+    0.5, // decimal
+    Number.MAX_SAFE_INTEGER * 2, // not safe
+  ]) {
+    expect(() => versionToLexi(badVersion)).toThrowError();
+  }
+});
+
+test('LexiVersion decode sanity checks', () => {
+  for (const badVersion of [
+    'not a ! number',
+    '0', // too short
+    '20', // length too long
+    '3cis1k', // length too short
+  ]) {
+    expect(() => versionFromLexi(badVersion)).toThrowError();
+  }
+});
