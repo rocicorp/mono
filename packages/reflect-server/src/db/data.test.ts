@@ -103,7 +103,7 @@ test('getEntries', async () => {
   );
 
   // Note: Also verifies that iteration order is sorted in UTF-8.
-  expect([...entries.entries()]).toEqual([
+  expect([...entries]).toEqual([
     ['1', '2'],
     ['3', '!'],
     ['a', 'b'],
