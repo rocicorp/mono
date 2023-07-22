@@ -16,6 +16,7 @@ import {
   userValueKey,
   userValuePrefix,
   userValueSchema,
+  userValueVersionEntry,
 } from '../types/user-value.js';
 import type {Storage} from './storage.js';
 
@@ -47,16 +48,17 @@ export class ReplicacheTransaction implements WriteTransaction {
   }
 
   async put(key: string, value: ReadonlyJSONValue): Promise<void> {
+    const prev = await this._getUserValueEntry(key);
     const userValue: UserValue = {
       deleted: false,
       version: this._version,
       value: v.parse(value, jsonSchema),
     };
-    await this._storage.put(userValueKey(key), userValue);
+    await this._replaceUserValueEntry(key, userValue, prev);
   }
 
   async del(key: string): Promise<boolean> {
-    const prev = await this.get(key);
+    const prev = await this._getUserValueEntry(key);
     if (prev === undefined) {
       return false;
     }
@@ -65,14 +67,37 @@ export class ReplicacheTransaction implements WriteTransaction {
     const userValue: UserValue = {
       deleted: true,
       version: this._version,
-      value: prev, // prev came from get which needs to be verified when it was written.
+      value: prev.value, // prev came from get which needs to be verified when it was written.
     };
-    await this._storage.put(userValueKey(key), userValue);
-    return prev !== undefined;
+    await this._replaceUserValueEntry(key, userValue, prev);
+    return true;
+  }
+
+  private async _replaceUserValueEntry(
+    userKey: string,
+    newValue: UserValue,
+    prevValue: UserValue | undefined,
+  ): Promise<void> {
+    if (prevValue) {
+      const oldIndexEntry = userValueVersionEntry(userKey, prevValue);
+      // Note: Purposely do not `await` this del(), in order to ensure that it is
+      // batched with the following putEntries().
+      void this._storage.del(oldIndexEntry.key);
+    }
+
+    const newIndexEntry = userValueVersionEntry(userKey, newValue);
+    await this._storage.putEntries({
+      [userValueKey(userKey)]: newValue,
+      [newIndexEntry.key]: newIndexEntry.value,
+    });
+  }
+
+  private _getUserValueEntry(key: string): Promise<UserValue | undefined> {
+    return this._storage.get(userValueKey(key), userValueSchema);
   }
 
   async get(key: string): Promise<ReadonlyJSONValue | undefined> {
-    const entry = await this._storage.get(userValueKey(key), userValueSchema);
+    const entry = await this._getUserValueEntry(key);
     if (entry === undefined) {
       return undefined;
     }
