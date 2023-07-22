@@ -2,6 +2,7 @@ import {describe, expect, test} from '@jest/globals';
 import * as valita from 'shared/src/valita.js';
 import {DurableStorage} from './durable-storage.js';
 import type {ListOptions} from './storage.js';
+import {randInt} from '../util/rand.js';
 
 describe('list and scan', () => {
   type Case = {
@@ -136,6 +137,11 @@ describe('getEntries', () => {
         .map(key => ({key, sort: Math.random()}))
         .sort((a, b) => a.sort - b.sort)
         .map(({key}) => key);
+
+      // Add a couple of non-existent keys that shouldn't affect the results.
+      for (let i = 0; i < 10; i++) {
+        shuffledKeys.push(randInt(500, 600).toString());
+      }
 
       const gotEntries = await storage.getEntries(
         shuffledKeys,
