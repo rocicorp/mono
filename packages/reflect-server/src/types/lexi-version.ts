@@ -26,7 +26,9 @@ export type LexiVersion = string;
 
 export function versionToLexi(version: Version): LexiVersion {
   assert(
-    version >= 0 && version <= Number.MAX_SAFE_INTEGER,
+    version >= 0 &&
+      version <= Number.MAX_SAFE_INTEGER &&
+      Number.isInteger(version),
     `Invalid or unsafe version ${version}`,
   );
   const base36Version = version.toString(36);
