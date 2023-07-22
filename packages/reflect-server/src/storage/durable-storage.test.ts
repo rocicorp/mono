@@ -111,3 +111,39 @@ describe('list and scan', () => {
     });
   }
 });
+
+describe('getEntries', () => {
+  for (const num of [0, 10, 128, 129, 300]) {
+    test(`get ${num} entries`, async () => {
+      const orderedKeys = [...Array(num).keys()].map(key =>
+        (100 + key).toString(),
+      );
+      const entries = new Map<string, string>(
+        orderedKeys.map(key => [key, `value of ${key}`]),
+      );
+
+      const {roomDO} = getMiniflareBindings();
+      const id = roomDO.newUniqueId();
+      const storage = new DurableStorage(
+        await getMiniflareDurableObjectStorage(id),
+      );
+
+      for (const [k, v] of entries) {
+        await storage.put(k, v);
+      }
+
+      const shuffledKeys = orderedKeys
+        .map(key => ({key, sort: Math.random()}))
+        .sort((a, b) => a.sort - b.sort)
+        .map(({key}) => key);
+
+      const gotEntries = await storage.getEntries(
+        shuffledKeys,
+        valita.string(),
+      );
+
+      // Validate order as well as contents.
+      expect([...gotEntries]).toEqual([...entries]);
+    });
+  }
+});

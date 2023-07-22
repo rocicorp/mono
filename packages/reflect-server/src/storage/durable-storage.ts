@@ -1,8 +1,16 @@
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import type * as valita from 'shared/src/valita.js';
-import {delEntry, getEntry, listEntries, putEntry} from '../db/data.js';
+import {
+  MAX_ENTRIES_TO_GET,
+  delEntry,
+  getEntries,
+  getEntry,
+  listEntries,
+  putEntry,
+} from '../db/data.js';
 import {batchScan, scan} from './scan-storage.js';
 import type {ListOptions, Storage} from './storage.js';
+import {compareUTF8} from 'compare-utf8';
 
 const baseAllowConcurrency = true;
 
@@ -54,6 +62,37 @@ export class DurableStorage implements Storage {
     schema: valita.Type<T>,
   ): Promise<T | undefined> {
     return getEntry(this._durable, key, schema, baseOptions);
+  }
+
+  // TODO(darick): Consider making this part of the Storage interface.
+  async getEntries<T extends ReadonlyJSONValue>(
+    keys: string[],
+    schema: valita.Type<T>,
+  ): Promise<Map<string, T>> {
+    const partitionedKeys = [];
+    for (let start = 0; start < keys.length; ) {
+      const end = Math.min(start + MAX_ENTRIES_TO_GET, keys.length + 1);
+      partitionedKeys.push(keys.slice(start, end));
+      start = end;
+    }
+    // Perform parallel getEntries() of groups of keys no larger than MAX_ENTRIES_TO_GET.
+    const partitionedEntries = await Promise.all(
+      partitionedKeys.map(partition =>
+        getEntries(this._durable, partition, schema, baseOptions),
+      ),
+    );
+    // Shortcut the common case where there was only one partition, which means
+    // everything is already sorted.
+    if (partitionedEntries.length === 1) {
+      return new Map<string, T>(partitionedEntries[0]);
+    }
+    // Otherwise, partitions must be merged and sorted.
+    const entries = [];
+    for (const partition of partitionedEntries) {
+      entries.push(...[...partition]);
+    }
+    entries.sort(([keyA], [keyB]) => compareUTF8(keyA, keyB));
+    return new Map<string, T>(entries);
   }
 
   scan<T extends ReadonlyJSONValue>(
