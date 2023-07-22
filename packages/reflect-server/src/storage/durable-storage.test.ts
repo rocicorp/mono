@@ -119,9 +119,7 @@ describe('getEntries', () => {
       const orderedKeys = [...Array(num).keys()].map(key =>
         (100 + key).toString(),
       );
-      const entries = new Map<string, string>(
-        orderedKeys.map(key => [key, `value of ${key}`]),
-      );
+      const entries = new Map(orderedKeys.map(key => [key, `value of ${key}`]));
 
       const {roomDO} = getMiniflareBindings();
       const id = roomDO.newUniqueId();

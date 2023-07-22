@@ -31,7 +31,7 @@ export async function getEntries<T extends ReadonlyJSONValue>(
     `Cannot get more than ${MAX_ENTRIES_TO_GET} entries`,
   );
   const values = await durable.get(keys, options);
-  return new Map<string, T>(
+  return new Map(
     [...values].map(([key, value]) => [key, valita.parse(value, schema)]),
   );
 }

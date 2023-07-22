@@ -92,7 +92,7 @@ export class DurableStorage implements Storage {
       entries.push(...[...partition]);
     }
     entries.sort(([keyA], [keyB]) => compareUTF8(keyA, keyB));
-    return new Map<string, T>(entries);
+    return new Map(entries);
   }
 
   scan<T extends ReadonlyJSONValue>(
