@@ -645,9 +645,7 @@ export class Reflect<MD extends MutatorDefs> {
    * attempt times out.
    */
   private async _connect(l: LogContext): Promise<void> {
-    if (this._socketOrigin === null) {
-      throw new Error('Invalid state, expected socketOrigin to be non-null.');
-    }
+    assert(this._socketOrigin);
 
     // All the callers check this state already.
     assert(this._connectionState === ConnectionState.Disconnected);
@@ -911,12 +909,7 @@ export class Reflect<MD extends MutatorDefs> {
   private async _runLoop() {
     (await this._l).info?.(`Starting Reflect version: ${this.version}`);
 
-    if (this._socketOrigin === undefined) {
-      (await this._l).info?.(
-        'No socket origin provided, not starting connect loop.',
-      );
-      return;
-    }
+    assert(this._socketOrigin);
 
     let runLoopCounter = 0;
     const bareLogContext = await this._l;
@@ -1254,12 +1247,7 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   private async _checkConnectivityAsync(reason: string) {
-    if (this._socketOrigin === null) {
-      (await this._l).error?.(
-        'Cannot check connectivity with null socketOrigin',
-      );
-      return;
-    }
+    assert(this._socketOrigin);
     try {
       await checkConnectivity(reason, this._socketOrigin, await this._l);
     } catch (e) {
