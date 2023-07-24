@@ -12,11 +12,17 @@ import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
-  return yargs.positional('script', {
-    describe: 'Path to the worker script',
-    type: 'string',
-    demandOption: true,
-  });
+  return yargs
+    .positional('script', {
+      describe: 'Path to the worker script',
+      type: 'string',
+      demandOption: true,
+    })
+    .option('configDirPath', {
+      describe: 'Directory location of reflect config',
+      type: 'string',
+      requiresArg: false,
+    });
 }
 
 async function exists(path: string) {
@@ -36,8 +42,8 @@ export async function publishHandler(
   yargs: PublishHandlerArgs,
   publish: PublishCaller = publishCaller, // Overridden in tests.
 ) {
-  const {script} = yargs;
-  const {appID} = mustReadAppConfig();
+  const {script, configDirPath} = yargs;
+  const {appID} = mustReadAppConfig(configDirPath);
 
   const absPath = path.resolve(script);
   if (!(await exists(absPath))) {

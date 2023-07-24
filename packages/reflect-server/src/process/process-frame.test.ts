@@ -16,7 +16,11 @@ import {
   putClientRecord,
 } from '../../src/types/client-record.js';
 import type {ClientID, ClientMap} from '../../src/types/client-state.js';
-import {UserValue, userValueKey} from '../../src/types/user-value.js';
+import {
+  UserValue,
+  userValueKey,
+  userValueVersionKey,
+} from '../../src/types/user-value.js';
 import {versionKey} from '../../src/types/version.js';
 import {processFrame} from '../process/process-frame.js';
 import type {ClientPoke} from '../types/client-poke.js';
@@ -742,6 +746,12 @@ describe('processFrame', () => {
           [...c.expectedUserValues].map(([key, value]) => [
             userValueKey(key),
             value,
+          ]),
+        ),
+        ...new Map<string, ReadonlyJSONValue>(
+          [...c.expectedUserValues].map(([key, value]) => [
+            userValueVersionKey(key, value.version),
+            {},
           ]),
         ),
         ...new Map<string, ReadonlyJSONValue>(

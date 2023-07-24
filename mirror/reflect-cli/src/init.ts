@@ -25,6 +25,11 @@ export function initOptions(yargs: CommonYargsArgv) {
     .option('new', {
       describe: 'Create a new app',
       type: 'boolean',
+    })
+    .option('configDirPath', {
+      describe: 'Directory location of reflect config',
+      type: 'string',
+      requiresArg: false,
     });
 }
 
@@ -36,7 +41,7 @@ export async function initHandler(yargs: InitHandlerArgs) {
   const userID = user.uid;
 
   const {name, new: newApp} = yargs;
-  const {channel} = yargs;
+  const {channel, configDirPath} = yargs;
   v.assert(channel, releaseChannelSchema);
 
   if (newApp) {
@@ -44,14 +49,14 @@ export async function initHandler(yargs: InitHandlerArgs) {
       console.error('Cannot use --name with --new');
       process.exit(1);
     }
-    await createNewApp(userID, channel);
+    await createNewApp(userID, channel, configDirPath);
     return;
   }
 
   const settings = getFirebaseConfig(yargs.stack);
   const firestore = new Firestore(settings);
 
-  const appConfig = readAppConfig();
+  const appConfig = readAppConfig(configDirPath);
   if (!name && appConfig) {
     // Load the app from firebase to ensure it still exists.
     const app = await getApp(firestore, appConfig.appID);
@@ -70,7 +75,7 @@ export async function initHandler(yargs: InitHandlerArgs) {
       process.exit(1);
     }
 
-    writeAppConfig({appID: app.appID});
+    writeAppConfig({appID: app.appID}, configDirPath);
     console.log(`Using app with name ${app.name}`);
     return;
   }
@@ -86,7 +91,7 @@ export async function initHandler(yargs: InitHandlerArgs) {
   if (existingAppsForUser.length === 1) {
     // User is only member of one team with apps. Use that app.
     console.log('User is member of team with a single app. Using that app.');
-    writeAppConfig({appID: existingAppsForUser[0].appID});
+    writeAppConfig({appID: existingAppsForUser[0].appID}, configDirPath);
     return;
   }
 
@@ -105,14 +110,18 @@ export async function initHandler(yargs: InitHandlerArgs) {
   process.exit(1);
 }
 
-async function createNewApp(userID: string, channel: 'canary' | 'stable') {
+async function createNewApp(
+  userID: string,
+  channel: 'canary' | 'stable',
+  configDirPath?: string | undefined,
+) {
   const data: CreateRequest = {
     requester: makeRequester(userID),
     serverReleaseChannel: channel,
   };
 
   const {appID, name: appName} = await create(data);
-  writeAppConfig({appID});
+  writeAppConfig({appID}, configDirPath);
   console.log(`Created app ${appID} (${appName})`);
 }
 

@@ -9,7 +9,7 @@ export type AppConfig = {
 /**
  * Finds the root of the git repository.
  */
-function findGitRoot(p = process.cwd()) {
+function findGitRoot(p = process.cwd()): string | undefined {
   if (!fs.existsSync(p)) {
     return undefined;
   }
@@ -45,6 +45,12 @@ function mustFindConfigFilePath(): string {
   return path.join(configRoot, configFileName);
 }
 
+function getConfigFilePath(configDirPath?: string | undefined) {
+  return configDirPath
+    ? path.join(configDirPath, configFileName)
+    : mustFindConfigFilePath();
+}
+
 const configFileName = 'reflect.config.json';
 
 let appConfigForTesting: AppConfig | undefined;
@@ -56,11 +62,13 @@ export function setAppConfigForTesting(config: AppConfig | undefined) {
 /**
  * Reads reflect.config.json in the "project root".
  */
-export function readAppConfig(): AppConfig | undefined {
+export function readAppConfig(
+  configDirPath?: string | undefined,
+): AppConfig | undefined {
   if (appConfigForTesting) {
     return appConfigForTesting;
   }
-  const configFilePath = mustFindConfigFilePath();
+  const configFilePath = getConfigFilePath(configDirPath);
   if (fs.existsSync(configFilePath)) {
     return JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
   }
@@ -68,8 +76,10 @@ export function readAppConfig(): AppConfig | undefined {
   return undefined;
 }
 
-export function mustReadAppConfig(): AppConfig {
-  const config = readAppConfig();
+export function mustReadAppConfig(
+  configDirPath?: string | undefined,
+): AppConfig {
+  const config = readAppConfig(configDirPath);
   if (!config) {
     throw new Error(
       `Could not find ${configFileName}. Please run \`reflect init\` to create one.`,
@@ -78,8 +88,11 @@ export function mustReadAppConfig(): AppConfig {
   return config;
 }
 
-export function writeAppConfig(config: AppConfig) {
-  const configFilePath = mustFindConfigFilePath();
+export function writeAppConfig(
+  config: AppConfig,
+  configDirPath?: string | undefined,
+) {
+  const configFilePath = getConfigFilePath(configDirPath);
   console.log('Writing config to', configFilePath);
   fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
 }

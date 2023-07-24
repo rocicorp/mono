@@ -2,6 +2,7 @@ import {describe, expect, test} from '@jest/globals';
 import * as valita from 'shared/src/valita.js';
 import {DurableStorage} from './durable-storage.js';
 import type {ListOptions} from './storage.js';
+import {randInt} from '../util/rand.js';
 
 describe('list and scan', () => {
   type Case = {
@@ -108,6 +109,45 @@ describe('list and scan', () => {
         }
         expect(scanResults).toEqual(c.expected);
       }
+    });
+  }
+});
+
+describe('getEntries', () => {
+  for (const num of [0, 10, 128, 129, 300]) {
+    test(`get ${num} entries`, async () => {
+      const orderedKeys = [...Array(num).keys()].map(key =>
+        (100 + key).toString(),
+      );
+      const entries = new Map(orderedKeys.map(key => [key, `value of ${key}`]));
+
+      const {roomDO} = getMiniflareBindings();
+      const id = roomDO.newUniqueId();
+      const storage = new DurableStorage(
+        await getMiniflareDurableObjectStorage(id),
+      );
+
+      for (const [k, v] of entries) {
+        await storage.put(k, v);
+      }
+
+      const shuffledKeys = orderedKeys
+        .map(key => ({key, sort: Math.random()}))
+        .sort((a, b) => a.sort - b.sort)
+        .map(({key}) => key);
+
+      // Add a couple of non-existent keys that shouldn't affect the results.
+      for (let i = 0; i < 10; i++) {
+        shuffledKeys.push(randInt(500, 600).toString());
+      }
+
+      const gotEntries = await storage.getEntries(
+        shuffledKeys,
+        valita.string(),
+      );
+
+      // Validate order as well as contents.
+      expect([...gotEntries]).toEqual([...entries]);
     });
   }
 });
