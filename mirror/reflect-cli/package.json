@@ -19,8 +19,8 @@
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "start": "AUTH_URL=http://localhost:3000/auth ts-node --esm ./src/index.ts --stack staging",
-    "start-local": "AUTH_URL=http://localhost:3000/auth ts-node --esm ./src/index.ts --stack local",
+    "start": "AUTH_URL=http://localhost:3000/auth node --no-warnings --loader ts-node/esm ./src/index.ts --stack staging",
+    "start-local": "AUTH_URL=http://localhost:3000/auth node --no-warnings --loader ts-node/esm ./src/index.ts --stack local",
     "build": "node tool/build.js",
     "check-types": "tsc --noEmit"
   },

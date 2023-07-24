@@ -11,8 +11,8 @@ import * as path from 'node:path';
 import {pkgUp} from 'pkg-up';
 import {SemVer} from 'semver';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
+import {storeModule} from 'shared/src/mirror/store-module.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
-import {storeModule} from './store-module.js';
 
 const require = createRequire(import.meta.url);
 

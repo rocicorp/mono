@@ -65,8 +65,11 @@ test('ReplicacheTransaction', async () => {
   expect(await storage.get('v/01/foo', userValueVersionInfoSchema)).toEqual({});
 
   // delete has special return value
-  expect(await writeTx3.del('foo'));
-  expect(!(await writeTx3.del('bar')));
+  expect(await writeTx3.del('foo')).toBe(true);
+  expect(await writeTx3.del('bar')).toBe(false);
+
+  // Redundant del should be a no-op
+  expect(await writeTx3.del('foo')).toBe(false);
 
   await entryCache.flush();
 
