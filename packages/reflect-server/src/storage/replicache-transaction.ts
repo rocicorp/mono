@@ -59,7 +59,7 @@ export class ReplicacheTransaction implements WriteTransaction {
 
   async del(key: string): Promise<boolean> {
     const prev = await this._getUserValueEntry(key);
-    if (prev === undefined) {
+    if (prev === undefined || prev.deleted) {
       return false;
     }
 
