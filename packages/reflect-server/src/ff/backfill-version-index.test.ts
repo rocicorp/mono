@@ -55,17 +55,17 @@ test('version index backfill', async () => {
   // (1) removing entries, or
   // (2) changing them to an older version to simulate rolling back and forth.
   for (const [key] of correctVersionIndex) {
+    const {userKey, version} = decodeUserValueVersionKey(key);
     switch (randInt(0, 2)) {
       case 1:
-        storage.del(key);
+        await storage.del(key);
         break;
       case 2:
-        const {userKey, version} = decodeUserValueVersionKey(key);
-        storage.put(
+        await storage.put(
           userValueVersionKey(userKey, Math.floor(version / 2)),
           randInt(0, 1) === 0 ? {} : {deleted: true},
         );
-        storage.del(key);
+        await storage.del(key);
         break;
     }
   }
