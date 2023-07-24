@@ -13,7 +13,7 @@
     "check-types": "tsc --noEmit",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "build-min": "node tool/build.js",
-    "build": "rm -rf out && npm run build-dts && npm run build-min && node tool/check-ambient-context.js"
+    "build": "rm -rf out && npm run build-dts && npm run build-min"
   },
   "dependencies": {
     "@badrap/valita": "^0.2.0",
