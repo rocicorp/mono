@@ -29,5 +29,6 @@ function checkFileForVersion(fileName, version) {
 
 const {version} = JSON.parse(read('package.json'));
 
+checkFileForVersion('index.js', version);
 checkFileForVersion('client.js', version);
 checkFileForVersion('server.js', version);

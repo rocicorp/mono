@@ -60,9 +60,8 @@ Send out the release branch as a PR like normal and land it.
 git checkout main
 git pull
 # Make sure you're at the commit that bumps the version
-export NEW_TAG="reflect/v$NEW_VERSION"
-git tag $NEW_TAG
-git push origin $NEW_TAG
+git tag "reflect/v$NEW_VERSION"
+git push --tags
 ```
 
 ## Update the peer libraries for compat with the new Reflect
