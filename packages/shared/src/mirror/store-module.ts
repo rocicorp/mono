@@ -1,4 +1,5 @@
 import type {Bucket} from '@google-cloud/storage';
+import * as crypto from './crypto.js';
 
 type Module = {
   name: string;

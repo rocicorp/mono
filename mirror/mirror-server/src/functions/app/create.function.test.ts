@@ -15,11 +15,10 @@ import {
   setTeam,
   setUser,
 } from 'mirror-schema/src/test-helpers.js';
-import {installCrypto, mockCloudflareStringParam} from '../../test-helpers.js';
+import {mockCloudflareStringParam} from '../../test-helpers.js';
 import {DEFAULT_MAX_APPS, create} from './create.function.js';
 
 mockCloudflareStringParam();
-await installCrypto();
 
 function callCreate(firestore: Firestore, userID: string, email: string) {
   const createFunction = https.onCall(create(firestore));

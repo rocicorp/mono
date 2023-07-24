@@ -1,9 +1,6 @@
 import type {Bucket} from '@google-cloud/storage';
 import {expect, test} from '@jest/globals';
 import {sha256OfString, storeModule} from './store-module.js';
-import {installCrypto} from './test-helpers.js';
-
-await installCrypto();
 
 test('basic', async () => {
   expect(await sha256OfString('foo')).toBe(
