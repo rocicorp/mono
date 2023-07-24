@@ -1,5 +1,5 @@
 import type {Bucket} from '@google-cloud/storage';
-import {expect, jest, test} from '@jest/globals';
+import {expect, test} from '@jest/globals';
 import {sha256OfString, storeModule} from './store-module.js';
 import {installCrypto} from './test-helpers.js';
 
@@ -29,14 +29,17 @@ test('storeBucket', async () => {
     },
   };
   const bucket = {
-    file: jest.fn().mockReturnValue(file),
+    file(filename: string) {
+      expect(filename).toBe(
+        '425de7eed0bfd83eb049395063c45c38a5e1ab4db37dd692ef88e869bdb616c',
+      );
+      return file;
+    },
   };
   expect(await storeModule(bucket as unknown as Bucket, module)).toBe(
     'gs://dummy',
   );
-  expect(bucket.file.mock.lastCall?.[0]).toBe(
-    '425de7eed0bfd83eb049395063c45c38a5e1ab4db37dd692ef88e869bdb616c',
-  );
+
   expect(saveCalls).toBe(1);
 
   // Writing again, exists is true.
