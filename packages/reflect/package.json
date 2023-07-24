@@ -12,7 +12,10 @@
     "format": "prettier --ignore-path .gitignore --write *",
     "check-format": "prettier --ignore-path .gitignore --check *",
     "check-types": "tsc --noEmit",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx tool/"
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx tool/",
+    "//": "Force is used to ensure reflect-shared is rebuilt picking up the latest version from this package.json",
+    "prepack": "turbo run test --force",
+    "postpack": "node tool/check-version.js && node tool/check-ambient-context.js"
   },
   "dependencies": {
     "@badrap/valita": "^0.2.0",
