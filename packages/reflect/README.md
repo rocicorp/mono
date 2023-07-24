@@ -14,7 +14,7 @@ if we are just making minor build fixes for the minor version.
 git branch -D release
 git checkout -b release HEAD
 cd packages/reflect
-npm version major # or minor
+npm version minor # or patch
 npm pack --foreground-script
 ```
 
