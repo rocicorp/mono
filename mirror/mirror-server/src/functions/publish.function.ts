@@ -11,12 +11,12 @@ import * as schema from 'mirror-schema/src/deployment.js';
 import * as semver from 'semver';
 import {newDeploymentID} from 'shared/src/mirror/ids.js';
 import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
+import {storeModule} from 'shared/src/mirror/store-module.js';
 import type {CfModule} from '../cloudflare/create-worker-upload-form.js';
 import {getServerModuleMetadata} from '../cloudflare/get-server-modules.js';
 import {publish as publishToCloudflare} from '../cloudflare/publish.js';
 import {findNewestMatchingVersion} from '../find-newest-matching-version.js';
-import {storeModule} from '../store-module.js';
-import {userAuthorization, appAuthorization} from './validators/auth.js';
+import {appAuthorization, userAuthorization} from './validators/auth.js';
 import {validateSchema} from './validators/schema.js';
 
 // This is the API token for reflect-server.net
