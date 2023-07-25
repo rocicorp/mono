@@ -1,3 +1,4 @@
+// TODO(arv): Use esbuild define instead.
 import packageJSON from '../package.json' assert {type: 'json'};
 
 export const {version} = packageJSON;

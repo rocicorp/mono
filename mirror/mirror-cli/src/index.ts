@@ -1,12 +1,12 @@
+import {
+  CommandLineArgsError,
+  createCLIParserBase,
+} from 'reflect-cli/src/create-cli-parser.js';
 import {hideBin} from 'yargs/helpers';
 import {
   uploadReflectServerHandler,
   uploadReflectServerOptions,
-} from './admin/upload-reflect-server.js';
-import {
-  CommandLineArgsError,
-  createCLIParserBase,
-} from './create-cli-parser.js';
+} from './upload.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -26,9 +26,9 @@ async function main(argv: string[]): Promise<void> {
 function createCLIParser(argv: string[]) {
   const reflectCLI = createCLIParserBase(argv);
 
-  // upload-reflect-server
+  // upload
   reflectCLI.command(
-    'upload-reflect-server',
+    'upload',
     '🆙 Build and upload @rocicorp/reflect/server to Firestore',
     uploadReflectServerOptions,
     uploadReflectServerHandler,

@@ -17,14 +17,10 @@ var require = ${createRequireAlias}(import.meta.url);
 }
 
 const external = [
-  '@badrap/valita',
-  '@google-cloud/firestore',
-  '@rocicorp/resolver',
+  '@rocicorp/reflect',
   'esbuild',
+  'firebase-admin',
   'firebase',
-  'miniflare',
-  'nanoid',
-  'open',
   'pkg-up',
   'semver',
   'yargs',
