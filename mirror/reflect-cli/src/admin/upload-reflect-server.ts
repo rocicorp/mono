@@ -10,7 +10,7 @@ import {pkgUp} from 'pkg-up';
 import {SemVer} from 'semver';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
 import {storeModule} from 'shared/src/mirror/store-module.js';
-import {buildReflectServerContent} from '../build-reflect-server-content.js';
+import {buildReflectServerContent} from '../compile.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 import {getWorkerTemplate} from './get-worker-template.js';
 

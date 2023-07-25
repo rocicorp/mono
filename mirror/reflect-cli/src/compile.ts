@@ -1,6 +1,5 @@
 import * as esbuild from 'esbuild';
 import {createRequire} from 'node:module';
-import * as path from 'node:path';
 
 const reflectServerFileName = 'reflect-server.js';
 
@@ -44,7 +43,7 @@ export async function compile(
     entryPoints: [entryPoint],
     external: [],
     format: 'esm',
-    outdir: path.dirname(entryPoint),
+    outdir: '.',
     platform: 'browser',
     plugins: [replaceReflectServerPlugin],
     sourcemap,
