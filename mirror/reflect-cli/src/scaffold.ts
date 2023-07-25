@@ -3,7 +3,17 @@ import color from 'picocolors';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {isValidPackageName} from './create.js';
+import validateProjectName from 'validate-npm-package-name';
+
+function isValidPackageName(projectName: string): string | void {
+  const nameValidation = validateProjectName(projectName);
+  if (!nameValidation.validForNewPackages) {
+    return [
+      ...(nameValidation.errors || []),
+      ...(nameValidation.warnings || []),
+    ].join('\n');
+  }
+}
 
 export function scaffoldOptions(yargs: CommonYargsArgv) {
   return yargs.option('name', {

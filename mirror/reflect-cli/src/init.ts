@@ -25,23 +25,21 @@ export function initOptions(yargs: CommonYargsArgv) {
     .option('new', {
       describe: 'Create a new app',
       type: 'boolean',
-    })
-    .option('configDirPath', {
-      describe: 'Directory location of reflect config',
-      type: 'string',
-      requiresArg: false,
     });
 }
 
 type InitHandlerArgs = YargvToInterface<ReturnType<typeof initOptions>>;
 
-export async function initHandler(yargs: InitHandlerArgs) {
+export async function initHandler(
+  yargs: InitHandlerArgs,
+  configDirPath?: string | undefined,
+) {
   const user = await authenticate();
 
   const userID = user.uid;
 
   const {name, new: newApp} = yargs;
-  const {channel, configDirPath} = yargs;
+  const {channel} = yargs;
   v.assert(channel, releaseChannelSchema);
 
   if (newApp) {

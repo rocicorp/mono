@@ -26,7 +26,7 @@ const r = new Reflect({
 const App = ({reflect}: {reflect: Reflect<M>}) => {
   const ref = useRef<HTMLDivElement | null>(null);
 
-  const onMouseMove = async ({
+  const onMouseMove = ({
     pageX,
     pageY,
   }: {
@@ -44,7 +44,7 @@ const App = ({reflect}: {reflect: Reflect<M>}) => {
   const clientStates = useClientStates(r);
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       const userInfo = randUserInfo();
       await reflect.mutate.initClientState(userInfo);
     })();
@@ -77,7 +77,7 @@ const App = ({reflect}: {reflect: Reflect<M>}) => {
         }}
       >
         {Object.entries(clientStates).map(
-          ([id, {userInfo, cursor}]: [string, ClientState]) =>
+          ([_id, {userInfo, cursor}]: [string, ClientState]) =>
             cursor && (
               <div className={styles.collaborator}>
                 <div

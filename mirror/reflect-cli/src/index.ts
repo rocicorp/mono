@@ -37,7 +37,7 @@ function createCLIParser(argv: string[]) {
   );
 
   reflectCLI.command(
-    'create [name]',
+    'create <name>',
     '🛠 Create, init and publish a basic Reflect project, ',
     createOptions,
     createHandler,
