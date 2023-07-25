@@ -13,7 +13,7 @@ import {getVersion, putVersion} from '../types/version.js';
 import {newAuthConnectionsRequest} from '../util/auth-test-util.js';
 import {TestLogSink, createSilentLogContext} from '../util/test-utils.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
-import {BaseRoomDO} from './room-do.js';
+import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
 
 test('sets roomID in createRoom', async () => {
   const testLogSink = new TestLogSink();
@@ -266,27 +266,13 @@ test('Logs version during construction', async () => {
   expect(testLogSink.messages[1][2][1]).toMatch(/^\d+\.\d+\.\d+/);
 });
 
-test('Sets turn duration based on allowUnconfirmedWrites flag', async () => {
-  const cases: {allowUnconfirmed: boolean; turnDuration: number}[] = [
+test('Sets turn duration based on allowUnconfirmedWrites flag', () => {
+  const cases = [
     {allowUnconfirmed: true, turnDuration: 1000 / 60},
     {allowUnconfirmed: false, turnDuration: 1000 / 15},
   ];
   for (const {allowUnconfirmed, turnDuration} of cases) {
-    const testLogSink = new TestLogSink();
-
-    const room = new BaseRoomDO({
-      mutators: {},
-      roomStartHandler: () => Promise.resolve(),
-      disconnectHandler: () => Promise.resolve(),
-      state: await createTestDurableObjectState('test-do-id'),
-      authApiKey: 'foo',
-      logSink: testLogSink,
-      logLevel: 'info',
-      allowUnconfirmedWrites: allowUnconfirmed,
-    });
-
-    // @ts-expect-error: private field
-    expect(room._turnDuration).toEqual(turnDuration);
+    expect(getDefaultTurnDuration(allowUnconfirmed)).toBe(turnDuration);
   }
 });
 

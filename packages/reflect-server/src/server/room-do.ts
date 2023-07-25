@@ -92,6 +92,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   readonly #storage: DurableStorage;
   readonly #authApiKey: string;
   #turnTimerID: ReturnType<typeof setInterval> | 0 = 0;
+
   readonly #turnDuration: number;
   readonly #router = new Router();
 
@@ -115,7 +116,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
     this.#initRoutes();
 
-    this.#turnDuration = 1000 / (options.allowUnconfirmedWrites ? 60 : 15);
+    this.#turnDuration = getDefaultTurnDuration(options.allowUnconfirmedWrites);
     this.#authApiKey = authApiKey;
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
@@ -462,6 +463,12 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       this.#processUntilDone(lc);
     });
   };
+}
+
+export function getDefaultTurnDuration(
+  allowUnconfirmedWrites: boolean,
+): number {
+  return 1000 / (allowUnconfirmedWrites ? 60 : 15);
 }
 
 /**
