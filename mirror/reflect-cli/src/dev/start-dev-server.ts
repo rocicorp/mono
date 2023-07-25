@@ -13,7 +13,7 @@ export async function startDevServer(
   code: OutputFile,
   sourcemap: OutputFile,
   port?: number,
-): Promise<() => Promise<void>> {
+): Promise<URL> {
   const appDir = path.dirname(code.path);
   const appConfigRoot = mustFindAppConfigRoot();
 
@@ -64,8 +64,10 @@ export async function startDevServer(
     compatibilityDate: '2023-05-18',
   });
 
-  console.log((await mf.ready).href);
-
+  // TODO(arv): When we implement watch mode we need to dispose the workerd instance.
+  // workerd itself supports watch but it is not clear how to use it with Miniflare.
   // Cleanup Miniflare, shutting down the workerd server
-  return () => mf.dispose();
+  // await mf.dispose(),
+
+  return mf.ready;
 }
