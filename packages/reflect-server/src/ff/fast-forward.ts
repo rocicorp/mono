@@ -6,6 +6,7 @@ import {listClientRecords} from '../types/client-record.js';
 import type {ClientGroupID, ClientID} from '../types/client-state.js';
 import {compareVersions} from '../types/version.js';
 import {getPatch} from './get-patch.js';
+import type {LogContext} from '@rocicorp/logger';
 
 /**
  * Returns zero or more pokes necessary to fast forward any clients in a room
@@ -15,6 +16,7 @@ import {getPatch} from './get-patch.js';
  * @param durable storage to read/write to
  */
 export async function fastForwardRoom(
+  lc: LogContext,
   clients: ClientID[],
   currentVersion: Version,
   storage: DurableStorage,
@@ -32,6 +34,9 @@ export async function fastForwardRoom(
   }
   // No need to calculate a patch for the current version!
   distinctBaseCookies.delete(currentVersion);
+  lc.debug?.(
+    `Computing patches for ${distinctBaseCookies.size} cookies of ${clients.length} connected clients (${clientRecords.size} clientRecords)`,
+  );
 
   // Calculate all the distinct patches in parallel
   const getPatchEntry = async (baseCookie: NullableVersion) =>
@@ -42,6 +47,7 @@ export async function fastForwardRoom(
   const distinctPatches = new Map(
     await Promise.all([...distinctBaseCookies].map(getPatchEntry)),
   );
+  lc.debug?.(`Finished computing patches`);
 
   // Calculate the last mutation id changes for each
   // (base cookie, client group id) combination
@@ -74,6 +80,7 @@ export async function fastForwardRoom(
     }
   }
 
+  let largestPatch = 0;
   const ret: ClientPoke[] = [];
   for (const clientID of clients) {
     const record = must(clientRecords.get(clientID));
@@ -81,6 +88,8 @@ export async function fastForwardRoom(
       continue;
     }
     const patch = must(distinctPatches.get(record.baseCookie));
+    largestPatch = Math.max(largestPatch, patch.length);
+
     const {clientGroupID} = record;
     const poke: Poke = {
       baseCookie: record.baseCookie,
@@ -100,5 +109,6 @@ export async function fastForwardRoom(
     ret.push(clientPoke);
   }
 
+  lc.debug?.(`Largest patch: ${largestPatch} ops`);
   return ret;
 }

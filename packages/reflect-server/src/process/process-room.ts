@@ -51,6 +51,7 @@ export async function processRoom(
   }
   lc.debug?.('currentVersion', currentVersion);
   const clientPokes: ClientPoke[] = await fastForwardRoom(
+    lc,
     clientIDs,
     currentVersion,
     storage,
