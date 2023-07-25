@@ -1037,9 +1037,7 @@ test('socketOrigin', async () => {
   for (const c of cases) {
     const r = reflectForTest(c.socketEnabled ? {} : {socketOrigin: null});
 
-    for (let i = 0; i < 10; i++) {
-      await clock.tickAsync(0);
-    }
+    await tickAFewTimes(clock);
 
     expect(r.connectionState, c.name).to.equal(
       c.socketEnabled
