@@ -9,16 +9,16 @@ export class TestExecutionContext implements ExecutionContext {
 
 export class TestDurableObjectId implements DurableObjectId {
   readonly name?: string;
-  private readonly _objectIDString: string;
+  readonly #objectIDString: string;
 
   constructor(objectIDString: string, name?: string) {
-    this._objectIDString = objectIDString;
+    this.#objectIDString = objectIDString;
     if (name !== undefined) {
       this.name = name;
     }
   }
   toString(): string {
-    return this._objectIDString;
+    return this.#objectIDString;
   }
   equals(other: DurableObjectId): boolean {
     return this.toString() === other.toString();
@@ -51,7 +51,7 @@ export async function createTestDurableObjectState(
 export class TestDurableObjectState implements DurableObjectState {
   readonly id: DurableObjectId;
   readonly storage: DurableObjectStorage;
-  private readonly _blockingCallbacks: Promise<unknown>[] = [];
+  readonly #blockingCallbacks: Promise<unknown>[] = [];
 
   constructor(id: DurableObjectId, storage: DurableObjectStorage) {
     this.id = id;
@@ -62,11 +62,11 @@ export class TestDurableObjectState implements DurableObjectState {
   }
   blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T> {
     const promise = callback();
-    this._blockingCallbacks.push(promise);
+    this.#blockingCallbacks.push(promise);
     return promise;
   }
   concurrencyBlockingCallbacks(): Promise<unknown[]> {
-    return Promise.all(this._blockingCallbacks);
+    return Promise.all(this.#blockingCallbacks);
   }
 }
 
