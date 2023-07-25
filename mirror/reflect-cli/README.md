@@ -44,6 +44,8 @@ version for the firebase functions.
 `run start-local` uses `--stack local` which means that it uses the local
 firebase emulator.
 
+Anyplace you see `run start` in these instructions, you can also use `run start-local`.
+
 To run the local firebase emulator:
 
 ```bash
@@ -61,13 +63,7 @@ file in the current project directory.
 
 ```bash
 npm run start init
-#or
-npm run start-local init
 ```
-
-The difference between `start` and `start-local` is that `start-local` uses
-`--stack local` which means that it uses the local firebase emulator. `start`
-uses the deployed staging versions of the firebase functions.
 
 If you have multiple applications you will see something like:
 
@@ -81,13 +77,13 @@ Please specify which app to use with --name flag.
 ```
 
 ```
-npm run start-local init --name veiled-encouraging-opal-xyz1
+npm run start init --name veiled-encouraging-opal-xyz1
 ```
 
 You can also create a new app (if your account allows more apps) with:
 
 ```
-npm run start-local init --new
+npm run start init --new
 ```
 
 This is all pretty much WIP. We want to allow user provided names and renames so
@@ -114,8 +110,16 @@ AUTH_URL=http://localhost:3000/auth npm run start login
 ## reflect publish
 
 ```bash
-npm run start-local publish example/index.ts
+npm run start publish example/index.ts
 ```
 
 This will bundle/compile the `example/index.ts` file, then send it to the
 mirror-server which in turn publishes to Cloudflare.
+
+## reflect dev
+
+```bash
+npm run start dev example/index.ts
+```
+
+This starts an entirely local (🤯) Reflect server you can program against without publishing.
