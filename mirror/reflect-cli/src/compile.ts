@@ -15,31 +15,74 @@ const replaceReflectServerPlugin: esbuild.Plugin = {
 
 export async function compile(
   entryPoint: string,
-): Promise<{code: esbuild.OutputFile; sourcemap: esbuild.OutputFile}> {
+  sourcemap: true | 'both' | 'external' | 'linked',
+): Promise<{
+  code: esbuild.OutputFile;
+  sourcemap: esbuild.OutputFile;
+}>;
+export async function compile(
+  entryPoint: string,
+  sourcemap: false | undefined | 'inline',
+): Promise<{
+  code: esbuild.OutputFile;
+  sourcemap: undefined;
+}>;
+export async function compile(
+  entryPoint: string,
+  sourcemap: esbuild.BuildOptions['sourcemap'] = 'external',
+): Promise<{
+  code: esbuild.OutputFile;
+  sourcemap: esbuild.OutputFile | undefined;
+}> {
   const res = await esbuild.build({
-    entryPoints: [entryPoint],
     bundle: true,
-    format: 'esm',
-    sourcemap: 'external',
-    target: 'esnext',
     conditions: ['workerd', 'worker', 'browser'],
-    plugins: [replaceReflectServerPlugin],
-    minify: false,
-    write: false,
+    // Remove process.env. It does not exist in CF workers and we have npm
+    // packages that use it.
+    define: {'process.env': '{}'},
+    entryPoints: [entryPoint],
+    external: [],
+    format: 'esm',
     outdir: path.dirname(entryPoint),
+    platform: 'browser',
+    plugins: [replaceReflectServerPlugin],
+    sourcemap,
+    target: 'esnext',
+    write: false,
   });
   const {errors, outputFiles} = res;
   if (errors.length > 0) {
     throw new Error(res.errors.join('\n'));
   }
-  // 1 for the bundle, 1 for the sourcemap
-  if (outputFiles.length !== 2) {
+
+  const expectedCount = shouldHaveSourcemapFile(sourcemap) ? 2 : 1;
+  if (expectedCount !== outputFiles.length) {
     throw new Error('Unexpected output from esbuild');
   }
 
-  // esbuild always(?) puts the sourcemap first
-  if (outputFiles[1].path.endsWith('.map')) {
+  if (expectedCount === 1) {
+    return {code: outputFiles[0], sourcemap: undefined};
+  }
+
+  // Not clear if the order in outputFiles is guaranteed.
+  if (outputFiles[0].path.endsWith('.map')) {
     outputFiles.reverse();
   }
-  return {code: outputFiles[1], sourcemap: outputFiles[0]};
+  return {code: outputFiles[0], sourcemap: outputFiles[1]};
+}
+
+function shouldHaveSourcemapFile(
+  v: esbuild.BuildOptions['sourcemap'] | undefined,
+): boolean {
+  switch (v) {
+    case true:
+    case 'both':
+    case 'external':
+    case 'linked':
+      return true;
+    case false:
+    case undefined:
+    case 'inline':
+      return false;
+  }
 }

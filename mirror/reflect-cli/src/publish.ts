@@ -53,7 +53,7 @@ export async function publishHandler(
   const range = await findServerVersionRange(absPath);
   const serverVersionRange = range.raw;
 
-  const {code, sourcemap} = await compile(absPath);
+  const {code, sourcemap} = await compile(absPath, 'linked');
 
   const user = await authenticate();
   const userID = user.uid;

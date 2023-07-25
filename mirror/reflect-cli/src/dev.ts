@@ -31,7 +31,7 @@ export async function devHandler(yargs: DevHandlerArgs) {
     throw new Error(`File not found: ${absPath}`);
   }
 
-  const {code, sourcemap} = await compile(absPath);
+  const {code, sourcemap} = await compile(absPath, 'linked');
 
   await startDevServer(code, sourcemap);
 }

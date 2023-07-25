@@ -6,12 +6,14 @@ import {getWorkerTemplate} from '../admin/get-worker-template.js';
 import {mustFindAppConfigRoot} from '../app-config.js';
 import {buildReflectServerContent} from '../build-reflect-server-content.js';
 
+/**
+ * Returns a function that shuts down the dev server.
+ */
 export async function startDevServer(
   code: OutputFile,
   sourcemap: OutputFile,
   port?: number,
-) {
-  debugger;
+): Promise<() => Promise<void>> {
   const appDir = path.dirname(code.path);
   const appConfigRoot = mustFindAppConfigRoot();
 
@@ -47,18 +49,23 @@ export async function startDevServer(
       // eslint-disable-next-line @typescript-eslint/naming-convention
       REFLECT_AUTH_API_KEY: nanoid(),
     },
-    // serviceBindings: {},
+
     durableObjects: {roomDO: 'RoomDO', authDO: 'AuthDO', testDO: 'TestDO'},
+
     // log: new Log(LogLevel.VERBOSE),
     // verbose: true,
 
     durableObjectsPersist: path.join(appConfigRoot, '.reflect', 'data'),
-    inspectorPort: 9229,
+
+    // debug support is currently not supported so supporting inspecting is not very useful.
+    // https://github.com/cloudflare/workerd/issues/371
+    // inspectorPort: 9229,
+
     compatibilityDate: '2023-05-18',
   });
 
   console.log((await mf.ready).href);
 
   // Cleanup Miniflare, shutting down the workerd server
-  // await mf.dispose();
+  return () => mf.dispose();
 }
