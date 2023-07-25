@@ -12,14 +12,14 @@ import {buildReflectServerContent} from '../compile.js';
 export async function startDevServer(
   code: OutputFile,
   sourcemap: OutputFile,
-  port?: number,
+  port: number,
 ): Promise<URL> {
   const appDir = path.dirname(code.path);
   const appConfigRoot = mustFindAppConfigRoot();
 
   // Create a new Miniflare instance, starting a workerd server
   const mf = new Miniflare({
-    port: port ?? 8080,
+    port,
     modules: [
       {
         type: 'ESModule',
@@ -51,9 +51,6 @@ export async function startDevServer(
     },
 
     durableObjects: {roomDO: 'RoomDO', authDO: 'AuthDO', testDO: 'TestDO'},
-
-    // log: new Log(LogLevel.VERBOSE),
-    // verbose: true,
 
     durableObjectsPersist: path.join(appConfigRoot, '.reflect', 'data'),
 
