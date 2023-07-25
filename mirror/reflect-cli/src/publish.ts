@@ -12,17 +12,11 @@ import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
-  return yargs
-    .positional('script', {
-      describe: 'Path to the worker script',
-      type: 'string',
-      demandOption: true,
-    })
-    .option('configDirPath', {
-      describe: 'Directory location of reflect config',
-      type: 'string',
-      requiresArg: false,
-    });
+  return yargs.positional('script', {
+    describe: 'Path to the worker script',
+    type: 'string',
+    demandOption: true,
+  });
 }
 
 async function exists(path: string) {
@@ -40,9 +34,11 @@ export type PublishCaller = typeof publishCaller;
 
 export async function publishHandler(
   yargs: PublishHandlerArgs,
+  configDirPath?: string | undefined,
   publish: PublishCaller = publishCaller, // Overridden in tests.
 ) {
-  const {script, configDirPath} = yargs;
+  const {script} = yargs;
+
   const {appID} = mustReadAppConfig(configDirPath);
 
   const absPath = path.resolve(script);
@@ -53,7 +49,7 @@ export async function publishHandler(
   const range = await findServerVersionRange(absPath);
   const serverVersionRange = range.raw;
 
-  const {code, sourcemap} = await compile(absPath);
+  const {code, sourcemap} = await compile(absPath, 'linked');
 
   const user = await authenticate();
   const userID = user.uid;

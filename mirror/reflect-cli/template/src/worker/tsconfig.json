@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "lib": ["esnext"],
+    "moduleResolution": "node16",
+    "declaration": true,
+    "incremental": true,
+  },
+  "include": ["**/*.ts"],
+  "extends": "../../tsconfig.json",
+}
