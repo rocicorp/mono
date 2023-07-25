@@ -12,6 +12,7 @@
     "miniflare": "^3.20230717.0",
     "nanoid": "^4.0.2",
     "open": "^9.1.0",
+    "picocolors": "^1.0.0",
     "pkg-up": "^4.0.0",
     "semver": "^7.5.3",
     "shared": "0.0.0",

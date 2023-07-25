@@ -25,8 +25,10 @@ const external = [
   'miniflare',
   'nanoid',
   'open',
+  'picocolors',
   'pkg-up',
   'semver',
+  'validate-npm-package-name',
   'yargs',
 ];
 

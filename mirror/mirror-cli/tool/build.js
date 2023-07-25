@@ -17,6 +17,7 @@ var require = ${createRequireAlias}(import.meta.url);
 }
 
 const external = [
+  '@badrap/valita',
   '@rocicorp/reflect',
   'esbuild',
   'firebase-admin',
