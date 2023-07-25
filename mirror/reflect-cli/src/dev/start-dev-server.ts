@@ -4,7 +4,7 @@ import {nanoid} from 'nanoid';
 import * as path from 'node:path';
 import {getWorkerTemplate} from '../admin/get-worker-template.js';
 import {mustFindAppConfigRoot} from '../app-config.js';
-import {buildReflectServerContent} from '../build-reflect-server-content.js';
+import {buildReflectServerContent} from '../compile.js';
 
 /**
  * Returns a function that shuts down the dev server.

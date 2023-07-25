@@ -1,4 +1,5 @@
 import * as esbuild from 'esbuild';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
 
 const reflectServerFileName = 'reflect-server.js';
@@ -85,4 +86,11 @@ function shouldHaveSourcemapFile(
     case 'inline':
       return false;
   }
+}
+
+export async function buildReflectServerContent(): Promise<string> {
+  const require = createRequire(import.meta.url);
+  const serverPath = require.resolve('@rocicorp/reflect/server');
+  const {code} = await compile(serverPath, false);
+  return code.text;
 }
