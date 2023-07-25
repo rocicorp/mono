@@ -64,7 +64,14 @@ export class DurableStorage implements Storage {
     return getEntry(this._durable, key, schema, baseOptions);
   }
 
-  // TODO(darick): Consider making this part of the Storage interface.
+  /**
+   * Fetches multiple entries from storage with as few reads as possible.
+   * Reads of up to {@link MAX_ENTRIES_TO_GET} keys are done with a single
+   * fetch, for which values are cross-consistent. Larger reads are split
+   * into parallel fetches which may not necessarily be consistent with each
+   * other. If consistency is required, the application must guarantee this
+   * with its own locking scheme.
+   */
   async getEntries<T extends ReadonlyJSONValue>(
     keys: string[],
     schema: valita.Type<T>,
