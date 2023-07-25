@@ -44,8 +44,11 @@ export interface Storage {
    * yielding UTF-8 key-ordered results.
    *
    * Unlike {@link list}, `scan` avoids loading an arbitrary amount of data
-   * into memory and is thus recommended when scanning a potentially large
-   * amount of data.
+   * into memory and is thus recommended when processing a potentially large
+   * amount of data. However, this involves multiple reads from storage
+   * which may not necessarily be consistent with each other. If consistency
+   * across a scan is required, the application must guarantee this with its
+   * own locking scheme.
    *
    * Also see {@link batchScan} for processing batches of objects efficiently.
    */
@@ -61,6 +64,11 @@ export interface Storage {
    *
    * This is similar to {@link scan} but allows the caller to
    * efficiently process larger numbers of entries as a batch.
+   *
+   * Similar to {@link scan}, `scanBatch` involves multiple reads from storage
+   * which may not necessarily be consistent with each other. If consistency
+   * across a scan is required, the application must guarantee this with its
+   * own locking scheme.
    */
   batchScan<T extends ReadonlyJSONValue>(
     options: ListOptions,
