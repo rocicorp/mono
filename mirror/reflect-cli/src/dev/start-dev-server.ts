@@ -52,7 +52,7 @@ export async function startDevServer(
     // log: new Log(LogLevel.VERBOSE),
     // verbose: true,
 
-    durableObjectsPersist: path.join(appConfigRoot, '.reflect-dev-data'),
+    durableObjectsPersist: path.join(appConfigRoot, '.reflect', 'data'),
     inspectorPort: 9229,
     compatibilityDate: '2023-05-18',
   });
