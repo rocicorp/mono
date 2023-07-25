@@ -64,10 +64,10 @@ function createCLIParser(argv: string[]) {
 
   // dev
   reflectCLI.command(
-    'dev [script]',
-    '👂 Start a local server for developing your ',
-    // devOptions,
-    // devHandler
+    'dev <script>',
+    '👷 Start a local dev server for your Reflect project',
+    devOptions,
+    devHandler,
   );
 
   // tail
@@ -84,14 +84,6 @@ function createCLIParser(argv: string[]) {
     '🆙 Publish your reflect project',
     publishOptions,
     publishHandler,
-  );
-
-  // dev
-  reflectCLI.command(
-    'dev <script>',
-    '🆙 dev your reflect project',
-    devOptions,
-    devHandler,
   );
 
   return reflectCLI;
