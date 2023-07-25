@@ -15,23 +15,21 @@ import type {ListOptions, Storage} from './storage.js';
  * TODO: We can remove the read side of this since DO does caching itself internally!
  */
 export class EntryCache implements Storage {
-  private _storage: Storage;
-  private _cache: Map<
-    string,
-    {value?: ReadonlyJSONValue | undefined; dirty: boolean}
-  > = new Map();
+  #storage: Storage;
+  #cache: Map<string, {value?: ReadonlyJSONValue | undefined; dirty: boolean}> =
+    new Map();
 
   constructor(storage: Storage) {
-    this._storage = storage;
+    this.#storage = storage;
   }
 
-  private _put<T extends ReadonlyJSONValue>(key: string, value: T) {
-    this._cache.set(key, {value, dirty: true});
+  #put<T extends ReadonlyJSONValue>(key: string, value: T) {
+    this.#cache.set(key, {value, dirty: true});
   }
 
   // eslint-disable-next-line require-await
   async put<T extends ReadonlyJSONValue>(key: string, value: T): Promise<void> {
-    this._put(key, value);
+    this.#put(key, value);
   }
 
   // eslint-disable-next-line require-await
@@ -39,23 +37,23 @@ export class EntryCache implements Storage {
     entries: Record<string, T>,
   ): Promise<void> {
     for (const [key, value] of Object.entries(entries)) {
-      this._put(key, value);
+      this.#put(key, value);
     }
   }
 
-  private _del(key: string) {
-    this._cache.set(key, {value: undefined, dirty: true});
+  #del(key: string) {
+    this.#cache.set(key, {value: undefined, dirty: true});
   }
 
   // eslint-disable-next-line require-await
   async del(key: string): Promise<void> {
-    this._del(key);
+    this.#del(key);
   }
 
   // eslint-disable-next-line require-await
   async delEntries(keys: string[]): Promise<void> {
     for (const key of keys) {
-      this._del(key);
+      this.#del(key);
     }
   }
 
@@ -63,15 +61,15 @@ export class EntryCache implements Storage {
     key: string,
     schema: valita.Type<T>,
   ): Promise<T | undefined> {
-    const cached = this._cache.get(key);
+    const cached = this.#cache.get(key);
     if (cached) {
       // We don't validate on cache hits partly for perf reasons and also
       // because we should have already validated with same schema during
       // initial read.
       return cached.value as T | undefined;
     }
-    const value = await this._storage.get(key, schema);
-    this._cache.set(key, {value, dirty: false});
+    const value = await this.#storage.get(key, schema);
+    this.#cache.set(key, {value, dirty: false});
     return value;
   }
 
@@ -80,7 +78,7 @@ export class EntryCache implements Storage {
    * redundant writes (e.g. deleting a non-existing key) are still considered writes.
    */
   isDirty(): boolean {
-    for (const value of this._cache.values()) {
+    for (const value of this.#cache.values()) {
       if (value.dirty) {
         return true;
       }
@@ -90,7 +88,7 @@ export class EntryCache implements Storage {
 
   pending(): Patch {
     const res: Patch = [];
-    for (const [key, {value, dirty}] of this._cache.entries()) {
+    for (const [key, {value, dirty}] of this.#cache.entries()) {
       if (dirty) {
         if (value === undefined) {
           res.push({op: 'del', key});
@@ -109,18 +107,18 @@ export class EntryCache implements Storage {
     //
     // https://developers.cloudflare.com/workers/learning/using-durable-objects/#accessing-persistent-storage-from-a-durable-object
     await Promise.all(
-      [...this._cache.entries()]
+      [...this.#cache.entries()]
         // Destructure ALL the things
         .filter(([, {dirty}]) => dirty)
         .map(([k, {value}]) => {
           if (value === undefined) {
-            return this._storage.del(k);
+            return this.#storage.del(k);
           }
-          return this._storage.put(k, value);
+          return this.#storage.put(k, value);
         }),
     );
 
-    this._cache.clear();
+    this.#cache.clear();
   }
 
   scan<T extends ReadonlyJSONValue>(
@@ -151,7 +149,7 @@ export class EntryCache implements Storage {
     let adjustedLimit = limit;
     if (adjustedLimit !== undefined) {
       let deleted = 0;
-      for (const [, {value, dirty}] of this._cache.entries()) {
+      for (const [, {value, dirty}] of this.#cache.entries()) {
         if (dirty && value === undefined) {
           deleted++;
         }
@@ -160,12 +158,12 @@ export class EntryCache implements Storage {
     }
 
     const base = new Map(
-      await this._storage.list({...options, limit: adjustedLimit}, schema),
+      await this.#storage.list({...options, limit: adjustedLimit}, schema),
     );
 
     // build a list of pending changes to overlay atop stored values
     const pending: [string, T | undefined][] = [];
-    for (const entry of this._cache.entries()) {
+    for (const entry of this.#cache.entries()) {
       const [k, v] = entry;
 
       if (

@@ -75,25 +75,26 @@ export const ROOM_ROUTES = {
 } as const;
 
 export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
-  private readonly _clients: ClientMap = new Map();
-  private readonly _pendingMutations: PendingMutation[] = [];
-  private readonly _bufferSizer = new BufferSizer({
+  readonly #clients: ClientMap = new Map();
+  readonly #pendingMutations: PendingMutation[] = [];
+  readonly #bufferSizer = new BufferSizer({
     initialBufferSizeMs: 200,
     minBufferSizeMs: 0,
     maxBufferSizeMs: 500,
     adjustBufferSizeIntervalMs: 10_000,
   });
-  private _maxProcessedMutationTimestamp = 0;
-  private readonly _lock = new Lock();
-  private readonly _mutators: MutatorMap;
-  private readonly _disconnectHandler: DisconnectHandler;
-  private _lcHasRoomIdContext = false;
-  private _lc: LogContext;
-  private readonly _storage: DurableStorage;
-  private readonly _authApiKey: string;
-  private _turnTimerID: ReturnType<typeof setInterval> | 0 = 0;
-  private readonly _turnDuration: number;
-  private readonly _router = new Router();
+  #maxProcessedMutationTimestamp = 0;
+  readonly #lock = new Lock();
+  readonly #mutators: MutatorMap;
+  readonly #disconnectHandler: DisconnectHandler;
+  #lcHasRoomIdContext = false;
+  #lc: LogContext;
+  readonly #storage: DurableStorage;
+  readonly #authApiKey: string;
+  #turnTimerID: ReturnType<typeof setInterval> | 0 = 0;
+
+  readonly #turnDuration: number;
+  readonly #router = new Router();
 
   constructor(options: RoomDOOptions<MD>) {
     const {
@@ -106,63 +107,63 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       logLevel,
     } = options;
 
-    this._mutators = new Map([...Object.entries(mutators)]) as MutatorMap;
-    this._disconnectHandler = disconnectHandler;
-    this._storage = new DurableStorage(
+    this.#mutators = new Map([...Object.entries(mutators)]) as MutatorMap;
+    this.#disconnectHandler = disconnectHandler;
+    this.#storage = new DurableStorage(
       state.storage,
       options.allowUnconfirmedWrites,
     );
 
-    this._initRoutes();
+    this.#initRoutes();
 
-    this._turnDuration = 1000 / (options.allowUnconfirmedWrites ? 60 : 15);
-    this._authApiKey = authApiKey;
+    this.#turnDuration = getDefaultTurnDuration(options.allowUnconfirmedWrites);
+    this.#authApiKey = authApiKey;
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
       'RoomDO',
     );
     registerUnhandledRejectionHandler(lc);
-    this._lc = lc.withContext('doID', state.id.toString());
+    this.#lc = lc.withContext('doID', state.id.toString());
 
-    this._lc.info?.('Starting server');
-    this._lc.info?.('Version:', version);
+    this.#lc.info?.('Starting server');
+    this.#lc.info?.('Version:', version);
 
     void state.blockConcurrencyWhile(async () => {
-      await initRoomSchema(this._lc, this._storage);
-      await processRoomStart(this._lc, roomStartHandler, this._storage);
+      await initRoomSchema(this.#lc, this.#storage);
+      await processRoomStart(this.#lc, roomStartHandler, this.#storage);
     });
   }
 
-  private _initRoutes() {
-    this._router.register(ROOM_ROUTES.deletePath, this._deleteAllData);
-    this._router.register(
+  #initRoutes() {
+    this.#router.register(ROOM_ROUTES.deletePath, this.#deleteAllData);
+    this.#router.register(
       ROOM_ROUTES.authInvalidateAll,
-      this._authInvalidateAll,
+      this.#authInvalidateAll,
     );
-    this._router.register(
+    this.#router.register(
       ROOM_ROUTES.authInvalidateForUser,
-      this._authInvalidateForUser,
+      this.#authInvalidateForUser,
     );
-    this._router.register(
+    this.#router.register(
       ROOM_ROUTES.authInvalidateForRoom,
-      this._authInvalidateForRoom,
+      this.#authInvalidateForRoom,
     );
-    this._router.register(ROOM_ROUTES.authConnections, this._authConnections);
+    this.#router.register(ROOM_ROUTES.authConnections, this.#authConnections);
 
-    this._router.register(ROOM_ROUTES.createRoom, this._createRoom);
-    this._router.register(ROOM_ROUTES.legacyCreateRoom, this._createRoom);
-    this._router.register(
+    this.#router.register(ROOM_ROUTES.createRoom, this.#createRoom);
+    this.#router.register(ROOM_ROUTES.legacyCreateRoom, this.#createRoom);
+    this.#router.register(
       ROOM_ROUTES.internalCreateRoom,
-      this._internalCreateRoom,
+      this.#internalCreateRoom,
     );
 
-    this._router.register(ROOM_ROUTES.connect, this._connect);
-    this._router.register(ROOM_ROUTES.legacyConnect, this._connect);
+    this.#router.register(ROOM_ROUTES.connect, this.#connect);
+    this.#router.register(ROOM_ROUTES.legacyConnect, this.#connect);
   }
 
-  private _requireAPIKey = <Context extends BaseContext, Resp>(
+  #requireAPIKey = <Context extends BaseContext, Resp>(
     next: Handler<Context, Resp>,
-  ) => requireAuthAPIKey(() => this._authApiKey, next);
+  ) => requireAuthAPIKey(() => this.#authApiKey, next);
 
   async fetch(request: Request): Promise<Response> {
     try {
@@ -173,7 +174,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       }
 
       let lc = addClientIPToLogContext(
-        addRequestIDFromHeadersOrRandomID(this._lc, request),
+        addRequestIDFromHeadersOrRandomID(this.#lc, request),
         request,
       );
 
@@ -192,11 +193,11 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         return new Response('Unexpected roomID', {status: 400});
       }
 
-      if (!this._lcHasRoomIdContext) {
+      if (!this.#lcHasRoomIdContext) {
         lc.debug?.('awaiting lock to initialize roomID context');
-        await this._lock.withLock(() => {
+        await this.#lock.withLock(() => {
           lc.debug?.('got lock to initialize roomID context');
-          if (this._lcHasRoomIdContext) {
+          if (this.#lcHasRoomIdContext) {
             lc.debug?.('roomID context already initialized, returning');
             return;
           }
@@ -207,17 +208,17 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
           }
           if (roomID || urlRoomID) {
             const roomIDForContext = roomID ?? urlRoomID;
-            this._lc = this._lc.withContext('roomID', roomIDForContext);
+            this.#lc = this.#lc.withContext('roomID', roomIDForContext);
             lc = lc.withContext('roomID', roomIDForContext);
-            this._lcHasRoomIdContext = true;
+            this.#lcHasRoomIdContext = true;
             lc.info?.('initialized roomID context');
           }
         });
       }
 
-      return await this._router.dispatch(request, {lc});
+      return await this.#router.dispatch(request, {lc});
     } catch (e) {
-      const lc = addClientIPToLogContext(this._lc, request);
+      const lc = addClientIPToLogContext(this.#lc, request);
 
       lc.error?.('Unhandled exception in fetch', e);
       return new Response(
@@ -227,20 +228,20 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     }
   }
 
-  private _setRoomID(roomID: string) {
-    return this._storage.put(roomIDKey, roomID);
+  #setRoomID(roomID: string) {
+    return this.#storage.put(roomIDKey, roomID);
   }
 
   maybeRoomID(): Promise<string | undefined> {
-    return this._storage.get(roomIDKey, valita.string());
+    return this.#storage.get(roomIDKey, valita.string());
   }
 
-  private _setDeleted() {
-    return this._storage.put(deletedKey, true);
+  #setDeleted() {
+    return this.#storage.put(deletedKey, true);
   }
 
   async deleted(): Promise<boolean> {
-    return (await this._storage.get(deletedKey, valita.boolean())) === true;
+    return (await this.#storage.get(deletedKey, valita.boolean())) === true;
   }
 
   // roomID errors and returns "unknown" if the roomID is not set. Prefer
@@ -261,16 +262,16 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
    * from the AuthDO.
    *
    */
-  private _internalCreateRoom = withBody(createRoomRequestSchema, async ctx => {
+  #internalCreateRoom = withBody(createRoomRequestSchema, async ctx => {
     const {roomID} = ctx.body;
-    this._lc.info?.('Handling create room request for roomID', roomID);
-    await this._setRoomID(roomID);
-    await this._storage.flush();
-    this._lc.debug?.('Flushed roomID to storage', roomID);
+    this.#lc.info?.('Handling create room request for roomID', roomID);
+    await this.#setRoomID(roomID);
+    await this.#storage.flush();
+    this.#lc.debug?.('Flushed roomID to storage', roomID);
     return new Response('ok');
   });
 
-  private _createRoom = this._requireAPIKey(this._internalCreateRoom);
+  #createRoom = this.#requireAPIKey(this.#internalCreateRoom);
 
   // There's a bit of a question here about whether we really want to delete *all* the
   // data when a room is deleted. This deletes everything, including values kept by the
@@ -278,19 +279,19 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   // delete room only delete the room user data and not the system keys, because once
   // system keys are deleted who knows what behavior the room will have when its apis are
   // called. Maybe it's fine if they error out, dunno.
-  private _deleteAllData = post(
-    this._requireAPIKey(async ctx => {
+  #deleteAllData = post(
+    this.#requireAPIKey(async ctx => {
       const {lc} = ctx;
       // Maybe we should validate that the roomID in the request matches?
       lc.info?.('delete all data');
-      await this._storage.deleteAll();
+      await this.#storage.deleteAll();
       lc.info?.('done deleting all data');
-      await this._setDeleted();
+      await this.#setDeleted();
       return new Response('ok');
     }),
   );
 
-  private _connect = get((ctx, request) => {
+  #connect = get((ctx, request) => {
     let {lc} = ctx;
     lc = addWebSocketIDToLogContext(lc, request.url);
 
@@ -304,20 +305,20 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     lc.debug?.('connection request', url.toString(), 'waiting for lock');
     serverWS.accept();
 
-    void this._lock
+    void this.#lock
       .withLock(async () => {
         lc.debug?.('received lock');
         await handleConnection(
           lc,
           serverWS,
-          this._storage,
+          this.#storage,
           url,
           request.headers,
-          this._clients,
-          this._handleMessage,
-          this._handleClose,
+          this.#clients,
+          this.#handleMessage,
+          this.#handleClose,
         );
-        this._processUntilDone(lc);
+        this.#processUntilDone(lc);
       })
       .catch(e => {
         lc.error?.('unhandled exception in handleConnection', e);
@@ -326,29 +327,29 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     return new Response(null, {status: 101, webSocket: clientWS});
   });
 
-  private _authInvalidateForRoom = post(
-    this._requireAPIKey(
+  #authInvalidateForRoom = post(
+    this.#requireAPIKey(
       withBody(invalidateForRoomRequestSchema, async ctx => {
         const {lc, body} = ctx;
         const {roomID} = body;
         lc.debug?.(
           `Closing room ${roomID}'s connections fulfilling auth api invalidateForRoom request.`,
         );
-        await this._closeConnections(_ => true);
+        await this.#closeConnections(_ => true);
         return new Response('Success', {status: 200});
       }),
     ),
   );
 
-  private _authInvalidateForUser = post(
-    this._requireAPIKey(
+  #authInvalidateForUser = post(
+    this.#requireAPIKey(
       withBody(invalidateForUserRequestSchema, async ctx => {
         const {lc, body} = ctx;
         const {userID} = body;
         lc.debug?.(
           `Closing user ${userID}'s connections fulfilling auth api invalidateForUser request.`,
         );
-        await this._closeConnections(
+        await this.#closeConnections(
           clientState => clientState.auth.userID === userID,
         );
         return new Response('Success', {status: 200});
@@ -356,34 +357,34 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     ),
   );
 
-  private _authInvalidateAll = post(
-    this._requireAPIKey(async ctx => {
+  #authInvalidateAll = post(
+    this.#requireAPIKey(async ctx => {
       const {lc} = ctx;
       lc.debug?.(
         'Closing all connections fulfilling auth api invalidateAll request.',
       );
-      await this._closeConnections(_ => true);
+      await this.#closeConnections(_ => true);
       return new Response('Success', {status: 200});
     }),
   );
 
-  private _authConnections = post(
-    this._requireAPIKey(ctx => {
+  #authConnections = post(
+    this.#requireAPIKey(ctx => {
       const {lc} = ctx;
       lc.debug?.('Retrieving all auth connections');
-      return new Response(JSON.stringify(getConnections(this._clients)));
+      return new Response(JSON.stringify(getConnections(this.#clients)));
     }),
   );
 
-  private _closeConnections(
+  #closeConnections(
     predicate: (clientState: ClientState) => boolean,
   ): Promise<void> {
-    return this._lock.withLock(() =>
-      closeConnections(this._clients, predicate),
+    return this.#lock.withLock(() =>
+      closeConnections(this.#clients, predicate),
     );
   }
 
-  private _handleMessage = async (
+  #handleMessage = async (
     lc: LogContext,
     clientID: ClientID,
     data: string,
@@ -393,17 +394,17 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     lc.debug?.('handling message', data, 'waiting for lock');
 
     try {
-      await this._lock.withLock(async () => {
+      await this.#lock.withLock(async () => {
         lc.debug?.('received lock');
         await handleMessage(
           lc,
-          this._storage,
-          this._clients,
-          this._pendingMutations,
+          this.#storage,
+          this.#clients,
+          this.#pendingMutations,
           clientID,
           data,
           ws,
-          () => this._processUntilDone(lc),
+          () => this.#processUntilDone(lc),
         );
       });
     } catch (e) {
@@ -411,57 +412,63 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     }
   };
 
-  private _processUntilDone(lc: LogContext) {
+  #processUntilDone(lc: LogContext) {
     lc.debug?.('handling processUntilDone');
-    if (this._turnTimerID) {
+    if (this.#turnTimerID) {
       lc.debug?.('already processing, nothing to do');
       return;
     }
 
-    this._turnTimerID = setInterval(() => {
-      this._processNext(lc).catch(e => {
+    this.#turnTimerID = setInterval(() => {
+      this.#processNext(lc).catch(e => {
         lc.error?.('Unhandled exception in _processNext', e);
       });
-    }, this._turnDuration);
+    }, this.#turnDuration);
   }
 
-  private async _processNext(lc: LogContext) {
+  async #processNext(lc: LogContext) {
     lc.debug?.(
       `processNext - starting turn at ${Date.now()} - waiting for lock`,
     );
-    await this._lock.withLock(async () => {
+    await this.#lock.withLock(async () => {
       lc.debug?.(`received lock at ${Date.now()}`);
       const {maxProcessedMutationTimestamp, nothingToProcess} =
         await processPending(
           lc,
-          this._storage,
-          this._clients,
-          this._pendingMutations,
-          this._mutators,
-          this._disconnectHandler,
-          this._maxProcessedMutationTimestamp,
-          this._bufferSizer,
+          this.#storage,
+          this.#clients,
+          this.#pendingMutations,
+          this.#mutators,
+          this.#disconnectHandler,
+          this.#maxProcessedMutationTimestamp,
+          this.#bufferSizer,
         );
-      this._maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
-      if (nothingToProcess && this._turnTimerID) {
-        clearInterval(this._turnTimerID);
-        this._turnTimerID = 0;
+      this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
+      if (nothingToProcess && this.#turnTimerID) {
+        clearInterval(this.#turnTimerID);
+        this.#turnTimerID = 0;
       }
     });
   }
 
-  private _handleClose = async (
+  #handleClose = async (
     lc: LogContext,
     clientID: ClientID,
     ws: Socket,
   ): Promise<void> => {
     lc.debug?.('handling close - waiting for lock');
-    await this._lock.withLock(() => {
+    await this.#lock.withLock(() => {
       lc.debug?.('received lock');
-      handleClose(lc, this._clients, clientID, ws);
-      this._processUntilDone(lc);
+      handleClose(lc, this.#clients, clientID, ws);
+      this.#processUntilDone(lc);
     });
   };
+}
+
+export function getDefaultTurnDuration(
+  allowUnconfirmedWrites: boolean,
+): number {
+  return 1000 / (allowUnconfirmedWrites ? 60 : 15);
 }
 
 /**

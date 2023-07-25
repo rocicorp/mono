@@ -44,12 +44,12 @@ type Route<Context> = {
  * such middleware.
  */
 export class Router<InitialContext extends BaseContext = BaseContext> {
-  private _routes: Route<InitialContext>[] = [];
+  #routes: Route<InitialContext>[] = [];
 
   register(path: string, handler: Handler<InitialContext, Response>) {
     // It is OK add another route with the same path. However, the first one
     // will always be used.
-    this._routes.push({
+    this.#routes.push({
       pattern: new URLPattern({pathname: path}),
       handler,
     });
@@ -59,7 +59,7 @@ export class Router<InitialContext extends BaseContext = BaseContext> {
     request: Request,
     context: Omit<InitialContext, 'parsedURL'>,
   ): MaybePromise<Response> {
-    for (const route of this._routes) {
+    for (const route of this.#routes) {
       const {pattern} = route;
       const result = pattern.exec(request.url);
       if (result) {
