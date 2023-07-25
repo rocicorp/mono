@@ -1,4 +1,3 @@
-import * as esbuild from 'esbuild';
 import {initializeApp} from 'firebase-admin/app';
 import type {Firestore} from 'firebase-admin/firestore';
 import {getFirestore} from 'firebase-admin/firestore';
@@ -7,12 +6,13 @@ import {getStorage} from 'firebase-admin/storage';
 import * as schema from 'mirror-schema/src/server.js';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
-import * as path from 'node:path';
 import {pkgUp} from 'pkg-up';
 import {SemVer} from 'semver';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
 import {storeModule} from 'shared/src/mirror/store-module.js';
+import {buildReflectServerContent} from '../compile.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
+import {getWorkerTemplate} from './get-worker-template.js';
 
 const require = createRequire(import.meta.url);
 
@@ -51,7 +51,7 @@ export async function uploadReflectServerHandler(
 
   const source = await buildReflectServerContent();
   const version = await findVersion();
-  const workerTemplate = await getWorkerTemplate();
+  const workerTemplate = getWorkerTemplate('<APP>', '<REFLECT_SERVER>');
   console.log('Version (from @rocicorp/reflect):', version.toString());
 
   // TODO(arv): Where should this come from? Config or CLI arg?
@@ -76,58 +76,11 @@ async function findVersion(): Promise<SemVer> {
   const serverPath = require.resolve('@rocicorp/reflect');
   const pkg = await pkgUp({cwd: serverPath});
   assert(pkg);
-  const s = await readFile(pkg, 'utf8');
+  const s = await readFile(pkg, 'utf-8');
   const v = JSON.parse(s);
   assertObject(v);
   assertString(v.version);
   return new SemVer(v.version);
-}
-
-async function buildReflectServerContent() {
-  const serverPath = require.resolve('reflect-server');
-
-  const result = await esbuild.build({
-    entryPoints: [serverPath],
-    bundle: true,
-    external: [],
-    // Remove process.env. It does not exist in CF workers and we have npm
-    // packages that use it.
-    define: {'process.env': '{}'},
-    platform: 'browser',
-    target: 'esnext',
-    format: 'esm',
-    sourcemap: false,
-    write: false,
-  });
-
-  const {errors, warnings, outputFiles} = result;
-  for (const error of errors) {
-    console.error(error);
-  }
-  for (const warning of warnings) {
-    console.warn(warning);
-  }
-  if (errors.length > 0) {
-    throw new Error(errors.join('\n'));
-  }
-
-  if (outputFiles.length !== 1) {
-    throw new Error(`Expected 1 output file, got ${outputFiles.length}`);
-  }
-
-  return outputFiles[0].text;
-}
-
-async function getWorkerTemplate() {
-  const serverPath = require.resolve('reflect-server');
-  const pkg = await pkgUp({cwd: serverPath});
-  assert(pkg);
-  const templatePath = path.join(
-    path.dirname(pkg),
-    'templates',
-    'worker.template.js',
-  );
-  return readFile(templatePath, 'utf-8');
 }
 
 async function upload(

@@ -7,6 +7,7 @@
     "@google-cloud/firestore": "^6.6.1",
     "firebase": "^9.22.2",
     "jwt-decode": "^3.1.2",
+    "miniflare": "^3.20230717.0",
     "nanoid": "^4.0.2",
     "open": "^9.1.0",
     "pkg-up": "^4.0.0",

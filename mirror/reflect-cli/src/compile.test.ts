@@ -13,7 +13,7 @@ async function writeTempFile(data: string, filename = 'test.js') {
 
 test('it should throw if the source has syntax errors', async () => {
   const testFilePath = await writeTempFile('const x =');
-  await expect(compile(testFilePath)).rejects.toEqual(
+  await expect(compile(testFilePath, true)).rejects.toEqual(
     expect.objectContaining({
       constructor: Error,
       message: expect.stringMatching(/Unexpected end of file/),
@@ -36,7 +36,7 @@ test('it should compile typescript', async () => {
     'test.ts',
   );
 
-  const result = await compile(testFilePath);
+  const result = await compile(testFilePath, true);
   expect(result.code.path).toBe(path.resolve('test.js'));
   expect(result.sourcemap.path).toBe(path.resolve('test.js.map'));
 
@@ -53,7 +53,7 @@ console.log(reflectServer);`,
     'test.ts',
   );
 
-  const result = await compile(testFilePath);
+  const result = await compile(testFilePath, true);
   expect(result.code.path).toBe(path.resolve('test.js'));
   expect(result.sourcemap.path).toBe(path.resolve('test.js.map'));
 
@@ -74,7 +74,7 @@ test('it should bundle into one file', async () => {
   const fileB = path.join(dir, 'b.js');
   await fs.writeFile(fileB, `export const b = 'BBB';`, 'utf-8');
 
-  const result = await compile(fileA);
+  const result = await compile(fileA, true);
   expect(result.code.path).toBe(path.resolve('a.js'));
   expect(result.sourcemap.path).toBe(path.resolve('a.js.map'));
 
