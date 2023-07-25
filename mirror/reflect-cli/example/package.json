@@ -1,7 +1,0 @@
-{
-  "name": "example",
-  "private": true,
-  "dependencies": {
-    "@rocicorp/reflect": "^0.28.1"
-  }
-}

@@ -25,23 +25,21 @@ export function initOptions(yargs: CommonYargsArgv) {
     .option('new', {
       describe: 'Create a new app',
       type: 'boolean',
-    })
-    .option('configDirPath', {
-      describe: 'Directory location of reflect config',
-      type: 'string',
-      requiresArg: false,
     });
 }
 
 type InitHandlerArgs = YargvToInterface<ReturnType<typeof initOptions>>;
 
-export async function initHandler(yargs: InitHandlerArgs) {
+export async function initHandler(
+  yargs: InitHandlerArgs,
+  configDirPath?: string | undefined,
+) {
   const user = await authenticate();
 
   const userID = user.uid;
 
   const {name, new: newApp} = yargs;
-  const {channel, configDirPath} = yargs;
+  const {channel} = yargs;
   v.assert(channel, releaseChannelSchema);
 
   if (newApp) {
@@ -84,7 +82,7 @@ export async function initHandler(yargs: InitHandlerArgs) {
     // New app.
     console.log('User is not member of any team(s) that has apps.');
     console.log('Creating new app.');
-    await createNewApp(userID, channel);
+    await createNewApp(userID, channel, configDirPath);
     return;
   }
 
@@ -125,7 +123,7 @@ async function createNewApp(
   console.log(`Created app ${appID} (${appName})`);
 }
 
-function getApp(firestore: Firestore, appID: string): Promise<App> {
+export function getApp(firestore: Firestore, appID: string): Promise<App> {
   const docRef = firestore.doc(appPath(appID)).withConverter(appDataConverter);
 
   return firestore.runTransaction(

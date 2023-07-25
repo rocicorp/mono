@@ -5,7 +5,7 @@ import {ClientRecordMap, putClientRecord} from '../types/client-record.js';
 import type {ClientID} from '../types/client-state.js';
 import {putUserValue, UserValue} from '../types/user-value.js';
 import {fastForwardRoom} from '../ff/fast-forward.js';
-import {mockMathRandom} from '../util/test-utils.js';
+import {createSilentLogContext, mockMathRandom} from '../util/test-utils.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -494,7 +494,12 @@ test('fastForward', async () => {
       await putUserValue(key, value, storage);
     }
 
-    const pokes = await fastForwardRoom(c.clients, 42, storage);
+    const pokes = await fastForwardRoom(
+      createSilentLogContext(),
+      c.clients,
+      42,
+      storage,
+    );
 
     expect(pokes).toEqual(c.expectedPokes);
   }

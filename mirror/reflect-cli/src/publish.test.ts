@@ -94,6 +94,7 @@ test('it should compile typescript', async () => {
   );
   await publishHandler(
     {script: testFilePath} as Args,
+    undefined,
     publishMock as unknown as PublishCaller,
   );
 
