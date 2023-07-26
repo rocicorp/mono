@@ -430,10 +430,9 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     const t0 = Date.now();
     this.#lockWaiters.push(name);
     this.#lc.debug?.(
-      `${name} waiting for lock (${
-        this.#lockWaiters.length - 1
-      } other waiters)`,
-      this.#lockWaiters,
+      `${name} waiting for lock (${this.#lockWaiters.length} total waiter(s): ${
+        this.#lockWaiters
+      })`,
     );
     if (this.#lockWaiters.length % 10 === 0) {
       // Flush the log if the number of waiters is a multiple of 10.
