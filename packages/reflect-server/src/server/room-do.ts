@@ -87,6 +87,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   #maxProcessedMutationTimestamp = 0;
   readonly #lock = new Lock();
   readonly #lockWaiters: string[] = [];
+  #lockHolder: string | undefined;
   readonly #mutators: MutatorMap;
   readonly #disconnectHandler: DisconnectHandler;
   #lcHasRoomIdContext = false;
@@ -429,19 +430,25 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   ): Promise<void> {
     const t0 = Date.now();
     this.#lockWaiters.push(name);
-    this.#lc.debug?.(
-      `${name} waiting for lock (${this.#lockWaiters.length} total waiter(s): ${
-        this.#lockWaiters
-      })`,
-    );
-    if (this.#lockWaiters.length % 10 === 0) {
-      // Flush the log if the number of waiters is a multiple of 10.
-      await this.#lc.flush();
+
+    if (this.#lockWaiters.length > 1) {
+      this.#lc.debug?.(
+        `${name} waiting for ${this.#lockHolder} (${
+          this.#lockWaiters.length - 1
+        } other waiter(s): ${this.#lockWaiters})`,
+      );
+      if (this.#lockWaiters.length % 10 === 0) {
+        // Flush the log if the number of waiters is a multiple of 10.
+        await this.#lc.flush();
+      }
     }
+
+    let flushLogs = false;
 
     await this.#lock.withLock(async () => {
       const t1 = Date.now();
       this.#lockWaiters.splice(this.#lockWaiters.indexOf(name), 1);
+      this.#lockHolder = name;
       const elapsed = t1 - t0;
       if (elapsed > 0) {
         this.#lc
@@ -454,6 +461,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         await fn();
       } finally {
         const t2 = Date.now();
+        this.#lockHolder = undefined;
         const elapsed = t2 - t1;
         if (elapsed > 0) {
           this.#lc
@@ -461,11 +469,14 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
             .withContext('function', name)
             .debug?.(`${name} held lock for ${elapsed} ms`);
           if (elapsed >= flushLogsIfLockHeldForMs) {
-            await this.#lc.flush();
+            flushLogs = true; // Flush after releasing the lock.
           }
         }
       }
     });
+    if (flushLogs) {
+      await this.#lc.flush();
+    }
   }
 
   async #processNext(lc: LogContext) {
