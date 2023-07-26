@@ -4,50 +4,45 @@ module.exports = {
   docs: [
     // TODO clean out the unused docs
     {
-      'Get Started': [
-        {
-          'Hello, Replicache': [
-            'tutorial/introduction',
-            'tutorial/constructing-replicache',
-            'tutorial/adding-mutators',
-            'tutorial/subscriptions',
-            'tutorial/sync',
-            'tutorial/next-steps',
-          ],
-        },
-        'quickstarts',
-        {
-          'Build Your Own Backend': [
-            'byob/intro',
-            'byob/install-replicache',
-            'byob/design-client-view',
-            'byob/render-ui',
-            'byob/local-mutations',
-            'byob/database-setup',
-            'byob/database-schema',
-            'byob/remote-mutations',
-            'byob/dynamic-pull',
-            'byob/poke',
-            'byob/conclusion',
-          ],
-        },
+      'Hello, Replicache': [
+        'tutorial/introduction',
+        'tutorial/constructing-replicache',
+        'tutorial/adding-mutators',
+        'tutorial/subscriptions',
+        'tutorial/sync',
+        'tutorial/next-steps',
       ],
     },
     {
       Examples: ['examples/todo', 'examples/repliear'],
     },
     {
+      'Build Your Own Backend': [
+        'byob/intro',
+        'byob/install-replicache',
+        'byob/design-client-view',
+        'byob/render-ui',
+        'byob/local-mutations',
+        'byob/database-setup',
+        'byob/database-schema',
+        'byob/remote-mutations',
+        'byob/dynamic-pull',
+        'byob/poke',
+        'byob/conclusion',
+      ],
+    },
+    {
+      'Backend Strategies': [
+        'strategies/overview',
+        'strategies/reset',
+        'strategies/global-version',
+        'strategies/per-space-version',
+        'strategies/row-version',
+      ],
+    },
+    {
       'Understand Replicache': [
         'concepts/how-it-works',
-        {
-          'Backend Strategies': [
-            'strategies/overview',
-            'strategies/reset',
-            'strategies/global-version',
-            'strategies/per-space-version',
-            'strategies/row-version',
-          ],
-        },
         'concepts/performance',
         'concepts/offline',
         'concepts/consistency',
