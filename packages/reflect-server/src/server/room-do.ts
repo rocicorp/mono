@@ -442,21 +442,27 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     await this.#lock.withLock(async () => {
       const t1 = Date.now();
       this.#lockWaiters.splice(this.#lockWaiters.indexOf(name), 1);
-      this.#lc
-        .withContext('timing', 'lock-acquired')
-        .withContext('function', name)
-        .debug?.(`${name} acquired lock in ${t1 - t0} ms`);
+      const elapsed = t1 - t0;
+      if (elapsed > 0) {
+        this.#lc
+          .withContext('timing', 'lock-acquired')
+          .withContext('function', name)
+          .debug?.(`${name} acquired lock in ${elapsed} ms`);
+      }
 
       try {
         await fn();
       } finally {
         const t2 = Date.now();
-        this.#lc
-          .withContext('timing', 'lock-held')
-          .withContext('function', name)
-          .debug?.(`${name} held lock for ${t2 - t1} ms`);
-        if (t2 - t1 >= flushLogsIfLockHeldForMs) {
-          await this.#lc.flush();
+        const elapsed = t2 - t1;
+        if (elapsed > 0) {
+          this.#lc
+            .withContext('timing', 'lock-held')
+            .withContext('function', name)
+            .debug?.(`${name} held lock for ${elapsed} ms`);
+          if (elapsed >= flushLogsIfLockHeldForMs) {
+            await this.#lc.flush();
+          }
         }
       }
     });
