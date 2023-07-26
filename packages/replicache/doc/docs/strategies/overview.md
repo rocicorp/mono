@@ -1,6 +1,6 @@
 ---
 title: Overview
-slug: /concepts/strategies/overview
+slug: /strategies/overview
 ---
 
 # Backend Strategies

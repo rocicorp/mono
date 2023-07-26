@@ -1,19 +1,13 @@
 import {afterEach, beforeEach} from '@jest/globals';
-import sign from 'jwt-encode';
-import {setAuthConfigForTesting} from './auth-config.js';
+import {setAppConfigForTesting, type AppConfig} from './app-config.js';
+import {UserAuthConfig, setAuthConfigForTesting} from './auth-config.js';
 
 export function useFakeAuthConfig() {
-  const secret = 'fake-secret';
-  const idToken = {
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    user_id: 'fake-uid',
-    // This is for testing... add more as needed
-  };
-  const expirationTime = 1234567890;
-  const newConfig = {
-    idToken: sign(idToken, secret),
-    expirationTime,
-    refreshToken: 'fake-refresh-token',
+  const newConfig: UserAuthConfig = {
+    authCredential: {
+      providerId: 'github.com',
+      signInMethod: 'github.com',
+    },
   };
 
   beforeEach(() => {
@@ -22,5 +16,19 @@ export function useFakeAuthConfig() {
 
   afterEach(() => {
     setAuthConfigForTesting(undefined);
+  });
+}
+
+export function useFakeAppConfig() {
+  const appConfig: AppConfig = {
+    appID: 'test-app-id',
+  };
+
+  beforeEach(() => {
+    setAppConfigForTesting(appConfig);
+  });
+
+  afterEach(() => {
+    setAppConfigForTesting(undefined);
   });
 }

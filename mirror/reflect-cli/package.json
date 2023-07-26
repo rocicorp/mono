@@ -4,11 +4,15 @@
   "version": "0.1.0",
   "type": "module",
   "dependencies": {
+    "@google-cloud/firestore": "^6.6.1",
+    "firebase": "^9.22.2",
     "jwt-decode": "^3.1.2",
+    "miniflare": "^3.20230717.0",
     "nanoid": "^4.0.2",
     "open": "^9.1.0",
     "pkg-up": "^4.0.0",
     "semver": "^7.5.3",
+    "validate-npm-package-name": "^5.0.0",
     "yargs": "^17.4.1"
   },
   "scripts": {
@@ -17,16 +21,18 @@
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "start": "AUTH_URL=http://localhost:3000 ts-node --esm ./src/index.ts",
+    "start": "AUTH_URL=http://localhost:3000/auth node --no-warnings --loader ts-node/esm ./src/index.ts --stack staging",
+    "start-local": "AUTH_URL=http://localhost:3000/auth node --no-warnings --loader ts-node/esm ./src/index.ts --stack local",
     "build": "node tool/build.js",
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
-    "@rocicorp/reflect": "0.28.1",
+    "@rocicorp/reflect": "0.29.2",
     "@types/jwt-encode": "^1.0.0",
     "@types/node": "^18.16.0",
+    "@types/validate-npm-package-name": "^4.0.0",
     "@types/yargs": "^17.0.10",
     "esbuild": "^0.18.3",
     "jwt-encode": "^1.0.1",

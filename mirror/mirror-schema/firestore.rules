@@ -13,10 +13,10 @@ service cloud.firestore {
 
     // userIs{Role}OfTeam() requires one get() on the user doc.
 		function userIsMemberOfTeam(teamID) {
-      return _userHasRoleIn(teamID, ['a', 'm']);
+      return _userHasRoleIn(teamID, ['admin', 'member']);
     }
   	function userIsAdminOfTeam(teamID) {
-      return _userHasRoleIn(teamID, ['a']);
+      return _userHasRoleIn(teamID, ['admin']);
     }
 
     function _userHasRoleIn(teamID, allowedRoles) {

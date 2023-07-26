@@ -86,8 +86,10 @@ export async function publish(
   appSourcemapModule: CfModule,
   appName: string,
   version: string,
-) {
-  console.log('publishing', appName);
+): Promise<string> {
+  console.log(
+    `publishing ${appName}.reflect-server.net (${config.scriptName})`,
+  );
 
   const [serverModule, ...otherServerModules] = await getServerModules(
     firestore,
@@ -119,7 +121,9 @@ export async function publish(
   // Make sure that all the names are unique.
   assertAllModulesHaveUniqueNames([workerModule, ...modules]);
 
-  console.log('publishing', appName);
+  console.log(
+    `publishing ${appName}.reflect-server.net (${config.scriptName})`,
+  );
   await createWorker(config, workerModule, modules);
 
   let reflectAuthApiKey = process.env.REFLECT_AUTH_API_KEY;
@@ -129,9 +133,12 @@ export async function publish(
     reflectAuthApiKey = nanoid();
   }
 
+  const hostname = `${appName}.reflect-server.net`;
   await Promise.all([
-    publishCustomDomains(config, `${appName}.reflect-server.net`),
+    publishCustomDomains(config, hostname),
     submitSecret(config, 'REFLECT_AUTH_API_KEY', reflectAuthApiKey),
     submitTriggers(config, '*/5 * * * *'),
   ]);
+
+  return hostname;
 }

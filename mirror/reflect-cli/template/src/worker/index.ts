@@ -1,5 +1,6 @@
 import type {AuthHandler, ReflectServerOptions} from '@rocicorp/reflect/server';
-import {mutators, type Mutators} from './mutators.js';
+import {clearCursor} from '../shared/client-state.js';
+import {Mutators, mutators} from '../shared/mutators.js';
 
 const authHandler: AuthHandler = (auth: string, _roomID: string) => {
   if (auth) {
@@ -17,15 +18,13 @@ const authHandler: AuthHandler = (auth: string, _roomID: string) => {
   return null;
 };
 
-// declare function createReflectServer<
-//   Env extends ReflectServerBaseEnv,
-//   MD extends MutatorDefs,
-// >(makeOptions: (env: Env) => ReflectServerOptions<MD>);
-
 function makeOptions(): ReflectServerOptions<Mutators> {
   return {
     mutators,
     authHandler,
+    disconnectHandler: async write => {
+      await clearCursor(write);
+    },
     logLevel: 'debug',
   };
 }

@@ -1,39 +1,23 @@
-import {initializeApp} from 'firebase/app';
 import {GithubAuthProvider, getAuth} from 'firebase/auth';
+import type {AuthCredential, User as FirebaseUser} from 'firebase/auth';
 import type {auth as firebaseUiAuth} from 'firebaseui';
-import {firebaseConfig} from './firebase.config';
+import {ensureUser} from 'mirror-protocol/src/user.js';
+import {initFirebaseApp} from './firebase.config';
 import * as v from 'shared/src/valita.js';
 /**
- * Authentication
+ * https://github.com/firebase/firebaseui-web/blob/de8a5b0f26cf87b1637c6a5f40c45278aba2945e/javascript/widgets/config.js#L922
  */
-export type FirebaseUser = {
-  getIdToken(): Promise<string>;
-  displayName: string;
-  email: string;
-  emailVerified: boolean;
-  isAnonymous: boolean;
-  photoURL: string;
-  refreshToken: string;
-  uid: string;
-  stsTokenManager: {
-    accessToken: string;
-    apiKey: string;
-    expirationTime: number;
-    refreshToken: string;
-  };
-};
 export type AuthResult = {
   user: FirebaseUser;
+  credential: AuthCredential;
 };
 
-export const firebase = initializeApp(firebaseConfig);
+initFirebaseApp();
 
 const githubAuthProvider = new GithubAuthProvider();
 
 export const callbackQueryParamsSchema = v.object({
-  idToken: v.string(),
-  refreshToken: v.string(),
-  expirationTime: v.string(),
+  authCredential: v.string(),
 });
 
 export type CallbackQueryParams = v.Infer<typeof callbackQueryParamsSchema>;
@@ -51,18 +35,21 @@ export const createCallbackUrl = (
 };
 
 const handleAuth = async (authResult: AuthResult) => {
-  const {refreshToken} = authResult.user;
-  const {expirationTime} = authResult.user.stsTokenManager;
-  const idToken = await authResult.user.getIdToken();
-
-  const callbackUrl = createCallbackUrl(
-    '/auth-callback',
-    {
-      refreshToken,
-      expirationTime: expirationTime.toString(),
-      idToken,
+  const userID = authResult.user.uid;
+  await ensureUser({
+    requester: {
+      userID,
+      userAgent: {
+        type: 'web',
+        version: '0.0.1',
+      },
     },
-    location.href,
+  });
+
+  const {credential} = authResult;
+  const callbackUrl = createCallbackUrl(
+    'http://localhost:8976/oauth/callback',
+    {authCredential: JSON.stringify(credential.toJSON())},
   );
 
   window.location.replace(callbackUrl);

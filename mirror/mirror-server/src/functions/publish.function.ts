@@ -1,6 +1,7 @@
 import {Timestamp, type Firestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
-import {defineSecret, defineString} from 'firebase-functions/params';
+import {logger} from 'firebase-functions';
+import {defineSecret} from 'firebase-functions/params';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {
   publishRequestSchema,
@@ -10,37 +11,29 @@ import * as schema from 'mirror-schema/src/deployment.js';
 import * as semver from 'semver';
 import {newDeploymentID} from 'shared/src/mirror/ids.js';
 import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
+import {storeModule} from 'shared/src/mirror/store-module.js';
 import type {CfModule} from '../cloudflare/create-worker-upload-form.js';
 import {getServerModuleMetadata} from '../cloudflare/get-server-modules.js';
 import {publish as publishToCloudflare} from '../cloudflare/publish.js';
 import {findNewestMatchingVersion} from '../find-newest-matching-version.js';
-import {storeModule} from '../store-module.js';
-import {withAuthorization} from './validators/auth.js';
-import {withSchema} from './validators/schema.js';
+import {appAuthorization, userAuthorization} from './validators/auth.js';
+import {validateSchema} from './validators/schema.js';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
 const cloudflareApiToken = defineSecret('CLOUDFLARE_API_TOKEN');
-const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
 export const publish = (
   firestore: Firestore,
   storage: Storage,
   bucketName: string,
 ) =>
-  withSchema(
-    publishRequestSchema,
-    publishResponseSchema,
-    withAuthorization(async (publishRequest, context) => {
-      const {serverVersionRange, name: appName, appID} = publishRequest;
-      const userID = context.auth.uid;
-
-      if (!userCanPublishApp(userID, appID)) {
-        throw new HttpsError(
-          'permission-denied',
-          'User does not have permission to publish this app',
-        );
-      }
+  validateSchema(publishRequestSchema, publishResponseSchema)
+    .validate(userAuthorization())
+    .validate(appAuthorization(firestore))
+    .handle(async (publishRequest, context) => {
+      const {serverVersionRange, appID} = publishRequest;
+      const {userID, app} = context;
 
       if (semver.validRange(serverVersionRange) === null) {
         throw new HttpsError('invalid-argument', 'Invalid desired version');
@@ -52,14 +45,13 @@ export const publish = (
       }
 
       const version = await findNewestMatchingVersion(firestore, range);
-      console.log(
+      logger.log(
         `Found matching version for ${serverVersionRange}: ${version}`,
       );
 
       const config = {
-        accountID: cloudflareAccountId.value(),
-        // TODO(arv): This is not the right name.
-        scriptName: appName,
+        accountID: app.cfID,
+        scriptName: app.cfScriptName,
         apiToken: cloudflareApiToken.value(),
       } as const;
       const appModule: CfModule = {
@@ -96,16 +88,17 @@ export const publish = (
         statusTime: Timestamp.now(),
       });
 
-      console.log(`Saved deployment ${deploymentID} to firestore`);
+      logger.log(`Saved deployment ${deploymentID} to firestore`);
 
+      let hostname: string;
       try {
-        await publishToCloudflare(
+        hostname = await publishToCloudflare(
           firestore,
           storage,
           config,
           appModule,
           appSourcemapModule,
-          appName,
+          app.name,
           version,
         );
       } catch (e) {
@@ -115,17 +108,9 @@ export const publish = (
 
       await setDeploymentStatusOfAll(firestore, appID, deploymentID);
 
-      return {success: true};
-    }),
-  );
+      return {success: true, hostname};
+    });
 
-function userCanPublishApp(userID: string, appID: string): boolean {
-  console.warn(
-    `userCanPublishApp(${userID}, ${appID}) not implemented. Allowing publish for now`,
-  );
-
-  return true;
-}
 /**
  * Returns the URL (gs://...) of the uploaded file.
  */

@@ -3,7 +3,7 @@ import {useRef, useState} from 'react';
 import styles from './BetaSignup.module.css';
 
 export function BetaSignup() {
-  const [name, setName] = useState('');
+  const [firstName, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [buttonText, setButtonText] = useState('Join Waitlist');
@@ -56,11 +56,11 @@ export function BetaSignup() {
           </label>
           <input
             className={styles.textField}
-            value={name}
+            value={firstName}
             onChange={e => setName(e.target.value)}
             type="text"
-            id="name"
-            name="name"
+            id="firstName"
+            name="firstName"
             placeholder=""
           />
         </div>
@@ -94,7 +94,7 @@ export function BetaSignup() {
         <div className={styles.ctaWrap}>
           <button
             className={styles.buttonPrimary}
-            disabled={!name || !email}
+            disabled={!firstName || !email}
             type="submit"
           >
             {buttonText}

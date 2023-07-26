@@ -16,6 +16,7 @@ import {
   userValueKey,
   userValuePrefix,
   userValueSchema,
+  userValueVersionEntry,
 } from '../types/user-value.js';
 import type {Storage} from './storage.js';
 
@@ -26,8 +27,8 @@ export class ReplicacheTransaction implements WriteTransaction {
   readonly clientID: ClientID;
   readonly mutationID: number;
   readonly auth?: AuthData | undefined;
-  private _storage: Storage;
-  private _version: Version;
+  #storage: Storage;
+  #version: Version;
 
   readonly reason: TransactionReason = 'authoritative';
   readonly environment: TransactionEnvironment = 'server';
@@ -39,40 +40,64 @@ export class ReplicacheTransaction implements WriteTransaction {
     version: Version,
     auth: AuthData | undefined,
   ) {
-    this._storage = storage;
+    this.#storage = storage;
     this.clientID = clientID;
-    this._version = version;
+    this.#version = version;
     this.mutationID = mutationID;
     this.auth = auth;
   }
 
   async put(key: string, value: ReadonlyJSONValue): Promise<void> {
+    const prev = await this.#getUserValueEntry(key);
     const userValue: UserValue = {
       deleted: false,
-      version: this._version,
+      version: this.#version,
       value: v.parse(value, jsonSchema),
     };
-    await this._storage.put(userValueKey(key), userValue);
+    await this.#replaceUserValueEntry(key, userValue, prev);
   }
 
   async del(key: string): Promise<boolean> {
-    const prev = await this.get(key);
-    if (prev === undefined) {
+    const prev = await this.#getUserValueEntry(key);
+    if (prev === undefined || prev.deleted) {
       return false;
     }
 
     // Implement del with soft delete so we can detect deletes for diff.
     const userValue: UserValue = {
       deleted: true,
-      version: this._version,
-      value: prev, // prev came from get which needs to be verified when it was written.
+      version: this.#version,
+      value: prev.value, // prev came from get which needs to be verified when it was written.
     };
-    await this._storage.put(userValueKey(key), userValue);
-    return prev !== undefined;
+    await this.#replaceUserValueEntry(key, userValue, prev);
+    return true;
+  }
+
+  async #replaceUserValueEntry(
+    userKey: string,
+    newValue: UserValue,
+    prevValue: UserValue | undefined,
+  ): Promise<void> {
+    if (prevValue) {
+      const oldIndexEntry = userValueVersionEntry(userKey, prevValue);
+      // Note: Purposely do not `await` this del(), in order to ensure that it is
+      // batched with the following putEntries().
+      void this.#storage.del(oldIndexEntry.key);
+    }
+
+    const newIndexEntry = userValueVersionEntry(userKey, newValue);
+    await this.#storage.putEntries({
+      [userValueKey(userKey)]: newValue,
+      [newIndexEntry.key]: newIndexEntry.value,
+    });
+  }
+
+  #getUserValueEntry(key: string): Promise<UserValue | undefined> {
+    return this.#storage.get(userValueKey(key), userValueSchema);
   }
 
   async get(key: string): Promise<ReadonlyJSONValue | undefined> {
-    const entry = await this._storage.get(userValueKey(key), userValueSchema);
+    const entry = await this.#getUserValueEntry(key);
     if (entry === undefined) {
       return undefined;
     }
@@ -96,11 +121,11 @@ export class ReplicacheTransaction implements WriteTransaction {
     }
 
     return makeScanResult<ScanNoIndexOptions>(options, () =>
-      this._scan(options),
+      this.#scan(options),
     );
   }
 
-  private async *_scan(options: ScanNoIndexOptions) {
+  async *#scan(options: ScanNoIndexOptions) {
     const {prefix, start} = options;
 
     const optsInternal = {
@@ -112,7 +137,7 @@ export class ReplicacheTransaction implements WriteTransaction {
       start: start && {key: userValueKey(start.key)}, // remove exclusive option, as makeScanResult will take care of it
     };
 
-    for await (const [k, v] of this._storage.scan(
+    for await (const [k, v] of this.#storage.scan(
       optsInternal,
       userValueSchema,
     )) {

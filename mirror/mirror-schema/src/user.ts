@@ -1,14 +1,14 @@
 import * as v from 'shared/src/valita.js';
 import {firestoreDataConverter} from './converter.js';
-import {shortRoleSchema} from './membership.js';
+import {roleSchema} from './membership.js';
 import * as path from './path.js';
 
 export const userSchema = v.object({
   email: v.string(),
   name: v.string().optional(),
 
-  roles: v.record(shortRoleSchema),
-  invites: v.record(shortRoleSchema).optional(),
+  roles: v.record(roleSchema),
+  invites: v.record(roleSchema).optional(),
 });
 
 export type User = v.Infer<typeof userSchema>;

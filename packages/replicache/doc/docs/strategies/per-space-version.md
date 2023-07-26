@@ -1,6 +1,6 @@
 ---
 title: Per-Space Version Strategy
-slug: /concepts/strategies/per-space-version
+slug: /strategies/per-space-version
 ---
 
 # 🛸 Per-Space Version Strategy

@@ -60,25 +60,10 @@ export class BTreeWrite extends BTreeRead {
     this.maxSize = maxSize;
   }
 
-  getNode(hash: Hash): Promise<DataNodeImpl | InternalNodeImpl> {
-    const node = this._modified.get(hash);
-    if (node) {
-      return Promise.resolve(node);
-    }
-    return super.getNode(hash);
-  }
-
-  protected override _chunkEntriesToTreeEntries<V>(
-    entries: readonly Entry<V>[],
-  ): Entry<V>[] {
-    // Remove readonly modifier.
-    // TODO(arv): Is this safe?
-    return entries as Entry<V>[];
-  }
-
   private _addToModified(node: DataNodeImpl | InternalNodeImpl): void {
     assert(node.isMutable);
     this._modified.set(node.hash, node);
+    this._cache.set(node.hash, node);
   }
 
   updateNode(node: DataNodeImpl | InternalNodeImpl): void {

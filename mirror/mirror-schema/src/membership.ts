@@ -6,9 +6,6 @@ import {teamPath} from './team.js';
 export const roleSchema = v.union(v.literal('member'), v.literal('admin'));
 export type Role = v.Infer<typeof roleSchema>;
 
-export const shortRoleSchema = v.union(v.literal('m'), v.literal('a'));
-export type ShortRole = v.Infer<typeof shortRoleSchema>;
-
 export const membershipSchema = v.object({
   role: roleSchema,
   email: v.string(),

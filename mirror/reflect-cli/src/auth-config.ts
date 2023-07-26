@@ -1,24 +1,40 @@
-import jwtDecode from 'jwt-decode';
 import fs, {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as v from 'shared/src/valita.js';
 import {parse} from 'shared/src/valita.js';
 import {scriptName} from './create-cli-parser.js';
+import {
+  AuthCredential,
+  EmailAuthCredential,
+  getAuth,
+  OAuthCredential,
+  PhoneAuthCredential,
+  SignInMethod,
+  signInWithCredential,
+  type User,
+} from 'firebase/auth';
+import {loginHandler} from './login.js';
+
 /**
  * The path to the config file that holds user authentication data,
  * relative to the user's home directory.
  */
 export const USER_AUTH_CONFIG_FILE = 'config/default.json';
 
+// https://firebase.google.com/docs/reference/js/auth.authcredential
+export const authCredentialSchema = v.object({
+  providerId: v.string(),
+  signInMethod: v.string(),
+});
+export type JSONAuthCredential = v.Infer<typeof authCredentialSchema>;
+
 /**
  * The data that may be read from the `USER_CONFIG_FILE`.
  */
 
 export const userAuthConfigSchema = v.object({
-  idToken: v.string(),
-  refreshToken: v.string(),
-  expirationTime: v.number(),
+  authCredential: authCredentialSchema,
 });
 export type UserAuthConfig = v.Infer<typeof userAuthConfigSchema>;
 
@@ -62,18 +78,11 @@ export function setAuthConfigForTesting(config: UserAuthConfig | undefined) {
 }
 
 //todo: make test
-export function mustReadAuthConfigFile(): UserAuthConfig {
-  if (authConfigForTesting) {
-    return authConfigForTesting;
-  }
-  const authConfigFilePath = path.join(
-    getGlobalReflectConfigPath(),
-    USER_AUTH_CONFIG_FILE,
-  );
+function mustReadAuthConfigFile(authConfigFilePath: string): UserAuthConfig {
   try {
     const rawData = readFileSync(authConfigFilePath, 'utf-8');
     const config: UserAuthConfig = JSON.parse(rawData);
-    return parse(config, userAuthConfigSchema);
+    return parse(config, userAuthConfigSchema, 'passthrough');
   } catch (err) {
     if (isFileNotFoundError(err)) {
       throw new Error(
@@ -92,16 +101,42 @@ function isFileNotFoundError(err: unknown): boolean {
   );
 }
 
-const tokenSchema = v.object({
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  user_id: v.string(),
-});
+export async function authenticate(): Promise<User> {
+  if (authConfigForTesting) {
+    return {uid: 'fake-uid'} as unknown as User;
+  }
+  const authConfigFilePath = path.join(
+    getGlobalReflectConfigPath(),
+    USER_AUTH_CONFIG_FILE,
+  );
+  if (fs.statSync(authConfigFilePath, {throwIfNoEntry: false}) === undefined) {
+    console.info('Login required');
+    await loginHandler();
+  }
+  const config = mustReadAuthConfigFile(authConfigFilePath);
+  const authCredential = parseAuthCredential(config.authCredential);
+  if (!authCredential) {
+    throw new Error(
+      `Invalid credentials. Please run \`${scriptName} login\` again.`,
+    );
+  }
+  const userCredentials = await signInWithCredential(getAuth(), authCredential);
+  console.info(`Logged in as ${userCredentials.user.email}`);
+  return userCredentials.user;
+}
 
-export function getUserIDFromConfig(config: UserAuthConfig) {
-  // @ts-expect-error TS reports an error about the default export not being a
-  // function but it clearly is.
-  const token = jwtDecode(config.idToken);
-  // Use passthrough to allow extra properties
-  v.assert(token, tokenSchema, 'passthrough');
-  return token.user_id;
+function parseAuthCredential(json: JSONAuthCredential): AuthCredential | null {
+  switch (json.signInMethod) {
+    case SignInMethod.GITHUB:
+    case SignInMethod.GOOGLE:
+    case SignInMethod.TWITTER:
+    case SignInMethod.FACEBOOK:
+      return OAuthCredential.fromJSON(json);
+    case SignInMethod.EMAIL_PASSWORD:
+    case SignInMethod.EMAIL_LINK:
+      return EmailAuthCredential.fromJSON(json);
+    case SignInMethod.PHONE:
+      return PhoneAuthCredential.fromJSON(json);
+  }
+  throw new Error('Invalid auth credentials. Please login again.');
 }

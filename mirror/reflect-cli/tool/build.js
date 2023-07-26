@@ -19,8 +19,8 @@ var require = ${createRequireAlias}(import.meta.url);
 const external = [
   '@badrap/valita',
   'esbuild',
-  'firebase-admin',
-  'firebase-functions',
+  'firebase',
+  '@google-cloud/firestore',
 ];
 
 async function main() {
