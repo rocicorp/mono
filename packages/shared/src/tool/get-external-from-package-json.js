@@ -1,3 +1,7 @@
+// @ts-check
+
+/* eslint-env es2022 */
+
 import {readFile} from 'fs/promises';
 import {pkgUp} from 'pkg-up';
 
