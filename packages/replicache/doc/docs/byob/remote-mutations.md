@@ -19,17 +19,19 @@ At minimum, all of these changes **must** happen atomically in a serialized tran
 
 ## Implement Push
 
-Create a new file `pages/api/replicache-push.js` and copy the below code into it.
+Create a new file `pages/api/replicache-push.ts` and copy the below code into it.
 
 This looks like a lot of code, but it's just implementing the description above. See the inline comments for additional details.
 
-```js
-import {tx} from '../../db.js';
+```ts
+import {NextApiRequest, NextApiResponse} from 'next';
+import {serverID, tx} from '../../db';
 import Pusher from 'pusher';
+import {ITask} from 'pg-promise';
+import {MessageWithID} from '../../types';
+import {MutationV1} from 'replicache';
 
-export {handlePush as default};
-
-async function handlePush(req, res) {
+export default async function (req: NextApiRequest, res: NextApiResponse) {
   const push = req.body;
   console.log('Processing push', JSON.stringify(push));
 
@@ -40,7 +42,7 @@ async function handlePush(req, res) {
       const t1 = Date.now();
 
       try {
-        await tx(t => processMutation(t, clientGroupID, mutation));
+        await tx(t => processMutation(t, push.clientGroupID, mutation));
       } catch (e) {
         console.error('Caught error from mutation', mutation, e);
 
@@ -88,12 +90,18 @@ async function handlePush(req, res) {
   }
 }
 
-async function processMutation(t, clientGroupID, mutation, error) {
+async function processMutation(
+  t: ITask<{}>,
+  clientGroupID: string,
+  mutation: MutationV1,
+  error?: string | undefined,
+) {
   const {clientID} = mutation;
 
   // Get the previous version and calculate the next one.
   const {version: prevVersion} = await t.one(
-    'select version from replicache_version for update',
+    'select version from replicache_server where id = $1 for update',
+    serverID,
   );
   const nextVersion = prevVersion + 1;
 
@@ -115,7 +123,9 @@ async function processMutation(t, clientGroupID, mutation, error) {
   // happen. If it does there is nothing to do but return an error to
   // client and report a bug to Replicache.
   if (mutation.id > nextMutationID) {
-    throw new Error(`Mutation ${mutation.id} is from the future - aborting`);
+    throw new Error(
+      `Mutation ${mutation.id} is from the future - aborting. This can happen in development if the server restarts. In that case, clear appliation data in browser and refresh.`,
+    );
   }
 
   if (error === undefined) {
@@ -125,7 +135,7 @@ async function processMutation(t, clientGroupID, mutation, error) {
     // mutation.
     switch (mutation.name) {
       case 'createMessage':
-        await createMessage(t, mutation.args, nextVersion);
+        await createMessage(t, mutation.args as MessageWithID, nextVersion);
         break;
       default:
         throw new Error(`Unknown mutation: ${mutation.name}`);
@@ -142,13 +152,22 @@ async function processMutation(t, clientGroupID, mutation, error) {
 
   console.log('setting', clientID, 'last_mutation_id to', nextMutationID);
   // Update lastMutationID for requesting client.
-  await setLastMutationID(t, clientID, clientGroupID, nextMutationID, version);
+  await setLastMutationID(
+    t,
+    clientID,
+    clientGroupID,
+    nextMutationID,
+    nextVersion,
+  );
 
   // Update global version.
-  await t.none('update replicache_version set version = $1', [nextVersion]);
+  await t.none('update replicache_server set version = $1 where id = $2', [
+    nextVersion,
+    serverID,
+  ]);
 }
 
-export async function getLastMutationID(t, clientID) {
+export async function getLastMutationID(t: ITask<{}>, clientID: string) {
   const clientRow = await t.oneOrNone(
     'select last_mutation_id from replicache_client where id = $1',
     clientID,
@@ -160,11 +179,11 @@ export async function getLastMutationID(t, clientID) {
 }
 
 async function setLastMutationID(
-  t,
-  clientID,
-  clientGroupID,
-  mutationID,
-  version,
+  t: ITask<{}>,
+  clientID: string,
+  clientGroupID: string,
+  mutationID: number,
+  version: number,
 ) {
   const result = await t.result(
     `update replicache_client set
@@ -187,7 +206,11 @@ async function setLastMutationID(
   }
 }
 
-async function createMessage(t, {id, from, content, order}, version) {
+async function createMessage(
+  t: ITask<{}>,
+  {id, from, content, order}: MessageWithID,
+  version: number,
+) {
   await t.none(
     `insert into message (
     id, sender, content, ord, deleted, version) values

@@ -22,9 +22,9 @@ export NEXT_PUBLIC_REPLICHAT_PUSHER_CLUSTER=<cluster>
 
 Typically you'll establish one WebSocket _channel_ per-document or whatever the unit of collaboration is in your application. For this simple demo, we just create one channel, `"default"`.
 
-Replace the implementation of `sendPoke()` in `replicache-push.js`:
+Replace the implementation of `sendPoke()` in `replicache-push.ts`:
 
-```js
+```ts
 async function sendPoke() {
   const pusher = new Pusher({
     appId: process.env.NEXT_PUBLIC_REPLICHAT_PUSHER_APP_ID,
@@ -39,10 +39,14 @@ async function sendPoke() {
 }
 ```
 
-Then on the client, in `index.js`, replace the implementation of `listen()` to tell Replicache to `pull()` whenever a poke is received:
+Then on the client, in `index.tsx`, replace the implementation of `listen()` to tell Replicache to `pull()` whenever a poke is received:
 
-```js
-function listen(rep) {
+```ts
+function listen() {
+  if (!rep) {
+    return;
+  }
+
   console.log('listening');
   // Listen for pokes, and pull whenever we get one.
   Pusher.logToConsole = true;

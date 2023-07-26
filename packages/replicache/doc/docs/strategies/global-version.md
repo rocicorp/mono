@@ -1,6 +1,6 @@
 ---
 title: Global Version Strategy
-slug: /concepts/strategies/global-version
+slug: /strategies/global-version
 ---
 
 # 🌏 The Global Version Strategy

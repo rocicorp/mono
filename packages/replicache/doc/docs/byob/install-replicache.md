@@ -10,14 +10,14 @@ We're going to use [Next.js](https://nextjs.org/) for this sample app, just beca
 Create an empty Next.js project:
 
 ```bash
-npx create-next-app chat --js --eslint --no-tailwind --import-alias="@/*" --no-app --no-src-dir
+npx create-next-app --example=basic-css chat
 cd chat
 ```
 
 Install Replicache and a few other utilities we'll use for this sample:
 
 ```bash
-npm install replicache replicache-react nanoid pg pg-mem pg-promise pusher pusher-js
+npm install replicache@13.0.0-beta.1 replicache-react nanoid pg pg-mem pg-promise pusher pusher-js
 ```
 
 ## Next

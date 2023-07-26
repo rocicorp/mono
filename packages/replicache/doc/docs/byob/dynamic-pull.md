@@ -40,69 +40,86 @@ The implementation of pull will depend on the backend strategy you are using. Fo
 
 ## Implement Pull
 
-Replace the contents of `pages/api/replicache-pull.js` with this code:
+Replace the contents of `pages/api/replicache-pull.ts` with this code:
 
-```js
-import {tx} from '../../db.js';
+```ts
+import {NextApiRequest, NextApiResponse} from 'next';
+import {serverID, tx} from '../../db';
+import {ITask} from 'pg-promise';
+import {PullResponse} from 'replicache';
 
-export {handlePull as default};
-
-async function handlePull(req, res) {
+export default async function (req: NextApiRequest, res: NextApiResponse) {
   const pull = req.body;
   console.log(`Processing pull`, JSON.stringify(pull));
+  const {clientGroupID} = pull;
+  const fromVersion = pull.cookie ?? 0;
   const t0 = Date.now();
 
   try {
     // Read all data in a single transaction so it's consistent.
     await tx(async t => {
       // Get current version.
-      const version =
-        (await t.one('select version from replicache_version')).version ?? 0;
+      const {version: currentVersion} = await t.one<{version: number}>(
+        'select version from replicache_server where id = $1',
+        serverID,
+      );
 
-      // Get lmid for requesting client.
-      const isExistingClient = pull.lastMutationID > 0;
+      if (fromVersion > currentVersion) {
+        throw new Error(
+          `fromVersion ${fromVersion} is from the future - aborting. This can happen in development if the server restarts. In that case, clear appliation data in browser and refresh.`,
+        );
+      }
+
+      // Get lmids for requesting client groups.
       const lastMutationIDChanges = await getLastMutationIDChanges(
         t,
-        pull.clientGroupID,
-        version,
+        clientGroupID,
+        fromVersion,
       );
-      // TODO: Deleted client check
-      // Requires clientID in PullRequest
 
       // Get changed domain objects since requested version.
-      const changed = await t.manyOrNone(
-        'select id, sender, content, ord, deleted from message where version > $1',
+      const changed = await t.manyOrNone<{
+        id: string;
+        sender: string;
+        content: string;
+        ord: number;
+        version: number;
+        deleted: boolean;
+      }>(
+        'select id, sender, content, ord, version, deleted from message where version > $1',
         fromVersion,
       );
 
       // Build and return response.
       const patch = [];
       for (const row of changed) {
-        if (row.deleted) {
-          if (fromVersion > 0) {
+        const {id, sender, content, ord, version: rowVersion, deleted} = row;
+        if (deleted) {
+          if (rowVersion > fromVersion) {
             patch.push({
               op: 'del',
-              key: `message/${row.id}`,
+              key: `message/${id}`,
             });
           }
         } else {
           patch.push({
             op: 'put',
-            key: `message/${row.id}`,
+            key: `message/${id}`,
             value: {
-              from: row.sender,
-              content: row.content,
-              order: parseInt(row.ord),
+              from: sender,
+              content: content,
+              order: ord,
             },
           });
         }
       }
 
-      res.json({
-        lastMutationIDChanges,
-        cookie: version,
+      const body: PullResponse = {
+        lastMutationIDChanges: lastMutationIDChanges ?? {},
+        cookie: currentVersion,
         patch,
-      });
+      };
+      res.json(body);
       res.end();
     });
   } catch (e) {
@@ -113,19 +130,24 @@ async function handlePull(req, res) {
   }
 }
 
-async function getLastMutationIDChanges(t, clientGroupID, fromVersion) {
-  const rows = await t.many(
+async function getLastMutationIDChanges(
+  t: ITask<{}>,
+  clientGroupID: string,
+  fromVersion: number,
+) {
+  const rows = await t.manyOrNone<{id: string; last_mutation_id: number}>(
     `select id, last_mutation_id
     from replicache_client
-    where clientGroupID = $1 and version > $2`,
-    clientGroupID,
-    fromVersion,
+    where client_group_id = $1 and version > $2`,
+    [clientGroupID, fromVersion],
   );
   return Object.fromEntries(rows.map(r => [r.id, r.last_mutation_id]));
 }
 ```
 
-Voila. We're now round-tripping browsers and devices!
+Because the previous pull response was hard-coded and not really reading from the database, you'll now have to clear your browser's application data to see consistent results. On Chrome/OSX for example: **cmd+opt+j → Application tab -> Storage -> Clear site data**.
+
+Once you do that, you can make a change in one browser and then refresh a different browser and see them round-trip:
 
 <p class="text--center">
   <img src="/img/setup/manual-sync.webp" width="650"/>

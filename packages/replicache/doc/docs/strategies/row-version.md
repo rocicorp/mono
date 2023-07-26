@@ -1,6 +1,6 @@
 ---
 title: Row Version Diff Strategy
-slug: /concepts/strategies/row-version
+slug: /strategies/row-version
 ---
 
 # 🚣 The Row Version Strategy
