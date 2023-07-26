@@ -1,4 +1,3 @@
-import {Lock} from '@rocicorp/lock';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {
   createRoomRequestSchema,
@@ -46,7 +45,7 @@ import {
   withBody,
 } from './router.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
-import type {MaybePromise} from 'replicache';
+import {LoggingLock} from '../util/lock.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -85,9 +84,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     adjustBufferSizeIntervalMs: 10_000,
   });
   #maxProcessedMutationTimestamp = 0;
-  readonly #lock = new Lock();
-  readonly #lockWaiters: string[] = [];
-  #lockHolder: string | undefined;
+  readonly #lock = new LoggingLock();
   readonly #mutators: MutatorMap;
   readonly #disconnectHandler: DisconnectHandler;
   #lcHasRoomIdContext = false;
@@ -197,7 +194,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       }
 
       if (!this.#lcHasRoomIdContext) {
-        await this.#withLock('initRoomIDContext', () => {
+        await this.#lock.withLock(this.#lc, 'initRoomIDContext', () => {
           if (this.#lcHasRoomIdContext) {
             lc.debug?.('roomID context already initialized, returning');
             return;
@@ -306,21 +303,23 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     lc.debug?.('connection request', url.toString(), 'waiting for lock');
     serverWS.accept();
 
-    void this.#withLock('handleConnection', async () => {
-      await handleConnection(
-        lc,
-        serverWS,
-        this.#storage,
-        url,
-        request.headers,
-        this.#clients,
-        this.#handleMessage,
-        this.#handleClose,
-      );
-      this.#processUntilDone(lc);
-    }).catch(e => {
-      lc.error?.('unhandled exception in handleConnection', e);
-    });
+    void this.#lock
+      .withLock(this.#lc, 'handleConnection', async () => {
+        await handleConnection(
+          lc,
+          serverWS,
+          this.#storage,
+          url,
+          request.headers,
+          this.#clients,
+          this.#handleMessage,
+          this.#handleClose,
+        );
+        this.#processUntilDone(lc);
+      })
+      .catch(e => {
+        lc.error?.('unhandled exception in handleConnection', e);
+      });
 
     return new Response(null, {status: 101, webSocket: clientWS});
   });
@@ -377,7 +376,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   #closeConnections(
     predicate: (clientState: ClientState) => boolean,
   ): Promise<void> {
-    return this.#withLock('closeConnections', () =>
+    return this.#lock.withLock(this.#lc, 'closeConnections', () =>
       closeConnections(this.#clients, predicate),
     );
   }
@@ -392,7 +391,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     lc.debug?.('handling message', data, 'waiting for lock');
 
     try {
-      await this.#withLock('handleMessage', async () => {
+      await this.#lock.withLock(this.#lc, 'handleMessage', async () => {
         await handleMessage(
           lc,
           this.#storage,
@@ -423,64 +422,9 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     }, this.#turnDuration);
   }
 
-  async #withLock(
-    name: string,
-    fn: () => MaybePromise<void>,
-    flushLogsIfLockHeldForMs = 5000,
-  ): Promise<void> {
-    const t0 = Date.now();
-    this.#lockWaiters.push(name);
-
-    if (this.#lockWaiters.length > 1) {
-      this.#lc.debug?.(
-        `${name} waiting for ${this.#lockHolder} (${
-          this.#lockWaiters.length - 1
-        } other waiter(s): ${this.#lockWaiters})`,
-      );
-      if (this.#lockWaiters.length % 10 === 0) {
-        // Flush the log if the number of waiters is a multiple of 10.
-        await this.#lc.flush();
-      }
-    }
-
-    let flushLogs = false;
-
-    await this.#lock.withLock(async () => {
-      const t1 = Date.now();
-      this.#lockWaiters.splice(this.#lockWaiters.indexOf(name), 1);
-      this.#lockHolder = name;
-      const elapsed = t1 - t0;
-      if (elapsed > 0) {
-        this.#lc
-          .withContext('timing', 'lock-acquired')
-          .withContext('function', name)
-          .debug?.(`${name} acquired lock in ${elapsed} ms`);
-      }
-
-      try {
-        await fn();
-      } finally {
-        const t2 = Date.now();
-        this.#lockHolder = undefined;
-        const elapsed = t2 - t1;
-        if (elapsed > 0) {
-          this.#lc
-            .withContext('timing', 'lock-held')
-            .withContext('function', name)
-            .debug?.(`${name} held lock for ${elapsed} ms`);
-          if (elapsed >= flushLogsIfLockHeldForMs) {
-            flushLogs = true; // Flush after releasing the lock.
-          }
-        }
-      }
-    });
-    if (flushLogs) {
-      await this.#lc.flush();
-    }
-  }
-
   async #processNext(lc: LogContext) {
-    await this.#withLock(
+    await this.#lock.withLock(
+      this.#lc,
       '#processNext',
       async () => {
         const {maxProcessedMutationTimestamp, nothingToProcess} =
@@ -509,8 +453,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     clientID: ClientID,
     ws: Socket,
   ): Promise<void> => {
-    lc.debug?.('handling close - waiting for lock');
-    await this.#withLock('#handleClose', () => {
+    await this.#lock.withLock(this.#lc, '#handleClose', () => {
       handleClose(lc, this.#clients, clientID, ws);
       this.#processUntilDone(lc);
     });
