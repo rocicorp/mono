@@ -430,7 +430,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       this.#lc
         .withContext('timing', 'lock-acquired')
         .withContext('function', name)
-        .debug?.(`${name} acquired lock in ${t1 - t0} ms`);
+        .info?.(`${name} acquired lock in ${t1 - t0} ms`);
 
       try {
         await fn();
@@ -439,7 +439,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         this.#lc
           .withContext('timing', 'lock-held')
           .withContext('function', name)
-          .debug?.(`${name} held lock for ${t2 - t1} ms`);
+          .info?.(`${name} held lock for ${t2 - t1} ms`);
       }
     });
   }
