@@ -11,18 +11,18 @@ export class LoggingLock {
     lc: LogContext,
     name: string,
     fn: () => MaybePromise<void>,
-    flushLogsIfLockHeldForMs = 5000,
+    flushLogsIfLockHeldForMs = 1000,
   ): Promise<void> {
     const t0 = Date.now();
     this.#waiters.push(name);
 
     if (this.#waiters.length > 1) {
       lc.debug?.(
-        `${name} waiting for ${this.#holder} (${
+        `${name} waiting for ${this.#holder} with ${
           this.#waiters.length - 1
-        } other waiter(s): ${this.#waiters})`,
+        } other waiter(s): ${this.#waiters}`,
       );
-      if (this.#waiters.length % 10 === 0) {
+      if (this.#waiters.length % 5 === 0) {
         // Flush the log if the number of waiters is a multiple of 10.
         await lc.flush();
       }
