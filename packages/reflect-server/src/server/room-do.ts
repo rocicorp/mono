@@ -86,6 +86,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   });
   #maxProcessedMutationTimestamp = 0;
   readonly #lock = new Lock();
+  readonly #lockWaiters: string[] = [];
   readonly #mutators: MutatorMap;
   readonly #disconnectHandler: DisconnectHandler;
   #lcHasRoomIdContext = false;
@@ -421,16 +422,31 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     }, this.#turnDuration);
   }
 
-  async #withLock(name: string, fn: () => MaybePromise<void>): Promise<void> {
+  async #withLock(
+    name: string,
+    fn: () => MaybePromise<void>,
+    flushLogsIfLockHeldForMs = 5000,
+  ): Promise<void> {
     const t0 = Date.now();
-    this.#lc.debug?.(`${name} waiting for lock`);
+    this.#lockWaiters.push(name);
+    this.#lc.debug?.(
+      `${name} waiting for lock (${
+        this.#lockWaiters.length - 1
+      } other waiters)`,
+      this.#lockWaiters,
+    );
+    if (this.#lockWaiters.length % 10 === 0) {
+      // Flush the log if the number of waiters is a multiple of 10.
+      await this.#lc.flush();
+    }
 
     await this.#lock.withLock(async () => {
       const t1 = Date.now();
+      this.#lockWaiters.splice(this.#lockWaiters.indexOf(name), 1);
       this.#lc
         .withContext('timing', 'lock-acquired')
         .withContext('function', name)
-        .info?.(`${name} acquired lock in ${t1 - t0} ms`);
+        .debug?.(`${name} acquired lock in ${t1 - t0} ms`);
 
       try {
         await fn();
@@ -439,30 +455,37 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         this.#lc
           .withContext('timing', 'lock-held')
           .withContext('function', name)
-          .info?.(`${name} held lock for ${t2 - t1} ms`);
+          .debug?.(`${name} held lock for ${t2 - t1} ms`);
+        if (t2 - t1 >= flushLogsIfLockHeldForMs) {
+          await this.#lc.flush();
+        }
       }
     });
   }
 
   async #processNext(lc: LogContext) {
-    await this.#withLock('#processNext', async () => {
-      const {maxProcessedMutationTimestamp, nothingToProcess} =
-        await processPending(
-          lc,
-          this.#storage,
-          this.#clients,
-          this.#pendingMutations,
-          this.#mutators,
-          this.#disconnectHandler,
-          this.#maxProcessedMutationTimestamp,
-          this.#bufferSizer,
-        );
-      this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
-      if (nothingToProcess && this.#turnTimerID) {
-        clearInterval(this.#turnTimerID);
-        this.#turnTimerID = 0;
-      }
-    });
+    await this.#withLock(
+      '#processNext',
+      async () => {
+        const {maxProcessedMutationTimestamp, nothingToProcess} =
+          await processPending(
+            lc,
+            this.#storage,
+            this.#clients,
+            this.#pendingMutations,
+            this.#mutators,
+            this.#disconnectHandler,
+            this.#maxProcessedMutationTimestamp,
+            this.#bufferSizer,
+          );
+        this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
+        if (nothingToProcess && this.#turnTimerID) {
+          clearInterval(this.#turnTimerID);
+          this.#turnTimerID = 0;
+        }
+      },
+      this.#turnDuration, // TODO(darick): Move this up to the level of the setInterval() call.
+    );
   }
 
   #handleClose = async (
