@@ -46,6 +46,7 @@ import {
   withBody,
 } from './router.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import type {MaybePromise} from 'replicache';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -193,9 +194,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       }
 
       if (!this._lcHasRoomIdContext) {
-        lc.debug?.('awaiting lock to initialize roomID context');
-        await this._lock.withLock(() => {
-          lc.debug?.('got lock to initialize roomID context');
+        await this._withLock('initRoomIDContext', () => {
           if (this._lcHasRoomIdContext) {
             lc.debug?.('roomID context already initialized, returning');
             return;
@@ -304,24 +303,21 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     lc.debug?.('connection request', url.toString(), 'waiting for lock');
     serverWS.accept();
 
-    void this._lock
-      .withLock(async () => {
-        lc.debug?.('received lock');
-        await handleConnection(
-          lc,
-          serverWS,
-          this._storage,
-          url,
-          request.headers,
-          this._clients,
-          this._handleMessage,
-          this._handleClose,
-        );
-        this._processUntilDone(lc);
-      })
-      .catch(e => {
-        lc.error?.('unhandled exception in handleConnection', e);
-      });
+    void this._withLock('handleConnection', async () => {
+      await handleConnection(
+        lc,
+        serverWS,
+        this._storage,
+        url,
+        request.headers,
+        this._clients,
+        this._handleMessage,
+        this._handleClose,
+      );
+      this._processUntilDone(lc);
+    }).catch(e => {
+      lc.error?.('unhandled exception in handleConnection', e);
+    });
 
     return new Response(null, {status: 101, webSocket: clientWS});
   });
@@ -378,7 +374,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   private _closeConnections(
     predicate: (clientState: ClientState) => boolean,
   ): Promise<void> {
-    return this._lock.withLock(() =>
+    return this._withLock('closeConnections', () =>
       closeConnections(this._clients, predicate),
     );
   }
@@ -393,8 +389,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     lc.debug?.('handling message', data, 'waiting for lock');
 
     try {
-      await this._lock.withLock(async () => {
-        lc.debug?.('received lock');
+      await this._withLock('handleMessage', async () => {
         await handleMessage(
           lc,
           this._storage,
@@ -425,12 +420,34 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     }, this._turnDuration);
   }
 
-  private async _processNext(lc: LogContext) {
-    lc.debug?.(
-      `processNext - starting turn at ${Date.now()} - waiting for lock`,
-    );
+  private async _withLock(
+    name: string,
+    fn: () => MaybePromise<void>,
+  ): Promise<void> {
+    const t0 = Date.now();
+    this._lc.debug?.(`${name} waiting for lock`);
+
     await this._lock.withLock(async () => {
-      lc.debug?.(`received lock at ${Date.now()}`);
+      const t1 = Date.now();
+      this._lc
+        .withContext('timing', 'lock-acquired')
+        .withContext('function', name)
+        .debug?.(`${name} acquired lock in ${t1 - t0} ms`);
+
+      try {
+        await fn();
+      } finally {
+        const t2 = Date.now();
+        this._lc
+          .withContext('timing', 'lock-held')
+          .withContext('function', name)
+          .debug?.(`${name} held lock for ${t2 - t1} ms`);
+      }
+    });
+  }
+
+  private async _processNext(lc: LogContext) {
+    await this._withLock('_processNext', async () => {
       const {maxProcessedMutationTimestamp, nothingToProcess} =
         await processPending(
           lc,
@@ -456,8 +473,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     ws: Socket,
   ): Promise<void> => {
     lc.debug?.('handling close - waiting for lock');
-    await this._lock.withLock(() => {
-      lc.debug?.('received lock');
+    await this._withLock('_handleClose', () => {
       handleClose(lc, this._clients, clientID, ws);
       this._processUntilDone(lc);
     });
