@@ -43,7 +43,7 @@ The implementation of pull will depend on the backend strategy you are using. Fo
 Replace the contents of `pages/api/replicache-pull.js` with this code:
 
 ```js
-import {tx} from '../../db.js';
+import {serverID, tx} from '../../db.js';
 
 export {handlePull as default};
 
@@ -58,17 +58,23 @@ async function handlePull(req, res) {
     // Read all data in a single transaction so it's consistent.
     await tx(async t => {
       // Get current version.
-      const currentVersion =
-        (await t.one('select version from replicache_version')).version ?? 0;
+      const {version: currentVersion} = await t.one(
+        'select version from replicache_server where id = $1',
+        serverID,
+      );
 
-      // Get lmid for requesting client.
+      if (fromVersion > currentVersion) {
+        throw new Error(
+          `fromVersion ${fromVersion} is from the future - aborting. This can happen in development if the server restarts. In that case, clear appliation data in browser and refresh.`,
+        );
+      }
+
+      // Get lmids for requesting client groups.
       const lastMutationIDChanges = await getLastMutationIDChanges(
         t,
         clientGroupID,
         fromVersion,
       );
-      // TODO: Deleted client check
-      // Requires clientID in PullRequest
 
       // Get changed domain objects since requested version.
       const changed = await t.manyOrNone(
@@ -101,7 +107,7 @@ async function handlePull(req, res) {
       }
 
       res.json({
-        lastMutationIDChanges,
+        lastMutationIDChanges: lastMutationIDChanges ?? {},
         cookie: currentVersion,
         patch,
       });
@@ -126,7 +132,9 @@ async function getLastMutationIDChanges(t, clientGroupID, fromVersion) {
 }
 ```
 
-Voila. We're now round-tripping browsers and devices!
+Because the previous pull response was hard-coded and not really reading from the database, you'll now have to clear your browser's application data to see consistent results. On Chrome/OSX for example: **cmd+opt+j → Application tab -> Storage -> Clear site data**.
+
+Once you do that, you can make a change in one browser and then refresh a different browser and see them round-trip:
 
 <p class="text--center">
   <img src="/img/setup/manual-sync.webp" width="650"/>

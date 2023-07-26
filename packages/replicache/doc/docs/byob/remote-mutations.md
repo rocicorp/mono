@@ -24,7 +24,7 @@ Create a new file `pages/api/replicache-push.js` and copy the below code into it
 This looks like a lot of code, but it's just implementing the description above. See the inline comments for additional details.
 
 ```js
-import {tx} from '../../db.js';
+import {serverID, tx} from '../../db.js';
 import Pusher from 'pusher';
 
 export {handlePush as default};
@@ -93,7 +93,8 @@ async function processMutation(t, clientGroupID, mutation, error) {
 
   // Get the previous version and calculate the next one.
   const {version: prevVersion} = await t.one(
-    'select version from replicache_version for update',
+    'select version from replicache_server where id = $1 for update',
+    serverID,
   );
   const nextVersion = prevVersion + 1;
 
@@ -115,7 +116,9 @@ async function processMutation(t, clientGroupID, mutation, error) {
   // happen. If it does there is nothing to do but return an error to
   // client and report a bug to Replicache.
   if (mutation.id > nextMutationID) {
-    throw new Error(`Mutation ${mutation.id} is from the future - aborting`);
+    throw new Error(
+      `Mutation ${mutation.id} is from the future - aborting. This can happen in development if the server restarts. In that case, clear appliation data in browser and refresh.`,
+    );
   }
 
   if (error === undefined) {
@@ -151,7 +154,10 @@ async function processMutation(t, clientGroupID, mutation, error) {
   );
 
   // Update global version.
-  await t.none('update replicache_version set version = $1', [nextVersion]);
+  await t.none('update replicache_server set version = $1 where id = $2', [
+    nextVersion,
+    serverID,
+  ]);
 }
 
 export async function getLastMutationID(t, clientID) {

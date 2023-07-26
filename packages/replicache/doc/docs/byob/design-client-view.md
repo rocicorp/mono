@@ -45,7 +45,7 @@ async function handlePull(req, res) {
   res.json({
     // We will discuss these two fields in later steps.
     lastMutationIDChanges: {},
-    cookie: 0,
+    cookie: 42,
     patch: [
       {op: 'clear'},
       {
