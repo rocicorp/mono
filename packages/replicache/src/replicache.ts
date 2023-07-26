@@ -1363,24 +1363,27 @@ export class Replicache<MD extends MutatorDefs = {}> {
     }
   }
 
-  private _fireOnClientStateNotFound(clientID: ClientID) {
-    this._lc.error?.(`Client state not found, clientID: ${clientID}`);
+  private _fireOnClientStateNotFound() {
     this.onClientStateNotFound?.();
   }
 
   private _clientStateNotFoundOnClient(clientID: ClientID) {
-    this._lc.error?.(`Client state not found, clientID: ${clientID}`);
-    this._fireOnClientStateNotFound(clientID);
+    this._lc.error?.(`Client state not found on client, clientID: ${clientID}`);
+    this._fireOnClientStateNotFound();
   }
 
   private async _clientStateNotFoundOnServer() {
     const clientGroupID = await this._clientGroupIDPromise;
     assert(clientGroupID);
     this._isClientGroupDisabled = true;
-    await withWrite(this._perdag, dagWrite =>
-      persist.disableClientGroup(clientGroupID, dagWrite),
+    await withWrite(this._perdag, async dagWrite => {
+      await persist.disableClientGroup(clientGroupID, dagWrite);
+      await dagWrite.commit();
+    });
+    this._lc.error?.(
+      `Client state not found on server, clientGroupID: ${clientGroupID}`,
     );
-    throw new ReportError(`Client group ${clientGroupID} is unknown on server`);
+    this._fireOnClientStateNotFound();
   }
 
   private _fireOnUpdateNeeded(reason: UpdateNeededReason) {

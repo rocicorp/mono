@@ -43,7 +43,7 @@ There is no need for soft deletes (`deleted` column) on the entities, or spaces.
 ## Push
 
 - Process the push as normal with other strategies.
-- Whenever any entity is updated, transactionally bump its `version` column. Note this is different than the way this column works in the [Global Version](/concepts/strategies/global-version) or [Per-Space Version](/concepts/strategies/per-space-version) strategies — each entity’s version is bumped independently on write, they aren’t all sharing one global or per-space version.
+- Whenever any entity is updated, transactionally bump its `version` column. Note this is different than the way this column works in the [Global Version](/strategies/global-version) or [Per-Space Version](/strategies/per-space-version) strategies — each entity’s version is bumped independently on write, they aren’t all sharing one global or per-space version.
 
 ## Pull
 
