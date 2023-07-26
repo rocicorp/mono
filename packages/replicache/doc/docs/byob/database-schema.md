@@ -19,9 +19,9 @@ Let's define our Postgres schema. As suggested in the [Global Version Strategy](
   - `version`: The version of the containing space that this item was last updated at. Used to calculate a diff during pull.
   - `deleted`: A [soft delete](https://en.wiktionary.org/wiki/soft_deletion) used to communicate to clients during pull that a item was logically deleted.
 
-Modify `db.js` so that `initDb` looks like:
+Modify `db.ts` so that `initDb` looks like:
 
-```js
+```ts
 async function initDB() {
   console.log('initializing database...');
   const db = newDb().adapters.createPgPromise();

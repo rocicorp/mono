@@ -17,7 +17,10 @@ First, let's register a _mutator_ that speculatively creates a message. In `inde
 new Replicache({
   //...
   mutators: {
-    async createMessage(tx, {id, from, content, order}) {
+    async createMessage(
+      tx: WriteTransaction,
+      {id, from, content, order}: MessageWithID,
+    ) {
       await tx.put(`message/${id}`, {
         from,
         content,
@@ -33,10 +36,11 @@ This creates a mutator named "createMessage". When invoked, the implementation i
 Now let's invoke the mutator when the user types a message. Replace the content of `onSubmit` so that it invokes the mutator:
 
 ```js
-const onSubmit = e => {
+const onSubmit = (e: FormEvent) => {
   e.preventDefault();
   const last = messages.length && messages[messages.length - 1][1];
   const order = (last?.order ?? 0) + 1;
+
   rep.mutate.createMessage({
     id: nanoid(),
     from: usernameRef.current.value,

@@ -19,17 +19,19 @@ At minimum, all of these changes **must** happen atomically in a serialized tran
 
 ## Implement Push
 
-Create a new file `pages/api/replicache-push.js` and copy the below code into it.
+Create a new file `pages/api/replicache-push.ts` and copy the below code into it.
 
 This looks like a lot of code, but it's just implementing the description above. See the inline comments for additional details.
 
-```js
-import {serverID, tx} from '../../db.js';
+```ts
+import {NextApiRequest, NextApiResponse} from 'next';
+import {serverID, tx} from '../../db';
 import Pusher from 'pusher';
+import {ITask} from 'pg-promise';
+import {MessageWithID} from '../../types';
+import {MutationV1} from 'replicache';
 
-export {handlePush as default};
-
-async function handlePush(req, res) {
+export default async function (req: NextApiRequest, res: NextApiResponse) {
   const push = req.body;
   console.log('Processing push', JSON.stringify(push));
 
@@ -88,7 +90,12 @@ async function handlePush(req, res) {
   }
 }
 
-async function processMutation(t, clientGroupID, mutation, error) {
+async function processMutation(
+  t: ITask<{}>,
+  clientGroupID: string,
+  mutation: MutationV1,
+  error?: string | undefined,
+) {
   const {clientID} = mutation;
 
   // Get the previous version and calculate the next one.
@@ -128,7 +135,7 @@ async function processMutation(t, clientGroupID, mutation, error) {
     // mutation.
     switch (mutation.name) {
       case 'createMessage':
-        await createMessage(t, mutation.args, nextVersion);
+        await createMessage(t, mutation.args as MessageWithID, nextVersion);
         break;
       default:
         throw new Error(`Unknown mutation: ${mutation.name}`);
@@ -160,7 +167,7 @@ async function processMutation(t, clientGroupID, mutation, error) {
   ]);
 }
 
-export async function getLastMutationID(t, clientID) {
+export async function getLastMutationID(t: ITask<{}>, clientID: string) {
   const clientRow = await t.oneOrNone(
     'select last_mutation_id from replicache_client where id = $1',
     clientID,
@@ -172,11 +179,11 @@ export async function getLastMutationID(t, clientID) {
 }
 
 async function setLastMutationID(
-  t,
-  clientID,
-  clientGroupID,
-  mutationID,
-  version,
+  t: ITask<{}>,
+  clientID: string,
+  clientGroupID: string,
+  mutationID: number,
+  version: number,
 ) {
   const result = await t.result(
     `update replicache_client set
@@ -199,7 +206,11 @@ async function setLastMutationID(
   }
 }
 
-async function createMessage(t, {id, from, content, order}, version) {
+async function createMessage(
+  t: ITask<{}>,
+  {id, from, content, order}: MessageWithID,
+  version: number,
+) {
   await t.none(
     `insert into message (
     id, sender, content, ord, deleted, version) values

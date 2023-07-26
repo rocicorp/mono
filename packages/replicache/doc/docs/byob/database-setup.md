@@ -21,11 +21,12 @@ If this invariant is violated by the server then Replicache may not function pro
 
 For this demo, we'll use [pg-mem](https://github.com/oguimbal/pg-mem) — an in-memory implementation of Postgres. This is a nice easy way to play locally, but you can easily adapt this sample to use a remote Postgres implementation like [Render](https://render.com/) or [Supabase](https://supabase.com/).
 
-Create a new file `db.js` with this code:
+Create a new file `db.ts` with this code:
 
-```js
+```ts
 import {newDb} from 'pg-mem';
-import pgp from 'pg-promise';
+import pgp, {IDatabase, ITask} from 'pg-promise';
+import {txMode} from 'pg-promise';
 
 const {isolationLevel} = pgp.txMode;
 
@@ -42,13 +43,23 @@ function getDB() {
   if (!global.__db) {
     global.__db = initDB();
   }
-  return global.__db;
+  return global.__db as IDatabase<{}>;
 }
 
 // Helper to make sure we always access database at serializable level.
-export async function tx(f, dbp = getDB()) {
+export async function tx<R>(
+  f: (t: ITask<{}> & {}) => Promise<R>,
+  dbp = getDB(),
+) {
   const db = await dbp;
-  return await db.tx({mode: isolationLevel.serializable}, f);
+  return await db.tx(
+    {
+      mode: new txMode.TransactionMode({
+        tiLevel: isolationLevel.serializable,
+      }),
+    },
+    f,
+  );
 }
 ```
 

@@ -36,12 +36,12 @@ Therefore, Replicache requires that clients assign IDs. Our sample apps typicall
 
 Now that we know what our schema will look like, let's serve it. Initially, we'll just serve static data, but later we'll build it dynamically from data in the database.
 
-Create a file in the project at `pages/api/replicache-pull.js` with the following contents:
+Create a file in the project at `pages/api/replicache-pull.ts` with the following contents:
 
-```js
-export {handlePull as default};
+```ts
+import {NextApiRequest, NextApiResponse} from 'next';
 
-async function handlePull(req, res) {
+export default async function (_: NextApiRequest, res: NextApiResponse) {
   res.json({
     // We will discuss these two fields in later steps.
     lastMutationIDChanges: {},
@@ -68,7 +68,6 @@ async function handlePull(req, res) {
       },
     ],
   });
-  res.end();
 }
 ```
 

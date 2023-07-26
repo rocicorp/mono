@@ -5,18 +5,31 @@ slug: /byob/render-ui
 
 The next step is to use the data in the Client View to render your UI.
 
-The model is that your UI is a [pure function](https://en.wikipedia.org/wiki/Pure_function) of the data in Replicache. Whenever the data in Replicache changes — either due to local mutations or syncing with the server — subscriptions will fire, and your UI components re-render. Easy.
+First, let's define a few simple types. Replicache supports strongly-typed mutators – we'll use these types later to ensure our UI passes the correct data. Create a new `types.ts` at the root and add this code:
+
+```ts
+export type Message = {
+  from: string;
+  content: string;
+  order: number;
+};
+
+export type MessageWithID = Message & {id: string};
+```
+
+Now we'll build the UI. The model is that the view is a [pure function](https://en.wikipedia.org/wiki/Pure_function) of the data in Replicache. Whenever the data in Replicache changes — either due to local mutations or syncing with the server — subscriptions will fire, and your UI components re-render. Easy.
 
 To create a subscription, use the `useSubscribe()` React hook. You can do multiple reads and compute a result. Your React component only re-renders when the returned result changes.
 
-Let's use a subscription to implement our chat UI. Delete `index.tsx`, then add `index.js` with the below code:
+Let's use a subscription to implement our chat UI. Replace `index.tsx` with the below code:
 
-```js
+```tsx
 import React, {useRef} from 'react';
-import {Replicache, TEST_LICENSE_KEY} from 'replicache';
+import {Replicache, TEST_LICENSE_KEY, WriteTransaction} from 'replicache';
 import {useSubscribe} from 'replicache-react';
 import {nanoid} from 'nanoid';
 import Pusher from 'pusher-js';
+import {Message, MessageWithID} from '../types';
 
 const rep = process.browser
   ? new Replicache({
@@ -27,27 +40,24 @@ const rep = process.browser
     })
   : null;
 
-if (rep) {
-  listen(rep);
-}
+listen();
 
 export default function Home() {
-  return <Chat rep={rep} />;
-}
-
-function Chat({rep}) {
   const messages = useSubscribe(
     rep,
     async tx => {
-      const list = await tx.scan({prefix: 'message/'}).entries().toArray();
+      const list = (await tx
+        .scan({prefix: 'message/'})
+        .entries()
+        .toArray()) as [string, Message][];
       list.sort(([, {order: a}], [, {order: b}]) => a - b);
       return list;
     },
     [],
   );
 
-  const usernameRef = useRef();
-  const contentRef = useRef();
+  const usernameRef = useRef<HTMLInputElement>();
+  const contentRef = useRef<HTMLInputElement>();
 
   const onSubmit = e => {
     e.preventDefault();
@@ -55,12 +65,10 @@ function Chat({rep}) {
   };
 
   return (
-    <div style={styles.container}>
-      <form style={styles.form} onSubmit={onSubmit}>
-        <input ref={usernameRef} style={styles.username} required />
-        says:
-        <input ref={contentRef} style={styles.content} required />
-        <input type="submit" />
+    <div>
+      <form onSubmit={onSubmit}>
+        <input ref={usernameRef} required /> says:{' '}
+        <input ref={contentRef} required /> <input type="submit" />
       </form>
       <MessageList messages={messages} />
     </div>
@@ -78,29 +86,7 @@ function MessageList({messages}) {
   });
 }
 
-const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'row',
-    flex: 0,
-    marginBottom: '1em',
-  },
-  username: {
-    flex: 0,
-    marginRight: '1em',
-  },
-  content: {
-    flex: 1,
-    maxWidth: '30em',
-    margin: '0 1em',
-  },
-};
-
-function listen(rep) {
+function listen() {
   // TODO: Listen for changes on server
 }
 ```

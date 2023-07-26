@@ -40,14 +40,15 @@ The implementation of pull will depend on the backend strategy you are using. Fo
 
 ## Implement Pull
 
-Replace the contents of `pages/api/replicache-pull.js` with this code:
+Replace the contents of `pages/api/replicache-pull.ts` with this code:
 
-```js
-import {serverID, tx} from '../../db.js';
+```ts
+import {NextApiRequest, NextApiResponse} from 'next';
+import {serverID, tx} from '../../db';
+import {ITask} from 'pg-promise';
+import {PullResponse} from 'replicache';
 
-export {handlePull as default};
-
-async function handlePull(req, res) {
+export default async function (req: NextApiRequest, res: NextApiResponse) {
   const pull = req.body;
   console.log(`Processing pull`, JSON.stringify(pull));
   const {clientGroupID} = pull;
@@ -58,7 +59,7 @@ async function handlePull(req, res) {
     // Read all data in a single transaction so it's consistent.
     await tx(async t => {
       // Get current version.
-      const {version: currentVersion} = await t.one(
+      const {version: currentVersion} = await t.one<{version: number}>(
         'select version from replicache_server where id = $1',
         serverID,
       );
@@ -77,7 +78,14 @@ async function handlePull(req, res) {
       );
 
       // Get changed domain objects since requested version.
-      const changed = await t.manyOrNone(
+      const changed = await t.manyOrNone<{
+        id: string;
+        sender: string;
+        content: string;
+        ord: number;
+        version: number;
+        deleted: boolean;
+      }>(
         'select id, sender, content, ord, version, deleted from message where version > $1',
         fromVersion,
       );
@@ -100,17 +108,18 @@ async function handlePull(req, res) {
             value: {
               from: sender,
               content: content,
-              order: parseInt(ord),
+              order: ord,
             },
           });
         }
       }
 
-      res.json({
+      const body: PullResponse = {
         lastMutationIDChanges: lastMutationIDChanges ?? {},
         cookie: currentVersion,
         patch,
-      });
+      };
+      res.json(body);
       res.end();
     });
   } catch (e) {
@@ -121,8 +130,12 @@ async function handlePull(req, res) {
   }
 }
 
-async function getLastMutationIDChanges(t, clientGroupID, fromVersion) {
-  const rows = await t.manyOrNone(
+async function getLastMutationIDChanges(
+  t: ITask<{}>,
+  clientGroupID: string,
+  fromVersion: number,
+) {
+  const rows = await t.manyOrNone<{id: string; last_mutation_id: number}>(
     `select id, last_mutation_id
     from replicache_client
     where client_group_id = $1 and version > $2`,
