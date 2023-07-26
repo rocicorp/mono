@@ -23,7 +23,7 @@ export class LoggingLock {
         } other waiter(s): ${this.#waiters}`,
       );
       if (this.#waiters.length % 5 === 0) {
-        // Flush the log if the number of waiters is a multiple of 10.
+        // Flush the log if the number of waiters is a multiple of 5.
         await lc.flush();
       }
     }
