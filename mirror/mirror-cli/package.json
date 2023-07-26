@@ -4,8 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "dependencies": {
+    "@badrap/valita": "^0.2.0",
     "@rocicorp/reflect": "0.29.2",
     "esbuild": "^0.18.3",
+    "firebase": "^9.22.2",
     "firebase-admin": "^11.10.1",
     "pkg-up": "^4.0.0",
     "reflect-cli": "0.1.0",

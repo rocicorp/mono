@@ -1,4 +1,6 @@
 import * as esbuild from 'esbuild';
+import {checkOutfileForNodeModules} from 'shared/src/tool/check-outfile-for-node-modules.js';
+import {getExternalFromPackageJSON} from 'shared/src/tool/get-external-from-package-json.js';
 
 function createRandomIdentifier(name) {
   return `${name}_${Math.random() * 10000}`.replace('.', '');
@@ -16,28 +18,13 @@ var require = ${createRequireAlias}(import.meta.url);
 `;
 }
 
-const external = [
-  '@badrap/valita',
-  '@google-cloud/firestore',
-  '@rocicorp/resolver',
-  'esbuild',
-  'firebase',
-  'miniflare',
-  'nanoid',
-  'open',
-  'picocolors',
-  'pkg-up',
-  'semver',
-  'validate-npm-package-name',
-  'yargs',
-];
-
 async function main() {
+  const outfile = 'out/index.mjs';
   await esbuild.build({
     entryPoints: ['src/index.ts'],
     bundle: true,
-    outfile: 'out/index.mjs',
-    external,
+    outfile,
+    external: await getExternalFromPackageJSON(import.meta.url),
     platform: 'node',
     target: 'esnext',
     format: 'esm',
@@ -46,6 +33,7 @@ async function main() {
       js: injectRequire(),
     },
   });
+  await checkOutfileForNodeModules(outfile);
 }
 
 await main();
