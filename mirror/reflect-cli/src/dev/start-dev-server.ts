@@ -2,9 +2,9 @@ import type {OutputFile} from 'esbuild';
 import {Miniflare} from 'miniflare';
 import {nanoid} from 'nanoid';
 import * as path from 'node:path';
-import {getWorkerTemplate} from '../admin/get-worker-template.js';
 import {mustFindAppConfigRoot} from '../app-config.js';
 import {buildReflectServerContent} from '../compile.js';
+import {getWorkerTemplate} from '../get-worker-template.js';
 
 /**
  * Returns a function that shuts down the dev server.

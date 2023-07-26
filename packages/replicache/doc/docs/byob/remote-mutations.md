@@ -5,7 +5,7 @@ slug: /byob/remote-mutations
 
 Replicache will periodically invoke your [push endpoint](/reference/server-push) sending a list of mutations that need to be applied.
 
-The implementation of push will depend on the backend strategy you are using. For the [Global Version](/concepts/strategies/global-version) strategy we're using, the basics steps are:
+The implementation of push will depend on the backend strategy you are using. For the [Global Version](/strategies/global-version) strategy we're using, the basics steps are:
 
 1. Open an exclusive (serializable) transaction.
 1. Read the current global version and compute the next one.

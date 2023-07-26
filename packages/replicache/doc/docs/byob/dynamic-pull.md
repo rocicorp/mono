@@ -18,7 +18,7 @@ And it returns:
 
 See [pull endpoint reference](/reference/server-pull) for more details.
 
-The implementation of pull will depend on the backend strategy you are using. For the [Global Version](/concepts/strategies/global-version) strategy we're using, the basics steps are:
+The implementation of pull will depend on the backend strategy you are using. For the [Global Version](/strategies/global-version) strategy we're using, the basics steps are:
 
 <ul>
   <li>Open an exclusive (serializable) transaction</li>

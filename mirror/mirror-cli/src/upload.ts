@@ -7,12 +7,15 @@ import * as schema from 'mirror-schema/src/server.js';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {pkgUp} from 'pkg-up';
+import {buildReflectServerContent} from 'reflect-cli/src/compile.js';
+import {getWorkerTemplate} from 'reflect-cli/src/get-worker-template.js';
+import type {
+  CommonYargsArgv,
+  YargvToInterface,
+} from 'reflect-cli/src/yarg-types.js';
 import {SemVer} from 'semver';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
 import {storeModule} from 'shared/src/mirror/store-module.js';
-import {buildReflectServerContent} from '../compile.js';
-import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
-import {getWorkerTemplate} from './get-worker-template.js';
 
 const require = createRequire(import.meta.url);
 

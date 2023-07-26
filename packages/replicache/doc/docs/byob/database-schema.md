@@ -7,11 +7,11 @@ There are a number of ways to implement Replicache backends.
 
 The Replicache client doesn't actually care _how_ your backend works internally — it only cares that you provide correctly implemented [push](/reference/server-push.md) and [pull](/reference/server-pull.md) endpoints.
 
-This walkthrough implements the [Global Version](/concepts/strategies/global-version) backend strategy, which is a simple strategy that we usually recommend users start with. See [Backend Strategies](/concepts/strategies/overview) for information on other commonly used strategies.
+This walkthrough implements the [Global Version](/strategies/global-version) backend strategy, which is a simple strategy that we usually recommend users start with. See [Backend Strategies](/strategies/overview) for information on other commonly used strategies.
 
 ## Define the Schema
 
-Let's define our Postgres schema. As suggested in the [Global Version Strategy](/concepts/strategies/global-version) doc, we'll track:
+Let's define our Postgres schema. As suggested in the [Global Version Strategy](/strategies/global-version) doc, we'll track:
 
 - **Global Version:** The version the backend database is currently at.
 - **Clients:** Clients that have connected to the server, and the last mutationID processed from each. This is used during push to ensure mutations are processed only once, and in the order they happened on the client. We also store each client's `clientGroupID`, which is needed to correctly implement `pull`.

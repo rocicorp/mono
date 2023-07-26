@@ -1,9 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "types": ["node"],
-    // skipLibCheck because invalid .d.ts for miniflare
-    "skipLibCheck": true
+    "types": ["node"]
   },
   "include": ["src/**/*.ts", "tool/build.js"]
 }
