@@ -35,12 +35,12 @@ npm run watch --ws
 
 Do the same for `npx create-replicache-app my-app ts-web-component`
 
-### Replidraw
+### Todo Sample
 
-Check out [rocicorp/replidraw](https://github.com/rocicorp/replidraw)
+Check out [rocicorp/todo-react](https://github.com/rocicorp/todo-react)
 
 Replace the replicache dependency in
-[package.json](https://github.com/rocicorp/replidraw/blob/master/package.json)
+[package.json](https://github.com/rocicorp/todo-react/blob/master/package.json)
 with the tarball.
 
 ```
@@ -49,17 +49,11 @@ npm add /path/to/replicache-<version>.tgz
 
 Follow instructions in repo to finish setting up app, and run to make sure it works.
 
-### Todo Sample
-
-Check out [rocicorp/replicache-todo](https://github.com/rocicorp/replicache-todo)
-
-Same as Replidraw test.
-
 ### Repliear Sample
 
 Check out [rocicorp/repliear](https://github.com/rocicorp/repliear)
 
-Same as Replidraw test.
+Same as todo.
 
 ### Integration Guide
 

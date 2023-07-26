@@ -1,13 +1,13 @@
 ---
 title: Global Version Strategy
-slug: /concepts/strategies/global-version
+slug: /strategies/global-version
 ---
 
 # 🌏 The Global Version Strategy
 
 The Global Version strategy is one of the easiest strategies to implement and the one we recomend most customers start with.
 
-It does have concurrency limits because all pushes server-wide are serialized, and it doesn't support advanced features like incremental sync and read authorization as easily as [row versioning](/concepts/strategies/row-version).
+It does have concurrency limits because all pushes server-wide are serialized, and it doesn't support advanced features like incremental sync and read authorization as easily as [row versioning](/strategies/row-version).
 
 :::info
 
