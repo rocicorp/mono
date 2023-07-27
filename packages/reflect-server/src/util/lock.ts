@@ -1,6 +1,7 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import type {MaybePromise} from 'replicache';
+import {randInt} from './rand.js';
 
 export class LoggingLock {
   readonly #minThresholdMs: number;
@@ -17,11 +18,12 @@ export class LoggingLock {
   async withLock(
     lc: LogContext,
     name: string,
-    fn: () => MaybePromise<void>,
+    fn: (lc: LogContext) => MaybePromise<void>,
     flushLogsIfLockHeldForMs = 100,
   ): Promise<void> {
+    const outerLC = lc; // Save this so that we only add the lockHoldID to the lc passed to the fn.
+    lc = lc.withContext('lock-fn', name);
     this.#waiters.push(name);
-    lc = lc.withContext('function', name);
 
     if (this.#waiters.length > 1) {
       // Flush the log if the number of waiters is a multiple of 5.
@@ -43,23 +45,26 @@ export class LoggingLock {
     await this.#lock.withLock(async () => {
       const t1 = Date.now();
 
+      const lockHoldID = randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
       this.#waiters.splice(this.#waiters.indexOf(name), 1);
-      this.#holder = name;
+      this.#holder = `${name}#${lockHoldID}`;
+      lc = lc.withContext('lockHoldID', lockHoldID);
+
       const elapsed = t1 - t0;
       if (elapsed >= this.#minThresholdMs) {
-        lc.withContext('timing', 'lock-acquired').debug?.(
+        lc.withContext('lock-timing', 'acquired').debug?.(
           `${name} acquired lock in ${elapsed} ms`,
         );
       }
 
       try {
-        await fn();
+        await fn(outerLC.withContext('lockHoldID', lockHoldID));
       } finally {
         const t2 = Date.now();
         const elapsed = t2 - t1;
         if (elapsed >= this.#minThresholdMs) {
           flushAfterLock = elapsed >= flushLogsIfLockHeldForMs;
-          lc = lc.withContext('timing', 'lock-held');
+          lc = lc.withContext('lock-timing', 'held');
           (flushAfterLock ? lc.info : lc.debug)?.(
             `${name} held lock for ${elapsed} ms`,
           );

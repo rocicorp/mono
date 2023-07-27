@@ -194,13 +194,13 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       }
 
       if (!this.#lcHasRoomIdContext) {
-        await this.#lock.withLock(this.#lc, 'initRoomIDContext', () => {
+        await this.#lock.withLock(lc, 'initRoomIDContext', lcInLock => {
           if (this.#lcHasRoomIdContext) {
-            lc.debug?.('roomID context already initialized, returning');
+            lcInLock.debug?.('roomID context already initialized, returning');
             return;
           }
           if (urlRoomID !== null && roomID === undefined) {
-            lc.error?.('Expected roomID to be present in storage', {
+            lcInLock.error?.('Expected roomID to be present in storage', {
               urlRoomID,
             });
           }
@@ -304,7 +304,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     serverWS.accept();
 
     void this.#lock
-      .withLock(this.#lc, 'handleConnection', async () => {
+      .withLock(lc, 'handleConnection', async lc => {
         await handleConnection(
           lc,
           serverWS,
@@ -391,7 +391,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     lc.debug?.('handling message', data, 'waiting for lock');
 
     try {
-      await this.#lock.withLock(this.#lc, 'handleMessage', async () => {
+      await this.#lock.withLock(lc, 'handleMessage', async lc => {
         await handleMessage(
           lc,
           this.#storage,
@@ -424,9 +424,9 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
   async #processNext(lc: LogContext) {
     await this.#lock.withLock(
-      this.#lc,
+      lc,
       '#processNext',
-      async () => {
+      async lc => {
         const {maxProcessedMutationTimestamp, nothingToProcess} =
           await processPending(
             lc,
@@ -453,7 +453,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     clientID: ClientID,
     ws: Socket,
   ): Promise<void> => {
-    await this.#lock.withLock(this.#lc, '#handleClose', () => {
+    await this.#lock.withLock(lc, '#handleClose', lc => {
       handleClose(lc, this.#clients, clientID, ws);
       this.#processUntilDone(lc);
     });

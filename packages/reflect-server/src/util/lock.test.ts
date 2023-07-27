@@ -19,6 +19,22 @@ describe('LoggingLock', () => {
     expect(sink.messages).toHaveLength(0);
   });
 
+  test('adds lockHoldID to the LogContext', async () => {
+    const lock = new LoggingLock(100 /* ms threshold */);
+    const sink = new TestLogSink();
+    const lc = new LogContext('debug', {foo: 'bar'}, sink);
+
+    await lock.withLock(lc, 'fast', innerLC => {
+      innerLC.info?.('should have new context');
+    });
+    await lc.flush();
+
+    expect(sink.messages).toHaveLength(1);
+    expect(sink.messages[0][0]).toBe('info');
+    expect(sink.messages[0][1]).toMatchObject({foo: 'bar'});
+    expect(sink.messages[0][1]).toHaveProperty('lockHoldID');
+  });
+
   test('logs lock-acquired and lock-held timings', async () => {
     const lock = new LoggingLock(-1);
     const sink = new TestLogSink();
@@ -40,15 +56,17 @@ describe('LoggingLock', () => {
 
     expect(sink.messages).toHaveLength(2);
     expect(sink.messages[0][0]).toBe('debug');
-    expect(sink.messages[0][1]).toEqual({
-      function: 'logic',
-      timing: 'lock-acquired',
+    expect(sink.messages[0][1]).toMatchObject({
+      ['lock-fn']: 'logic',
+      ['lock-timing']: 'acquired',
     });
+    expect(sink.messages[0][1]).toHaveProperty('lockHoldID');
     expect(sink.messages[1][0]).toBe('debug');
-    expect(sink.messages[1][1]).toEqual({
-      function: 'logic',
-      timing: 'lock-held',
+    expect(sink.messages[1][1]).toMatchObject({
+      ['lock-fn']: 'logic',
+      ['lock-timing']: 'held',
     });
+    expect(sink.messages[1][1]).toHaveProperty('lockHoldID');
   });
 
   test('logs at info level above threshold', async () => {
@@ -77,15 +95,17 @@ describe('LoggingLock', () => {
 
     expect(sink.messages).toHaveLength(2);
     expect(sink.messages[0][0]).toBe('debug');
-    expect(sink.messages[0][1]).toEqual({
-      function: 'logic',
-      timing: 'lock-acquired',
+    expect(sink.messages[0][1]).toMatchObject({
+      ['lock-fn']: 'logic',
+      ['lock-timing']: 'acquired',
     });
+    expect(sink.messages[0][1]).toHaveProperty('lockHoldID');
     expect(sink.messages[1][0]).toBe('info');
-    expect(sink.messages[1][1]).toEqual({
-      function: 'logic',
-      timing: 'lock-held',
+    expect(sink.messages[1][1]).toMatchObject({
+      ['lock-fn']: 'logic',
+      ['lock-timing']: 'held',
     });
+    expect(sink.messages[1][1]).toHaveProperty('lockHoldID');
   });
 
   test('logs multiple waiters', async () => {
@@ -121,10 +141,10 @@ describe('LoggingLock', () => {
     expect(sink.messages).toHaveLength(1);
     expect(sink.messages[0][0]).toBe('debug');
     expect(sink.messages[0][1]).toEqual({
-      function: 'logic',
+      ['lock-fn']: 'logic',
     });
     expect(sink.messages[0][2][0]).toMatch(
-      'logic waiting for slow with 1 other waiter(s): logic,logic',
+      /logic waiting for slow#[a-z0-9]+ with 1 other waiter\(s\): logic,logic/,
     );
 
     pushWaiter();
@@ -134,10 +154,10 @@ describe('LoggingLock', () => {
     expect(sink.messages).toHaveLength(2);
     expect(sink.messages[1][0]).toBe('debug');
     expect(sink.messages[1][1]).toEqual({
-      function: 'logic',
+      ['lock-fn']: 'logic',
     });
     expect(sink.messages[1][2][0]).toMatch(
-      'logic waiting for slow with 2 other waiter(s): logic,logic,logic',
+      /logic waiting for slow#[a-z0-9]+ with 2 other waiter\(s\): logic,logic,logic/,
     );
 
     releaseFirstLock.notify();
