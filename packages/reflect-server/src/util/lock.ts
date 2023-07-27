@@ -56,8 +56,6 @@ export class LoggingLock {
         await fn();
       } finally {
         const t2 = Date.now();
-
-        this.#holder = undefined;
         const elapsed = t2 - t1;
         if (elapsed >= this.#minThresholdMs) {
           flushAfterLock = elapsed >= flushLogsIfLockHeldForMs;
@@ -66,6 +64,9 @@ export class LoggingLock {
             `${name} held lock for ${elapsed} ms`,
           );
         }
+        // Note: Leave the #holder variable set until it is replaced
+        // by the next holder. This makes the logging output (when
+        // there are multiple waiters) more useful.
       }
     });
     if (flushAfterLock) {
