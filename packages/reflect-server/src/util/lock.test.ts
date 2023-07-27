@@ -11,8 +11,8 @@ describe('LoggingLock', () => {
     const sink = new TestLogSink();
     const lc = new LogContext('debug', {}, sink);
 
-    const inLock = new Sync();
-    const releaseLock = new Sync();
+    const inLock = new Signal();
+    const releaseLock = new Signal();
     void lock.withLock(createSilentLogContext(), 'first', async () => {
       inLock.notify();
       await releaseLock.notification();
@@ -43,8 +43,8 @@ describe('LoggingLock', () => {
     const sink = new TestLogSink();
     const lc = new LogContext('debug', {}, sink);
 
-    const inLock = new Sync();
-    const releaseLock = new Sync();
+    const inLock = new Signal();
+    const releaseLock = new Signal();
     void lock.withLock(createSilentLogContext(), 'first', async () => {
       inLock.notify();
       await releaseLock.notification();
@@ -80,8 +80,8 @@ describe('LoggingLock', () => {
     const sink = new TestLogSink();
     const lc = new LogContext('debug', {}, sink);
 
-    const inLock = new Sync();
-    const releaseFirstLock = new Sync();
+    const inLock = new Signal();
+    const releaseFirstLock = new Signal();
     void lock.withLock(createSilentLogContext(), 'slow', async () => {
       inLock.notify();
       await releaseFirstLock.notification();
@@ -89,7 +89,7 @@ describe('LoggingLock', () => {
 
     await inLock.notification();
 
-    const releaseSecondLock = new Sync();
+    const releaseSecondLock = new Signal();
     const waiters: Promise<void>[] = [];
     const pushWaiter = () => {
       waiters.push(
@@ -134,7 +134,7 @@ describe('LoggingLock', () => {
   });
 });
 
-class Sync {
+class Signal {
   #promise: Promise<void>;
   #resolve: undefined | ((value: void | PromiseLike<void>) => void) = undefined;
 
