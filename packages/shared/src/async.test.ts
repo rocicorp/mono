@@ -1,6 +1,5 @@
 import {describe, expect, test} from '@jest/globals';
-import {CountDownLatch, Signal} from './async.js';
-import {sleep} from './sleep.js';
+import {CountDownLatch} from './async.js';
 
 describe('CountDownLatch', () => {
   test('countDown and zero', async () => {
@@ -39,30 +38,5 @@ describe('CountDownLatch', () => {
     expect(latch.value()).toBe(0);
     latch.countDown();
     expect(latch.value()).toBe(0);
-  });
-});
-
-describe('Signal', () => {
-  test('notify and notification', async () => {
-    const signal1 = new Signal();
-    const signal2 = new Signal();
-
-    let waiting = true;
-
-    const fn = new Promise<void>(async resolve => {
-      await signal2.notification();
-      waiting = false;
-      signal1.notify();
-      resolve();
-    });
-
-    await sleep(1);
-    expect(waiting).toBe(true);
-
-    signal2.notify();
-    await signal1.notification();
-    expect(waiting).toBe(false);
-
-    expect(fn).resolves;
   });
 });

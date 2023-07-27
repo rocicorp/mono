@@ -3,7 +3,7 @@ import {LoggingLock} from './lock.js';
 import {LogContext} from '@rocicorp/logger';
 import {TestLogSink, createSilentLogContext} from './test-utils.js';
 import {sleep} from './sleep.js';
-import {Signal} from 'shared/src/async.js';
+import {resolver} from './resolver.js';
 
 describe('LoggingLock', () => {
   test('logs nothing for timings above threshold', async () => {
@@ -44,15 +44,15 @@ describe('LoggingLock', () => {
     const sink = new TestLogSink();
     const lc = new LogContext('debug', {}, sink);
 
-    const inLock = new Signal();
-    const releaseLock = new Signal();
+    const {promise: hasAcquiredLock, resolve: acquiredLock} = resolver<void>();
+    const {promise: canReleaseLock, resolve: releaseLock} = resolver<void>();
     void lock.withLock(createSilentLogContext(), 'first', async () => {
-      inLock.notify();
-      await releaseLock.notification();
+      acquiredLock();
+      await canReleaseLock;
     });
 
-    await inLock.notification();
-    setTimeout(() => releaseLock.notify(), 1);
+    await hasAcquiredLock;
+    setTimeout(() => releaseLock(), 1);
     await lock.withLock(lc, 'logic', async () => {
       // do nothing
     });
@@ -78,15 +78,15 @@ describe('LoggingLock', () => {
     const sink = new TestLogSink();
     const lc = new LogContext('debug', {}, sink);
 
-    const inLock = new Signal();
-    const releaseLock = new Signal();
+    const {promise: hasAcquiredLock, resolve: acquiredLock} = resolver<void>();
+    const {promise: canReleaseLock, resolve: releaseLock} = resolver<void>();
     void lock.withLock(createSilentLogContext(), 'first', async () => {
-      inLock.notify();
-      await releaseLock.notification();
+      acquiredLock();
+      await canReleaseLock;
     });
 
-    await inLock.notification();
-    setTimeout(() => releaseLock.notify(), 1);
+    await hasAcquiredLock;
+    setTimeout(() => releaseLock(), 1);
     await lock.withLock(
       lc,
       'logic',
@@ -117,21 +117,23 @@ describe('LoggingLock', () => {
     const sink = new TestLogSink();
     const lc = new LogContext('debug', {}, sink);
 
-    const inLock = new Signal();
-    const releaseFirstLock = new Signal();
+    const {promise: hasAcquiredLock, resolve: acquiredLock} = resolver<void>();
+    const {promise: canReleaseFirstLock, resolve: releaseFirstLock} =
+      resolver<void>();
     void lock.withLock(createSilentLogContext(), 'slow', async () => {
-      inLock.notify();
-      await releaseFirstLock.notification();
+      acquiredLock();
+      await canReleaseFirstLock;
     });
 
-    await inLock.notification();
+    await hasAcquiredLock;
 
-    const releaseSecondLock = new Signal();
+    const {promise: canReleaseSecondLock, resolve: releaseSecondLock} =
+      resolver<void>();
     const waiters: Promise<void>[] = [];
     const pushWaiter = () => {
       waiters.push(
         lock.withLock(lc, `logic`, async () => {
-          await releaseSecondLock.notification();
+          await canReleaseSecondLock;
         }),
       );
     };
@@ -164,8 +166,8 @@ describe('LoggingLock', () => {
       /logic waiting for slow#[a-z0-9]+ with 2 other waiter\(s\): logic,logic,logic/,
     );
 
-    releaseFirstLock.notify();
-    releaseSecondLock.notify();
+    releaseFirstLock();
+    releaseSecondLock();
 
     await Promise.all(waiters);
   });
