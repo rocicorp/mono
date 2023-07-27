@@ -2,8 +2,8 @@ import {describe, test, expect} from '@jest/globals';
 import {LoggingLock} from './lock.js';
 import {LogContext} from '@rocicorp/logger';
 import {TestLogSink, createSilentLogContext} from './test-utils.js';
-import {must} from 'shared/src/must.js';
 import {sleep} from './sleep.js';
+import {Signal} from 'shared/src/async.js';
 
 describe('LoggingLock', () => {
   test('logs nothing for timings above threshold', async () => {
@@ -170,22 +170,3 @@ describe('LoggingLock', () => {
     await Promise.all(waiters);
   });
 });
-
-class Signal {
-  #promise: Promise<void>;
-  #resolve: undefined | ((value: void | PromiseLike<void>) => void) = undefined;
-
-  constructor() {
-    this.#promise = new Promise(resolve => {
-      this.#resolve = resolve;
-    });
-  }
-
-  notification(): Promise<void> {
-    return this.#promise;
-  }
-
-  notify() {
-    must(this.#resolve)();
-  }
-}
