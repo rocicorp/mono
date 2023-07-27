@@ -20,7 +20,7 @@ describe('LoggingLock', () => {
   });
 
   test('logs lock-acquired and lock-held timings', async () => {
-    const lock = new LoggingLock();
+    const lock = new LoggingLock(-1);
     const sink = new TestLogSink();
     const lc = new LogContext('debug', {}, sink);
 
@@ -32,9 +32,9 @@ describe('LoggingLock', () => {
     });
 
     await inLock.notification();
-    setTimeout(() => releaseLock.notify(), 2);
+    setTimeout(() => releaseLock.notify(), 1);
     await lock.withLock(lc, 'logic', async () => {
-      await sleep(1); // Must be >0ms to result in logging
+      // do nothing
     });
     await lc.flush();
 
@@ -52,7 +52,7 @@ describe('LoggingLock', () => {
   });
 
   test('logs at info level above threshold', async () => {
-    const lock = new LoggingLock();
+    const lock = new LoggingLock(-1);
     const sink = new TestLogSink();
     const lc = new LogContext('debug', {}, sink);
 
@@ -64,12 +64,12 @@ describe('LoggingLock', () => {
     });
 
     await inLock.notification();
-    setTimeout(() => releaseLock.notify(), 2);
+    setTimeout(() => releaseLock.notify(), 1);
     await lock.withLock(
       lc,
       'logic',
       async () => {
-        await sleep(2); // Must be >0ms to result in logging
+        await sleep(2); // Must be >1ms
       },
       1, // Log at INFO if held for more than 1 ms
     );
