@@ -6,6 +6,19 @@ import {must} from 'shared/src/must.js';
 import {sleep} from './sleep.js';
 
 describe('LoggingLock', () => {
+  test('logs nothing for timings above threshold', async () => {
+    const lock = new LoggingLock(100 /* ms threshold */);
+    const sink = new TestLogSink();
+    const lc = new LogContext('debug', {}, sink);
+
+    await lock.withLock(lc, 'fast', () => {
+      // do nothing
+    });
+    await lc.flush();
+
+    expect(sink.messages).toHaveLength(0);
+  });
+
   test('logs lock-acquired and lock-held timings', async () => {
     const lock = new LoggingLock();
     const sink = new TestLogSink();

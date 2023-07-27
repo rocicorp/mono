@@ -3,9 +3,16 @@ import type {LogContext} from '@rocicorp/logger';
 import type {MaybePromise} from 'replicache';
 
 export class LoggingLock {
+  readonly #minThresholdMs: number;
+
   readonly #lock = new Lock();
   readonly #waiters: string[] = [];
   #holder: string | undefined;
+
+  // By default, logs timings over 0 ms.
+  constructor(loggingMinThresholdMs = 1) {
+    this.#minThresholdMs = loggingMinThresholdMs;
+  }
 
   async withLock(
     lc: LogContext,
@@ -39,7 +46,7 @@ export class LoggingLock {
       this.#waiters.splice(this.#waiters.indexOf(name), 1);
       this.#holder = name;
       const elapsed = t1 - t0;
-      if (elapsed > 0) {
+      if (elapsed >= this.#minThresholdMs) {
         lc.withContext('timing', 'lock-acquired').debug?.(
           `${name} acquired lock in ${elapsed} ms`,
         );
@@ -52,7 +59,7 @@ export class LoggingLock {
 
         this.#holder = undefined;
         const elapsed = t2 - t1;
-        if (elapsed > 0) {
+        if (elapsed >= this.#minThresholdMs) {
           flushAfterLock = elapsed >= flushLogsIfLockHeldForMs;
           lc = lc.withContext('timing', 'lock-held');
           (flushAfterLock ? lc.info : lc.debug)?.(
