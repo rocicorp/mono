@@ -1,3 +1,4 @@
+import {Lock} from '@rocicorp/lock';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {
   createRoomRequestSchema,
@@ -45,7 +46,6 @@ import {
   withBody,
 } from './router.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
-import {LoggingLock} from '../util/lock.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -84,7 +84,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     adjustBufferSizeIntervalMs: 10_000,
   });
   #maxProcessedMutationTimestamp = 0;
-  readonly #lock = new LoggingLock();
+  readonly #lock = new Lock();
   readonly #mutators: MutatorMap;
   readonly #disconnectHandler: DisconnectHandler;
   #lcHasRoomIdContext = false;
@@ -194,13 +194,15 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       }
 
       if (!this.#lcHasRoomIdContext) {
-        await this.#lock.withLock(lc, 'initRoomIDContext', lcInLock => {
+        lc.debug?.('awaiting lock to initialize roomID context');
+        await this.#lock.withLock(() => {
+          lc.debug?.('got lock to initialize roomID context');
           if (this.#lcHasRoomIdContext) {
-            lcInLock.debug?.('roomID context already initialized, returning');
+            lc.debug?.('roomID context already initialized, returning');
             return;
           }
           if (urlRoomID !== null && roomID === undefined) {
-            lcInLock.error?.('Expected roomID to be present in storage', {
+            lc.error?.('Expected roomID to be present in storage', {
               urlRoomID,
             });
           }
@@ -304,7 +306,8 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     serverWS.accept();
 
     void this.#lock
-      .withLock(lc, 'handleConnection', async lc => {
+      .withLock(async () => {
+        lc.debug?.('received lock');
         await handleConnection(
           lc,
           serverWS,
@@ -376,7 +379,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   #closeConnections(
     predicate: (clientState: ClientState) => boolean,
   ): Promise<void> {
-    return this.#lock.withLock(this.#lc, 'closeConnections', () =>
+    return this.#lock.withLock(() =>
       closeConnections(this.#clients, predicate),
     );
   }
@@ -391,7 +394,8 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     lc.debug?.('handling message', data, 'waiting for lock');
 
     try {
-      await this.#lock.withLock(lc, 'handleMessage', async lc => {
+      await this.#lock.withLock(async () => {
+        lc.debug?.('received lock');
         await handleMessage(
           lc,
           this.#storage,
@@ -423,29 +427,28 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   }
 
   async #processNext(lc: LogContext) {
-    await this.#lock.withLock(
-      lc,
-      '#processNext',
-      async lc => {
-        const {maxProcessedMutationTimestamp, nothingToProcess} =
-          await processPending(
-            lc,
-            this.#storage,
-            this.#clients,
-            this.#pendingMutations,
-            this.#mutators,
-            this.#disconnectHandler,
-            this.#maxProcessedMutationTimestamp,
-            this.#bufferSizer,
-          );
-        this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
-        if (nothingToProcess && this.#turnTimerID) {
-          clearInterval(this.#turnTimerID);
-          this.#turnTimerID = 0;
-        }
-      },
-      this.#turnDuration, // TODO(darick): Move this up to the level of the setInterval() call.
+    lc.debug?.(
+      `processNext - starting turn at ${Date.now()} - waiting for lock`,
     );
+    await this.#lock.withLock(async () => {
+      lc.debug?.(`received lock at ${Date.now()}`);
+      const {maxProcessedMutationTimestamp, nothingToProcess} =
+        await processPending(
+          lc,
+          this.#storage,
+          this.#clients,
+          this.#pendingMutations,
+          this.#mutators,
+          this.#disconnectHandler,
+          this.#maxProcessedMutationTimestamp,
+          this.#bufferSizer,
+        );
+      this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
+      if (nothingToProcess && this.#turnTimerID) {
+        clearInterval(this.#turnTimerID);
+        this.#turnTimerID = 0;
+      }
+    });
   }
 
   #handleClose = async (
@@ -453,7 +456,9 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     clientID: ClientID,
     ws: Socket,
   ): Promise<void> => {
-    await this.#lock.withLock(lc, '#handleClose', lc => {
+    lc.debug?.('handling close - waiting for lock');
+    await this.#lock.withLock(() => {
+      lc.debug?.('received lock');
       handleClose(lc, this.#clients, clientID, ws);
       this.#processUntilDone(lc);
     });
