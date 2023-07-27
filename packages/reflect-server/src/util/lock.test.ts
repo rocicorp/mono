@@ -33,6 +33,7 @@ describe('LoggingLock', () => {
     expect(sink.messages[0][0]).toBe('info');
     expect(sink.messages[0][1]).toMatchObject({foo: 'bar'});
     expect(sink.messages[0][1]).toHaveProperty('lockHoldID');
+    expect(sink.messages[0][2][0]).toBe('should have new context');
   });
 
   test('logs lock-acquired and lock-held timings', async () => {
