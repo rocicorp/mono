@@ -21,7 +21,6 @@ export class LoggingLock {
     fn: (lc: LogContext) => MaybePromise<void>,
     flushLogsIfLockHeldForMs = 100,
   ): Promise<void> {
-    const outerLC = lc; // Save this so that we only add the lockHoldID to the lc passed to the fn.
     lc = lc.withContext('lock-fn', name);
     this.#waiters.push(name);
 
@@ -58,14 +57,14 @@ export class LoggingLock {
       }
 
       try {
-        await fn(outerLC.withContext('lockHoldID', lockHoldID));
+        await fn(lc);
       } finally {
         const t2 = Date.now();
         const elapsed = t2 - t1;
         if (elapsed >= this.#minThresholdMs) {
           flushAfterLock = elapsed >= flushLogsIfLockHeldForMs;
-          lc = lc.withContext('lock-timing', 'held');
-          (flushAfterLock ? lc.info : lc.debug)?.(
+          const tlc = lc.withContext('lock-timing', 'held');
+          (flushAfterLock ? tlc.info : tlc.debug)?.(
             `${name} held lock for ${elapsed} ms`,
           );
         }
