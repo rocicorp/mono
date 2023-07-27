@@ -25,8 +25,8 @@ export class LoggingLock {
     this.#waiters.push(name);
 
     if (this.#waiters.length > 1) {
-      // Flush the log if the number of waiters is a multiple of 5.
-      const flush = this.#waiters.length % 5 === 0;
+      // Flush the log if the number of waiters is a multiple of 10.
+      const flush = this.#waiters.length % 10 === 0;
 
       (flush ? lc.info : lc.debug)?.(
         `${name} waiting for ${this.#holder} with ${
