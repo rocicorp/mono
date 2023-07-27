@@ -21,7 +21,7 @@ export class LoggingLock {
     fn: (lc: LogContext) => MaybePromise<void>,
     flushLogsIfLockHeldForMs = 100,
   ): Promise<void> {
-    lc = lc.withContext('lock-fn', name);
+    lc = lc.withContext('lockFn', name);
     this.#waiters.push(name);
 
     if (this.#waiters.length > 1) {
@@ -51,7 +51,7 @@ export class LoggingLock {
 
       const elapsed = t1 - t0;
       if (elapsed >= this.#minThresholdMs) {
-        lc.withContext('lock-timing', 'acquired').debug?.(
+        lc.withContext('lockTiming', 'acquired').debug?.(
           `${name} acquired lock in ${elapsed} ms`,
         );
       }
@@ -63,7 +63,7 @@ export class LoggingLock {
         const elapsed = t2 - t1;
         if (elapsed >= this.#minThresholdMs) {
           flushAfterLock = elapsed >= flushLogsIfLockHeldForMs;
-          const tlc = lc.withContext('lock-timing', 'held');
+          const tlc = lc.withContext('lockTiming', 'held');
           (flushAfterLock ? tlc.info : tlc.debug)?.(
             `${name} held lock for ${elapsed} ms`,
           );

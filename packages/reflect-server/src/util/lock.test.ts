@@ -33,13 +33,13 @@ describe('LoggingLock', () => {
     expect(sink.messages[0][0]).toBe('info');
     expect(sink.messages[0][1]).toMatchObject({
       foo: 'bar',
-      ['lock-fn']: 'fast',
+      lockFn: 'fast',
     });
     expect(sink.messages[0][1]).toHaveProperty('lockHoldID');
     expect(sink.messages[0][2][0]).toBe('should have new context');
   });
 
-  test('logs lock-acquired and lock-held timings', async () => {
+  test('logs acquired and held lockTiming', async () => {
     const lock = new LoggingLock(-1);
     const sink = new TestLogSink();
     const lc = new LogContext('debug', {}, sink);
@@ -61,14 +61,14 @@ describe('LoggingLock', () => {
     expect(sink.messages).toHaveLength(2);
     expect(sink.messages[0][0]).toBe('debug');
     expect(sink.messages[0][1]).toMatchObject({
-      ['lock-fn']: 'logic',
-      ['lock-timing']: 'acquired',
+      lockFn: 'logic',
+      lockTiming: 'acquired',
     });
     expect(sink.messages[0][1]).toHaveProperty('lockHoldID');
     expect(sink.messages[1][0]).toBe('debug');
     expect(sink.messages[1][1]).toMatchObject({
-      ['lock-fn']: 'logic',
-      ['lock-timing']: 'held',
+      lockFn: 'logic',
+      lockTiming: 'held',
     });
     expect(sink.messages[1][1]).toHaveProperty('lockHoldID');
   });
@@ -100,14 +100,14 @@ describe('LoggingLock', () => {
     expect(sink.messages).toHaveLength(2);
     expect(sink.messages[0][0]).toBe('debug');
     expect(sink.messages[0][1]).toMatchObject({
-      ['lock-fn']: 'logic',
-      ['lock-timing']: 'acquired',
+      lockFn: 'logic',
+      lockTiming: 'acquired',
     });
     expect(sink.messages[0][1]).toHaveProperty('lockHoldID');
     expect(sink.messages[1][0]).toBe('info');
     expect(sink.messages[1][1]).toMatchObject({
-      ['lock-fn']: 'logic',
-      ['lock-timing']: 'held',
+      lockFn: 'logic',
+      lockTiming: 'held',
     });
     expect(sink.messages[1][1]).toHaveProperty('lockHoldID');
   });
@@ -145,7 +145,7 @@ describe('LoggingLock', () => {
     expect(sink.messages).toHaveLength(1);
     expect(sink.messages[0][0]).toBe('debug');
     expect(sink.messages[0][1]).toEqual({
-      ['lock-fn']: 'logic',
+      lockFn: 'logic',
     });
     expect(sink.messages[0][2][0]).toMatch(
       /logic waiting for slow#[a-z0-9]+ with 1 other waiter\(s\): logic,logic/,
@@ -158,7 +158,7 @@ describe('LoggingLock', () => {
     expect(sink.messages).toHaveLength(2);
     expect(sink.messages[1][0]).toBe('debug');
     expect(sink.messages[1][1]).toEqual({
-      ['lock-fn']: 'logic',
+      lockFn: 'logic',
     });
     expect(sink.messages[1][2][0]).toMatch(
       /logic waiting for slow#[a-z0-9]+ with 2 other waiter\(s\): logic,logic,logic/,
