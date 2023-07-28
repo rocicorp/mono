@@ -1,7 +1,8 @@
 import {consoleLogSink, LogLevel, LogSink} from '@rocicorp/logger';
 import {createClientDatadogLogSink} from '@rocicorp/reflect/client';
 
-const DATADOG_SERVICE_LABEL = 'reflect.net';
+const DEFAULT_DATADOG_SERVICE_LABEL = 'reflect.net';
+const DEFAULT_LOG_LEVEL = 'info';
 
 function getLogSinks() {
   // empty for next SSR
@@ -17,13 +18,35 @@ function getLogSinks() {
   return [
     createClientDatadogLogSink({
       clientToken: process.env.NEXT_PUBLIC_DATADOG_LOGS_CLIENT_TOKEN,
-      service: DATADOG_SERVICE_LABEL,
+      service:
+        process.env.NEXT_PUBLIC_DATADOG_SERVICE_LABEL ??
+        DEFAULT_DATADOG_SERVICE_LABEL,
     }),
     consoleLogSink,
   ];
 }
 
+function getLogLevel() {
+  const envLogLevel = process.env.NEXT_PUBLIC_LOG_LEVEL;
+  switch (envLogLevel) {
+    case 'error':
+    case 'info':
+    case 'debug':
+      return envLogLevel;
+    case undefined:
+      return DEFAULT_LOG_LEVEL;
+    default:
+      console.log(
+        'bad log level env variable value:',
+        envLogLevel,
+        'defaulting to:',
+        DEFAULT_LOG_LEVEL,
+      );
+      return DEFAULT_LOG_LEVEL;
+  }
+}
+
 export const loggingOptions: {logLevel: LogLevel; logSinks: LogSink[]} = {
-  logLevel: 'info',
+  logLevel: getLogLevel(),
   logSinks: getLogSinks(),
 };

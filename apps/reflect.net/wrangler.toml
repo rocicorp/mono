@@ -9,6 +9,7 @@ durable_objects.bindings = [
   { name = "roomDO", class_name = "RoomDO" },
   { name = "authDO", class_name = "AuthDO" }
 ]
+var = { DATADOG_SERVICE_LABEL = "reflect.net", LOG_LEVEL = "info"}
 
 [[migrations]]
 tag = "v1"
@@ -42,3 +43,4 @@ durable_objects.bindings = [
   { name = "roomDO", class_name = "RoomDO" },
   { name = "authDO", class_name = "AuthDO" }
 ]
+var = { DATADOG_SERVICE_LABEL = "staging.reflect.net", LOG_LEVEL = "debug" }
