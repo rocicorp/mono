@@ -19,6 +19,8 @@ type ReflectNetServerEnv = {
   DATADOG_METRICS_API_KEY?: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   DATADOG_LOGS_API_KEY?: string;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  DATADOG_SERVICE_LABEL?: string;
 } & ReflectServerBaseEnv;
 
 function getDatadogMetricsOptions(env: ReflectNetServerEnv) {
@@ -30,7 +32,7 @@ function getDatadogMetricsOptions(env: ReflectNetServerEnv) {
   }
   return {
     apiKey: env.DATADOG_METRICS_API_KEY,
-    service: DATADOG_SERVICE_LABEL,
+    service: env.DATADOG_SERVICE_LABEL ?? DEFAULT_DATADOG_SERVICE_LABEL,
   };
 }
 
@@ -45,13 +47,13 @@ function getLogSinks(env: ReflectNetServerEnv) {
   return [
     createWorkerDatadogLogSink({
       apiKey: env.DATADOG_LOGS_API_KEY,
-      service: DATADOG_SERVICE_LABEL,
+      service: env.DATADOG_SERVICE_LABEL ?? DEFAULT_DATADOG_SERVICE_LABEL,
     }),
     consoleLogSink,
   ];
 }
 
-const DATADOG_SERVICE_LABEL = 'reflect.net';
+const DEFAULT_DATADOG_SERVICE_LABEL = 'reflect.net';
 const {
   worker,
   // eslint-disable-next-line @typescript-eslint/naming-convention
