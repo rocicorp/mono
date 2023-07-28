@@ -345,7 +345,7 @@ async function recoverMutationsOfClientV4(
       ) {
         const newClients = new Map(clients);
         newClients.delete(clientID);
-        setNewClients(newClients);
+        return setNewClients(newClients);
       }
 
       assert(pullResponse);
