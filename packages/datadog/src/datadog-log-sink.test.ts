@@ -61,40 +61,47 @@ test('reaching flush threshold also calls flush', () => {
 test('does not flush more than max entries', async () => {
   const l = new DatadogLogSink({
     apiKey: 'apiKey',
+    interval: 10,
   });
 
   let fetchCount = 0;
-  const {promise: firstFetchCalled, resolve: inFirstFetch} = resolver<void>();
-  const {promise: secondFetchCalled, resolve: inSecondFetch} = resolver<void>();
+  const fetchLatches = [resolver<void>(), resolver<void>(), resolver<void>()];
   const {promise: canFinishFetch, resolve: finishFetch} = resolver<Response>();
+
   fetch.mockImplementation(() => {
-    if (++fetchCount < 2) {
-      inFirstFetch();
-    } else {
-      inSecondFetch();
-    }
+    fetchLatches[fetchCount++].resolve();
     return canFinishFetch;
   });
   // Trigger the first force flush.
   for (let i = 0; i < FORCE_FLUSH_THRESHOLD; i++) {
     l.log('info', {usr: {name: 'bob'}}, 'aaa');
   }
-  // Wait for the resulting flush() to call fetch.
-  await firstFetchCalled;
 
-  // While fetch() is blocked, add more than MAX_ENTRIES more log statements.
-  for (let i = 0; i < MAX_LOG_ENTRIES_PER_FLUSH + 100; i++) {
+  const numLogEntriesInRequest = (n: number) => {
+    const body = fetch.mock.calls[n][1]?.body;
+    return String(body).split('\n').length;
+  };
+
+  // Wait for the resulting flush() to call fetch.
+  await fetchLatches[0].promise;
+  expect(numLogEntriesInRequest(0)).toBe(FORCE_FLUSH_THRESHOLD);
+
+  // While fetch() is blocked, add 123 + MAX_LOG_ENTRIES more log statements.
+  for (let i = 0; i < 123 + MAX_LOG_ENTRIES_PER_FLUSH; i++) {
     l.log('info', {usr: {name: 'bob'}}, 'aaa');
   }
 
-  // Complete the first fetch.
+  // Let the first fetch complete.
   finishFetch({ok: true} as unknown as Response);
 
-  await secondFetchCalled;
-  expect(fetch).toHaveBeenCalledTimes(2);
+  // Check the second fetch.
+  await fetchLatches[1].promise;
+  expect(numLogEntriesInRequest(1)).toBe(MAX_LOG_ENTRIES_PER_FLUSH);
 
-  const body = fetch.mock.calls[1][1]?.body;
-  expect(String(body).split('\n').length).toBe(MAX_LOG_ENTRIES_PER_FLUSH);
+  // Check the third fetch.
+  jest.advanceTimersByTime(10);
+  await fetchLatches[2].promise;
+  expect(numLogEntriesInRequest(2)).toBe(123);
 });
 
 test('flush calls fetch', async () => {
