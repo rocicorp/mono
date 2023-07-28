@@ -3,6 +3,7 @@ import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import * as dag from './dag/mod.js';
 import * as db from './db/mod.js';
 import {
+  ClientStateNotFoundResponse,
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from './error-responses.js';
@@ -15,8 +16,13 @@ import type {HTTPRequestInfo} from './http-request-info.js';
 import type {CreateStore} from './kv/store.js';
 import {assertClientV4, setClients} from './persist/clients.js';
 import * as persist from './persist/mod.js';
-import type {PullResponseV0, PullResponseV1, Puller} from './puller.js';
-import type {Pusher} from './pusher.js';
+import type {
+  PullResponseV0,
+  PullResponseV1,
+  Puller,
+  PullerResultV1,
+} from './puller.js';
+import type {PushResponse, Pusher, PusherResult} from './pusher.js';
 import type {MaybePromise} from './replicache.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
 import * as sync from './sync/mod.js';
@@ -190,14 +196,14 @@ async function recoverMutationsOfClientV4(
   }
   const stepDescription = `Recovering mutations for ${clientID}.`;
   lc.debug?.('Start:', stepDescription);
-  const dagForOtherClient = new dag.LazyStore(
+  const lazyDagForOtherClient = new dag.LazyStore(
     perdag,
     MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
     dag.throwChunkHasher,
     assertHash,
   );
   try {
-    await withWrite(dagForOtherClient, async write => {
+    await withWrite(lazyDagForOtherClient, async write => {
       await write.setHead(db.DEFAULT_HEAD_NAME, client.headHash);
       await write.commit();
     });
@@ -214,10 +220,10 @@ async function recoverMutationsOfClientV4(
     const pushSucceeded = await wrapInOnlineCheck(async () => {
       const {result: pusherResult} = await wrapInReauthRetries(
         async (requestID: string, requestLc: LogContext) => {
-          assertNotUndefined(dagForOtherClient);
+          assertNotUndefined(lazyDagForOtherClient);
           const pusherResult = await sync.push(
             requestID,
-            dagForOtherClient,
+            lazyDagForOtherClient,
             requestLc,
             await delegate.profileID,
             undefined,
@@ -266,7 +272,7 @@ async function recoverMutationsOfClientV4(
             database.schemaVersion,
             puller,
             requestID,
-            dagForOtherClient,
+            lazyDagForOtherClient,
             formatVersion,
             requestLc,
             false,
@@ -339,7 +345,7 @@ async function recoverMutationsOfClientV4(
       ) {
         const newClients = new Map(clients);
         newClients.delete(clientID);
-        return setNewClients(newClients);
+        setNewClients(newClients);
       }
 
       assert(pullResponse);
@@ -358,7 +364,7 @@ async function recoverMutationsOfClientV4(
   } catch (e) {
     logMutationRecoveryError(e, lc, stepDescription, delegate);
   } finally {
-    await dagForOtherClient.close();
+    await lazyDagForOtherClient.close();
     lc.debug?.('End:', stepDescription);
   }
   return;
@@ -491,6 +497,38 @@ async function recoverMutationsFromPerdagDD31(
   lc.debug?.('End:', stepDescription);
 }
 
+async function maybeDisableClientGroup(
+  lc: LogContext,
+  selfClientGroupID: string,
+  clientGroupID: string,
+  response: PushResponse | PullResponseV1 | undefined,
+  perdag: dag.Store,
+) {
+  if (
+    !isClientStateNotFoundResponse(response) &&
+    !isVersionNotSupportedResponse(response)
+  ) {
+    return false;
+  }
+  if (isClientStateNotFoundResponse(response)) {
+    lc.debug?.(
+      `Client group ${selfClientGroupID} cannot recover mutations for client group ${clientGroupID}. The client group is unknown on the server. Marking it as disabled.`,
+    );
+  } else if (isVersionNotSupportedResponse(response)) {
+    lc.debug?.(
+      `Client group ${selfClientGroupID} cannot recover mutations for client group ${clientGroupID}. The client group's version is not supported on the server. versionType: ${response.versionType}. Marking it as disabled.`,
+    );
+  }
+  // The client group is not the main client group so we do not need the
+  // Replicache instance to update its internal _isClientGroupDisabled
+  // property.
+  await withWrite(perdag, async perdagWrite => {
+    await persist.disableClientGroup(clientGroupID, perdagWrite);
+    await perdagWrite.commit();
+  });
+  return true;
+}
+
 /**
  * @returns When mutations are recovered the resulting updated client group map.
  *   Otherwise undefined, which can be because there were no mutations to
@@ -514,7 +552,9 @@ async function recoverMutationsOfClientGroupDD31(
     isPushDisabled,
     isPullDisabled,
   } = options;
+
   const selfClientGroupID = await options.clientGroupIDPromise;
+  assertNotUndefined(selfClientGroupID);
   if (selfClientGroupID === clientGroupID) {
     return;
   }
@@ -538,16 +578,23 @@ async function recoverMutationsOfClientGroupDD31(
     return;
   }
 
+  if (clientGroup.disabled) {
+    lc.debug?.(
+      `Not recovering mutations for client group ${clientGroupID} because group is disabled.`,
+    );
+    return;
+  }
+
   const stepDescription = `Recovering mutations for client group ${clientGroupID}.`;
   lc.debug?.('Start:', stepDescription);
-  const dagForOtherClientGroup = new dag.LazyStore(
+  const lazyDagForOtherClientGroup = new dag.LazyStore(
     perdag,
     MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
     dag.throwChunkHasher,
     assertHash,
   );
   try {
-    await withWrite(dagForOtherClientGroup, async write => {
+    await withWrite(lazyDagForOtherClientGroup, async write => {
       await write.setHead(db.DEFAULT_HEAD_NAME, clientGroup.headHash);
       await write.commit();
     });
@@ -566,10 +613,10 @@ async function recoverMutationsOfClientGroupDD31(
       const {result: pusherResult} = await wrapInReauthRetries(
         async (requestID: string, requestLc: LogContext) => {
           assert(clientID);
-          assert(dagForOtherClientGroup);
+          assert(lazyDagForOtherClientGroup);
           const pusherResult = await sync.push(
             requestID,
-            dagForOtherClientGroup,
+            lazyDagForOtherClientGroup,
             requestLc,
             await delegate.profileID,
             clientGroupID,
@@ -587,30 +634,20 @@ async function recoverMutationsOfClientGroupDD31(
         pushDescription,
         lc,
       );
-
       if (!pusherResult) {
         return false;
       }
-
       if (
-        isClientStateNotFoundResponse(pusherResult.response) ||
-        isVersionNotSupportedResponse(pusherResult.response)
+        await maybeDisableClientGroup(
+          lc,
+          selfClientGroupID,
+          clientGroupID,
+          pusherResult.response,
+          perdag,
+        )
       ) {
-        if (isClientStateNotFoundResponse(pusherResult.response)) {
-          lc.debug?.(
-            `Client group ${clientGroupID} is unknown on the server. Marking it as disabled.`,
-          );
-        } else {
-          lc.debug?.(
-            `Push does not support the pushVersion/schemaVersion of group ${clientGroupID}. Marking it as disabled.`,
-          );
-        }
-        await withWrite(dagForOtherClientGroup, write =>
-          persist.disableClientGroup(clientGroupID, write),
-        );
         return false;
       }
-
       return pusherResult.httpRequestInfo.httpStatusCode === 200;
     }, pushDescription);
     if (!pushSucceeded) {
@@ -642,7 +679,7 @@ async function recoverMutationsOfClientGroupDD31(
             database.schemaVersion,
             puller,
             requestID,
-            dagForOtherClientGroup,
+            lazyDagForOtherClientGroup,
             formatVersion,
             requestLc,
             false,
@@ -656,6 +693,17 @@ async function recoverMutationsOfClientGroupDD31(
         lc,
       );
       ({pullResponse} = beginPullResponse);
+      if (
+        await maybeDisableClientGroup(
+          lc,
+          selfClientGroupID,
+          clientGroupID,
+          pullResponse,
+          perdag,
+        )
+      ) {
+        return false;
+      }
       return (
         !!pullResponse &&
         beginPullResponse.httpRequestInfo.httpStatusCode === 200
@@ -671,55 +719,20 @@ async function recoverMutationsOfClientGroupDD31(
     // TODO(arv): Refactor to make pullResponse a const.
     // pullResponse must be non undefined because pullSucceeded is true.
     assert(pullResponse);
-    if (lc.debug) {
-      if (isClientStateNotFoundResponse(pullResponse)) {
-        lc.debug?.(
-          `Client group ${selfClientGroupID} cannot recover mutations for client group ${clientGroupID}. The client group us unknown on the server.`,
-        );
-      } else if (isVersionNotSupportedResponse(pullResponse)) {
-        lc.debug?.(
-          `Version is not supported on the server. versionType: ${pullResponse.versionType}. Cannot recover mutations for client group ${clientGroupID}.`,
-        );
-      } else {
-        lc.debug?.(
-          `Client group ${selfClientGroupID} recovered mutations for client group ${clientGroupID}.  Details`,
-          {
-            mutationIDs: clientGroup.mutationIDs,
-            lastServerAckdMutationIDs: clientGroup.lastServerAckdMutationIDs,
-            lastMutationIDChanges: pullResponse.lastMutationIDChanges,
-          },
-        );
-      }
-    }
+    lc.debug?.(
+      `Client group ${selfClientGroupID} recovered mutations for client group ${clientGroupID}.  Details`,
+      {
+        mutationIDs: clientGroup.mutationIDs,
+        lastServerAckdMutationIDs: clientGroup.lastServerAckdMutationIDs,
+        lastMutationIDChanges: pullResponse.lastMutationIDChanges,
+      },
+    );
 
     return await withWrite(perdag, async dagWrite => {
       const clientGroups = await persist.getClientGroups(dagWrite);
       const clientGroupToUpdate = clientGroups.get(clientGroupID);
       if (!clientGroupToUpdate) {
         return clientGroups;
-      }
-
-      const setNewClientGroups = async (
-        newClientGroups: persist.ClientGroupMap,
-      ) => {
-        await persist.setClientGroups(newClientGroups, dagWrite);
-        await dagWrite.commit();
-        return newClientGroups;
-      };
-
-      if (
-        isClientStateNotFoundResponse(pullResponse) ||
-        isVersionNotSupportedResponse(pullResponse)
-      ) {
-        // The client group is not the main client group so we do not need the
-        // Replicache instance to update its internal _isClientGroupDisabled
-        // property.
-        const newClientGroups = new Map(clientGroups);
-        newClientGroups.set(clientGroupID, {
-          ...clientGroupToUpdate,
-          disabled: true,
-        });
-        return setNewClientGroups(newClientGroups);
       }
 
       assert(pullResponse);
@@ -747,12 +760,14 @@ async function recoverMutationsOfClientGroupDD31(
           ...lastServerAckdMutationIDsUpdates,
         },
       });
-      return setNewClientGroups(newClientGroups);
+      await persist.setClientGroups(newClientGroups, dagWrite);
+      await dagWrite.commit();
+      return newClientGroups;
     });
   } catch (e) {
     logMutationRecoveryError(e, lc, stepDescription, delegate);
   } finally {
-    await dagForOtherClientGroup.close();
+    await lazyDagForOtherClientGroup.close();
     lc.debug?.('End:', stepDescription);
   }
   return;
