@@ -15,13 +15,7 @@ export class LoggingLock {
     this.#minThresholdMs = loggingMinThresholdMs;
   }
 
-  async withLock(
-    lc: LogContext,
-    name: string,
-    fn: (lc: LogContext) => MaybePromise<void>,
-    flushLogsIfLockHeldForMs = 100,
-  ): Promise<void> {
-    lc = lc.withContext('lockFn', name);
+  #trackWaiters(lc: LogContext, name: string) {
     this.#waiters.push(name);
 
     if (this.#waiters.length > 1) {
@@ -34,11 +28,23 @@ export class LoggingLock {
         } other waiter(s): ${this.#waiters}`,
       );
       if (flush) {
-        // Note: It is important not to flush here as higher level logic relies on
-        // lock acquisition happening in strict (synchronous) order.
+        // Note: Do not await. See documentation in withLock().
         void lc.flush();
       }
     }
+  }
+
+  async withLock(
+    lc: LogContext,
+    name: string,
+    fn: (lc: LogContext) => MaybePromise<void>,
+    flushLogsIfLockHeldForMs = 100,
+  ): Promise<void> {
+    // Note: It is important that there are no `await`s before the lock
+    // acquisition is attempted (i.e. withLock()), as the calling logic relies
+    // on lock acquisition happening in chronological order.
+    lc = lc.withContext('lockFn', name);
+    this.#trackWaiters(lc, name);
 
     let flushAfterLock = false;
     const t0 = Date.now();
