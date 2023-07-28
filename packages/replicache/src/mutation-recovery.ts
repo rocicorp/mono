@@ -3,7 +3,6 @@ import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import * as dag from './dag/mod.js';
 import * as db from './db/mod.js';
 import {
-  ClientStateNotFoundResponse,
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from './error-responses.js';
@@ -17,12 +16,12 @@ import type {CreateStore} from './kv/store.js';
 import {assertClientV4, setClients} from './persist/clients.js';
 import * as persist from './persist/mod.js';
 import type {
+  PullResponseOKV1,
   PullResponseV0,
   PullResponseV1,
   Puller,
-  PullerResultV1,
 } from './puller.js';
-import type {PushResponse, Pusher, PusherResult} from './pusher.js';
+import type {PushResponse, Pusher} from './pusher.js';
 import type {MaybePromise} from './replicache.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
 import * as sync from './sync/mod.js';
@@ -667,7 +666,7 @@ async function recoverMutationsOfClientGroupDD31(
     const {puller} = delegate;
 
     const pullDescription = 'recoveringMutationsPull';
-    let pullResponse: PullResponseV1 | undefined;
+    let okPullResponse: PullResponseOKV1 | undefined;
     const pullSucceeded = await wrapInOnlineCheck(async () => {
       const {result: beginPullResponse} = await wrapInReauthRetries(
         async (requestID: string, requestLc: LogContext) => {
@@ -692,7 +691,7 @@ async function recoverMutationsOfClientGroupDD31(
         pullDescription,
         lc,
       );
-      ({pullResponse} = beginPullResponse);
+      const {pullResponse} = beginPullResponse;
       if (
         await maybeDisableClientGroup(
           lc,
@@ -704,10 +703,19 @@ async function recoverMutationsOfClientGroupDD31(
       ) {
         return false;
       }
-      return (
-        !!pullResponse &&
-        beginPullResponse.httpRequestInfo.httpStatusCode === 200
-      );
+      if (
+        !pullResponse ||
+        beginPullResponse.httpRequestInfo.httpStatusCode !== 200 ||
+        // These next to checks are redundant with maybeDisableClientGroup
+        // but TypeScript doesn't know that and they are needed to refine
+        // pullResponse to type PullResponseOKV1 in the else case.
+        isClientStateNotFoundResponse(pullResponse) ||
+        isVersionNotSupportedResponse(pullResponse)
+      ) {
+        return false;
+      }
+      okPullResponse = pullResponse;
+      return true;
     }, pullDescription);
     if (!pullSucceeded) {
       lc.debug?.(
@@ -718,13 +726,13 @@ async function recoverMutationsOfClientGroupDD31(
 
     // TODO(arv): Refactor to make pullResponse a const.
     // pullResponse must be non undefined because pullSucceeded is true.
-    assert(pullResponse);
+    assert(okPullResponse);
     lc.debug?.(
       `Client group ${selfClientGroupID} recovered mutations for client group ${clientGroupID}.  Details`,
       {
         mutationIDs: clientGroup.mutationIDs,
         lastServerAckdMutationIDs: clientGroup.lastServerAckdMutationIDs,
-        lastMutationIDChanges: pullResponse.lastMutationIDChanges,
+        lastMutationIDChanges: okPullResponse.lastMutationIDChanges,
       },
     );
 
@@ -735,11 +743,11 @@ async function recoverMutationsOfClientGroupDD31(
         return clientGroups;
       }
 
-      assert(pullResponse);
+      assert(okPullResponse);
       const lastServerAckdMutationIDsUpdates: Record<ClientID, number> = {};
       let anyMutationIDsUpdated = false;
       for (const [clientID, lastMutationIDChange] of Object.entries(
-        pullResponse.lastMutationIDChanges,
+        okPullResponse.lastMutationIDChanges,
       )) {
         if (
           (clientGroupToUpdate.lastServerAckdMutationIDs[clientID] ?? 0) <
