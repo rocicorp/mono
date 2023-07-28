@@ -11,6 +11,10 @@ export interface DatadogLogSinkOptions {
 
 const DD_URL = 'https://http-intake.logs.datadoghq.com/api/v2/logs';
 
+// https://docs.datadoghq.com/api/latest/logs/
+export const MAX_LOG_ENTRIES_PER_FLUSH = 1000;
+export const FORCE_FLUSH_THRESHOLD = 250;
+
 export class DatadogLogSink implements LogSink {
   private _messages: Message[] = [];
   private readonly _apiKey: string;
@@ -33,7 +37,7 @@ export class DatadogLogSink implements LogSink {
 
   log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
     this._messages.push(makeMessage(args, context, level));
-    if (level === 'error') {
+    if (level === 'error' || this._messages.length === FORCE_FLUSH_THRESHOLD) {
       // Do not await. Later calls to flush will await as needed.
       void this.flush();
     } else {
@@ -59,8 +63,7 @@ export class DatadogLogSink implements LogSink {
         return;
       }
 
-      const messages = this._messages;
-      this._messages = [];
+      const messages = this._messages.splice(0, MAX_LOG_ENTRIES_PER_FLUSH);
 
       const flushTime = Date.now();
       const body = messages
@@ -101,8 +104,9 @@ export class DatadogLogSink implements LogSink {
         } as RequestInit);
 
         ok = response.ok;
-      } catch {
-        // ok stays false
+      } catch (e) {
+        // Log to console so that we might catch this in `wrangler tail`.
+        console.error('Log flush to datadog failed', e);
       }
 
       if (!ok) {
