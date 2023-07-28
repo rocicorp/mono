@@ -119,10 +119,10 @@ describe('LoggingLock', () => {
 
     // To ensure that flush() is never `await`ed when logging pre-acquire
     // messages, we replace flush with a never-resolving Promise.
-    const {promise: flushFinished} = resolver<void>();
+    const {promise: neverFinished} = resolver<void>();
     const flushSpy = jest
       .spyOn(lc, 'flush')
-      .mockImplementation(() => flushFinished);
+      .mockImplementation(() => neverFinished);
     // Override withContext so it always returns the this instance with the mocked flush().
     jest.spyOn(lc, 'withContext').mockImplementation(() => lc);
 
