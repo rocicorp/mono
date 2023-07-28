@@ -21,6 +21,8 @@ type ReflectNetServerEnv = {
   DATADOG_LOGS_API_KEY?: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   DATADOG_SERVICE_LABEL?: string;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  LOG_LEVEL?: string; // should be 'error', 'debug', or 'info'
 } & ReflectServerBaseEnv;
 
 function getDatadogMetricsOptions(env: ReflectNetServerEnv) {
@@ -53,6 +55,27 @@ function getLogSinks(env: ReflectNetServerEnv) {
   ];
 }
 
+const DEFAULT_LOG_LEVEL = 'info';
+function getLogLevel(env: ReflectNetServerEnv) {
+  const envLogLevel = env.LOG_LEVEL;
+  switch (envLogLevel) {
+    case 'error':
+    case 'info':
+    case 'debug':
+      return envLogLevel;
+    case undefined:
+      return DEFAULT_LOG_LEVEL;
+    default:
+      console.log(
+        'bad log level env variable value:',
+        envLogLevel,
+        'defaulting to:',
+        DEFAULT_LOG_LEVEL,
+      );
+      return DEFAULT_LOG_LEVEL;
+  }
+}
+
 const DEFAULT_DATADOG_SERVICE_LABEL = 'reflect.net';
 const {
   worker,
@@ -64,7 +87,7 @@ const {
   mutators,
   datadogMetricsOptions: getDatadogMetricsOptions(env),
   logSinks: getLogSinks(env),
-  logLevel: 'info',
+  logLevel: getLogLevel(env),
   disconnectHandler: async tx => {
     console.log('deleting old client', tx.clientID);
     await deleteClient(tx, tx.clientID);
