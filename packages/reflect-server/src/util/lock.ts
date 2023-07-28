@@ -34,7 +34,9 @@ export class LoggingLock {
         } other waiter(s): ${this.#waiters}`,
       );
       if (flush) {
-        await lc.flush();
+        // Note: It is important not to flush here as higher level logic relies on
+        // lock acquisition happening in strict (synchronous) order.
+        void lc.flush();
       }
     }
 

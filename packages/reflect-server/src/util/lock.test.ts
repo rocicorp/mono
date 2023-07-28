@@ -1,8 +1,8 @@
-import {describe, test, expect} from '@jest/globals';
+import {describe, test, expect, jest} from '@jest/globals';
 import {LoggingLock} from './lock.js';
 import {LogContext} from '@rocicorp/logger';
 import {TestLogSink, createSilentLogContext} from './test-utils.js';
-import {must} from 'shared/src/must.js';
+import {resolver} from './resolver.js';
 import {sleep} from './sleep.js';
 
 describe('LoggingLock', () => {
@@ -44,15 +44,15 @@ describe('LoggingLock', () => {
     const sink = new TestLogSink();
     const lc = new LogContext('debug', {}, sink);
 
-    const inLock = new Signal();
-    const releaseLock = new Signal();
+    const {promise: hasAcquiredLock, resolve: acquiredLock} = resolver<void>();
+    const {promise: canReleaseLock, resolve: releaseLock} = resolver<void>();
     void lock.withLock(createSilentLogContext(), 'first', async () => {
-      inLock.notify();
-      await releaseLock.notification();
+      acquiredLock();
+      await canReleaseLock;
     });
 
-    await inLock.notification();
-    setTimeout(() => releaseLock.notify(), 1);
+    await hasAcquiredLock;
+    setTimeout(() => releaseLock(), 1);
     await lock.withLock(lc, 'logic', async () => {
       // do nothing
     });
@@ -78,15 +78,15 @@ describe('LoggingLock', () => {
     const sink = new TestLogSink();
     const lc = new LogContext('debug', {}, sink);
 
-    const inLock = new Signal();
-    const releaseLock = new Signal();
+    const {promise: hasAcquiredLock, resolve: acquiredLock} = resolver<void>();
+    const {promise: canReleaseLock, resolve: releaseLock} = resolver<void>();
     void lock.withLock(createSilentLogContext(), 'first', async () => {
-      inLock.notify();
-      await releaseLock.notification();
+      acquiredLock();
+      await canReleaseLock;
     });
 
-    await inLock.notification();
-    setTimeout(() => releaseLock.notify(), 1);
+    await hasAcquiredLock;
+    setTimeout(() => releaseLock(), 1);
     await lock.withLock(
       lc,
       'logic',
@@ -112,26 +112,37 @@ describe('LoggingLock', () => {
     expect(sink.messages[1][1]).toHaveProperty('lockHoldID');
   });
 
-  test('logs multiple waiters', async () => {
-    const lock = new LoggingLock();
+  test('logs multiple waiters without awaiting flush', async () => {
+    const lock = new LoggingLock(1000);
     const sink = new TestLogSink();
     const lc = new LogContext('debug', {}, sink);
 
-    const inLock = new Signal();
-    const releaseFirstLock = new Signal();
+    // To ensure that flush() is never `await`ed when logging pre-acquire
+    // messages, we replace flush with a never-resolving Promise.
+    const {promise: flushFinished} = resolver<void>();
+    const flushSpy = jest
+      .spyOn(lc, 'flush')
+      .mockImplementation(() => flushFinished);
+    // Override withContext so it always returns the this instance with the mocked flush().
+    jest.spyOn(lc, 'withContext').mockImplementation(() => lc);
+
+    const {promise: hasAcquiredLock, resolve: acquiredLock} = resolver<void>();
+    const {promise: canReleaseFirstLock, resolve: releaseFirstLock} =
+      resolver<void>();
     void lock.withLock(createSilentLogContext(), 'slow', async () => {
-      inLock.notify();
-      await releaseFirstLock.notification();
+      acquiredLock();
+      await canReleaseFirstLock;
     });
 
-    await inLock.notification();
+    await hasAcquiredLock;
 
-    const releaseSecondLock = new Signal();
+    const {promise: canReleaseSecondLock, resolve: releaseSecondLock} =
+      resolver<void>();
     const waiters: Promise<void>[] = [];
     const pushWaiter = () => {
       waiters.push(
         lock.withLock(lc, `logic`, async () => {
-          await releaseSecondLock.notification();
+          await canReleaseSecondLock;
         }),
       );
     };
@@ -140,52 +151,37 @@ describe('LoggingLock', () => {
     pushWaiter();
 
     await sleep(1);
-    await lc.flush();
 
     expect(sink.messages).toHaveLength(1);
     expect(sink.messages[0][0]).toBe('debug');
-    expect(sink.messages[0][1]).toEqual({
-      lockFn: 'logic',
-    });
     expect(sink.messages[0][2][0]).toMatch(
       /logic waiting for slow#[a-z0-9]+ with 1 other waiter\(s\): logic,logic/,
     );
 
     pushWaiter();
     await sleep(2);
-    await lc.flush();
 
     expect(sink.messages).toHaveLength(2);
     expect(sink.messages[1][0]).toBe('debug');
-    expect(sink.messages[1][1]).toEqual({
-      lockFn: 'logic',
-    });
     expect(sink.messages[1][2][0]).toMatch(
       /logic waiting for slow#[a-z0-9]+ with 2 other waiter\(s\): logic,logic,logic/,
     );
 
-    releaseFirstLock.notify();
-    releaseSecondLock.notify();
+    // Push 7 more waiters so that the total of 10 waiters triggers an (asynchronous) LogContext flush.
+    for (let i = 0; i < 7; i++) {
+      pushWaiter();
+    }
+    await sleep(2);
 
+    // The 9th message should call flush() without awaiting.
+    expect(sink.messages).toHaveLength(9);
+
+    releaseFirstLock();
+    releaseSecondLock();
+
+    // Ensure that the waiters all complete, which validates that they are never waiting on the
+    // never-resolving flush() method. If they are waiting, the test runner should fail with a timeout.
     await Promise.all(waiters);
+    expect(flushSpy).toHaveBeenCalledTimes(1);
   });
 });
-
-class Signal {
-  #promise: Promise<void>;
-  #resolve: undefined | ((value: void | PromiseLike<void>) => void) = undefined;
-
-  constructor() {
-    this.#promise = new Promise(resolve => {
-      this.#resolve = resolve;
-    });
-  }
-
-  notification(): Promise<void> {
-    return this.#promise;
-  }
-
-  notify() {
-    must(this.#resolve)();
-  }
-}
