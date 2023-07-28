@@ -706,8 +706,8 @@ async function recoverMutationsOfClientGroupDD31(
       if (
         !pullResponse ||
         beginPullResponse.httpRequestInfo.httpStatusCode !== 200 ||
-        // These next to checks are redundant with maybeDisableClientGroup
-        // but TypeScript doesn't know that and they are needed to refine
+        // These next two checks are redundant with maybeDisableClientGroup
+        // but TypeScript doesn't know that and so they are needed to refine
         // pullResponse to type PullResponseOKV1 in the else case.
         isClientStateNotFoundResponse(pullResponse) ||
         isVersionNotSupportedResponse(pullResponse)
