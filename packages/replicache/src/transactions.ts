@@ -1,25 +1,42 @@
 import type {LogContext} from '@rocicorp/logger';
 import {greaterThan} from 'compare-utf8';
-import {ReadonlyJSONValue, deepFreeze} from './json.js';
+import {IndexKey, decodeIndexKey} from './db/index.js';
+import type * as db from './db/mod.js';
+import type {IndexDefinition} from './index-defs.js';
+import {JSONValue, ReadonlyJSONValue, deepFreeze} from './json.js';
+import type {ScanResult} from './scan-iterator.js';
+import {ScanResultImpl, fromKeyForIndexScanInternal} from './scan-iterator.js';
 import {
-  isScanIndexOptions,
   KeyTypeForScanOptions,
   ScanIndexOptions,
   ScanNoIndexOptions,
   ScanOptions,
+  isScanIndexOptions,
   toDbScanOptions,
 } from './scan-options.js';
-import {fromKeyForIndexScanInternal, ScanResultImpl} from './scan-iterator.js';
-import type {ScanResult} from './scan-iterator.js';
-import {rejectIfClosed, throwIfClosed} from './transaction-closed-error.js';
-import type * as db from './db/mod.js';
 import type {ScanSubscriptionInfo} from './subscriptions.js';
-import {decodeIndexKey, IndexKey} from './db/index.js';
-import type {IndexDefinition} from './index-defs.js';
 import type {ClientID} from './sync/ids.js';
+import {rejectIfClosed, throwIfClosed} from './transaction-closed-error.js';
 
 export type TransactionEnvironment = 'client' | 'server';
 export type TransactionReason = 'initial' | 'rebase' | 'authoritative';
+
+/**
+ * Basic deep readonly type. It works for {@link JSONValue}.
+ */
+export type DeepReadonly<T> = T extends
+  | null
+  | boolean
+  | string
+  | number
+  | undefined
+  ? T
+  : DeepReadonlyObject<T>;
+
+export type DeepReadonlyObject<T> = {
+  readonly [K in keyof T]: DeepReadonly<T[K]>;
+};
+
 /**
  * ReadTransactions are used with {@link Replicache.query} and
  * {@link Replicache.subscribe} and allows read operations on the
@@ -38,7 +55,9 @@ export interface ReadTransaction {
    * for performance reasons. If you mutate the return value you will get
    * undefined behavior.
    */
+
   get(key: string): Promise<ReadonlyJSONValue | undefined>;
+  get<T extends JSONValue>(key: string): Promise<DeepReadonly<T> | undefined>;
 
   /** Determines if a single `key` is present in the database. */
   has(key: string): Promise<boolean>;
@@ -113,10 +132,12 @@ export class ReadTransactionImpl implements ReadTransaction {
     this.environment = 'client';
   }
 
-  // eslint-disable-next-line require-await
-  async get(key: string): Promise<ReadonlyJSONValue | undefined> {
-    throwIfClosed(this.dbtx);
-    return this.dbtx.get(key);
+  get(key: string): Promise<ReadonlyJSONValue | undefined>;
+  get<T extends JSONValue>(key: string): Promise<DeepReadonly<T> | undefined> {
+    return (
+      rejectIfClosed(this.dbtx) ||
+      (this.dbtx.get(key) as Promise<DeepReadonly<T> | undefined>)
+    );
   }
 
   // eslint-disable-next-line require-await
@@ -185,9 +206,10 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
     return this._tx.isEmpty();
   }
 
-  get(key: string): Promise<ReadonlyJSONValue | undefined> {
+  get(key: string): Promise<ReadonlyJSONValue | undefined>;
+  get<T extends JSONValue>(key: string): Promise<DeepReadonly<T> | undefined> {
     this._keys.add(key);
-    return this._tx.get(key);
+    return this._tx.get(key) as Promise<DeepReadonly<T> | undefined>;
   }
 
   has(key: string): Promise<boolean> {

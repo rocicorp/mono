@@ -1,6 +1,7 @@
 /* eslint-disable require-await */
 
 import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
+import {assert} from 'shared/src/asserts.js';
 import type {IndexKey} from './db/index.js';
 import type {ReadonlyJSONObject} from './mod.js';
 import {Replicache} from './replicache.js';
@@ -424,4 +425,86 @@ test.skip('Allowing undefined in JSONObject [type checking only]', async () => {
     },
   });
   await rep.mutate.mut({a: undefined});
+});
+
+test.skip('Parameterized get [type checking only]', async () => {
+  const rep = new Replicache({
+    name: 'test-types',
+    licenseKey: TEST_LICENSE_KEY,
+    mutators: {
+      mut: async (tx: WriteTransaction) => {
+        const p: {x: string} | undefined = await tx.get<{x: string}>('x');
+        use(p);
+      },
+    },
+  });
+  await rep.query(async tx => {
+    const p: {x: string} | undefined = await tx.get<{x: string}>('x');
+    use(p);
+  });
+});
+
+test.skip('Parameterized get invalid types [type checking only]', async () => {
+  const rep = new Replicache({
+    name: 'test-types',
+    licenseKey: TEST_LICENSE_KEY,
+    mutators: {
+      mut: async (tx: WriteTransaction) => {
+        // @ts-expect-error Type 'string' is not assignable to type 'number'.ts(2322)
+        const p: {x: number} | undefined = await tx.get<{x: string}>('x');
+        use(p);
+      },
+    },
+  });
+  await rep.query(async tx => {
+    // @ts-expect-error Type 'string' is not assignable to type 'number'.ts(2322)
+    const p: {x: number} | undefined = await tx.get<{x: string}>('x');
+    use(p);
+  });
+});
+
+test.skip('Parameterized get deep read only [type checking only]', async () => {
+  type T = {
+    x: number;
+  };
+  const rep = new Replicache({
+    name: 'test-types',
+    licenseKey: TEST_LICENSE_KEY,
+    mutators: {
+      mut: async (tx: WriteTransaction) => {
+        const v = await tx.get<T>('x');
+        assert(v);
+        // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
+        v.x = 42;
+      },
+    },
+  });
+  await rep.query(async tx => {
+    const v = await tx.get<T>('x');
+    assert(v);
+    // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
+    v.x = 42;
+  });
+});
+
+test.skip('Parameterized get deep read only array [type checking only]', async () => {
+  type T = {x: number[]};
+  const rep = new Replicache({
+    name: 'test-types',
+    licenseKey: TEST_LICENSE_KEY,
+    mutators: {
+      mut: async (tx: WriteTransaction) => {
+        const v = await tx.get<T>('x');
+        assert(v);
+        // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
+        v.x[0] = 42;
+      },
+    },
+  });
+  await rep.query(async tx => {
+    const v = await tx.get<T>('x');
+    assert(v);
+    // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
+    v.x[0] = 42;
+  });
 });
