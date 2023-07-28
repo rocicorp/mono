@@ -1,4 +1,3 @@
-import 'firebase/auth';
 import {StyledFirebaseAuth} from '@/components/Firebase/StyledFirebaseAuth';
 import {auth, uiConfig} from '@/firebase-config/firebase-auth-ui-config';
 
