@@ -7,5 +7,6 @@
 /server.d.ts
 /server.js
 /server.js.map
+/bin/
 
 tsconfig.tsbuildinfo

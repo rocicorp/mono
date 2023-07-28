@@ -13,7 +13,7 @@ function createRandomIdentifier(name) {
  */
 function injectRequire() {
   const createRequireAlias = createRandomIdentifier('createRequire');
-  return `import {createRequire as ${createRequireAlias}} from 'module';
+  return `import {createRequire as ${createRequireAlias}} from 'node:module';
 var require = ${createRequireAlias}(import.meta.url);
 `;
 }

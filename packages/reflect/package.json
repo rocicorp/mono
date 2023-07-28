@@ -7,6 +7,9 @@
   "main": "index.js",
   "module": "index.js",
   "types": "index.d.ts",
+  "bin": {
+    "reflect": "cli.js"
+  },
   "scripts": {
     "build": "node tool/build.js",
     "format": "prettier --ignore-path .gitignore --write *",
@@ -19,26 +22,39 @@
   },
   "dependencies": {
     "@badrap/valita": "^0.2.0",
+    "@google-cloud/firestore": "^6.6.1",
     "@rocicorp/lock": "^1.0.1",
     "@rocicorp/logger": "^5.2.0",
-    "@rocicorp/resolver": "^1.0.0"
+    "@rocicorp/resolver": "^1.0.0",
+    "esbuild": "^0.18.3",
+    "firebase": "^9.22.2",
+    "miniflare": "^3.20230717.0",
+    "open": "^9.1.0",
+    "picocolors": "^1.0.0",
+    "pkg-up": "^4.0.0",
+    "semver": "^7.5.3",
+    "validate-npm-package-name": "^5.0.0",
+    "yargs": "^17.4.1"
   },
   "devDependencies": {
+    "@types/node": "^18.16.0",
+    "reflect-cli": "0.1.0",
     "reflect-client": "0.0.0",
     "reflect-server": "0.0.0",
-    "@types/node": "^18.16.0",
     "reflect-shared": "0.0.0"
   },
   "peerDependencies": {
     "wrangler": "^2.13.0"
   },
   "files": [
+    "cli.js",
     "client.d.ts",
     "client.js",
+    "index.d.ts",
+    "index.js",
     "server.d.ts",
     "server.js",
-    "index.d.ts",
-    "index.js"
+    "bin/cli.js"
   ],
   "exports": {
     ".": "./index.js",
