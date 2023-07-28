@@ -1,6 +1,11 @@
 import {jest, afterEach, beforeEach, test, expect} from '@jest/globals';
 import type {ReadonlyJSONObject} from 'replicache';
-import {DatadogLogSink} from './datadog-log-sink.js';
+import {
+  DatadogLogSink,
+  FORCE_FLUSH_THRESHOLD,
+  MAX_LOG_ENTRIES_PER_FLUSH,
+} from './datadog-log-sink.js';
+import {resolver} from '@rocicorp/resolver';
 import realFetch from 'cross-fetch';
 
 const fetch = jest.fn(realFetch);
@@ -29,6 +34,67 @@ test('calling error also calls flush', () => {
     .mockImplementation(() => Promise.resolve(undefined));
   l.log('error', {usr: {name: 'bob'}}, 'aaa');
   expect(flushSpy).toHaveBeenCalledTimes(1);
+});
+
+test('reaching flush threshold also calls flush', () => {
+  const l = new DatadogLogSink({
+    apiKey: 'apiKey',
+  });
+  const flushSpy = jest
+    .spyOn(l, 'flush')
+    .mockImplementation(() => Promise.resolve(undefined));
+  for (let i = 0; i < FORCE_FLUSH_THRESHOLD - 1; i++) {
+    l.log('info', {usr: {name: 'bob'}}, 'aaa');
+  }
+  expect(flushSpy).not.toHaveBeenCalled();
+  // The next log should force a flush.
+  l.log('info', {usr: {name: 'bob'}}, 'aaa');
+  expect(flushSpy).toHaveBeenCalledTimes(1);
+
+  // Subsequent logs don't repeatedly flush.
+  for (let i = 0; i < 5; i++) {
+    l.log('info', {usr: {name: 'bob'}}, 'aaa');
+  }
+  expect(flushSpy).toHaveBeenCalledTimes(1);
+});
+
+test('does not flush more than max entries', async () => {
+  const l = new DatadogLogSink({
+    apiKey: 'apiKey',
+  });
+
+  let fetchCount = 0;
+  const {promise: firstFetchCalled, resolve: inFirstFetch} = resolver<void>();
+  const {promise: secondFetchCalled, resolve: inSecondFetch} = resolver<void>();
+  const {promise: canFinishFetch, resolve: finishFetch} = resolver<Response>();
+  fetch.mockImplementation(() => {
+    if (++fetchCount < 2) {
+      inFirstFetch();
+    } else {
+      inSecondFetch();
+    }
+    return canFinishFetch;
+  });
+  // Trigger the first force flush.
+  for (let i = 0; i < FORCE_FLUSH_THRESHOLD; i++) {
+    l.log('info', {usr: {name: 'bob'}}, 'aaa');
+  }
+  // Wait for the resulting flush() to call fetch.
+  await firstFetchCalled;
+
+  // While fetch() is blocked, add more than MAX_ENTRIES more log statements.
+  for (let i = 0; i < MAX_LOG_ENTRIES_PER_FLUSH + 100; i++) {
+    l.log('info', {usr: {name: 'bob'}}, 'aaa');
+  }
+
+  // Complete the first fetch.
+  finishFetch({ok: true} as unknown as Response);
+
+  await secondFetchCalled;
+  expect(fetch).toHaveBeenCalledTimes(2);
+
+  const body = fetch.mock.calls[1][1]?.body;
+  expect(String(body).split('\n').length).toBe(MAX_LOG_ENTRIES_PER_FLUSH);
 });
 
 test('flush calls fetch', async () => {
