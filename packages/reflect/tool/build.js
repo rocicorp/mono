@@ -40,6 +40,10 @@ function doCopy(dst, src, name) {
     );
     process.exit(1);
   }
+  const dstDir = path.dirname(dst);
+  if (!fs.existsSync(dstDir)) {
+    fs.mkdirSync(dstDir, {recursive: true});
+  }
 
   fs.copyFileSync(src, dst);
 }
