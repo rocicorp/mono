@@ -4,8 +4,8 @@
 import * as esbuild from 'esbuild';
 import {writeFile} from 'fs/promises';
 import * as path from 'path';
+import {sharedOptions} from 'shared/src/build.js';
 import {fileURLToPath} from 'url';
-import {sharedOptions} from '../shared/src/build.js';
 
 const metafile = process.argv.includes('--metafile');
 

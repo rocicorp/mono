@@ -15,9 +15,6 @@
     "test:watch": "node --no-warnings --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
     "check-types": "tsc --noEmit"
   },
-  "bin": {
-    "reflect": "out/cli.js"
-  },
   "dependencies": {
     "@badrap/valita": "^0.2.0",
     "@rocicorp/lock": "^1.0.1",

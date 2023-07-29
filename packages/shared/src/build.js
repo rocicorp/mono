@@ -13,11 +13,9 @@ const external = [
 /**
  * @param {boolean=} minify
  * @param {boolean=} metafile
- * @returns {import('esbuild').BuildOptions}
  */
 export function sharedOptions(minify = true, metafile = false) {
-  /** @type {import('esbuild').BuildOptions} */
-  const opts = {
+  const opts = /** @type {const} */ ({
     bundle: true,
     target: 'es2022',
     format: 'esm',
@@ -25,9 +23,13 @@ export function sharedOptions(minify = true, metafile = false) {
     minify,
     sourcemap: true,
     metafile,
-  };
+  });
   if (minify) {
-    return {...opts, mangleProps: /^_./, reserveProps: /^__.*__$/};
+    return /** @type {const} */ ({
+      ...opts,
+      mangleProps: /^_./,
+      reserveProps: /^__.*__$/,
+    });
   }
   return opts;
 }
