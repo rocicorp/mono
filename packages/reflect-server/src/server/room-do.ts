@@ -415,37 +415,56 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       return;
     }
 
-    this.#turnTimerID = setInterval(() => {
-      this.#processNext(lc).catch(e => {
-        lc.error?.('Unhandled exception in _processNext', e);
-      });
+    let queued = false;
+
+    this.#turnTimerID = setInterval(async () => {
+      // setInterval() is recommended to only be used with logic that completes within
+      // the interval:
+      //
+      // https://developer.mozilla.org/en-US/docs/Web/API/setInterval#ensure_that_execution_duration_is_shorter_than_interval_frequency
+      //
+      // We do not have this guarantee with #processNextInLock(), and because
+      // these calls are serialized by the lock, a long invocation can result in setInterval()
+      // queueing up many subsequent invocations and consequently hogging the lock.
+      //
+      // To avoid this self-DOS situation, we only allow one invocation to be queued, meanwhile
+      // aborting redundant invocations fired by setInterval().
+      if (queued) {
+        lc.info?.(`Previous turn is still queued. Dropping redundant turn.`);
+        return;
+      }
+      queued = true;
+      await this.#lock.withLock(
+        lc,
+        '#processNext',
+        async lc => {
+          queued = false;
+          await this.#processNextInLock(lc).catch(e => {
+            lc.error?.('Unhandled exception in _processNext', e);
+          });
+        },
+        this.#turnDuration * 1.5,
+      );
     }, this.#turnDuration);
   }
 
-  async #processNext(lc: LogContext) {
-    await this.#lock.withLock(
-      lc,
-      '#processNext',
-      async lc => {
-        const {maxProcessedMutationTimestamp, nothingToProcess} =
-          await processPending(
-            lc,
-            this.#storage,
-            this.#clients,
-            this.#pendingMutations,
-            this.#mutators,
-            this.#disconnectHandler,
-            this.#maxProcessedMutationTimestamp,
-            this.#bufferSizer,
-          );
-        this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
-        if (nothingToProcess && this.#turnTimerID) {
-          clearInterval(this.#turnTimerID);
-          this.#turnTimerID = 0;
-        }
-      },
-      this.#turnDuration, // TODO(darick): Move this up to the level of the setInterval() call.
-    );
+  async #processNextInLock(lc: LogContext) {
+    const {maxProcessedMutationTimestamp, nothingToProcess} =
+      await processPending(
+        lc,
+        this.#storage,
+        this.#clients,
+        this.#pendingMutations,
+        this.#mutators,
+        this.#disconnectHandler,
+        this.#maxProcessedMutationTimestamp,
+        this.#bufferSizer,
+      );
+    this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
+    if (nothingToProcess && this.#turnTimerID) {
+      clearInterval(this.#turnTimerID);
+      this.#turnTimerID = 0;
+    }
   }
 
   #handleClose = async (
