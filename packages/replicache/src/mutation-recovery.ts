@@ -3,6 +3,8 @@ import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import * as dag from './dag/mod.js';
 import * as db from './db/mod.js';
 import {
+  ClientStateNotFoundResponse,
+  VersionNotSupportedResponse,
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from './error-responses.js';
@@ -496,19 +498,22 @@ async function recoverMutationsFromPerdagDD31(
   lc.debug?.('End:', stepDescription);
 }
 
-async function maybeDisableClientGroup(
+function isResponseThatShouldDisableClientGroup(
+  response: PushResponse | PullResponseV1 | undefined,
+): response is ClientStateNotFoundResponse | VersionNotSupportedResponse {
+  return (
+    isClientStateNotFoundResponse(response) ||
+    isVersionNotSupportedResponse(response)
+  );
+}
+
+async function disableClientGroup(
   lc: LogContext,
   selfClientGroupID: string,
   clientGroupID: string,
-  response: PushResponse | PullResponseV1 | undefined,
+  response: ClientStateNotFoundResponse | VersionNotSupportedResponse,
   perdag: dag.Store,
 ) {
-  if (
-    !isClientStateNotFoundResponse(response) &&
-    !isVersionNotSupportedResponse(response)
-  ) {
-    return false;
-  }
   if (isClientStateNotFoundResponse(response)) {
     lc.debug?.(
       `Client group ${selfClientGroupID} cannot recover mutations for client group ${clientGroupID}. The client group is unknown on the server. Marking it as disabled.`,
@@ -525,7 +530,6 @@ async function maybeDisableClientGroup(
     await persist.disableClientGroup(clientGroupID, perdagWrite);
     await perdagWrite.commit();
   });
-  return true;
 }
 
 /**
@@ -636,15 +640,15 @@ async function recoverMutationsOfClientGroupDD31(
       if (!pusherResult) {
         return false;
       }
-      if (
-        await maybeDisableClientGroup(
+      const pusherResponse = pusherResult.response;
+      if (isResponseThatShouldDisableClientGroup(pusherResponse)) {
+        await disableClientGroup(
           lc,
           selfClientGroupID,
           clientGroupID,
-          pusherResult.response,
+          pusherResponse,
           perdag,
-        )
-      ) {
+        );
         return false;
       }
       return pusherResult.httpRequestInfo.httpStatusCode === 200;
@@ -692,25 +696,19 @@ async function recoverMutationsOfClientGroupDD31(
         lc,
       );
       const {pullResponse} = beginPullResponse;
-      if (
-        await maybeDisableClientGroup(
+      if (isResponseThatShouldDisableClientGroup(pullResponse)) {
+        await disableClientGroup(
           lc,
           selfClientGroupID,
           clientGroupID,
           pullResponse,
           perdag,
-        )
-      ) {
+        );
         return false;
       }
       if (
         !pullResponse ||
-        beginPullResponse.httpRequestInfo.httpStatusCode !== 200 ||
-        // These next two checks are redundant with maybeDisableClientGroup
-        // but TypeScript doesn't know that and so they are needed to refine
-        // pullResponse to type PullResponseOKV1 in the else case.
-        isClientStateNotFoundResponse(pullResponse) ||
-        isVersionNotSupportedResponse(pullResponse)
+        beginPullResponse.httpRequestInfo.httpStatusCode !== 200
       ) {
         return false;
       }
