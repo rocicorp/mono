@@ -14,6 +14,12 @@ const DD_URL = 'https://http-intake.logs.datadoghq.com/api/v2/logs';
 // https://docs.datadoghq.com/api/latest/logs/
 export const MAX_LOG_ENTRIES_PER_FLUSH = 1000;
 export const FORCE_FLUSH_THRESHOLD = 250;
+const MAX_ENTRY_BYTES = 5 * 1024 * 1024;
+
+// Conservative limit that assumes all chars are encoded as 4 UTF-8 bytes.
+// This makes the actual limit somewhere closer to 1.25 MB, which is still
+// a reasonable amount of log data to send per request.
+export const MAX_ENTRY_CHARS = MAX_ENTRY_BYTES / 4;
 
 export class DatadogLogSink implements LogSink {
   private _messages: Message[] = [];
@@ -63,20 +69,40 @@ export class DatadogLogSink implements LogSink {
         return;
       }
 
-      const messages = this._messages.splice(0, MAX_LOG_ENTRIES_PER_FLUSH);
-
       const flushTime = Date.now();
-      const body = messages
-        .map(m => {
-          // As a small perf optimization, we directly mutate
-          // the message rather than making a shallow copy.
-          // The LOG_SINK_FLUSH_DELAY_ATTRIBUTE will be clobbered by
-          // the next flush if this flush fails (which is the desired behavior).
-          m[LOG_SINK_FLUSH_DELAY_ATTRIBUTE] = flushTime - m.date;
-          return JSON.stringify(m);
-        })
-        .join('\n');
+      const stringified = [];
+      let totalBytes = 0;
 
+      for (const m of this._messages) {
+        // As a small perf optimization, we directly mutate
+        // the message rather than making a shallow copy.
+        // The LOG_SINK_FLUSH_DELAY_ATTRIBUTE will be clobbered by
+        // the next flush if this flush fails (which is the desired behavior).
+        m[LOG_SINK_FLUSH_DELAY_ATTRIBUTE] = flushTime - m.date;
+
+        let str = JSON.stringify(m);
+        if (str.length > MAX_ENTRY_CHARS) {
+          // A single message above the total payload limit will otherwise halt
+          // log flushing progress. Drop and replace with a message indicating so.
+          m.message = `[Dropped message of length ${str.length}]`;
+          str = JSON.stringify(m);
+        }
+        // Calculate the totalBytes with the newline characters between messages.
+        if (str.length + totalBytes + stringified.length > MAX_ENTRY_CHARS) {
+          break;
+        }
+        totalBytes += str.length;
+        stringified.push(str);
+
+        if (stringified.length === MAX_LOG_ENTRIES_PER_FLUSH) {
+          break;
+        }
+      }
+
+      // Remove messages that have been stringified for sending.
+      const flushing = this._messages.splice(0, stringified.length);
+
+      const body = stringified.join('\n');
       const url = new URL(DD_URL);
       url.searchParams.set('dd-api-key', this._apiKey);
 
@@ -111,7 +137,7 @@ export class DatadogLogSink implements LogSink {
 
       if (!ok) {
         // Put the messages back in the queue.
-        this._messages.splice(0, 0, ...messages);
+        this._messages.splice(0, 0, ...flushing);
       }
 
       // If any messages left at this point schedule another flush.
