@@ -38,7 +38,7 @@ import {
   tickAFewTimes,
 } from './test-util.js';
 import {uuid} from './uuid.js';
-import {withRead} from './with-transactions.js';
+import {withRead, withWrite} from './with-transactions.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -59,6 +59,7 @@ suite('DD31', () => {
     pullResponse?: PullResponseV1 | undefined;
     pushResponse?: PushResponse | undefined;
     formatVersion: FormatVersion;
+    expectClientGroupDisabled?: boolean;
   }) {
     sinon.stub(console, 'error');
 
@@ -78,6 +79,7 @@ suite('DD31', () => {
         [client2ID]: 1,
       },
       formatVersion,
+      expectClientGroupDisabled = false,
     } = args;
 
     assert(formatVersion >= FormatVersion.V6);
@@ -143,6 +145,7 @@ suite('DD31', () => {
     assertClientV6(client2);
 
     expect(client1.clientGroupID).to.equal(client2.clientGroupID);
+    expect(await rep.clientGroupID).to.not.equal(client1.clientGroupID);
 
     const clientGroup = await withRead(testPerdag, read =>
       persist.getClientGroup(client1.clientGroupID, read),
@@ -261,6 +264,7 @@ suite('DD31', () => {
     expect(updatedClientGroup.mutationIDs).to.deep.equal(
       clientGroup.mutationIDs,
     );
+    expect(updatedClientGroup.disabled).to.equal(expectClientGroupDisabled);
   }
 
   for (const formatVersion of [FormatVersion.V6, FormatVersion.V7] as const) {
@@ -365,6 +369,7 @@ suite('DD31', () => {
           schemaVersionOfClientRecoveringMutations: 'testSchema1',
           pullResponse: {error: 'VersionNotSupported', versionType: 'pull'},
           formatVersion,
+          expectClientGroupDisabled: true,
         });
       });
 
@@ -374,6 +379,7 @@ suite('DD31', () => {
           schemaVersionOfClientRecoveringMutations: 'testSchema1',
           pullResponse: {error: 'ClientStateNotFound'},
           formatVersion,
+          expectClientGroupDisabled: true,
         });
       });
 
@@ -383,6 +389,7 @@ suite('DD31', () => {
           schemaVersionOfClientRecoveringMutations: 'testSchema1',
           pushResponse: {error: 'VersionNotSupported', versionType: 'pull'},
           formatVersion,
+          expectClientGroupDisabled: true,
         });
       });
 
@@ -392,6 +399,7 @@ suite('DD31', () => {
           schemaVersionOfClientRecoveringMutations: 'testSchema1',
           pushResponse: {error: 'ClientStateNotFound'},
           formatVersion,
+          expectClientGroupDisabled: true,
         });
       });
     });
@@ -1940,7 +1948,7 @@ suite('DD31', () => {
       clientID: client1ID,
       perdag: testPerdagDD31,
       numLocal: 1,
-      mutatorNames: Object.keys(rep.mutate),
+      mutatorNames: ['client-1', 'mutator_name_2'],
       cookie: 'c1',
       formatVersion,
     });
@@ -1949,6 +1957,7 @@ suite('DD31', () => {
       persist.getClient(client1ID, read),
     );
     assertClientV6(client1);
+    expect(client1.clientGroupID).to.not.equal(await rep.clientGroupID);
     const clientGroup1 = await withRead(testPerdagDD31, read =>
       persist.getClientGroup(client1.clientGroupID, read),
     );
@@ -2039,6 +2048,7 @@ suite('DD31', () => {
       persist.getClient(client1ID, read),
     );
     assertClientV6(client1);
+    expect(client1.clientGroupID).to.not.equal(await rep.clientGroupID);
     const clientGroup1 = await withRead(testPerdagDD31, read =>
       persist.getClientGroup(client1.clientGroupID, read),
     );
@@ -2107,5 +2117,181 @@ suite('DD31', () => {
 
   test('pullDisabled so cannot confirm recovery different perdag due to schema', async () => {
     await testPullDisabled('schema-version-1', 'schema-version-2');
+  });
+
+  async function testClientGroupDisabled(
+    schemaVersion1: string,
+    schemaVersion2: string,
+  ) {
+    const formatVersion = FormatVersion.Latest;
+    const client1ID = 'client1';
+    const client2ID = 'client2';
+    const auth = '1';
+    const pushURL = 'https://test.replicache.dev/push';
+    const pullURL = 'https://test.replicache.dev/pull';
+    const rep = await replicacheForTesting('client-group-to-recover-disabled', {
+      auth,
+      pushURL,
+      pullURL,
+      schemaVersion: schemaVersion1,
+      mutators: {
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        mutator_name_2: () => undefined,
+      },
+    });
+    const profileID = await rep.profileID;
+
+    const testPerdagDD31 = await createPerdag({
+      replicacheName: rep.name,
+      schemaVersion: schemaVersion2,
+      formatVersion,
+    });
+
+    await createAndPersistClientWithPendingLocalDD31({
+      clientID: client1ID,
+      perdag: testPerdagDD31,
+      numLocal: 1,
+      mutatorNames: ['mutator_client1', 'mutator_name_2'],
+      cookie: 'c1',
+      formatVersion,
+    });
+
+    const client2PendingLocalMetas =
+      await createAndPersistClientWithPendingLocalDD31({
+        clientID: client2ID,
+        perdag: testPerdagDD31,
+        numLocal: 1,
+        // change mutator names to get a different client group from
+        // client1
+        mutatorNames: ['mutator_client2', 'mutator_name_2'],
+        // This needs to be lexicographically greater than the cookie
+        // used to create/persist client1ID above, otherwise the snapshot
+        // created for this client won't get presisted as its cookie is not
+        // considered newer than the snapshot its client group was forked from,
+        // and we end up with rebase errors
+        cookie: 'c2',
+        formatVersion,
+      });
+
+    const client1 = await withRead(testPerdagDD31, read =>
+      persist.getClient(client1ID, read),
+    );
+    assertClientV6(client1);
+    expect(client1.clientGroupID).to.not.equal(await rep.clientGroupID);
+    await withWrite(testPerdagDD31, async write => {
+      await persist.disableClientGroup(client1.clientGroupID, write);
+      await write.commit();
+    });
+    const clientGroup1 = await withRead(testPerdagDD31, read =>
+      persist.getClientGroup(client1.clientGroupID, read),
+    );
+    assert(clientGroup1);
+    expect(clientGroup1.mutationIDs[client1ID]).to.equal(2);
+
+    const client2 = await withRead(testPerdagDD31, read =>
+      persist.getClient(client2ID, read),
+    );
+    assertClientV6(client2);
+    expect(client2.clientGroupID).to.not.equal(await rep.clientGroupID);
+    expect(client2.clientGroupID).to.not.equal(client1.clientGroupID);
+    const clientGroup2 = await withRead(testPerdagDD31, read =>
+      persist.getClientGroup(client2.clientGroupID, read),
+    );
+    assert(clientGroup2);
+    expect(clientGroup2.mutationIDs[client2ID]).to.equal(2);
+
+    fetchMock.reset();
+
+    const pullRequestJSONBodies: JSONObject[] = [];
+    const pushRequestJSONBodies: JSONObject[] = [];
+    fetchMock.reset();
+    fetchMock.post(
+      pushURL,
+      async (_url: string, _options: RequestInit, request: Request) => {
+        const requestJSON = await request.json();
+        assertJSONObject(requestJSON);
+        pushRequestJSONBodies.push(requestJSON);
+        return 'ok';
+      },
+    );
+    fetchMock.post(
+      pullURL,
+      async (_url: string, _options: RequestInit, request: Request) => {
+        const requestJSON = await request.json();
+        assertJSONObject(requestJSON);
+        pullRequestJSONBodies.push(requestJSON);
+        return {
+          cookie: 'c3',
+          lastMutationIDChanges: {[client2ID]: 2},
+          patch: [],
+        };
+      },
+    );
+
+    await rep.recoverMutations();
+
+    // Client 2 is recovered, but client 1 is not since its client group
+    // is disabled
+    const pushRequestBody1: PushRequestV1 = {
+      clientGroupID: client2.clientGroupID,
+      mutations: [
+        {
+          clientID: client2ID,
+          args: client2PendingLocalMetas[0].mutatorArgsJSON,
+          id: client2PendingLocalMetas[0].mutationID,
+          name: client2PendingLocalMetas[0].mutatorName,
+          timestamp: client2PendingLocalMetas[0].timestamp,
+        },
+      ],
+      profileID,
+      pushVersion: PUSH_VERSION_DD31,
+      schemaVersion: schemaVersion2,
+    };
+    expect(pushRequestJSONBodies).to.deep.equal([pushRequestBody1]);
+    const pullRequestBody1: PullRequestV1 = {
+      profileID,
+      clientGroupID: client2.clientGroupID,
+      cookie: 'c2',
+      pullVersion: PULL_VERSION_DD31,
+      schemaVersion: schemaVersion2,
+    };
+    expect(pullRequestJSONBodies).to.deep.equal([pullRequestBody1]);
+
+    const updatedClient1 = await withRead(testPerdagDD31, read =>
+      persist.getClient(client1ID, read),
+    );
+    assertClientV6(updatedClient1);
+    expect(updatedClient1).to.deep.equal(client1);
+
+    const updatedClientGroup1 = await withRead(testPerdagDD31, read =>
+      persist.getClientGroup(client1.clientGroupID, read),
+    );
+    // This did not get updated because the client group was disabled!
+    expect(updatedClientGroup1).to.deep.equal(clientGroup1);
+
+    const updatedClient2 = await withRead(testPerdagDD31, read =>
+      persist.getClient(client2ID, read),
+    );
+    assertClientV6(updatedClient2);
+    expect(updatedClient2).to.deep.equal(client2);
+
+    const updatedClientGroup2 = await withRead(testPerdagDD31, read =>
+      persist.getClientGroup(client2.clientGroupID, read),
+    );
+    // Updated with new lastServerAckdMutationIDs from pull response
+    expect(updatedClientGroup2).to.deep.equal({
+      ...clientGroup2,
+      lastServerAckdMutationIDs: {
+        [client2ID]: 2,
+      },
+    });
+  }
+
+  test('disabled client group is not recovered', async () => {
+    await testClientGroupDisabled('schema-version', 'schema-version');
+  });
+
+  test('disabled client group is not recovered, different perdag due to schema', async () => {
+    await testClientGroupDisabled('schema-version-1', 'schema-version-2');
   });
 });
