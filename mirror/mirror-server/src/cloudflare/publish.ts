@@ -10,6 +10,7 @@ import {getServerModules} from './get-server-modules.js';
 import {publishCustomDomains} from './publish-custom-domains.js';
 import {submitSecret} from './submit-secret.js';
 import {submitTriggers} from './submit-triggers.js';
+import {logger} from 'firebase-functions';
 
 export async function createWorker(
   {accountID, scriptName, apiToken}: Config,
@@ -87,9 +88,7 @@ export async function publish(
   appName: string,
   version: string,
 ): Promise<string> {
-  console.log(
-    `publishing ${appName}.reflect-server.net (${config.scriptName})`,
-  );
+  logger.log(`publishing ${appName}.reflect-server.net (${config.scriptName})`);
 
   const [serverModule, ...otherServerModules] = await getServerModules(
     firestore,
@@ -121,15 +120,13 @@ export async function publish(
   // Make sure that all the names are unique.
   assertAllModulesHaveUniqueNames([workerModule, ...modules]);
 
-  console.log(
-    `publishing ${appName}.reflect-server.net (${config.scriptName})`,
-  );
+  logger.log(`publishing ${appName}.reflect-server.net (${config.scriptName})`);
   await createWorker(config, workerModule, modules);
 
   let reflectAuthApiKey = process.env.REFLECT_AUTH_API_KEY;
   if (!reflectAuthApiKey) {
     // TODO(arv): Figure this out once and for all.
-    console.log('Missing REFLECT_AUTH_API_KEY, using a random one');
+    logger.log('Missing REFLECT_AUTH_API_KEY, using a random one');
     reflectAuthApiKey = nanoid();
   }
 

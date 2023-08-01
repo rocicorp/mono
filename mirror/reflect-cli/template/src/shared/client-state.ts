@@ -62,12 +62,10 @@ export function putClientState(
 }
 
 export async function clearCursor(tx: WriteTransaction): Promise<void> {
-  const {cursor, ...clientStateWithoutCursor} = await getClientState(
-    tx,
-    tx.clientID,
-  );
+  const clientState = {...(await getClientState(tx, tx.clientID))};
+  clientState.cursor = undefined;
   await putClientState(tx, {
-    clientState: clientStateWithoutCursor,
+    clientState,
   });
 }
 

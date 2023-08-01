@@ -9,7 +9,7 @@ durable_objects.bindings = [
   { name = "roomDO", class_name = "RoomDO" },
   { name = "authDO", class_name = "AuthDO" }
 ]
-vars = { DATADOG_SERVICE_LABEL = "reflect.net", LOG_LEVEL = "info"}
+vars = { DATADOG_SERVICE_LABEL = "reflect.net", LOG_LEVEL = "debug"}
 
 [[migrations]]
 tag = "v1"

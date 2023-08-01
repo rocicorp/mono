@@ -2,6 +2,7 @@ import {HttpsError, type CallableRequest} from 'firebase-functions/v2/https';
 import type * as v from 'shared/src/valita.js';
 import {parse} from 'shared/src/valita.js';
 import {ValidatorChainer} from './types.js';
+import {logger} from 'firebase-functions';
 
 export function validateSchema<Request, Response>(
   requestSchema: v.Type<Request>,
@@ -12,7 +13,7 @@ export function validateSchema<Request, Response>(
       try {
         parse(request, requestSchema);
       } catch (e) {
-        console.log(String(e));
+        logger.warn(String(e));
         throw new HttpsError('invalid-argument', String(e));
       }
       return context;
