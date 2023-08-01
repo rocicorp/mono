@@ -1,4 +1,5 @@
 import * as esbuild from 'esbuild';
+import {injectRequire} from 'shared/src/tool/inject-require.js';
 import packageJSON from '../package.json' assert {type: 'json'};
 
 const {dependencies, devDependencies, bundleDependencies} = packageJSON;
@@ -12,22 +13,6 @@ const external = new Set(
 // See comment in tool/process-deps.js
 for (const dep of bundleDependencies) {
   external.delete(dep);
-}
-
-function createRandomIdentifier(name) {
-  return `${name}_${Math.random() * 10000}`.replace('.', '');
-}
-
-/**
- * Injects a global `require` function into the bundle.
- *
- *  @returns {esbuild.BuildOptions}
- */
-function injectRequire() {
-  const createRequireAlias = createRandomIdentifier('createRequire');
-  return `import {createRequire as ${createRequireAlias}} from 'module';
-var require = ${createRequireAlias}(import.meta.url);
-`;
 }
 
 const indexCtx = await esbuild.context({

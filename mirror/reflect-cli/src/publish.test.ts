@@ -1,10 +1,8 @@
 import {expect, jest, test} from '@jest/globals';
 import * as fs from 'node:fs/promises';
-import {createRequire} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {pkgUp} from 'pkg-up';
-import {assert} from 'shared/src/asserts.js';
+import {fileURLToPath} from 'node:url';
 import {publishHandler, type PublishCaller} from './publish.js';
 import {useFakeAppConfig, useFakeAuthConfig} from './test-helpers.js';
 
@@ -36,10 +34,16 @@ async function writeTempFiles(
   await fs.writeFile(testFilePath, data, 'utf-8');
 
   if (!reflectVersion) {
-    const require = createRequire(import.meta.url);
-    const reflectPath = require.resolve('@rocicorp/reflect');
-    const reflectPackageJSONPath = await pkgUp({cwd: reflectPath});
-    assert(reflectPackageJSONPath);
+    const currentFile = fileURLToPath(import.meta.url);
+    const reflectPackageJSONPath = path.join(
+      path.dirname(currentFile), // src
+      '..', // reflect-cli
+      '..', // mirror
+      '..', // mono
+      'packages',
+      'reflect',
+      'package.json',
+    );
     const s = await fs.readFile(reflectPackageJSONPath, 'utf-8');
     const reflectPackageJSON = JSON.parse(s);
     reflectVersion = '>=' + reflectPackageJSON.version;

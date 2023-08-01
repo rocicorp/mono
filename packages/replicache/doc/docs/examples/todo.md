@@ -29,7 +29,7 @@ Minimal examples, demonstrating different stacks and techniques for building Rep
 <div style={{float:"left", width:"50%", paddingLeft:'2ex', marginTop: '2em', boxSizing:'border-box'}}>
   <h3>todo-wc</h3>
   <div style={{marginBottom: '1em'}}>
-    <a style={{marginRight:'2ex'}} href="TODO">Live Demo</a>
+    <a style={{marginRight:'2ex'}} href="https://todo-wc.onrender.com/">Live Demo</a>
     <a href="https://github.com/rocicorp/todo-wc">Source Code</a>
   </div>
   <p>

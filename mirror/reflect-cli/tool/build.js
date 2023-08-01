@@ -1,22 +1,7 @@
 import * as esbuild from 'esbuild';
 import {checkOutfileForNodeModules} from 'shared/src/tool/check-outfile-for-node-modules.js';
 import {getExternalFromPackageJSON} from 'shared/src/tool/get-external-from-package-json.js';
-
-function createRandomIdentifier(name) {
-  return `${name}_${Math.random() * 10000}`.replace('.', '');
-}
-
-/**
- * Injects a global `require` function into the bundle.
- *
- *  @returns {esbuild.BuildOptions}
- */
-function injectRequire() {
-  const createRequireAlias = createRandomIdentifier('createRequire');
-  return `import {createRequire as ${createRequireAlias}} from 'module';
-var require = ${createRequireAlias}(import.meta.url);
-`;
-}
+import {injectRequire} from 'shared/src/tool/inject-require.js';
 
 async function main() {
   const outfile = 'out/index.mjs';

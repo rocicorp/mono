@@ -3,6 +3,7 @@ import type {ReadonlyJSONObject} from 'replicache';
 import {
   DatadogLogSink,
   FORCE_FLUSH_THRESHOLD,
+  MAX_ENTRY_CHARS,
   MAX_LOG_ENTRIES_PER_FLUSH,
 } from './datadog-log-sink.js';
 import {resolver} from '@rocicorp/resolver';
@@ -136,6 +137,98 @@ test('flush calls fetch', async () => {
           flushDelayMs: 8,
         },
       ),
+      method: 'POST',
+      keepalive: true,
+    },
+  );
+});
+
+test('flush truncates large messages and batches', async () => {
+  const l = new DatadogLogSink({
+    apiKey: 'apiKey',
+  });
+  jest.setSystemTime(1);
+  l.log('debug', {usr: {name: 'bob'}}, 'a'.repeat(MAX_ENTRY_CHARS * 2));
+  l.log('debug', {usr: {name: 'bob'}}, 'b'.repeat(MAX_ENTRY_CHARS / 2));
+  l.log('debug', {usr: {name: 'bob'}}, 'small message');
+  l.log('debug', {usr: {name: 'bob'}}, 'c'.repeat(MAX_ENTRY_CHARS / 2));
+  l.log('debug', {usr: {name: 'bob'}}, 'another small message');
+  l.log('debug', {usr: {name: 'bob'}}, 'd'.repeat(MAX_ENTRY_CHARS * 2));
+  l.log('debug', {usr: {name: 'bob'}}, 'last small message');
+
+  await l.flush();
+
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledWith(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
+    {
+      body: stringifyMany(
+        // The first message should be truncated.
+        {
+          usr: {name: 'bob'},
+          date: 1,
+          message: '[Dropped message of length 2621518]',
+          status: 'debug',
+          flushDelayMs: 0,
+        },
+        // The second message fits within the total MAX_ENTRY_CHARS limit, but the other big message does not.
+        {
+          usr: {name: 'bob'},
+          date: 1,
+          message: 'b'.repeat(MAX_ENTRY_CHARS / 2),
+          status: 'debug',
+          flushDelayMs: 0,
+        },
+        {
+          usr: {name: 'bob'},
+          date: 1,
+          message: 'small message',
+          status: 'debug',
+          flushDelayMs: 0,
+        },
+      ),
+      method: 'POST',
+      keepalive: true,
+    },
+  );
+
+  await l.flush();
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenCalledWith(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
+    // The remaining messages are sent on the next flush.
+    {
+      body: stringifyMany(
+        {
+          usr: {name: 'bob'},
+          date: 1,
+          message: 'c'.repeat(MAX_ENTRY_CHARS / 2),
+          status: 'debug',
+          flushDelayMs: 0,
+        },
+        {
+          usr: {name: 'bob'},
+          date: 1,
+          message: 'another small message',
+          status: 'debug',
+          flushDelayMs: 0,
+        },
+        {
+          usr: {name: 'bob'},
+          date: 1,
+          message: '[Dropped message of length 2621518]',
+          status: 'debug',
+          flushDelayMs: 0,
+        },
+        {
+          usr: {name: 'bob'},
+          date: 1,
+          message: 'last small message',
+          status: 'debug',
+          flushDelayMs: 0,
+        },
+      ),
+
       method: 'POST',
       keepalive: true,
     },
