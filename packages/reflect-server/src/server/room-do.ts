@@ -415,37 +415,75 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       return;
     }
 
-    this.#turnTimerID = setInterval(() => {
-      this.#processNext(lc).catch(e => {
-        lc.error?.('Unhandled exception in _processNext', e);
-      });
-    }, this.#turnDuration);
-  }
-
-  async #processNext(lc: LogContext) {
-    await this.#lock.withLock(
+    this.#turnTimerID = this.runInLockAtInterval(
       lc,
       '#processNext',
-      async lc => {
-        const {maxProcessedMutationTimestamp, nothingToProcess} =
-          await processPending(
-            lc,
-            this.#storage,
-            this.#clients,
-            this.#pendingMutations,
-            this.#mutators,
-            this.#disconnectHandler,
-            this.#maxProcessedMutationTimestamp,
-            this.#bufferSizer,
-          );
-        this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
-        if (nothingToProcess && this.#turnTimerID) {
-          clearInterval(this.#turnTimerID);
-          this.#turnTimerID = 0;
-        }
-      },
-      this.#turnDuration, // TODO(darick): Move this up to the level of the setInterval() call.
+      this.#turnDuration,
+      lc => this.#processNextInLock(lc),
     );
+  }
+
+  // Exposed for testing.
+  runInLockAtInterval(
+    lc: LogContext,
+    name: string,
+    interval: number,
+    callback: (lc: LogContext) => Promise<void>,
+  ): NodeJS.Timer {
+    let queued = false;
+
+    return setInterval(async () => {
+      // setInterval() is recommended to only be used with logic that completes within the interval:
+      //
+      // https://developer.mozilla.org/en-US/docs/Web/API/setInterval#ensure_that_execution_duration_is_shorter_than_interval_frequency
+      //
+      // We do not have this guarantee with the `callback`, and because calls are serialized by the lock,
+      // a long invocation can result in setInterval() queueing up many subsequent invocations and
+      // consequently hogging the lock.
+      //
+      // To avoid this self-DOS situation, we only allow one invocation to be queued, meanwhile
+      // aborting redundant invocations fired by setInterval().
+      if (queued) {
+        lc.info?.(
+          `Previous ${name} is still queued. Dropping redundant invocation.`,
+        );
+        return;
+      }
+      queued = true;
+
+      await this.#lock.withLock(
+        lc,
+        name,
+        async lc => {
+          queued = false;
+          await callback(lc).catch(e => {
+            lc.error?.(`Unhandled exception in ${name}`, e);
+          });
+        },
+        // The callback is expected to run close to and occasionally exceed the interval.
+        // Log if it runs for more than 1.5x the interval.
+        interval * 1.5,
+      );
+    }, interval);
+  }
+
+  async #processNextInLock(lc: LogContext) {
+    const {maxProcessedMutationTimestamp, nothingToProcess} =
+      await processPending(
+        lc,
+        this.#storage,
+        this.#clients,
+        this.#pendingMutations,
+        this.#mutators,
+        this.#disconnectHandler,
+        this.#maxProcessedMutationTimestamp,
+        this.#bufferSizer,
+      );
+    this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
+    if (nothingToProcess && this.#turnTimerID) {
+      clearInterval(this.#turnTimerID);
+      this.#turnTimerID = 0;
+    }
   }
 
   #handleClose = async (
