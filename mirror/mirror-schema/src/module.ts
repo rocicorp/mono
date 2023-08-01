@@ -1,5 +1,5 @@
 import type {Bucket} from '@google-cloud/storage';
-import * as crypto from './crypto.js';
+import * as crypto from 'shared/src/mirror/crypto.js';
 
 type Module = {
   name: string;

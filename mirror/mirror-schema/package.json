@@ -16,6 +16,7 @@
   "dependencies": {
     "@badrap/valita": "^0.2.0",
     "@google-cloud/firestore": "^6.6.1",
+    "@google-cloud/storage": "^6.12.0",
     "firestore-jest-mock": "^0.21.0"
   },
   "devDependencies": {

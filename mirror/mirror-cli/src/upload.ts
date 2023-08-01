@@ -15,7 +15,7 @@ import type {
 } from 'reflect-cli/src/yarg-types.js';
 import {SemVer} from 'semver';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
-import {storeModule} from 'shared/src/mirror/store-module.js';
+import {storeModule} from 'mirror-schema/src/module.js';
 
 const require = createRequire(import.meta.url);
 

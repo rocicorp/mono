@@ -3,7 +3,7 @@ import type {Storage} from 'firebase-admin/storage';
 import {HttpsError} from 'firebase-functions/v2/https';
 import * as schema from 'mirror-schema/src/server.js';
 import assert from 'node:assert';
-import {parseCloudStorageURL} from '../parse-cloud-storage-url.js';
+import {parseCloudStorageURL} from 'mirror-schema/src/cloud-storage.js';
 import type {CfModule} from './create-worker-upload-form.js';
 
 export async function getServerModules(
