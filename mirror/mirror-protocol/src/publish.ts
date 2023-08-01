@@ -24,7 +24,7 @@ export const publishResponseSchema = v.object({
 export type PublishResponse = v.Infer<typeof publishResponseSchema>;
 
 export const publish = createCall(
-  'publish',
+  'app-publish',
   publishRequestSchema,
   publishResponseSchema,
 );

@@ -11,20 +11,11 @@ import {
 } from './config/index.js';
 import * as appFunctions from './functions/app/index.js';
 import {healthcheck as healthcheckHandler} from './functions/healthcheck.function.js';
-import {publish as publishHandler} from './functions/publish.function.js';
 import * as userFunctions from './functions/user/index.js';
 
 // Initializes firestore et al. (e.g. for subsequent calls to getFirestore())
 initializeApp(appOptions);
 setGlobalOptions({serviceAccount: serviceAccountId});
-
-export const publish = https.onCall(
-  {
-    ...baseHttpsOptions,
-    secrets: ['CLOUDFLARE_API_TOKEN'],
-  },
-  publishHandler(getFirestore(), getStorage(), modulesBucketName),
-);
 
 export const healthcheck = https.onRequest(
   baseHttpsOptions,
@@ -46,5 +37,12 @@ export const user = {
 
 export const app = {
   create: https.onCall(baseHttpsOptions, appFunctions.create(getFirestore())),
+  publish: https.onCall(
+    {
+      ...baseHttpsOptions,
+      secrets: ['CLOUDFLARE_API_TOKEN'],
+    },
+    appFunctions.publish(getFirestore(), getStorage(), modulesBucketName),
+  ),
   rename: https.onCall(baseHttpsOptions, appFunctions.rename(getFirestore())),
 };
