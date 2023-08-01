@@ -26,15 +26,9 @@ const r = new Reflect({
 const App = ({reflect}: {reflect: Reflect<M>}) => {
   const ref = useRef<HTMLDivElement | null>(null);
 
-  const onMouseMove = ({
-    pageX,
-    pageY,
-  }: {
-    pageX: number;
-    pageY: number;
-  }) => {
+  const onMouseMove = ({pageX, pageY}: {pageX: number; pageY: number}) => {
     if (ref && ref.current) {
-      reflect.mutate.setCursor({
+      void reflect.mutate.setCursor({
         x: pageX,
         y: pageY - ref.current.offsetTop,
       });
