@@ -1,8 +1,9 @@
+import {logger} from 'firebase-functions';
 import {cfFetch} from './cf-fetch.js';
 import type {Config} from './config.js';
 
 export function submitTriggers(config: Config, cron: string) {
-  console.log('Setting up triggers:', cron);
+  logger.log('Setting up triggers:', cron);
   const {accountID, apiToken, scriptName} = config;
   return cfFetch(
     apiToken,

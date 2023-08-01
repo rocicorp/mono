@@ -1,3 +1,4 @@
+import {logger} from 'firebase-functions';
 import {cfFetch} from './cf-fetch.js';
 import type {Config} from './config.js';
 
@@ -22,7 +23,7 @@ export async function publishCustomDomains(
   };
   /* eslint-enable @typescript-eslint/naming-convention */
 
-  console.log('Setting up custom domain:', hostname);
+  logger.log('Setting up custom domain:', hostname);
 
   // deploy to domains
   await cfFetch(

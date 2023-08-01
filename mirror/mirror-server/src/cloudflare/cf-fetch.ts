@@ -1,6 +1,7 @@
 // This is taken from workers-sdk/packages/wrangler/
 // TODO(arv): Remove thing we don not need.
 
+import {logger} from 'firebase-functions';
 import {assert} from 'shared/src/asserts.js';
 
 interface FetchError {
@@ -37,7 +38,7 @@ export async function cfFetch<ResponseType = unknown>(
   const queryString = searchParams ? `?${searchParams.toString()}` : '';
 
   const url = `${base}${resource}${queryString}`;
-  console.debug(`cfFetch: URL: ${url}`, 'init:', init);
+  logger.debug(`cfFetch: URL: ${url}`, 'init:', init);
 
   const response = await fetch(url, {
     ...init,
@@ -48,7 +49,7 @@ export async function cfFetch<ResponseType = unknown>(
     },
   });
   const jsonText = await response.text();
-  console.debug(`cfFetch: URL: ${url}`, 'response:', jsonText);
+  logger.debug(`cfFetch: URL: ${url}`, 'response:', jsonText);
 
   const method = init.method ?? 'GET';
 
