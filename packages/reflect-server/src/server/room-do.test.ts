@@ -14,6 +14,9 @@ import {newAuthConnectionsRequest} from '../util/auth-test-util.js';
 import {TestLogSink, createSilentLogContext} from '../util/test-utils.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
+import {LogContext} from '@rocicorp/logger';
+import {resolver} from '../util/resolver.js';
+import {sleep} from '../util/sleep.js';
 
 test('sets roomID in createRoom', async () => {
   const testLogSink = new TestLogSink();
@@ -264,6 +267,47 @@ test('Logs version during construction', async () => {
     ]),
   );
   expect(testLogSink.messages[1][2][1]).toMatch(/^\d+\.\d+\.\d+/);
+});
+
+test('Avoids queueing many intervals in the lock', async () => {
+  const testLogSink = new TestLogSink();
+  const room = new BaseRoomDO({
+    mutators: {},
+    roomStartHandler: () => Promise.resolve(),
+    disconnectHandler: () => Promise.resolve(),
+    state: await createTestDurableObjectState('test-do-id'),
+    authApiKey: 'foo',
+    logSink: testLogSink,
+    logLevel: 'info',
+    allowUnconfirmedWrites: true,
+  });
+
+  const {promise: canFinishCallback, resolve: finishCallback} =
+    resolver<void>();
+  const latches = [resolver<void>(), resolver<void>()];
+
+  let numInvocations = 0;
+  const timerID = room.runInLockAtInterval(
+    new LogContext('debug', {}, testLogSink),
+    'fakeProcessNext',
+    1, // Fire once every ms.
+    async () => {
+      latches[numInvocations++].resolve();
+      await canFinishCallback; // Make the first invocation hold the lock.
+    },
+  );
+
+  // Should cause 10 invocations to fire.
+  // Note: jest.useFakeTimers() doesn't quite work as expected for setInterval()
+  // so we're using real timers with real sleep().
+  await sleep(10);
+  clearTimeout(timerID);
+
+  finishCallback();
+  await latches[1].promise; // Wait for the second invocation.
+
+  await sleep(1); // No other invocations should happen, even with sleep.
+  expect(numInvocations).toBe(2); // All other invocations should have been aborted.
 });
 
 test('Sets turn duration based on allowUnconfirmedWrites flag', () => {
