@@ -62,15 +62,17 @@ describe('LoggingLock', () => {
     expect(sink.messages[0][0]).toBe('debug');
     expect(sink.messages[0][1]).toMatchObject({
       lockFn: 'logic',
-      lockTiming: 'acquired',
+      lockStage: 'acquired',
     });
     expect(sink.messages[0][1]).toHaveProperty('lockHoldID');
+    expect(sink.messages[0][1]).toHaveProperty('lockTiming');
     expect(sink.messages[1][0]).toBe('debug');
     expect(sink.messages[1][1]).toMatchObject({
       lockFn: 'logic',
-      lockTiming: 'held',
+      lockStage: 'held',
     });
     expect(sink.messages[1][1]).toHaveProperty('lockHoldID');
+    expect(sink.messages[1][1]).toHaveProperty('lockTiming');
   });
 
   test('logs at info level above threshold', async () => {
@@ -101,15 +103,17 @@ describe('LoggingLock', () => {
     expect(sink.messages[0][0]).toBe('debug');
     expect(sink.messages[0][1]).toMatchObject({
       lockFn: 'logic',
-      lockTiming: 'acquired',
+      lockStage: 'acquired',
     });
     expect(sink.messages[0][1]).toHaveProperty('lockHoldID');
+    expect(sink.messages[0][1]).toHaveProperty('lockTiming');
     expect(sink.messages[1][0]).toBe('info');
     expect(sink.messages[1][1]).toMatchObject({
       lockFn: 'logic',
-      lockTiming: 'held',
+      lockStage: 'held',
     });
     expect(sink.messages[1][1]).toHaveProperty('lockHoldID');
+    expect(sink.messages[1][1]).toHaveProperty('lockTiming');
   });
 
   test('logs multiple waiters without awaiting flush', async () => {
