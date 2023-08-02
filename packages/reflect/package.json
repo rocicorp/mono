@@ -27,7 +27,7 @@
     "@rocicorp/logger": "^5.2.0",
     "@rocicorp/resolver": "^1.0.0",
     "esbuild": "^0.18.3",
-    "firebase": "^9.22.2",
+    "firebase": "9.23.0",
     "miniflare": "^3.20230717.0",
     "open": "^9.1.0",
     "picocolors": "^1.0.0",
