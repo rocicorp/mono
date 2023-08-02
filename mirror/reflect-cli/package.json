@@ -5,7 +5,6 @@
   "type": "module",
   "dependencies": {
     "@badrap/valita": "^0.2.0",
-    "@google-cloud/firestore": "^6.6.1",
     "@rocicorp/resolver": "^1.0.0",
     "esbuild": "^0.18.3",
     "firebase": "9.23.0",
