@@ -27,6 +27,7 @@ import {
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 <<<<<<< HEAD
 import {timed} from 'shared/src/timed.js';
+import { populateLogContextFromRequest } from '../util/log-context-common.js';
 =======
 import type {MaybePromise} from 'replicache';
 import {version} from '../mod.js';

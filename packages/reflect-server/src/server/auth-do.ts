@@ -157,7 +157,7 @@ export class BaseAuthDO implements DurableObject {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const lc = populateLogContextFromRequest(this._lc, request);
+    const lc = populateLogContextFromRequest(this.#lc, request);
     lc.debug?.('Handling request:', request.url);
     try {
       const resp = await this.#router.dispatch(request, {lc});

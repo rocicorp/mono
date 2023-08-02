@@ -166,7 +166,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   ) => requireAuthAPIKey(() => this.#authApiKey, next);
 
   async fetch(request: Request): Promise<Response> {
-    let lc = populateLogContextFromRequest(this._lc, request);
+    let lc = populateLogContextFromRequest(this.#lc, request);
 
     try {
       if (await this.deleted()) {
@@ -284,7 +284,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   );
 
   #connect = get((ctx, request) => {
-    let {lc} = ctx;
+    const {lc} = ctx;
     if (request.headers.get('Upgrade') !== 'websocket') {
       lc.error?.('roomDO: missing Upgrade header');
       return new Response('expected websocket', {status: 400});
@@ -408,10 +408,13 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     }
 
     this.#turnTimerID = this.runInLockAtInterval(
-      lc,
+      // The logging in turn processing should use this.#lc (i.e. the RoomDO's
+      // general log context), rather than lc which has the context of a
+      // specific request/connection
+      this.#lc,
       '#processNext',
       this.#turnDuration,
-      lc => this.#processNextInLock(lc),
+      logContext => this.#processNextInLock(logContext),
     );
   }
 
