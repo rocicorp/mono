@@ -1,4 +1,4 @@
-import {Firestore} from '@google-cloud/firestore';
+import {getFirestore, type Firestore} from './firebase.js';
 import {CreateRequest, create} from 'mirror-protocol/src/app.js';
 import {App, appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {releaseChannelSchema} from 'mirror-schema/src/server.js';
@@ -6,7 +6,6 @@ import {must} from 'shared/src/must.js';
 import * as v from 'shared/src/valita.js';
 import {readAppConfig, writeAppConfig} from './app-config.js';
 import {authenticate} from './auth-config.js';
-import {getFirebaseConfig} from './firebase.js';
 import {getExistingAppsForUser} from './get-existing-apps-for-user.js';
 import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
@@ -51,8 +50,7 @@ export async function initHandler(
     return;
   }
 
-  const settings = getFirebaseConfig(yargs.stack);
-  const firestore = new Firestore(settings);
+  const firestore = getFirestore();
 
   const appConfig = readAppConfig(configDirPath);
   if (!name && appConfig) {
@@ -124,17 +122,16 @@ async function createNewApp(
 }
 
 export function getApp(firestore: Firestore, appID: string): Promise<App> {
-  const docRef = firestore.doc(appPath(appID)).withConverter(appDataConverter);
+  const docRef = firestore
+    .doc(appPath(appID))
+    .withConverter(appDataConverter.forClient);
 
-  return firestore.runTransaction(
-    async txn => {
-      const doc = await txn.get(docRef);
-      if (!doc.exists) {
-        throw new Error(`App with appID ${appID} does not exist`);
-      }
+  return firestore.runTransaction(async txn => {
+    const doc = await txn.get(docRef);
+    if (!doc.exists) {
+      throw new Error(`App with appID ${appID} does not exist`);
+    }
 
-      return must(doc.data());
-    },
-    {readOnly: true},
-  );
+    return must(doc.data());
+  });
 }

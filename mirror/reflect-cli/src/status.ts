@@ -6,7 +6,5 @@ export async function statusHandler() {
   const user = await authenticate();
   const data = {requester: makeRequester(user.uid)};
   const result = await ensureUser(data);
-  console.log(
-    result.success ? `Logged in as ${user.displayName}` : 'Not logged in',
-  );
+  console.log('Status:', result);
 }

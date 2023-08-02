@@ -1,5 +1,7 @@
-import {initializeApp} from 'firebase/app';
 import {connectFunctionsEmulator, getFunctions} from 'firebase/functions';
+
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/firestore';
 
 export function getFirebaseConfig(stack: string) {
   return stack === 'prod'
@@ -25,9 +27,15 @@ export function getFirebaseConfig(stack: string) {
 export function initFirebase(stack: string) {
   const firebaseConfig = getFirebaseConfig(stack);
 
-  initializeApp(firebaseConfig);
+  firebase.default.initializeApp(firebaseConfig);
 
   if (stack === 'local') {
     connectFunctionsEmulator(getFunctions(), '127.0.0.1', 5001);
   }
+}
+
+export type Firestore = firebase.default.firestore.Firestore;
+
+export function getFirestore(): Firestore {
+  return firebase.default.firestore();
 }
