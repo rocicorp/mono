@@ -286,28 +286,34 @@ test('Avoids queueing many intervals in the lock', async () => {
     resolver<void>();
   const latches = [resolver<void>(), resolver<void>()];
 
-  let numInvocations = 0;
+  let fired = 0;
+  let invoked = 0;
   const timerID = room.runInLockAtInterval(
     new LogContext('debug', {}, testLogSink),
     'fakeProcessNext',
     1, // Fire once every ms.
     async () => {
-      latches[numInvocations++].resolve();
+      latches[invoked++].resolve();
       await canFinishCallback; // Make the first invocation hold the lock.
+    },
+    () => {
+      fired++;
     },
   );
 
-  // Should cause 10 invocations to fire.
+  // Wait for the timer to fire at least 5 times.
   // Note: jest.useFakeTimers() doesn't quite work as expected for setInterval()
   // so we're using real timers with real sleep().
-  await sleep(10);
+  while (fired < 5) {
+    await sleep(2);
+  }
   clearTimeout(timerID);
 
   finishCallback();
   await latches[1].promise; // Wait for the second invocation.
 
   await sleep(1); // No other invocations should happen, even with sleep.
-  expect(numInvocations).toBe(2); // All other invocations should have been aborted.
+  expect(invoked).toBe(2); // All other invocations should have been aborted.
 });
 
 test('Sets turn duration based on allowUnconfirmedWrites flag', () => {

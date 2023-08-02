@@ -424,10 +424,15 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     name: string,
     interval: number,
     callback: (lc: LogContext) => Promise<void>,
+    beforeQueue = () => {
+      /* hook for testing */
+    },
   ): NodeJS.Timer {
     let queued = false;
 
     return setInterval(async () => {
+      beforeQueue(); // Hook for testing.
+
       // setInterval() is recommended to only be used with logic that completes within the interval:
       //
       // https://developer.mozilla.org/en-US/docs/Web/API/setInterval#ensure_that_execution_duration_is_shorter_than_interval_frequency
