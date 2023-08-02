@@ -122,9 +122,7 @@ async function createNewApp(
 }
 
 export function getApp(firestore: Firestore, appID: string): Promise<App> {
-  const docRef = firestore
-    .doc(appPath(appID))
-    .withConverter(appDataConverter.forClient);
+  const docRef = firestore.doc(appPath(appID)).withConverter(appDataConverter);
 
   return firestore.runTransaction(async txn => {
     const doc = await txn.get(docRef);

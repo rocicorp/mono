@@ -12,7 +12,7 @@ export function getExistingAppsForUser(
 ): Promise<App[]> {
   const userDocRef = firestore
     .doc(userPath(userID))
-    .withConverter(userDataConverter.forClient);
+    .withConverter(userDataConverter);
 
   return firestore.runTransaction(async txn => {
     const userDoc = await txn.get(userDocRef);
@@ -28,7 +28,7 @@ export function getExistingAppsForUser(
 
     const appsSnapshot = await firestore
       .collection(APP_COLLECTION)
-      .withConverter(appDataConverter.forClient)
+      .withConverter(appDataConverter)
       .where('teamID', 'in', teamIDs)
       .get();
 
