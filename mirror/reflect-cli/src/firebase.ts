@@ -1,5 +1,10 @@
 import {connectFunctionsEmulator, getFunctions} from 'firebase/functions';
 
+// This magically sets things up so that we can use the old firestore() API
+// via the compatibility layer. We use the namespaced API so that we can share
+// more code with the server-side logic (e.g. mirror-schema, testing mocks, etc.).
+//
+// https://firebase.google.com/docs/web/modular-upgrade
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 
