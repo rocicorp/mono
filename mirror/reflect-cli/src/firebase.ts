@@ -53,7 +53,7 @@ export function handleWith<T>(handler: (args: T) => Promise<void>) {
       try {
         await handler(args);
       } finally {
-        getFirestore().terminate();
+        await getFirestore().terminate();
       }
     },
   };
