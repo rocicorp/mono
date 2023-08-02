@@ -44,3 +44,17 @@ export type Firestore = firebase.default.firestore.Firestore;
 export function getFirestore(): Firestore {
   return firebase.default.firestore();
 }
+
+// Wraps a command handler with cleanup code (e.g. terminating any Firestore client)
+// to ensure that the process exits after the handler completes.
+export function handleWith<T>(handler: (args: T) => Promise<void>) {
+  return {
+    andCleanup: () => async (args: T) => {
+      try {
+        await handler(args);
+      } finally {
+        getFirestore().terminate();
+      }
+    },
+  };
+}

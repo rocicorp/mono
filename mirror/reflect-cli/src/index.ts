@@ -10,6 +10,7 @@ import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
 import {createHandler, createOptions} from './create.js';
+import {handleWith} from './firebase.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -33,14 +34,14 @@ function createCLIParser(argv: string[]) {
     'init [name]',
     '📥 Initialize a basic Reflect project, ',
     initOptions,
-    initHandler,
+    handleWith(initHandler).andCleanup(),
   );
 
   reflectCLI.command(
     'create <name>',
     '🛠 Create, init and publish a basic Reflect project, ',
     createOptions,
-    createHandler,
+    handleWith(createHandler).andCleanup(),
   );
 
   // login
@@ -49,7 +50,7 @@ function createCLIParser(argv: string[]) {
     '🔓 Login to Reflect',
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},
-    async () => {
+    handleWith(async () => {
       try {
         await loginHandler();
         // authenticate() validates that credentials were written
@@ -58,7 +59,7 @@ function createCLIParser(argv: string[]) {
       } catch (e) {
         console.error(e);
       }
-    },
+    }).andCleanup(),
   );
 
   reflectCLI.command(
@@ -66,7 +67,7 @@ function createCLIParser(argv: string[]) {
     '🚥 Get your status',
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},
-    statusHandler,
+    handleWith(statusHandler).andCleanup(),
   );
 
   // dev
@@ -74,7 +75,7 @@ function createCLIParser(argv: string[]) {
     'dev <script>',
     '👷 Start a local dev server for your Reflect project',
     devOptions,
-    devHandler,
+    handleWith(devHandler).andCleanup(),
   );
 
   // tail
@@ -90,7 +91,7 @@ function createCLIParser(argv: string[]) {
     'publish <script>',
     '🆙 Publish your reflect project',
     publishOptions,
-    publishHandler,
+    handleWith(publishHandler).andCleanup(),
   );
 
   return reflectCLI;
