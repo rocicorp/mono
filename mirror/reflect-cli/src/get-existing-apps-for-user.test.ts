@@ -5,7 +5,6 @@ import {
   setTeam,
   setUser,
 } from 'mirror-schema/src/test-helpers.js';
-import type {Firestore} from './firebase.js';
 import {getExistingAppsForUser} from './get-existing-apps-for-user.js';
 
 test('list when no team', async () => {
@@ -14,10 +13,7 @@ test('list when no team', async () => {
   const email = 'foo@bar.com';
   await setUser(firestore, userID, email, 'Foo Bar', {});
 
-  const apps = await getExistingAppsForUser(
-    firestore as unknown as Firestore,
-    userID,
-  );
+  const apps = await getExistingAppsForUser(firestore, userID);
 
   expect(apps).toEqual([]);
 });
@@ -29,10 +25,7 @@ test('list when missing team', async () => {
   const teamID = 'fooTeam';
   await setUser(firestore, userID, email, 'Foo Bar', {[teamID]: 'admin'});
 
-  const apps = await getExistingAppsForUser(
-    firestore as unknown as Firestore,
-    userID,
-  );
+  const apps = await getExistingAppsForUser(firestore, userID);
 
   expect(apps).toEqual([]);
 });
@@ -45,10 +38,7 @@ test('list with one team but no apps', async () => {
   await setUser(firestore, userID, email, 'Foo Bar', {[teamID]: 'admin'});
   await setTeam(firestore, teamID, {name: 'Foo Team'});
 
-  const apps = await getExistingAppsForUser(
-    firestore as unknown as Firestore,
-    userID,
-  );
+  const apps = await getExistingAppsForUser(firestore, userID);
 
   expect(apps).toEqual([]);
 });
@@ -66,10 +56,7 @@ test('list with multiple teams but no apps', async () => {
   await setTeam(firestore, teamID1, {name: 'Team 1'});
   await setTeam(firestore, teamID2, {name: 'Team 2'});
 
-  const apps = await getExistingAppsForUser(
-    firestore as unknown as Firestore,
-    userID,
-  );
+  const apps = await getExistingAppsForUser(firestore, userID);
 
   expect(apps).toEqual([]);
 });
@@ -86,10 +73,7 @@ test('list with one teams and one app', async () => {
   await setTeam(firestore, teamID, {name: 'Team Name'});
   await setApp(firestore, 'app-id', {teamID});
 
-  const apps = await getExistingAppsForUser(
-    firestore as unknown as Firestore,
-    userID,
-  );
+  const apps = await getExistingAppsForUser(firestore, userID);
 
   expect(apps).toEqual([
     {
@@ -116,10 +100,7 @@ test('list with one teams and two apps', async () => {
   await setApp(firestore, 'app-id-1', {teamID});
   await setApp(firestore, 'app-id-2', {teamID, serverReleaseChannel: 'canary'});
 
-  const apps = await getExistingAppsForUser(
-    firestore as unknown as Firestore,
-    userID,
-  );
+  const apps = await getExistingAppsForUser(firestore, userID);
 
   expect(apps).toEqual([
     {
@@ -160,10 +141,7 @@ test('list with two teams and two apps total', async () => {
     serverReleaseChannel: 'canary',
   });
 
-  const apps = await getExistingAppsForUser(
-    firestore as unknown as Firestore,
-    userID,
-  );
+  const apps = await getExistingAppsForUser(firestore, userID);
 
   expect(apps).toEqual([
     {
@@ -209,10 +187,7 @@ test('list with two teams and 4 apps total', async () => {
     serverReleaseChannel: 'canary',
   });
 
-  const apps = await getExistingAppsForUser(
-    firestore as unknown as Firestore,
-    userID,
-  );
+  const apps = await getExistingAppsForUser(firestore, userID);
 
   expect(apps).toEqual([
     {

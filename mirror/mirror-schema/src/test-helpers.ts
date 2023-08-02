@@ -1,4 +1,5 @@
 import type {Firestore} from '@google-cloud/firestore';
+import type firebase from 'firebase/compat/app';
 import {firebaseStub} from 'firestore-jest-mock/mocks/firebase.js';
 import {
   App,
@@ -26,11 +27,15 @@ import {
 } from 'mirror-schema/src/user.js';
 import {must} from 'shared/src/must.js';
 
-export function fakeFirestore(): Firestore {
+// The server and (v8) client Firestore interfaces are largely the same.
+// Have the jest mock implement both, which should largely work for our testing purposes.
+type AllTheFirestores = Firestore & firebase.default.firestore.Firestore;
+
+export function fakeFirestore(): AllTheFirestores {
   return firebaseStub(
     {database: {}},
     {mutable: true},
-  ).firestore() as unknown as Firestore;
+  ).firestore() as unknown as AllTheFirestores;
 }
 
 export async function setUser(
