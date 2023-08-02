@@ -59,9 +59,9 @@ export class LoggingLock {
 
       const elapsed = t1 - t0;
       if (elapsed >= this.#minThresholdMs) {
-        lc.withContext('lockTiming', 'acquired').debug?.(
-          `${name} acquired lock in ${elapsed} ms`,
-        );
+        lc.withContext('lockStage', 'acquired')
+          .withContext('lockTiming', elapsed)
+          .debug?.(`${name} acquired lock in ${elapsed} ms`);
       }
 
       try {
@@ -71,7 +71,9 @@ export class LoggingLock {
         const elapsed = t2 - t1;
         if (elapsed >= this.#minThresholdMs) {
           flushAfterLock = elapsed >= flushLogsIfLockHeldForMs;
-          const tlc = lc.withContext('lockTiming', 'held');
+          const tlc = lc
+            .withContext('lockStage', 'held')
+            .withContext('lockTiming', elapsed);
           (flushAfterLock ? tlc.info : tlc.debug)?.(
             `${name} held lock for ${elapsed} ms`,
           );
