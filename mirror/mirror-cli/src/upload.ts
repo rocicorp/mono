@@ -102,7 +102,7 @@ async function upload(
   };
   const bucket = storage.bucket(bucketName);
 
-  const [mainURL, workerTemplateURL] = await Promise.all([
+  const [mainModuleRef, workerTemplateModuleRef] = await Promise.all([
     storeModule(bucket, main),
     storeModule(bucket, workerTemplateModule),
   ]);
@@ -123,18 +123,7 @@ async function upload(
       major: version.major,
       minor: version.minor,
       patch: version.patch,
-      modules: [
-        {
-          name: main.name,
-          url: mainURL,
-          type: main.type,
-        },
-        {
-          name: workerTemplateModule.name,
-          url: workerTemplateURL,
-          type: workerTemplateModule.type,
-        },
-      ],
+      modules: [mainModuleRef, workerTemplateModuleRef],
       channel,
     };
 

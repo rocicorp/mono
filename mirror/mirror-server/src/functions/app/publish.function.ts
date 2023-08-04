@@ -80,7 +80,7 @@ export const publish = (
 
       // For now we manually invoke the trigger.
       // TODO(darick): Set this up as a Firestore-based trigger.
-      return await deploy(firestore, storage, appID, deploymentID);
+      return deploy(firestore, storage, appID, deploymentID);
     });
 
 async function deploy(
@@ -89,16 +89,16 @@ async function deploy(
   appID: string,
   deploymentID: string,
 ): Promise<PublishResponse> {
-  const [appDoc, deploymentDoc] = await firestore.runTransaction(async tx => {
-    return await Promise.all([
+  const [appDoc, deploymentDoc] = await firestore.runTransaction(tx =>
+    Promise.all([
       tx.get(firestore.doc(appPath(appID)).withConverter(appDataConverter)),
       tx.get(
         firestore
           .doc(schema.deploymentPath(appID, deploymentID))
           .withConverter(schema.deploymentDataConverter),
       ),
-    ]);
-  });
+    ]),
+  );
   if (!appDoc.exists) {
     throw new HttpsError('not-found', `Missing app doc for ${appID}`);
   }

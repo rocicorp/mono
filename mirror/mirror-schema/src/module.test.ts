@@ -79,9 +79,7 @@ test('loadModule', async () => {
 
   for (const c of cases) {
     const file = {
-      download: () => {
-        return [Buffer.from('module-contents 🌊', 'utf-8')];
-      },
+      download: () => [Buffer.from('module-contents 🌊', 'utf-8')],
     };
     const bucket = {
       file: (filename: string) => {

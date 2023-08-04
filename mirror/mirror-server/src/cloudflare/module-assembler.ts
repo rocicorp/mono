@@ -12,7 +12,7 @@ export class ModuleAssembler {
 
   constructor(appModules: ModuleRef[], serverModules: ModuleRef[]) {
     assert(appModules.length >= 1);
-    assert(serverModules.length == 2); // The current logic only supports the server and template modules.
+    assert(serverModules.length === 2); // The current logic only supports the server and template modules.
     this.#appModules = appModules;
     this.#serverModules = serverModules;
     this.#uniqueModuleNames = assertAllModulesHaveUniqueNames(

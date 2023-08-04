@@ -162,8 +162,10 @@ describe('module-assembler', () => {
           expect(bucketName).toBe('reflect-modules');
           return {
             file: (filename: string) => ({
+              // eslint-disable-next-line require-await
               get: async () => [
                 {
+                  // eslint-disable-next-line require-await
                   download: async () => {
                     for (const m of [...serverModules, ...c.appModules]) {
                       if (m.url.endsWith('/' + filename)) {
