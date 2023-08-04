@@ -3,6 +3,7 @@ import {appPath} from './app.js';
 import {firestoreDataConverter} from './converter.js';
 import * as path from './path.js';
 import {timestampSchema} from './timestamp.js';
+import {moduleRefSchema} from './module.js';
 
 export const deploymentTypeSchema = v.union(
   v.literal('USER_UPLOAD'),
@@ -24,12 +25,13 @@ export type DeploymentStatus = v.Infer<typeof deploymentStatusSchema>;
 export const deploymentSchema = v.object({
   requesterID: v.string(), // userID
   type: deploymentTypeSchema,
-  appModule: v.string(), // gs:// URL
-  appSourcemap: v.string(), // gs:// URL
+  // The first app module must be the "main" module that exports the
+  // ReflectServerOptions creation function as default.
+  appModules: v.array(moduleRefSchema),
   appVersion: v.string().optional(),
   description: v.string().optional(),
   serverVersionRange: v.string(),
-  serverModules: v.array(v.string()), // array of gs:// URLs
+  serverVersion: v.string(),
   status: deploymentStatusSchema,
   statusTime: timestampSchema,
 });

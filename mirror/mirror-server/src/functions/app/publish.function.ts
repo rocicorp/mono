@@ -4,6 +4,7 @@ import {logger} from 'firebase-functions';
 import {defineSecret} from 'firebase-functions/params';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {
+  PublishResponse,
   publishRequestSchema,
   publishResponseSchema,
 } from 'mirror-protocol/src/publish.js';
@@ -11,13 +12,15 @@ import * as schema from 'mirror-schema/src/deployment.js';
 import * as semver from 'semver';
 import {newDeploymentID} from 'shared/src/mirror/ids.js';
 import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
-import {storeModule} from 'mirror-schema/src/module.js';
-import type {CfModule} from '../../cloudflare/create-worker-upload-form.js';
+import {storeModule, type Module, ModuleRef} from 'mirror-schema/src/module.js';
 import {getServerModuleMetadata} from '../../cloudflare/get-server-modules.js';
 import {publish as publishToCloudflare} from '../../cloudflare/publish.js';
+import {assertAllModulesHaveUniqueNames} from '../../cloudflare/module-assembler.js';
 import {findNewestMatchingVersion} from './find-newest-matching-version.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
+import {App, appDataConverter, appPath} from 'mirror-schema/src/app.js';
+import {must} from 'shared/src/must.js';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
@@ -33,7 +36,13 @@ export const publish = (
     .validate(appAuthorization(firestore))
     .handle(async (publishRequest, context) => {
       const {serverVersionRange, appID} = publishRequest;
-      const {userID, app} = context;
+      const {userID} = context;
+
+      const appModules: Module[] = [
+        {...publishRequest.source, type: 'esm'},
+        {...publishRequest.sourcemap, type: 'text'},
+      ];
+      assertAllModulesHaveUniqueNames(appModules, 'invalid-argument');
 
       if (semver.validRange(serverVersionRange) === null) {
         throw new HttpsError('invalid-argument', 'Invalid desired version');
@@ -44,72 +53,94 @@ export const publish = (
         throw new HttpsError('invalid-argument', 'Unsupported desired version');
       }
 
-      const version = await findNewestMatchingVersion(firestore, range);
+      const serverVersion = await findNewestMatchingVersion(firestore, range);
       logger.log(
-        `Found matching version for ${serverVersionRange}: ${version}`,
+        `Found matching version for ${serverVersionRange}: ${serverVersion}`,
       );
 
-      const config = {
-        accountID: app.cfID,
-        scriptName: app.cfScriptName,
-        apiToken: cloudflareApiToken.value(),
-      } as const;
-      const appModule: CfModule = {
-        ...publishRequest.source,
-        type: 'esm',
-      };
-      const appSourcemapModule: CfModule = {
-        ...publishRequest.sourcemap,
-        type: 'text',
-      };
-
-      const [appModuleURL, appSourcemapURL] = await saveToGoogleCloudStorage(
+      const appModuleRefs = await saveToGoogleCloudStorage(
         storage,
         bucketName,
-        appModule,
-        appSourcemapModule,
-      );
-
-      const serverModuleMetadata = await getServerModuleMetadata(
-        firestore,
-        version,
+        appModules,
       );
 
       const deploymentID = await saveToFirestore(firestore, appID, {
         requesterID: userID,
         type: 'USER_UPLOAD',
-        appModule: appModuleURL,
-        appSourcemap: appSourcemapURL,
+        appModules: appModuleRefs,
         // appVersion
         // description
         serverVersionRange,
-        serverModules: serverModuleMetadata.modules.map(m => m.url),
+        serverVersion,
         status: 'DEPLOYING',
         statusTime: Timestamp.now(),
       });
 
       logger.log(`Saved deployment ${deploymentID} to firestore`);
 
-      let hostname: string;
-      try {
-        hostname = await publishToCloudflare(
-          firestore,
-          storage,
-          config,
-          appModule,
-          appSourcemapModule,
-          app.name,
-          version,
-        );
-      } catch (e) {
-        await setDeploymentStatus(firestore, appID, deploymentID, 'FAILED');
-        throw e;
-      }
-
-      await setDeploymentStatusOfAll(firestore, appID, deploymentID);
-
-      return {success: true, hostname};
+      // For now we manually invoke the trigger.
+      // TODO(darick): Set this up as a Firestore-based trigger.
+      return await deploy(firestore, storage, appID, deploymentID);
     });
+
+async function deploy(
+  firestore: Firestore,
+  storage: Storage,
+  appID: string,
+  deploymentID: string,
+): Promise<PublishResponse> {
+  const [appDoc, deploymentDoc] = await firestore.runTransaction(async tx => {
+    return await Promise.all([
+      tx.get(firestore.doc(appPath(appID)).withConverter(appDataConverter)),
+      tx.get(
+        firestore
+          .doc(schema.deploymentPath(appID, deploymentID))
+          .withConverter(schema.deploymentDataConverter),
+      ),
+    ]);
+  });
+  if (!appDoc.exists) {
+    throw new HttpsError('not-found', `Missing app doc for ${appID}`);
+  }
+  if (!deploymentDoc.exists) {
+    throw new HttpsError(
+      'not-found',
+      `Missing deployment doc ${deploymentID} for app ${appID}`,
+    );
+  }
+
+  const app: App = must(appDoc.data());
+  const deployment: schema.Deployment = must(deploymentDoc.data());
+
+  const config = {
+    accountID: app.cfID,
+    scriptName: app.cfScriptName,
+    apiToken: cloudflareApiToken.value(),
+  } as const;
+
+  const {modules: serverModules} = await getServerModuleMetadata(
+    firestore,
+    deployment.serverVersion,
+  );
+
+  let hostname: string;
+  try {
+    hostname = await publishToCloudflare(
+      storage,
+      config,
+      app.name,
+      deployment.appModules,
+      serverModules,
+    );
+  } catch (e) {
+    await setDeploymentStatus(firestore, appID, deploymentID, 'FAILED');
+    throw e;
+  }
+
+  await setDeploymentStatusOfAll(firestore, appID, deploymentID);
+
+  return {success: true, hostname};
+}
 
 /**
  * Returns the URL (gs://...) of the uploaded file.
@@ -117,14 +148,10 @@ export const publish = (
 function saveToGoogleCloudStorage(
   storage: Storage,
   bucketName: string,
-  appModule: CfModule,
-  appSourcemapModule: CfModule,
-): Promise<[appModuleURL: string, appSourcemapModuleURL: string]> {
+  appModules: Module[],
+): Promise<ModuleRef[]> {
   const bucket = storage.bucket(bucketName);
-  return Promise.all([
-    storeModule(bucket, appModule),
-    storeModule(bucket, appSourcemapModule),
-  ]);
+  return Promise.all(appModules.map(ref => storeModule(bucket, ref)));
 }
 
 async function saveToFirestore(

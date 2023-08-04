@@ -1,16 +1,15 @@
-import type {Firestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {nanoid} from 'nanoid';
-import assert from 'node:assert';
 import {cfFetch} from './cf-fetch.js';
 import type {Config} from './config.js';
 import {CfModule, createWorkerUploadForm} from './create-worker-upload-form.js';
 import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
-import {getServerModules} from './get-server-modules.js';
 import {publishCustomDomains} from './publish-custom-domains.js';
 import {submitSecret} from './submit-secret.js';
 import {submitTriggers} from './submit-triggers.js';
 import {logger} from 'firebase-functions';
+import type {ModuleRef} from 'mirror-schema/src/module.js';
+import {ModuleAssembler} from './module-assembler.js';
 
 export async function createWorker(
   {accountID, scriptName, apiToken}: Config,
@@ -71,57 +70,18 @@ const migrations: Migration[] = [
   },
 ];
 
-function assertAllModulesHaveUniqueNames(modules: Iterable<CfModule>) {
-  const names = new Set<string>();
-  for (const m of modules) {
-    assert(!names.has(m.name), `Duplicate module name: ${m.name}`);
-    names.add(m.name);
-  }
-}
-
 export async function publish(
-  firestore: Firestore,
   storage: Storage,
   config: Config,
-  appModule: CfModule,
-  appSourcemapModule: CfModule,
   appName: string,
-  version: string,
+  appModules: ModuleRef[],
+  serverModules: ModuleRef[],
 ): Promise<string> {
-  logger.log(`publishing ${appName}.reflect-server.net (${config.scriptName})`);
-
-  const [serverModule, ...otherServerModules] = await getServerModules(
-    firestore,
-    storage,
-    version,
-  );
-
-  let workerModule: CfModule | undefined;
-  const otherModules: CfModule[] = [];
-  for (const m of otherServerModules) {
-    if (m.name === 'worker.template.js') {
-      const content = m.content
-        .replaceAll('<REFLECT_SERVER>', serverModule.name)
-        .replaceAll('<APP>', appModule.name);
-      workerModule = {content, name: 'worker.js', type: 'esm'};
-    } else {
-      otherModules.push(m);
-    }
-  }
-  assert(workerModule);
-
-  const modules: CfModule[] = [
-    appModule,
-    appSourcemapModule,
-    serverModule,
-    ...otherModules,
-  ];
-
-  // Make sure that all the names are unique.
-  assertAllModulesHaveUniqueNames([workerModule, ...modules]);
+  const assembler = new ModuleAssembler(appModules, serverModules);
+  const modules = await assembler.assemble(storage);
 
   logger.log(`publishing ${appName}.reflect-server.net (${config.scriptName})`);
-  await createWorker(config, workerModule, modules);
+  await createWorker(config, modules[0], modules.slice(1));
 
   let reflectAuthApiKey = process.env.REFLECT_AUTH_API_KEY;
   if (!reflectAuthApiKey) {

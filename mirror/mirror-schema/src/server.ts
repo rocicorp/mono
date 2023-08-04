@@ -1,15 +1,7 @@
 import * as v from 'shared/src/valita.js';
 import {firestoreDataConverter} from './converter.js';
+import {moduleRefSchema} from './module.js';
 import * as path from './path.js';
-
-export const moduleSchema = v.object({
-  name: v.string(),
-  // gs://bucketname/filename. url is the filename used in Google Cloud Storage. It has a GUID in it.
-  url: v.string(),
-  type: v.union(v.literal('esm'), v.literal('text')),
-});
-
-export type Module = v.Infer<typeof moduleSchema>;
 
 export const releaseChannelSchema = v.union(
   v.literal('canary'),
@@ -22,7 +14,7 @@ export const serverSchema = v.object({
   major: v.number(),
   minor: v.number(),
   patch: v.number(),
-  modules: v.array(moduleSchema),
+  modules: v.array(moduleRefSchema),
   channel: releaseChannelSchema,
 });
 
