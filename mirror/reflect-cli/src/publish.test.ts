@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {publishHandler, type PublishCaller} from './publish.js';
 import {useFakeAppConfig, useFakeAuthConfig} from './test-helpers.js';
+import type {Firestore} from './firebase.js';
 
 type Args = Parameters<typeof publishHandler>[0];
 
@@ -89,17 +90,42 @@ test('it should compile typescript', async () => {
       },
       sourcemap: {content: expect.any(String), name: 'test.js.map'},
     });
-    return Promise.resolve(new Response('{"result":{"success":"OK"}}'));
+    return Promise.resolve({
+      success: true,
+      deploymentPath: 'apps/foo/deployments/bar',
+    });
   });
 
   const testFilePath = await writeTempFiles(
     'const x: number = 42; console.log(x);',
     'test.ts',
   );
+
+  // 'firestore-jest-mocks doesn't implement the same onSnapshot() API
+  // as that of the client JS sdk. Just fill in enough to get the test to pass.
+  const fakeFirestore = {
+    doc: (path: string) => {
+      expect(path).toBe('apps/foo/deployments/bar');
+      return {
+        withConverter: () => ({
+          onSnapshot: (callbacks: {error: (e: unknown) => void}) => {
+            callbacks.error(
+              new Error('unimplemented. just getting the test to pass'),
+            );
+            return () => {
+              /* do nothing */
+            };
+          },
+        }),
+      };
+    },
+  } as unknown as Firestore;
+
   await publishHandler(
     {script: testFilePath} as Args,
     undefined,
     publishMock as unknown as PublishCaller,
+    fakeFirestore,
   );
 
   expect(publishMock).toHaveBeenCalledTimes(1);

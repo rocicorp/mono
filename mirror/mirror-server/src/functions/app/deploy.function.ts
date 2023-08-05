@@ -83,7 +83,7 @@ export const deploy = (firestore: Firestore, storage: Storage) =>
         throw e;
       }
 
-      await setDeploymentStatusOfAll(firestore, appID, deploymentID);
+      await setRunningDeployment(firestore, appID, deploymentID);
     },
   );
 
@@ -166,9 +166,10 @@ async function setDeploymentStatus(
 }
 
 /**
- * Updates the the status and statusTime of all deployments for the app.
+ * Updates the collection of deployments so that the specified one
+ * is `RUNNING`, setting the previously `RUNNING` deployment to `STOPPED`.
  */
-async function setDeploymentStatusOfAll(
+async function setRunningDeployment(
   firestore: Firestore,
   appID: string,
   deploymentID: string,

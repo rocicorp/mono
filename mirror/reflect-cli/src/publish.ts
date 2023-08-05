@@ -10,7 +10,7 @@ import {compile} from './compile.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
 import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import {getFirestore} from './firebase.js';
+import {Firestore, getFirestore} from './firebase.js';
 import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
 import {resolver} from '@rocicorp/resolver';
 
@@ -39,6 +39,7 @@ export async function publishHandler(
   yargs: PublishHandlerArgs,
   configDirPath?: string | undefined,
   publish: PublishCaller = publishCaller, // Overridden in tests.
+  firestore?: Firestore, // Overridden in tests.
 ) {
   const {script} = yargs;
 
@@ -74,7 +75,7 @@ export async function publishHandler(
   const {deploymentPath} = await publish(data);
 
   const {promise: isDoneWatching, resolve: done} = resolver<void>();
-  const stopListener = getFirestore()
+  const stopListener = (firestore ?? getFirestore())
     .doc(deploymentPath)
     .withConverter(deploymentDataConverter)
     .onSnapshot({
