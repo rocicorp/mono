@@ -28,12 +28,22 @@ export const deploymentSchema = v.object({
   // The first app module must be the "main" module that exports the
   // ReflectServerOptions creation function as default.
   appModules: v.array(moduleRefSchema),
+  // The hostname of the worker, which is https://<appName>.reflect-server.net
+  // can be a vanity domain in the future.
+  hostname: v.string(),
   appVersion: v.string().optional(),
   description: v.string().optional(),
   serverVersionRange: v.string(),
   serverVersion: v.string(),
   status: deploymentStatusSchema,
-  statusTime: timestampSchema,
+  // A message associated with the current status of the deployment that is
+  // suitable for displaying to the user.
+  statusMessage: v.string().optional(),
+
+  requestTime: timestampSchema,
+  deployTime: timestampSchema.optional(),
+  startTime: timestampSchema.optional(),
+  stopTime: timestampSchema.optional(),
 });
 
 export type Deployment = v.Infer<typeof deploymentSchema>;

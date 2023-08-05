@@ -27,7 +27,7 @@ export async function findNewestMatchingVersion(
 
   if (maxVersion === undefined) {
     throw new HttpsError(
-      'invalid-argument',
+      'out-of-range',
       `No matching version for ${serverVersionRange} found`,
     );
   }

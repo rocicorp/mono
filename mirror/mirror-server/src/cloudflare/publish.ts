@@ -73,14 +73,14 @@ const migrations: Migration[] = [
 export async function publish(
   storage: Storage,
   config: Config,
-  appName: string,
+  hostname: string,
   appModules: ModuleRef[],
   serverModules: ModuleRef[],
 ): Promise<string> {
   const assembler = new ModuleAssembler(appModules, serverModules);
   const modules = await assembler.assemble(storage);
 
-  logger.log(`publishing ${appName}.reflect-server.net (${config.scriptName})`);
+  logger.log(`publishing ${hostname} (${config.scriptName})`);
   await createWorker(config, modules[0], modules.slice(1));
 
   let reflectAuthApiKey = process.env.REFLECT_AUTH_API_KEY;
@@ -90,7 +90,6 @@ export async function publish(
     reflectAuthApiKey = nanoid();
   }
 
-  const hostname = `${appName}.reflect-server.net`;
   await Promise.all([
     publishCustomDomains(config, hostname),
     submitSecret(config, 'REFLECT_AUTH_API_KEY', reflectAuthApiKey),
