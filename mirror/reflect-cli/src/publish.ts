@@ -78,8 +78,8 @@ export async function publishHandler(
   const stopListener = (firestore ?? getFirestore())
     .doc(deploymentPath)
     .withConverter(deploymentDataConverter)
-    .onSnapshot({
-      next: snapshot => {
+    .onSnapshot(
+      snapshot => {
         const deployment = snapshot.data();
         if (!deployment) {
           console.error(`Deployment not found`);
@@ -102,11 +102,11 @@ export async function publishHandler(
           done();
         }
       },
-      error: e => {
-        console.error(e);
+      err => {
+        console.error(err);
         done();
       },
-    });
+    );
 
   await isDoneWatching;
   stopListener();

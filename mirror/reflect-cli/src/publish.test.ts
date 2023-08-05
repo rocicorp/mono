@@ -5,7 +5,9 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {publishHandler, type PublishCaller} from './publish.js';
 import {useFakeAppConfig, useFakeAuthConfig} from './test-helpers.js';
-import type {Firestore} from './firebase.js';
+import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
+import {Timestamp} from '@google-cloud/firestore';
+import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
 
 type Args = Parameters<typeof publishHandler>[0];
 
@@ -101,31 +103,27 @@ test('it should compile typescript', async () => {
     'test.ts',
   );
 
-  // 'firestore-jest-mocks doesn't implement the same onSnapshot() API
-  // as that of the client JS sdk. Just fill in enough to get the test to pass.
-  const fakeFirestore = {
-    doc: (path: string) => {
-      expect(path).toBe('apps/foo/deployments/bar');
-      return {
-        withConverter: () => ({
-          onSnapshot: (callbacks: {error: (e: unknown) => void}) => {
-            callbacks.error(
-              new Error('unimplemented. just getting the test to pass'),
-            );
-            return () => {
-              /* do nothing */
-            };
-          },
-        }),
-      };
-    },
-  } as unknown as Firestore;
+  // Set the Deployment doc to RUNNING so that the cli command exits.
+  const firestore = fakeFirestore();
+  await firestore
+    .doc('apps/foo/deployments/bar')
+    .withConverter(deploymentDataConverter)
+    .set({
+      requesterID: 'foo',
+      type: 'USER_UPLOAD',
+      status: 'RUNNING',
+      appModules: [],
+      hostname: 'app-name.reflect-server-net',
+      serverVersion: '0.1.0',
+      serverVersionRange: '^0.1.0',
+      requestTime: Timestamp.now(),
+    });
 
   await publishHandler(
     {script: testFilePath} as Args,
     undefined,
     publishMock as unknown as PublishCaller,
-    fakeFirestore,
+    firestore,
   );
 
   expect(publishMock).toHaveBeenCalledTimes(1);
