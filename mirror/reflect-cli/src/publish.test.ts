@@ -1,4 +1,4 @@
-import {expect, jest, test} from '@jest/globals';
+import {expect, jest, test, beforeAll} from '@jest/globals';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -8,11 +8,16 @@ import {useFakeAppConfig, useFakeAuthConfig} from './test-helpers.js';
 import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
 import {Timestamp} from '@google-cloud/firestore';
 import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
+import {initFirebase} from './firebase.js';
 
 type Args = Parameters<typeof publishHandler>[0];
 
 useFakeAuthConfig();
 useFakeAppConfig();
+
+beforeAll(() => {
+  initFirebase('local');
+});
 
 test('it should throw if file not found', async () => {
   const script = `./test${Math.random().toString(32).slice(2)}.ts`;
