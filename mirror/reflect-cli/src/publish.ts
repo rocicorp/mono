@@ -10,6 +10,9 @@ import {compile} from './compile.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
 import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import {Firestore, getFirestore} from './firebase.js';
+import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
+import {watch} from 'mirror-schema/src/watch.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
   return yargs.positional('script', {
@@ -36,6 +39,7 @@ export async function publishHandler(
   yargs: PublishHandlerArgs,
   configDirPath?: string | undefined,
   publish: PublishCaller = publishCaller, // Overridden in tests.
+  firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
   const {script} = yargs;
 
@@ -49,6 +53,7 @@ export async function publishHandler(
   const range = await findServerVersionRange(absPath);
   const serverVersionRange = range.raw;
 
+  console.log(`Compiling ${script}`);
   const {code, sourcemap} = await compile(absPath, 'linked');
 
   const user = await authenticate();
@@ -68,8 +73,31 @@ export async function publishHandler(
     appID,
   };
 
-  const {hostname} = await publish(data);
+  console.log('Requesting deployment');
+  const {deploymentPath} = await publish(data);
 
-  console.log(`🎁 Published successfully to:`);
-  console.log(`https://${hostname}`);
+  const deploymentDoc = firestore
+    .doc(deploymentPath)
+    .withConverter(deploymentDataConverter);
+
+  for await (const snapshot of watch(deploymentDoc)) {
+    const deployment = snapshot.data();
+    if (!deployment) {
+      console.error(`Deployment not found`);
+      break;
+    }
+    if (deployment?.status === 'RUNNING') {
+      console.log(`🎁 Published successfully to:`);
+      console.log(`https://${deployment.hostname}`);
+      break;
+    }
+    console.info(
+      `Status: ${deployment.status}${
+        deployment.statusMessage ? ': ' + deployment.statusMessage : ''
+      }`,
+    );
+    if (deployment.status === 'FAILED' || deployment.status === 'STOPPED') {
+      break;
+    }
+  }
 }

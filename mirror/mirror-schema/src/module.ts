@@ -11,7 +11,7 @@ export type ModuleType = v.Infer<typeof moduleTypeSchema>;
 
 export const moduleRefSchema = v.object({
   name: v.string(),
-  type: v.union(v.literal('esm'), v.literal('text')),
+  type: moduleTypeSchema,
   // gs://bucketname/filename. url is the filename used in Google Cloud Storage. It has a GUID in it.
   url: v.string(),
 });

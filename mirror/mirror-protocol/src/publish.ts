@@ -19,7 +19,7 @@ export type PublishRequest = v.Infer<typeof publishRequestSchema>;
 
 export const publishResponseSchema = v.object({
   ...baseResponseFields,
-  hostname: v.string(),
+  deploymentPath: v.string(),
 });
 export type PublishResponse = v.Infer<typeof publishResponseSchema>;
 

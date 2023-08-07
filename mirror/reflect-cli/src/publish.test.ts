@@ -1,15 +1,23 @@
-import {expect, jest, test} from '@jest/globals';
+import {expect, jest, test, beforeAll} from '@jest/globals';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {publishHandler, type PublishCaller} from './publish.js';
 import {useFakeAppConfig, useFakeAuthConfig} from './test-helpers.js';
+import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
+import {Timestamp} from '@google-cloud/firestore';
+import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
+import {initFirebase} from './firebase.js';
 
 type Args = Parameters<typeof publishHandler>[0];
 
 useFakeAuthConfig();
 useFakeAppConfig();
+
+beforeAll(() => {
+  initFirebase('local');
+});
 
 test('it should throw if file not found', async () => {
   const script = `./test${Math.random().toString(32).slice(2)}.ts`;
@@ -89,17 +97,38 @@ test('it should compile typescript', async () => {
       },
       sourcemap: {content: expect.any(String), name: 'test.js.map'},
     });
-    return Promise.resolve(new Response('{"result":{"success":"OK"}}'));
+    return Promise.resolve({
+      success: true,
+      deploymentPath: 'apps/foo/deployments/bar',
+    });
   });
 
   const testFilePath = await writeTempFiles(
     'const x: number = 42; console.log(x);',
     'test.ts',
   );
+
+  // Set the Deployment doc to RUNNING so that the cli command exits.
+  const firestore = fakeFirestore();
+  await firestore
+    .doc('apps/foo/deployments/bar')
+    .withConverter(deploymentDataConverter)
+    .set({
+      requesterID: 'foo',
+      type: 'USER_UPLOAD',
+      status: 'RUNNING',
+      appModules: [],
+      hostname: 'app-name.reflect-server-net',
+      serverVersion: '0.1.0',
+      serverVersionRange: '^0.1.0',
+      requestTime: Timestamp.now(),
+    });
+
   await publishHandler(
     {script: testFilePath} as Args,
     undefined,
     publishMock as unknown as PublishCaller,
+    firestore,
   );
 
   expect(publishMock).toHaveBeenCalledTimes(1);

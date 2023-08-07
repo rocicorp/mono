@@ -38,11 +38,9 @@ export const user = {
 export const app = {
   create: https.onCall(baseHttpsOptions, appFunctions.create(getFirestore())),
   publish: https.onCall(
-    {
-      ...baseHttpsOptions,
-      secrets: ['CLOUDFLARE_API_TOKEN'],
-    },
+    baseHttpsOptions,
     appFunctions.publish(getFirestore(), getStorage(), modulesBucketName),
   ),
+  deploy: appFunctions.deploy(getFirestore(), getStorage()),
   rename: https.onCall(baseHttpsOptions, appFunctions.rename(getFirestore())),
 };
