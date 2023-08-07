@@ -31,7 +31,7 @@ export function watch<Snapshot>(
         timeoutMs === undefined
           ? undefined
           : setTimeout(
-              () => snapshots.enqueueRejection(new TimeoutError()),
+              () => snapshots.enqueueRejection(new TimeoutError(timeoutMs)),
               timeoutMs,
             );
 
@@ -60,7 +60,11 @@ export function watch<Snapshot>(
 }
 
 /** Thrown if the `watch()` iterator is not exited within its optional `timeoutMs`. */
-export class TimeoutError extends Error {}
+export class TimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Timed out after ${timeoutMs} milliseconds`);
+  }
+}
 
 // Server SDK methods common to DocumentReference and Query.
 interface ServerDocumentReferenceOrQuery<Snapshot> {

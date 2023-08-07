@@ -88,6 +88,38 @@ describe('watch', () => {
     expect(String(err)).toBe('Error: bonk');
   });
 
+  test('unsubscribes after timeout', async () => {
+    const {promise: wasUnsubscribeCalled, resolve: unsubscribe} =
+      resolver<void>();
+    const doc = {
+      onSnapshot: (onNext: (snapshot: string) => void) => {
+        setTimeout(() => {
+          onNext('foo');
+        }, 1);
+        setTimeout(() => {
+          onNext('bar');
+        }, 2);
+        setTimeout(() => {
+          onNext('baz');
+        }, 10);
+        return unsubscribe;
+      },
+    };
+    const received = [];
+    let err: unknown;
+    try {
+      for await (const snapshot of watch(doc, 5)) {
+        received.push(snapshot);
+      }
+    } catch (e) {
+      err = e;
+    }
+
+    await wasUnsubscribeCalled;
+    expect(received).toEqual(['foo', 'bar']);
+    expect(String(err)).toBe('Error: Timed out after 5 milliseconds');
+  });
+
   test('with firebase mock document', async () => {
     const firebase = fakeFirestore();
     await firebase.doc('foo/bar').set({foo: 'bar'});
