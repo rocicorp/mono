@@ -84,19 +84,19 @@ export async function publishHandler(
     const deployment = snapshot.data();
     if (!deployment) {
       console.error(`Deployment not found`);
-    } else {
-      console.info(
-        `Deployment ${deployment.status}${
-          deployment.statusMessage ? ': ' + deployment.statusMessage : ''
-        }`,
-      );
+      break;
     }
     if (deployment?.status === 'RUNNING') {
       console.log(`🎁 Published successfully to:`);
       console.log(`https://${deployment.hostname}`);
       break;
     }
-    if (!deployment || deployment.status === 'FAILED') {
+    console.info(
+      `Status: ${deployment.status}${
+        deployment.statusMessage ? ': ' + deployment.statusMessage : ''
+      }`,
+    );
+    if (deployment.status === 'FAILED' || deployment.status === 'STOPPED') {
       break;
     }
   }
