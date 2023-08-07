@@ -29,6 +29,7 @@ export async function processPending(
   maxProcessedMutationTimestamp: number,
   bufferSizer: BufferSizer,
 ): Promise<{maxProcessedMutationTimestamp: number; nothingToProcess: boolean}> {
+  lc = lc.withContext('numClients', clients.size);
   lc.debug?.('process pending');
 
   const storedConnectedClients = await getConnectedClients(storage);
@@ -87,6 +88,7 @@ export async function processPending(
     bufferSizer.recordMissable(t0, missCount > 0, bufferNeededMs, lc);
   }
 
+  lc = lc.withContext('numMutations', toProcess.length);
   lc.debug?.(
     'processing',
     toProcess.length,
