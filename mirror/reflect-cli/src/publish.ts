@@ -39,7 +39,7 @@ export async function publishHandler(
   yargs: PublishHandlerArgs,
   configDirPath?: string | undefined,
   publish: PublishCaller = publishCaller, // Overridden in tests.
-  firestore?: Firestore, // Overridden in tests.
+  firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
   const {script} = yargs;
 
@@ -76,7 +76,7 @@ export async function publishHandler(
   console.log('Requesting deployment');
   const {deploymentPath} = await publish(data);
 
-  const deploymentDoc = (firestore ?? getFirestore())
+  const deploymentDoc = firestore
     .doc(deploymentPath)
     .withConverter(deploymentDataConverter);
 
