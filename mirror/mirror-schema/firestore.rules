@@ -12,10 +12,10 @@ service cloud.firestore {
     }
 
     // userIs{Role}OfTeam() requires one get() on the user doc.
-		function userIsMemberOfTeam(teamID) {
+    function userIsMemberOfTeam(teamID) {
       return _userHasRoleIn(teamID, ['admin', 'member']);
     }
-  	function userIsAdminOfTeam(teamID) {
+    function userIsAdminOfTeam(teamID) {
       return _userHasRoleIn(teamID, ['admin']);
     }
 
@@ -27,30 +27,30 @@ service cloud.firestore {
     // /supportedAgents is globally visible, allowing clients to check
     // for their obsolescence.
     match /supportedAgents/{document=**} {
-	    allow read: if true;
+      allow read: if true;
     }
     // A user has read access to all documents rooted at /users/{userID} 
-		match /users/{userID}/{document=**} {
-    	allow read: if request.auth.uid == userID;
+    match /users/{userID}/{document=**} {
+      allow read: if request.auth.uid == userID;
     }
     // Team members have read access to all documents rooted at /apps/{appID}
-  	match /apps/{appID} {
+    match /apps/{appID} {
       // Optimization: References the teamID directly.
-			allow read: if userIsMemberOfTeam(resource.data.teamID)
+      allow read: if userIsMemberOfTeam(resource.data.teamID)
       
       match /{subcollection}/{document=**} {
         // For docs in subcollections, the app doc is consulted to determine the teamID.
-			  allow read: if userIsMemberOfApp(appID);
+        allow read: if userIsMemberOfApp(appID);
       }
     }
     // Users can see their own app keys. Team admins can see all of a team's appKeys.
     match /appKeys/{appKey} {
-    	allow read: if request.auth.uid == resource.data.userID 
-      	|| userIsAdminOfApp(resource.data.appID);
+      allow read: if request.auth.uid == resource.data.userID
+        || userIsAdminOfApp(resource.data.appID);
     }
     // Team members have read access to all documents rooted at /teams/{teamID}
-  	match /teams/{teamID}/{document=**} {
-			allow read: if userIsMemberOfTeam(teamID)
+    match /teams/{teamID}/{document=**} {
+      allow read: if userIsMemberOfTeam(teamID)
     }
 
     // By default, documents are not publicly readable or writeable. 
