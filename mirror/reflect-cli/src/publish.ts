@@ -53,6 +53,7 @@ export async function publishHandler(
   const range = await findServerVersionRange(absPath);
   const serverVersionRange = range.raw;
 
+  console.log(`Compiling ${script}`);
   const {code, sourcemap} = await compile(absPath, 'linked');
 
   const user = await authenticate();
@@ -72,6 +73,7 @@ export async function publishHandler(
     appID,
   };
 
+  console.log('Requesting deployment');
   const {deploymentPath} = await publish(data);
 
   const deploymentDoc = (firestore ?? getFirestore())
