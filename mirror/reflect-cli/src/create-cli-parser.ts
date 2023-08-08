@@ -1,6 +1,6 @@
 import makeCLI, {Argv} from 'yargs';
-import {version} from './version.js';
 import {initFirebase} from './firebase.js';
+import {version} from './version.js';
 
 export class CommandLineArgsError extends Error {}
 
@@ -8,8 +8,6 @@ export const scriptName = `npx @rocicorp/reflect`;
 
 export function createCLIParserBase(argv: string[]): Argv<{
   v: boolean | undefined;
-  config: string | undefined;
-  env: string | undefined;
   stack: string;
 }> {
   // Type check result against CommonYargsOptions to make sure we've included
@@ -30,18 +28,6 @@ export function createCLIParserBase(argv: string[]): Argv<{
       describe: 'Show version number',
       alias: 'version',
       type: 'boolean',
-    })
-    .option('config', {
-      alias: 'c',
-      describe: 'Path to .toml configuration file',
-      type: 'string',
-      requiresArg: true,
-    })
-    .option('env', {
-      alias: 'e',
-      describe: 'Environment to use for operations and .env files',
-      type: 'string',
-      requiresArg: true,
     })
     .option('stack', {
       alias: 's',
