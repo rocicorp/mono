@@ -17,8 +17,8 @@ describe('room schema', () => {
         // eslint-disable-next-line @typescript-eslint/naming-convention
         storage_schema_meta: {
           // Update these as necessary.
-          version: 1,
-          maxVersion: 1,
+          version: 2,
+          maxVersion: 2,
           minSafeRollbackVersion: 1,
         },
       },
