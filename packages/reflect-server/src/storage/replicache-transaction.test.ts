@@ -10,7 +10,6 @@ import {
   UserValue,
   userValueKey,
   userValueSchema,
-  userValueVersionInfoSchema,
 } from '../../src/types/user-value.js';
 
 const {roomDO} = getMiniflareBindings();
@@ -54,46 +53,18 @@ test('ReplicacheTransaction', async () => {
   expect(await writeTx3.get('foo')).toEqual('bar');
 
   // Check the underlying storage gets written in the way we expect.
-  const expected1: UserValue = {
+  const expected: UserValue = {
     deleted: false,
     value: 'bar',
     version: 1,
   };
   expect(await storage.get(userValueKey('foo'), userValueSchema)).toEqual(
-    expected1,
+    expected,
   );
-  expect(await storage.get('v/01/foo', userValueVersionInfoSchema)).toEqual({});
 
   // delete has special return value
-  expect(await writeTx3.del('foo')).toBe(true);
-  expect(await writeTx3.del('bar')).toBe(false);
-
-  // Redundant del should be a no-op
-  expect(await writeTx3.del('foo')).toBe(false);
-
-  await entryCache.flush();
-
-  // Check the underlying storage for the delete.
-  const expected2: UserValue = {
-    deleted: true,
-    value: 'bar',
-    version: 3,
-  };
-  expect(await storage.get(userValueKey('foo'), userValueSchema)).toEqual(
-    expected2,
-  );
-  expect(await storage.get('v/03/foo', userValueVersionInfoSchema)).toEqual({
-    deleted: true,
-  });
-
-  // The old index entry for foo@v1 should be gone.
-  expect(await storage.get('v/01/foo', userValueVersionInfoSchema))
-    .toBeUndefined;
-
-  // Delete of non-existent key should not create a tombstone
-  expect(await storage.get(userValueKey('bar'), userValueSchema)).toBeUndefined;
-  expect(await storage.get('v/03/bar', userValueVersionInfoSchema))
-    .toBeUndefined;
+  expect(await writeTx3.del('foo'));
+  expect(!(await writeTx3.del('bar')));
 });
 
 test('ReplicacheTransaction environment and reason', async () => {

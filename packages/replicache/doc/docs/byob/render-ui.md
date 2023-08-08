@@ -24,7 +24,7 @@ To create a subscription, use the `useSubscribe()` React hook. You can do multip
 Let's use a subscription to implement our chat UI. Replace `index.tsx` with the below code:
 
 ```tsx
-import React, {useRef} from 'react';
+import React, {FormEvent, useRef} from 'react';
 import {Replicache, TEST_LICENSE_KEY, WriteTransaction} from 'replicache';
 import {useSubscribe} from 'replicache-react';
 import {nanoid} from 'nanoid';

@@ -12,7 +12,7 @@ import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {Firestore, getFirestore} from './firebase.js';
 import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
-import {resolver} from '@rocicorp/resolver';
+import {watch} from 'mirror-schema/src/watch.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
   return yargs.positional('script', {
@@ -39,7 +39,7 @@ export async function publishHandler(
   yargs: PublishHandlerArgs,
   configDirPath?: string | undefined,
   publish: PublishCaller = publishCaller, // Overridden in tests.
-  firestore?: Firestore, // Overridden in tests.
+  firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
   const {script} = yargs;
 
@@ -53,6 +53,7 @@ export async function publishHandler(
   const range = await findServerVersionRange(absPath);
   const serverVersionRange = range.raw;
 
+  console.log(`Compiling ${script}`);
   const {code, sourcemap} = await compile(absPath, 'linked');
 
   const user = await authenticate();
@@ -72,42 +73,31 @@ export async function publishHandler(
     appID,
   };
 
+  console.log('Requesting deployment');
   const {deploymentPath} = await publish(data);
 
-  const {promise: isDoneWatching, resolve: done} = resolver<void>();
-  const stopListener = (firestore ?? getFirestore())
+  const deploymentDoc = firestore
     .doc(deploymentPath)
-    .withConverter(deploymentDataConverter)
-    .onSnapshot(
-      snapshot => {
-        const deployment = snapshot.data();
-        if (!deployment) {
-          console.error(`Deployment not found`);
-        } else {
-          console.info(
-            `Deployment ${deployment.status}${
-              deployment.statusMessage ? ': ' + deployment.statusMessage : ''
-            }`,
-          );
-        }
-        if (deployment?.status === 'RUNNING') {
-          console.log(`🎁 Published successfully to:`);
-          console.log(`https://${deployment.hostname}`);
-        }
-        if (
-          !deployment ||
-          deployment.status === 'RUNNING' ||
-          deployment.status === 'FAILED'
-        ) {
-          done();
-        }
-      },
-      err => {
-        console.error(err);
-        done();
-      },
-    );
+    .withConverter(deploymentDataConverter);
 
-  await isDoneWatching;
-  stopListener();
+  for await (const snapshot of watch(deploymentDoc)) {
+    const deployment = snapshot.data();
+    if (!deployment) {
+      console.error(`Deployment not found`);
+      break;
+    }
+    if (deployment?.status === 'RUNNING') {
+      console.log(`🎁 Published successfully to:`);
+      console.log(`https://${deployment.hostname}`);
+      break;
+    }
+    console.info(
+      `Status: ${deployment.status}${
+        deployment.statusMessage ? ': ' + deployment.statusMessage : ''
+      }`,
+    );
+    if (deployment.status === 'FAILED' || deployment.status === 'STOPPED') {
+      break;
+    }
+  }
 }
