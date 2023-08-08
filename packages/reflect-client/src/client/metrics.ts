@@ -7,6 +7,7 @@ export enum MetricName {
   LastConnectError = 'last_connect_error',
   TimeToConnectMsV2 = 'time_to_connect_ms_v2',
   LastConnectErrorV2 = 'last_connect_error_v2',
+  TotalTimeToConnectMs = 'total_time_to_connect_ms',
 }
 
 // This value is used to indicate that the client's last connection attempt
@@ -17,12 +18,13 @@ export const DID_NOT_CONNECT_VALUE = 100 * 1000;
 
 export const REPORT_INTERVAL_MS = 5_000;
 
-export const TIME_TO_CONNECT_V2_SPECIAL_VALUES = {
-  initialValue: 100_000,
-  connectError: 200_000,
-  disconnectedWaitingForVisible: 300_000,
-  disconnectedWaitingForVisiblePriorWasInitial: 400_000,
-  disconnectedWaitingForVisiblePriorWasConnectError: 500_000,
+// Used by TimeToConnectMsV2 and TotalTimeToConnectMs
+export const TIME_TO_CONNECT_SPECIAL_VALUES = {
+  initialValue: -100_000,
+  connectError: -200_000,
+  disconnectedWaitingForVisible: -300_000,
+  disconnectedWaitingForVisiblePriorWasInitial: -400_000,
+  disconnectedWaitingForVisiblePriorWasConnectError: -500_000,
 } as const;
 
 type ClientDisconnectReason =
@@ -89,7 +91,8 @@ export class MetricManager {
     this.tags.push(`source:${opts.source}`);
 
     this.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
-    this._timeToConnectMsV2.set(TIME_TO_CONNECT_V2_SPECIAL_VALUES.initialValue);
+    this._timeToConnectMsV2.set(TIME_TO_CONNECT_SPECIAL_VALUES.initialValue);
+    this._totalTimeToConnectMs.set(TIME_TO_CONNECT_SPECIAL_VALUES.initialValue);
 
     this._timerID = setInterval(() => {
       void this.flush();
@@ -132,14 +135,13 @@ export class MetricManager {
     ),
   );
 
-  /**
-   * The time from the call to connect() to receiving the 'connected' ws message
-   * for the last successful connect, or one of the special values in
-   * TIME_TO_CONNECT_SPECIAL_VALUES.
-   */
+  // The time from the call to connect() to receiving the 'connected' ws message
+  // for the last successful connect, or one of the special values in
+  // TIME_TO_CONNECT_SPECIAL_VALUES.
   private readonly _timeToConnectMsV2 = this._register(
     new Gauge(MetricName.TimeToConnectMsV2),
   );
+
   // lastConnectErrorV2 records the last error that occurred when connecting,
   // if any. It is cleared when connecting successfully, or
   // lastConnectErrorV2 and timeToConnectMsV2 should be kept in sync
@@ -149,35 +151,41 @@ export class MetricManager {
     new State(MetricName.LastConnectErrorV2),
   );
 
-  setConnected(timeToConnectMs: number) {
+  // The total time it takes to connect across retries due to errors.
+  private readonly _totalTimeToConnectMs = this._register(
+    new Gauge(MetricName.TotalTimeToConnectMs),
+  );
+
+  setConnected(timeToConnectMs: number, totalTimeToConnectMs: number) {
     this._lastConnectErrorV2.clear();
     this._timeToConnectMsV2.set(timeToConnectMs);
+    this._totalTimeToConnectMs.set(totalTimeToConnectMs);
   }
 
   setDisconnectedWaitingForVisible() {
     this._lastConnectErrorV2.clear();
+    let value;
     switch (this._timeToConnectMsV2.get()) {
-      case TIME_TO_CONNECT_V2_SPECIAL_VALUES.initialValue:
-        this._timeToConnectMsV2.set(
-          TIME_TO_CONNECT_V2_SPECIAL_VALUES.disconnectedWaitingForVisiblePriorWasInitial,
-        );
+      case TIME_TO_CONNECT_SPECIAL_VALUES.initialValue:
+        value =
+          TIME_TO_CONNECT_SPECIAL_VALUES.disconnectedWaitingForVisiblePriorWasInitial;
         break;
-      case TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError:
-        this._timeToConnectMsV2.set(
-          TIME_TO_CONNECT_V2_SPECIAL_VALUES.disconnectedWaitingForVisiblePriorWasConnectError,
-        );
+      case TIME_TO_CONNECT_SPECIAL_VALUES.connectError:
+        value =
+          TIME_TO_CONNECT_SPECIAL_VALUES.disconnectedWaitingForVisiblePriorWasConnectError;
         break;
       default:
-        this._timeToConnectMsV2.set(
-          TIME_TO_CONNECT_V2_SPECIAL_VALUES.disconnectedWaitingForVisible,
-        );
+        value = TIME_TO_CONNECT_SPECIAL_VALUES.disconnectedWaitingForVisible;
         break;
     }
+    this._timeToConnectMsV2.set(value);
+    this._totalTimeToConnectMs.set(value);
   }
 
   setConnectError(reason: DisconnectReason) {
     this._lastConnectErrorV2.set(getLastConnectErrorValue(reason));
-    this._timeToConnectMsV2.set(TIME_TO_CONNECT_V2_SPECIAL_VALUES.connectError);
+    this._timeToConnectMsV2.set(TIME_TO_CONNECT_SPECIAL_VALUES.connectError);
+    this._totalTimeToConnectMs.set(TIME_TO_CONNECT_SPECIAL_VALUES.connectError);
   }
 
   /**

@@ -233,8 +233,8 @@ export class Reflect<MD extends MutatorDefs> {
     this.#connectionStateChangeResolver = resolver();
   }
 
-  // See comment on _metrics.timeToConnectMs for how _connectingStart is used.
-  protected _connectingStart: number | undefined = undefined;
+  protected _connectStart: number | undefined = undefined;
+  protected _totalToConnectStart: number | undefined = undefined;
 
   readonly #options: ReflectOptions<MD>;
 
@@ -519,13 +519,13 @@ export class Reflect<MD extends MutatorDefs> {
       e.target as WebSocket,
       await this._l,
     );
-    if (this._connectingStart === undefined) {
+    if (this._connectStart === undefined) {
       l.error?.(
         'Got open event but connect start time is undefined. This should not happen.',
       );
     } else {
       const now = Date.now();
-      const timeToOpenMs = now - this._connectingStart;
+      const timeToOpenMs = now - this._connectStart;
       l.info?.('Got socket open event', {
         navigatorOnline: navigator.onLine,
         timeToOpenMs,
@@ -583,6 +583,7 @@ export class Reflect<MD extends MutatorDefs> {
     lc: LogContext,
     connectedMessage: ConnectedMessage,
   ) {
+    const now = Date.now();
     const [, connectBody] = connectedMessage;
     lc = addWebSocketIDToLogContext(connectBody.wsid, lc);
 
@@ -592,28 +593,36 @@ export class Reflect<MD extends MutatorDefs> {
       this._checkConnectivity('connectAfterError');
     }
     this._connectedCount++;
-    this._connectedAt = Date.now();
+    this._connectedAt = now;
     this._metrics.lastConnectError.clear();
     this._connectErrorCount = 0;
 
     let timeToConnectMs = undefined;
     let connectMsgLatencyMs = undefined;
-    if (this._connectingStart === undefined) {
+    if (this._connectStart === undefined) {
       lc.error?.(
         'Got connected message but connect start time is undefined. This should not happen.',
       );
     } else {
-      const now = Date.now();
-      timeToConnectMs = now - this._connectingStart;
+      timeToConnectMs = now - this._connectStart;
       this._metrics.timeToConnectMs.set(timeToConnectMs);
       connectMsgLatencyMs =
         connectBody.timestamp !== undefined
           ? now - connectBody.timestamp
           : undefined;
-      this._connectingStart = undefined;
+      this._connectStart = undefined;
+    }
+    let totalTimeToConnectMs = undefined;
+    if (this._totalToConnectStart === undefined) {
+      lc.error?.(
+        'Got connected message but total to connect start time is undefined. This should not happen.',
+      );
+    } else {
+      totalTimeToConnectMs = now - this._totalToConnectStart;
+      this._totalToConnectStart = undefined;
     }
 
-    this._metrics.setConnected(timeToConnectMs ?? 0);
+    this._metrics.setConnected(timeToConnectMs ?? 0, totalTimeToConnectMs ?? 0);
 
     lc.info?.('Connected', {
       navigatorOnline: navigator.onLine,
@@ -658,9 +667,13 @@ export class Reflect<MD extends MutatorDefs> {
 
     // connect() called but connect start time is defined. This should not
     // happen.
-    assert(this._connectingStart === undefined);
+    assert(this._connectStart === undefined);
 
-    this._connectingStart = Date.now();
+    const now = Date.now();
+    this._connectStart = now;
+    if (this._totalToConnectStart === undefined) {
+      this._totalToConnectStart = now;
+    }
 
     const baseCookie = await this._getBaseCookie();
     this._baseCookie = baseCookie;
@@ -713,7 +726,8 @@ export class Reflect<MD extends MutatorDefs> {
     l.info?.('disconnecting', {
       navigatorOnline: navigator.onLine,
       reason,
-      connectingStart: this._connectingStart,
+      connectStart: this._connectStart,
+      totalToConnectStart: this._totalToConnectStart,
       connectedAt: this._connectedAt,
       connectionDuration: this._connectedAt
         ? Date.now() - this._connectedAt
@@ -725,11 +739,11 @@ export class Reflect<MD extends MutatorDefs> {
 
     switch (this._connectionState) {
       case ConnectionState.Connected: {
-        if (this._connectingStart !== undefined) {
+        if (this._connectStart !== undefined) {
           l.error?.(
             'disconnect() called while connected but connect start time is defined. This should not happen.',
           );
-          // this._connectingStart reset below.
+          // this._connectStart reset below.
         }
 
         break;
@@ -746,8 +760,8 @@ export class Reflect<MD extends MutatorDefs> {
             `connectErrorCount=${this._connectErrorCount}`,
           );
         }
-        // this._connectingStart reset below.
-        if (this._connectingStart === undefined) {
+        // this._connectStart reset below.
+        if (this._connectStart === undefined) {
           l.error?.(
             'disconnect() called while connecting but connect start time is undefined. This should not happen.',
           );
@@ -765,7 +779,7 @@ export class Reflect<MD extends MutatorDefs> {
     this._connectResolver = resolver();
     this._connectionState = ConnectionState.Disconnected;
     this._messageCount = 0;
-    this._connectingStart = undefined;
+    this._connectStart = undefined; // don't reset this._totalToConnectStart
     this._connectedAt = 0;
     this._socket?.removeEventListener('message', this._onMessage);
     this._socket?.removeEventListener('open', this._onOpen);
@@ -935,6 +949,7 @@ export class Reflect<MD extends MutatorDefs> {
           case ConnectionState.Disconnected: {
             if (this.#visibilityWatcher.visibilityState === 'hidden') {
               this._metrics.setDisconnectedWaitingForVisible();
+              this._totalToConnectStart = undefined;
             }
             // If hidden, we wait for the tab to become visible before trying again.
             await this.#visibilityWatcher.waitForVisible();

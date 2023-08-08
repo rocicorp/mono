@@ -72,7 +72,7 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
   }
 
   get connectingStart() {
-    return this._connectingStart;
+    return this._connectStart;
   }
 
   protected get _connectionState(): ConnectionState {
