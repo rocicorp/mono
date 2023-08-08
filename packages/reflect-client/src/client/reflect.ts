@@ -949,6 +949,8 @@ export class Reflect<MD extends MutatorDefs> {
           case ConnectionState.Disconnected: {
             if (this.#visibilityWatcher.visibilityState === 'hidden') {
               this._metrics.setDisconnectedWaitingForVisible();
+              // reset this._totalToConnectStart since this client
+              // is no longer trying to connect due to being hidden.
               this._totalToConnectStart = undefined;
             }
             // If hidden, we wait for the tab to become visible before trying again.
@@ -1077,6 +1079,20 @@ export class Reflect<MD extends MutatorDefs> {
 
       if (gotError) {
         this.#setOnline(false);
+        let cfGetCheckSucceeded = false;
+        const cfGetCheckURL = new URL(
+          this._socketOrigin.replace(/^ws/, 'http'),
+        );
+        cfGetCheckURL.pathname = '/api/canary/v0/get';
+        cfGetCheckURL.searchParams.set('id', nanoid());
+        const cfGetCheckController = new AbortController();
+        fetch(cfGetCheckURL, {signal: cfGetCheckController.signal})
+          .then(_ => {
+            cfGetCheckSucceeded = true;
+          })
+          .catch(_ => {
+            cfGetCheckSucceeded = false;
+          });
 
         lc.debug?.(
           'Sleeping',
@@ -1085,6 +1101,13 @@ export class Reflect<MD extends MutatorDefs> {
           this._connectionState,
         );
         await sleep(RUN_LOOP_INTERVAL_MS);
+        cfGetCheckController.abort();
+        if (!cfGetCheckSucceeded) {
+          lc.info?.(
+            'Canary request failed, resetting total time to connect start time.',
+          );
+          this._totalToConnectStart = undefined;
+        }
       }
     }
   }
