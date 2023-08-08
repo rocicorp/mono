@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import {mustFindAppConfigRoot} from '../app-config.js';
 import {buildReflectServerContent} from '../compile.js';
 import {getWorkerTemplate} from '../get-worker-template.js';
+import {inspectorConsoleClient} from './inspector-console-client.js';
 
 /**
  * Returns a function that shuts down the dev server.
@@ -13,9 +14,11 @@ export async function startDevServer(
   code: OutputFile,
   sourcemap: OutputFile,
   port: number,
+  signal: AbortSignal,
 ): Promise<URL> {
   const appDir = path.dirname(code.path);
   const appConfigRoot = mustFindAppConfigRoot();
+  const inspectorPort = 9229;
 
   // Create a new Miniflare instance, starting a workerd server
   const mf = new Miniflare({
@@ -54,9 +57,9 @@ export async function startDevServer(
 
     durableObjectsPersist: path.join(appConfigRoot, '.reflect', 'data'),
 
-    // debug support is currently not supported so supporting inspecting is not very useful.
-    // https://github.com/cloudflare/workerd/issues/371
-    // inspectorPort: 9229,
+    // Use inspector/Chrome DevTools Protocol to forward console.log inside the
+    // worker to console.log to the terminal.
+    inspectorPort,
 
     compatibilityDate: '2023-05-18',
   });
@@ -66,5 +69,15 @@ export async function startDevServer(
   // Cleanup Miniflare, shutting down the workerd server
   // await mf.dispose(),
 
-  return mf.ready;
+  const url = await mf.ready;
+
+  await inspectorConsoleClient(url, inspectorPort, signal);
+
+  signal.addEventListener('abort', () => {
+    mf.dispose().catch(e => {
+      console.error('Failed to shut down dev server', e);
+    });
+  });
+
+  return url;
 }

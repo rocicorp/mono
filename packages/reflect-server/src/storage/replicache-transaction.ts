@@ -16,7 +16,6 @@ import {
   userValueKey,
   userValuePrefix,
   userValueSchema,
-  userValueVersionEntry,
 } from '../types/user-value.js';
 import type {Storage} from './storage.js';
 
@@ -48,18 +47,17 @@ export class ReplicacheTransaction implements WriteTransaction {
   }
 
   async put(key: string, value: ReadonlyJSONValue): Promise<void> {
-    const prev = await this.#getUserValueEntry(key);
     const userValue: UserValue = {
       deleted: false,
       version: this.#version,
       value: v.parse(value, jsonSchema),
     };
-    await this.#replaceUserValueEntry(key, userValue, prev);
+    await this.#storage.put(userValueKey(key), userValue);
   }
 
   async del(key: string): Promise<boolean> {
-    const prev = await this.#getUserValueEntry(key);
-    if (prev === undefined || prev.deleted) {
+    const prev = await this.get(key);
+    if (prev === undefined) {
       return false;
     }
 
@@ -67,37 +65,14 @@ export class ReplicacheTransaction implements WriteTransaction {
     const userValue: UserValue = {
       deleted: true,
       version: this.#version,
-      value: prev.value, // prev came from get which needs to be verified when it was written.
+      value: prev, // prev came from get which needs to be verified when it was written.
     };
-    await this.#replaceUserValueEntry(key, userValue, prev);
-    return true;
-  }
-
-  async #replaceUserValueEntry(
-    userKey: string,
-    newValue: UserValue,
-    prevValue: UserValue | undefined,
-  ): Promise<void> {
-    if (prevValue) {
-      const oldIndexEntry = userValueVersionEntry(userKey, prevValue);
-      // Note: Purposely do not `await` this del(), in order to ensure that it is
-      // batched with the following putEntries().
-      void this.#storage.del(oldIndexEntry.key);
-    }
-
-    const newIndexEntry = userValueVersionEntry(userKey, newValue);
-    await this.#storage.putEntries({
-      [userValueKey(userKey)]: newValue,
-      [newIndexEntry.key]: newIndexEntry.value,
-    });
-  }
-
-  #getUserValueEntry(key: string): Promise<UserValue | undefined> {
-    return this.#storage.get(userValueKey(key), userValueSchema);
+    await this.#storage.put(userValueKey(key), userValue);
+    return prev !== undefined;
   }
 
   async get(key: string): Promise<ReadonlyJSONValue | undefined> {
-    const entry = await this.#getUserValueEntry(key);
+    const entry = await this.#storage.get(userValueKey(key), userValueSchema);
     if (entry === undefined) {
       return undefined;
     }

@@ -39,7 +39,7 @@ export async function publishHandler(
   yargs: PublishHandlerArgs,
   configDirPath?: string | undefined,
   publish: PublishCaller = publishCaller, // Overridden in tests.
-  firestore?: Firestore, // Overridden in tests.
+  firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
   const {script} = yargs;
 
@@ -53,6 +53,7 @@ export async function publishHandler(
   const range = await findServerVersionRange(absPath);
   const serverVersionRange = range.raw;
 
+  console.log(`Compiling ${script}`);
   const {code, sourcemap} = await compile(absPath, 'linked');
 
   const user = await authenticate();
@@ -72,9 +73,10 @@ export async function publishHandler(
     appID,
   };
 
+  console.log('Requesting deployment');
   const {deploymentPath} = await publish(data);
 
-  const deploymentDoc = (firestore ?? getFirestore())
+  const deploymentDoc = firestore
     .doc(deploymentPath)
     .withConverter(deploymentDataConverter);
 
@@ -82,19 +84,19 @@ export async function publishHandler(
     const deployment = snapshot.data();
     if (!deployment) {
       console.error(`Deployment not found`);
-    } else {
-      console.info(
-        `Deployment ${deployment.status}${
-          deployment.statusMessage ? ': ' + deployment.statusMessage : ''
-        }`,
-      );
+      break;
     }
     if (deployment?.status === 'RUNNING') {
       console.log(`🎁 Published successfully to:`);
       console.log(`https://${deployment.hostname}`);
       break;
     }
-    if (!deployment || deployment.status === 'FAILED') {
+    console.info(
+      `Status: ${deployment.status}${
+        deployment.statusMessage ? ': ' + deployment.statusMessage : ''
+      }`,
+    );
+    if (deployment.status === 'FAILED' || deployment.status === 'STOPPED') {
       break;
     }
   }
