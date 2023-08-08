@@ -6,6 +6,7 @@
   "dependencies": {
     "@badrap/valita": "^0.2.0",
     "@rocicorp/resolver": "^1.0.0",
+    "devtools-protocol": "^0.0.1179426",
     "esbuild": "^0.18.3",
     "firebase": "9.23.0",
     "miniflare": "^3.20230717.0",
@@ -16,6 +17,7 @@
     "semver": "^7.5.3",
     "shared": "0.0.0",
     "validate-npm-package-name": "^5.0.0",
+    "ws": "^8.13.0",
     "yargs": "^17.4.1"
   },
   "scripts": {

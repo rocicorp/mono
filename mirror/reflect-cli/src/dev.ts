@@ -41,7 +41,8 @@ export async function devHandler(yargs: DevHandlerArgs) {
 
   const {code, sourcemap} = await compile(absPath, 'linked');
 
-  const {href} = await startDevServer(code, sourcemap, port);
+  const ac = new AbortController();
+  const {href} = await startDevServer(code, sourcemap, port, ac.signal);
   console.log(`Dev server running at:
   ${href}
   ${href.replace(/^http/, 'ws')}`);
