@@ -11,6 +11,7 @@ import {
 } from './config/index.js';
 import * as appFunctions from './functions/app/index.js';
 import {healthcheck as healthcheckHandler} from './functions/healthcheck.function.js';
+import * as tailFunctions from './functions/tail/index.js';
 import * as userFunctions from './functions/user/index.js';
 
 // Initializes firestore et al. (e.g. for subsequent calls to getFirestore())
@@ -43,4 +44,12 @@ export const app = {
   ),
   deploy: appFunctions.deploy(getFirestore(), getStorage()),
   rename: https.onCall(baseHttpsOptions, appFunctions.rename(getFirestore())),
+};
+
+export const tail = {
+  create: https.onRequest(
+    baseHttpsOptions,
+    tailFunctions.create(getFirestore(), getAuth()),
+  ),
+  // delete: https.onCall(baseHttpsOptions, tailFunctions.delete(getFirestore())),
 };
