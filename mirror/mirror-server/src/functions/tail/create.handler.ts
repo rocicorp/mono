@@ -28,6 +28,7 @@ export const create = (_firestore: Firestore, _auth: Auth) =>
       'Cache-Control': 'no-store',
       'Content-Type': 'text/event-stream',
     });
+    response.flushHeaders();
 
     // TODO(arv): Not sure why this is not working?
     const apiToken =
@@ -38,7 +39,8 @@ export const create = (_firestore: Firestore, _auth: Auth) =>
     const filters = {filters: []};
     const debug = true;
     const env = undefined;
-    const packageVersion = '';
+    // TODO(arv): Grab this.
+    const packageVersion = '0.30.0';
 
     console.log({
       apiToken,
@@ -50,7 +52,7 @@ export const create = (_firestore: Firestore, _auth: Auth) =>
       packageVersion,
     });
 
-    const {tail, expiration, deleteTail} = await createTail(
+    const {ws, expiration, deleteTail} = await createTail(
       apiToken,
       accountID,
       cfWorkerName,
@@ -62,11 +64,10 @@ export const create = (_firestore: Firestore, _auth: Auth) =>
 
     logger.log(`expiration: ${expiration}`);
 
-    loop: for await (const item of wsQueue(tail, 10_000)) {
+    loop: for await (const item of wsQueue(ws, 10_000)) {
       switch (item.type) {
         case 'data':
           writeData(response, item.data);
-
           break;
         case 'ping':
           response.write(':\n\n');

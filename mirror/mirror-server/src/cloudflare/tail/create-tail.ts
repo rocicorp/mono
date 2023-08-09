@@ -80,7 +80,7 @@ export async function createTail(
   env: string | undefined,
   packageVersion: string,
 ): Promise<{
-  tail: WebSocket;
+  ws: WebSocket;
   expiration: Date;
   deleteTail: () => Promise<void>;
 }> {
@@ -102,7 +102,7 @@ export async function createTail(
   }
 
   // connect to the tail
-  const tail = new WebSocket(websocketUrl, TRACE_VERSION, {
+  const ws = new WebSocket(websocketUrl, TRACE_VERSION, {
     headers: {
       'Sec-WebSocket-Protocol': TRACE_VERSION, // needs to be `trace-v1` to be accepted
       'User-Agent': `reflect/${packageVersion}`,
@@ -110,11 +110,11 @@ export async function createTail(
   });
 
   // send filters when we open up
-  tail.on('open', () => {
-    tail.send(JSON.stringify({debug}));
+  ws.on('open', () => {
+    ws.send(JSON.stringify({debug}));
   });
 
-  return {tail, expiration, deleteTail};
+  return {ws, expiration, deleteTail};
 }
 
 /**
