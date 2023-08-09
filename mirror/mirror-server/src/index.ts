@@ -12,6 +12,7 @@ import {
 import * as appFunctions from './functions/app/index.js';
 import {healthcheck as healthcheckHandler} from './functions/healthcheck.function.js';
 import * as serverFunctions from './functions/server/index.js';
+import * as tailFunctions from './functions/tail/index.js';
 import * as userFunctions from './functions/user/index.js';
 import {DEPLOYMENT_SECRETS_NAMES} from './functions/app/secrets.js';
 
@@ -50,4 +51,12 @@ export const app = {
 
 export const server = {
   autoDeploy: serverFunctions.autoDeploy(getFirestore()),
+};
+
+export const tail = {
+  create: https.onRequest(
+    baseHttpsOptions,
+    tailFunctions.create(getFirestore(), getAuth()),
+  ),
+  // delete: https.onCall(baseHttpsOptions, tailFunctions.delete(getFirestore())),
 };

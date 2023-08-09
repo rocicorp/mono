@@ -4,13 +4,14 @@ import {
   CommandLineArgsError,
   createCLIParserBase,
 } from './create-cli-parser.js';
+import {createHandler, createOptions} from './create.js';
 import {devHandler, devOptions} from './dev.js';
+import {handleWith} from './firebase.js';
 import {initHandler, initOptions} from './init.js';
 import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
-import {createHandler, createOptions} from './create.js';
-import {handleWith} from './firebase.js';
+import {tailHandler, tailOptions} from './tail.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -82,8 +83,8 @@ function createCLIParser(argv: string[]) {
   reflectCLI.command(
     'tail [worker]',
     '🦚 Starts a log tailing session running worker',
-    // tailOptions,
-    // tailHandler
+    tailOptions,
+    tailHandler,
   );
 
   // publish
