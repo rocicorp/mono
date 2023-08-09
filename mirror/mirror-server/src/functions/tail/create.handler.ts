@@ -33,6 +33,7 @@ export const create = (_firestore: Firestore, _auth: Auth) =>
     const apiToken =
       cloudflareApiToken.value() || '7egl0VDDRceLm853K9YMrGF_DYn4BCnt4R8NvZjz';
     const accountID = cloudflareAccountId.value();
+    // TODO(arv) Get this from `getApp`
     const cfWorkerName = 'arv-cli-test-1';
     const filters = {filters: []};
     const debug = true;
