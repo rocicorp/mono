@@ -1,4 +1,5 @@
 import * as v from 'shared/src/valita.js';
+import {Timestamp as FirestoreTimestamp} from '@google-cloud/firestore';
 
 // https://firebase.google.com/docs/reference/node/firebase.firestore.Timestamp
 export const timestampSchema = v.object({
@@ -13,3 +14,10 @@ export const timestampSchema = v.object({
 });
 
 export type Timestamp = v.Infer<typeof timestampSchema>;
+
+export function toMillis(timestamp: Timestamp): number {
+  return new FirestoreTimestamp(
+    timestamp.seconds,
+    timestamp.nanoseconds,
+  ).toMillis();
+}

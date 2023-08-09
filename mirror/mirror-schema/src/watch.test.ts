@@ -2,6 +2,7 @@ import {describe, test, expect} from '@jest/globals';
 import {resolver} from '@rocicorp/resolver';
 import {watch} from './watch.js';
 import {fakeFirestore} from './test-helpers.js';
+import type {HttpsError} from 'firebase-functions/v2/https';
 
 describe('watch', () => {
   test('receives snapshots', async () => {
@@ -118,6 +119,7 @@ describe('watch', () => {
     await wasUnsubscribeCalled;
     expect(received).toEqual(['foo', 'bar']);
     expect(String(err)).toBe('Error: Timed out after 5 milliseconds');
+    expect((err as HttpsError).code).toBe('resource-exhausted');
   });
 
   test('with firebase mock document', async () => {

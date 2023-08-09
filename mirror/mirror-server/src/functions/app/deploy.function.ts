@@ -9,6 +9,8 @@ import {newDeploymentID} from 'shared/src/mirror/ids.js';
 import {getServerModuleMetadata} from '../../cloudflare/get-server-modules.js';
 import {publish as publishToCloudflare} from '../../cloudflare/publish.js';
 import {App, appDataConverter, appPath} from 'mirror-schema/src/app.js';
+import {lockDataConverter, deploymentLockPath} from 'mirror-schema/src/lock.js';
+import {Lock} from './lock.js';
 import {must} from 'shared/src/must.js';
 
 // This is the API token for reflect-server.net
@@ -23,69 +25,86 @@ export const deploy = (firestore: Firestore, storage: Storage) =>
     },
     async event => {
       const {appID, deploymentID} = event.params;
-      const [appDoc, deploymentDoc] = await firestore.runTransaction(tx =>
-        Promise.all([
-          tx.get(firestore.doc(appPath(appID)).withConverter(appDataConverter)),
-          tx.get(
-            firestore
-              .doc(event.document)
-              .withConverter(schema.deploymentDataConverter),
-          ),
-        ]),
+
+      const deploymentLock = new Lock(
+        firestore
+          .doc(deploymentLockPath(appID))
+          .withConverter(lockDataConverter),
       );
-      if (!appDoc.exists) {
-        throw new HttpsError('not-found', `Missing app doc for ${appID}`);
-      }
-      if (!deploymentDoc.exists) {
-        throw new HttpsError(
-          'not-found',
-          `Missing deployment doc ${deploymentID} for app ${appID}`,
-        );
-      }
-
-      const app: App = must(appDoc.data());
-      const deployment: schema.Deployment = must(deploymentDoc.data());
-
-      if (deployment.status !== 'REQUESTED') {
-        logger.warn(`Deployment is already ${deployment.status}`);
-        return;
-      }
-
-      const config = {
-        accountID: app.cfID,
-        scriptName: app.cfScriptName,
-        apiToken: cloudflareApiToken.value(),
-      } as const;
-
-      const {modules: serverModules} = await getServerModuleMetadata(
-        firestore,
-        deployment.serverVersion,
+      await deploymentLock.withLock(deploymentID, () =>
+        deployInLock(firestore, storage, appID, deploymentID),
       );
-
-      // TODO(darick): Acquire a document lock to enforce that only one deployment runs at a time.
-      await setDeploymentStatus(firestore, appID, deploymentID, 'DEPLOYING');
-      try {
-        await publishToCloudflare(
-          storage,
-          config,
-          deployment.hostname,
-          deployment.appModules,
-          serverModules,
-        );
-      } catch (e) {
-        await setDeploymentStatus(
-          firestore,
-          appID,
-          deploymentID,
-          'FAILED',
-          String(e),
-        );
-        throw e;
-      }
-
-      await setRunningDeployment(firestore, appID, deploymentID);
     },
   );
+
+async function deployInLock(
+  firestore: Firestore,
+  storage: Storage,
+  appID: string,
+  deploymentID: string,
+): Promise<void> {
+  const [appDoc, deploymentDoc] = await firestore.runTransaction(tx =>
+    Promise.all([
+      tx.get(firestore.doc(appPath(appID)).withConverter(appDataConverter)),
+      tx.get(
+        firestore
+          .doc(schema.deploymentPath(appID, deploymentID))
+          .withConverter(schema.deploymentDataConverter),
+      ),
+    ]),
+  );
+  if (!appDoc.exists) {
+    throw new HttpsError('not-found', `Missing app doc for ${appID}`);
+  }
+  if (!deploymentDoc.exists) {
+    throw new HttpsError(
+      'not-found',
+      `Missing deployment doc ${deploymentID} for app ${appID}`,
+    );
+  }
+
+  const app: App = must(appDoc.data());
+  const deployment: schema.Deployment = must(deploymentDoc.data());
+
+  if (deployment.status !== 'REQUESTED') {
+    logger.warn(`Deployment is already ${deployment.status}`);
+    return;
+  }
+
+  const config = {
+    accountID: app.cfID,
+    scriptName: app.cfScriptName,
+    apiToken: cloudflareApiToken.value(),
+  } as const;
+
+  const {modules: serverModules} = await getServerModuleMetadata(
+    firestore,
+    deployment.serverVersion,
+  );
+
+  // TODO(darick): Acquire a document lock to enforce that only one deployment runs at a time.
+  await setDeploymentStatus(firestore, appID, deploymentID, 'DEPLOYING');
+  try {
+    await publishToCloudflare(
+      storage,
+      config,
+      deployment.hostname,
+      deployment.appModules,
+      serverModules,
+    );
+  } catch (e) {
+    await setDeploymentStatus(
+      firestore,
+      appID,
+      deploymentID,
+      'FAILED',
+      String(e),
+    );
+    throw e;
+  }
+
+  await setRunningDeployment(firestore, appID, deploymentID);
+}
 
 export function requestDeployment(
   firestore: Firestore,

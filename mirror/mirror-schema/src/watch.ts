@@ -1,4 +1,5 @@
 import type {FirestoreError, SnapshotListenOptions} from 'firebase/firestore';
+import {HttpsError} from 'firebase-functions/v2/https';
 import {Queue} from 'shared/src/queue.js';
 
 /**
@@ -60,9 +61,9 @@ export function watch<Snapshot>(
 }
 
 /** Thrown if the `watch()` iterator is not exited within its optional `timeoutMs`. */
-export class TimeoutError extends Error {
+export class TimeoutError extends HttpsError {
   constructor(timeoutMs: number) {
-    super(`Timed out after ${timeoutMs} milliseconds`);
+    super('resource-exhausted', `Timed out after ${timeoutMs} milliseconds`);
   }
 }
 
