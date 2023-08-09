@@ -630,9 +630,8 @@ describe('processRoom', () => {
         await putClientRecord(clientID, record, storage);
       }
 
-      const silentContext = createSilentLogContext();
       const p = processRoom(
-        silentContext,
+        createSilentLogContext(),
         c.clients,
         c.pendingMutations,
         mutators,
