@@ -22,18 +22,18 @@ type TailCreationApiResponse = {
  *
  * https://api.cloudflare.com/#worker-tail-logs-start-tail
  *
- * @param accountId the account ID associated with the worker to tail
+ * @param accountID the account ID associated with the worker to tail
  * @param workerName the name of the worker to tail
  * @returns a `cfetch`-ready URL for creating a new tail
  */
 function makeCreateTailUrl(
-  accountId: string,
+  accountID: string,
   workerName: string,
   env: string | undefined,
 ): string {
   return env
-    ? `/accounts/${accountId}/workers/services/${workerName}/environments/${env}/tails`
-    : `/accounts/${accountId}/workers/scripts/${workerName}/tails`;
+    ? `/accounts/${accountID}/workers/services/${workerName}/environments/${env}/tails`
+    : `/accounts/${accountID}/workers/scripts/${workerName}/tails`;
 }
 
 /**
@@ -65,7 +65,7 @@ function makeDeleteTailUrl(
  * - Connects to the tail worker
  * - Sends any filters over the connection
  *
- * @param accountId the account ID associated with the worker to tail
+ * @param accountID the account ID associated with the worker to tail
  * @param workerName the name of the worker to tail
  * @param filters A list of `TailAPIFilters` given to the tail
  * @param debug Flag to run tail in debug mode
@@ -73,7 +73,7 @@ function makeDeleteTailUrl(
  */
 export async function createTail(
   apiToken: string,
-  accountId: string,
+  accountID: string,
   workerName: string,
   filters: TailFilterMessage,
   debug: boolean,
@@ -85,7 +85,7 @@ export async function createTail(
   deleteTail: () => Promise<void>;
 }> {
   // create the tail
-  const createTailUrl = makeCreateTailUrl(accountId, workerName, env);
+  const createTailUrl = makeCreateTailUrl(accountID, workerName, env);
   const {
     id: tailId,
     url: websocketUrl,
@@ -96,7 +96,7 @@ export async function createTail(
   });
 
   // delete the tail (not yet!)
-  const deleteUrl = makeDeleteTailUrl(accountId, workerName, tailId, env);
+  const deleteUrl = makeDeleteTailUrl(accountID, workerName, tailId, env);
   async function deleteTail() {
     await cfFetch(apiToken, deleteUrl, {method: 'DELETE'});
   }
@@ -111,15 +111,7 @@ export async function createTail(
 
   // send filters when we open up
   tail.on('open', () => {
-    tail.send(
-      JSON.stringify({debug}),
-      {binary: false, compress: false, mask: false, fin: true},
-      err => {
-        if (err) {
-          throw err;
-        }
-      },
-    );
+    tail.send(JSON.stringify({debug}));
   });
 
   return {tail, expiration, deleteTail};
