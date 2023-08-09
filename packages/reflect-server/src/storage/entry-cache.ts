@@ -100,38 +100,44 @@ export class EntryCache implements Storage {
     return res;
   }
 
-  async flush(): Promise<{
-    cacheSize: number;
-    deleteCount: number;
+  pendingCounts(): {
+    delCount: number;
     putCount: number;
-  }> {
+  } {
+    const counts = {
+      delCount: 0,
+      putCount: 0,
+    };
+    for (const {value, dirty} of this.#cache.values()) {
+      if (dirty) {
+        if (value === undefined) {
+          counts.delCount++;
+        } else {
+          counts.putCount++;
+        }
+      }
+    }
+    return counts;
+  }
+
+  async flush(): Promise<void> {
     // Note the order of operations: all del()` and put() calls are
     // invoked before await. This ensures atomicity of the flushed
     // writes, as described in:
     //
     // https://developers.cloudflare.com/workers/learning/using-durable-objects/#accessing-persistent-storage-from-a-durable-object
-    const stats = {
-      cacheSize: 0,
-      deleteCount: 0,
-      putCount: 0,
-    };
     const promises = [];
-    for (const [k, v] of this.#cache.entries()) {
-      stats.cacheSize++;
-      if (v.dirty) {
-        if (v.value === undefined) {
-          stats.deleteCount++;
-          promises.push(this.#storage.del(k));
+    for (const [key, {value, dirty}] of this.#cache.entries()) {
+      if (dirty) {
+        if (value === undefined) {
+          promises.push(this.#storage.del(key));
         } else {
-          stats.putCount++;
-          promises.push(this.#storage.put(k, v.value));
+          promises.push(this.#storage.put(key, value));
         }
       }
     }
     await Promise.all(promises);
-
     this.#cache.clear();
-    return stats;
   }
 
   scan<T extends ReadonlyJSONValue>(

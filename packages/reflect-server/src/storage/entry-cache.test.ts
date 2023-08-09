@@ -3,6 +3,7 @@ import * as valita from 'shared/src/valita.js';
 import {DurableStorage} from './durable-storage.js';
 import {EntryCache} from './entry-cache.js';
 import type {ListOptions} from './storage.js';
+import type {Patch} from 'reflect-protocol';
 
 describe('entry-cache', () => {
   type Case = {
@@ -12,6 +13,7 @@ describe('entry-cache', () => {
     deletedKeys: string[];
     deletedKeysBatch: string[];
     expected: [string, string][];
+    expectedPending: Patch;
     opts?: ListOptions;
   };
 
@@ -29,6 +31,7 @@ describe('entry-cache', () => {
         ['baz-1', 'orig-baz-1'],
         ['foo-1', 'orig-foo-1'],
       ],
+      expectedPending: [],
     },
     {
       name: 'prefix',
@@ -38,6 +41,7 @@ describe('entry-cache', () => {
       deletedKeysBatch: [],
       opts: {prefix: 'foo'},
       expected: [['foo-1', 'orig-foo-1']],
+      expectedPending: [],
     },
     {
       name: 'limit',
@@ -50,6 +54,7 @@ describe('entry-cache', () => {
         ['bar-1', 'orig-bar-1'],
         ['baz-1', 'orig-baz-1'],
       ],
+      expectedPending: [],
     },
     {
       name: 'prefix, limit',
@@ -59,6 +64,7 @@ describe('entry-cache', () => {
       deletedKeysBatch: [],
       opts: {prefix: 'foo', limit: 2},
       expected: [['foo-1', 'orig-foo-1']],
+      expectedPending: [],
     },
     {
       name: 'start',
@@ -71,6 +77,7 @@ describe('entry-cache', () => {
         ['baz-1', 'orig-baz-1'],
         ['foo-1', 'orig-foo-1'],
       ],
+      expectedPending: [],
     },
     {
       name: 'start, exclusive',
@@ -80,6 +87,7 @@ describe('entry-cache', () => {
       deletedKeysBatch: [],
       opts: {start: {key: 'baz-1', exclusive: true}},
       expected: [['foo-1', 'orig-foo-1']],
+      expectedPending: [],
     },
     {
       name: 'prefix, limit, start, exclusive',
@@ -89,6 +97,7 @@ describe('entry-cache', () => {
       deletedKeysBatch: [],
       opts: {prefix: 'b', limit: 1, start: {key: 'bar-1', exclusive: true}},
       expected: [['baz-1', 'orig-baz-1']],
+      expectedPending: [],
     },
 
     {
@@ -103,6 +112,11 @@ describe('entry-cache', () => {
         ['baz-2', 'new-baz-2'],
         ['baz-3', 'new-baz-3'],
         ['foo-1', 'new-foo-1'],
+      ],
+      expectedPending: [
+        {op: 'put', key: 'foo-1', value: 'new-foo-1'},
+        {op: 'put', key: 'baz-2', value: 'new-baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
       ],
     },
     {
@@ -119,6 +133,11 @@ describe('entry-cache', () => {
         ['baz-3', 'new-baz-3'],
         ['baz-4', 'new-baz-4'],
       ],
+      expectedPending: [
+        {op: 'put', key: 'baz-2', value: 'new-baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
+      ],
     },
     {
       name: 'limit (with pending puts)',
@@ -133,6 +152,11 @@ describe('entry-cache', () => {
         ['baz-2', 'new-baz-2'],
         ['baz-3', 'new-baz-3'],
       ],
+      expectedPending: [
+        {op: 'put', key: 'baz-2', value: 'new-baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
+      ],
     },
     {
       name: 'prefix, limit (with pending puts)',
@@ -144,6 +168,11 @@ describe('entry-cache', () => {
       expected: [
         ['baz-1', 'orig-baz-1'],
         ['baz-2', 'new-baz-2'],
+      ],
+      expectedPending: [
+        {op: 'put', key: 'baz-2', value: 'new-baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
       ],
     },
     {
@@ -160,6 +189,11 @@ describe('entry-cache', () => {
         ['baz-4', 'new-baz-4'],
         ['foo-1', 'orig-foo-1'],
       ],
+      expectedPending: [
+        {op: 'put', key: 'baz-2', value: 'new-baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
+      ],
     },
     {
       name: 'start, exclusive (with pending puts)',
@@ -174,6 +208,11 @@ describe('entry-cache', () => {
         ['baz-4', 'new-baz-4'],
         ['foo-1', 'orig-foo-1'],
       ],
+      expectedPending: [
+        {op: 'put', key: 'baz-2', value: 'new-baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
+      ],
     },
     {
       name: 'prefix, limit, start, exclusive (with pending puts)',
@@ -186,6 +225,11 @@ describe('entry-cache', () => {
         ['baz-1', 'orig-baz-1'],
         ['baz-2', 'new-baz-2'],
         ['baz-3', 'new-baz-3'],
+      ],
+      expectedPending: [
+        {op: 'put', key: 'baz-2', value: 'new-baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
       ],
     },
 
@@ -201,6 +245,14 @@ describe('entry-cache', () => {
         ['baz-4', 'new-baz-4'],
         ['foo-1', 'orig-foo-1'],
       ],
+      expectedPending: [
+        {op: 'del', key: 'baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
+        {op: 'del', key: 'baz-5'},
+        {op: 'del', key: 'baz-1'},
+        {op: 'del', key: 'baz-6'},
+      ],
     },
     {
       name: 'prefix (with pending puts and dels)',
@@ -213,6 +265,14 @@ describe('entry-cache', () => {
         ['bar-1', 'orig-bar-1'],
         ['baz-3', 'new-baz-3'],
         ['baz-4', 'new-baz-4'],
+      ],
+      expectedPending: [
+        {op: 'del', key: 'baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
+        {op: 'del', key: 'baz-5'},
+        {op: 'del', key: 'baz-1'},
+        {op: 'del', key: 'baz-6'},
       ],
     },
     {
@@ -227,6 +287,15 @@ describe('entry-cache', () => {
         ['baz-3', 'new-baz-3'],
         ['baz-4', 'new-baz-4'],
       ],
+      expectedPending: [
+        {op: 'del', key: 'baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
+        {op: 'del', key: 'baz-5'},
+        {op: 'put', key: 'baz-6', value: 'new-baz-6'},
+        {op: 'del', key: 'baz-7'},
+        {op: 'del', key: 'baz-1'},
+      ],
     },
     {
       name: 'prefix, limit (with pending puts and dels)',
@@ -238,6 +307,15 @@ describe('entry-cache', () => {
       expected: [
         ['baz-3', 'new-baz-3'],
         ['baz-4', 'new-baz-4'],
+      ],
+      expectedPending: [
+        {op: 'del', key: 'baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
+        {op: 'del', key: 'baz-5'},
+        {op: 'put', key: 'baz-6', value: 'new-baz-6'},
+        {op: 'del', key: 'baz-7'},
+        {op: 'del', key: 'baz-1'},
       ],
     },
     {
@@ -252,6 +330,14 @@ describe('entry-cache', () => {
         ['baz-4', 'new-baz-4'],
         ['foo-1', 'orig-foo-1'],
       ],
+      expectedPending: [
+        {op: 'del', key: 'baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
+        {op: 'del', key: 'baz-5'},
+        {op: 'del', key: 'baz-1'},
+        {op: 'del', key: 'baz-6'},
+      ],
     },
     {
       name: 'start, exclusive (with pending puts and dels)',
@@ -264,6 +350,14 @@ describe('entry-cache', () => {
         ['baz-4', 'new-baz-4'],
         ['foo-1', 'orig-foo-1'],
       ],
+      expectedPending: [
+        {op: 'del', key: 'baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
+        {op: 'del', key: 'baz-5'},
+        {op: 'del', key: 'baz-1'},
+        {op: 'del', key: 'baz-6'},
+      ],
     },
     {
       name: 'prefix, limit, start, exclusive (with pending puts and dels)',
@@ -275,6 +369,14 @@ describe('entry-cache', () => {
       expected: [
         ['baz-3', 'new-baz-3'],
         ['baz-4', 'new-baz-4'],
+      ],
+      expectedPending: [
+        {op: 'del', key: 'baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
+        {op: 'del', key: 'baz-5'},
+        {op: 'del', key: 'baz-1'},
+        {op: 'del', key: 'baz-6'},
       ],
     },
   ];
@@ -347,6 +449,21 @@ describe('entry-cache', () => {
       expect(durableEntriesBeforeFlush).toEqual(
         durableEntryKeys.map(k => [k, `orig-${k}`]),
       );
+
+      expect(cache.pending()).toEqual(c.expectedPending);
+      const expectedCounts = {
+        delCount: 0,
+        putCount: 0,
+      };
+      for (const {op} of c.expectedPending) {
+        if (op === 'del') {
+          expectedCounts.delCount++;
+        }
+        if (op === 'put') {
+          expectedCounts.putCount++;
+        }
+      }
+      expect(cache.pendingCounts()).toEqual(expectedCounts);
 
       await cache.flush();
       expect(cache.isDirty()).toBe(false);

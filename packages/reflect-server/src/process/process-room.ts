@@ -15,6 +15,7 @@ import {processFrame} from './process-frame.js';
 import type {MutatorMap} from './process-mutation.js';
 
 export const FRAME_LENGTH_MS = 1000 / 60;
+const FLUSH_SIZE_THRESHOLD_FOR_LOG_FLUSH = 500;
 
 /**
  * Process all pending mutations that are ready to be processed for a room.
@@ -79,22 +80,27 @@ export async function processRoom(
   );
 
   const startCacheFlush = Date.now();
-  const flushStats = await cache.flush();
-  const cacheFlushLatencyMs = Date.now() - startCacheFlush;
-  const startStorageFlush = Date.now();
-  await storage.flush();
-  const storageFlushLatencyMs = Date.now() - startStorageFlush;
-
-  for (const [k, v] of Object.entries(flushStats)) {
-    lc = lc.withContext(k, v);
+  const pendingCounts = cache.pendingCounts();
+  lc = lc.withContext('cacheFlushDelCount', pendingCounts.delCount);
+  lc = lc.withContext('cacheFlushPutCount', pendingCounts.putCount);
+  lc.debug?.('Starting cache flush', pendingCounts);
+  // In case this "large" flush causes the DO to be reset because of:
+  // "Durable Object storage operation exceeded timeout which caused object to
+  // be reset", flush the logs for debugging.
+  if (
+    pendingCounts.delCount + pendingCounts.putCount >
+    FLUSH_SIZE_THRESHOLD_FOR_LOG_FLUSH
+  ) {
+    void lc.flush();
   }
-  lc = lc
-    .withContext('cacheFlushTiming', cacheFlushLatencyMs)
-    .withContext('storageFlushTiming', storageFlushLatencyMs);
+  await cache.flush();
+  const cacheFlushLatencyMs = Date.now() - startCacheFlush;
+  lc = lc.withContext('cacheFlushTiming', cacheFlushLatencyMs);
   lc.debug?.(
-    'Flushed to durable storage in',
-    cacheFlushLatencyMs + storageFlushLatencyMs,
+    'Finished cache flush in',
+    cacheFlushLatencyMs,
     'ms.',
+    pendingCounts,
   );
   return clientPokes;
 }
