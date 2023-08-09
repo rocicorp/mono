@@ -151,8 +151,9 @@ export class MetricManager {
     new State(MetricName.LastConnectErrorV2),
   );
 
-  // The total time it took to connect across retries due to errors, or one of
-  // the special values in TIME_TO_CONNECT_SPECIAL_VALUES.
+  // The total time it took to connect across retries or one of the special
+  // values in TIME_TO_CONNECT_SPECIAL_VALUES.
+  // See Reflect._totalToConnectStart for details of how this total is computed.
   private readonly _totalTimeToConnectMs = this._register(
     new Gauge(MetricName.TotalTimeToConnectMs),
   );

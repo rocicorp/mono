@@ -234,6 +234,12 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   protected _connectStart: number | undefined = undefined;
+  // Set on connect attempt if currently undefined.
+  // Reset to undefined when
+  // 1. client stops trying to connect because it is hidden
+  // 2. client encounters a connect error and canary request indicates
+  //    the client is offline
+  // 2. client successfully connects
   protected _totalToConnectStart: number | undefined = undefined;
 
   readonly #options: ReflectOptions<MD>;
