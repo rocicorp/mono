@@ -1,10 +1,25 @@
+import type {Response} from 'express';
 import type {Auth} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
+import {logger} from 'firebase-functions';
+import {defineSecret, defineString} from 'firebase-functions/params';
 import {onRequest} from 'firebase-functions/v2/https';
+import assert from 'node:assert';
+import {jsonSchema} from 'reflect-protocol/src/json.js';
+import {Queue} from 'shared/src/queue.js';
+import * as v from 'shared/src/valita.js';
+import type WebSocket from 'ws';
+import {createTail} from '../../cloudflare/tail/create-tail.js';
+
+// This is the API token for reflect-server.net
+// https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
+const cloudflareApiToken = defineSecret('CLOUDFLARE_API_TOKEN');
+
+const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
 export const create = (_firestore: Firestore, _auth: Auth) =>
-  onRequest(async (request, response) => {
-    console.log(typeof request.body);
+  onRequest(async (_request, response) => {
+    // console.log(typeof request.body);
     // TODO(arv): Validate request.body
     // TODO(arv): userAuthorization()
     // TODO(arv): appAuthorization()
@@ -14,12 +29,135 @@ export const create = (_firestore: Firestore, _auth: Auth) =>
       'Content-Type': 'text/event-stream',
     });
 
-    // const {tail, expiration, deleteTail} = await createTail(apiToken, accountID, cfWorkerName, filters, debug, env, packageVersion)
+    // TODO(arv): Not sure why this is not working?
+    const apiToken =
+      cloudflareApiToken.value() || '7egl0VDDRceLm853K9YMrGF_DYn4BCnt4R8NvZjz';
+    const accountID = cloudflareAccountId.value();
+    const cfWorkerName = 'arv-cli-test-1';
+    const filters = {filters: []};
+    const debug = true;
+    const env = undefined;
+    const packageVersion = '';
 
-    console.log(`request.url: ${request.url}\n`);
-    for (let i = 0; i < 10; i++) {
-      response.write(`data: Item ${i}\n\n`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    console.log({
+      apiToken,
+      accountID,
+      cfWorkerName,
+      filters,
+      debug,
+      env,
+      packageVersion,
+    });
+
+    const {tail, expiration, deleteTail} = await createTail(
+      apiToken,
+      accountID,
+      cfWorkerName,
+      filters,
+      debug,
+      env,
+      packageVersion,
+    );
+
+    logger.log(`expiration: ${expiration}`);
+
+    loop: for await (const item of wsQueue(tail, 10_000)) {
+      switch (item.type) {
+        case 'data':
+          writeData(response, item.data);
+
+          break;
+        case 'ping':
+          response.write(':\n\n');
+          break;
+        case 'close':
+          break loop;
+      }
     }
+    await deleteTail();
     response.end();
   });
+
+type QueueItem =
+  | {type: 'data'; data: string}
+  | {type: 'ping'}
+  | {type: 'close'};
+
+function wsQueue(
+  ws: WebSocket,
+  pingInterval: number,
+): AsyncIterable<QueueItem> {
+  const q = new Queue<QueueItem>();
+  ws.onmessage = ({data}) => {
+    assert(data instanceof Buffer);
+    void q.enqueue({type: 'data', data: data.toString('utf-8')});
+  };
+  ws.onerror = event => void q.enqueueRejection(event);
+  ws.onclose = () => void q.enqueue({type: 'close'});
+
+  const pingTimer = setInterval(
+    () => void q.enqueue({type: 'ping'}),
+    pingInterval,
+  );
+
+  function cleanup() {
+    clearInterval(pingTimer);
+    ws.close();
+  }
+
+  return {
+    [Symbol.asyncIterator]: () => q.asAsyncIterator(cleanup),
+  };
+}
+
+/*
+{
+    "outcome": "ok",
+    "scriptName": "arv-cli-test-1",
+    "diagnosticsChannelEvents": [],
+    "exceptions": [],
+    "logs": [
+        {
+            "message": [
+                "component=Worker",
+                "scheduled=ry5fw9fphyb",
+                "Handling scheduled event"
+            ],
+            "level": "info",
+            "timestamp": 1691593226241
+        },
+        {
+            "message": [
+                "component=Worker",
+                "scheduled=ry5fw9fphyb",
+                "Returning early because REFLECT_AUTH_API_KEY is not defined in env."
+            ],
+            "level": "debug",
+            "timestamp": 1691593226241
+        }
+    ],
+    "eventTimestamp": 1691593226234,
+    "event": {
+        "cron": "* /5 * * * *",
+        "scheduledTime": 1691593225000
+    }
+}
+*/
+
+const partialRecordSchema = v.object({
+  logs: v.array(
+    v.object({
+      message: jsonSchema,
+      level: v.string(),
+      timestamp: v.number(),
+    }),
+  ),
+});
+
+function writeData(response: Response, data: string) {
+  const cfLogRecord = JSON.parse(data);
+  const logRecords = v.parse(cfLogRecord, partialRecordSchema, 'strip');
+  for (const rec of logRecords.logs) {
+    response.write(`data: ${JSON.stringify(rec)}\n\n`);
+  }
+}

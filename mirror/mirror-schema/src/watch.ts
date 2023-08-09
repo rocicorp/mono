@@ -41,21 +41,7 @@ export function watch<Snapshot>(
         clearTimeout(timeoutID);
       }
 
-      return {
-        next: async () => {
-          try {
-            const value = await snapshots.dequeue();
-            return {value};
-          } catch (e) {
-            cleanup();
-            throw e;
-          }
-        },
-        return: value => {
-          cleanup();
-          return Promise.resolve({value, done: true});
-        },
-      };
+      return snapshots.asAsyncIterator(cleanup);
     },
   };
 }
