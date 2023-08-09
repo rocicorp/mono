@@ -1,4 +1,5 @@
 import WebSocket from 'ws';
+import {cfFetch} from '../cf-fetch.js';
 import type {Outcome, TailFilterMessage} from './filters.js';
 
 const TRACE_VERSION = 'trace-v1';
@@ -71,6 +72,7 @@ function makeDeleteTailUrl(
  * @returns a websocket connection, an expiration, and a function to call to delete the tail
  */
 export async function createTail(
+  apiToken: string,
   accountId: string,
   workerName: string,
   filters: TailFilterMessage,
@@ -88,7 +90,7 @@ export async function createTail(
     id: tailId,
     url: websocketUrl,
     expires_at: expiration,
-  } = await fetchResult<TailCreationApiResponse>(createTailUrl, {
+  } = await cfFetch<TailCreationApiResponse>(apiToken, createTailUrl, {
     method: 'POST',
     body: JSON.stringify(filters),
   });
@@ -96,7 +98,7 @@ export async function createTail(
   // delete the tail (not yet!)
   const deleteUrl = makeDeleteTailUrl(accountId, workerName, tailId, env);
   async function deleteTail() {
-    await fetchResult(deleteUrl, {method: 'DELETE'});
+    await cfFetch(apiToken, deleteUrl, {method: 'DELETE'});
   }
 
   // connect to the tail
@@ -127,7 +129,7 @@ export async function createTail(
  * Everything captured by the trace worker and sent to us via
  * `wrangler tail` is structured JSON that deserializes to this type.
  */
-type TailEventMessage = {
+export type TailEventMessage = {
   /**
    * Whether the execution of this worker succeeded or failed
    */
