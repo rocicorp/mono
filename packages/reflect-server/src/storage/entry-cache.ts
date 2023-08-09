@@ -100,24 +100,43 @@ export class EntryCache implements Storage {
     return res;
   }
 
+  pendingCounts(): {
+    delCount: number;
+    putCount: number;
+  } {
+    const counts = {
+      delCount: 0,
+      putCount: 0,
+    };
+    for (const {value, dirty} of this.#cache.values()) {
+      if (dirty) {
+        if (value === undefined) {
+          counts.delCount++;
+        } else {
+          counts.putCount++;
+        }
+      }
+    }
+    return counts;
+  }
+
   async flush(): Promise<void> {
     // Note the order of operations: all del()` and put() calls are
     // invoked before await. This ensures atomicity of the flushed
     // writes, as described in:
     //
     // https://developers.cloudflare.com/workers/learning/using-durable-objects/#accessing-persistent-storage-from-a-durable-object
-    await Promise.all(
-      [...this.#cache.entries()]
-        // Destructure ALL the things
-        .filter(([, {dirty}]) => dirty)
-        .map(([k, {value}]) => {
-          if (value === undefined) {
-            return this.#storage.del(k);
-          }
-          return this.#storage.put(k, value);
-        }),
-    );
-
+    const promises = [];
+    for (const [key, {value, dirty}] of this.#cache.entries()) {
+      if (dirty) {
+        if (value === undefined) {
+          promises.push(this.#storage.del(key));
+        } else {
+          promises.push(this.#storage.put(key, value));
+        }
+      }
+    }
+    await Promise.all(promises);
     this.#cache.clear();
   }
 

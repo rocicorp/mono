@@ -15,6 +15,7 @@ import {processFrame} from './process-frame.js';
 import type {MutatorMap} from './process-mutation.js';
 
 export const FRAME_LENGTH_MS = 1000 / 60;
+const FLUSH_SIZE_THRESHOLD_FOR_LOG_FLUSH = 500;
 
 /**
  * Process all pending mutations that are ready to be processed for a room.
@@ -78,6 +79,28 @@ export async function processRoom(
     )),
   );
 
+  const startCacheFlush = Date.now();
+  const pendingCounts = cache.pendingCounts();
+  lc = lc.withContext('cacheFlushDelCount', pendingCounts.delCount);
+  lc = lc.withContext('cacheFlushPutCount', pendingCounts.putCount);
+  lc.debug?.('Starting cache flush', pendingCounts);
+  // In case this "large" flush causes the DO to be reset because of:
+  // "Durable Object storage operation exceeded timeout which caused object to
+  // be reset", flush the logs for debugging.
+  if (
+    pendingCounts.delCount + pendingCounts.putCount >
+    FLUSH_SIZE_THRESHOLD_FOR_LOG_FLUSH
+  ) {
+    void lc.flush();
+  }
   await cache.flush();
+  const cacheFlushLatencyMs = Date.now() - startCacheFlush;
+  lc = lc.withContext('cacheFlushTiming', cacheFlushLatencyMs);
+  lc.debug?.(
+    'Finished cache flush in',
+    cacheFlushLatencyMs,
+    'ms.',
+    pendingCounts,
+  );
   return clientPokes;
 }
