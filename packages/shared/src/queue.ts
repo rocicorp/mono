@@ -1,4 +1,4 @@
-import { resolver, type Resolver } from '@rocicorp/resolver';
+import {resolver, type Resolver} from '@rocicorp/resolver';
 
 /**
  * A Queue allows the consumers to await (possibly future) values,
@@ -48,7 +48,11 @@ export class Queue<T> {
     return consumer.promise;
   }
 
-  asAsyncIterator(cleanup = () => { /* nop */}): AsyncIterator<T> {
+  asAsyncIterator(
+    cleanup = () => {
+      /* nop */
+    },
+  ): AsyncIterator<T> {
     return {
       next: async () => {
         try {
@@ -63,5 +67,6 @@ export class Queue<T> {
         cleanup();
         return Promise.resolve({value, done: true});
       },
-    };  }
+    };
+  }
 }
