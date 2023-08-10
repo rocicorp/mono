@@ -8,6 +8,7 @@ export enum MetricName {
   TimeToConnectMsV2 = 'time_to_connect_ms_v2',
   LastConnectErrorV2 = 'last_connect_error_v2',
   TotalTimeToConnectMs = 'total_time_to_connect_ms',
+  NotConnected = 'not_connected',
 }
 
 // This value is used to indicate that the client's last connection attempt
@@ -18,15 +19,6 @@ export const DID_NOT_CONNECT_VALUE = 100 * 1000;
 
 export const REPORT_INTERVAL_MS = 5_000;
 
-// Used by TimeToConnectMsV2 and TotalTimeToConnectMs
-export const TIME_TO_CONNECT_SPECIAL_VALUES = {
-  initialValue: -100_000,
-  connectError: -200_000,
-  disconnectedWaitingForVisible: -300_000,
-  disconnectedWaitingForVisiblePriorWasInitial: -400_000,
-  disconnectedWaitingForVisiblePriorWasConnectError: -500_000,
-} as const;
-
 type ClientDisconnectReason =
   | 'AbruptClose'
   | 'CleanClose'
@@ -35,6 +27,13 @@ type ClientDisconnectReason =
   | 'UnexpectedBaseCookie'
   | 'PingTimeout'
   | 'Hidden';
+
+type NotConnectedReason =
+  | 'init'
+  | 'error'
+  | 'hidden'
+  | 'hidden_was_init'
+  | 'hidden_was_error';
 
 export type DisconnectReason =
   | {
@@ -91,8 +90,7 @@ export class MetricManager {
     this.tags.push(`source:${opts.source}`);
 
     this.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
-    this._timeToConnectMsV2.set(TIME_TO_CONNECT_SPECIAL_VALUES.initialValue);
-    this._totalTimeToConnectMs.set(TIME_TO_CONNECT_SPECIAL_VALUES.initialValue);
+    this._setNotConnectedReason('init');
 
     this._timerID = setInterval(() => {
       void this.flush();
@@ -135,59 +133,74 @@ export class MetricManager {
     ),
   );
 
+  // notConnected records the reason why the client is not currently connected.
+  // It is cleared when the client successfully connects.
+  private readonly _notConnected = this._register(
+    new State(MetricName.NotConnected),
+  );
+
   // The time from the call to connect() to receiving the 'connected' ws message
-  // for the last successful connect, or one of the special values in
-  // TIME_TO_CONNECT_SPECIAL_VALUES.
+  // for the current connection.  Cleared when the client is not connected.
+  // TODO: Not actually currently cleared on disconnect untill there is a
+  // connect error, or client reports disconnected and waiting for visible.
+  // Should have a value iff _notConnected has no value.
   private readonly _timeToConnectMsV2 = this._register(
     new Gauge(MetricName.TimeToConnectMsV2),
   );
 
   // lastConnectErrorV2 records the last error that occurred when connecting,
-  // if any. It is cleared when connecting successfully, or
-  // lastConnectErrorV2 and timeToConnectMsV2 should be kept in sync
-  // so that lastConnectErrorV2 has a value iff timeToConnectMsV2's value is
-  // TIME_TO_CONNECT_SPECIAL_VALUES.connectError
+  // if any. It is cleared when the client successfully connects or
+  // stops trying to connect due to being hidden.
+  // Should have a value iff notConnected state is NotConnectedReason.Error.
   private readonly _lastConnectErrorV2 = this._register(
     new State(MetricName.LastConnectErrorV2),
   );
 
-  // The total time it took to connect across retries or one of the special
-  // values in TIME_TO_CONNECT_SPECIAL_VALUES.
+  // The total time it took to connect across retries for the current
+  // connection.  Cleared when the client is not connected.
+  // TODO: Not actually currently cleared on disconnect untill there is a
+  // connect error, or client reports disconnected and waiting for visible.
   // See Reflect._totalToConnectStart for details of how this total is computed.
+  // Should have a value iff _notConnected has no value.
   private readonly _totalTimeToConnectMs = this._register(
     new Gauge(MetricName.TotalTimeToConnectMs),
   );
 
+  private _setNotConnectedReason(reason: NotConnectedReason) {
+    this._notConnected.set(reason);
+  }
+
   setConnected(timeToConnectMs: number, totalTimeToConnectMs: number) {
+    this._notConnected.clear();
     this._lastConnectErrorV2.clear();
     this._timeToConnectMsV2.set(timeToConnectMs);
     this._totalTimeToConnectMs.set(totalTimeToConnectMs);
   }
 
   setDisconnectedWaitingForVisible() {
+    this._timeToConnectMsV2.clear();
+    this._totalTimeToConnectMs.clear();
     this._lastConnectErrorV2.clear();
-    let value;
-    switch (this._timeToConnectMsV2.get()) {
-      case TIME_TO_CONNECT_SPECIAL_VALUES.initialValue:
-        value =
-          TIME_TO_CONNECT_SPECIAL_VALUES.disconnectedWaitingForVisiblePriorWasInitial;
+    let notConnectedReason: NotConnectedReason;
+    switch (this._notConnected.get()) {
+      case 'init':
+        notConnectedReason = 'hidden_was_init';
         break;
-      case TIME_TO_CONNECT_SPECIAL_VALUES.connectError:
-        value =
-          TIME_TO_CONNECT_SPECIAL_VALUES.disconnectedWaitingForVisiblePriorWasConnectError;
+      case 'error':
+        notConnectedReason = 'hidden_was_error';
         break;
       default:
-        value = TIME_TO_CONNECT_SPECIAL_VALUES.disconnectedWaitingForVisible;
+        notConnectedReason = 'hidden';
         break;
     }
-    this._timeToConnectMsV2.set(value);
-    this._totalTimeToConnectMs.set(value);
+    this._setNotConnectedReason(notConnectedReason);
   }
 
   setConnectError(reason: DisconnectReason) {
+    this._timeToConnectMsV2.clear();
+    this._totalTimeToConnectMs.clear();
+    this._setNotConnectedReason('error');
     this._lastConnectErrorV2.set(getLastConnectErrorValue(reason));
-    this._timeToConnectMsV2.set(TIME_TO_CONNECT_SPECIAL_VALUES.connectError);
-    this._totalTimeToConnectMs.set(TIME_TO_CONNECT_SPECIAL_VALUES.connectError);
   }
 
   /**
@@ -299,11 +312,17 @@ export class Gauge implements Flushable {
     return this._value;
   }
 
+  clear() {
+    this._value = undefined;
+  }
+
   flush() {
+    if (this._value === undefined) {
+      return undefined;
+    }
     // Gauge reports the timestamp at flush time, not at the point the value was
     // recorded.
-    const points =
-      this._value === undefined ? [] : [makePoint(t(), this._value)];
+    const points = [makePoint(t(), this._value)];
     return {metric: this._name, points};
   }
 }
