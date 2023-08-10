@@ -601,6 +601,7 @@ export class Reflect<MD extends MutatorDefs> {
     this._connectedCount++;
     this._connectedAt = now;
     this._metrics.lastConnectError.clear();
+    const proceedingConnectErrorCount = this._connectErrorCount;
     this._connectErrorCount = 0;
 
     let timeToConnectMs = undefined;
@@ -633,8 +634,10 @@ export class Reflect<MD extends MutatorDefs> {
     lc.info?.('Connected', {
       navigatorOnline: navigator.onLine,
       timeToConnectMs,
+      totalTimeToConnectMs,
       connectMsgLatencyMs,
       connectedCount: this._connectedCount,
+      proceedingConnectErrorCount,
     });
     this._lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
 
