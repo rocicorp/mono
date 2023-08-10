@@ -1,26 +1,42 @@
-import type { Auth } from 'firebase-admin/auth';
-import type { Firestore } from 'firebase-admin/firestore';
+import type {Auth} from 'firebase-admin/auth';
+import type {Firestore} from 'firebase-admin/firestore';
 import {
+  DeleteTailResponse,
   deleteTailRequestSchema,
   deleteTailResponseSchema,
 } from 'mirror-protocol/src/tail.js';
-import { cfFetch } from '../../cloudflare/cf-fetch.js';
-import { appAuthorization, userAuthorization } from '../validators/auth.js';
-import { validateSchema } from '../validators/schema.js';
+import {cfFetch} from '../../cloudflare/cf-fetch.js';
+import {appAuthorization, userAuthorization} from '../validators/auth.js';
+import {validateSchema} from '../validators/schema.js';
+import {defineSecret, defineString} from 'firebase-functions/params';
 
-const deleteTail = (firestore: Firestore, auth: Auth) =>
+// This is the API token for reflect-server.net
+// https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
+const cloudflareApiToken = defineSecret('CLOUDFLARE_API_TOKEN');
+
+const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
+
+const deleteTail = (firestore: Firestore, _auth: Auth) =>
   validateSchema(deleteTailRequestSchema, deleteTailResponseSchema)
     .validate(userAuthorization())
     .validate(appAuthorization(firestore))
-    .handle(async (deleteTailRequest, context) => {
-      const {appID} = deleteTailRequest;
-      const {userID, app} = context;
-
-      const apiToken 
-      await cfFetch(apiToken, makeDeleteTailUrl(accountId, workerName, tailId, env), {
-        method: 'DELETE',
-      });
-    };
+    .handle(async (deleteTailRequest, _context) => {
+      const {tailID, env} = deleteTailRequest;
+      // TODO(cesar) Get this from `getApp`
+      const cfWorkerName = 'arv-cli-test-1';
+      const apiToken =
+        cloudflareApiToken.value() ||
+        '7egl0VDDRceLm853K9YMrGF_DYn4BCnt4R8NvZjz';
+      const accountID = cloudflareAccountId.value();
+      const {success} = await cfFetch<DeleteTailResponse>(
+        apiToken,
+        makeDeleteTailUrl(accountID, cfWorkerName, tailID, env),
+        {
+          method: 'DELETE',
+        },
+      );
+      return {success};
+    });
 
 /**
  * Generate a URL that, when `cfetch`ed, deletes a tail
@@ -33,14 +49,14 @@ const deleteTail = (firestore: Firestore, auth: Auth) =>
  * @returns a `cfetch`-ready URL for deleting a tail
  */
 function makeDeleteTailUrl(
-	accountId: string,
-	workerName: string,
-	tailId: string,
-	env: string | undefined
+  accountId: string,
+  workerName: string,
+  tailId: string,
+  env: string | undefined,
 ): string {
-	return env
-		? `/accounts/${accountId}/workers/services/${workerName}/environments/${env}/tails/${tailId}`
-		: `/accounts/${accountId}/workers/scripts/${workerName}/tails/${tailId}`;
+  return env
+    ? `/accounts/${accountId}/workers/services/${workerName}/environments/${env}/tails/${tailId}`
+    : `/accounts/${accountId}/workers/scripts/${workerName}/tails/${tailId}`;
 }
 
-export { deleteTail as delete };
+export {deleteTail as delete};
