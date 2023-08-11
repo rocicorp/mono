@@ -11,6 +11,7 @@ import type {PendingMutation} from '../types/mutation.js';
 import {randomID} from '../util/rand.js';
 import type {MutatorMap} from './process-mutation.js';
 import {processRoom} from './process-room.js';
+import {timed} from 'shared/src/timed.js';
 
 /**
  * Processes pending mutations and client disconnect/connects, and sends
@@ -18,7 +19,32 @@ import {processRoom} from './process-room.js';
  * @param clients Rooms to process mutations for
  * @param mutators All known mutators
  */
-export async function processPending(
+export function processPending(
+  lc: LogContext,
+  storage: DurableStorage,
+  clients: ClientMap,
+  pendingMutations: PendingMutation[],
+  mutators: MutatorMap,
+  disconnectHandler: DisconnectHandler,
+  maxProcessedMutationTimestamp: number,
+  bufferSizer: BufferSizer,
+): Promise<{maxProcessedMutationTimestamp: number; nothingToProcess: boolean}> {
+  lc = lc = lc.withContext('numClients', clients.size);
+  return timed(lc.debug, 'processPending', () =>
+    processPendingTimed(
+      lc,
+      storage,
+      clients,
+      pendingMutations,
+      mutators,
+      disconnectHandler,
+      maxProcessedMutationTimestamp,
+      bufferSizer,
+    ),
+  );
+}
+
+async function processPendingTimed(
   lc: LogContext,
   storage: DurableStorage,
   clients: ClientMap,
@@ -97,21 +123,17 @@ export async function processPending(
     missCount,
     'forced misses',
   );
-  try {
-    const pokes = await processRoom(
-      lc,
-      clients,
-      toProcess,
-      mutators,
-      disconnectHandler,
-      storage,
-    );
-    sendPokes(lc, pokes, clients, bufferMs);
-    lc.debug?.('clearing pending mutations');
-    pendingMutations.splice(0, endIndex);
-  } finally {
-    lc.debug?.(`processPending took ${Date.now() - t0} ms`);
-  }
+  const pokes = await processRoom(
+    lc,
+    clients,
+    toProcess,
+    mutators,
+    disconnectHandler,
+    storage,
+  );
+  sendPokes(lc, pokes, clients, bufferMs);
+  lc.debug?.('clearing pending mutations');
+  pendingMutations.splice(0, endIndex);
   return {
     nothingToProcess: false,
     maxProcessedMutationTimestamp: toProcess.reduce<number>(

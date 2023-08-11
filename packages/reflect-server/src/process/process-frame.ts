@@ -64,6 +64,7 @@ export async function processFrame(
       const mutationClientGroupID = pendingMutation.clientGroupID;
       clientPokes.push(
         ...(await buildClientPokesAndUpdateClientRecords(
+          lc,
           cache,
           clientIDs,
           clients,
@@ -104,6 +105,7 @@ export async function processFrame(
     await disconnectsCache.flush();
     clientPokes.push(
       ...(await buildClientPokesAndUpdateClientRecords(
+        lc,
         cache,
         clientIDs,
         clients,
@@ -125,6 +127,7 @@ export async function processFrame(
 }
 
 function buildClientPokesAndUpdateClientRecords(
+  lc: LogContext,
   cache: Storage,
   clientIDs: ClientID[],
   clients: ClientMap,
@@ -142,6 +145,11 @@ function buildClientPokesAndUpdateClientRecords(
       }
     | undefined,
 ): Promise<ClientPoke[]> {
+  lc.debug?.('building client pokes for patch', {
+    baseCookie: prevVersion,
+    cookie: nextVersion,
+    patch,
+  });
   const now = Date.now();
   return Promise.all(
     clientIDs.map(async clientID => {
