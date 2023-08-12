@@ -15,9 +15,10 @@ Some strategies easily support syncing only a subset of the data the user has ac
 
 ## Dynamic Auth
 
-Imagine you have a document editing program where users can share documents with each other. Your server must know to send the document data to a user's client when the user gains access, and also to send a delete of that data when the user loses access. This should happen even though the document itself has not changed.
+Some strategies easily support syncing only the subset of the data the user currently has access to, even if that access is indirect via group sharing and so-on.
 
-Some strategies elegantly support this, while with others it's not possible or only possible inefficiently.
+<br/>
+<br/>
 
 <table>
     <thead>
