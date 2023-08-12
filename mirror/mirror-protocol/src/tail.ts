@@ -1,6 +1,9 @@
 import * as v from 'shared/src/valita.js';
 import {baseRequestFields, baseResponseFields} from './base.js';
 import {createCall} from './call.js';
+import {baseAppRequestFields} from './app.js';
+import {createEventSource} from './event-source.js';
+import type EventSource from 'eventsource';
 
 export const deleteTailRequestSchema = v.object({
   ...baseRequestFields,
@@ -20,3 +23,19 @@ export const deleteTail = createCall(
   deleteTailRequestSchema,
   deleteTailResponseSchema,
 );
+
+export const createTailRequestSchema = v.object({
+  ...baseAppRequestFields,
+});
+
+export type CreateTailRequest = v.Infer<typeof createTailRequestSchema>;
+
+export const createTailResponseSchema = v.object({
+  ...baseResponseFields,
+  tailID: v.string(),
+  tailURL: v.string(),
+});
+export type CreateTailResponse = v.Infer<typeof createTailResponseSchema>;
+
+export const createTail = (appID: string, idToken: string): EventSource =>
+  createEventSource('tail-create', appID, idToken);
