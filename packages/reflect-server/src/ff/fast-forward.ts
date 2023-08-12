@@ -2,7 +2,7 @@ import type {NullableVersion, Patch, Poke, Version} from 'reflect-protocol';
 import {must} from 'shared/src/must.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import type {ClientPoke} from '../types/client-poke.js';
-import {listClientRecords} from '../types/client-record.js';
+import {getClientRecords, listClientRecords} from '../types/client-record.js';
 import type {ClientGroupID, ClientID} from '../types/client-state.js';
 import {compareVersions} from '../types/version.js';
 import {getPatch} from './get-patch.js';
@@ -21,21 +21,29 @@ export async function fastForwardRoom(
   currentVersion: Version,
   storage: DurableStorage,
 ): Promise<ClientPoke[]> {
-  const clientRecords = await listClientRecords(storage);
+  const clientsRecords = await getClientRecords(clients, storage);
   // Get all of the distinct base cookies. Typically almost all active clients
   // of a room will have same base cookie. No need to recalculate over and over.
   const distinctBaseCookies = new Set<NullableVersion>();
   for (const clientID of clients) {
     const record = must(
-      clientRecords.get(clientID),
+      clientsRecords.get(clientID),
       `Client record not found: ${clientID}`,
     );
     distinctBaseCookies.add(record.baseCookie);
   }
   // No need to calculate a patch for the current version!
   distinctBaseCookies.delete(currentVersion);
+  if (distinctBaseCookies.size === 0) {
+    lc.debug?.('No clients need to be fastforwarded.');
+    return [];
+  }
+
+  // TODO: Don't fetch all client records, build an index, or change client
+  // record key scheme, to allow only fetching relevant client records.
+  const allClientsRecords = await listClientRecords(storage);
   lc.debug?.(
-    `Computing patches for ${distinctBaseCookies.size} cookies of ${clients.length} connected clients (${clientRecords.size} clientRecords)`,
+    `Computing patches for ${distinctBaseCookies.size} cookies of ${clients.length} connected clients (${allClientsRecords.size} all client records)`,
   );
 
   // Calculate all the distinct patches in parallel
@@ -55,7 +63,7 @@ export async function fastForwardRoom(
     ClientGroupID,
     Map<NullableVersion, Record<ClientID, number>>
   > = new Map();
-  for (const [clientID, record] of clientRecords) {
+  for (const [clientID, record] of allClientsRecords) {
     if (record.lastMutationIDVersion !== null) {
       const {clientGroupID} = record;
       let changesByBaseCookie =
@@ -83,7 +91,7 @@ export async function fastForwardRoom(
   let largestPatch = 0;
   const ret: ClientPoke[] = [];
   for (const clientID of clients) {
-    const record = must(clientRecords.get(clientID));
+    const record = must(clientsRecords.get(clientID));
     if (record.baseCookie === currentVersion) {
       continue;
     }

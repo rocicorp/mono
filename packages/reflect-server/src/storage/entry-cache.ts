@@ -73,6 +73,36 @@ export class EntryCache implements Storage {
     return value;
   }
 
+  async getEntries<T extends ReadonlyJSONValue>(
+    keys: string[],
+    schema: valita.Type<T>,
+  ): Promise<Map<string, T>> {
+    const result = new Map<string, T>();
+    const keysToGetFromStorage = [];
+    for (const key of keys) {
+      const cached = this.#cache.get(key);
+      if (cached) {
+        // We don't validate on cache hits partly for perf reasons and also
+        // because we should have already validated with same schema during
+        // initial read.
+        if (cached.value !== undefined) {
+          result.set(key, cached.value as T);
+        }
+      } else {
+        keysToGetFromStorage.push(key);
+      }
+    }
+    const fromStorage = await this.#storage.getEntries(
+      keysToGetFromStorage,
+      schema,
+    );
+    for (const [key, value] of fromStorage.entries()) {
+      this.#cache.set(key, {value, dirty: false});
+      result.set(key, value);
+    }
+    return result;
+  }
+
   /**
    * @returns Whether there are any pending writes in the cache. Note that
    * redundant writes (e.g. deleting a non-existing key) are still considered writes.
