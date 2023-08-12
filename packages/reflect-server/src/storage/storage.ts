@@ -23,6 +23,10 @@ export interface Storage {
     key: string,
     schema: valita.Type<T>,
   ): Promise<T | undefined>;
+  getEntries<T extends ReadonlyJSONValue>(
+    keys: string[],
+    schema: valita.Type<T>,
+  ): Promise<Map<string, T>>;
 
   /**
    * Gets a contiguous sequence of keys and values based on the specified

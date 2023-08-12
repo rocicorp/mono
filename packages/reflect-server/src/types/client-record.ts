@@ -34,15 +34,22 @@ export function getClientRecord(
 export async function listClientRecords(
   storage: Storage,
 ): Promise<ClientRecordMap> {
-  const withPrefix = await storage.list(
+  const entries = await storage.list(
     {prefix: clientRecordPrefix},
     clientRecordSchema,
   );
-  const clientRecords = new Map();
-  for (const [key, record] of withPrefix) {
-    clientRecords.set(key.substring(clientRecordPrefix.length), record);
-  }
-  return clientRecords;
+  return toClientRecordMap(entries);
+}
+
+export async function getClientRecords(
+  clientIDs: ClientID[],
+  storage: Storage,
+): Promise<ClientRecordMap> {
+  const entries = await storage.getEntries(
+    clientIDs.map(clientRecordKey),
+    clientRecordSchema,
+  );
+  return toClientRecordMap(entries);
 }
 
 export function putClientRecord(
@@ -51,4 +58,14 @@ export function putClientRecord(
   storage: Storage,
 ): Promise<void> {
   return storage.put(clientRecordKey(clientID), record);
+}
+
+function toClientRecordMap(
+  entries: Map<string, ClientRecord>,
+): ClientRecordMap {
+  const clientRecords = new Map();
+  for (const [key, record] of entries) {
+    clientRecords.set(key.substring(clientRecordPrefix.length), record);
+  }
+  return clientRecords;
 }
