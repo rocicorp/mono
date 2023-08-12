@@ -1,4 +1,4 @@
-import type {Firestore} from 'firebase-admin/firestore';
+import type {Firestore, Transaction} from 'firebase-admin/firestore';
 import {defineString} from 'firebase-functions/params';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {
@@ -45,7 +45,7 @@ export const create = (firestore: Firestore) =>
         .doc(userPath(userID))
         .withConverter(userDataConverter);
 
-      return firestore.runTransaction(async txn => {
+      return firestore.runTransaction(async (txn: Transaction) => {
         const userDoc = await txn.get(userDocRef);
         if (!userDoc.exists) {
           throw new HttpsError('not-found', 'User does not exist');

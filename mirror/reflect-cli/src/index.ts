@@ -84,7 +84,7 @@ function createCLIParser(argv: string[]) {
     'tail [worker]',
     '🦚 Starts a log tailing session running worker',
     tailOptions,
-    tailHandler,
+    handleWith(tailHandler).andCleanup(),
   );
 
   // publish

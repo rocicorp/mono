@@ -18,7 +18,8 @@ const cloudflareApiToken = defineSecret('CLOUDFLARE_API_TOKEN');
 const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
 export const create = (_firestore: Firestore, _auth: Auth) =>
-  onRequest(async (_request, response) => {
+  onRequest(async (request, response) => {
+    console.log('_request', JSON.stringify(request));
     // console.log(typeof request.body);
     // TODO(arv): Validate request.body
     // TODO(arv): userAuthorization()
