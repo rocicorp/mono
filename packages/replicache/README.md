@@ -14,6 +14,9 @@ Look through the changes since the last tag.
 git branch -D release
 git checkout -b release HEAD
 npm version major # or minor or patch v12.0.0-beta.0
+npx syncpack fix-mismatches
+# Ensure all fixed, else fix manually
+npx syncpack
 ```
 
 ## Manual Testing
@@ -24,30 +27,15 @@ To test that a release works before creating the release we use a tarball depend
 npm pack
 ```
 
-### create-replicache-app
+### Todo Samples
+
+Check out each of the [todo samples](https://trunk.doc.replicache.dev/examples/todo). Manually add the tarball:
 
 ```bash
-npx create-replicache-app my-app react
-cd my-app/client/react
-npm add /path/to/replicache-<version>.tgz
-npm run watch --ws
-```
-
-Do the same for `npx create-replicache-app my-app ts-web-component`
-
-### Todo Sample
-
-Check out [rocicorp/todo-react](https://github.com/rocicorp/todo-react)
-
-Replace the replicache dependency in
-[package.json](https://github.com/rocicorp/todo-react/blob/master/package.json)
-with the tarball.
-
-```
 npm add /path/to/replicache-<version>.tgz
 ```
 
-Follow instructions in repo to finish setting up app, and run to make sure it works.
+Then run the app and ensure it works properly.
 
 ### Repliear Sample
 
@@ -55,9 +43,9 @@ Check out [rocicorp/repliear](https://github.com/rocicorp/repliear)
 
 Same as todo.
 
-### Integration Guide
+### BYOB Guide
 
-Walk through [the integration guide](https://doc.replicache.dev/byob/intro) and make sure things still work.
+Walk through [the integration guide](https://trunk.doc.replicache.dev/byob/intro) and make sure things still work.
 
 ## Check for API Changes
 
