@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Poke, PokeMessage} from 'reflect-protocol';
+import type {Patch, Poke, PokeMessage} from 'reflect-protocol';
 import type {BufferSizer} from 'shared/src/buffer-sizer.js';
 import {must} from 'shared/src/must.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
@@ -129,17 +129,16 @@ function sendPokes(
   clients: ClientMap,
   bufferMs: number,
 ) {
-  const pokesByClientID = new Map<ClientID, Poke[]>();
-  for (const clientPoke of clientPokes) {
-    let pokes = pokesByClientID.get(clientPoke.clientID);
-    if (!pokes) {
-      pokes = [];
-      pokesByClientID.set(clientPoke.clientID, pokes);
-    }
-    pokes.push(clientPoke.poke);
-  }
-  for (const [clientID, pokes] of pokesByClientID) {
-    const client = must(clients.get(clientID));
+  // Performance optimization: when sending pokes to more than one client,
+  // only JSON.stringify each unique patch once.  Other than fast-forward
+  // patches, patches sent to clients are identical.  If they are large,
+  // running JSON.stringify on them is slow and can be the dominate cost
+  // of processPending.
+  if (clients.size === 1) {
+    const [clientID, client] = [...clients.entries()][0];
+    const pokes = clientPokes
+      .filter(clientPoke => clientPoke.clientID === clientID)
+      .map(clientPoke => clientPoke.poke);
     const pokeMessage: PokeMessage = [
       'poke',
       {
@@ -150,5 +149,47 @@ function sendPokes(
     ];
     lc.debug?.('sending client', clientID, 'poke', pokeMessage);
     send(client.socket, pokeMessage);
+    return;
+  }
+  const pokesByClientID = new Map<ClientID, [Poke, string][]>();
+  const patchStrings = new Map<Patch, string>();
+  for (const clientPoke of clientPokes) {
+    let pokes = pokesByClientID.get(clientPoke.clientID);
+    if (!pokes) {
+      pokes = [];
+      pokesByClientID.set(clientPoke.clientID, pokes);
+    }
+    const {patch} = clientPoke.poke;
+    let patchString = patchStrings.get(patch);
+    if (patchString === undefined) {
+      patchString = JSON.stringify(patch);
+      patchStrings.set(clientPoke.poke.patch, patchString);
+    }
+    pokes.push([clientPoke.poke, patchString]);
+  }
+  // This manual json string building is necessary, to avoid JSON.stringify-ing
+  // the same patches for each client.
+  for (const [clientID, pokes] of pokesByClientID) {
+    const client = must(clients.get(clientID));
+    const pokeStrings = [];
+    for (const [poke, patchString] of pokes) {
+      const {patch: _, ...pokeMinusPatch} = poke;
+      const pokeMinusPatchString = JSON.stringify(pokeMinusPatch);
+      pokeStrings.push(
+        pokeMinusPatchString.substring(0, pokeMinusPatchString.length - 1) +
+          ',"patch":' +
+          patchString +
+          '}',
+      );
+    }
+    const pokesString = `[${pokeStrings.join(',')}]`;
+    const pokeMessageString =
+      `["poke",{` +
+      `"requestID":"${randomID()}",` +
+      `${client.debugPerf ? `"debugServerBufferMs":${bufferMs},` : ''}` +
+      `"pokes": ${pokesString}` +
+      `}]`;
+    lc.debug?.('sending client', clientID, 'poke');
+    client.socket.send(pokeMessageString);
   }
 }

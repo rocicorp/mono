@@ -1183,9 +1183,10 @@ describe('processPending', () => {
         if (!expectedPoke) {
           expect(mocket.log.length).toEqual(0);
         } else {
-          expect(mocket.log[0]).toEqual([
-            'send',
-            JSON.stringify(['poke', expectedPoke]),
+          expect(mocket.log[0][0]).toEqual('send');
+          expect(JSON.parse(mocket.log[0][1] as string)).toEqual([
+            'poke',
+            expectedPoke,
           ]);
         }
       }
