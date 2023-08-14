@@ -1,3 +1,6 @@
+NOTE: This file is HACKING.md, not README.md, because npmjs.com shows the
+README automatically on the package homepage.
+
 # Cutting a release
 
 ## Decide what the new version should be.
