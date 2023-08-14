@@ -147,25 +147,40 @@ function sendPokes(
         debugServerBufferMs: client.debugPerf ? bufferMs : undefined,
       },
     ];
-    lc.debug?.('sending client', clientID, 'poke', pokeMessage);
-    send(client.socket, pokeMessage);
+    const pokeMessageString = JSON.stringify(pokeMessage);
+    lc.debug?.('sending client', clientID, 'pokeMessage', pokeMessageString);
+    client.socket.send(pokeMessageString);
     return;
   }
   const pokesByClientID = new Map<ClientID, [Poke, string][]>();
-  const patchStrings = new Map<Patch, string>();
+  const patchStrings = new Map<Patch, {string: string; id: string}>();
   for (const clientPoke of clientPokes) {
     let pokes = pokesByClientID.get(clientPoke.clientID);
     if (!pokes) {
       pokes = [];
       pokesByClientID.set(clientPoke.clientID, pokes);
     }
-    const {patch} = clientPoke.poke;
+    const {patch, ...pokeMinusPatch} = clientPoke.poke;
     let patchString = patchStrings.get(patch);
     if (patchString === undefined) {
-      patchString = JSON.stringify(patch);
+      patchString = {string: JSON.stringify(patch), id: randomID()};
       patchStrings.set(clientPoke.poke.patch, patchString);
+      lc.debug?.(
+        'stringifyed patch id',
+        patchString.id,
+        'string',
+        patchString.string,
+      );
     }
-    pokes.push([clientPoke.poke, patchString]);
+    lc.debug?.(
+      'sending client',
+      clientPoke.clientID,
+      'poke',
+      pokeMinusPatch,
+      'with stringifyed patch',
+      patchString.id,
+    );
+    pokes.push([clientPoke.poke, patchString.string]);
   }
   // This manual json string building is necessary, to avoid JSON.stringify-ing
   // the same patches for each client.
