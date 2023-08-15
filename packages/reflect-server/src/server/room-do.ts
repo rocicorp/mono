@@ -380,7 +380,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     ws: Socket,
   ): Promise<void> => {
     lc = lc.withContext('msgID', randomID());
-    lc.debug?.('handling message', data, 'waiting for lock');
+    lc.debug?.('handling message', data);
 
     try {
       await this.#lock.withLock(lc, 'handleMessage', async lc => {

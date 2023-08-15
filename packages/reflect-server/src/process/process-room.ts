@@ -57,7 +57,10 @@ export async function processRoom(
     currentVersion,
     storage,
   );
-  lc.debug?.('pokes from fastforward', JSON.stringify(clientPokes));
+  lc.debug?.(
+    'clients with pokes from fastforward',
+    clientPokes.map(clientPoke => clientPoke.clientID),
+  );
 
   for (const ffClientPoke of clientPokes) {
     const cr = must(
@@ -83,7 +86,7 @@ export async function processRoom(
   const pendingCounts = cache.pendingCounts();
   lc = lc.withContext('cacheFlushDelCount', pendingCounts.delCount);
   lc = lc.withContext('cacheFlushPutCount', pendingCounts.putCount);
-  lc.debug?.('Starting cache flush', pendingCounts);
+  lc.info?.('Starting cache flush', pendingCounts);
   // In case this "large" flush causes the DO to be reset because of:
   // "Durable Object storage operation exceeded timeout which caused object to
   // be reset", flush the logs for debugging.
@@ -96,7 +99,7 @@ export async function processRoom(
   await cache.flush();
   const cacheFlushLatencyMs = Date.now() - startCacheFlush;
   lc = lc.withContext('cacheFlushTiming', cacheFlushLatencyMs);
-  lc.debug?.(
+  lc.info?.(
     'Finished cache flush in',
     cacheFlushLatencyMs,
     'ms.',
