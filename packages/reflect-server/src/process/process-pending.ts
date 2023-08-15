@@ -1,15 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Patch, Poke, PokeMessage} from 'reflect-protocol';
+import type {Patch, Poke} from 'reflect-protocol';
 import type {BufferSizer} from 'shared/src/buffer-sizer.js';
 import {must} from 'shared/src/must.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import type {ClientPoke} from '../types/client-poke.js';
-import type {ClientID, ClientMap} from '../types/client-state.js';
+import type {ClientID, ClientMap, ClientState} from '../types/client-state.js';
 import {getConnectedClients} from '../types/connected-clients.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {randomID} from '../util/rand.js';
-import {send} from '../util/socket.js';
 import type {MutatorMap} from './process-mutation.js';
 import {processRoom} from './process-room.js';
 
@@ -123,88 +122,126 @@ export async function processPending(
   };
 }
 
+type MemoizedPatchString = {string: string; id: string};
+const MAX_PATCH_CHARS_TO_LOG = 5000;
+
 function sendPokes(
   lc: LogContext,
   clientPokes: ClientPoke[],
   clients: ClientMap,
   bufferMs: number,
 ) {
-  // Performance optimization: when sending pokes to more than one client,
-  // only JSON.stringify each unique patch once.  Other than fast-forward
-  // patches, patches sent to clients are identical.  If they are large,
-  // running JSON.stringify on them is slow and can be the dominate cost
-  // of processPending.
-  if (clients.size === 1) {
-    const [clientID, client] = [...clients.entries()][0];
-    const pokes = clientPokes
-      .filter(clientPoke => clientPoke.clientID === clientID)
-      .map(clientPoke => clientPoke.poke);
-    const pokeMessage: PokeMessage = [
-      'poke',
-      {
-        pokes,
-        requestID: randomID(),
-        debugServerBufferMs: client.debugPerf ? bufferMs : undefined,
-      },
-    ];
-    const pokeMessageString = JSON.stringify(pokeMessage);
-    lc.debug?.('sending client', clientID, 'pokeMessage', pokeMessageString);
-    client.socket.send(pokeMessageString);
-    return;
-  }
-  const pokesByClientID = new Map<ClientID, [Poke, string][]>();
-  const patchStrings = new Map<Patch, {string: string; id: string}>();
+  // Performance optimization: when sending pokes only JSON.stringify each
+  // unique patch once.  Other than fast-forward patches, patches sent to
+  // clients are identical.  If they are large, running JSON.stringify on them
+  // for each client is slow and can be the dominate cost of processPending.
+  const pokesByClientID = new Map<ClientID, [Poke, MemoizedPatchString][]>();
+  const memoizedPatchStrings = new Map<Patch, MemoizedPatchString>();
   for (const clientPoke of clientPokes) {
     let pokes = pokesByClientID.get(clientPoke.clientID);
     if (!pokes) {
       pokes = [];
       pokesByClientID.set(clientPoke.clientID, pokes);
     }
-    const {patch, ...pokeMinusPatch} = clientPoke.poke;
-    let patchString = patchStrings.get(patch);
-    if (patchString === undefined) {
-      patchString = {string: JSON.stringify(patch), id: randomID()};
-      patchStrings.set(clientPoke.poke.patch, patchString);
+    const {patch} = clientPoke.poke;
+    let memoizedPatchString = memoizedPatchStrings.get(patch);
+    if (memoizedPatchString === undefined) {
+      memoizedPatchString = {string: JSON.stringify(patch), id: randomID()};
+      memoizedPatchStrings.set(clientPoke.poke.patch, memoizedPatchString);
       lc.debug?.(
         'stringifyed patch id',
-        patchString.id,
+        memoizedPatchString.id,
         'string',
-        patchString.string,
+        truncate(memoizedPatchString.string, MAX_PATCH_CHARS_TO_LOG),
       );
     }
-    lc.debug?.(
-      'sending client',
-      clientPoke.clientID,
-      'poke',
-      pokeMinusPatch,
-      'with stringifyed patch',
-      patchString.id,
-    );
-    pokes.push([clientPoke.poke, patchString.string]);
+    pokes.push([clientPoke.poke, memoizedPatchString]);
   }
   // This manual json string building is necessary, to avoid JSON.stringify-ing
   // the same patches for each client.
   for (const [clientID, pokes] of pokesByClientID) {
     const client = must(clients.get(clientID));
-    const pokeStrings = [];
-    for (const [poke, patchString] of pokes) {
+    let pokesString = '[';
+    let debugPokesString = '[';
+    for (let i = 0; i < pokes.length; i++) {
+      const [poke, memoizedPatchString] = pokes[i];
       const {patch: _, ...pokeMinusPatch} = poke;
       const pokeMinusPatchString = JSON.stringify(pokeMinusPatch);
-      pokeStrings.push(
-        pokeMinusPatchString.substring(0, pokeMinusPatchString.length - 1) +
-          ',"patch":' +
-          patchString +
-          '}',
+      const pokeMinusPatchStringPrefix = pokeMinusPatchString.substring(
+        0,
+        pokeMinusPatchString.length - 1,
       );
+      pokesString += appendPatch(
+        pokeMinusPatchStringPrefix,
+        memoizedPatchString.string,
+        i,
+        pokes.length,
+      );
+      if (lc.debug) {
+        debugPokesString += appendPatch(
+          pokeMinusPatchStringPrefix,
+          memoizedPatchString.id,
+          i,
+          pokes.length,
+        );
+      }
     }
-    const pokesString = `[${pokeStrings.join(',')}]`;
-    const pokeMessageString =
-      `["poke",{` +
-      `"requestID":"${randomID()}",` +
-      `${client.debugPerf ? `"debugServerBufferMs":${bufferMs},` : ''}` +
-      `"pokes": ${pokesString}` +
-      `}]`;
-    lc.debug?.('sending client', clientID, 'poke');
+    pokesString += ']';
+    const requestID = randomID();
+    const pokeMessageString = makePokeMessage(
+      requestID,
+      client,
+      bufferMs,
+      pokesString,
+    );
     client.socket.send(pokeMessageString);
+
+    if (lc.debug) {
+      debugPokesString += ']';
+      const debugPokeMessageString = makePokeMessage(
+        requestID,
+        client,
+        bufferMs,
+        debugPokesString,
+      );
+      lc.debug?.('sending client', clientID, 'poke', debugPokeMessageString);
+    }
   }
+}
+
+function appendPatch(
+  pokeMinusPatchStringPrefix: string,
+  patchString: string,
+  i: number,
+  length: number,
+) {
+  return (
+    pokeMinusPatchStringPrefix +
+    ',"patch":' +
+    patchString +
+    '}' +
+    (i === length - 1 ? '' : ',')
+  );
+}
+
+function makePokeMessage(
+  requestID: string,
+  client: ClientState,
+  bufferMs: number,
+  pokesString: string,
+) {
+  return (
+    `["poke",{` +
+    `"requestID":"${requestID}",` +
+    `${client.debugPerf ? `"debugServerBufferMs":${bufferMs},` : ''}` +
+    `"pokes":${pokesString}` +
+    `}]`
+  );
+}
+
+function truncate(str: string, maxLength: number) {
+  if (str.length < maxLength) {
+    return str;
+  }
+  return str.substring(0, maxLength) + `(${maxLength}/${str.length} chars)`;
 }
