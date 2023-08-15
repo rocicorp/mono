@@ -7,7 +7,7 @@ import {logger} from 'firebase-functions';
 import {Lock as InMemoryLock} from '@rocicorp/lock';
 import {assert} from 'shared/src/asserts.js';
 
-export const MIN_LEASE_INTERVAL_MS = 2000;
+export const MIN_LEASE_INTERVAL_MS = 4000;
 const LEASE_BUFFER_MS = MIN_LEASE_INTERVAL_MS / 2;
 
 type MaybePromise<T> = T | Promise<T>;
@@ -19,22 +19,23 @@ type LockTimes = {
 
 /**
  * Lock is used for Firestore-mediated serialization of access to external systems.
- * An example use cases is ensuring that only one Cloudflare publish is running for
- * a given app at any given time.
+ * An example use case is ensuring that only one Cloudflare `publish` is running for
+ * a given app at any given time (e.g. even if a user-requested publish and
+ * server-update are concurrently requested).
  *
  * Internally, Lock works by lock holders creating a LockDoc at an agreed upon path,
  * running their logic, and then deleting the doc. The existence of the LockDoc indicates
- * to other processes that the lock is held; the processes then wait for the current
+ * to other processes that the lock is held; those processes then wait for the current
  * lock holder to "release" the lock by deleting the document.
  *
- * Because it is possible for the lock holder to be aborted without allowing its
- * proper cleanup (e.g. process killed), it is important to consider the possibility
- * of a LockDoc being orphaned (and never deleted by the lock holder). To handle this
- * scenario, a LockDoc is actually a timed "lease" of the lock, with an expiration time
- * contained in the document itself. While the lock holder process is alive and still
- * running, the Lock class periodically extends the lease by moving the expiration
- * forward in time. If the process gets killed, then, the lease eventually expires,
- * signalling to other processes that the document can be deleted and created anew.
+ * Because it is possible for the lock holder to be aborted without proper cleanup
+ * (e.g. process killed), it is important to consider the possibility of a LockDoc being
+ * "orphaned" and never deleted by the lock holder. To handle this scenario, a LockDoc
+ * is actually a timed "lease" of the lock, with the expiration time stored in the
+ * document itself. While the lock holder process is running, the Lock class periodically
+ * extends the lease by moving the expiration forward in time. If the process gets killed,
+ * then, the lease eventually expires, signalling to other processes that the document
+ * can be deleted and created anew.
  */
 export class Lock {
   readonly #doc: DocumentReference<LockDoc>;
@@ -83,7 +84,18 @@ export class Lock {
     for await (const snapshot of watch(this.#doc, timeoutMs)) {
       clearTimeout(expirationTimer);
 
-      if (snapshot.exists) {
+      if (!snapshot.exists) {
+        // Common case: LockDoc does not exist. Try to create it.
+        try {
+          const lockHolder = new LockHolder(this.#doc, name);
+          return await lockHolder.acquire(acquireStart, this.#leaseIntervalMs);
+        } catch (e) {
+          // Could be an error, or could be contention (a different Locker won).
+          // Let the loop run on the next snapshot of the LockDoc.
+          logger.warn(`Error acquiring ${this.#doc.path} lock for ${name}`, e);
+        }
+      } else {
+        // LockDoc exists.
         const {holder, expiration} = must(snapshot.data());
         const lockTimes = {
           createTime: must(snapshot.createTime),
@@ -97,22 +109,14 @@ export class Lock {
             expirationMs,
           ).toISOString()}`,
         );
-        // Wait for the current lock holder will release (i.e. delete) the Lock,
+        // Wait for the current lock holder to release (i.e. delete) the Lock,
         // or for the timer to delete it at expiration. Note that because the delete
         // is preconditioned on the lock's updateTime, it will not delete the lock if
-        // the lock has been updated (i.e. its lease extended).
+        // the lock was concurrently updated (i.e. its lease extended).
         expirationTimer = setTimeout(
           () => this.#expireLock(holder, lockTimes),
           expirationMs - Date.now(),
         );
-      } else {
-        try {
-          const lockHolder = new LockHolder(this.#doc, name);
-          return await lockHolder.acquire(acquireStart, this.#leaseIntervalMs);
-        } catch (e) {
-          // Could be an error, or could be contention (a different Locker won).
-          logger.warn(`Error acquiring ${this.#doc.path} lock for ${name}`, e);
-        }
       }
     }
     // The watch loop only exits with a `return` or a TimeoutError ('resource-exhausted').
@@ -211,12 +215,11 @@ class LockHolder {
 
     return this.#updateLock.withLock(async () => {
       try {
-        const lock = must(this.#lock);
         const deleted = await this.#doc.delete({
-          lastUpdateTime: lock.updateTime,
+          lastUpdateTime: this.#lock.updateTime,
         });
         const elapsed =
-          deleted.writeTime.toMillis() - lock.createTime.toMillis();
+          deleted.writeTime.toMillis() - this.#lock.createTime.toMillis();
         logger.info(
           `${this.#doc.path} lock held by ${
             this.#name

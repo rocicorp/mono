@@ -111,8 +111,8 @@ describe('firestore lock', () => {
     await runner.running;
     expect(mock.doc.create).toBeCalledTimes(1);
     expect(mock.doc.create.mock.calls[0][0]).toEqual({
-      // Expiration should be lease duration + buffer == 11 seconds.
-      expiration: Timestamp.fromMillis(now + 11000),
+      // Expiration should be lease duration + buffer == 12 seconds.
+      expiration: Timestamp.fromMillis(now + 12000),
       holder: 'acquire test',
     });
     expect(mock.doc.delete).not.toBeCalled;
@@ -172,8 +172,8 @@ describe('firestore lock', () => {
     await runner.running;
     expect(mock.doc.create).toBeCalledTimes(1);
     expect(mock.doc.create.mock.calls[0][0]).toEqual({
-      // Expiration should be lease duration + buffer == 11 seconds.
-      expiration: Timestamp.fromMillis(Date.now() + 11000),
+      // Expiration should be lease duration + buffer == 12 seconds.
+      expiration: Timestamp.fromMillis(Date.now() + 12000),
       holder: 'held lock test',
     });
     expect(mock.doc.delete).not.toBeCalled;
@@ -230,8 +230,8 @@ describe('firestore lock', () => {
     await runner.running;
     expect(mock.doc.create).toBeCalledTimes(1);
     expect(mock.doc.create.mock.calls[0][0]).toEqual({
-      // Expiration should be lease duration + buffer == 11 seconds.
-      expiration: Timestamp.fromMillis(Date.now() + 11000),
+      // Expiration should be lease duration + buffer == 12 seconds.
+      expiration: Timestamp.fromMillis(Date.now() + 12000),
       holder: 'expire test',
     });
     expect(mock.doc.delete).not.toBeCalled;
@@ -278,8 +278,8 @@ describe('firestore lock', () => {
     await runner.running;
     expect(mock.doc.create).toBeCalledTimes(1);
     expect(mock.doc.create.mock.calls[0][0]).toEqual({
-      // Expiration should be lease duration + buffer == 11 seconds.
-      expiration: Timestamp.fromMillis(now + 11000),
+      // Expiration should be lease duration + buffer == 12 seconds.
+      expiration: Timestamp.fromMillis(now + 12000),
       holder: 'extend test',
     });
     expect(mock.doc.update).not.toBeCalled;
