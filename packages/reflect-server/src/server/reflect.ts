@@ -44,6 +44,14 @@ export interface ReflectServerOptions<MD extends MutatorDefs> {
    * Default is `false`.
    */
   allowUnconfirmedWrites?: boolean | undefined;
+
+  /**
+   * If defined limits the number of mutations that will be processed per
+   * turn.
+   * Setting this limit can prevent busy rooms from experiencing "overloaded"
+   * exceptions at the cost of peer-to-peer latency.
+   */
+  maxMutationsPerTurn?: number | undefined;
 }
 
 /**
@@ -58,6 +66,7 @@ export type NormalizedOptions<MD extends MutatorDefs> = {
   logLevel: LogLevel;
   datadogMetricsOptions?: DatadogMetricsOptions | undefined;
   allowUnconfirmedWrites: boolean;
+  maxMutationsPerTurn: number;
 };
 
 function combineLogSinks(sinks: LogSink[]): LogSink {
@@ -129,6 +138,7 @@ function makeNormalizedOptionsGetter<
       logLevel = 'debug',
       allowUnconfirmedWrites = false,
       datadogMetricsOptions = undefined,
+      maxMutationsPerTurn = Number.MAX_SAFE_INTEGER,
     } = makeOptions(env);
     const logSink = logSinks ? combineLogSinks(logSinks) : consoleLogSink;
     return {
@@ -140,6 +150,7 @@ function makeNormalizedOptionsGetter<
       logLevel,
       allowUnconfirmedWrites,
       datadogMetricsOptions,
+      maxMutationsPerTurn,
     };
   };
 }
@@ -157,6 +168,7 @@ function createRoomDOClass<
         logSink,
         logLevel,
         allowUnconfirmedWrites,
+        maxMutationsPerTurn,
       } = getOptions(env);
       super({
         mutators,
@@ -167,6 +179,7 @@ function createRoomDOClass<
         logSink,
         logLevel,
         allowUnconfirmedWrites,
+        maxMutationsPerTurn,
       });
     }
   };

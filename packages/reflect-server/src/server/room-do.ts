@@ -59,6 +59,7 @@ export interface RoomDOOptions<MD extends MutatorDefs> {
   logSink: LogSink;
   logLevel: LogLevel;
   allowUnconfirmedWrites: boolean;
+  maxMutationsPerTurn: number;
 }
 
 export const ROOM_ROUTES = {
@@ -87,6 +88,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   readonly #lock = new LoggingLock();
   readonly #mutators: MutatorMap;
   readonly #disconnectHandler: DisconnectHandler;
+  readonly #maxMutationsPerTurn: number;
   #lcHasRoomIdContext = false;
   #lc: LogContext;
   readonly #storage: DurableStorage;
@@ -105,10 +107,12 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       authApiKey,
       logSink,
       logLevel,
+      maxMutationsPerTurn,
     } = options;
 
     this.#mutators = new Map([...Object.entries(mutators)]) as MutatorMap;
     this.#disconnectHandler = disconnectHandler;
+    this.#maxMutationsPerTurn = maxMutationsPerTurn;
     this.#storage = new DurableStorage(
       state.storage,
       options.allowUnconfirmedWrites,
@@ -478,6 +482,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         this.#disconnectHandler,
         this.#maxProcessedMutationTimestamp,
         this.#bufferSizer,
+        this.#maxMutationsPerTurn,
       );
     this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
     if (nothingToProcess && this.#turnTimerID) {
