@@ -1,4 +1,5 @@
 import {HttpsError} from 'firebase-functions/v2/https';
+import type {Auth} from 'firebase-admin/auth';
 import type {AuthData} from 'firebase-functions/v2/tasks';
 import type {BaseRequest} from 'mirror-protocol/src/base.js';
 import type {BaseAppRequest} from 'mirror-protocol/src/app.js';
@@ -14,10 +15,18 @@ import {must} from 'shared/src/must.js';
 import {logger} from 'firebase-functions';
 import type {Role} from 'mirror-schema/src/membership.js';
 import {assert} from 'shared/src/asserts.js';
+import type {OnRequestContext} from './https.js';
 
 // The subset of CallableRequest fields applicable to `userAuthorization`.
 interface AuthContext {
   auth?: AuthData;
+}
+
+export function httpsAuthorization<Request, Context extends OnRequestContext>(
+  auth: Auth,
+): RequestContextValidator<Request, Context, Context & AuthContext> {
+  // does the Authorization: Bearer check from the OnRequestContext headers and
+  // appends a resulting { auth: ... } to the outgoing context.
 }
 
 /**

@@ -1,4 +1,6 @@
-import type {CallableRequest} from 'firebase-functions/v2/https';
+import type {CallableRequest, Request} from 'firebase-functions/v2/https';
+import type {AuthData} from 'firebase-functions/v2/tasks';
+import type {Response} from 'express';
 import type {App} from 'mirror-schema/src/app.js';
 import type {Role} from 'mirror-schema/src/membership.js';
 import type {User} from 'mirror-schema/src/user.js';
