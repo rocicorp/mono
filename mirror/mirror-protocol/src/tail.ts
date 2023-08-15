@@ -26,14 +26,13 @@ export const deleteTail = createCall(
 
 export const createTailRequestSchema = v.object({
   ...baseAppRequestFields,
+  serverVersionRange: v.string(),
 });
 
 export type CreateTailRequest = v.Infer<typeof createTailRequestSchema>;
 
 export const createTailResponseSchema = v.object({
   ...baseResponseFields,
-  tailID: v.string(),
-  tailURL: v.string(),
 });
 export type CreateTailResponse = v.Infer<typeof createTailResponseSchema>;
 

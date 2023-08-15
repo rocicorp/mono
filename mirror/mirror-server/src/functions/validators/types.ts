@@ -71,6 +71,8 @@ export class ValidatorChainer<Request, Context, Response> {
   ): Callable<Request, Response> {
     return async originalContext => {
       const request = originalContext.data;
+      console.log('handler!', originalContext.data);
+
       const context = await this._requestValidator(request, originalContext);
       const response = await handler(request, context);
       return this._responseValidator(response);

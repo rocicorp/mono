@@ -14,6 +14,8 @@ import {must} from 'shared/src/must.js';
 import {logger} from 'firebase-functions';
 import type {Role} from 'mirror-schema/src/membership.js';
 import {assert} from 'shared/src/asserts.js';
+import type {Auth, DecodedIdToken} from 'firebase-admin/auth';
+
 
 // The subset of CallableRequest fields applicable to `userAuthorization`.
 interface AuthContext {
@@ -52,6 +54,53 @@ export function userAuthorization<
 }
 
 /**
+  * Validator that checks the Firebase ID token, this is only used for onRequest functions
+ */
+export function firebaseIdToken<
+  Request extends BaseRequest & {
+    headers: {
+      authorization: string;
+    };
+  },
+>(
+  auth: Auth,
+): RequestContextValidator<Request, CallableRequest<Request>, DecodedIdToken> {
+  return request => {
+    console.log('Check if request is authorized with Firebase ID token');
+
+    if (
+      !request.headers.authorization ||
+      !request.headers.authorization.startsWith('Bearer ')
+    ) {
+      console.error(
+        'No Firebase ID token was passed as a Bearer token in the Authorization header.',
+        'Make sure you authorize your request by providing the following HTTP header:',
+        'Authorization: Bearer <Firebase ID Token>',
+      );
+      throw new HttpsError(
+        'permission-denied',
+        'authenticated user is not authorized to make this request',
+      );
+    }
+
+    const idToken = request.headers.authorization.split('Bearer ')[1];
+    return auth
+      .verifyIdToken(idToken)
+      .then(decodedIdToken => {
+        console.log('ID Token correctly decoded', decodedIdToken);
+        return decodedIdToken;
+      })
+      .catch(error => {
+        throw new HttpsError(
+          'permission-denied',
+          'error while validating idtoken',
+          error,
+        );
+      });
+  };
+}
+
+/**
  * Validates that the authorized user has privileges to modify the
  * app associated with the request.
  */
@@ -62,46 +111,49 @@ export function appAuthorization<
   assert(allowedRoles.length > 0, 'allowedRoles must be non-empty');
   return async (request: Request, context: Context) => {
     const {userID} = context;
-    const userDocRef = firestore
-      .doc(userPath(userID))
-      .withConverter(userDataConverter);
     const {appID} = request;
-    const appDocRef = firestore
-      .doc(appPath(appID))
-      .withConverter(appDataConverter);
-
-    const authorization: AppAuthorization = await firestore.runTransaction(
-      async txn => {
-        const [userDoc, appDoc] = await Promise.all([
-          txn.get(userDocRef),
-          txn.get(appDocRef),
-        ]);
-        if (!userDoc.exists) {
-          throw new HttpsError(
-            'failed-precondition',
-            `User ${userID} has not been initialized`,
-          );
-        }
-        if (!appDoc.exists) {
-          throw new HttpsError('not-found', `App ${appID} does not exist`);
-        }
-        const user = must(userDoc.data());
-        const app = must(appDoc.data());
-        const {teamID} = app;
-        const role = user.roles[teamID];
-        if (allowedRoles.indexOf(role) < 0) {
-          throw new HttpsError(
-            'permission-denied',
-            `User ${userID} has insufficient permissions for App ${appID}`,
-          );
-        }
-        logger.info(
-          `User ${userID} has role ${role} in team ${teamID} of app ${appID}`,
-        );
-        return {app, user, role};
-      },
-      {readOnly: true},
-    );
+    const authorization = await getAppByUserId(userID, appID, firestore, allowedRoles);
     return {...context, ...authorization};
   };
+}
+
+export async function getAppByUserId(userID: string, appID: string, firestore: Firestore, allowedRoles: Role[] = ['admin', 'member'], ){
+  const userDocRef = firestore
+  .doc(userPath(userID))
+  .withConverter(userDataConverter);
+const appDocRef = firestore
+  .doc(appPath(appID))
+  .withConverter(appDataConverter);
+
+const authorization: AppAuthorization = await firestore.runTransaction(
+  async txn => {
+    const [userDoc, appDoc] = await Promise.all([
+      txn.get(userDocRef),
+      txn.get(appDocRef),
+    ]);
+    if (!userDoc.exists) {
+      throw new HttpsError(
+        'failed-precondition',
+        `User ${userID} has not been initialized`,
+      );
+    }
+    if (!appDoc.exists) {
+      throw new HttpsError('not-found', `App ${appID} does not exist`);
+    }
+    const user = must(userDoc.data());
+    const app = must(appDoc.data());
+    const {teamID} = app;
+    const role = user.roles[teamID];
+    if (allowedRoles.indexOf(role) < 0) {
+      throw new HttpsError(
+        'permission-denied',
+        `User ${userID} has insufficient permissions for App ${appID}`,
+      );
+    }
+    logger.info(
+      `User ${userID} has role ${role} in team ${teamID} of app ${appID}`,
+    );
+    return {app, user, role};
+  });
+  return {...authorization}
 }

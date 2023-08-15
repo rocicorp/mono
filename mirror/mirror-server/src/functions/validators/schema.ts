@@ -8,7 +8,7 @@ export function validateSchema<Request, Response>(
   requestSchema: v.Type<Request>,
   responseSchema: v.Type<Response>,
 ): ValidatorChainer<Request, CallableRequest<Request>, Response> {
-  return new ValidatorChainer(
+  return new ValidatorChainer(    
     (request, context) => {
       try {
         parse(request, requestSchema);
