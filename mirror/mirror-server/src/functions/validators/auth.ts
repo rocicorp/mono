@@ -1,4 +1,5 @@
-import {CallableRequest, HttpsError} from 'firebase-functions/v2/https';
+import {HttpsError} from 'firebase-functions/v2/https';
+import type {AuthData} from 'firebase-functions/v2/tasks';
 import type {BaseRequest} from 'mirror-protocol/src/base.js';
 import type {BaseAppRequest} from 'mirror-protocol/src/app.js';
 import type {
@@ -14,16 +15,26 @@ import {logger} from 'firebase-functions';
 import type {Role} from 'mirror-schema/src/membership.js';
 import {assert} from 'shared/src/asserts.js';
 
+// The subset of CallableRequest fields applicable to `userAuthorization`.
+interface AuthContext {
+  auth?: AuthData;
+}
+
 /**
  * Validator that checks the original authentication against the
  * requester userID and initializes a {@link UserAuthorization} context.
  */
 export function userAuthorization<
   Request extends BaseRequest,
+  Context extends AuthContext,
 >(): RequestContextValidator<
   Request,
-  CallableRequest<Request>,
-  UserAuthorization
+  Context,
+  // Remove the 'auth' field from the OutputContext to prevent
+  // downstream code from erroneously referencing the authenticated
+  // user (i.e. context.auth.uid); subsequent logic should be based
+  // on the requester.userID.
+  Omit<Context, 'auth'> & UserAuthorization
 > {
   return (request, context) => {
     if (context.auth?.uid === undefined) {
@@ -36,11 +47,7 @@ export function userAuthorization<
         'authenticated user is not authorized to make this request',
       );
     }
-    // From here we return a brand new context in order to avoid
-    // code from erroneously referencing the authenticated user
-    // (i.e. context.auth.uid); subsequent logic should be based
-    // on the requester.userID.
-    return {userID: request.requester.userID};
+    return {...context, userID: request.requester.userID};
   };
 }
 
