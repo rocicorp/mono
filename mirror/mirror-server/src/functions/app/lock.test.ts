@@ -14,7 +14,8 @@ import {
 import {Lock} from './lock.js';
 import {resolver} from '@rocicorp/resolver';
 import type {LockDoc} from 'mirror-schema/src/lock.js';
-import {must} from 'shared/src/must.js';
+import {Queue} from 'shared/src/queue.js';
+import {HttpsError} from 'firebase-functions/v2/https';
 
 beforeEach(() => {
   jest.useFakeTimers();
@@ -60,11 +61,17 @@ function makeSnapshot(
 
 type SnapshotReceiver = (s: DocumentSnapshot<LockDoc>) => void;
 
-function mockDoc(
-  createTimestamps: number[],
-  updateTimestamps: number[],
-  deleteTimestamps: number[],
-) {
+function mockDoc() {
+  function nextWriteResult(results: Queue<number>) {
+    return async () => {
+      const timestamp = await results.dequeue();
+      return {writeTime: Timestamp.fromMillis(timestamp)};
+    };
+  }
+  const creates = new Queue<number>();
+  const updates = new Queue<number>();
+  const deletes = new Queue<number>();
+
   const mock = {
     doc: {
       path: 'my/lock',
@@ -74,17 +81,14 @@ function mockDoc(
           /* empty */
         };
       }),
-      create: jest.fn().mockImplementation(() => ({
-        writeTime: Timestamp.fromMillis(must(createTimestamps.shift())),
-      })),
-      update: jest.fn().mockImplementation(() => ({
-        writeTime: Timestamp.fromMillis(must(updateTimestamps.shift())),
-      })),
-      delete: jest.fn().mockImplementation(() => ({
-        writeTime: Timestamp.fromMillis(must(deleteTimestamps.shift())),
-      })),
+      create: jest.fn().mockImplementation(nextWriteResult(creates)),
+      update: jest.fn().mockImplementation(nextWriteResult(updates)),
+      delete: jest.fn().mockImplementation(nextWriteResult(deletes)),
     },
     nextSnapshot: undefined as unknown as SnapshotReceiver,
+    creates,
+    updates,
+    deletes,
   };
   return mock;
 }
@@ -96,7 +100,7 @@ describe('firestore lock', () => {
     const newLockDeleteTime = now + 234;
 
     const runner = makeRunner('acquired!');
-    const mock = mockDoc([newLockCreateTime], [], [newLockDeleteTime]);
+    const mock = mockDoc();
 
     jest.setSystemTime(now);
 
@@ -108,7 +112,9 @@ describe('firestore lock', () => {
 
     mock.nextSnapshot(makeEmptySnapshot());
 
+    await mock.creates.enqueue(newLockCreateTime);
     await runner.running;
+
     expect(mock.doc.create).toBeCalledTimes(1);
     expect(mock.doc.create.mock.calls[0][0]).toEqual({
       // Expiration should be lease duration + buffer == 12 seconds.
@@ -118,7 +124,80 @@ describe('firestore lock', () => {
     expect(mock.doc.delete).not.toBeCalled;
 
     runner.finish();
+    await mock.deletes.enqueue(newLockDeleteTime);
     expect(await running).toBe('acquired!');
+
+    expect(mock.doc.delete).toBeCalledTimes(1);
+    expect(mock.doc.delete.mock.calls[0][0]).toEqual({
+      lastUpdateTime: Timestamp.fromMillis(newLockCreateTime),
+    });
+  });
+
+  test('retries acquire after lock contention', async () => {
+    const now = 987;
+    const newLockCreateTime = now + 123;
+    const newLockDeleteTime = now + 234;
+
+    const runner = makeRunner('acquired after contention');
+    const mock = mockDoc();
+
+    jest.setSystemTime(now);
+
+    const lock = new Lock(mock.doc as unknown as DocumentReference<LockDoc>);
+    const running = lock.withLock('acquire after contention test', runner.run);
+
+    expect(mock.doc.onSnapshot).toBeCalledTimes(1);
+    expect(mock.doc.create).not.toBeCalled;
+
+    mock.nextSnapshot(makeEmptySnapshot());
+
+    // First create() fails with lock contention.
+    await mock.creates.enqueueRejection(
+      new HttpsError('already-exists', 'you lost bro'),
+    );
+
+    // Allow the snapshot loop run.
+    await jest.advanceTimersByTimeAsync(1000);
+    expect(mock.doc.create).toBeCalledTimes(1);
+    expect(mock.doc.create.mock.calls[0][0]).toEqual({
+      // Expiration should be lease duration + buffer == 12 seconds.
+      expiration: Timestamp.fromMillis(now + 12000),
+      holder: 'acquire after contention test',
+    });
+    expect(mock.doc.delete).not.toBeCalled;
+
+    // The 'already-exists' error is followed by the snapshot of the lock winner.
+    mock.nextSnapshot(
+      makeSnapshot(
+        {expiration: Timestamp.fromMillis(now + 5000)},
+        now - 100,
+        now - 100,
+      ),
+    );
+
+    await jest.advanceTimersByTimeAsync(1000);
+    expect(mock.doc.delete).not.toBeCalled;
+
+    // Once the lock is released, the acquisition should be attempted again.
+    mock.nextSnapshot(makeEmptySnapshot());
+
+    // Second create() succeeds.
+    await mock.creates.enqueue(newLockCreateTime);
+    await runner.running;
+
+    expect(mock.doc.create).toBeCalledTimes(2);
+    expect(mock.doc.create.mock.calls[1][0]).toEqual({
+      // Expiration should be lease duration + buffer == 12 seconds.
+      expiration: Timestamp.fromMillis(now + 2000 + 12000),
+      holder: 'acquire after contention test',
+    });
+    expect(mock.doc.delete).not.toBeCalled;
+
+    runner.finish();
+
+    await mock.deletes.enqueue(newLockDeleteTime);
+    expect(await running).toBe('acquired after contention');
+
     expect(mock.doc.delete).toBeCalledTimes(1);
     expect(mock.doc.delete.mock.calls[0][0]).toEqual({
       lastUpdateTime: Timestamp.fromMillis(newLockCreateTime),
@@ -131,7 +210,7 @@ describe('firestore lock', () => {
     const newLockDeleteTime = now + 234;
 
     const runner = makeRunner('waited!');
-    const mock = mockDoc([newLockCreateTime], [], [newLockDeleteTime]);
+    const mock = mockDoc();
 
     jest.setSystemTime(now);
 
@@ -169,6 +248,7 @@ describe('firestore lock', () => {
     // Lock is released.
     mock.nextSnapshot(makeEmptySnapshot());
 
+    await mock.creates.enqueue(newLockCreateTime);
     await runner.running;
     expect(mock.doc.create).toBeCalledTimes(1);
     expect(mock.doc.create.mock.calls[0][0]).toEqual({
@@ -179,6 +259,7 @@ describe('firestore lock', () => {
     expect(mock.doc.delete).not.toBeCalled;
 
     runner.finish();
+    await mock.deletes.enqueue(newLockDeleteTime);
     expect(await running).toBe('waited!');
     expect(mock.doc.delete).toBeCalledTimes(1);
     expect(mock.doc.delete.mock.calls[0][0]).toEqual({
@@ -193,11 +274,7 @@ describe('firestore lock', () => {
     const newLockDeleteTime = now + 800;
 
     const runner = makeRunner('expired!');
-    const mock = mockDoc(
-      [newLockCreateTime],
-      [],
-      [expiredLockDeleteTime, newLockDeleteTime],
-    );
+    const mock = mockDoc();
 
     jest.setSystemTime(now);
 
@@ -220,13 +297,18 @@ describe('firestore lock', () => {
 
     // Expiration timer should fire.
     await jest.advanceTimersByTimeAsync(101);
+    await mock.deletes.enqueue(expiredLockDeleteTime);
 
     expect(mock.doc.create).not.toBeCalled;
     expect(mock.doc.delete).toBeCalledTimes(1);
+    expect(mock.doc.delete.mock.calls[0][0]).toEqual({
+      lastUpdateTime: Timestamp.fromMillis(expiredLockUpdateTime),
+    });
 
     // Lock is released.
     mock.nextSnapshot(makeEmptySnapshot());
 
+    await mock.creates.enqueue(newLockCreateTime);
     await runner.running;
     expect(mock.doc.create).toBeCalledTimes(1);
     expect(mock.doc.create.mock.calls[0][0]).toEqual({
@@ -234,14 +316,11 @@ describe('firestore lock', () => {
       expiration: Timestamp.fromMillis(Date.now() + 12000),
       holder: 'expire test',
     });
-    expect(mock.doc.delete).not.toBeCalled;
 
     runner.finish();
+    await mock.deletes.enqueue(newLockDeleteTime);
     expect(await running).toBe('expired!');
     expect(mock.doc.delete).toBeCalledTimes(2);
-    expect(mock.doc.delete.mock.calls[0][0]).toEqual({
-      lastUpdateTime: Timestamp.fromMillis(expiredLockUpdateTime),
-    });
     expect(mock.doc.delete.mock.calls[1][0]).toEqual({
       lastUpdateTime: Timestamp.fromMillis(newLockCreateTime),
     });
@@ -256,11 +335,7 @@ describe('firestore lock', () => {
     const newLockDeleteTime = newLockUpdateTime2 + 234;
 
     const runner = makeRunner('extended!');
-    const mock = mockDoc(
-      [newLockCreateTime],
-      [newLockUpdateTime1, newLockUpdateTime2],
-      [newLockDeleteTime],
-    );
+    const mock = mockDoc();
 
     jest.setSystemTime(now);
 
@@ -275,6 +350,7 @@ describe('firestore lock', () => {
 
     mock.nextSnapshot(makeEmptySnapshot());
 
+    await mock.creates.enqueue(newLockCreateTime);
     await runner.running;
     expect(mock.doc.create).toBeCalledTimes(1);
     expect(mock.doc.create.mock.calls[0][0]).toEqual({
@@ -286,11 +362,21 @@ describe('firestore lock', () => {
     expect(mock.doc.delete).not.toBeCalled;
 
     await jest.advanceTimersByTimeAsync(leaseInterval + 1000);
+    await mock.updates.enqueue(newLockUpdateTime1);
     expect(mock.doc.update).toBeCalledTimes(1);
+    expect(mock.doc.update.mock.calls[0][1]).toEqual({
+      lastUpdateTime: Timestamp.fromMillis(newLockCreateTime),
+    });
+
     await jest.advanceTimersByTimeAsync(leaseInterval + 1000);
+    await mock.updates.enqueue(newLockUpdateTime2);
     expect(mock.doc.update).toBeCalledTimes(2);
+    expect(mock.doc.update.mock.calls[1][1]).toEqual({
+      lastUpdateTime: Timestamp.fromMillis(newLockUpdateTime1),
+    });
 
     runner.finish();
+    await mock.deletes.enqueue(newLockDeleteTime);
     expect(await running).toBe('extended!');
     expect(mock.doc.delete).toBeCalledTimes(1);
     expect(mock.doc.delete.mock.calls[0][0]).toEqual({
