@@ -5,9 +5,9 @@ slug: /strategies/per-space-version
 
 # 🛸 Per-Space Version Strategy
 
-The Per-Space Version Strategy is the same as the [The Global Version Strategy](/strategies/global-version) except it partitions the database into separate _spaces_ and gives each space its own version number.
+The Per-Space Version Strategy is the same as the [The Global Version Strategy](/strategies/global-version) except it has more than one space.
 
-This increases throughput of the server. Instead of approximately 50 pushes per second across your entire server, you can get 50 pushes per **space**.
+This increases throughput of the server. Instead of approximately 50 pushes per second across your entire server, you can get 50 pushes per space.
 
 A common example of how people partition by space is along organizational boundaries in a SaaS application. Each customer org would be its own space and you'd thereby get 50 pushes per second per organization.
 
@@ -23,32 +23,103 @@ While this might just seem like a minor UI annoyance, keep in mind that it means
 
 This is why partitioning makes most sense at very high-level boundaries, like organizations, so that it will be uncommon in your application to want to have data from two spaces interact.
 
-## How it Works
+## Schema
 
-### Setup
+The schema generalizes the schema from the [Global Version Strategy](./reset.md):
 
-1. Setup database as-per [The Global Version Strategy](/strategies/global-version), except instead of a single global version, add storage for `Space` entities. Each space will have a unique ID and also a `version`. You may be able to simply extend some existing entity in your database, such as an organization.
-2. Each entity in your database that will be synced must be part of one (and only one) space. Add a `spaceID` attribute to each entity to keep track of the space it is part of.
-3. When constructing Replicache, specify a `name` that includes the `spaceID`, for example: `${userID}/${spaceID}` so that if a user moves between spaces, the data from two spaces won't get mixed.
-4. Also include the `spaceID` in the push and pull URLs so that the server will know which space to look in.
+```ts
+type ReplicacheSpace = {
+  id: string;
 
-### On Push
+  // Same as Global Version Strategy.
+  version: number;
+};
 
-- Same as [The Global Version Strategy](/strategies/global-version) except read and update the version from the relevant space, rather than the single global version.
+type ReplicacheClientGroup = {
+  // Same as Global Version Strategy.
+  id: string;
+  userID: any;
 
-### On Pull
+  spaceID: string;
+};
 
-- Same as [The Global Version Strategy](/strategies/global-version) except return only data from the requested space.
+type ReplicacheClient = {
+  // Same as Global Version Strategy.
+  id: string;
+  clientGroupID: string;
+  lastMutationID: number;
+  lastModifiedVersion: number;
+};
+
+// Each of your domain entities will have one additional fields.
+type Todo = {
+  // ... fields needed for your application (id, title, complete, etc)
+
+  // Same as Global Version Strategy.
+  lastModifiedVersion: number;
+  deleted: boolean;
+
+  spaceID: string;
+};
+```
+
+## Push
+
+The push handler should receive the `spaceID` being operated on as an HTTP parameter. The logic is otherwise almost identical to the Global Version Strategy, with minor changes to deal with spaces.
+
+1. Create a new `ReplicacheClientGroup` if necessary.
+1. Verify that the requesting user owns the specified `ReplicacheClientGroup`.
+1. **Verify that the `ReplicacheClientGroup` is in the requested space.**
+
+Then, for each mutation described in the [`PushRequest`](/reference/server-push#http-request-body):
+
+<ol>
+  <li value="3">Create the <code>ReplicacheClient</code> if necessary.</li>
+  <li>Validate that the <code>ReplicacheClient</code> is part of the requested <code>ReplicacheClientGroup</code>.</li>
+  <li>Validate that the received mutation ID is the next expected mutation ID from this client.</li>
+  <li>Increment the per-space version.</li>
+  <li>Run the applicable business logic to apply the mutation.
+    <ul>
+      <li>For each domain entity that is changed or deleted, update its <code>lastModifiedVersion</code> to the current per-space version.</li>
+      <li>For each domain entity that is deleted, set its <code>deleted</code> field to true.</li>
+    </ul>
+  </li>
+  <li>Update the <code>lastMutationID</code> of the client to store that the mutation was processed.</li>
+  <li>Update the <code>lastModifiedVersion</code> of the client to the current per-space version.</li>
+</ol>
+
+### Pull
+
+The pull handler should also receive the `spaceID` being operated on as an HTTP parameter.
+
+<ol>
+  <li>Verify that requesting user owns the requested <code>ReplicacheClientGroup</code>.</li>
+  <li>Verify that the requested <code>ReplicacheClientGroup</code> is within the requested space.</li>
+  <li>Return a <code><a href="/reference/server-pull#http-response-body">PullResponse</a></code> with:
+    <ul>
+      <li>The current per-space version as the cookie.</li>
+      <li>The <code>lastMutatationID</code> for each client that has changed since the requesting cookie.</li>
+      <li>A patch with:
+        <ul>
+          <li><code>put</code> ops for every entity created or changed since the request cookie.</li>
+          <li><code>del</code> ops for every entity deleted since the request cookie.</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ol>
+
+## Example
+
+[Todo-WC](https://github.com/rocicorp/todo-wc) is a simple example of per-space versioning. [Repliear](/examples/repliear) is a more involved example.
 
 ## Challenges
 
+- Like the Global Version strategy, soft deletes can be annoying.
+- Also like the Global Version strategy, it is difficult to implement features like read authentication and partial sync.
 - It can be hard in some applications to find a way to partition spaces naturally.
 - 50 pushes per second per space can still be insufficient for some applications.
 
 ## Variations
 
 The same variations available to [The Global Version Strategy](/strategies/global-version#variations) apply here.
-
-## Examples
-
-- [React TODO](/examples/todo) and [Repliear](/examples/repliear) both use the space strategy to give each visitor to the sample their own unique data to play with.

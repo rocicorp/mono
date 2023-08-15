@@ -1,3 +1,6 @@
+NOTE: This file is HACKING.md, not README.md, because npmjs.com shows the
+README automatically on the package homepage.
+
 # Cutting a release
 
 ## Decide what the new version should be.
@@ -19,8 +22,9 @@ git branch -D release
 git checkout -b release HEAD
 cd packages/reflect
 npm version minor # or patch
-npm pack --foreground-script
+npx syncpack fix-mismatches
 git commit -a -m 'Bump reflect version to $version'
+npm pack --foreground-script
 ```
 
 ## Manual Testing

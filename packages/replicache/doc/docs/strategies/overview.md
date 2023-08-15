@@ -7,17 +7,9 @@ slug: /strategies/overview
 
 Replicache defines abstract [push](/reference/server-push.md) and [pull](/reference/server-pull.md) endpoints that servers must implement to sync. There are a number of possible strategies to implement these endpoints with different tradeoffs.
 
-The main difference between the strategies is how they calcuate the `patch` required by the pull endpoint. Different approaches to calculating this patch require different state to be stored in the backend database, affect the push and pull implementations, and also some features Replicache chan support.
+The main difference between the strategies is how they calcuate the `patch` required by the pull endpoint. Different approaches to calculating this patch require different state to be stored in the backend database, affect the push and pull implementations, and also some features Replicache can support.
 
-## Partial Sync
-
-Some strategies easily support syncing only a subset of the data the user has access to, others can do so but it's more effort.
-
-## Dynamic Auth
-
-Imagine you have a document editing program where users can share documents with each other. Your server must know to send the document data to a user's client when the user gains access, and also to send a delete of that data when the user loses access. This should happen even though the document itself has not changed.
-
-Some strategies elegantly support this, while with others it's not possible or only possible inefficiently.
+<br/>
 
 <table>
     <thead>

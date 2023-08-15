@@ -5,19 +5,6 @@ slug: /byob/dynamic-pull
 
 Even though in the previous step we're making persistent changes in the database, we still aren't _serving_ that data in the pull endpoint (it's still static 🤣). The pull response is still static. Let's fix that now.
 
-The pull endpoint takes as input:
-
-- `clientGroupID`: The client group (roughly, the browser profile) that is making the request.
-- `cookie`: The cookie the client group received from the previous pull, if any.
-
-And it returns:
-
-- `patch`: A set of changes (puts and deletes) that have occurred since the last pull.
-- `cookie`: An opaque value that identifies the state the patch was calculated from. This value is sent back to the server on the next pull, so the next patch can be calculated.
-- `lastMutationIDChanges`: A map with an entry for each client in the group whose `lastMutationID` has changed since the last pull.
-
-See [pull endpoint reference](/reference/server-pull) for more details.
-
 The implementation of pull will depend on the backend strategy you are using. For the [Global Version](/strategies/global-version) strategy we're using, the basics steps are:
 
 <ul>
