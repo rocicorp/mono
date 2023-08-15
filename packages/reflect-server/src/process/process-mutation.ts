@@ -36,7 +36,12 @@ async function processMutationTimed(
   storage: Storage,
   version: Version,
 ): Promise<number | undefined> {
-  lc.debug?.('processing mutation', pendingMutation, 'version', version);
+  lc.debug?.(
+    'processing mutation',
+    describeMutation(pendingMutation),
+    'version',
+    version,
+  );
   const {clientID} = pendingMutation;
   const cache = new EntryCache(storage);
   const record = await getClientRecord(clientID, cache);
@@ -47,14 +52,20 @@ async function processMutationTimed(
 
   const expectedMutationID = record.lastMutationID + 1;
   if (pendingMutation.id < expectedMutationID) {
-    lc.debug?.('skipping duplicate mutation', pendingMutation);
+    lc.debug?.(
+      'skipping duplicate mutation',
+      describeMutation(pendingMutation),
+    );
     return;
   }
 
   if (pendingMutation.id > expectedMutationID) {
     // This should never happen, the order is validated in the push message
     // handler.
-    lc.error?.('skipping out of order mutation', pendingMutation);
+    lc.error?.(
+      'skipping out of order mutation',
+      describeMutation(pendingMutation),
+    );
     return;
   }
 
@@ -85,4 +96,12 @@ async function processMutationTimed(
   await putVersion(version, cache);
   await cache.flush();
   return expectedMutationID;
+}
+
+function describeMutation(pendingMutation: PendingMutation) {
+  return {
+    clientID: pendingMutation.clientID,
+    id: pendingMutation.id,
+    name: pendingMutation.name,
+  };
 }
