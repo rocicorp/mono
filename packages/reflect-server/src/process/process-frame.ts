@@ -104,7 +104,6 @@ export async function processFrame(
     await disconnectsCache.flush();
     clientPokes.push(
       ...(await buildClientPokesAndUpdateClientRecords(
-        lc,
         cache,
         clientIDs,
         clients,
