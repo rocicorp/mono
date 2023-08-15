@@ -26,11 +26,11 @@ export const deploy = (firestore: Firestore, storage: Storage) =>
     async event => {
       const {appID, deploymentID} = event.params;
 
-      const deploymentLock = new Lock(
-        firestore
-          .doc(deploymentLockPath(appID))
-          .withConverter(lockDataConverter),
-      );
+      const lockDoc = firestore
+        .doc(deploymentLockPath(appID))
+        .withConverter(lockDataConverter);
+      const deploymentLock = new Lock(lockDoc);
+
       await deploymentLock.withLock(deploymentID, () =>
         deployInLock(firestore, storage, appID, deploymentID),
       );
@@ -82,7 +82,6 @@ async function deployInLock(
     deployment.serverVersion,
   );
 
-  // TODO(darick): Acquire a document lock to enforce that only one deployment runs at a time.
   await setDeploymentStatus(firestore, appID, deploymentID, 'DEPLOYING');
   try {
     await publishToCloudflare(
