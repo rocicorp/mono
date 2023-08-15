@@ -7,15 +7,21 @@ import {logger} from 'firebase-functions';
 import {Lock as InMemoryLock} from '@rocicorp/lock';
 import {assert} from 'shared/src/asserts.js';
 
-export const MIN_LEASE_INTERVAL_MS = 4000;
-const LEASE_BUFFER_MS = MIN_LEASE_INTERVAL_MS / 2;
-
-type MaybePromise<T> = T | Promise<T>;
-
-type LockTimes = {
-  readonly createTime: Timestamp;
-  updateTime: Timestamp;
-};
+/**
+ * The interval at which the lock is renewed if the lock holding logic has not
+ * completed. The actual lease duration includes an additional buffer to allow
+ * time for the renewal to take place.
+ *
+ * The interval is chosen to be a balance between (1) something long enough such that
+ * lease renewal is not common, as lock renewals require Firestore I/O and
+ * introduce the possibility of transient errors, and (2) short enough such that
+ * recovery from an aborted lock-holding process is reasonable.
+ *
+ * If necessary, this interval can be made configurable, but for simplicity it
+ * is currently a constant.
+ */
+export const LEASE_INTERVAL_MS = 20_000;
+export const LEASE_BUFFER_MS = 2_000;
 
 /**
  * Lock is used for Firestore-mediated serialization of access to external systems.
@@ -39,20 +45,13 @@ type LockTimes = {
  */
 export class Lock {
   readonly #doc: DocumentReference<LockDoc>;
-  readonly #leaseIntervalMs: number;
 
   /**
    *
    * @param doc The document used to coordinate the lock.
-   * @param leaseIntervalMs The interval at which the lease is updated. Values less
-   *   than MIN_LEASE_INTERVAL_MS will be treated as MIN_LEASE_INTERVAL_MS.
    */
-  constructor(
-    doc: DocumentReference<LockDoc>,
-    leaseIntervalMs: number = 1000 * 10,
-  ) {
+  constructor(doc: DocumentReference<LockDoc>) {
     this.#doc = doc;
-    this.#leaseIntervalMs = Math.max(leaseIntervalMs, MIN_LEASE_INTERVAL_MS);
   }
 
   /**
@@ -88,7 +87,7 @@ export class Lock {
         // Common case: LockDoc does not exist. Try to create it.
         try {
           const lockHolder = new LockHolder(this.#doc, name);
-          return await lockHolder.acquire(acquireStart, this.#leaseIntervalMs);
+          return await lockHolder.acquire(acquireStart);
         } catch (e) {
           // Could be an error, or could be contention (a different Locker won).
           // Let the loop run on the next snapshot of the LockDoc.
@@ -97,10 +96,6 @@ export class Lock {
       } else {
         // LockDoc exists.
         const {holder, expiration} = must(snapshot.data());
-        const lockTimes = {
-          createTime: must(snapshot.createTime),
-          updateTime: must(snapshot.updateTime),
-        };
         const expirationMs = toMillis(expiration);
         logger.info(
           `Existing ${
@@ -113,6 +108,10 @@ export class Lock {
         // or for the timer to delete it at expiration. Note that because the delete
         // is preconditioned on the lock's updateTime, it will not delete the lock if
         // the lock was concurrently updated (i.e. its lease extended).
+        const lockTimes = {
+          createTime: must(snapshot.createTime),
+          updateTime: must(snapshot.updateTime),
+        };
         expirationTimer = setTimeout(
           () => this.#expireLock(holder, lockTimes),
           expirationMs - Date.now(),
@@ -151,7 +150,7 @@ class LockHolder {
   // An InMemory lock is used to make updates to the Firestore doc and the
   // #lock metadata atomic.
   readonly #updateLock = new InMemoryLock();
-  readonly #lock = {
+  readonly #lock: LockTimes = {
     createTime: Timestamp.fromMillis(0),
     updateTime: Timestamp.fromMillis(0),
   };
@@ -162,14 +161,17 @@ class LockHolder {
     this.#name = name;
   }
 
-  acquire(start: Timestamp, leaseMs: number): Promise<LockHolder> {
+  acquire(start: Timestamp): Promise<LockHolder> {
     assert(this.#lock.updateTime.toMillis() === 0);
 
     return this.#updateLock.withLock(async () => {
-      const writeResult = await this.#doc.create(this.#newLease(leaseMs));
+      const writeResult = await this.#doc.create(this.#newLease());
       this.#lock.createTime = writeResult.writeTime;
       this.#lock.updateTime = writeResult.writeTime;
-      this.#extensionTimer = setInterval(() => this.#extend(leaseMs), leaseMs);
+      this.#extensionTimer = setInterval(
+        () => this.#extend(),
+        LEASE_INTERVAL_MS,
+      );
 
       logger.info(
         `Acquired ${this.#doc.path} lock for ${this.#name} in ${
@@ -180,12 +182,12 @@ class LockHolder {
     });
   }
 
-  #extend(leaseMs: number): Promise<void> {
+  #extend(): Promise<void> {
     assert(this.#lock.updateTime.toMillis() > 0);
 
     return this.#updateLock.withLock(async () => {
       try {
-        const writeResult = await this.#doc.update(this.#newLease(leaseMs), {
+        const writeResult = await this.#doc.update(this.#newLease(), {
           lastUpdateTime: this.#lock.updateTime,
         });
         this.#lock.updateTime = writeResult.writeTime;
@@ -199,13 +201,15 @@ class LockHolder {
   }
 
   /**
-   * Creates a LockDoc with a lease expiration `#leaseIntervalMs`, with a small
+   * Creates a LockDoc with a lease expiration `LEASE_INTERVAL_MS`, with a small
    * buffer for the lease extension operation.
    */
-  #newLease(leaseMs: number): LockDoc {
+  #newLease(): LockDoc {
     return {
       holder: this.#name,
-      expiration: Timestamp.fromMillis(Date.now() + leaseMs + LEASE_BUFFER_MS),
+      expiration: Timestamp.fromMillis(
+        Date.now() + LEASE_INTERVAL_MS + LEASE_BUFFER_MS,
+      ),
     };
   }
 
@@ -237,3 +241,10 @@ class LockHolder {
     });
   }
 }
+
+type MaybePromise<T> = T | Promise<T>;
+
+type LockTimes = {
+  createTime: Timestamp;
+  updateTime: Timestamp;
+};
