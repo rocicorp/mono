@@ -28,6 +28,7 @@ export function processPending(
   disconnectHandler: DisconnectHandler,
   maxProcessedMutationTimestamp: number,
   bufferSizer: BufferSizer,
+  maxMutationsToProcess: number,
 ): Promise<{maxProcessedMutationTimestamp: number; nothingToProcess: boolean}> {
   lc = lc = lc.withContext('numClients', clients.size);
   return timed(lc.debug, 'processPending', () =>
@@ -40,6 +41,7 @@ export function processPending(
       disconnectHandler,
       maxProcessedMutationTimestamp,
       bufferSizer,
+      maxMutationsToProcess,
     ),
   );
 }
@@ -53,6 +55,7 @@ async function processPendingTimed(
   disconnectHandler: DisconnectHandler,
   maxProcessedMutationTimestamp: number,
   bufferSizer: BufferSizer,
+  maxMutationsToProcess: number,
 ): Promise<{maxProcessedMutationTimestamp: number; nothingToProcess: boolean}> {
   lc = lc.withContext('numClients', clients.size);
   lc.debug?.('process pending');
@@ -76,12 +79,25 @@ async function processPendingTimed(
 
   const t0 = Date.now();
   const bufferMs = bufferSizer.bufferSizeMs;
-  const tooNewIndex = pendingMutations.findIndex(
-    pendingM =>
+  let endIndex = pendingMutations.length;
+  for (let i = 0; i < pendingMutations.length; i++) {
+    if (i >= maxMutationsToProcess) {
+      lc.info?.(
+        'turn size limited by maxMutationsPerTurn',
+        maxMutationsToProcess,
+      );
+      endIndex = i;
+      break;
+    }
+    const pendingM = pendingMutations[i];
+    if (
       pendingM.timestamps !== undefined &&
-      pendingM.timestamps.normalizedTimestamp > t0 - bufferMs,
-  );
-  const endIndex = tooNewIndex !== -1 ? tooNewIndex : pendingMutations.length;
+      pendingM.timestamps.normalizedTimestamp > t0 - bufferMs
+    ) {
+      endIndex = i;
+      break;
+    }
+  }
   const toProcess = pendingMutations.slice(0, endIndex);
   const missCount =
     maxProcessedMutationTimestamp === undefined
