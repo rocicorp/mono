@@ -14,7 +14,6 @@ import {must} from 'shared/src/must.js';
 import {logger} from 'firebase-functions';
 import type {Role} from 'mirror-schema/src/membership.js';
 import {assert} from 'shared/src/asserts.js';
-import type {Auth, DecodedIdToken} from 'firebase-admin/auth';
 
 
 // The subset of CallableRequest fields applicable to `userAuthorization`.
@@ -50,53 +49,6 @@ export function userAuthorization<
       );
     }
     return {...context, userID: request.requester.userID};
-  };
-}
-
-/**
-  * Validator that checks the Firebase ID token, this is only used for onRequest functions
- */
-export function firebaseIdToken<
-  Request extends BaseRequest & {
-    headers: {
-      authorization: string;
-    };
-  },
->(
-  auth: Auth,
-): RequestContextValidator<Request, CallableRequest<Request>, DecodedIdToken> {
-  return request => {
-    console.log('Check if request is authorized with Firebase ID token');
-
-    if (
-      !request.headers.authorization ||
-      !request.headers.authorization.startsWith('Bearer ')
-    ) {
-      console.error(
-        'No Firebase ID token was passed as a Bearer token in the Authorization header.',
-        'Make sure you authorize your request by providing the following HTTP header:',
-        'Authorization: Bearer <Firebase ID Token>',
-      );
-      throw new HttpsError(
-        'permission-denied',
-        'authenticated user is not authorized to make this request',
-      );
-    }
-
-    const idToken = request.headers.authorization.split('Bearer ')[1];
-    return auth
-      .verifyIdToken(idToken)
-      .then(decodedIdToken => {
-        console.log('ID Token correctly decoded', decodedIdToken);
-        return decodedIdToken;
-      })
-      .catch(error => {
-        throw new HttpsError(
-          'permission-denied',
-          'error while validating idtoken',
-          error,
-        );
-      });
   };
 }
 

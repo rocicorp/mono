@@ -33,6 +33,25 @@ export type Callable<Request, Response> = (
   request: CallableRequest<Request>,
 ) => Promise<Response>;
 
+// export class OnRequestHandler {
+
+//   #validatorChainer ...
+
+//   onRequest(handler...) {
+//     return ((request), (response)) => {
+//       // create CallableRequest (from headers, and body, with Firebase idtoken stuff)
+//       const callableRequest = foo;
+
+//       //
+//       validateSchema(publishRequestSchema, publishResponseSchema)
+//     .validate(userAuthorization())
+//     .validate(appAuthorization(firestore))
+//     .handle
+//       this.#validatorChainer.handle(handler)(callableRequest)
+//     }
+//   }
+// }
+
 export class ValidatorChainer<Request, Context, Response> {
   private readonly _requestValidator: RequestContextValidator<
     Request,

@@ -11,11 +11,7 @@ import * as v from 'shared/src/valita.js';
 import type WebSocket from 'ws';
 import {createTail} from '../../cloudflare/tail/create-tail.js';
 import type express from 'express';
-import {
-  createTailRequestSchema,
-  createTailResponseSchema,
-} from 'mirror-protocol/src/tail.js';
-import {validateSchema} from '../validators/schema.js';
+
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 
 // This is the API token for reflect-server.net
@@ -59,17 +55,19 @@ const validateFirebaseIdToken = async (
 };
 
 export const create = (firestore: Firestore, auth: Auth) =>
-  onRequest(async (request, response) => {
+  onRequest(async (request: express.Request) => {
+    const response = request.res;
+    if(response === undefined) { 
+        throw new Error('response is undefined');
+    }
     // console.log(typeof request.body);
     // TODO(arv): Validate request.body
     // TODO(arv): userAuthorization()
     // TODO(arv): appAuthorization()
+    // tail-create/<appId>
     await validateFirebaseIdToken(auth, request, response);
-    const x = await userAuthorization();
-    console.log('FDSAFDASFDASFDASFDASFDASFDAS');
-    console.log('x', x);
-    const y = await appAuthorization(firestore);
-    console.log('y', y);
+    await userAuthorization();
+    await appAuthorization(firestore);
     console.log('_request.body', JSON.stringify(request.body));
     console.log('_request.headers', JSON.stringify(request.headers));
 
