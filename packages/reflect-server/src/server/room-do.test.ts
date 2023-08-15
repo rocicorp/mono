@@ -29,6 +29,7 @@ test('sets roomID in createRoom', async () => {
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
+    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
   });
   const createRoomRequest = newCreateRoomRequest(
     'http://example.com/',
@@ -57,6 +58,7 @@ test('inits storage schema', async () => {
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
+    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
   });
 
   await state.concurrencyBlockingCallbacks();
@@ -91,6 +93,7 @@ test('runs roomStartHandler', async () => {
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
+    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
   });
 
   await state.concurrencyBlockingCallbacks();
@@ -120,6 +123,7 @@ test('deleteAllData deletes all data', async () => {
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
+    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
   });
   const createRoomRequest = newCreateRoomRequest(
     'http://example.com/',
@@ -155,6 +159,7 @@ test('after deleteAllData the roomDO just 410s', async () => {
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
+    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
   });
   const createRoomRequest = newCreateRoomRequest(
     'http://example.com/',
@@ -237,6 +242,7 @@ test('401s if wrong auth api key', async () => {
       logSink: testLogSink,
       logLevel: 'info',
       allowUnconfirmedWrites: true,
+      maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
     });
 
     const response = await roomDO.fetch(testRequest);
@@ -255,6 +261,7 @@ test('Logs version during construction', async () => {
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
+    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
   });
   expect(testLogSink.messages).toEqual(
     expect.arrayContaining([
@@ -280,6 +287,7 @@ test('Avoids queueing many intervals in the lock', async () => {
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
+    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
   });
 
   const {promise: canFinishCallback, resolve: finishCallback} =
@@ -358,6 +366,7 @@ test('good, bad, invalid connect requests', async () => {
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
+    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
   });
   for (const test of [goodTest, nonWebSocketTest, badRequestTest]) {
     const response = await roomDO.fetch(test.request);

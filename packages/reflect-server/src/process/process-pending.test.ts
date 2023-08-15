@@ -95,6 +95,7 @@ describe('processPending', () => {
     pendingMutations: PendingMutation[];
     maxProcessedMutationTimestamp: number;
     bufferSizeMs?: number; // default 200
+    maxMutationsToProcess?: number; // default Number.MAX_SAFE_INTEGER
     expectedError?: string;
     expectedVersion: Version;
     expectedPokes?: Map<ClientID, PokeBody>;
@@ -500,6 +501,176 @@ describe('processPending', () => {
         ['c3', clientRecord('cg2', 4, 2, 4)],
       ]),
       expectedMaxProcessedMutationTimestamp: 740,
+      expectedMissableRecords: [
+        {
+          bufferNeededMs: 0,
+          missed: false,
+          now: START_TIME,
+        },
+      ],
+    },
+    {
+      name: 'three clients, two client groups, three mutations, only 2 processed due to maxMutationsToProcess',
+      version: 1,
+      clientRecords: new Map([
+        ['c1', clientRecord('cg1', 1)],
+        ['c2', clientRecord('cg1', 1)],
+        ['c3', clientRecord('cg2', 1)],
+      ]),
+      clients: new Map([
+        client('c1', 'u1', 'cg1', s1, 0),
+        client('c2', 'u2', 'cg1', s2, 0),
+        client('c3', 'u3', 'cg2', s3, 0),
+      ]),
+      storedConnectedClients: ['c1', 'c2', 'c3'],
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamps: 700,
+          name: 'inc',
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamps: 720,
+          name: 'inc',
+        }),
+        pendingMutation({
+          clientID: 'c3',
+          clientGroupID: 'cg2',
+          id: 2,
+          timestamps: 740,
+          name: 'inc',
+        }),
+      ],
+      maxProcessedMutationTimestamp: 700,
+      maxMutationsToProcess: 2,
+      expectedVersion: 3,
+      expectedPokes: new Map([
+        [
+          'c1',
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                lastMutationIDChanges: {c1: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 700,
+              },
+              {
+                baseCookie: 2,
+                cookie: 3,
+                lastMutationIDChanges: {c2: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 2,
+                  },
+                ],
+                timestamp: 720,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
+        ],
+        [
+          'c2',
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                lastMutationIDChanges: {c1: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 700,
+              },
+              {
+                baseCookie: 2,
+                cookie: 3,
+                lastMutationIDChanges: {c2: 2},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 2,
+                  },
+                ],
+                timestamp: 720,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
+        ],
+        [
+          'c3',
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                lastMutationIDChanges: {},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 700,
+              },
+              {
+                baseCookie: 2,
+                cookie: 3,
+                lastMutationIDChanges: {},
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 2,
+                  },
+                ],
+                timestamp: 720,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
+        ],
+      ]),
+      expectedUserValues: new Map([
+        ['count', {value: 2, version: 3, deleted: false}],
+      ]),
+      expectedClientRecords: new Map([
+        ['c1', clientRecord('cg1', 3, 2, 2)],
+        ['c2', clientRecord('cg1', 3, 2, 3)],
+        ['c3', clientRecord('cg2', 3, 1, 1)],
+      ]),
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID: 'c3',
+          clientGroupID: 'cg2',
+          id: 2,
+          timestamps: 740,
+          name: 'inc',
+        }),
+      ],
+      expectedMaxProcessedMutationTimestamp: 720,
       expectedMissableRecords: [
         {
           bufferNeededMs: 0,
@@ -1152,6 +1323,7 @@ describe('processPending', () => {
         () => Promise.resolve(),
         c.maxProcessedMutationTimestamp,
         fakeBufferSizer,
+        c.maxMutationsToProcess ?? Number.MAX_SAFE_INTEGER,
       );
       if (c.expectedError) {
         let expectedE;
@@ -1183,9 +1355,10 @@ describe('processPending', () => {
         if (!expectedPoke) {
           expect(mocket.log.length).toEqual(0);
         } else {
-          expect(mocket.log[0]).toEqual([
-            'send',
-            JSON.stringify(['poke', expectedPoke]),
+          expect(mocket.log[0][0]).toEqual('send');
+          expect(JSON.parse(mocket.log[0][1] as string)).toEqual([
+            'poke',
+            expectedPoke,
           ]);
         }
       }

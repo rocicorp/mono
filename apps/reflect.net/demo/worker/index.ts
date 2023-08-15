@@ -92,6 +92,7 @@ const {
     console.log('deleting old client', tx.clientID);
     await deleteClient(tx, tx.clientID);
   },
+  maxMutationsPerTurn: 100,
 }));
 
 class RoomDO extends SuperRoomDO {
