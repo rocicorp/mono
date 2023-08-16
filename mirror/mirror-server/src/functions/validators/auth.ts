@@ -55,6 +55,11 @@ export function userAuthorization<
  * Validates that the authorized user has privileges to modify the
  * app associated with the request.
  */
+
+/**
+ * Validates that the authorized user has privileges to modify the
+ * app associated with the request.
+ */
 export function appAuthorization<
   Request extends BaseAppRequest,
   Context extends UserAuthorization,
@@ -62,60 +67,46 @@ export function appAuthorization<
   assert(allowedRoles.length > 0, 'allowedRoles must be non-empty');
   return async (request: Request, context: Context) => {
     const {userID} = context;
+    const userDocRef = firestore
+      .doc(userPath(userID))
+      .withConverter(userDataConverter);
     const {appID} = request;
-    const authorization = await getAppByUserId(
-      userID,
-      appID,
-      firestore,
-      allowedRoles,
+    const appDocRef = firestore
+      .doc(appPath(appID))
+      .withConverter(appDataConverter);
+
+    const authorization: AppAuthorization = await firestore.runTransaction(
+      async txn => {
+        const [userDoc, appDoc] = await Promise.all([
+          txn.get(userDocRef),
+          txn.get(appDocRef),
+        ]);
+        if (!userDoc.exists) {
+          throw new HttpsError(
+            'failed-precondition',
+            `User ${userID} has not been initialized`,
+          );
+        }
+        if (!appDoc.exists) {
+          throw new HttpsError('not-found', `App ${appID} does not exist`);
+        }
+        const user = must(userDoc.data());
+        const app = must(appDoc.data());
+        const {teamID} = app;
+        const role = user.roles[teamID];
+        if (allowedRoles.indexOf(role) < 0) {
+          throw new HttpsError(
+            'permission-denied',
+            `User ${userID} has insufficient permissions for App ${appID}`,
+          );
+        }
+        logger.info(
+          `User ${userID} has role ${role} in team ${teamID} of app ${appID}`,
+        );
+        return {app, user, role};
+      },
+      {readOnly: true},
     );
     return {...context, ...authorization};
   };
-}
-
-export async function getAppByUserId(
-  userID: string,
-  appID: string,
-  firestore: Firestore,
-  allowedRoles: Role[] = ['admin', 'member'],
-) {
-  const userDocRef = firestore
-    .doc(userPath(userID))
-    .withConverter(userDataConverter);
-  const appDocRef = firestore
-    .doc(appPath(appID))
-    .withConverter(appDataConverter);
-
-  const authorization: AppAuthorization = await firestore.runTransaction(
-    async txn => {
-      const [userDoc, appDoc] = await Promise.all([
-        txn.get(userDocRef),
-        txn.get(appDocRef),
-      ]);
-      if (!userDoc.exists) {
-        throw new HttpsError(
-          'failed-precondition',
-          `User ${userID} has not been initialized`,
-        );
-      }
-      if (!appDoc.exists) {
-        throw new HttpsError('not-found', `App ${appID} does not exist`);
-      }
-      const user = must(userDoc.data());
-      const app = must(appDoc.data());
-      const {teamID} = app;
-      const role = user.roles[teamID];
-      if (allowedRoles.indexOf(role) < 0) {
-        throw new HttpsError(
-          'permission-denied',
-          `User ${userID} has insufficient permissions for App ${appID}`,
-        );
-      }
-      logger.info(
-        `User ${userID} has role ${role} in team ${teamID} of app ${appID}`,
-      );
-      return {app, user, role};
-    },
-  );
-  return {...authorization};
 }

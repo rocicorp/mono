@@ -1,7 +1,7 @@
 import EventSource from 'eventsource';
 import {getFunctions} from 'firebase/functions';
 import type {BaseRequest} from 'mirror-protocol/src/base.js';
-import {encodeHeaderValue} from 'shared/src/headers.js'
+import {encodeHeaderValue} from 'shared/src/headers.js';
 
 export function createEventSource<R extends BaseRequest>(
   functionName: string,
@@ -12,7 +12,7 @@ export function createEventSource<R extends BaseRequest>(
   const headers = {
     // eslint-disable-next-line @typescript-eslint/naming-convention
     Authorization: `Bearer ${apiToken}`,
-    data: encodeHeaderValue(JSON.stringify(request)), 
+    data: encodeHeaderValue(JSON.stringify(request)),
   };
   const url = createEventSourceUrl(getFunctions(), functionName, appID);
   return new EventSource(url, {
