@@ -3,6 +3,7 @@ import type * as v from 'shared/src/valita.js';
 import {parse} from 'shared/src/valita.js';
 import {RequestContextValidator, ValidatorChainer} from './types.js';
 import {logger} from 'firebase-functions';
+import {OnRequestBuilder} from './https.js';
 
 export function validateSchema<Request, Response>(
   reqSchema: v.Type<Request>,
@@ -13,7 +14,11 @@ export function validateSchema<Request, Response>(
   );
 }
 
-export function requestSchema<Request, Context>(
+export function validateRequest<Request>(reqSchema: v.Type<Request>) {
+  return new OnRequestBuilder(requestSchema(reqSchema));
+}
+
+function requestSchema<Request, Context>(
   schema: v.Type<Request>,
 ): RequestContextValidator<Request, Context, Context> {
   return (request, context) => {
