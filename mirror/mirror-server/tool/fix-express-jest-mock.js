@@ -1,4 +1,3 @@
-
 // @ts-check
 
 // This script fixes the firestore-jest-mock package to use the correct

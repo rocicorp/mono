@@ -3,5 +3,10 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["src", "tool/fix-firestore-jest-mock.js",  "tool/fix-express-jest-mock.js", "tool/build.js"]
+  "include": [
+    "src",
+    "tool/fix-firestore-jest-mock.js",
+    "tool/fix-express-jest-mock.js",
+    "tool/build.js"
+  ]
 }
