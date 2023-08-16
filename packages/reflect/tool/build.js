@@ -28,6 +28,24 @@ function copyPackages() {
   }
 }
 
+function copyWorkerTemplates() {
+  const dir = fs.opendirSync(
+    basePath('..', 'reflect-server', 'out', 'worker-templates'),
+  );
+  for (let file = dir.readSync(); file !== null; file = dir.readSync()) {
+    const src = basePath(
+      '..',
+      'reflect-server',
+      'out',
+      'worker-templates',
+      file.name,
+    );
+
+    const dst = basePath('worker-templates', file.name);
+    doCopy(dst, src, 'packages/reflect-server');
+  }
+}
+
 /**
  * @param {string} dst
  * @param {string} src
@@ -57,3 +75,5 @@ function copyReflectCLI() {
 copyPackages();
 
 copyReflectCLI();
+
+copyWorkerTemplates();

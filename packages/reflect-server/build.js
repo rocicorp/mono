@@ -2,6 +2,7 @@
 /* eslint-env node, es2022 */
 
 import * as esbuild from 'esbuild';
+import * as fs from 'node:fs';
 import {writeFile} from 'fs/promises';
 import * as path from 'path';
 import {sharedOptions} from 'shared/src/build.js';
@@ -53,8 +54,38 @@ function buildInternal(options) {
   });
 }
 
+function copyWorkerTemplates() {
+  const dir = fs.opendirSync(`./src/worker-templates`);
+  for (let file = dir.readSync(); file !== null; file = dir.readSync()) {
+    if (file.name.endsWith('-worker.ts')) {
+      const name = file.name.substring(0, file.name.length - 3);
+      const src = `./src/worker-templates/${file.name}`;
+      const dst = `./out/worker-templates/${name}.js`; // TODO: actually compile to js?
+      doCopy(dst, src);
+    }
+  }
+}
+
+/**
+ * @param {string} dst
+ * @param {string} src
+ */
+function doCopy(dst, src) {
+  if (!fs.existsSync(src)) {
+    console.error(`File does not exist: ${src}.`);
+    process.exit(1);
+  }
+  const dstDir = path.dirname(dst);
+  if (!fs.existsSync(dstDir)) {
+    fs.mkdirSync(dstDir, {recursive: true});
+  }
+
+  fs.copyFileSync(src, dst);
+}
+
 try {
   await Promise.all([buildESM(), buildExample(), buildCLI()]);
+  copyWorkerTemplates();
 } catch (e) {
   console.error(e);
   process.exit(1);

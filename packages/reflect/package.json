@@ -56,7 +56,9 @@
     "index.js",
     "server.d.ts",
     "server.js",
-    "bin/cli.js"
+    "bin/cli.js",
+    "worker-templates/dev-worker.js",
+    "worker-templates/prod-worker.js"
   ],
   "exports": {
     ".": "./index.js",
