@@ -55,11 +55,6 @@ export function userAuthorization<
  * Validates that the authorized user has privileges to modify the
  * app associated with the request.
  */
-
-/**
- * Validates that the authorized user has privileges to modify the
- * app associated with the request.
- */
 export function appAuthorization<
   Request extends BaseAppRequest,
   Context extends UserAuthorization,
