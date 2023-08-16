@@ -48,7 +48,7 @@ const validateFirebaseIdToken = async (
     return;
   }
   const idToken = req.headers.authorization.split('Bearer ')[1];
-  return await auth
+  await auth
     .verifyIdToken(idToken)
     .then(decodedIdToken => {
       console.log('ID Token correctly decoded', decodedIdToken);
@@ -59,6 +59,7 @@ const validateFirebaseIdToken = async (
       console.error('Error while verifying Firebase ID token:', error);
       res.status(401).send('Unauthorized');
     });
+  return;
 };
 
 export const create = (firestore: Firestore, auth: Auth) => {
@@ -153,10 +154,17 @@ export const create = (firestore: Firestore, auth: Auth) => {
 };
 
 function getData(headers: IncomingHttpHeaders): CreateTailRequest {
-  if (!headers['data']) {
+  const dataHeaderValue = headers['data'];
+  if (!dataHeaderValue) {
     throw new Error('data header is missing');
   }
-  const data = decodeHeaderValue(headers['data'] as string);
+  if (typeof dataHeaderValue !== 'string') {
+    throw new Error(
+      'invalid data header, single value expected, received' +
+        JSON.stringify(dataHeaderValue),
+    );
+  }
+  const data = decodeHeaderValue(dataHeaderValue);
   return JSON.parse(data);
 }
 type QueueItem =
