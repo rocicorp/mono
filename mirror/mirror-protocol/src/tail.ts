@@ -32,10 +32,11 @@ export type CreateTailRequest = v.Infer<typeof createTailRequestSchema>;
 
 export const createTailResponseSchema = v.object({
   ...baseResponseFields,
-  tailID: v.string(),
-  tailURL: v.string(),
 });
 export type CreateTailResponse = v.Infer<typeof createTailResponseSchema>;
 
-export const createTail = (appID: string, idToken: string): EventSource =>
-  createEventSource('tail-create', appID, idToken);
+export const createTail = (
+  appID: string,
+  idToken: string,
+  data: CreateTailRequest,
+): EventSource => createEventSource('tail-create', appID, idToken, data);
