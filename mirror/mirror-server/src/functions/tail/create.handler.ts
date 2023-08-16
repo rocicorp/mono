@@ -48,7 +48,7 @@ const validateFirebaseIdToken = async (
     return;
   }
   const idToken = req.headers.authorization.split('Bearer ')[1];
-  await auth
+  const decodedIdToken = await auth
     .verifyIdToken(idToken)
     .then(decodedIdToken => {
       console.log('ID Token correctly decoded', decodedIdToken);
@@ -59,7 +59,7 @@ const validateFirebaseIdToken = async (
       console.error('Error while verifying Firebase ID token:', error);
       res.status(401).send('Unauthorized');
     });
-  return;
+  return decodedIdToken
 };
 
 export const create = (firestore: Firestore, auth: Auth) => {
