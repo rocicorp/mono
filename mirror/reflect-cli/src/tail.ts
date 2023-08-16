@@ -15,7 +15,6 @@ export async function tailHandler(
   _yargs: TailHandlerArgs,
   configDirPath?: string | undefined,
 ) {
-  configDirPath = '/Users/cesar/code/cesartesta';
   const {appID} = mustReadAppConfig(configDirPath);
   const user = await authenticate();
   const idToken = await user.getIdToken();

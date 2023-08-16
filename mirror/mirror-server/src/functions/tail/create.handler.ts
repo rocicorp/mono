@@ -134,12 +134,9 @@ export const create = (firestore: Firestore, auth: Auth) => {
   return onRequest(
     async (request: express.Request, response: express.Response) => {
       const customRequest = request as https.Request;
-      console.log('request.headers!!!!!', request.headers);
-
       const authData = await validateFirebaseIdToken(auth, request, response);
-      console.log('authData', authData);
       if (authData === undefined) {
-        throw new Error('authData is undefined!!!!');
+        throw new Error('authData is undefined!');
       }
       const data = getData(request.headers);
       const callableRequest: CallableRequest<CreateTailRequest> = {
