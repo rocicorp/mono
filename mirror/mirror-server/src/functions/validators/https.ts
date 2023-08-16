@@ -1,5 +1,4 @@
 import type {Request} from 'firebase-functions/v2/https';
-import type {AuthData} from 'firebase-functions/v2/tasks';
 import type {Response} from 'express';
 import type {RequestContextValidator, MaybePromise} from './types.js';
 
@@ -10,12 +9,17 @@ export type OnRequestHandler<Request, Context> = (
   ctx: Context,
 ) => MaybePromise<void>;
 
-export type OnRequestContext = {
+export type HttpsRequestContext = {
   request: Request;
+};
+
+export type HttpsResponseContext = {
   response: Response;
 };
 
-export class HttpsValidatorChainer<Request, Context> {
+export type OnRequestContext = HttpsRequestContext & HttpsResponseContext;
+
+export class OnRequestBuilder<Request, Context> {
   private readonly _requestValidator: RequestContextValidator<
     Request,
     OnRequestContext,
@@ -38,17 +42,17 @@ export class HttpsValidatorChainer<Request, Context> {
    */
   validate<NewContext>(
     nextValidator: RequestContextValidator<Request, Context, NewContext>,
-  ): HttpsValidatorChainer<Request, NewContext> {
-    return new HttpsValidatorChainer(async (request, ctx) => {
+  ): OnRequestBuilder<Request, NewContext> {
+    return new OnRequestBuilder(async (request, ctx) => {
       const context = await this._requestValidator(request, ctx);
       return nextValidator(request, context);
     });
   }
 
   handle(handler: OnRequestHandler<Request, Context>): OnRequest {
-    return async (req, res) => {
-      const ctx: OnRequestContext = {res} as unknown as OnRequestContext;
-      const payload: Request = req.body as unknown as Request;
+    return async (request, response) => {
+      const ctx: OnRequestContext = {request, response};
+      const payload: Request = request.body as Request;
 
       const context = await this._requestValidator(payload, ctx);
       await handler(payload, context);
