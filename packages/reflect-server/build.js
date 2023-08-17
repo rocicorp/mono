@@ -2,6 +2,7 @@
 /* eslint-env node, es2022 */
 
 import * as esbuild from 'esbuild';
+import * as fs from 'node:fs';
 import {writeFile} from 'fs/promises';
 import * as path from 'path';
 import {sharedOptions} from 'shared/src/build.js';
@@ -53,8 +54,37 @@ function buildInternal(options) {
   });
 }
 
+function copyScriptTemplates() {
+  const dir = fs.opendirSync(`./src/script-templates`);
+  for (let file = dir.readSync(); file !== null; file = dir.readSync()) {
+    if (file.name.endsWith('-script.ts')) {
+      const name = file.name.substring(0, file.name.length - 3);
+      const src = `./src/script-templates/${file.name}`;
+      const dst = `./out/script-templates/${name}.js`; // TODO: actually compile to js?
+      doCopy(dst, src);
+    }
+  }
+}
+
+/**
+ * @param {string} dst
+ * @param {string} src
+ */
+function doCopy(dst, src) {
+  if (!fs.existsSync(src)) {
+    throw new Error(`File does not exist: ${src}.`);
+  }
+  const dstDir = path.dirname(dst);
+  if (!fs.existsSync(dstDir)) {
+    fs.mkdirSync(dstDir, {recursive: true});
+  }
+
+  fs.copyFileSync(src, dst);
+}
+
 try {
   await Promise.all([buildESM(), buildExample(), buildCLI()]);
+  copyScriptTemplates();
 } catch (e) {
   console.error(e);
   process.exit(1);
