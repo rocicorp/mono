@@ -130,6 +130,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     this.#lc = lc.withContext('doID', state.id.toString());
 
     this.#lc.info?.('Starting RoomDO. Version:', version);
+    this.#lc.info?.('process.env.NODE_ENV', process.env.NODE_ENV);
 
     void state.blockConcurrencyWhile(async () => {
       await initRoomSchema(this.#lc, this.#storage);
