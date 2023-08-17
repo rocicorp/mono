@@ -7,13 +7,8 @@ import {
   logFilter,
   datadogLogging,
   datadogMetrics,
-  type AllOptionsEnv,
-  ReflectServerBaseEnv,
 } from './server-module-name.js';
-const optionsBuilder = newOptionsBuilder<
-  AllOptionsEnv & ReflectServerBaseEnv,
-  {}
->(makeOptions)
+const optionsBuilder = newOptionsBuilder(makeOptions)
   .add(logLevel())
   .add(defaultConsoleLogSink())
   .add(logFilter((level, ctx) => level === 'error' || ctx?.['vis'] === 'app'))
