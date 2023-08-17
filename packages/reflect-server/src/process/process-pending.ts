@@ -57,7 +57,6 @@ async function processPendingTimed(
   bufferSizer: BufferSizer,
   maxMutationsToProcess: number,
 ): Promise<{maxProcessedMutationTimestamp: number; nothingToProcess: boolean}> {
-  lc = lc.withContext('numClients', clients.size);
   lc.debug?.('process pending');
 
   const storedConnectedClients = await getConnectedClients(storage);
@@ -129,15 +128,18 @@ async function processPendingTimed(
     bufferSizer.recordMissable(t0, missCount > 0, bufferNeededMs, lc);
   }
 
-  lc = lc.withContext('numMutations', toProcess.length);
-  lc.debug?.(
-    'processing',
-    toProcess.length,
-    'of',
-    pendingMutations.length,
-    'pending mutations with',
-    missCount,
-    'forced misses',
+  lc = lc
+    .withContext('numPending', pendingMutations.length)
+    .withContext('numMutations', toProcess.length);
+  lc.info?.(
+    'process pending',
+    {
+      numMutations: toProcess.length,
+      numPending: pendingMutations.length,
+      missCount,
+      hasConnectsOrDisconnectsToProcess,
+    },
+    toProcess,
   );
   const pokes = await processRoom(
     lc,
@@ -175,6 +177,7 @@ function sendPokes(
   // for each client is slow and can be the dominate cost of processPending.
   const pokesByClientID = new Map<ClientID, [Poke, MemoizedPatchString][]>();
   const memoizedPatchStrings = new Map<Patch, MemoizedPatchString>();
+  let patchesLogString = 'Patches:';
   for (const clientPoke of clientPokes) {
     let pokes = pokesByClientID.get(clientPoke.clientID);
     if (!pokes) {
@@ -186,21 +189,23 @@ function sendPokes(
     if (memoizedPatchString === undefined) {
       memoizedPatchString = {string: JSON.stringify(patch), id: randomID()};
       memoizedPatchStrings.set(clientPoke.poke.patch, memoizedPatchString);
-      lc.debug?.(
-        'stringifyed patch id',
-        memoizedPatchString.id,
-        'string',
-        truncate(memoizedPatchString.string, MAX_PATCH_CHARS_TO_LOG),
-      );
+      if (lc.info) {
+        patchesLogString += ` ${memoizedPatchString.id}=${truncate(
+          memoizedPatchString.string,
+          MAX_PATCH_CHARS_TO_LOG,
+        )}`;
+      }
     }
     pokes.push([clientPoke.poke, memoizedPatchString]);
   }
+  lc.info?.(patchesLogString);
   // This manual json string building is necessary, to avoid JSON.stringify-ing
   // the same patches for each client.
+  let pokesForClientsLogString = 'Pokes:';
   for (const [clientID, pokes] of pokesByClientID) {
     const client = must(clients.get(clientID));
     let pokesString = '[';
-    let debugPokesString = '[';
+    let pokesLogString = '[';
     for (let i = 0; i < pokes.length; i++) {
       const [poke, memoizedPatchString] = pokes[i];
       const {patch: _, ...pokeMinusPatch} = poke;
@@ -215,8 +220,8 @@ function sendPokes(
         i,
         pokes.length,
       );
-      if (lc.debug) {
-        debugPokesString += appendPatch(
+      if (lc.info) {
+        pokesLogString += appendPatch(
           pokeMinusPatchStringPrefix,
           memoizedPatchString.id,
           i,
@@ -234,17 +239,18 @@ function sendPokes(
     );
     client.socket.send(pokeMessageString);
 
-    if (lc.debug) {
-      debugPokesString += ']';
-      const debugPokeMessageString = makePokeMessage(
+    if (lc.info) {
+      pokesLogString += ']';
+      const pokeMessageLogString = makePokeMessage(
         requestID,
         client,
         bufferMs,
-        debugPokesString,
+        pokesLogString,
       );
-      lc.debug?.('sending client', clientID, 'poke', debugPokeMessageString);
+      pokesForClientsLogString += ` ${clientID}=${pokeMessageLogString}`;
     }
   }
+  lc.info?.(pokesForClientsLogString);
 }
 
 function appendPatch(

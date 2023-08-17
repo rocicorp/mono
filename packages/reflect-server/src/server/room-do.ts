@@ -129,8 +129,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     registerUnhandledRejectionHandler(lc);
     this.#lc = lc.withContext('doID', state.id.toString());
 
-    this.#lc.info?.('Starting server');
-    this.#lc.info?.('Version:', version);
+    this.#lc.info?.('Starting RoomDO. Version:', version);
 
     void state.blockConcurrencyWhile(async () => {
       await initRoomSchema(this.#lc, this.#storage);
