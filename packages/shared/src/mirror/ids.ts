@@ -19,7 +19,7 @@ export function newAppIDAsNumber(): number {
 }
 
 export function newAppID(n = newAppIDAsNumber()): string {
-  return base62.encode(BigInt(n));
+  return n.toString(36);
 }
 
 /**

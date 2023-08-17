@@ -10,12 +10,12 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-test('appID is timestamp base62 encoded', () => {
+test('appID is timestamp base36 encoded', () => {
   jest.setSystemTime(0);
   expect(newAppID()).toBe('0');
 
   jest.setSystemTime(1234567890);
-  expect(newAppID()).toBe('1LY7VK');
+  expect(newAppID()).toBe('kf12oi');
 });
 
 test('script name', () => {
