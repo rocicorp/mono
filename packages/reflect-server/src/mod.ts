@@ -21,7 +21,7 @@ export {
   logFilter,
   datadogLogging,
   datadogMetrics,
-  type AllOptionsEnv,
+  type BuildableOptionsEnv,
 } from './server/options.js';
 
 export const ROUTES = {

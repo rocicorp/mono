@@ -3,7 +3,7 @@ import type {MutatorDefs} from 'reflect-types/src/mod.js';
 import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
 import {consoleLogSink, createWorkerDatadogLogSink} from '../mod.js';
 
-export type AllOptionsEnv = LogFilterEnv &
+export type BuildableOptionsEnv = LogFilterEnv &
   LogLevelEnv &
   DataDogLogEnv &
   DataDogMetricsEnv;
