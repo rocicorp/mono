@@ -2,4 +2,4 @@ out
 .eslintrc.cjs
 jest.config.js
 templates/*
-src/worker-templates/*
+src/script-templates/*

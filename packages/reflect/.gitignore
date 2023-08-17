@@ -8,6 +8,6 @@
 /server.js
 /server.js.map
 /bin/
-/worker-templates/
+/script-templates/
 
 tsconfig.tsbuildinfo
