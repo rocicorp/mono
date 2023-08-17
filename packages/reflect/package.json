@@ -1,7 +1,7 @@
 {
   "name": "@rocicorp/reflect",
   "description": "",
-  "version": "0.31.0",
+  "version": "0.31.1",
   "license": "SEE LICENSE IN https://roci.dev/terms.html",
   "type": "module",
   "main": "index.js",
@@ -56,7 +56,9 @@
     "index.js",
     "server.d.ts",
     "server.js",
-    "bin/cli.js"
+    "bin/cli.js",
+    "script-templates/dev-script.js",
+    "script-templates/prod-script.js"
   ],
   "exports": {
     ".": "./index.js",
