@@ -14,6 +14,16 @@ export {
   ReflectServerOptions,
   createReflectServer,
 } from './server/reflect.js';
+export {
+  newOptionsBuilder,
+  defaultConsoleLogSink,
+  logLevel,
+  logFilter,
+  datadogLogging,
+  datadogMetrics,
+  type AllOptionsEnv,
+} from './server/options.js';
+
 export const ROUTES = {
   reportMetrics: REPORT_METRICS_PATH,
 };
