@@ -54,13 +54,13 @@ function buildInternal(options) {
   });
 }
 
-function copyWorkerTemplates() {
-  const dir = fs.opendirSync(`./src/worker-templates`);
+function copyScriptTemplates() {
+  const dir = fs.opendirSync(`./src/script-templates`);
   for (let file = dir.readSync(); file !== null; file = dir.readSync()) {
-    if (file.name.endsWith('-worker.ts')) {
+    if (file.name.endsWith('-script.ts')) {
       const name = file.name.substring(0, file.name.length - 3);
-      const src = `./src/worker-templates/${file.name}`;
-      const dst = `./out/worker-templates/${name}.js`; // TODO: actually compile to js?
+      const src = `./src/script-templates/${file.name}`;
+      const dst = `./out/script-templates/${name}.js`; // TODO: actually compile to js?
       doCopy(dst, src);
     }
   }
@@ -72,8 +72,7 @@ function copyWorkerTemplates() {
  */
 function doCopy(dst, src) {
   if (!fs.existsSync(src)) {
-    console.error(`File does not exist: ${src}.`);
-    process.exit(1);
+    throw new Error(`File does not exist: ${src}.`);
   }
   const dstDir = path.dirname(dst);
   if (!fs.existsSync(dstDir)) {
@@ -85,7 +84,7 @@ function doCopy(dst, src) {
 
 try {
   await Promise.all([buildESM(), buildExample(), buildCLI()]);
-  copyWorkerTemplates();
+  copyScriptTemplates();
 } catch (e) {
   console.error(e);
   process.exit(1);

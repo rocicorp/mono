@@ -5,7 +5,7 @@
   "type": "module",
   "dependencies": {
     "@badrap/valita": "^0.2.0",
-    "@rocicorp/reflect": "0.31.0",
+    "@rocicorp/reflect": "0.31.1",
     "esbuild": "^0.18.3",
     "firebase": "9.23.0",
     "firebase-admin": "^11.10.1",
