@@ -265,15 +265,14 @@ test('Logs version during construction', async () => {
   });
   expect(testLogSink.messages).toEqual(
     expect.arrayContaining([
-      ['info', {component: 'RoomDO', doID: 'test-do-id'}, ['Starting server']],
       [
         'info',
         {component: 'RoomDO', doID: 'test-do-id'},
-        ['Version:', version],
+        ['Starting RoomDO. Version:', version],
       ],
     ]),
   );
-  expect(testLogSink.messages[1][2][1]).toMatch(/^\d+\.\d+\.\d+/);
+  expect(testLogSink.messages[0][2][1]).toMatch(/^\d+\.\d+\.\d+/);
 });
 
 test('Avoids queueing many intervals in the lock', async () => {
