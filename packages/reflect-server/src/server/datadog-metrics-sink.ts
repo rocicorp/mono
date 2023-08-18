@@ -46,7 +46,7 @@ async function report(
   const body = JSON.stringify({
     series: series.map(s => ({
       ...s,
-      host: s.host ?? options.host,
+      host: options.host ?? s.host, // The host from sink options takes precedence.
       tags: [...(s.tags ?? []), `service:${options.service}`],
       type: s.type,
     })),
