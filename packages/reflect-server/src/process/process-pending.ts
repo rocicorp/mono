@@ -132,7 +132,7 @@ async function processPendingTimed(
     .withContext('numPending', pendingMutations.length)
     .withContext('numMutations', toProcess.length);
   lc.info?.(
-    'process pending',
+    'Processing turn',
     {
       numMutations: toProcess.length,
       numPending: pendingMutations.length,
@@ -198,7 +198,6 @@ function sendPokes(
     }
     pokes.push([clientPoke.poke, memoizedPatchString]);
   }
-  lc.info?.(patchesLogString);
   // This manual json string building is necessary, to avoid JSON.stringify-ing
   // the same patches for each client.
   let pokesForClientsLogString = 'Pokes:';
@@ -238,7 +237,6 @@ function sendPokes(
       pokesString,
     );
     client.socket.send(pokeMessageString);
-
     if (lc.info) {
       pokesLogString += ']';
       const pokeMessageLogString = makePokeMessage(
@@ -250,7 +248,14 @@ function sendPokes(
       pokesForClientsLogString += ` ${clientID}=${pokeMessageLogString}`;
     }
   }
-  lc.info?.(pokesForClientsLogString);
+  lc.info?.(
+    'Sent ' +
+      pokesByClientID.size +
+      ' pokes.' +
+      (pokesByClientID.size === 0
+        ? ''
+        : ' ' + pokesForClientsLogString + '\n' + patchesLogString),
+  );
 }
 
 function appendPatch(
@@ -287,5 +292,5 @@ function truncate(str: string, maxLength: number) {
   if (str.length < maxLength) {
     return str;
   }
-  return str.substring(0, maxLength) + `(${maxLength}/${str.length} chars)`;
+  return str.substring(0, maxLength) + `...(${maxLength}/${str.length} chars)`;
 }
