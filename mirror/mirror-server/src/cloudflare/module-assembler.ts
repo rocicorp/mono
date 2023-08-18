@@ -49,7 +49,7 @@ export class ModuleAssembler {
           .replaceAll('server-module-name.js', serverModuleName)
           .replaceAll('app-module-name.js', appModuleName)
           .replaceAll('app-script-name', this.#appScriptName);
-        logger.debug('Assembled app script', content);
+        logger.debug('Assembled app script:\n', content);
         const name = this.#uniquifyAndAddName('script.js');
         // Main module is the first.
         assembled.unshift({content, name, type: 'esm'});
@@ -58,7 +58,7 @@ export class ModuleAssembler {
         const content = m.content
           .replaceAll('<REFLECT_SERVER>', serverModuleName)
           .replaceAll('<APP>', appModuleName);
-        logger.debug('Assembled app script', content);
+        logger.debug('Assembled app script:\n', content);
         const name = this.#uniquifyAndAddName('worker.js');
         // Main module is the first.
         assembled.unshift({content, name, type: 'esm'});
