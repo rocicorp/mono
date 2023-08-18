@@ -149,8 +149,7 @@ export class BaseAuthDO implements DurableObject {
     this.#lc = lc.withContext('doID', state.id.toString());
 
     this.#initRoutes();
-    this.#lc.info?.('Starting server');
-    this.#lc.info?.('Version:', version);
+    this.#lc.info?.('Starting AuthDO. Version:', version);
     void state.blockConcurrencyWhile(() =>
       initAuthDOSchema(this.#lc, this.#durableStorage),
     );
@@ -158,10 +157,10 @@ export class BaseAuthDO implements DurableObject {
 
   async fetch(request: Request): Promise<Response> {
     const lc = populateLogContextFromRequest(this.#lc, request);
-    lc.debug?.('Handling request:', request.url);
+    lc.info?.('Handling request:', request.url);
     try {
       const resp = await this.#router.dispatch(request, {lc});
-      lc.debug?.(`Returning response: ${resp.status} ${resp.statusText}`);
+      lc.info?.(`Returning response: ${resp.status} ${resp.statusText}`);
       return resp;
     } catch (e) {
       lc.error?.('Unhandled exception in fetch', e);
@@ -336,7 +335,7 @@ export class BaseAuthDO implements DurableObject {
           ? 'cfWebSocketWSecWebSocketProtocolHeader'
           : 'cfWebSocket',
       );
-    lc.info?.('Handling WebSocket connection check.');
+    lc.debug?.('Handling WebSocket connection check.');
     if (request.headers.get('Upgrade') !== 'websocket') {
       lc.error?.('returning 400 bc missing Upgrade header:', url);
       return new Response('expected websocket', {status: 400});
@@ -350,24 +349,24 @@ export class BaseAuthDO implements DurableObject {
       if (secWebSocketProtocolHeader === null) {
         return new Response('expected Sec-WebSocket-Protocol', {status: 400});
       }
-      lc.info?.(
+      lc.debug?.(
         'Setting response Sec-WebSocket-Protocol to',
         secWebSocketProtocolHeader,
       );
       responseHeaders.set('Sec-WebSocket-Protocol', secWebSocketProtocolHeader);
     } else if (secWebSocketProtocolHeader !== null) {
-      lc.info?.(
+      lc.debug?.(
         'Unexpected Sec-WebSocket-Protocol header',
         secWebSocketProtocolHeader,
       );
     }
     const {0: clientWS, 1: serverWS} = new WebSocketPair();
     serverWS.accept();
-    lc.info?.('Sending hello message');
+    lc.debug?.('Sending hello message');
     serverWS.send('hello');
     let closed = false;
     const onClose = () => {
-      lc.info?.('Socket closed');
+      lc.debug?.('Socket closed');
       closed = true;
       serverWS.removeEventListener('close', onClose);
     };
@@ -382,11 +381,11 @@ export class BaseAuthDO implements DurableObject {
       if (!closed) {
         closed = true;
         serverWS.removeEventListener('close', onClose);
-        lc.info?.('Closing socket');
+        lc.debug?.('Closing socket');
         serverWS.close();
       }
     }, 10_000);
-    lc.info?.('Returning response', {
+    lc.debug?.('Returning response', {
       status: 101,
       headers: responseHeaders.toString(),
     });

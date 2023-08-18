@@ -46,7 +46,7 @@ async function processMutationTimed(
   const cache = new EntryCache(storage);
   const record = await getClientRecord(clientID, cache);
   if (!record) {
-    lc.info?.('client not found', clientID);
+    lc.error?.('client not found', clientID);
     throw new Error(`Client ${clientID} not found`);
   }
 
