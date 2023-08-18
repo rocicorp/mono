@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {assert} from 'shared/src/asserts.js';
 import {cfFetch} from './cf-fetch.js';
-import type {CfDurableObjectMigrations} from './create-worker-upload-form.js';
+import type {CfDurableObjectMigrations} from './create-script-upload-form.js';
 
 export type Migration = {
   /** A unique identifier for this migration. */

@@ -2,7 +2,7 @@ import type {Storage} from 'firebase-admin/storage';
 import {nanoid} from 'nanoid';
 import {cfFetch} from './cf-fetch.js';
 import type {Config} from './config.js';
-import {CfModule, createWorkerUploadForm} from './create-worker-upload-form.js';
+import {CfModule, createScriptUploadForm} from './create-script-upload-form.js';
 import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
 import {publishCustomDomains} from './publish-custom-domains.js';
 import {submitSecret} from './submit-secret.js';
@@ -11,7 +11,7 @@ import {logger} from 'firebase-functions';
 import type {ModuleRef} from 'mirror-schema/src/module.js';
 import {ModuleAssembler} from './module-assembler.js';
 
-export async function createWorker(
+export async function createScript(
   {accountID, scriptName, apiToken}: Config,
   mainModule: CfModule,
   modules: CfModule[],
@@ -23,7 +23,7 @@ export async function createWorker(
     env: undefined,
   });
 
-  const form = createWorkerUploadForm({
+  const form = createScriptUploadForm({
     name: scriptName,
     main: mainModule, // await createCfModule('worker.js'),
     bindings: {
@@ -77,11 +77,15 @@ export async function publish(
   appModules: ModuleRef[],
   serverModules: ModuleRef[],
 ): Promise<string> {
-  const assembler = new ModuleAssembler(appModules, serverModules);
+  const assembler = new ModuleAssembler(
+    config.scriptName,
+    appModules,
+    serverModules,
+  );
   const modules = await assembler.assemble(storage);
 
   logger.log(`publishing ${hostname} (${config.scriptName})`);
-  await createWorker(config, modules[0], modules.slice(1));
+  await createScript(config, modules[0], modules.slice(1));
 
   let reflectAuthApiKey = process.env.REFLECT_AUTH_API_KEY;
   if (!reflectAuthApiKey) {

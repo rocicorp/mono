@@ -4,7 +4,7 @@ import {nanoid} from 'nanoid';
 import * as path from 'node:path';
 import {mustFindAppConfigRoot} from '../app-config.js';
 import {buildReflectServerContent} from '../compile.js';
-import {getWorkerTemplate} from '../get-worker-template.js';
+import {getScriptTemplate} from '../get-script-template.js';
 import {inspectorConsoleClient} from './inspector-console-client.js';
 
 /**
@@ -27,7 +27,8 @@ export async function startDevServer(
       {
         type: 'ESModule',
         path: path.join(appDir, 'worker.js'),
-        contents: getWorkerTemplate(
+        contents: await getScriptTemplate(
+          'dev',
           path.basename(code.path),
           'reflect-server.js',
         ),

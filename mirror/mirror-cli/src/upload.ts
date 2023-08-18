@@ -8,7 +8,7 @@ import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {pkgUp} from 'pkg-up';
 import {buildReflectServerContent} from 'reflect-cli/src/compile.js';
-import {getWorkerTemplate} from 'reflect-cli/src/get-worker-template.js';
+import {getScriptTemplate} from 'reflect-cli/src/get-script-template.js';
 import type {
   CommonYargsArgv,
   YargvToInterface,
@@ -20,7 +20,7 @@ import {storeModule, type Module} from 'mirror-schema/src/module.js';
 const require = createRequire(import.meta.url);
 
 // TODO(arv): This should be a config value
-const bucketName = 'reflect-mirror-staging-servers';
+const bucketName = 'reflect-mirror-staging-modules';
 // TODO(arv): This should be a config value
 const projectId = 'reflect-mirror-staging';
 
@@ -48,7 +48,8 @@ export async function uploadReflectServerHandler(
 
   const source = await buildReflectServerContent();
   const version = await findVersion();
-  const workerTemplate = getWorkerTemplate('<APP>', '<REFLECT_SERVER>');
+  const scriptTemplate = await getScriptTemplate('prod');
+  console.log('Script template:\n', scriptTemplate);
   console.log('Version (from @rocicorp/reflect):', version.toString());
 
   // TODO(arv): Where should this come from? Config or CLI arg?
@@ -62,7 +63,7 @@ export async function uploadReflectServerHandler(
     !!yargs.force,
     version,
     source,
-    workerTemplate,
+    scriptTemplate,
     channel,
   );
 
@@ -87,7 +88,7 @@ async function upload(
   force: boolean,
   version: SemVer,
   source: string,
-  workerTemplate: string,
+  scriptTemplate: string,
   channel: schema.ReleaseChannel,
 ) {
   const main: Module = {
@@ -95,35 +96,41 @@ async function upload(
     name: 'reflect-server.js',
     type: 'esm',
   };
-  const workerTemplateModule: Module = {
-    content: workerTemplate,
-    name: 'worker.template.js',
+  const scriptTemplateModule: Module = {
+    content: scriptTemplate,
+    name: 'script.template.js',
     type: 'esm',
   };
   const bucket = storage.bucket(bucketName);
 
-  const [mainModuleRef, workerTemplateModuleRef] = await Promise.all([
+  console.log(`Uploading modules to ${bucketName}`);
+  const [mainModuleRef, scriptTemplateModuleRef] = await Promise.all([
     storeModule(bucket, main),
-    storeModule(bucket, workerTemplateModule),
+    storeModule(bucket, scriptTemplateModule),
   ]);
 
   const docRef = firestore
     .doc(schema.serverPath(version.toString()))
     .withConverter(schema.serverDataConverter);
 
+  console.log('Writing server to firestore');
   await firestore.runTransaction(async txn => {
     const doc = await txn.get(docRef);
-    if (doc.exists && !force) {
-      console.error(`Version ${version} has already been uploaded`);
-      console.error('Use --force to overwrite');
-      process.exit(1);
+    if (doc.exists) {
+      if (force) {
+        console.info(`Overwriting existing module at ${version} with --force`);
+      } else {
+        console.error(`Version ${version} has already been uploaded`);
+        console.error('Use --force to overwrite');
+        process.exit(1);
+      }
     }
 
     const newDoc: schema.Server = {
       major: version.major,
       minor: version.minor,
       patch: version.patch,
-      modules: [mainModuleRef, workerTemplateModuleRef],
+      modules: [mainModuleRef, scriptTemplateModuleRef],
       channel,
     };
 

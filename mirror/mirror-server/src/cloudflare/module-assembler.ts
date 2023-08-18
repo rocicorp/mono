@@ -3,16 +3,22 @@ import {logger} from 'firebase-functions';
 import {FunctionsErrorCode, HttpsError} from 'firebase-functions/v2/https';
 import {type ModuleRef, loadModule} from 'mirror-schema/src/module.js';
 import {assert} from 'shared/src/asserts.js';
-import type {CfModule} from './create-worker-upload-form.js';
+import type {CfModule} from './create-script-upload-form.js';
 
 export class ModuleAssembler {
+  #appScriptName: string;
   #appModules: ModuleRef[];
   #serverModules: ModuleRef[];
   #uniqueModuleNames: Set<string>;
 
-  constructor(appModules: ModuleRef[], serverModules: ModuleRef[]) {
+  constructor(
+    appScriptName: string,
+    appModules: ModuleRef[],
+    serverModules: ModuleRef[],
+  ) {
     assert(appModules.length >= 1);
     assert(serverModules.length === 2); // The current logic only supports the server and template modules.
+    this.#appScriptName = appScriptName;
     this.#appModules = appModules;
     this.#serverModules = serverModules;
     this.#uniqueModuleNames = assertAllModulesHaveUniqueNames(
@@ -21,7 +27,7 @@ export class ModuleAssembler {
     );
   }
 
-  /** Assembles and returns the list of Modules, starting with main (i.e. worker) module. */
+  /** Assembles and returns the list of Modules, starting with main (i.e. script) module. */
   async assemble(storage: Storage): Promise<CfModule[]> {
     const appModuleName = this.#appModules[0].name;
     let serverModuleName = this.#serverModules[0].name;
@@ -37,10 +43,22 @@ export class ModuleAssembler {
       if (m.name === serverModuleName) {
         serverModuleName = this.#uniquifyAndAddName(serverModuleName);
         assembled.push({...m, name: serverModuleName});
+      } else if (m.name === 'script.template.js') {
+        // Template that comes from packages/reflect-server/script-templates/*-script.ts
+        const content = m.content
+          .replaceAll('server-module-name.js', serverModuleName)
+          .replaceAll('app-module-name.js', appModuleName)
+          .replaceAll('app-script-name', this.#appScriptName);
+        logger.debug('Assembled app script', content);
+        const name = this.#uniquifyAndAddName('script.js');
+        // Main module is the first.
+        assembled.unshift({content, name, type: 'esm'});
       } else if (m.name === 'worker.template.js') {
+        // Legacy worker template. We can get rid of this when old server modules are deleted.
         const content = m.content
           .replaceAll('<REFLECT_SERVER>', serverModuleName)
           .replaceAll('<APP>', appModuleName);
+        logger.debug('Assembled app script', content);
         const name = this.#uniquifyAndAddName('worker.js');
         // Main module is the first.
         assembled.unshift({content, name, type: 'esm'});

@@ -2,7 +2,7 @@ import {describe, expect, test} from '@jest/globals';
 import type {Storage} from 'firebase-admin/storage';
 import type {Module, ModuleRef} from 'mirror-schema/src/module.js';
 import {ModuleAssembler} from './module-assembler.js';
-import type {CfModule} from './create-worker-upload-form.js';
+import type {CfModule} from './create-script-upload-form.js';
 
 describe('module-assembler', () => {
   const serverModules: (Module & ModuleRef)[] = [
@@ -13,10 +13,11 @@ describe('module-assembler', () => {
       content: 'bonk',
     },
     {
-      name: 'worker.template.js',
+      name: 'script.template.js',
       type: 'esm',
-      url: 'gs://reflect-modules/worker.template.js',
-      content: 'import "<REFLECT_SERVER>"; import "<APP>"; do { the thing };',
+      url: 'gs://reflect-modules/script.template.js',
+      content:
+        'import "server-module-name.js"; import "app-module-name.js"; console.log("app-script-name");',
     },
   ];
   type Case = {
@@ -37,9 +38,10 @@ describe('module-assembler', () => {
       ],
       expectedModules: [
         {
-          name: 'worker.js',
+          name: 'script.js',
           type: 'esm',
-          content: 'import "server.js"; import "index.js"; do { the thing };',
+          content:
+            'import "server.js"; import "index.js"; console.log("my-app-script");',
         },
         {
           name: 'index.js',
@@ -57,10 +59,10 @@ describe('module-assembler', () => {
       name: 'name collisions',
       appModules: [
         {
-          name: 'worker.js',
+          name: 'script.js',
           type: 'esm',
           content: 'bar baz',
-          url: 'gs://reflect-modules/app-worker.js',
+          url: 'gs://reflect-modules/app-script.js',
         },
         {
           name: 'server.js',
@@ -71,12 +73,13 @@ describe('module-assembler', () => {
       ],
       expectedModules: [
         {
-          name: 'worker0.js',
+          name: 'script0.js',
           type: 'esm',
-          content: 'import "server0.js"; import "worker.js"; do { the thing };',
+          content:
+            'import "server0.js"; import "script.js"; console.log("my-app-script");',
         },
         {
-          name: 'worker.js',
+          name: 'script.js',
           type: 'esm',
           content: 'bar baz',
         },
@@ -96,16 +99,16 @@ describe('module-assembler', () => {
       name: 'multiple name collisions',
       appModules: [
         {
-          name: 'worker.js',
+          name: 'script.js',
           type: 'esm',
           content: 'bar baz',
-          url: 'gs://reflect-modules/app-worker.js',
+          url: 'gs://reflect-modules/app-script.js',
         },
         {
-          name: 'worker0.js',
+          name: 'script0.js',
           type: 'esm',
           content: 'boo bonk',
-          url: 'gs://reflect-modules/app-worker0.js',
+          url: 'gs://reflect-modules/app-script0.js',
         },
         {
           name: 'server.js',
@@ -122,17 +125,18 @@ describe('module-assembler', () => {
       ],
       expectedModules: [
         {
-          name: 'worker1.js',
+          name: 'script1.js',
           type: 'esm',
-          content: 'import "server1.js"; import "worker.js"; do { the thing };',
+          content:
+            'import "server1.js"; import "script.js"; console.log("my-app-script");',
         },
         {
-          name: 'worker.js',
+          name: 'script.js',
           type: 'esm',
           content: 'bar baz',
         },
         {
-          name: 'worker0.js',
+          name: 'script0.js',
           type: 'esm',
           content: 'boo bonk',
         },
@@ -181,7 +185,11 @@ describe('module-assembler', () => {
         },
       } as unknown as Storage;
 
-      const assembler = new ModuleAssembler(c.appModules, serverModules);
+      const assembler = new ModuleAssembler(
+        'my-app-script',
+        c.appModules,
+        serverModules,
+      );
       expect(await assembler.assemble(storage)).toEqual(c.expectedModules);
     });
   }
