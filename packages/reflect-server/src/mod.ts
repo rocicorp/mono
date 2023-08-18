@@ -33,7 +33,7 @@ export type WorkerDatadogLogSinkOptions = {
   host?: string | undefined;
 };
 export function createWorkerDatadogLogSink(opts: WorkerDatadogLogSinkOptions) {
-  return new DatadogLogSink({...opts, source: 'worker', interval: 1_000});
+  return new DatadogLogSink({...opts, source: 'worker'});
 }
 
 export * from './replicache-mod.js';
