@@ -19,3 +19,8 @@ export const baseHttpsOptions: HttpsOptions = {
   // TODO(darick): Convert to a limited list.
   cors: true,
 };
+
+// e.g. "mirror-prod", "mirror-staging"
+export const mirrorServiceName = projectId.startsWith('reflect-mirror')
+  ? projectId.substring('reflect-'.length)
+  : projectId;

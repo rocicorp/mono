@@ -4,6 +4,7 @@ import {FunctionsErrorCode, HttpsError} from 'firebase-functions/v2/https';
 import {type ModuleRef, loadModule} from 'mirror-schema/src/module.js';
 import {assert} from 'shared/src/asserts.js';
 import type {CfModule} from './create-script-upload-form.js';
+import {mirrorServiceName} from '../config/index.js';
 
 export class ModuleAssembler {
   #appScriptName: string;
@@ -48,7 +49,8 @@ export class ModuleAssembler {
         const content = m.content
           .replaceAll('server-module-name.js', serverModuleName)
           .replaceAll('app-module-name.js', appModuleName)
-          .replaceAll('app-script-name', this.#appScriptName);
+          .replaceAll('app-script-name', this.#appScriptName)
+          .replaceAll('datadog-service-name', mirrorServiceName);
         logger.debug('Assembled app script:\n', content);
         const name = this.#uniquifyAndAddName('script.js');
         // Main module is the first.

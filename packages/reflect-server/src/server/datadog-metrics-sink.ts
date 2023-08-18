@@ -7,6 +7,7 @@ import {
 export type DatadogMetricsSinkOptions = {
   apiKey: string;
   service?: string | undefined;
+  host?: string | undefined;
 };
 
 export function createDatadogMetricsSink(options: DatadogMetricsSinkOptions) {
@@ -45,6 +46,7 @@ async function report(
   const body = JSON.stringify({
     series: series.map(s => ({
       ...s,
+      host: s.host ?? options.host,
       tags: [...(s.tags ?? []), `service:${options.service}`],
       type: s.type,
     })),
