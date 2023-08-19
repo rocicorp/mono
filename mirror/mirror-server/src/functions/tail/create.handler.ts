@@ -5,11 +5,11 @@ import {https, logger} from 'firebase-functions';
 import {defineSecret, defineString} from 'firebase-functions/params';
 import {CallableRequest, onRequest} from 'firebase-functions/v2/https';
 import assert from 'node:assert';
-import {jsonSchema} from 'reflect-protocol/src/json.js';
+import {jsonSchema} from 'reflect-protocol';
 import {Queue} from 'shared/src/queue.js';
 import * as v from 'shared/src/valita.js';
 import type WebSocket from 'ws';
-import {createTail} from '../../cloudflare/tail/create-tail.js';
+import {createTail as createTailDefault} from '../../cloudflare/tail/create-tail.js';
 import type express from 'express';
 
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
@@ -50,19 +50,19 @@ const validateFirebaseIdToken = async (
   const idToken = req.headers.authorization.split('Bearer ')[1];
   const decodedIdToken = await auth
     .verifyIdToken(idToken)
-    .then(decodedIdToken => {
-      console.log('ID Token correctly decoded', decodedIdToken);
-      console.log('returning decodedToken');
-      return decodedIdToken;
-    })
+    .then(decodedIdToken => decodedIdToken)
     .catch(error => {
       console.error('Error while verifying Firebase ID token:', error);
       res.status(401).send('Unauthorized');
     });
-  return decodedIdToken
+  return decodedIdToken;
 };
 
-export const create = (firestore: Firestore, auth: Auth) => {
+export const create = (
+  firestore: Firestore,
+  auth: Auth,
+  createTail = createTailDefault,
+) => {
   const handler = validateSchema(
     createTailRequestSchema,
     createTailResponseSchema,
@@ -72,7 +72,7 @@ export const create = (firestore: Firestore, auth: Auth) => {
     .handle(async (_tailRequest, context) => {
       const response = context.rawRequest.res;
       if (response === undefined) {
-        throw new Error('response is undefined');
+        throw new https.HttpsError('not-found', 'response is undefined');
       }
       response.writeHead(200, {
         'Cache-Control': 'no-store',
@@ -136,6 +136,7 @@ export const create = (firestore: Firestore, auth: Auth) => {
     async (request: express.Request, response: express.Response) => {
       const customRequest = request as https.Request;
       const authData = await validateFirebaseIdToken(auth, request, response);
+
       if (authData === undefined) {
         throw new Error('authData is undefined!');
       }
@@ -167,12 +168,13 @@ function getData(headers: IncomingHttpHeaders): CreateTailRequest {
   const data = decodeHeaderValue(dataHeaderValue);
   return JSON.parse(data);
 }
+
 type QueueItem =
   | {type: 'data'; data: string}
   | {type: 'ping'}
   | {type: 'close'};
 
-function wsQueue(
+export function wsQueue(
   ws: WebSocket,
   pingInterval: number,
 ): AsyncIterable<QueueItem> {
@@ -181,8 +183,11 @@ function wsQueue(
     assert(data instanceof Buffer);
     void q.enqueue({type: 'data', data: data.toString('utf-8')});
   };
+
   ws.onerror = event => void q.enqueueRejection(event);
-  ws.onclose = () => void q.enqueue({type: 'close'});
+  ws.onclose = () => {
+    void q.enqueue({type: 'close'});
+  };
 
   const pingTimer = setInterval(
     () => void q.enqueue({type: 'ping'}),
@@ -199,40 +204,6 @@ function wsQueue(
   };
 }
 
-/*
-{
-    "outcome": "ok",
-    "scriptName": "arv-cli-test-1",
-    "diagnosticsChannelEvents": [],
-    "exceptions": [],
-    "logs": [
-        {
-            "message": [
-                "component=Worker",
-                "scheduled=ry5fw9fphyb",
-                "Handling scheduled event"
-            ],
-            "level": "info",
-            "timestamp": 1691593226241
-        },
-        {
-            "message": [
-                "component=Worker",
-                "scheduled=ry5fw9fphyb",
-                "Returning early because REFLECT_AUTH_API_KEY is not defined in env."
-            ],
-            "level": "debug",
-            "timestamp": 1691593226241
-        }
-    ],
-    "eventTimestamp": 1691593226234,
-    "event": {
-        "cron": "* /5 * * * *",
-        "scheduledTime": 1691593225000
-    }
-}
-*/
-
 const partialRecordSchema = v.object({
   logs: v.array(
     v.object({
@@ -243,7 +214,7 @@ const partialRecordSchema = v.object({
   ),
 });
 
-function writeData(response: Response, data: string) {
+export function writeData(response: Response, data: string) {
   const cfLogRecord = JSON.parse(data);
   const logRecords = v.parse(cfLogRecord, partialRecordSchema, 'strip');
   for (const rec of logRecords.logs) {

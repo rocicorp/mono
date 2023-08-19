@@ -13,5 +13,9 @@ export function mockFunctionParamsAndSecrets() {
         process.env[p.name] = `default-${p.name}`;
         break;
     }
+
+    if (p.name === 'CLOUDFLARE_API_TOKEN') {
+      p.value = p.toString = () => 'cloudflare-api-token';
+    }
   }
 }

@@ -39,8 +39,6 @@ export async function cfFetch<ResponseType = unknown>(
 
   const url = `${base}${resource}${queryString}`;
   logger.debug(`cfFetch: URL: ${url}`, 'init:', init);
-  logger.debug(`cfFetch: apiToken`, apiToken);
-
   const response = await fetch(url, {
     ...init,
     headers: {
