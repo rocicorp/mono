@@ -186,6 +186,9 @@ describe('test create-tail', () => {
     );
     await sleep(1);
     expect(res.write).toBeCalledTimes(2);
+    expect(req.res.write).toBeCalledWith(
+      `data: {"message":["component=Worker","scheduled=ry5fw9fphyb","Returning early because REFLECT_AUTH_API_KEY is not defined in env."],"level":"debug","timestamp":1691593226241}\n\n`,
+    );
     wsMock.close();
     await createTailPromise;
     expect(auth.verifyIdToken).toBeCalledWith('this-is-the-encoded-token');
