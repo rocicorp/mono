@@ -17,10 +17,16 @@ export class DataConverter<T extends DocumentData>
     FirestoreDataConverter<T>,
     firebase.default.firestore.FirestoreDataConverter<T>
 {
-  #schema: v.Type<T>;
+  readonly #schema: v.Type<T>;
+  readonly #mode: v.ParseOptionsMode;
 
-  constructor(schema: v.Type<T>) {
+  constructor(schema: v.Type<T>, mode: v.ParseOptionsMode = 'passthrough') {
     this.#schema = schema;
+    this.#mode = mode;
+  }
+
+  strict(): DataConverter<T> {
+    return new DataConverter(this.#schema, 'strict');
   }
 
   toFirestore(obj: T): DocumentData {
@@ -39,6 +45,6 @@ export class DataConverter<T extends DocumentData>
       | firebase.default.firestore.QueryDocumentSnapshot,
     _?: firebase.default.firestore.SnapshotOptions,
   ): T {
-    return v.parse(snapshot.data(), this.#schema);
+    return v.parse(snapshot.data(), this.#schema, this.#mode);
   }
 }
