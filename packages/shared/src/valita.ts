@@ -118,7 +118,7 @@ function getMessage(err: v.Err, v: unknown): string {
  * 'strict' errors if there are unknown properties.
  * 'passthrough' allows unknown properties.
  */
-type ParseOptionsMode = 'passthrough' | 'strict' | 'strip';
+export type ParseOptionsMode = 'passthrough' | 'strict' | 'strip';
 
 export function parse<T>(
   value: unknown,
