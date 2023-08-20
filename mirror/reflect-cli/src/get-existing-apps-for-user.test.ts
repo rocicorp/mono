@@ -5,6 +5,7 @@ import {
   setTeam,
   setUser,
 } from 'mirror-schema/src/test-helpers.js';
+import {defaultOptions} from 'mirror-schema/src/deployment.js';
 import {getExistingAppsForUser} from './get-existing-apps-for-user.js';
 
 test('list when no team', async () => {
@@ -83,6 +84,7 @@ test('list with one teams and one app', async () => {
       name: 'Name of app-id',
       serverReleaseChannel: 'stable',
       teamID,
+      deploymentOptions: defaultOptions(),
     },
   ]);
 });
@@ -110,6 +112,7 @@ test('list with one teams and two apps', async () => {
       name: 'Name of app-id-1',
       serverReleaseChannel: 'stable',
       teamID,
+      deploymentOptions: defaultOptions(),
     },
     {
       appID: 'app-id-2',
@@ -118,6 +121,7 @@ test('list with one teams and two apps', async () => {
       name: 'Name of app-id-2',
       serverReleaseChannel: 'canary',
       teamID,
+      deploymentOptions: defaultOptions(),
     },
   ]);
 });
@@ -151,6 +155,7 @@ test('list with two teams and two apps total', async () => {
       name: 'Name of app-id-1',
       serverReleaseChannel: 'stable',
       teamID: teamID1,
+      deploymentOptions: defaultOptions(),
     },
     {
       appID: 'app-id-2',
@@ -159,6 +164,7 @@ test('list with two teams and two apps total', async () => {
       name: 'Name of app-id-2',
       serverReleaseChannel: 'canary',
       teamID: teamID2,
+      deploymentOptions: defaultOptions(),
     },
   ]);
 });
@@ -197,6 +203,7 @@ test('list with two teams and 4 apps total', async () => {
       name: 'Name of app-id-1',
       serverReleaseChannel: 'stable',
       teamID: teamID1,
+      deploymentOptions: defaultOptions(),
     },
     {
       appID: 'app-id-2',
@@ -205,6 +212,7 @@ test('list with two teams and 4 apps total', async () => {
       name: 'Name of app-id-2',
       serverReleaseChannel: 'canary',
       teamID: teamID2,
+      deploymentOptions: defaultOptions(),
     },
     {
       appID: 'app-id-3',
@@ -213,6 +221,7 @@ test('list with two teams and 4 apps total', async () => {
       name: 'Name of app-id-3',
       serverReleaseChannel: 'stable',
       teamID: teamID1,
+      deploymentOptions: defaultOptions(),
     },
     {
       appID: 'app-id-4',
@@ -221,6 +230,7 @@ test('list with two teams and 4 apps total', async () => {
       name: 'Name of app-id-4',
       serverReleaseChannel: 'canary',
       teamID: teamID2,
+      deploymentOptions: defaultOptions(),
     },
   ]);
 });
