@@ -5,8 +5,8 @@
   "scripts": {
     "build:watch": "node --no-warnings tool/build.js --watch",
     "build": "node --no-warnings tool/build.js",
-    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
-    "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
+    "test": "npx firebase-tools emulators:exec --only=firestore 'node --experimental-vm-modules ../../node_modules/jest/bin/jest.js'",
+    "test:watch": "npx firebase-tools emulators:exec --only=firestore 'node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch'",
     "serve": "npm run build && npx firebase-tools emulators:start --project staging --only functions",
     "shell": "npx firebase-tools functions:shell",
     "start": "npm run build && npm run shell",

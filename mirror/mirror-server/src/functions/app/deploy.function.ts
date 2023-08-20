@@ -4,10 +4,16 @@ import {logger} from 'firebase-functions';
 import {defineSecret} from 'firebase-functions/params';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {onDocumentCreated} from 'firebase-functions/v2/firestore';
-import * as schema from 'mirror-schema/src/deployment.js';
+import {
+  deploymentPath,
+  deploymentDataConverter,
+  Deployment,
+  DeploymentStatus,
+  DeploymentSecrets,
+} from 'mirror-schema/src/deployment.js';
 import {newDeploymentID} from 'shared/src/mirror/ids.js';
 import {getServerModuleMetadata} from '../../cloudflare/get-server-modules.js';
-import {publish as publishToCloudflare} from '../../cloudflare/publish.js';
+import {publish} from '../../cloudflare/publish.js';
 import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {lockDataConverter, deploymentLockPath} from 'mirror-schema/src/lock.js';
 import {Lock} from './lock.js';
@@ -38,19 +44,23 @@ export const deploy = (firestore: Firestore, storage: Storage) =>
     },
   );
 
+export type PublishFn = typeof publish;
+export const deployInLockForTest = deployInLock;
+
 async function deployInLock(
   firestore: Firestore,
   storage: Storage,
   appID: string,
   deploymentID: string,
+  publishToCloudflare: PublishFn = publish, // Overridden in tests.
 ): Promise<void> {
   const [appDoc, deploymentDoc] = await firestore.runTransaction(tx =>
     Promise.all([
       tx.get(firestore.doc(appPath(appID)).withConverter(appDataConverter)),
       tx.get(
         firestore
-          .doc(schema.deploymentPath(appID, deploymentID))
-          .withConverter(schema.deploymentDataConverter),
+          .doc(deploymentPath(appID, deploymentID))
+          .withConverter(deploymentDataConverter),
       ),
     ]),
   );
@@ -116,20 +126,23 @@ async function deployInLock(
 export function requestDeployment(
   firestore: Firestore,
   appID: string,
-  data: Pick<schema.Deployment, 'requesterID' | 'type' | 'spec'>,
+  data: Pick<Deployment, 'requesterID' | 'type' | 'spec'>,
 ): Promise<string> {
+  const appDocRef = firestore
+    .doc(appPath(appID))
+    .withConverter(appDataConverter);
   return firestore.runTransaction(async tx => {
     for (let i = 0; i < 5; i++) {
       const deploymentID = newDeploymentID();
       const docRef = firestore
-        .doc(schema.deploymentPath(appID, deploymentID))
-        .withConverter(schema.deploymentDataConverter);
+        .doc(deploymentPath(appID, deploymentID))
+        .withConverter(deploymentDataConverter);
       const doc = await tx.get(docRef);
       if (doc.exists) {
         logger.warn(`Deployment ${deploymentID} already exists. Trying again.`);
         continue;
       }
-      const deployment: schema.Deployment = {
+      const deployment: Deployment = {
         ...data,
         deploymentID,
         status: 'REQUESTED',
@@ -137,6 +150,9 @@ export function requestDeployment(
       };
 
       tx.create(docRef, deployment);
+      tx.update(appDocRef, {
+        queuedDeploymentIDs: FieldValue.arrayUnion(deploymentID),
+      });
       return docRef.path;
     }
     throw new HttpsError(
@@ -147,10 +163,10 @@ export function requestDeployment(
 }
 
 function deploymentUpdate(
-  status: Exclude<schema.DeploymentStatus, 'REQUESTED'>,
+  status: Exclude<DeploymentStatus, 'REQUESTED'>,
   statusMessage?: string,
-): Partial<schema.Deployment> {
-  const update: Partial<schema.Deployment> = {status};
+): Partial<Deployment> {
+  const update: Partial<Deployment> = {status};
   if (statusMessage) {
     update.statusMessage = statusMessage;
   }
@@ -173,13 +189,25 @@ async function setDeploymentStatus(
   firestore: Firestore,
   appID: string,
   deploymentID: string,
-  status: Exclude<schema.DeploymentStatus, 'REQUESTED'>,
+  status: 'DEPLOYING' | 'FAILED',
   statusMessage?: string,
 ): Promise<void> {
-  await firestore
-    .doc(schema.deploymentPath(appID, deploymentID))
-    .withConverter(schema.deploymentDataConverter)
-    .update(deploymentUpdate(status, statusMessage));
+  const batch = firestore.batch();
+  batch.update(
+    firestore
+      .doc(deploymentPath(appID, deploymentID))
+      .withConverter(deploymentDataConverter),
+    deploymentUpdate(status, statusMessage),
+  );
+  if (status !== 'DEPLOYING') {
+    batch.update(
+      firestore.doc(appPath(appID)).withConverter(appDataConverter),
+      {
+        queuedDeploymentIDs: FieldValue.arrayRemove(deploymentID),
+      },
+    );
+  }
+  await batch.commit();
 }
 
 /**
@@ -189,24 +217,49 @@ async function setDeploymentStatus(
 async function setRunningDeployment(
   firestore: Firestore,
   appID: string,
-  deploymentID: string,
-  hashesOfSecrets: schema.DeploymentSecrets,
+  newDeploymentID: string,
+  hashesOfSecrets: DeploymentSecrets,
 ): Promise<void> {
-  const collection = firestore
-    .collection(schema.deploymentsCollection(appID))
-    .where('status', 'in', ['DEPLOYING', 'RUNNING'])
-    .withConverter(schema.deploymentDataConverter);
+  const appDocRef = firestore
+    .doc(appPath(appID))
+    .withConverter(appDataConverter);
+  const newDeploymentDocRef = firestore
+    .doc(deploymentPath(appID, newDeploymentID))
+    .withConverter(deploymentDataConverter);
+
   await firestore.runTransaction(async tx => {
-    const deployments = await tx.get(collection);
-    for (const deployment of deployments.docs) {
-      if (deployment.id === deploymentID) {
-        tx.update(deployment.ref, {
-          ...deploymentUpdate('RUNNING'),
-          ['spec.hashesOfSecrets']: hashesOfSecrets,
-        });
-      } else if (deployment.data().status === 'RUNNING') {
-        tx.update(deployment.ref, deploymentUpdate('STOPPED'));
-      }
+    const [appDoc, newDeploymentDoc] = await Promise.all([
+      tx.get(appDocRef),
+      tx.get(newDeploymentDocRef),
+    ]);
+    if (!appDoc.exists) {
+      throw new HttpsError('internal', `Missing ${appID} App doc`);
+    }
+    if (!newDeploymentDoc.exists) {
+      throw new HttpsError(
+        'internal',
+        `Missing ${newDeploymentID} Deployment doc`,
+      );
+    }
+    const newDeployment = must(newDeploymentDoc.data());
+    newDeployment.spec.hashesOfSecrets = hashesOfSecrets;
+    const newRunningDeployment = {
+      ...newDeployment,
+      ...deploymentUpdate('RUNNING'),
+    };
+
+    tx.set(newDeploymentDocRef, newRunningDeployment);
+    tx.update(appDocRef, {
+      runningDeployment: newRunningDeployment,
+      queuedDeploymentIDs: FieldValue.arrayRemove(newDeploymentID),
+    });
+
+    const oldDeploymentID = appDoc.data()?.runningDeployment?.deploymentID;
+    if (oldDeploymentID) {
+      const oldDeploymentDoc = firestore
+        .doc(deploymentPath(appID, oldDeploymentID))
+        .withConverter(deploymentDataConverter);
+      tx.update(oldDeploymentDoc, deploymentUpdate('STOPPED'));
     }
   });
 }

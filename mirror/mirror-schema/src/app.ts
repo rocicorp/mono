@@ -1,6 +1,6 @@
 import * as v from 'shared/src/valita.js';
 import {firestoreDataConverter} from './converter.js';
-import {deploymentOptionsSchema} from './deployment.js';
+import {deploymentOptionsSchema, deploymentSchema} from './deployment.js';
 import * as path from './path.js';
 import {releaseChannelSchema} from './server.js';
 
@@ -20,6 +20,16 @@ export const appSchema = v.object({
   teamID: v.string(),
 
   deploymentOptions: deploymentOptionsSchema,
+
+  // The App document tracks the running and queued deployments and serves as
+  // a coordination point for (1) determining if a new deployment is necessary
+  // (i.e. if the desired `DeploymentSpec` differs from that which is running)
+  // and (2) ensuring that deployments are executed in their requested order.
+  //
+  // These fields are transactionally consistent views of the documents in the
+  // deployments subcollection.
+  runningDeployment: deploymentSchema.optional(),
+  queuedDeploymentIDs: v.array(v.string()).optional(),
 });
 
 export type App = v.Infer<typeof appSchema>;
