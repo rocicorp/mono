@@ -8,10 +8,11 @@ import * as schema from 'mirror-schema/src/deployment.js';
 import {newDeploymentID} from 'shared/src/mirror/ids.js';
 import {getServerModuleMetadata} from '../../cloudflare/get-server-modules.js';
 import {publish as publishToCloudflare} from '../../cloudflare/publish.js';
-import {App, appDataConverter, appPath} from 'mirror-schema/src/app.js';
+import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {lockDataConverter, deploymentLockPath} from 'mirror-schema/src/lock.js';
 import {Lock} from './lock.js';
 import {must} from 'shared/src/must.js';
+import {getAppSecrets} from './secrets.js';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
@@ -63,32 +64,39 @@ async function deployInLock(
     );
   }
 
-  const app: App = must(appDoc.data());
-  const deployment: schema.Deployment = must(deploymentDoc.data());
+  const {cfID, cfScriptName} = must(appDoc.data());
+  const {
+    status,
+    spec: {serverVersion, hostname, options, appModules},
+  } = must(deploymentDoc.data());
 
-  if (deployment.status !== 'REQUESTED') {
-    logger.warn(`Deployment is already ${deployment.status}`);
+  if (status !== 'REQUESTED') {
+    logger.warn(`Deployment is already ${status}`);
     return;
   }
 
   const config = {
-    accountID: app.cfID,
-    scriptName: app.cfScriptName,
+    accountID: cfID,
+    scriptName: cfScriptName,
     apiToken: cloudflareApiToken.value(),
   } as const;
 
   const {modules: serverModules} = await getServerModuleMetadata(
     firestore,
-    deployment.serverVersion,
+    serverVersion,
   );
+
+  const {secrets, hashes} = await getAppSecrets();
 
   await setDeploymentStatus(firestore, appID, deploymentID, 'DEPLOYING');
   try {
     await publishToCloudflare(
       storage,
       config,
-      deployment.hostname,
-      deployment.appModules,
+      hostname,
+      options,
+      secrets,
+      appModules,
       serverModules,
     );
   } catch (e) {
@@ -102,23 +110,13 @@ async function deployInLock(
     throw e;
   }
 
-  await setRunningDeployment(firestore, appID, deploymentID);
+  await setRunningDeployment(firestore, appID, deploymentID, hashes);
 }
 
 export function requestDeployment(
   firestore: Firestore,
   appID: string,
-  data: Pick<
-    schema.Deployment,
-    | 'requesterID'
-    | 'type'
-    | 'appModules'
-    | 'hostname'
-    | 'appVersion'
-    | 'description'
-    | 'serverVersionRange'
-    | 'serverVersion'
-  >,
+  data: Pick<schema.Deployment, 'requesterID' | 'type' | 'spec'>,
 ): Promise<string> {
   return firestore.runTransaction(async tx => {
     for (let i = 0; i < 5; i++) {
@@ -133,6 +131,7 @@ export function requestDeployment(
       }
       const deployment: schema.Deployment = {
         ...data,
+        deploymentID,
         status: 'REQUESTED',
         requestTime: FieldValue.serverTimestamp() as Timestamp,
       };
@@ -191,15 +190,20 @@ async function setRunningDeployment(
   firestore: Firestore,
   appID: string,
   deploymentID: string,
+  hashesOfSecrets: schema.DeploymentSecrets,
 ): Promise<void> {
   const collection = firestore
     .collection(schema.deploymentsCollection(appID))
+    .where('status', 'in', ['DEPLOYING', 'RUNNING'])
     .withConverter(schema.deploymentDataConverter);
   await firestore.runTransaction(async tx => {
     const deployments = await tx.get(collection);
     for (const deployment of deployments.docs) {
       if (deployment.id === deploymentID) {
-        tx.update(deployment.ref, deploymentUpdate('RUNNING'));
+        tx.update(deployment.ref, {
+          ...deploymentUpdate('RUNNING'),
+          ['spec.hashesOfSecrets']: hashesOfSecrets,
+        });
       } else if (deployment.data().status === 'RUNNING') {
         tx.update(deployment.ref, deploymentUpdate('STOPPED'));
       }

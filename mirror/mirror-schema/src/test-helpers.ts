@@ -26,6 +26,7 @@ import {
   type User,
 } from 'mirror-schema/src/user.js';
 import {must} from 'shared/src/must.js';
+import {defaultOptions} from './deployment.js';
 
 // The server and (v8) client Firestore interfaces are largely the same.
 // Have the jest mock implement both, which should largely work for our testing purposes.
@@ -169,6 +170,7 @@ export async function setApp(
     cfID,
     cfScriptName,
     serverReleaseChannel,
+    deploymentOptions: defaultOptions(),
   };
   await firestore
     .doc(appPath(appID))

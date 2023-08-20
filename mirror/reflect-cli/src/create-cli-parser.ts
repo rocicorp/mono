@@ -33,7 +33,7 @@ export function createCLIParserBase(argv: string[]): Argv<{
       alias: 's',
       describe: 'prod, staging, or local (emulator) stack to connect to',
       choices: ['prod', 'staging', 'local'],
-      default: 'prod',
+      default: 'staging',
       requiresArg: true,
     });
 

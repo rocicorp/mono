@@ -5,7 +5,10 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {publishHandler, type PublishCaller} from './publish.js';
 import {useFakeAppConfig, useFakeAuthConfig} from './test-helpers.js';
-import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
+import {
+  deploymentDataConverter,
+  defaultOptions,
+} from 'mirror-schema/src/deployment.js';
 import {Timestamp} from '@google-cloud/firestore';
 import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
 import {initFirebase} from './firebase.js';
@@ -114,13 +117,24 @@ test('it should compile typescript', async () => {
     .doc('apps/foo/deployments/bar')
     .withConverter(deploymentDataConverter)
     .set({
+      deploymentID: 'bar',
       requesterID: 'foo',
       type: 'USER_UPLOAD',
       status: 'RUNNING',
-      appModules: [],
-      hostname: 'app-name.reflect-server-net',
-      serverVersion: '0.1.0',
-      serverVersionRange: '^0.1.0',
+      spec: {
+        appModules: [],
+        hostname: 'app-name.reflect-server-net',
+        serverVersion: '0.1.0',
+        serverVersionRange: '^0.1.0',
+        options: defaultOptions(),
+        hashesOfSecrets: {
+          /* eslint-disable @typescript-eslint/naming-convention */
+          REFLECT_AUTH_API_KEY: 'aaa',
+          DATADOG_LOGS_API_KEY: 'bbb',
+          DATADOG_METRICS_API_KEY: 'ccc',
+          /* eslint-enable @typescript-eslint/naming-convention */
+        },
+      },
       requestTime: Timestamp.now(),
     });
 

@@ -1,4 +1,3 @@
-import {initializeApp} from 'firebase-admin/app';
 import type {Firestore} from 'firebase-admin/firestore';
 import {getFirestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
@@ -19,11 +18,6 @@ import {storeModule, type Module} from 'mirror-schema/src/module.js';
 
 const require = createRequire(import.meta.url);
 
-// TODO(arv): This should be a config value
-const bucketName = 'reflect-mirror-staging-modules';
-// TODO(arv): This should be a config value
-const projectId = 'reflect-mirror-staging';
-
 export function uploadReflectServerOptions(yargs: CommonYargsArgv) {
   return yargs.option('force', {
     describe: 'Overwrite existing version',
@@ -42,9 +36,12 @@ export async function uploadReflectServerHandler(
     'Make sure you run `npm run build` from the root of the repo first',
   );
 
-  initializeApp({projectId});
   const firestore = getFirestore();
   const storage = getStorage();
+  const bucketName =
+    yargs.stack === 'prod'
+      ? 'reflect-mirror-prod-modules'
+      : 'reflect-mirror-staging-modules';
 
   const source = await buildReflectServerContent();
   const version = await findVersion();

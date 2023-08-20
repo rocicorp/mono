@@ -29,6 +29,7 @@ import {
 import {must} from 'shared/src/must.js';
 import {userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
+import {defaultOptions} from 'mirror-schema/src/deployment.js';
 
 const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
@@ -147,6 +148,7 @@ export const create = (firestore: Firestore) =>
           cfID: cloudflareAccountId.value(),
           cfScriptName: scriptName,
           serverReleaseChannel,
+          deploymentOptions: defaultOptions(),
         };
 
         if (createNewTeam) {

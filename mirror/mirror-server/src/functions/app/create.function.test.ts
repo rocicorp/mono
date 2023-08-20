@@ -96,6 +96,14 @@ describe('create when user is already member of a team', () => {
         cfID: 'default-cloudflare-id',
         cfScriptName: expect.any(String),
         serverReleaseChannel: 'stable',
+        deploymentOptions: {
+          vars: {
+            /* eslint-disable @typescript-eslint/naming-convention */
+            DISABLE_LOG_FILTERING: 'false',
+            LOG_LEVEL: 'info',
+            /* eslint-enable @typescript-eslint/naming-convention */
+          },
+        },
       });
 
       const appName = await getAppName(firestore, app.name);
@@ -152,6 +160,14 @@ test('create when no team', async () => {
     cfID: 'default-cloudflare-id',
     cfScriptName: expect.any(String),
     serverReleaseChannel: 'stable',
+    deploymentOptions: {
+      vars: {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        DISABLE_LOG_FILTERING: 'false',
+        LOG_LEVEL: 'info',
+        /* eslint-enable @typescript-eslint/naming-convention */
+      },
+    },
   });
 
   const appName = await getAppName(firestore, app.name);

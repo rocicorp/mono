@@ -7,6 +7,12 @@ import {
   uploadReflectServerHandler,
   uploadReflectServerOptions,
 } from './upload.js';
+import {initializeApp} from 'firebase-admin/app';
+import {
+  wipeDeploymentsHandler,
+  wipeDeploymentsOptions,
+} from './wipe-deployments.js';
+import {addDeploymentsOptionsHandler} from './add-deployment-options.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -26,12 +32,36 @@ async function main(argv: string[]): Promise<void> {
 function createCLIParser(argv: string[]) {
   const reflectCLI = createCLIParserBase(argv);
 
+  reflectCLI.middleware(argv => {
+    initializeApp({
+      projectId:
+        argv.stack === 'prod'
+          ? 'reflect-mirror-prod'
+          : 'reflect-mirror-staging',
+    });
+  });
+
   // upload
   reflectCLI.command(
     'upload',
     '🆙 Build and upload @rocicorp/reflect/server to Firestore',
     uploadReflectServerOptions,
     uploadReflectServerHandler,
+  );
+
+  reflectCLI.command(
+    'addDeploymentOptions',
+    'Adds default deploymentsOptions to Apps that do not have them.',
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    () => {},
+    addDeploymentsOptionsHandler,
+  );
+
+  reflectCLI.command(
+    'wipeDeployments',
+    'Wipes all deployments. Used only in staging while the schema is in flux.',
+    wipeDeploymentsOptions,
+    wipeDeploymentsHandler,
   );
 
   return reflectCLI;

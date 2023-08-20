@@ -1,5 +1,6 @@
 import * as v from 'shared/src/valita.js';
 import {firestoreDataConverter} from './converter.js';
+import {deploymentOptionsSchema} from './deployment.js';
 import * as path from './path.js';
 import {releaseChannelSchema} from './server.js';
 
@@ -17,17 +18,18 @@ export const appSchema = v.object({
   name: v.string(),
   serverReleaseChannel: releaseChannelSchema,
   teamID: v.string(),
+
+  deploymentOptions: deploymentOptionsSchema,
 });
 
 export type App = v.Infer<typeof appSchema>;
 
 export const appDataConverter = firestoreDataConverter(appSchema);
 
-export const APP_COLLECTION = 'apps';
-
-export function appPath(appID: string): string {
-  return path.join(APP_COLLECTION, appID);
-}
+// APP_COLLECTION and appPath() are defined in deployment.js to avoid a cyclic
+// dependency (which otherwise breaks mjs targets). Re-export them here to be
+// consistent with other schema files.
+export {APP_COLLECTION, appPath} from './deployment.js';
 
 export const appNameIndexSchema = v.object({
   appID: v.string(),

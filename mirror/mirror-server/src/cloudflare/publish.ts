@@ -2,7 +2,11 @@ import type {Storage} from 'firebase-admin/storage';
 import {nanoid} from 'nanoid';
 import {cfFetch} from './cf-fetch.js';
 import type {Config} from './config.js';
-import {CfModule, createScriptUploadForm} from './create-script-upload-form.js';
+import {
+  CfModule,
+  CfVars,
+  createScriptUploadForm,
+} from './create-script-upload-form.js';
 import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
 import {publishCustomDomains} from './publish-custom-domains.js';
 import {submitSecret} from './submit-secret.js';
@@ -10,11 +14,16 @@ import {submitTriggers} from './submit-triggers.js';
 import {logger} from 'firebase-functions';
 import type {ModuleRef} from 'mirror-schema/src/module.js';
 import {ModuleAssembler} from './module-assembler.js';
+import type {
+  DeploymentOptions,
+  DeploymentSecrets,
+} from 'mirror-schema/src/deployment.js';
 
 export async function createScript(
   {accountID, scriptName, apiToken}: Config,
   mainModule: CfModule,
   modules: CfModule[],
+  vars: CfVars,
 ) {
   const cfMigrations = await getMigrationsToUpload(scriptName, apiToken, {
     accountId: accountID,
@@ -27,6 +36,7 @@ export async function createScript(
     name: scriptName,
     main: mainModule, // await createCfModule('worker.js'),
     bindings: {
+      vars,
       // eslint-disable-next-line @typescript-eslint/naming-convention
       durable_objects: {
         bindings: [
@@ -74,9 +84,11 @@ export async function publish(
   storage: Storage,
   config: Config,
   hostname: string,
+  options: DeploymentOptions,
+  secrets: DeploymentSecrets,
   appModules: ModuleRef[],
   serverModules: ModuleRef[],
-): Promise<string> {
+): Promise<void> {
   const assembler = new ModuleAssembler(
     config.scriptName,
     appModules,
@@ -85,7 +97,7 @@ export async function publish(
   const modules = await assembler.assemble(storage);
 
   logger.log(`publishing ${hostname} (${config.scriptName})`);
-  await createScript(config, modules[0], modules.slice(1));
+  await createScript(config, modules[0], modules.slice(1), options.vars);
 
   let reflectAuthApiKey = process.env.REFLECT_AUTH_API_KEY;
   if (!reflectAuthApiKey) {
@@ -96,9 +108,9 @@ export async function publish(
 
   await Promise.all([
     publishCustomDomains(config, hostname),
-    submitSecret(config, 'REFLECT_AUTH_API_KEY', reflectAuthApiKey),
     submitTriggers(config, '*/5 * * * *'),
+    ...Object.entries(secrets).map(([name, value]) =>
+      submitSecret(config, name, value),
+    ),
   ]);
-
-  return hostname;
 }
