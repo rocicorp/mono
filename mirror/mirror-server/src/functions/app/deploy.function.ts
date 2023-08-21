@@ -21,7 +21,7 @@ import {getServerModuleMetadata} from '../../cloudflare/get-server-modules.js';
 import {publish} from '../../cloudflare/publish.js';
 import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {must} from 'shared/src/must.js';
-import {getAppSecrets} from './secrets.js';
+import {getAppSecrets, DEPLOYMENT_SECRETS_NAMES} from './secrets.js';
 import {watch} from 'mirror-schema/src/watch.js';
 import {toMillis} from 'mirror-schema/src/timestamp.js';
 
@@ -33,7 +33,7 @@ export const deploy = (firestore: Firestore, storage: Storage) =>
   onDocumentCreated(
     {
       document: 'apps/{appID}/deployments/{deploymentID}',
-      secrets: ['CLOUDFLARE_API_TOKEN'],
+      secrets: ['CLOUDFLARE_API_TOKEN', ...DEPLOYMENT_SECRETS_NAMES],
     },
     async event => {
       const {appID, deploymentID} = event.params;

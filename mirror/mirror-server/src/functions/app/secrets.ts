@@ -6,6 +6,11 @@ import {nanoid} from 'nanoid';
 const datadogLogsApiKey = defineSecret('DATADOG_LOGS_API_KEY');
 const datadogMetricsApiKey = defineSecret('DATADOG_METRICS_API_KEY');
 
+export const DEPLOYMENT_SECRETS_NAMES = [
+  'DATADOG_LOGS_API_KEY',
+  'DATADOG_METRICS_API_KEY',
+] as const;
+
 export async function getAppSecrets() {
   const secrets: DeploymentSecrets = {
     /* eslint-disable @typescript-eslint/naming-convention */
