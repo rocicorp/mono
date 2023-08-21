@@ -1,6 +1,7 @@
 import {
   describe,
   test,
+  jest,
   expect,
   beforeAll,
   afterAll,
@@ -8,10 +9,11 @@ import {
   afterEach,
 } from '@jest/globals';
 import {initializeApp} from 'firebase-admin/app';
-import {Timestamp, getFirestore} from 'firebase-admin/firestore';
+import {FieldValue, Timestamp, getFirestore} from 'firebase-admin/firestore';
 import {resolver} from '@rocicorp/resolver';
 import {
-  deployInLockForTest as deploy,
+  runDeployment,
+  earlierDeployments,
   requestDeployment,
 } from './deploy.function.js';
 import type {Storage} from 'firebase-admin/storage';
@@ -28,6 +30,7 @@ import {setApp, dummySecrets, getApp} from 'mirror-schema/src/test-helpers.js';
 import {must} from 'shared/src/must.js';
 import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
 import {appDataConverter} from 'mirror-schema/src/app.js';
+import {Queue} from 'shared/src/queue.js';
 
 describe('deploy', () => {
   initializeApp({projectId: 'deploy-function-test'});
@@ -145,7 +148,7 @@ describe('deploy', () => {
     expect(app.queuedDeploymentIDs).toEqual([deploymentID]);
     expect(app.runningDeployment).toBeUndefined;
 
-    const deploymentFinished = deploy(
+    const deploymentFinished = runDeployment(
       firestore,
       null as unknown as Storage,
       APP_ID,
@@ -179,7 +182,7 @@ describe('deploy', () => {
     expect(app.queuedDeploymentIDs).toEqual([nextDeploymentID]);
     expect(app.runningDeployment).toEqual(deployment);
 
-    await deploy(
+    await runDeployment(
       firestore,
       null as unknown as Storage,
       APP_ID,
@@ -220,7 +223,7 @@ describe('deploy', () => {
     expect(app.queuedDeploymentIDs).toEqual([deploymentID]);
     expect(app.runningDeployment).toEqual(runningDeployment);
 
-    const deploymentFinished = deploy(
+    const deploymentFinished = runDeployment(
       firestore,
       null as unknown as Storage,
       APP_ID,
@@ -253,5 +256,76 @@ describe('deploy', () => {
 
     const stillRunning = await getDeployment(runningDeployment.deploymentID);
     expect(stillRunning.status).toBe('RUNNING');
+  });
+
+  test('deployment queue', async () => {
+    const setTimeoutCalled = new Queue<void>();
+    const setTimeoutFn = jest
+      .fn()
+      .mockImplementation(() => setTimeoutCalled.enqueue());
+
+    const first = await requestTestDeployment();
+    const second = await requestTestDeployment();
+    const third = await requestTestDeployment();
+
+    const doneWaiting = earlierDeployments(
+      firestore,
+      APP_ID,
+      third,
+      setTimeoutFn as unknown as typeof setTimeout,
+    );
+
+    await setTimeoutCalled.dequeue();
+    expect((await getDeployment(first)).status).toBe('REQUESTED');
+
+    // Simulate the first one finishing on its own.
+    await firestore
+      .doc(appPath(APP_ID))
+      .withConverter(appDataConverter)
+      .update({
+        queuedDeploymentIDs: FieldValue.arrayRemove(first),
+      });
+
+    await setTimeoutCalled.dequeue();
+    expect((await getDeployment(second)).status).toBe('REQUESTED');
+
+    // Fire the second timeout.
+    type TimeoutCallback = () => Promise<void>;
+    await (setTimeoutFn.mock.calls[1][0] as unknown as TimeoutCallback)();
+    expect((await getDeployment(second)).status).toBe('FAILED');
+
+    await doneWaiting;
+  });
+
+  test('concurrent deployments', async () => {
+    const id = await requestTestDeployment();
+    let timesDeployed = 0;
+
+    const results = await Promise.allSettled([
+      runDeployment(
+        firestore,
+        null as unknown as Storage,
+        APP_ID,
+        id,
+        // eslint-disable-next-line require-await
+        async () => {
+          timesDeployed++;
+        },
+      ),
+      runDeployment(
+        firestore,
+        null as unknown as Storage,
+        APP_ID,
+        id,
+        // eslint-disable-next-line require-await
+        async () => {
+          timesDeployed++;
+        },
+      ),
+    ]);
+
+    // Verify that only one of the runs succeeded.
+    expect(results[0].status).not.toBe(results[1].status);
+    expect(timesDeployed).toBe(1);
   });
 });

@@ -1,4 +1,9 @@
-import {Timestamp, type Firestore, FieldValue} from 'firebase-admin/firestore';
+import {
+  Timestamp,
+  type Firestore,
+  FieldValue,
+  Precondition,
+} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {logger} from 'firebase-functions';
 import {defineSecret} from 'firebase-functions/params';
@@ -15,10 +20,10 @@ import {newDeploymentID} from 'shared/src/mirror/ids.js';
 import {getServerModuleMetadata} from '../../cloudflare/get-server-modules.js';
 import {publish} from '../../cloudflare/publish.js';
 import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
-import {lockDataConverter, deploymentLockPath} from 'mirror-schema/src/lock.js';
-import {Lock} from './lock.js';
 import {must} from 'shared/src/must.js';
 import {getAppSecrets} from './secrets.js';
+import {watch} from 'mirror-schema/src/watch.js';
+import {toMillis} from 'mirror-schema/src/timestamp.js';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
@@ -33,21 +38,14 @@ export const deploy = (firestore: Firestore, storage: Storage) =>
     async event => {
       const {appID, deploymentID} = event.params;
 
-      const lockDoc = firestore
-        .doc(deploymentLockPath(appID))
-        .withConverter(lockDataConverter);
-      const deploymentLock = new Lock(lockDoc);
-
-      await deploymentLock.withLock(deploymentID, () =>
-        deployInLock(firestore, storage, appID, deploymentID),
-      );
+      await earlierDeployments(firestore, appID, deploymentID);
+      await runDeployment(firestore, storage, appID, deploymentID);
     },
   );
 
 export type PublishFn = typeof publish;
-export const deployInLockForTest = deployInLock;
 
-async function deployInLock(
+export async function runDeployment(
   firestore: Firestore,
   storage: Storage,
   appID: string,
@@ -100,7 +98,15 @@ async function deployInLock(
 
   const {secrets, hashes} = await getAppSecrets();
 
-  await setDeploymentStatus(firestore, appID, deploymentID, 'DEPLOYING');
+  const lastUpdateTime = must(deploymentDoc.updateTime);
+  await setDeploymentStatus(
+    firestore,
+    appID,
+    deploymentID,
+    'DEPLOYING',
+    undefined,
+    {lastUpdateTime}, // Aborts if another trigger is already publishing the same deployment.
+  );
   try {
     await publishToCloudflare(
       storage,
@@ -164,6 +170,59 @@ export function requestDeployment(
   });
 }
 
+const DEPLOYMENT_FAILURE_TIMEOUT_MS = 1000 * 60; // 1 minute.
+
+export async function earlierDeployments(
+  firestore: Firestore,
+  appID: string,
+  deploymentID: string,
+  setTimeoutFn = setTimeout,
+): Promise<void> {
+  const appDoc = firestore.doc(appPath(appID)).withConverter(appDataConverter);
+  let failureTimeout: NodeJS.Timer | undefined;
+
+  for await (const appSnapshot of watch(appDoc)) {
+    clearTimeout(failureTimeout);
+
+    if (!appSnapshot.exists) {
+      throw new HttpsError('not-found', `App ${appID} has been deleted.`);
+    }
+    const app = must(appSnapshot.data());
+    if (!app.queuedDeploymentIDs?.length) {
+      throw new HttpsError(
+        'aborted',
+        `Deployment ${deploymentID} is no longer queued.`,
+      );
+    }
+    const nextDeploymentID = app.queuedDeploymentIDs[0];
+    if (nextDeploymentID === deploymentID) {
+      return; // Common case: the deployment is next in line.
+    }
+    logger.info(
+      `Waiting for deployments ahead of ${deploymentID}: ${app.queuedDeploymentIDs}`,
+    );
+
+    const deploymentDoc = await firestore
+      .doc(deploymentPath(appID, nextDeploymentID))
+      .withConverter(deploymentDataConverter)
+      .get();
+    const deployment = must(deploymentDoc.data());
+    const lastUpdateTime = must(deploymentDoc.updateTime);
+    const lastActionTime = deployment.deployTime ?? deployment.requestTime;
+    failureTimeout = setTimeoutFn(async () => {
+      await setDeploymentStatus(
+        firestore,
+        appID,
+        nextDeploymentID,
+        'FAILED',
+        'Deployment timed out',
+        {lastUpdateTime},
+      );
+      logger.warn(`Set ${nextDeploymentID} to FAILED after timeout`);
+    }, toMillis(lastActionTime) + DEPLOYMENT_FAILURE_TIMEOUT_MS - Date.now());
+  }
+}
+
 function deploymentUpdate(
   status: Exclude<DeploymentStatus, 'REQUESTED'>,
   statusMessage?: string,
@@ -193,6 +252,7 @@ async function setDeploymentStatus(
   deploymentID: string,
   status: 'DEPLOYING' | 'FAILED',
   statusMessage?: string,
+  precondition: Precondition = {},
 ): Promise<void> {
   const batch = firestore.batch();
   batch.update(
@@ -200,6 +260,7 @@ async function setDeploymentStatus(
       .doc(deploymentPath(appID, deploymentID))
       .withConverter(deploymentDataConverter),
     deploymentUpdate(status, statusMessage),
+    precondition,
   );
   if (status !== 'DEPLOYING') {
     batch.update(
