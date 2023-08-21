@@ -54,15 +54,17 @@ async function deployInLock(
   deploymentID: string,
   publishToCloudflare: PublishFn = publish, // Overridden in tests.
 ): Promise<void> {
-  const [appDoc, deploymentDoc] = await firestore.runTransaction(tx =>
-    Promise.all([
-      tx.get(firestore.doc(appPath(appID)).withConverter(appDataConverter)),
-      tx.get(
-        firestore
-          .doc(deploymentPath(appID, deploymentID))
-          .withConverter(deploymentDataConverter),
-      ),
-    ]),
+  const [appDoc, deploymentDoc] = await firestore.runTransaction(
+    tx =>
+      Promise.all([
+        tx.get(firestore.doc(appPath(appID)).withConverter(appDataConverter)),
+        tx.get(
+          firestore
+            .doc(deploymentPath(appID, deploymentID))
+            .withConverter(deploymentDataConverter),
+        ),
+      ]),
+    {readOnly: true},
   );
   if (!appDoc.exists) {
     throw new HttpsError('not-found', `Missing app doc for ${appID}`);
