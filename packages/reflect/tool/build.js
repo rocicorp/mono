@@ -66,6 +66,8 @@ function doCopy(dst, src, name) {
 }
 
 function copyReflectCLI() {
+  const binDir = basePath('bin');
+  fs.rmSync(binDir, {recursive: true, force: true});
   const src = basePath('..', '..', 'mirror', 'reflect-cli', 'out', 'index.mjs');
   const dst = basePath('bin/cli.js');
   doCopy(dst, src, 'mirror/reflect-cli');
