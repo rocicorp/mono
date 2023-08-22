@@ -1,7 +1,7 @@
 {
   "name": "@rocicorp/reflect",
   "description": "",
-  "version": "0.31.2",
+  "version": "0.31.3",
   "license": "SEE LICENSE IN https://roci.dev/terms.html",
   "type": "module",
   "main": "index.js",
@@ -29,6 +29,7 @@
     "devtools-protocol": "^0.0.1179426",
     "esbuild": "^0.18.3",
     "firebase": "9.23.0",
+    "firebase-functions": "^4.4.0",
     "miniflare": "^3.20230717.0",
     "open": "^9.1.0",
     "picocolors": "^1.0.0",
@@ -58,8 +59,12 @@
     "server.js",
     "bin/cli.js",
     "script-templates/dev-script.js",
-    "script-templates/prod-script.js"
+    "script-templates/prod-script.js",
+    "bin/template"
   ],
+  "directories": {
+    "template": "bin/template"
+  },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
