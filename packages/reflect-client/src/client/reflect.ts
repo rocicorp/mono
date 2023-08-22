@@ -932,7 +932,12 @@ export class Reflect<MD extends MutatorDefs> {
   private async _runLoop() {
     (await this._l).info?.(`Starting Reflect version: ${this.version}`);
 
-    assert(this._socketOrigin);
+    if (this._socketOrigin === null) {
+      (await this._l).info?.(
+        'No socket origin provided, not starting connect loop.',
+      );
+      return;
+    }
 
     let runLoopCounter = 0;
     const bareLogContext = await this._l;
