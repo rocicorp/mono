@@ -26,6 +26,7 @@ import {
   type User,
 } from 'mirror-schema/src/user.js';
 import {must} from 'shared/src/must.js';
+import {DeploymentSecrets, defaultOptions} from './deployment.js';
 
 // The server and (v8) client Firestore interfaces are largely the same.
 // Have the jest mock implement both, which should largely work for our testing purposes.
@@ -169,6 +170,7 @@ export async function setApp(
     cfID,
     cfScriptName,
     serverReleaseChannel,
+    deploymentOptions: defaultOptions(),
   };
   await firestore
     .doc(appPath(appID))
@@ -197,4 +199,14 @@ export async function setAppName(
     .doc(appNameIndexPath(name))
     .withConverter(appNameIndexDataConverter)
     .set({appID});
+}
+
+export function dummySecrets(): DeploymentSecrets {
+  return {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    REFLECT_AUTH_API_KEY: 'dummy1',
+    DATADOG_LOGS_API_KEY: 'dummy2',
+    DATADOG_METRICS_API_KEY: 'dummy3',
+    /* eslint-enable @typescript-eslint/naming-convention */
+  };
 }

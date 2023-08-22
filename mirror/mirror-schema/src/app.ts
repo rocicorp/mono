@@ -1,5 +1,6 @@
 import * as v from 'shared/src/valita.js';
 import {firestoreDataConverter} from './converter.js';
+import {deploymentOptionsSchema, deploymentSchema} from './deployment.js';
 import * as path from './path.js';
 import {releaseChannelSchema} from './server.js';
 
@@ -17,17 +18,28 @@ export const appSchema = v.object({
   name: v.string(),
   serverReleaseChannel: releaseChannelSchema,
   teamID: v.string(),
+
+  deploymentOptions: deploymentOptionsSchema,
+
+  // The App document tracks the running and queued deployments and serves as
+  // a coordination point for (1) determining if a new deployment is necessary
+  // (i.e. if the desired `DeploymentSpec` differs from that which is running)
+  // and (2) ensuring that deployments are executed in their requested order.
+  //
+  // These fields are transactionally consistent views of the documents in the
+  // deployments subcollection.
+  runningDeployment: deploymentSchema.optional(),
+  queuedDeploymentIDs: v.array(v.string()).optional(),
 });
 
 export type App = v.Infer<typeof appSchema>;
 
 export const appDataConverter = firestoreDataConverter(appSchema);
 
-export const APP_COLLECTION = 'apps';
-
-export function appPath(appID: string): string {
-  return path.join(APP_COLLECTION, appID);
-}
+// APP_COLLECTION and appPath() are defined in deployment.js to avoid a cyclic
+// dependency (which otherwise breaks mjs targets). Re-export them here to be
+// consistent with other schema files.
+export {APP_COLLECTION, appPath} from './deployment.js';
 
 export const appNameIndexSchema = v.object({
   appID: v.string(),

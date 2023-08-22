@@ -10,7 +10,10 @@ import type {AuthData} from 'firebase-functions/v2/tasks';
 import {publish} from './publish.function.js';
 import type {PublishRequest} from 'mirror-protocol/src/publish.js';
 import type {Storage} from 'firebase-admin/storage';
-import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
+import {
+  defaultOptions,
+  deploymentDataConverter,
+} from 'mirror-schema/src/deployment.js';
 import {appDataConverter} from 'mirror-schema/src/app.js';
 
 describe('publish', () => {
@@ -78,6 +81,7 @@ describe('publish', () => {
         cfScriptName: 'foo-bar-script',
         serverReleaseChannel: 'stable',
         teamID: 'fooTeam',
+        deploymentOptions: defaultOptions(),
       });
       for (const version of c.serverVersions) {
         await firestore.doc(`servers/${version}`).set({});
@@ -126,24 +130,34 @@ describe('publish', () => {
         expect(deployments.size).toBe(1);
         const deployment = deployments.docs[0].data();
         expect(deployment).toMatchObject({
-          appModules: [
-            {
-              name: 'index.js',
-              type: 'esm',
-              url: 'gs://modulez/e7fb2f4978d27e4f9e23fe22cea2bb3da1632fabb50362e2963c6870a6f1a5',
-            },
-            {
-              name: 'index.js.map',
-              type: 'text',
-              url: 'gs://modulez/3ba8907e7a252327488df390ed517c45b96dead03360019bdca710d1d3f88a',
-            },
-          ],
           requesterID: 'foo',
-          serverVersion: c.expectedServerVersion,
-          serverVersionRange: request.serverVersionRange,
-          hostname: 'foo-bar.reflect-server.net',
-          status: 'REQUESTED',
           type: 'USER_UPLOAD',
+          spec: {
+            appModules: [
+              {
+                name: 'index.js',
+                type: 'esm',
+                url: 'gs://modulez/e7fb2f4978d27e4f9e23fe22cea2bb3da1632fabb50362e2963c6870a6f1a5',
+              },
+              {
+                name: 'index.js.map',
+                type: 'text',
+                url: 'gs://modulez/3ba8907e7a252327488df390ed517c45b96dead03360019bdca710d1d3f88a',
+              },
+            ],
+            serverVersion: c.expectedServerVersion,
+            serverVersionRange: request.serverVersionRange,
+            hostname: 'foo-bar.reflect-server.net',
+            options: {
+              vars: {
+                /* eslint-disable @typescript-eslint/naming-convention */
+                DISABLE_LOG_FILTERING: 'false',
+                LOG_LEVEL: 'info',
+                /* eslint-enable @typescript-eslint/naming-convention */
+              },
+            },
+          },
+          status: 'REQUESTED',
         });
         expect(deployment).toHaveProperty('requestTime');
       }

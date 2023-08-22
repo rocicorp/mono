@@ -17,6 +17,7 @@ import type {Callable} from './types.js';
 import type {User} from 'mirror-schema/src/user.js';
 import type {App} from 'mirror-schema/src/app.js';
 import type {Role} from 'mirror-schema/src/membership.js';
+import {defaultOptions} from 'mirror-schema/src/deployment.js';
 
 const testRequestSchema = v.object({
   ...baseAppRequestFields,
@@ -129,6 +130,7 @@ describe('app authorization', () => {
     cfID: 'cfID',
     cfScriptName: 'cfScriptName',
     serverReleaseChannel: 'stable',
+    deploymentOptions: defaultOptions(),
   };
   const defaultUser: User = {
     email: 'foo@bar.com',

@@ -9,11 +9,14 @@ import {
 import * as semver from 'semver';
 import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
 import {storeModule, type Module, ModuleRef} from 'mirror-schema/src/module.js';
+import type {DeploymentSpec} from 'mirror-schema/src/deployment.js';
 import {assertAllModulesHaveUniqueNames} from '../../cloudflare/module-assembler.js';
 import {findNewestMatchingVersion} from './find-newest-matching-version.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {requestDeployment} from './deploy.function.js';
+import type {App} from 'mirror-schema/src/app.js';
+import {getAppSecrets} from './secrets.js';
 
 export const publish = (
   firestore: Firestore,
@@ -33,18 +36,10 @@ export const publish = (
       ];
       assertAllModulesHaveUniqueNames(appModules, 'invalid-argument');
 
-      if (semver.validRange(serverVersionRange) === null) {
-        throw new HttpsError('invalid-argument', 'Invalid desired version');
-      }
-
-      const range = new semver.Range(serverVersionRange);
-      if (!isSupportedSemverRange(range)) {
-        throw new HttpsError('invalid-argument', 'Unsupported desired version');
-      }
-
-      const serverVersion = await findNewestMatchingVersion(firestore, range);
-      logger.log(
-        `Found matching version for ${serverVersionRange}: ${serverVersion}`,
+      const spec = await computeDeploymentSpec(
+        firestore,
+        app,
+        serverVersionRange,
       );
 
       const appModuleRefs = await saveToGoogleCloudStorage(
@@ -56,17 +51,47 @@ export const publish = (
       const deploymentPath = await requestDeployment(firestore, appID, {
         requesterID: userID,
         type: 'USER_UPLOAD',
-        appModules: appModuleRefs,
-        hostname: `${app.name}.reflect-server.net`,
-        // appVersion
-        // description
-        serverVersionRange,
-        serverVersion,
+        spec: {
+          ...spec,
+          appModules: appModuleRefs,
+          // appVersion
+          // description
+        },
       });
 
       logger.log(`Requested ${deploymentPath}`);
       return {deploymentPath, success: true};
     });
+
+async function computeDeploymentSpec(
+  firestore: Firestore,
+  app: App,
+  serverVersionRange: string,
+): Promise<Omit<DeploymentSpec, 'appModules' | 'appVersion' | 'description'>> {
+  if (semver.validRange(serverVersionRange) === null) {
+    throw new HttpsError('invalid-argument', 'Invalid desired version');
+  }
+
+  const range = new semver.Range(serverVersionRange);
+  if (!isSupportedSemverRange(range)) {
+    throw new HttpsError('invalid-argument', 'Unsupported desired version');
+  }
+
+  const serverVersion = await findNewestMatchingVersion(firestore, range);
+  logger.log(
+    `Found matching version for ${serverVersionRange}: ${serverVersion}`,
+  );
+
+  const {hashes: hashesOfSecrets} = await getAppSecrets();
+
+  return {
+    serverVersionRange,
+    serverVersion,
+    hostname: `${app.name}.reflect-server.net`,
+    options: app.deploymentOptions,
+    hashesOfSecrets,
+  };
+}
 
 function saveToGoogleCloudStorage(
   storage: Storage,
