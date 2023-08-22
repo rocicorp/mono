@@ -106,7 +106,7 @@ test('does not flush more than max entries', async () => {
   expect(numLogEntriesInRequest(2)).toBe(123);
 });
 
-test('flushes MAX_LOG_ENTRIES_PER_FLUSH at at time until size is below FORCE_FLUSH_THRESHOLD', async () => {
+test('flushes MAX_LOG_ENTRIES_PER_FLUSH at a time until size is below FORCE_FLUSH_THRESHOLD', async () => {
   const l = new DatadogLogSink({
     apiKey: 'apiKey',
     interval: 10,

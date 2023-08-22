@@ -160,7 +160,7 @@ export class DatadogLogSink implements LogSink {
                 MAX_MESSAGE_RETRIES + 1
               } times.`,
             );
-            // Remove messages that have failed to many times.
+            // Remove messages that have failed too many times.
             this._messages.splice(0, numWithTooManyRetries);
           }
         }
