@@ -72,7 +72,7 @@ export function logLevel<Env extends LogLevelEnv, MD extends MutatorDefs>(
       case undefined:
         break;
       default:
-        throw new Error(`Invalid value for FORCE_LOG_LEVEL: ${env.LOG_LEVEL}`);
+        throw new Error(`Invalid value for LOG_LEVEL: ${env.LOG_LEVEL}`);
     }
     return {...options, logLevel: defaultLogLevel};
   };
