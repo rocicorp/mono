@@ -47,6 +47,18 @@ describe('deployment', () => {
     });
   });
 
+  test('protoless valita defaultOptions', () => {
+    const protoless = Object.freeze(Object.create(null));
+    const defaultDeploy = Object.create(protoless);
+    defaultDeploy['DISABLE_LOG_FILTERING'] = 'false';
+    defaultDeploy['LOG_LEVEL'] = 'info';
+    expect(varsSchema.parse({}).constructor).toBeDefined();
+    expect(
+      defaultDeploy.constructor === varsSchema.parse({}).constructor,
+    ).toEqual(false);
+    expect(defaultOptions().vars).toEqual(varsSchema.parse({}));
+  });
+
   test('vars embedded in docs are normalized on parse', () => {
     const parsedApp = appSchema.parse({
       cfID: 'foo',
