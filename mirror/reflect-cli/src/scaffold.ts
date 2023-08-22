@@ -1,6 +1,6 @@
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import color from 'picocolors';
-import fs from 'node:fs';
+import fs, {existsSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import validateProjectName from 'validate-npm-package-name';
@@ -29,6 +29,13 @@ const templateDir = path.resolve(
   `template`,
 );
 
+const templateBinDir = path.resolve(
+  fileURLToPath(import.meta.url),
+  '../..',
+  'bin',
+  `template`,
+);
+
 type ScaffoldHandlerArgs = YargvToInterface<ReturnType<typeof scaffoldOptions>>;
 
 export function scaffoldHandler(yargs: ScaffoldHandlerArgs) {
@@ -45,7 +52,11 @@ export function scaffoldHandler(yargs: ScaffoldHandlerArgs) {
     process.exit(1);
   }
   console.log(color.green(`Creating folder: ${color.bgWhite(name)}`));
-  copyDir(templateDir, name);
+
+  const sourceDir = existsSync(templateDir) ? templateDir : templateBinDir;
+
+  copyDir(sourceDir, name);
+
   updateProjectName(name);
   updateEnvFile(name, `wss://${name}.reflect-server.net`);
   console.log(color.green('Finished initializing your reflect project 🎉'));

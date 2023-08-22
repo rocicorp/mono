@@ -62,7 +62,6 @@ function doCopy(dst, src, name) {
   if (!fs.existsSync(dstDir)) {
     fs.mkdirSync(dstDir, {recursive: true});
   }
-
   fs.copyFileSync(src, dst);
 }
 
@@ -70,6 +69,9 @@ function copyReflectCLI() {
   const src = basePath('..', '..', 'mirror', 'reflect-cli', 'out', 'index.mjs');
   const dst = basePath('bin/cli.js');
   doCopy(dst, src, 'mirror/reflect-cli');
+  const templateSrc = basePath('..', '..', 'mirror', 'reflect-cli', 'template');
+  const templateDst = basePath('bin', 'template');
+  fs.cpSync(templateSrc, templateDst, {recursive: true});
 }
 
 copyPackages();
