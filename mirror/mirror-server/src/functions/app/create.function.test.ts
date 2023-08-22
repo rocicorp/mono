@@ -75,9 +75,6 @@ describe('app-create function', () => {
           [TEAM_ID]: role,
         });
 
-        // Make sure to set team before membership to not trigger a bug in
-        // firestore-jest-mock.
-        // https://github.com/Upstatement/firestore-jest-mock/issues/170
         const team = await setTeam(firestore, TEAM_ID, {
           numAdmins: 1,
           maxApps: 5,
@@ -203,9 +200,6 @@ describe('app-create function', () => {
       [TEAM_ID]: 'admin',
     });
 
-    // Make sure to set team before membership to not trigger a bug in
-    // firestore-jest-mock.
-    // https://github.com/Upstatement/firestore-jest-mock/issues/170
     const team = await setTeam(firestore, TEAM_ID, {
       numAdmins: 1,
       numApps: 5,
