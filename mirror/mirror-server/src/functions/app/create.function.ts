@@ -11,7 +11,6 @@ import {
   appNameIndexDataConverter,
   appNameIndexPath,
   appPath,
-  appSchema,
 } from 'mirror-schema/src/app.js';
 import {
   Membership,
@@ -21,7 +20,6 @@ import {
 import {Team, teamDataConverter, teamPath} from 'mirror-schema/src/team.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import assert from 'node:assert';
-import {assert as valitaAssert} from 'shared/src/valita.js';
 import {
   newAppID,
   newAppIDAsNumber,
@@ -161,7 +159,6 @@ export const create = (firestore: Firestore) =>
         } else {
           txn.update(teamDocRef, team);
         }
-        valitaAssert(app, appSchema);
         txn.create(appDocRef, app);
         txn.create(appNameDocRef, {appID});
         return {appID, name: scriptName, success: true};
