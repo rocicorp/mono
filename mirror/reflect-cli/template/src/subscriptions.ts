@@ -1,7 +1,7 @@
 import type {Reflect} from '@rocicorp/reflect/client';
 import {useSubscribe} from 'replicache-react';
-import {ClientState, clientStatePrefix} from './client-state';
-import type {M} from './mutators';
+import {ClientState, clientStatePrefix} from './reflect/client-state';
+import type {M} from './reflect/mutators';
 
 export function useCount(reflect: Reflect<M>, key: string) {
   return useSubscribe(
@@ -18,7 +18,7 @@ export function useClientStates(reflect: Reflect<M>) {
       (await tx
         .scan({prefix: clientStatePrefix})
         .entries()
-        .toArray()) as readonly [string, ClientState][],
+        .toArray()) as (readonly [string, ClientState])[],
     [],
   );
 }
