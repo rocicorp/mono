@@ -55,8 +55,10 @@ export const server = {
 
 export const tail = {
   create: https.onRequest(
-    baseHttpsOptions,
+    {
+      ...baseHttpsOptions,
+      secrets: ['CLOUDFLARE_API_TOKEN', ...DEPLOYMENT_SECRETS_NAMES],
+    },
     tailFunctions.create(getFirestore(), getAuth()),
   ),
-  // delete: https.onCall(baseHttpsOptions, tailFunctions.delete(getFirestore())),
 };

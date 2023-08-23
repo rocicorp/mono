@@ -11,6 +11,7 @@ import * as v from 'shared/src/valita.js';
 import type WebSocket from 'ws';
 import {createTail as createTailDefault} from '../../cloudflare/tail/create-tail.js';
 import type express from 'express';
+import packageJson from '../../../package.json';
 
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
@@ -81,17 +82,17 @@ export const create = (
       response.flushHeaders();
 
       // TODO(arv): Not sure why this is not working?
-      const apiToken =
-        cloudflareApiToken.value() ||
-        '7egl0VDDRceLm853K9YMrGF_DYn4BCnt4R8NvZjz';
+      const apiToken = cloudflareApiToken.value();
+      console.log('apiToken', apiToken);
+      if (!apiToken) {
+        throw new Error('apiToken is undefined!');
+      }
       const accountID = cloudflareAccountId.value();
       const cfWorkerName = context.app.cfScriptName;
       const filters = {filters: []};
       const debug = true;
       const env = undefined;
-      // TODO(arv): Grab this.
-      const packageVersion = '0.30.0';
-
+      const packageVersion = packageJson.version || '0.0.0';
       console.log({
         apiToken,
         accountID,

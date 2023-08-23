@@ -1,7 +1,7 @@
 import {describe, test, jest, expect, beforeEach} from '@jest/globals';
 import type {Auth} from 'firebase-admin/auth';
 import type {https} from 'firebase-functions/v2';
-import {mockCloudflareStringParam} from '../../test-helpers.js';
+import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {create} from './create.handler.js';
 import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
 import {getMockReq, getMockRes} from '@jest-mock/express';
@@ -50,7 +50,7 @@ export class MockSocket {
   }
 }
 
-mockCloudflareStringParam();
+mockFunctionParamsAndSecrets();
 
 describe('test create-tail', () => {
   let firestore: Firestore & firebase.default.firestore.Firestore;
