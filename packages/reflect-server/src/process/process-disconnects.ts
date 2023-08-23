@@ -10,6 +10,7 @@ import {
   putConnectedClients,
 } from '../types/connected-clients.js';
 import {putVersion} from '../types/version.js';
+import type {PendingMutation} from 'replicache';
 
 const NOOP_MUTATION_ID = -1;
 
@@ -17,11 +18,20 @@ export async function processDisconnects(
   lc: LogContext,
   disconnectHandler: DisconnectHandler,
   connectedClients: ClientID[],
+  pendingMutations: PendingMutation[],
+  numPendingMutationsProcessed: number,
   storage: Storage,
   nextVersion: Version,
 ): Promise<void> {
   const currentlyConnectedClients = new Set(connectedClients);
+  const clientsWithPendingMutations = new Set();
+  for (let i = numPendingMutationsProcessed; i < pendingMutations.length; i++) {
+    clientsWithPendingMutations.add(pendingMutations[i].clientID);
+  }
   const storedConnectedClients = await getConnectedClients(storage);
+  const newStoredConnectedClients = new Set<ClientID>(
+    currentlyConnectedClients,
+  );
   lc.debug?.(
     'Checking for disconnected clients.',
     'Currently connected',
@@ -30,7 +40,19 @@ export async function processDisconnects(
     [...storedConnectedClients],
   );
   for (const clientID of storedConnectedClients) {
-    if (!currentlyConnectedClients.has(clientID)) {
+    if (
+      currentlyConnectedClients.has(clientID) ||
+      clientsWithPendingMutations.has(clientID)
+    ) {
+      newStoredConnectedClients.add(clientID);
+      if (!currentlyConnectedClients.has(clientID)) {
+        lc.debug?.(
+          'Not Executing disconnectHandler for disconnected:',
+          clientID,
+          'because it has pending mutations',
+        );
+      }
+    } else {
       lc.debug?.('Executing disconnectHandler for:', clientID);
       const cache = new EntryCache(storage);
       const tx = new ReplicacheTransaction(
@@ -50,5 +72,5 @@ export async function processDisconnects(
       }
     }
   }
-  await putConnectedClients(currentlyConnectedClients, storage);
+  await putConnectedClients(newStoredConnectedClients, storage);
 }

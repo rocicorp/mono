@@ -17,31 +17,18 @@ import type {MutatorMap} from './process-mutation.js';
 export const FRAME_LENGTH_MS = 1000 / 60;
 const FLUSH_SIZE_THRESHOLD_FOR_LOG_FLUSH = 500;
 
-/**
- * Process all pending mutations that are ready to be processed for a room.
- * @param clients active clients in the room
- * @param clientGroups client groups with pending mutations
- * @param mutators all known mutators
- * @param durable storage to read/write to
- * @param timestamp timestamp to put in resulting pokes
- */
 export async function processRoom(
   lc: LogContext,
   clients: ClientMap,
   pendingMutations: PendingMutation[],
+  numPendingMutationsToProcess: number,
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
   storage: DurableStorage,
 ): Promise<ClientPoke[]> {
   const cache = new EntryCache(storage);
   const clientIDs = [...clients.keys()];
-  lc.debug?.(
-    'processing room',
-    'clientIDs',
-    [...clientIDs.entries()],
-    ' pendingMutations',
-    [...pendingMutations.entries()],
-  );
+  lc.debug?.('processing room');
 
   // Before running any mutations, fast forward connected clients to
   // current state.
@@ -75,6 +62,7 @@ export async function processRoom(
     ...(await processFrame(
       lc,
       pendingMutations,
+      numPendingMutationsToProcess,
       mutators,
       disconnectHandler,
       clients,
