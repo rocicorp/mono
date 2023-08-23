@@ -18,7 +18,23 @@
 
 import {type WriteTransaction} from '@rocicorp/reflect/server';
 import {getClientState, initClientState, putClientState} from './client-state';
+
+export const mutators = {
+  setCursor,
+  initClientState,
+  increment,
+};
+
 export type M = typeof mutators;
+
+export async function increment(
+  tx: WriteTransaction,
+  {key, delta}: {key: string; delta: number},
+) {
+  const prev = (await tx.get(key)) as number | undefined;
+  const next = (prev ?? 0) + delta;
+  await tx.put(key, next);
+}
 
 export async function setCursor(
   tx: WriteTransaction,
@@ -35,10 +51,3 @@ export async function setCursor(
     },
   });
 }
-
-export const mutators = {
-  setCursor,
-  initClientState,
-};
-
-export type Mutators = typeof mutators;
