@@ -25,6 +25,7 @@ import {MutatorMap, processMutation} from './process-mutation.js';
 export async function processFrame(
   lc: LogContext,
   pendingMutations: PendingMutation[],
+  numPendingMutationsToProcess: number,
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
   clients: ClientMap,
@@ -39,10 +40,9 @@ export async function processFrame(
   let nextVersion = (prevVersion ?? 0) + 1;
 
   lc.debug?.('prevVersion', prevVersion, 'nextVersion', nextVersion);
-  let count = 0;
   const clientPokes: ClientPoke[] = [];
-  for (const pendingMutation of pendingMutations) {
-    count++;
+  for (let i = 0; i < numPendingMutationsToProcess; i++) {
+    const pendingMutation = pendingMutations[i];
     const mutationCache = new EntryCache(cache);
     const newLastMutationID = await processMutation(
       lc,
@@ -86,13 +86,15 @@ export async function processFrame(
     }
   }
 
-  lc.debug?.(`processed ${count} mutations`);
+  lc.debug?.(`processed ${numPendingMutationsToProcess} mutations`);
 
   const disconnectsCache = new EntryCache(cache);
   await processDisconnects(
     lc,
     disconnectHandler,
     clientIDs,
+    pendingMutations,
+    numPendingMutationsToProcess,
     disconnectsCache,
     nextVersion,
   );

@@ -56,6 +56,7 @@ describe('processFrame', () => {
   type Case = {
     name: string;
     pendingMutations: PendingMutation[];
+    numPendingMutationsToProcess: number;
     clients: ClientMap;
     clientRecords: ClientRecordMap;
     storedConnectedClients: ClientID[];
@@ -64,6 +65,7 @@ describe('processFrame', () => {
     expectedClientRecords: ClientRecordMap;
     expectedVersion: Version;
     expectedDisconnectedClients: ClientID[];
+    expectedConnectedClients: ClientID[];
     disconnectHandlerThrows: boolean;
   };
 
@@ -91,6 +93,7 @@ describe('processFrame', () => {
     {
       name: 'no mutations, no clients',
       pendingMutations: [],
+      numPendingMutationsToProcess: 0,
       clients: new Map(),
       clientRecords: records,
       storedConnectedClients: [],
@@ -99,11 +102,13 @@ describe('processFrame', () => {
       expectedClientRecords: records,
       expectedVersion: startVersion,
       expectedDisconnectedClients: [],
+      expectedConnectedClients: [],
       disconnectHandlerThrows: false,
     },
     {
       name: 'no mutations, one client',
       pendingMutations: [],
+      numPendingMutationsToProcess: 0,
       clients: new Map([client('c1', 'u1', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1'],
@@ -112,6 +117,7 @@ describe('processFrame', () => {
       expectedClientRecords: records,
       expectedVersion: startVersion,
       expectedDisconnectedClients: [],
+      expectedConnectedClients: ['c1'],
       disconnectHandlerThrows: false,
     },
     {
@@ -126,6 +132,7 @@ describe('processFrame', () => {
           args: {key: 'foo', value: 'bar'},
         }),
       ],
+      numPendingMutationsToProcess: 1,
       clients: new Map([client('c1', 'u1', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1'],
@@ -156,6 +163,7 @@ describe('processFrame', () => {
       ]),
       expectedVersion: startVersion + 1,
       expectedDisconnectedClients: [],
+      expectedConnectedClients: ['c1'],
       disconnectHandlerThrows: false,
     },
     {
@@ -170,6 +178,7 @@ describe('processFrame', () => {
           args: {key: 'foo', value: 'bar'},
         }),
       ],
+      numPendingMutationsToProcess: 1,
       clients: new Map([client('c1', 'u1', 'cg1'), client('c2', 'u2', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1', 'c2'],
@@ -217,6 +226,7 @@ describe('processFrame', () => {
       ]),
       expectedVersion: startVersion + 1,
       expectedDisconnectedClients: [],
+      expectedConnectedClients: ['c1', 'c2'],
       disconnectHandlerThrows: false,
     },
     {
@@ -235,6 +245,7 @@ describe('processFrame', () => {
           args: {key: 'foo', value: 'bar'},
         }),
       ],
+      numPendingMutationsToProcess: 1,
       clients: new Map([
         client('c1', 'u1', 'cg1', undefined, undefined, true /* debugPerf */),
         client('c2', 'u2', 'cg1'),
@@ -288,6 +299,7 @@ describe('processFrame', () => {
       ]),
       expectedVersion: startVersion + 1,
       expectedDisconnectedClients: [],
+      expectedConnectedClients: ['c1', 'c2'],
       disconnectHandlerThrows: false,
     },
     {
@@ -313,6 +325,7 @@ describe('processFrame', () => {
           },
         }),
       ],
+      numPendingMutationsToProcess: 2,
       clients: new Map([
         client('c1', 'u1', 'cg1'),
         client('c2', 'u2', 'cg1'),
@@ -430,6 +443,7 @@ describe('processFrame', () => {
       ]),
       expectedVersion: startVersion + 2,
       expectedDisconnectedClients: [],
+      expectedConnectedClients: ['c1', 'c2', 'c3'],
       disconnectHandlerThrows: false,
     },
     {
@@ -452,6 +466,7 @@ describe('processFrame', () => {
           args: {key: 'foo', value: 'baz'},
         }),
       ],
+      numPendingMutationsToProcess: 2,
       clients: new Map([client('c1', 'u1', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1'],
@@ -498,11 +513,13 @@ describe('processFrame', () => {
       ]),
       expectedVersion: startVersion + 2,
       expectedDisconnectedClients: [],
+      expectedConnectedClients: ['c1'],
       disconnectHandlerThrows: false,
     },
     {
       name: 'no mutations, no clients, 1 client disconnects',
       pendingMutations: [],
+      numPendingMutationsToProcess: 0,
       clients: new Map(),
       clientRecords: records,
       storedConnectedClients: ['c1'],
@@ -513,11 +530,13 @@ describe('processFrame', () => {
       expectedClientRecords: records,
       expectedVersion: startVersion + 1,
       expectedDisconnectedClients: ['c1'],
+      expectedConnectedClients: [],
       disconnectHandlerThrows: false,
     },
     {
       name: 'no mutations, no clients, 1 client disconnects, disconnect handler throws',
       pendingMutations: [],
+      numPendingMutationsToProcess: 0,
       clients: new Map(),
       clientRecords: records,
       storedConnectedClients: ['c1'],
@@ -528,11 +547,13 @@ describe('processFrame', () => {
       // version not incremented for same reason
       expectedVersion: startVersion,
       expectedDisconnectedClients: ['c1'],
+      expectedConnectedClients: [],
       disconnectHandlerThrows: true,
     },
     {
       name: 'no mutations, 1 client, 1 client disconnected',
       pendingMutations: [],
+      numPendingMutationsToProcess: 0,
       clients: new Map([client('c2', 'u2', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1', 'c2'],
@@ -563,11 +584,13 @@ describe('processFrame', () => {
       ]),
       expectedVersion: startVersion + 1,
       expectedDisconnectedClients: ['c1'],
+      expectedConnectedClients: ['c2'],
       disconnectHandlerThrows: false,
     },
     {
       name: 'no mutations, 1 client, 2 clients disconnected',
       pendingMutations: [],
+      numPendingMutationsToProcess: 0,
       clients: new Map([client('c2', 'u2', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1', 'c2', 'c3'],
@@ -604,6 +627,7 @@ describe('processFrame', () => {
       ]),
       expectedVersion: startVersion + 1,
       expectedDisconnectedClients: ['c1', 'c3'],
+      expectedConnectedClients: ['c2'],
       disconnectHandlerThrows: false,
     },
     {
@@ -618,6 +642,7 @@ describe('processFrame', () => {
           args: {key: 'foo', value: 'bar'},
         }),
       ],
+      numPendingMutationsToProcess: 1,
       clients: new Map([client('c1', 'u1', 'cg1'), client('c2', 'u2', 'cg1')]),
       clientRecords: records,
       storedConnectedClients: ['c1', 'c2', 'c3'],
@@ -698,6 +723,189 @@ describe('processFrame', () => {
       ]),
       expectedVersion: startVersion + 2,
       expectedDisconnectedClients: ['c3'],
+      expectedConnectedClients: ['c1', 'c2'],
+      disconnectHandlerThrows: false,
+    },
+    {
+      name: '1 mutation, 2 clients, 1 client disconnects but has pending not process in this frame',
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamps: 100,
+          name: 'put',
+          args: {key: 'foo', value: 'bar'},
+        }),
+        pendingMutation({
+          clientID: 'c3',
+          clientGroupID: 'cg2',
+          id: 8,
+          timestamps: 120,
+          name: 'put',
+          args: {
+            key: 'fuzzy',
+            value: 'wuzzy',
+          },
+        }),
+      ],
+      numPendingMutationsToProcess: 1,
+      clients: new Map([client('c1', 'u1', 'cg1'), client('c2', 'u2', 'cg1')]),
+      clientRecords: records,
+      storedConnectedClients: ['c1', 'c2', 'c3'],
+      expectedPokes: [
+        {
+          clientID: 'c1',
+          poke: {
+            baseCookie: startVersion,
+            cookie: startVersion + 1,
+            lastMutationIDChanges: {c1: 2},
+            patch: [
+              {
+                op: 'put',
+                key: 'foo',
+                value: 'bar',
+              },
+            ],
+            timestamp: 100,
+          },
+        },
+        {
+          clientID: 'c2',
+          poke: {
+            baseCookie: startVersion,
+            cookie: startVersion + 1,
+            lastMutationIDChanges: {c1: 2},
+            patch: [
+              {
+                op: 'put',
+                key: 'foo',
+                value: 'bar',
+              },
+            ],
+            timestamp: 100,
+          },
+        },
+      ],
+      expectedUserValues: new Map([
+        ['foo', userValue('bar', startVersion + 1)],
+      ]),
+      expectedClientRecords: new Map([
+        ...records,
+        ['c1', clientRecord('cg1', startVersion + 1, 2, startVersion + 1)],
+        ['c2', clientRecord('cg1', startVersion + 1, 7, startVersion)],
+      ]),
+      expectedVersion: startVersion + 1,
+      expectedDisconnectedClients: [],
+      expectedConnectedClients: ['c1', 'c2', 'c3'],
+      disconnectHandlerThrows: false,
+    },
+    {
+      name: '1 mutation, 2 clients, 1 client disconnects and has pending processed in this frame',
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c3',
+          clientGroupID: 'cg2',
+          id: 8,
+          timestamps: 100,
+          name: 'put',
+          args: {
+            key: 'fuzzy',
+            value: 'wuzzy',
+          },
+        }),
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamps: 120,
+          name: 'put',
+          args: {key: 'foo', value: 'bar'},
+        }),
+      ],
+      numPendingMutationsToProcess: 1,
+      clients: new Map([client('c1', 'u1', 'cg1'), client('c2', 'u2', 'cg1')]),
+      clientRecords: records,
+      storedConnectedClients: ['c1', 'c2', 'c3'],
+      expectedPokes: [
+        {
+          clientID: 'c1',
+          poke: {
+            baseCookie: startVersion,
+            cookie: startVersion + 1,
+            lastMutationIDChanges: {},
+            patch: [
+              {
+                op: 'put',
+                key: 'fuzzy',
+                value: 'wuzzy',
+              },
+            ],
+            timestamp: 100,
+          },
+        },
+        {
+          clientID: 'c2',
+          poke: {
+            baseCookie: startVersion,
+            cookie: startVersion + 1,
+            lastMutationIDChanges: {},
+            patch: [
+              {
+                op: 'put',
+                key: 'fuzzy',
+                value: 'wuzzy',
+              },
+            ],
+            timestamp: 100,
+          },
+        },
+        {
+          clientID: 'c1',
+          poke: {
+            baseCookie: startVersion + 1,
+            cookie: startVersion + 2,
+            lastMutationIDChanges: {},
+            patch: [
+              {
+                key: 'test-disconnected-c3',
+                op: 'put',
+                value: true,
+              },
+            ],
+            timestamp: undefined,
+          },
+        },
+        {
+          clientID: 'c2',
+          poke: {
+            baseCookie: startVersion + 1,
+            cookie: startVersion + 2,
+            lastMutationIDChanges: {},
+            patch: [
+              {
+                key: 'test-disconnected-c3',
+                op: 'put',
+                value: true,
+              },
+            ],
+            timestamp: undefined,
+          },
+        },
+      ],
+      expectedUserValues: new Map([
+        ['fuzzy', userValue('wuzzy', startVersion + 1)],
+        [disconnectHandlerWriteKey('c3'), userValue(true, startVersion + 2)],
+      ]),
+      expectedClientRecords: new Map([
+        ...records,
+        ['c1', clientRecord('cg1', startVersion + 2, 1, startVersion)],
+        ['c2', clientRecord('cg1', startVersion + 2, 7, startVersion)],
+        ['c3', clientRecord('cg2', startVersion, 8, startVersion + 1)],
+      ]),
+      expectedVersion: startVersion + 2,
+      expectedDisconnectedClients: ['c3'],
+      expectedConnectedClients: ['c1', 'c2'],
       disconnectHandlerThrows: false,
     },
   ];
@@ -718,6 +926,7 @@ describe('processFrame', () => {
       const result = await processFrame(
         createSilentLogContext(),
         c.pendingMutations,
+        c.numPendingMutationsToProcess,
         mutators,
         async write => {
           await write.put(disconnectHandlerWriteKey(write.clientID), true);
@@ -751,7 +960,7 @@ describe('processFrame', () => {
           ]),
         ),
         [versionKey, c.expectedVersion],
-        [connectedClientsKey, [...c.clients.keys()]],
+        [connectedClientsKey, [...c.expectedConnectedClients]],
       ]);
 
       expect((await durable.list()).size).toEqual(expectedState.size);

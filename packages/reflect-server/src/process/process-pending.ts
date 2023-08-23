@@ -70,31 +70,25 @@ export async function processPending(
     }
   }
   const toProcessMutations = pendingMutations.slice(0, endIndex);
-  const missCount =
-    maxProcessedMutationTimestamp === undefined
-      ? 0
-      : toProcessMutations.reduce(
-          (sum, pendingM) =>
-            sum +
-            (pendingM.timestamps !== undefined &&
-            pendingM.timestamps.normalizedTimestamp <
-              maxProcessedMutationTimestamp
-              ? 1
-              : 0),
-          0,
-        );
-
-  const bufferNeededMs = toProcessMutations.reduce(
-    (max, pendingM) =>
-      pendingM.timestamps === undefined
-        ? max
-        : Math.max(
-            max,
-            pendingM.timestamps.serverReceivedTimestamp -
-              pendingM.timestamps.normalizedTimestamp,
-          ),
-    Number.MIN_SAFE_INTEGER,
-  );
+  let missCount = 0;
+  let bufferNeededMs = Number.MIN_SAFE_INTEGER;
+  for (let i = 0; i < pendingMutations.length; i++) {
+    const pendingM = pendingMutations[i];
+    if (
+      maxProcessedMutationTimestamp !== undefined &&
+      pendingM.timestamps !== undefined &&
+      pendingM.timestamps.normalizedTimestamp < maxProcessedMutationTimestamp
+    ) {
+      missCount++;
+    }
+    if (pendingM.timestamps !== undefined) {
+      bufferNeededMs = Math.max(
+        bufferNeededMs,
+        pendingM.timestamps.serverReceivedTimestamp -
+          pendingM.timestamps.normalizedTimestamp,
+      );
+    }
+  }
 
   if (bufferNeededMs !== Number.MIN_SAFE_INTEGER) {
     bufferSizer.recordMissable(start, missCount > 0, bufferNeededMs, lc);
@@ -116,7 +110,8 @@ export async function processPending(
   const pokes = await processRoom(
     lc,
     clients,
-    toProcessMutations,
+    pendingMutations,
+    endIndex,
     mutators,
     disconnectHandler,
     storage,

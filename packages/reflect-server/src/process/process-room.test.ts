@@ -634,6 +634,7 @@ describe('processRoom', () => {
         createSilentLogContext(),
         c.clients,
         c.pendingMutations,
+        c.pendingMutations.length,
         mutators,
         () => Promise.resolve(),
         storage,
