@@ -1,7 +1,7 @@
 import {Reflect} from '@rocicorp/reflect/client';
-import {M} from '../shared/mutators';
-import {useClientStates} from '../shared/subscription';
-import {ClientState} from '../shared/client-state';
+import {M} from './reflect/mutators';
+import {useClientStates} from './subscriptions';
+import {ClientState} from './reflect/client-state';
 import styles from './cursor-field.module.css';
 import {useEffect} from 'react';
 

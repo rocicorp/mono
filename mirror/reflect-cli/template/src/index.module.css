@@ -2,7 +2,7 @@
   font-family: 'Muoto 205tf';
   font-style: normal;
   font-weight: 100 900;
-  src: url('/fonts/muoto-var.ttf') format('truetype-variations');
+  src: url('/muoto-var.ttf') format('truetype-variations');
 }
 
 html,

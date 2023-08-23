@@ -1,6 +1,6 @@
 import type {AuthHandler, ReflectServerOptions} from '@rocicorp/reflect/server';
-import {clearCursor} from '../shared/client-state.js';
-import {M, mutators} from '../shared/mutators.js';
+import {clearCursor} from './client-state.js';
+import {M, mutators} from './mutators.js';
 
 const authHandler: AuthHandler = (auth: string, _roomID: string) => {
   if (auth) {

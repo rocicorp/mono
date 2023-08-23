@@ -1,12 +1,12 @@
 import React, {useEffect} from 'react';
 import ReactDOM from 'react-dom/client';
-import {mutators} from '../shared/mutators';
+import {mutators} from './reflect/mutators';
 import {ExperimentalMemKVStore, Reflect} from '@rocicorp/reflect/client';
 import {nanoid} from 'nanoid';
-import {randUserInfo} from '../shared/client-state';
+import {randUserInfo} from './reflect/client-state';
 import styles from './index.module.css';
 import CursorField from './cursor-field';
-import {useCount} from '../shared/subscription';
+import {useCount} from './subscriptions';
 
 const userID = nanoid();
 const roomID = 'my-room';
