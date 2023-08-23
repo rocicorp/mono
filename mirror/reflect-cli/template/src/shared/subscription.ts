@@ -18,7 +18,7 @@ export function useClientStates(reflect: Reflect<M>) {
       (await tx
         .scan({prefix: clientStatePrefix})
         .entries()
-        .toArray()) as readonly [string, ClientState][],
+        .toArray()) as (readonly [string, ClientState])[],
     [],
   );
 }
