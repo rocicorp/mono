@@ -1,25 +1,24 @@
 import type {Reflect} from '@rocicorp/reflect/client';
 import {useSubscribe} from 'replicache-react';
-import {clientStatePrefix} from './client-state';
-import type {ClientState} from './client-state';
+import {ClientState, clientStatePrefix} from './client-state';
 import type {M} from './mutators';
+
+export function useCount(reflect: Reflect<M>, key: string) {
+  return useSubscribe(
+    reflect,
+    async tx => ((await tx.get(key)) ?? 0) as number,
+    0,
+  );
+}
 
 export function useClientStates(reflect: Reflect<M>) {
   return useSubscribe(
     reflect,
-    async tx => {
-      const clientStateEntries = (await tx
+    async tx =>
+      (await tx
         .scan({prefix: clientStatePrefix})
         .entries()
-        .toArray()) as [string, ClientState][];
-      const clientStates = clientStateEntries
-        .map<[string, ClientState]>(([key, clientState]) => {
-          const id = key.substring(clientStatePrefix.length);
-          return [id, clientState];
-        })
-        .filter(([id, _]) => id !== tx.clientID);
-      return Object.fromEntries(clientStates);
-    },
-    {},
+        .toArray()) as readonly [string, ClientState][],
+    [],
   );
 }

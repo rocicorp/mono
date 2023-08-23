@@ -1,110 +1,62 @@
-import React, {useRef, useEffect} from 'react';
+import React, {useEffect} from 'react';
 import ReactDOM from 'react-dom/client';
 import {mutators} from '../shared/mutators';
-import {Reflect} from '@rocicorp/reflect/client';
+import {ExperimentalMemKVStore, Reflect} from '@rocicorp/reflect/client';
 import {nanoid} from 'nanoid';
-import {ClientState, randUserInfo} from '../shared/client-state';
-import {useClientStates} from '../shared/subscription';
-import styles from './styles.module.css';
+import {randUserInfo} from '../shared/client-state';
+import styles from './index.module.css';
+import CursorField from './cursor-field';
+import {useCount} from '../shared/subscription';
+
 const userID = nanoid();
+const roomID = 'my-room';
+const incrementKey = 'count';
 
 const socketOrigin: string | undefined = import.meta.env.VITE_WORKER_URL;
 if (socketOrigin === undefined || socketOrigin === '') {
   throw new Error('VITE_WORKER_URL required');
 }
 
-type M = typeof mutators;
-
 const r = new Reflect({
   socketOrigin,
   userID,
-  roomID: 'current-room',
+  roomID,
   auth: userID,
   mutators,
+
+  // Turns off local persistence. This will go away soon.
+  createKVStore: (name: string) => {
+    return new ExperimentalMemKVStore(name);
+  },
 });
 
-const App = ({reflect}: {reflect: Reflect<M>}) => {
-  const ref = useRef<HTMLDivElement | null>(null);
-
-  const onMouseMove = ({pageX, pageY}: {pageX: number; pageY: number}) => {
-    if (ref && ref.current) {
-      void reflect.mutate.setCursor({
-        x: pageX,
-        y: pageY - ref.current.offsetTop,
-      });
-    }
-  };
-
-  const clientStates = useClientStates(r);
-
+const App = () => {
   useEffect(() => {
     void (async () => {
       const userInfo = randUserInfo();
-      await reflect.mutate.initClientState(userInfo);
+      await r.mutate.initClientState(userInfo);
     })();
   }, []);
 
+  const handleButtonClick = () => {
+    void r.mutate.increment({key: incrementKey, delta: 1});
+  };
+
+  const count = useCount(r, incrementKey);
+
   // Render app.
   return (
-    <div
-      style={{
-        position: 'absolute',
-        display: 'flex',
-        flexDirection: 'column',
-        left: 0,
-        top: 0,
-        width: '100%',
-        height: '100%',
-        background: 'rgb(229,229,229)',
-      }}
-    >
-      <div
-        {...{
-          ref,
-          style: {
-            position: 'relative',
-            display: 'flex',
-            flex: 1,
-            overflow: 'hidden',
-          },
-          onMouseMove,
-        }}
-      >
-        {Object.entries(clientStates).map(
-          ([_id, {userInfo, cursor}]: [string, ClientState]) =>
-            cursor && (
-              <div className={styles.collaborator}>
-                <div
-                  className={styles.cursor}
-                  style={{
-                    left: cursor.x,
-                    top: cursor.y,
-                    overflow: 'auto',
-                  }}
-                >
-                  <div
-                    className={styles.pointer}
-                    style={{color: userInfo.color}}
-                  >
-                    ➤
-                  </div>
-                  <div
-                    className={styles.userinfo}
-                    style={{
-                      backgroundColor: userInfo.color,
-                      color: 'white',
-                    }}
-                  >
-                    {userInfo.avatar}&nbsp;{userInfo.name}
-                  </div>
-                </div>
-              </div>
-            ),
-        )}
+    <div className={styles.container}>
+      <img className={styles.logo} src="/reflect.svg" />
+      <div className={styles.content}>
+        <div className={styles.count}>{count}</div>
+        <button onClick={handleButtonClick}>Bonk</button>
+        <CursorField r={r} />
       </div>
     </div>
   );
 };
+
 const rootElement = document.getElementById('root');
 if (rootElement === null) {
   throw new Error('root element is null');
@@ -112,7 +64,7 @@ if (rootElement === null) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App reflect={r} />
+    <App />
   </React.StrictMode>,
 );
 
