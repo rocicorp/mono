@@ -49,7 +49,7 @@ export const create = (firestore: Firestore) =>
       return firestore.runTransaction(async txn => {
         const userDoc = await txn.get(userDocRef);
         if (!userDoc.exists) {
-          throw new HttpsError('not-found', 'User does not exist');
+          throw new HttpsError('not-found', `User ${userID} does not exist`);
         }
 
         const user = must(userDoc.data());
@@ -161,7 +161,6 @@ export const create = (firestore: Firestore) =>
         }
         txn.create(appDocRef, app);
         txn.create(appNameDocRef, {appID});
-
         return {appID, name: scriptName, success: true};
       });
     });
