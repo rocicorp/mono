@@ -19,10 +19,17 @@ import {storeModule, type Module} from 'mirror-schema/src/module.js';
 const require = createRequire(import.meta.url);
 
 export function uploadReflectServerOptions(yargs: CommonYargsArgv) {
-  return yargs.option('force', {
-    describe: 'Overwrite existing version',
-    type: 'boolean',
-  });
+  return yargs
+    .option('force', {
+      describe: 'Overwrite existing version',
+      type: 'boolean',
+    })
+    .option('channels', {
+      describe: 'The channels to which the server is immediately deployed',
+      type: 'array',
+      string: true,
+      default: ['canary'],
+    });
 }
 
 type UploadReflectServerHandlerArgs = YargvToInterface<
@@ -49,9 +56,6 @@ export async function uploadReflectServerHandler(
   console.log('Script template:\n', scriptTemplate);
   console.log('Version (from @rocicorp/reflect):', version.toString());
 
-  // TODO(arv): Where should this come from? Config or CLI arg?
-  const channel: schema.ReleaseChannel = 'canary';
-
   console.log('Uploading...');
   await upload(
     firestore,
@@ -61,7 +65,7 @@ export async function uploadReflectServerHandler(
     version,
     source,
     scriptTemplate,
-    channel,
+    yargs.channels,
   );
 
   console.log(`Uploaded version ${version} successfully`);
@@ -86,7 +90,7 @@ async function upload(
   version: SemVer,
   source: string,
   scriptTemplate: string,
-  channel: schema.ReleaseChannel,
+  channels: string[],
 ) {
   const main: Module = {
     content: source,
@@ -128,7 +132,7 @@ async function upload(
       minor: version.minor,
       patch: version.patch,
       modules: [mainModuleRef, scriptTemplateModuleRef],
-      channel,
+      channels,
     };
 
     txn.set(docRef, newDoc);

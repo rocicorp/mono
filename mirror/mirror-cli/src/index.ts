@@ -6,7 +6,7 @@ import {hideBin} from 'yargs/helpers';
 import {
   uploadReflectServerHandler,
   uploadReflectServerOptions,
-} from './upload.js';
+} from './upload-server.js';
 import {initializeApp} from 'firebase-admin/app';
 import {
   wipeDeploymentsHandler,
@@ -41,9 +41,9 @@ function createCLIParser(argv: string[]) {
     });
   });
 
-  // upload
+  // uploadServer
   reflectCLI.command(
-    'upload',
+    'uploadServer',
     '🆙 Build and upload @rocicorp/reflect/server to Firestore',
     uploadReflectServerOptions,
     uploadReflectServerHandler,
