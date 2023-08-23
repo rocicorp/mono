@@ -28,6 +28,9 @@ export async function findNewestMatchingVersion(
     }
   }
 
+  // TODO(darick): For non standard release channels (e.g. "debug-then-forgot"),
+  // consider logging a warning here and then falling back to the "stable" release.
+
   throw new HttpsError(
     'out-of-range',
     `No matching version for ${serverVersionRange} found`,
