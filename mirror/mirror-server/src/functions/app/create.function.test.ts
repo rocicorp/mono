@@ -17,13 +17,13 @@ import {
   setTeam,
   setUser,
 } from 'mirror-schema/src/test-helpers.js';
-import {mockCloudflareStringParam} from '../../test-helpers.js';
+import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {DEFAULT_MAX_APPS, create} from './create.function.js';
 import {initializeApp} from 'firebase-admin/app';
 import {userPath} from 'mirror-schema/src/user.js';
 import {teamPath} from 'mirror-schema/src/team.js';
 
-mockCloudflareStringParam();
+mockFunctionParamsAndSecrets();
 
 function callCreate(firestore: Firestore, userID: string, email: string) {
   const createFunction = https.onCall(create(firestore));
@@ -111,7 +111,7 @@ describe('app-create function', () => {
         expect(app).toMatchObject({
           teamID: TEAM_ID,
           name: expect.any(String),
-          cfID: 'default-cloudflare-id',
+          cfID: 'default-CLOUDFLARE_ACCOUNT_ID',
           cfScriptName: expect.any(String),
           serverReleaseChannel: 'stable',
           deploymentOptions: {
@@ -155,7 +155,7 @@ describe('app-create function', () => {
     const team = await getTeam(firestore, teamID);
     expect(team).toEqual({
       name: '',
-      defaultCfID: 'default-cloudflare-id',
+      defaultCfID: 'default-CLOUDFLARE_ACCOUNT_ID',
       numAdmins: 1,
       numMembers: 0,
       numInvites: 0,
@@ -173,7 +173,7 @@ describe('app-create function', () => {
     expect(app).toMatchObject({
       teamID,
       name: expect.any(String),
-      cfID: 'default-cloudflare-id',
+      cfID: 'default-CLOUDFLARE_ACCOUNT_ID',
       cfScriptName: expect.any(String),
       serverReleaseChannel: 'stable',
       deploymentOptions: {

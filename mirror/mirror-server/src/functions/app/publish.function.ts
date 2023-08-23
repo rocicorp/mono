@@ -77,7 +77,11 @@ async function computeDeploymentSpec(
     throw new HttpsError('invalid-argument', 'Unsupported desired version');
   }
 
-  const serverVersion = await findNewestMatchingVersion(firestore, range);
+  const serverVersion = await findNewestMatchingVersion(
+    firestore,
+    range,
+    app.serverReleaseChannel,
+  );
   logger.log(
     `Found matching version for ${serverVersionRange}: ${serverVersion}`,
   );

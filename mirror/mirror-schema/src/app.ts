@@ -2,7 +2,6 @@ import * as v from 'shared/src/valita.js';
 import {firestoreDataConverter} from './converter.js';
 import {deploymentOptionsSchema, deploymentSchema} from './deployment.js';
 import * as path from './path.js';
-import {releaseChannelSchema} from './server.js';
 
 export const appSchema = v.object({
   cfID: v.string(),
@@ -16,7 +15,9 @@ export const appSchema = v.object({
   // Users can rename their app (and thus worker url) via the
   // app-rename command.
   name: v.string(),
-  serverReleaseChannel: releaseChannelSchema,
+
+  // The release channel from which server versions are chosen.
+  serverReleaseChannel: v.string(),
   teamID: v.string(),
 
   deploymentOptions: deploymentOptionsSchema,

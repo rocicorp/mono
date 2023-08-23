@@ -3,10 +3,14 @@ import assert from 'node:assert';
 
 assert(process.env.NODE_ENV === 'test', 'Only import this file in tests');
 
-export function mockCloudflareStringParam() {
+export function mockFunctionParamsAndSecrets() {
   for (const p of declaredParams) {
-    if (p.name === 'CLOUDFLARE_ACCOUNT_ID') {
-      p.value = p.toString = () => 'default-cloudflare-id';
+    switch (p.name) {
+      case 'CLOUDFLARE_ACCOUNT_ID':
+      case 'CLOUDFLARE_API_TOKEN':
+      case 'DATADOG_LOGS_API_KEY':
+      case 'DATADOG_METRICS_API_KEY':
+        p.value = p.toString = () => `default-${p.name}`;
     }
   }
 }

@@ -31,6 +31,9 @@ import {must} from 'shared/src/must.js';
 import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
 import {appDataConverter} from 'mirror-schema/src/app.js';
 import {Queue} from 'shared/src/queue.js';
+import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
+
+mockFunctionParamsAndSecrets();
 
 describe('deploy', () => {
   initializeApp({projectId: 'deploy-function-test'});
@@ -47,7 +50,7 @@ describe('deploy', () => {
         minor: 2,
         patch: 3,
         modules: [],
-        channel: 'stable',
+        channels: ['stable'],
       });
   });
 
