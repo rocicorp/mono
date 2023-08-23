@@ -30,10 +30,6 @@ import {must} from 'shared/src/must.js';
 import {userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {defaultOptions} from 'mirror-schema/src/deployment.js';
-import {
-  CANARY_RELEASE_CHANNEL,
-  STABLE_RELEASE_CHANNEL,
-} from 'mirror-schema/src/server.js';
 
 const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
@@ -45,16 +41,6 @@ export const create = (firestore: Firestore) =>
     .handle((request, context) => {
       const {userID} = context;
       const {serverReleaseChannel} = request;
-
-      if (
-        serverReleaseChannel !== STABLE_RELEASE_CHANNEL &&
-        serverReleaseChannel !== CANARY_RELEASE_CHANNEL
-      ) {
-        throw new HttpsError(
-          'invalid-argument',
-          `Invalid serverReleaseChannel "${serverReleaseChannel}": Must be one of "${CANARY_RELEASE_CHANNEL}" or "${STABLE_RELEASE_CHANNEL}"`,
-        );
-      }
 
       const userDocRef = firestore
         .doc(userPath(userID))

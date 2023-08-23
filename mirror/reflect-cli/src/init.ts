@@ -2,10 +2,12 @@ import {getFirestore, type Firestore} from './firebase.js';
 import {CreateRequest, create} from 'mirror-protocol/src/app.js';
 import {App, appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {
+  standardReleaseChannelSchema,
   STABLE_RELEASE_CHANNEL,
   CANARY_RELEASE_CHANNEL,
 } from 'mirror-schema/src/server.js';
 import {must} from 'shared/src/must.js';
+import * as v from 'shared/src/valita.js';
 import {readAppConfig, writeAppConfig} from './app-config.js';
 import {authenticate} from './auth-config.js';
 import {getExistingAppsForUser} from './get-existing-apps-for-user.js';
@@ -41,12 +43,7 @@ export async function initHandler(
 
   const {name, new: newApp} = yargs;
   const {channel} = yargs;
-  if (
-    channel !== STABLE_RELEASE_CHANNEL &&
-    channel !== CANARY_RELEASE_CHANNEL
-  ) {
-    throw new Error(`Invalid channel name: ${channel}`);
-  }
+  v.assert(channel, standardReleaseChannelSchema);
 
   if (newApp) {
     if (name) {
