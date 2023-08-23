@@ -15,6 +15,7 @@ import type {
 import {SemVer} from 'semver';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
 import {storeModule, type Module} from 'mirror-schema/src/module.js';
+import {CANARY_RELEASE_CHANNEL} from 'mirror-schema/src/server.js';
 
 const require = createRequire(import.meta.url);
 
@@ -28,7 +29,7 @@ export function uploadReflectServerOptions(yargs: CommonYargsArgv) {
       describe: 'The channels to which the server is immediately deployed',
       type: 'array',
       string: true,
-      default: ['canary'],
+      default: [CANARY_RELEASE_CHANNEL],
     });
 }
 

@@ -25,7 +25,12 @@ import {teamPath} from 'mirror-schema/src/team.js';
 
 mockFunctionParamsAndSecrets();
 
-function callCreate(firestore: Firestore, userID: string, email: string) {
+function callCreate(
+  firestore: Firestore,
+  userID: string,
+  email: string,
+  serverReleaseChannel = 'stable',
+) {
   const createFunction = https.onCall(create(firestore));
 
   return createFunction.run({
@@ -34,7 +39,7 @@ function callCreate(firestore: Firestore, userID: string, email: string) {
         userID,
         userAgent: {type: 'reflect-cli', version: '0.0.1'},
       },
-      serverReleaseChannel: 'stable',
+      serverReleaseChannel,
     },
 
     auth: {
@@ -231,5 +236,39 @@ describe('app-create function', () => {
 
     const membership = await getMembership(firestore, TEAM_ID, USER_ID);
     expect(membership).toEqual(teamMembership);
+  });
+
+  test(`create with invalid serverReleaseChannel`, async () => {
+    const email = 'foo@bar.com';
+    const name = 'Test User';
+
+    await setUser(firestore, USER_ID, email, name, {
+      [TEAM_ID]: 'admin',
+    });
+
+    await setTeam(firestore, TEAM_ID, {
+      numAdmins: 1,
+      numApps: 1,
+      maxApps: 5,
+    });
+
+    await setMembership(firestore, TEAM_ID, USER_ID, email, 'admin');
+
+    let error;
+    try {
+      await callCreate(
+        firestore,
+        USER_ID,
+        email,
+        'not-a-valid-release-channel',
+      );
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(HttpsError);
+    expect((error as HttpsError).message).toBe(
+      'Invalid serverReleaseChannel "not-a-valid-release-channel": Must be one of "canary" or "stable"',
+    );
+    expect((error as HttpsError).code).toBe('invalid-argument');
   });
 });

@@ -3,12 +3,8 @@ import {firestoreDataConverter} from './converter.js';
 import {moduleRefSchema} from './module.js';
 import * as path from './path.js';
 
-export const releaseChannelSchema = v.union(
-  v.literal('canary'),
-  v.literal('stable'),
-);
-
-export type ReleaseChannel = v.Infer<typeof releaseChannelSchema>;
+export const CANARY_RELEASE_CHANNEL = 'canary';
+export const STABLE_RELEASE_CHANNEL = 'stable';
 
 export const serverSchema = v.object({
   major: v.number(),

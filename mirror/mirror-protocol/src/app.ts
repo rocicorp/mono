@@ -1,11 +1,10 @@
-import {releaseChannelSchema} from 'mirror-schema/src/server.js';
 import * as v from 'shared/src/valita.js';
 import {baseRequestFields, baseResponseFields} from './base.js';
 import {createCall} from './call.js';
 
 export const createRequestSchema = v.object({
   ...baseRequestFields,
-  serverReleaseChannel: releaseChannelSchema,
+  serverReleaseChannel: v.string(),
 });
 
 export type CreateRequest = v.Infer<typeof createRequestSchema>;
