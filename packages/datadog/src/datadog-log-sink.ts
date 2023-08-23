@@ -15,6 +15,7 @@ const DD_URL = 'https://http-intake.logs.datadoghq.com/api/v2/logs';
 export const MAX_LOG_ENTRIES_PER_FLUSH = 1000;
 export const FORCE_FLUSH_THRESHOLD = 250;
 const MAX_ENTRY_BYTES = 5 * 1024 * 1024;
+const MAX_MESSAGE_RETRIES = 2;
 
 // Conservative limit that assumes all chars are encoded as 4 UTF-8 bytes.
 // This makes the actual limit somewhere closer to 1.25 MB, which is still
@@ -68,78 +69,102 @@ export class DatadogLogSink implements LogSink {
       if (length === 0) {
         return;
       }
+      do {
+        const flushTime = Date.now();
+        const stringified = [];
+        let totalBytes = 0;
 
-      const flushTime = Date.now();
-      const stringified = [];
-      let totalBytes = 0;
+        for (const m of this._messages) {
+          // As a small perf optimization, we directly mutate
+          // the message rather than making a shallow copy.
+          // The LOG_SINK_FLUSH_DELAY_ATTRIBUTE will be clobbered by
+          // the next flush if this flush fails (which is the desired behavior).
+          m.flushDelayMs = flushTime - m.date;
 
-      for (const m of this._messages) {
-        // As a small perf optimization, we directly mutate
-        // the message rather than making a shallow copy.
-        // The LOG_SINK_FLUSH_DELAY_ATTRIBUTE will be clobbered by
-        // the next flush if this flush fails (which is the desired behavior).
-        m[LOG_SINK_FLUSH_DELAY_ATTRIBUTE] = flushTime - m.date;
+          let str = JSON.stringify(m);
+          if (str.length > MAX_ENTRY_CHARS) {
+            // A single message above the total payload limit will otherwise halt
+            // log flushing progress. Drop and replace with a message indicating so.
+            m.message = `[Dropped message of length ${str.length}]`;
+            str = JSON.stringify(m);
+          }
+          // Calculate the totalBytes with the newline characters between messages.
+          if (str.length + totalBytes + stringified.length > MAX_ENTRY_CHARS) {
+            break;
+          }
+          totalBytes += str.length;
+          stringified.push(str);
 
-        let str = JSON.stringify(m);
-        if (str.length > MAX_ENTRY_CHARS) {
-          // A single message above the total payload limit will otherwise halt
-          // log flushing progress. Drop and replace with a message indicating so.
-          m.message = `[Dropped message of length ${str.length}]`;
-          str = JSON.stringify(m);
+          if (stringified.length === MAX_LOG_ENTRIES_PER_FLUSH) {
+            break;
+          }
         }
-        // Calculate the totalBytes with the newline characters between messages.
-        if (str.length + totalBytes + stringified.length > MAX_ENTRY_CHARS) {
-          break;
+
+        const body = stringified.join('\n');
+        const url = new URL(DD_URL);
+        url.searchParams.set('dd-api-key', this._apiKey);
+
+        if (this._source) {
+          // Both need to be set for server to treat us as the browser SDK for
+          // value 'browser'.
+          url.searchParams.set('ddsource', this._source);
+          url.searchParams.set('dd-evp-origin', this._source);
         }
-        totalBytes += str.length;
-        stringified.push(str);
 
-        if (stringified.length === MAX_LOG_ENTRIES_PER_FLUSH) {
-          break;
+        if (this._service) {
+          url.searchParams.set('service', this._service);
         }
-      }
 
-      // Remove messages that have been stringified for sending.
-      const flushing = this._messages.splice(0, stringified.length);
+        if (this._host) {
+          url.searchParams.set('host', this._host);
+        }
 
-      const body = stringified.join('\n');
-      const url = new URL(DD_URL);
-      url.searchParams.set('dd-api-key', this._apiKey);
+        let ok = false;
+        try {
+          const response = await fetch(url.toString(), {
+            method: 'POST',
+            body,
+            keepalive: true,
+          } as RequestInit);
 
-      if (this._source) {
-        // Both need to be set for server to treat us as the browser SDK for
-        // value 'browser'.
-        url.searchParams.set('ddsource', this._source);
-        url.searchParams.set('dd-evp-origin', this._source);
-      }
+          ok = response.ok;
+          if (!ok) {
+            // Log to console so that we might catch this in `wrangler tail`.
+            console.error(
+              'response',
+              response.status,
+              response.statusText,
+              await response.text,
+            );
+          }
+        } catch (e) {
+          // Log to console so that we might catch this in `wrangler tail`.
+          console.error('Log flush to datadog failed', e);
+        }
 
-      if (this._service) {
-        url.searchParams.set('service', this._service);
-      }
-
-      if (this._host) {
-        url.searchParams.set('host', this._host);
-      }
-
-      let ok = false;
-      try {
-        const response = await fetch(url.toString(), {
-          method: 'POST',
-          body,
-          keepalive: true,
-        } as RequestInit);
-
-        ok = response.ok;
-      } catch (e) {
-        // Log to console so that we might catch this in `wrangler tail`.
-        console.error('Log flush to datadog failed', e);
-      }
-
-      if (!ok) {
-        // Put the messages back in the queue.
-        this._messages.splice(0, 0, ...flushing);
-      }
-
+        if (ok) {
+          // Remove messages that were successfully flushed.
+          this._messages.splice(0, stringified.length);
+        } else {
+          let numWithTooManyRetries = 0;
+          for (let i = 0; i < stringified.length; i++) {
+            const m = this._messages[i];
+            m.flushRetryCount = (m.flushRetryCount ?? 0) + 1;
+            if (m.flushRetryCount > MAX_MESSAGE_RETRIES) {
+              numWithTooManyRetries++;
+            }
+          }
+          if (numWithTooManyRetries > 0) {
+            console.error(
+              `Dropping ${numWithTooManyRetries} datadog log messages which failed to send ${
+                MAX_MESSAGE_RETRIES + 1
+              } times.`,
+            );
+            // Remove messages that have failed too many times.
+            this._messages.splice(0, numWithTooManyRetries);
+          }
+        }
+      } while (this._messages.length >= FORCE_FLUSH_THRESHOLD);
       // If any messages left at this point schedule another flush.
       if (this._messages.length) {
         this._startTimer();
@@ -153,6 +178,8 @@ type Message = Context & {
   date: number;
   message: unknown;
   error?: {origin: 'logger'};
+  flushDelayMs?: number;
+  flushRetryCount?: number;
 };
 
 function flattenMessage(message: unknown): unknown {
@@ -192,6 +219,7 @@ function convertErrors(message: unknown): unknown {
   return message;
 }
 
+const LOG_SINK_FLUSH_RETRY_COUNT = 'flushRetryCount';
 const LOG_SINK_FLUSH_DELAY_ATTRIBUTE = 'flushDelayMs';
 // This code assumes that no context keys will start with
 // @DATADOG_RESERVED_ (a fairly safe assumption).
@@ -214,6 +242,7 @@ const RESERVED_KEYS: ReadonlyArray<string> = [
   // The following are attributes reserved by the DataDogLogSink
   // itself (as opposed to DataDog), to report on its own behavior.
   LOG_SINK_FLUSH_DELAY_ATTRIBUTE,
+  LOG_SINK_FLUSH_RETRY_COUNT,
 ];
 
 function makeMessage(
