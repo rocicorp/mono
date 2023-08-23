@@ -10,7 +10,8 @@ export function mockFunctionParamsAndSecrets() {
       case 'CLOUDFLARE_API_TOKEN':
       case 'DATADOG_LOGS_API_KEY':
       case 'DATADOG_METRICS_API_KEY':
-        p.value = p.toString = () => `default-${p.name}`;
+        process.env[p.name] = `default-${p.name}`;
+        break;
     }
   }
 }

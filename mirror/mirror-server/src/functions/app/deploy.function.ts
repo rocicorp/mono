@@ -6,7 +6,6 @@ import {
 } from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {logger} from 'firebase-functions';
-import {defineSecret} from 'firebase-functions/params';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {onDocumentCreated} from 'firebase-functions/v2/firestore';
 import {
@@ -21,13 +20,17 @@ import {getServerModuleMetadata} from '../../cloudflare/get-server-modules.js';
 import {publish} from '../../cloudflare/publish.js';
 import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {must} from 'shared/src/must.js';
-import {getAppSecrets, DEPLOYMENT_SECRETS_NAMES} from './secrets.js';
+import {
+  getAppSecrets,
+  DEPLOYMENT_SECRETS_NAMES,
+  defineSecretSafely,
+} from './secrets.js';
 import {watch} from 'mirror-schema/src/watch.js';
 import {toMillis} from 'mirror-schema/src/timestamp.js';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
-const cloudflareApiToken = defineSecret('CLOUDFLARE_API_TOKEN');
+const cloudflareApiToken = defineSecretSafely('CLOUDFLARE_API_TOKEN');
 
 export const deploy = (firestore: Firestore, storage: Storage) =>
   onDocumentCreated(
