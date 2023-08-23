@@ -99,10 +99,92 @@ test('does not flush more than max entries', async () => {
   await fetchLatches[1].promise;
   expect(numLogEntriesInRequest(1)).toBe(MAX_LOG_ENTRIES_PER_FLUSH);
 
-  // Check the third fetch.
+  // Check the third fetch (not flushed till after flush interval
+  // since message count is below FORCE_FLUSH_THRESHOLD).
   jest.advanceTimersByTime(10);
   await fetchLatches[2].promise;
   expect(numLogEntriesInRequest(2)).toBe(123);
+});
+
+test('flushes MAX_LOG_ENTRIES_PER_FLUSH at a time until size is below FORCE_FLUSH_THRESHOLD', async () => {
+  const l = new DatadogLogSink({
+    apiKey: 'apiKey',
+    interval: 10,
+  });
+
+  let fetchCount = 0;
+  const fetchLatches = [
+    resolver<void>(),
+    resolver<void>(),
+    resolver<void>(),
+    resolver<void>(),
+    resolver<void>(),
+  ];
+  const fetchResponseResolvers = [
+    resolver<Response>(),
+    resolver<Response>(),
+    resolver<Response>(),
+    resolver<Response>(),
+    resolver<Response>(),
+  ];
+
+  fetch.mockImplementation(() => {
+    const i = fetchCount++;
+    fetchLatches[i].resolve();
+    return fetchResponseResolvers[i].promise;
+  });
+  // Trigger the first force flush.
+  for (let i = 0; i < FORCE_FLUSH_THRESHOLD; i++) {
+    l.log('info', {usr: {name: 'bob'}}, 'aaa');
+  }
+
+  const numLogEntriesInRequest = (n: number) => {
+    const body = fetch.mock.calls[n][1]?.body;
+    return String(body).split('\n').length;
+  };
+
+  // Wait for the resulting flush() to call fetch.
+  await fetchLatches[0].promise;
+  expect(numLogEntriesInRequest(0)).toBe(FORCE_FLUSH_THRESHOLD);
+
+  // While fetch() is blocked, add 123 + FORCE_FLUSH_THRESHOLD + MAX_LOG_ENTRIES * 2 more log statements.
+  for (
+    let i = 0;
+    i < 123 + FORCE_FLUSH_THRESHOLD + MAX_LOG_ENTRIES_PER_FLUSH * 2;
+    i++
+  ) {
+    l.log('info', {usr: {name: 'bob'}}, 'aaa');
+  }
+
+  // Let the first fetch complete.
+  fetchResponseResolvers[0].resolve({ok: true} as unknown as Response);
+
+  // Check the second fetch.
+  await fetchLatches[1].promise;
+  fetchResponseResolvers[1].resolve({ok: true} as unknown as Response);
+  expect(numLogEntriesInRequest(1)).toBe(MAX_LOG_ENTRIES_PER_FLUSH);
+
+  // Check the third fetch.
+  await fetchLatches[2].promise;
+  fetchResponseResolvers[2].resolve({ok: true} as unknown as Response);
+  expect(numLogEntriesInRequest(2)).toBe(MAX_LOG_ENTRIES_PER_FLUSH);
+
+  // Check the fourth fetch
+  await fetchLatches[3].promise;
+  expect(numLogEntriesInRequest(3)).toBe(FORCE_FLUSH_THRESHOLD + 123);
+
+  // While fetch() is blocked, add 123 more log statements.
+  for (let i = 0; i < 123; i++) {
+    l.log('info', {usr: {name: 'bob'}}, 'aaa');
+  }
+  fetchResponseResolvers[3].resolve({ok: true} as unknown as Response);
+
+  // Check the final fetch (not flushed till after flush interval
+  // since message count is below FORCE_FLUSH_THRESHOLD).
+  jest.advanceTimersByTime(10);
+  await fetchLatches[4].promise;
+  fetchResponseResolvers[4].resolve({ok: true} as unknown as Response);
+  expect(numLogEntriesInRequest(4)).toBe(123);
 });
 
 test('flush calls fetch', async () => {
@@ -253,6 +335,7 @@ test('reserved keys are prefixed', async () => {
       msg: 'testMsg',
       date: 'test-date',
       flushDelayMs: 'test-flushDelayMs',
+      flushRetryCount: 'test-flushRetryCount',
     },
     'debug message',
   );
@@ -275,6 +358,7 @@ test('reserved keys are prefixed', async () => {
         ['@DATADOG_RESERVED_msg']: 'testMsg',
         ['@DATADOG_RESERVED_date']: 'test-date',
         ['@DATADOG_RESERVED_flushDelayMs']: 'test-flushDelayMs',
+        ['@DATADOG_RESERVED_flushRetryCount']: 'test-flushRetryCount',
         date: 1,
         message: 'debug message',
         status: 'debug',
@@ -459,7 +543,7 @@ test('flush is called again in case of failure', async () => {
     },
   );
 
-  fetch.mockReturnValue(Promise.resolve(new Response('{}')));
+  fetch.mockReturnValue(Promise.resolve(new Response()));
   l.log('info', {usr: {name: 'bob'}}, 'info message 2');
   jest.advanceTimersByTime(1000);
 
@@ -476,11 +560,178 @@ test('flush is called again in case of failure', async () => {
           message: 'info message',
           status: 'info',
           flushDelayMs: 2000,
+          flushRetryCount: 1,
         },
         {
           usr: {name: 'bob'},
           date: 1003,
           message: 'info message 2',
+          status: 'info',
+          flushDelayMs: 1000,
+        },
+      ),
+      method: 'POST',
+      keepalive: true,
+    },
+  );
+});
+
+test('messages that fail to send 3 times are dropped', async () => {
+  const l = new DatadogLogSink({
+    apiKey: 'apiKey',
+    interval: 1000,
+  });
+
+  fetch.mockReturnValue(Promise.reject(new Error('error')));
+  jest.setSystemTime(3);
+  l.log('info', {usr: {name: 'bob'}}, 'info message');
+  l.log('info', {usr: {name: 'bob'}}, 'info message 2');
+  jest.advanceTimersByTime(1000);
+
+  await microtasksUntil(() => fetch.mock.calls.length >= 1);
+
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledWith(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
+    {
+      body: stringifyMany(
+        {
+          usr: {name: 'bob'},
+          date: 3,
+          message: 'info message',
+          status: 'info',
+          flushDelayMs: 1000,
+        },
+        {
+          usr: {name: 'bob'},
+          date: 3,
+          message: 'info message 2',
+          status: 'info',
+          flushDelayMs: 1000,
+        },
+      ),
+      method: 'POST',
+      keepalive: true,
+    },
+  );
+
+  l.log('info', {usr: {name: 'bob'}}, 'info message 3');
+  jest.advanceTimersByTime(1000);
+
+  await microtasksUntil(() => fetch.mock.calls.length >= 2);
+
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenLastCalledWith(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
+    {
+      body: stringifyMany(
+        {
+          usr: {name: 'bob'},
+          date: 3,
+          message: 'info message',
+          status: 'info',
+          flushDelayMs: 2000,
+          flushRetryCount: 1,
+        },
+        {
+          usr: {name: 'bob'},
+          date: 3,
+          message: 'info message 2',
+          status: 'info',
+          flushDelayMs: 2000,
+          flushRetryCount: 1,
+        },
+        {
+          usr: {name: 'bob'},
+          date: 1003,
+          message: 'info message 3',
+          status: 'info',
+          flushDelayMs: 1000,
+        },
+      ),
+      method: 'POST',
+      keepalive: true,
+    },
+  );
+
+  l.log('info', {usr: {name: 'bob'}}, 'info message 4');
+  jest.advanceTimersByTime(1000);
+
+  await microtasksUntil(() => fetch.mock.calls.length >= 3);
+
+  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(fetch).toHaveBeenLastCalledWith(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
+    {
+      body: stringifyMany(
+        {
+          usr: {name: 'bob'},
+          date: 3,
+          message: 'info message',
+          status: 'info',
+          flushDelayMs: 3000,
+          flushRetryCount: 2,
+        },
+        {
+          usr: {name: 'bob'},
+          date: 3,
+          message: 'info message 2',
+          status: 'info',
+          flushDelayMs: 3000,
+          flushRetryCount: 2,
+        },
+        {
+          usr: {name: 'bob'},
+          date: 1003,
+          message: 'info message 3',
+          status: 'info',
+          flushDelayMs: 2000,
+          flushRetryCount: 1,
+        },
+        {
+          usr: {name: 'bob'},
+          date: 2003,
+          message: 'info message 4',
+          status: 'info',
+          flushDelayMs: 1000,
+        },
+      ),
+      method: 'POST',
+      keepalive: true,
+    },
+  );
+
+  fetch.mockReturnValue(Promise.resolve(new Response()));
+  l.log('info', {usr: {name: 'bob'}}, 'info message 5');
+  jest.advanceTimersByTime(1000);
+
+  await microtasksUntil(() => fetch.mock.calls.length >= 4);
+
+  expect(fetch).toHaveBeenCalledTimes(4);
+  expect(fetch).toHaveBeenLastCalledWith(
+    'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
+    {
+      body: stringifyMany(
+        {
+          usr: {name: 'bob'},
+          date: 1003,
+          message: 'info message 3',
+          status: 'info',
+          flushDelayMs: 3000,
+          flushRetryCount: 2,
+        },
+        {
+          usr: {name: 'bob'},
+          date: 2003,
+          message: 'info message 4',
+          status: 'info',
+          flushDelayMs: 2000,
+          flushRetryCount: 1,
+        },
+        {
+          usr: {name: 'bob'},
+          date: 3003,
+          message: 'info message 5',
           status: 'info',
           flushDelayMs: 1000,
         },
