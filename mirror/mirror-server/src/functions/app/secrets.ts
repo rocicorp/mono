@@ -19,7 +19,7 @@ export function defineSecretSafely(name: string) {
       // can't see secrets in Cloudflare) to really-bad (infinite redeployment loops because deployed
       // secrets don't match the expected ones).
       assert(
-        process.env[secret.name],
+        process.env[secret.name] !== undefined,
         `No value found for secret parameter "${secret.name}". A function can only access a secret if you include the secret in the function's dependency array.`,
       );
       return secret.value();

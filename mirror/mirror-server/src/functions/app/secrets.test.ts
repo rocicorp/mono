@@ -1,7 +1,19 @@
 import {describe, expect, test} from '@jest/globals';
-import {hashSecrets} from './secrets.js';
+import {defineSecretSafely, hashSecrets} from './secrets.js';
 
 describe('secrets', () => {
+  test('defineSecretSafely', () => {
+    const secret = defineSecretSafely('TEST_SECRET');
+
+    expect(() => secret.value()).toThrowError();
+
+    process.env['TEST_SECRET'] = '';
+    expect(secret.value()).toBe('');
+
+    process.env['TEST_SECRET'] = 'foo';
+    expect(secret.value()).toBe('foo');
+  });
+
   test('hashing', async () => {
     /* eslint-disable @typescript-eslint/naming-convention */
     const secrets = {
