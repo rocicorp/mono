@@ -6,7 +6,7 @@ import * as schema from 'mirror-schema/src/server.js';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {pkgUp} from 'pkg-up';
-import {buildReflectServerContent} from 'reflect-cli/src/compile.js';
+import {compile} from 'reflect-cli/src/compile.js';
 import {getScriptTemplate} from 'reflect-cli/src/get-script-template.js';
 import type {
   CommonYargsArgv,
@@ -138,4 +138,18 @@ async function upload(
 
     txn.set(docRef, newDoc);
   });
+}
+
+async function buildReflectServerContent(): Promise<string> {
+  // Note: This must be created from this `mirror-cli` package, not from the `reflect-cli` package.
+  const require = createRequire(import.meta.url);
+  const serverPath = require.resolve('@rocicorp/reflect/server');
+  assert(
+    serverPath.indexOf('/node_modules/') >= 0,
+    `Must reference a published npm and not a monorepo source directory: ${serverPath}.\n` +
+      `Try temporarily bumping the version in 'packages/reflect/package.json' and re-running 'npm install' from the repo root.`,
+  );
+  console.info(`Building server from ${serverPath}`);
+  const {code} = await compile(serverPath, false);
+  return code.text;
 }
