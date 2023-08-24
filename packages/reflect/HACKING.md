@@ -157,12 +157,13 @@ This is needed so that we can publish apps to Mirror that use this version.
 # https://github.com/rocicorp/mono/issues/833.
 
 cd $REPO_ROOT
+git checkout reflect/v$NEW_VERSION
 npm install
 cd mirror/mirror-cli
 # adjust channels to taste
 # can also pass --force to overwrite old versions
 npm run start uploadServer -- --channels=canary --channels=stable
-npm run start uploadServer -- --stack=staging --channels=canary --channels=stable
+npm run start uploadServer -- --stack=prod --channels=canary --channels=stable
 
 # Abandon temporary change to package.json
 git reset --hard HEAD
