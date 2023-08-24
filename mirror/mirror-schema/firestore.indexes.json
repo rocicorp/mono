@@ -1,6 +1,20 @@
 {
   "indexes": [
     {
+      "collectionGroup": "deployments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "requesterID",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requestTime",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "servers",
       "queryScope": "COLLECTION",
       "fields": [
