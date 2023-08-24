@@ -72,6 +72,20 @@ export async function uploadReflectServerHandler(
   console.log(`Uploaded version ${version} successfully`);
 }
 
+async function buildReflectServerContent(): Promise<string> {
+  const serverPath = require.resolve('@rocicorp/reflect/server');
+  assert(
+    // Note: Don't include the full directory name because that trips up some
+    // unrelated build checks.
+    serverPath.indexOf('/node_module') >= 0,
+    `Must reference a published npm and not a monorepo source directory: ${serverPath}.\n` +
+      `Try temporarily bumping the version in 'packages/reflect/package.json' and re-running 'npm install' from the repo root.`,
+  );
+  console.info(`Building server from ${serverPath}`);
+  const {code} = await compile(serverPath, false);
+  return code.text;
+}
+
 async function findVersion(): Promise<SemVer> {
   const serverPath = require.resolve('@rocicorp/reflect');
   const pkg = await pkgUp({cwd: serverPath});
@@ -138,20 +152,4 @@ async function upload(
 
     txn.set(docRef, newDoc);
   });
-}
-
-async function buildReflectServerContent(): Promise<string> {
-  // Note: This must be created from this `mirror-cli` package, not from the `reflect-cli` package.
-  const require = createRequire(import.meta.url);
-  const serverPath = require.resolve('@rocicorp/reflect/server');
-  assert(
-    // Note: Don't include the full directory name because that trips up some
-    // unrelated build checks.
-    serverPath.indexOf('/node_module') >= 0,
-    `Must reference a published npm and not a monorepo source directory: ${serverPath}.\n` +
-      `Try temporarily bumping the version in 'packages/reflect/package.json' and re-running 'npm install' from the repo root.`,
-  );
-  console.info(`Building server from ${serverPath}`);
-  const {code} = await compile(serverPath, false);
-  return code.text;
 }
