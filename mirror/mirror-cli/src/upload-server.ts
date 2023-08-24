@@ -1,5 +1,5 @@
 import type {Firestore} from 'firebase-admin/firestore';
-import {getFirestore} from 'firebase-admin/firestore';
+import {getFirestore, GrpcStatus} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {getStorage} from 'firebase-admin/storage';
 import * as schema from 'mirror-schema/src/server.js';
@@ -129,27 +129,29 @@ async function upload(
     .doc(schema.serverPath(version.toString()))
     .withConverter(schema.serverDataConverter);
 
+  const newDoc: schema.Server = {
+    major: version.major,
+    minor: version.minor,
+    patch: version.patch,
+    modules: [mainModuleRef, scriptTemplateModuleRef],
+    channels,
+  };
+
   console.log('Writing server to firestore');
-  await firestore.runTransaction(async txn => {
-    const doc = await txn.get(docRef);
-    if (doc.exists) {
+  try {
+    await docRef.create(newDoc);
+  } catch (e) {
+    if ((e as {code: GrpcStatus}).code === GrpcStatus.ALREADY_EXISTS) {
       if (force) {
         console.info(`Overwriting existing module at ${version} with --force`);
+        await docRef.set(newDoc);
       } else {
         console.error(`Version ${version} has already been uploaded`);
         console.error('Use --force to overwrite');
         process.exit(1);
       }
+    } else {
+      throw e;
     }
-
-    const newDoc: schema.Server = {
-      major: version.major,
-      minor: version.minor,
-      patch: version.patch,
-      modules: [mainModuleRef, scriptTemplateModuleRef],
-      channels,
-    };
-
-    txn.set(docRef, newDoc);
-  });
+  }
 }
