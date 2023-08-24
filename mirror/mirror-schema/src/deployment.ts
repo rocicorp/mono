@@ -62,7 +62,9 @@ export const deploymentTypeSchema = v.union(
   v.literal('USER_UPLOAD'),
   v.literal('USER_ROLLBACK'),
   v.literal('SERVER_UPDATE'),
-  v.literal('SERVER_ROLLBACK'),
+  v.literal('OPTIONS_UPDATE'),
+  v.literal('SECRETS_UPDATE'),
+  v.literal('HOSTNAME_UPDATE'),
 );
 export type DeploymentType = v.Infer<typeof deploymentTypeSchema>;
 

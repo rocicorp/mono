@@ -43,5 +43,6 @@ export const app = {
     appFunctions.publish(getFirestore(), getStorage(), modulesBucketName),
   ),
   deploy: appFunctions.deploy(getFirestore(), getStorage()),
+  autoDeploy: appFunctions.autoDeploy(getFirestore()),
   rename: https.onCall(baseHttpsOptions, appFunctions.rename(getFirestore())),
 };

@@ -13,6 +13,7 @@ import {
   wipeDeploymentsOptions,
 } from './wipe-deployments.js';
 import {addDeploymentsOptionsHandler} from './add-deployment-options.js';
+import {runQueryHandler} from './run-query.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -47,6 +48,14 @@ function createCLIParser(argv: string[]) {
     '🆙 Build and upload @rocicorp/reflect/server to Firestore',
     uploadReflectServerOptions,
     uploadReflectServerHandler,
+  );
+
+  reflectCLI.command(
+    'runQuery',
+    'Runs a specific query against Firestore to see if an index is necessary (which would appear in an Error message)',
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    () => {},
+    runQueryHandler,
   );
 
   reflectCLI.command(

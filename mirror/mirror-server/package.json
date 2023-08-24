@@ -28,6 +28,7 @@
     "cors": "^2.8.5",
     "firebase-admin": "^11.10.1",
     "firebase-functions": "^4.4.0",
+    "lodash": "^4.17.21",
     "nanoid": "^4.0.2",
     "semver": "^7.5.3"
   },
@@ -36,6 +37,7 @@
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/cors": "^2.8.12",
+    "@types/lodash": "^4.14.197",
     "@types/node": "^18.16.0",
     "datadog": "0.0.0",
     "esbuild": "^0.18.3",

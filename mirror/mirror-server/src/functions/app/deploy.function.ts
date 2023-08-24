@@ -27,6 +27,7 @@ import {
 } from './secrets.js';
 import {watch} from 'mirror-schema/src/watch.js';
 import {toMillis} from 'mirror-schema/src/timestamp.js';
+import _ from 'lodash';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
@@ -138,6 +139,7 @@ export function requestDeployment(
   firestore: Firestore,
   appID: string,
   data: Pick<Deployment, 'requesterID' | 'type' | 'spec'>,
+  lastAppUpdateTime?: Timestamp,
 ): Promise<string> {
   const appDocRef = firestore
     .doc(appPath(appID))
@@ -161,9 +163,13 @@ export function requestDeployment(
       };
 
       tx.create(docRef, deployment);
-      tx.update(appDocRef, {
-        queuedDeploymentIDs: FieldValue.arrayUnion(deploymentID),
-      });
+      tx.update(
+        appDocRef,
+        {
+          queuedDeploymentIDs: FieldValue.arrayUnion(deploymentID),
+        },
+        lastAppUpdateTime ? {lastUpdateTime: lastAppUpdateTime} : {},
+      );
       return docRef.path;
     }
     throw new HttpsError(
@@ -308,7 +314,12 @@ async function setRunningDeployment(
       );
     }
     const newDeployment = must(newDeploymentDoc.data());
-    newDeployment.spec.hashesOfSecrets = hashesOfSecrets;
+    if (!_.isEqual(hashesOfSecrets, newDeployment.spec.hashesOfSecrets)) {
+      logger.warn(
+        `Deployed secrets differ from secrets at request time. This should only happen if secrets concurrently changed.`,
+      );
+      newDeployment.spec.hashesOfSecrets = hashesOfSecrets;
+    }
     const newRunningDeployment = {
       ...newDeployment,
       ...deploymentUpdate('RUNNING'),

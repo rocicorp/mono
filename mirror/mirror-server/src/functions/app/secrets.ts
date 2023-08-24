@@ -1,7 +1,6 @@
 import {defineSecret} from 'firebase-functions/params';
 import type {DeploymentSecrets} from 'mirror-schema/src/deployment.js';
 import {sha256OfString} from 'mirror-schema/src/module.js';
-import {nanoid} from 'nanoid';
 import {assert} from 'shared/src/asserts.js';
 
 export function defineSecretSafely(name: string) {
@@ -38,7 +37,7 @@ export const DEPLOYMENT_SECRETS_NAMES = [
 export async function getAppSecrets() {
   const secrets: DeploymentSecrets = {
     /* eslint-disable @typescript-eslint/naming-convention */
-    REFLECT_AUTH_API_KEY: nanoid(), // TODO(darick): Replace with a stable per-app secret.
+    REFLECT_AUTH_API_KEY: 'dummy-api-key', // TODO(darick): Replace with a stable per-app secret.
     DATADOG_LOGS_API_KEY: datadogLogsApiKey.value(),
     DATADOG_METRICS_API_KEY: datadogMetricsApiKey.value(),
     /* eslint-enable @typescript-eslint/naming-convention */

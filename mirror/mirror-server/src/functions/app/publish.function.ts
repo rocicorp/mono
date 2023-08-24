@@ -63,7 +63,7 @@ export const publish = (
       return {deploymentPath, success: true};
     });
 
-async function computeDeploymentSpec(
+export async function computeDeploymentSpec(
   firestore: Firestore,
   app: App,
   serverVersionRange: string,
