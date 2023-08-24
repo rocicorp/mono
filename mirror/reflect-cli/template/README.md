@@ -4,10 +4,18 @@ This project will set you up with a very basic application that you can immediat
 
 ## To Run
 
-```
+```bash
 npm install
-npm run build
-npx @rocicorp/reflect publish ./src/worker/index.ts --name=<name of your project>
-# set your env file for VITE_WORKER_URL to the published worker url (i.e. name-of-project.reflect-server.net)
+npx reflect dev src/reflect/index.ts
 npm run dev
+```
+
+## To Publish
+
+```bash
+# Publish the Reflect server
+npx reflect publish src/reflect/index.ts
+
+# Publish the UI somewhere, i.e. Vercel
+npx vercel
 ```

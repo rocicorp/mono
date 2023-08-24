@@ -31,7 +31,7 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
   await publishHandler(
     {
       ...createYargs,
-      script: `${name}/src/worker/index.ts`,
+      script: `${name}/src/reflect/index.ts`,
     },
     name,
   );
