@@ -3,19 +3,20 @@ import {baseResponseFields} from './base.js';
 import {baseAppRequestFields} from './app.js';
 import {createEventSource} from './event-source.js';
 import type EventSource from 'eventsource';
-export const createTailRequestSchema = v.object({
+
+export const tailRequestSchema = v.object({
   ...baseAppRequestFields,
 });
 
-export type CreateTailRequest = v.Infer<typeof createTailRequestSchema>;
+export type TailRequest = v.Infer<typeof tailRequestSchema>;
 
-export const createTailResponseSchema = v.object({
+export const tailResponseSchema = v.object({
   ...baseResponseFields,
 });
-export type CreateTailResponse = v.Infer<typeof createTailResponseSchema>;
+export type TailResponse = v.Infer<typeof tailResponseSchema>;
 
-export const createTail = (
+export const tail = (
   appID: string,
   idToken: string,
-  data: CreateTailRequest,
-): EventSource => createEventSource('tail-create', appID, idToken, data);
+  data: TailRequest,
+): EventSource => createEventSource('tail', appID, idToken, data);

@@ -2,7 +2,7 @@ import {Queue} from 'shared/src/queue.js';
 import {mustReadAppConfig} from './app-config.js';
 import {authenticate} from './auth-config.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import {createTail, CreateTailRequest} from 'mirror-protocol/src/tail.js';
+import {tail, TailRequest} from 'mirror-protocol/src/tail.js';
 import {makeRequester} from './requester.js';
 
 export function tailOptions(yargs: CommonYargsArgv) {
@@ -19,12 +19,12 @@ export async function tailHandler(
   const user = await authenticate();
   const idToken = await user.getIdToken();
 
-  const data: CreateTailRequest = {
+  const data: TailRequest = {
     requester: makeRequester(user.uid),
     appID,
   };
 
-  const tailEventSource = await createTail(appID, idToken, data);
+  const tailEventSource = await tail(appID, idToken, data);
 
   // type QueueItem =
   // | {type: 'data'; data: string}

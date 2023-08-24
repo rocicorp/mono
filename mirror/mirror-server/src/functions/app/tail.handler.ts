@@ -16,9 +16,9 @@ import packageJson from '../../../package.json';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {
-  CreateTailRequest,
-  createTailRequestSchema,
-  createTailResponseSchema,
+  TailRequest,
+  tailRequestSchema,
+  tailResponseSchema,
 } from 'mirror-protocol/src/tail.js';
 import type {IncomingHttpHeaders} from 'http';
 import {decodeHeaderValue} from 'shared/src/headers.js';
@@ -60,15 +60,12 @@ const validateFirebaseIdToken = async (
   return decodedIdToken;
 };
 
-export const create = (
+export const tail = (
   firestore: Firestore,
   auth: Auth,
   createTail = createTailDefault,
 ) => {
-  const handler = validateSchema(
-    createTailRequestSchema,
-    createTailResponseSchema,
-  )
+  const handler = validateSchema(tailRequestSchema, tailResponseSchema)
     .validate(userAuthorization())
     .validate(appAuthorization(firestore))
     .handle(async (_tailRequest, context) => {
@@ -134,7 +131,7 @@ export const create = (
         throw new Error('authData is undefined!');
       }
       const data = getData(request.headers);
-      const callableRequest: CallableRequest<CreateTailRequest> = {
+      const callableRequest: CallableRequest<TailRequest> = {
         auth: {
           uid: authData.uid,
           token: authData,
@@ -147,7 +144,7 @@ export const create = (
   );
 };
 
-function getData(headers: IncomingHttpHeaders): CreateTailRequest {
+function getData(headers: IncomingHttpHeaders): TailRequest {
   const dataHeaderValue = headers['data'];
   if (!dataHeaderValue) {
     throw new Error('data header is missing');

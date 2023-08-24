@@ -2,7 +2,7 @@ import {describe, test, jest, expect, beforeEach} from '@jest/globals';
 import type {Auth} from 'firebase-admin/auth';
 import type {https} from 'firebase-functions/v2';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
-import {create} from './create.handler.js';
+import {tail} from './tail.handler.js';
 import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
 import {getMockReq, getMockRes} from '@jest-mock/express';
 import {encodeHeaderValue} from 'shared/src/headers.js';
@@ -52,7 +52,7 @@ export class MockSocket {
 
 mockFunctionParamsAndSecrets();
 
-describe('test create-tail', () => {
+describe('test tail', () => {
   let firestore: Firestore & firebase.default.firestore.Firestore;
   let auth: Auth;
   let wsMock: MockSocket;
@@ -86,7 +86,7 @@ describe('test create-tail', () => {
       });
     };
 
-    createTailFunction = create(firestore, auth, createCloudflareTailMock);
+    createTailFunction = tail(firestore, auth, createCloudflareTailMock);
     await setUser(firestore, 'foo', 'foo@bar.com', 'bob', {fooTeam: 'admin'});
     await setApp(firestore, 'myApp', {teamID: 'fooTeam', name: 'MyAppName'});
   });

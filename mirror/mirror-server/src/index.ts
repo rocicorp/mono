@@ -12,7 +12,6 @@ import {
 import * as appFunctions from './functions/app/index.js';
 import {healthcheck as healthcheckHandler} from './functions/healthcheck.function.js';
 import * as serverFunctions from './functions/server/index.js';
-import * as tailFunctions from './functions/tail/index.js';
 import * as userFunctions from './functions/user/index.js';
 import {DEPLOYMENT_SECRETS_NAMES} from './functions/app/secrets.js';
 
@@ -47,18 +46,16 @@ export const app = {
   deploy: appFunctions.deploy(getFirestore(), getStorage()),
   autoDeploy: appFunctions.autoDeploy(getFirestore()),
   rename: https.onCall(baseHttpsOptions, appFunctions.rename(getFirestore())),
+  create: https.onRequest(
+    {
+      ...baseHttpsOptions,
+      secrets: ['CLOUDFLARE_API_TOKEN', ...DEPLOYMENT_SECRETS_NAMES],
+    },
+    appFunctions.tail(getFirestore(), getAuth()),
 };
 
 export const server = {
   autoDeploy: serverFunctions.autoDeploy(getFirestore()),
 };
 
-export const tail = {
-  create: https.onRequest(
-    {
-      ...baseHttpsOptions,
-      secrets: ['CLOUDFLARE_API_TOKEN', ...DEPLOYMENT_SECRETS_NAMES],
-    },
-    tailFunctions.create(getFirestore(), getAuth()),
-  ),
-};
+
