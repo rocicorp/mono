@@ -1,5 +1,5 @@
-import {getFunctions, httpsCallable} from 'firebase/functions';
 import type * as v from 'shared/src/valita.js';
+import {getFunctions, httpsCallable} from 'firebase/functions';
 
 export function createCall<Req extends v.ObjectType, Res extends v.ObjectType>(
   functionName: string,

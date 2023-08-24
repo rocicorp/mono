@@ -48,6 +48,7 @@ export class Queue<T> {
     return consumer.promise;
   }
 
+  //todo(darick): add a test for this
   asAsyncIterator(
     cleanup = () => {
       /* nop */

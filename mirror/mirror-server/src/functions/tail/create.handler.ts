@@ -2,14 +2,14 @@ import type {Response} from 'express';
 import type {Auth, DecodedIdToken} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
 import {https, logger} from 'firebase-functions';
-import {defineSecret, defineString} from 'firebase-functions/params';
+import {defineString} from 'firebase-functions/params';
 import {CallableRequest, onRequest} from 'firebase-functions/v2/https';
 import assert from 'node:assert';
 import {jsonSchema} from 'reflect-protocol';
 import {Queue} from 'shared/src/queue.js';
 import * as v from 'shared/src/valita.js';
 import type WebSocket from 'ws';
-import {createTail as createTailDefault} from '../../cloudflare/tail/create-tail.js';
+import {createTail as createTailDefault} from '../../cloudflare/tail/tail.js';
 import type express from 'express';
 import packageJson from '../../../package.json';
 
@@ -22,10 +22,11 @@ import {
 } from 'mirror-protocol/src/tail.js';
 import type {IncomingHttpHeaders} from 'http';
 import {decodeHeaderValue} from 'shared/src/headers.js';
+import {defineSecretSafely} from '../app/secrets.js';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
-const cloudflareApiToken = defineSecret('CLOUDFLARE_API_TOKEN');
+const cloudflareApiToken = defineSecretSafely('CLOUDFLARE_API_TOKEN');
 
 const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
@@ -81,27 +82,13 @@ export const create = (
       });
       response.flushHeaders();
 
-      // TODO(arv): Not sure why this is not working?
       const apiToken = cloudflareApiToken.value();
-      console.log('apiToken', apiToken);
-      if (!apiToken) {
-        throw new Error('apiToken is undefined!');
-      }
       const accountID = cloudflareAccountId.value();
       const cfWorkerName = context.app.cfScriptName;
       const filters = {filters: []};
       const debug = true;
       const env = undefined;
       const packageVersion = packageJson.version || '0.0.0';
-      console.log({
-        apiToken,
-        accountID,
-        cfWorkerName,
-        filters,
-        debug,
-        env,
-        packageVersion,
-      });
 
       const {ws, expiration, deleteTail} = await createTail(
         apiToken,
@@ -115,19 +102,24 @@ export const create = (
 
       logger.log(`expiration: ${expiration}`);
 
-      loop: for await (const item of wsQueue(ws, 10_000)) {
-        switch (item.type) {
-          case 'data':
-            writeData(response, item.data);
-            break;
-          case 'ping':
-            response.write(':\n\n');
-            break;
-          case 'close':
-            break loop;
+      try {
+        loop: for await (const item of wsQueue(ws, 10_000)) {
+          switch (item.type) {
+            case 'data':
+              writeData(response, item.data);
+              break;
+            case 'ping':
+              response.write('\n\n');
+              break;
+            case 'close':
+              break loop;
+          }
         }
+      } catch (e) {
+        logger.error(e);
+      } finally {
+        await deleteTail();
       }
-      await deleteTail();
       response.end();
 
       return {success: true};
