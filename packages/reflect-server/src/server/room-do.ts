@@ -82,7 +82,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     initialBufferSizeMs: 25,
     minBufferSizeMs: 0,
     maxBufferSizeMs: 500,
-    adjustBufferSizeIntervalMs: 2_000,
+    adjustBufferSizeIntervalMs: 5_000,
   });
   #maxProcessedMutationTimestamp = 0;
   readonly #lock = new LoggingLock();
