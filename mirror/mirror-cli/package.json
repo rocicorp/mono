@@ -20,7 +20,7 @@
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "build": "node tool/build.js",
-    "start": "node --no-warnings --loader ts-node/esm ./src/index.ts --stack staging",
+    "start": "node --no-warnings --loader ts-node/esm ./src/index.ts",
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {
