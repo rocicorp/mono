@@ -3,7 +3,6 @@ import {expect} from 'chai';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import * as sinon from 'sinon';
 import {
-  BUFFER_SIZER_OPTIONS,
   PokeHandler,
   RESET_PLAYBACK_OFFSET_THRESHOLD_MS,
 } from './poke-handler.js';
@@ -11,6 +10,16 @@ import {
 let clock: sinon.SinonFakeTimers;
 let rafStub: sinon.SinonStub;
 const startTime = 1678829450000;
+
+// These independent test options allow us to adjust
+// the constants used by PokeHandler without have to adjust
+// all these tests.
+const TEST_BUFFER_SIZER_OPTIONS = {
+  initialBufferSizeMs: 250,
+  maxBufferSizeMs: 1000,
+  minBufferSizeMs: -1000,
+  adjustBufferSizeIntervalMs: 10 * 1000,
+} as const;
 
 setup(() => {
   clock = sinon.useFakeTimers();
@@ -128,6 +137,7 @@ test('playback all pokes have timestamps but are for this client so merge and pl
     outOfOrderPokeStub,
     Promise.resolve('c1'),
     Promise.resolve(new LogContext('error')),
+    new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
 
@@ -225,6 +235,7 @@ test('playback all pokes have timestamps without any merges', async () => {
     outOfOrderPokeStub,
     Promise.resolve('c1'),
     Promise.resolve(new LogContext('error')),
+    new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
 
@@ -373,6 +384,7 @@ test('playback all pokes have timestamps, two pokes merge due to timing', async 
     outOfOrderPokeStub,
     Promise.resolve('c1'),
     Promise.resolve(new LogContext('error')),
+    new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
 
@@ -502,6 +514,7 @@ test('playback pokes with no timestamp or for this client playback ASAP', async 
     outOfOrderPokeStub,
     Promise.resolve('c1'),
     Promise.resolve(new LogContext('error')),
+    new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
 
@@ -611,6 +624,7 @@ test('playback sequence of poke messages', async () => {
     outOfOrderPokeStub,
     Promise.resolve('c1'),
     Promise.resolve(new LogContext('error')),
+    new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
 
@@ -785,6 +799,7 @@ test(`playback offset is reset for new pokes if timestamp offset delta is > ${RE
     outOfOrderPokeStub,
     Promise.resolve('c1'),
     Promise.resolve(new LogContext('error')),
+    new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
 
@@ -993,6 +1008,7 @@ test('playback stats', async () => {
       timedFrameCount: number;
       missedTimedFrameCount: number;
       avgLatency: number;
+      recentLatencies: number[];
     },
     rafAtTime: number,
   ) => {
@@ -1026,6 +1042,8 @@ test('playback stats', async () => {
         expectedStats.missedTimedFrameCount / expectedStats.timedFrameCount,
         '\navg poke latency:',
         expectedStats.avgLatency,
+        '\nrecent poke latencies:',
+        expectedStats.recentLatencies,
       ],
     ]);
   };
@@ -1035,6 +1053,8 @@ test('playback stats', async () => {
     outOfOrderPokeStub,
     Promise.resolve('c1'),
     Promise.resolve(logContext),
+    new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
+    3 /* maxRecentPokeLatenciesSize */,
   );
   expect(rafStub.callCount).to.equal(0);
 
@@ -1170,6 +1190,7 @@ test('playback stats', async () => {
       missedTimedFrameCount: 0,
       timedFrameCount: 0,
       avgLatency: NaN,
+      recentLatencies: [],
     },
     0,
   );
@@ -1211,6 +1232,7 @@ test('playback stats', async () => {
       missedTimedFrameCount: 0,
       timedFrameCount: 1,
       avgLatency: 245,
+      recentLatencies: [240, 250],
     },
     270,
   );
@@ -1252,6 +1274,9 @@ test('playback stats', async () => {
       missedTimedFrameCount: 1,
       timedFrameCount: 2,
       avgLatency: 222.5,
+      // 250 is removed since constructed with maxRecentPokeLatenciesSize
+      // of 3
+      recentLatencies: [190, 210, 240],
     },
     310,
   );
@@ -1270,6 +1295,7 @@ test('onOutOfOrderPoke is called if replicache poke throws an unexpected base co
     outOfOrderPokeStub,
     Promise.resolve('c1'),
     Promise.resolve(new LogContext('error')),
+    new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
 
@@ -1313,6 +1339,7 @@ test('onDisconnect clears pending pokes and playback offset', async () => {
     outOfOrderPokeStub,
     Promise.resolve('c1'),
     Promise.resolve(new LogContext('error')),
+    new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
 
@@ -1496,6 +1523,7 @@ test('handlePoke returns the last mutation id change for this client from poke m
     outOfOrderPokeStub,
     Promise.resolve('c1'),
     Promise.resolve(new LogContext('error')),
+    new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
 
   const lastMutationIDChangeForSelf = await pokeHandler.handlePoke({
@@ -1607,7 +1635,7 @@ test('handlePoke returns the last mutation id change for this client from poke m
 test('integration with BufferSizer', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
-  const bufferSizer = new BufferSizer(BUFFER_SIZER_OPTIONS);
+  const bufferSizer = new BufferSizer(TEST_BUFFER_SIZER_OPTIONS);
   const recordMissableSpy = sinon.spy(bufferSizer, 'recordMissable');
   const bufferSizeMsStub = sinon.stub(bufferSizer, 'bufferSizeMs');
   const pokeHandler = new PokeHandler(
