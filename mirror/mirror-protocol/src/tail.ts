@@ -19,4 +19,4 @@ export const tail = (
   appID: string,
   idToken: string,
   data: TailRequest,
-): EventSource => createEventSource('tail', appID, idToken, data);
+): EventSource => createEventSource('app-tail', appID, idToken, data);

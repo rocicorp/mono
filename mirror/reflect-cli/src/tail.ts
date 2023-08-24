@@ -26,12 +26,6 @@ export async function tailHandler(
 
   const tailEventSource = await tail(appID, idToken, data);
 
-  // type QueueItem =
-  // | {type: 'data'; data: string}
-  // | {type: 'ping'}
-  // | {type: 'close'};
-
-  //todo(Cesar): handle tail disconnect when loop is over;
   const q = new Queue<string>();
   tailEventSource.onmessage = (event: {data: string}) => q.enqueue(event.data);
   for (;;) {

@@ -48,6 +48,7 @@ export const app = {
   rename: https.onCall(baseHttpsOptions, appFunctions.rename(getFirestore())),
   create: https.onRequest(
     {
+      timeoutSeconds: 3600,
       ...baseHttpsOptions,
       secrets: ['CLOUDFLARE_API_TOKEN', ...DEPLOYMENT_SECRETS_NAMES],
     },
