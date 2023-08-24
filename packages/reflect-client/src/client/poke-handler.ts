@@ -10,7 +10,7 @@ const BUFFER_SIZER_OPTIONS = {
   initialBufferSizeMs: 50,
   maxBufferSizeMs: 1000,
   minBufferSizeMs: -1000,
-  adjustBufferSizeIntervalMs: 5 * 1000,
+  adjustBufferSizeIntervalMs: 5_000,
 } as const;
 // TODO consider systems that don't run at 60fps (newer macs/ipads run RAF
 // at 120fps).  Playback on 120fps systems will actually be 120fps with

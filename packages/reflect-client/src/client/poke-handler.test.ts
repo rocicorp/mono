@@ -18,7 +18,7 @@ const TEST_BUFFER_SIZER_OPTIONS = {
   initialBufferSizeMs: 250,
   maxBufferSizeMs: 1000,
   minBufferSizeMs: -1000,
-  adjustBufferSizeIntervalMs: 10 * 1000,
+  adjustBufferSizeIntervalMs: 10_000,
 } as const;
 
 setup(() => {
