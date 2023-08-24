@@ -79,10 +79,10 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   readonly #clients: ClientMap = new Map();
   readonly #pendingMutations: PendingMutation[] = [];
   readonly #bufferSizer = new BufferSizer({
-    initialBufferSizeMs: 200,
+    initialBufferSizeMs: 25,
     minBufferSizeMs: 0,
     maxBufferSizeMs: 500,
-    adjustBufferSizeIntervalMs: 10_000,
+    adjustBufferSizeIntervalMs: 5_000,
   });
   #maxProcessedMutationTimestamp = 0;
   readonly #lock = new LoggingLock();

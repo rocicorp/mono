@@ -6,11 +6,11 @@ import {assert} from 'shared/src/asserts.js';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import {mergePokes} from './merge-pokes.js';
 
-export const BUFFER_SIZER_OPTIONS = {
-  initialBufferSizeMs: 250,
+const BUFFER_SIZER_OPTIONS = {
+  initialBufferSizeMs: 50,
   maxBufferSizeMs: 1000,
   minBufferSizeMs: -1000,
-  adjustBufferSizeIntervalMs: 10 * 1000,
+  adjustBufferSizeIntervalMs: 5_000,
 } as const;
 // TODO consider systems that don't run at 60fps (newer macs/ipads run RAF
 // at 120fps).  Playback on 120fps systems will actually be 120fps with
@@ -21,6 +21,7 @@ export const BUFFER_SIZER_OPTIONS = {
 // when there is no interference from other JS).
 const FRAME_INTERVAL_TOLERANCE_MS = 18;
 export const RESET_PLAYBACK_OFFSET_THRESHOLD_MS = 1000;
+const MAX_RECENT_POKE_LATENCIES_SIZE = 10;
 
 type PendingPoke = Poke & {
   normalizedTimestamp?: number | undefined;
@@ -37,6 +38,7 @@ export class PokeHandler {
   private readonly _lcPromise: Promise<LogContext>;
   private readonly _pokeBuffer: PendingPoke[] = [];
   private readonly _bufferSizer: BufferSizer;
+  private readonly _maxRecentPokeLatenciesSize: number;
   private _pokePlaybackLoopRunning = false;
   private _lastRafPerfTimestamp = 0;
   private _playbackOffsetMs: number | undefined = undefined;
@@ -48,6 +50,7 @@ export class PokeHandler {
   private _timedFrameCount = 0;
   private _missedTimedFrameCount = 0;
   private _timedPokeLatencyTotal = 0;
+  private readonly _recentPokeLatencies: number[] = [];
 
   constructor(
     replicachePoke: (poke: ReplicachePoke) => Promise<void>,
@@ -55,12 +58,14 @@ export class PokeHandler {
     clientIDPromise: Promise<ClientID>,
     lcPromise: Promise<LogContext>,
     bufferSizer = new BufferSizer(BUFFER_SIZER_OPTIONS),
+    maxRecentPokeLatenciesSize = MAX_RECENT_POKE_LATENCIES_SIZE,
   ) {
     this._replicachePoke = replicachePoke;
     this._onOutOfOrderPoke = onOutOfOrderPoke;
     this._clientIDPromise = clientIDPromise;
     this._lcPromise = lcPromise.then(lc => lc.withContext('PokeHandler'));
     this._bufferSizer = bufferSizer;
+    this._maxRecentPokeLatenciesSize = maxRecentPokeLatenciesSize;
   }
 
   async handlePoke(pokeBody: PokeBody): Promise<number | undefined> {
@@ -193,6 +198,14 @@ export class PokeHandler {
               headPoke.receivedTimestamp - headPoke.debugOriginTimestamp;
             const playbackLatency = now - headPoke.debugOriginTimestamp;
             this._timedPokeLatencyTotal += playbackLatency;
+            this._recentPokeLatencies.unshift(playbackLatency);
+            if (
+              this._recentPokeLatencies.length >
+              this._maxRecentPokeLatenciesSize
+            ) {
+              this._recentPokeLatencies.length =
+                this._maxRecentPokeLatenciesSize;
+            }
             lc.debug?.(
               'poke latency breakdown:',
               '\nserver received:',
@@ -306,6 +319,8 @@ export class PokeHandler {
         this._missedTimedFrameCount / this._timedFrameCount,
         '\navg poke latency:',
         this._timedPokeLatencyTotal / this._timedPokeCount,
+        '\nrecent poke latencies:',
+        this._recentPokeLatencies,
       );
     });
   }
