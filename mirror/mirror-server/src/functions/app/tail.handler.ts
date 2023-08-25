@@ -95,7 +95,7 @@ type QueueItem =
   | {type: 'ping'}
   | {type: 'close'};
 
-export function wsQueue(
+function wsQueue(
   ws: WebSocket,
   pingInterval: number,
 ): AsyncIterable<QueueItem> {

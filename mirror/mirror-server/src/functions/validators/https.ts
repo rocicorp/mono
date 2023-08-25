@@ -53,10 +53,10 @@ export class OnRequestBuilder<Request, Context> {
     return async (request, response) => {
       const ctx: OnRequestContext = {request, response};
       //check if request.body is a buffer
-      let payload = request.body;
-      if (request.body instanceof Buffer) {
-        payload = JSON.parse(request.body.toString('utf-8'));
-      }
+      const payload =
+        request.body instanceof Buffer
+          ? JSON.parse(request.body.toString('utf-8'))
+          : request.body;
       const context = await this._requestValidator(payload as Request, ctx);
       await handler(payload, context);
     };

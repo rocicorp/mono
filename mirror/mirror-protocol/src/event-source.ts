@@ -33,14 +33,6 @@ export async function createEventSource<R extends BaseRequest>(
     .getReader();
   if (!reader) throw new Error('SSEReader is undefined');
 
-  async function* messageGenerator() {
-    while (true && reader) {
-      const {done, value} = await reader.read();
-      if (done) break;
-      yield value;
-    }
-  }
-
   const eventSource: TailEventSource = {
     set onMessage(listener: (message: string) => void) {
       onMsg = listener;
@@ -50,9 +42,11 @@ export async function createEventSource<R extends BaseRequest>(
       return onMsg || (() => {});
     },
     async startListening() {
-      for await (const message of messageGenerator()) {
-        if (onMsg) {
-          onMsg(message);
+      for (;;) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        if (onMsg && value) {
+          onMsg(value);
         }
       }
     },
