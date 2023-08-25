@@ -46,17 +46,16 @@ export const app = {
   deploy: appFunctions.deploy(getFirestore(), getStorage()),
   autoDeploy: appFunctions.autoDeploy(getFirestore()),
   rename: https.onCall(baseHttpsOptions, appFunctions.rename(getFirestore())),
-  create: https.onRequest(
+  tail: https.onRequest(
     {
       timeoutSeconds: 3600,
       ...baseHttpsOptions,
       secrets: ['CLOUDFLARE_API_TOKEN', ...DEPLOYMENT_SECRETS_NAMES],
     },
     appFunctions.tail(getFirestore(), getAuth()),
+  ),
 };
 
 export const server = {
   autoDeploy: serverFunctions.autoDeploy(getFirestore()),
 };
-
-
