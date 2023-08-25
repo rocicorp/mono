@@ -31,67 +31,64 @@ export const tail = (
   firestore: Firestore,
   auth: Auth,
   createTail = createTailDefault,
-) => {
-  const handler = validateRequest(tailRequestSchema)
-    .validate(tokenAuthentication(auth))
-    .validate(userAuthorization())
-    .validate(appAuthorization(firestore))
-    .handle(async (_tailRequest, context) => {
-      const {response} = context;
-      if (response === undefined) {
-        throw new https.HttpsError('not-found', 'response is undefined');
-      }
-      response.writeHead(200, {
-        'Cache-Control': 'no-store',
-        'Content-Type': 'text/event-stream',
-      });
-      response.flushHeaders();
-
-      const apiToken = cloudflareApiToken.value();
-      const accountID = cloudflareAccountId.value();
-      const cfWorkerName = context.app.cfScriptName;
-      const filters = {filters: []};
-      const debug = true;
-      const env = undefined;
-      const packageVersion = packageJson.version || '0.0.0';
-
-      const {ws, expiration, deleteTail} = await createTail(
-        apiToken,
-        accountID,
-        cfWorkerName,
-        filters,
-        debug,
-        env,
-        packageVersion,
-      );
-
-      logger.log(`expiration: ${expiration}`);
-
-      try {
-        loop: for await (const item of wsQueue(ws, 10_000)) {
-          switch (item.type) {
-            case 'data':
-              writeData(response, item.data);
-              break;
-            case 'ping':
-              response.write('\n\n');
-              break;
-            case 'close':
-              break loop;
-          }
+) =>
+  onRequest(
+    validateRequest(tailRequestSchema)
+      .validate(tokenAuthentication(auth))
+      .validate(userAuthorization())
+      .validate(appAuthorization(firestore))
+      .handle(async (_tailRequest, context) => {
+        const {response} = context;
+        if (response === undefined) {
+          throw new https.HttpsError('not-found', 'response is undefined');
         }
-      } catch (e) {
-        logger.error(e);
-      } finally {
-        await deleteTail();
-      }
-      response.end();
-    });
+        response.writeHead(200, {
+          'Cache-Control': 'no-store',
+          'Content-Type': 'text/event-stream',
+        });
+        response.flushHeaders();
 
-  return onRequest((req, res) => {
-    handler(req, res);
-  });
-};
+        const apiToken = cloudflareApiToken.value();
+        const accountID = cloudflareAccountId.value();
+        const cfWorkerName = context.app.cfScriptName;
+        const filters = {filters: []};
+        const debug = true;
+        const env = undefined;
+        const packageVersion = packageJson.version || '0.0.0';
+
+        const {ws, expiration, deleteTail} = await createTail(
+          apiToken,
+          accountID,
+          cfWorkerName,
+          filters,
+          debug,
+          env,
+          packageVersion,
+        );
+
+        logger.log(`expiration: ${expiration}`);
+
+        try {
+          loop: for await (const item of wsQueue(ws, 10_000)) {
+            switch (item.type) {
+              case 'data':
+                writeData(response, item.data);
+                break;
+              case 'ping':
+                response.write('\n\n');
+                break;
+              case 'close':
+                break loop;
+            }
+          }
+        } catch (e) {
+          logger.error(e);
+        } finally {
+          await deleteTail();
+        }
+        response.end();
+      }),
+  );
 
 type QueueItem =
   | {type: 'data'; data: string}

@@ -56,6 +56,7 @@ describe('test tail', () => {
   let wsMock: MockSocket;
   let createTailFunction: (
     req: https.Request,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     res: any,
   ) => void | Promise<void>;
   let createCloudflareTailMockPromise: Promise<void>;

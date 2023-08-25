@@ -29,7 +29,7 @@ export async function tailHandler(
   tailEventSource.onMessage = async (message: string) => {
     await q.enqueue(message);
   };
-  tailEventSource.startListening();
+  void tailEventSource.startListening();
   for (;;) {
     const item = await q.dequeue();
     console.log(item);
