@@ -69,25 +69,28 @@ describe('deployment', () => {
       deploymentOptions: {vars: {}},
     });
 
-    const parsedDeployment = deploymentSchema.parse({
-      deploymentID: 'boo',
-      requesterID: 'foo',
-      type: 'USER_UPLOAD',
-      spec: {
-        appModules: [],
-        hostname: 'bar',
-        serverVersionRange: 'baz',
-        serverVersion: 'boo',
-        options: {vars: {DISABLE_LOG_FILTERING: 'false'}},
-        hashesOfSecrets: {
-          REFLECT_AUTH_API_KEY: 'aaa',
-          DATADOG_LOGS_API_KEY: 'bbb',
-          DATADOG_METRICS_API_KEY: 'ccc',
+    const parsedDeployment = deploymentSchema.parse(
+      {
+        deploymentID: 'boo',
+        requesterID: 'foo',
+        type: 'USER_UPLOAD',
+        spec: {
+          appModules: [],
+          hostname: 'bar',
+          serverVersionRange: 'baz',
+          serverVersion: 'boo',
+          options: {vars: {DISABLE_LOG_FILTERING: 'false'}},
+          hashesOfSecrets: {
+            REFLECT_AUTH_API_KEY: 'aaa',
+            DATADOG_LOGS_API_KEY: 'bbb',
+            DATADOG_METRICS_API_KEY: 'ccc',
+          },
         },
+        requestTime: Timestamp.now(),
+        status: 'REQUESTED',
       },
-      requestTime: Timestamp.now(),
-      status: 'REQUESTED',
-    });
+      {mode: 'passthrough'},
+    );
 
     expect(parsedApp.deploymentOptions?.vars).toEqual(
       parsedDeployment.spec.options?.vars,

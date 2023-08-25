@@ -4,12 +4,6 @@ import * as v from 'shared/src/valita.js';
 export const timestampSchema = v.object({
   nanoseconds: v.number(),
   seconds: v.number(),
-
-  // Undocumented fields from https://github.com/googleapis/nodejs-firestore/blob/ac35b372faf32f093d83af18d487f1b3f23ee673/dev/src/timestamp.ts#L60
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  _nanoseconds: v.number().optional(),
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  _seconds: v.number().optional(),
 });
 
 export type Timestamp = v.Infer<typeof timestampSchema>;
