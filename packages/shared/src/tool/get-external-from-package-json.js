@@ -56,12 +56,12 @@ function isInternalPackage(name) {
 /**
  * @param {string} name
  */
-async function getRecursiveExternals(name) {
+function getRecursiveExternals(name) {
   if (name === 'shared') {
-    return await getExternalFromPackageJSON(fileURLToPath(import.meta.url));
+    return getExternalFromPackageJSON(fileURLToPath(import.meta.url));
   }
 
   const require = createRequire(import.meta.url);
   const depPath = require.resolve(name);
-  return await getExternalFromPackageJSON(depPath);
+  return getExternalFromPackageJSON(depPath);
 }
