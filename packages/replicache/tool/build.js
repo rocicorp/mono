@@ -77,6 +77,7 @@ async function buildCLI() {
     platform: 'node',
     outfile: path.join(dirname, '..', 'out', 'cli.cjs'),
     entryPoints: [path.join(dirname, 'cli.ts')],
+    format: 'cjs',
   });
 }
 
