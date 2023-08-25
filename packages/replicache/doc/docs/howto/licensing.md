@@ -14,7 +14,7 @@ and there is no charge for many uses of Replicache (see [Replicache Pricing](htt
 To get a key run:
 
 ```
-npx replicache@12.0.0 get-license
+npx replicache@latest get-license
 ```
 
 It will ask you a few questions and then print your license key, eg:

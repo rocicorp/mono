@@ -1,38 +1,88 @@
 # Cutting a release
 
-## Decide what the new version should be.
+## Build then code
 
-Look through the changes since the last tag.
+First make double-check the current build has passed tests on GitHub.
+
+Then:
+
+```bash
+git checkout main
+git pull
+git branch -D release
+git checkout -b release HEAD
+npm install
+npm run build
+npm run test
+```
+
+## Decide what the new version should be
+
+First look for API changes. Download the last release and compare the .d.ts files:
+
+```bash
+cd /tmp
+npm pack replicache@$LAST_RELEASE_VERSION
+tar -xvf replicache@$LAST_RELEASE_VERSION
+cd -
+diff -u /tmp/package/out/replicache.d.ts out/packages/replicache/replicache.d.ts | less
+```
+
+We need to be very careful about public API changes as we then have to maintain them. Make sure all new API has been discussed and agreed to by the team.
+
+Next look through all changes in the repo since the last release. To do this properly:
+
+```bash
+# List all commits on main from the commit prior to last tag (which should be
+# present on main) to HEAD.
+git log replicache/v$LAST_RELEASE_VERSION^..HEAD
+```
+
+Build a list of all changes that affect Replicache. This will become the release notes later.
 
 - If there are any breaking changes, then this needs to be a new major version.
 - If there are any new (non-breaking) features, then this needs to be a new minor version.
 - Otherwise, if there are only non-breaking bugfixes, it's a patch.
 
-## Build the release
+Finally update the version:
 
-```
-git branch -D release
-git checkout -b release HEAD
+```bash
+cd packages/replicache
 npm version major # or minor or patch v12.0.0-beta.0
+cd -
 npx syncpack fix-mismatches
 # Ensure all fixed, else fix manually
 npx syncpack
+git commit -a -m 'chore(replicache): Bump version to v$NEW_VERSION'
 ```
 
 ## Manual Testing
 
 To test that a release works before creating the release we use a tarball dependency.
 
-```
+```bash
+cd packages/replicache
 npm pack
 ```
+
+### npx replicache get-license
+
+Test that the `get-license` script still works:
+
+```bash
+mv replicache-<version>.tgz /tmp/
+cd /tmp/
+npx replicache-<version>.tgz get-license
+```
+
+Go through the flow and ensure you get a license.
 
 ### Todo Samples
 
 Check out each of the [todo samples](https://trunk.doc.replicache.dev/examples/todo). Manually add the tarball:
 
 ```bash
-npm add /path/to/replicache-<version>.tgz
+npm add /tmp/replicache-<version>.tgz
 ```
 
 Then run the app and ensure it works properly.
@@ -47,30 +97,22 @@ Same as todo.
 
 Walk through [the integration guide](https://trunk.doc.replicache.dev/byob/intro) and make sure things still work.
 
-## Check for API Changes
-
-We need to be very careful about public API changes as we then have to maintain them.
-
-Check whether there are any public API changes by diffing `out/replicache.d.ts` between the previous released version and the new candidate. Make sure all new API has been discussed and agreed to by the team.
-
-## Land the Release
-
-Send out the release branch as a PR like normal and land it.
-
 ## Tag the Release
 
+We tag the release _on the branch_. This is important because we only want to
+tag the code we just tested above, not any other code that may have landed on
+main in the meantime.
+
 ```
-git checkout main
-git pull
-# Make sure you're at the commit that bumps the version
-export NEW_TAG="replicache/v$NEW_VERSION"
-git tag $NEW_TAG
-git push origin $NEW_TAG
+cd <mono-root>
+# Make sure you're still on the release branch
+git tag replicache/v$NEW_VERSION
+git push origin --tags
 ```
 
 ## Update the peer libraries for compat with the new Replicache
 
-The following have peerDependencies that should to be updated to the new Replicache version:
+If the major version changed, then update the following packages that have peerDependencies on Replicache:
 
 - `replicache-nextjs`
 - `rails`
@@ -95,16 +137,33 @@ paying customers to make it easier to debug their code.
 ```bash
 git checkout rocicorp-replicache
 
-# Make sure all the changes from main are included.
-git merge main
+# Merge new release
+git merge replicache/v$NEW_VERSION
 
 # Verify that the only diff is the name and the sourcemap
-git diff main
+git diff replicache/v$NEW_VERSION
 
-git push
+git push origin rocicorp-replicache
 
 npm publish
 ```
+
+## Merge release to main
+
+```bash
+git checkout main
+git pull
+git branch -D release
+git checkout -b release main
+git merge replicache/v$NEW_VERSION
+git commit -a -m 'Merge replicache/$NEW_VERSION'
+git push origin release
+```
+
+If there were no changes on main while the release was happening,
+this will be a fast-forward. Otherwise it will be a true merge.
+
+Send a PR for this and land as normal.
 
 ## Release docs
 
@@ -114,7 +173,7 @@ to deploy a new version.
 ```
 git checkout docs
 git pull
-git reset --hard <tag-of-release>
+git reset --hard replicache/v$NEW_VERSION
 git push origin docs
 ```
 

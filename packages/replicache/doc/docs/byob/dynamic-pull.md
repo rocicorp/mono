@@ -3,7 +3,7 @@ title: Dynamic Pull
 slug: /byob/dynamic-pull
 ---
 
-Even though in the previous step we're making persistent changes in the database, we still aren't _serving_ that data in the pull endpoint (it's still static 🤣). The pull response is still static. Let's fix that now.
+Even though in the previous step we're making persistent changes in the database, we still aren't _serving_ that data in the pull endpoint – it's still static 🤣. Let's fix that now.
 
 The implementation of pull will depend on the backend strategy you are using. For the [Global Version](/strategies/global-version) strategy we're using, the basics steps are:
 
