@@ -5,11 +5,11 @@ import {
   getFirestore,
 } from 'firebase-admin/firestore';
 import {serverPath, serverDataConverter} from 'mirror-schema/src/server.js';
-// import {
-//   APP_DEPLOYMENTS_COLLECTION_ID,
-//   deploymentDataConverter,
-// } from 'mirror-schema/src/deployment.js';
-// import {watch, TimeoutError} from 'mirror-schema/src/watch.js';
+import {
+  APP_DEPLOYMENTS_COLLECTION_ID,
+  deploymentDataConverter,
+} from 'mirror-schema/src/deployment.js';
+import {watch, TimeoutError} from 'mirror-schema/src/watch.js';
 import type {
   CommonYargsArgv,
   YargvToInterface,
@@ -80,87 +80,78 @@ export async function revertReflectServerHandler(
   await watchForDeployments(firestore, writeTime);
 }
 
-// const WATCH_DEPLOYMENTS_TIMEOUT = 1000 * 60;
+const WATCH_DEPLOYMENTS_TIMEOUT = 1000 * 60;
 
-// async function watchForDeployments(
-//   firestore: Firestore,
-//   from: Timestamp,
-// ): Promise<void> {
-//   const deployments = firestore
-//     .collectionGroup(APP_DEPLOYMENTS_COLLECTION_ID)
-//     .withConverter(deploymentDataConverter)
-//     .where('type', '==', 'SERVER_UPDATE')
-//     .where('requestTime', '>', from);
-//   try {
-//     console.info(`Watching deployments ...`);
-//     let last = new RolloutStatus(0);
-//     for await (const snapshot of watch(
-//       deployments,
-//       WATCH_DEPLOYMENTS_TIMEOUT,
-//     )) {
-//       const status = new RolloutStatus(snapshot.size);
-
-//       snapshot.docs.forEach(doc => {
-//         switch (doc.data().status) {
-//           case 'RUNNING':
-//           case 'STOPPED':
-//             status.deployed++;
-//             break;
-//           case 'FAILED':
-//             status.failed++;
-//             break;
-//         }
-//       });
-//       if (!status.equals(last)) {
-//         status.output();
-//       }
-//       last = status;
-//       if (status.done()) {
-//         break;
-//       }
-//     }
-//   } catch (e) {
-//     if (e instanceof TimeoutError) {
-//       console.warn(`Timed out watching deployments.`);
-//     } else {
-//       throw e;
-//     }
-//   }
-// }
-
-// class RolloutStatus {
-//   deployed = 0;
-//   failed = 0;
-//   readonly total: number;
-
-//   constructor(total: number) {
-//     this.total = total;
-//   }
-
-//   equals(other: RolloutStatus): boolean {
-//     return (
-//       this.total === other.total &&
-//       this.deployed === other.deployed &&
-//       this.failed === other.failed
-//     );
-//   }
-
-//   output() {
-//     console.info(
-//       `Deployed to ${this.deployed} of ${this.total} apps (${this.failed} failed)`,
-//     );
-//   }
-
-//   done() {
-//     return this.total > 0 && this.deployed + this.failed === this.total;
-//   }
-// }
-
-// TODO(darick): Figure out how to get the real watch code to play
-// nicely with the build toolchain.
-/* eslint-disable @typescript-eslint/naming-convention */
-/* eslint-disable @typescript-eslint/no-empty-function */
 async function watchForDeployments(
-  _: Firestore,
-  __: Timestamp,
-): Promise<void> {}
+  firestore: Firestore,
+  from: Timestamp,
+): Promise<void> {
+  const deployments = firestore
+    .collectionGroup(APP_DEPLOYMENTS_COLLECTION_ID)
+    .withConverter(deploymentDataConverter)
+    .where('type', '==', 'SERVER_UPDATE')
+    .where('requestTime', '>', from);
+  try {
+    console.info(`Watching deployments ...`);
+    let last = new RolloutStatus(0);
+    for await (const snapshot of watch(
+      deployments,
+      WATCH_DEPLOYMENTS_TIMEOUT,
+    )) {
+      const status = new RolloutStatus(snapshot.size);
+
+      snapshot.docs.forEach(doc => {
+        switch (doc.data().status) {
+          case 'RUNNING':
+          case 'STOPPED':
+            status.deployed++;
+            break;
+          case 'FAILED':
+            status.failed++;
+            break;
+        }
+      });
+      if (!status.equals(last)) {
+        status.output();
+      }
+      last = status;
+      if (status.done()) {
+        break;
+      }
+    }
+  } catch (e) {
+    if (e instanceof TimeoutError) {
+      console.warn(`Timed out watching deployments.`);
+    } else {
+      throw e;
+    }
+  }
+}
+
+class RolloutStatus {
+  deployed = 0;
+  failed = 0;
+  readonly total: number;
+
+  constructor(total: number) {
+    this.total = total;
+  }
+
+  equals(other: RolloutStatus): boolean {
+    return (
+      this.total === other.total &&
+      this.deployed === other.deployed &&
+      this.failed === other.failed
+    );
+  }
+
+  output() {
+    console.info(
+      `Deployed to ${this.deployed} of ${this.total} apps (${this.failed} failed)`,
+    );
+  }
+
+  done() {
+    return this.total > 0 && this.deployed + this.failed === this.total;
+  }
+}
