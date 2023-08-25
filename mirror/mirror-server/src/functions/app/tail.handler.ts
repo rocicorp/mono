@@ -1,28 +1,25 @@
 import type {Response} from 'express';
-import type {Auth, DecodedIdToken} from 'firebase-admin/auth';
+import type {Auth} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
 import {https, logger} from 'firebase-functions';
 import {defineString} from 'firebase-functions/params';
-import {CallableRequest, onRequest} from 'firebase-functions/v2/https';
+import {onRequest} from 'firebase-functions/v2/https';
 import assert from 'node:assert';
 import {jsonSchema} from 'reflect-protocol';
 import {Queue} from 'shared/src/queue.js';
 import * as v from 'shared/src/valita.js';
 import type WebSocket from 'ws';
 import {createTail as createTailDefault} from '../../cloudflare/tail/tail.js';
-import type express from 'express';
 import packageJson from '../../../package.json';
 
-import {appAuthorization, userAuthorization} from '../validators/auth.js';
-import {validateSchema} from '../validators/schema.js';
 import {
-  TailRequest,
-  tailRequestSchema,
-  tailResponseSchema,
-} from 'mirror-protocol/src/tail.js';
-import type {IncomingHttpHeaders} from 'http';
-import {decodeHeaderValue} from 'shared/src/headers.js';
-import {defineSecretSafely} from '../app/secrets.js';
+  appAuthorization,
+  tokenAuthentication,
+  userAuthorization,
+} from '../validators/auth.js';
+import {validateRequest} from '../validators/schema.js';
+import {tailRequestSchema} from 'mirror-protocol/src/tail.js';
+import {defineSecretSafely} from './secrets.js';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
@@ -30,46 +27,17 @@ const cloudflareApiToken = defineSecretSafely('CLOUDFLARE_API_TOKEN');
 
 const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
-const validateFirebaseIdToken = async (
-  auth: Auth,
-  req: express.Request,
-  res: express.Response,
-): Promise<void | DecodedIdToken> => {
-  console.log('Check if request is authorized with Firebase ID token');
-
-  if (
-    !req.headers.authorization ||
-    !req.headers.authorization.startsWith('Bearer ')
-  ) {
-    console.error(
-      'No Firebase ID token was passed as a Bearer token in the Authorization header.',
-      'Make sure you authorize your request by providing the following HTTP header:',
-      'Authorization: Bearer <Firebase ID Token>',
-    );
-    res.status(403).send('Unauthorized');
-    return;
-  }
-  const idToken = req.headers.authorization.split('Bearer ')[1];
-  const decodedIdToken = await auth
-    .verifyIdToken(idToken)
-    .then(decodedIdToken => decodedIdToken)
-    .catch(error => {
-      console.error('Error while verifying Firebase ID token:', error);
-      res.status(401).send('Unauthorized');
-    });
-  return decodedIdToken;
-};
-
 export const tail = (
   firestore: Firestore,
   auth: Auth,
   createTail = createTailDefault,
 ) => {
-  const handler = validateSchema(tailRequestSchema, tailResponseSchema)
+  const handler = validateRequest(tailRequestSchema)
+    .validate(tokenAuthentication(auth))
     .validate(userAuthorization())
     .validate(appAuthorization(firestore))
     .handle(async (_tailRequest, context) => {
-      const response = context.rawRequest.res;
+      const {response} = context;
       if (response === undefined) {
         throw new https.HttpsError('not-found', 'response is undefined');
       }
@@ -118,46 +86,12 @@ export const tail = (
         await deleteTail();
       }
       response.end();
-
-      return {success: true};
     });
 
-  return onRequest(
-    async (request: express.Request, response: express.Response) => {
-      const customRequest = request as https.Request;
-      const authData = await validateFirebaseIdToken(auth, request, response);
-
-      if (authData === undefined) {
-        throw new Error('authData is undefined!');
-      }
-      const data = getData(request.headers);
-      const callableRequest: CallableRequest<TailRequest> = {
-        auth: {
-          uid: authData.uid,
-          token: authData,
-        },
-        data,
-        rawRequest: customRequest,
-      };
-      await handler(callableRequest);
-    },
-  );
+  return onRequest((req, res) => {
+    handler(req, res);
+  });
 };
-
-function getData(headers: IncomingHttpHeaders): TailRequest {
-  const dataHeaderValue = headers['data'];
-  if (!dataHeaderValue) {
-    throw new Error('data header is missing');
-  }
-  if (typeof dataHeaderValue !== 'string') {
-    throw new Error(
-      'invalid data header, single value expected, received' +
-        JSON.stringify(dataHeaderValue),
-    );
-  }
-  const data = decodeHeaderValue(dataHeaderValue);
-  return JSON.parse(data);
-}
 
 type QueueItem =
   | {type: 'data'; data: string}

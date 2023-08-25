@@ -36,7 +36,9 @@ export function tokenAuthentication<
   auth: Auth,
 ): RequestContextValidator<Request, Context, Context & AuthContext> {
   return async (_, context) => {
-    const authorization = context.request.headers['Authorization'];
+    const authorization =
+      context.request.headers['Authorization'] ??
+      context.request.headers['authorization'];
     if (typeof authorization !== 'string') {
       throw new HttpsError('unauthenticated', 'Invalid Authorization header');
     }

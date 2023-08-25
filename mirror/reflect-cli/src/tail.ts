@@ -25,9 +25,11 @@ export async function tailHandler(
   };
 
   const tailEventSource = await tail(appID, idToken, data);
-
   const q = new Queue<string>();
-  tailEventSource.onmessage = (event: {data: string}) => q.enqueue(event.data);
+  tailEventSource.onMessage = async (message: string) => {
+    await q.enqueue(message);
+  };
+  tailEventSource.startListening();
   for (;;) {
     const item = await q.dequeue();
     console.log(item);

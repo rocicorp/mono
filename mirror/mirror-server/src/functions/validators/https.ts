@@ -52,9 +52,12 @@ export class OnRequestBuilder<Request, Context> {
   handle(handler: OnRequestHandler<Request, Context>): OnRequest {
     return async (request, response) => {
       const ctx: OnRequestContext = {request, response};
-      const payload: Request = request.body as Request;
-
-      const context = await this._requestValidator(payload, ctx);
+      //check if request.body is a buffer
+      let payload = request.body;
+      if (request.body instanceof Buffer) {
+        payload = JSON.parse(request.body.toString('utf-8'));
+      }
+      const context = await this._requestValidator(payload as Request, ctx);
       await handler(payload, context);
     };
   }

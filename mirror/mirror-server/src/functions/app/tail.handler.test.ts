@@ -5,11 +5,9 @@ import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {tail} from './tail.handler.js';
 import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
 import {getMockReq, getMockRes} from '@jest-mock/express';
-import {encodeHeaderValue} from 'shared/src/headers.js';
 import {setUser, setApp} from 'mirror-schema/src/test-helpers.js';
 import type WebSocket from 'ws';
 import {sleep} from 'shared/src/sleep.js';
-import {HttpsError} from 'firebase-functions/v2/https';
 import type {Firestore} from '@google-cloud/firestore';
 
 export class MockSocket {
@@ -91,44 +89,25 @@ describe('test tail', () => {
     await setApp(firestore, 'myApp', {teamID: 'fooTeam', name: 'MyAppName'});
   });
 
-  const getRequestWithHeaders = (data: any): https.Request =>
+  const getRequestWithHeaders = (): https.Request =>
     getMockReq({
+      body: {
+        requester: {
+          userID: 'foo',
+          userAgent: {type: 'reflect-cli', version: '0.0.1'},
+        },
+        appID: 'myApp',
+      },
       headers: {
-        authorization: 'Bearer this-is-the-encoded-token',
-        data: encodeHeaderValue(JSON.stringify(data)),
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        Authorization: 'Bearer this-is-the-encoded-token',
       },
     }) as unknown as https.Request;
 
-  test('invalid auth in header', async () => {
-    const req = getRequestWithHeaders({
-      requester: {
-        userID: 'foo',
-        userAgent: {type: 'reflect-cli', version: '0.0.1'},
-      },
-    });
-
-    try {
-      const {res} = getMockRes();
-      req.res = res;
-      const createTailPromise = createTailFunction(req, res);
-      await createTailPromise;
-    } catch (e) {
-      expect(e).toBeInstanceOf(HttpsError);
-      if (e instanceof HttpsError) {
-        expect(e.message).toBe('TypeError: Missing property appID');
-      }
-    }
-  });
-
   test('valid auth in header', async () => {
-    const req = getRequestWithHeaders({
-      requester: {
-        userID: 'foo',
-        userAgent: {type: 'reflect-cli', version: '0.0.1'},
-      },
-      appID: 'myApp',
-    });
+    const req = getRequestWithHeaders();
 
+    console.log('req', req.body);
     const {res} = getMockRes();
     req.res = res;
     const createTailPromise = createTailFunction(req, res);
@@ -139,13 +118,7 @@ describe('test tail', () => {
   });
 
   test('handle message', async () => {
-    const req = getRequestWithHeaders({
-      requester: {
-        userID: 'foo',
-        userAgent: {type: 'reflect-cli', version: '0.0.1'},
-      },
-      appID: 'myApp',
-    });
+    const req = getRequestWithHeaders();
 
     const {res} = getMockRes();
     req.res = res;

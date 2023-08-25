@@ -1,8 +1,7 @@
 import * as v from 'shared/src/valita.js';
 import {baseResponseFields} from './base.js';
 import {baseAppRequestFields} from './app.js';
-import {createEventSource} from './event-source.js';
-import type EventSource from 'eventsource';
+import {createEventSource, TailEventSource} from './event-source.js';
 
 export const tailRequestSchema = v.object({
   ...baseAppRequestFields,
@@ -19,4 +18,5 @@ export const tail = (
   appID: string,
   idToken: string,
   data: TailRequest,
-): EventSource => createEventSource('app-tail', appID, idToken, data);
+): Promise<TailEventSource> =>
+  createEventSource('app-tail', appID, idToken, data);
