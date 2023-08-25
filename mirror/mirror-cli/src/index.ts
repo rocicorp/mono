@@ -14,6 +14,12 @@ import {
 } from './wipe-deployments.js';
 import {addDeploymentsOptionsHandler} from './add-deployment-options.js';
 import {runQueryHandler} from './run-query.js';
+import {
+  releaseReflectServerHandler,
+  releaseReflectServerOptions,
+  revertReflectServerHandler,
+  revertReflectServerOptions,
+} from './release-server.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -48,6 +54,22 @@ function createCLIParser(argv: string[]) {
     '🆙 Build and upload @rocicorp/reflect/server to Firestore',
     uploadReflectServerOptions,
     uploadReflectServerHandler,
+  );
+
+  // releaseServer
+  reflectCLI.command(
+    'releaseServer',
+    'Deploy a server version to a set of server channels',
+    releaseReflectServerOptions,
+    releaseReflectServerHandler,
+  );
+
+  // unreleaseServer
+  reflectCLI.command(
+    'unreleaseServer',
+    'Removes a server version to a set of server channels. The resulting highest server version will be re-deployed to apps in those channels.',
+    revertReflectServerOptions,
+    revertReflectServerHandler,
   );
 
   reflectCLI.command(

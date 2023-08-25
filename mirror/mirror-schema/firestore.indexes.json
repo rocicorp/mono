@@ -2,6 +2,20 @@
   "indexes": [
     {
       "collectionGroup": "deployments",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requestTime",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deployments",
       "queryScope": "COLLECTION",
       "fields": [
         {
