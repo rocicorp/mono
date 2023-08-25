@@ -169,6 +169,32 @@ npm run start uploadServer -- --stack=prod --channels=canary --channels=stable
 git reset --hard HEAD
 ```
 
+## Release a Server to more channels
+
+If a server was only uploaded to, say `--channels=canary` and you wish to roll it
+out to stable:
+
+```bash
+cd mirror/mirror-cli
+npm run start releaseServer -- --server=0.40.5 --channels=stable
+```
+
+The command is additive and will not remove any existing channels (e.g. "canary").
+This can also be used for one-off debugging, e.g. if you want to release to a specific
+app. Define your temporary channel name (e.g. "debug-#433") and release the desired server to
+that channel. Then in [Firebase console](https://console.firebase.google.com/project/reflect-mirror-prod/firestore/data/~2Fapps), navigate to the `apps/${appID}` document and set that App's
+`serverReleaseChannel` to your channel name. The deployment should automatically kick in.
+Don't forget to return the App to its original channel (and clean up the server doc).
+
+## Unrelease a Server from a channel
+
+```bash
+cd mirror/mirror-cli
+npm run start unreleaseServer -- --server=0.40.5 --channels=stable
+```
+
+Essentially, `releaseServer` and `unreleaseServer` take the same cli arguments.
+
 ## Update sample apps that depend on Reflect
 
 - reflect-todo
