@@ -6,6 +6,7 @@ import {appDataConverter} from 'mirror-schema/src/app.js';
 import {DEPLOYMENT_SECRETS_NAMES} from '../app/secrets.js';
 import {checkForAutoDeployment} from '../app/auto-deploy.function.js';
 import {serverSchema} from 'mirror-schema/src/server.js';
+import * as v from 'shared/src/valita.js';
 
 /**
  * `server-autoDeploy` is triggered on all changes to `servers/...` documents,
@@ -28,10 +29,8 @@ export const autoDeploy = (firestore: Firestore) =>
       const after = event.data.after.data();
 
       const affectedChannels = getAffectedChannels(
-        before
-          ? serverSchema.parse(before, {mode: 'passthrough'}).channels
-          : [],
-        after ? serverSchema.parse(after, {mode: 'passthrough'}).channels : [],
+        before ? v.parse(before, serverSchema, 'passthrough').channels : [],
+        after ? v.parse(after, serverSchema, 'passthrough').channels : [],
       );
       logger.info(
         `${serverVersion}: [${before?.channels}] => [${after?.channels}]. Checking apps in [${affectedChannels}]`,
@@ -44,10 +43,7 @@ export function getAffectedChannels(
   before: string[],
   after: string[],
 ): string[] {
-  const affectedChannels = new Set<string>();
-  for (const channel of before) {
-    affectedChannels.add(channel);
-  }
+  const affectedChannels = new Set<string>(before);
   for (const channel of after) {
     if (affectedChannels.has(channel)) {
       // Channels in both before and after are unaffected.

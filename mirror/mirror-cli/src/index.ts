@@ -67,7 +67,7 @@ function createCLIParser(argv: string[]) {
   // unreleaseServer
   reflectCLI.command(
     'unreleaseServer',
-    'Removes a server version to a set of server channels. The resulting highest server version will be re-deployed to apps in those channels.',
+    'Removes a server version from a set of server channels. The resulting highest server version will be re-deployed to apps in those channels.',
     revertReflectServerOptions,
     revertReflectServerHandler,
   );
