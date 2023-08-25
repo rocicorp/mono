@@ -47,4 +47,27 @@ export class Queue<T> {
     this.#consumers.push(consumer);
     return consumer.promise;
   }
+
+  //todo(darick): add a test for this
+  asAsyncIterator(
+    cleanup = () => {
+      /* nop */
+    },
+  ): AsyncIterator<T> {
+    return {
+      next: async () => {
+        try {
+          const value = await this.dequeue();
+          return {value};
+        } catch (e) {
+          cleanup();
+          throw e;
+        }
+      },
+      return: value => {
+        cleanup();
+        return Promise.resolve({value, done: true});
+      },
+    };
+  }
 }
