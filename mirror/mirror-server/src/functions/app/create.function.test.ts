@@ -140,8 +140,9 @@ describe('app-create function', () => {
             },
           });
 
-          // Internal consistency (and not confusing it with the script name.)
+          // Internal consistency checks.
           expect(app.name).toBe(resp.name);
+          expect(app.cfScriptName.endsWith(`-${resp.appID}`)).toBe(true);
 
           const appNameEntry = await getAppName(firestore, app.name);
           expect(appNameEntry).toEqual({
@@ -209,8 +210,9 @@ describe('app-create function', () => {
       },
     });
 
-    // Internal consistency (and not confusing it with the script name.)
+    // Internal consistency checks.
     expect(app.name).toBe(resp.name);
+    expect(app.cfScriptName.endsWith(`-${resp.appID}`)).toBe(true);
 
     const appName = await getAppName(firestore, app.name);
     expect(appName).toEqual({
