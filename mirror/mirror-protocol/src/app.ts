@@ -6,6 +6,7 @@ import {createCall} from './call.js';
 export const createRequestSchema = v.object({
   ...baseRequestFields,
   serverReleaseChannel: standardReleaseChannelSchema,
+  name: v.string().optional(),
 });
 
 export type CreateRequest = v.Infer<typeof createRequestSchema>;

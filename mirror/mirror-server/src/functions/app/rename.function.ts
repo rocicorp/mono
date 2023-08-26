@@ -26,7 +26,7 @@ export const rename = (firestore: Firestore) =>
       if (!isValidAppName(newName)) {
         throw new HttpsError(
           'invalid-argument',
-          'Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen',
+          `Invalid App Name "${newName}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen`,
         );
       }
 
@@ -82,8 +82,5 @@ export const rename = (firestore: Firestore) =>
       });
 
       logger.info(`Renamed ${appID} from ${context.app.name} to ${newName}`);
-
-      // TODO(darick): Kick off a deployment to the new hostname if there
-      // is a deployment running.
       return {success: true};
     });

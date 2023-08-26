@@ -11,6 +11,7 @@ import {
   appNameIndexDataConverter,
   appNameIndexPath,
   appPath,
+  isValidAppName,
 } from 'mirror-schema/src/app.js';
 import {
   Membership,
@@ -40,7 +41,14 @@ export const create = (firestore: Firestore) =>
     .validate(userAuthorization())
     .handle((request, context) => {
       const {userID} = context;
-      const {serverReleaseChannel} = request;
+      const {serverReleaseChannel, name} = request;
+
+      if (name !== undefined && !isValidAppName(name)) {
+        throw new HttpsError(
+          'invalid-argument',
+          `Invalid App Name "${name}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
+        );
+      }
 
       const userDocRef = firestore
         .doc(userPath(userID))
@@ -129,21 +137,18 @@ export const create = (firestore: Firestore) =>
         const appIDNumber = newAppIDAsNumber();
         const appID = newAppID(appIDNumber);
         const scriptName = newAppScriptName(appIDNumber);
+        const appName =
+          name ?? scriptName.substring(0, scriptName.lastIndexOf('-'));
 
-        // TODO(arv): Ensure that Cloudflare is OK with this script name?
         const appDocRef = firestore
           .doc(appPath(appID))
           .withConverter(appDataConverter);
         const appNameDocRef = firestore
-          .doc(appNameIndexPath(scriptName))
+          .doc(appNameIndexPath(appName))
           .withConverter(appNameIndexDataConverter);
-        const appDoc = await txn.get(appDocRef);
-        if (appDoc.exists) {
-          throw new HttpsError('already-exists', 'App already exists');
-        }
 
         const app: App = {
-          name: scriptName,
+          name: appName,
           teamID,
           cfID: cloudflareAccountId.value(),
           cfScriptName: scriptName,
@@ -161,6 +166,6 @@ export const create = (firestore: Firestore) =>
         }
         txn.create(appDocRef, app);
         txn.create(appNameDocRef, {appID});
-        return {appID, name: scriptName, success: true};
+        return {appID, name: appName, success: true};
       });
     });
