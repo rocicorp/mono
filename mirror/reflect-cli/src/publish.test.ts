@@ -1,10 +1,10 @@
-import {expect, jest, test, beforeAll} from '@jest/globals';
+import {expect, jest, test, beforeAll, afterEach} from '@jest/globals';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {publishHandler, type PublishCaller} from './publish.js';
-import {useFakeAppConfig, useFakeAuthConfig} from './test-helpers.js';
+import {useFakeAuthConfig} from './test-helpers.js';
 import {
   deploymentDataConverter,
   defaultOptions,
@@ -12,20 +12,29 @@ import {
 import {Timestamp} from '@google-cloud/firestore';
 import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
 import {initFirebase} from './firebase.js';
+import {setAppConfigForTesting} from './app-config.js';
 
 type Args = Parameters<typeof publishHandler>[0];
 
 useFakeAuthConfig();
-useFakeAppConfig();
 
 beforeAll(() => {
   initFirebase('local');
 });
 
+afterEach(() => {
+  setAppConfigForTesting(undefined);
+});
+
 test('it should throw if file not found', async () => {
   const script = `./test${Math.random().toString(32).slice(2)}.ts`;
+  setAppConfigForTesting({
+    id: 'test-app-id',
+    name: 'test-app-name',
+    server: script,
+  });
 
-  await expect(publishHandler({script} as Args)).rejects.toEqual(
+  await expect(publishHandler({} as Args)).rejects.toEqual(
     expect.objectContaining({
       constructor: Error,
       message: expect.stringMatching(
@@ -43,6 +52,11 @@ async function writeTempFiles(
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'reflect-publish-test-'));
   const testFilePath = path.join(dir, filename);
   await fs.writeFile(testFilePath, data, 'utf-8');
+  setAppConfigForTesting({
+    id: 'test-app-id',
+    name: 'test-app-name',
+    server: testFilePath,
+  });
 
   if (!reflectVersion) {
     const currentFile = fileURLToPath(import.meta.url);
@@ -70,12 +84,11 @@ async function writeTempFiles(
     }),
     'utf-8',
   );
-  return testFilePath;
 }
 
 test('it should throw if the source has syntax errors', async () => {
-  const testFilePath = await writeTempFiles('const x =');
-  await expect(publishHandler({script: testFilePath} as Args)).rejects.toEqual(
+  await writeTempFiles('const x =');
+  await expect(publishHandler({} as Args)).rejects.toEqual(
     expect.objectContaining({
       constructor: Error,
       message: expect.stringMatching(/Unexpected end of file/),
@@ -90,7 +103,7 @@ test('it should compile typescript', async () => {
       requester: {
         userAgent: {
           type: 'reflect-cli',
-          version: '0.1.0',
+          version: '0.31.0',
         },
         userID: 'fake-uid',
       },
@@ -106,10 +119,7 @@ test('it should compile typescript', async () => {
     });
   });
 
-  const testFilePath = await writeTempFiles(
-    'const x: number = 42; console.log(x);',
-    'test.ts',
-  );
+  await writeTempFiles('const x: number = 42; console.log(x);', 'test.ts');
 
   // Set the Deployment doc to RUNNING so that the cli command exits.
   const firestore = fakeFirestore();
@@ -125,7 +135,7 @@ test('it should compile typescript', async () => {
         appModules: [],
         hostname: 'app-name.reflect-server-net',
         serverVersion: '0.1.0',
-        serverVersionRange: '^0.1.0',
+        serverVersionRange: '^0.31.0',
         options: defaultOptions(),
         hashesOfSecrets: {
           /* eslint-disable @typescript-eslint/naming-convention */
@@ -139,7 +149,7 @@ test('it should compile typescript', async () => {
     });
 
   await publishHandler(
-    {script: testFilePath} as Args,
+    {} as Args,
     undefined,
     publishMock as unknown as PublishCaller,
     firestore,
@@ -149,12 +159,8 @@ test('it should compile typescript', async () => {
 });
 
 test('it should throw if invalid version', async () => {
-  const testFilePath = await writeTempFiles(
-    'const x = 42;',
-    'test.ts',
-    '1.0.0',
-  );
-  await expect(publishHandler({script: testFilePath} as Args)).rejects.toEqual(
+  await writeTempFiles('const x = 42;', 'test.ts', '1.0.0');
+  await expect(publishHandler({} as Args)).rejects.toEqual(
     expect.objectContaining({
       constructor: Error,
       message: expect.stringMatching(
