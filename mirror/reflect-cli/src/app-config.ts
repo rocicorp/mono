@@ -1,10 +1,27 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {pkgUpSync} from 'pkg-up';
+import * as v from 'shared/src/valita.js';
+import {authenticate} from './auth-config.js';
+import {makeRequester} from './requester.js';
+import {CreateRequest, create} from 'mirror-protocol/src/app.js';
 
-export type AppConfig = {
-  appID: string;
-};
+// AppSpec contains the user-specified features of the App.
+const appSpecSchema = v.object({
+  id: v.string().optional(), // Initialized on first online action (e.g. publish).
+  name: v.string(),
+  server: v.string(),
+});
+
+// AppConfig extends AppSpec and includes the initialized app ID on the backend.
+const appConfigSchema = v.object({
+  id: v.string(),
+  name: v.string(),
+  server: v.string(),
+});
+
+export type AppSpec = v.Infer<typeof appSpecSchema>;
+export type AppConfig = v.Infer<typeof appConfigSchema>;
 
 /**
  * Finds the root of the git repository.
@@ -62,37 +79,60 @@ export function setAppConfigForTesting(config: AppConfig | undefined) {
 /**
  * Reads reflect.config.json in the "project root".
  */
-export function readAppConfig(
+export function readAppSpec(
   configDirPath?: string | undefined,
-): AppConfig | undefined {
+): AppSpec | undefined {
   if (appConfigForTesting) {
     return appConfigForTesting;
   }
   const configFilePath = getConfigFilePath(configDirPath);
   if (fs.existsSync(configFilePath)) {
-    return JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
+    const json = JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
+    return v.parse(json, appSpecSchema, 'passthrough');
   }
 
   return undefined;
 }
 
-export function mustReadAppConfig(
-  configDirPath?: string | undefined,
-): AppConfig {
-  const config = readAppConfig(configDirPath);
-  if (!config) {
+export function mustReadAppSpec(configDirPath?: string | undefined): AppSpec {
+  const spec = readAppSpec(configDirPath);
+  if (!spec) {
     throw new Error(
       `Could not find ${configFileName}. Please run \`reflect init\` to create one.`,
     );
   }
+  return spec;
+}
+
+export async function ensureAppConfig(
+  configDirPath?: string | undefined,
+): Promise<AppConfig> {
+  const spec = mustReadAppSpec(configDirPath);
+  if (spec.id) {
+    // TODO(darick): Check that the name matches that of the app? Or somehow support renaming.
+    return v.parse(spec, appConfigSchema, 'passthrough');
+  }
+  const {uid: userID} = await authenticate();
+
+  const data: CreateRequest = {
+    requester: makeRequester(userID),
+    serverReleaseChannel: 'stable',
+    name: spec.name,
+  };
+
+  const {appID} = await create(data);
+  const config = {
+    ...spec,
+    id: appID,
+  };
+  writeAppConfig(config, configDirPath);
   return config;
 }
 
 export function writeAppConfig(
-  config: AppConfig,
+  config: AppSpec,
   configDirPath?: string | undefined,
 ) {
   const configFilePath = getConfigFilePath(configDirPath);
-  console.log('Writing config to', configFilePath);
   fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
 }

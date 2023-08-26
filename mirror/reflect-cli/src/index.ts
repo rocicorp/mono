@@ -7,11 +7,11 @@ import {
 import {createHandler, createOptions} from './create.js';
 import {devHandler, devOptions} from './dev.js';
 import {handleWith} from './firebase.js';
-import {initHandler, initOptions} from './init.js';
 import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
 import {tailHandler, tailOptions} from './tail.js';
+import {lfgHandler, lfgOptions} from './lfg.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -31,18 +31,28 @@ async function main(argv: string[]): Promise<void> {
 function createCLIParser(argv: string[]) {
   const reflectCLI = createCLIParserBase(argv);
 
-  reflectCLI.command(
-    'init [name]',
-    '📥 Initialize a basic Reflect project, ',
-    initOptions,
-    handleWith(initHandler).andCleanup(),
-  );
-
+  // create
   reflectCLI.command(
     'create <name>',
-    '🛠 Create, init and publish a basic Reflect project, ',
+    '🛠  Create, init and publish a basic Reflect project, ',
     createOptions,
     handleWith(createHandler).andCleanup(),
+  );
+
+  // init
+  reflectCLI.command(
+    ['init', 'lfg'],
+    '🚀 Initialize and publish a basic Reflect project in the current directory',
+    lfgOptions,
+    handleWith(lfgHandler).andCleanup(),
+  );
+
+  // dev
+  reflectCLI.command(
+    'dev',
+    '👷 Start a local dev server for your Reflect project',
+    devOptions,
+    handleWith(devHandler).andCleanup(),
   );
 
   // login
@@ -63,36 +73,28 @@ function createCLIParser(argv: string[]) {
     }).andCleanup(),
   );
 
+  // publish
   reflectCLI.command(
-    'status',
-    '🚥 Get your status',
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    () => {},
-    handleWith(statusHandler).andCleanup(),
-  );
-
-  // dev
-  reflectCLI.command(
-    'dev <script>',
-    '👷 Start a local dev server for your Reflect project',
-    devOptions,
-    handleWith(devHandler).andCleanup(),
+    'publish',
+    '🆙 Publish your Reflect project',
+    publishOptions,
+    handleWith(publishHandler).andCleanup(),
   );
 
   // tail
   reflectCLI.command(
-    'tail [worker]',
-    '🦚 Starts a log tailing session running worker',
+    'tail',
+    '🦚 Starts a log tailing session',
     tailOptions,
     handleWith(tailHandler).andCleanup(),
   );
 
-  // publish
   reflectCLI.command(
-    'publish <script>',
-    '🆙 Publish your reflect project',
-    publishOptions,
-    handleWith(publishHandler).andCleanup(),
+    'status',
+    false, // Don't show in help.
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    () => {},
+    handleWith(statusHandler).andCleanup(),
   );
 
   return reflectCLI;

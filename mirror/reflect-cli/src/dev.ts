@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import {compile} from './compile.js';
 import {startDevServer} from './dev/start-dev-server.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import {mustReadAppSpec} from './app-config.js';
 
 export function devOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -32,7 +33,8 @@ async function exists(path: string) {
 type DevHandlerArgs = YargvToInterface<ReturnType<typeof devOptions>>;
 
 export async function devHandler(yargs: DevHandlerArgs) {
-  const {script, port} = yargs;
+  const {port} = yargs;
+  const {server: script} = mustReadAppSpec();
 
   const absPath = path.resolve(script);
   if (!(await exists(absPath))) {

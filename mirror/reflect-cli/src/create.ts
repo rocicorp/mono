@@ -1,10 +1,7 @@
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import color from 'picocolors';
-import {scaffoldHandler, updateEnvFile} from './scaffold.js';
-import {getApp, initHandler} from './init.js';
-import {publishHandler} from './publish.js';
-import {readAppConfig} from './app-config.js';
-import {getFirestore} from './firebase.js';
+import {initApp, isValidPackageName} from './lfg.js';
+import {mkdir} from 'node:fs/promises';
 
 export function createOptions(yargs: CommonYargsArgv) {
   return yargs.option('name', {
@@ -18,32 +15,20 @@ type CreatedHandlerArgs = YargvToInterface<ReturnType<typeof createOptions>>;
 
 export async function createHandler(createYargs: CreatedHandlerArgs) {
   const {name} = createYargs;
-  scaffoldHandler(createYargs);
-  await initHandler(
-    {
-      ...createYargs,
-      name: undefined,
-      channel: 'stable',
-      new: true,
-    },
-    name,
-  );
-  await publishHandler(
-    {
-      ...createYargs,
-      script: `${name}/src/reflect/index.ts`,
-    },
-    name,
-  );
-  const firestore = getFirestore();
-  const appConfig = readAppConfig(name);
-  if (appConfig) {
-    const app = await getApp(firestore, appConfig.appID);
+
+  const invalidPackageNameReason = isValidPackageName(name);
+  if (invalidPackageNameReason) {
     console.log(
-      `Updating app .env with worker wss://${app.name}.reflect-server.net`,
+      color.red(
+        `Invalid project name: ${color.bgWhite(
+          name,
+        )} - (${invalidPackageNameReason})`,
+      ),
     );
-    updateEnvFile(name, `wss://${app.name}.reflect-server.net`);
+    process.exit(1);
   }
-  console.log(color.blue(`start-up your reflect app:`));
-  console.log(color.white(`cd ${name} && npm install && npm run dev`));
+
+  console.log(color.green(`Creating folder: ${color.bgWhite(name)}`));
+  await mkdir(name, {recursive: true});
+  await initApp(createYargs, name);
 }

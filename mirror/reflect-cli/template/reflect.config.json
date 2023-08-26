@@ -1,0 +1,4 @@
+{
+  "name": "<APP-NAME>",
+  "server": "./src/reflect/index.ts"
+}

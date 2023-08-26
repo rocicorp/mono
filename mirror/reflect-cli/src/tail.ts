@@ -1,5 +1,5 @@
 import {Queue} from 'shared/src/queue.js';
-import {mustReadAppConfig} from './app-config.js';
+import {ensureAppConfig} from './app-config.js';
 import {authenticate} from './auth-config.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {tail, TailRequest} from 'mirror-protocol/src/tail.js';
@@ -15,7 +15,7 @@ export async function tailHandler(
   _yargs: TailHandlerArgs,
   configDirPath?: string | undefined,
 ) {
-  const {appID} = mustReadAppConfig(configDirPath);
+  const {id: appID} = await ensureAppConfig(configDirPath);
   const user = await authenticate();
   const idToken = await user.getIdToken();
 

@@ -4,7 +4,7 @@ import {
 } from 'mirror-protocol/src/publish.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {mustReadAppConfig} from './app-config.js';
+import {ensureAppConfig} from './app-config.js';
 import {authenticate} from './auth-config.js';
 import {compile} from './compile.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
@@ -15,11 +15,7 @@ import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
 import {watch} from 'mirror-schema/src/watch.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
-  return yargs.positional('script', {
-    describe: 'Path to the worker script',
-    type: 'string',
-    demandOption: true,
-  });
+  return yargs;
 }
 
 async function exists(path: string) {
@@ -36,14 +32,12 @@ type PublishHandlerArgs = YargvToInterface<ReturnType<typeof publishOptions>>;
 export type PublishCaller = typeof publishCaller;
 
 export async function publishHandler(
-  yargs: PublishHandlerArgs,
+  _: PublishHandlerArgs,
   configDirPath?: string | undefined,
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
-  const {script} = yargs;
-
-  const {appID} = mustReadAppConfig(configDirPath);
+  const {id: appID, server: script} = await ensureAppConfig(configDirPath);
 
   const absPath = path.resolve(script);
   if (!(await exists(absPath))) {
