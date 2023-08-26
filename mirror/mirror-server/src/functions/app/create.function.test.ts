@@ -140,6 +140,9 @@ describe('app-create function', () => {
             },
           });
 
+          // Internal consistency (and not confusing it with the script name.)
+          expect(app.name).toBe(resp.name);
+
           const appNameEntry = await getAppName(firestore, app.name);
           expect(appNameEntry).toEqual({
             appID: resp.appID,
@@ -205,6 +208,9 @@ describe('app-create function', () => {
         },
       },
     });
+
+    // Internal consistency (and not confusing it with the script name.)
+    expect(app.name).toBe(resp.name);
 
     const appName = await getAppName(firestore, app.name);
     expect(appName).toEqual({
