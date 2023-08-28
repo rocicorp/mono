@@ -21,8 +21,8 @@ export function createTailEventSource<R extends BaseRequest>(
   appID: string,
   apiToken: string,
   request: R,
+  url = createTailEventSourceURL(functionName, appID),
 ): TailEventSource {
-  const url = createTailEventSourceURL(functionName, appID);
   return new TailEventSourceImpl(url, apiToken, request);
 }
 
