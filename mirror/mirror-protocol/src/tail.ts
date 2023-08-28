@@ -15,6 +15,9 @@ export function createTailEventSourceURL(
   functionName: string,
   appID: string,
 ): string {
+  // Firebase has an undocumented property to determine if the emulator is being
+  // used and at what origin.
+  // https://stackoverflow.com/questions/71899872/how-to-get-the-current-https-functions-endpoint-for-firebase-when-using-not-usin
   const functions: Functions & {emulatorOrigin?: string} = getFunctions();
   if (functions.emulatorOrigin) {
     return `${functions.emulatorOrigin}/${functions.app.options.projectId}/${functions.region}/${functionName}/${appID}`;
