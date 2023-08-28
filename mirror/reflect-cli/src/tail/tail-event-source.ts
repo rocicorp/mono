@@ -1,4 +1,3 @@
-import {getFunctions} from 'firebase/functions';
 import type {BaseRequest} from 'mirror-protocol/src/base.js';
 import assert from 'node:assert';
 import {jsonSchema} from 'reflect-protocol';
@@ -23,7 +22,7 @@ export function createTailEventSource<R extends BaseRequest>(
   apiToken: string,
   request: R,
 ): TailEventSource {
-  const url = createTailEventSourceURL(getFunctions(), functionName, appID);
+  const url = createTailEventSourceURL(functionName, appID);
   return new TailEventSourceImpl(url, apiToken, request);
 }
 

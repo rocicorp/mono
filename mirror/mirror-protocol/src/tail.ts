@@ -1,4 +1,4 @@
-import type {getFunctions} from 'firebase/functions';
+import {getFunctions, type Functions} from 'firebase/functions';
 import * as v from 'shared/src/valita.js';
 import {baseAppRequestFields} from './app.js';
 import {baseResponseFields} from './base.js';
@@ -12,12 +12,10 @@ export const tailResponseSchema = v.object(baseResponseFields);
 export type TailResponse = v.Infer<typeof tailResponseSchema>;
 
 export function createTailEventSourceURL(
-  functions: ReturnType<typeof getFunctions> & {
-    emulatorOrigin?: string;
-  },
   functionName: string,
   appID: string,
 ): string {
+  const functions: Functions & {emulatorOrigin?: string} = getFunctions();
   if (functions.emulatorOrigin) {
     return `${functions.emulatorOrigin}/${functions.app.options.projectId}/${functions.region}/${functionName}/${appID}`;
   }
