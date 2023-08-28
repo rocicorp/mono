@@ -20,6 +20,7 @@ import {
   ClientGroupID,
   ClientID,
   dropDatabase,
+  ExperimentalMemKVStore,
   ExperimentalWatchCallbackForOptions,
   ExperimentalWatchNoIndexCallback,
   ExperimentalWatchOptions,
@@ -302,7 +303,7 @@ export class Reflect<MD extends MutatorDefs> {
         minDelayMs: 0,
       },
       licenseKey: 'reflect-client-static-key',
-      experimentalCreateKVStore: options.createKVStore,
+      experimentalCreateKVStore: options.createKVStore ?? createMemStore,
     };
     const replicacheInternalOptions = {
       enableLicensing: false,
@@ -1418,3 +1419,7 @@ class TimedOutError extends Error {
 }
 
 class CloseError extends Error {}
+
+function createMemStore(name: string): ExperimentalMemKVStore {
+  return new ExperimentalMemKVStore(name);
+}

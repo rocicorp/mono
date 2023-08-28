@@ -18,6 +18,7 @@ import {
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
+  Reflect,
   createSocket,
   serverAheadReloadReason,
 } from './reflect.js';
@@ -1509,6 +1510,23 @@ suite('Invalid Downstream message', () => {
   }
 });
 
+test('Uses MemStore by default', async () => {
+  // This test will fail if we touch IndexedDB.
+  const spy = sinon.spy(IDBFactory.prototype, 'open');
+
+  const r = new Reflect({
+    socketOrigin: null,
+    userID: 'user-id',
+    roomID: 'room-id',
+  });
+
+  expect(await r.query(tx => tx.get('foo'))).to.equal(undefined);
+
+  await r.close();
+
+  expect(spy.called).is.false;
+});
+
 test('experimentalKVStore', async () => {
   const r1 = reflectForTest({
     mutators: {
@@ -1519,7 +1537,8 @@ test('experimentalKVStore', async () => {
   });
   await r1.mutate.putFoo('bar');
   expect(await r1.query(tx => tx.get('foo'))).to.equal('bar');
-  expect(await idbExists(r1.idbName)).is.true;
+  // We currently disable persistence so there should be no IndexedDB.
+  expect(await idbExists(r1.idbName)).is.false;
 
   const r2 = reflectForTest({
     createKVStore: name => new ExperimentalMemKVStore(name),
