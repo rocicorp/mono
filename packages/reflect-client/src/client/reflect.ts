@@ -262,6 +262,7 @@ export class Reflect<MD extends MutatorDefs> {
       onOnlineChange,
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
+      enablePersistence = false,
     } = options;
     if (!userID) {
       throw new Error('ReflectOptions.userID must not be empty.');
@@ -303,7 +304,9 @@ export class Reflect<MD extends MutatorDefs> {
         minDelayMs: 0,
       },
       licenseKey: 'reflect-client-static-key',
-      experimentalCreateKVStore: options.createKVStore ?? createMemStore,
+      experimentalCreateKVStore:
+        options.createKVStore ??
+        (enablePersistence ? undefined : createMemStore),
     };
     const replicacheInternalOptions = {
       enableLicensing: false,

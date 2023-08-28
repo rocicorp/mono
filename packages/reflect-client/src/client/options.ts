@@ -175,4 +175,9 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * Allows providing a custom implementation of the underlying storage layer.
    */
   createKVStore?: CreateKVStore | undefined;
+
+  /**
+   * Enables persistence of the datastore used on the client. Default is `false`.
+   */
+  enablePersistence?: boolean | undefined;
 }

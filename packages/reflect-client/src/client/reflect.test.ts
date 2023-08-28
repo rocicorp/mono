@@ -1527,6 +1527,23 @@ test('Uses MemStore by default', async () => {
   expect(spy.called).is.false;
 });
 
+test('Use IDB if enablePersistence', async () => {
+  const spy = sinon.spy(IDBFactory.prototype, 'open');
+
+  const r = new Reflect({
+    socketOrigin: null,
+    userID: 'user-id',
+    roomID: 'room-id',
+    enablePersistence: true,
+  });
+
+  expect(await r.query(tx => tx.get('foo'))).to.equal(undefined);
+
+  await r.close();
+
+  expect(spy.called).is.true;
+});
+
 test('experimentalKVStore', async () => {
   const r1 = reflectForTest({
     mutators: {
