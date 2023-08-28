@@ -1,6 +1,6 @@
-import type {Request} from 'firebase-functions/v2/https';
 import type {Response} from 'express';
-import type {RequestContextValidator, MaybePromise} from './types.js';
+import type {Request} from 'firebase-functions/v2/https';
+import type {MaybePromise, RequestContextValidator} from './types.js';
 
 type OnRequest = (request: Request, response: Response) => MaybePromise<void>;
 
@@ -52,12 +52,11 @@ export class OnRequestBuilder<Request, Context> {
   handle(handler: OnRequestHandler<Request, Context>): OnRequest {
     return async (request, response) => {
       const ctx: OnRequestContext = {request, response};
-      //check if request.body is a buffer
+      // If the body is a Buffer, it's likely a JSON payload.
+      const {body} = request;
       const payload =
-        request.body instanceof Buffer
-          ? JSON.parse(request.body.toString('utf-8'))
-          : request.body;
-      const context = await this._requestValidator(payload as Request, ctx);
+        body instanceof Buffer ? JSON.parse(body.toString('utf-8')) : body;
+      const context = await this._requestValidator(payload, ctx);
       await handler(payload, context);
     };
   }
