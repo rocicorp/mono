@@ -98,6 +98,8 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   readonly #turnDuration: number;
   readonly #router = new Router();
 
+  #state: DurableObjectState;
+
   constructor(options: RoomDOOptions<MD>) {
     const {
       mutators,
@@ -117,6 +119,8 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       state.storage,
       options.allowUnconfirmedWrites,
     );
+
+    this.#state = options.state;
 
     this.#initRoutes();
 
@@ -403,11 +407,10 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     }
   };
 
-  #processUntilDone(lc: LogContext) {
-    lc.debug?.('handling processUntilDone');
+  alarm(): Promise<void> {
     if (this.#turnTimerID) {
-      lc.debug?.('already processing, nothing to do');
-      return;
+      this.#lc.debug?.('already processing, nothing to do');
+      return Promise.resolve();
     }
 
     this.#turnTimerID = this.runInLockAtInterval(
@@ -419,6 +422,16 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       this.#turnDuration,
       logContext => this.#processNextInLock(logContext),
     );
+    return Promise.resolve();
+  }
+
+  #processUntilDone(lc: LogContext) {
+    lc.debug?.('handling processUntilDone');
+    if (this.#turnTimerID) {
+      lc.debug?.('already processing, nothing to do');
+      return;
+    }
+    void this.#state.storage.setAlarm(0);
   }
 
   // Exposed for testing.
