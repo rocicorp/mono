@@ -24,7 +24,7 @@ export const stringBooleanSchema = v.union(
  */
 export const varsSchema = v.object({
   /* eslint-disable @typescript-eslint/naming-convention */
-  DISABLED: stringBooleanSchema.default('false'),
+  DISABLE: stringBooleanSchema.default('false'),
   DISABLE_LOG_FILTERING: stringBooleanSchema.default('false'),
   LOG_LEVEL: logLevelSchema.default('info'),
   /* eslint-enable @typescript-eslint/naming-convention */

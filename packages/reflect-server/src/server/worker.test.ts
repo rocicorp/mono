@@ -21,7 +21,7 @@ function createTestFixture(
   options: {
     createTestResponse?: (req: Request) => Response;
     authApiKeyDefined?: boolean;
-    disable?: boolean | undefined;
+    disable?: string | undefined;
   } = {},
 ) {
   const {
@@ -73,14 +73,14 @@ function testDisabled(testRequest: Request) {
   return testNotForwardedToAuthDo(
     testRequest,
     new Response('Disabled', {status: 503}),
-    true,
+    'true',
   );
 }
 
 async function testNotForwardedToAuthDo(
   testRequest: Request,
   expectedResponse: Response,
-  disable?: boolean | undefined,
+  disable?: string | undefined,
 ) {
   const {testEnv, authDORequests} = createTestFixture({
     createTestResponse: () => {
@@ -326,7 +326,7 @@ test('on scheduled event does not send api/auth/v0/revalidateConnections to Auth
 
   const {testEnv, authDORequests} = createTestFixture({
     authApiKeyDefined: true,
-    disable: true,
+    disable: 'true',
   });
 
   if (!worker.scheduled) {

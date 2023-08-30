@@ -69,7 +69,7 @@ describe('auto-deploy', () => {
         teamSubdomain: 'yah',
         deploymentOptions: {
           vars: {
-            DISABLED: 'false',
+            DISABLE: 'false',
             DISABLE_LOG_FILTERING: 'false',
             LOG_LEVEL: 'info',
           },
@@ -89,7 +89,7 @@ describe('auto-deploy', () => {
             hostname: 'boo.yah.reflect-server.net',
             options: {
               vars: {
-                DISABLED: 'false',
+                DISABLE: 'false',
                 DISABLE_LOG_FILTERING: 'false',
                 LOG_LEVEL: 'info',
               },
@@ -168,7 +168,7 @@ describe('auto-deploy', () => {
       expectedSpec: {
         options: {
           vars: {
-            DISABLED: 'false',
+            DISABLE: 'false',
             DISABLE_LOG_FILTERING: 'false',
             LOG_LEVEL: 'debug',
           },
