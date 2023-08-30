@@ -303,7 +303,7 @@ export class Reflect<MD extends MutatorDefs> {
         minDelayMs: 0,
       },
       licenseKey: 'reflect-client-static-key',
-      experimentalCreateKVStore: getKVStoreFactory(options),
+      experimentalCreateKVStore: getCreateKVStore(options),
     };
     const replicacheInternalOptions = {
       enableLicensing: false,
@@ -1424,7 +1424,7 @@ function createMemStore(name: string): ExperimentalMemKVStore {
   return new ExperimentalMemKVStore(name);
 }
 
-function getKVStoreFactory<MD extends MutatorDefs>(
+function getCreateKVStore<MD extends MutatorDefs>(
   options: ReflectOptions<MD>,
 ): CreateKVStore | undefined {
   switch (options.kvStore) {
