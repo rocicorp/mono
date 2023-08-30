@@ -5,9 +5,6 @@ import {
   App,
   appDataConverter,
   appPath,
-  AppNameIndex,
-  appNameIndexDataConverter,
-  appNameIndexPath,
 } from 'mirror-schema/src/app.js';
 import {
   Membership,
@@ -18,6 +15,10 @@ import {
 import {
   teamDataConverter,
   teamPath,
+  appNameIndexPath,
+  appNameIndexDataConverter,
+  sanitizeForSubdomain,
+  type AppNameIndex,
   type Team,
 } from 'mirror-schema/src/team.js';
 import {
@@ -76,6 +77,7 @@ export async function setTeam(
 ): Promise<Team> {
   const {
     name = `Name of ${teamID}`,
+    subdomain = sanitizeForSubdomain(`Name of ${teamID}`),
     defaultCfID = 'default-cloudflare-id',
     numAdmins = 0,
     numMembers = 0,
@@ -85,6 +87,7 @@ export async function setTeam(
   } = team;
   const newTeam: Team = {
     name,
+    subdomain,
     defaultCfID,
     numAdmins,
     numMembers,
@@ -181,10 +184,11 @@ export async function setApp(
 
 export async function getAppName(
   firestore: Firestore,
+  teamID: string,
   appName: string,
 ): Promise<AppNameIndex> {
   const appNameDoc = await firestore
-    .doc(appNameIndexPath(appName))
+    .doc(appNameIndexPath(teamID, appName))
     .withConverter(appNameIndexDataConverter)
     .get();
   return must(appNameDoc.data());
@@ -192,11 +196,12 @@ export async function getAppName(
 
 export async function setAppName(
   firestore: Firestore,
+  teamID: string,
   appID: string,
   name: NamedCurve,
 ): Promise<void> {
   await firestore
-    .doc(appNameIndexPath(name))
+    .doc(appNameIndexPath(teamID, name))
     .withConverter(appNameIndexDataConverter)
     .set({appID});
 }

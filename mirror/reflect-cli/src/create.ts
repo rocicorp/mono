@@ -22,7 +22,6 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
   await initHandler(
     {
       ...createYargs,
-      name: undefined,
       channel: 'stable',
       new: true,
     },

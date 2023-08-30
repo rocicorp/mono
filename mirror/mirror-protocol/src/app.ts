@@ -5,8 +5,9 @@ import {createCall} from './call.js';
 
 export const createRequestSchema = v.object({
   ...baseRequestFields,
+  teamID: v.string(),
+  name: v.string(),
   serverReleaseChannel: standardReleaseChannelSchema,
-  name: v.string().optional(),
 });
 
 export type CreateRequest = v.Infer<typeof createRequestSchema>;
@@ -14,7 +15,6 @@ export type CreateRequest = v.Infer<typeof createRequestSchema>;
 export const createResponseSchema = v.object({
   ...baseResponseFields,
   appID: v.string(),
-  name: v.string(),
 });
 export type CreateResponse = v.Infer<typeof createResponseSchema>;
 

@@ -14,6 +14,10 @@ export const ensureTeamResponseSchema = v.object({
 });
 export type EnsureTeamResponse = v.Infer<typeof ensureTeamResponseSchema>;
 
+// The team-ensure function ensures that the user is part of exactly one Team,
+// initializing one with the given name if necessary. The name should default
+// to the user's github username, which is available on the client credentials
+// via the github oauth login.
 export const ensureTeam = createCall(
   'team-ensure',
   ensureTeamRequestSchema,

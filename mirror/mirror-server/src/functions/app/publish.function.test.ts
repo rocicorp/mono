@@ -42,6 +42,7 @@ describe('publish', () => {
       firestore.doc(appPath(APP_ID)).withConverter(appDataConverter),
       {
         name: 'foo-bar',
+        teamSubdomain: 'team-blue',
         cfID: '123',
         cfScriptName: 'foo-bar-script',
         serverReleaseChannel: 'stable',
@@ -217,7 +218,7 @@ describe('publish', () => {
             ],
             serverVersion: c.expectedServerVersion,
             serverVersionRange: request.serverVersionRange,
-            hostname: 'foo-bar.reflect-server.net',
+            hostname: 'foo-bar.team-blue.reflect-server.net',
             options: {
               vars: {
                 /* eslint-disable @typescript-eslint/naming-convention */
