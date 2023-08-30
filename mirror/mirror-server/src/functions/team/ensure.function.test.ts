@@ -19,7 +19,6 @@ import {
   teamSubdomainIndexDataConverter,
   teamSubdomainIndexPath,
 } from 'mirror-schema/src/team.js';
-import {must} from 'shared/src/must.js';
 
 mockFunctionParamsAndSecrets();
 
@@ -122,7 +121,7 @@ describe('team-ensure function', () => {
       email: USER_EMAIL,
       role: 'admin',
     });
-    const subdomain = must(team.subdomain);
+    const {subdomain} = team;
     const subdomainIndex = await firestore
       .doc(teamSubdomainIndexPath(subdomain))
       .get();
@@ -165,7 +164,7 @@ describe('team-ensure function', () => {
       email: USER_EMAIL,
       role: 'admin',
     });
-    const subdomain = must(team.subdomain);
+    const {subdomain} = team;
     const subdomainIndex = await firestore
       .doc(teamSubdomainIndexPath(subdomain))
       .get();

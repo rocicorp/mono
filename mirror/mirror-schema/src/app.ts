@@ -12,7 +12,7 @@ export const appSchema = v.object({
   // with the app `name`, to determine the hostname of the app worker URL:
   //
   // https://<app-name>.<team-subdomain>.reflect-server.net.
-  teamSubdomain: v.string().optional(), // TODO: Make required.
+  teamSubdomain: v.string(),
 
   // The user requested name, which must be suitable as a subdomain
   // (lower-cased alphanumeric with hyphens).

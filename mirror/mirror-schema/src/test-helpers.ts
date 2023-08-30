@@ -159,6 +159,7 @@ export async function setApp(
   const {
     name = `Name of ${appID}`,
     teamID = 'team-id',
+    teamSubdomain = 'team-subdomain',
     cfID = 'default-cloudflare-id',
     cfScriptName = 'cf-script-name',
     serverReleaseChannel = 'stable',
@@ -166,6 +167,7 @@ export async function setApp(
   const newApp: App = {
     name,
     teamID,
+    teamSubdomain,
     cfID,
     cfScriptName,
     serverReleaseChannel,
