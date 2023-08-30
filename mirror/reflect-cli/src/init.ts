@@ -44,8 +44,7 @@ export async function initHandler(
 
   const userID = user.uid;
 
-  const {name: appName, new: newApp} = yargs;
-  const {channel} = yargs;
+  const {name: appName, new: newApp, channel} = yargs;
   v.assert(channel, standardReleaseChannelSchema);
 
   if (newApp) {

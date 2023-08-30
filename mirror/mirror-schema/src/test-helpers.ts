@@ -73,7 +73,7 @@ export async function setTeam(
 ): Promise<Team> {
   const {
     name = `Name of ${teamID}`,
-    subdomain = sanitizeForSubdomain(`Name of ${teamID}`),
+    subdomain = sanitizeForSubdomain(name),
     defaultCfID = 'default-cloudflare-id',
     numAdmins = 0,
     numMembers = 0,

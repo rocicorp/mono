@@ -73,7 +73,7 @@ export const create = (firestore: Firestore) =>
         if (role !== 'admin') {
           throw new HttpsError(
             'permission-denied',
-            `User ${userID} is not an admin of team ${teamID}`,
+            `User ${userID} does not have permission to create new apps for team ${teamID}`,
           );
         }
 

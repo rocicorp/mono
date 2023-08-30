@@ -1,7 +1,6 @@
 import * as v from 'shared/src/valita.js';
 import {firestoreDataConverter} from './converter.js';
 import {deploymentOptionsSchema, deploymentSchema} from './deployment.js';
-import {isValidSubdomain} from './team.js';
 
 export const appSchema = v.object({
   cfID: v.string(),
@@ -54,4 +53,4 @@ export const appDataConverter = firestoreDataConverter(appSchema);
 // consistent with other schema files.
 export {APP_COLLECTION, appPath} from './deployment.js';
 
-export const isValidAppName = isValidSubdomain;
+export {isValidSubdomain as isValidAppName} from './team.js';
