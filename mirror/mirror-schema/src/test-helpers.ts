@@ -1,11 +1,7 @@
 import type {Firestore} from '@google-cloud/firestore';
 import type firebase from 'firebase/compat/app';
 import {firebaseStub} from 'firestore-jest-mock/mocks/firebase.js';
-import {
-  App,
-  appDataConverter,
-  appPath,
-} from 'mirror-schema/src/app.js';
+import {App, appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {
   Membership,
   Role,
