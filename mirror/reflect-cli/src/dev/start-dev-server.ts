@@ -1,4 +1,5 @@
 import type {OutputFile} from 'esbuild';
+import getPort from 'get-port';
 import {Miniflare} from 'miniflare';
 import {nanoid} from 'nanoid';
 import * as path from 'node:path';
@@ -18,7 +19,7 @@ export async function startDevServer(
 ): Promise<URL> {
   const appDir = path.dirname(code.path);
   const appConfigRoot = mustFindAppConfigRoot();
-  const inspectorPort = 9229;
+  const inspectorPort = await getPort({port: 9229});
 
   // Create a new Miniflare instance, starting a workerd server
   const mf = new Miniflare({
@@ -50,8 +51,7 @@ export async function startDevServer(
       },
     ],
     bindings: {
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      REFLECT_AUTH_API_KEY: nanoid(),
+      ['REFLECT_AUTH_API_KEY']: nanoid(),
     },
 
     durableObjects: {roomDO: 'RoomDO', authDO: 'AuthDO', testDO: 'TestDO'},
