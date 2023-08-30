@@ -428,7 +428,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         clearInterval(this.#turnTimerID);
         this.#turnTimerID = 0;
         void this.#state.storage.setAlarm(Date.now());
-      }
+      },
     );
     return Promise.resolve();
   }
@@ -452,10 +452,11 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     timeoutCallback: (lc: LogContext) => void,
     beforeQueue = () => {
       /* hook for testing */
-    }
+    },
   ): NodeJS.Timer {
     let queued = false;
     const startIntervalTime = Date.now();
+    let timeoutCallbackCalled = false;
     return setInterval(async () => {
       beforeQueue(); // Hook for testing.
 
@@ -492,9 +493,13 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       );
 
       const elapsed = Date.now() - startIntervalTime;
-      if (elapsed > timeout) {
-        lc.debug?.(`${name} interval ran for ${elapsed}ms, calling timeoutCallback`);
+      console.log(elapsed, timeout);
+      if (elapsed > timeout && !timeoutCallbackCalled) {
+        lc.debug?.(
+          `${name} interval ran for ${elapsed}ms, calling timeoutCallback`,
+        );
         timeoutCallback(lc);
+        timeoutCallbackCalled = true;
       }
     }, interval);
   }
