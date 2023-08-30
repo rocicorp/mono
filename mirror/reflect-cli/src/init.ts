@@ -1,5 +1,5 @@
 import {getFirestore, type Firestore} from './firebase.js';
-import {CreateRequest, create as createApp} from 'mirror-protocol/src/app.js';
+import {createApp} from 'mirror-protocol/src/app.js';
 import {ensureTeam} from 'mirror-protocol/src/team.js';
 
 import {App, appDataConverter, appPath} from 'mirror-schema/src/app.js';

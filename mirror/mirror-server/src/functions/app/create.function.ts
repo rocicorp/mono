@@ -39,6 +39,13 @@ export const create = (firestore: Firestore) =>
       const {userID} = context;
       const {teamID, serverReleaseChannel, name: appName} = request;
 
+      if (!teamID || !appName) {
+        throw new HttpsError(
+          'invalid-argument',
+          'Please update to the latest release of @rocicorp/reflect',
+        );
+      }
+
       if (appName !== undefined && !isValidAppName(appName)) {
         throw new HttpsError(
           'invalid-argument',

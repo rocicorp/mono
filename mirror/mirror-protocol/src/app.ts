@@ -5,8 +5,10 @@ import {createCall} from './call.js';
 
 export const createRequestSchema = v.object({
   ...baseRequestFields,
-  teamID: v.string(),
-  name: v.string(),
+
+  // TODO(darick): Make these required once TT's have updated their reflect-cli.
+  teamID: v.string().optional(),
+  name: v.string().optional(),
   serverReleaseChannel: standardReleaseChannelSchema,
 });
 
@@ -18,7 +20,7 @@ export const createResponseSchema = v.object({
 });
 export type CreateResponse = v.Infer<typeof createResponseSchema>;
 
-export const create = createCall(
+export const createApp = createCall(
   'app-create',
   createRequestSchema,
   createResponseSchema,
@@ -44,7 +46,7 @@ export const renameAppResponseSchema = v.object({
 });
 export type RenameAppResponse = v.Infer<typeof renameAppResponseSchema>;
 
-export const rename = createCall(
+export const renameApp = createCall(
   'app-rename',
   renameAppRequestSchema,
   renameAppResponseSchema,
