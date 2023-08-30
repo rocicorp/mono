@@ -498,6 +498,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       );
     this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
     if (nothingToProcess && this.#turnTimerID) {
+      lc.info?.('\n\n\n\n** nothing to process, clearing timer **\n\n\n\n');
       clearInterval(this.#turnTimerID);
       this.#turnTimerID = 0;
     }
