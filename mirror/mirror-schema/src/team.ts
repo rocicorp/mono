@@ -12,7 +12,7 @@ export const teamSchema = v.object({
   // integer suffix added in the case of collisions. In the future, users will
   // have the ability to change the team name and subdomain.
   //
-  // TODO: Denormalize to all of the Team's apps to simplify deployment logic.
+  // This field is denormalized to all of the Team's apps to simplify deployment logic.
   subdomain: v.string().optional(), // Make required
 
   defaultCfID: v.string(),
