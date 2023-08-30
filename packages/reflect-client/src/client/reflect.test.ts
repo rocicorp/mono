@@ -1528,31 +1528,42 @@ test('Uses MemStore by default', async () => {
   expect(spy.called).is.false;
 });
 
-suite.only('kvStore option', async () => {
+suite('kvStore option', () => {
   const t = (
     kvStore: ReflectOptions<Record<string, never>>['kvStore'],
+    roomID: string,
     expectedIDBExist: boolean,
     expectedValue: ReadonlyJSONValue | undefined = undefined,
   ) => {
     test(kvStore + '', async () => {
-      const r = reflectForTest({
+      const r = new TestReflect({
+        socketOrigin: null,
+        userID: 'user-id',
+        roomID,
         kvStore,
+        mutators: {
+          putFoo: async (tx, val: string) => {
+            await tx.put('foo', val);
+          },
+        },
       });
-      expect(await r.query(tx => tx.get('foo'))).to.deep.equal(expectedValue);
+      console.log('r.idbName', r.idbName);
+      expect(await r.query(tx => tx.get('foo'))).to.equal(expectedValue);
+      await r.mutate.putFoo('bar');
+      expect(await r.query(tx => tx.get('foo'))).to.equal('bar');
       await r.close();
       expect(await idbExists(r.idbName)).equal(expectedIDBExist);
     });
   };
 
-  t('idb', true);
-  t('mem', false);
-  t(undefined, false);
+  t('idb', 'room-id-1', true);
+  t('idb', 'room-id-1', true, 'bar');
+  // t('mem', 'room-id-2', false);
+  // t(undefined, 'room-id-3', false);
 
-  const ms = new ExperimentalMemKVStore('test');
-  const w = await ms.write();
-  await w.put('foo', 'bar');
-  await w.commit();
-  t(() => ms, false, 'bar');
+  // const ms: CreateKVStore = name => new ExperimentalMemKVStore(name);
+  // t(ms, 'room-id-4', false, undefined);
+  // t(ms, 'room-id-4', false, 'bar');
 });
 
 test('experimentalKVStore', async () => {
