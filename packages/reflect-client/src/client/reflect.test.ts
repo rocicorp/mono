@@ -6,10 +6,11 @@ import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
 import type {MutatorDefs, WriteTransaction} from 'reflect-types/src/mod.js';
 import {ExperimentalMemKVStore, PullRequestV1, PushRequestV1} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
-import type {JSONValue} from 'shared/src/json.js';
+import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
 import {REPORT_INTERVAL_MS} from './metrics.js';
+import type {ReflectOptions} from './options.js';
 import {
   CONNECT_TIMEOUT_MS,
   ConnectionState,
@@ -1527,21 +1528,31 @@ test('Uses MemStore by default', async () => {
   expect(spy.called).is.false;
 });
 
-test('Use IDB if enablePersistence', async () => {
-  const spy = sinon.spy(IDBFactory.prototype, 'open');
+suite.only('kvStore option', async () => {
+  const t = (
+    kvStore: ReflectOptions<Record<string, never>>['kvStore'],
+    expectedIDBExist: boolean,
+    expectedValue: ReadonlyJSONValue | undefined = undefined,
+  ) => {
+    test(kvStore + '', async () => {
+      const r = reflectForTest({
+        kvStore,
+      });
+      expect(await r.query(tx => tx.get('foo'))).to.deep.equal(expectedValue);
+      await r.close();
+      expect(await idbExists(r.idbName)).equal(expectedIDBExist);
+    });
+  };
 
-  const r = new Reflect({
-    socketOrigin: null,
-    userID: 'user-id',
-    roomID: 'room-id',
-    enablePersistence: true,
-  });
+  t('idb', true);
+  t('mem', false);
+  t(undefined, false);
 
-  expect(await r.query(tx => tx.get('foo'))).to.equal(undefined);
-
-  await r.close();
-
-  expect(spy.called).is.true;
+  const ms = new ExperimentalMemKVStore('test');
+  const w = await ms.write();
+  await w.put('foo', 'bar');
+  await w.commit();
+  t(() => ms, false, 'bar');
 });
 
 test('experimentalKVStore', async () => {

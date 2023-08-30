@@ -173,11 +173,20 @@ export interface ReflectOptions<MD extends MutatorDefs> {
 
   /**
    * Allows providing a custom implementation of the underlying storage layer.
+   * @deprecated Use [[kvStore]] instead.
    */
   createKVStore?: CreateKVStore | undefined;
 
   /**
-   * Enables persistence of the datastore used on the client. Default is `false`.
+   * Determines what kind of storage implementation to use to on the client.
+   *
+   * Defaults to `'mem'` which means the data is not persisted on the client.
+   *
+   * By setting this to `'idb'` the data is persisted on the client allowing
+   * faster syncs between application restarts.
+   *
+   * You can also set this to a function that is used to create new KV stores,
+   * allowing a custom implementation of the underlying storage layer.
    */
-  enablePersistence?: boolean | undefined;
+  kvStore?: 'mem' | 'idb' | CreateKVStore | undefined;
 }
