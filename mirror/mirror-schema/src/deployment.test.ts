@@ -8,16 +8,19 @@ describe('deployment', () => {
   /* eslint-disable @typescript-eslint/naming-convention */
   test('default vars', () => {
     expect(varsSchema.parse({})).toEqual({
+      DISABLED: 'false',
       DISABLE_LOG_FILTERING: 'false',
       LOG_LEVEL: 'info',
     });
 
     expect(parse({}, varsSchema)).toEqual({
+      DISABLED: 'false',
       DISABLE_LOG_FILTERING: 'false',
       LOG_LEVEL: 'info',
     });
 
     expect(parse({LOG_LEVEL: 'debug'}, varsSchema)).toEqual({
+      DISABLED: 'false',
       DISABLE_LOG_FILTERING: 'false',
       LOG_LEVEL: 'debug',
     });
@@ -29,6 +32,7 @@ describe('deployment', () => {
     };
 
     expect(parse(vars, varsSchema)).toEqual({
+      DISABLED: 'false',
       DISABLE_LOG_FILTERING: 'true',
       LOG_LEVEL: 'info',
     });
@@ -41,6 +45,7 @@ describe('deployment', () => {
   test('defaultOptions', () => {
     expect(defaultOptions()).toEqual({
       vars: {
+        DISABLED: 'false',
         DISABLE_LOG_FILTERING: 'false',
         LOG_LEVEL: 'info',
       },
