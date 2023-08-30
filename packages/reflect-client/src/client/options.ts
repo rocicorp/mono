@@ -184,7 +184,7 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * the data is not persisted on the client.
    *
    * By setting this to `'idb'` the data is persisted on the client using
-   * IndexedDBß, allowing faster syncs between application restarts.
+   * IndexedDB, allowing faster syncs between application restarts.
    *
    * You can also set this to a function that is used to create new KV stores,
    * allowing a custom implementation of the underlying storage layer.
