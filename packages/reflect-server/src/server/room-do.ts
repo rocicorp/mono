@@ -98,6 +98,8 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   readonly #turnDuration: number;
   readonly #router = new Router();
 
+  #state: DurableObjectState;
+
   constructor(options: RoomDOOptions<MD>) {
     const {
       mutators,
@@ -117,6 +119,8 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       state.storage,
       options.allowUnconfirmedWrites,
     );
+
+    this.#state = options.state;
 
     this.#initRoutes();
 
@@ -403,11 +407,10 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     }
   };
 
-  #processUntilDone(lc: LogContext) {
-    lc.debug?.('handling processUntilDone');
+  alarm(): Promise<void> {
     if (this.#turnTimerID) {
-      lc.debug?.('already processing, nothing to do');
-      return;
+      this.#lc.debug?.('already processing, nothing to do');
+      return Promise.resolve();
     }
 
     this.#turnTimerID = this.runInLockAtInterval(
@@ -418,7 +421,25 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       '#processNext',
       this.#turnDuration,
       logContext => this.#processNextInLock(logContext),
+      this.#turnDuration * 20,
+      // If the interval runs for more than 20x the intervaltime we want to clear the interval and reschedule it via alarm
+      // so that logs will be flushed to tail
+      _lc => {
+        clearInterval(this.#turnTimerID);
+        this.#turnTimerID = 0;
+        void this.#state.storage.setAlarm(Date.now());
+      },
     );
+    return Promise.resolve();
+  }
+
+  #processUntilDone(lc: LogContext) {
+    lc.debug?.('handling processUntilDone');
+    if (this.#turnTimerID) {
+      lc.debug?.('already processing, nothing to do');
+      return;
+    }
+    void this.#state.storage.setAlarm(Date.now());
   }
 
   // Exposed for testing.
@@ -427,12 +448,15 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     name: string,
     interval: number,
     callback: (lc: LogContext) => Promise<void>,
+    timeout: number,
+    timeoutCallback: (lc: LogContext) => void,
     beforeQueue = () => {
       /* hook for testing */
     },
   ): NodeJS.Timer {
     let queued = false;
-
+    const startIntervalTime = Date.now();
+    let timeoutCallbackCalled = false;
     return setInterval(async () => {
       beforeQueue(); // Hook for testing.
 
@@ -467,6 +491,16 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         // Log if it runs for more than 1.5x the interval.
         interval * 1.5,
       );
+
+      const elapsed = Date.now() - startIntervalTime;
+      console.log(elapsed, timeout);
+      if (elapsed > timeout && !timeoutCallbackCalled) {
+        lc.debug?.(
+          `${name} interval ran for ${elapsed}ms, calling timeoutCallback`,
+        );
+        timeoutCallback(lc);
+        timeoutCallbackCalled = true;
+      }
     }, interval);
   }
 
