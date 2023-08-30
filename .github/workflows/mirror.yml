@@ -1,0 +1,17 @@
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  mirror_job:
+    runs-on: ubuntu-latest
+    name: Mirror main branch to sandbox branch
+    steps:
+    - name: Mirror action step
+      id: mirror
+      uses: google/mirror-branch-action@v2.0
+      with:
+        github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+        source: 'main'
+        dest: 'sandbox'

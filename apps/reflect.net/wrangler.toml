@@ -36,11 +36,20 @@ crons = [ "*/5 * * * *" ] # ever 5 mins for AuthDO connection revalidation
 #NEW_ROOM_SECRET
 
 
-[env.staging]
-name = "reflect-net-east-staging"
-route = { pattern = "staging.reflect-server.net", custom_domain = true }
+[env.sandbox]
+name = "reflect-net-east-sandbox"
+route = { pattern = "sandbox.reflect-server.net", custom_domain = true }
 durable_objects.bindings = [
   { name = "roomDO", class_name = "RoomDO" },
   { name = "authDO", class_name = "AuthDO" }
 ]
-vars = { DATADOG_SERVICE_LABEL = "staging.reflect.net", LOG_LEVEL = "info" }
+vars = { DATADOG_SERVICE_LABEL = "sandbox.reflect.net", LOG_LEVEL = "info" }
+
+[env.preview]
+name = "reflect-net-east-preview"
+route = { pattern = "preview.reflect-server.net", custom_domain = true }
+durable_objects.bindings = [
+  { name = "roomDO", class_name = "RoomDO" },
+  { name = "authDO", class_name = "AuthDO" }
+]
+vars = { DATADOG_SERVICE_LABEL = "preview.reflect.net", LOG_LEVEL = "info" }
