@@ -431,7 +431,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       lc.debug?.('already processing, nothing to do');
       return;
     }
-    void this.#state.storage.setAlarm(0);
+    void this.#state.storage.setAlarm(Date.now());
   }
 
   // Exposed for testing.
