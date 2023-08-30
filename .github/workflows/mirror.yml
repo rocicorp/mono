@@ -10,7 +10,7 @@ jobs:
     steps:
     - name: Mirror action step
       id: mirror
-      uses: google/mirror-branch-action@v1.0
+      uses: google/mirror-branch-action@v2.0
       with:
         github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         source: 'main'
