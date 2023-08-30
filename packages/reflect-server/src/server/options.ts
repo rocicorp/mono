@@ -2,6 +2,7 @@ import type {ReflectServerOptions} from './reflect.js';
 import type {MutatorDefs} from 'reflect-types/src/mod.js';
 import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
 import {consoleLogSink, createWorkerDatadogLogSink} from '../mod.js';
+import {isTrueEnvValue} from '../util/env.js';
 
 export type BuildableOptionsEnv = LogFilterEnv &
   LogLevelEnv &
@@ -36,10 +37,8 @@ export function logFilter<Env extends LogFilterEnv, MD extends MutatorDefs>(
   include: LogPredicate,
 ): OptionsAdder<Env, MD> {
   return (options, env) => {
-    switch ((env.DISABLE_LOG_FILTERING ?? '0').toLowerCase()) {
-      case 'true':
-      case '1':
-        return options;
+    if (isTrueEnvValue(env.DISABLE_LOG_FILTERING)) {
+      return options;
     }
     const numLogSinks = options.logSinks?.length ?? 0;
     if (numLogSinks === 0) {
