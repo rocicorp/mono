@@ -5,7 +5,7 @@ slug: /byob/remote-database
 
 Replicache is also backend-agnostic. You can use most backend languages and frameworks, and any backend datastore that supports [serializable transactions](https://en.wikipedia.org/wiki/Serializability).
 
-Some examples of suitable datastores are: MySQL, Postgres, CockroachDB, CosmosDB, DynamoDB, and Firebase Cloud Firestore (but **not** Realtime Database).
+Some examples of suitable datastores are: MySQL, Postgres, CockroachDB, CosmosDB, and Firebase Cloud Firestore. Some examples of non-suitable datastores are: DynamoDB and Firebase RealtimeDB.
 
 :::info
 
