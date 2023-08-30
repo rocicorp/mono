@@ -2,6 +2,8 @@ import {getFirestore} from 'firebase-admin/firestore';
 import {
   teamPath,
   teamDataConverter,
+  teamSubdomainIndexPath,
+  teamSubdomainIndexDataConverter,
   appNameIndexPath,
   appNameIndexDataConverter,
   sanitizeForSubdomain,
@@ -71,6 +73,12 @@ export async function migrateTeamAppsHandler(
       name: teamName,
       subdomain,
     });
+    txn.create(
+      firestore
+        .doc(teamSubdomainIndexPath(subdomain))
+        .withConverter(teamSubdomainIndexDataConverter),
+      {teamID},
+    );
     console.info(
       `Updating ${apps.size} apps with subdomain ${subdomain} for team ${teamName} (${teamID})`,
     );

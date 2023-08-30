@@ -20,6 +20,10 @@ import {
   revertReflectServerHandler,
   revertReflectServerOptions,
 } from './release-server.js';
+import {
+  migrateTeamAppsHandler,
+  migrateTeamAppsOptions,
+} from './migrate-team-apps.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -70,6 +74,13 @@ function createCLIParser(argv: string[]) {
     'Removes a server version from a set of server channels. The resulting highest server version will be re-deployed to apps in those channels.',
     revertReflectServerOptions,
     revertReflectServerHandler,
+  );
+
+  reflectCLI.command(
+    'migrateTeamApps',
+    'Adds a team name (and corresponding subdomain) to a team and its apps. Triggers new deployments of those apps.',
+    migrateTeamAppsOptions,
+    migrateTeamAppsHandler,
   );
 
   reflectCLI.command(
