@@ -445,7 +445,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     },
   ): NodeJS.Timer {
     let queued = false;
-
+    const startIntervalTime = Date.now();
     return setInterval(async () => {
       beforeQueue(); // Hook for testing.
 
@@ -480,6 +480,15 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         // Log if it runs for more than 1.5x the interval.
         interval * 1.5,
       );
+
+      const elapsed = Date.now() - startIntervalTime;
+      if (elapsed > 1_000) {
+        lc.info?.(
+          `\n\n !!! Processing ${name} took ${elapsed}ms, forcing interval clearing !!!\n\n`,
+        );
+        clearInterval(this.#turnTimerID);
+        this.#processUntilDone(lc);
+      }
     }, interval);
   }
 
