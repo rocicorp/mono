@@ -178,12 +178,13 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   createKVStore?: CreateKVStore | undefined;
 
   /**
-   * Determines what kind of storage implementation to use to on the client.
+   * Determines what kind of storage implementation to use on the client.
    *
-   * Defaults to `'mem'` which means the data is not persisted on the client.
+   * Defaults to `'mem'` which means that Reflect uses an in memory storage and
+   * the data is not persisted on the client.
    *
-   * By setting this to `'idb'` the data is persisted on the client allowing
-   * faster syncs between application restarts.
+   * By setting this to `'idb'` the data is persisted on the client using
+   * IndexedDBß, allowing faster syncs between application restarts.
    *
    * You can also set this to a function that is used to create new KV stores,
    * allowing a custom implementation of the underlying storage layer.
