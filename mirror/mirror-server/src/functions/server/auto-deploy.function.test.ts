@@ -85,6 +85,7 @@ describe('server auto-deploy', () => {
         name: 'boo',
         deploymentOptions: {
           vars: {
+            DISABLED: 'false',
             DISABLE_LOG_FILTERING: 'false',
             LOG_LEVEL: 'info',
           },
@@ -104,6 +105,7 @@ describe('server auto-deploy', () => {
             hostname: 'boo.reflect-server.net',
             options: {
               vars: {
+                DISABLED: 'false',
                 DISABLE_LOG_FILTERING: 'false',
                 LOG_LEVEL: 'info',
               },
