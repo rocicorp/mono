@@ -6,11 +6,11 @@ import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
 import type {MutatorDefs, WriteTransaction} from 'reflect-types/src/mod.js';
 import {ExperimentalMemKVStore, PullRequestV1, PushRequestV1} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
-import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
+import type {JSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
 import {REPORT_INTERVAL_MS} from './metrics.js';
-import type {ReflectOptions} from './options.js';
+import type {CreateKVStore, ReflectOptions} from './options.js';
 import {
   CONNECT_TIMEOUT_MS,
   ConnectionState,
@@ -19,7 +19,6 @@ import {
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
-  Reflect,
   createSocket,
   serverAheadReloadReason,
 } from './reflect.js';
@@ -1511,59 +1510,43 @@ suite('Invalid Downstream message', () => {
   }
 });
 
-test('Uses MemStore by default', async () => {
-  // This test will fail if we touch IndexedDB.
+test('kvStore option', async () => {
   const spy = sinon.spy(IDBFactory.prototype, 'open');
 
-  const r = new Reflect({
-    socketOrigin: null,
-    userID: 'user-id',
-    roomID: 'room-id',
-  });
-
-  expect(await r.query(tx => tx.get('foo'))).to.equal(undefined);
-
-  await r.close();
-
-  expect(spy.called).is.false;
-});
-
-suite('kvStore option', () => {
-  const t = (
+  const t = async (
     kvStore: ReflectOptions<Record<string, never>>['kvStore'],
-    roomID: string,
-    expectedIDBExist: boolean,
-    expectedValue: ReadonlyJSONValue | undefined = undefined,
+    userID: string,
+    expectedIDBOpenCalled: boolean,
+    expectedValue: JSONValue | undefined = undefined,
   ) => {
-    test(kvStore + '', async () => {
-      const r = new TestReflect({
-        socketOrigin: null,
-        userID: 'user-id',
-        roomID,
-        kvStore,
-        mutators: {
-          putFoo: async (tx, val: string) => {
-            await tx.put('foo', val);
-          },
+    const r = reflectForTest({
+      userID,
+      kvStore,
+      mutators: {
+        putFoo: async (tx, val: string) => {
+          await tx.put('foo', val);
         },
-      });
-      console.log('r.idbName', r.idbName);
-      expect(await r.query(tx => tx.get('foo'))).to.equal(expectedValue);
-      await r.mutate.putFoo('bar');
-      expect(await r.query(tx => tx.get('foo'))).to.equal('bar');
-      await r.close();
-      expect(await idbExists(r.idbName)).equal(expectedIDBExist);
+      },
     });
+    expect(await r.query(tx => tx.get('foo'))).to.equal(expectedValue);
+    await r.mutate.putFoo('bar');
+    expect(await r.query(tx => tx.get('foo'))).to.equal('bar');
+    // Wait for persist to finish
+    await tickAFewTimes(clock, 1000);
+    await r.close();
+    expect(spy.called).equal(expectedIDBOpenCalled, 'IDB existed!');
+
+    spy.resetHistory();
   };
 
-  t('idb', 'room-id-1', true);
-  t('idb', 'room-id-1', true, 'bar');
-  // t('mem', 'room-id-2', false);
-  // t(undefined, 'room-id-3', false);
+  await t('idb', 'kv-store-test-user-id-1', true);
+  await t('idb', 'kv-store-test-user-id-1', true, 'bar');
+  await t('mem', 'kv-store-test-user-id-2', false);
+  await t(undefined, 'kv-store-test-user-id-3', false);
 
-  // const ms: CreateKVStore = name => new ExperimentalMemKVStore(name);
-  // t(ms, 'room-id-4', false, undefined);
-  // t(ms, 'room-id-4', false, 'bar');
+  const kvStore: CreateKVStore = name => new ExperimentalMemKVStore(name);
+  await t(kvStore, 'kv-store-test-user-id-4', false, undefined);
+  await t(kvStore, 'kv-store-test-user-id-4', false, 'bar');
 });
 
 test('experimentalKVStore', async () => {
