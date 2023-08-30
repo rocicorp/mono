@@ -487,6 +487,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
           `\n\n !!! Processing ${name} took ${elapsed}ms, forcing interval clearing !!!\n\n`,
         );
         clearInterval(this.#turnTimerID);
+        this.#turnTimerID = 0;
         this.#processUntilDone(lc);
       }
     }, interval);
