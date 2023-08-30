@@ -12,6 +12,6 @@ jobs:
       id: mirror
       uses: google/mirror-branch-action@v1.0
       with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
+        github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         source: 'main'
         dest: 'sandbox'
