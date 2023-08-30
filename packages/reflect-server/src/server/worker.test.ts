@@ -18,10 +18,17 @@ import {BaseWorkerEnv, createWorker} from './worker.js';
 const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
 
 function createTestFixture(
-  createTestResponse: (req: Request) => Response = () =>
-    new Response('success', {status: 200}),
-  authApiKeyDefined = true,
+  options: {
+    createTestResponse?: (req: Request) => Response;
+    authApiKeyDefined?: boolean;
+    disable?: boolean | undefined;
+  } = {},
 ) {
+  const {
+    createTestResponse = () => new Response('success', {status: 200}),
+    authApiKeyDefined = true,
+    disable,
+  } = options;
   const authDORequests: {req: Request; resp: Response}[] = [];
 
   const testEnv: BaseWorkerEnv = {
@@ -45,6 +52,9 @@ function createTestFixture(
   if (authApiKeyDefined) {
     testEnv.REFLECT_AUTH_API_KEY = TEST_AUTH_API_KEY;
   }
+  if (disable !== undefined) {
+    testEnv.DISABLE = disable;
+  }
 
   return {
     testEnv,
@@ -59,12 +69,24 @@ function createWorkerWithTestLogSink() {
   }));
 }
 
+function testDisabled(testRequest: Request) {
+  return testNotForwardedToAuthDo(
+    testRequest,
+    new Response('Disabled', {status: 503}),
+    true,
+  );
+}
+
 async function testNotForwardedToAuthDo(
   testRequest: Request,
   expectedResponse: Response,
+  disable?: boolean | undefined,
 ) {
-  const {testEnv, authDORequests} = createTestFixture(() => {
-    throw new Error('Unexpected call to auth DO');
+  const {testEnv, authDORequests} = createTestFixture({
+    createTestResponse: () => {
+      throw new Error('Unexpected call to auth DO');
+    },
+    disable,
   });
   const worker = createWorkerWithTestLogSink();
   if (!worker.fetch) {
@@ -105,7 +127,9 @@ async function testForwardedToAuthDO(
   const testResponseClone = authDoResponse.webSocket
     ? undefined
     : authDoResponse.clone();
-  const {testEnv, authDORequests} = createTestFixture(() => authDoResponse);
+  const {testEnv, authDORequests} = createTestFixture({
+    createTestResponse: () => authDoResponse,
+  });
   const worker = createWorkerWithTestLogSink();
   if (!worker.fetch) {
     throw new Error('Expect fetch to be defined');
@@ -145,6 +169,10 @@ test('worker forwards connect requests to authDO', async () => {
       webSocket: new Mocket(),
     }),
   );
+});
+
+test('worker does not forward connect requests to authDO when DISABLE is true', async () => {
+  await testDisabled(new Request('ws://test.roci.dev/connect'));
 });
 
 test('worker forwards authDO api requests to authDO', async () => {
@@ -233,6 +261,13 @@ test('worker forwards authDO api requests to authDO', async () => {
         body: tc.body ? JSON.stringify(tc.body) : null,
       }),
     );
+    await testDisabled(
+      new Request(tc.path, {
+        method: tc.method,
+        headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+        body: tc.body ? JSON.stringify(tc.body) : null,
+      }),
+    );
     await testNotForwardedToAuthDo(
       new Request(tc.path, {
         method: tc.path,
@@ -271,7 +306,28 @@ test('on scheduled event sends api/auth/v0/revalidateConnections to AuthDO when 
 test('on scheduled event does not send api/auth/v0/revalidateConnections to AuthDO when REFLECT_AUTH_API_KEY is undefined', async () => {
   const worker = createWorkerWithTestLogSink();
 
-  const {testEnv, authDORequests} = createTestFixture(undefined, false);
+  const {testEnv, authDORequests} = createTestFixture({
+    authApiKeyDefined: false,
+  });
+
+  if (!worker.scheduled) {
+    throw new Error('Expect scheduled to be defined');
+  }
+  await worker.scheduled(
+    {scheduledTime: 100, cron: '', noRetry: () => undefined},
+    testEnv,
+    new TestExecutionContext(),
+  );
+  expect(authDORequests.length).toEqual(0);
+});
+
+test('on scheduled event does not send api/auth/v0/revalidateConnections to AuthDO when DISABLE is true', async () => {
+  const worker = createWorkerWithTestLogSink();
+
+  const {testEnv, authDORequests} = createTestFixture({
+    authApiKeyDefined: true,
+    disable: true,
+  });
 
   if (!worker.scheduled) {
     throw new Error('Expect scheduled to be defined');
