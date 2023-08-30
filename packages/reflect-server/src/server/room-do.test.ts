@@ -1,4 +1,5 @@
-import {expect, test} from '@jest/globals';
+import {afterEach, beforeEach, expect, jest, test} from '@jest/globals';
+
 import {version} from 'reflect-shared';
 import type {WriteTransaction} from 'reflect-types/src/mod.js';
 import {
@@ -16,7 +17,16 @@ import {createTestDurableObjectState} from './do-test-utils.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '../util/resolver.js';
-import {sleep} from '../util/sleep.js';
+
+const START_TIME = 1000;
+beforeEach(() => {
+  jest.useFakeTimers();
+  jest.setSystemTime(START_TIME);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
 
 test('sets roomID in createRoom', async () => {
   const testLogSink = new TestLogSink();
@@ -303,6 +313,8 @@ test('Avoids queueing many intervals in the lock', async () => {
       latches[invoked++].resolve();
       await canFinishCallback; // Make the first invocation hold the lock.
     },
+    1,
+    () => undefined,
     () => {
       fired++;
     },
@@ -312,15 +324,50 @@ test('Avoids queueing many intervals in the lock', async () => {
   // Note: jest.useFakeTimers() doesn't quite work as expected for setInterval()
   // so we're using real timers with real sleep().
   while (fired < 5) {
-    await sleep(2);
+    await jest.advanceTimersByTimeAsync(2);
   }
   clearTimeout(timerID);
 
   finishCallback();
   await latches[1].promise; // Wait for the second invocation.
 
-  await sleep(1); // No other invocations should happen, even with sleep.
+  await jest.advanceTimersByTimeAsync(1); // No other invocations should happen, even with sleep.
   expect(invoked).toBe(2); // All other invocations should have been aborted.
+});
+
+test('clear interval call', async () => {
+  const testLogSink = new TestLogSink();
+  const room = new BaseRoomDO({
+    mutators: {},
+    roomStartHandler: () => Promise.resolve(),
+    disconnectHandler: () => Promise.resolve(),
+    state: await createTestDurableObjectState('test-do-id'),
+    authApiKey: 'foo',
+    logSink: testLogSink,
+    logLevel: 'info',
+    allowUnconfirmedWrites: true,
+    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+  });
+
+  let fired = 0;
+  let invoked = 0;
+  room.runInLockAtInterval(
+    new LogContext('debug', {}, testLogSink),
+    'fakeProcessNext',
+    1, // Fire once every ms.
+    () => {
+      void invoked++;
+      return Promise.resolve();
+    },
+    3,
+    () => {
+      fired++;
+    },
+  );
+  await jest.advanceTimersByTimeAsync(5);
+  expect(Date.now()).toEqual(1005);
+  expect(invoked).toBe(5);
+  expect(fired).toBe(1);
 });
 
 test('Sets turn duration based on allowUnconfirmedWrites flag', () => {

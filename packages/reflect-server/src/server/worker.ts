@@ -27,6 +27,7 @@ import {
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import {timed} from 'shared/src/timed.js';
 import {populateLogContextFromRequest} from '../util/log-context-common.js';
+import {isTrueEnvValue} from '../util/env.js';
 
 export type MetricsSink = (
   allSeries: Series[],
@@ -41,6 +42,12 @@ export interface WorkerOptions {
 
 export interface BaseWorkerEnv {
   authDO: DurableObjectNamespace;
+  /**
+   * If DISABLE is 'true' or '1' (ignoring case), all request will be returned
+   * a 503 response, and scheduled events will not be handled.
+   */
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  DISABLE?: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   REFLECT_AUTH_API_KEY?: string;
 }
@@ -181,6 +188,10 @@ export function createWorker<Env extends BaseWorkerEnv>(
 async function scheduled(env: BaseWorkerEnv, lc: LogContext): Promise<void> {
   lc = lc.withContext('scheduled', randomID());
   lc.info?.('Handling scheduled event');
+  if (isTrueEnvValue(env.DISABLE)) {
+    lc.debug?.('Returning early because env.DISABLE is true.');
+    return;
+  }
   if (!env.REFLECT_AUTH_API_KEY) {
     lc.debug?.(
       'Returning early because REFLECT_AUTH_API_KEY is not defined in env.',
@@ -210,14 +221,21 @@ async function fetch(
 ): Promise<Response> {
   lc.debug?.('Handling request:', request.method, request.url);
   try {
-    const resp = await withAllowAllCORS(
-      request,
-      async (request: Request) =>
-        (await router.dispatch(request, {lc, env, datadogMetricsOptions})) ??
+    const resp = await withAllowAllCORS(request, async (request: Request) => {
+      if (isTrueEnvValue(env.DISABLE)) {
+        return new Response('Disabled', {status: 503});
+      }
+      return (
+        (await router.dispatch(request, {
+          lc,
+          env,
+          datadogMetricsOptions,
+        })) ??
         new Response(null, {
           status: 404,
-        }),
-    );
+        })
+      );
+    });
     lc.debug?.(`Returning response: ${resp.status} ${resp.statusText}`);
     return resp;
   } catch (e) {

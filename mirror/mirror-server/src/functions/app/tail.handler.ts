@@ -4,21 +4,20 @@ import type {Firestore} from 'firebase-admin/firestore';
 import {https, logger} from 'firebase-functions';
 import {defineString} from 'firebase-functions/params';
 import {onRequest} from 'firebase-functions/v2/https';
+import {tailRequestSchema} from 'mirror-protocol/src/tail.js';
 import assert from 'node:assert';
 import {jsonSchema} from 'reflect-protocol';
 import {Queue} from 'shared/src/queue.js';
 import * as v from 'shared/src/valita.js';
 import type WebSocket from 'ws';
-import {createTail as createTailDefault} from '../../cloudflare/tail/tail.js';
 import packageJson from '../../../package.json';
-
+import {createTail as createTailDefault} from '../../cloudflare/tail/tail.js';
 import {
   appAuthorization,
   tokenAuthentication,
   userAuthorization,
 } from '../validators/auth.js';
 import {validateRequest} from '../validators/schema.js';
-import {tailRequestSchema} from 'mirror-protocol/src/tail.js';
 import {defineSecretSafely} from './secrets.js';
 
 // This is the API token for reflect-server.net
@@ -42,11 +41,6 @@ export const tail = (
         if (response === undefined) {
           throw new https.HttpsError('not-found', 'response is undefined');
         }
-        response.writeHead(200, {
-          'Cache-Control': 'no-store',
-          'Content-Type': 'text/event-stream',
-        });
-        response.flushHeaders();
 
         const apiToken = cloudflareApiToken.value();
         const accountID = cloudflareAccountId.value();
@@ -56,17 +50,31 @@ export const tail = (
         const env = undefined;
         const packageVersion = packageJson.version || '0.0.0';
 
-        const {ws, expiration, deleteTail} = await createTail(
-          apiToken,
-          accountID,
-          cfWorkerName,
-          filters,
-          debug,
-          env,
-          packageVersion,
-        );
+        let createTailResult;
+        try {
+          createTailResult = await createTail(
+            apiToken,
+            accountID,
+            cfWorkerName,
+            filters,
+            debug,
+            env,
+            packageVersion,
+          );
+        } catch (e) {
+          response.status(500).send({error: 'Failed to connect to backend'});
+          return;
+        }
 
-        logger.log(`expiration: ${expiration}`);
+        response.writeHead(200, {
+          'Cache-Control': 'no-store',
+          'Content-Type': 'text/event-stream',
+        });
+        response.flushHeaders();
+
+        const {ws, expiration, deleteTail} = createTailResult;
+        // TODO(arv): Do we need to deal with the expiration?
+        logger.log(`tail expiration: ${expiration}`);
 
         try {
           loop: for await (const item of wsQueue(ws, 10_000)) {

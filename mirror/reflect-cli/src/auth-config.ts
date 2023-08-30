@@ -7,12 +7,14 @@ import {scriptName} from './create-cli-parser.js';
 import {
   AuthCredential,
   EmailAuthCredential,
+  getAdditionalUserInfo,
   getAuth,
   OAuthCredential,
   PhoneAuthCredential,
   SignInMethod,
   signInWithCredential,
   type User,
+  AdditionalUserInfo,
 } from 'firebase/auth';
 import {loginHandler} from './login.js';
 
@@ -101,9 +103,14 @@ function isFileNotFoundError(err: unknown): boolean {
   );
 }
 
-export async function authenticate(): Promise<User> {
+type AuthenticatedUser = User & {additionalUserInfo: AdditionalUserInfo | null};
+
+export async function authenticate(): Promise<AuthenticatedUser> {
   if (authConfigForTesting) {
-    return {uid: 'fake-uid'} as unknown as User;
+    return {
+      uid: 'fake-uid',
+      additionalUserInfo: null,
+    } as unknown as AuthenticatedUser;
   }
   const authConfigFilePath = path.join(
     getGlobalReflectConfigPath(),
@@ -121,8 +128,12 @@ export async function authenticate(): Promise<User> {
     );
   }
   const userCredentials = await signInWithCredential(getAuth(), authCredential);
+  const additionalUserInfo = getAdditionalUserInfo(userCredentials);
   console.info(`Logged in as ${userCredentials.user.email}`);
-  return userCredentials.user;
+  return {
+    ...userCredentials.user,
+    additionalUserInfo,
+  };
 }
 
 function parseAuthCredential(json: JSONAuthCredential): AuthCredential | null {

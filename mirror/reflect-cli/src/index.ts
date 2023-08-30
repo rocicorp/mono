@@ -10,8 +10,8 @@ import {handleWith} from './firebase.js';
 import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
-import {tailHandler, tailOptions} from './tail.js';
 import {lfgHandler, lfgOptions} from './lfg.js';
+import {tailHandler, tailOptions} from './tail/index.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);

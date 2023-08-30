@@ -8,24 +8,20 @@ import {
 import {
   App,
   appDataConverter,
-  appNameIndexDataConverter,
-  appNameIndexPath,
   appPath,
   isValidAppName,
 } from 'mirror-schema/src/app.js';
 import {
-  Membership,
-  membershipDataConverter,
-  teamMembershipPath,
-} from 'mirror-schema/src/membership.js';
-import {Team, teamDataConverter, teamPath} from 'mirror-schema/src/team.js';
+  teamDataConverter,
+  teamPath,
+  appNameIndexPath,
+  appNameIndexDataConverter,
+} from 'mirror-schema/src/team.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
-import assert from 'node:assert';
 import {
   newAppID,
   newAppIDAsNumber,
   newAppScriptName,
-  newTeamID,
 } from 'shared/src/mirror/ids.js';
 import {must} from 'shared/src/must.js';
 import {userAuthorization} from '../validators/auth.js';
@@ -34,25 +30,37 @@ import {defaultOptions} from 'mirror-schema/src/deployment.js';
 
 const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
-export const DEFAULT_MAX_APPS = null;
+// TODO(darick): Reduce this once (or make it configurable by stack)
+// once we've cleaned up all of the throwaway apps in staging.
+export const DEFAULT_MAX_APPS = 100;
 
 export const create = (firestore: Firestore) =>
   validateSchema(createRequestSchema, createResponseSchema)
     .validate(userAuthorization())
     .handle((request, context) => {
       const {userID} = context;
-      const {serverReleaseChannel, name} = request;
+      const {teamID, serverReleaseChannel, name: appName} = request;
 
-      if (name !== undefined && !isValidAppName(name)) {
+      if (!teamID || !appName) {
         throw new HttpsError(
           'invalid-argument',
-          `Invalid App Name "${name}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
+          'Please update to the latest release of @rocicorp/reflect',
+        );
+      }
+
+      if (appName !== undefined && !isValidAppName(appName)) {
+        throw new HttpsError(
+          'invalid-argument',
+          `Invalid App Name "${appName}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
         );
       }
 
       const userDocRef = firestore
         .doc(userPath(userID))
         .withConverter(userDataConverter);
+      const teamDocRef = firestore
+        .doc(teamPath(teamID))
+        .withConverter(teamDataConverter);
 
       return firestore.runTransaction(async txn => {
         const userDoc = await txn.get(userDocRef);
@@ -61,111 +69,48 @@ export const create = (firestore: Firestore) =>
         }
 
         const user = must(userDoc.data());
-        const {email} = user;
-
-        const teamIDs = Object.keys(user.roles);
-        let teamID: string;
-
-        const createNewTeam = teamIDs.length === 0;
-        if (createNewTeam) {
-          // User is not a member of any team. Create a new team.
-          teamID = newTeamID();
-        } else if (teamIDs.length === 1) {
-          // User is a member of one team. Use that team.
-          teamID = teamIDs[0];
-        } else {
+        const role = user.roles[teamID];
+        if (role !== 'admin') {
           throw new HttpsError(
-            'internal',
-            'User is part of multiple teams, but only one team is supported at this time',
+            'permission-denied',
+            `User ${userID} does not have permission to create new apps for team ${teamID}`,
           );
         }
 
-        const teamDocRef = firestore
-          .doc(teamPath(teamID))
-          .withConverter(teamDataConverter);
         const teamDoc = await txn.get(teamDocRef);
-
-        let team: Team;
-        let membership: Membership | undefined;
-
-        if (createNewTeam) {
-          if (teamDoc.exists) {
-            throw new HttpsError('already-exists', 'Team already exists');
-          }
-          team = {
-            name: '',
-            defaultCfID: cloudflareAccountId.value(),
-            numAdmins: 1,
-            numMembers: 0,
-            numInvites: 0,
-            numApps: 1,
-            maxApps: DEFAULT_MAX_APPS,
-          };
-          user.roles[teamID] = 'admin';
-          membership = {email, role: 'admin'};
-        } else {
-          if (!teamDoc.exists) {
-            throw new HttpsError('not-found', 'Team does not exist');
-          }
-          team = must(teamDoc.data());
-          // Check app limits
-          if (team.maxApps !== null && team.numApps >= team.maxApps) {
-            throw new HttpsError(
-              'resource-exhausted',
-              'Team has too many apps',
-            );
-          }
-          team.numApps++;
-          // No need to change admins or members. User is already part of team.
-          // No need to create a membership. User is already a member of team.
+        if (!teamDoc.exists) {
+          throw new HttpsError('not-found', `Team ${teamID} does not exist`);
         }
-
-        const membershipDocRef = firestore
-          .doc(teamMembershipPath(teamID, userID))
-          .withConverter(membershipDataConverter);
-        const membershipDoc = await txn.get(membershipDocRef);
-        if (!createNewTeam) {
-          if (!membershipDoc.exists) {
-            throw new HttpsError('internal', 'Team membership should exist');
-          }
-        } else {
-          if (membershipDoc.exists) {
-            throw new HttpsError('internal', 'Team membership already exists');
-          }
+        // Check app limits
+        const team = must(teamDoc.data());
+        if (team.numApps >= (team.maxApps ?? DEFAULT_MAX_APPS)) {
+          throw new HttpsError('resource-exhausted', 'Team has too many apps');
         }
 
         const appIDNumber = newAppIDAsNumber();
         const appID = newAppID(appIDNumber);
         const scriptName = newAppScriptName(appIDNumber);
-        const appName =
-          name ?? scriptName.substring(0, scriptName.lastIndexOf('-'));
 
         const appDocRef = firestore
           .doc(appPath(appID))
           .withConverter(appDataConverter);
         const appNameDocRef = firestore
-          .doc(appNameIndexPath(appName))
+          .doc(appNameIndexPath(teamID, appName))
           .withConverter(appNameIndexDataConverter);
 
         const app: App = {
           name: appName,
           teamID,
+          teamSubdomain: team.subdomain,
           cfID: cloudflareAccountId.value(),
           cfScriptName: scriptName,
           serverReleaseChannel,
           deploymentOptions: defaultOptions(),
         };
 
-        if (createNewTeam) {
-          txn.create(teamDocRef, team);
-          txn.update(userDocRef, user);
-          assert(membership);
-          txn.create(membershipDocRef, membership);
-        } else {
-          txn.update(teamDocRef, team);
-        }
+        txn.update(teamDocRef, {numApps: team.numApps + 1});
         txn.create(appDocRef, app);
         txn.create(appNameDocRef, {appID});
-        return {appID, name: appName, success: true};
+        return {appID, success: true};
       });
     });
