@@ -421,6 +421,14 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       '#processNext',
       this.#turnDuration,
       logContext => this.#processNextInLock(logContext),
+      this.#turnDuration * 20,
+      // If the interval runs for more than 20x the intervaltime we want to clear the interval and reschedule it via alarm
+      // so that logs will be flushed to tail
+      _lc => {
+        clearInterval(this.#turnTimerID);
+        this.#turnTimerID = 0;
+        void this.#state.storage.setAlarm(Date.now());
+      }
     );
     return Promise.resolve();
   }
@@ -440,9 +448,11 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     name: string,
     interval: number,
     callback: (lc: LogContext) => Promise<void>,
+    timeout: number,
+    timeoutCallback: (lc: LogContext) => void,
     beforeQueue = () => {
       /* hook for testing */
-    },
+    }
   ): NodeJS.Timer {
     let queued = false;
     const startIntervalTime = Date.now();
@@ -482,13 +492,9 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       );
 
       const elapsed = Date.now() - startIntervalTime;
-      if (elapsed > 1_000) {
-        lc.info?.(
-          `\n\n !!! Processing ${name} took ${elapsed}ms, forcing interval clearing !!!\n\n`,
-        );
-        clearInterval(this.#turnTimerID);
-        this.#turnTimerID = 0;
-        this.#processUntilDone(lc);
+      if (elapsed > timeout) {
+        lc.debug?.(`${name} interval ran for ${elapsed}ms, calling timeoutCallback`);
+        timeoutCallback(lc);
       }
     }, interval);
   }
@@ -508,7 +514,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       );
     this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
     if (nothingToProcess && this.#turnTimerID) {
-      lc.info?.('\n\n\n\n** nothing to process, clearing timer **\n\n\n\n');
       clearInterval(this.#turnTimerID);
       this.#turnTimerID = 0;
     }

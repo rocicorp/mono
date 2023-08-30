@@ -303,6 +303,8 @@ test('Avoids queueing many intervals in the lock', async () => {
       latches[invoked++].resolve();
       await canFinishCallback; // Make the first invocation hold the lock.
     },
+    1,
+    () => undefined,
     () => {
       fired++;
     },
