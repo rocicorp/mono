@@ -3,6 +3,7 @@ import {firestoreDataConverter} from './converter.js';
 import * as path from './path.js';
 import {timestampSchema} from './timestamp.js';
 import {moduleRefSchema} from './module.js';
+import {parse} from './parse.js';
 
 export const logLevelSchema = v.union(
   v.literal('debug'),
@@ -33,10 +34,7 @@ export const varsSchema = v.object({
 export type DeploymentVars = v.Infer<typeof varsSchema>;
 
 function defaultVars(): DeploymentVars {
-  //shallow copy to ensure this will pass firestore isPlainObject check which requires objects to have a constructor with name 'Object'
-  //valita creates objects without a prototype and thus without a constructor
-  //https://github.com/badrap/valita/blob/5db630edb1397959f613b94b0f9e22ceb8ec78d4/src/index.ts#L568
-  return {...varsSchema.parse({})};
+  return parse({}, varsSchema);
 }
 
 export const deploymentOptionsSchema = v.object({
