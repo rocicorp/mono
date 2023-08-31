@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import http from 'node:http';
 import type {Socket} from 'node:net';
 import open from 'open';
+import confirm from '@inquirer/confirm';
 import {sleep} from 'shared/src/sleep.js';
 import {parse} from 'shared/src/valita.js';
 import {
@@ -75,8 +76,15 @@ export async function loginHandler(
 
   credentialReceiverServer.listen(8976);
 
-  console.log(`Opening a link in your default browser: ${urlToOpen}`);
-  await openInBrowser(urlToOpen);
+  if (
+    await confirm({
+      message: 'Open login page in your default browser?',
+      default: true,
+    })
+  ) {
+    await openInBrowser(urlToOpen);
+  }
+  console.log(`Please login at: ${urlToOpen}`);
   const timeoutController = new AbortController();
   try {
     await Promise.race([

@@ -29,8 +29,7 @@ afterEach(() => {
 test('it should throw if file not found', async () => {
   const script = `./test${Math.random().toString(32).slice(2)}.ts`;
   setAppConfigForTesting({
-    id: 'test-app-id',
-    name: 'test-app-name',
+    appID: 'test-app-id',
     server: script,
   });
 
@@ -53,8 +52,7 @@ async function writeTempFiles(
   const testFilePath = path.join(dir, filename);
   await fs.writeFile(testFilePath, data, 'utf-8');
   setAppConfigForTesting({
-    id: 'test-app-id',
-    name: 'test-app-name',
+    appID: 'test-app-id',
     server: testFilePath,
   });
 

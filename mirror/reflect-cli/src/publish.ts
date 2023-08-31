@@ -37,7 +37,7 @@ export async function publishHandler(
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
-  const {id: appID, server: script} = await ensureAppConfig(configDirPath);
+  const {appID, server: script} = await ensureAppConfig(configDirPath);
 
   const absPath = path.resolve(script);
   if (!(await exists(absPath))) {

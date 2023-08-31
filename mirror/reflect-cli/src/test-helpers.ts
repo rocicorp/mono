@@ -21,8 +21,7 @@ export function useFakeAuthConfig() {
 
 export function useFakeAppConfig() {
   const appConfig: AppConfig = {
-    id: 'test-app-id',
-    name: 'test-app-name',
+    appID: 'test-app-id',
     server: 'test-server-path.js',
   };
 

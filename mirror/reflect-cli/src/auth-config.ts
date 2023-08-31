@@ -105,7 +105,7 @@ function isFileNotFoundError(err: unknown): boolean {
 
 type AuthenticatedUser = User & {additionalUserInfo: AdditionalUserInfo | null};
 
-export async function authenticate(): Promise<AuthenticatedUser> {
+export async function authenticate(output = true): Promise<AuthenticatedUser> {
   if (authConfigForTesting) {
     return {
       uid: 'fake-uid',
@@ -129,7 +129,9 @@ export async function authenticate(): Promise<AuthenticatedUser> {
   }
   const userCredentials = await signInWithCredential(getAuth(), authCredential);
   const additionalUserInfo = getAdditionalUserInfo(userCredentials);
-  console.info(`Logged in as ${userCredentials.user.email}`);
+  if (output) {
+    console.info(`Logged in as ${userCredentials.user.email}`);
+  }
   return {
     ...userCredentials.user,
     additionalUserInfo,

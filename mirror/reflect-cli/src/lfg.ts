@@ -5,12 +5,10 @@ import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import confirm from '@inquirer/confirm';
 import input from '@inquirer/input';
 import color from 'picocolors';
-import {isValidAppName, appNameIndexPath} from 'mirror-schema/src/app.js';
+import {isValidAppName} from 'mirror-schema/src/app.js';
 import validateProjectName from 'validate-npm-package-name';
-import {getFirestore} from './firebase.js';
 import {scaffold} from './scaffold.js';
-import {writeAppConfig} from './app-config.js';
-import {publishHandler} from './publish.js';
+import {configFileExists, writeAppConfig} from './app-config.js';
 
 export function lfgOptions(yargs: CommonYargsArgv) {
   return yargs;
@@ -22,33 +20,34 @@ export async function lfgHandler(yargs: LfgHandlerArgs) {
   await initApp(yargs, './');
 }
 
-export async function initApp(yargs: LfgHandlerArgs, dir: string) {
-  const name = await getAppName(dir);
+export async function initApp(_: LfgHandlerArgs, dir: string) {
+  if (configFileExists(dir)) {
+    console.log(
+      `Cannot initialize. There is already a ${color.white(
+        'reflect.config.json',
+      )} file present.`,
+    );
+    process.exit(1);
+  }
   if (await canScaffold(dir)) {
-    scaffold(name, dir);
+    const name = await getAppName(dir);
+    await scaffold(name, dir);
   } else {
     const server = await input({
-      message:
-        'Enter the path to the server entry point (e.g. src/reflect/index.ts):',
+      message: `Enter the path to the server entry point (e.g. ${color.white(
+        'src/reflect/index.ts',
+      )}):`,
       validate: validateEntryPoint(dir),
     });
-    writeAppConfig({name, server}, dir);
-  }
-  if (
-    await confirm({
-      message: `Publish to https://${name}.reflect-server.net/ ?`,
-      default: true,
-    })
-  ) {
-    await publishHandler(yargs, dir);
+    writeAppConfig({server}, dir);
   }
 
   console.log('');
   console.log(color.green(`You're all set up! 🎉`));
-  console.log(color.blue(`start-up your reflect app:\n`));
+  console.log(color.blue(`Start your Reflect app:\n`));
 
   const STARTUP = 'npm install && npm run dev\n';
-  console.log(color.white((dir === './' ? '' : `cd ${name} && `) + STARTUP));
+  console.log(color.white((dir === './' ? '' : `cd ${dir} && `) + STARTUP));
 }
 
 async function canScaffold(dirPath: string): Promise<boolean> {
@@ -63,15 +62,22 @@ async function canScaffold(dirPath: string): Promise<boolean> {
   return true;
 }
 
-async function getAppName(dir: string): Promise<string> {
+export function getDefaultAppNameFromDir(dir: string): string {
   const dirname = basename(resolve(dir));
-  const defaultName = dirname
+  return dirname
     .toLocaleLowerCase()
     .replaceAll(/^-*/g, '')
     .replaceAll(/[^a-z0-9\-]/g, '');
+}
+
+async function getAppName(dir: string): Promise<string> {
+  const defaultAppName = getDefaultAppNameFromDir(dir);
+  if ((await validateAppName(defaultAppName)) === true) {
+    return defaultAppName;
+  }
   return await input({
     message: 'Name of your App:',
-    default: defaultName,
+    default: defaultAppName,
     validate: validateAppName,
   });
 }
@@ -85,11 +91,6 @@ async function validateAppName(name: string): Promise<string | boolean> {
   const invalidPackageNameReason = isValidPackageName(name);
   if (invalidPackageNameReason) {
     return invalidPackageNameReason;
-  }
-  const firestore = getFirestore();
-  const app = await firestore.doc(appNameIndexPath(name)).get();
-  if (app.exists) {
-    return 'Looks like that name is already taken. Please choose another.';
   }
   return true;
 }

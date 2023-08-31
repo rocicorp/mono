@@ -29,13 +29,23 @@ export async function scaffold(name: string, dest: string): Promise<void> {
   const sourceDir = existsSync(templateDir) ? templateDir : templateBinDir;
 
   copyDir(sourceDir, dest);
+  writeTemplatedFilePlaceholders(dest, {
+    ['<APP-NAME>']: name,
+    ['<REFLECT-VERSION>']: reflectVersion,
+  });
+}
 
+export function writeTemplatedFilePlaceholders(
+  dest: string,
+  placeholders: Record<string, string>,
+) {
   TEMPLATED_FILES.forEach(file => {
-    editFile(path.resolve(dest, file), content =>
-      content
-        .replaceAll('<APP-NAME>', name)
-        .replaceAll('<REFLECT-VERSION>', reflectVersion),
-    );
+    editFile(path.resolve(dest, file), content => {
+      for (const [key, value] of Object.entries(placeholders)) {
+        content = content.replaceAll(key, value);
+      }
+      return content;
+    });
   });
 }
 
