@@ -19,6 +19,8 @@ import type {
   Socket,
 } from '../types/client-state.js';
 import type {PendingMutation} from '../types/mutation.js';
+import {LoggingLock} from '../util/lock.js';
+import {populateLogContextFromRequest} from '../util/log-context-common.js';
 import {randomID} from '../util/rand.js';
 import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
@@ -44,8 +46,6 @@ import {
   withBody,
 } from './router.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
-import {LoggingLock} from '../util/lock.js';
-import {populateLogContextFromRequest} from '../util/log-context-common.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -453,7 +453,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     beforeQueue = () => {
       /* hook for testing */
     },
-  ): NodeJS.Timer {
+  ): ReturnType<typeof setInterval> {
     let queued = false;
     const startIntervalTime = Date.now();
     let timeoutCallbackCalled = false;
