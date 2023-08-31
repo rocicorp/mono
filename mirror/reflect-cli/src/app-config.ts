@@ -18,6 +18,7 @@ import {getFirestore} from './firebase.js';
 import {getDefaultAppNameFromDir} from './lfg.js';
 import {must} from 'shared/src/must.js';
 import {randInt} from 'shared/src/rand.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 // { srcFile: destFile }
 const templateFiles = v.record(v.string());
@@ -137,6 +138,7 @@ export function mustReadAppConfig(
 }
 
 export async function ensureAppInstantiated(
+  yargs: YargvToInterface<CommonYargsArgv>,
   instance = 'default',
 ): Promise<LocalConfig & AppInstance> {
   const config = mustReadAppConfig();
@@ -149,7 +151,7 @@ export async function ensureAppInstantiated(
   const {
     user: {uid: userID},
     additionalUserInfo,
-  } = await authenticate(false);
+  } = await authenticate(yargs, false);
   const defaultTeamName = additionalUserInfo?.username;
   if (!defaultTeamName) {
     throw new Error('Could not determine github username from OAuth');

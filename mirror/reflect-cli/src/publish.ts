@@ -35,11 +35,11 @@ type PublishHandlerArgs = YargvToInterface<ReturnType<typeof publishOptions>>;
 export type PublishCaller = typeof publishCaller;
 
 export async function publishHandler(
-  _: PublishHandlerArgs,
+  yargs: PublishHandlerArgs,
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
-  const {appID, server: script} = await ensureAppInstantiated();
+  const {appID, server: script} = await ensureAppInstantiated(yargs);
 
   const absPath = path.resolve(script);
   if (!(await exists(absPath))) {
