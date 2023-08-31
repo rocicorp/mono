@@ -2,11 +2,11 @@ import {Reflect} from '@rocicorp/reflect/client';
 import {nanoid} from 'nanoid';
 import React, {useEffect} from 'react';
 import ReactDOM from 'react-dom/client';
-import CursorField from './cursor-field';
+import CursorField from './cursor-field.js';
 import styles from './index.module.css';
-import {randUserInfo} from './reflect/client-state';
-import {mutators} from './reflect/mutators';
-import {useCount} from './subscriptions';
+import {randUserInfo} from './reflect/client-state.js';
+import {mutators} from './reflect/mutators.js';
+import {useCount} from './subscriptions.js';
 
 const userID = nanoid();
 const roomID = 'my-room';
@@ -25,7 +25,7 @@ const r = new Reflect({
   mutators,
 });
 
-const App = () => {
+function App() {
   useEffect(() => {
     void (async () => {
       const userInfo = randUserInfo();
@@ -50,7 +50,7 @@ const App = () => {
       </div>
     </div>
   );
-};
+}
 
 const rootElement = document.getElementById('root');
 if (rootElement === null) {
