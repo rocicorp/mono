@@ -4,7 +4,10 @@ import {
 } from 'mirror-protocol/src/publish.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {ensureAppInitialized} from './app-config.js';
+import {
+  ensureAppInstantiated,
+  writeTemplatedFilePlaceholders,
+} from './app-config.js';
 import {authenticate} from './auth-config.js';
 import {compile} from './compile.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
@@ -36,7 +39,7 @@ export async function publishHandler(
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
-  const {appID, server: script} = await ensureAppInitialized();
+  const {appID, server: script} = await ensureAppInstantiated();
 
   const absPath = path.resolve(script);
   if (!(await exists(absPath))) {
@@ -82,6 +85,9 @@ export async function publishHandler(
     if (deployment?.status === 'RUNNING') {
       console.log(`🎁 Published successfully to:`);
       console.log(`https://${deployment.spec.hostname}`);
+      writeTemplatedFilePlaceholders('./', {
+        appHostname: deployment.spec.hostname,
+      });
       break;
     }
     console.info(

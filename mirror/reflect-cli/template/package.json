@@ -1,5 +1,5 @@
 {
-  "name": "<APP-NAME>",
+  "name": "{{appName}}",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -12,7 +12,7 @@
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.1.2",
-    "@rocicorp/reflect": "^<REFLECT-VERSION>",
+    "@rocicorp/reflect": "^{{reflectVersion}}",
     "@types/react": "^18.0.17",
     "@types/react-dom": "^18.0.6",
     "@vitejs/plugin-react": "^2.0.1",

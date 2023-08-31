@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {readFile} from 'node:fs/promises';
 import {pkgUp} from 'pkg-up';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
+import {writeTemplatedFilePlaceholders} from './app-config.js';
 
 const templateDir = path.resolve(
   fileURLToPath(import.meta.url),
@@ -18,35 +19,12 @@ const templateBinDir = path.resolve(
   `template`,
 );
 
-const TEMPLATED_FILES = [
-  'package.json',
-  '.env',
-  'reflect.config.json',
-] as const;
-
-export async function scaffold(name: string, dest: string): Promise<void> {
+export async function scaffold(appName: string, dest: string): Promise<void> {
   const reflectVersion = await findReflectVersion();
   const sourceDir = existsSync(templateDir) ? templateDir : templateBinDir;
 
   copyDir(sourceDir, dest);
-  writeTemplatedFilePlaceholders(dest, {
-    ['<APP-NAME>']: name,
-    ['<REFLECT-VERSION>']: reflectVersion,
-  });
-}
-
-export function writeTemplatedFilePlaceholders(
-  dest: string,
-  placeholders: Record<string, string>,
-) {
-  TEMPLATED_FILES.forEach(file => {
-    editFile(path.resolve(dest, file), content => {
-      for (const [key, value] of Object.entries(placeholders)) {
-        content = content.replaceAll(key, value);
-      }
-      return content;
-    });
-  });
+  writeTemplatedFilePlaceholders(dest, {appName, reflectVersion});
 }
 
 function copy(src: string, dest: string) {
@@ -65,11 +43,6 @@ function copyDir(srcDir: string, destDir: string) {
     const destFile = path.resolve(destDir, file);
     copy(srcFile, destFile);
   }
-}
-
-function editFile(file: string, callback: (content: string) => string) {
-  const content = fs.readFileSync(file, 'utf-8');
-  fs.writeFileSync(file, callback(content), 'utf-8');
 }
 
 async function findReflectVersion(): Promise<string> {

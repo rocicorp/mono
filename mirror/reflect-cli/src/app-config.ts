@@ -13,41 +13,40 @@ import {
   appNameIndexPath,
   appNameIndexDataConverter,
 } from 'mirror-schema/src/team.js';
-import {
-  appPath,
-  appDataConverter,
-  isValidAppName,
-} from 'mirror-schema/src/app.js';
+import {isValidAppName} from 'mirror-schema/src/app.js';
 import {getFirestore} from './firebase.js';
 import {getDefaultAppNameFromDir} from './lfg.js';
 import {must} from 'shared/src/must.js';
-import {writeTemplatedFilePlaceholders} from './scaffold.js';
+import {randInt} from 'shared/src/rand.js';
 
-// LocalConfig contains the user-specified features of the App.
-const localConfigSchema = v.object({
-  server: v.string(),
-  apps: v.undefined().optional(),
-});
+// { srcFile: destFile }
+const templateFiles = v.record(v.string());
 
-// AppInstance identifies an app that has been initialized on the Mirror Server.
+// AppInstance identifies an app that has been initialized on mirror via app-create.
 const appInstanceSchema = v.object({
   appID: v.string(),
 });
 
+// AppInstances associates an instance name (e.g. "default", "dev", "prod" with an
+// AppInstance. Currently, the cli is hardcoded to always use the "default" instance,
+// but the schema supports tracking multiple instances.
 const appInstancesSchema = v.record(appInstanceSchema);
 
-// InitializedAppConfig combines the LocalConfig with one or more initialized AppInstances.
-const initializedAppConfigSchema = v.object({
+// LocalConfig contains the user-specified features of the App.
+const localConfigSchema = v.object({
   server: v.string(),
-  apps: appInstancesSchema,
 });
 
-const configFileSchema = v.union(localConfigSchema, initializedAppConfigSchema);
+// AppConfig tracks the full state of the directory and App(s).
+const appConfigSchema = v.object({
+  server: v.string(),
+  templates: templateFiles.optional(),
+  apps: appInstancesSchema.optional(),
+});
 
 export type AppInstance = v.Infer<typeof appInstanceSchema>;
 export type LocalConfig = v.Infer<typeof localConfigSchema>;
-export type InitializedAppConfig = v.Infer<typeof initializedAppConfigSchema>;
-export type ConfigFile = v.Infer<typeof configFileSchema>;
+export type AppConfig = v.Infer<typeof appConfigSchema>;
 
 /**
  * Finds the root of the git repository.
@@ -96,9 +95,9 @@ function getConfigFilePath(configDirPath?: string | undefined) {
 
 const configFileName = 'reflect.config.json';
 
-let appConfigForTesting: ConfigFile | undefined;
+let appConfigForTesting: AppConfig | undefined;
 
-export function setAppConfigForTesting(config: ConfigFile | undefined) {
+export function setAppConfigForTesting(config: AppConfig | undefined) {
   appConfigForTesting = config;
 }
 
@@ -112,14 +111,14 @@ export function configFileExists(configDirPath: string): boolean {
  */
 export function readAppConfig(
   configDirPath?: string | undefined,
-): ConfigFile | undefined {
+): AppConfig | undefined {
   if (appConfigForTesting) {
     return appConfigForTesting;
   }
   const configFilePath = getConfigFilePath(configDirPath);
   if (fs.existsSync(configFilePath)) {
     const json = JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
-    return v.parse(json, configFileSchema, 'passthrough');
+    return v.parse(json, appConfigSchema, 'passthrough');
   }
 
   return undefined;
@@ -127,7 +126,7 @@ export function readAppConfig(
 
 export function mustReadAppConfig(
   configDirPath?: string | undefined,
-): ConfigFile {
+): AppConfig {
   const spec = readAppConfig(configDirPath);
   if (!spec) {
     throw new Error(
@@ -137,13 +136,13 @@ export function mustReadAppConfig(
   return spec;
 }
 
-export async function ensureAppInitialized(
+export async function ensureAppInstantiated(
   instance = 'default',
 ): Promise<LocalConfig & AppInstance> {
-  let config = mustReadAppConfig();
+  const config = mustReadAppConfig();
   if (config.apps?.[instance]) {
     return {
-      server: config.server,
+      ...config,
       ...config.apps?.[instance],
     };
   }
@@ -169,26 +168,16 @@ export async function ensureAppInitialized(
             serverReleaseChannel: 'stable',
           })
         ).appID;
-  // Now that the App is created, fill in the TEAM-SUBDOMAIN placeholders in any scaffolding.
-  const appDoc = await getFirestore()
-    .doc(appPath(appID))
-    .withConverter(appDataConverter)
-    .get();
-  const {teamSubdomain} = must(appDoc.data());
-  writeTemplatedFilePlaceholders('./', {['<TEAM-SUBDOMAIN>']: teamSubdomain});
-  config = writeAppConfig({...config, apps: {[instance]: {appID}}});
-  return {
-    server: config.server,
-    ...config.apps?.[instance],
-  };
+  writeAppConfig({...config, apps: {[instance]: {appID}}});
+  return {...config, appID};
 }
 
-export function writeAppConfig<
-  Config extends LocalConfig | InitializedAppConfig,
->(config: Config, configDirPath?: string | undefined): Config {
+export function writeAppConfig(
+  config: AppConfig,
+  configDirPath?: string | undefined,
+) {
   const configFilePath = getConfigFilePath(configDirPath);
   fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
-  return config;
 }
 
 async function getNewAppNameOrExistingID(
@@ -206,12 +195,12 @@ async function getNewAppNameOrExistingID(
       return {name: defaultAppName};
     }
   }
-  for (;;) {
+  for (let appNameSuffix = ''; ; appNameSuffix = `-${randInt(1000, 9999)}`) {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore type error in jest?!?
     const name = await input({
       message: 'Name of your App:',
-      default: defaultAppName,
+      default: `${defaultAppName}${appNameSuffix}`,
       validate: isValidAppName,
     });
     const nameEntry = await firestore
@@ -244,4 +233,34 @@ async function getDefaultAppName(): Promise<string> {
     }
   }
   return getDefaultAppNameFromDir('./');
+}
+
+type TemplatePlaceholders = {
+  appName: string;
+  reflectVersion: string;
+  appHostname: string;
+};
+
+export function writeTemplatedFilePlaceholders(
+  dir: string,
+  placeholders: Partial<{[Key in keyof TemplatePlaceholders]: string}>,
+) {
+  const appConfig = mustReadAppConfig(dir);
+  Object.entries(appConfig.templates ?? {}).forEach(([src, dst]) => {
+    copyAndEditFile(path.resolve(dir, src), path.resolve(dir, dst), content => {
+      for (const [key, value] of Object.entries(placeholders)) {
+        content = content.replaceAll(`{{${key}}}`, value);
+      }
+      return content;
+    });
+  });
+}
+
+function copyAndEditFile(
+  src: string,
+  dst: string,
+  edit: (content: string) => string,
+) {
+  const content = fs.readFileSync(src, 'utf-8');
+  fs.writeFileSync(dst, edit(content), 'utf-8');
 }

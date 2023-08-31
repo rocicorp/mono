@@ -1,5 +1,5 @@
 import type {TailRequest} from 'mirror-protocol/src/tail.js';
-import {ensureAppInitialized} from '../app-config.js';
+import {ensureAppInstantiated} from '../app-config.js';
 import {authenticate} from '../auth-config.js';
 import {makeRequester} from '../requester.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
@@ -12,7 +12,7 @@ export function tailOptions(yargs: CommonYargsArgv) {
 type TailHandlerArgs = YargvToInterface<ReturnType<typeof tailOptions>>;
 
 export async function tailHandler(_yargs: TailHandlerArgs) {
-  const {appID} = await ensureAppInitialized();
+  const {appID} = await ensureAppInstantiated();
   const user = await authenticate();
   const idToken = await user.getIdToken();
 

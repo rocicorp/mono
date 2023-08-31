@@ -6,6 +6,7 @@ import confirm from '@inquirer/confirm';
 import input from '@inquirer/input';
 import color from 'picocolors';
 import {isValidAppName} from 'mirror-schema/src/app.js';
+import {sanitizeForSubdomain} from 'mirror-schema/src/team.js';
 import validateProjectName from 'validate-npm-package-name';
 import {scaffold} from './scaffold.js';
 import {configFileExists, writeAppConfig} from './app-config.js';
@@ -68,10 +69,7 @@ async function canScaffold(dirPath: string): Promise<boolean> {
 
 export function getDefaultAppNameFromDir(dir: string): string {
   const dirname = basename(resolve(dir));
-  return dirname
-    .toLocaleLowerCase()
-    .replaceAll(/^-*/g, '')
-    .replaceAll(/[^a-z0-9-]/g, '');
+  return sanitizeForSubdomain(dirname);
 }
 
 async function getAppName(dir: string): Promise<string> {
