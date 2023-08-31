@@ -24,7 +24,7 @@ export async function scaffold(appName: string, dest: string): Promise<void> {
   const sourceDir = existsSync(templateDir) ? templateDir : templateBinDir;
 
   copyDir(sourceDir, dest);
-  writeTemplatedFilePlaceholders({appName, reflectVersion}, dest);
+  writeTemplatedFilePlaceholders({appName, reflectVersion}, dest, false);
 }
 
 function copy(src: string, dest: string) {

@@ -247,23 +247,41 @@ type TemplatePlaceholders = {
 export function writeTemplatedFilePlaceholders(
   placeholders: Partial<{[Key in keyof TemplatePlaceholders]: string}>,
   dir = './',
+  logConsole = true,
 ) {
   const appConfig = mustReadAppConfig(dir);
   Object.entries(appConfig.templates ?? {}).forEach(([src, dst]) => {
-    copyAndEditFile(path.resolve(dir, src), path.resolve(dir, dst), content => {
-      for (const [key, value] of Object.entries(placeholders)) {
-        content = content.replaceAll(`{{${key}}}`, value);
-      }
-      return content;
-    });
+    copyAndEditFile(
+      dir,
+      src,
+      dst,
+      content => {
+        for (const [key, value] of Object.entries(placeholders)) {
+          content = content.replaceAll(`{{${key}}}`, value);
+        }
+        return content;
+      },
+      logConsole,
+    );
   });
 }
 
 function copyAndEditFile(
+  dir: string,
   src: string,
   dst: string,
   edit: (content: string) => string,
+  logConsole: boolean,
 ) {
-  const content = fs.readFileSync(src, 'utf-8');
-  fs.writeFileSync(dst, edit(content), 'utf-8');
+  const srcPath = path.resolve(dir, src);
+  const dstPath = path.resolve(dir, dst);
+  const content = fs.readFileSync(srcPath, 'utf-8');
+  const edited = edit(content);
+  if (fs.existsSync(dstPath) && fs.readFileSync(dstPath, 'utf-8') === edited) {
+    return;
+  }
+  fs.writeFileSync(dstPath, edited, 'utf-8');
+  if (logConsole) {
+    console.log(`Updated ${dst} from ${src}`);
+  }
 }
