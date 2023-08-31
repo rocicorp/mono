@@ -43,10 +43,6 @@ service cloud.firestore {
         allow read: if userIsMemberOfApp(appID);
       }
     }
-    // The appNames index is public so that login is not required for choosing an unused name.
-    match /appNames/{appName} {
-      allow get: if true;
-    }
     // Team members have read access to all documents rooted at /teams/{teamID}
     match /teams/{teamID}/{document=**} {
       allow read: if userIsMemberOfTeam(teamID);
