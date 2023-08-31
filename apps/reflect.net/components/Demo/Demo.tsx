@@ -17,7 +17,7 @@ import styles from '@/styles/Home.module.css';
 import {getLocationString, Location} from '@/util/get-location-string';
 import {closeReflect} from '@/util/reflect';
 import {getWorkerHost} from '@/util/worker-host';
-import {ExperimentalMemKVStore, Reflect} from '@rocicorp/reflect/client';
+import {Reflect} from '@rocicorp/reflect/client';
 import classNames from 'classnames';
 import {event} from 'nextjs-google-analytics';
 import {useCallback, useEffect, useState} from 'react';
@@ -32,7 +32,6 @@ function usePuzzleRoomID() {
   useEffect(() => {
     const orchestratorClient = new Reflect<M>({
       socketOrigin: getWorkerHost(),
-      createKVStore: name => new ExperimentalMemKVStore(name),
       userID: 'anon',
       roomID: ORCHESTRATOR_ROOM,
       mutators,
@@ -112,7 +111,6 @@ function useReflect(
 
     const reflect = new Reflect<M>({
       socketOrigin: getWorkerHost(),
-      createKVStore: name => new ExperimentalMemKVStore(name),
       userID: 'anon',
       roomID: puzzleRoomID,
       mutators,

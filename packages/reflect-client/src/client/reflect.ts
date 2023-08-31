@@ -20,6 +20,7 @@ import {
   ClientGroupID,
   ClientID,
   dropDatabase,
+  ExperimentalMemKVStore,
   ExperimentalWatchCallbackForOptions,
   ExperimentalWatchNoIndexCallback,
   ExperimentalWatchOptions,
@@ -51,7 +52,7 @@ import {
   REPORT_INTERVAL_MS,
   Series,
 } from './metrics.js';
-import type {ReflectOptions} from './options.js';
+import type {CreateKVStore, ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {isAuthError, isServerError, ServerError} from './server-error.js';
@@ -302,7 +303,7 @@ export class Reflect<MD extends MutatorDefs> {
         minDelayMs: 0,
       },
       licenseKey: 'reflect-client-static-key',
-      experimentalCreateKVStore: options.createKVStore,
+      experimentalCreateKVStore: getCreateKVStore(options),
     };
     const replicacheInternalOptions = {
       enableLicensing: false,
@@ -1418,3 +1419,23 @@ class TimedOutError extends Error {
 }
 
 class CloseError extends Error {}
+
+function createMemStore(name: string): ExperimentalMemKVStore {
+  return new ExperimentalMemKVStore(name);
+}
+
+function getCreateKVStore<MD extends MutatorDefs>(
+  options: ReflectOptions<MD>,
+): CreateKVStore | undefined {
+  switch (options.kvStore) {
+    case 'idb':
+      return undefined;
+
+    case 'mem':
+    case undefined:
+      return createMemStore;
+
+    default:
+      return options.kvStore;
+  }
+}

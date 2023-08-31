@@ -172,7 +172,16 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   hiddenTabDisconnectDelay?: number | undefined;
 
   /**
-   * Allows providing a custom implementation of the underlying storage layer.
+   * Determines what kind of storage implementation to use on the client.
+   *
+   * Defaults to `'mem'` which means that Reflect uses an in memory storage and
+   * the data is not persisted on the client.
+   *
+   * By setting this to `'idb'` the data is persisted on the client using
+   * IndexedDB, allowing faster syncs between application restarts.
+   *
+   * You can also set this to a function that is used to create new KV stores,
+   * allowing a custom implementation of the underlying storage layer.
    */
-  createKVStore?: CreateKVStore | undefined;
+  kvStore?: 'mem' | 'idb' | CreateKVStore | undefined;
 }
