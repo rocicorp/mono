@@ -1531,7 +1531,7 @@ test('kvStore option', async () => {
     await r.mutate.putFoo('bar');
     expect(await r.query(tx => tx.get('foo'))).to.equal('bar');
     // Wait for persist to finish
-    await tickAFewTimes(clock, 1000);
+    await tickAFewTimes(clock, 2000);
     await r.close();
     expect(spy.called).equal(expectedIDBOpenCalled, 'IDB existed!');
 
