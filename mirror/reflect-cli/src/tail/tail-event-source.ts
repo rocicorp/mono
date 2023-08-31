@@ -77,7 +77,6 @@ async function* createIter<R extends BaseRequest>(
       yield entry;
     }
   } finally {
-    console.log('aborting due to finally in createIter');
     abortController.abort();
   }
 }
