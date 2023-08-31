@@ -1432,10 +1432,8 @@ function getCreateKVStore<MD extends MutatorDefs>(
       return undefined;
 
     case 'mem':
-      return createMemStore;
-
     case undefined:
-      return options.createKVStore ?? createMemStore;
+      return createMemStore;
 
     default:
       return options.kvStore;

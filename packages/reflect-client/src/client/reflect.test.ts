@@ -28,7 +28,6 @@ import {
   MockSocket,
   TestLogSink,
   TestReflect,
-  idbExists,
   reflectForTest,
   tickAFewTimes,
   waitForUpstreamMessage,
@@ -1547,32 +1546,6 @@ test('kvStore option', async () => {
   const kvStore: CreateKVStore = name => new ExperimentalMemKVStore(name);
   await t(kvStore, 'kv-store-test-user-id-4', false, undefined);
   await t(kvStore, 'kv-store-test-user-id-4', false, 'bar');
-});
-
-test('experimentalKVStore', async () => {
-  const r1 = reflectForTest({
-    mutators: {
-      putFoo: async (tx, val: string) => {
-        await tx.put('foo', val);
-      },
-    },
-  });
-  await r1.mutate.putFoo('bar');
-  expect(await r1.query(tx => tx.get('foo'))).to.equal('bar');
-  // We currently disable persistence so there should be no IndexedDB.
-  expect(await idbExists(r1.idbName)).is.false;
-
-  const r2 = reflectForTest({
-    createKVStore: name => new ExperimentalMemKVStore(name),
-    mutators: {
-      putFoo: async (tx, val: string) => {
-        await tx.put('foo', val);
-      },
-    },
-  });
-  await r2.mutate.putFoo('bar');
-  expect(await r2.query(tx => tx.get('foo'))).to.equal('bar');
-  expect(await idbExists(r2.idbName)).is.false;
 });
 
 test('Close during connect should sleep', async () => {

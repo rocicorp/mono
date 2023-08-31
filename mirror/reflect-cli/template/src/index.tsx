@@ -1,11 +1,11 @@
+import {Reflect} from '@rocicorp/reflect/client';
+import {nanoid} from 'nanoid';
 import React, {useEffect} from 'react';
 import ReactDOM from 'react-dom/client';
-import {mutators} from './reflect/mutators';
-import {ExperimentalMemKVStore, Reflect} from '@rocicorp/reflect/client';
-import {nanoid} from 'nanoid';
-import {randUserInfo} from './reflect/client-state';
-import styles from './index.module.css';
 import CursorField from './cursor-field';
+import styles from './index.module.css';
+import {randUserInfo} from './reflect/client-state';
+import {mutators} from './reflect/mutators';
 import {useCount} from './subscriptions';
 
 const userID = nanoid();
@@ -23,11 +23,6 @@ const r = new Reflect({
   roomID,
   auth: userID,
   mutators,
-
-  // Turns off local persistence. This will go away soon.
-  createKVStore: (name: string) => {
-    return new ExperimentalMemKVStore(name);
-  },
 });
 
 const App = () => {

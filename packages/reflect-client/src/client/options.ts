@@ -172,12 +172,6 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   hiddenTabDisconnectDelay?: number | undefined;
 
   /**
-   * Allows providing a custom implementation of the underlying storage layer.
-   * @deprecated Use [[kvStore]] instead.
-   */
-  createKVStore?: CreateKVStore | undefined;
-
-  /**
    * Determines what kind of storage implementation to use on the client.
    *
    * Defaults to `'mem'` which means that Reflect uses an in memory storage and
