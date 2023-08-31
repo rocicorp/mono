@@ -29,22 +29,22 @@ const localConfigSchema = v.object({
   apps: v.undefined().optional(),
 });
 
-// AppVariant identifies an app that has been initialized on the Mirror Server.
-const appVariantSchema = v.object({
+// AppInstance identifies an app that has been initialized on the Mirror Server.
+const appInstanceSchema = v.object({
   appID: v.string(),
 });
 
-const appVariantsSchema = v.record(appVariantSchema);
+const appInstancesSchema = v.record(appInstanceSchema);
 
-// InitializedAppConfig combines the LocalConfig with an initialized App.
+// InitializedAppConfig combines the LocalConfig with one or more initialized AppInstances.
 const initializedAppConfigSchema = v.object({
   server: v.string(),
-  apps: appVariantsSchema,
+  apps: appInstancesSchema,
 });
 
 const configFileSchema = v.union(localConfigSchema, initializedAppConfigSchema);
 
-export type AppVariant = v.Infer<typeof appVariantSchema>;
+export type AppInstance = v.Infer<typeof appInstanceSchema>;
 export type LocalConfig = v.Infer<typeof localConfigSchema>;
 export type InitializedAppConfig = v.Infer<typeof initializedAppConfigSchema>;
 export type ConfigFile = v.Infer<typeof configFileSchema>;
@@ -138,13 +138,13 @@ export function mustReadAppConfig(
 }
 
 export async function ensureAppInitialized(
-  variant = 'default',
-): Promise<LocalConfig & AppVariant> {
+  instance = 'default',
+): Promise<LocalConfig & AppInstance> {
   let config = mustReadAppConfig();
-  if (config.apps?.[variant]) {
+  if (config.apps?.[instance]) {
     return {
-      ...config.apps?.[variant],
       server: config.server,
+      ...config.apps?.[instance],
     };
   }
   const {uid: userID, additionalUserInfo} = await authenticate(false);
@@ -176,10 +176,10 @@ export async function ensureAppInitialized(
     .get();
   const {teamSubdomain} = must(appDoc.data());
   writeTemplatedFilePlaceholders('./', {['<TEAM-SUBDOMAIN>']: teamSubdomain});
-  config = writeAppConfig({...config, apps: {[variant]: {appID}}});
+  config = writeAppConfig({...config, apps: {[instance]: {appID}}});
   return {
-    ...config.apps?.[variant],
     server: config.server,
+    ...config.apps?.[instance],
   };
 }
 
