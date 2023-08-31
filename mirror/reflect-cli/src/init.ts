@@ -1,5 +1,7 @@
 import {getFirestore, type Firestore} from './firebase.js';
-import {CreateRequest, create} from 'mirror-protocol/src/app.js';
+import {createApp} from 'mirror-protocol/src/app.js';
+import {ensureTeam} from 'mirror-protocol/src/team.js';
+
 import {App, appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {
   standardReleaseChannelSchema,
@@ -17,8 +19,9 @@ import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 export function initOptions(yargs: CommonYargsArgv) {
   return yargs
     .option('name', {
-      describe: 'The name of existing app to use',
+      describe: 'The name of app to use (or create with --new)',
       type: 'string',
+      demandOption: true,
     })
     .option('channel', {
       describe: 'Which channel to use',
@@ -41,88 +44,69 @@ export async function initHandler(
 
   const userID = user.uid;
 
-  const {name, new: newApp} = yargs;
-  const {channel} = yargs;
+  const {name: appName, new: newApp, channel} = yargs;
   v.assert(channel, standardReleaseChannelSchema);
 
   if (newApp) {
-    if (name) {
-      console.error('Cannot use --name with --new');
-      process.exit(1);
+    const defaultTeamName = user.additionalUserInfo?.username;
+    if (!defaultTeamName) {
+      throw new Error('Could not determine github username from oauth');
     }
-    await createNewApp(userID, channel, configDirPath);
+    await createNewApp(
+      userID,
+      defaultTeamName,
+      appName,
+      channel,
+      configDirPath,
+    );
     return;
   }
 
   const firestore = getFirestore();
 
   const appConfig = readAppConfig(configDirPath);
-  if (!name && appConfig) {
+  if (appConfig) {
     // Load the app from firebase to ensure it still exists.
     const app = await getApp(firestore, appConfig.appID);
-    console.log(`Using app with name ${app.name}`);
+    console.log(`Already configured to use app "${app.name}"`);
     return;
   }
 
-  // Check if user is already member of a team that has apps.
   const existingAppsForUser = await getExistingAppsForUser(firestore, userID);
-
-  if (name) {
-    // Check if the name flag is valid.
-    const app = existingAppsForUser.find(app => app.name === name);
-    if (!app) {
-      console.error(`No app with name ${name} found.`);
-      process.exit(1);
-    }
-
+  const app = existingAppsForUser.find(app => app.name === appName);
+  if (app) {
     writeAppConfig({appID: app.appID}, configDirPath);
-    console.log(`Using app with name ${app.name}`);
+    console.log(`Ready to use app "${app.name}"`);
     return;
   }
 
-  if (existingAppsForUser.length === 0) {
-    // New app.
-    console.log('User is not member of any team(s) that has apps.');
-    console.log('Creating new app.');
-    await createNewApp(userID, channel, configDirPath);
-    return;
-  }
-
-  if (existingAppsForUser.length === 1) {
-    // User is only member of one team with apps. Use that app.
-    console.log('User is member of team with a single app. Using that app.');
-    writeAppConfig({appID: existingAppsForUser[0].appID}, configDirPath);
-    return;
-  }
-
-  // User is member of multiple teams with apps. Check if name flag is set
-  // and present in list of apps.
-  console.log('User is member of team(s) with multiple apps:');
   console.log('');
-
-  for (const app of existingAppsForUser) {
-    console.log(
-      `  ${app.name} (appID: ${app.appID}, channel: ${app.serverReleaseChannel})`,
-    );
-  }
-  console.log('');
-  console.log('Please specify which app to use with --name flag.');
+  console.error(
+    `Did not find an app named ${appName}. Please specify --new to create one.`,
+  );
   process.exit(1);
 }
 
 async function createNewApp(
   userID: string,
+  defaultTeamName: string,
+  appName: string,
   channel: 'canary' | 'stable',
   configDirPath?: string | undefined,
 ) {
-  const data: CreateRequest = {
-    requester: makeRequester(userID),
+  const requester = makeRequester(userID);
+  const {teamID} = await ensureTeam({
+    requester,
+    name: defaultTeamName,
+  });
+  const {appID} = await createApp({
+    requester,
+    teamID,
+    name: appName,
     serverReleaseChannel: channel,
-  };
-
-  const {appID, name: appName} = await create(data);
+  });
   writeAppConfig({appID}, configDirPath);
-  console.log(`Created app ${appID} (${appName})`);
+  console.log(`Created app "${name}" (${appID})`);
 }
 
 export function getApp(firestore: Firestore, appID: string): Promise<App> {

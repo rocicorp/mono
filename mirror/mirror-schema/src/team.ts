@@ -8,8 +8,12 @@ export const teamSchema = v.object({
   // Subdomain of reflect-server.net where apps are hosted, e.g.
   // https://app-name.team-subdomain.reflect-server.net
   //
-  // TODO: Denormalized to all of the Team's apps to simplify deployment logic.
-  subdomain: v.string().optional(), // Make required
+  // This defaults to a sanitized version of the Team `name`, with a random
+  // integer suffix added in the case of collisions. In the future, users will
+  // have the ability to change the team name and subdomain.
+  //
+  // This field is denormalized to all of the Team's apps to simplify deployment logic.
+  subdomain: v.string(),
 
   defaultCfID: v.string(),
 
@@ -63,4 +67,19 @@ export function sanitizeForSubdomain(orig: string): string {
     .replaceAll(/[^a-z0-9-]+/g, '-') // Replace any sequences of illegal characters with a hyphens
     .replaceAll(/^[0-9-]*/g, '') // Remove leading digits or hyphens
     .replaceAll(/[-]*$/g, ''); // Remove trailing hyphens
+}
+
+export const appNameIndexSchema = v.object({
+  appID: v.string(),
+});
+
+export type AppNameIndex = v.Infer<typeof appNameIndexSchema>;
+
+export const appNameIndexDataConverter =
+  firestoreDataConverter(appNameIndexSchema);
+
+export const APP_NAME_INDEX_COLLECTION_ID = 'appNames';
+
+export function appNameIndexPath(teamID: string, appName: string): string {
+  return path.append(teamPath(teamID), APP_NAME_INDEX_COLLECTION_ID, appName);
 }

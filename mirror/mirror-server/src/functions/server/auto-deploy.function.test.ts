@@ -82,6 +82,7 @@ describe('server auto-deploy', () => {
         cfID: 'foo',
         cfScriptName: 'bar',
         teamID: 'baz',
+        teamSubdomain: 'boom',
         name: 'boo',
         deploymentOptions: {
           vars: {
@@ -102,7 +103,7 @@ describe('server auto-deploy', () => {
             appModules: [],
             serverVersionRange: '^0.209.0',
             serverVersion: '0.209.0',
-            hostname: 'boo.reflect-server.net',
+            hostname: 'boo.boom.reflect-server.net',
             options: {
               vars: {
                 DISABLE: 'false',

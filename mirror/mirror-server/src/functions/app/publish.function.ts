@@ -91,7 +91,7 @@ export async function computeDeploymentSpec(
   return {
     serverVersionRange,
     serverVersion,
-    hostname: `${app.name}.reflect-server.net`,
+    hostname: `${app.name}.${app.teamSubdomain}.reflect-server.net`,
     options: app.deploymentOptions,
     hashesOfSecrets,
   };

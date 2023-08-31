@@ -40,63 +40,58 @@ export const ensure = (firestore: Firestore) =>
         .withConverter(userDataConverter);
 
       const teamID = await firestore.runTransaction(async txn => {
-        try {
-          const userDoc = await txn.get(userDocRef);
-          if (!userDoc.exists) {
-            throw new HttpsError('not-found', `User ${userID} does not exist`);
-          }
-
-          const user = must(userDoc.data());
-          const {email} = user;
-
-          const teamIDs = Object.keys(user.roles);
-          if (teamIDs.length > 1) {
-            throw new HttpsError(
-              'internal',
-              'User is part of multiple teams, but only one team is supported at this time',
-            );
-          }
-          if (teamIDs.length === 1) {
-            return teamIDs[0];
-          }
-
-          const teamID = newTeamID();
-          const subdomain = await getSubdomain(firestore, txn, name);
-
-          logger.info(
-            `Creating team "${name}" (${teamID}) at ${subdomain}.reflect-server.net for user ${userID}`,
-          );
-          txn.create(
-            firestore.doc(teamPath(teamID)).withConverter(teamDataConverter),
-            {
-              name,
-              subdomain,
-              defaultCfID: cloudflareAccountId.value(),
-              numAdmins: 1,
-              numMembers: 0,
-              numInvites: 0,
-              numApps: 0,
-              maxApps: DEFAULT_MAX_APPS,
-            },
-          );
-          txn.create(
-            firestore
-              .doc(teamMembershipPath(teamID, userID))
-              .withConverter(membershipDataConverter),
-            {email, role: 'admin'},
-          );
-          txn.update(userDocRef, {roles: {[teamID]: 'admin'}});
-          txn.create(
-            firestore
-              .doc(teamSubdomainIndexPath(subdomain))
-              .withConverter(teamSubdomainIndexDataConverter),
-            {teamID},
-          );
-          return teamID;
-        } catch (e) {
-          console.error(String(e));
-          throw e;
+        const userDoc = await txn.get(userDocRef);
+        if (!userDoc.exists) {
+          throw new HttpsError('not-found', `User ${userID} does not exist`);
         }
+
+        const user = must(userDoc.data());
+        const {email} = user;
+
+        const teamIDs = Object.keys(user.roles);
+        if (teamIDs.length > 1) {
+          throw new HttpsError(
+            'internal',
+            'User is part of multiple teams, but only one team is supported at this time',
+          );
+        }
+        if (teamIDs.length === 1) {
+          return teamIDs[0];
+        }
+
+        const teamID = newTeamID();
+        const subdomain = await getSubdomain(firestore, txn, name);
+
+        logger.info(
+          `Creating team "${name}" (${teamID}) at ${subdomain}.reflect-server.net for user ${userID}`,
+        );
+        txn.create(
+          firestore.doc(teamPath(teamID)).withConverter(teamDataConverter),
+          {
+            name,
+            subdomain,
+            defaultCfID: cloudflareAccountId.value(),
+            numAdmins: 1,
+            numMembers: 0,
+            numInvites: 0,
+            numApps: 0,
+            maxApps: DEFAULT_MAX_APPS,
+          },
+        );
+        txn.create(
+          firestore
+            .doc(teamMembershipPath(teamID, userID))
+            .withConverter(membershipDataConverter),
+          {email, role: 'admin'},
+        );
+        txn.update(userDocRef, {roles: {[teamID]: 'admin'}});
+        txn.create(
+          firestore
+            .doc(teamSubdomainIndexPath(subdomain))
+            .withConverter(teamSubdomainIndexDataConverter),
+          {teamID},
+        );
+        return teamID;
       });
       return {teamID, success: true};
     });
@@ -106,7 +101,7 @@ async function getSubdomain(
   txn: Transaction,
   name: string,
 ): Promise<string> {
-  // Try up to 5 times to add a random number fo the subdomain if it is taken.
+  // Try up to 5 times, adding a random number fo the subdomain if it is taken.
   for (let i = 0; i < 5; i++) {
     const subdomain =
       i === 0

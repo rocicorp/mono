@@ -1,20 +1,9 @@
-import {
-  describe,
-  expect,
-  test,
-  beforeAll,
-  beforeEach,
-  afterEach,
-} from '@jest/globals';
+import {describe, expect, test, beforeEach, afterEach} from '@jest/globals';
 import type {DecodedIdToken} from 'firebase-admin/auth';
-import {getFirestore, type Firestore} from 'firebase-admin/firestore';
+import {getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import type {Request} from 'firebase-functions/v2/https';
-import {
-  TEAM_MEMBERSHIPS_COLLECTION_ID,
-  membershipDataConverter,
-  teamMembershipPath,
-} from 'mirror-schema/src/membership.js';
+import {teamMembershipPath} from 'mirror-schema/src/membership.js';
 import {
   getMembership,
   getTeam,
@@ -30,7 +19,6 @@ import {
   teamSubdomainIndexDataConverter,
   teamSubdomainIndexPath,
 } from 'mirror-schema/src/team.js';
-import {must} from 'shared/src/must.js';
 
 mockFunctionParamsAndSecrets();
 
@@ -41,7 +29,7 @@ describe('team-ensure function', () => {
   const USER_EMAIL = 'foo@bar.com';
   const TEAM_ID = 'team-ensure-test-team';
 
-  function callEnsure(firestore: Firestore, name: string) {
+  function callEnsure(name: string) {
     const ensureFunction = https.onCall(ensure(firestore));
 
     return ensureFunction.run({
@@ -69,25 +57,6 @@ describe('team-ensure function', () => {
     await batch.commit();
   }
 
-  beforeAll(async () => {
-    const subs = await firestore
-      .collection('teamSubdomains')
-      .withConverter(teamSubdomainIndexDataConverter)
-      .get();
-    for (const doc of subs.docs) {
-      const team = await firestore.doc(teamPath(doc.data().teamID)).get();
-      console.warn(
-        `Existing subdomain: ${doc.ref.path}: ${doc.data().teamID}`,
-        team.data(),
-      );
-      const members = await firestore
-        .collection(TEAM_MEMBERSHIPS_COLLECTION_ID)
-        .withConverter(membershipDataConverter)
-        .get();
-      console.warn(`Members: [${members.docs.map(doc => doc.data())}]`);
-    }
-  });
-
   beforeEach(async () => {
     const batch = firestore.batch();
     batch.create(
@@ -113,17 +82,21 @@ describe('team-ensure function', () => {
           [TEAM_ID]: role,
         });
 
-        const resp = await callEnsure(firestore, 'ignored');
+        const resp = await callEnsure('ignored');
         expect(resp).toEqual({
           success: true,
           teamID: TEAM_ID,
         });
+
+        // Only the user doc is checked; no other actions should have been performed.
+        const teamDoc = await firestore.doc(teamPath(TEAM_ID)).get();
+        expect(teamDoc.exists).toBe(false);
       });
     }
   });
 
   test('ensure when no team', async () => {
-    const resp = await callEnsure(firestore, 'My Team, LLC.');
+    const resp = await callEnsure('My Team, LLC.');
     expect(resp).toMatchObject({
       success: true,
       teamID: expect.any(String),
@@ -148,7 +121,7 @@ describe('team-ensure function', () => {
       email: USER_EMAIL,
       role: 'admin',
     });
-    const subdomain = must(team.subdomain);
+    const {subdomain} = team;
     const subdomainIndex = await firestore
       .doc(teamSubdomainIndexPath(subdomain))
       .get();
@@ -166,7 +139,7 @@ describe('team-ensure function', () => {
         teamID: TEAM_ID,
       });
 
-    const resp = await callEnsure(firestore, 'Existing Team Name, LLC.');
+    const resp = await callEnsure('Existing Team Name, LLC.');
     expect(resp).toMatchObject({
       success: true,
       teamID: expect.any(String),
@@ -191,7 +164,7 @@ describe('team-ensure function', () => {
       email: USER_EMAIL,
       role: 'admin',
     });
-    const subdomain = must(team.subdomain);
+    const {subdomain} = team;
     const subdomainIndex = await firestore
       .doc(teamSubdomainIndexPath(subdomain))
       .get();

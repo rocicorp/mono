@@ -161,6 +161,7 @@ export function requestDeployment(
         status: 'REQUESTED',
         requestTime: FieldValue.serverTimestamp() as Timestamp,
       };
+      logger.debug(`Creating Deployment ${deploymentID}`, deployment);
 
       tx.create(docRef, deployment);
       tx.update(

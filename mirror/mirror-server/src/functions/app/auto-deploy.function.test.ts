@@ -66,6 +66,7 @@ describe('auto-deploy', () => {
         cfScriptName: 'bar',
         teamID: 'baz',
         name: 'boo',
+        teamSubdomain: 'yah',
         deploymentOptions: {
           vars: {
             DISABLE: 'false',
@@ -85,7 +86,7 @@ describe('auto-deploy', () => {
             appModules: [],
             serverVersionRange: '^0.28.0',
             serverVersion: SERVER_VERSION_1,
-            hostname: 'boo.reflect-server.net',
+            hostname: 'boo.yah.reflect-server.net',
             options: {
               vars: {
                 DISABLE: 'false',
@@ -153,7 +154,7 @@ describe('auto-deploy', () => {
       },
       expectedType: 'HOSTNAME_UPDATE',
       expectedSpec: {
-        hostname: 'bonk.reflect-server.net',
+        hostname: 'bonk.yah.reflect-server.net',
       },
     },
     {

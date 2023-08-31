@@ -71,6 +71,7 @@ describe('deployment', () => {
       name: 'baz',
       serverReleaseChannel: 'stable',
       teamID: 'boo',
+      teamSubdomain: 'team-subdomain',
       deploymentOptions: {vars: {}},
     });
 

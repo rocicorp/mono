@@ -16,7 +16,9 @@ import {
 import type {AuthData} from 'firebase-functions/v2/tasks';
 import {rename} from './rename.function.js';
 import type {RenameAppRequest} from 'mirror-protocol/src/app.js';
-import {appNameIndexPath} from 'mirror-schema/src/app.js';
+import {appNameIndexPath} from 'mirror-schema/src/team.js';
+
+const TEAM_ID = 'foo-team';
 
 type Case = {
   name: string;
@@ -55,13 +57,13 @@ const cases: Case[] = [
   {
     name: 'new name in use',
     newName: 'taken-name',
-    extraDocs: {[appNameIndexPath('taken-name')]: {appID: 'otherApp'}},
+    extraDocs: {[appNameIndexPath(TEAM_ID, 'taken-name')]: {appID: 'otherApp'}},
     error: 'already-exists',
   },
   {
     name: 'corrupt name index doc',
     newName: 'valid-name',
-    extraDocs: {[appNameIndexPath('old-name')]: {appID: 'otherApp'}},
+    extraDocs: {[appNameIndexPath(TEAM_ID, 'old-name')]: {appID: 'otherApp'}},
     error: 'internal',
   },
 ];
@@ -69,9 +71,9 @@ const cases: Case[] = [
 for (const c of cases) {
   test(c.name, async () => {
     const firestore = fakeFirestore();
-    await setUser(firestore, 'fooUser', 'f@b.com', '', {barTeam: 'admin'});
-    await setApp(firestore, 'barApp', {teamID: 'barTeam', name: 'old-name'});
-    await setAppName(firestore, 'barApp', 'old-name');
+    await setUser(firestore, 'fooUser', 'f@b.com', '', {[TEAM_ID]: 'admin'});
+    await setApp(firestore, 'barApp', {teamID: TEAM_ID, name: 'old-name'});
+    await setAppName(firestore, TEAM_ID, 'barApp', 'old-name');
     for (const [path, data] of Object.entries(c.extraDocs ?? {})) {
       await firestore.doc(path).set(data);
     }
@@ -106,11 +108,11 @@ for (const c of cases) {
     if (!c.error) {
       const app = await getApp(firestore, 'barApp');
       expect(app.name).toBe(c.newName);
-      const appName = await getAppName(firestore, c.newName);
+      const appName = await getAppName(firestore, TEAM_ID, c.newName);
       expect(appName.appID).toBe('barApp');
 
       const oldAppName = await firestore
-        .doc(appNameIndexPath('old-name'))
+        .doc(appNameIndexPath(TEAM_ID, 'old-name'))
         .get();
       expect(oldAppName.data()).toBeUndefined;
     }

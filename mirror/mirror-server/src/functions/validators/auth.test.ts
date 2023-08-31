@@ -126,6 +126,7 @@ describe('app authorization', () => {
   };
   const defaultApp: App = {
     teamID: 'myTeam',
+    teamSubdomain: 'team-subdomain',
     name: 'My App',
     cfID: 'cfID',
     cfScriptName: 'cfScriptName',

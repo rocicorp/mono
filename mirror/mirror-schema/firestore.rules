@@ -36,7 +36,7 @@ service cloud.firestore {
     // Team members have read access to all documents rooted at /apps/{appID}
     match /apps/{appID} {
       // Optimization: References the teamID directly.
-      allow read: if userIsMemberOfTeam(resource.data.teamID)
+      allow read: if userIsMemberOfTeam(resource.data.teamID);
       
       match /{subcollection}/{document=**} {
         // For docs in subcollections, the app doc is consulted to determine the teamID.
@@ -45,7 +45,7 @@ service cloud.firestore {
     }
     // Team members have read access to all documents rooted at /teams/{teamID}
     match /teams/{teamID}/{document=**} {
-      allow read: if userIsMemberOfTeam(teamID)
+      allow read: if userIsMemberOfTeam(teamID);
     }
 
     // By default, documents are not publicly readable or writeable. 
