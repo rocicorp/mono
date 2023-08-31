@@ -85,7 +85,7 @@ export async function publishHandler(
     if (deployment?.status === 'RUNNING') {
       console.log(`🎁 Published successfully to:`);
       console.log(`https://${deployment.spec.hostname}`);
-      writeTemplatedFilePlaceholders('./', {
+      writeTemplatedFilePlaceholders({
         appHostname: deployment.spec.hostname,
       });
       break;

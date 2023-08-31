@@ -127,13 +127,13 @@ export function readAppConfig(
 export function mustReadAppConfig(
   configDirPath?: string | undefined,
 ): AppConfig {
-  const spec = readAppConfig(configDirPath);
-  if (!spec) {
+  const config = readAppConfig(configDirPath);
+  if (!config) {
     throw new Error(
       `Could not find ${configFileName}. Please run \`reflect init\` to create one.`,
     );
   }
-  return spec;
+  return config;
 }
 
 export async function ensureAppInstantiated(
@@ -242,8 +242,8 @@ type TemplatePlaceholders = {
 };
 
 export function writeTemplatedFilePlaceholders(
-  dir: string,
   placeholders: Partial<{[Key in keyof TemplatePlaceholders]: string}>,
+  dir = './',
 ) {
   const appConfig = mustReadAppConfig(dir);
   Object.entries(appConfig.templates ?? {}).forEach(([src, dst]) => {

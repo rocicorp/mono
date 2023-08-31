@@ -22,11 +22,6 @@ export function devOptions(yargs: CommonYargsArgv) {
         requiresArg: true,
       })
       .default('port', undefined, '' + DEFAULT_PORT)
-      .positional('script', {
-        describe: 'Path to the worker script',
-        type: 'string',
-        demandOption: true,
-      })
   );
 }
 

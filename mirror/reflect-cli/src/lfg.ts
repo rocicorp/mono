@@ -72,10 +72,10 @@ export function getDefaultAppNameFromDir(dir: string): string {
   return sanitizeForSubdomain(dirname);
 }
 
-async function getAppName(dir: string): Promise<string> {
+function getAppName(dir: string): Promise<string> {
   const defaultAppName = getDefaultAppNameFromDir(dir);
-  if ((await validateAppName(defaultAppName)) === true) {
-    return defaultAppName;
+  if (validateAppName(defaultAppName) === true) {
+    return Promise.resolve(defaultAppName);
   }
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore type error in jest?!?

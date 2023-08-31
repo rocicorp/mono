@@ -7,10 +7,10 @@ import {
 import {createHandler, createOptions} from './create.js';
 import {devHandler, devOptions} from './dev.js';
 import {handleWith} from './firebase.js';
+import {lfgHandler, lfgOptions} from './lfg.js';
 import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
-import {lfgHandler, lfgOptions} from './lfg.js';
 import {tailHandler, tailOptions} from './tail/index.js';
 
 async function main(argv: string[]): Promise<void> {
