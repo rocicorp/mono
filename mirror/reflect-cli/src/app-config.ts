@@ -207,6 +207,8 @@ async function getNewAppNameOrExistingID(
     }
   }
   for (;;) {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore type error in jest?!?
     const name = await input({
       message: 'Name of your App:',
       default: defaultAppName,
@@ -221,6 +223,8 @@ async function getNewAppNameOrExistingID(
     }
     const {appID: id} = must(nameEntry.data());
     if (
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore type error in jest?!?
       await confirm({
         message: `There is an existing App named "${name}". Do you want to use it?`,
         default: false,

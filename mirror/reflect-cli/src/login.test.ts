@@ -15,6 +15,7 @@ describe('loginHandler', () => {
     let writeAuthConfigFileCalled = false;
 
     const loginHandlerPromise = loginHandler(
+      false,
       async url => {
         openInBrowserCalled = true;
         expect(url).toEqual('https://reflect.net/auth');
@@ -52,6 +53,7 @@ describe('loginHandler', () => {
     let writeAuthConfigFileCalled = false;
 
     const loginHandlerPromise = loginHandler(
+      false,
       async url => {
         openInBrowserCalled = true;
         expect(url).toEqual('https://reflect.net/auth');

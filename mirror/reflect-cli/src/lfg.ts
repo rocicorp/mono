@@ -33,6 +33,8 @@ export async function initApp(_: LfgHandlerArgs, dir: string) {
     const name = await getAppName(dir);
     await scaffold(name, dir);
   } else {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore type error in jest?!?
     const server = await input({
       message: `Enter the path to the server entry point (e.g. ${color.white(
         'src/reflect/index.ts',
@@ -53,6 +55,8 @@ export async function initApp(_: LfgHandlerArgs, dir: string) {
 async function canScaffold(dirPath: string): Promise<boolean> {
   const dir = await opendir(dirPath);
   for await (const _ of dir) {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore type error in jest?!?
     return confirm({
       message:
         'Current directory is not empty. Overwrite files with new project?',
@@ -75,6 +79,8 @@ async function getAppName(dir: string): Promise<string> {
   if ((await validateAppName(defaultAppName)) === true) {
     return defaultAppName;
   }
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore type error in jest?!?
   return input({
     message: 'Name of your App:',
     default: defaultAppName,

@@ -18,6 +18,7 @@ async function timeout(signal: AbortSignal) {
 }
 
 export async function loginHandler(
+  promptToOpenBrowser = true,
   openInBrowser = openInBrowserImpl,
   writeAuthConfigFile = writeAuthConfigFileImpl,
 ): Promise<void> {
@@ -77,10 +78,13 @@ export async function loginHandler(
   credentialReceiverServer.listen(8976);
 
   if (
-    await confirm({
+    !promptToOpenBrowser ||
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore type error in jest?!?
+    (await confirm({
       message: 'Open login page in your default browser?',
       default: true,
-    })
+    }))
   ) {
     await openInBrowser(urlToOpen);
   }
