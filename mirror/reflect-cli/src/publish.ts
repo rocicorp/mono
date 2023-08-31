@@ -52,7 +52,7 @@ export async function publishHandler(
   console.log(`Compiling ${script}`);
   const {code, sourcemap} = await compile(absPath, 'linked');
 
-  const {user} = await authenticate();
+  const {user} = await authenticate(yargs);
   const userID = user.uid;
 
   const data: PublishRequest = {

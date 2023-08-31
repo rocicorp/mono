@@ -12,6 +12,7 @@ import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
 import {tailHandler, tailOptions} from './tail/index.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -61,12 +62,12 @@ function createCLIParser(argv: string[]) {
     '🔓 Login to Reflect',
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},
-    handleWith(async () => {
+    handleWith(async (yargs: YargvToInterface<CommonYargsArgv>) => {
       try {
-        await loginHandler();
+        await loginHandler(yargs);
         // authenticate() validates that credentials were written
         // and outputs the logged in user to the console.
-        await authenticate();
+        await authenticate(yargs);
       } catch (e) {
         console.error(e);
       }

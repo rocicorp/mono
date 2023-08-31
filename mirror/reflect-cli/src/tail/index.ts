@@ -11,9 +11,9 @@ export function tailOptions(yargs: CommonYargsArgv) {
 
 type TailHandlerArgs = YargvToInterface<ReturnType<typeof tailOptions>>;
 
-export async function tailHandler(_yargs: TailHandlerArgs) {
+export async function tailHandler(yargs: TailHandlerArgs) {
   const {appID} = await ensureAppInstantiated();
-  const {user} = await authenticate();
+  const {user} = await authenticate(yargs);
   const idToken = await user.getIdToken();
 
   const data: TailRequest = {

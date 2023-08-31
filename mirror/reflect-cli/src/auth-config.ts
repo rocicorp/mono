@@ -17,6 +17,7 @@ import {
   AdditionalUserInfo,
 } from 'firebase/auth';
 import {loginHandler} from './login.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 /**
  * The path to the config file that holds user authentication data,
@@ -108,7 +109,7 @@ type AuthenticatedUser = {
   additionalUserInfo: AdditionalUserInfo | null;
 };
 
-export async function authenticate(output = true): Promise<AuthenticatedUser> {
+export async function authenticate(yargs: YargvToInterface<CommonYargsArgv>, output = true): Promise<AuthenticatedUser> {
   if (authConfigForTesting) {
     return {
       user: {uid: 'fake-uid'},
@@ -121,7 +122,7 @@ export async function authenticate(output = true): Promise<AuthenticatedUser> {
   );
   if (fs.statSync(authConfigFilePath, {throwIfNoEntry: false}) === undefined) {
     console.info('Login required');
-    await loginHandler();
+    await loginHandler(yargs);
   }
   const config = mustReadAuthConfigFile(authConfigFilePath);
   const authCredential = parseAuthCredential(config.authCredential);
