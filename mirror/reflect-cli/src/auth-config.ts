@@ -109,7 +109,10 @@ type AuthenticatedUser = {
   additionalUserInfo: AdditionalUserInfo | null;
 };
 
-export async function authenticate(yargs: YargvToInterface<CommonYargsArgv>, output = true): Promise<AuthenticatedUser> {
+export async function authenticate(
+  yargs: YargvToInterface<CommonYargsArgv>,
+  output = true,
+): Promise<AuthenticatedUser> {
   if (authConfigForTesting) {
     return {
       user: {uid: 'fake-uid'},
