@@ -103,12 +103,15 @@ function isFileNotFoundError(err: unknown): boolean {
   );
 }
 
-type AuthenticatedUser = User & {additionalUserInfo: AdditionalUserInfo | null};
+type AuthenticatedUser = {
+  user: User;
+  additionalUserInfo: AdditionalUserInfo | null;
+};
 
 export async function authenticate(output = true): Promise<AuthenticatedUser> {
   if (authConfigForTesting) {
     return {
-      uid: 'fake-uid',
+      user: {uid: 'fake-uid'},
       additionalUserInfo: null,
     } as unknown as AuthenticatedUser;
   }
@@ -133,7 +136,7 @@ export async function authenticate(output = true): Promise<AuthenticatedUser> {
     console.info(`Logged in as ${userCredentials.user.email}`);
   }
   return {
-    ...userCredentials.user,
+    user: userCredentials.user,
     additionalUserInfo,
   };
 }

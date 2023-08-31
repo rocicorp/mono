@@ -4,7 +4,7 @@ import {makeRequester} from './requester.js';
 import {getFirestore} from './firebase.js';
 
 export async function statusHandler() {
-  const user = await authenticate();
+  const {user} = await authenticate();
   const data = {requester: makeRequester(user.uid)};
   const result = await ensureUser(data);
   console.log('Status:', result);
