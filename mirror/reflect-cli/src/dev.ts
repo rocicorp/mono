@@ -35,7 +35,6 @@ async function exists(path: string) {
 }
 
 type DevHandlerArgs = {
-  script: string;
   port?: number | undefined;
 };
 
