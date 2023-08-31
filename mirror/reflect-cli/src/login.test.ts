@@ -4,6 +4,8 @@ import {mockHttpServer} from './login.test.helper.js';
 import type http from 'node:http';
 import type {UserAuthConfig} from './auth-config.js';
 
+type Args = Parameters<typeof loginHandler>[0];
+
 const credentialReceiverServerFetch: (
   req: Request,
 ) => Promise<http.ServerResponse<http.IncomingMessage>> = mockHttpServer();
@@ -15,6 +17,7 @@ describe('loginHandler', () => {
     let writeAuthConfigFileCalled = false;
 
     const loginHandlerPromise = loginHandler(
+      {stack: 'prod'} as Args,
       false,
       async url => {
         openInBrowserCalled = true;
@@ -53,10 +56,11 @@ describe('loginHandler', () => {
     let writeAuthConfigFileCalled = false;
 
     const loginHandlerPromise = loginHandler(
+      {stack: 'staging'} as Args,
       false,
       async url => {
         openInBrowserCalled = true;
-        expect(url).toEqual('https://reflect.net/auth');
+        expect(url).toEqual('https://sandbox.reflect.net/auth');
         const serverResponse = await credentialReceiverServerFetch(
           new Request(callbackUrl.toString()),
         );
