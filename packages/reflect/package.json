@@ -41,7 +41,7 @@
   },
   "devDependencies": {
     "@types/node": "^18.16.0",
-    "reflect-cli": "0.1.0",
+    "reflect-cli": "0.31.0",
     "reflect-client": "0.0.0",
     "reflect-server": "0.0.0",
     "reflect-shared": "0.0.0"
