@@ -45,7 +45,7 @@
     "compare-utf8": "^0.1.1",
     "esbuild": "^0.18.3",
     "fetch-mock": "^9.11.0",
-    "get-port": "^6.1.2",
+    "get-port": "^7.0.0",
     "hash-wasm": "^4.9.0",
     "idb": "^7.0.1",
     "navigator.locks": "^0.8.5",
