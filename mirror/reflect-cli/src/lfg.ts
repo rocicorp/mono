@@ -53,7 +53,7 @@ export async function initApp(_: LfgHandlerArgs, dir: string) {
 async function canScaffold(dirPath: string): Promise<boolean> {
   const dir = await opendir(dirPath);
   for await (const _ of dir) {
-    return await confirm({
+    return confirm({
       message:
         'Current directory is not empty. Overwrite files with new project?',
       default: false,
@@ -67,7 +67,7 @@ export function getDefaultAppNameFromDir(dir: string): string {
   return dirname
     .toLocaleLowerCase()
     .replaceAll(/^-*/g, '')
-    .replaceAll(/[^a-z0-9\-]/g, '');
+    .replaceAll(/[^a-z0-9-]/g, '');
 }
 
 async function getAppName(dir: string): Promise<string> {
@@ -75,14 +75,14 @@ async function getAppName(dir: string): Promise<string> {
   if ((await validateAppName(defaultAppName)) === true) {
     return defaultAppName;
   }
-  return await input({
+  return input({
     message: 'Name of your App:',
     default: defaultAppName,
     validate: validateAppName,
   });
 }
 
-async function validateAppName(name: string): Promise<string | boolean> {
+function validateAppName(name: string): string | boolean {
   if (!isValidAppName(name)) {
     return 'Names must start with a letter and use lowercased alphanumeric characters and hyphens.';
   }
@@ -106,7 +106,7 @@ export function isValidPackageName(projectName: string): string | void {
 }
 
 function validateEntryPoint(dir: string) {
-  return async (path: string) => {
+  return (path: string) => {
     if (isAbsolute(path)) {
       return 'Please specify a path relative to the project root.';
     }

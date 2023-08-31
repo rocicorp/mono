@@ -23,20 +23,31 @@ import {getDefaultAppNameFromDir} from './lfg.js';
 import {must} from 'shared/src/must.js';
 import {writeTemplatedFilePlaceholders} from './scaffold.js';
 
-// AppSpec contains the user-specified features of the App.
-const appSpecSchema = v.object({
-  appID: v.string().optional(), // Initialized on first online action (e.g. publish).
+// LocalConfig contains the user-specified features of the App.
+const localConfigSchema = v.object({
   server: v.string(),
+  apps: v.undefined().optional(),
 });
 
-// AppConfig extends AppSpec and includes the initialized App ID on the backend.
-const appConfigSchema = v.object({
+// AppVariant identifies an app that has been initialized on the Mirror Server.
+const appVariantSchema = v.object({
   appID: v.string(),
-  server: v.string(),
 });
 
-export type AppSpec = v.Infer<typeof appSpecSchema>;
-export type AppConfig = v.Infer<typeof appConfigSchema>;
+const appVariantsSchema = v.record(appVariantSchema);
+
+// InitializedAppConfig combines the LocalConfig with an initialized App.
+const initializedAppConfigSchema = v.object({
+  server: v.string(),
+  apps: appVariantsSchema,
+});
+
+const configFileSchema = v.union(localConfigSchema, initializedAppConfigSchema);
+
+export type AppVariant = v.Infer<typeof appVariantSchema>;
+export type LocalConfig = v.Infer<typeof localConfigSchema>;
+export type InitializedAppConfig = v.Infer<typeof initializedAppConfigSchema>;
+export type ConfigFile = v.Infer<typeof configFileSchema>;
 
 /**
  * Finds the root of the git repository.
@@ -85,9 +96,9 @@ function getConfigFilePath(configDirPath?: string | undefined) {
 
 const configFileName = 'reflect.config.json';
 
-let appConfigForTesting: AppConfig | undefined;
+let appConfigForTesting: ConfigFile | undefined;
 
-export function setAppConfigForTesting(config: AppConfig | undefined) {
+export function setAppConfigForTesting(config: ConfigFile | undefined) {
   appConfigForTesting = config;
 }
 
@@ -99,23 +110,25 @@ export function configFileExists(configDirPath: string): boolean {
 /**
  * Reads reflect.config.json in the "project root".
  */
-export function readAppSpec(
+export function readAppConfig(
   configDirPath?: string | undefined,
-): AppSpec | undefined {
+): ConfigFile | undefined {
   if (appConfigForTesting) {
     return appConfigForTesting;
   }
   const configFilePath = getConfigFilePath(configDirPath);
   if (fs.existsSync(configFilePath)) {
     const json = JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
-    return v.parse(json, appSpecSchema, 'passthrough');
+    return v.parse(json, configFileSchema, 'passthrough');
   }
 
   return undefined;
 }
 
-export function mustReadAppSpec(configDirPath?: string | undefined): AppSpec {
-  const spec = readAppSpec(configDirPath);
+export function mustReadAppConfig(
+  configDirPath?: string | undefined,
+): ConfigFile {
+  const spec = readAppConfig(configDirPath);
   if (!spec) {
     throw new Error(
       `Could not find ${configFileName}. Please run \`reflect init\` to create one.`,
@@ -124,12 +137,15 @@ export function mustReadAppSpec(configDirPath?: string | undefined): AppSpec {
   return spec;
 }
 
-export async function ensureAppConfig(
-  configDirPath?: string | undefined,
-): Promise<AppConfig> {
-  const spec = mustReadAppSpec(configDirPath);
-  if (spec.appID) {
-    return v.parse(spec, appConfigSchema, 'passthrough');
+export async function ensureAppInitialized(
+  variant = 'default',
+): Promise<LocalConfig & AppVariant> {
+  let config = mustReadAppConfig();
+  if (config.apps?.[variant]) {
+    return {
+      ...config.apps?.[variant],
+      server: config.server,
+    };
   }
   const {uid: userID, additionalUserInfo} = await authenticate(false);
   const defaultTeamName = additionalUserInfo?.username;
@@ -160,13 +176,16 @@ export async function ensureAppConfig(
     .get();
   const {teamSubdomain} = must(appDoc.data());
   writeTemplatedFilePlaceholders('./', {['<TEAM-SUBDOMAIN>']: teamSubdomain});
-  return writeAppConfig({...spec, appID}, configDirPath);
+  config = writeAppConfig({...config, apps: {[variant]: {appID}}});
+  return {
+    ...config.apps?.[variant],
+    server: config.server,
+  };
 }
 
-export function writeAppConfig<Config extends AppSpec>(
-  config: Config,
-  configDirPath?: string | undefined,
-): Config {
+export function writeAppConfig<
+  Config extends LocalConfig | InitializedAppConfig,
+>(config: Config, configDirPath?: string | undefined): Config {
   const configFilePath = getConfigFilePath(configDirPath);
   fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
   return config;

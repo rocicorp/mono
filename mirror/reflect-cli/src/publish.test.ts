@@ -29,7 +29,7 @@ afterEach(() => {
 test('it should throw if file not found', async () => {
   const script = `./test${Math.random().toString(32).slice(2)}.ts`;
   setAppConfigForTesting({
-    appID: 'test-app-id',
+    apps: {default: {appID: 'test-app-id'}},
     server: script,
   });
 
@@ -52,7 +52,7 @@ async function writeTempFiles(
   const testFilePath = path.join(dir, filename);
   await fs.writeFile(testFilePath, data, 'utf-8');
   setAppConfigForTesting({
-    appID: 'test-app-id',
+    apps: {default: {appID: 'test-app-id'}},
     server: testFilePath,
   });
 
@@ -148,7 +148,6 @@ test('it should compile typescript', async () => {
 
   await publishHandler(
     {} as Args,
-    undefined,
     publishMock as unknown as PublishCaller,
     firestore,
   );

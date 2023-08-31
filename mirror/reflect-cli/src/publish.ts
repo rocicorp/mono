@@ -4,7 +4,7 @@ import {
 } from 'mirror-protocol/src/publish.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {ensureAppConfig} from './app-config.js';
+import {ensureAppInitialized} from './app-config.js';
 import {authenticate} from './auth-config.js';
 import {compile} from './compile.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
@@ -33,11 +33,10 @@ export type PublishCaller = typeof publishCaller;
 
 export async function publishHandler(
   _: PublishHandlerArgs,
-  configDirPath?: string | undefined,
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
-  const {appID, server: script} = await ensureAppConfig(configDirPath);
+  const {appID, server: script} = await ensureAppInitialized();
 
   const absPath = path.resolve(script);
   if (!(await exists(absPath))) {

@@ -1,5 +1,5 @@
 import {afterEach, beforeEach} from '@jest/globals';
-import {setAppConfigForTesting, type AppConfig} from './app-config.js';
+import {setAppConfigForTesting, type ConfigFile} from './app-config.js';
 import {UserAuthConfig, setAuthConfigForTesting} from './auth-config.js';
 
 export function useFakeAuthConfig() {
@@ -20,8 +20,8 @@ export function useFakeAuthConfig() {
 }
 
 export function useFakeAppConfig() {
-  const appConfig: AppConfig = {
-    appID: 'test-app-id',
+  const appConfig: ConfigFile = {
+    apps: {default: {appID: 'test-app-id'}},
     server: 'test-server-path.js',
   };
 
