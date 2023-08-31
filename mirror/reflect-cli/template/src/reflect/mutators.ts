@@ -17,7 +17,11 @@
 // precedence over the client-side optimistic result.
 
 import {type WriteTransaction} from '@rocicorp/reflect/server';
-import {getClientState, initClientState, putClientState} from './client-state';
+import {
+  getClientState,
+  initClientState,
+  putClientState,
+} from './client-state.js';
 
 export const mutators = {
   setCursor,

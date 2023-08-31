@@ -10,6 +10,7 @@ import type {JSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
 import {REPORT_INTERVAL_MS} from './metrics.js';
+import type {CreateKVStore, ReflectOptions} from './options.js';
 import {
   CONNECT_TIMEOUT_MS,
   ConnectionState,
@@ -27,7 +28,6 @@ import {
   MockSocket,
   TestLogSink,
   TestReflect,
-  idbExists,
   reflectForTest,
   tickAFewTimes,
   waitForUpstreamMessage,
@@ -1509,29 +1509,43 @@ suite('Invalid Downstream message', () => {
   }
 });
 
-test('experimentalKVStore', async () => {
-  const r1 = reflectForTest({
-    mutators: {
-      putFoo: async (tx, val: string) => {
-        await tx.put('foo', val);
-      },
-    },
-  });
-  await r1.mutate.putFoo('bar');
-  expect(await r1.query(tx => tx.get('foo'))).to.equal('bar');
-  expect(await idbExists(r1.idbName)).is.true;
+test('kvStore option', async () => {
+  const spy = sinon.spy(IDBFactory.prototype, 'open');
 
-  const r2 = reflectForTest({
-    createKVStore: name => new ExperimentalMemKVStore(name),
-    mutators: {
-      putFoo: async (tx, val: string) => {
-        await tx.put('foo', val);
+  const t = async (
+    kvStore: ReflectOptions<Record<string, never>>['kvStore'],
+    userID: string,
+    expectedIDBOpenCalled: boolean,
+    expectedValue: JSONValue | undefined = undefined,
+  ) => {
+    const r = reflectForTest({
+      userID,
+      kvStore,
+      mutators: {
+        putFoo: async (tx, val: string) => {
+          await tx.put('foo', val);
+        },
       },
-    },
-  });
-  await r2.mutate.putFoo('bar');
-  expect(await r2.query(tx => tx.get('foo'))).to.equal('bar');
-  expect(await idbExists(r2.idbName)).is.false;
+    });
+    expect(await r.query(tx => tx.get('foo'))).to.equal(expectedValue);
+    await r.mutate.putFoo('bar');
+    expect(await r.query(tx => tx.get('foo'))).to.equal('bar');
+    // Wait for persist to finish
+    await tickAFewTimes(clock, 2000);
+    await r.close();
+    expect(spy.called).equal(expectedIDBOpenCalled, 'IDB existed!');
+
+    spy.resetHistory();
+  };
+
+  await t('idb', 'kv-store-test-user-id-1', true);
+  await t('idb', 'kv-store-test-user-id-1', true, 'bar');
+  await t('mem', 'kv-store-test-user-id-2', false);
+  await t(undefined, 'kv-store-test-user-id-3', false);
+
+  const kvStore: CreateKVStore = name => new ExperimentalMemKVStore(name);
+  await t(kvStore, 'kv-store-test-user-id-4', false, undefined);
+  await t(kvStore, 'kv-store-test-user-id-4', false, 'bar');
 });
 
 test('Close during connect should sleep', async () => {
