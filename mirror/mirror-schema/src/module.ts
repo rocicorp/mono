@@ -1,8 +1,8 @@
-import type {Storage} from 'firebase-admin/storage';
 import type {Bucket} from '@google-cloud/storage';
-import * as crypto from 'shared/src/mirror/crypto.js';
-import {parseCloudStorageURL} from './cloud-storage.js';
+import type {Storage} from 'firebase-admin/storage';
+import {sha256OfString} from 'shared/src/sha256.js';
 import * as v from 'shared/src/valita.js';
+import {parseCloudStorageURL} from './cloud-storage.js';
 
 // Subset of the wrangler `CfModuleType` applicable to Mirror.
 export const moduleTypeSchema = v.union(v.literal('esm'), v.literal('text'));
@@ -59,19 +59,4 @@ export async function loadModule(
     type: ref.type,
     content: content.toString('utf-8'),
   };
-}
-
-export async function sha256OfString(s: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(s);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return hexStringFromBuffer(hash);
-}
-
-function hexStringFromBuffer(hash: ArrayBuffer): string {
-  let s = '';
-  for (const byte of new Uint8Array(hash)) {
-    s += byte < 10 ? '0' : '' + byte.toString(16);
-  }
-  return s;
 }
