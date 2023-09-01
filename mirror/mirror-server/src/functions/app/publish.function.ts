@@ -17,7 +17,7 @@ import {validateSchema} from '../validators/schema.js';
 import {requestDeployment} from './deploy.function.js';
 import type {App} from 'mirror-schema/src/app.js';
 import {getAppSecrets} from './secrets.js';
-import {getDataOrFail} from '../validators/must.js';
+import {getDataOrFail} from '../validators/data.js';
 import {
   cloudflareDataConverter,
   cloudflarePath,

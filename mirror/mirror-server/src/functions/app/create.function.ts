@@ -30,7 +30,7 @@ import {
 import {userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {defaultOptions} from 'mirror-schema/src/deployment.js';
-import {getDataOrFail} from '../validators/must.js';
+import {getDataOrFail} from '../validators/data.js';
 
 const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
