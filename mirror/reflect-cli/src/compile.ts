@@ -100,15 +100,13 @@ export async function* watch(
       } else {
         process.stdout.write('Rebuilding...');
       }
-      const start = performance.now();
+      const start = Date.now();
       const res = await buildContext.rebuild();
       if (signal.aborted) {
         break;
       }
 
-      process.stdout.write(
-        `Done in ${Math.round(performance.now() - start)}ms.\n`,
-      );
+      process.stdout.write(` Done in ${Date.now() - start}ms.\n`);
 
       yield getResultFromEsbuildResult(res, sourcemap);
 
@@ -121,7 +119,9 @@ export async function* watch(
       );
 
       await watchFiles(filesToWatch, signal, hashes);
-      process.stdout.write('Files changed. ');
+      if (!signal.aborted) {
+        process.stdout.write('Files changed. ');
+      }
     }
   } finally {
     await buildContext.dispose();

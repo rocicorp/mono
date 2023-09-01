@@ -65,20 +65,19 @@ export async function startDevServer(
     compatibilityDate: '2023-05-18',
   });
 
-  // TODO(arv): When we implement watch mode we need to dispose the workerd instance.
-  // workerd itself supports watch but it is not clear how to use it with Miniflare.
-  // Cleanup Miniflare, shutting down the workerd server
-  // await mf.dispose(),
-
   const url = await mf.ready;
 
   await inspectorConsoleClient(url, inspectorPort, signal);
 
-  signal.addEventListener('abort', () => {
-    mf.dispose().catch(e => {
-      console.error('Failed to shut down dev server', e);
-    });
-  });
+  signal.addEventListener(
+    'abort',
+    () => {
+      mf.dispose().catch(e => {
+        console.error('Failed to shut down dev server', e);
+      });
+    },
+    {once: true},
+  );
 
   return url;
 }
