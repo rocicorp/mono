@@ -141,7 +141,7 @@ test('basic', () => {
     });
     t(s, {x: {y: 1, z: 2}});
     t(s, {x: {y: 1}}, 'Missing property z at x');
-    t(s, {x: {}}, 'Missing property z at x');
+    t(s, {x: {}}, 'Missing property y at x');
   }
 
   {
@@ -179,14 +179,14 @@ test('basic', () => {
     t(s, 'yes');
     t(s, true);
     t(s, 0, 'Expected literal value 1, "yes" or true Got 0');
-    t(s, null, 'Expected number, string or boolean. Got null');
+    t(s, null, 'Expected literal value 1, "yes" or true Got null');
   }
   {
     const s = v.union(v.literal(1), v.literal('yes'), v.boolean());
     t(s, 1);
     t(s, 'yes');
     t(s, true);
-    t(s, 0, 'Expected literal value 1 or "yes" Got 0');
+    t(s, 0, 'Expected number, string or boolean. Got 0');
     t(s, null, 'Expected number, string or boolean. Got null');
   }
 
