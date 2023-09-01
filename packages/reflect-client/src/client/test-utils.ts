@@ -52,10 +52,6 @@ export class MockSocket extends EventTarget {
 }
 
 export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
-  constructor(options: ReflectOptions<MD>) {
-    super(options);
-  }
-
   #connectionStateResolvers: Set<{
     state: ConnectionState;
     resolve: (state: ConnectionState) => void;
@@ -74,12 +70,6 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
       case ConnectionState.Connected:
         return 'Connected';
     }
-  }
-
-  get testLogSink(): TestLogSink {
-    const {logSink} = this._logOptions;
-    assert(logSink instanceof TestLogSink);
-    return logSink;
   }
 
   get connectingStart() {
@@ -108,6 +98,12 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
       logLevel: options.consoleLogLevel,
       logSink: new TestLogSink(),
     };
+  }
+
+  get testLogSink(): TestLogSink {
+    const {logSink} = this._logOptions;
+    assert(logSink instanceof TestLogSink);
+    return logSink;
   }
 
   waitForConnectionState(state: ConnectionState) {

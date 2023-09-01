@@ -365,7 +365,6 @@ export class Reflect<MD extends MutatorDefs> {
     consoleLogLevel: LogLevel;
     socketOrigin: string | null;
   }): LogOptions {
-    console.log('!!!!!!!!!!');
     return createLogOptions(options);
   }
 
