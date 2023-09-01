@@ -748,27 +748,26 @@ test('smokeTest', async () => {
 
 test('poke log context includes requestID', async () => {
   const url = 'ws://example.com/';
-  const log: unknown[][] = [];
 
   const {promise: foundRequestIDFromLogPromise, resolve} = resolver<string>();
-  const logSink = {
-    log(_level: LogLevel, context: Context | undefined, ..._args: unknown[]) {
-      if (context?.requestID === 'test-request-id-poke') {
-        resolve(context?.requestID);
-      }
-    },
-  };
 
   const r = new TestReflect({
     socketOrigin: url,
     auth: '',
     userID: 'user-id',
     roomID: 'room-id',
-    logSinks: [logSink],
     logLevel: 'debug',
   });
 
-  log.length = 0;
+  sinon
+    .stub(r.testLogSink, 'log')
+    .callsFake(
+      (_level: LogLevel, context: Context | undefined, ..._args: unknown[]) => {
+        if (context?.requestID === 'test-request-id-poke') {
+          resolve(context?.requestID);
+        }
+      },
+    );
 
   await r.triggerPoke({
     pokes: [
@@ -1048,23 +1047,13 @@ test('socketOrigin', async () => {
 });
 
 test('Logs errors in connect', async () => {
-  const log: [LogLevel, unknown[]][] = [];
-
-  const r = reflectForTest({
-    logSinks: [
-      {
-        log: (level, ...args) => {
-          log.push([level, args]);
-        },
-      },
-    ],
-  });
+  const r = reflectForTest({});
   await r.triggerError('ClientNotFound', 'client-id-a');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
   await clock.tickAsync(0);
 
-  const index = log.findIndex(
-    ([level, args]) =>
+  const index = r.testLogSink.messages.findIndex(
+    ([level, _context, args]) =>
       level === 'error' && args.find(arg => /client-id-a/.test(String(arg))),
   );
 
@@ -1072,17 +1061,8 @@ test('Logs errors in connect', async () => {
 });
 
 test('New connection logs', async () => {
-  const log: [LogLevel, unknown[]][] = [];
   clock.setSystemTime(1000);
-  const r = reflectForTest({
-    logSinks: [
-      {
-        log: (level, ...args) => {
-          log.push([level, args]);
-        },
-      },
-    ],
-  });
+  const r = reflectForTest({logLevel: 'info'});
   await r.waitForConnectionState(ConnectionState.Connecting);
   await clock.tickAsync(500);
   await r.triggerConnected();
@@ -1092,8 +1072,8 @@ test('New connection logs', async () => {
   await r.triggerClose();
   await r.waitForConnectionState(ConnectionState.Disconnected);
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
-  const connectIndex = log.findIndex(
-    ([level, args]) =>
+  const connectIndex = r.testLogSink.messages.findIndex(
+    ([level, _context, args]) =>
       level === 'info' &&
       args.find(arg => /Connected/.test(String(arg))) &&
       args.find(
@@ -1103,8 +1083,8 @@ test('New connection logs', async () => {
       ),
   );
 
-  const disconnectIndex = log.findIndex(
-    ([level, args]) =>
+  const disconnectIndex = r.testLogSink.messages.findIndex(
+    ([level, _context, args]) =>
       level === 'info' &&
       args.find(arg => /disconnecting/.test(String(arg))) &&
       args.find(
@@ -1191,13 +1171,10 @@ test('Protocol mismatch', async () => {
 });
 
 test('server ahead', async () => {
-  const sink = new TestLogSink();
   const {promise, resolve} = resolver();
   const storage: Record<string, string> = {};
   sinon.replaceGetter(window, 'localStorage', () => storage as Storage);
-  const r = reflectForTest({
-    logSinks: [sink],
-  });
+  const r = reflectForTest();
   r.reload = resolve;
 
   await r.triggerError(
@@ -1429,14 +1406,11 @@ suite('Disconnect on hide', () => {
 });
 
 test('InvalidConnectionRequest', async () => {
-  const testLogSink = new TestLogSink();
-  const r = reflectForTest({
-    logSinks: [testLogSink],
-  });
+  const r = reflectForTest({});
   await r.triggerError('InvalidConnectionRequest', 'test');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
   await clock.tickAsync(0);
-  const msg = testLogSink.messages.at(-1);
+  const msg = r.testLogSink.messages.at(-1);
   assert(msg);
 
   expect(msg[0]).equal('error');
@@ -1465,9 +1439,7 @@ suite('Invalid Downstream message', () => {
 
   for (const c of cases) {
     test(c.name, async () => {
-      const testLogSink = new TestLogSink();
       const r = reflectForTest({
-        logSinks: [testLogSink],
         logLevel: 'debug',
       });
       await r.triggerConnected();
@@ -1499,7 +1471,7 @@ suite('Invalid Downstream message', () => {
       expect(r.online).eq(true);
       expect(r.connectionState).eq(ConnectionState.Connected);
 
-      const found = testLogSink.messages.some(m =>
+      const found = r.testLogSink.messages.some(m =>
         m[2].some(
           v => v instanceof Error && v.message.includes('Invalid union value.'),
         ),
@@ -1549,9 +1521,7 @@ test('kvStore option', async () => {
 });
 
 test('Close during connect should sleep', async () => {
-  const testLogSink = new TestLogSink();
   const r = reflectForTest({
-    logSinks: [testLogSink],
     logLevel: 'debug',
   });
 
@@ -1569,7 +1539,7 @@ test('Close during connect should sleep', async () => {
   await r.waitForConnectionState(ConnectionState.Disconnected);
   await clock.tickAsync(0);
   expect(r.online).equal(false);
-  const hasSleeping = testLogSink.messages.some(m =>
+  const hasSleeping = r.testLogSink.messages.some(m =>
     m[2].some(v => v === 'Sleeping'),
   );
   expect(hasSleeping).true;
