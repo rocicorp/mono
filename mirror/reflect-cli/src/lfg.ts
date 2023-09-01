@@ -2,8 +2,7 @@ import {opendir} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {basename, isAbsolute, resolve} from 'node:path';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import confirm from '@inquirer/confirm';
-import input from '@inquirer/input';
+import {confirm, input} from './inquirer.js';
 import color from 'picocolors';
 import {isValidAppName} from 'mirror-schema/src/app.js';
 import {sanitizeForSubdomain} from 'mirror-schema/src/team.js';
@@ -34,8 +33,6 @@ export async function initApp(_: LfgHandlerArgs, dir: string) {
     const name = await getAppName(dir);
     await scaffold(name, dir);
   } else {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore type error in jest?!?
     const server = await input({
       message: `Enter the path to the server entry point (e.g. ${color.white(
         'src/reflect/index.ts',
@@ -56,8 +53,6 @@ export async function initApp(_: LfgHandlerArgs, dir: string) {
 async function canScaffold(dirPath: string): Promise<boolean> {
   const dir = await opendir(dirPath);
   for await (const _ of dir) {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore type error in jest?!?
     return confirm({
       message:
         'Current directory is not empty. Overwrite files with new project?',
@@ -77,8 +72,6 @@ function getAppName(dir: string): Promise<string> {
   if (validateAppName(defaultAppName) === true) {
     return Promise.resolve(defaultAppName);
   }
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore type error in jest?!?
   return input({
     message: 'Name of your App:',
     default: defaultAppName,

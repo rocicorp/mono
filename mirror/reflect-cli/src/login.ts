@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import http from 'node:http';
 import type {Socket} from 'node:net';
 import open from 'open';
-import confirm from '@inquirer/confirm';
+import {confirm} from './inquirer.js';
 import {sleep} from 'shared/src/sleep.js';
 import {parse} from 'shared/src/valita.js';
 import {
@@ -88,8 +88,6 @@ export async function loginHandler(
 
   if (
     !promptToOpenBrowser ||
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore type error in jest?!?
     (await confirm({
       message: 'Open login page in your default browser?',
       default: true,
