@@ -12,7 +12,7 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "dependencies": {
-    "@badrap/valita": "^0.2.0"
+    "@badrap/valita": "^0.2.10"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.4.2",
