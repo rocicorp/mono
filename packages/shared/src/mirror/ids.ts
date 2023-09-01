@@ -1,6 +1,6 @@
 import {objects, predicates} from 'friendly-words';
 import * as base62 from '../base62.js';
-import * as crypto from './crypto.js';
+import * as crypto from '../crypto.js';
 
 const tempUint64Array = new BigUint64Array(1);
 
