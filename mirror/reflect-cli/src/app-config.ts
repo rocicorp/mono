@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import {readFile} from 'fs/promises';
 import * as path from 'node:path';
-import {pkgUpSync} from 'pkg-up';
+import {pkgUp, pkgUpSync} from 'pkg-up';
 import * as v from 'shared/src/valita.js';
 import confirm from '@inquirer/confirm';
 import input from '@inquirer/input';
@@ -154,7 +154,7 @@ export async function ensureAppInstantiated(
   } = await authenticate(yargs, false);
   const defaultTeamName = additionalUserInfo?.username;
   if (!defaultTeamName) {
-    throw new Error('Could not determine github username from OAuth');
+    throw new Error('Could not determine GitHub username from OAuth');
   }
   const requester = makeRequester(userID);
   const {teamID} = await ensureTeam({
@@ -230,7 +230,7 @@ async function getNewAppNameOrExistingID(
 }
 
 async function getDefaultAppName(): Promise<string> {
-  const pkg = pkgUpSync();
+  const pkg = await pkgUp();
   if (pkg) {
     const {name} = JSON.parse(await readFile(pkg, 'utf-8'));
     if (name) {
