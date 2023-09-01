@@ -34,10 +34,6 @@ import {getDataOrFail} from '../validators/must.js';
 
 const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
-// TODO(darick): Reduce this once (or make it configurable by stack)
-// once we've cleaned up all of the throwaway apps in staging.
-export const DEFAULT_MAX_APPS = 100;
-
 export const create = (firestore: Firestore) =>
   validateSchema(createRequestSchema, createResponseSchema)
     .validate(userAuthorization())
