@@ -22,7 +22,7 @@ teardown(() => {
   sinon.restore();
 });
 
-test('when socketOrigin is not subdomain of .reflect-server.net, log sink is unfiltered console log sink, and log level is consoleLogLevel', async () => {
+test('when socketOrigin is not subdomain of .reflect-server.net, log sink is unfiltered console log sink, and log level is consoleLogLevel', () => {
   const {logLevel, logSink} = createLogOptions(
     {
       consoleLogLevel: 'info',
