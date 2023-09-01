@@ -2,6 +2,9 @@ import {
   publish as publishCaller,
   type PublishRequest,
 } from 'mirror-protocol/src/publish.js';
+import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
+import {watch} from 'mirror-schema/src/watch.js';
+import assert from 'node:assert';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {
@@ -11,11 +14,9 @@ import {
 import {authenticate} from './auth-config.js';
 import {compile} from './compile.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
+import {Firestore, getFirestore} from './firebase.js';
 import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import {Firestore, getFirestore} from './firebase.js';
-import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
-import {watch} from 'mirror-schema/src/watch.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
   return yargs;
@@ -51,6 +52,7 @@ export async function publishHandler(
 
   console.log(`Compiling ${script}`);
   const {code, sourcemap} = await compile(absPath, 'linked');
+  assert(sourcemap);
 
   const {user} = await authenticate(yargs);
   const userID = user.uid;

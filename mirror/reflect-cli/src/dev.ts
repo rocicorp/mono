@@ -1,10 +1,11 @@
 import getPort, {portNumbers} from 'get-port';
 import isPortReachable from 'is-port-reachable';
+import assert from 'node:assert';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import {mustReadAppConfig} from './app-config.js';
 import {compile} from './compile.js';
 import {startDevServer} from './dev/start-dev-server.js';
-import {mustReadAppConfig} from './app-config.js';
 import type {CommonYargsArgv} from './yarg-types.js';
 
 const DEFAULT_PORT = 8080;
@@ -47,7 +48,7 @@ export async function devHandler(yargs: DevHandlerArgs) {
   }
 
   const {code, sourcemap} = await compile(absPath, 'linked');
-
+  assert(sourcemap);
   const port = await findPort(yargs.port);
   const ac = new AbortController();
   const {href} = await startDevServer(code, sourcemap, port, ac.signal);
