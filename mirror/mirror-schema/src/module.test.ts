@@ -1,14 +1,8 @@
 import type {Bucket} from '@google-cloud/storage';
-import type {Storage} from 'firebase-admin/storage';
 import {expect, test} from '@jest/globals';
-import {loadModule, sha256OfString, storeModule} from './module.js';
+import type {Storage} from 'firebase-admin/storage';
 import type {Module} from './module.js';
-
-test('basic', async () => {
-  expect(await sha256OfString('foo')).toBe(
-    '2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae',
-  );
-});
+import {loadModule, storeModule} from './module.js';
 
 test('storeModule', async () => {
   let saveCalls = 0;

@@ -17,7 +17,7 @@
     "deploy-indexes-prod": "npx firebase-tools --project prod deploy --only firestore:indexes"
   },
   "dependencies": {
-    "@badrap/valita": "^0.2.0",
+    "@badrap/valita": "^0.2.10",
     "@google-cloud/firestore": "^6.6.1",
     "@google-cloud/storage": "^6.12.0",
     "firebase": "9.23.0",

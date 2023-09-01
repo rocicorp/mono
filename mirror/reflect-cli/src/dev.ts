@@ -1,10 +1,11 @@
 import getPort, {portNumbers} from 'get-port';
 import isPortReachable from 'is-port-reachable';
+import assert from 'node:assert';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {compile} from './compile.js';
-import {startDevServer} from './dev/start-dev-server.js';
 import {mustReadAppConfig} from './app-config.js';
+import {watch} from './compile.js';
+import {startDevServer} from './dev/start-dev-server.js';
 import type {CommonYargsArgv} from './yarg-types.js';
 
 const DEFAULT_PORT = 8080;
@@ -46,14 +47,34 @@ export async function devHandler(yargs: DevHandlerArgs) {
     throw new Error(`File not found: ${absPath}`);
   }
 
-  const {code, sourcemap} = await compile(absPath, 'linked');
-
+  let first = true;
   const port = await findPort(yargs.port);
   const ac = new AbortController();
-  const {href} = await startDevServer(code, sourcemap, port, ac.signal);
-  console.log(`Dev server running at:
+  let mfAc: AbortController | undefined;
+  for await (const {code, sourcemap} of watch(absPath, 'linked', ac.signal)) {
+    assert(sourcemap);
+    const start = Date.now();
+    process.stdout.write(
+      (first ? 'Starting' : 'Restarting') + ' dev server...',
+    );
+
+    mfAc?.abort();
+    mfAc = new AbortController();
+
+    const {href} = await startDevServer(code, sourcemap, port, mfAc.signal);
+    process.stdout.write(` Done in ${Date.now() - start}ms.\n`);
+    if (first) {
+      console.log(`
+Dev server running at:
   ${href}
-  ${href.replace(/^http/, 'ws')}`);
+  ${href.replace(/^http/, 'ws')}
+`);
+
+      first = false;
+    }
+  }
+
+  mfAc?.abort();
 }
 
 async function findPort(port: undefined | number) {

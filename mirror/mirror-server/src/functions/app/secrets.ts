@@ -1,7 +1,7 @@
 import {defineSecret} from 'firebase-functions/params';
 import type {DeploymentSecrets} from 'mirror-schema/src/deployment.js';
-import {sha256OfString} from 'mirror-schema/src/module.js';
 import {assert} from 'shared/src/asserts.js';
+import {sha256OfString} from 'shared/src/sha256.js';
 
 export function defineSecretSafely(name: string) {
   const secret = defineSecret(name);

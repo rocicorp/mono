@@ -1,5 +1,6 @@
 import * as esbuild from 'esbuild';
 import {createRequire} from 'node:module';
+import {watchFiles} from './watch-files.js';
 
 const reflectServerFileName = 'reflect-server.js';
 
@@ -13,43 +14,51 @@ const replaceReflectServerPlugin: esbuild.Plugin = {
   },
 };
 
-export async function compile(
-  entryPoint: string,
-  sourcemap: true | 'both' | 'external' | 'linked',
-): Promise<{
-  code: esbuild.OutputFile;
-  sourcemap: esbuild.OutputFile;
-}>;
-export async function compile(
-  entryPoint: string,
-  sourcemap: false | undefined | 'inline',
-): Promise<{
-  code: esbuild.OutputFile;
-  sourcemap: undefined;
-}>;
-export async function compile(
+function getEsbuildOptions(
   entryPoint: string,
   sourcemap: esbuild.BuildOptions['sourcemap'] = 'external',
-): Promise<{
-  code: esbuild.OutputFile;
-  sourcemap: esbuild.OutputFile | undefined;
-}> {
-  const res = await esbuild.build({
+) {
+  return {
     bundle: true,
     conditions: ['workerd', 'worker', 'browser'],
     // Remove process.env. It does not exist in CF workers and we have npm
     // packages that use it.
     define: {'process.env': '{}'},
-    entryPoints: [entryPoint],
     external: [],
     format: 'esm',
     outdir: '.',
     platform: 'browser',
     plugins: [replaceReflectServerPlugin],
-    sourcemap,
     target: 'esnext',
     write: false,
-  });
+    metafile: true,
+    entryPoints: [entryPoint],
+    sourcemap,
+  } as esbuild.BuildOptions & {metafile: true; write: false};
+}
+
+export type CompileResult = {
+  code: esbuild.OutputFile;
+  sourcemap: esbuild.OutputFile | undefined;
+};
+
+export async function compile(
+  entryPoint: string,
+  sourcemap?: esbuild.BuildOptions['sourcemap'],
+): Promise<CompileResult> {
+  const res = await esbuild.build(getEsbuildOptions(entryPoint, sourcemap));
+  return getResultFromEsbuildResult(res, sourcemap);
+}
+
+function getResultFromEsbuildResult(
+  res: esbuild.BuildResult<
+    esbuild.BuildOptions & {
+      metafile: true;
+      write: false;
+    }
+  >,
+  sourcemap: esbuild.BuildOptions['sourcemap'] = 'external',
+): CompileResult {
   const {errors, outputFiles} = res;
   if (errors.length > 0) {
     throw new Error(res.errors.join('\n'));
@@ -69,6 +78,54 @@ export async function compile(
     outputFiles.reverse();
   }
   return {code: outputFiles[0], sourcemap: outputFiles[1]};
+}
+
+export async function* watch(
+  entryPoint: string,
+  sourcemap: esbuild.BuildOptions['sourcemap'] | undefined,
+  signal: AbortSignal,
+): AsyncGenerator<CompileResult> {
+  const buildContext = await esbuild.context(
+    getEsbuildOptions(entryPoint, sourcemap),
+  );
+
+  const hashes = new Map<string, string>();
+  let first = true;
+  try {
+    while (!signal.aborted) {
+      if (first) {
+        process.stdout.write('Building...');
+
+        first = false;
+      } else {
+        process.stdout.write('Rebuilding...');
+      }
+      const start = Date.now();
+      const res = await buildContext.rebuild();
+      if (signal.aborted) {
+        break;
+      }
+
+      process.stdout.write(` Done in ${Date.now() - start}ms.\n`);
+
+      yield getResultFromEsbuildResult(res, sourcemap);
+
+      if (signal.aborted) {
+        return;
+      }
+
+      const filesToWatch = Object.keys(res.metafile.inputs).filter(
+        input => !input.startsWith('<define:'),
+      );
+
+      await watchFiles(filesToWatch, signal, hashes);
+      if (!signal.aborted) {
+        process.stdout.write('Files changed. ');
+      }
+    }
+  } finally {
+    await buildContext.dispose();
+  }
 }
 
 function shouldHaveSourcemapFile(
