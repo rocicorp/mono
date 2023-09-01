@@ -413,6 +413,13 @@ test('withBody', async () => {
       body: {badUserId: 'bar'},
       expected: {
         status: 400,
+        text: 'Body schema error. Missing property userID',
+      },
+    },
+    {
+      body: {userID: 'foo', badUserId: 'bar'},
+      expected: {
+        status: 400,
         text: 'Body schema error. Unexpected property badUserId',
       },
     },
