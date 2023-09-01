@@ -9,7 +9,6 @@ import {listPieces} from '@/demo/alive/piece-model';
 import {Puzzle} from '@/demo/alive/Puzzle';
 import {TouchPrompt} from '@/demo/alive/touch-prompt';
 import {generateRandomPieces, getStage, Rect, Size} from '@/demo/alive/util';
-import {loggingOptions} from '@/demo/frontend/logging-options';
 import {mutators, type M} from '@/demo/shared/mutators';
 import {useElementSize} from '@/hooks/use-element-size';
 import {useIsomorphicLayoutEffect} from '@/hooks/use-isomorphic-layout-effect';
@@ -35,7 +34,6 @@ function usePuzzleRoomID() {
       userID: 'anon',
       roomID: ORCHESTRATOR_ROOM,
       mutators,
-      ...loggingOptions,
     });
 
     orchestratorClient.onUpdateNeeded = reason => {
