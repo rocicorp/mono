@@ -3,8 +3,9 @@ import {firestoreDataConverter} from './converter.js';
 import * as path from './path.js';
 
 export const cloudflareSchema = v.object({
-  name: v.string(),
-  authToken: v.string(),
+  // The domain on which workers are hosted.
+  domain: v.string(),
+  defaultMaxApps: v.number(),
 });
 
 export type Cloudflare = v.Infer<typeof cloudflareSchema>;
