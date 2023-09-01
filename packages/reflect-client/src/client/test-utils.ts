@@ -17,6 +17,7 @@ import {assert} from 'shared/src/asserts.js';
 import type {SinonFakeTimers} from 'sinon';
 import type {ReflectOptions} from './options.js';
 import {ConnectionState, Reflect} from './reflect.js';
+import type {LogOptions} from './log-options.js';
 
 export async function tickAFewTimes(clock: SinonFakeTimers, duration = 100) {
   const n = 10;
@@ -87,6 +88,22 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
         resolve(newState);
       }
     }
+  }
+
+  protected _createLogOptions(options: {
+    consoleLogLevel: LogLevel;
+    socketOrigin: string | null;
+  }): LogOptions {
+    return {
+      logLevel: options.consoleLogLevel,
+      logSink: new TestLogSink(),
+    };
+  }
+
+  get testLogSink(): TestLogSink {
+    const {logSink} = this._logOptions;
+    assert(logSink instanceof TestLogSink);
+    return logSink;
   }
 
   waitForConnectionState(state: ConnectionState) {
@@ -170,7 +187,6 @@ export function reflectForTest<MD extends MutatorDefs>(
     userID: 'test-user-id-' + testReflectCounter++,
     roomID: 'test-room-id',
     auth: 'test-auth',
-    logSinks: [],
     ...options,
   });
   // We do not want any unexpected onUpdateNeeded calls in tests. If the test
@@ -195,9 +211,15 @@ teardown(async () => {
 
 export class TestLogSink implements LogSink {
   messages: [LogLevel, Context | undefined, unknown[]][] = [];
+  flushCallCount = 0;
 
   log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
     this.messages.push([level, context, args]);
+  }
+
+  flush() {
+    this.flushCallCount++;
+    return Promise.resolve();
   }
 }
 

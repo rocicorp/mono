@@ -1,4 +1,4 @@
-import type {LogLevel, LogSink} from '@rocicorp/logger';
+import type {LogLevel} from '@rocicorp/logger';
 import type {MutatorDefs} from 'reflect-types/src/mod.js';
 import type {ExperimentalCreateKVStore, MaybePromise} from 'replicache';
 
@@ -66,29 +66,17 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   schemaVersion?: string | undefined;
 
   /**
-   * Determines how much logging to do. When this is set to `'debug'`,
-   * `'info'` and `'error'` messages are also logged. When set to
-   * `'info'` we log `'info'` and `'error'` but not `'debug'`. When set to
-   * `'error'` we only log `'error'` messages.
-   * Default is `'info'`.
+   * Determines the level of detail at which Reflect logs messages about
+   * its operation. Messages are logged to the `console`.
+   *
+   * When this is set to `'debug'`, `'info'` and `'error'` messages are also
+   * logged. When set to `'info'`, `'info'` and `'error'` but not
+   * `'debug'` messages are logged. When set to `'error'` only `'error'`
+   * messages are logged.
+   *
+   * Default is `'error'`.
    */
   logLevel?: LogLevel | undefined;
-
-  /**
-   * Enables custom handling of logs.
-   *
-   * By default logs are logged to the console.  If you would like logs to be
-   * sent elsewhere (e.g. to a cloud logging service like DataDog) you can
-   * provide an array of [[LogSink]]s.  Logs at or above
-   * [[ReflectOptions.logLevel]] are sent to each of these [[LogSink]]s.
-   * If you would still like logs to go to the console, include
-   * [[consoleLogSink]] in the array.
-   *
-   * ```ts
-   * logSinks: [consoleLogSink, myCloudLogSink],
-   * ```
-   */
-  logSinks?: LogSink[] | undefined;
 
   /**
    * An object used as a map to define the *mutators* for this application.

@@ -1,4 +1,3 @@
-import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
 import {
   ConnectedMessage,
@@ -56,6 +55,8 @@ import type {CreateKVStore, ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {isAuthError, isServerError, ServerError} from './server-error.js';
+import {LogOptions, createLogOptions} from './log-options.js';
+import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 
 export const enum ConnectionState {
   Disconnected,
@@ -135,6 +136,7 @@ export class Reflect<MD extends MutatorDefs> {
   // This is a promise because it is waiting for the clientID from the
   // Replicache instance.
   private readonly _l: Promise<LogContext>;
+  protected readonly _logOptions: LogOptions;
 
   private readonly _pokeHandler: PokeHandler;
 
@@ -288,10 +290,16 @@ export class Reflect<MD extends MutatorDefs> {
     this.onOnlineChange = onOnlineChange;
     this.#options = options;
 
+    this._logOptions = this._createLogOptions({
+      consoleLogLevel: options.logLevel ?? 'error',
+      socketOrigin,
+    });
+    const logOptions = this._logOptions;
+
     const replicacheOptions: ReplicacheOptions<MD> = {
       schemaVersion: options.schemaVersion,
-      logLevel: options.logLevel,
-      logSinks: options.logSinks,
+      logLevel: logOptions.logLevel,
+      logSinks: [logOptions.logSink],
       mutators: options.mutators,
       name: `reflect-${userID}-${roomID}`,
       pusher: (req, reqID) => this._pusher(req, reqID),
@@ -319,7 +327,12 @@ export class Reflect<MD extends MutatorDefs> {
     this.roomID = roomID;
     this.userID = userID;
     this._jurisdiction = jurisdiction;
-    this._l = getLogContext(options, this._rep);
+    this._l = getLogContext(
+      options.roomID,
+      logOptions.logLevel,
+      logOptions.logSink,
+      this._rep,
+    );
 
     void this._l.then(lc => reportReloadReason(lc, localStorage));
 
@@ -346,6 +359,13 @@ export class Reflect<MD extends MutatorDefs> {
     );
 
     void this._runLoop();
+  }
+
+  protected _createLogOptions(options: {
+    consoleLogLevel: LogLevel;
+    socketOrigin: string | null;
+  }): LogOptions {
+    return createLogOptions(options);
   }
 
   /**
@@ -1367,15 +1387,14 @@ export function createSocket(
 }
 
 async function getLogContext<MD extends MutatorDefs>(
-  options: ReflectOptions<MD>,
+  roomID: string,
+  logLevel: LogLevel,
+  logSink: LogSink,
   rep: Replicache<MD>,
 ) {
-  const {logSinks = [consoleLogSink]} = options;
-  const logSink =
-    logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
   return new LogContext(
-    options.logLevel,
-    {roomID: options.roomID, clientID: await rep.clientID},
+    logLevel,
+    {roomID, clientID: await rep.clientID},
     logSink,
   );
 }
