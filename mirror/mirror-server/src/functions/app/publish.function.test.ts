@@ -20,6 +20,10 @@ import {appDataConverter} from 'mirror-schema/src/app.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
+import {
+  cloudflareDataConverter,
+  cloudflarePath,
+} from 'mirror-schema/src/cloudflare.js';
 
 mockFunctionParamsAndSecrets();
 
@@ -28,6 +32,7 @@ describe('publish', () => {
   const firestore = getFirestore();
   const USER_ID = 'app-publish-test-user';
   const APP_ID = 'app-publish-test-app';
+  const CF_ID = 'cf-abc';
 
   beforeAll(async () => {
     const batch = firestore.batch();
@@ -39,11 +44,20 @@ describe('publish', () => {
       },
     );
     batch.create(
+      firestore
+        .doc(cloudflarePath(CF_ID))
+        .withConverter(cloudflareDataConverter),
+      {
+        domain: 'reflect-o-rama.net',
+        defaultMaxApps: 3,
+      },
+    );
+    batch.create(
       firestore.doc(appPath(APP_ID)).withConverter(appDataConverter),
       {
         name: 'foo-bar',
         teamSubdomain: 'team-blue',
-        cfID: '123',
+        cfID: CF_ID,
         cfScriptName: 'foo-bar-script',
         serverReleaseChannel: 'stable',
         teamID: 'fooTeam',
@@ -89,6 +103,7 @@ describe('publish', () => {
     for (const path of [
       userPath(USER_ID),
       appPath(APP_ID),
+      cloudflarePath(CF_ID),
       serverPath('0.28.0'),
       serverPath('0.28.1'),
       serverPath('0.29.0'),
@@ -218,7 +233,7 @@ describe('publish', () => {
             ],
             serverVersion: c.expectedServerVersion,
             serverVersionRange: request.serverVersionRange,
-            hostname: 'foo-bar.team-blue.reflect-server.net',
+            hostname: 'foo-bar.team-blue.reflect-o-rama.net',
             options: {
               vars: {
                 /* eslint-disable @typescript-eslint/naming-convention */

@@ -16,6 +16,10 @@ import {
   checkAppsInChannels,
   getAffectedChannels,
 } from './auto-deploy.function.js';
+import {
+  cloudflareDataConverter,
+  cloudflarePath,
+} from 'mirror-schema/src/cloudflare.js';
 
 test('getAffectedChannels', () => {
   expect(getAffectedChannels(['canary'], ['stable'])).toEqual([
@@ -43,6 +47,7 @@ describe('server auto-deploy', () => {
   const APP_ID = 'server-auto-deploy-test-app-';
   const SERVER_VERSION_1 = '0.209.1';
   const SERVER_VERSION_2 = '0.209.2';
+  const CF_ID = 'cf-abc';
 
   const appDocs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(i =>
     firestore.doc(appPath(`${APP_ID}${i}`)).withConverter(appDataConverter),
@@ -77,9 +82,18 @@ describe('server auto-deploy', () => {
         channels: ['test-canary'],
       },
     );
+    batch.create(
+      firestore
+        .doc(cloudflarePath(CF_ID))
+        .withConverter(cloudflareDataConverter),
+      {
+        domain: 'reflect-o-rama.net',
+        defaultMaxApps: 3,
+      },
+    );
     appDocs.forEach((appDoc, i) => {
       batch.create(appDoc, {
-        cfID: 'foo',
+        cfID: CF_ID,
         cfScriptName: 'bar',
         teamID: 'baz',
         teamSubdomain: 'boom',
@@ -103,7 +117,7 @@ describe('server auto-deploy', () => {
             appModules: [],
             serverVersionRange: '^0.209.0',
             serverVersion: '0.209.0',
-            hostname: 'boo.boom.reflect-server.net',
+            hostname: 'boo.boom.reflect-o-rama.net',
             options: {
               vars: {
                 DISABLE: 'false',
@@ -127,6 +141,7 @@ describe('server auto-deploy', () => {
     for (const path of [
       serverPath(SERVER_VERSION_1),
       serverPath(SERVER_VERSION_2),
+      cloudflarePath(CF_ID),
     ]) {
       batch.delete(firestore.doc(path));
     }

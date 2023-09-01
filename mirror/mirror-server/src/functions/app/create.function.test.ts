@@ -18,6 +18,10 @@ import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {teamDataConverter, teamPath} from 'mirror-schema/src/team.js';
 import {appPath} from 'mirror-schema/src/deployment.js';
 import {appNameIndexPath} from 'mirror-schema/src/team.js';
+import {
+  cloudflareDataConverter,
+  cloudflarePath,
+} from 'mirror-schema/src/cloudflare.js';
 
 mockFunctionParamsAndSecrets();
 
@@ -26,6 +30,7 @@ describe('app-create function', () => {
   const firestore = getFirestore();
   const USER_ID = 'app-create-test-user';
   const USER_EMAIL = 'foo@bar.com';
+  const CF_ID = 'cf-123';
   const TEAM_ID = 'app-create-test-team';
   const TEAM_SUBDOMAIN = 'foo-team';
 
@@ -63,7 +68,16 @@ describe('app-create function', () => {
       [TEAM_ID]: 'admin',
     });
 
+    await firestore
+      .doc(cloudflarePath(CF_ID))
+      .withConverter(cloudflareDataConverter)
+      .set({
+        domain: 'reflect-server.net',
+        defaultMaxApps: 3,
+      });
+
     await setTeam(firestore, TEAM_ID, {
+      defaultCfID: CF_ID,
       subdomain: TEAM_SUBDOMAIN,
       numAdmins: 1,
       numApps: 2,
@@ -78,6 +92,7 @@ describe('app-create function', () => {
         firestore.doc(userPath(USER_ID)),
         firestore.doc(teamPath(TEAM_ID)),
         firestore.doc(teamMembershipPath(TEAM_ID, USER_ID)),
+        firestore.doc(cloudflarePath(CF_ID)),
       );
       for (const doc of docs) {
         tx.delete(doc.ref);
@@ -139,11 +154,27 @@ describe('app-create function', () => {
     }
   });
 
-  test('cannot create app when team has too many apps', async () => {
+  test('cannot create app when explicit app limit exceeded', async () => {
     await firestore
       .doc(teamPath(TEAM_ID))
       .withConverter(teamDataConverter)
       .update({numApps: 4, maxApps: 4});
+
+    const appName = 'my-app';
+    try {
+      await callCreate(appName);
+      throw new Error('Expected resource-exhausted');
+    } catch (e) {
+      expect(e).toBeInstanceOf(HttpsError);
+      expect((e as HttpsError).code).toBe('resource-exhausted');
+    }
+  });
+
+  test('cannot create app when default app limit exceeded', async () => {
+    await firestore
+      .doc(teamPath(TEAM_ID))
+      .withConverter(teamDataConverter)
+      .update({numApps: 3, maxApps: null}); // Cloudflare.defaultMaxApps set to 3.
 
     const appName = 'my-app';
     try {

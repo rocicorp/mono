@@ -46,8 +46,9 @@ type ReplicacheClientGroup = {
   // Incremented on each mutation from a client in the group.
   clientVersion: number;
 
-  // Increments each time we generate a CVR.
-  cvrVersion: number;
+  // Increments each time we generate a CVR. Null is used as a sentinel to
+  // indicate that a pull hasn't happened yet.
+  cvrVersion: number | null;
 };
 
 type ReplicacheClient = {
@@ -74,7 +75,7 @@ type Todo = {
 
 The push handler is similar to the Reset Strategy, except for with some modifications to track changes to clients and domain entities.
 
-1. Create a new `ReplicacheClientGroup` if necessary.
+1. Create a new `ReplicacheClientGroup` if necessary, initializing the `cvrVersion` to `null`.
 1. Verify that the requesting user owns the specified `ReplicacheClientGroup`.
 
 Then, for each mutation described in the [`PushRequest`](/reference/server-push#http-request-body):
@@ -99,7 +100,7 @@ The pull logic is more involved than in other strategies because of the need to 
 
 <ol>
   <li>Verify that requesting user owns the requested <code>ReplicacheClientGroup</code>.</li>
-	<li>Use the request cookie to fetch the corresponding CVR, or default to an empty CVR.</li>
+	<li>Use the request cookie to fetch the previous CVR, or default to an empty CVR.</li>
 	<li>Increment the <code>ReplicacheClientGroup</code> record's <code>cvrVersion</code> field.</li>
 	<li>Fetch the ids and versions of the current Client View from the DB and use it to build the next CVR. This query can be any arbitrary function of the DB, including read authorization, paging, etc.</li>
 	<li>Store the new CVR keyed by <code>clientGroupID</code> and the current <code>cvrVersion</code>.</li>
@@ -107,7 +108,7 @@ The pull logic is more involved than in other strategies because of the need to 
 	<li>Fetch all <code>ReplicacheClient</code> records that have changed since the old CVR's <code>clientVersion</code>.</li>
   <li>Return a <code><a href="/reference/server-pull#http-response-body">PullResponse</a></code> with:
     <ul>
-      <li><code>cvrVersion</code> as the cookie.</li>
+      <li><code>&#123;order: $nextCVRVersion, clientGroupID: $clientGroupID&#125;</code> as the cookie.</li>
       <li>The <code>lastMutatationID</code> for each changed client.</li>
       <li>A patch with:
         <ul>

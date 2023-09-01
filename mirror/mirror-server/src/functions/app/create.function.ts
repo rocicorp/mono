@@ -6,6 +6,10 @@ import {
   createResponseSchema,
 } from 'mirror-protocol/src/app.js';
 import {
+  cloudflareDataConverter,
+  cloudflarePath,
+} from 'mirror-schema/src/cloudflare.js';
+import {
   App,
   appDataConverter,
   appPath,
@@ -23,16 +27,12 @@ import {
   newAppIDAsNumber,
   newAppScriptName,
 } from 'shared/src/mirror/ids.js';
-import {must} from 'shared/src/must.js';
 import {userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {defaultOptions} from 'mirror-schema/src/deployment.js';
+import {getDataOrFail} from '../validators/data.js';
 
 const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
-
-// TODO(darick): Reduce this once (or make it configurable by stack)
-// once we've cleaned up all of the throwaway apps in staging.
-export const DEFAULT_MAX_APPS = 100;
 
 export const create = (firestore: Firestore) =>
   validateSchema(createRequestSchema, createResponseSchema)
@@ -63,12 +63,12 @@ export const create = (firestore: Firestore) =>
         .withConverter(teamDataConverter);
 
       return firestore.runTransaction(async txn => {
-        const userDoc = await txn.get(userDocRef);
-        if (!userDoc.exists) {
-          throw new HttpsError('not-found', `User ${userID} does not exist`);
-        }
+        const user = getDataOrFail(
+          await txn.get(userDocRef),
+          'not-found',
+          `User ${userID} does not exist`,
+        );
 
-        const user = must(userDoc.data());
         const role = user.roles[teamID];
         if (role !== 'admin') {
           throw new HttpsError(
@@ -77,13 +77,22 @@ export const create = (firestore: Firestore) =>
           );
         }
 
-        const teamDoc = await txn.get(teamDocRef);
-        if (!teamDoc.exists) {
-          throw new HttpsError('not-found', `Team ${teamID} does not exist`);
-        }
         // Check app limits
-        const team = must(teamDoc.data());
-        if (team.numApps >= (team.maxApps ?? DEFAULT_MAX_APPS)) {
+        const team = getDataOrFail(
+          await txn.get(teamDocRef),
+          'not-found',
+          `Team ${teamID} does not exist`,
+        );
+        const cf = getDataOrFail(
+          await txn.get(
+            firestore
+              .doc(cloudflarePath(team.defaultCfID))
+              .withConverter(cloudflareDataConverter),
+          ),
+          'internal',
+          `Account ${team.defaultCfID} is not properly set up.`,
+        );
+        if (team.numApps >= (team.maxApps ?? cf.defaultMaxApps)) {
           throw new HttpsError('resource-exhausted', 'Team has too many apps');
         }
 

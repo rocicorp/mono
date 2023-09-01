@@ -17,6 +17,11 @@ import {validateSchema} from '../validators/schema.js';
 import {requestDeployment} from './deploy.function.js';
 import type {App} from 'mirror-schema/src/app.js';
 import {getAppSecrets} from './secrets.js';
+import {getDataOrFail} from '../validators/data.js';
+import {
+  cloudflareDataConverter,
+  cloudflarePath,
+} from 'mirror-schema/src/cloudflare.js';
 
 export const publish = (
   firestore: Firestore,
@@ -86,12 +91,21 @@ export async function computeDeploymentSpec(
     `Found matching version for ${serverVersionRange}: ${serverVersion}`,
   );
 
+  const cf = getDataOrFail(
+    await firestore
+      .doc(cloudflarePath(app.cfID))
+      .withConverter(cloudflareDataConverter)
+      .get(),
+    'internal',
+    `Account ${app.cfID} is not properly set up.`,
+  );
+
   const {hashes: hashesOfSecrets} = await getAppSecrets();
 
   return {
     serverVersionRange,
     serverVersion,
-    hostname: `${app.name}.${app.teamSubdomain}.reflect-server.net`,
+    hostname: `${app.name}.${app.teamSubdomain}.${cf.domain}`,
     options: app.deploymentOptions,
     hashesOfSecrets,
   };

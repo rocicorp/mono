@@ -22,6 +22,10 @@ import {
   checkForAutoDeployment,
 } from './auto-deploy.function.js';
 import {dummySecrets} from 'mirror-schema/src/test-helpers.js';
+import {
+  cloudflareDataConverter,
+  cloudflarePath,
+} from 'mirror-schema/src/cloudflare.js';
 
 describe('auto-deploy', () => {
   initializeApp({projectId: 'auto-deploy-function-test'});
@@ -29,6 +33,7 @@ describe('auto-deploy', () => {
   const APP_ID = 'auto-deploy-test-app-id';
   const SERVER_VERSION_1 = '0.28.0';
   const SERVER_VERSION_2 = '0.28.2';
+  const CF_ID = 'cf-abc';
 
   beforeEach(async () => {
     mockFunctionParamsAndSecrets();
@@ -60,9 +65,18 @@ describe('auto-deploy', () => {
       },
     );
     batch.create(
+      firestore
+        .doc(cloudflarePath(CF_ID))
+        .withConverter(cloudflareDataConverter),
+      {
+        domain: 'reflect-o-rama.net',
+        defaultMaxApps: 3,
+      },
+    );
+    batch.create(
       firestore.doc(appPath(APP_ID)).withConverter(appDataConverter),
       {
-        cfID: 'foo',
+        cfID: CF_ID,
         cfScriptName: 'bar',
         teamID: 'baz',
         name: 'boo',
@@ -86,7 +100,7 @@ describe('auto-deploy', () => {
             appModules: [],
             serverVersionRange: '^0.28.0',
             serverVersion: SERVER_VERSION_1,
-            hostname: 'boo.yah.reflect-server.net',
+            hostname: 'boo.yah.reflect-o-rama.net',
             options: {
               vars: {
                 DISABLE: 'false',
@@ -114,6 +128,7 @@ describe('auto-deploy', () => {
       appPath(APP_ID),
       serverPath(SERVER_VERSION_1),
       serverPath(SERVER_VERSION_2),
+      cloudflarePath(CF_ID),
     ]) {
       batch.delete(firestore.doc(path));
     }
@@ -154,7 +169,7 @@ describe('auto-deploy', () => {
       },
       expectedType: 'HOSTNAME_UPDATE',
       expectedSpec: {
-        hostname: 'bonk.yah.reflect-server.net',
+        hostname: 'bonk.yah.reflect-o-rama.net',
       },
     },
     {
@@ -295,7 +310,7 @@ describe('auto-deploy', () => {
               serverVersion: SERVER_VERSION_1,
               options: defaultOptions(),
               hashesOfSecrets: dummySecrets(),
-              hostname: 'boo.reflect-server.net',
+              hostname: 'boo.yah.reflect-o-rama.net',
             },
           },
         );

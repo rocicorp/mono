@@ -35,7 +35,6 @@ function usePuzzleRoomID() {
       userID: 'anon',
       roomID: ORCHESTRATOR_ROOM,
       mutators,
-      ...loggingOptions,
     });
 
     orchestratorClient.onUpdateNeeded = reason => {
