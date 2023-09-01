@@ -19,7 +19,7 @@
     "typescript": "^5.1.3"
   },
   "dependencies": {
-    "@badrap/valita": "^0.2.0",
+    "@badrap/valita": "^0.2.10",
     "@rocicorp/logger": "^5.2.0",
     "@rocicorp/resolver": "^1.0.0",
     "friendly-words": "^1.2.3",

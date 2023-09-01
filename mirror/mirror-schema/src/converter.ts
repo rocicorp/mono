@@ -4,8 +4,7 @@ import type {
   QueryDocumentSnapshot,
 } from '@google-cloud/firestore';
 import type firebase from 'firebase/compat/app';
-import type * as v from 'shared/src/valita.js';
-import {parse} from './parse.js';
+import * as v from 'shared/src/valita.js';
 
 export function firestoreDataConverter<T extends DocumentData>(
   schema: v.Type<T>,
@@ -46,6 +45,6 @@ export class DataConverter<T extends DocumentData>
       | firebase.default.firestore.QueryDocumentSnapshot,
     _?: firebase.default.firestore.SnapshotOptions,
   ): T {
-    return parse(snapshot.data(), this.#schema, this.#mode);
+    return v.parse(snapshot.data(), this.#schema, this.#mode);
   }
 }

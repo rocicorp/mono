@@ -1,9 +1,8 @@
 import * as v from 'shared/src/valita.js';
 import {firestoreDataConverter} from './converter.js';
+import {moduleRefSchema} from './module.js';
 import * as path from './path.js';
 import {timestampSchema} from './timestamp.js';
-import {moduleRefSchema} from './module.js';
-import {parse} from './parse.js';
 
 export const logLevelSchema = v.union(
   v.literal('debug'),
@@ -34,7 +33,7 @@ export const varsSchema = v.object({
 export type DeploymentVars = v.Infer<typeof varsSchema>;
 
 function defaultVars(): DeploymentVars {
-  return parse({}, varsSchema);
+  return v.parse({}, varsSchema);
 }
 
 export const deploymentOptionsSchema = v.object({
