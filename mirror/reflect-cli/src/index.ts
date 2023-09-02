@@ -13,6 +13,7 @@ import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
 import {tailHandler, tailOptions} from './tail/index.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import {deleteHandler, deleteOptions} from './delete.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -88,6 +89,14 @@ function createCLIParser(argv: string[]) {
     '🦚 Starts a log tailing session',
     tailOptions,
     handleWith(tailHandler).andCleanup(),
+  );
+
+  // delete
+  reflectCLI.command(
+    'delete',
+    '🗑️ Deletes one or more Apps and their associated data. If no flags are specified, defaults to the App of the current directory.',
+    deleteOptions,
+    handleWith(deleteHandler).andCleanup(),
   );
 
   reflectCLI.command(
