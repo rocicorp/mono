@@ -51,9 +51,7 @@ export async function initApp(_: LfgHandlerArgs, dir: string) {
   const STARTUP = '\nnpm install\nnpx reflect dev';
   console.log(color.reset((dir === './' ? '' : `cd ${dir}`) + STARTUP));
   console.log(color.blue('\nThen open a new terminal and run the UI:'));
-  console.log(
-    color.reset('\nVITE_WORKER_URL=ws://127.0.0.1:8080 npm run dev'),
-  );
+  console.log(color.reset('\nVITE_WORKER_URL=ws://127.0.0.1:8080 npm run dev'));
 }
 
 async function canScaffold(dirPath: string): Promise<boolean> {
