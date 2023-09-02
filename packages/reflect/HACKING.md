@@ -48,7 +48,7 @@ npm install
 npm run dev
 
 # Should run against local server
-npx reflect dev src/reflect/index.ts
+npx reflect dev
 VITE_WORKER_URL="ws://127.0.0.1:8080/" npm run dev
 
 # Should ask where to publish on vercel and run on vercel
