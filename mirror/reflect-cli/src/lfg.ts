@@ -45,15 +45,14 @@ export async function initApp(_: LfgHandlerArgs, dir: string) {
     writeAppConfig({server}, dir);
   }
 
-  console.log('');
-  console.log(color.green(`You're all set! 🎉`));
+  console.log(color.green(`\nYou're all set! 🎉`));
   console.log(color.blue(`\nFirst, start the Reflect dev server:\n`));
 
-  const STARTUP = 'npm install && npx reflect dev\n';
-  console.log(color.white((dir === './' ? '' : `cd ${dir} && `) + STARTUP));
-  console.log(color.white('\nThen open a new terminal and run the UI:\n'));
+  const STARTUP = '\nnpm install\nnpx reflect dev';
+  console.log(color.reset((dir === './' ? '' : `cd ${dir}`) + STARTUP));
+  console.log(color.blue('\nThen open a new terminal and run the UI:'));
   console.log(
-    color.white('\nVITE_WORKER_URL=ws://127.0.0.1:8080 npm run dev\n'),
+    color.reset('\nVITE_WORKER_URL=ws://127.0.0.1:8080 npm run dev'),
   );
 }
 
