@@ -44,16 +44,14 @@ npx /path/to/rocicorp-reflect-<version>.tgz create my-app
 cd my-app
 npm install
 
-# Should run against remote server
-npm run dev
-
 # Should run against local server
-npx reflect dev src/reflect/index.ts
+npx reflect dev
+
 VITE_WORKER_URL="ws://127.0.0.1:8080/" npm run dev
 
 # Should ask where to publish on vercel and run on vercel
 # Need to set VITE_WORKER_URL env var on deployment
-npx reflect publish src/reflect/index.ts
+npx reflect publish
 npx vercel
 ```
 
@@ -138,6 +136,7 @@ The following have peerDependencies that should to be updated to the new Reflect
 
 ```
 git checkout reflect/v$NEW_VERSION
+cd packages/reflect
 
 # note: this will publish the release to the "latest" tag, which means it's what
 # people will get when they `npm install`. If this is a beta release, you should
@@ -151,19 +150,20 @@ npm publish
 This is needed so that we can publish apps to Mirror that use this version.
 
 ```bash
-# First, change packages/reflect/package.json version to the next number
+cd $REPO_ROOT
+git checkout reflect/v$NEW_VERSION
+
+# Change packages/reflect/package.json version to the next number
 # temporarily. So say that the version is currently 0.40.5, change it to
 # 0.40.6. This is a temporary workaround for:
 # https://github.com/rocicorp/mono/issues/833.
 
-cd $REPO_ROOT
-git checkout reflect/v$NEW_VERSION
 npm install
 cd mirror/mirror-cli
 # adjust channels to taste
 # can also pass --force to overwrite old versions
 npm run start uploadServer -- --channels=canary --channels=stable
-npm run start uploadServer -- --stack=prod --channels=canary --channels=stable
+npm run start uploadServer -- --stack=staging --channels=canary --channels=stable
 
 # Abandon temporary change to package.json
 git reset --hard HEAD

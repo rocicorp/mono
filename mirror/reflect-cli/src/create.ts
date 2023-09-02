@@ -28,7 +28,6 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
     process.exit(1);
   }
 
-  console.log(color.green(`Creating folder: ${color.bgWhite(name)}`));
   await mkdir(name, {recursive: true});
   await initApp(createYargs, name);
 }

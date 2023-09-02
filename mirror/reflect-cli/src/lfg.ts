@@ -42,12 +42,13 @@ export async function initApp(_: LfgHandlerArgs, dir: string) {
     writeAppConfig({server}, dir);
   }
 
-  console.log('');
-  console.log(color.green(`You're all set up! 🎉`));
-  console.log(color.blue(`Start your Reflect app:\n`));
+  console.log(color.green(`\nYou're all set! 🎉`));
+  console.log(color.blue(`\nFirst, start the Reflect dev server:\n`));
 
-  const STARTUP = 'npm install && npm run dev\n';
-  console.log(color.white((dir === './' ? '' : `cd ${dir} && `) + STARTUP));
+  const STARTUP = '\nnpm install\nnpx reflect dev';
+  console.log(color.reset((dir === './' ? '' : `cd ${dir}`) + STARTUP));
+  console.log(color.blue('\nThen open a new terminal and run the UI:'));
+  console.log(color.reset('\nVITE_WORKER_URL=ws://127.0.0.1:8080 npm run dev'));
 }
 
 async function canScaffold(dirPath: string): Promise<boolean> {
