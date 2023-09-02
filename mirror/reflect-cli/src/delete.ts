@@ -12,7 +12,7 @@ import {
 import {userPath, userDataConverter} from 'mirror-schema/src/user.js';
 import {watch} from 'mirror-schema/src/watch.js';
 import {must} from 'shared/src/must.js';
-import {readAppConfig} from './app-config.js';
+import {readAppConfig, writeAppConfig} from './app-config.js';
 import {confirm} from './inquirer.js';
 
 export function deleteOptions(yargs: CommonYargsArgv) {
@@ -52,7 +52,7 @@ export async function deleteHandler(yargs: DeleteHandlerArgs) {
     const confirmed =
       yargs.force ||
       (await confirm({
-        message: `Delete "${app.name}" and all associated data?`,
+        message: `Delete "${app.name}" and associated data?`,
         default: false,
       }));
     if (!confirmed) {
@@ -96,12 +96,20 @@ export async function deleteHandler(yargs: DeleteHandlerArgs) {
         throw e;
       }
     }
+    if (app.fromAppConfig) {
+      const config = readAppConfig();
+      if (config?.apps?.default) {
+        delete config.apps.default;
+        writeAppConfig(config);
+      }
+    }
   }
 }
 
 type AppInfo = {
   id: string;
   name: string;
+  fromAppConfig?: boolean | undefined;
 };
 
 async function getAppsToDelete(
@@ -128,7 +136,7 @@ async function getAppsToDelete(
   const config = readAppConfig();
   const defaultAppID = config?.apps?.default?.appID;
   if (defaultAppID) {
-    return getApp(firestore, defaultAppID);
+    return getApp(firestore, defaultAppID, true);
   }
   console.error(
     'Missing reflect.config.json Could not determine App to delete.',
@@ -136,7 +144,11 @@ async function getAppsToDelete(
   process.exit(1);
 }
 
-async function getApp(firestore: Firestore, id: string): Promise<AppInfo[]> {
+async function getApp(
+  firestore: Firestore,
+  id: string,
+  fromAppConfig?: boolean,
+): Promise<AppInfo[]> {
   const appDoc = await firestore
     .doc(appPath(id))
     .withConverter(appDataConverter)
@@ -145,7 +157,7 @@ async function getApp(firestore: Firestore, id: string): Promise<AppInfo[]> {
     throw new Error(`App is already deleted`);
   }
   const {name} = must(appDoc.data());
-  return [{id, name}];
+  return [{id, name, fromAppConfig}];
 }
 
 async function getSingleAdminTeam(
