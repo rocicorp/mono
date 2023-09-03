@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "dependencies": {
-    "@rocicorp/reflect": "0.32.0",
+    "@rocicorp/reflect": "0.33.0-canary.0",
     "esbuild": "^0.18.3",
     "firebase-admin": "^11.10.1",
     "pkg-up": "^4.0.0",
