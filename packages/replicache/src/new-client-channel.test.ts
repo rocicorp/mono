@@ -5,6 +5,10 @@ import {
   initNewClientChannel,
   makeChannelNameForTesting,
 } from './new-client-channel.js';
+import * as dag from './dag/mod.js';
+import {withWrite} from './with-transactions.js';
+import {setClientGroup} from './persist/client-groups.js';
+import {fakeHash} from './hash.js';
 
 function getChannelMessagePromise(replicacheName: string) {
   const channel = new BroadcastChannel(
@@ -29,6 +33,7 @@ suite('initNewClientChannel', () => {
       clientGroupID,
       true,
       () => undefined,
+      new dag.TestStore(),
     );
     expect(await channelMessagePromise).to.deep.equal([clientGroupID]);
   });
@@ -44,6 +49,7 @@ suite('initNewClientChannel', () => {
       clientGroupID,
       false,
       () => undefined,
+      new dag.TestStore(),
     );
 
     const sentinel = Symbol();
@@ -126,12 +132,14 @@ suite('initNewClientChannel', () => {
   //   expect(client3OnUpdateNeededCallCount).to.equal(0);
   // });
 
-  test('calls onUpdateNeeded when a client with a different clientGroupID is received', async () => {
+  test('calls onUpdateNeeded when a client with a different clientGroupID is received and that newClientGroupID is present in perdag', async () => {
     const replicacheName = 'test-name';
     const controller = new AbortController();
     const clientGroupID1 = 'client-group-1';
     const clientGroupID2 = 'client-group-2';
+    const perdag = new dag.TestStore();
 
+    await putClientGroup(perdag, clientGroupID1);
     let client1OnUpdateNeededCallCount = 0;
     initNewClientChannel(
       replicacheName,
@@ -141,9 +149,11 @@ suite('initNewClientChannel', () => {
       () => {
         client1OnUpdateNeededCallCount++;
       },
+      perdag,
     );
     expect(client1OnUpdateNeededCallCount).to.equal(0);
 
+    await putClientGroup(perdag, clientGroupID2);
     let client2OnUpdateNeededCallCount = 0;
     const channelMessagePromise = getChannelMessagePromise(replicacheName);
     initNewClientChannel(
@@ -154,17 +164,21 @@ suite('initNewClientChannel', () => {
       () => {
         client2OnUpdateNeededCallCount++;
       },
+      perdag,
     );
     await channelMessagePromise;
     expect(client1OnUpdateNeededCallCount).to.equal(1);
     expect(client2OnUpdateNeededCallCount).to.equal(0);
   });
 
-  test('does not call onUpdateNeeded when a client with the same clientGroupID is received', async () => {
+  test('does not call onUpdateNeeded when a client with a different clientGroupID is received and that newClientGroupID is *not* present in perdag', async () => {
     const replicacheName = 'test-name';
     const controller = new AbortController();
     const clientGroupID1 = 'client-group-1';
+    const clientGroupID2 = 'client-group-2';
+    const perdag = new dag.TestStore();
 
+    await putClientGroup(perdag, clientGroupID1);
     let client1OnUpdateNeededCallCount = 0;
     initNewClientChannel(
       replicacheName,
@@ -174,6 +188,46 @@ suite('initNewClientChannel', () => {
       () => {
         client1OnUpdateNeededCallCount++;
       },
+      perdag,
+    );
+    expect(client1OnUpdateNeededCallCount).to.equal(0);
+
+    // don't put clientGroupID2 in perdag
+    let client2OnUpdateNeededCallCount = 0;
+    const channelMessagePromise = getChannelMessagePromise(replicacheName);
+    initNewClientChannel(
+      replicacheName,
+      controller.signal,
+      clientGroupID2,
+      true,
+      () => {
+        client2OnUpdateNeededCallCount++;
+      },
+      perdag,
+    );
+    await channelMessagePromise;
+    // 0 because clientGroupID2 is not in perdag
+    expect(client1OnUpdateNeededCallCount).to.equal(0);
+    expect(client2OnUpdateNeededCallCount).to.equal(0);
+  });
+
+  test('does not call onUpdateNeeded when a client with the same clientGroupID is received', async () => {
+    const replicacheName = 'test-name';
+    const controller = new AbortController();
+    const clientGroupID1 = 'client-group-1';
+    const perdag = new dag.TestStore();
+
+    await putClientGroup(perdag, clientGroupID1);
+    let client1OnUpdateNeededCallCount = 0;
+    initNewClientChannel(
+      replicacheName,
+      controller.signal,
+      clientGroupID1,
+      true,
+      () => {
+        client1OnUpdateNeededCallCount++;
+      },
+      new dag.TestStore(),
     );
     expect(client1OnUpdateNeededCallCount).to.equal(0);
 
@@ -187,6 +241,7 @@ suite('initNewClientChannel', () => {
       () => {
         client2OnUpdateNeededCallCount++;
       },
+      new dag.TestStore(),
     );
     await channelMessagePromise;
     expect(client1OnUpdateNeededCallCount).to.equal(0);
@@ -199,6 +254,9 @@ suite('initNewClientChannel', () => {
     const controller2 = new AbortController();
     const clientGroupID1 = 'client-group-1';
     const clientGroupID2 = 'client-group-2';
+    const perdag = new dag.TestStore();
+
+    await putClientGroup(perdag, clientGroupID1);
     let client1OnUpdateNeededCallCount = 0;
     initNewClientChannel(
       replicacheName,
@@ -208,11 +266,13 @@ suite('initNewClientChannel', () => {
       () => {
         client1OnUpdateNeededCallCount++;
       },
+      new dag.TestStore(),
     );
     expect(client1OnUpdateNeededCallCount).to.equal(0);
     let client2OnUpdateNeededCallCount = 0;
     controller1.abort();
 
+    await putClientGroup(perdag, clientGroupID2);
     const channelMessagePromise = getChannelMessagePromise(replicacheName);
     initNewClientChannel(
       replicacheName,
@@ -222,6 +282,7 @@ suite('initNewClientChannel', () => {
       () => {
         client2OnUpdateNeededCallCount++;
       },
+      new dag.TestStore(),
     );
     await channelMessagePromise;
     // 0 because controller1.abort was called, causing
@@ -230,3 +291,21 @@ suite('initNewClientChannel', () => {
     expect(client2OnUpdateNeededCallCount).to.equal(0);
   });
 });
+
+async function putClientGroup(perdag: dag.TestStore, clientGroupID1: string) {
+  await withWrite(perdag, async perdagWrite => {
+    await setClientGroup(
+      clientGroupID1,
+      {
+        headHash: fakeHash('abc'),
+        indexes: {},
+        mutationIDs: {},
+        lastServerAckdMutationIDs: {},
+        mutatorNames: ['addData'],
+        disabled: false,
+      },
+      perdagWrite,
+    );
+    await perdagWrite.commit();
+  });
+}

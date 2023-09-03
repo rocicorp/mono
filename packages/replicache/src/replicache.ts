@@ -621,6 +621,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       () => {
         this._fireOnUpdateNeeded(updateNeededReasonNewClientGroup);
       },
+      this._perdag,
     );
 
     setIntervalWithSignal(
