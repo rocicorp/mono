@@ -1,5 +1,9 @@
 import {expect} from 'chai';
-import {initReplicacheTesting, replicacheForTesting} from './test-util.js';
+import {
+  initReplicacheTesting,
+  replicacheForTesting,
+  tickAFewTimes,
+} from './test-util.js';
 
 initReplicacheTesting();
 
@@ -24,6 +28,8 @@ suite('onUpdateNeeded', () => {
       },
       {useUniqueName: false},
     );
+
+    await tickAFewTimes();
 
     expect(onUpdateNeededReason).to.deep.equal({
       type: 'NewClientGroup',
