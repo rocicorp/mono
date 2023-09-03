@@ -615,12 +615,14 @@ export class Replicache<MD extends MutatorDefs = {}> {
     persist.initClientGroupGC(this._perdag, this._lc, signal);
     initNewClientChannel(
       this.name,
+      this.idbName,
       signal,
       client.clientGroupID,
       isNewClientGroup,
       () => {
         this._fireOnUpdateNeeded(updateNeededReasonNewClientGroup);
       },
+      this._perdag,
     );
 
     setIntervalWithSignal(
