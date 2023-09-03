@@ -22,29 +22,33 @@ function getChannelMessagePromise(replicacheName: string) {
 }
 
 suite('initNewClientChannel', () => {
-  test('sends client group ID to channel', async () => {
+  test('sends client group ID and idb name to channel', async () => {
     const replicacheName = 'test-name';
+    const idbName = 'test-idb-name';
     const channelMessagePromise = getChannelMessagePromise(replicacheName);
     const controller = new AbortController();
     const clientGroupID = 'test-client-group-id-1';
     initNewClientChannel(
       replicacheName,
+      idbName,
       controller.signal,
       clientGroupID,
       true,
       () => undefined,
       new dag.TestStore(),
     );
-    expect(await channelMessagePromise).to.deep.equal([clientGroupID]);
+    expect(await channelMessagePromise).to.deep.equal([clientGroupID, idbName]);
   });
 
   test("Doesn't send message if client group is not new", async () => {
     const replicacheName = 'test-name';
+    const idbName = 'test-idb-name';
     const channelMessagePromise = getChannelMessagePromise(replicacheName);
     const controller = new AbortController();
     const clientGroupID = 'test-client-group-id-1';
     initNewClientChannel(
       replicacheName,
+      idbName,
       controller.signal,
       clientGroupID,
       false,
@@ -132,8 +136,10 @@ suite('initNewClientChannel', () => {
   //   expect(client3OnUpdateNeededCallCount).to.equal(0);
   // });
 
-  test('calls onUpdateNeeded when a client with a different clientGroupID is received and that newClientGroupID is present in perdag', async () => {
+  test('calls onUpdateNeeded when a client with a different idbName is received', async () => {
     const replicacheName = 'test-name';
+    const idbName1 = 'test-idb-name-1';
+    const idbName2 = 'test-idb-name-2';
     const controller = new AbortController();
     const clientGroupID1 = 'client-group-1';
     const clientGroupID2 = 'client-group-2';
@@ -143,6 +149,48 @@ suite('initNewClientChannel', () => {
     let client1OnUpdateNeededCallCount = 0;
     initNewClientChannel(
       replicacheName,
+      idbName1,
+      controller.signal,
+      clientGroupID1,
+      true,
+      () => {
+        client1OnUpdateNeededCallCount++;
+      },
+      new dag.TestStore(),
+    );
+    expect(client1OnUpdateNeededCallCount).to.equal(0);
+
+    let client2OnUpdateNeededCallCount = 0;
+    const channelMessagePromise = getChannelMessagePromise(replicacheName);
+    initNewClientChannel(
+      replicacheName,
+      idbName2,
+      controller.signal,
+      clientGroupID2,
+      true, // This should not happen because the client group is already created
+      () => {
+        client2OnUpdateNeededCallCount++;
+      },
+      new dag.TestStore(),
+    );
+    await channelMessagePromise;
+    expect(client1OnUpdateNeededCallCount).to.equal(1);
+    expect(client2OnUpdateNeededCallCount).to.equal(0);
+  });
+
+  test('calls onUpdateNeeded when a client with a different clientGroupID and same idbName is received and that newClientGroupID is present in perdag', async () => {
+    const replicacheName = 'test-name';
+    const idbName = 'test-idb-name';
+    const controller = new AbortController();
+    const clientGroupID1 = 'client-group-1';
+    const clientGroupID2 = 'client-group-2';
+    const perdag = new dag.TestStore();
+
+    await putClientGroup(perdag, clientGroupID1);
+    let client1OnUpdateNeededCallCount = 0;
+    initNewClientChannel(
+      replicacheName,
+      idbName,
       controller.signal,
       clientGroupID1,
       true,
@@ -158,6 +206,7 @@ suite('initNewClientChannel', () => {
     const channelMessagePromise = getChannelMessagePromise(replicacheName);
     initNewClientChannel(
       replicacheName,
+      idbName,
       controller.signal,
       clientGroupID2,
       true,
@@ -171,8 +220,9 @@ suite('initNewClientChannel', () => {
     expect(client2OnUpdateNeededCallCount).to.equal(0);
   });
 
-  test('does not call onUpdateNeeded when a client with a different clientGroupID is received and that newClientGroupID is *not* present in perdag', async () => {
+  test('does not call onUpdateNeeded when a client with a different clientGroupID and same idbName is received and that newClientGroupID is *not* present in perdag', async () => {
     const replicacheName = 'test-name';
+    const idbName = 'test-idb-name';
     const controller = new AbortController();
     const clientGroupID1 = 'client-group-1';
     const clientGroupID2 = 'client-group-2';
@@ -182,6 +232,7 @@ suite('initNewClientChannel', () => {
     let client1OnUpdateNeededCallCount = 0;
     initNewClientChannel(
       replicacheName,
+      idbName,
       controller.signal,
       clientGroupID1,
       true,
@@ -197,6 +248,7 @@ suite('initNewClientChannel', () => {
     const channelMessagePromise = getChannelMessagePromise(replicacheName);
     initNewClientChannel(
       replicacheName,
+      idbName,
       controller.signal,
       clientGroupID2,
       true,
@@ -211,8 +263,9 @@ suite('initNewClientChannel', () => {
     expect(client2OnUpdateNeededCallCount).to.equal(0);
   });
 
-  test('does not call onUpdateNeeded when a client with the same clientGroupID is received', async () => {
+  test('does not call onUpdateNeeded when a client with the same clientGroupID and idbName is received', async () => {
     const replicacheName = 'test-name';
+    const idbName = 'test-idb-name';
     const controller = new AbortController();
     const clientGroupID1 = 'client-group-1';
     const perdag = new dag.TestStore();
@@ -221,6 +274,7 @@ suite('initNewClientChannel', () => {
     let client1OnUpdateNeededCallCount = 0;
     initNewClientChannel(
       replicacheName,
+      idbName,
       controller.signal,
       clientGroupID1,
       true,
@@ -235,6 +289,7 @@ suite('initNewClientChannel', () => {
     const channelMessagePromise = getChannelMessagePromise(replicacheName);
     initNewClientChannel(
       replicacheName,
+      idbName,
       controller.signal,
       clientGroupID1,
       true, // This should not happen because the client group is already created
@@ -250,6 +305,7 @@ suite('initNewClientChannel', () => {
 
   test('closes channel when abort is signaled', async () => {
     const replicacheName = 'test-name';
+    const idbName = 'test-idb-name';
     const controller1 = new AbortController();
     const controller2 = new AbortController();
     const clientGroupID1 = 'client-group-1';
@@ -260,6 +316,7 @@ suite('initNewClientChannel', () => {
     let client1OnUpdateNeededCallCount = 0;
     initNewClientChannel(
       replicacheName,
+      idbName,
       controller1.signal,
       clientGroupID1,
       true,
@@ -276,6 +333,7 @@ suite('initNewClientChannel', () => {
     const channelMessagePromise = getChannelMessagePromise(replicacheName);
     initNewClientChannel(
       replicacheName,
+      idbName,
       controller2.signal,
       clientGroupID2,
       true,
