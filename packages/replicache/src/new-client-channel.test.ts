@@ -367,3 +367,65 @@ async function putClientGroup(perdag: dag.TestStore, clientGroupID1: string) {
     await perdagWrite.commit();
   });
 }
+
+test('v0 message, calls onUpdateNeeded when a client with a different clientGroupID is received and that newClientGroupID even if it is not present in perdag', async () => {
+  const replicacheName = 'test-name';
+  const idbName = 'test-idb-name';
+  const controller = new AbortController();
+  const clientGroupID1 = 'client-group-1';
+  const perdag = new dag.TestStore();
+
+  let client1OnUpdateNeededCallCount = 0;
+  initNewClientChannel(
+    replicacheName,
+    idbName,
+    controller.signal,
+    clientGroupID1,
+    true,
+    () => {
+      client1OnUpdateNeededCallCount++;
+    },
+    perdag,
+  );
+  expect(client1OnUpdateNeededCallCount).to.equal(0);
+
+  const channelMessagePromise = getChannelMessagePromise(replicacheName);
+  const channel = new BroadcastChannel(
+    `replicache-new-client-group:${replicacheName}`,
+  );
+  channel.postMessage(['client-group-2']);
+  await channelMessagePromise;
+
+  expect(client1OnUpdateNeededCallCount).to.equal(1);
+});
+
+test('v0 message, does not call onUpdateNeeded when a client with the same clientGroupID is received', async () => {
+  const replicacheName = 'test-name';
+  const idbName = 'test-idb-name';
+  const controller = new AbortController();
+  const clientGroupID1 = 'client-group-1';
+  const perdag = new dag.TestStore();
+
+  let client1OnUpdateNeededCallCount = 0;
+  initNewClientChannel(
+    replicacheName,
+    idbName,
+    controller.signal,
+    clientGroupID1,
+    true,
+    () => {
+      client1OnUpdateNeededCallCount++;
+    },
+    perdag,
+  );
+  expect(client1OnUpdateNeededCallCount).to.equal(0);
+
+  const channelMessagePromise = getChannelMessagePromise(replicacheName);
+  const channel = new BroadcastChannel(
+    `replicache-new-client-group:${replicacheName}`,
+  );
+  channel.postMessage(['client-group-1']);
+  await channelMessagePromise;
+
+  expect(client1OnUpdateNeededCallCount).to.equal(0);
+});
