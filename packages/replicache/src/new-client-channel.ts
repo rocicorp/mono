@@ -11,8 +11,8 @@ function makeChannelNameV0(replicacheName: string): string {
 
 // This channel name was introduced when we first needed to change the message
 // format.  The design of the messages sent on this channel allows for
-// the message content to be extended in the future in away that is
-// forward and backwards compatible.  The message can be extended
+// the message content to be extended in the future in a way that is
+// forward and backwards compatible.  The message format can be extended
 // by adding new *optional* fields.
 function makeChannelNameV1(replicacheName: string): string {
   return `replicache-new-client-group-v1:${replicacheName}`;
