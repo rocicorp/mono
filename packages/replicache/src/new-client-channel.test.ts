@@ -3,17 +3,19 @@ import {expect} from 'chai';
 import {sleep} from 'shared/src/sleep.js';
 import {
   initNewClientChannel,
-  makeChannelNameForTesting,
+  makeChannelNameV0ForTesting,
+  makeChannelNameV1ForTesting,
 } from './new-client-channel.js';
 import * as dag from './dag/mod.js';
 import {withWrite} from './with-transactions.js';
 import {setClientGroup} from './persist/client-groups.js';
 import {fakeHash} from './hash.js';
 
-function getChannelMessagePromise(replicacheName: string) {
-  const channel = new BroadcastChannel(
-    makeChannelNameForTesting(replicacheName),
-  );
+function getChannelMessagePromise(
+  replicacheName: string,
+  makeChannelName = makeChannelNameV1ForTesting,
+) {
+  const channel = new BroadcastChannel(makeChannelName(replicacheName));
   const messageResolver = resolver();
   channel.onmessage = e => {
     messageResolver.resolve(e.data);
@@ -22,10 +24,17 @@ function getChannelMessagePromise(replicacheName: string) {
 }
 
 suite('initNewClientChannel', () => {
-  test('sends client group ID and idb name to channel', async () => {
+  test('sends client group ID to channel v0 and client group ID and idb name to channel v1', async () => {
     const replicacheName = 'test-name';
     const idbName = 'test-idb-name';
-    const channelMessagePromise = getChannelMessagePromise(replicacheName);
+    const channelMessageV0Promise = getChannelMessagePromise(
+      replicacheName,
+      makeChannelNameV0ForTesting,
+    );
+    const channelMessageV1Promise = getChannelMessagePromise(
+      replicacheName,
+      makeChannelNameV1ForTesting,
+    );
     const controller = new AbortController();
     const clientGroupID = 'test-client-group-id-1';
     initNewClientChannel(
@@ -37,13 +46,24 @@ suite('initNewClientChannel', () => {
       () => undefined,
       new dag.TestStore(),
     );
-    expect(await channelMessagePromise).to.deep.equal([clientGroupID, idbName]);
+    expect(await channelMessageV0Promise).to.deep.equal([clientGroupID]);
+    expect(await channelMessageV1Promise).to.deep.equal({
+      clientGroupID,
+      idbName,
+    });
   });
 
-  test("Doesn't send message if client group is not new", async () => {
+  test("Doesn't send messages to channels if client group is not new", async () => {
     const replicacheName = 'test-name';
     const idbName = 'test-idb-name';
-    const channelMessagePromise = getChannelMessagePromise(replicacheName);
+    const channelMessageV0Promise = getChannelMessagePromise(
+      replicacheName,
+      makeChannelNameV0ForTesting,
+    );
+    const channelMessageV1Promise = getChannelMessagePromise(
+      replicacheName,
+      makeChannelNameV1ForTesting,
+    );
     const controller = new AbortController();
     const clientGroupID = 'test-client-group-id-1';
     initNewClientChannel(
@@ -58,83 +78,34 @@ suite('initNewClientChannel', () => {
 
     const sentinel = Symbol();
     const res = await Promise.race([
-      channelMessagePromise,
+      channelMessageV0Promise,
+      channelMessageV1Promise,
       sleep(10).then(() => sentinel),
     ]);
     expect(res).equal(sentinel);
 
     {
       // And test that we get the message if another client group is created
-      const channel = new BroadcastChannel(
-        makeChannelNameForTesting(replicacheName),
-      );
+
       const anotherClientGroupID = 'test-client-group-id-2';
-      channel.postMessage([anotherClientGroupID]);
-      expect(await channelMessagePromise).to.deep.equal([anotherClientGroupID]);
+      initNewClientChannel(
+        replicacheName,
+        idbName,
+        controller.signal,
+        anotherClientGroupID,
+        true,
+        () => undefined,
+        new dag.TestStore(),
+      );
+      expect(await channelMessageV0Promise).to.deep.equal([
+        anotherClientGroupID,
+      ]);
+      expect(await channelMessageV1Promise).to.deep.equal({
+        clientGroupID: anotherClientGroupID,
+        idbName,
+      });
     }
   });
-
-  // test('calls onUpdateNeeded when a different format version is received and does not assert Client schema', async () => {
-  //   const replicacheName = 'test-name';
-  //   const controller = new AbortController();
-  //   const clientID1 = 'client1';
-  //   const client1: ClientV5 = {
-  //     heartbeatTimestampMs: 111,
-  //     headHash: fakeHash('c1'),
-  //     tempRefreshHash: null,
-  //     clientGroupID: 'branch-1',
-  //   };
-  //   const clientID2 = 'client2';
-  //   // intentionally missing required fields.
-  //   const client2 = {} as ClientV5;
-  //   const clientID3 = 'client3';
-  //   // intentionally missing required fields.
-  //   const client3 = {} as ClientV5;
-  //   let client1OnUpdateNeededCallCount = 0;
-  //   initNewClientChannel(
-  //     replicacheName,
-  //     TEST_FORMAT_VERSION,
-  //     controller.signal,
-  //     clientID1,
-  //     client1,
-  //     () => {
-  //       client1OnUpdateNeededCallCount++;
-  //     },
-  //   );
-  //   expect(client1OnUpdateNeededCallCount).to.equal(0);
-  //   let client2OnUpdateNeededCallCount = 0;
-  //   const channelMessagePromise = getChannelMessagePromise(replicacheName);
-  //   initNewClientChannel(
-  //     replicacheName,
-  //     TEST_FORMAT_VERSION + 1,
-  //     controller.signal,
-  //     clientID2,
-  //     client2,
-  //     () => {
-  //       client2OnUpdateNeededCallCount++;
-  //     },
-  //   );
-  //   await channelMessagePromise;
-  //   expect(client1OnUpdateNeededCallCount).to.equal(1);
-  //   expect(client2OnUpdateNeededCallCount).to.equal(0);
-
-  //   let client3OnUpdateNeededCallCount = 0;
-  //   const channelMessagePromise2 = getChannelMessagePromise(replicacheName);
-  //   initNewClientChannel(
-  //     replicacheName,
-  //     TEST_FORMAT_VERSION - 1,
-  //     controller.signal,
-  //     clientID3,
-  //     client3,
-  //     () => {
-  //       client3OnUpdateNeededCallCount++;
-  //     },
-  //   );
-  //   await channelMessagePromise2;
-  //   expect(client1OnUpdateNeededCallCount).to.equal(2);
-  //   expect(client2OnUpdateNeededCallCount).to.equal(1);
-  //   expect(client3OnUpdateNeededCallCount).to.equal(0);
-  // });
 
   test('calls onUpdateNeeded when a client with a different idbName is received', async () => {
     const replicacheName = 'test-name';
@@ -368,7 +339,7 @@ async function putClientGroup(perdag: dag.TestStore, clientGroupID1: string) {
   });
 }
 
-test('v0 message, calls onUpdateNeeded when a client with a different clientGroupID is received and that newClientGroupID even if it is not present in perdag', async () => {
+test('v0 message is not handled', async () => {
   const replicacheName = 'test-name';
   const idbName = 'test-idb-name';
   const controller = new AbortController();
@@ -389,42 +360,14 @@ test('v0 message, calls onUpdateNeeded when a client with a different clientGrou
   );
   expect(client1OnUpdateNeededCallCount).to.equal(0);
 
-  const channelMessagePromise = getChannelMessagePromise(replicacheName);
+  const channelMessagePromise = getChannelMessagePromise(
+    replicacheName,
+    makeChannelNameV0ForTesting,
+  );
   const channel = new BroadcastChannel(
-    `replicache-new-client-group:${replicacheName}`,
+    makeChannelNameV0ForTesting(replicacheName),
   );
   channel.postMessage(['client-group-2']);
-  await channelMessagePromise;
-
-  expect(client1OnUpdateNeededCallCount).to.equal(1);
-});
-
-test('v0 message, does not call onUpdateNeeded when a client with the same clientGroupID is received', async () => {
-  const replicacheName = 'test-name';
-  const idbName = 'test-idb-name';
-  const controller = new AbortController();
-  const clientGroupID1 = 'client-group-1';
-  const perdag = new dag.TestStore();
-
-  let client1OnUpdateNeededCallCount = 0;
-  initNewClientChannel(
-    replicacheName,
-    idbName,
-    controller.signal,
-    clientGroupID1,
-    true,
-    () => {
-      client1OnUpdateNeededCallCount++;
-    },
-    perdag,
-  );
-  expect(client1OnUpdateNeededCallCount).to.equal(0);
-
-  const channelMessagePromise = getChannelMessagePromise(replicacheName);
-  const channel = new BroadcastChannel(
-    `replicache-new-client-group:${replicacheName}`,
-  );
-  channel.postMessage(['client-group-1']);
   await channelMessagePromise;
 
   expect(client1OnUpdateNeededCallCount).to.equal(0);
