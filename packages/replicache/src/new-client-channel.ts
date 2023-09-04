@@ -50,7 +50,7 @@ export function initNewClientChannel(
   const channelV1 = new BroadcastChannel(makeChannelNameV1(replicacheName));
   if (isNewClientGroup) {
     channelV1.postMessage({clientGroupID, idbName});
-    // Send expected format to V0 channel
+    // Send expected format to V0 channel for old clients.
     const channelV0 = new BroadcastChannel(makeChannelNameV0(replicacheName));
     channelV0.postMessage([clientGroupID]);
     channelV0.close();
@@ -80,7 +80,7 @@ export function initNewClientChannel(
             onUpdateNeeded();
           }
         } else {
-          // Idb name is different, indicating ew schema or format version.
+          // Idb name is different, indicating new schema or format version.
           // Update to get assigned to newClientIDBName, and hopefully
           // newClientGroupID.
           // If storage is not actually shared (i.e. due to

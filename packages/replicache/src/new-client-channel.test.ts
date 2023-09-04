@@ -33,7 +33,7 @@ suite('initNewClientChannel', () => {
     );
     const channelMessageV1Promise = getChannelMessagePromise(
       replicacheName,
-      makeChannelNameV0ForTesting,
+      makeChannelNameV1ForTesting,
     );
     const controller = new AbortController();
     const clientGroupID = 'test-client-group-id-1';
@@ -62,7 +62,7 @@ suite('initNewClientChannel', () => {
     );
     const channelMessageV1Promise = getChannelMessagePromise(
       replicacheName,
-      makeChannelNameV0ForTesting,
+      makeChannelNameV1ForTesting,
     );
     const controller = new AbortController();
     const clientGroupID = 'test-client-group-id-1';
