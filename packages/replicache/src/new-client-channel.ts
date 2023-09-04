@@ -2,14 +2,14 @@ import type * as dag from './dag/mod.js';
 import {getClientGroup} from './persist/client-groups.js';
 import {withRead} from './with-transactions.js';
 
-// Older clients (<= replicache@13.0.1), listened on this format of channel name
-// and *asserted* that the message received was an array containing exactly one
-// string.
+// Older clients (<= replicache@13.0.1), listened on this channel name
+// and *asserted* that the messages received were an array containing exactly
+// one string.
 function makeChannelNameV0(replicacheName: string): string {
   return `replicache-new-client-group:${replicacheName}`;
 }
 
-// This channel was introduced when we first needed to change the message
+// This channel name was introduced when we first needed to change the message
 // format.  The design of the messages sent on this channel allows for
 // the message content to be extended in the future in away that is
 // forward and backwards compatible.  The message can be extended
