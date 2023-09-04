@@ -1066,3 +1066,35 @@ test('Errors in subscriptions are logged if no onError', async () => {
   assert.equal(f.callCount, 1);
   assert.isTrue(f.calledWith(err));
 });
+
+test('subscribe using a function', async () => {
+  const log: (readonly [string, ReadonlyJSONValue])[] = [];
+
+  const rep = await replicacheForTesting('subscribe', {
+    mutators: {
+      addData,
+    },
+  });
+  let queryCallCount = 0;
+  const cancel = rep.subscribe(
+    tx => {
+      queryCallCount++;
+      return tx.scan({prefix: 'a/'}).entries().toArray();
+    },
+    values => {
+      for (const entry of values) {
+        log.push(entry);
+      }
+    },
+  );
+
+  expect(log).to.have.length(0);
+  expect(queryCallCount).to.equal(0);
+
+  const add = rep.mutate.addData;
+  await add({'a/0': 0});
+  expect(log).to.deep.equal([['a/0', 0]]);
+  expect(queryCallCount).to.equal(2); // One for initial subscribe and one for the add.
+
+  cancel();
+});

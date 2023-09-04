@@ -1449,35 +1449,42 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * Subscribe to the result of a {@link query}. The `body` function is
    * evaluated once and its results are returned via `onData`.
    *
-   * Thereafter, each time the the result of `body` changes, `onData`
-   * is fired again with the new result.
+   * Thereafter, each time the the result of `body` changes, `onData` is fired
+   * again with the new result.
    *
    * `subscribe()` goes to significant effort to avoid extraneous work
    * re-evaluating subscriptions:
    *
-   * 1. subscribe tracks the keys that `body` accesses each time it
-   *    runs. `body` is only re-evaluated when those keys change.
-   * 2. subscribe only re-fires `onData` in the case that a result
-   *    changes by way of `deepEquals`.
+   * 1. subscribe tracks the keys that `body` accesses each time it runs. `body`
+   *    is only re-evaluated when those keys change.
+   * 2. subscribe only re-fires `onData` in the case that a result changes by
+   *    way of `deepEquals`.
    *
-   * Because of (1), `body` must be a pure function of the data in
-   * Replicache. `body` must not access anything other than the `tx`
-   * parameter passed to it.
+   * Because of (1), `body` must be a pure function of the data in Replicache.
+   * `body` must not access anything other than the `tx` parameter passed to it.
    *
-   * Although subscribe is as efficient as it can be, it is somewhat
-   * constrained by the goal of returning an arbitrary computation of the
-   * cache. For even better performance (but worse dx), see
-   * {@link experimentalWatch}.
+   * Although subscribe is as efficient as it can be, it is somewhat constrained
+   * by the goal of returning an arbitrary computation of the cache. For even
+   * better performance (but worse dx), see {@link experimentalWatch}.
    *
    * If an error occurs in the `body` the `onError` function is called if
    * present. Otherwise, the error is logged at log level 'error'.
    *
    * To cancel the subscription, call the returned function.
+   *
+   * @param body The function to evaluate to get the value to pass into
+   *    `onData`.
+   * @param options Options is either a function or an object. If it is a
+   *    function it is equivalent to passing it as the `onData` property of an
+   *    object.
    */
   subscribe<R extends ReadonlyJSONValue | undefined>(
     body: (tx: ReadTransaction) => Promise<R>,
-    options: SubscribeOptions<R>,
+    options: SubscribeOptions<R> | ((result: R) => void),
   ): () => void {
+    if (typeof options === 'function') {
+      options = {onData: options};
+    }
     return this._subscriptions.addSubscription(body, options);
   }
 
