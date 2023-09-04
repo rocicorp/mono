@@ -162,8 +162,8 @@ npm install
 cd mirror/mirror-cli
 # adjust channels to taste
 # can also pass --force to overwrite old versions
-npm run start uploadServer -- --channels=canary --channels=stable
-npm run start uploadServer -- --stack=staging --channels=canary --channels=stable
+npm run mirror uploadServer -- --channels=canary --channels=stable
+npm run mirror uploadServer -- --stack=staging --channels=canary --channels=stable
 
 # Abandon temporary change to package.json
 git reset --hard HEAD
@@ -176,7 +176,7 @@ out to `stable`:
 
 ```bash
 cd mirror/mirror-cli
-npm run start releaseServer -- --server=0.40.5 --channels=stable
+npm run mirror releaseServer -- --server=0.40.5 --channels=stable
 ```
 
 The command is additive and will not remove any existing channels (e.g. "canary").
@@ -190,7 +190,7 @@ Don't forget to return the App to its original channel (and clean up the server 
 
 ```bash
 cd mirror/mirror-cli
-npm run start unreleaseServer -- --server=0.40.5 --channels=stable
+npm run mirror unreleaseServer -- --server=0.40.5 --channels=stable
 ```
 
 Essentially, `releaseServer` and `unreleaseServer` take the same cli arguments.

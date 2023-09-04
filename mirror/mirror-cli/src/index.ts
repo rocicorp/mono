@@ -1,7 +1,7 @@
 import {
   CommandLineArgsError,
   createCLIParserBase,
-} from 'reflect-cli/src/create-cli-parser.js';
+} from './create-cli-parser.js';
 import {hideBin} from 'yargs/helpers';
 import {
   uploadReflectServerHandler,

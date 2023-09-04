@@ -9,10 +9,7 @@ import {
   sanitizeForSubdomain,
 } from 'mirror-schema/src/team.js';
 import {appDataConverter, APP_COLLECTION} from 'mirror-schema/src/app.js';
-import type {
-  CommonYargsArgv,
-  YargvToInterface,
-} from 'reflect-cli/src/yarg-types.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {must} from 'shared/src/must.js';
 
 export function migrateTeamAppsOptions(yargs: CommonYargsArgv) {
