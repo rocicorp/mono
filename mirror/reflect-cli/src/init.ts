@@ -1,9 +1,10 @@
-import {existsSync} from 'node:fs';
 import {execSync} from 'node:child_process';
-import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import {existsSync} from 'node:fs';
 import color from 'picocolors';
-import {copyTemplate} from './scaffold.js';
 import {configFileExists} from './app-config.js';
+import {logErrorAndExit, noFormat} from './log-error-and-exit.js';
+import {copyTemplate} from './scaffold.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function initOptions(yargs: CommonYargsArgv) {
   return yargs;
@@ -13,26 +14,26 @@ type InitHandlerArgs = YargvToInterface<ReturnType<typeof initOptions>>;
 
 export async function initHandler(_: InitHandlerArgs) {
   if (configFileExists('./')) {
-    console.log(
+    logErrorAndExit(
       `Cannot initialize. There is already a ${color.white(
         'reflect.config.json',
       )} file present.`,
+      noFormat,
     );
-    process.exit(1);
   }
   if (existsSync('reflect')) {
-    console.log(
+    logErrorAndExit(
       `Cannot initialize. There is already a ${color.white(
         'reflect',
       )} folder present.`,
+      noFormat,
     );
-    process.exit(1);
   }
   if (!existsSync('package.json')) {
-    console.log(
+    logErrorAndExit(
       `No package.json. To create an example project, run:\nnpx @rocicorp/reflect create <name>`,
+      noFormat,
     );
-    process.exit(1);
   }
 
   await copyTemplate('init', './');

@@ -1,19 +1,20 @@
 import {deleteApp} from 'mirror-protocol/src/app.js';
-import {authenticate} from './auth-config.js';
-import {makeRequester} from './requester.js';
-import {Firestore, getFirestore} from './firebase.js';
-import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
 import {
   APP_COLLECTION,
-  appPath,
   appDataConverter,
+  appPath,
 } from 'mirror-schema/src/app.js';
-import {userPath, userDataConverter} from 'mirror-schema/src/user.js';
+import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
+import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {watch} from 'mirror-schema/src/watch.js';
 import {must} from 'shared/src/must.js';
 import {readAppConfig, writeAppConfig} from './app-config.js';
+import {authenticate} from './auth-config.js';
+import {Firestore, getFirestore} from './firebase.js';
 import {confirm} from './inquirer.js';
+import {logErrorAndExit} from './log-error-and-exit.js';
+import {makeRequester} from './requester.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function deleteOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -138,10 +139,9 @@ async function getAppsToDelete(
   if (defaultAppID) {
     return getApp(firestore, defaultAppID, true);
   }
-  console.error(
+  logErrorAndExit(
     'Missing reflect.config.json Could not determine App to delete.',
   );
-  process.exit(1);
 }
 
 async function getApp(
