@@ -71,8 +71,14 @@ function copyReflectCLI() {
   const src = basePath('..', '..', 'mirror', 'reflect-cli', 'out', 'index.mjs');
   const dst = basePath('bin/cli.js');
   doCopy(dst, src, 'mirror/reflect-cli');
-  const templateSrc = basePath('..', '..', 'mirror', 'reflect-cli', 'template');
-  const templateDst = basePath('bin', 'template');
+  const templateSrc = basePath(
+    '..',
+    '..',
+    'mirror',
+    'reflect-cli',
+    'templates',
+  );
+  const templateDst = basePath('bin', 'templates');
   fs.cpSync(templateSrc, templateDst, {recursive: true});
 }
 
