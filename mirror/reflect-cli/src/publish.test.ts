@@ -1,18 +1,18 @@
-import {expect, jest, test, beforeAll, afterEach} from '@jest/globals';
+import {Timestamp} from '@google-cloud/firestore';
+import {afterEach, beforeAll, expect, jest, test} from '@jest/globals';
+import {
+  defaultOptions,
+  deploymentDataConverter,
+} from 'mirror-schema/src/deployment.js';
+import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {setAppConfigForTesting} from './app-config.js';
+import {initFirebase} from './firebase.js';
 import {publishHandler, type PublishCaller} from './publish.js';
 import {useFakeAuthConfig} from './test-helpers.js';
-import {
-  deploymentDataConverter,
-  defaultOptions,
-} from 'mirror-schema/src/deployment.js';
-import {Timestamp} from '@google-cloud/firestore';
-import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
-import {initFirebase} from './firebase.js';
-import {setAppConfigForTesting} from './app-config.js';
 
 type Args = Parameters<typeof publishHandler>[0];
 
@@ -101,7 +101,7 @@ test('it should compile typescript', async () => {
       requester: {
         userAgent: {
           type: 'reflect-cli',
-          version: '0.31.0',
+          version: '0.33.0-canary.0',
         },
         userID: 'fake-uid',
       },
