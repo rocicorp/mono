@@ -1474,7 +1474,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    *    `onData`.
    * @param options Options is either a function or an object. If it is a
    *    function it is equivalent to passing it as the `onData` property of an
-   *    object. If it is an object it can have the following properties:
+   *    object.
    */
   subscribe<R extends ReadonlyJSONValue | undefined>(
     body: (tx: ReadTransaction) => Promise<R>,
