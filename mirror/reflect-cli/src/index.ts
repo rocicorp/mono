@@ -7,13 +7,13 @@ import {
 import {createHandler, createOptions} from './create.js';
 import {devHandler, devOptions} from './dev.js';
 import {handleWith} from './firebase.js';
-import {lfgHandler, lfgOptions} from './lfg.js';
 import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
 import {tailHandler, tailOptions} from './tail/index.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {deleteHandler, deleteOptions} from './delete.js';
+import {initHandler, initOptions} from './init.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -36,7 +36,7 @@ function createCLIParser(argv: string[]) {
   // create
   reflectCLI.command(
     'create <name>',
-    '🛠  Create, init and publish a basic Reflect project, ',
+    '🛠  Create a basic Reflect project',
     createOptions,
     handleWith(createHandler).andCleanup(),
   );
@@ -44,9 +44,9 @@ function createCLIParser(argv: string[]) {
   // init
   reflectCLI.command(
     ['init', 'lfg'],
-    '🚀 Initialize and publish a basic Reflect project in the current directory',
-    lfgOptions,
-    handleWith(lfgHandler).andCleanup(),
+    '🚀 Add Reflect and basic mutators to an existing project',
+    initOptions,
+    handleWith(initHandler).andCleanup(),
   );
 
   // dev
@@ -86,7 +86,7 @@ function createCLIParser(argv: string[]) {
   // tail
   reflectCLI.command(
     'tail',
-    '🦚 Starts a log tailing session',
+    '🦚 Start a log tailing session',
     tailOptions,
     handleWith(tailHandler).andCleanup(),
   );
@@ -94,7 +94,7 @@ function createCLIParser(argv: string[]) {
   // delete
   reflectCLI.command(
     'delete',
-    '🗑️  Deletes one or more Apps and their associated data. If no flags are specified, defaults to the App of the current directory.',
+    '🗑️  Delete one or more Apps and their associated data. If no flags are specified, defaults to the App of the current directory.',
     deleteOptions,
     handleWith(deleteHandler).andCleanup(),
   );

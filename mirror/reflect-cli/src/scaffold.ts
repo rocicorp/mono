@@ -1,30 +1,35 @@
 import fs, {existsSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {readFile} from 'node:fs/promises';
-import {pkgUp} from 'pkg-up';
-import {assert, assertObject, assertString} from 'shared/src/asserts.js';
 import {writeTemplatedFilePlaceholders} from './app-config.js';
 
-const templateDir = path.resolve(
-  fileURLToPath(import.meta.url),
-  '../..',
-  `template`,
-);
+const templateDir = (templateName: string) =>
+  path.resolve(
+    fileURLToPath(import.meta.url),
+    '../..',
+    `templates`,
+    templateName,
+  );
 
-const templateBinDir = path.resolve(
-  fileURLToPath(import.meta.url),
-  '../..',
-  'bin',
-  `template`,
-);
+const templateBinDir = (templateName: string) =>
+  path.resolve(
+    fileURLToPath(import.meta.url),
+    '../..',
+    'bin',
+    `templates`,
+    templateName,
+  );
 
-export async function scaffold(appName: string, dest: string): Promise<void> {
-  const reflectVersion = await findReflectVersion();
-  const sourceDir = existsSync(templateDir) ? templateDir : templateBinDir;
-
+export function copyTemplate(name: string, dest: string) {
+  const sourceDir = existsSync(templateDir(name))
+    ? templateDir(name)
+    : templateBinDir(name);
   copyDir(sourceDir, dest);
-  writeTemplatedFilePlaceholders({appName, reflectVersion}, dest, false);
+}
+
+export function scaffold(appName: string, dest: string) {
+  copyTemplate('create', dest);
+  writeTemplatedFilePlaceholders({appName}, dest, false);
 }
 
 function copy(src: string, dest: string) {
@@ -43,14 +48,4 @@ function copyDir(srcDir: string, destDir: string) {
     const destFile = path.resolve(destDir, file);
     copy(srcFile, destFile);
   }
-}
-
-async function findReflectVersion(): Promise<string> {
-  const pkg = await pkgUp({cwd: fileURLToPath(import.meta.url)});
-  assert(pkg);
-  const s = await readFile(pkg, 'utf-8');
-  const v = JSON.parse(s);
-  assertObject(v);
-  assertString(v.version);
-  return v.version;
 }

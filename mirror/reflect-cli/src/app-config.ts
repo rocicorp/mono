@@ -2,6 +2,8 @@ import * as fs from 'node:fs';
 import {readFile} from 'fs/promises';
 import * as path from 'node:path';
 import {pkgUp, pkgUpSync} from 'pkg-up';
+import {basename, resolve} from 'node:path';
+import {sanitizeForSubdomain} from 'mirror-schema/src/team.js';
 import * as v from 'shared/src/valita.js';
 import {confirm, input} from './inquirer.js';
 import {authenticate} from './auth-config.js';
@@ -14,7 +16,6 @@ import {
 } from 'mirror-schema/src/team.js';
 import {isValidAppName} from 'mirror-schema/src/app.js';
 import {getFirestore} from './firebase.js';
-import {getDefaultAppNameFromDir} from './lfg.js';
 import {must} from 'shared/src/must.js';
 import {randInt} from 'shared/src/rand.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
@@ -235,9 +236,13 @@ async function getDefaultAppName(): Promise<string> {
   return getDefaultAppNameFromDir('./');
 }
 
+function getDefaultAppNameFromDir(dir: string): string {
+  const dirname = basename(resolve(dir));
+  return sanitizeForSubdomain(dirname);
+}
+
 type TemplatePlaceholders = {
   appName: string;
-  reflectVersion: string;
   appHostname: string;
 };
 
