@@ -11,6 +11,9 @@ normal semantic versioning does not apply.
 Generally we bump the minor version for new release, and bump the patch version
 if we are just making minor build fixes for the minor version.
 
+Note: The version number in mirror/reflect-cli/package.json needs to match the version
+in packages/reflect.
+
 ## Pull main
 
 You probably want to ensure you are at tip before you do all of the below work so that the release has latest goodness on it.
@@ -20,6 +23,9 @@ You probably want to ensure you are at tip before you do all of the below work s
 ```
 git branch -D release
 git checkout -b release
+cd mirror/reflect-cli
+npm version minor # or patch
+cd ../..
 cd packages/reflect
 npm version minor # or patch
 cd ../..
