@@ -23,11 +23,10 @@ export function createCLIParserBase(argv: string[]): Argv<{
     .version(false)
     .option('stack', {
       alias: 's',
-      describe: 'prod, staging, or local (emulator) stack to connect to',
+      describe: 'The Firebase stack to execute on',
       choices: ['prod', 'staging'],
       default: 'prod',
       requiresArg: true,
-      hidden: true,
     });
 
   reflectCLI.help().alias('h', 'help');
