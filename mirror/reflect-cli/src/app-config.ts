@@ -1,23 +1,24 @@
-import * as fs from 'node:fs';
 import {readFile} from 'fs/promises';
-import * as path from 'node:path';
-import {pkgUp, pkgUpSync} from 'pkg-up';
-import {basename, resolve} from 'node:path';
-import {sanitizeForSubdomain} from 'mirror-schema/src/team.js';
-import * as v from 'shared/src/valita.js';
-import {confirm, input} from './inquirer.js';
-import {authenticate} from './auth-config.js';
-import {makeRequester} from './requester.js';
 import {createApp} from 'mirror-protocol/src/app.js';
 import {ensureTeam} from 'mirror-protocol/src/team.js';
-import {
-  appNameIndexPath,
-  appNameIndexDataConverter,
-} from 'mirror-schema/src/team.js';
 import {isValidAppName} from 'mirror-schema/src/app.js';
-import {getFirestore} from './firebase.js';
+import {
+  appNameIndexDataConverter,
+  appNameIndexPath,
+  sanitizeForSubdomain,
+} from 'mirror-schema/src/team.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {basename, resolve} from 'node:path';
+import {pkgUp, pkgUpSync} from 'pkg-up';
 import {must} from 'shared/src/must.js';
 import {randInt} from 'shared/src/rand.js';
+import * as v from 'shared/src/valita.js';
+import {authenticate} from './auth-config.js';
+import {getFirestore} from './firebase.js';
+import {confirm, input} from './inquirer.js';
+import {logErrorAndExit} from './log-error-and-exit.js';
+import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 // { srcFile: destFile }
@@ -130,7 +131,7 @@ export function mustReadAppConfig(
 ): AppConfig {
   const config = readAppConfig(configDirPath);
   if (!config) {
-    throw new Error(
+    logErrorAndExit(
       `Could not find ${configFileName}. Please run \`reflect init\` to create one.`,
     );
   }

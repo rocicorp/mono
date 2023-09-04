@@ -1,9 +1,10 @@
-import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {execSync} from 'node:child_process';
+import {mkdir} from 'node:fs/promises';
 import color from 'picocolors';
 import validateProjectName from 'validate-npm-package-name';
-import {mkdir} from 'node:fs/promises';
+import {logErrorAndExit} from './log-error-and-exit.js';
 import {scaffold} from './scaffold.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function createOptions(yargs: CommonYargsArgv) {
   return yargs.option('name', {
@@ -20,14 +21,11 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
 
   const invalidPackageNameReason = isValidPackageName(name);
   if (invalidPackageNameReason) {
-    console.log(
-      color.red(
-        `Invalid project name: ${color.bgWhite(
-          name,
-        )} - (${invalidPackageNameReason})`,
-      ),
+    logErrorAndExit(
+      `Invalid project name: ${color.bgWhite(
+        name,
+      )} - (${invalidPackageNameReason})`,
     );
-    process.exit(1);
   }
 
   await mkdir(name, {recursive: true});
