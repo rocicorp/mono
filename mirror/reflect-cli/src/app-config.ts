@@ -2,9 +2,10 @@ import * as fs from 'node:fs';
 import {readFile} from 'fs/promises';
 import * as path from 'node:path';
 import {pkgUp, pkgUpSync} from 'pkg-up';
+import {basename, resolve} from 'node:path';
+import {sanitizeForSubdomain} from 'mirror-schema/src/team.js';
 import * as v from 'shared/src/valita.js';
-import confirm from '@inquirer/confirm';
-import input from '@inquirer/input';
+import {confirm, input} from './inquirer.js';
 import {authenticate} from './auth-config.js';
 import {makeRequester} from './requester.js';
 import {createApp} from 'mirror-protocol/src/app.js';
@@ -15,7 +16,6 @@ import {
 } from 'mirror-schema/src/team.js';
 import {isValidAppName} from 'mirror-schema/src/app.js';
 import {getFirestore} from './firebase.js';
-import {getDefaultAppNameFromDir} from './lfg.js';
 import {must} from 'shared/src/must.js';
 import {randInt} from 'shared/src/rand.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
@@ -201,8 +201,6 @@ async function getNewAppNameOrExistingID(
     }
   }
   for (let appNameSuffix = ''; ; appNameSuffix = `-${randInt(1000, 9999)}`) {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore type error in jest?!?
     const name = await input({
       message: 'Name of your App:',
       default: `${defaultAppName}${appNameSuffix}`,
@@ -217,8 +215,6 @@ async function getNewAppNameOrExistingID(
     }
     const {appID: id} = must(nameEntry.data());
     if (
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore type error in jest?!?
       await confirm({
         message: `There is an existing App named "${name}". Do you want to use it?`,
         default: false,
@@ -240,9 +236,13 @@ async function getDefaultAppName(): Promise<string> {
   return getDefaultAppNameFromDir('./');
 }
 
+function getDefaultAppNameFromDir(dir: string): string {
+  const dirname = basename(resolve(dir));
+  return sanitizeForSubdomain(dirname);
+}
+
 type TemplatePlaceholders = {
   appName: string;
-  reflectVersion: string;
   appHostname: string;
 };
 

@@ -20,18 +20,27 @@ import type {Storage} from 'firebase-admin/storage';
 import {
   Deployment,
   DeploymentStatus,
+  DeploymentType,
   appPath,
   defaultOptions,
   deploymentDataConverter,
   deploymentPath,
   deploymentsCollection,
 } from 'mirror-schema/src/deployment.js';
-import {setApp, dummySecrets, getApp} from 'mirror-schema/src/test-helpers.js';
+import {
+  setApp,
+  dummySecrets,
+  getApp,
+  setTeam,
+  setAppName,
+  getTeam,
+} from 'mirror-schema/src/test-helpers.js';
 import {must} from 'shared/src/must.js';
 import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
 import {appDataConverter} from 'mirror-schema/src/app.js';
 import {Queue} from 'shared/src/queue.js';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
+import {appNameIndexPath, teamPath} from 'mirror-schema/src/team.js';
 
 mockFunctionParamsAndSecrets();
 
@@ -39,6 +48,8 @@ describe('deploy', () => {
   initializeApp({projectId: 'deploy-function-test'});
   const firestore = getFirestore();
   const APP_ID = 'deploy-test-app-id';
+  const APP_NAME = 'my-app';
+  const TEAM_ID = 'my-team';
   const SERVER_VERSION = 'deploy-server-version';
 
   beforeAll(async () => {
@@ -59,7 +70,9 @@ describe('deploy', () => {
   });
 
   beforeEach(async () => {
-    await setApp(firestore, APP_ID, {});
+    await setApp(firestore, APP_ID, {teamID: TEAM_ID, name: APP_NAME});
+    await setTeam(firestore, TEAM_ID, {numApps: 1});
+    await setAppName(firestore, TEAM_ID, APP_ID, APP_NAME);
   });
 
   afterEach(async () => {
@@ -73,6 +86,9 @@ describe('deploy', () => {
       batch.delete(d);
     }
     batch.delete(firestore.doc(appPath(APP_ID)));
+    batch.delete(firestore.doc(teamPath(TEAM_ID)));
+    batch.delete(firestore.doc(appNameIndexPath(TEAM_ID, APP_NAME)));
+    await batch.commit();
   });
 
   async function writeTestDeployment(
@@ -101,10 +117,12 @@ describe('deploy', () => {
     return deployment;
   }
 
-  async function requestTestDeployment(): Promise<string> {
+  async function requestTestDeployment(
+    type: DeploymentType = 'USER_UPLOAD',
+  ): Promise<string> {
     const deploymentPath = await requestDeployment(firestore, APP_ID, {
       requesterID: 'foo',
-      type: 'USER_UPLOAD',
+      type,
       spec: {
         appModules: [],
         hostname: 'boo',
@@ -330,5 +348,45 @@ describe('deploy', () => {
     // Verify that only one of the runs succeeded.
     expect(results[0].status).not.toBe(results[1].status);
     expect(timesDeployed).toBe(1);
+  });
+
+  test('app delete', async () => {
+    // Enqueue two deployments. The delete should cancel the second (by deleting it).
+    const deleteID = await requestTestDeployment('DELETE');
+    const uploadID = await requestTestDeployment('USER_UPLOAD');
+
+    // Sanity checks
+    expect(
+      (await firestore.doc(deploymentPath(APP_ID, deleteID)).get()).exists,
+    ).toBe(true);
+    expect(
+      (await firestore.doc(deploymentPath(APP_ID, uploadID)).get()).exists,
+    ).toBe(true);
+
+    let scriptDeleted = false;
+
+    await runDeployment(
+      firestore,
+      null as unknown as Storage,
+      APP_ID,
+      deleteID,
+      () => Promise.resolve(),
+      // eslint-disable-next-line require-await
+      async () => {
+        scriptDeleted = true;
+      },
+    );
+    expect(scriptDeleted).toBe(true);
+
+    const docs = await firestore.getAll(
+      firestore.doc(appPath(APP_ID)),
+      firestore.doc(deploymentPath(APP_ID, deleteID)),
+      firestore.doc(deploymentPath(APP_ID, uploadID)),
+      firestore.doc(appNameIndexPath(TEAM_ID, APP_NAME)),
+    );
+    docs.forEach(doc => expect(doc.exists).toBe(false));
+
+    const team = await getTeam(firestore, TEAM_ID);
+    expect(team.numApps).toBe(0);
   });
 });

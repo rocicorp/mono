@@ -46,6 +46,14 @@ export async function getAppSecrets() {
   return {secrets, hashes};
 }
 
+export const NULL_SECRETS: DeploymentSecrets = {
+  /* eslint-disable @typescript-eslint/naming-convention */
+  REFLECT_AUTH_API_KEY: '',
+  DATADOG_LOGS_API_KEY: '',
+  DATADOG_METRICS_API_KEY: '',
+  /* eslint-enable @typescript-eslint/naming-convention */
+} as const;
+
 export async function hashSecrets(
   secrets: DeploymentSecrets,
 ): Promise<DeploymentSecrets> {

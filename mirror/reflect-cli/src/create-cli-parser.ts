@@ -35,6 +35,7 @@ export function createCLIParserBase(argv: string[]): Argv<{
       choices: ['prod', 'staging', 'local'],
       default: 'prod',
       requiresArg: true,
+      hidden: true,
     });
 
   reflectCLI.help().alias('h', 'help');

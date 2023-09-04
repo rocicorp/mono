@@ -15,7 +15,7 @@ The disadvantage is that it pays for this flexibility in increased implementatio
 
 ## Client View Records
 
-A _Client View Record_ (CVR) captures minimal information about the state of the database at the time a Client View was generated.
+A _Client View Record_ (CVR) is a minimal representation of a Client View snapshot. In other words, it captures what data a Client Group had at a particular moment in time.
 
 In TypeScript, it might look like:
 

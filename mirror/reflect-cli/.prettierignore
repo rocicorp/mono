@@ -3,4 +3,4 @@
 **/example
 *.example
 reflect.config.json
-template
+templates

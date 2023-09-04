@@ -28,6 +28,8 @@ import {
 import {watch} from 'mirror-schema/src/watch.js';
 import {toMillis} from 'mirror-schema/src/timestamp.js';
 import _ from 'lodash';
+import {deleteScript} from '../../cloudflare/delete.js';
+import {deleteAppDocs} from './delete.function.js';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
@@ -47,14 +49,13 @@ export const deploy = (firestore: Firestore, storage: Storage) =>
     },
   );
 
-export type PublishFn = typeof publish;
-
 export async function runDeployment(
   firestore: Firestore,
   storage: Storage,
   appID: string,
   deploymentID: string,
-  publishToCloudflare: PublishFn = publish, // Overridden in tests.
+  publishToCloudflare = publish, // Overridden in tests.
+  deleteFromCloudflare = deleteScript, // Overridden in tests.
 ): Promise<void> {
   const [appDoc, deploymentDoc] = await firestore.runTransaction(
     tx =>
@@ -80,6 +81,7 @@ export async function runDeployment(
 
   const {cfID, cfScriptName} = must(appDoc.data());
   const {
+    type: deploymentType,
     status,
     spec: {serverVersion, hostname, options, appModules},
   } = must(deploymentDoc.data());
@@ -88,20 +90,6 @@ export async function runDeployment(
     logger.warn(`Deployment is already ${status}`);
     return;
   }
-
-  const config = {
-    accountID: cfID,
-    scriptName: cfScriptName,
-    apiToken: cloudflareApiToken.value(),
-  } as const;
-
-  const {modules: serverModules} = await getServerModuleMetadata(
-    firestore,
-    serverVersion,
-  );
-
-  const {secrets, hashes} = await getAppSecrets();
-
   const lastUpdateTime = must(deploymentDoc.updateTime);
   await setDeploymentStatus(
     firestore,
@@ -109,9 +97,32 @@ export async function runDeployment(
     deploymentID,
     'DEPLOYING',
     undefined,
-    {lastUpdateTime}, // Aborts if another trigger is already publishing the same deployment.
+    {lastUpdateTime}, // Aborts if another trigger is already executing the same deployment.
   );
+
+  const config = {
+    accountID: cfID,
+    scriptName: cfScriptName,
+    apiToken: cloudflareApiToken.value(),
+  } as const;
+
   try {
+    if (deploymentType === 'DELETE') {
+      // For a DELETE, the Deployment lifecycle is 'REQUESTED' -> 'DEPLOYING' -> (document deleted) | 'FAILED'
+      await deleteFromCloudflare(config);
+      await deleteAppDocs(firestore, appID);
+      logger.info(`Deleted app ${appID}`);
+      return;
+    }
+
+    // For all other deployments, the lifecycle is 'REQUESTED' -> 'DEPLOYING' -> 'RUNNING' | 'FAILED'
+    const {modules: serverModules} = await getServerModuleMetadata(
+      firestore,
+      serverVersion,
+    );
+
+    const {secrets, hashes} = await getAppSecrets();
+
     await publishToCloudflare(
       storage,
       config,
@@ -121,6 +132,7 @@ export async function runDeployment(
       appModules,
       serverModules,
     );
+    await setRunningDeployment(firestore, appID, deploymentID, hashes);
   } catch (e) {
     await setDeploymentStatus(
       firestore,
@@ -131,8 +143,6 @@ export async function runDeployment(
     );
     throw e;
   }
-
-  await setRunningDeployment(firestore, appID, deploymentID, hashes);
 }
 
 export function requestDeployment(

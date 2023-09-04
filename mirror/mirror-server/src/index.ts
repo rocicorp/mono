@@ -10,7 +10,6 @@ import {
   serviceAccountId,
 } from './config/index.js';
 import * as appFunctions from './functions/app/index.js';
-import {healthcheck as healthcheckHandler} from './functions/healthcheck.function.js';
 import * as serverFunctions from './functions/server/index.js';
 import * as teamFunctions from './functions/team/index.js';
 import * as userFunctions from './functions/user/index.js';
@@ -19,11 +18,6 @@ import {DEPLOYMENT_SECRETS_NAMES} from './functions/app/secrets.js';
 // Initializes firestore et al. (e.g. for subsequent calls to getFirestore())
 initializeApp(appOptions);
 setGlobalOptions({serviceAccount: serviceAccountId});
-
-export const healthcheck = https.onRequest(
-  baseHttpsOptions,
-  healthcheckHandler,
-);
 
 // Per https://firebase.google.com/docs/functions/manage-functions
 // functions should be deployed in groups of 10 or fewer
@@ -55,6 +49,7 @@ export const app = {
     },
     appFunctions.tail(getFirestore(), getAuth()),
   ),
+  delete: https.onCall(baseHttpsOptions, appFunctions.delete(getFirestore())),
 };
 
 export const server = {

@@ -12,7 +12,6 @@
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.1.2",
-    "@rocicorp/reflect": "^{{reflectVersion}}",
     "@types/react": "^18.0.17",
     "@types/react-dom": "^18.0.6",
     "@vitejs/plugin-react": "^2.0.1",

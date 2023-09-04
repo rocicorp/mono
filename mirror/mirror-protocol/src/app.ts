@@ -51,3 +51,22 @@ export const renameApp = createCall(
   renameAppRequestSchema,
   renameAppResponseSchema,
 );
+
+export const deleteAppRequestSchema = v.object({
+  ...baseAppRequestFields,
+});
+
+export type DeleteAppRequest = v.Infer<typeof deleteAppRequestSchema>;
+
+export const deleteAppResponseSchema = v.object({
+  ...baseResponseFields,
+  deploymentPath: v.string(),
+});
+
+export type DeleteAppResponse = v.Infer<typeof deleteAppResponseSchema>;
+
+export const deleteApp = createCall(
+  'app-delete',
+  deleteAppRequestSchema,
+  deleteAppResponseSchema,
+);
