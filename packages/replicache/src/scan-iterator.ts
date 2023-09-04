@@ -17,7 +17,7 @@ import {EntryForOptions, fromKeyForNonIndexScan} from './transactions.js';
 type ScanKey = string | IndexKey;
 
 type ToValue<Options extends ScanOptions, Value> = (
-  entry: EntryForOptions<Options>,
+  entry: EntryForOptions<Options, ReadonlyJSONValue>,
 ) => Value;
 
 /**
@@ -26,16 +26,18 @@ type ToValue<Options extends ScanOptions, Value> = (
  * await` loop. There are also methods to iterate over the {@link keys},
  * {@link entries} or {@link values}.
  */
-export class ScanResultImpl<Options extends ScanOptions>
-  implements ScanResult<KeyTypeForScanOptions<Options>>
+export class ScanResultImpl<Options extends ScanOptions, V>
+  implements ScanResult<KeyTypeForScanOptions<Options>, V>
 {
-  private readonly _iter: AsyncIterable<EntryForOptions<Options>>;
+  private readonly _iter: AsyncIterable<
+    EntryForOptions<Options, ReadonlyJSONValue>
+  >;
   private readonly _options: Options;
   private readonly _dbDelegateOptions: Closed;
   private readonly _onLimitKey: (inclusiveLimitKey: string) => void;
 
   constructor(
-    iter: AsyncIterable<EntryForOptions<Options>>,
+    iter: AsyncIterable<EntryForOptions<Options, ReadonlyJSONValue>>,
     options: Options,
     dbDelegateOptions: Closed,
     onLimitKey: (inclusiveLimitKey: string) => void,
@@ -47,14 +49,14 @@ export class ScanResultImpl<Options extends ScanOptions>
   }
 
   /** The default AsyncIterable. This is the same as {@link values}. */
-  [Symbol.asyncIterator](): AsyncIterableIteratorToArray<ReadonlyJSONValue> {
+  [Symbol.asyncIterator](): AsyncIterableIteratorToArray<V> {
     return this.values();
   }
 
   /** Async iterator over the values of the {@link ReadTransaction.scan | scan} call. */
-  values(): AsyncIterableIteratorToArray<ReadonlyJSONValue> {
+  values(): AsyncIterableIteratorToArray<V> {
     return new AsyncIterableIteratorToArrayWrapperImpl(
-      this._newIterator(e => e[1]),
+      this._newIterator(e => e[1] as V),
     );
   }
 
@@ -77,17 +79,17 @@ export class ScanResultImpl<Options extends ScanOptions>
    * `[secondaryKey: string, primaryKey]`
    */
   entries(): AsyncIterableIteratorToArray<
-    readonly [KeyTypeForScanOptions<Options>, ReadonlyJSONValue]
+    readonly [KeyTypeForScanOptions<Options>, V]
   > {
     type Key = KeyTypeForScanOptions<Options>;
-    type Entry = readonly [Key, ReadonlyJSONValue];
+    type Entry = readonly [Key, V];
     return new AsyncIterableIteratorToArrayWrapperImpl(
-      this._newIterator<Entry>(e => [e[0] as Key, e[1]]),
+      this._newIterator<Entry>(e => [e[0] as Key, e[1] as V]),
     );
   }
 
   /** Returns all the values as an array. Same as `values().toArray()` */
-  toArray(): Promise<ReadonlyJSONValue[]> {
+  toArray(): Promise<V[]> {
     return this.values().toArray();
   }
 
@@ -104,13 +106,12 @@ export class ScanResultImpl<Options extends ScanOptions>
   }
 }
 
-export interface ScanResult<K extends ScanKey>
-  extends AsyncIterable<ReadonlyJSONValue> {
+export interface ScanResult<K extends ScanKey, V> extends AsyncIterable<V> {
   /** The default AsyncIterable. This is the same as {@link values}. */
-  [Symbol.asyncIterator](): AsyncIterableIteratorToArray<ReadonlyJSONValue>;
+  [Symbol.asyncIterator](): AsyncIterableIteratorToArray<V>;
 
   /** Async iterator over the values of the {@link ReadTransaction.scan | scan} call. */
-  values(): AsyncIterableIteratorToArray<ReadonlyJSONValue>;
+  values(): AsyncIterableIteratorToArray<V>;
 
   /**
    * Async iterator over the keys of the {@link ReadTransaction.scan | scan}
@@ -125,10 +126,10 @@ export interface ScanResult<K extends ScanKey>
    * {@link ReadTransaction.scan | scan} is over an index the key is a tuple of
    * `[secondaryKey: string, primaryKey]`
    */
-  entries(): AsyncIterableIteratorToArray<readonly [K, ReadonlyJSONValue]>;
+  entries(): AsyncIterableIteratorToArray<readonly [K, V]>;
 
   /** Returns all the values as an array. Same as `values().toArray()` */
-  toArray(): Promise<ReadonlyJSONValue[]>;
+  toArray(): Promise<V[]>;
 }
 
 /**
@@ -169,7 +170,7 @@ class AsyncIterableIteratorToArrayWrapperImpl<V>
 
 async function* scanIterator<Options extends ScanOptions, Value>(
   toValue: ToValue<Options, Value>,
-  iter: AsyncIterable<EntryForOptions<Options>>,
+  iter: AsyncIterable<EntryForOptions<Options, ReadonlyJSONValue>>,
   options: Options,
   closed: Closed,
   onLimitKey: (inclusiveLimitKey: string) => void,
@@ -301,8 +302,8 @@ export function makeScanResult<Options extends ScanOptions>(
   getScanIterator: Options extends ScanIndexOptions
     ? GetIndexScanIterator
     : GetScanIterator,
-): ScanResult<KeyTypeForScanOptions<Options>> {
-  type AsyncIter = AsyncIterable<EntryForOptions<Options>>;
+): ScanResult<KeyTypeForScanOptions<Options>, ReadonlyJSONValue> {
+  type AsyncIter = AsyncIterable<EntryForOptions<Options, ReadonlyJSONValue>>;
 
   if (isScanIndexOptions(options)) {
     const [fromSecondaryKey, fromPrimaryKey] = fromKeyForIndexScan(options);

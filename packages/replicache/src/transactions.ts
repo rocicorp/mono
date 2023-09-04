@@ -82,7 +82,8 @@ export interface ReadTransaction {
    * for performance reasons. If you mutate the return value you will get
    * undefined behavior.
    */
-  scan(): ScanResult<string>;
+  scan(): ScanResult<string, ReadonlyJSONValue>;
+  scan<V extends JSONValue>(): ScanResult<string, DeepReadonly<V>>;
 
   /**
    * Gets many values from the database. This returns a {@link ScanResult} which
@@ -103,7 +104,10 @@ export interface ReadTransaction {
    */
   scan<Options extends ScanOptions>(
     options?: Options,
-  ): ScanResult<KeyTypeForScanOptions<Options>>;
+  ): ScanResult<KeyTypeForScanOptions<Options>, ReadonlyJSONValue>;
+  scan<Options extends ScanOptions, V extends JSONValue>(
+    options?: Options,
+  ): ScanResult<KeyTypeForScanOptions<Options>, DeepReadonly<V>>;
 }
 
 let transactionIDCounter = 0;
@@ -133,10 +137,10 @@ export class ReadTransactionImpl implements ReadTransaction {
   }
 
   get(key: string): Promise<ReadonlyJSONValue | undefined>;
-  get<T extends JSONValue>(key: string): Promise<DeepReadonly<T> | undefined> {
+  get<V extends JSONValue>(key: string): Promise<DeepReadonly<V> | undefined> {
     return (
       rejectIfClosed(this.dbtx) ||
-      (this.dbtx.get(key) as Promise<DeepReadonly<T> | undefined>)
+      (this.dbtx.get(key) as Promise<DeepReadonly<V> | undefined>)
     );
   }
 
@@ -152,13 +156,17 @@ export class ReadTransactionImpl implements ReadTransaction {
     return this.dbtx.isEmpty();
   }
 
-  scan(): ScanResult<string>;
+  scan(): ScanResult<string, ReadonlyJSONValue>;
+  scan<V extends JSONValue>(): ScanResult<string, DeepReadonly<V>>;
   scan<Options extends ScanOptions>(
     options?: Options,
-  ): ScanResult<KeyTypeForScanOptions<Options>>;
-  scan<Options extends ScanOptions>(
+  ): ScanResult<KeyTypeForScanOptions<Options>, ReadonlyJSONValue>;
+  scan<Options extends ScanOptions, V extends JSONValue>(
     options?: Options,
-  ): ScanResult<KeyTypeForScanOptions<Options>> {
+  ): ScanResult<KeyTypeForScanOptions<Options>, DeepReadonly<V>>;
+  scan<Options extends ScanOptions, V extends JSONValue>(
+    options?: Options,
+  ): ScanResult<KeyTypeForScanOptions<Options>, V> {
     return scan(options, this.dbtx, noop);
   }
 }
@@ -167,12 +175,12 @@ function noop(_: unknown): void {
   // empty
 }
 
-function scan<Options extends ScanOptions>(
+function scan<Options extends ScanOptions, V extends JSONValue>(
   options: Options | undefined,
   dbRead: db.Read,
   onLimitKey: (inclusiveLimitKey: string) => void,
-): ScanResult<KeyTypeForScanOptions<Options>> {
-  const iter = getScanIterator<Options>(dbRead, options);
+): ScanResult<KeyTypeForScanOptions<Options>, V> {
+  const iter = getScanIterator<Options, V>(dbRead, options);
   return makeScanResultFromScanIteratorInternal(
     iter,
     options ?? ({} as Options),
@@ -217,13 +225,17 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
     return this._tx.has(key);
   }
 
-  scan(): ScanResult<string>;
+  scan(): ScanResult<string, ReadonlyJSONValue>;
+  scan<V extends JSONValue>(): ScanResult<string, DeepReadonly<V>>;
   scan<Options extends ScanOptions>(
     options?: Options,
-  ): ScanResult<KeyTypeForScanOptions<Options>>;
+  ): ScanResult<KeyTypeForScanOptions<Options>, ReadonlyJSONValue>;
+  scan<Options extends ScanOptions, V extends JSONValue>(
+    options?: Options,
+  ): ScanResult<KeyTypeForScanOptions<Options>, V>;
   scan<Options extends ScanOptions>(
     options?: Options,
-  ): ScanResult<KeyTypeForScanOptions<Options>> {
+  ): ScanResult<KeyTypeForScanOptions<Options>, ReadonlyJSONValue> {
     const scanInfo: ScanSubscriptionInfo = {
       options: toDbScanOptions(options),
       inclusiveLimitKey: undefined,
@@ -311,23 +323,23 @@ type IndexKeyEntry<Value> = Entry<IndexKey, Value>;
 
 type StringKeyEntry<Value> = Entry<string, Value>;
 
-export type EntryForOptions<Options extends ScanOptions> =
-  Options extends ScanIndexOptions
-    ? IndexKeyEntry<ReadonlyJSONValue>
-    : StringKeyEntry<ReadonlyJSONValue>;
+export type EntryForOptions<
+  Options extends ScanOptions,
+  V,
+> = Options extends ScanIndexOptions ? IndexKeyEntry<V> : StringKeyEntry<V>;
 
-function getScanIterator<Options extends ScanOptions>(
+function getScanIterator<Options extends ScanOptions, V>(
   dbRead: db.Read,
   options: Options | undefined,
-): AsyncIterable<EntryForOptions<Options>> {
+): AsyncIterable<EntryForOptions<Options, V>> {
   if (options && isScanIndexOptions(options)) {
     return getScanIteratorForIndexMap(dbRead, options) as AsyncIterable<
-      EntryForOptions<Options>
+      EntryForOptions<Options, V>
     >;
   }
 
   return dbRead.map.scan(fromKeyForNonIndexScan(options)) as AsyncIterable<
-    EntryForOptions<Options>
+    EntryForOptions<Options, V>
   >;
 }
 
@@ -345,12 +357,15 @@ export function fromKeyForNonIndexScan(
   return prefix;
 }
 
-function makeScanResultFromScanIteratorInternal<Options extends ScanOptions>(
-  iter: AsyncIterable<EntryForOptions<Options>>,
+function makeScanResultFromScanIteratorInternal<
+  Options extends ScanOptions,
+  V extends JSONValue,
+>(
+  iter: AsyncIterable<EntryForOptions<Options, V>>,
   options: Options,
   dbRead: db.Read,
   onLimitKey: (inclusiveLimitKey: string) => void,
-): ScanResult<KeyTypeForScanOptions<Options>> {
+): ScanResult<KeyTypeForScanOptions<Options>, V> {
   return new ScanResultImpl(iter, options, dbRead, onLimitKey);
 }
 
