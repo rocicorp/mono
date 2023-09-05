@@ -35,7 +35,7 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
     cwd: name,
     stdio: ['ignore', 'inherit', 'inherit'],
   });
-  
+
   console.log(color.green(`\nYou're all set! 🎉`));
   console.log(color.blue(`\nRun Reflect dev server and UI:`));
   console.log(color.reset(`\ncd ${name} && npm run watch\n`));
