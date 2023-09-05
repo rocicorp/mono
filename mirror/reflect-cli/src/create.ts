@@ -35,13 +35,11 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
     cwd: name,
     stdio: ['ignore', 'inherit', 'inherit'],
   });
-
+  process.chdir(name);
+  
   console.log(color.green(`\nYou're all set! 🎉`));
-  console.log(color.blue(`\nFirst, start the Reflect dev server:\n`));
-
-  console.log(color.reset(`cd ${name}\nnpx @rocicorp/reflect dev`));
-  console.log(color.blue('\nThen open a new terminal and run the UI:'));
-  console.log(color.reset('\nVITE_WORKER_URL=ws://127.0.0.1:8080 npm run dev'));
+  console.log(color.blue(`\nRun Reflect dev server and UI:\n`));
+  console.log(color.reset(`npm run watch\n`));
 }
 
 function isValidPackageName(projectName: string): string | void {
