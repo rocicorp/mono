@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@rocicorp/logger": "^5.2.0",
-    "@rocicorp/reflect": "0.33.0-canary.0",
+    "@rocicorp/reflect": "0.33.0-canary.1",
     "firebase": "9.23.0",
     "firebaseui": "^6.0.2",
     "nanoid": "^4.0.2",
