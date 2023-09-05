@@ -30,16 +30,15 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
 
   await mkdir(name, {recursive: true});
   await scaffold(name, name);
-  console.log(`Installing @rocicorp/reflect`);
+  console.log(color.cyan(`Installing @rocicorp/reflect`));
   execSync(`npm install`, {
     cwd: name,
     stdio: ['ignore', 'inherit', 'inherit'],
   });
-  process.chdir(name);
   
   console.log(color.green(`\nYou're all set! 🎉`));
-  console.log(color.blue(`\nRun Reflect dev server and UI:\n`));
-  console.log(color.reset(`npm run watch\n`));
+  console.log(color.blue(`\nRun Reflect dev server and UI:`));
+  console.log(color.reset(`\ncd ${name} && npm run watch\n`));
 }
 
 function isValidPackageName(projectName: string): string | void {
