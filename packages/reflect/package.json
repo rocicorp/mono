@@ -65,10 +65,10 @@
     "bin/cli.js",
     "script-templates/dev-script.js",
     "script-templates/prod-script.js",
-    "bin/template"
+    "bin/templates"
   ],
   "directories": {
-    "template": "bin/template"
+    "template": "bin/templates"
   },
   "exports": {
     ".": "./index.js",

@@ -493,7 +493,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       );
 
       const elapsed = Date.now() - startIntervalTime;
-      console.log(elapsed, timeout);
+
       if (elapsed > timeout && !timeoutCallbackCalled) {
         lc.debug?.(
           `${name} interval ran for ${elapsed}ms, calling timeoutCallback`,
