@@ -65,7 +65,7 @@ export function createLogOptions(
   const socketOriginURL = socketOrigin === null ? null : new URL(socketOrigin);
   const socketHostname = socketOriginURL?.hostname;
 
-  // If the hostname is undefined, localhost, op an ip address, then
+  // If the hostname is undefined, localhost, or an ip address, then
   // this is most likely a test or local development, in which case we
   // do not want to send logs to datadog, instead only log to console.
   if (
