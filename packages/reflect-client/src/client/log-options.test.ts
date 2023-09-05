@@ -22,31 +22,43 @@ teardown(() => {
   sinon.restore();
 });
 
-test('when socketOrigin is not subdomain of .reflect-server.net, log sink is unfiltered console log sink, and log level is consoleLogLevel', () => {
-  const {logLevel, logSink} = createLogOptions(
-    {
-      consoleLogLevel: 'info',
-      socketOrigin: 'ws://locahost:8989',
-    },
-    fakeCreateDatadogLogSink,
-  );
-  expect(fakeCreateDatadogLogSink.callCount).to.equal(0);
-  expect(logLevel).to.equal('info');
-  expect(logSink).to.equal(consoleLogSink);
+suite('when socketOrigin indicates testing or local dev', () => {
+  const cases: (string | null)[] = [
+    null,
+    'ws://localhost',
+    'ws://localhost:8000',
+    'ws://127.0.0.1',
+    'ws://127.0.0.1:1900',
+    'wss://[2001:db8:3333:4444:5555:6666:7777:8888]:9000',
+  ];
+  for (const c of cases) {
+    test(c + '', () => {
+      const {logLevel, logSink} = createLogOptions(
+        {
+          consoleLogLevel: 'info',
+          socketOrigin: c,
+        },
+        fakeCreateDatadogLogSink,
+      );
+      expect(fakeCreateDatadogLogSink.callCount).to.equal(0);
+      expect(logLevel).to.equal('info');
+      expect(logSink).to.equal(consoleLogSink);
+    });
+  }
 });
 
-suite('when socketOrigin is subdomain of .reflect-server.net', () => {
+function testLogLevels(socketOrigin: string, expectedServiceLabel: string) {
   test('consoleLogLevel debug', () => {
     const {logLevel, logSink} = createLogOptions(
       {
         consoleLogLevel: 'debug',
-        socketOrigin: 'wss://testSubdomain.reflect-server.net',
+        socketOrigin,
       },
       fakeCreateDatadogLogSink,
     );
     expect(fakeCreateDatadogLogSink.callCount).to.equal(1);
     expect(fakeCreateDatadogLogSink.getCall(0).args[0].service).to.equal(
-      'testsubdomain',
+      expectedServiceLabel,
     );
     expect(logLevel).to.equal('debug');
 
@@ -89,13 +101,13 @@ suite('when socketOrigin is subdomain of .reflect-server.net', () => {
     const {logLevel, logSink} = createLogOptions(
       {
         consoleLogLevel: 'info',
-        socketOrigin: 'wss://testSubdomain.reflect-server.net',
+        socketOrigin,
       },
       fakeCreateDatadogLogSink,
     );
     expect(fakeCreateDatadogLogSink.callCount).to.equal(1);
     expect(fakeCreateDatadogLogSink.getCall(0).args[0].service).to.equal(
-      'testsubdomain',
+      expectedServiceLabel,
     );
     expect(logLevel).to.equal('info');
 
@@ -132,13 +144,13 @@ suite('when socketOrigin is subdomain of .reflect-server.net', () => {
     const {logLevel, logSink} = createLogOptions(
       {
         consoleLogLevel: 'error',
-        socketOrigin: 'wss://testSubdomain.reflect-server.net',
+        socketOrigin,
       },
       fakeCreateDatadogLogSink,
     );
     expect(fakeCreateDatadogLogSink.callCount).to.equal(1);
     expect(fakeCreateDatadogLogSink.getCall(0).args[0].service).to.equal(
-      'testsubdomain',
+      expectedServiceLabel,
     );
     expect(logLevel).to.equal('info');
 
@@ -167,4 +179,12 @@ suite('when socketOrigin is subdomain of .reflect-server.net', () => {
       'goodbye',
     ]);
   });
+}
+
+suite('when socketOrigin is subdomain of .reflect-server.net', () => {
+  testLogLevels('wss://testSubdomain.reflect-server.net', 'testsubdomain');
+});
+
+suite('when socketOrigin is not a subdomain of .reflect-server.net', () => {
+  testLogLevels('wss://fooBar.FuzzyWuzzy.com', 'foobar.fuzzywuzzy.com');
 });
