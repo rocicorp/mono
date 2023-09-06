@@ -40,7 +40,6 @@ const internalPackages = [
   'reflect-protocol',
   'reflect-server',
   'reflect-shared',
-  'reflect-types',
   'shared',
   'reflect-cli',
 ];

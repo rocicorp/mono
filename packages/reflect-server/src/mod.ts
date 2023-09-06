@@ -10,19 +10,19 @@ export {
 export type {AuthHandler} from './server/auth.js';
 export type {DisconnectHandler} from './server/disconnect.js';
 export {
+  datadogLogging,
+  datadogMetrics,
+  defaultConsoleLogSink,
+  logFilter,
+  logLevel,
+  newOptionsBuilder,
+  type BuildableOptionsEnv,
+} from './server/options.js';
+export {
   ReflectServerBaseEnv,
   ReflectServerOptions,
   createReflectServer,
 } from './server/reflect.js';
-export {
-  newOptionsBuilder,
-  defaultConsoleLogSink,
-  logLevel,
-  logFilter,
-  datadogLogging,
-  datadogMetrics,
-  type BuildableOptionsEnv,
-} from './server/options.js';
 
 export const ROUTES = {
   reportMetrics: REPORT_METRICS_PATH,
@@ -43,6 +43,6 @@ export type {
   MutatorDefs,
   ReadTransaction,
   WriteTransaction,
-} from 'reflect-types/src/mod.js';
+} from 'reflect-shared';
 
 export {version} from './util/version.js';

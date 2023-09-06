@@ -1,7 +1,8 @@
 import {afterEach, beforeEach, expect, jest, test} from '@jest/globals';
 
+import {LogContext} from '@rocicorp/logger';
+import type {WriteTransaction} from 'reflect-shared';
 import {version} from 'reflect-shared';
-import type {WriteTransaction} from 'reflect-types/src/mod.js';
 import {
   newInvalidateAllAuthRequest,
   newInvalidateForRoomAuthRequest,
@@ -12,11 +13,10 @@ import {DurableStorage} from '../storage/durable-storage.js';
 import {getUserValue, putUserValue} from '../types/user-value.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {newAuthConnectionsRequest} from '../util/auth-test-util.js';
+import {resolver} from '../util/resolver.js';
 import {TestLogSink, createSilentLogContext} from '../util/test-utils.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
-import {LogContext} from '@rocicorp/logger';
-import {resolver} from '../util/resolver.js';
 
 const START_TIME = 1000;
 beforeEach(() => {
