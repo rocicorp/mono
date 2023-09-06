@@ -23,7 +23,7 @@ function getUserAuthConfigFile(
   yargs: YargvToInterface<CommonYargsArgv>,
 ): string {
   const {stack} = yargs;
-  const basename = stack === 'prod' ? 'default' : 'sandbox';
+  const basename = stack === 'prod' ? 'default' : stack;
   return path.join(getGlobalReflectConfigPath(), `config/${basename}.json`);
 }
 
