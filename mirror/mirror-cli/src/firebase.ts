@@ -23,7 +23,7 @@ export function initFirebase(argv: YargvToInterface<CommonYargsArgv>) {
 }
 
 // Unlike all of the other Firebase libraries in the Admin SDK, the Auth library does
-// not play will with Application Default Credentials:
+// not play well with Application Default Credentials:
 //
 // https://github.com/firebase/firebase-admin-node/issues/2169
 // https://github.com/firebase/firebase-admin-node/issues/1377
@@ -32,8 +32,8 @@ export function initFirebase(argv: YargvToInterface<CommonYargsArgv>) {
 //
 // The working alternative is to authenticate as a service account. Rather than generating
 // a private key (through the gcp console) and managing a sensitive JSON file to login as
-// a service account, we instead use gcloud service account impersonation to generate a
-// temporary access token that is usable by the Firebase library.
+// a service account, we instead use gcloud service account impersonation to generate an
+// ephemeral access token that is usable by the Firebase library.
 export function getServiceAccountAuth(
   name: string,
   yargs: YargvToInterface<CommonYargsArgv>,
