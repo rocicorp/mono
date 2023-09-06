@@ -27,7 +27,8 @@ describe('loginHandler', () => {
         );
         expect(serverResponse).toBeDefined();
       },
-      (config: UserAuthConfig) => {
+      (yargs, config: UserAuthConfig) => {
+        expect(yargs.stack).toBe('prod');
         expect(config).toBeDefined();
         expect(config.authCredential).toEqual({
           accessToken: 'valid-token',
@@ -66,7 +67,8 @@ describe('loginHandler', () => {
         );
         expect(serverResponse).toBeDefined();
       },
-      (config: UserAuthConfig) => {
+      (yargs, config: UserAuthConfig) => {
+        expect(yargs.stack).toBe('staging');
         expect(config).toBeDefined();
         expect(config.authCredential).toEqual({
           accessToken: 'valid-token',
