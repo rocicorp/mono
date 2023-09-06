@@ -1,4 +1,4 @@
-import type {WriteTransaction} from 'reflect-types/src/mod.js';
+import type {WriteTransaction} from 'reflect-shared';
 import type {JSONValue} from '../src/mod.js';
 import {createReflectServer} from '../src/mod.js';
 

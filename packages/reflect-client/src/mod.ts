@@ -9,7 +9,7 @@ export type {
   MutatorDefs,
   ReadTransaction,
   WriteTransaction,
-} from 'reflect-types/src/mod.js';
+} from 'reflect-shared';
 
 // Export the deprecated version to shadow the version from replicache
 export {version} from './client/version.js';

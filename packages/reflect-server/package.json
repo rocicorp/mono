@@ -33,7 +33,6 @@
     "miniflare": "^3.20230717.0",
     "reflect-protocol": "0.0.0",
     "reflect-shared": "0.0.0",
-    "reflect-types": "0.0.0",
     "replicache": "13.0.1",
     "rollup": "^3.24.0",
     "rollup-plugin-dts": "^5.3.0",

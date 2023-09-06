@@ -12,12 +12,12 @@ import {
   PullResponseMessage,
   upstreamSchema,
 } from 'reflect-protocol';
-import type {MutatorDefs} from 'reflect-types/src/mod.js';
+import type {MutatorDefs} from 'reflect-shared';
 import {assert} from 'shared/src/asserts.js';
 import type {SinonFakeTimers} from 'sinon';
+import type {LogOptions} from './log-options.js';
 import type {ReflectOptions} from './options.js';
 import {ConnectionState, Reflect} from './reflect.js';
-import type {LogOptions} from './log-options.js';
 
 export async function tickAFewTimes(clock: SinonFakeTimers, duration = 100) {
   const n = 10;

@@ -1,4 +1,4 @@
-import type {WriteTransaction} from 'reflect-types/src/mod.js';
+import type {WriteTransaction} from 'reflect-shared';
 
 /**
  * The `RoomStartHandler` is invoked when the room is started, before

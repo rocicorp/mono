@@ -1,8 +1,8 @@
-import type {ReflectServerOptions} from './reflect.js';
-import type {MutatorDefs} from 'reflect-types/src/mod.js';
 import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
+import type {MutatorDefs} from 'reflect-shared';
 import {consoleLogSink, createWorkerDatadogLogSink} from '../mod.js';
 import {isTrueEnvValue} from '../util/env.js';
+import type {ReflectServerOptions} from './reflect.js';
 
 export type BuildableOptionsEnv = LogFilterEnv &
   LogLevelEnv &

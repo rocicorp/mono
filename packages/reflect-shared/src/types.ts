@@ -1,8 +1,8 @@
 import type {
+  MutatorReturn,
+  ReadonlyJSONObject,
   ReadTransaction as ReplicacheReadTransaction,
   WriteTransaction as ReplicacheWriteTransaction,
-  ReadonlyJSONObject,
-  MutatorReturn,
 } from 'replicache';
 
 /**

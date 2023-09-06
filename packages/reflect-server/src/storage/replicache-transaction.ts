@@ -1,5 +1,5 @@
 import {jsonSchema, Patch, Version} from 'reflect-protocol';
-import type {AuthData, WriteTransaction} from 'reflect-types/src/mod.js';
+import type {AuthData, WriteTransaction} from 'reflect-shared';
 import {
   isScanIndexOptions,
   makeScanResult,

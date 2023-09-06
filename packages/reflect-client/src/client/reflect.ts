@@ -1,39 +1,40 @@
+import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
 import {
   ConnectedMessage,
   Downstream,
-  downstreamSchema,
   NullableVersion,
-  nullableVersionSchema,
   PingMessage,
   PokeMessage,
   PullRequestMessage,
   PullResponseBody,
   PullResponseMessage,
   PushMessage,
+  downstreamSchema,
+  nullableVersionSchema,
   type ErrorMessage,
 } from 'reflect-protocol';
+import type {MutatorDefs, ReadTransaction} from 'reflect-shared';
 import {version} from 'reflect-shared';
-import type {MutatorDefs, ReadTransaction} from 'reflect-types/src/mod.js';
 import {
   ClientGroupID,
   ClientID,
-  dropDatabase,
   ExperimentalMemKVStore,
   ExperimentalWatchCallbackForOptions,
   ExperimentalWatchNoIndexCallback,
   ExperimentalWatchOptions,
   MaybePromise,
-  PullerResultV0,
-  PullerResultV1,
   PullRequestV0,
   PullRequestV1,
-  PusherResult,
+  PullerResultV0,
+  PullerResultV1,
   PushRequestV0,
   PushRequestV1,
+  PusherResult,
   Replicache,
   ReplicacheOptions,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
+  dropDatabase,
 } from 'replicache';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
@@ -43,20 +44,19 @@ import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {checkConnectivity} from './connect-checks.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
+import {LogOptions, createLogOptions} from './log-options.js';
 import {
   DID_NOT_CONNECT_VALUE,
   DisconnectReason,
-  getLastConnectErrorValue,
   MetricManager,
   REPORT_INTERVAL_MS,
   Series,
+  getLastConnectErrorValue,
 } from './metrics.js';
 import type {CreateKVStore, ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
-import {isAuthError, isServerError, ServerError} from './server-error.js';
-import {LogOptions, createLogOptions} from './log-options.js';
-import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import {ServerError, isAuthError, isServerError} from './server-error.js';
 
 export const enum ConnectionState {
   Disconnected,
