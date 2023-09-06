@@ -1,4 +1,4 @@
-import {ReadTransaction, type WriteTransaction} from '@rocicorp/reflect/server';
+import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect';
 
 const colors = ['#f94144', '#f3722c', '#f8961e', '#f9844a', '#f9c74f'];
 const avatars = [

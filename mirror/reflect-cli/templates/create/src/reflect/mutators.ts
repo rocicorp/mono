@@ -16,7 +16,7 @@
 // thing. The Reflect sync protocol ensures that the server-side result takes
 // precedence over the client-side optimistic result.
 
-import {type WriteTransaction} from '@rocicorp/reflect/server';
+import type {WriteTransaction} from '@rocicorp/reflect';
 import {
   getClientState,
   initClientState,

@@ -1,5 +1,5 @@
 import {entitySchema, generate} from '@rocicorp/rails';
-import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect/client';
+import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect';
 import {z} from 'zod';
 
 // Changing this string to the next in the sequence a-z,aa-zz,aaa-zzz,..

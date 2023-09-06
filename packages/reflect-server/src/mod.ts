@@ -38,11 +38,4 @@ export function createWorkerDatadogLogSink(opts: WorkerDatadogLogSinkOptions) {
 
 export * from './replicache-mod.js';
 
-export type {
-  AuthData,
-  MutatorDefs,
-  ReadTransaction,
-  WriteTransaction,
-} from 'reflect-shared';
-
 export {version} from './util/version.js';

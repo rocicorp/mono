@@ -1,4 +1,6 @@
-import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect/client';
+import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect';
+import {assert} from 'shared/src/valita';
+import * as v from 'shared/src/valita.js';
 import {
   deleteClient,
   ensureClient,
@@ -14,8 +16,6 @@ import {
   putPiece,
   updatePiece,
 } from '../alive/piece-model';
-import {assert} from 'shared/src/valita';
-import * as v from 'shared/src/valita.js';
 
 export type M = typeof mutators;
 

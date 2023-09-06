@@ -1,4 +1,4 @@
-import type {ReadTransaction} from '@rocicorp/reflect/client';
+import type {ReadTransaction} from '@rocicorp/reflect';
 import {ClientModel, listClients} from './client-model';
 import {PieceModel, listPieces} from './piece-model';
 
