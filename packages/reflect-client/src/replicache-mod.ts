@@ -21,7 +21,6 @@ export {
 } from 'replicache';
 export type {
   AsyncIterableIteratorToArray,
-  ClientGroupID,
   ClientStateNotFoundResponse,
   Cookie,
   CreateIndexDefinition,
