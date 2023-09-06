@@ -141,7 +141,7 @@ export async function authenticate(
     console.info(`Logged in as ${userCredentials.user.email}`);
   }
   if (yargs.runAs) {
-    console.info(color.yellow(`Running as ${yargs.runAs})`));
+    console.info(color.yellow(`Running as ${yargs.runAs}`));
   }
   return {
     userID: yargs.runAs ?? userCredentials.user.uid,
