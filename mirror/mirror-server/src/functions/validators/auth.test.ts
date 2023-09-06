@@ -1,6 +1,10 @@
 import {describe, expect, test} from '@jest/globals';
 import type {Firestore} from 'firebase-admin/firestore';
-import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
+import {
+  fakeFirestore,
+  setApp,
+  setUser,
+} from 'mirror-schema/src/test-helpers.js';
 import {https} from 'firebase-functions/v2';
 import {
   FunctionsErrorCode,
@@ -54,7 +58,7 @@ function testFunction(
     );
 }
 
-describe('user authorization failures', () => {
+describe('user authorization', () => {
   const goodRequest = {
     requester: {
       userID: 'foo',
@@ -68,9 +72,14 @@ describe('user authorization failures', () => {
     name: string;
     request: TestRequest;
     authData: AuthData;
-    errorCode: FunctionsErrorCode;
+    errorCode?: FunctionsErrorCode;
   };
   const cases: Case[] = [
+    {
+      name: 'successful authentication',
+      authData: {uid: 'foo'} as AuthData,
+      request: goodRequest,
+    },
     {
       name: 'missing authentication',
       authData: {} as AuthData,
@@ -80,6 +89,23 @@ describe('user authorization failures', () => {
     {
       name: 'wrong authenticated user',
       authData: {uid: 'bar'} as AuthData,
+      request: goodRequest,
+      errorCode: 'permission-denied',
+    },
+    {
+      name: 'user with super powers',
+      authData: {
+        uid: 'bar',
+        token: {superUntil: Date.now() + 10000},
+      } as unknown as AuthData,
+      request: goodRequest,
+    },
+    {
+      name: 'user with expired super powers',
+      authData: {
+        uid: 'bar',
+        token: {superUntil: Date.now() - 10000},
+      } as unknown as AuthData,
       request: goodRequest,
       errorCode: 'permission-denied',
     },
@@ -94,11 +120,20 @@ describe('user authorization failures', () => {
   for (const c of cases) {
     test(c.name, async () => {
       const firestore = fakeFirestore();
+      await setUser(firestore, 'foo', 'foo@bar.com', 'Foo', {
+        ['appTeam']: 'admin',
+      });
+      await setApp(firestore, 'myApp', {
+        teamID: 'appTeam',
+        name: 'My App Name',
+      });
+
       const authenticatedFunction = https.onCall(testFunction(firestore));
 
       let error: HttpsError | undefined;
+      let resp: TestResponse | undefined;
       try {
-        await authenticatedFunction.run({
+        resp = await authenticatedFunction.run({
           auth: c.authData,
           data: c.request,
           rawRequest: null as unknown as Request,
@@ -109,8 +144,15 @@ describe('user authorization failures', () => {
       }
 
       expect(error?.code).toBe(c.errorCode);
-      const fooDoc = await firestore.doc('users/foo').get();
-      expect(fooDoc.exists).toBe(false);
+      if (!c.errorCode) {
+        expect(resp).toEqual({
+          appName: 'My App Name',
+          userEmail: 'foo@bar.com',
+          role: 'admin',
+          bar: 'boo',
+          success: true,
+        });
+      }
     });
   }
 });

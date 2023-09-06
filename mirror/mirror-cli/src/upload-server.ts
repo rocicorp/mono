@@ -8,10 +8,7 @@ import {createRequire} from 'node:module';
 import {pkgUp} from 'pkg-up';
 import {compile} from 'reflect-cli/src/compile.js';
 import {getScriptTemplate} from 'reflect-cli/src/get-script-template.js';
-import type {
-  CommonYargsArgv,
-  YargvToInterface,
-} from 'reflect-cli/src/yarg-types.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {SemVer} from 'semver';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
 import {storeModule, type Module} from 'mirror-schema/src/module.js';

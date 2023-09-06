@@ -30,9 +30,11 @@
     "firebase-functions": "^4.4.0",
     "lodash": "^4.17.21",
     "nanoid": "^4.0.2",
-    "semver": "^7.5.3"
+    "semver": "^7.5.3",
+    "friendly-words": "^1.2.3"
   },
   "devDependencies": {
+    "@types/friendly-words": "^1.2.0",
     "@jest-mock/express": "^2.0.2",
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",

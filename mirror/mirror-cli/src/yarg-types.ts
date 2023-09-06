@@ -4,9 +4,7 @@ import type {ArgumentsCamelCase, Argv} from 'yargs';
  * Yargs options included in every reflect cli command.
  */
 export interface CommonYargsOptions {
-  v: boolean | undefined;
   stack: string;
-  runAs: string | undefined;
 }
 
 export type CommonYargsArgv = Argv<CommonYargsOptions>;

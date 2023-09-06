@@ -3,7 +3,7 @@ import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
-import type {MutatorDefs, WriteTransaction} from 'reflect-types/src/mod.js';
+import type {MutatorDefs, WriteTransaction} from 'reflect-shared';
 import {ExperimentalMemKVStore, PullRequestV1, PushRequestV1} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
 import type {JSONValue} from 'shared/src/json.js';

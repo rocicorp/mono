@@ -8,7 +8,7 @@ import {
 } from '@jest/globals';
 import type {LogContext} from '@rocicorp/logger';
 import type {PokeBody, Version} from 'reflect-protocol';
-import type {WriteTransaction} from 'reflect-types/src/mod.js';
+import type {WriteTransaction} from 'reflect-shared';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
 import {

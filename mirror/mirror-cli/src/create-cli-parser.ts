@@ -1,15 +1,11 @@
 import makeCLI, {Argv} from 'yargs';
-import {initFirebase} from './firebase.js';
-import {version} from './version.js';
 
 export class CommandLineArgsError extends Error {}
 
-export const scriptName = `npx @rocicorp/reflect`;
+export const scriptName = `npm run mirror`;
 
 export function createCLIParserBase(argv: string[]): Argv<{
-  v: boolean | undefined;
   stack: string;
-  runAs: string | undefined;
 }> {
   // Type check result against CommonYargsOptions to make sure we've included
   // all common options
@@ -25,24 +21,12 @@ export function createCLIParserBase(argv: string[]): Argv<{
     .scriptName(scriptName)
     .wrap(null)
     .version(false)
-    .option('v', {
-      describe: 'Show version number',
-      alias: 'version',
-      type: 'boolean',
-    })
     .option('stack', {
       alias: 's',
-      describe: 'prod, staging, or local (emulator) stack to connect to',
-      choices: ['prod', 'staging', 'local'],
+      describe: 'The Firebase stack to execute on',
+      choices: ['prod', 'staging'],
       default: 'prod',
       requiresArg: true,
-      hidden: true,
-    })
-    .option('runAs', {
-      describe: 'User ID to run as, delegation permitting',
-      type: 'string',
-      requiresArg: true,
-      hidden: true,
     });
 
   reflectCLI.help().alias('h', 'help');
@@ -56,18 +40,6 @@ export function createCLIParserBase(argv: string[]): Argv<{
       }
       reflectCLI.showHelp();
     }
-  });
-
-  // This set to false to allow overwrite of default behavior
-  reflectCLI.version(false);
-
-  // version
-  reflectCLI.command('version', false, {}, () => {
-    console.log(version);
-  });
-
-  reflectCLI.middleware(argv => {
-    initFirebase(argv.stack);
   });
 
   reflectCLI.exitProcess(false);

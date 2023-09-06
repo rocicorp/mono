@@ -4,8 +4,8 @@ import {
   invalidateForRoomRequestSchema,
   invalidateForUserRequestSchema,
 } from 'reflect-protocol';
+import type {MutatorDefs} from 'reflect-shared';
 import {version} from 'reflect-shared';
-import type {MutatorDefs} from 'reflect-types/src/mod.js';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import * as valita from 'shared/src/valita.js';
 import type {MutatorMap} from '../process/process-mutation.js';
@@ -493,7 +493,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       );
 
       const elapsed = Date.now() - startIntervalTime;
-      console.log(elapsed, timeout);
+
       if (elapsed > timeout && !timeoutCallbackCalled) {
         lc.debug?.(
           `${name} interval ran for ${elapsed}ms, calling timeoutCallback`,

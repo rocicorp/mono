@@ -2,6 +2,7 @@ import fs, {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as v from 'shared/src/valita.js';
+import color from 'picocolors';
 import {parse} from 'shared/src/valita.js';
 import {scriptName} from './create-cli-parser.js';
 import {
@@ -13,17 +14,18 @@ import {
   PhoneAuthCredential,
   SignInMethod,
   signInWithCredential,
-  type User,
   AdditionalUserInfo,
 } from 'firebase/auth';
 import {loginHandler} from './login.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
-/**
- * The path to the config file that holds user authentication data,
- * relative to the user's home directory.
- */
-export const USER_AUTH_CONFIG_FILE = 'config/default.json';
+function getUserAuthConfigFile(
+  yargs: YargvToInterface<CommonYargsArgv>,
+): string {
+  const {stack} = yargs;
+  const basename = stack === 'prod' ? 'default' : stack;
+  return path.join(getGlobalReflectConfigPath(), `config/${basename}.json`);
+}
 
 // https://firebase.google.com/docs/reference/js/auth.authcredential
 export const authCredentialSchema = v.object({
@@ -46,11 +48,11 @@ export type UserAuthConfig = v.Infer<typeof userAuthConfigSchema>;
  * and updates the user auth state with the new credentials.
  */
 
-export function writeAuthConfigFile(config: UserAuthConfig) {
-  const authConfigFilePath = path.join(
-    getGlobalReflectConfigPath(),
-    USER_AUTH_CONFIG_FILE,
-  );
+export function writeAuthConfigFile(
+  yargs: YargvToInterface<CommonYargsArgv>,
+  config: UserAuthConfig,
+) {
+  const authConfigFilePath = getUserAuthConfigFile(yargs);
   mkdirSync(path.dirname(authConfigFilePath), {
     recursive: true,
   });
@@ -105,7 +107,8 @@ function isFileNotFoundError(err: unknown): boolean {
 }
 
 type AuthenticatedUser = {
-  user: User;
+  userID: string;
+  getIdToken: (forceRefresh?: boolean | undefined) => Promise<string>;
   additionalUserInfo: AdditionalUserInfo | null;
 };
 
@@ -115,14 +118,11 @@ export async function authenticate(
 ): Promise<AuthenticatedUser> {
   if (authConfigForTesting) {
     return {
-      user: {uid: 'fake-uid'},
+      userID: yargs.runAs ?? 'fake-uid',
       additionalUserInfo: null,
     } as unknown as AuthenticatedUser;
   }
-  const authConfigFilePath = path.join(
-    getGlobalReflectConfigPath(),
-    USER_AUTH_CONFIG_FILE,
-  );
+  const authConfigFilePath = getUserAuthConfigFile(yargs);
   if (fs.statSync(authConfigFilePath, {throwIfNoEntry: false}) === undefined) {
     console.info('Login required');
     await loginHandler(yargs);
@@ -139,8 +139,12 @@ export async function authenticate(
   if (output) {
     console.info(`Logged in as ${userCredentials.user.email}`);
   }
+  if (yargs.runAs) {
+    console.info(color.yellow(`Running as ${yargs.runAs}`));
+  }
   return {
-    user: userCredentials.user,
+    userID: yargs.runAs ?? userCredentials.user.uid,
+    getIdToken: forceRefresh => userCredentials.user.getIdToken(forceRefresh),
     additionalUserInfo,
   };
 }

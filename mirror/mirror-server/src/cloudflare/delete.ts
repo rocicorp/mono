@@ -15,17 +15,25 @@ export async function deleteScript(config: Config): Promise<void> {
       new URLSearchParams({force: 'true'}),
     );
   } catch (e) {
-    // Error returned by Cloudflare when the script is not found (already deleted)
+    // Two possible errors are returned by Cloudflare when the script is not found (already deleted)
     // {
     //   "code": 10007,
     //   "message": "workers.api.error.script_not_found"
     // }
-    // an attached to the ParseError in throwFetchError().
-    if ((e as unknown as {code?: number}).code === 10007) {
-      // Log a warning but otherwise consider it a success.
-      logger.warn(`Script ${scriptName} was not found in Cloudflare`, e);
-    } else {
-      throw e;
+    // {
+    //   "code": 7003,
+    //   "message": "Could not route to /client/v4/accounts/1/workers/scripts/<script-name>, perhaps your object identifier is invalid?"
+    // }
+    //
+    // The code for thrown errors is attached to the ParseError in throwFetchError().
+    switch ((e as unknown as {code?: number}).code) {
+      case 7003:
+      case 10007:
+        // Log a warning but otherwise consider it a success.
+        logger.warn(`Script ${scriptName} was not found in Cloudflare`, e);
+        break;
+      default:
+        throw e;
     }
   }
   logger.info(`Deleted script ${scriptName}`);

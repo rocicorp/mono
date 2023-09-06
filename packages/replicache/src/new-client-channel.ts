@@ -2,33 +2,35 @@ import type * as dag from './dag/mod.js';
 import {getClientGroup} from './persist/client-groups.js';
 import {withRead} from './with-transactions.js';
 
-function makeChannelName(replicacheName: string): string {
+// Older clients (<= replicache@13.0.1), listened on this channel name
+// and *asserted* that the messages received were an array containing exactly
+// one string.
+function makeChannelNameV0(replicacheName: string): string {
   return `replicache-new-client-group:${replicacheName}`;
 }
 
-export {makeChannelName as makeChannelNameForTesting};
-
-type NewClientChannelMessageV0 = [clientGroupID: string];
-type NewClientChannelMessageV1 = [clientGroupID: string, idbName: string];
-
-function istNewClientChannelMessageV0(
-  message: unknown,
-): message is NewClientChannelMessageV0 {
-  return (
-    Array.isArray(message) &&
-    message.length === 1 &&
-    typeof message[0] === 'string'
-  );
+// This channel name was introduced when we first needed to change the message
+// format.  The design of the messages sent on this channel allows for
+// the message content to be extended in the future in a way that is
+// forward and backwards compatible.  The message format can be extended
+// by adding new *optional* fields.
+function makeChannelNameV1(replicacheName: string): string {
+  return `replicache-new-client-group-v1:${replicacheName}`;
 }
 
-function istNewClientChannelMessageV1(
+export {makeChannelNameV0 as makeChannelNameV0ForTesting};
+export {makeChannelNameV1 as makeChannelNameV1ForTesting};
+
+// This message type can be extended with optional properties.
+type NewClientChannelMessageV1 = {clientGroupID: string; idbName: string};
+
+function isNewClientChannelMessageV1(
   message: unknown,
 ): message is NewClientChannelMessageV1 {
   return (
-    Array.isArray(message) &&
-    message.length === 2 &&
-    typeof message[0] === 'string' &&
-    typeof message[1] === 'string'
+    typeof message === 'object' &&
+    typeof (message as {clientGroupID: unknown}).clientGroupID === 'string' &&
+    typeof (message as {idbName: unknown}).idbName === 'string'
   );
 }
 
@@ -45,22 +47,19 @@ export function initNewClientChannel(
     return;
   }
 
-  const channel = new BroadcastChannel(makeChannelName(replicacheName));
+  const channelV1 = new BroadcastChannel(makeChannelNameV1(replicacheName));
   if (isNewClientGroup) {
-    channel.postMessage([clientGroupID, idbName]);
+    channelV1.postMessage({clientGroupID, idbName});
+    // Send expected format to V0 channel for old clients.
+    const channelV0 = new BroadcastChannel(makeChannelNameV0(replicacheName));
+    channelV0.postMessage([clientGroupID]);
+    channelV0.close();
   }
 
-  channel.onmessage = async (e: MessageEvent) => {
+  channelV1.onmessage = async (e: MessageEvent) => {
     const {data} = e;
-    if (istNewClientChannelMessageV0(data)) {
-      const [newClientGroupID] = data;
-      if (newClientGroupID !== clientGroupID) {
-        onUpdateNeeded();
-      }
-      return;
-    }
-    if (istNewClientChannelMessageV1(data)) {
-      const [newClientGroupID, newClientIDBName] = data;
+    if (isNewClientChannelMessageV1(data)) {
+      const {clientGroupID: newClientGroupID, idbName: newClientIDBName} = data;
       if (newClientGroupID !== clientGroupID) {
         if (newClientIDBName === idbName) {
           // Check if this client can see the new client's newClientGroupID in its
@@ -81,7 +80,7 @@ export function initNewClientChannel(
             onUpdateNeeded();
           }
         } else {
-          // Idb name is different, indicating ew schema or format version.
+          // Idb name is different, indicating new schema or format version.
           // Update to get assigned to newClientIDBName, and hopefully
           // newClientGroupID.
           // If storage is not actually shared (i.e. due to
@@ -100,5 +99,5 @@ export function initNewClientChannel(
     }
   };
 
-  signal.addEventListener('abort', () => channel.close());
+  signal.addEventListener('abort', () => channelV1.close());
 }

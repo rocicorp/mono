@@ -10,10 +10,7 @@ import {
   deploymentDataConverter,
 } from 'mirror-schema/src/deployment.js';
 import {watch, TimeoutError} from 'mirror-schema/src/watch.js';
-import type {
-  CommonYargsArgv,
-  YargvToInterface,
-} from 'reflect-cli/src/yarg-types.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function releaseReflectServerOptions(yargs: CommonYargsArgv) {
   return yargs

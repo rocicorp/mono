@@ -54,8 +54,7 @@ export async function publishHandler(
   const {code, sourcemap} = await compile(absPath, 'linked');
   assert(sourcemap);
 
-  const {user} = await authenticate(yargs);
-  const userID = user.uid;
+  const {userID} = await authenticate(yargs);
 
   const data: PublishRequest = {
     requester: makeRequester(userID),

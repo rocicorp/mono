@@ -1,5 +1,5 @@
 import {expect, test} from '@jest/globals';
-import type {AuthData, WriteTransaction} from 'reflect-types/src/mod.js';
+import type {AuthData, WriteTransaction} from 'reflect-shared';
 import {
   MutatorMap,
   processMutation,

@@ -6,31 +6,27 @@ import {
   createResponseSchema,
 } from 'mirror-protocol/src/app.js';
 import {
-  cloudflareDataConverter,
-  cloudflarePath,
-} from 'mirror-schema/src/cloudflare.js';
-import {
   App,
   appDataConverter,
   appPath,
   isValidAppName,
 } from 'mirror-schema/src/app.js';
 import {
+  cloudflareDataConverter,
+  cloudflarePath,
+} from 'mirror-schema/src/cloudflare.js';
+import {defaultOptions} from 'mirror-schema/src/deployment.js';
+import {
+  appNameIndexDataConverter,
+  appNameIndexPath,
   teamDataConverter,
   teamPath,
-  appNameIndexPath,
-  appNameIndexDataConverter,
 } from 'mirror-schema/src/team.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
-import {
-  newAppID,
-  newAppIDAsNumber,
-  newAppScriptName,
-} from 'shared/src/mirror/ids.js';
+import {newAppID, newAppIDAsNumber, newAppScriptName} from '../../ids.js';
 import {userAuthorization} from '../validators/auth.js';
-import {validateSchema} from '../validators/schema.js';
-import {defaultOptions} from 'mirror-schema/src/deployment.js';
 import {getDataOrFail} from '../validators/data.js';
+import {validateSchema} from '../validators/schema.js';
 
 const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 

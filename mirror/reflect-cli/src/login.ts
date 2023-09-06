@@ -53,7 +53,7 @@ export async function loginHandler(
             ),
           };
 
-          writeAuthConfigFile(authConfig);
+          writeAuthConfigFile(yargs, authConfig);
         } catch (error) {
           res.end(() => {
             loginResolver.reject(
