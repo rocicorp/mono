@@ -19,11 +19,13 @@ import {
 import {loginHandler} from './login.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
-/**
- * The path to the config file that holds user authentication data,
- * relative to the user's home directory.
- */
-export const USER_AUTH_CONFIG_FILE = 'config/default.json';
+function getUserAuthConfigFile(
+  yargs: YargvToInterface<CommonYargsArgv>,
+): string {
+  const {stack} = yargs;
+  const basename = stack === 'prod' ? 'default' : 'sandbox';
+  return path.join(getGlobalReflectConfigPath(), `config/${basename}.json`);
+}
 
 // https://firebase.google.com/docs/reference/js/auth.authcredential
 export const authCredentialSchema = v.object({
@@ -46,11 +48,11 @@ export type UserAuthConfig = v.Infer<typeof userAuthConfigSchema>;
  * and updates the user auth state with the new credentials.
  */
 
-export function writeAuthConfigFile(config: UserAuthConfig) {
-  const authConfigFilePath = path.join(
-    getGlobalReflectConfigPath(),
-    USER_AUTH_CONFIG_FILE,
-  );
+export function writeAuthConfigFile(
+  yargs: YargvToInterface<CommonYargsArgv>,
+  config: UserAuthConfig,
+) {
+  const authConfigFilePath = getUserAuthConfigFile(yargs);
   mkdirSync(path.dirname(authConfigFilePath), {
     recursive: true,
   });
@@ -120,10 +122,7 @@ export async function authenticate(
       additionalUserInfo: null,
     } as unknown as AuthenticatedUser;
   }
-  const authConfigFilePath = path.join(
-    getGlobalReflectConfigPath(),
-    USER_AUTH_CONFIG_FILE,
-  );
+  const authConfigFilePath = getUserAuthConfigFile(yargs);
   if (fs.statSync(authConfigFilePath, {throwIfNoEntry: false}) === undefined) {
     console.info('Login required');
     await loginHandler(yargs);
