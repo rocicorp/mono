@@ -1,2 +1,2 @@
-#!/usr/bin/env node --no-warnings
+#!/usr/bin/env node
 await import('./bin/cli.js');
