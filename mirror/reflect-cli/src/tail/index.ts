@@ -13,11 +13,11 @@ type TailHandlerArgs = YargvToInterface<ReturnType<typeof tailOptions>>;
 
 export async function tailHandler(yargs: TailHandlerArgs) {
   const {appID} = await ensureAppInstantiated(yargs);
-  const {user} = await authenticate(yargs);
-  const idToken = await user.getIdToken();
+  const {userID, getIdToken} = await authenticate(yargs);
+  const idToken = await getIdToken();
 
   const data: TailRequest = {
-    requester: makeRequester(user.uid),
+    requester: makeRequester(userID),
     appID,
   };
 

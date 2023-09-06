@@ -75,11 +75,18 @@ export function userAuthorization<
       throw new HttpsError('unauthenticated', 'missing authentication');
     }
     if (context.auth.uid !== request.requester.userID) {
-      // TODO: Add support for admin access / impersonation.
-      throw new HttpsError(
-        'permission-denied',
-        'authenticated user is not authorized to make this request',
-      );
+      // Check custom claims for temporary super powers.
+      const superUntil = context.auth.token?.superUntil;
+      if (typeof superUntil === 'number' && superUntil >= Date.now()) {
+        logger.info(
+          `${context.auth.uid} (${context.auth.token.email}) impersonating ${request.requester.userID}`,
+        );
+      } else {
+        throw new HttpsError(
+          'permission-denied',
+          'authenticated user is not authorized to make this request',
+        );
+      }
     }
     return {...context, userID: request.requester.userID};
   };

@@ -7,7 +7,6 @@ import {
   uploadReflectServerHandler,
   uploadReflectServerOptions,
 } from './upload-server.js';
-import {initializeApp} from 'firebase-admin/app';
 import {
   wipeDeploymentsHandler,
   wipeDeploymentsOptions,
@@ -24,6 +23,8 @@ import {
   migrateTeamAppsHandler,
   migrateTeamAppsOptions,
 } from './migrate-team-apps.js';
+import {grantSuperHandler, grantSuperOptions} from './grant-super.js';
+import {initFirebase} from './firebase.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -43,14 +44,7 @@ async function main(argv: string[]): Promise<void> {
 function createCLIParser(argv: string[]) {
   const reflectCLI = createCLIParserBase(argv);
 
-  reflectCLI.middleware(argv => {
-    initializeApp({
-      projectId:
-        argv.stack === 'prod'
-          ? 'reflect-mirror-prod'
-          : 'reflect-mirror-staging',
-    });
-  });
+  reflectCLI.middleware(argv => initFirebase(argv));
 
   // uploadServer
   reflectCLI.command(
@@ -74,6 +68,14 @@ function createCLIParser(argv: string[]) {
     'Removes a server version from a set of server channels. The resulting highest server version will be re-deployed to apps in those channels.',
     revertReflectServerOptions,
     revertReflectServerHandler,
+  );
+
+  // grantSuper
+  reflectCLI.command(
+    'grantSuper <email>',
+    'Grants temporary super powers (e.g. impersonation) to an account.',
+    grantSuperOptions,
+    grantSuperHandler,
   );
 
   reflectCLI.command(

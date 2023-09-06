@@ -47,8 +47,8 @@ type DeleteHandlerArgs = YargvToInterface<ReturnType<typeof deleteOptions>>;
 
 export async function deleteHandler(yargs: DeleteHandlerArgs) {
   const firestore = getFirestore();
-  const {user} = await authenticate(yargs);
-  const apps = await getAppsToDelete(firestore, user.uid, yargs);
+  const {userID} = await authenticate(yargs);
+  const apps = await getAppsToDelete(firestore, userID, yargs);
   for (const app of apps) {
     const confirmed =
       yargs.force ||
@@ -61,7 +61,7 @@ export async function deleteHandler(yargs: DeleteHandlerArgs) {
     }
     console.info(`Requesting delete of "${app.name}"`);
     const {deploymentPath} = await deleteApp({
-      requester: makeRequester(user.uid),
+      requester: makeRequester(userID),
       appID: app.id,
     });
 

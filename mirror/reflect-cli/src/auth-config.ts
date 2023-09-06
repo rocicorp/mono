@@ -2,6 +2,7 @@ import fs, {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as v from 'shared/src/valita.js';
+import color from 'picocolors';
 import {parse} from 'shared/src/valita.js';
 import {scriptName} from './create-cli-parser.js';
 import {
@@ -13,7 +14,6 @@ import {
   PhoneAuthCredential,
   SignInMethod,
   signInWithCredential,
-  type User,
   AdditionalUserInfo,
 } from 'firebase/auth';
 import {loginHandler} from './login.js';
@@ -105,7 +105,8 @@ function isFileNotFoundError(err: unknown): boolean {
 }
 
 type AuthenticatedUser = {
-  user: User;
+  userID: string;
+  getIdToken: (forceRefresh?: boolean | undefined) => Promise<string>;
   additionalUserInfo: AdditionalUserInfo | null;
 };
 
@@ -115,7 +116,7 @@ export async function authenticate(
 ): Promise<AuthenticatedUser> {
   if (authConfigForTesting) {
     return {
-      user: {uid: 'fake-uid'},
+      userID: yargs.runAs ?? 'fake-uid',
       additionalUserInfo: null,
     } as unknown as AuthenticatedUser;
   }
@@ -139,8 +140,12 @@ export async function authenticate(
   if (output) {
     console.info(`Logged in as ${userCredentials.user.email}`);
   }
+  if (yargs.runAs) {
+    console.info(color.yellow(`Running as ${yargs.runAs})`));
+  }
   return {
-    user: userCredentials.user,
+    userID: yargs.runAs ?? userCredentials.user.uid,
+    getIdToken: forceRefresh => userCredentials.user.getIdToken(forceRefresh),
     additionalUserInfo,
   };
 }

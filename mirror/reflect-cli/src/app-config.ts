@@ -149,10 +149,7 @@ export async function ensureAppInstantiated(
       ...config.apps?.[instance],
     };
   }
-  const {
-    user: {uid: userID},
-    additionalUserInfo,
-  } = await authenticate(yargs, false);
+  const {userID, additionalUserInfo} = await authenticate(yargs, false);
   const defaultTeamName = additionalUserInfo?.username;
   if (!defaultTeamName) {
     throw new Error('Could not determine GitHub username from OAuth');

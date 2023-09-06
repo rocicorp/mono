@@ -9,6 +9,7 @@ export const scriptName = `npx @rocicorp/reflect`;
 export function createCLIParserBase(argv: string[]): Argv<{
   v: boolean | undefined;
   stack: string;
+  runAs: string | undefined;
 }> {
   // Type check result against CommonYargsOptions to make sure we've included
   // all common options
@@ -34,6 +35,12 @@ export function createCLIParserBase(argv: string[]): Argv<{
       describe: 'prod, staging, or local (emulator) stack to connect to',
       choices: ['prod', 'staging', 'local'],
       default: 'prod',
+      requiresArg: true,
+      hidden: true,
+    })
+    .option('runAs', {
+      describe: 'User ID to run as, delegation permitting',
+      type: 'string',
       requiresArg: true,
       hidden: true,
     });
