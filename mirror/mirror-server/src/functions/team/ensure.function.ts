@@ -1,28 +1,28 @@
+import {randomInt} from 'crypto';
 import type {Firestore, Transaction} from 'firebase-admin/firestore';
+import {logger} from 'firebase-functions';
 import {defineString} from 'firebase-functions/params';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {
   ensureTeamRequestSchema,
   ensureTeamResponseSchema,
 } from 'mirror-protocol/src/team.js';
-import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
-import {userAuthorization} from '../validators/auth.js';
-import {validateSchema} from '../validators/schema.js';
-import {newTeamID} from 'shared/src/mirror/ids.js';
 import {
   membershipDataConverter,
   teamMembershipPath,
 } from 'mirror-schema/src/membership.js';
 import {
+  sanitizeForSubdomain,
   teamDataConverter,
   teamPath,
-  sanitizeForSubdomain,
-  teamSubdomainIndexPath,
   teamSubdomainIndexDataConverter,
+  teamSubdomainIndexPath,
 } from 'mirror-schema/src/team.js';
-import {logger} from 'firebase-functions';
+import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {must} from 'shared/src/must.js';
-import {randomInt} from 'crypto';
+import {newTeamID} from '../../ids.js';
+import {userAuthorization} from '../validators/auth.js';
+import {validateSchema} from '../validators/schema.js';
 
 const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 

@@ -1,35 +1,35 @@
 import {
-  Timestamp,
-  type Firestore,
   FieldValue,
   Precondition,
+  Timestamp,
+  type Firestore,
 } from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {logger} from 'firebase-functions';
-import {HttpsError} from 'firebase-functions/v2/https';
 import {onDocumentCreated} from 'firebase-functions/v2/firestore';
+import {HttpsError} from 'firebase-functions/v2/https';
+import _ from 'lodash';
+import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {
-  deploymentPath,
-  deploymentDataConverter,
   Deployment,
-  DeploymentStatus,
   DeploymentSecrets,
+  DeploymentStatus,
+  deploymentDataConverter,
+  deploymentPath,
 } from 'mirror-schema/src/deployment.js';
-import {newDeploymentID} from 'shared/src/mirror/ids.js';
+import {toMillis} from 'mirror-schema/src/timestamp.js';
+import {watch} from 'mirror-schema/src/watch.js';
+import {must} from 'shared/src/must.js';
+import {deleteScript} from '../../cloudflare/delete.js';
 import {getServerModuleMetadata} from '../../cloudflare/get-server-modules.js';
 import {publish} from '../../cloudflare/publish.js';
-import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
-import {must} from 'shared/src/must.js';
+import {newDeploymentID} from '../../ids.js';
+import {deleteAppDocs} from './delete.function.js';
 import {
-  getAppSecrets,
   DEPLOYMENT_SECRETS_NAMES,
   defineSecretSafely,
+  getAppSecrets,
 } from './secrets.js';
-import {watch} from 'mirror-schema/src/watch.js';
-import {toMillis} from 'mirror-schema/src/timestamp.js';
-import _ from 'lodash';
-import {deleteScript} from '../../cloudflare/delete.js';
-import {deleteAppDocs} from './delete.function.js';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
