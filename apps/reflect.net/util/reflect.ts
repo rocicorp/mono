@@ -1,8 +1,5 @@
-import type {
-  MutatorDefs,
-  ReadonlyJSONValue,
-  Reflect,
-} from '@rocicorp/reflect/client';
+import type {MutatorDefs, ReadonlyJSONValue} from '@rocicorp/reflect';
+import type {Reflect} from '@rocicorp/reflect/client';
 
 // TODO(reflect): improve this inside Reflect.
 export function closeReflect<M extends MutatorDefs>(r: Reflect<M>) {

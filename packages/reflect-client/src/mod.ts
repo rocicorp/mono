@@ -4,12 +4,5 @@ export {Reflect} from './client/reflect.js';
 // https://github.com/rocicorp/mono/issues/362
 export * from './replicache-mod.js';
 
-export type {
-  AuthData,
-  MutatorDefs,
-  ReadTransaction,
-  WriteTransaction,
-} from 'reflect-shared';
-
 // Export the deprecated version to shadow the version from replicache
 export {version} from './client/version.js';

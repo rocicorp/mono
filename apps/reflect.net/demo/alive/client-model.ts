@@ -1,5 +1,5 @@
 import {entitySchema, generate, Update} from '@rocicorp/rails';
-import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect/client';
+import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect';
 import {z} from 'zod';
 
 const DEAD_BOT_CONTROLLER_THRESHHOLD_MS = 5_000;
