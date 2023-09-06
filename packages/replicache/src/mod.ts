@@ -102,6 +102,8 @@ export type {
 export {TransactionClosedError} from './transaction-closed-error.js';
 export type {
   CreateIndexDefinition,
+  DeepReadonly,
+  DeepReadonlyObject,
   ReadTransaction,
   TransactionEnvironment,
   TransactionReason,
