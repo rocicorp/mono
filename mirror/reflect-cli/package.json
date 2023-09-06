@@ -20,7 +20,6 @@
     "picocolors": "^1.0.0",
     "pkg-up": "^4.0.0",
     "semver": "^7.5.3",
-    "shared": "0.0.0",
     "validate-npm-package-name": "^5.0.0",
     "ws": "^8.13.0",
     "yargs": "^17.4.1"
@@ -37,11 +36,13 @@
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {
+    "@google-cloud/firestore": "^6.6.1",
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/node": "^18.16.0",
     "@types/validate-npm-package-name": "^4.0.0",
     "@types/yargs": "^17.0.10",
+    "shared": "0.0.0",
     "ts-jest": "^29.1.0",
     "typescript": "^5.1.3"
   },
