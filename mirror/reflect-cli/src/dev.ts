@@ -20,7 +20,8 @@ export function devOptions(yargs: CommonYargsArgv) {
         requiresArg: true,
         default: 8080,
       })
-      .option('noStartupMessage', {
+      .option('no-startup-message', {
+        alias: 'n',
         describe: 'Disable startup message',
         type: 'boolean',
         default: false,

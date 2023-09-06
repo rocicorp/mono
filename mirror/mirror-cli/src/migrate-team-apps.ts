@@ -19,7 +19,7 @@ export function migrateTeamAppsOptions(yargs: CommonYargsArgv) {
       type: 'string',
       demandOption: true,
     })
-    .option('teamName', {
+    .option('team-name', {
       describe: 'Name to give the team, from which Team subdomain is derived.',
       type: 'string',
       demandOption: true,
