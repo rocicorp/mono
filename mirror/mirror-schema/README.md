@@ -11,6 +11,9 @@ functional version of mirror. A stack consists of:
   - Secret Manager for storing sensitive data like keys
 - A Cloudflare account for running Workers and Durable Objects
 
+(Note that the one part of Mirror stacks that are not isolated are the Datadog
+sinks. We use a single Datadog account for logging / metrics of all stacks.)
+
 We run two stacks:
 
 - The `prod` stack is the public stack that services our customers and production apps.
