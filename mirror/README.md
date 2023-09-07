@@ -1,4 +1,14 @@
-# Mirror "Stacks"
+# Mirror
+
+## Package / Directory Layout
+
+- `mirror-cli`: cli for admin operations. Uses `gcloud` login (@roci.dev) for authorization
+- `mirror-protocol`: JSON REST API to Cloud Functions
+- `mirror-schema`: Firestore schema (Mirror database)
+- `mirror-server`: Cloud Function implementation (Mirror server business logic)
+- `reflect-cli`: User-level cli for `npm @rocicorp/reflect <command>` operations. Packaged by `packages/reflect`
+
+## Mirror "Stacks"
 
 A mirror "stack" is an isolated set of systems/accounts that constitute a
 functional version of mirror. A stack consists of:
