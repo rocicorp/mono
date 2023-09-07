@@ -79,7 +79,12 @@ export async function runDeployment(
     );
   }
 
-  const {cfID, cfScriptName} = must(appDoc.data());
+  const {
+    cfID,
+    cfScriptName,
+    name: appName,
+    teamSubdomain,
+  } = must(appDoc.data());
   const {
     type: deploymentType,
     status,
@@ -126,6 +131,8 @@ export async function runDeployment(
     await publishToCloudflare(
       storage,
       config,
+      appName,
+      teamSubdomain,
       hostname,
       options,
       secrets,

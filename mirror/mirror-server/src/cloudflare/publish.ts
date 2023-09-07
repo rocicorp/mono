@@ -83,6 +83,8 @@ const migrations: Migration[] = [
 export async function publish(
   storage: Storage,
   config: Config,
+  appName: string,
+  teamSubdomain: string,
   hostname: string,
   options: DeploymentOptions,
   secrets: DeploymentSecrets,
@@ -90,6 +92,8 @@ export async function publish(
   serverModules: ModuleRef[],
 ): Promise<void> {
   const assembler = new ModuleAssembler(
+    appName,
+    teamSubdomain,
     config.scriptName,
     appModules,
     serverModules,

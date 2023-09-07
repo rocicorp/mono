@@ -6,18 +6,24 @@ import {assert} from 'shared/src/asserts.js';
 import type {CfModule} from './create-script-upload-form.js';
 
 export class ModuleAssembler {
+  #appName: string;
+  #teamSubdomain: string;
   #appScriptName: string;
   #appModules: ModuleRef[];
   #serverModules: ModuleRef[];
   #uniqueModuleNames: Set<string>;
 
   constructor(
+    appName: string,
+    teamSubdomain: string,
     appScriptName: string,
     appModules: ModuleRef[],
     serverModules: ModuleRef[],
   ) {
     assert(appModules.length >= 1);
     assert(serverModules.length === 2); // The current logic only supports the server and template modules.
+    this.#appName = appName;
+    this.#teamSubdomain = teamSubdomain;
     this.#appScriptName = appScriptName;
     this.#appModules = appModules;
     this.#serverModules = serverModules;
@@ -48,7 +54,9 @@ export class ModuleAssembler {
         const content = m.content
           .replaceAll('server-module-name.js', serverModuleName)
           .replaceAll('app-module-name.js', appModuleName)
-          .replaceAll('app-script-name', this.#appScriptName);
+          .replaceAll('app-script-name', this.#appScriptName)
+          .replaceAll('app-name', this.#appName)
+          .replaceAll('team-subdomain', this.#teamSubdomain);
         logger.debug('Assembled app script:\n', content);
         const name = this.#uniquifyAndAddName('script.js');
         // Main module is the first.
