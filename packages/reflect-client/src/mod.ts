@@ -1,8 +1,49 @@
+export {
+  IDBNotFoundError,
+  PullError,
+  TransactionClosedError,
+  dropAllDatabases,
+  dropDatabase,
+  getDefaultPuller,
+  isScanIndexOptions,
+  makeIDBName,
+} from 'replicache';
+export type {
+  ExperimentalCreateKVStore as CreateKVStore,
+  ExperimentalDiff,
+  ExperimentalDiffOperation,
+  ExperimentalDiffOperationAdd,
+  ExperimentalDiffOperationChange,
+  ExperimentalDiffOperationDel,
+  ExperimentalIndexDiff,
+  ExperimentalNoIndexDiff,
+  ExperimentalWatchCallbackForOptions,
+  ExperimentalWatchIndexCallback,
+  ExperimentalWatchIndexOptions,
+  ExperimentalWatchNoIndexCallback,
+  ExperimentalWatchNoIndexOptions,
+  ExperimentalWatchOptions,
+  IndexDefinition,
+  IndexDefinitions,
+  IndexKey,
+  ExperimentalKVRead as KVRead,
+  ExperimentalKVStore as KVStore,
+  ExperimentalKVWrite as KVWrite,
+  KeyTypeForScanOptions,
+  PendingMutation,
+  Puller,
+  PullerResult,
+  PullerResultV0,
+  PullerResultV1,
+  PushError,
+  Pusher,
+  PusherResult,
+  ScanIndexOptions,
+  ScanNoIndexOptions,
+  ScanOptionIndexedStartKey,
+  ScanOptions,
+  ScanResult,
+  SubscribeOptions,
+} from 'replicache';
 export type {ReflectOptions} from './client/options.js';
 export {Reflect} from './client/reflect.js';
-// TODO(arv): Only export the types that are actually used.
-// https://github.com/rocicorp/mono/issues/362
-export * from './replicache-mod.js';
-
-// Export the deprecated version to shadow the version from replicache
-export {version} from './client/version.js';
