@@ -20,8 +20,8 @@ export function devOptions(yargs: CommonYargsArgv) {
         requiresArg: true,
         default: 8080,
       })
-      .option('no-startup-message', {
-        alias: 'n',
+      .option('silence-startup-message', {
+        alias: 's',
         describe: 'Disable startup message',
         type: 'boolean',
         default: false,
@@ -48,7 +48,7 @@ export async function devHandler(yargs: DevHandlerArgs) {
     logErrorAndExit(`File not found: ${absPath}`);
   }
 
-  const {port, noStartupMessage} = yargs;
+  const {port, silenceStartupMessage} = yargs;
   if (await isPortReachable(port, {host: '0.0.0.0'})) {
     logErrorAndExit(`Port ${port} is already in use`);
   }
@@ -68,7 +68,7 @@ export async function devHandler(yargs: DevHandlerArgs) {
 
     const {href} = await startDevServer(code, sourcemap, port, mfAc.signal);
     process.stdout.write(` Done in ${Date.now() - start}ms.\n`);
-    if (first && !noStartupMessage) {
+    if (first && !silenceStartupMessage) {
       console.log(`
 Dev server running at:
   ${href}
