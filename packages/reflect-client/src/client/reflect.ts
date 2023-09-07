@@ -19,6 +19,7 @@ import {version} from 'reflect-shared';
 import {
   ClientGroupID,
   ClientID,
+  ExperimentalCreateKVStore,
   ExperimentalMemKVStore,
   ExperimentalWatchCallbackForOptions,
   ExperimentalWatchNoIndexCallback,
@@ -53,7 +54,7 @@ import {
   Series,
   getLastConnectErrorValue,
 } from './metrics.js';
-import type {CreateKVStore, ReflectOptions} from './options.js';
+import type {ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
@@ -1445,7 +1446,7 @@ function createMemStore(name: string): ExperimentalMemKVStore {
 
 function getCreateKVStore<MD extends MutatorDefs>(
   options: ReflectOptions<MD>,
-): CreateKVStore | undefined {
+): ExperimentalCreateKVStore | undefined {
   switch (options.kvStore) {
     case 'idb':
       return undefined;

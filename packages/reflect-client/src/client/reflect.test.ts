@@ -4,13 +4,18 @@ import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
 import type {MutatorDefs, WriteTransaction} from 'reflect-shared';
-import {ExperimentalMemKVStore, PullRequestV1, PushRequestV1} from 'replicache';
+import {
+  ExperimentalCreateKVStore,
+  ExperimentalMemKVStore,
+  PullRequestV1,
+  PushRequestV1,
+} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
 import type {JSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
 import {REPORT_INTERVAL_MS} from './metrics.js';
-import type {CreateKVStore, ReflectOptions} from './options.js';
+import type {ReflectOptions} from './options.js';
 import {
   CONNECT_TIMEOUT_MS,
   ConnectionState,
@@ -1515,7 +1520,8 @@ test('kvStore option', async () => {
   await t('mem', 'kv-store-test-user-id-2', false);
   await t(undefined, 'kv-store-test-user-id-3', false);
 
-  const kvStore: CreateKVStore = name => new ExperimentalMemKVStore(name);
+  const kvStore: ExperimentalCreateKVStore = name =>
+    new ExperimentalMemKVStore(name);
   await t(kvStore, 'kv-store-test-user-id-4', false, undefined);
   await t(kvStore, 'kv-store-test-user-id-4', false, 'bar');
 });

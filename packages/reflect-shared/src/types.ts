@@ -45,16 +45,3 @@ export type MutatorDefs = {
     args?: any,
   ) => MutatorReturn;
 };
-
-export {
-  ClientGroupID,
-  ClientID,
-  JSONObject,
-  JSONValue,
-  MaybePromise,
-  MutatorReturn,
-  ReadonlyJSONObject,
-  ReadonlyJSONValue,
-  TransactionEnvironment,
-  TransactionReason,
-} from 'replicache';
