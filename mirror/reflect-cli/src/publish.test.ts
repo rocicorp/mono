@@ -13,6 +13,7 @@ import {Timestamp} from '@google-cloud/firestore';
 import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
 import {initFirebase} from './firebase.js';
 import {setAppConfigForTesting} from './app-config.js';
+import {version} from './version.js';
 
 type Args = Parameters<typeof publishHandler>[0];
 
@@ -101,7 +102,7 @@ test('it should compile typescript', async () => {
       requester: {
         userAgent: {
           type: 'reflect-cli',
-          version: '0.31.0',
+          version,
         },
         userID: 'fake-uid',
       },
@@ -133,7 +134,7 @@ test('it should compile typescript', async () => {
         appModules: [],
         hostname: 'app-name.reflect-server-net',
         serverVersion: '0.1.0',
-        serverVersionRange: '^0.31.0',
+        serverVersionRange: `^${version}`,
         options: defaultOptions(),
         hashesOfSecrets: {
           /* eslint-disable @typescript-eslint/naming-convention */
