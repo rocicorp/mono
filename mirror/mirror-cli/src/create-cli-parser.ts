@@ -24,7 +24,7 @@ export function createCLIParserBase(argv: string[]): Argv<{
     .option('stack', {
       alias: 's',
       describe: 'The Firebase stack to execute on',
-      choices: ['prod', 'staging'],
+      choices: ['prod', 'sandbox'],
       default: 'prod',
       requiresArg: true,
     });

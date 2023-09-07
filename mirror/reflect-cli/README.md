@@ -36,86 +36,16 @@ cd apps/reflect.net
 npm run dev-next
 ```
 
-## `npm run start` vs `npm run start-local`
+## `npm run reflect` vs `npm run reflect-local`
 
-`run start uses `--stack staging` which means that it uses the deployed staging
-version for the firebase functions.
+`npm run reflect` runs the reflect cli against the prod firebase stack.
 
-`run start-local` uses `--stack local` which means that it uses the local
-firebase emulator.
+- Use `npm run reflect -- --stack=sandbox` to run against he sandbox stack.
 
-To run the local firebase emulator:
+`npm run reflect-local` will point to:
 
-```bash
-cd mirror/reflect-server
-npm run start
-```
+- a locally run login page (run with `apps/reflect.net$ npm run dev-next`)
+- locally run cloud functions (run with `mirror/mirror-server$ npm run serve`)
 
 You can also do `npm run build:watch` in the same directory if you are actively
 working on the firebase functions.
-
-## reflect init
-
-Init selects the the current app to work on and creates a `reflect.config.js`
-file in the current project directory.
-
-```bash
-npm run start init
-#or
-npm run start-local init
-```
-
-The difference between `start` and `start-local` is that `start-local` uses
-`--stack local` which means that it uses the local firebase emulator. `start`
-uses the deployed staging versions of the firebase functions.
-
-If you have multiple applications you will see something like:
-
-```
-User is member of team(s) with multiple apps:
-
-  veiled-encouraging-opal-xyz1 (appID: xyz1, channel: stable)
-  lavish-medieval-meat-xyz2 (appID: xyz2, channel: stable)
-
-Please specify which app to use with --name flag.
-```
-
-```
-npm run start-local init --name veiled-encouraging-opal-xyz1
-```
-
-You can also create a new app (if your account allows more apps) with:
-
-```
-npm run start-local init --new
-```
-
-This is all pretty much WIP. We want to allow user provided names and renames so
-this will all change.
-
-## reflect login
-
-We login as needed so there should be no need to run this command directly.
-
-Make sure to start `apps/reflect.net` since we use reflect.net to redirect back
-to the temporary server the CLI starts.
-
-```bash
-cd apps/reflect.net
-npm run dev-next
-```
-
-Then set the `AUTH_URL` environment variable to the server you started.
-
-```bash
-AUTH_URL=http://localhost:3000/auth npm run start login
-```
-
-## reflect publish
-
-```bash
-npm run start-local publish example/index.ts
-```
-
-This will bundle/compile the `example/index.ts` file, then send it to the
-mirror-server which in turn publishes to Cloudflare.

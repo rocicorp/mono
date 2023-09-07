@@ -163,7 +163,7 @@ cd mirror/mirror-cli
 # adjust channels to taste
 # can also pass --force to overwrite old versions
 npm run mirror uploadServer -- --channels=canary --channels=stable
-npm run mirror uploadServer -- --stack=staging --channels=canary --channels=stable
+npm run mirror uploadServer -- --stack=sandbox --channels=canary --channels=stable
 
 # Abandon temporary change to package.json
 git reset --hard HEAD

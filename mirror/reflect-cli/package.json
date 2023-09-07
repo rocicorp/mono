@@ -31,7 +31,7 @@
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "reflect": "node --no-warnings --loader ts-node/esm ./src/index.ts",
-    "reflect-local": "AUTH_URL=http://localhost:3000/auth node --no-warnings --loader ts-node/esm ./src/index.ts --stack local",
+    "reflect-local": "npm run reflect -- --stack sandbox --local",
     "build": "node tool/build.js",
     "check-types": "tsc --noEmit"
   },

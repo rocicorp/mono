@@ -19,7 +19,7 @@ type Args = Parameters<typeof publishHandler>[0];
 useFakeAuthConfig();
 
 beforeAll(() => {
-  initFirebase('local');
+  initFirebase({stack: 'sandbox', local: true});
 });
 
 afterEach(() => {

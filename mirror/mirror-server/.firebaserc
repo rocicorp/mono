@@ -1,7 +1,8 @@
 {
   "projects": {
+    "sandbox": "reflect-mirror-sandbox",
     "staging": "reflect-mirror-staging",
     "prod": "reflect-mirror-prod",
-    "default": "reflect-mirror-staging"
+    "default": "reflect-mirror-sandbox"
   }
 }

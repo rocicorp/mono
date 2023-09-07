@@ -9,6 +9,7 @@ export const scriptName = `npx @rocicorp/reflect`;
 export function createCLIParserBase(argv: string[]): Argv<{
   v: boolean | undefined;
   stack: string;
+  local: boolean;
   runAs: string | undefined;
 }> {
   // Type check result against CommonYargsOptions to make sure we've included
@@ -32,10 +33,16 @@ export function createCLIParserBase(argv: string[]): Argv<{
     })
     .option('stack', {
       alias: 's',
-      describe: 'prod, staging, or local (emulator) stack to connect to',
-      choices: ['prod', 'staging', 'local'],
+      describe: 'prod or sandbox firebase stack',
+      choices: ['prod', 'sandbox'],
       default: 'prod',
       requiresArg: true,
+      hidden: true,
+    })
+    .option('local', {
+      describe: 'run against a local auth login UI and cloud functions',
+      type: 'boolean',
+      default: false,
       hidden: true,
     })
     .option('runAs', {
@@ -66,9 +73,7 @@ export function createCLIParserBase(argv: string[]): Argv<{
     console.log(version);
   });
 
-  reflectCLI.middleware(argv => {
-    initFirebase(argv.stack);
-  });
+  reflectCLI.middleware(argv => initFirebase(argv));
 
   reflectCLI.exitProcess(false);
 

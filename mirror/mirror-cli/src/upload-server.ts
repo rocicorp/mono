@@ -43,11 +43,7 @@ export async function uploadReflectServerHandler(
 
   const firestore = getFirestore();
   const storage = getStorage();
-  const bucketName =
-    yargs.stack === 'prod'
-      ? 'reflect-mirror-prod-modules'
-      : 'reflect-mirror-staging-modules';
-
+  const bucketName = `reflect-mirror-${yargs.stack}-modules`;
   const source = await buildReflectServerContent();
   const version = await findVersion();
   const scriptTemplate = await getScriptTemplate('prod');

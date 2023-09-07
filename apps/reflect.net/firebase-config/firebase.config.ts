@@ -3,12 +3,12 @@ import {connectFunctionsEmulator, getFunctions} from 'firebase/functions';
 
 const firebaseConfig = process.env.NEXT_PUBLIC_FIREBASE_STAGING
   ? {
-      apiKey: 'AIzaSyDxHw3_wWcLkpjWgprfEPhrppFr3SgV03M',
-      authDomain: 'reflect-mirror-staging.firebaseapp.com',
-      projectId: 'reflect-mirror-staging',
-      storageBucket: 'reflect-mirror-staging.appspot.com',
-      messagingSenderId: '709901628211',
-      appId: '1:709901628211:web:8164d4a5cd28226a180446',
+      apiKey: 'AIzaSyDM0EcyI763qTKxBPyrJ7XkPDASsCpOUms',
+      authDomain: 'reflect-mirror-sandbox.firebaseapp.com',
+      projectId: 'reflect-mirror-sandbox',
+      storageBucket: 'reflect-mirror-sandbox.appspot.com',
+      messagingSenderId: '980528051836',
+      appId: '1:980528051836:web:d95f535ac5bf95c6f37bf9',
     }
   : {
       apiKey: 'AIzaSyCHJ8PpJjH5eQnp9sCV1xUIz7hv55OOHpQ',

@@ -57,7 +57,7 @@ describe('loginHandler', () => {
     let writeAuthConfigFileCalled = false;
 
     const loginHandlerPromise = loginHandler(
-      {stack: 'staging'} as Args,
+      {stack: 'sandbox'} as Args,
       false,
       async url => {
         openInBrowserCalled = true;
@@ -68,7 +68,7 @@ describe('loginHandler', () => {
         expect(serverResponse).toBeDefined();
       },
       (yargs, config: UserAuthConfig) => {
-        expect(yargs.stack).toBe('staging');
+        expect(yargs.stack).toBe('sandbox');
         expect(config).toBeDefined();
         expect(config.authCredential).toEqual({
           accessToken: 'valid-token',

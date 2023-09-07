@@ -9,9 +9,7 @@ import {getAuth, type Auth} from 'firebase-admin/auth';
 import {execSync} from 'node:child_process';
 
 function getProjectID(argv: YargvToInterface<CommonYargsArgv>): string {
-  return argv.stack === 'prod'
-    ? 'reflect-mirror-prod'
-    : 'reflect-mirror-staging';
+  return `reflect-mirror-${argv.stack}`;
 }
 
 export function initFirebase(argv: YargvToInterface<CommonYargsArgv>) {

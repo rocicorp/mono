@@ -10,10 +10,10 @@
     "format": "prettier --write *",
     "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "deploy-rules-staging": "npx firebase-tools --project staging deploy --only firestore:rules",
+    "deploy-rules-sandbox": "npx firebase-tools --project sandbox deploy --only firestore:rules",
     "deploy-rules-prod": "npx firebase-tools --project prod deploy --only firestore:rules",
-    "update-indexes-from-staging": "npx firebase-tools --project staging firestore:indexes > firestore.indexes.json",
-    "deploy-indexes-staging": "npx firebase-tools --project staging deploy --only firestore:indexes",
+    "update-indexes-from-sandbox": "npx firebase-tools --project sandbox firestore:indexes > firestore.indexes.json",
+    "deploy-indexes-sandbox": "npx firebase-tools --project sandbox deploy --only firestore:indexes",
     "deploy-indexes-prod": "npx firebase-tools --project prod deploy --only firestore:indexes"
   },
   "dependencies": {
