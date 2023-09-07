@@ -21,8 +21,7 @@ export function devOptions(yargs: CommonYargsArgv) {
         default: 8080,
       })
       .option('silence-startup-message', {
-        alias: 's',
-        describe: 'Disable startup message',
+        describe: 'Silence startup message',
         type: 'boolean',
         default: false,
       })
