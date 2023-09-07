@@ -616,6 +616,7 @@ describe('reportMetrics', () => {
       datadogMetricsOptions: {
         apiKey: 'test-dd-key',
         service: 'test-service',
+        tags: {script: 'test-script'},
       },
     }));
 
@@ -652,7 +653,11 @@ describe('reportMetrics', () => {
               ...tc.body,
               series: (tc.body.series as Series[]).map(s => ({
                 ...s,
-                tags: [...(s.tags ?? []), 'service:test-service'],
+                tags: [
+                  ...(s.tags ?? []),
+                  'script:test-script',
+                  'service:test-service',
+                ],
                 type: s.type,
               })),
             })

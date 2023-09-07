@@ -119,7 +119,10 @@ export type DataDogMetricsEnv = {
 export function datadogMetrics<
   Env extends DataDogMetricsEnv,
   MD extends MutatorDefs,
->(defaultServiceLabel: string): OptionsAdder<Env, MD> {
+>(
+  defaultServiceLabel: string,
+  tags?: Record<string, string>,
+): OptionsAdder<Env, MD> {
   return (options, env) => {
     if (env.DATADOG_METRICS_API_KEY === undefined) {
       console.warn(
@@ -132,6 +135,7 @@ export function datadogMetrics<
       datadogMetricsOptions: {
         apiKey: env.DATADOG_METRICS_API_KEY,
         service: env.DATADOG_SERVICE_LABEL ?? defaultServiceLabel,
+        tags,
       },
     };
   };
