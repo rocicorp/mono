@@ -145,4 +145,4 @@ That should be it. To give it a spin, you'll need to:
 
 - Run the login page, either locally or on some Vercel deployment
 - Run `reflect create --stack=stackname my-app` to create a new project
-- Run `reflect publish` which will go through the login, app creation, and publish step
+- Run `reflect publish --stack=stackname` which will go through the login, app creation, and publish step
