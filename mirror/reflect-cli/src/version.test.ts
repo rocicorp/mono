@@ -4,14 +4,14 @@ import * as v from 'shared/src/valita.js';
 import {userAgent, version} from './version.js';
 
 test('version', () => {
-  expect(version).toBe('0.33.0');
+  expect(version).toBe('0.1.2');
 });
 
 test('userAgent', () => {
   expect(userAgent).toMatchInlineSnapshot(`
     {
       "type": "reflect-cli",
-      "version": "0.33.0",
+      "version": "0.1.2",
     }
   `);
 });

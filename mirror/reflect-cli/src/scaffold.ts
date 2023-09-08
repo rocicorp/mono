@@ -5,6 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {pkgUp} from 'pkg-up';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
 import {writeTemplatedFilePlaceholders} from './app-config.js';
+import {execSync} from 'node:child_process';
 
 const templateDir = (templateName: string) =>
   path.resolve(
@@ -54,8 +55,18 @@ function copyDir(srcDir: string, destDir: string) {
   }
 }
 
-async function findReflectVersion(): Promise<string> {
-  const pkg = await pkgUp({cwd: fileURLToPath(import.meta.url)});
+export async function findReflectVersion(): Promise<string> {
+  const pkgDir = fileURLToPath(import.meta.url);
+  if (pkgDir.indexOf('/node_module') < 0) {
+    const version = execSync('npm view @rocicorp/reflect dist-tags.latest')
+      .toString()
+      .trim();
+    console.log(
+      `reflect-cli run from source. Using @rocicorp/reflect@latest version ${version}.`,
+    );
+    return version;
+  }
+  const pkg = await pkgUp({cwd: pkgDir});
   assert(pkg);
   const s = await readFile(pkg, 'utf-8');
   const v = JSON.parse(s);
