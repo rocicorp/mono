@@ -1,0 +1,44 @@
+.authContainer {
+  padding: 4rem;
+}
+
+.logoAnimated {
+  display: block;
+  margin: 0 auto 4rem;
+}
+
+.authContainer h3 {
+  margin: 0 auto 2rem;
+  text-align: center;
+}
+
+.signinOptions {
+  border: 1px solid #fc208a;
+  padding: 1rem;
+  width: fit-content;
+  margin: 0 auto;
+  border-radius: 0.5rem;
+  background: rgba(252, 32, 138, 0.05);
+}
+
+.authSuccess {
+  border: 1px solid #00ffa3;
+  padding: 1rem 1rem 1rem 2.75rem;
+  width: fit-content;
+  margin: 0 auto;
+  border-radius: 0.5rem;
+  background: rgba(0, 255, 163, 0.05) url(/auth/success.svg) no-repeat;
+  background-size: 16px;
+  background-position: 1.25rem center;
+}
+
+.authError {
+  border: 1px solid #ff4949;
+  padding: 1rem 1rem 1rem 2.75rem;
+  width: fit-content;
+  margin: 0 auto;
+  border-radius: 0.5rem;
+  background: rgba(255, 73, 73, 0.05) url(/auth/error.svg) no-repeat;
+  background-size: 16px;
+  background-position: 1.25rem center;
+}
