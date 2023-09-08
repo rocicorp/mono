@@ -2,17 +2,17 @@ import type {Firestore} from 'firebase-admin/firestore';
 import {getFirestore, GrpcStatus} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {getStorage} from 'firebase-admin/storage';
+import {storeModule, type Module} from 'mirror-schema/src/module.js';
 import * as schema from 'mirror-schema/src/server.js';
+import {CANARY_RELEASE_CHANNEL} from 'mirror-schema/src/server.js';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {pkgUp} from 'pkg-up';
 import {compile} from 'reflect-cli/src/compile.js';
 import {getScriptTemplate} from 'reflect-cli/src/get-script-template.js';
-import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {SemVer} from 'semver';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
-import {storeModule, type Module} from 'mirror-schema/src/module.js';
-import {CANARY_RELEASE_CHANNEL} from 'mirror-schema/src/server.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 const require = createRequire(import.meta.url);
 
@@ -75,7 +75,7 @@ async function buildReflectServerContent(): Promise<string> {
       `Try temporarily bumping the version in 'packages/reflect/package.json' and re-running 'npm install' from the repo root.`,
   );
   console.info(`Building server from ${serverPath}`);
-  const {code} = await compile(serverPath, false);
+  const {code} = await compile(serverPath, false, 'production');
   return code.text;
 }
 
