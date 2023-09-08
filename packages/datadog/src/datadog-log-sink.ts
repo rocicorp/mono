@@ -123,7 +123,7 @@ export class DatadogLogSink implements LogSink {
         }
 
         if (this._version) {
-          url.searchParams.set('version', this._version);
+          url.searchParams.set('ddtags', `version:${this._version}`);
         }
 
         let ok = false;
