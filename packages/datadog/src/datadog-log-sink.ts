@@ -88,7 +88,7 @@ export class DatadogLogSink implements LogSink {
           if (str.length > MAX_ENTRY_CHARS) {
             // A single message above the total payload limit will otherwise halt
             // log flushing progress. Drop and replace with a message indicating so.
-            m.message = `[Dropped message of length ${str.length}]`;
+            m.message = `[Dropped message of length: ${str.length}]`;
             str = JSON.stringify(m);
           }
           // Calculate the totalBytes with the newline characters between messages.
