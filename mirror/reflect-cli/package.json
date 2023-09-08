@@ -1,7 +1,7 @@
 {
   "name": "reflect-cli",
   "private": true,
-  "version": "0.33.0",
+  "version": "0.1.2",
   "type": "module",
   "dependencies": {
     "@badrap/valita": "^0.2.10",

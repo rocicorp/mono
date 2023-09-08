@@ -3,7 +3,7 @@ import {existsSync} from 'node:fs';
 import color from 'picocolors';
 import {configFileExists} from './app-config.js';
 import {logErrorAndExit, noFormat} from './log-error-and-exit.js';
-import {copyTemplate} from './scaffold.js';
+import {copyTemplate, findReflectVersion} from './scaffold.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function initOptions(yargs: CommonYargsArgv) {
@@ -36,9 +36,11 @@ export async function initHandler(_: InitHandlerArgs) {
     );
   }
 
-  await copyTemplate('init', './');
+  copyTemplate('init', './');
   console.log(`Installing @rocicorp/reflect`);
-  execSync(`npm add '@rocicorp/reflect'`, {
+
+  const reflectVersion = await findReflectVersion();
+  execSync(`npm add '@rocicorp/reflect@^${reflectVersion}'`, {
     stdio: ['ignore', 'inherit', 'inherit'],
   });
 
