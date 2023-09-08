@@ -5,8 +5,8 @@ import {
   type LogSink,
 } from '@rocicorp/logger';
 import type {MutatorDefs} from 'reflect-shared';
-import {createWorkerDatadogLogSink} from '../mod.js';
 import {isTrueEnvValue} from '../util/env.js';
+import {createWorkerDatadogLogSink} from './create-worker-datadog-log-sink.js';
 import type {ReflectServerOptions} from './reflect.js';
 
 export type BuildableOptionsEnv = LogFilterEnv &
