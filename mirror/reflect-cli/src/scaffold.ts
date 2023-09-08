@@ -66,7 +66,6 @@ export async function findReflectVersion(): Promise<string> {
     );
     return version;
   }
-  console.log(`reflect-cli package at ${pkgDir}`);
   const pkg = await pkgUp({cwd: pkgDir});
   assert(pkg);
   const s = await readFile(pkg, 'utf-8');
