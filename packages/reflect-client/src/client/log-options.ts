@@ -6,6 +6,7 @@ import {
   type LogSink,
 } from '@rocicorp/logger';
 import {DatadogLogSink, DatadogLogSinkOptions} from 'datadog';
+import {version} from 'reflect-shared';
 
 // https://www.oreilly.com/library/view/regular-expressions-cookbook/9780596802837/ch07s16.html
 const IPV4_ADDRESS_REGEX =
@@ -92,6 +93,7 @@ export function createLogOptions(
         apiKey: DATADOG_CLIENT_TOKEN,
         service: datadogServiceLabel,
         host: location.host,
+        version,
         // This has to be set to 'browser' so the server thinks we are the Datadog
         // browser SDK and we get the extra special UA/IP/GEO parsing goodness.
         source: 'browser',

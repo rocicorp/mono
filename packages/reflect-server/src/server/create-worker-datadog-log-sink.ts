@@ -8,4 +8,5 @@ export type WorkerDatadogLogSinkOptions = {
   apiKey: string;
   service?: string | undefined;
   host?: string | undefined;
+  version?: string | undefined;
 };
