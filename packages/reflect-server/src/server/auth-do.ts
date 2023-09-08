@@ -205,16 +205,14 @@ export class BaseAuthDO implements DurableObject {
   #createRoom = post(
     this.#requireAPIKey(
       withBody(createRoomRequestSchema, (ctx, req) => {
-        const {
-          lc,
-          body: {roomID, jurisdiction},
-        } = ctx;
+        const {lc, body} = ctx;
+        const {roomID, jurisdiction} = body;
         return this.#roomRecordLock.withWrite(() =>
           createRoom(
             lc,
             this.#roomDO,
             this.#durableStorage,
-            req,
+            new Request(req, {body: JSON.stringify(body)}),
             roomID,
             jurisdiction,
           ),
@@ -721,6 +719,7 @@ export class BaseAuthDO implements DurableObject {
             lc,
             'authInvalidateForUser',
             req,
+            JSON.stringify(body),
             connections,
           );
         });
@@ -740,6 +739,7 @@ export class BaseAuthDO implements DurableObject {
           lc,
           'authInvalidateAll',
           req,
+          '',
           // Use async generator because the full list of connections
           // may exceed the DO's memory limits.
           getConnections(this.#durableStorage),
@@ -845,6 +845,7 @@ export class BaseAuthDO implements DurableObject {
     lc: LogContext,
     invalidateRequestName: string,
     request: Request,
+    body: string,
     connections:
       | Iterable<[string, ConnectionRecord]>
       | AsyncGenerator<[string, ConnectionRecord]>,
@@ -879,7 +880,7 @@ export class BaseAuthDO implements DurableObject {
       }
 
       const stub = this.#roomDO.get(roomObjectID);
-      const req = roomIDs.length === 1 ? request : request.clone();
+      const req = new Request(request, {body});
       responsePromises.push(
         roomDOFetch(req, 'fwd invalidate request', stub, roomID, lc),
       );
