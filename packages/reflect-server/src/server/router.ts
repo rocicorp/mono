@@ -190,10 +190,11 @@ async function validateBody<T>(
     // original request body is not consumed CF complains in the console, "Your
     // worker called response.clone(), but did not read the body of both
     // clones. <snip>". Routes that use validateBody, should use
-    // the ValidateResult, as reading the body will results in an error
-    // "TypeError: body used already for <snip>".
+    // the ValidateResult and not try to read the body, as reading the body
+    // again will results in an error "TypeError: body used already for <snip>".
     json = await request.json();
   } catch (e) {
+    console.log('here', e);
     return {
       errorResponse: new Response('Body must be valid json.', {status: 400}),
       value: undefined,

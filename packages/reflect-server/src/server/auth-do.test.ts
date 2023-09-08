@@ -144,6 +144,7 @@ function createCreateRoomTestFixture() {
 test("createRoom creates a room and doesn't allow it to be re-created", async () => {
   const {testRoomID, testRequest, testRoomDO, state, roomDOcreateRoomCounts} =
     await createCreateRoomTestFixture();
+  const testRequest2 = testRequest.clone();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -166,7 +167,7 @@ test("createRoom creates a room and doesn't allow it to be re-created", async ()
   expect(response.status).toEqual(200);
 
   // Attempt to create the room again.
-  const response2 = await authDO.fetch(testRequest);
+  const response2 = await authDO.fetch(testRequest2);
   expect(response2.status).toEqual(409);
   expect(roomDOcreateRoomCounts.size).toEqual(1);
 });
@@ -1497,6 +1498,7 @@ test('authInvalidateForUser when requests to roomDOs are successful', async () =
       }),
     },
   );
+  const testRequestClone = testRequest.clone();
 
   await storeTestConnectionState();
   const roomDORequestCountsByRoomID = new Map();
@@ -1517,7 +1519,7 @@ test('authInvalidateForUser when requests to roomDOs are successful', async () =
             roomID,
             (roomDORequestCountsByRoomID.get(roomID) || 0) + 1,
           );
-          await expectForwardedAuthInvalidateRequest(request, testRequest);
+          await expectForwardedAuthInvalidateRequest(request, testRequestClone);
         }
         return new Response('Test Success', {status: 200});
       }),
@@ -1558,6 +1560,7 @@ test('authInvalidateForUser when connection ids have chars that need to be perce
       }),
     },
   );
+  const testRequestClone = testRequest.clone();
 
   await recordConnectionHelper(
     '/testUserID/?',
@@ -1591,7 +1594,7 @@ test('authInvalidateForUser when connection ids have chars that need to be perce
             roomID,
             (roomDORequestCountsByRoomID.get(roomID) || 0) + 1,
           );
-          await expectForwardedAuthInvalidateRequest(request, testRequest);
+          await expectForwardedAuthInvalidateRequest(request, testRequestClone);
         }
         return new Response('Test Success', {status: 200});
       }),
@@ -1631,6 +1634,7 @@ test('authInvalidateForUser when any request to roomDOs returns error response',
       }),
     },
   );
+  const testRequestClone = testRequest.clone();
 
   await storeTestConnectionState();
   await recordConnectionHelper('testUserID1', 'testRoomID3', 'testClientID6');
@@ -1650,7 +1654,7 @@ test('authInvalidateForUser when any request to roomDOs returns error response',
             roomID,
             (roomDORequestCountsByRoomID.get(roomID) || 0) + 1,
           );
-          await expectForwardedAuthInvalidateRequest(request, testRequest);
+          await expectForwardedAuthInvalidateRequest(request, testRequestClone);
           return roomID === 'testRoomID2'
             ? new Response(
                 'Test authInvalidateForUser Internal Server Error Msg',
@@ -1863,6 +1867,7 @@ test('authInvalidateAll when requests to roomDOs are successful', async () => {
       body: '',
     },
   );
+  const testRequestClone = testRequest.clone();
 
   await storeTestConnectionState();
 
@@ -1880,7 +1885,7 @@ test('authInvalidateAll when requests to roomDOs are successful', async () => {
             roomID,
             (roomDORequestCountsByRoomID.get(roomID) || 0) + 1,
           );
-          await expectForwardedAuthInvalidateRequest(request, testRequest);
+          await expectForwardedAuthInvalidateRequest(request, testRequestClone);
         }
         return new Response('Test Success', {status: 200});
       }),
@@ -1932,6 +1937,7 @@ test('authInvalidateAll when any request to roomDOs returns error response', asy
       body: '',
     },
   );
+  const testRequestClone = testRequest.clone();
 
   await storeTestConnectionState();
 
@@ -1949,7 +1955,7 @@ test('authInvalidateAll when any request to roomDOs returns error response', asy
             roomID,
             (roomDORequestCountsByRoomID.get(roomID) || 0) + 1,
           );
-          await expectForwardedAuthInvalidateRequest(request, testRequest);
+          await expectForwardedAuthInvalidateRequest(request, testRequestClone);
           return roomID === 'testRoomID2'
             ? new Response('Test authInvalidateAll Internal Server Error Msg', {
                 status: 500,
