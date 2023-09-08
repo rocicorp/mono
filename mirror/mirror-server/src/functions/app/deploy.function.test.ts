@@ -174,7 +174,6 @@ describe('deploy', () => {
     expect(app.queuedDeploymentIDs).toEqual([deploymentID]);
     expect(app.runningDeployment).toBeUndefined;
 
-    // eslint-disable-next-line require-yield
     async function* publish() {
       publishing();
       for (;;) {
