@@ -194,7 +194,6 @@ async function validateBody<T>(
     // again will results in an error "TypeError: body used already for <snip>".
     json = await request.json();
   } catch (e) {
-    console.log('here', e);
     return {
       errorResponse: new Response('Body must be valid json.', {status: 400}),
       value: undefined,
