@@ -25,6 +25,10 @@ import {
 } from './migrate-team-apps.js';
 import {grantSuperHandler, grantSuperOptions} from './grant-super.js';
 import {initFirebase} from './firebase.js';
+import {
+  queryAnalyticsHandler,
+  queryAnalyticsOptions,
+} from './query-analytics.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -76,6 +80,14 @@ function createCLIParser(argv: string[]) {
     'Grants temporary super powers (e.g. impersonation) to an account.',
     grantSuperOptions,
     grantSuperHandler,
+  );
+
+  // query-analytics
+  reflectCLI.command(
+    'query-analytics <query>',
+    'Execute a Worker Analytics SQL Query',
+    queryAnalyticsOptions,
+    queryAnalyticsHandler,
   );
 
   reflectCLI.command(
