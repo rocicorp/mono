@@ -216,6 +216,10 @@ function sendPokes(
       pokesForClientsLogString += ` ${clientID}=${pokeMessageLogString}`;
     }
   }
+  const processPendingLatencyMs = Date.now() - start;
+  lc = lc
+    .withContext('processPendingTiming', processPendingLatencyMs)
+    .withContext('pokeCount', pokesByClientID.size);
   lc.info?.(
     'Finished process pending in ' +
       (Date.now() - start) +
