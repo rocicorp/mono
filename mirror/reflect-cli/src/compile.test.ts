@@ -1,4 +1,4 @@
-import {expect, test} from '@jest/globals';
+import {describe, expect, test} from '@jest/globals';
 import {fail} from 'node:assert';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -17,7 +17,7 @@ async function writeTempFile(data: string, filename = 'test.js') {
 
 test('it should throw if the source has syntax errors', async () => {
   const testFilePath = await writeTempFile('const x =');
-  await expect(compile(testFilePath, true)).rejects.toEqual(
+  await expect(compile(testFilePath, true, 'production')).rejects.toEqual(
     expect.objectContaining({
       constructor: Error,
       message: expect.stringMatching(/Unexpected end of file/),
@@ -40,7 +40,7 @@ test('it should compile typescript', async () => {
     'test.ts',
   );
 
-  const result = await compile(testFilePath, true);
+  const result = await compile(testFilePath, true, 'production');
   expect(result.code.path).toBe(path.resolve('test.js'));
   expect(result.sourcemap?.path).toBe(path.resolve('test.js.map'));
 
@@ -57,7 +57,7 @@ console.log(reflectServer);`,
     'test.ts',
   );
 
-  const result = await compile(testFilePath, true);
+  const result = await compile(testFilePath, true, 'production');
   expect(result.code.path).toBe(path.resolve('test.js'));
   expect(result.sourcemap?.path).toBe(path.resolve('test.js.map'));
 
@@ -65,6 +65,25 @@ console.log(reflectServer);`,
     "import * as reflectServer from "./reflect-server.js";
     console.log(reflectServer);"
   `);
+});
+
+describe('it should replace process.env.NODE_ENV', () => {
+  for (const mode of ['production', 'development'] as const) {
+    test(mode, async () => {
+      const testFilePath = await writeTempFile(
+        `console.log(process.env.NODE_ENV);`,
+        'test.ts',
+      );
+
+      const result = await compile(testFilePath, true, mode);
+      expect(result.code.path).toBe(path.resolve('test.js'));
+      expect(result.sourcemap?.path).toBe(path.resolve('test.js.map'));
+
+      expect(stripCommentLines(result.code.text)).toBe(
+        `console.log("${mode}");`,
+      );
+    });
+  }
 });
 
 test('it should bundle into one file', async () => {
@@ -78,7 +97,7 @@ test('it should bundle into one file', async () => {
   const fileB = path.join(dir, 'b.js');
   await fs.writeFile(fileB, `export const b = 'BBB';`, 'utf-8');
 
-  const result = await compile(fileA, true);
+  const result = await compile(fileA, true, 'production');
   expect(result.code.path).toBe(path.resolve('a.js'));
   expect(result.sourcemap?.path).toBe(path.resolve('a.js.map'));
 
@@ -106,7 +125,12 @@ test('watch should work', async () => {
     let compilationExpected = true;
     (async () => {
       try {
-        for await (const change of watch(fileA, true, ac.signal)) {
+        for await (const change of watch(
+          fileA,
+          true,
+          'development',
+          ac.signal,
+        )) {
           if (!compilationExpected) {
             throw new Error('Unexpected recompilation');
           }
@@ -134,6 +158,10 @@ console.log(b);`);
     compilationExpected = true;
     await fs.writeFile(fileA, `console.log('changed a again');`, 'utf-8');
     await checkResult(`console.log("changed a again");`);
+
+    compilationExpected = true;
+    await fs.writeFile(fileA, `console.log(process.env.NODE_ENV);`, 'utf-8');
+    await checkResult(`console.log("development");`);
 
     await sleep(100);
   } finally {

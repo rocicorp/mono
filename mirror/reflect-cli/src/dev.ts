@@ -55,7 +55,13 @@ export async function devHandler(yargs: DevHandlerArgs) {
   let first = true;
   const ac = new AbortController();
   let mfAc: AbortController | undefined;
-  for await (const {code, sourcemap} of watch(absPath, 'linked', ac.signal)) {
+  const mode = 'development';
+  for await (const {code, sourcemap} of watch(
+    absPath,
+    'linked',
+    mode,
+    ac.signal,
+  )) {
     assert(sourcemap);
     const start = Date.now();
     process.stdout.write(
@@ -65,7 +71,13 @@ export async function devHandler(yargs: DevHandlerArgs) {
     mfAc?.abort();
     mfAc = new AbortController();
 
-    const {href} = await startDevServer(code, sourcemap, port, mfAc.signal);
+    const {href} = await startDevServer(
+      code,
+      sourcemap,
+      port,
+      mode,
+      mfAc.signal,
+    );
     process.stdout.write(` Done in ${Date.now() - start}ms.\n`);
     if (first && !silenceStartupMessage) {
       console.log(`

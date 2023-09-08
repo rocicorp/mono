@@ -17,13 +17,14 @@ const replaceReflectServerPlugin: esbuild.Plugin = {
 function getEsbuildOptions(
   entryPoint: string,
   sourcemap: esbuild.BuildOptions['sourcemap'] = 'external',
+  mode: 'production' | 'development',
 ) {
   return {
     bundle: true,
     conditions: ['workerd', 'worker', 'browser'],
     // Remove process.env. It does not exist in CF workers and we have npm
     // packages that use it.
-    define: {'process.env': '{}'},
+    define: {'process.env.NODE_ENV': JSON.stringify(mode), 'process.env': '{}'},
     external: [],
     format: 'esm',
     outdir: '.',
@@ -44,9 +45,12 @@ export type CompileResult = {
 
 export async function compile(
   entryPoint: string,
-  sourcemap?: esbuild.BuildOptions['sourcemap'],
+  sourcemap: esbuild.BuildOptions['sourcemap'],
+  mode: 'production' | 'development',
 ): Promise<CompileResult> {
-  const res = await esbuild.build(getEsbuildOptions(entryPoint, sourcemap));
+  const res = await esbuild.build(
+    getEsbuildOptions(entryPoint, sourcemap, mode),
+  );
   return getResultFromEsbuildResult(res, sourcemap);
 }
 
@@ -83,10 +87,11 @@ function getResultFromEsbuildResult(
 export async function* watch(
   entryPoint: string,
   sourcemap: esbuild.BuildOptions['sourcemap'] | undefined,
+  mode: 'production' | 'development',
   signal: AbortSignal,
 ): AsyncGenerator<CompileResult> {
   const buildContext = await esbuild.context(
-    getEsbuildOptions(entryPoint, sourcemap),
+    getEsbuildOptions(entryPoint, sourcemap, mode),
   );
 
   const hashes = new Map<string, string>();
@@ -144,9 +149,11 @@ function shouldHaveSourcemapFile(
   }
 }
 
-export async function buildReflectServerContent(): Promise<string> {
+export async function buildReflectServerContent(
+  mode: 'production' | 'development',
+): Promise<string> {
   const require = createRequire(import.meta.url);
   const serverPath = require.resolve('@rocicorp/reflect/server');
-  const {code} = await compile(serverPath, false);
+  const {code} = await compile(serverPath, false, mode);
   return code.text;
 }

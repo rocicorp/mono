@@ -15,6 +15,7 @@ export async function startDevServer(
   code: OutputFile,
   sourcemap: OutputFile,
   port: number,
+  mode: 'production' | 'development',
   signal: AbortSignal,
 ): Promise<URL> {
   const appDir = path.dirname(code.path);
@@ -47,7 +48,7 @@ export async function startDevServer(
       {
         type: 'ESModule',
         path: path.join(appDir, 'reflect-server.js'),
-        contents: await buildReflectServerContent(),
+        contents: await buildReflectServerContent(mode),
       },
     ],
     bindings: {

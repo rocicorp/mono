@@ -51,7 +51,7 @@ export async function publishHandler(
   const serverVersionRange = range.raw;
 
   console.log(`Compiling ${script}`);
-  const {code, sourcemap} = await compile(absPath, 'linked');
+  const {code, sourcemap} = await compile(absPath, 'linked', 'production');
   assert(sourcemap);
 
   const {userID} = await authenticate(yargs);
