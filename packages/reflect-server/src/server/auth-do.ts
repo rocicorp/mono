@@ -517,7 +517,7 @@ export class BaseAuthDO implements DurableObject {
             Promise.race([authHandler(auth, roomID), timeout()]);
 
           const [authHandlerAuthData, response] = await timed(
-            lc.debug,
+            lc.info,
             'calling authHandler',
             async () => {
               try {
