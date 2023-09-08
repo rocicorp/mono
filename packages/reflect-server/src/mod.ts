@@ -1,6 +1,8 @@
-import {DatadogLogSink} from 'datadog';
-
 export type {AuthHandler} from './server/auth.js';
+export {
+  createWorkerDatadogLogSink,
+  type WorkerDatadogLogSinkOptions,
+} from './server/create-worker-datadog-log-sink.js';
 export type {DisconnectHandler} from './server/disconnect.js';
 export {
   datadogLogging,
@@ -16,13 +18,3 @@ export {
   ReflectServerOptions,
   createReflectServer,
 } from './server/reflect.js';
-
-export type WorkerDatadogLogSinkOptions = {
-  apiKey: string;
-  service?: string | undefined;
-  host?: string | undefined;
-};
-
-export function createWorkerDatadogLogSink(opts: WorkerDatadogLogSinkOptions) {
-  return new DatadogLogSink({...opts, source: 'worker'});
-}
