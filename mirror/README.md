@@ -6,7 +6,7 @@
 - `mirror-protocol`: JSON REST API to Cloud Functions
 - `mirror-schema`: Firestore schema (Mirror database)
 - `mirror-server`: Cloud Function implementation (Mirror server business logic)
-- `reflect-cli`: User-level cli for `npm @rocicorp/reflect <command>` operations. Packaged by `packages/reflect`
+- `reflect-cli`: User-level cli for `npx @rocicorp/reflect <command>` operations. Packaged by `packages/reflect`
 
 ## Mirror "Stacks"
 
