@@ -191,7 +191,7 @@ async function validateBody<T>(
     // worker called response.clone(), but did not read the body of both
     // clones. <snip>". Routes that use validateBody, should use
     // the ValidateResult and not try to read the body, as reading the body
-    // again will results in an error "TypeError: body used already for <snip>".
+    // again will result in an error "TypeError: body used already for <snip>".
     json = await request.json();
   } catch (e) {
     return {
