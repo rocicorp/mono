@@ -5,6 +5,11 @@
     "declaration": true,
     "incremental": true
   },
-  "include": ["**/*.ts", "../subscriptions.ts"],
+  "include": [
+    "**/*.ts",
+    "../subscriptions.ts",
+    "../client-state.ts",
+    "../mutators.ts"
+  ],
   "extends": "../../tsconfig.json"
 }

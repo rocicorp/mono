@@ -9,10 +9,11 @@
     "build": "npm run lint && tsc && vite build",
     "preview": "vite preview",
     "format": "prettier --write './src/*/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
-    "watch": "concurrently --kill-others 'npx reflect dev --silence-startup-message' 'VITE_WORKER_URL=ws://127.0.0.1:8080 npm run dev'"
+    "watch": "concurrently --kill-others 'npx reflect dev --silence-startup-message' 'VITE_REFLECT_URL=ws://127.0.0.1:8080 npm run dev'"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.1.2",
+    "@rocicorp/rails": "^0.7.0",
     "@rocicorp/reflect": "^{{reflectVersion}}",
     "@types/react": "^18.0.17",
     "@types/react-dom": "^18.0.6",
