@@ -128,7 +128,7 @@ export async function runDeployment(
 
     const {secrets, hashes} = await getAppSecrets();
 
-    await publishToCloudflare(
+    for await (const deploymentUpdate of publishToCloudflare(
       storage,
       config,
       appName,
@@ -138,7 +138,15 @@ export async function runDeployment(
       secrets,
       appModules,
       serverModules,
-    );
+    )) {
+      await setDeploymentStatus(
+        firestore,
+        appID,
+        deploymentID,
+        'DEPLOYING',
+        deploymentUpdate,
+      );
+    }
     await setRunningDeployment(firestore, appID, deploymentID, hashes);
   } catch (e) {
     await setDeploymentStatus(

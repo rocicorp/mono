@@ -32,7 +32,7 @@ export async function cfFetch<ResponseType = unknown>(
   resource: string,
   init: RequestInit = {},
   searchParams?: URLSearchParams,
-) {
+): Promise<ResponseType> {
   assert(resource.startsWith('/'), 'resource must start with /');
   const base = 'https://api.cloudflare.com/client/v4';
   const queryString = searchParams ? `?${searchParams.toString()}` : '';

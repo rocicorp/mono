@@ -4,3 +4,8 @@ export type Config = {
   apiToken: string;
   env?: string;
 };
+
+export type ZoneConfig = {
+  zoneID: string;
+  apiToken: string;
+};

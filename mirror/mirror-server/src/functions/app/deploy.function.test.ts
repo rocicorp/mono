@@ -41,8 +41,14 @@ import {appDataConverter} from 'mirror-schema/src/app.js';
 import {Queue} from 'shared/src/queue.js';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {appNameIndexPath, teamPath} from 'mirror-schema/src/team.js';
+import {sleep} from 'shared/src/sleep.js';
 
 mockFunctionParamsAndSecrets();
+
+// eslint-disable-next-line require-await
+async function* noopPublish() {
+  // empty
+}
 
 describe('deploy', () => {
   initializeApp({projectId: 'deploy-function-test'});
@@ -158,8 +164,7 @@ describe('deploy', () => {
 
   test('state tracking: success', async () => {
     const {promise: isPublishing, resolve: publishing} = resolver<void>();
-    const {promise: canFinishPublishing, resolve: finishPublishing} =
-      resolver<void>();
+    const deploymentUpdates = new Queue<string>();
 
     const deploymentID = await requestTestDeployment();
     let deployment = await getDeployment(deploymentID);
@@ -169,20 +174,30 @@ describe('deploy', () => {
     expect(app.queuedDeploymentIDs).toEqual([deploymentID]);
     expect(app.runningDeployment).toBeUndefined;
 
+    // eslint-disable-next-line require-yield
+    async function* publish() {
+      publishing();
+      for (;;) {
+        const update = await deploymentUpdates.dequeue();
+        if (!update) {
+          break;
+        }
+        yield update;
+      }
+    }
+
     const deploymentFinished = runDeployment(
       firestore,
       null as unknown as Storage,
       APP_ID,
       deploymentID,
-      async () => {
-        publishing();
-        await canFinishPublishing;
-      },
+      publish,
     );
     await isPublishing;
 
     deployment = await getDeployment(deploymentID);
     expect(deployment.status).toBe('DEPLOYING');
+    expect(deployment.statusMessage).toBeUndefined;
     app = await getApp(firestore, APP_ID);
     expect(app.queuedDeploymentIDs).toEqual([deploymentID]);
     expect(app.runningDeployment).toBeUndefined;
@@ -193,7 +208,14 @@ describe('deploy', () => {
     expect(app.queuedDeploymentIDs).toEqual([deploymentID, nextDeploymentID]);
     expect(app.runningDeployment).toBeUndefined;
 
-    finishPublishing();
+    for (const update of ['deploying yo!', 'still deploying']) {
+      void deploymentUpdates.enqueue(update);
+      await sleep(200); // We *could* use a snapshot listener to wait for updates but that's a lot more code.
+      deployment = await getDeployment(deploymentID);
+      expect(deployment.status).toBe('DEPLOYING');
+      expect(deployment.statusMessage).toBe(update);
+    }
+    void deploymentUpdates.enqueue('');
     await deploymentFinished;
 
     deployment = await getDeployment(deploymentID);
@@ -208,8 +230,7 @@ describe('deploy', () => {
       null as unknown as Storage,
       APP_ID,
       nextDeploymentID,
-      // eslint-disable-next-line @typescript-eslint/no-empty-function
-      async () => {},
+      noopPublish,
     );
 
     const first = await getDeployment(deploymentID);
@@ -244,15 +265,18 @@ describe('deploy', () => {
     expect(app.queuedDeploymentIDs).toEqual([deploymentID]);
     expect(app.runningDeployment).toEqual(runningDeployment);
 
+    // eslint-disable-next-line require-yield
+    async function* publish() {
+      publishing();
+      await canFinishPublishing;
+    }
+
     const deploymentFinished = runDeployment(
       firestore,
       null as unknown as Storage,
       APP_ID,
       deploymentID,
-      async () => {
-        publishing();
-        await canFinishPublishing;
-      },
+      publish,
     );
     await isPublishing;
 
@@ -322,27 +346,15 @@ describe('deploy', () => {
     const id = await requestTestDeployment();
     let timesDeployed = 0;
 
+    // eslint-disable-next-line require-await
+    // eslint-disable-next-line require-yield
+    async function* publish() {
+      timesDeployed++;
+    }
+
     const results = await Promise.allSettled([
-      runDeployment(
-        firestore,
-        null as unknown as Storage,
-        APP_ID,
-        id,
-        // eslint-disable-next-line require-await
-        async () => {
-          timesDeployed++;
-        },
-      ),
-      runDeployment(
-        firestore,
-        null as unknown as Storage,
-        APP_ID,
-        id,
-        // eslint-disable-next-line require-await
-        async () => {
-          timesDeployed++;
-        },
-      ),
+      runDeployment(firestore, null as unknown as Storage, APP_ID, id, publish),
+      runDeployment(firestore, null as unknown as Storage, APP_ID, id, publish),
     ]);
 
     // Verify that only one of the runs succeeded.
@@ -370,7 +382,7 @@ describe('deploy', () => {
       null as unknown as Storage,
       APP_ID,
       deleteID,
-      () => Promise.resolve(),
+      noopPublish,
       // eslint-disable-next-line require-await
       async () => {
         scriptDeleted = true;
