@@ -17,11 +17,7 @@
 // precedence over the client-side optimistic result.
 
 import type {WriteTransaction} from '@rocicorp/reflect';
-import {
-  getClientState,
-  initClientState,
-  putClientState,
-} from './client-state.js';
+import {initClientState, updateClientState} from './client-state.js';
 
 export const mutators = {
   setCursor,
@@ -31,7 +27,7 @@ export const mutators = {
 
 export type M = typeof mutators;
 
-export async function increment(
+async function increment(
   tx: WriteTransaction,
   {key, delta}: {key: string; delta: number},
 ) {
@@ -40,18 +36,9 @@ export async function increment(
   await tx.put(key, next);
 }
 
-export async function setCursor(
+async function setCursor(
   tx: WriteTransaction,
   {x, y}: {x: number; y: number},
 ): Promise<void> {
-  const clientState = await getClientState(tx, tx.clientID);
-  await putClientState(tx, {
-    clientState: {
-      ...clientState,
-      cursor: {
-        x,
-        y,
-      },
-    },
-  });
+  await updateClientState(tx, {id: tx.clientID, cursor: {x, y}});
 }

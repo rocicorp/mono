@@ -4,17 +4,17 @@ import React, {useEffect} from 'react';
 import ReactDOM from 'react-dom/client';
 import CursorField from './cursor-field.js';
 import styles from './index.module.css';
-import {randUserInfo} from './reflect/client-state.js';
-import {mutators} from './reflect/mutators.js';
+import {randUserInfo} from './client-state.js';
+import {mutators} from './mutators.js';
 import {useCount} from './subscriptions.js';
 
 const userID = nanoid();
 const roomID = 'my-room';
 const incrementKey = 'count';
 
-const socketOrigin: string | undefined = import.meta.env.VITE_WORKER_URL;
+const socketOrigin: string | undefined = import.meta.env.VITE_REFLECT_URL;
 if (socketOrigin === undefined || socketOrigin === '') {
-  throw new Error('VITE_WORKER_URL required');
+  throw new Error('VITE_REFLECT_URL required');
 }
 
 const r = new Reflect({

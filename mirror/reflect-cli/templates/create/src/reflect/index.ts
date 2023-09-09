@@ -1,6 +1,6 @@
 import type {AuthHandler, ReflectServerOptions} from '@rocicorp/reflect/server';
-import {clearCursor} from './client-state.js';
-import {M, mutators} from './mutators.js';
+import {clearCursor} from '../client-state.js';
+import {M, mutators} from '../mutators.js';
 
 const authHandler: AuthHandler = (auth: string, _roomID: string) => {
   if (auth) {
@@ -22,9 +22,7 @@ function makeOptions(): ReflectServerOptions<M> {
   return {
     mutators,
     authHandler,
-    disconnectHandler: async write => {
-      await clearCursor(write);
-    },
+    disconnectHandler: clearCursor,
     logLevel: 'debug',
   };
 }
