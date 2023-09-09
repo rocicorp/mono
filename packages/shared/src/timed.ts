@@ -1,5 +1,9 @@
 type LogFunction = ((...args: unknown[]) => void) | undefined;
 
+declare const performance: {
+  now(): number;
+};
+
 /**
  * Times some async function and writes the result to a provided log function.
  * The log function can be undefined to simplify use with OptionalLogger.

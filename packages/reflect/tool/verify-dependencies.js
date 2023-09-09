@@ -57,6 +57,9 @@ function dirExists(p) {
  * @param {string} name
  */
 function isInternalPackage(name) {
+  if (name === 'replicache') {
+    return false;
+  }
   return dirExists(path('packages', name)) || dirExists(path('mirror', name));
 }
 

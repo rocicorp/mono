@@ -1,3 +1,5 @@
+import {getVersion} from '../reflect-shared/tool/get-version.js';
+
 /** @type {import('jest').Config} */
 const config = {
   preset: 'ts-jest/presets/default-esm',
@@ -15,6 +17,9 @@ const config = {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   testEnvironment: 'miniflare',
+  globals: {
+    ['REFLECT_VERSION']: getVersion(),
+  },
 };
 
 export {config as default};

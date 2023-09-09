@@ -20,7 +20,7 @@ export async function getExternalFromPackageJSON(basePath) {
   const pkg = JSON.parse(x);
 
   const deps = new Set();
-  for (const dep of Object.keys(pkg.dependencies)) {
+  for (const dep of Object.keys(pkg.dependencies ?? {})) {
     if (isInternalPackage(dep)) {
       for (const depDep of await getRecursiveExternals(dep)) {
         deps.add(depDep);

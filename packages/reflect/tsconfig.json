@@ -2,7 +2,9 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "types": ["node"],
-    "lib": ["esnext"],
+    // For WebAssembly used by esbuild
+    "lib": ["esnext", "dom"],
+    "skipLibCheck": true,
     "noEmit": true
   },
   "include": ["tool/*.js"]
