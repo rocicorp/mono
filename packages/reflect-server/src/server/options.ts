@@ -4,7 +4,7 @@ import {
   type LogLevel,
   type LogSink,
 } from '@rocicorp/logger';
-import type {MutatorDefs} from 'reflect-shared';
+import {version, type MutatorDefs} from 'reflect-shared';
 import {isTrueEnvValue} from '../util/env.js';
 import {createWorkerDatadogLogSink} from './create-worker-datadog-log-sink.js';
 import type {ReflectServerOptions} from './reflect.js';
@@ -103,6 +103,7 @@ export function datadogLogging<
     const logSink = createWorkerDatadogLogSink({
       apiKey: env.DATADOG_LOGS_API_KEY,
       service: env.DATADOG_SERVICE_LABEL ?? defaultServiceLabel,
+      version,
       host,
     });
     return {...options, logSinks: [...(options.logSinks ?? []), logSink]};

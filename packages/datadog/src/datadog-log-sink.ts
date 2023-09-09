@@ -6,6 +6,7 @@ export interface DatadogLogSinkOptions {
   source?: string | undefined;
   service?: string | undefined;
   host?: string | undefined;
+  version?: string | undefined;
   interval?: number | undefined;
 }
 
@@ -28,17 +29,19 @@ export class DatadogLogSink implements LogSink {
   private readonly _source: string | undefined;
   private readonly _service: string | undefined;
   private readonly _host: string | undefined;
+  private readonly _version: string | undefined;
   private readonly _interval: number;
   private _timerID: ReturnType<typeof setTimeout> | 0 = 0;
   private _flushLock = new Lock();
 
   constructor(options: DatadogLogSinkOptions) {
-    const {apiKey, source, service, host, interval = 5_000} = options;
+    const {apiKey, source, service, host, version, interval = 5_000} = options;
 
     this._apiKey = apiKey;
     this._source = source;
     this._service = service;
     this._host = host;
+    this._version = version;
     this._interval = interval;
   }
 
@@ -117,6 +120,10 @@ export class DatadogLogSink implements LogSink {
 
         if (this._host) {
           url.searchParams.set('host', this._host);
+        }
+
+        if (this._version) {
+          url.searchParams.set('ddtags', `version:${this._version}`);
         }
 
         let ok = false;
@@ -235,6 +242,7 @@ const RESERVED_KEYS: ReadonlyArray<string> = [
   'source',
   'status',
   'service',
+  'version',
   'trace_id',
   'message',
   'msg', // alias for message
