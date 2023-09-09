@@ -128,7 +128,7 @@ async function buildPackages() {
     platform: 'neutral',
     define: {
       ...define,
-      REFLECT_VERSION: JSON.stringify(getReflectVersion()),
+      ['REFLECT_VERSION']: JSON.stringify(getReflectVersion()),
     },
     format: 'esm',
     entryPoints: [
