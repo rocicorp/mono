@@ -74,6 +74,7 @@ jobs:
 
   test:
     name: Test
+    needs: [format, lint, check-types]
     runs-on: ubuntu-latest
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
