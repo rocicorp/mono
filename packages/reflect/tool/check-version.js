@@ -1,7 +1,6 @@
 // @ts-check
 
-import {readFileSync} from 'node:fs';
-import {opendir} from 'node:fs/promises';
+import {opendir, readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import * as path from 'path';
 import colors from 'picocolors';
@@ -9,22 +8,22 @@ import colors from 'picocolors';
 const {bold} = colors;
 
 /**
- * @param {string} fileName
- * @returns {string}
+ * @returns {Promise<string>}
  */
-function read(fileName) {
-  return readFileSync(
-    path.join(path.dirname(fileURLToPath(import.meta.url)), '..', fileName),
+async function versionFromPackageJSON() {
+  const s = await readFile(
+    fileURLToPath(new URL('../package.json', import.meta.url)),
     'utf-8',
   );
+  return JSON.parse(s).version;
 }
 
 /**
  * @param {string} fileName
  * @param {string} version
  */
-function fileContainsVersionString(fileName, version) {
-  const js = readFileSync(fileName, 'utf-8');
+async function fileContainsVersionString(fileName, version) {
+  const js = await readFile(fileName, 'utf-8');
   return new RegExp('var [a-zA-Z0-9]+ ?= ?"' + version + '";', 'g').test(js);
 }
 
@@ -40,7 +39,9 @@ async function checkFilesForVersion(dir, version) {
     if (!entry.isFile() || !entry.name.endsWith('.js')) {
       continue;
     }
-    if (fileContainsVersionString(path.join(dir, '/', entry.name), version)) {
+    if (
+      await fileContainsVersionString(path.join(dir, '/', entry.name), version)
+    ) {
       return;
     }
     files.push(entry.name);
@@ -54,6 +55,4 @@ async function checkFilesForVersion(dir, version) {
   process.exit(1);
 }
 
-const {version} = JSON.parse(read('package.json'));
-
-checkFilesForVersion('out', version);
+await checkFilesForVersion('out', await versionFromPackageJSON());
