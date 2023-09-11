@@ -12,8 +12,7 @@
     "test:watch": "web-test-runner --watch",
     "check-types": "tsc --noEmit",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
-    "build-min": "node tool/build.js",
-    "build": "rm -rf out && npm run build-dts && npm run build-min"
+    "build": "rm -rf out && npm run build-dts"
   },
   "dependencies": {
     "@badrap/valita": "^0.2.10",
@@ -42,6 +41,9 @@
     "shared": "0.0.0",
     "sinon": "^13.0.1",
     "typescript": "^5.1.3"
+  },
+  "exports": {
+    ".": "./src/mod.ts"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

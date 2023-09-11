@@ -3,7 +3,6 @@
 
 import * as esbuild from 'esbuild';
 import * as fs from 'node:fs';
-import {writeFile} from 'fs/promises';
 import * as path from 'path';
 import {sharedOptions} from 'shared/src/build.js';
 import {fileURLToPath} from 'url';
@@ -11,17 +10,6 @@ import {fileURLToPath} from 'url';
 const metafile = process.argv.includes('--metafile');
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
-
-async function buildESM() {
-  const outfile = path.join(dirname, 'out', 'reflect-server.js');
-  const result = await buildInternal({
-    entryPoints: [path.join(dirname, 'src', 'mod.ts')],
-    outfile,
-  });
-  if (metafile) {
-    await writeFile(outfile + '.meta.json', JSON.stringify(result.metafile));
-  }
-}
 
 function buildExample() {
   return buildInternal({
@@ -83,7 +71,7 @@ function doCopy(dst, src) {
 }
 
 try {
-  await Promise.all([buildESM(), buildExample(), buildCLI()]);
+  await Promise.all([buildExample(), buildCLI()]);
   copyScriptTemplates();
 } catch (e) {
   console.error(e);

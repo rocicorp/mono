@@ -15,8 +15,7 @@ const config = {
     ],
   },
   globals: {
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    REFLECT_VERSION: getVersion(),
+    ['REFLECT_VERSION']: getVersion(),
   },
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',

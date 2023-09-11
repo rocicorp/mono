@@ -11,7 +11,12 @@ export default {
   output: {
     file: `./out/reflect-shared.d.ts`,
   },
-  external: ['@rocicorp/lock', '@rocicorp/logger', '@rocicorp/resolver'],
+  external: [
+    '@rocicorp/lock',
+    '@rocicorp/logger',
+    '@rocicorp/resolver',
+    'replicache',
+  ],
   plugins: [
     nodeResolve(),
     dts({

@@ -4,6 +4,7 @@
 
 import {esbuildPlugin} from '@web/dev-server-esbuild';
 import {playwrightLauncher} from '@web/test-runner-playwright';
+import {getVersion} from '../reflect-shared/tool/get-version.js';
 import {makeDefine} from '../shared/src/build.js';
 
 const chromium = playwrightLauncher({product: 'chromium'});
@@ -22,7 +23,10 @@ const config = {
     esbuildPlugin({
       ts: true,
       target: 'es2022',
-      define,
+      define: {
+        ...define,
+        ['REFLECT_VERSION']: JSON.stringify(getVersion()),
+      },
     }),
   ],
   staticLogging: !!process.env.CI,

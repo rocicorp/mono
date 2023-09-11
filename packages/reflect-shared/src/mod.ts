@@ -50,5 +50,10 @@ export type {
   UpdateNeededReason,
   VersionNotSupportedResponse,
 } from 'replicache';
-export type * from './types.js';
+export type {
+  AuthData,
+  MutatorDefs,
+  ReadTransaction,
+  WriteTransaction,
+} from './types.js';
 export {version} from './version.js';

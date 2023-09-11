@@ -8,6 +8,7 @@ const external = [
   '@rocicorp/lock',
   '@rocicorp/logger',
   '@rocicorp/resolver',
+  'replicache',
 ];
 
 /**

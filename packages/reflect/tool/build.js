@@ -1,8 +1,11 @@
 // @ts-check
 
+import * as esbuild from 'esbuild';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {makeDefine, sharedOptions} from '../../shared/src/build.js';
+import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-from-package-json.js';
 
 /** @param {string[]} parts */
 function basePath(...parts) {
@@ -15,7 +18,7 @@ function basePath(...parts) {
 
 function copyPackages() {
   for (const name of ['client', 'server', 'shared']) {
-    for (const ext of ['js', 'd.ts', 'js.map']) {
+    for (const ext of ['d.ts']) {
       const src = basePath(
         '..',
         `reflect-${name}`,
@@ -69,7 +72,7 @@ function copyReflectCLI() {
   const binDir = basePath('bin');
   fs.rmSync(binDir, {recursive: true, force: true});
   const src = basePath('..', '..', 'mirror', 'reflect-cli', 'out', 'index.mjs');
-  const dst = basePath('bin/cli.js');
+  const dst = basePath('bin', 'cli.js');
   doCopy(dst, src, 'mirror/reflect-cli');
   const templateSrc = basePath(
     '..',
@@ -81,6 +84,65 @@ function copyReflectCLI() {
   const templateDst = basePath('bin', 'templates');
   fs.cpSync(templateSrc, templateDst, {recursive: true});
 }
+
+/**
+ * @return {string}
+ */
+function getReflectVersion() {
+  const pkg = fs.readFileSync(basePath('package.json'), 'utf-8');
+  return JSON.parse(pkg).version;
+}
+
+/**
+ * @param {any[]} names
+ * @returns {Promise<string[]>}
+ */
+async function getExternalForPackages(...names) {
+  const externals = new Set();
+  for (const name of names) {
+    for (const dep of await getExternalFromPackageJSON(basePath('..', name))) {
+      externals.add(dep);
+    }
+  }
+  return [...externals];
+}
+
+async function buildPackages() {
+  // let's just never minify for now, it's constantly getting in our and our
+  // user's way. When we have an automated way to do both minified and non-
+  // minified builds we can re-enable this.
+  const minify = false;
+  let shared = sharedOptions(minify, false);
+  const define = makeDefine('unknown');
+
+  fs.rmSync(basePath('out'), {recursive: true, force: true});
+
+  await esbuild.build({
+    ...shared,
+    external: await getExternalForPackages(
+      'reflect-server',
+      'reflect-client',
+      'reflect-shared',
+    ),
+    // Use neutral to remove the automatic define for process.env.NODE_ENV
+    platform: 'neutral',
+    define: {
+      ...define,
+      ['REFLECT_VERSION']: JSON.stringify(getReflectVersion()),
+    },
+    format: 'esm',
+    entryPoints: [
+      basePath('src', 'client.ts'),
+      basePath('src', 'server.ts'),
+      basePath('src', 'shared.ts'),
+    ],
+    bundle: true,
+    outdir: 'out',
+    splitting: true,
+  });
+}
+
+await buildPackages();
 
 copyPackages();
 
