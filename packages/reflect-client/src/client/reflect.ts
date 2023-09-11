@@ -129,22 +129,22 @@ const enum PingResult {
 export class Reflect<MD extends MutatorDefs> {
   readonly version = version;
 
-  private readonly _rep: Replicache<MD>;
-  private readonly _socketOrigin: string | null;
+  readonly #rep: Replicache<MD>;
+  readonly #socketOrigin: string | null;
   readonly userID: string;
   readonly roomID: string;
 
   // This is a promise because it is waiting for the clientID from the
   // Replicache instance.
-  private readonly _l: Promise<LogContext>;
+  readonly #l: Promise<LogContext>;
   protected readonly _logOptions: LogOptions;
 
-  private readonly _pokeHandler: PokeHandler;
+  readonly #pokeHandler: PokeHandler;
 
-  private _lastMutationIDSent: {clientID: string; id: number} =
+  #lastMutationIDSent: {clientID: string; id: number} =
     NULL_LAST_MUTATION_ID_SENT;
 
-  private _onPong: () => void = () => undefined;
+  #onPong: () => void = () => undefined;
 
   #online = false;
 
@@ -154,17 +154,17 @@ export class Reflect<MD extends MutatorDefs> {
    */
   onOnlineChange: ((online: boolean) => void) | null | undefined = null;
 
-  private _onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
-  private readonly _jurisdiction: 'eu' | undefined;
-  private _baseCookie: number | null = null;
+  #onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
+  readonly #jurisdiction: 'eu' | undefined;
+  #baseCookie: number | null = null;
   // Total number of sockets successfully connected by this client
-  private _connectedCount = 0;
+  #connectedCount = 0;
   // Number of messages received over currently connected socket.  Reset
   // on disconnect.
-  private _messageCount = 0;
-  private _connectedAt = 0;
+  #messageCount = 0;
+  #connectedAt = 0;
   // Reset on successful connection.
-  private _connectErrorCount = 0;
+  #connectErrorCount = 0;
 
   #abortPingTimeout = () => {
     // intentionally empty
@@ -189,24 +189,23 @@ export class Reflect<MD extends MutatorDefs> {
    * available and prompting them to refresh.
    */
   get onUpdateNeeded(): ((reason: UpdateNeededReason) => void) | null {
-    return this._onUpdateNeeded;
+    return this.#onUpdateNeeded;
   }
   set onUpdateNeeded(callback: ((reason: UpdateNeededReason) => void) | null) {
-    this._onUpdateNeeded = callback;
-    this._rep.onUpdateNeeded =
+    this.#onUpdateNeeded = callback;
+    this.#rep.onUpdateNeeded =
       callback &&
       (reason => {
         callback(convertOnUpdateNeededReason(reason));
       });
   }
 
-  private _connectResolver = resolver<void>();
-  private _baseCookieResolver: Resolver<NullableVersion> | null = null;
-  private _pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> =
-    new Map();
-  private _lastMutationIDReceived = 0;
+  #connectResolver = resolver<void>();
+  #baseCookieResolver: Resolver<NullableVersion> | null = null;
+  #pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> = new Map();
+  #lastMutationIDReceived = 0;
 
-  private _socket: WebSocket | undefined = undefined;
+  #socket: WebSocket | undefined = undefined;
   protected _socketResolver = resolver<WebSocket>();
 
   #connectionStateChangeResolver = resolver<ConnectionState>();
@@ -248,11 +247,11 @@ export class Reflect<MD extends MutatorDefs> {
 
   readonly #options: ReflectOptions<MD>;
 
-  private _metrics: MetricManager;
+  #metrics: MetricManager;
 
   // Store as field to allow test subclass to override. Web API doesn't allow
   // overwriting location fields for security reasons.
-  private _reload = () => location.reload();
+  #reload = () => location.reload();
 
   /**
    * Constructs a new Reflect client.
@@ -303,8 +302,8 @@ export class Reflect<MD extends MutatorDefs> {
       logSinks: [logOptions.logSink],
       mutators: options.mutators,
       name: `reflect-${userID}-${roomID}`,
-      pusher: (req, reqID) => this._pusher(req, reqID),
-      puller: (req, reqID) => this._puller(req, reqID),
+      pusher: (req, reqID) => this.#pusher(req, reqID),
+      puller: (req, reqID) => this.#puller(req, reqID),
       // TODO: Do we need these?
       pushDelay: 0,
       requestOptions: {
@@ -318,39 +317,39 @@ export class Reflect<MD extends MutatorDefs> {
       enableLicensing: false,
     };
 
-    this._rep = new Replicache({
+    this.#rep = new Replicache({
       ...replicacheOptions,
       ...replicacheInternalOptions,
     });
-    this._rep.getAuth = this.#getAuthToken;
-    this._onUpdateNeeded = this._rep.onUpdateNeeded; // defaults to reload.
-    this._socketOrigin = socketOrigin;
+    this.#rep.getAuth = this.#getAuthToken;
+    this.#onUpdateNeeded = this.#rep.onUpdateNeeded; // defaults to reload.
+    this.#socketOrigin = socketOrigin;
     this.roomID = roomID;
     this.userID = userID;
-    this._jurisdiction = jurisdiction;
-    this._l = getLogContext(
+    this.#jurisdiction = jurisdiction;
+    this.#l = getLogContext(
       options.roomID,
       logOptions.logLevel,
       logOptions.logSink,
-      this._rep,
+      this.#rep,
     );
 
-    void this._l.then(lc => reportReloadReason(lc, localStorage));
+    void this.#l.then(lc => reportReloadReason(lc, localStorage));
 
-    this._metrics = new MetricManager({
+    this.#metrics = new MetricManager({
       reportIntervalMs: REPORT_INTERVAL_MS,
       host: location.host,
       source: 'client',
-      reporter: allSeries => this._reportMetrics(allSeries),
-      lc: this._l,
+      reporter: allSeries => this.#reportMetrics(allSeries),
+      lc: this.#l,
     });
-    this._metrics.tags.push(`version:${this.version}`);
+    this.#metrics.tags.push(`version:${this.version}`);
 
-    this._pokeHandler = new PokeHandler(
-      pokeDD31 => this._rep.poke(pokeDD31),
-      () => this._onOutOfOrderPoke(),
+    this.#pokeHandler = new PokeHandler(
+      pokeDD31 => this.#rep.poke(pokeDD31),
+      () => this.#onOutOfOrderPoke(),
       this.clientID,
-      this._l,
+      this.#l,
     );
 
     this.#visibilityWatcher = getDocumentVisibilityWatcher(
@@ -358,6 +357,8 @@ export class Reflect<MD extends MutatorDefs> {
       hiddenTabDisconnectDelay,
       this.#closeAbortController.signal,
     );
+
+    void this.#runLoop();
 
     void this._runLoop();
   }
@@ -374,7 +375,7 @@ export class Reflect<MD extends MutatorDefs> {
    * instance of Reflect is stored.
    */
   get idbName(): string {
-    return this._rep.idbName;
+    return this.#rep.idbName;
   }
 
   /**
@@ -382,7 +383,7 @@ export class Reflect<MD extends MutatorDefs> {
    * See [[ReflectOptions.schemaVersion]].
    */
   get schemaVersion(): string {
-    return this._rep.schemaVersion;
+    return this.#rep.schemaVersion;
   }
 
   /**
@@ -390,18 +391,18 @@ export class Reflect<MD extends MutatorDefs> {
    * gets a unique client ID.
    */
   get clientID(): Promise<ClientID> {
-    return this._rep.clientID;
+    return this.#rep.clientID;
   }
 
   get clientGroupID(): Promise<ClientGroupID> {
-    return this._rep.clientGroupID;
+    return this.#rep.clientGroupID;
   }
 
   /**
    * The registered mutators (see [[ReflectOptions.mutators]]).
    */
   get mutate() {
-    return this._rep.mutate;
+    return this.#rep.mutate;
   }
 
   /**
@@ -411,7 +412,7 @@ export class Reflect<MD extends MutatorDefs> {
    * used any more.
    */
   get closed(): boolean {
-    return this._rep.closed;
+    return this.#rep.closed;
   }
 
   /**
@@ -421,14 +422,14 @@ export class Reflect<MD extends MutatorDefs> {
    */
   async close(): Promise<void> {
     if (this._connectionState !== ConnectionState.Disconnected) {
-      const lc = await this._l;
-      await this._disconnect(lc, {
+      const lc = await this.#l;
+      await this.#disconnect(lc, {
         client: 'ReflectClosed',
       });
     }
     this.#closeAbortController.abort();
-    this._metrics.stop();
-    return this._rep.close();
+    this.#metrics.stop();
+    return this.#rep.close();
   }
 
   /**
@@ -454,7 +455,7 @@ export class Reflect<MD extends MutatorDefs> {
       onDone?: () => void;
     },
   ): () => void {
-    return this._rep.subscribe(body, {
+    return this.#rep.subscribe(body, {
       onData,
       onError,
       onDone,
@@ -465,7 +466,7 @@ export class Reflect<MD extends MutatorDefs> {
    * Transactionally read Reflect data.
    */
   query<R>(body: (tx: ReadTransaction) => Promise<R> | R): Promise<R> {
-    return this._rep.query(body);
+    return this.#rep.query(body);
   }
 
   /**
@@ -492,11 +493,11 @@ export class Reflect<MD extends MutatorDefs> {
     callback: ExperimentalWatchCallbackForOptions<Options>,
     options?: Options,
   ): () => void {
-    return this._rep.experimentalWatch(callback, options);
+    return this.#rep.experimentalWatch(callback, options);
   }
 
-  private _onMessage = async (e: MessageEvent<string>): Promise<void> => {
-    const l = await this._l;
+  #onMessage = async (e: MessageEvent<string>): Promise<void> => {
+    const l = await this.#l;
     l.debug?.('received message', e.data);
     if (this.closed) {
       l.debug?.('ignoring message because already closed');
@@ -520,32 +521,32 @@ export class Reflect<MD extends MutatorDefs> {
       rejectInvalidMessage(e);
       return;
     }
-    this._messageCount++;
+    this.#messageCount++;
     switch (downMessage[0]) {
       case 'connected':
-        return this._handleConnectedMessage(l, downMessage);
+        return this.#handleConnectedMessage(l, downMessage);
 
       case 'error':
-        return this._handleErrorMessage(l, downMessage);
+        return this.#handleErrorMessage(l, downMessage);
 
       case 'pong':
-        return this._onPong();
+        return this.#onPong();
 
       case 'poke':
-        return this._handlePoke(l, downMessage);
+        return this.#handlePoke(l, downMessage);
 
       case 'pull':
-        return this._handlePullResponse(l, downMessage);
+        return this.#handlePullResponse(l, downMessage);
 
       default:
         rejectInvalidMessage();
     }
   };
 
-  private _onOpen = async (e: Event) => {
+  #onOpen = async (e: Event) => {
     const l = addWebSocketIDFromSocketToLogContext(
       e.target as WebSocket,
-      await this._l,
+      await this.#l,
     );
     if (this._connectStart === undefined) {
       l.error?.(
@@ -561,21 +562,21 @@ export class Reflect<MD extends MutatorDefs> {
     }
   };
 
-  private _onClose = async (e: CloseEvent) => {
+  #onClose = async (e: CloseEvent) => {
     const l = addWebSocketIDFromSocketToLogContext(
       e.target as WebSocket,
-      await this._l,
+      await this.#l,
     );
     const {code, reason, wasClean} = e;
     l.info?.('Got socket close event', {code, reason, wasClean});
 
     const closeKind = wasClean ? 'CleanClose' : 'AbruptClose';
-    this._connectResolver.reject(new CloseError(closeKind));
-    await this._disconnect(l, {client: closeKind});
+    this.#connectResolver.reject(new CloseError(closeKind));
+    await this.#disconnect(l, {client: closeKind});
   };
 
   // An error on the connection is fatal for the connection.
-  private async _handleErrorMessage(
+  async #handleErrorMessage(
     lc: LogContext,
     downMessage: ErrorMessage,
   ): Promise<void> {
@@ -589,9 +590,9 @@ export class Reflect<MD extends MutatorDefs> {
       kind === 'InvalidConnectionRequestLastMutationID' ||
       kind === 'InvalidConnectionRequestBaseCookie'
     ) {
-      await dropDatabase(this._rep.idbName);
+      await dropDatabase(this.#rep.idbName);
       reloadWithReason(
-        this._reload,
+        this.#reload,
         localStorage,
         serverAheadReloadReason(kind),
       );
@@ -603,28 +604,25 @@ export class Reflect<MD extends MutatorDefs> {
 
     this.#rejectMessageError?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
-    this._connectResolver.reject(error);
-    await this._disconnect(lc, {server: kind});
+    this.#connectResolver.reject(error);
+    await this.#disconnect(lc, {server: kind});
   }
 
-  private _handleConnectedMessage(
-    lc: LogContext,
-    connectedMessage: ConnectedMessage,
-  ) {
+  #handleConnectedMessage(lc: LogContext, connectedMessage: ConnectedMessage) {
     const now = Date.now();
     const [, connectBody] = connectedMessage;
     lc = addWebSocketIDToLogContext(connectBody.wsid, lc);
 
-    if (this._connectedCount === 0) {
-      this._checkConnectivity('firstConnect');
-    } else if (this._connectErrorCount > 0) {
-      this._checkConnectivity('connectAfterError');
+    if (this.#connectedCount === 0) {
+      this.#checkConnectivity('firstConnect');
+    } else if (this.#connectErrorCount > 0) {
+      this.#checkConnectivity('connectAfterError');
     }
-    this._connectedCount++;
-    this._connectedAt = now;
-    this._metrics.lastConnectError.clear();
-    const proceedingConnectErrorCount = this._connectErrorCount;
-    this._connectErrorCount = 0;
+    this.#connectedCount++;
+    this.#connectedAt = now;
+    this.#metrics.lastConnectError.clear();
+    const proceedingConnectErrorCount = this.#connectErrorCount;
+    this.#connectErrorCount = 0;
 
     let timeToConnectMs = undefined;
     let connectMsgLatencyMs = undefined;
@@ -634,7 +632,7 @@ export class Reflect<MD extends MutatorDefs> {
       );
     } else {
       timeToConnectMs = now - this._connectStart;
-      this._metrics.timeToConnectMs.set(timeToConnectMs);
+      this.#metrics.timeToConnectMs.set(timeToConnectMs);
       connectMsgLatencyMs =
         connectBody.timestamp !== undefined
           ? now - connectBody.timestamp
@@ -651,41 +649,41 @@ export class Reflect<MD extends MutatorDefs> {
       this._totalToConnectStart = undefined;
     }
 
-    this._metrics.setConnected(timeToConnectMs ?? 0, totalTimeToConnectMs ?? 0);
+    this.#metrics.setConnected(timeToConnectMs ?? 0, totalTimeToConnectMs ?? 0);
 
     lc.info?.('Connected', {
       navigatorOnline: navigator.onLine,
       timeToConnectMs,
       totalTimeToConnectMs,
       connectMsgLatencyMs,
-      connectedCount: this._connectedCount,
+      connectedCount: this.#connectedCount,
       proceedingConnectErrorCount,
     });
-    this._lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+    this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
 
     lc.debug?.('Resolving connect resolver');
     this._connectionState = ConnectionState.Connected;
-    this._connectResolver.resolve();
+    this.#connectResolver.resolve();
   }
 
   /**
    * Starts a new connection. This will create the WebSocket that does the HTTP
    * request to the server.
    *
-   * {@link _connect} will throw an assertion error if the
+   * {@link #connect} will throw an assertion error if the
    * {@link _connectionState} is not {@link ConnectionState.Disconnected}.
    * Callers MUST check the connection state before calling this method and log
    * an error as needed.
    *
    * The function will resolve once the socket is connected. If you need to know
    * when a connection has been established, as in we have received the
-   * {@link ConnectedMessage}, you should await the {@link _connectResolver}
-   * promise. The {@link _connectResolver} promise rejects if an error message
+   * {@link ConnectedMessage}, you should await the {@link #connectResolver}
+   * promise. The {@link #connectResolver} promise rejects if an error message
    * is received before the connected message is received or if the connection
    * attempt times out.
    */
-  private async _connect(l: LogContext): Promise<void> {
-    assert(this._socketOrigin);
+  async #connect(l: LogContext): Promise<void> {
+    assert(this.#socketOrigin);
 
     // All the callers check this state already.
     assert(this._connectionState === ConnectionState.Disconnected);
@@ -706,66 +704,63 @@ export class Reflect<MD extends MutatorDefs> {
       this._totalToConnectStart = now;
     }
 
-    const baseCookie = await this._getBaseCookie();
-    this._baseCookie = baseCookie;
+    const baseCookie = await this.#getBaseCookie();
+    this.#baseCookie = baseCookie;
 
     // Reject connect after a timeout.
     const id = setTimeout(async () => {
       l.debug?.('Rejecting connect resolver due to timeout');
-      this._connectResolver.reject(new TimedOutError('Connect'));
-      await this._disconnect(l, {
+      this.#connectResolver.reject(new TimedOutError('Connect'));
+      await this.#disconnect(l, {
         client: 'ConnectTimeout',
       });
     }, CONNECT_TIMEOUT_MS);
 
     const ws = createSocket(
-      this._socketOrigin,
+      this.#socketOrigin,
       baseCookie,
       await this.clientID,
       await this.clientGroupID,
       this.roomID,
       this.userID,
-      this._rep.auth,
-      this._jurisdiction,
-      this._lastMutationIDReceived,
+      this.#rep.auth,
+      this.#jurisdiction,
+      this.#lastMutationIDReceived,
       wsid,
       this.#options.logLevel === 'debug',
       l,
     );
 
-    ws.addEventListener('message', this._onMessage);
-    ws.addEventListener('open', this._onOpen);
-    ws.addEventListener('close', this._onClose);
-    this._socket = ws;
+    ws.addEventListener('message', this.#onMessage);
+    ws.addEventListener('open', this.#onOpen);
+    ws.addEventListener('close', this.#onClose);
+    this.#socket = ws;
     this._socketResolver.resolve(ws);
 
     try {
       l.debug?.('Waiting for connection to be acknowledged');
-      await this._connectResolver.promise;
+      await this.#connectResolver.promise;
     } finally {
       clearTimeout(id);
     }
   }
 
-  private async _disconnect(
-    l: LogContext,
-    reason: DisconnectReason,
-  ): Promise<void> {
+  async #disconnect(l: LogContext, reason: DisconnectReason): Promise<void> {
     if (this._connectionState === ConnectionState.Connecting) {
-      this._connectErrorCount++;
+      this.#connectErrorCount++;
     }
     l.info?.('disconnecting', {
       navigatorOnline: navigator.onLine,
       reason,
       connectStart: this._connectStart,
       totalToConnectStart: this._totalToConnectStart,
-      connectedAt: this._connectedAt,
-      connectionDuration: this._connectedAt
-        ? Date.now() - this._connectedAt
+      connectedAt: this.#connectedAt,
+      connectionDuration: this.#connectedAt
+        ? Date.now() - this.#connectedAt
         : 0,
-      messageCount: this._messageCount,
+      messageCount: this.#messageCount,
       connectionState: this._connectionState,
-      connectErrorCount: this._connectErrorCount,
+      connectErrorCount: this.#connectErrorCount,
     });
 
     switch (this._connectionState) {
@@ -780,15 +775,15 @@ export class Reflect<MD extends MutatorDefs> {
         break;
       }
       case ConnectionState.Connecting: {
-        this._metrics.lastConnectError.set(getLastConnectErrorValue(reason));
-        this._metrics.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
-        this._metrics.setConnectError(reason);
+        this.#metrics.lastConnectError.set(getLastConnectErrorValue(reason));
+        this.#metrics.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
+        this.#metrics.setConnectError(reason);
         if (
-          this._connectErrorCount % CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY ===
+          this.#connectErrorCount % CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY ===
           1
         ) {
-          this._checkConnectivity(
-            `connectErrorCount=${this._connectErrorCount}`,
+          this.#checkConnectivity(
+            `connectErrorCount=${this.#connectErrorCount}`,
           );
         }
         // this._connectStart reset below.
@@ -807,46 +802,46 @@ export class Reflect<MD extends MutatorDefs> {
 
     this._socketResolver = resolver();
     l.debug?.('Creating new connect resolver');
-    this._connectResolver = resolver();
+    this.#connectResolver = resolver();
     this._connectionState = ConnectionState.Disconnected;
-    this._messageCount = 0;
+    this.#messageCount = 0;
     this._connectStart = undefined; // don't reset this._totalToConnectStart
-    this._connectedAt = 0;
-    this._socket?.removeEventListener('message', this._onMessage);
-    this._socket?.removeEventListener('open', this._onOpen);
-    this._socket?.removeEventListener('close', this._onClose);
-    this._socket?.close();
-    this._socket = undefined;
-    this._lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
-    await this._pokeHandler.handleDisconnect();
+    this.#connectedAt = 0;
+    this.#socket?.removeEventListener('message', this.#onMessage);
+    this.#socket?.removeEventListener('open', this.#onOpen);
+    this.#socket?.removeEventListener('close', this.#onClose);
+    this.#socket?.close();
+    this.#socket = undefined;
+    this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+    await this.#pokeHandler.handleDisconnect();
   }
 
-  private async _handlePoke(_lc: LogContext, pokeMessage: PokeMessage) {
+  async #handlePoke(_lc: LogContext, pokeMessage: PokeMessage) {
     this.#abortPingTimeout();
     const pokeBody = pokeMessage[1];
-    const lastMutationIDChangeForSelf = await this._pokeHandler.handlePoke(
+    const lastMutationIDChangeForSelf = await this.#pokeHandler.handlePoke(
       pokeBody,
     );
     if (lastMutationIDChangeForSelf !== undefined) {
-      this._lastMutationIDReceived = lastMutationIDChangeForSelf;
+      this.#lastMutationIDReceived = lastMutationIDChangeForSelf;
     }
   }
 
-  private async _onOutOfOrderPoke() {
-    const lc = await this._l;
+  async #onOutOfOrderPoke() {
+    const lc = await this.#l;
     lc.info?.('out of order poke, disconnecting');
 
     // It is theoretically possible that we get disconnected during the
     // async poke above. Only disconnect if we are not already
     // disconnected.
     if (this._connectionState !== ConnectionState.Disconnected) {
-      await this._disconnect(lc, {
+      await this.#disconnect(lc, {
         client: 'UnexpectedBaseCookie',
       });
     }
   }
 
-  private _handlePullResponse(
+  #handlePullResponse(
     lc: LogContext,
     pullResponseMessage: PullResponseMessage,
   ) {
@@ -854,7 +849,7 @@ export class Reflect<MD extends MutatorDefs> {
     const body = pullResponseMessage[1];
     lc = lc.withContext('requestID', body.requestID);
     lc.debug?.('Handling pull response', body);
-    const resolver = this._pendingPullsByRequestID.get(body.requestID);
+    const resolver = this.#pendingPullsByRequestID.get(body.requestID);
     if (!resolver) {
       // This can happen because resolvers are deleted
       // from this._pendingPullsByRequestID when pulls timeout.
@@ -864,13 +859,13 @@ export class Reflect<MD extends MutatorDefs> {
     resolver.resolve(pullResponseMessage[1]);
   }
 
-  private async _pusher(
+  async #pusher(
     req: PushRequestV0 | PushRequestV1,
     requestID: string,
   ): Promise<PusherResult> {
     // If we are connecting we wait until we are connected.
-    await this._connectResolver.promise;
-    const l = (await this._l).withContext('requestID', requestID);
+    await this.#connectResolver.promise;
+    const l = (await this.#l).withContext('requestID', requestID);
     l.debug?.(`pushing ${req.mutations.length} mutations`);
 
     // If pushVersion is 0 this is a mutation recovery push for a pre dd31
@@ -884,7 +879,7 @@ export class Reflect<MD extends MutatorDefs> {
         },
       };
     }
-    const socket = this._socket;
+    const socket = this.#socket;
     assert(socket);
 
     const isMutationRecoveryPush =
@@ -893,8 +888,8 @@ export class Reflect<MD extends MutatorDefs> {
       ? 0
       : req.mutations.findIndex(
           m =>
-            m.clientID === this._lastMutationIDSent.clientID &&
-            m.id === this._lastMutationIDSent.id,
+            m.clientID === this.#lastMutationIDSent.clientID &&
+            m.id === this.#lastMutationIDSent.id,
         ) + 1;
     l.debug?.(
       isMutationRecoveryPush ? 'pushing for recovery' : 'pushing',
@@ -927,7 +922,7 @@ export class Reflect<MD extends MutatorDefs> {
       ];
       send(socket, msg);
       if (!isMutationRecoveryPush) {
-        this._lastMutationIDSent = {clientID: m.clientID, id: m.id};
+        this.#lastMutationIDSent = {clientID: m.clientID, id: m.id};
       }
     }
     return {
@@ -947,26 +942,26 @@ export class Reflect<MD extends MutatorDefs> {
     const auth = await this.#getAuthToken();
     if (auth) {
       lc.debug?.('Got auth token');
-      this._rep.auth = auth;
+      this.#rep.auth = auth;
     }
   }
 
-  private async _runLoop() {
-    (await this._l).info?.(`Starting Reflect version: ${this.version}`);
+  async #runLoop() {
+    (await this.#l).info?.(`Starting Reflect version: ${this.version}`);
 
-    if (this._socketOrigin === null) {
-      (await this._l).info?.(
+    if (this.#socketOrigin === null) {
+      (await this.#l).info?.(
         'No socket origin provided, not starting connect loop.',
       );
       return;
     }
 
     let runLoopCounter = 0;
-    const bareLogContext = await this._l;
+    const bareLogContext = await this.#l;
     const getLogContext = () => {
       let lc = bareLogContext;
-      if (this._socket) {
-        lc = addWebSocketIDFromSocketToLogContext(this._socket, lc);
+      if (this.#socket) {
+        lc = addWebSocketIDFromSocketToLogContext(this.#socket, lc);
       }
       return lc.withContext('runLoopCounter', runLoopCounter);
     };
@@ -984,7 +979,7 @@ export class Reflect<MD extends MutatorDefs> {
         switch (this._connectionState) {
           case ConnectionState.Disconnected: {
             if (this.#visibilityWatcher.visibilityState === 'hidden') {
-              this._metrics.setDisconnectedWaitingForVisible();
+              this.#metrics.setDisconnectedWaitingForVisible();
               // reset this._totalToConnectStart since this client
               // is no longer trying to connect due to being hidden.
               this._totalToConnectStart = undefined;
@@ -997,10 +992,10 @@ export class Reflect<MD extends MutatorDefs> {
               await this.#updateAuthToken(lc);
             }
 
-            await this._connect(lc);
+            await this.#connect(lc);
 
             // Now we have a new socket, update lc with the new wsid.
-            assert(this._socket);
+            assert(this.#socket);
             lc = getLogContext();
 
             lc.debug?.('Connected successfully');
@@ -1054,7 +1049,7 @@ export class Reflect<MD extends MutatorDefs> {
 
             switch (raceResult) {
               case RaceCases.Ping: {
-                const pingResult = await this._ping(
+                const pingResult = await this.#ping(
                   lc,
                   this.#rejectMessageError.promise,
                 );
@@ -1064,7 +1059,7 @@ export class Reflect<MD extends MutatorDefs> {
                 break;
               }
               case RaceCases.Hidden:
-                await this._disconnect(lc, {
+                await this.#disconnect(lc, {
                   client: 'Hidden',
                 });
                 this.#setOnline(false);
@@ -1077,8 +1072,8 @@ export class Reflect<MD extends MutatorDefs> {
       } catch (ex) {
         if (this._connectionState !== ConnectionState.Connected) {
           lc.error?.('Failed to connect', ex, {
-            lmid: this._lastMutationIDReceived,
-            baseCookie: this._baseCookie,
+            lmid: this.#lastMutationIDReceived,
+            baseCookie: this.#baseCookie,
           });
         }
 
@@ -1117,7 +1112,7 @@ export class Reflect<MD extends MutatorDefs> {
         this.#setOnline(false);
         let cfGetCheckSucceeded = false;
         const cfGetCheckURL = new URL(
-          this._socketOrigin.replace(/^ws/, 'http'),
+          this.#socketOrigin.replace(/^ws/, 'http'),
         );
         cfGetCheckURL.pathname = '/api/canary/v0/get';
         cfGetCheckURL.searchParams.set('id', nanoid());
@@ -1148,11 +1143,11 @@ export class Reflect<MD extends MutatorDefs> {
     }
   }
 
-  private async _puller(
+  async #puller(
     req: PullRequestV0 | PullRequestV1,
     requestID: string,
   ): Promise<PullerResultV0 | PullerResultV1> {
-    const l = (await this._l).withContext('requestID', requestID);
+    const l = (await this.#l).withContext('requestID', requestID);
     l.debug?.('Pull', req);
     // If pullVersion === 0 this is a mutation recovery pull for a pre dd31
     // client.  Reflect didn't support mutation recovery pre dd31, so don't
@@ -1170,8 +1165,8 @@ export class Reflect<MD extends MutatorDefs> {
     // as pulls for this client group are handled via poke over the socket.
     if (req.clientGroupID === (await this.clientGroupID)) {
       const cookie = valita.parse(req.cookie, nullableVersionSchema);
-      const resolver = this._baseCookieResolver;
-      this._baseCookieResolver = null;
+      const resolver = this.#baseCookieResolver;
+      this.#baseCookieResolver = null;
       resolver?.resolve(cookie);
       return {
         httpRequestInfo: {
@@ -1182,8 +1177,8 @@ export class Reflect<MD extends MutatorDefs> {
     }
 
     // If we are connecting we wait until we are connected.
-    await this._connectResolver.promise;
-    const socket = this._socket;
+    await this.#connectResolver.promise;
+    const socket = this.#socket;
     assert(socket);
 
     // Mutation recovery pull.
@@ -1199,7 +1194,7 @@ export class Reflect<MD extends MutatorDefs> {
     ];
     send(socket, pullRequestMessage);
     const pullResponseResolver: Resolver<PullResponseBody> = resolver();
-    this._pendingPullsByRequestID.set(requestID, pullResponseResolver);
+    this.#pendingPullsByRequestID.set(requestID, pullResponseResolver);
     try {
       const enum RaceCases {
         Timeout = 0,
@@ -1234,7 +1229,7 @@ export class Reflect<MD extends MutatorDefs> {
       }
     } finally {
       pullResponseResolver.reject('timed out');
-      this._pendingPullsByRequestID.delete(requestID);
+      this.#pendingPullsByRequestID.delete(requestID);
     }
   }
 
@@ -1261,17 +1256,17 @@ export class Reflect<MD extends MutatorDefs> {
    * If it takes too long to get a pong we disconnect and this returns
    * {@code PingResult.TimedOut}.
    */
-  private async _ping(
+  async #ping(
     l: LogContext,
     messageErrorRejectionPromise: Promise<never>,
   ): Promise<PingResult> {
     l.debug?.('pinging');
     const {promise, resolve} = resolver();
-    this._onPong = resolve;
+    this.#onPong = resolve;
     const pingMessage: PingMessage = ['ping', {}];
     const t0 = performance.now();
-    assert(this._socket);
-    send(this._socket, pingMessage);
+    assert(this.#socket);
+    send(this.#socket, pingMessage);
 
     const connected =
       (await promiseRace([
@@ -1283,7 +1278,7 @@ export class Reflect<MD extends MutatorDefs> {
     const delta = performance.now() - t0;
     if (!connected) {
       l.info?.('ping failed in', delta, 'ms - disconnecting');
-      await this._disconnect(l, {
+      await this.#disconnect(l, {
         client: 'PingTimeout',
       });
       return PingResult.TimedOut;
@@ -1295,13 +1290,13 @@ export class Reflect<MD extends MutatorDefs> {
 
   // Sends a set of metrics to the server. Throws unless the server
   // returns 200.
-  private async _reportMetrics(allSeries: Series[]) {
-    if (this._socketOrigin === null) {
-      (await this._l).info?.('Skipping metrics report, socketOrigin is null');
+  async #reportMetrics(allSeries: Series[]) {
+    if (this.#socketOrigin === null) {
+      (await this.#l).info?.('Skipping metrics report, socketOrigin is null');
       return;
     }
     const body = JSON.stringify({series: allSeries});
-    const url = new URL('/api/metrics/v0/report', this._socketOrigin);
+    const url = new URL('/api/metrics/v0/report', this.#socketOrigin);
     url.searchParams.set('clientID', await this.clientID);
     url.searchParams.set('clientGroupID', await this.clientGroupID);
     url.searchParams.set('roomID', this.roomID);
@@ -1321,23 +1316,23 @@ export class Reflect<MD extends MutatorDefs> {
     }
   }
 
-  private _checkConnectivity(reason: string) {
-    void this._checkConnectivityAsync(reason);
+  #checkConnectivity(reason: string) {
+    void this.#checkConnectivityAsync(reason);
   }
 
-  private async _checkConnectivityAsync(reason: string) {
-    assert(this._socketOrigin);
+  async #checkConnectivityAsync(reason: string) {
+    assert(this.#socketOrigin);
     try {
-      await checkConnectivity(reason, this._socketOrigin, await this._l);
+      await checkConnectivity(reason, this.#socketOrigin, await this.#l);
     } catch (e) {
-      (await this._l).info?.('Error checking connectivity for', reason, e);
+      (await this.#l).info?.('Error checking connectivity for', reason, e);
     }
   }
   // Total hack to get base cookie, see _puller for how the promise is resolved.
-  private _getBaseCookie(): Promise<NullableVersion> {
-    this._baseCookieResolver ??= resolver();
-    this._rep.pull();
-    return this._baseCookieResolver.promise;
+  #getBaseCookie(): Promise<NullableVersion> {
+    this.#baseCookieResolver ??= resolver();
+    this.#rep.pull();
+    return this.#baseCookieResolver.promise;
   }
 }
 
