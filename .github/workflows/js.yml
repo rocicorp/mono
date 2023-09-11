@@ -34,6 +34,7 @@ jobs:
 
   lint:
     name: Lint
+    needs: [format]
     runs-on: ubuntu-latest
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -54,6 +55,7 @@ jobs:
 
   check-types:
     name: Check Types
+    needs: [lint]
     runs-on: ubuntu-latest
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -74,7 +76,7 @@ jobs:
 
   test:
     name: Test
-    needs: [format, lint, check-types]
+    needs: [check-types]
     runs-on: ubuntu-latest
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
