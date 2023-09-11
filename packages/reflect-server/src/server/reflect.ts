@@ -170,13 +170,14 @@ function createRoomDOClass<
         allowUnconfirmedWrites,
         maxMutationsPerTurn,
       } = getOptions(env);
+      const customLogSink = () => logSink;
       super({
         mutators,
         state,
         roomStartHandler,
         disconnectHandler,
         authApiKey: getAPIKey(env),
-        logSink,
+        logSink: customLogSink,
         logLevel,
         allowUnconfirmedWrites,
         maxMutationsPerTurn,
