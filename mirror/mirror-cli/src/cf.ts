@@ -62,9 +62,7 @@ export async function cfCall<ResponseType = unknown>(
       ...init?.headers,
     },
   });
-  const jsonText = await response.text();
-
-  return JSON.parse(jsonText) as ResponseType;
+  return (await response.json()) as ResponseType;
 }
 
 export async function cfFetch<ResponseType = unknown>(
