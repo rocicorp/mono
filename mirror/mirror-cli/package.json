@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "dependencies": {
+    "@google-cloud/secret-manager": "^5.0.1",
     "@rocicorp/reflect": "0.34.0-canary.0",
     "esbuild": "^0.18.3",
     "firebase-admin": "^11.10.1",
