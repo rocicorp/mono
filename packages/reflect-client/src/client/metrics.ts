@@ -103,19 +103,19 @@ export class MetricManager {
   // the 'connected' ws message. We record the DID_NOT_CONNECT_VALUE if the previous
   // connection attempt failed for any reason.
   //
-  // We set the gauge using _connectStart as follows:
-  // - _connectStart is undefined if we are disconnected or connected; it is
+  // We set the gauge using #connectStart as follows:
+  // - #connectStart is undefined if we are disconnected or connected; it is
   //   defined only in the Connecting state, as a number representing the timestamp
   //   at which we started connecting.
-  // - _connectStart is set to the current time when connect() is called.
+  // - #connectStart is set to the current time when connect() is called.
   // - When we receive the 'connected' message we record the time to connect and
-  //   set _connectStart to undefined.
-  // - If disconnect() is called with a defined _connectStart then we record
-  //   DID_NOT_CONNECT_VALUE and set _connectStart to undefined.
+  //   set #connectStart to undefined.
+  // - If disconnect() is called with a defined #connectStart then we record
+  //   DID_NOT_CONNECT_VALUE and set #connectStart to undefined.
   //
   // TODO It's clear after playing with the connection code we should encapsulate
   // the ConnectionState along with its state transitions and possibly behavior.
-  // In that world the metric gauge(s) and bookkeeping like _connectStart would
+  // In that world the metric gauge(s) and bookkeeping like #connectStart would
   // be encapsulated with the ConnectionState. This will probably happen as part
   // of https://github.com/rocicorp/reflect-server/issues/255.
   readonly timeToConnectMs = this.#register(
@@ -156,9 +156,9 @@ export class MetricManager {
 
   // The total time it took to connect across retries for the current
   // connection.  Cleared when the client is not connected.
-  // TODO: Not actually currently cleared on disconnect untill there is a
+  // TODO: Not actually currently cleared on disconnect until there is a
   // connect error, or client reports disconnected and waiting for visible.
-  // See Reflect._totalToConnectStart for details of how this total is computed.
+  // See Reflect.#totalToConnectStart for details of how this total is computed.
   // Should have a value iff _notConnected has no value.
   readonly #totalTimeToConnectMs = this.#register(
     new Gauge(MetricName.TotalTimeToConnectMs),

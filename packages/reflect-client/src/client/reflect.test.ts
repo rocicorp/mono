@@ -44,8 +44,11 @@ const startTime = 1678829450000;
 setup(() => {
   clock = sinon.useFakeTimers();
   clock.setSystemTime(startTime);
-  // @ts-expect-error MockSocket is not sufficiently compatible with WebSocket
-  sinon.replace(globalThis, 'WebSocket', MockSocket);
+  sinon.replace(
+    globalThis,
+    'WebSocket',
+    MockSocket as unknown as typeof WebSocket,
+  );
 });
 
 teardown(() => {
@@ -1496,6 +1499,7 @@ test('kvStore option', async () => {
     expectedValue: JSONValue | undefined = undefined,
   ) => {
     const r = reflectForTest({
+      socketOrigin: null,
       userID,
       kvStore,
       mutators: {

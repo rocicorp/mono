@@ -1,9 +1,9 @@
+import {consoleLogSink, type LogSink} from '@rocicorp/logger';
 import {expect} from 'chai';
+import type {DatadogLogSinkOptions} from 'datadog';
 import * as sinon from 'sinon';
 import {createLogOptions} from './log-options.js';
 import {TestLogSink} from './test-utils.js';
-import {consoleLogSink, type LogSink} from '@rocicorp/logger';
-import type {DatadogLogSinkOptions} from 'datadog';
 
 let consoleLogSinkSpy: sinon.SinonSpiedInstance<LogSink>;
 let datadogLogSinkSpy: sinon.SinonSpiedInstance<LogSink>;
@@ -49,6 +49,10 @@ suite('when socketOrigin indicates testing or local dev', () => {
 
 function testLogLevels(socketOrigin: string, expectedServiceLabel: string) {
   test('consoleLogLevel debug', () => {
+    sinon.stub(console, 'debug');
+    sinon.stub(console, 'info');
+    sinon.stub(console, 'error');
+
     const {logLevel, logSink} = createLogOptions(
       {
         consoleLogLevel: 'debug',
@@ -98,6 +102,10 @@ function testLogLevels(socketOrigin: string, expectedServiceLabel: string) {
   });
 
   test('consoleLogLevel info', () => {
+    sinon.stub(console, 'debug');
+    sinon.stub(console, 'info');
+    sinon.stub(console, 'error');
+
     const {logLevel, logSink} = createLogOptions(
       {
         consoleLogLevel: 'info',
@@ -141,6 +149,10 @@ function testLogLevels(socketOrigin: string, expectedServiceLabel: string) {
   });
 
   test('consoleLogLevel error', () => {
+    sinon.stub(console, 'debug');
+    sinon.stub(console, 'info');
+    sinon.stub(console, 'error');
+
     const {logLevel, logSink} = createLogOptions(
       {
         consoleLogLevel: 'error',

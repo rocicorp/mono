@@ -27,10 +27,12 @@ import {
   MaybePromise,
   PullRequestV0,
   PullRequestV1,
+  Puller,
   PullerResultV0,
   PullerResultV1,
   PushRequestV0,
   PushRequestV1,
+  Pusher,
   PusherResult,
   Replicache,
   ReplicacheOptions,
@@ -58,6 +60,22 @@ import type {ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
+
+declare const TESTING: boolean;
+
+export type TestingContext = {
+  puller: Puller;
+  pusher: Pusher;
+  setReload: (r: () => void) => void;
+  logOptions: LogOptions;
+  connectStart: () => number | undefined;
+  socketResolver: () => Resolver<WebSocket>;
+  connectionState: () => ConnectionState;
+};
+
+export const onSetConnectionStateSymbol = Symbol();
+export const exposedToTestingSymbol = Symbol();
+export const createLogOptionsSymbol = Symbol();
 
 export const enum ConnectionState {
   Disconnected,
@@ -137,7 +155,7 @@ export class Reflect<MD extends MutatorDefs> {
   // This is a promise because it is waiting for the clientID from the
   // Replicache instance.
   readonly #l: Promise<LogContext>;
-  protected readonly _logOptions: LogOptions;
+  readonly #logOptions: LogOptions;
 
   readonly #pokeHandler: PokeHandler;
 
@@ -206,7 +224,7 @@ export class Reflect<MD extends MutatorDefs> {
   #lastMutationIDReceived = 0;
 
   #socket: WebSocket | undefined = undefined;
-  protected _socketResolver = resolver<WebSocket>();
+  #socketResolver = resolver<WebSocket>();
 
   #connectionStateChangeResolver = resolver<ConnectionState>();
 
@@ -223,10 +241,8 @@ export class Reflect<MD extends MutatorDefs> {
 
   // We use an accessor pair to allow the subclass to override the setter.
   #connectionState: ConnectionState = ConnectionState.Disconnected;
-  protected get _connectionState(): ConnectionState {
-    return this.#connectionState;
-  }
-  protected set _connectionState(state: ConnectionState) {
+
+  #setConnectionState(state: ConnectionState) {
     if (state === this.#connectionState) {
       return;
     }
@@ -234,16 +250,21 @@ export class Reflect<MD extends MutatorDefs> {
     this.#connectionState = state;
     this.#connectionStateChangeResolver.resolve(state);
     this.#connectionStateChangeResolver = resolver();
+
+    if (TESTING) {
+      // @ts-expect-error Exposed for testing.
+      this[onSetConnectionStateSymbol](state);
+    }
   }
 
-  protected _connectStart: number | undefined = undefined;
+  #connectStart: number | undefined = undefined;
   // Set on connect attempt if currently undefined.
   // Reset to undefined when
   // 1. client stops trying to connect because it is hidden
   // 2. client encounters a connect error and canary request indicates
   //    the client is offline
   // 2. client successfully connects
-  protected _totalToConnectStart: number | undefined = undefined;
+  #totalToConnectStart: number | undefined = undefined;
 
   readonly #options: ReflectOptions<MD>;
 
@@ -290,11 +311,11 @@ export class Reflect<MD extends MutatorDefs> {
     this.onOnlineChange = onOnlineChange;
     this.#options = options;
 
-    this._logOptions = this._createLogOptions({
+    this.#logOptions = this.#createLogOptions({
       consoleLogLevel: options.logLevel ?? 'error',
       socketOrigin,
     });
-    const logOptions = this._logOptions;
+    const logOptions = this.#logOptions;
 
     const replicacheOptions: ReplicacheOptions<MD> = {
       schemaVersion: options.schemaVersion,
@@ -360,13 +381,30 @@ export class Reflect<MD extends MutatorDefs> {
 
     void this.#runLoop();
 
-    void this._runLoop();
+    if (TESTING) {
+      (this as unknown as {exposedToTesting: TestingContext}).exposedToTesting =
+        {
+          puller: this.#puller,
+          pusher: this.#pusher,
+          setReload: (r: () => void) => {
+            this.#reload = r;
+          },
+          logOptions: this.#logOptions,
+          connectStart: () => this.#connectStart,
+          socketResolver: () => this.#socketResolver,
+          connectionState: () => this.#connectionState,
+        };
+    }
   }
 
-  protected _createLogOptions(options: {
+  #createLogOptions(options: {
     consoleLogLevel: LogLevel;
     socketOrigin: string | null;
   }): LogOptions {
+    if (TESTING) {
+      // @ts-expect-error Exposed for testing.
+      return this[createLogOptionsSymbol](options);
+    }
     return createLogOptions(options);
   }
 
@@ -421,7 +459,7 @@ export class Reflect<MD extends MutatorDefs> {
    * When closed all subscriptions end and no more read or writes are allowed.
    */
   async close(): Promise<void> {
-    if (this._connectionState !== ConnectionState.Disconnected) {
+    if (this.#connectionState !== ConnectionState.Disconnected) {
       const lc = await this.#l;
       await this.#disconnect(lc, {
         client: 'ReflectClosed',
@@ -548,13 +586,13 @@ export class Reflect<MD extends MutatorDefs> {
       e.target as WebSocket,
       await this.#l,
     );
-    if (this._connectStart === undefined) {
+    if (this.#connectStart === undefined) {
       l.error?.(
         'Got open event but connect start time is undefined. This should not happen.',
       );
     } else {
       const now = Date.now();
-      const timeToOpenMs = now - this._connectStart;
+      const timeToOpenMs = now - this.#connectStart;
       l.info?.('Got socket open event', {
         navigatorOnline: navigator.onLine,
         timeToOpenMs,
@@ -626,27 +664,27 @@ export class Reflect<MD extends MutatorDefs> {
 
     let timeToConnectMs = undefined;
     let connectMsgLatencyMs = undefined;
-    if (this._connectStart === undefined) {
+    if (this.#connectStart === undefined) {
       lc.error?.(
         'Got connected message but connect start time is undefined. This should not happen.',
       );
     } else {
-      timeToConnectMs = now - this._connectStart;
+      timeToConnectMs = now - this.#connectStart;
       this.#metrics.timeToConnectMs.set(timeToConnectMs);
       connectMsgLatencyMs =
         connectBody.timestamp !== undefined
           ? now - connectBody.timestamp
           : undefined;
-      this._connectStart = undefined;
+      this.#connectStart = undefined;
     }
     let totalTimeToConnectMs = undefined;
-    if (this._totalToConnectStart === undefined) {
+    if (this.#totalToConnectStart === undefined) {
       lc.error?.(
         'Got connected message but total to connect start time is undefined. This should not happen.',
       );
     } else {
-      totalTimeToConnectMs = now - this._totalToConnectStart;
-      this._totalToConnectStart = undefined;
+      totalTimeToConnectMs = now - this.#totalToConnectStart;
+      this.#totalToConnectStart = undefined;
     }
 
     this.#metrics.setConnected(timeToConnectMs ?? 0, totalTimeToConnectMs ?? 0);
@@ -662,7 +700,7 @@ export class Reflect<MD extends MutatorDefs> {
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
 
     lc.debug?.('Resolving connect resolver');
-    this._connectionState = ConnectionState.Connected;
+    this.#setConnectionState(ConnectionState.Connected);
     this.#connectResolver.resolve();
   }
 
@@ -671,7 +709,7 @@ export class Reflect<MD extends MutatorDefs> {
    * request to the server.
    *
    * {@link #connect} will throw an assertion error if the
-   * {@link _connectionState} is not {@link ConnectionState.Disconnected}.
+   * {@link #connectionState} is not {@link ConnectionState.Disconnected}.
    * Callers MUST check the connection state before calling this method and log
    * an error as needed.
    *
@@ -686,22 +724,22 @@ export class Reflect<MD extends MutatorDefs> {
     assert(this.#socketOrigin);
 
     // All the callers check this state already.
-    assert(this._connectionState === ConnectionState.Disconnected);
+    assert(this.#connectionState === ConnectionState.Disconnected);
 
     const wsid = nanoid();
     l = addWebSocketIDToLogContext(wsid, l);
     l.info?.('Connecting...', {navigatorOnline: navigator.onLine});
 
-    this._connectionState = ConnectionState.Connecting;
+    this.#setConnectionState(ConnectionState.Connecting);
 
     // connect() called but connect start time is defined. This should not
     // happen.
-    assert(this._connectStart === undefined);
+    assert(this.#connectStart === undefined);
 
     const now = Date.now();
-    this._connectStart = now;
-    if (this._totalToConnectStart === undefined) {
-      this._totalToConnectStart = now;
+    this.#connectStart = now;
+    if (this.#totalToConnectStart === undefined) {
+      this.#totalToConnectStart = now;
     }
 
     const baseCookie = await this.#getBaseCookie();
@@ -735,7 +773,7 @@ export class Reflect<MD extends MutatorDefs> {
     ws.addEventListener('open', this.#onOpen);
     ws.addEventListener('close', this.#onClose);
     this.#socket = ws;
-    this._socketResolver.resolve(ws);
+    this.#socketResolver.resolve(ws);
 
     try {
       l.debug?.('Waiting for connection to be acknowledged');
@@ -746,26 +784,26 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   async #disconnect(l: LogContext, reason: DisconnectReason): Promise<void> {
-    if (this._connectionState === ConnectionState.Connecting) {
+    if (this.#connectionState === ConnectionState.Connecting) {
       this.#connectErrorCount++;
     }
     l.info?.('disconnecting', {
       navigatorOnline: navigator.onLine,
       reason,
-      connectStart: this._connectStart,
-      totalToConnectStart: this._totalToConnectStart,
+      connectStart: this.#connectStart,
+      totalToConnectStart: this.#totalToConnectStart,
       connectedAt: this.#connectedAt,
       connectionDuration: this.#connectedAt
         ? Date.now() - this.#connectedAt
         : 0,
       messageCount: this.#messageCount,
-      connectionState: this._connectionState,
+      connectionState: this.#connectionState,
       connectErrorCount: this.#connectErrorCount,
     });
 
-    switch (this._connectionState) {
+    switch (this.#connectionState) {
       case ConnectionState.Connected: {
-        if (this._connectStart !== undefined) {
+        if (this.#connectStart !== undefined) {
           l.error?.(
             'disconnect() called while connected but connect start time is defined. This should not happen.',
           );
@@ -787,7 +825,7 @@ export class Reflect<MD extends MutatorDefs> {
           );
         }
         // this._connectStart reset below.
-        if (this._connectStart === undefined) {
+        if (this.#connectStart === undefined) {
           l.error?.(
             'disconnect() called while connecting but connect start time is undefined. This should not happen.',
           );
@@ -800,12 +838,12 @@ export class Reflect<MD extends MutatorDefs> {
         break;
     }
 
-    this._socketResolver = resolver();
+    this.#socketResolver = resolver();
     l.debug?.('Creating new connect resolver');
     this.#connectResolver = resolver();
-    this._connectionState = ConnectionState.Disconnected;
+    this.#setConnectionState(ConnectionState.Disconnected);
     this.#messageCount = 0;
-    this._connectStart = undefined; // don't reset this._totalToConnectStart
+    this.#connectStart = undefined; // don't reset this._totalToConnectStart
     this.#connectedAt = 0;
     this.#socket?.removeEventListener('message', this.#onMessage);
     this.#socket?.removeEventListener('open', this.#onOpen);
@@ -834,7 +872,7 @@ export class Reflect<MD extends MutatorDefs> {
     // It is theoretically possible that we get disconnected during the
     // async poke above. Only disconnect if we are not already
     // disconnected.
-    if (this._connectionState !== ConnectionState.Disconnected) {
+    if (this.#connectionState !== ConnectionState.Disconnected) {
       await this.#disconnect(lc, {
         client: 'UnexpectedBaseCookie',
       });
@@ -976,13 +1014,13 @@ export class Reflect<MD extends MutatorDefs> {
       let lc = getLogContext();
 
       try {
-        switch (this._connectionState) {
+        switch (this.#connectionState) {
           case ConnectionState.Disconnected: {
             if (this.#visibilityWatcher.visibilityState === 'hidden') {
               this.#metrics.setDisconnectedWaitingForVisible();
               // reset this._totalToConnectStart since this client
               // is no longer trying to connect due to being hidden.
-              this._totalToConnectStart = undefined;
+              this.#totalToConnectStart = undefined;
             }
             // If hidden, we wait for the tab to become visible before trying again.
             await this.#visibilityWatcher.waitForVisible();
@@ -1070,7 +1108,7 @@ export class Reflect<MD extends MutatorDefs> {
           }
         }
       } catch (ex) {
-        if (this._connectionState !== ConnectionState.Connected) {
+        if (this.#connectionState !== ConnectionState.Connected) {
           lc.error?.('Failed to connect', ex, {
             lmid: this.#lastMutationIDReceived,
             baseCookie: this.#baseCookie,
@@ -1080,7 +1118,7 @@ export class Reflect<MD extends MutatorDefs> {
         lc.debug?.(
           'Got an exception in the run loop',
           'state:',
-          this._connectionState,
+          this.#connectionState,
           'exception:',
           ex,
         );
@@ -1129,7 +1167,7 @@ export class Reflect<MD extends MutatorDefs> {
           'Sleeping',
           RUN_LOOP_INTERVAL_MS,
           'ms before reconnecting due to error, state:',
-          this._connectionState,
+          this.#connectionState,
         );
         await sleep(RUN_LOOP_INTERVAL_MS);
         cfGetCheckController.abort();
@@ -1137,7 +1175,7 @@ export class Reflect<MD extends MutatorDefs> {
           lc.info?.(
             'Canary request failed, resetting total time to connect start time.',
           );
-          this._totalToConnectStart = undefined;
+          this.#totalToConnectStart = undefined;
         }
       }
     }
