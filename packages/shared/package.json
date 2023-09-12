@@ -19,8 +19,8 @@
   },
   "dependencies": {
     "@badrap/valita": "^0.2.10",
-    "@rocicorp/logger": "^5.2.0",
-    "@rocicorp/resolver": "^1.0.0",
+    "@rocicorp/logger": "^5.2.1",
+    "@rocicorp/resolver": "^1.0.1",
     "semver": "^7.5.3"
   },
   "eslintConfig": {

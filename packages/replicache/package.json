@@ -21,13 +21,13 @@
     "perf": "npm run build-perf && node perf/runner.js"
   },
   "dependencies": {
-    "@rocicorp/lock": "^1.0.1",
-    "@rocicorp/logger": "^5.2.0",
-    "@rocicorp/resolver": "^1.0.0"
+    "@rocicorp/lock": "^1.0.3",
+    "@rocicorp/logger": "^5.2.1",
+    "@rocicorp/resolver": "^1.0.1"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.4.2",
-    "@rocicorp/licensing": "^7.0.0",
+    "@rocicorp/licensing": "^7.0.1",
     "@rocicorp/prettier-config": "^0.1.1",
     "@rollup/plugin-node-resolve": "^15.0.1",
     "@types/chai": "^4.3.5",
