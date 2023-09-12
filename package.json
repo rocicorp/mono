@@ -17,7 +17,6 @@
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.26.0",
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
     "syncpack": "^9.8.4",
