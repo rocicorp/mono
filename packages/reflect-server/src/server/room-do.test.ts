@@ -18,7 +18,7 @@ import {TestLogSink, createSilentLogContext} from '../util/test-utils.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
 
-const testLogSink = () => new TestLogSink();
+const createTestLogSink = () => new TestLogSink();
 
 const START_TIME = 1000;
 beforeEach(() => {
@@ -37,7 +37,7 @@ test('sets roomID in createRoom', async () => {
     disconnectHandler: () => Promise.resolve(),
     state: await createTestDurableObjectState('test-do-id'),
     authApiKey: 'API KEY',
-    logSink: testLogSink,
+    createLogSink: createTestLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
@@ -55,7 +55,6 @@ test('sets roomID in createRoom', async () => {
 });
 
 test('inits storage schema', async () => {
-  const testLogSink = () => new TestLogSink();
   const state = await createTestDurableObjectState('test-do-id');
 
   expect(await state.storage.get('storage_schema_meta')).toBeUndefined();
@@ -66,7 +65,7 @@ test('inits storage schema', async () => {
     disconnectHandler: () => Promise.resolve(),
     state,
     authApiKey: 'API KEY',
-    logSink: testLogSink,
+    createLogSink: createTestLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
@@ -100,7 +99,7 @@ test('runs roomStartHandler', async () => {
     disconnectHandler: () => Promise.resolve(),
     state,
     authApiKey: 'API KEY',
-    logSink: testLogSink,
+    createLogSink: createTestLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
@@ -129,7 +128,7 @@ test('deleteAllData deletes all data', async () => {
     disconnectHandler: () => Promise.resolve(),
     state,
     authApiKey: 'API KEY',
-    logSink: testLogSink,
+    createLogSink: createTestLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
@@ -163,7 +162,7 @@ test('after deleteAllData the roomDO just 410s', async () => {
     disconnectHandler: () => Promise.resolve(),
     state: await createTestDurableObjectState('test-do-id'),
     authApiKey: 'API KEY',
-    logSink: testLogSink,
+    createLogSink: createTestLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
@@ -244,7 +243,7 @@ test('401s if wrong auth api key', async () => {
       disconnectHandler: () => Promise.resolve(),
       state: await createTestDurableObjectState('test-do-id'),
       authApiKey: 'API KEY',
-      logSink: testLogSink,
+      createLogSink: createTestLogSink,
       logLevel: 'info',
       allowUnconfirmedWrites: true,
       maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
@@ -256,18 +255,20 @@ test('401s if wrong auth api key', async () => {
 });
 
 test('Logs version during construction', async () => {
+  const testLogSink = new TestLogSink();
+  const createLogSink = () => testLogSink;
   new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
     state: await createTestDurableObjectState('test-do-id'),
     authApiKey: 'foo',
-    logSink: testLogSink,
+    createLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
   });
-  expect(testLogSink().messages).toEqual(
+  expect(testLogSink.messages).toEqual(
     expect.arrayContaining([
       [
         'info',
@@ -276,7 +277,7 @@ test('Logs version during construction', async () => {
       ],
     ]),
   );
-  expect(testLogSink().messages[0][2][1]).toMatch(/^\d+\.\d+\.\d+/);
+  expect(testLogSink.messages[0][2][1]).toMatch(/^\d+\.\d+\.\d+/);
 });
 
 test('Avoids queueing many intervals in the lock', async () => {
@@ -286,7 +287,7 @@ test('Avoids queueing many intervals in the lock', async () => {
     disconnectHandler: () => Promise.resolve(),
     state: await createTestDurableObjectState('test-do-id'),
     authApiKey: 'foo',
-    logSink: testLogSink,
+    createLogSink: createTestLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
@@ -299,7 +300,7 @@ test('Avoids queueing many intervals in the lock', async () => {
   let fired = 0;
   let invoked = 0;
   const timerID = room.runInLockAtInterval(
-    new LogContext('debug', {}, testLogSink()),
+    new LogContext('debug', {}, createTestLogSink()),
     'fakeProcessNext',
     1, // Fire once every ms.
     async () => {
@@ -335,7 +336,7 @@ test('clear interval call', async () => {
     disconnectHandler: () => Promise.resolve(),
     state: await createTestDurableObjectState('test-do-id'),
     authApiKey: 'foo',
-    logSink: testLogSink,
+    createLogSink: createTestLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
@@ -344,7 +345,7 @@ test('clear interval call', async () => {
   let fired = 0;
   let invoked = 0;
   room.runInLockAtInterval(
-    new LogContext('debug', {}, testLogSink()),
+    new LogContext('debug', {}, createTestLogSink()),
     'fakeProcessNext',
     1, // Fire once every ms.
     () => {
@@ -400,7 +401,7 @@ test('good, bad, invalid connect requests', async () => {
     disconnectHandler: () => Promise.resolve(),
     state,
     authApiKey: 'API KEY',
-    logSink: testLogSink,
+    createLogSink: createTestLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,

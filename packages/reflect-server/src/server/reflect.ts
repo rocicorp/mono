@@ -177,7 +177,7 @@ function createRoomDOClass<
         roomStartHandler,
         disconnectHandler,
         authApiKey: getAPIKey(env),
-        logSink: customLogSink,
+        createLogSink: customLogSink,
         logLevel,
         allowUnconfirmedWrites,
         maxMutationsPerTurn,
