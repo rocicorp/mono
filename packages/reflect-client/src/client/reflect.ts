@@ -77,6 +77,19 @@ export const onSetConnectionStateSymbol = Symbol();
 export const exposedToTestingSymbol = Symbol();
 export const createLogOptionsSymbol = Symbol();
 
+interface TestReflect {
+  [exposedToTestingSymbol]: TestingContext;
+  [onSetConnectionStateSymbol]: (state: ConnectionState) => void;
+  [createLogOptionsSymbol]: (options: {
+    consoleLogLevel: LogLevel;
+    socketOrigin: string | null;
+  }) => LogOptions;
+}
+
+function forTesting<MD extends MutatorDefs>(r: Reflect<MD>): TestReflect {
+  return r as unknown as TestReflect;
+}
+
 export const enum ConnectionState {
   Disconnected,
   Connecting,
@@ -252,8 +265,7 @@ export class Reflect<MD extends MutatorDefs> {
     this.#connectionStateChangeResolver = resolver();
 
     if (TESTING) {
-      // @ts-expect-error Exposed for testing.
-      this[onSetConnectionStateSymbol](state);
+      forTesting(this)[onSetConnectionStateSymbol](state);
     }
   }
 
@@ -382,18 +394,17 @@ export class Reflect<MD extends MutatorDefs> {
     void this.#runLoop();
 
     if (TESTING) {
-      (this as unknown as {exposedToTesting: TestingContext}).exposedToTesting =
-        {
-          puller: this.#puller,
-          pusher: this.#pusher,
-          setReload: (r: () => void) => {
-            this.#reload = r;
-          },
-          logOptions: this.#logOptions,
-          connectStart: () => this.#connectStart,
-          socketResolver: () => this.#socketResolver,
-          connectionState: () => this.#connectionState,
-        };
+      forTesting(this)[exposedToTestingSymbol] = {
+        puller: this.#puller,
+        pusher: this.#pusher,
+        setReload: (r: () => void) => {
+          this.#reload = r;
+        },
+        logOptions: this.#logOptions,
+        connectStart: () => this.#connectStart,
+        socketResolver: () => this.#socketResolver,
+        connectionState: () => this.#connectionState,
+      };
     }
   }
 
@@ -402,8 +413,7 @@ export class Reflect<MD extends MutatorDefs> {
     socketOrigin: string | null;
   }): LogOptions {
     if (TESTING) {
-      // @ts-expect-error Exposed for testing.
-      return this[createLogOptionsSymbol](options);
+      return forTesting(this)[createLogOptionsSymbol](options);
     }
     return createLogOptions(options);
   }
