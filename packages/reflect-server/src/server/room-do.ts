@@ -99,6 +99,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   readonly #router = new Router();
 
   #state: DurableObjectState;
+  readonly #alarmTasks: (() => Promise<void>)[] = [];
 
   constructor(options: RoomDOOptions<MD>) {
     const {
@@ -126,6 +127,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
     this.#turnDuration = getDefaultTurnDuration(options.allowUnconfirmedWrites);
     this.#authApiKey = authApiKey;
+
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
       'RoomDO',
@@ -407,30 +409,19 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     }
   };
 
-  alarm(): Promise<void> {
-    if (this.#turnTimerID) {
-      this.#lc.debug?.('already processing, nothing to do');
-      return Promise.resolve();
-    }
+  async addAlarmTask(task: () => Promise<void>) {
+    this.#alarmTasks.push(task);
+    await this.#state.storage.setAlarm(Date.now());
+  }
 
-    this.#turnTimerID = this.runInLockAtInterval(
-      // The logging in turn processing should use this.#lc (i.e. the RoomDO's
-      // general log context), rather than lc which has the context of a
-      // specific request/connection
-      this.#lc,
-      '#processNext',
-      this.#turnDuration,
-      logContext => this.#processNextInLock(logContext),
-      this.#turnDuration * 20,
-      // If the interval runs for more than 20x the intervaltime we want to clear the interval and reschedule it via alarm
-      // so that logs will be flushed to tail
-      _lc => {
-        clearInterval(this.#turnTimerID);
-        this.#turnTimerID = 0;
-        void this.#state.storage.setAlarm(Date.now());
-      },
-    );
-    return Promise.resolve();
+  async alarm(): Promise<void> {
+    const task = this.#alarmTasks.shift();
+    if (task) {
+      await task();
+    }
+    if (this.#alarmTasks.length > 0) {
+      await this.#state.storage.setAlarm(Date.now());
+    }
   }
 
   #processUntilDone(lc: LogContext) {
@@ -439,7 +430,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       lc.debug?.('already processing, nothing to do');
       return;
     }
-    void this.#state.storage.setAlarm(Date.now());
+    void this.addAlarmTask(() => this.#processUntilDoneTask());
   }
 
   // Exposed for testing.
@@ -521,7 +512,35 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     if (nothingToProcess && this.#turnTimerID) {
       clearInterval(this.#turnTimerID);
       this.#turnTimerID = 0;
+      // Empty task to flush logs to tail
+      await this.addAlarmTask(() => Promise.resolve());
     }
+  }
+
+  #processUntilDoneTask() {
+    if (this.#turnTimerID) {
+      this.#lc.debug?.('already processing, nothing to do');
+      return Promise.resolve();
+    }
+
+    this.#turnTimerID = this.runInLockAtInterval(
+      // The logging in turn processing should use this.#lc (i.e. the RoomDO's
+      // general log context), rather than lc which has the context of a
+      // specific request/connection
+      this.#lc,
+      '#processNext',
+      this.#turnDuration,
+      logContext => this.#processNextInLock(logContext),
+      this.#turnDuration * 20,
+      // If the interval runs for more than 20x the intervaltime we want to clear the interval and reschedule it via alarm
+      // so that logs will be flushed to tail
+      async _lc => {
+        clearInterval(this.#turnTimerID);
+        this.#turnTimerID = 0;
+        await this.addAlarmTask(() => this.#processUntilDoneTask());
+      },
+    );
+    return Promise.resolve();
   }
 
   #handleClose = async (
