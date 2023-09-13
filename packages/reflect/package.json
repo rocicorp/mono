@@ -38,7 +38,6 @@
     "open": "^9.1.0",
     "picocolors": "^1.0.0",
     "pkg-up": "^4.0.0",
-    "replicache": "13.0.1",
     "semver": "^7.5.3",
     "validate-npm-package-name": "^5.0.0",
     "ws": "^8.13.0",
@@ -51,7 +50,8 @@
     "reflect-cli": "0.1.2",
     "reflect-client": "0.0.0",
     "reflect-server": "0.0.0",
-    "reflect-shared": "0.0.0"
+    "reflect-shared": "0.0.0",
+    "replicache": "13.0.1"
   },
   "peerDependencies": {
     "wrangler": "^2.13.0"
