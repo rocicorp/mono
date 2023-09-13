@@ -24,11 +24,12 @@ export const mutators = {
 
 export type M = typeof mutators;
 
-export async function increment(
+async function increment(
   tx: WriteTransaction,
-  {key, delta}: {key: string; delta: number},
+  { key, delta }: { key: string; delta: number }
 ) {
-  const prev = (await tx.get(key)) as number | undefined;
+  console.log(`incrementing ${key} by ${delta}`);
+  const prev = await tx.get<number>(key);
   const next = (prev ?? 0) + delta;
   await tx.put(key, next);
 }
