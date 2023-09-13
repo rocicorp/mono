@@ -56,9 +56,7 @@ export interface RoomDOOptions<MD extends MutatorDefs> {
   authApiKey: string;
   roomStartHandler: RoomStartHandler;
   disconnectHandler: DisconnectHandler;
-  createLogSink: (
-    customSetTimeOut?: ((callback: () => void, ms: number) => void) | undefined,
-  ) => LogSink;
+  logSink: LogSink;
   logLevel: LogLevel;
   allowUnconfirmedWrites: boolean;
   maxMutationsPerTurn: number;
@@ -110,7 +108,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       disconnectHandler,
       state,
       authApiKey,
-      createLogSink,
+      logSink,
       logLevel,
       maxMutationsPerTurn,
     } = options;
@@ -130,18 +128,10 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     this.#turnDuration = getDefaultTurnDuration(options.allowUnconfirmedWrites);
     this.#authApiKey = authApiKey;
 
-    const customSetTimeout = async (callback: () => void, ms: number) => {
-      await this.addAlarmTask(() => {
-        setTimeout(callback, ms);
-        return Promise.resolve();
-      });
-    };
-
-    const lc = new LogContext(
-      logLevel,
-      undefined,
-      createLogSink(customSetTimeout),
-    ).withContext('component', 'RoomDO');
+    const lc = new LogContext(logLevel, undefined, logSink).withContext(
+      'component',
+      'RoomDO',
+    );
     registerUnhandledRejectionHandler(lc);
     this.#lc = lc.withContext('doID', state.id.toString());
 
