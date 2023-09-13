@@ -23,7 +23,6 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
-    "@rollup/plugin-node-resolve": "^15.0.1",
     "@types/mocha": "^10.0.1",
     "@types/sinon": "^10.0.11",
     "@web/dev-server": "^0.1.36",
@@ -37,7 +36,6 @@
     "reflect-shared": "0.0.0",
     "replicache": "13.0.1",
     "rollup": "^3.24.0",
-    "rollup-plugin-dts": "^5.3.0",
     "shared": "0.0.0",
     "sinon": "^13.0.1",
     "typescript": "^5.1.3"
