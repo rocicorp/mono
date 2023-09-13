@@ -17,7 +17,14 @@ import {assert} from 'shared/src/asserts.js';
 import type {SinonFakeTimers} from 'sinon';
 import type {LogOptions} from './log-options.js';
 import type {ReflectOptions} from './options.js';
-import {ConnectionState, Reflect} from './reflect.js';
+import {
+  ConnectionState,
+  Reflect,
+  TestingContext,
+  createLogOptionsSymbol,
+  exposedToTestingSymbol,
+  onSetConnectionStateSymbol,
+} from './reflect.js';
 
 export async function tickAFewTimes(clock: SinonFakeTimers, duration = 100) {
   const n = 10;
@@ -58,11 +65,12 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
   }> = new Set();
 
   get connectionState() {
-    return this._connectionState;
+    assert(TESTING);
+    return this[exposedToTestingSymbol].connectionState();
   }
 
   get connectionStateAsString(): string {
-    switch (this._connectionState) {
+    switch (this.connectionState) {
       case ConnectionState.Disconnected:
         return 'Disconnected';
       case ConnectionState.Connecting:
@@ -73,14 +81,11 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
   }
 
   get connectingStart() {
-    return this._connectStart;
+    return this[exposedToTestingSymbol].connectStart;
   }
 
-  protected get _connectionState(): ConnectionState {
-    return super._connectionState;
-  }
-  protected set _connectionState(newState: ConnectionState) {
-    super._connectionState = newState;
+  // Testing only hook
+  [onSetConnectionStateSymbol](newState: ConnectionState) {
     for (const entry of this.#connectionStateResolvers) {
       const {state, resolve} = entry;
       if (state === newState) {
@@ -90,10 +95,8 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
     }
   }
 
-  protected _createLogOptions(options: {
-    consoleLogLevel: LogLevel;
-    socketOrigin: string | null;
-  }): LogOptions {
+  [createLogOptionsSymbol](options: {consoleLogLevel: LogLevel}): LogOptions {
+    assert(TESTING);
     return {
       logLevel: options.consoleLogLevel,
       logSink: new TestLogSink(),
@@ -101,13 +104,14 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
   }
 
   get testLogSink(): TestLogSink {
-    const {logSink} = this._logOptions;
+    assert(TESTING);
+    const {logSink} = this[exposedToTestingSymbol].logOptions;
     assert(logSink instanceof TestLogSink);
     return logSink;
   }
 
   waitForConnectionState(state: ConnectionState) {
-    if (this._connectionState === state) {
+    if (this.connectionState === state) {
       return Promise.resolve(state);
     }
     const {promise, resolve} = resolver<ConnectionState>();
@@ -116,7 +120,7 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
   }
 
   get socket(): Promise<MockSocket> {
-    return this._socketResolver
+    return this[exposedToTestingSymbol].socketResolver()
       .promise as Promise<unknown> as Promise<MockSocket>;
   }
 
@@ -158,21 +162,25 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
     socket.dispatchEvent(new CloseEvent('close'));
   }
 
+  declare [exposedToTestingSymbol]: TestingContext;
+
   get pusher() {
-    // @ts-expect-error Property '_pusher' is private
-    return this._pusher;
+    assert(TESTING);
+    return this[exposedToTestingSymbol].pusher;
   }
 
   get puller() {
-    // @ts-expect-error Property '_puller' is private
-    return this._puller;
+    assert(TESTING);
+    return this[exposedToTestingSymbol].puller;
   }
 
   set reload(r: () => void) {
-    // @ts-expect-error Property '_reload' is private
-    this._reload = r;
+    assert(TESTING);
+    this[exposedToTestingSymbol].setReload(r);
   }
 }
+
+declare const TESTING: boolean;
 
 const testReflectInstances = new Set<TestReflect<MutatorDefs>>();
 

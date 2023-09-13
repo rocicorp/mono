@@ -26,6 +26,7 @@ const config = {
       define: {
         ...define,
         ['REFLECT_VERSION']: JSON.stringify(getVersion()),
+        ['TESTING']: 'true',
       },
     }),
   ],
