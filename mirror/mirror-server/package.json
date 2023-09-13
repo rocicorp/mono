@@ -28,19 +28,20 @@
     "cors": "^2.8.5",
     "firebase-admin": "^11.10.1",
     "firebase-functions": "^4.4.0",
+    "friendly-words": "^1.2.3",
     "lodash": "^4.17.21",
     "nanoid": "^4.0.2",
-    "semver": "^7.5.3",
-    "friendly-words": "^1.2.3"
+    "semver": "^7.5.4"
   },
   "devDependencies": {
-    "@types/friendly-words": "^1.2.0",
     "@jest-mock/express": "^2.0.2",
     "@rocicorp/eslint-config": "^0.4.2",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/cors": "^2.8.12",
+    "@types/friendly-words": "^1.2.0",
     "@types/lodash": "^4.14.197",
     "@types/node": "^18.16.0",
+    "@types/semver": "^7.5.1",
     "datadog": "0.0.0",
     "esbuild": "^0.18.3",
     "firebase-tools": "^12.3.0",
