@@ -127,7 +127,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
     this.#turnDuration = getDefaultTurnDuration(options.allowUnconfirmedWrites);
     this.#authApiKey = authApiKey;
-
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
       'RoomDO',
@@ -433,28 +432,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     void this.#state.storage.setAlarm(Date.now());
   }
 
-  async #processNextInLock(lc: LogContext) {
-    const {maxProcessedMutationTimestamp, nothingToProcess} =
-      await processPending(
-        lc,
-        this.#storage,
-        this.#clients,
-        this.#pendingMutations,
-        this.#mutators,
-        this.#disconnectHandler,
-        this.#maxProcessedMutationTimestamp,
-        this.#bufferSizer,
-        this.#maxMutationsPerTurn,
-      );
-    this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
-    if (nothingToProcess && this.#turnTimerID) {
-      clearInterval(this.#turnTimerID);
-      this.#turnTimerID = 0;
-      // Empty task to flush logs to tail
-      await this.addAlarmTask(() => Promise.resolve());
-    }
-  }
-
   // Exposed for testing.
   runInLockAtInterval(
     lc: LogContext,
@@ -515,6 +492,28 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         timeoutCallbackCalled = true;
       }
     }, interval);
+  }
+
+  async #processNextInLock(lc: LogContext) {
+    const {maxProcessedMutationTimestamp, nothingToProcess} =
+      await processPending(
+        lc,
+        this.#storage,
+        this.#clients,
+        this.#pendingMutations,
+        this.#mutators,
+        this.#disconnectHandler,
+        this.#maxProcessedMutationTimestamp,
+        this.#bufferSizer,
+        this.#maxMutationsPerTurn,
+      );
+    this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
+    if (nothingToProcess && this.#turnTimerID) {
+      clearInterval(this.#turnTimerID);
+      this.#turnTimerID = 0;
+      // Empty task to flush logs to tail
+      await this.addAlarmTask(() => Promise.resolve());
+    }
   }
 
   #processUntilDoneTask() {
