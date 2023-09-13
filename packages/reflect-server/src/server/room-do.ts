@@ -127,6 +127,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
     this.#turnDuration = getDefaultTurnDuration(options.allowUnconfirmedWrites);
     this.#authApiKey = authApiKey;
+
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
       'RoomDO',
@@ -429,7 +430,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       lc.debug?.('already processing, nothing to do');
       return;
     }
-    void this.#state.storage.setAlarm(Date.now());
+    void this.addAlarmTask(() => this.#processUntilDoneTask());
   }
 
   // Exposed for testing.
