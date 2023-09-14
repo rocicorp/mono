@@ -4,26 +4,26 @@ import {withRead, withWrite} from '../with-transactions.js';
 import type {Read, Store, Write} from './store.js';
 
 class TestStore implements Store {
-  private readonly _store: Store;
+  readonly #store: Store;
 
   constructor(store: Store) {
-    this._store = store;
+    this.#store = store;
   }
 
   get closed(): boolean {
-    return this._store.closed;
+    return this.#store.closed;
   }
 
   read(): Promise<Read> {
-    return this._store.read();
+    return this.#store.read();
   }
 
   write(): Promise<Write> {
-    return this._store.write();
+    return this.#store.write();
   }
 
   close(): Promise<void> {
-    return this._store.close();
+    return this.#store.close();
   }
 
   async put(key: string, value: FrozenJSONValue): Promise<void> {

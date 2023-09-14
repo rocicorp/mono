@@ -4,20 +4,20 @@ import type {Hash} from '../hash.js';
 import {promiseVoid} from '../resolved-promises.js';
 
 export class GatherMemoryOnlyVisitor extends Visitor {
-  private readonly _gatheredChunks: Map<Hash, dag.Chunk> = new Map();
-  private readonly _lazyRead: dag.LazyRead;
+  readonly #gatheredChunks: Map<Hash, dag.Chunk> = new Map();
+  readonly #lazyRead: dag.LazyRead;
 
   constructor(dagRead: dag.LazyRead) {
     super(dagRead);
-    this._lazyRead = dagRead;
+    this.#lazyRead = dagRead;
   }
 
   get gatheredChunks(): ReadonlyMap<Hash, dag.Chunk> {
-    return this._gatheredChunks;
+    return this.#gatheredChunks;
   }
 
   override visit(h: Hash): Promise<void> {
-    if (!this._lazyRead.isMemOnlyChunkHash(h)) {
+    if (!this.#lazyRead.isMemOnlyChunkHash(h)) {
       // Not a memory-only hash, no need to visit anything else.
       return promiseVoid;
     }
@@ -25,7 +25,7 @@ export class GatherMemoryOnlyVisitor extends Visitor {
   }
 
   override visitChunk(chunk: dag.Chunk): Promise<void> {
-    this._gatheredChunks.set(chunk.hash, chunk);
+    this.#gatheredChunks.set(chunk.hash, chunk);
     return super.visitChunk(chunk);
   }
 }

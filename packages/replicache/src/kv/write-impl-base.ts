@@ -8,16 +8,16 @@ type DeleteSentinel = typeof deleteSentinel;
 export class WriteImplBase {
   protected readonly _pending: Map<string, FrozenJSONValue | DeleteSentinel> =
     new Map();
-  private readonly _read: Read;
+  readonly #read: Read;
 
   constructor(read: Read) {
-    this._read = read;
+    this.#read = read;
   }
 
   has(key: string): Promise<boolean> {
     switch (this._pending.get(key)) {
       case undefined:
-        return this._read.has(key);
+        return this.#read.has(key);
       case deleteSentinel:
         return promiseFalse;
       default:
@@ -31,7 +31,7 @@ export class WriteImplBase {
       case deleteSentinel:
         return undefined;
       case undefined: {
-        const v = await this._read.get(key);
+        const v = await this.#read.get(key);
         return deepFreeze(v);
       }
       default:
@@ -50,10 +50,10 @@ export class WriteImplBase {
   }
 
   release(): void {
-    this._read.release();
+    this.#read.release();
   }
 
   get closed(): boolean {
-    return this._read.closed;
+    return this.#read.closed;
   }
 }
