@@ -53,26 +53,24 @@ function assertIndexedDBDatabase(
 }
 
 export class IDBDatabasesStore {
-  private readonly _kvStore: kv.Store;
+  readonly #kvStore: kv.Store;
 
   constructor(createKVStore: kv.CreateStore) {
-    this._kvStore = createKVStore(getIDBDatabasesDBName());
+    this.#kvStore = createKVStore(getIDBDatabasesDBName());
   }
 
   putDatabase(db: IndexedDBDatabase): Promise<IndexedDBDatabaseRecord> {
-    return this._putDatabase({...db, lastOpenedTimestampMS: Date.now()});
+    return this.#putDatabase({...db, lastOpenedTimestampMS: Date.now()});
   }
 
   putDatabaseForTesting(
     db: IndexedDBDatabase,
   ): Promise<IndexedDBDatabaseRecord> {
-    return this._putDatabase(db);
+    return this.#putDatabase(db);
   }
 
-  private _putDatabase(
-    db: IndexedDBDatabase,
-  ): Promise<IndexedDBDatabaseRecord> {
-    return withWrite(this._kvStore, async write => {
+  #putDatabase(db: IndexedDBDatabase): Promise<IndexedDBDatabaseRecord> {
+    return withWrite(this.#kvStore, async write => {
       const oldDbRecord = await getDatabases(write);
       const dbRecord = {
         ...oldDbRecord,
@@ -85,14 +83,14 @@ export class IDBDatabasesStore {
   }
 
   clearDatabases(): Promise<void> {
-    return withWrite(this._kvStore, async write => {
+    return withWrite(this.#kvStore, async write => {
       await write.del(DBS_KEY);
       await write.commit();
     });
   }
 
   deleteDatabases(names: Iterable<IndexedDBName>): Promise<void> {
-    return withWrite(this._kvStore, async write => {
+    return withWrite(this.#kvStore, async write => {
       const oldDbRecord = await getDatabases(write);
       const dbRecord = {
         ...oldDbRecord,
@@ -106,15 +104,15 @@ export class IDBDatabasesStore {
   }
 
   getDatabases(): Promise<IndexedDBDatabaseRecord> {
-    return withRead(this._kvStore, getDatabases);
+    return withRead(this.#kvStore, getDatabases);
   }
 
   close(): Promise<void> {
-    return this._kvStore.close();
+    return this.#kvStore.close();
   }
 
   getProfileID(): Promise<string> {
-    return withWrite(this._kvStore, async write => {
+    return withWrite(this.#kvStore, async write => {
       let profileId = await write.get(PROFILE_ID_KEY);
       if (profileId === undefined) {
         // Profile id is 'p' followed by the guid with no dashes.

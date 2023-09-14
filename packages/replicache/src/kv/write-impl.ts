@@ -5,20 +5,20 @@ import type {Write} from './store.js';
 import {deleteSentinel, WriteImplBase} from './write-impl-base.js';
 
 export class WriteImpl extends WriteImplBase implements Write {
-  private readonly _map: Map<string, FrozenJSONValue>;
+  readonly #map: Map<string, FrozenJSONValue>;
 
   constructor(map: Map<string, FrozenJSONValue>, release: () => void) {
     super(new ReadImpl(map, release));
-    this._map = map;
+    this.#map = map;
   }
 
   commit(): Promise<void> {
     // HOT. Do not allocate entry tuple and destructure.
     this._pending.forEach((value, key) => {
       if (value === deleteSentinel) {
-        this._map.delete(key);
+        this.#map.delete(key);
       } else {
-        this._map.set(key, value);
+        this.#map.set(key, value);
       }
     });
     this._pending.clear();

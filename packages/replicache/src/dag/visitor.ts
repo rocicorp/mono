@@ -6,19 +6,19 @@ import type {MustGetChunk} from './store.js';
  * A visitor walks the DAG starting at a given root and visits each chunk.
  */
 export class Visitor {
-  private _seen: Set<Hash> = new Set();
-  private _dagRead: MustGetChunk;
+  #seen: Set<Hash> = new Set();
+  #dagRead: MustGetChunk;
 
   constructor(dagRead: MustGetChunk) {
-    this._dagRead = dagRead;
+    this.#dagRead = dagRead;
   }
 
   async visit(h: Hash) {
-    if (this._seen.has(h)) {
+    if (this.#seen.has(h)) {
       return;
     }
-    this._seen.add(h);
-    const chunk = await this._dagRead.mustGetChunk(h);
+    this.#seen.add(h);
+    const chunk = await this.#dagRead.mustGetChunk(h);
     await this.visitChunk(chunk);
   }
 

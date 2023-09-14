@@ -26,9 +26,9 @@ export function clearAllNamedMemStoresForTesting(): void {
  * in the future without following semver versioning. Please be cautious.
  */
 export class MemStore implements Store {
-  private readonly _map: StorageMap;
-  private readonly _rwLock: RWLock;
-  private _closed = false;
+  readonly #map: StorageMap;
+  readonly #rwLock: RWLock;
+  #closed = false;
 
   constructor(name: string) {
     const entry = stores.get(name);
@@ -41,26 +41,26 @@ export class MemStore implements Store {
       map = new Map();
       stores.set(name, {lock, map});
     }
-    this._rwLock = lock;
-    this._map = map;
+    this.#rwLock = lock;
+    this.#map = map;
   }
 
   async read(): Promise<Read> {
-    const release = await this._rwLock.read();
-    return new ReadImpl(this._map, release);
+    const release = await this.#rwLock.read();
+    return new ReadImpl(this.#map, release);
   }
 
   async write(): Promise<Write> {
-    const release = await this._rwLock.write();
-    return new WriteImpl(this._map, release);
+    const release = await this.#rwLock.write();
+    return new WriteImpl(this.#map, release);
   }
 
   close(): Promise<void> {
-    this._closed = true;
+    this.#closed = true;
     return promiseVoid;
   }
 
   get closed(): boolean {
-    return this._closed;
+    return this.#closed;
   }
 }

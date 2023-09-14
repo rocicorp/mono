@@ -11,14 +11,10 @@ onmessage = async (e: MessageEvent) => {
   const {name} = e.data;
   try {
     await testGetHasScanOnEmptyDB(name);
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore TypeScripts type defs are incorrect.
     postMessage(undefined);
     await closeAllReps();
   } catch (ex) {
     await closeAllReps();
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore TypeScripts type defs are incorrect.
     postMessage(ex);
   }
 };

@@ -1532,9 +1532,9 @@ suite('DD31', () => {
 
   test('mutation recovery is invoked at startup', async () => {
     const rep = await replicacheForTesting('mutation-recovery-startup-dd31');
-    expect(rep.recoverMutationsSpy.callCount).to.equal(1);
-    expect(rep.recoverMutationsSpy.callCount).to.equal(1);
-    expect(await rep.recoverMutationsSpy.firstCall.returnValue).to.equal(true);
+    expect(rep.recoverMutationsFake.callCount).to.equal(1);
+    expect(rep.recoverMutationsFake.callCount).to.equal(1);
+    expect(await rep.recoverMutationsFake.firstCall.returnValue).to.equal(true);
   });
 
   test('mutation recovery returns early without running if push is disabled', async () => {
@@ -1547,8 +1547,10 @@ suite('DD31', () => {
         useDefaultURLs: false,
       },
     );
-    expect(rep.recoverMutationsSpy.callCount).to.equal(1);
-    expect(await rep.recoverMutationsSpy.firstCall.returnValue).to.equal(false);
+    expect(rep.recoverMutationsFake.callCount).to.equal(1);
+    expect(await rep.recoverMutationsFake.firstCall.returnValue).to.equal(
+      false,
+    );
     expect(await rep.recoverMutations()).to.equal(false);
   });
 
@@ -1557,8 +1559,10 @@ suite('DD31', () => {
       pullURL: 'https://diff.com/pull',
       ...disableAllBackgroundProcesses,
     });
-    expect(rep.recoverMutationsSpy.callCount).to.equal(1);
-    expect(await rep.recoverMutationsSpy.firstCall.returnValue).to.equal(false);
+    expect(rep.recoverMutationsFake.callCount).to.equal(1);
+    expect(await rep.recoverMutationsFake.firstCall.returnValue).to.equal(
+      false,
+    );
     expect(await rep.recoverMutations()).to.equal(false);
   });
 
@@ -1567,7 +1571,7 @@ suite('DD31', () => {
     const rep = await replicacheForTesting('mutation-recovery-online', {
       pullURL,
     });
-    expect(rep.recoverMutationsSpy.callCount).to.equal(1);
+    expect(rep.recoverMutationsFake.callCount).to.equal(1);
     expect(rep.online).to.equal(true);
 
     fetchMock.post(pullURL, () => ({
@@ -1578,7 +1582,7 @@ suite('DD31', () => {
 
     await tickAFewTimes();
     expect(rep.online).to.equal(false);
-    expect(rep.recoverMutationsSpy.callCount).to.equal(1);
+    expect(rep.recoverMutationsFake.callCount).to.equal(1);
 
     const clientID = await rep.clientID;
     fetchMock.reset();
@@ -1589,22 +1593,22 @@ suite('DD31', () => {
     });
 
     rep.pull();
-    expect(rep.recoverMutationsSpy.callCount).to.equal(1);
+    expect(rep.recoverMutationsFake.callCount).to.equal(1);
     while (!rep.online) {
       await tickAFewTimes();
     }
-    expect(rep.recoverMutationsSpy.callCount).to.equal(2);
+    expect(rep.recoverMutationsFake.callCount).to.equal(2);
   });
 
   test('mutation recovery is invoked on 5 minute interval', async () => {
     const rep = await replicacheForTesting('mutation-recovery-startup-dd31-4', {
       enableLicensing: false,
     });
-    expect(rep.recoverMutationsSpy.callCount).to.equal(1);
+    expect(rep.recoverMutationsFake.callCount).to.equal(1);
     await clock.tickAsync(5 * 60 * 1000);
-    expect(rep.recoverMutationsSpy.callCount).to.equal(2);
+    expect(rep.recoverMutationsFake.callCount).to.equal(2);
     await clock.tickAsync(5 * 60 * 1000);
-    expect(rep.recoverMutationsSpy.callCount).to.equal(3);
+    expect(rep.recoverMutationsFake.callCount).to.equal(3);
   });
 
   suite('Recover mutations across replicache format versions', () => {

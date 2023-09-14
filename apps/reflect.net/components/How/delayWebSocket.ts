@@ -24,14 +24,14 @@ export const delayWebSocket = (host: string) => {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   const OriginalWebSocket = WebSocket;
   globalThis.WebSocket = class extends OriginalWebSocket {
-    private readonly _userID: string;
-    private readonly _sendQueue: DelayQueue<
+    readonly #userID: string;
+    readonly #sendQueue: DelayQueue<
       string | ArrayBufferLike | Blob | ArrayBufferView
     >;
-    private readonly _deliveryQueue: DelayQueue<MessageEvent>;
+    readonly #deliveryQueue: DelayQueue<MessageEvent>;
 
-    private _onMessage = (ev: MessageEvent) => {
-      const latency = latencies.get(this._userID);
+    #onMessage = (ev: MessageEvent) => {
+      const latency = latencies.get(this.#userID);
       // console.log(
       //   'latency',
       //   latency,
@@ -47,32 +47,31 @@ export const delayWebSocket = (host: string) => {
       //   halfTripPing,
       //   'halfTripPing',
       // );
-      this._deliveryQueue.enqueue(ev, latency, halfTripPing);
+      this.#deliveryQueue.enqueue(ev, latency, halfTripPing);
     };
 
-    private _onMessageCallbacks: Set<
-      (this: WebSocket, ev: MessageEvent) => any
-    > = new Set();
+    #onMessageCallbacks: Set<(this: WebSocket, ev: MessageEvent) => unknown> =
+      new Set();
     constructor(url: string | URL, protocols?: string | string[] | undefined) {
       super(url, protocols);
       const urlObj = new URL(url);
-      this._userID = urlObj.searchParams.get('clientID') ?? '';
-      this._sendQueue = new DelayQueue(data => super.send(data));
-      this._deliveryQueue = new DelayQueue(ev =>
-        this._onMessageCallbacks.forEach(cb => cb.call(this, ev)),
+      this.#userID = urlObj.searchParams.get('clientID') ?? '';
+      this.#sendQueue = new DelayQueue(data => super.send(data));
+      this.#deliveryQueue = new DelayQueue(ev =>
+        this.#onMessageCallbacks.forEach(cb => cb.call(this, ev)),
       );
     }
 
     override send(
       data: string | ArrayBufferLike | Blob | ArrayBufferView,
     ): void {
-      const latency = latencies.get(this._userID);
-      this._sendQueue.enqueue(data, latency, halfTripPing);
+      const latency = latencies.get(this.#userID);
+      this.#sendQueue.enqueue(data, latency, halfTripPing);
     }
 
     override addEventListener<K extends keyof WebSocketEventMap>(
       type: K,
-      listener: (this: WebSocket, ev: WebSocketEventMap[K]) => any,
+      listener: (this: WebSocket, ev: WebSocketEventMap[K]) => unknown,
       options?: boolean | AddEventListenerOptions | undefined,
     ): void {
       if (type !== 'message') {
@@ -80,82 +79,82 @@ export const delayWebSocket = (host: string) => {
         return;
       }
 
-      const first = this._onMessageCallbacks.size === 0;
-      this._onMessageCallbacks.add(
-        listener as (this: WebSocket, ev: MessageEvent) => any,
+      const first = this.#onMessageCallbacks.size === 0;
+      this.#onMessageCallbacks.add(
+        listener as (this: WebSocket, ev: MessageEvent) => unknown,
       );
 
       if (first) {
-        super.addEventListener('message', this._onMessage);
+        super.addEventListener('message', this.#onMessage);
       }
     }
 
     override removeEventListener<K extends keyof WebSocketEventMap>(
       type: K,
-      listener: (this: WebSocket, ev: WebSocketEventMap[K]) => any,
+      listener: (this: WebSocket, ev: WebSocketEventMap[K]) => unknown,
       options?: boolean | EventListenerOptions | undefined,
     ): void {
       if (type !== 'message') {
         super.removeEventListener(type, listener, options);
         return;
       }
-      this._onMessageCallbacks.delete(
-        listener as (this: WebSocket, ev: MessageEvent) => any,
+      this.#onMessageCallbacks.delete(
+        listener as (this: WebSocket, ev: MessageEvent) => unknown,
       );
-      if (this._onMessageCallbacks.size === 0) {
-        super.removeEventListener('message', this._onMessage);
+      if (this.#onMessageCallbacks.size === 0) {
+        super.removeEventListener('message', this.#onMessage);
       }
     }
   };
 };
 
 class DelayQueue<T> {
-  private readonly _queue: {
+  readonly #queue: {
     targetTime: number;
     t: T;
   }[] = [];
-  private _processScheduled = false;
-  private readonly _process: (t: T) => void;
+  #processScheduled = false;
+  readonly #process: (t: T) => void;
   constructor(process: (t: T) => void) {
-    this._process = process;
+    this.#process = process;
   }
 
   enqueue(t: T, latency: number | undefined, halfTripPing: number): void {
     // console.log("enque ", t, "t", latency, "latency", halfTripPing, "halfTripPing");
 
-    if ((latency && latency > halfTripPing) || this._queue.length > 0) {
+    if ((latency && latency > halfTripPing) || this.#queue.length > 0) {
       const targetTime = Date.now() + Math.max(latency ?? 0 - halfTripPing, 0);
-      this._queue.push({
+      this.#queue.push({
         targetTime,
         t,
       });
-      this._maybeScheduleProcess();
+      this.#maybeScheduleProcess();
     } else {
-      this._process(t);
+      this.#process(t);
     }
   }
 
-  private _maybeScheduleProcess = () => {
-    if (this._processScheduled || this._queue.length === 0) {
+  #maybeScheduleProcess = () => {
+    if (this.#processScheduled || this.#queue.length === 0) {
       return;
     }
-    this._processScheduled = true;
+    this.#processScheduled = true;
     setTimeout(() => {
-      this._processScheduled = false;
+      this.#processScheduled = false;
       const now = Date.now();
       const toProcess = [];
-      for (const message of this._queue) {
+      for (const message of this.#queue) {
         if (message.targetTime > now) {
           break;
         }
         toProcess.push(message);
       }
-      this._queue.splice(0, toProcess.length);
+      this.#queue.splice(0, toProcess.length);
       toProcess.forEach(({t}) => {
-        this._process(t);
+        this.#process(t);
       });
-      this._maybeScheduleProcess();
-    }, this._queue[0].targetTime - Date.now());
+      this.#maybeScheduleProcess();
+    }, this.#queue[0].targetTime - Date.now());
   };
 }
 

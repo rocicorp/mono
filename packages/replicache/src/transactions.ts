@@ -192,37 +192,37 @@ function scan<Options extends ScanOptions, V extends JSONValue>(
 // An implementation of ReadTransaction that keeps track of `keys` and `scans`
 // for use with Subscriptions.
 export class SubscriptionTransactionWrapper implements ReadTransaction {
-  private readonly _keys: Set<string> = new Set();
-  private readonly _scans: ScanSubscriptionInfo[] = [];
-  private readonly _tx: ReadTransactionImpl;
+  readonly #keys: Set<string> = new Set();
+  readonly #scans: ScanSubscriptionInfo[] = [];
+  readonly #tx: ReadTransactionImpl;
 
   constructor(tx: ReadTransactionImpl) {
-    this._tx = tx;
+    this.#tx = tx;
   }
 
   get environment(): TransactionEnvironment {
-    return this._tx.environment;
+    return this.#tx.environment;
   }
 
   get clientID(): string {
-    return this._tx.clientID;
+    return this.#tx.clientID;
   }
 
   isEmpty(): Promise<boolean> {
     // Any change to the subscription requires rerunning it.
-    this._scans.push({options: {}});
-    return this._tx.isEmpty();
+    this.#scans.push({options: {}});
+    return this.#tx.isEmpty();
   }
 
   get(key: string): Promise<ReadonlyJSONValue | undefined>;
   get<T extends JSONValue>(key: string): Promise<DeepReadonly<T> | undefined> {
-    this._keys.add(key);
-    return this._tx.get(key) as Promise<DeepReadonly<T> | undefined>;
+    this.#keys.add(key);
+    return this.#tx.get(key) as Promise<DeepReadonly<T> | undefined>;
   }
 
   has(key: string): Promise<boolean> {
-    this._keys.add(key);
-    return this._tx.has(key);
+    this.#keys.add(key);
+    return this.#tx.has(key);
   }
 
   scan(): ScanResult<string, ReadonlyJSONValue>;
@@ -240,18 +240,18 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
       options: toDbScanOptions(options),
       inclusiveLimitKey: undefined,
     };
-    this._scans.push(scanInfo);
-    return scan(options, this._tx.dbtx, inclusiveLimitKey => {
+    this.#scans.push(scanInfo);
+    return scan(options, this.#tx.dbtx, inclusiveLimitKey => {
       scanInfo.inclusiveLimitKey = inclusiveLimitKey;
     });
   }
 
   get keys(): ReadonlySet<string> {
-    return this._keys;
+    return this.#keys;
   }
 
   get scans(): ScanSubscriptionInfo[] {
-    return this._scans;
+    return this.#scans;
   }
 }
 

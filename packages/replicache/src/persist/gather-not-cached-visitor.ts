@@ -7,11 +7,11 @@ import {getSizeOfValue} from '../size-of-value.js';
 export type ChunkWithSize = {chunk: dag.Chunk; size: number};
 
 export class GatherNotCachedVisitor extends Visitor {
-  private readonly _gatheredChunks: Map<Hash, ChunkWithSize> = new Map();
-  private _gatheredChunksTotalSize = 0;
-  private readonly _lazyStore: dag.LazyStore;
-  private readonly _gatherSizeLimit: number;
-  private readonly _getSizeOfChunk: (chunk: dag.Chunk) => number;
+  readonly #gatheredChunks: Map<Hash, ChunkWithSize> = new Map();
+  #gatheredChunksTotalSize = 0;
+  readonly #lazyStore: dag.LazyStore;
+  readonly #gatherSizeLimit: number;
+  readonly #getSizeOfChunk: (chunk: dag.Chunk) => number;
 
   constructor(
     dagRead: dag.Read,
@@ -20,19 +20,19 @@ export class GatherNotCachedVisitor extends Visitor {
     getSizeOfChunk: (chunk: dag.Chunk) => number = getSizeOfValue,
   ) {
     super(dagRead);
-    this._lazyStore = lazyStore;
-    this._gatherSizeLimit = gatherSizeLimit;
-    this._getSizeOfChunk = getSizeOfChunk;
+    this.#lazyStore = lazyStore;
+    this.#gatherSizeLimit = gatherSizeLimit;
+    this.#getSizeOfChunk = getSizeOfChunk;
   }
 
   get gatheredChunks(): ReadonlyMap<Hash, ChunkWithSize> {
-    return this._gatheredChunks;
+    return this.#gatheredChunks;
   }
 
   override visit(h: Hash): Promise<void> {
     if (
-      this._gatheredChunksTotalSize >= this._gatherSizeLimit ||
-      this._lazyStore.isCached(h)
+      this.#gatheredChunksTotalSize >= this.#gatherSizeLimit ||
+      this.#lazyStore.isCached(h)
     ) {
       return promiseVoid;
     }
@@ -40,10 +40,10 @@ export class GatherNotCachedVisitor extends Visitor {
   }
 
   override visitChunk(chunk: dag.Chunk): Promise<void> {
-    if (this._gatheredChunksTotalSize < this._gatherSizeLimit) {
-      const size = this._getSizeOfChunk(chunk);
-      this._gatheredChunks.set(chunk.hash, {chunk, size});
-      this._gatheredChunksTotalSize += size;
+    if (this.#gatheredChunksTotalSize < this.#gatherSizeLimit) {
+      const size = this.#getSizeOfChunk(chunk);
+      this.#gatheredChunks.set(chunk.hash, {chunk, size});
+      this.#gatheredChunksTotalSize += size;
     }
 
     return super.visitChunk(chunk);

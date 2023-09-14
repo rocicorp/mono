@@ -1,5 +1,6 @@
 import styled from 'styled-components';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 const checkSaturation = (props: any) => {
   if (props.scroll < 26) {
     return 100 - props.scroll * 4 + '%';

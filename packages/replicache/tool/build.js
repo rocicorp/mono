@@ -43,7 +43,10 @@ async function buildReplicache(options) {
     ...restOfOptions,
     // Use neutral to remove the automatic define for process.env.NODE_ENV
     platform: 'neutral',
-    define,
+    define: {
+      ...define,
+      ['TESTING']: 'false',
+    },
     outfile,
     entryPoints: [path.join(dirname, '..', 'src', 'mod.ts')],
   });

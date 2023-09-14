@@ -77,11 +77,11 @@ export class LazyStore implements Store {
    * - write `_heads`
    * - write `_memOnlyChunks`
    */
-  private readonly _rwLock = new RWLock();
-  private readonly _heads = new Map<string, Hash>();
-  private readonly _sourceStore: Store;
-  private readonly _chunkHasher: ChunkHasher;
-  private readonly _assertValidHash: (hash: Hash) => void;
+  readonly #rwLock = new RWLock();
+  readonly #heads = new Map<string, Hash>();
+  readonly #sourceStore: Store;
+  readonly #chunkHasher: ChunkHasher;
+  readonly #assertValidHash: (hash: Hash) => void;
 
   /** The following are protected so testing subclass can access. */
   protected readonly _memOnlyChunks = new Map<Hash, Chunk>();
@@ -154,35 +154,35 @@ export class LazyStore implements Store {
       this._refCounts,
       this._refs,
     );
-    this._sourceStore = sourceStore;
-    this._chunkHasher = chunkHasher;
-    this._assertValidHash = assertValidHash;
+    this.#sourceStore = sourceStore;
+    this.#chunkHasher = chunkHasher;
+    this.#assertValidHash = assertValidHash;
   }
 
   async read(): Promise<LazyRead> {
-    const release = await this._rwLock.read();
+    const release = await this.#rwLock.read();
     return new LazyRead(
-      this._heads,
+      this.#heads,
       this._memOnlyChunks,
       this._sourceChunksCache,
-      this._sourceStore,
+      this.#sourceStore,
       release,
-      this._assertValidHash,
+      this.#assertValidHash,
     );
   }
 
   async write(): Promise<LazyWrite> {
-    const release = await this._rwLock.write();
+    const release = await this.#rwLock.write();
     return new LazyWrite(
-      this._heads,
+      this.#heads,
       this._memOnlyChunks,
       this._sourceChunksCache,
-      this._sourceStore,
+      this.#sourceStore,
       this._refCounts,
       this._refs,
       release,
-      this._chunkHasher,
-      this._assertValidHash,
+      this.#chunkHasher,
+      this.#assertValidHash,
     );
   }
 
@@ -211,9 +211,9 @@ export class LazyRead implements Read {
   protected readonly _memOnlyChunks: Map<Hash, Chunk>;
   protected readonly _sourceChunksCache: ChunksCache;
   protected readonly _sourceStore: Store;
-  private _sourceRead: Promise<Read> | undefined = undefined;
-  private readonly _release: () => void;
-  private _closed = false;
+  #sourceRead: Promise<Read> | undefined = undefined;
+  readonly #release: () => void;
+  #closed = false;
   readonly assertValidHash: (hash: Hash) => void;
 
   constructor(
@@ -228,7 +228,7 @@ export class LazyRead implements Read {
     this._memOnlyChunks = memOnlyChunks;
     this._sourceChunksCache = sourceChunksCache;
     this._sourceStore = sourceStore;
-    this._release = release;
+    this.#release = release;
     this.assertValidHash = assertValidHash;
   }
 
@@ -264,27 +264,27 @@ export class LazyRead implements Read {
   }
 
   release(): void {
-    if (!this._closed) {
-      this._release();
-      this._sourceRead
+    if (!this.#closed) {
+      this.#release();
+      this.#sourceRead
         ?.then(read => read.release())
         // If creation of the read failed there is nothing to release.
         // Catch to avoid `Uncaught (in promise)` errors being reported.
         // eslint-disable-next-line @typescript-eslint/no-empty-function
         .catch(_ => {});
-      this._closed = true;
+      this.#closed = true;
     }
   }
 
   get closed(): boolean {
-    return this._closed;
+    return this.#closed;
   }
 
   protected _getSourceRead(): Promise<Read> {
-    if (!this._sourceRead) {
-      this._sourceRead = this._sourceStore.read();
+    if (!this.#sourceRead) {
+      this.#sourceRead = this._sourceStore.read();
     }
-    return this._sourceRead;
+    return this.#sourceRead;
   }
 }
 
@@ -292,16 +292,16 @@ export class LazyWrite
   extends LazyRead
   implements Write, RefCountUpdatesDelegate
 {
-  private readonly _refCounts: Map<Hash, number>;
-  private readonly _refs: Map<Hash, readonly Hash[]>;
-  private readonly _chunkHasher: ChunkHasher;
+  readonly #refCounts: Map<Hash, number>;
+  readonly #refs: Map<Hash, readonly Hash[]>;
+  readonly #chunkHasher: ChunkHasher;
   protected readonly _pendingHeadChanges = new Map<string, HeadChange>();
   protected readonly _pendingMemOnlyChunks = new Map<Hash, Chunk>();
   protected readonly _pendingCachedChunks = new Map<
     Hash,
     {chunk: Chunk; size: number}
   >();
-  private readonly _createdChunks = new Set<Hash>();
+  readonly #createdChunks = new Set<Hash>();
 
   constructor(
     heads: Map<string, Hash>,
@@ -322,14 +322,14 @@ export class LazyWrite
       release,
       assertValidHash,
     );
-    this._refCounts = refCounts;
-    this._refs = refs;
-    this._chunkHasher = chunkHasher;
+    this.#refCounts = refCounts;
+    this.#refs = refs;
+    this.#chunkHasher = chunkHasher;
   }
 
   createChunk = <V>(data: V, refs: readonly Hash[]): Chunk<V> => {
-    const chunk = createChunk(data, refs, this._chunkHasher);
-    this._createdChunks.add(chunk.hash);
+    const chunk = createChunk(data, refs, this.#chunkHasher);
+    this.#createdChunks.add(chunk.hash);
     return chunk;
   };
 
@@ -341,7 +341,7 @@ export class LazyWrite
         this.assertValidHash(h);
       }
     }
-    if (this._createdChunks.has(hash) || this.isMemOnlyChunkHash(hash)) {
+    if (this.#createdChunks.has(hash) || this.isMemOnlyChunkHash(hash)) {
       this._pendingMemOnlyChunks.set(hash, c);
     } else {
       this._pendingCachedChunks.set(hash, {chunk: c, size: size ?? -1});
@@ -350,14 +350,14 @@ export class LazyWrite
   }
 
   async setHead(name: string, hash: Hash): Promise<void> {
-    await this._setHead(name, hash);
+    await this.#setHead(name, hash);
   }
 
   async removeHead(name: string): Promise<void> {
-    await this._setHead(name, undefined);
+    await this.#setHead(name, undefined);
   }
 
-  private async _setHead(name: string, hash: Hash | undefined): Promise<void> {
+  async #setHead(name: string, hash: Hash | undefined): Promise<void> {
     const oldHash = await this.getHead(name);
     const v = this._pendingHeadChanges.get(name);
     if (v === undefined) {
@@ -424,14 +424,14 @@ export class LazyWrite
     for (const [hash, count] of refCountUpdates) {
       if (this.isMemOnlyChunkHash(hash)) {
         if (count === 0) {
-          this._refCounts.delete(hash);
+          this.#refCounts.delete(hash);
           this._memOnlyChunks.delete(hash);
-          this._refs.delete(hash);
+          this.#refs.delete(hash);
         } else {
-          this._refCounts.set(hash, count);
+          this.#refCounts.set(hash, count);
           const chunk = this._pendingMemOnlyChunks.get(hash);
           if (chunk) {
-            this._refs.set(hash, chunk.meta);
+            this.#refs.set(hash, chunk.meta);
             this._memOnlyChunks.set(hash, chunk);
           }
         }
@@ -459,7 +459,7 @@ export class LazyWrite
   }
 
   getRefCount(hash: Hash): number | undefined {
-    return this._refCounts.get(hash);
+    return this.#refCounts.get(hash);
   }
 
   getRefs(hash: Hash): readonly Hash[] | undefined {
@@ -475,11 +475,11 @@ export class LazyWrite
     if (pendingCachedChunk !== undefined) {
       return pendingCachedChunk.chunk.meta;
     }
-    return this._refs.get(hash);
+    return this.#refs.get(hash);
   }
 
   areRefsCounted(hash: Hash): boolean {
-    return this._refs.has(hash);
+    return this.#refs.has(hash);
   }
 
   chunksPersisted(chunkHashes: readonly Hash[]): void {
@@ -501,13 +501,13 @@ type CacheEntry = {
 };
 
 class ChunksCache {
-  private readonly _cacheSizeLimit: number;
-  private readonly _getSizeOfChunk: (chunk: Chunk) => number;
-  private readonly _refCounts: Map<Hash, number>;
-  private readonly _refs: Map<Hash, readonly Hash[]>;
-  private _size = 0;
-  private _evictsAndDeletesSuspended = false;
-  private readonly _suspendedDeletes: Hash[] = [];
+  readonly #cacheSizeLimit: number;
+  readonly #getSizeOfChunk: (chunk: Chunk) => number;
+  readonly #refCounts: Map<Hash, number>;
+  readonly #refs: Map<Hash, readonly Hash[]>;
+  #size = 0;
+  #evictsAndDeletesSuspended = false;
+  readonly #suspendedDeletes: Hash[] = [];
 
   /**
    * Iteration order is from least to most recently used.
@@ -522,10 +522,10 @@ class ChunksCache {
     refCounts: Map<Hash, number>,
     refs: Map<Hash, readonly Hash[]>,
   ) {
-    this._cacheSizeLimit = cacheSizeLimit;
-    this._getSizeOfChunk = getSizeOfChunk;
-    this._refCounts = refCounts;
-    this._refs = refs;
+    this.#cacheSizeLimit = cacheSizeLimit;
+    this.#getSizeOfChunk = getSizeOfChunk;
+    this.#refCounts = refCounts;
+    this.#refs = refs;
   }
 
   get(hash: Hash): Chunk | undefined {
@@ -554,60 +554,60 @@ class ChunksCache {
     }
 
     // Only cache if there is a ref from a head to this chunk
-    const refCount = this._refCounts.get(hash);
+    const refCount = this.#refCounts.get(hash);
     if (refCount === undefined || refCount < 1) {
       return;
     }
-    if (!this._cacheChunk(chunk)) {
+    if (!this.#cacheChunk(chunk)) {
       return;
     }
-    if (!this._refs.has(hash)) {
+    if (!this.#refs.has(hash)) {
       for (const refHash of chunk.meta) {
-        this._refCounts.set(refHash, (this._refCounts.get(refHash) || 0) + 1);
+        this.#refCounts.set(refHash, (this.#refCounts.get(refHash) || 0) + 1);
       }
-      this._refs.set(hash, chunk.meta);
+      this.#refs.set(hash, chunk.meta);
     }
 
-    this._ensureCacheSizeLimit();
+    this.#ensureCacheSizeLimit();
   }
 
-  private _ensureCacheSizeLimit() {
-    if (this._evictsAndDeletesSuspended) {
+  #ensureCacheSizeLimit() {
+    if (this.#evictsAndDeletesSuspended) {
       return;
     }
     for (const entry of this.cacheEntries.values()) {
-      if (this._size <= this._cacheSizeLimit) {
+      if (this.#size <= this.#cacheSizeLimit) {
         break;
       }
-      this._evict(entry);
+      this.#evict(entry);
     }
   }
 
-  private _cacheChunk(chunk: Chunk, size?: number): boolean {
-    const chunkSize = size ?? this._getSizeOfChunk(chunk);
-    if (chunkSize > this._cacheSizeLimit) {
+  #cacheChunk(chunk: Chunk, size?: number): boolean {
+    const chunkSize = size ?? this.#getSizeOfChunk(chunk);
+    if (chunkSize > this.#cacheSizeLimit) {
       // This value cannot be cached due to its size exceeding the
       // cache size limit, don't evict other entries to try to make
       // room for it.
       return false;
     }
-    this._size += chunkSize;
+    this.#size += chunkSize;
     this.cacheEntries.set(chunk.hash, {chunk, size: chunkSize});
     return true;
   }
 
-  private _evict(cacheEntry: CacheEntry): void {
+  #evict(cacheEntry: CacheEntry): void {
     const {hash} = cacheEntry.chunk;
-    this._size -= cacheEntry.size;
+    this.#size -= cacheEntry.size;
     this.cacheEntries.delete(hash);
   }
 
-  private _delete(hash: Hash): void {
-    this._refCounts.delete(hash);
-    this._refs.delete(hash);
+  #delete(hash: Hash): void {
+    this.#refCounts.delete(hash);
+    this.#refs.delete(hash);
     const cacheEntry = this.cacheEntries.get(hash);
     if (cacheEntry) {
-      this._size -= cacheEntry.size;
+      this.#size -= cacheEntry.size;
       this.cacheEntries.delete(hash);
     }
   }
@@ -618,14 +618,14 @@ class ChunksCache {
   ): void {
     for (const [hash, count] of refCountUpdates) {
       if (count === 0) {
-        if (!this._evictsAndDeletesSuspended) {
-          this._delete(hash);
+        if (!this.#evictsAndDeletesSuspended) {
+          this.#delete(hash);
         } else {
-          this._refCounts.set(hash, 0);
-          this._suspendedDeletes.push(hash);
+          this.#refCounts.set(hash, 0);
+          this.#suspendedDeletes.push(hash);
         }
       } else {
-        this._refCounts.set(hash, count);
+        this.#refCounts.set(hash, count);
         const chunkAndSize = chunksToPut.get(hash);
         if (chunkAndSize) {
           const {chunk, size} = chunkAndSize;
@@ -637,36 +637,36 @@ class ChunksCache {
             this.cacheEntries.delete(hash);
             this.cacheEntries.set(hash, oldCacheEntry);
           } else {
-            this._cacheChunk(chunk, size !== -1 ? size : undefined);
-            this._refs.set(hash, chunk.meta);
+            this.#cacheChunk(chunk, size !== -1 ? size : undefined);
+            this.#refs.set(hash, chunk.meta);
           }
         }
       }
     }
-    this._ensureCacheSizeLimit();
+    this.#ensureCacheSizeLimit();
   }
 
   persisted(chunks: Iterable<Chunk>) {
     for (const chunk of chunks) {
-      this._cacheChunk(chunk);
+      this.#cacheChunk(chunk);
     }
-    this._ensureCacheSizeLimit();
+    this.#ensureCacheSizeLimit();
   }
 
   async withSuspendedEvictsAndDeletes<T>(
     fn: () => MaybePromise<T>,
   ): Promise<T> {
-    this._evictsAndDeletesSuspended = true;
+    this.#evictsAndDeletesSuspended = true;
     try {
       return await fn();
     } finally {
-      this._evictsAndDeletesSuspended = false;
-      for (const hash of this._suspendedDeletes) {
-        if (this._refCounts.get(hash) === 0) {
-          this._delete(hash);
+      this.#evictsAndDeletesSuspended = false;
+      for (const hash of this.#suspendedDeletes) {
+        if (this.#refCounts.get(hash) === 0) {
+          this.#delete(hash);
         }
       }
-      this._ensureCacheSizeLimit();
+      this.#ensureCacheSizeLimit();
     }
   }
 }

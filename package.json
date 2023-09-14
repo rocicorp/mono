@@ -17,14 +17,14 @@
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.4.2",
+    "@rocicorp/eslint-config": "^0.5.0",
     "@rocicorp/prettier-config": "^0.1.1",
+    "@typescript-eslint/eslint-plugin": "^6.7.0",
     "syncpack": "^9.8.4",
     "turbo": "^1.10.3"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },
-  "prettier": "@rocicorp/prettier-config",
-  "packageManager": "npm@8.11.0"
+  "prettier": "@rocicorp/prettier-config"
 }

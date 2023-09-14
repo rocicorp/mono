@@ -247,7 +247,7 @@ abstract class NodeImpl<Value> {
   abstract readonly level: number;
   readonly isMutable: boolean;
 
-  private _childNodeSize = -1;
+  #childNodeSize = -1;
 
   constructor(entries: Array<Entry<Value>>, hash: Hash, isMutable: boolean) {
     this.entries = entries;
@@ -272,19 +272,19 @@ abstract class NodeImpl<Value> {
   }
 
   getChildNodeSize(tree: BTreeRead): number {
-    if (this._childNodeSize !== -1) {
-      return this._childNodeSize;
+    if (this.#childNodeSize !== -1) {
+      return this.#childNodeSize;
     }
 
     let sum = tree.chunkHeaderSize;
     for (const entry of this.entries) {
       sum += entry[2];
     }
-    return (this._childNodeSize = sum);
+    return (this.#childNodeSize = sum);
   }
 
   protected _updateNode(tree: BTreeWrite) {
-    this._childNodeSize = -1;
+    this.#childNodeSize = -1;
     tree.updateNode(
       this as NodeImpl<unknown> as DataNodeImpl | InternalNodeImpl,
     );
@@ -317,11 +317,11 @@ export class DataNodeImpl extends NodeImpl<FrozenJSONValue> {
     }
 
     return Promise.resolve(
-      this._splice(tree, i, deleteCount, [key, value, entrySize]),
+      this.#splice(tree, i, deleteCount, [key, value, entrySize]),
     );
   }
 
-  private _splice(
+  #splice(
     tree: BTreeWrite,
     start: number,
     deleteCount: number,
@@ -345,7 +345,7 @@ export class DataNodeImpl extends NodeImpl<FrozenJSONValue> {
     }
 
     // Found. Create new node or mutate existing one.
-    return Promise.resolve(this._splice(tree, i, 1));
+    return Promise.resolve(this.#splice(tree, i, 1));
   }
 
   async *keys(_tree: BTreeRead): AsyncGenerator<string, void> {
@@ -411,21 +411,21 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
 
     const childNodeSize = childNode.getChildNodeSize(tree);
     if (childNodeSize > tree.maxSize || childNodeSize < tree.minSize) {
-      return this._mergeAndPartition(tree, i, childNode);
+      return this.#mergeAndPartition(tree, i, childNode);
     }
 
     const newEntry = createNewInternalEntryForNode(
       childNode,
       tree.getEntrySize,
     );
-    return this._replaceChild(tree, i, newEntry);
+    return this.#replaceChild(tree, i, newEntry);
   }
 
   /**
    * This merges the child node entries with previous or next sibling and then
    * partitions the merged entries.
    */
-  private async _mergeAndPartition(
+  async #mergeAndPartition(
     tree: BTreeWrite,
     i: number,
     childNode: DataNodeImpl | InternalNodeImpl,
@@ -497,7 +497,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
     return tree.newInternalNodeImpl(entries, this.level);
   }
 
-  private _replaceChild(
+  #replaceChild(
     tree: BTreeWrite,
     index: number,
     newEntry: Entry<Hash>,
@@ -547,11 +547,11 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
     if (childNode.getChildNodeSize(tree) > tree.minSize) {
       // No merging needed.
       const entry = createNewInternalEntryForNode(childNode, tree.getEntrySize);
-      return this._replaceChild(tree, i, entry);
+      return this.#replaceChild(tree, i, entry);
     }
 
     // Child node size is too small.
-    return this._mergeAndPartition(tree, i, childNode);
+    return this.#mergeAndPartition(tree, i, childNode);
   }
 
   async *keys(tree: BTreeRead): AsyncGenerator<string, void> {

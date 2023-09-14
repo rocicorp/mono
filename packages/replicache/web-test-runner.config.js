@@ -19,7 +19,10 @@ const config = {
     esbuildPlugin({
       ts: true,
       target: 'es2022',
-      define: await makeDefine('debug'),
+      define: {
+        ...(await makeDefine('debug')),
+        ['TESTING']: 'true',
+      },
     }),
   ],
   staticLogging: !!process.env.CI,

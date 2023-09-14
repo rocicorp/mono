@@ -43,13 +43,14 @@
     "react-intersection-observer": "^9.4.3",
     "react-range": "^1.8.14",
     "react-syntax-highlighter": "^15.5.0",
-    "replicache-react": "^2.10.1"
+    "replicache-react": "^2.10.1",
+    "tslib": "^2.6.2"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^3.8.0",
     "@datadog/browser-logs": "^4.11.3",
     "@next/font": "13.1.5",
-    "@rocicorp/eslint-config": "^0.4.2",
+    "@rocicorp/eslint-config": "^0.5.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "@rocicorp/rails": "^0.5.0-beta.0",
     "@rocicorp/resolver": "^1.0.1",
@@ -62,8 +63,8 @@
     "@vercel/node": "^2.8.13",
     "buffer": "^5.7.1",
     "classnames": "^2.3.2",
-    "eslint": "8.32.0",
-    "eslint-config-next": "13.1.5",
+    "eslint": "^8.49.0",
+    "eslint-config-next": "^13.4.19",
     "miniflare": "^3.20230717.0",
     "mirror-protocol": "0.0.0",
     "mobx": "^6.9.0",

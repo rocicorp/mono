@@ -49,24 +49,24 @@ export class ConnectionLoop {
 
   // Controls whether the next iteration of the loop will wait at the pending
   // state.
-  private _pendingResolver = resolver<void>();
+  #pendingResolver = resolver<void>();
 
-  private readonly _delegate: ConnectionLoopDelegate;
-  private _closed = false;
+  readonly #delegate: ConnectionLoopDelegate;
+  #closed = false;
 
   constructor(delegate: ConnectionLoopDelegate) {
-    this._delegate = delegate;
+    this.#delegate = delegate;
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
     this.run();
   }
 
   close(): void {
-    this._closed = true;
+    this.#closed = true;
   }
 
   send(): void {
-    this._delegate.debug?.('send');
-    this._pendingResolver.resolve();
+    this.#delegate.debug?.('send');
+    this.#pendingResolver.resolve();
   }
 
   async run(): Promise<void> {
@@ -77,13 +77,13 @@ export class ConnectionLoop {
 
     // The number of active connections.
     let counter = 0;
-    const delegate = this._delegate;
+    const delegate = this.#delegate;
     const {debug} = delegate;
     let delay = 0;
 
     debug?.('Starting connection loop');
 
-    while (!this._closed) {
+    while (!this.#closed) {
       debug?.(
         didLastSendRequestFail(sendRecords)
           ? 'Last request failed. Trying again'
@@ -91,26 +91,26 @@ export class ConnectionLoop {
       );
 
       // Wait until send is called or until the watchdog timer fires.
-      const races = [this._pendingResolver.promise];
+      const races = [this.#pendingResolver.promise];
       const t = delegate.watchdogTimer;
       if (t !== null) {
         races.push(sleep(t));
       }
       await Promise.race(races);
-      if (this._closed) break;
+      if (this.#closed) break;
 
       debug?.('Waiting for debounce');
       await sleep(delegate.debounceDelay);
-      if (this._closed) break;
+      if (this.#closed) break;
       debug?.('debounced');
 
       // This resolver is used to wait for incoming push calls.
-      this._pendingResolver = resolver();
+      this.#pendingResolver = resolver();
 
       if (counter >= delegate.maxConnections) {
         debug?.('Too many request in flight. Waiting until one finishes...');
-        await this._waitUntilAvailableConnection();
-        if (this._closed) break;
+        await this.#waitUntilAvailableConnection();
+        if (this.#closed) break;
         debug?.('...finished');
       }
 
@@ -146,7 +146,7 @@ export class ConnectionLoop {
             sleep(clampedDelay - timeSinceLastSend),
             recoverResolver.promise,
           ]);
-          if (this._closed) break;
+          if (this.#closed) break;
         }
       }
 
@@ -164,7 +164,7 @@ export class ConnectionLoop {
           debug?.('Send failed', e);
           ok = false;
         }
-        if (this._closed) {
+        if (this.#closed) {
           debug?.('Closed after invokeSend');
           return;
         }
@@ -175,28 +175,28 @@ export class ConnectionLoop {
           recoverResolver = resolver();
         }
         counter--;
-        this._connectionAvailable();
+        this.#connectionAvailable();
         if (!ok) {
           // Keep trying
-          this._pendingResolver.resolve();
+          this.#pendingResolver.resolve();
         }
       })();
     }
   }
 
-  private _waitingConnectionResolve: (() => void) | undefined = undefined;
+  #waitingConnectionResolve: (() => void) | undefined = undefined;
 
-  private _connectionAvailable() {
-    if (this._waitingConnectionResolve) {
-      const resolve = this._waitingConnectionResolve;
-      this._waitingConnectionResolve = undefined;
+  #connectionAvailable() {
+    if (this.#waitingConnectionResolve) {
+      const resolve = this.#waitingConnectionResolve;
+      this.#waitingConnectionResolve = undefined;
       resolve();
     }
   }
 
-  private _waitUntilAvailableConnection() {
+  #waitUntilAvailableConnection() {
     const {promise, resolve} = resolver();
-    this._waitingConnectionResolve = resolve;
+    this.#waitingConnectionResolve = resolve;
     return promise;
   }
 }

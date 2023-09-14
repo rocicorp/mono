@@ -14,7 +14,7 @@
     "test:watch": "node --no-warnings --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.4.2",
+    "@rocicorp/eslint-config": "^0.5.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "esbuild": "^0.18.3",
     "replicache": "13.0.1",

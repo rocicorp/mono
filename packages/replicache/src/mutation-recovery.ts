@@ -73,11 +73,11 @@ interface MutationRecoveryOptions {
 }
 
 export class MutationRecovery {
-  private _recoveringMutations = false;
-  private readonly _options: MutationRecoveryOptions;
+  #recoveringMutations = false;
+  readonly #options: MutationRecoveryOptions;
 
   constructor(options: MutationRecoveryOptions) {
-    this._options = options;
+    this.#options = options;
   }
 
   async recoverMutations(
@@ -89,11 +89,11 @@ export class MutationRecovery {
     createStore: CreateStore,
   ): Promise<boolean> {
     const {lc, enableMutationRecovery, isPushDisabled, delegate} =
-      this._options;
+      this.#options;
 
     if (
       !enableMutationRecovery ||
-      this._recoveringMutations ||
+      this.#recoveringMutations ||
       !delegate.online ||
       delegate.closed ||
       isPushDisabled()
@@ -103,11 +103,11 @@ export class MutationRecovery {
     const stepDescription = 'Recovering mutations.';
     lc.debug?.('Start:', stepDescription);
     try {
-      this._recoveringMutations = true;
+      this.#recoveringMutations = true;
       await ready;
       await recoverMutationsFromPerdag(
         idbDatabase,
-        this._options,
+        this.#options,
         perdag,
         preReadClientMap,
       );
@@ -127,7 +127,7 @@ export class MutationRecovery {
             case FormatVersion.V7:
               await recoverMutationsWithNewPerdag(
                 database,
-                this._options,
+                this.#options,
                 undefined,
                 createStore,
               );
@@ -138,7 +138,7 @@ export class MutationRecovery {
       logMutationRecoveryError(e, lc, stepDescription, delegate);
     } finally {
       lc.debug?.('End:', stepDescription);
-      this._recoveringMutations = false;
+      this.#recoveringMutations = false;
     }
     return true;
   }

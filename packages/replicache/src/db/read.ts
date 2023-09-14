@@ -13,7 +13,7 @@ import {
 import {IndexRead} from './index.js';
 
 export class Read {
-  private readonly _dagRead: dag.Read;
+  readonly #dagRead: dag.Read;
   map: BTreeRead;
   readonly indexes: Map<string, IndexRead>;
 
@@ -22,7 +22,7 @@ export class Read {
     map: BTreeRead,
     indexes: Map<string, IndexRead>,
   ) {
-    this._dagRead = dagRead;
+    this.#dagRead = dagRead;
     this.map = map;
     this.indexes = indexes;
   }
@@ -48,11 +48,11 @@ export class Read {
   }
 
   get closed(): boolean {
-    return this._dagRead.closed;
+    return this.#dagRead.closed;
   }
 
   close(): void {
-    this._dagRead.release();
+    this.#dagRead.release();
   }
 }
 
