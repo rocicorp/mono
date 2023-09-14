@@ -51,12 +51,12 @@ const emptySet: ReadonlySet<string> = new Set();
 class SubscriptionImpl<R extends ReadonlyJSONValue | undefined>
   implements Subscription<R>
 {
-  private readonly _body: (tx: ReadTransaction) => Promise<R>;
-  private readonly _onData: (result: R) => void;
-  private _skipEqualsCheck = true;
-  private _lastValue: R | undefined = undefined;
-  private _keys = emptySet;
-  private _scans: readonly Readonly<ScanSubscriptionInfo>[] = [];
+  readonly #body: (tx: ReadTransaction) => Promise<R>;
+  readonly #onData: (result: R) => void;
+  #skipEqualsCheck = true;
+  #lastValue: R | undefined = undefined;
+  #keys = emptySet;
+  #scans: readonly Readonly<ScanSubscriptionInfo>[] = [];
 
   readonly onError: ((error: unknown) => void) | undefined;
   readonly onDone: (() => void) | undefined;
@@ -67,14 +67,14 @@ class SubscriptionImpl<R extends ReadonlyJSONValue | undefined>
     onError: ((error: unknown) => void) | undefined,
     onDone: (() => void) | undefined,
   ) {
-    this._body = body;
-    this._onData = onData;
+    this.#body = body;
+    this.#onData = onData;
     this.onError = onError;
     this.onDone = onDone;
   }
 
   hasIndexSubscription(indexName: string): boolean {
-    for (const scan of this._scans) {
+    for (const scan of this.#scans) {
       if (scan.options.indexName === indexName) {
         return true;
       }
@@ -87,12 +87,12 @@ class SubscriptionImpl<R extends ReadonlyJSONValue | undefined>
     _kind: InvokeKind,
     _diffs: sync.DiffsMap | undefined,
   ): Promise<R> {
-    return this._body(tx);
+    return this.#body(tx);
   }
 
   matches(diffs: sync.DiffsMap): boolean {
     for (const [indexName, diff] of diffs) {
-      if (diffMatchesSubscription(this._keys, this._scans, indexName, diff)) {
+      if (diffMatchesSubscription(this.#keys, this.#scans, indexName, diff)) {
         return true;
       }
     }
@@ -104,15 +104,15 @@ class SubscriptionImpl<R extends ReadonlyJSONValue | undefined>
     keys: ReadonlySet<string>,
     scans: readonly Readonly<ScanSubscriptionInfo>[],
   ): void {
-    this._keys = keys;
-    this._scans = scans;
+    this.#keys = keys;
+    this.#scans = scans;
   }
 
   onData(result: R): void {
-    if (this._skipEqualsCheck || !deepEqual(result, this._lastValue)) {
-      this._lastValue = result;
-      this._skipEqualsCheck = false;
-      this._onData(result);
+    if (this.#skipEqualsCheck || !deepEqual(result, this.#lastValue)) {
+      this.#lastValue = result;
+      this.#skipEqualsCheck = false;
+      this.#onData(result);
     }
   }
 }
@@ -178,28 +178,28 @@ export type WatchNoIndexOptions = {
 export type WatchCallback = (diff: Diff) => void;
 
 class WatchImpl implements Subscription<Diff | undefined> {
-  private readonly _callback: WatchCallback;
-  private readonly _prefix: string;
-  private readonly _indexName: string | undefined;
-  private readonly _initialValuesInFirstDiff: boolean;
+  readonly #callback: WatchCallback;
+  readonly #prefix: string;
+  readonly #indexName: string | undefined;
+  readonly #initialValuesInFirstDiff: boolean;
 
   readonly onError: ((error: unknown) => void) | undefined = undefined;
   readonly onDone: (() => void) | undefined = undefined;
 
   constructor(callback: WatchCallback, options: WatchOptions) {
-    this._callback = callback;
-    this._prefix = options.prefix ?? '';
-    this._indexName = (options as WatchIndexOptions).indexName;
-    this._initialValuesInFirstDiff = options.initialValuesInFirstDiff ?? false;
+    this.#callback = callback;
+    this.#prefix = options.prefix ?? '';
+    this.#indexName = (options as WatchIndexOptions).indexName;
+    this.#initialValuesInFirstDiff = options.initialValuesInFirstDiff ?? false;
   }
 
   hasIndexSubscription(indexName: string): boolean {
-    return this._indexName === indexName;
+    return this.#indexName === indexName;
   }
 
   onData(result: Diff | undefined): void {
     if (result !== undefined) {
-      this._callback(result);
+      this.#callback(result);
     }
   }
 
@@ -218,7 +218,7 @@ class WatchImpl implements Subscription<Diff | undefined> {
     ): Promise<readonly DiffOperation<Key>[] | undefined> => {
       let diff: readonly DiffOperation<Key>[];
       if (kind === InvokeKind.InitialRun) {
-        if (!this._initialValuesInFirstDiff) {
+        if (!this.#initialValuesInFirstDiff) {
           // We are using `undefined` here as a sentinel value to indicate that we
           // should not call the callback in `onDone`.
           return undefined;
@@ -261,10 +261,10 @@ class WatchImpl implements Subscription<Diff | undefined> {
         : undefined;
     };
 
-    if (this._indexName) {
+    if (this.#indexName) {
       return invoke<db.IndexKey>(
-        this._indexName,
-        this._prefix,
+        this.#indexName,
+        this.#prefix,
         diff => diff.key[0],
         internalDiff => convertDiffValues(internalDiff, db.decodeIndexKey),
       );
@@ -272,19 +272,19 @@ class WatchImpl implements Subscription<Diff | undefined> {
 
     return invoke<string>(
       undefined,
-      this._prefix,
+      this.#prefix,
       diff => diff.key,
       internalDiff => convertDiffValues(internalDiff, k => k),
     );
   }
 
   matches(diffs: sync.DiffsMap): boolean {
-    const diff = diffs.get(this._indexName ?? '');
+    const diff = diffs.get(this.#indexName ?? '');
     if (diff === undefined) {
       return false;
     }
 
-    return watcherMatchesDiff(diff, this._prefix, this._indexName);
+    return watcherMatchesDiff(diff, this.#prefix, this.#indexName);
   }
 
   updateDeps(
@@ -350,21 +350,21 @@ type UnknownSubscription = Subscription<unknown>;
 type SubscriptionSet = Set<UnknownSubscription>;
 
 export class SubscriptionsManager implements DiffComputationConfig {
-  private readonly _subscriptions: SubscriptionSet = new Set();
-  private readonly _pendingSubscriptions: SubscriptionSet = new Set();
-  private readonly _queryInternal: QueryInternal;
-  private readonly _lc: LogContext;
+  readonly #subscriptions: SubscriptionSet = new Set();
+  readonly #pendingSubscriptions: SubscriptionSet = new Set();
+  readonly #queryInternal: QueryInternal;
+  readonly #lc: LogContext;
   hasPendingSubscriptionRuns = false;
 
   constructor(queryInternal: QueryInternal, lc: LogContext) {
-    this._queryInternal = queryInternal;
-    this._lc = lc;
+    this.#queryInternal = queryInternal;
+    this.#lc = lc;
   }
 
-  private _add(subscription: UnknownSubscription): () => void {
-    this._subscriptions.add(subscription);
-    void this._scheduleInitialSubscriptionRun(subscription);
-    return () => this._subscriptions.delete(subscription);
+  #add(subscription: UnknownSubscription): () => void {
+    this.#subscriptions.add(subscription);
+    void this.#scheduleInitialSubscriptionRun(subscription);
+    return () => this.#subscriptions.delete(subscription);
   }
 
   addSubscription<R extends ReadonlyJSONValue | undefined>(
@@ -378,7 +378,7 @@ export class SubscriptionsManager implements DiffComputationConfig {
       onDone,
     ) as unknown as UnknownSubscription;
 
-    return this._add(s);
+    return this.#add(s);
   }
 
   addWatch(
@@ -386,22 +386,22 @@ export class SubscriptionsManager implements DiffComputationConfig {
     options: WatchOptions | undefined,
   ): () => void {
     const w = new WatchImpl(callback, options ?? {}) as UnknownSubscription;
-    return this._add(w);
+    return this.#add(w);
   }
 
   clear(): void {
-    for (const subscription of this._subscriptions) {
+    for (const subscription of this.#subscriptions) {
       subscription.onDone?.();
     }
-    this._subscriptions.clear();
+    this.#subscriptions.clear();
   }
 
   async fire(diffs: sync.DiffsMap): Promise<void> {
-    const subscriptions = subscriptionsForDiffs(this._subscriptions, diffs);
-    await this._fireSubscriptions(subscriptions, InvokeKind.Regular, diffs);
+    const subscriptions = subscriptionsForDiffs(this.#subscriptions, diffs);
+    await this.#fireSubscriptions(subscriptions, InvokeKind.Regular, diffs);
   }
 
-  private async _fireSubscriptions(
+  async #fireSubscriptions(
     subscriptions: Iterable<UnknownSubscription>,
     kind: InvokeKind,
     diffs: sync.DiffsMap | undefined,
@@ -412,7 +412,7 @@ export class SubscriptionsManager implements DiffComputationConfig {
     }
 
     // Use allSettled to gather fulfilled and rejected promises.
-    const results = await this._queryInternal(tx =>
+    const results = await this.#queryInternal(tx =>
       Promise.allSettled(
         subs.map(async s => {
           const stx = new SubscriptionTransactionWrapper(tx);
@@ -436,22 +436,22 @@ export class SubscriptionsManager implements DiffComputationConfig {
         if (s.onError) {
           s.onError(result.reason);
         } else {
-          this._lc.error?.('Error in subscription body:', result.reason);
+          this.#lc.error?.('Error in subscription body:', result.reason);
         }
       }
     }
   }
 
-  private async _scheduleInitialSubscriptionRun(s: UnknownSubscription) {
-    this._pendingSubscriptions.add(s);
+  async #scheduleInitialSubscriptionRun(s: UnknownSubscription) {
+    this.#pendingSubscriptions.add(s);
 
     if (!this.hasPendingSubscriptionRuns) {
       this.hasPendingSubscriptionRuns = true;
       await Promise.resolve();
       this.hasPendingSubscriptionRuns = false;
-      const subscriptions = [...this._pendingSubscriptions];
-      this._pendingSubscriptions.clear();
-      await this._fireSubscriptions(
+      const subscriptions = [...this.#pendingSubscriptions];
+      this.#pendingSubscriptions.clear();
+      await this.#fireSubscriptions(
         subscriptions,
         InvokeKind.InitialRun,
         undefined,
@@ -460,11 +460,11 @@ export class SubscriptionsManager implements DiffComputationConfig {
   }
 
   shouldComputeDiffs(): boolean {
-    return this._subscriptions.size > 0;
+    return this.#subscriptions.size > 0;
   }
 
   shouldComputeDiffsForIndex(indexName: string): boolean {
-    for (const s of this._subscriptions) {
+    for (const s of this.#subscriptions) {
       if (s.hasIndexSubscription(indexName)) {
         return true;
       }

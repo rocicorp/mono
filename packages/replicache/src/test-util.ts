@@ -35,7 +35,7 @@ export class ReplicacheTest<
   // eslint-disable-next-line @typescript-eslint/ban-types
   MD extends MutatorDefs = {},
 > extends Replicache<MD> {
-  private readonly _internalAPI!: ReplicacheInternalAPI;
+  readonly #internalAPI!: ReplicacheInternalAPI;
 
   constructor(options: ReplicacheOptions<MD>) {
     let internalAPI!: ReplicacheInternalAPI;
@@ -45,7 +45,7 @@ export class ReplicacheTest<
         internalAPI = api;
       },
     } as ReplicacheOptions<MD>);
-    this._internalAPI = internalAPI;
+    this.#internalAPI = internalAPI;
   }
 
   beginPull(): Promise<BeginPullResult> {
@@ -70,7 +70,7 @@ export class ReplicacheTest<
   }
 
   persist() {
-    return this._internalAPI.persist();
+    return this.#internalAPI.persist();
   }
 
   recoverMutationsSpy = sinon.spy(this, 'recoverMutations');

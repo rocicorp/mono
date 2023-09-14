@@ -29,12 +29,10 @@ type ToValue<Options extends ScanOptions, Value> = (
 export class ScanResultImpl<Options extends ScanOptions, V>
   implements ScanResult<KeyTypeForScanOptions<Options>, V>
 {
-  private readonly _iter: AsyncIterable<
-    EntryForOptions<Options, ReadonlyJSONValue>
-  >;
-  private readonly _options: Options;
-  private readonly _dbDelegateOptions: Closed;
-  private readonly _onLimitKey: (inclusiveLimitKey: string) => void;
+  readonly #iter: AsyncIterable<EntryForOptions<Options, ReadonlyJSONValue>>;
+  readonly #options: Options;
+  readonly #dbDelegateOptions: Closed;
+  readonly #onLimitKey: (inclusiveLimitKey: string) => void;
 
   constructor(
     iter: AsyncIterable<EntryForOptions<Options, ReadonlyJSONValue>>,
@@ -42,10 +40,10 @@ export class ScanResultImpl<Options extends ScanOptions, V>
     dbDelegateOptions: Closed,
     onLimitKey: (inclusiveLimitKey: string) => void,
   ) {
-    this._iter = iter;
-    this._options = options;
-    this._dbDelegateOptions = dbDelegateOptions;
-    this._onLimitKey = onLimitKey;
+    this.#iter = iter;
+    this.#options = options;
+    this.#dbDelegateOptions = dbDelegateOptions;
+    this.#onLimitKey = onLimitKey;
   }
 
   /** The default AsyncIterable. This is the same as {@link values}. */
@@ -56,7 +54,7 @@ export class ScanResultImpl<Options extends ScanOptions, V>
   /** Async iterator over the values of the {@link ReadTransaction.scan | scan} call. */
   values(): AsyncIterableIteratorToArray<V> {
     return new AsyncIterableIteratorToArrayWrapperImpl(
-      this._newIterator(e => e[1] as V),
+      this.#newIterator(e => e[1] as V),
     );
   }
 
@@ -68,7 +66,7 @@ export class ScanResultImpl<Options extends ScanOptions, V>
   keys(): AsyncIterableIteratorToArray<KeyTypeForScanOptions<Options>> {
     type K = KeyTypeForScanOptions<Options>;
     return new AsyncIterableIteratorToArrayWrapperImpl<K>(
-      this._newIterator<K>(e => e[0] as K),
+      this.#newIterator<K>(e => e[0] as K),
     );
   }
 
@@ -84,7 +82,7 @@ export class ScanResultImpl<Options extends ScanOptions, V>
     type Key = KeyTypeForScanOptions<Options>;
     type Entry = readonly [Key, V];
     return new AsyncIterableIteratorToArrayWrapperImpl(
-      this._newIterator<Entry>(e => [e[0] as Key, e[1] as V]),
+      this.#newIterator<Entry>(e => [e[0] as Key, e[1] as V]),
     );
   }
 
@@ -93,15 +91,13 @@ export class ScanResultImpl<Options extends ScanOptions, V>
     return this.values().toArray();
   }
 
-  private _newIterator<T>(
-    toValue: ToValue<Options, T>,
-  ): AsyncIterableIterator<T> {
+  #newIterator<T>(toValue: ToValue<Options, T>): AsyncIterableIterator<T> {
     return scanIterator(
       toValue,
-      this._iter,
-      this._options,
-      this._dbDelegateOptions,
-      this._onLimitKey,
+      this.#iter,
+      this.#options,
+      this.#dbDelegateOptions,
+      this.#onLimitKey,
     );
   }
 }
@@ -149,22 +145,22 @@ export interface AsyncIterableIteratorToArray<V>
 class AsyncIterableIteratorToArrayWrapperImpl<V>
   implements AsyncIterableIterator<V>
 {
-  private readonly _it: AsyncIterableIterator<V>;
+  readonly #it: AsyncIterableIterator<V>;
 
   constructor(it: AsyncIterableIterator<V>) {
-    this._it = it;
+    this.#it = it;
   }
 
   next() {
-    return this._it.next();
+    return this.#it.next();
   }
 
   [Symbol.asyncIterator](): AsyncIterableIterator<V> {
-    return this._it[Symbol.asyncIterator]();
+    return this.#it[Symbol.asyncIterator]();
   }
 
   toArray(): Promise<V[]> {
-    return asyncIterableToArray(this._it);
+    return asyncIterableToArray(this.#it);
   }
 }
 

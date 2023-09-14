@@ -54,14 +54,14 @@ export function computeRefCountUpdates(
 }
 
 class RefCountUpdates {
-  private readonly _newHeads: Hash[];
-  private readonly _oldHeads: Hash[];
-  private readonly _putChunks: ReadonlySet<Hash>;
-  private readonly _delegate: RefCountUpdatesDelegate;
-  private readonly _refsCounted: Set<Hash> | null;
-  private readonly _refCountUpdates: Map<Hash, number>;
-  private readonly _loadedRefCountPromises: LoadedRefCountPromises;
-  private readonly _isLazyDelegate: boolean;
+  readonly #newHeads: Hash[];
+  readonly #oldHeads: Hash[];
+  readonly #putChunks: ReadonlySet<Hash>;
+  readonly #delegate: RefCountUpdatesDelegate;
+  readonly #refsCounted: Set<Hash> | null;
+  readonly #refCountUpdates: Map<Hash, number>;
+  readonly #loadedRefCountPromises: LoadedRefCountPromises;
+  readonly #isLazyDelegate: boolean;
 
   constructor(
     headChanges: Iterable<HeadChange>,
@@ -76,45 +76,45 @@ class RefCountUpdates {
         changedHead.new && newHeads.push(changedHead.new);
       }
     }
-    this._newHeads = newHeads;
-    this._oldHeads = oldHeads;
-    this._putChunks = putChunks;
-    this._delegate = delegate;
-    this._refCountUpdates = new Map();
+    this.#newHeads = newHeads;
+    this.#oldHeads = oldHeads;
+    this.#putChunks = putChunks;
+    this.#delegate = delegate;
+    this.#refCountUpdates = new Map();
     // This map is used to ensure we do not load the ref count key more than once.
     // Once it is loaded we only operate on a cache of the ref counts.
-    this._loadedRefCountPromises = new Map();
-    this._isLazyDelegate = delegate.areRefsCounted !== undefined;
-    this._refsCounted = this._isLazyDelegate ? new Set() : null;
+    this.#loadedRefCountPromises = new Map();
+    this.#isLazyDelegate = delegate.areRefsCounted !== undefined;
+    this.#refsCounted = this.#isLazyDelegate ? new Set() : null;
   }
 
   async compute(): Promise<Map<Hash, number>> {
-    for (const n of this._newHeads) {
-      await this._changeRefCount(n, 1);
+    for (const n of this.#newHeads) {
+      await this.#changeRefCount(n, 1);
     }
 
     // Now go through the put chunks to ensure each has an entry in
     // refCountUpdates (zero for new chunks which are not reachable from
     // newHeads).
     await Promise.all(
-      Array.from(this._putChunks.values(), hash =>
-        this._ensureRefCountLoaded(hash),
+      Array.from(this.#putChunks.values(), hash =>
+        this.#ensureRefCountLoaded(hash),
       ),
     );
 
-    if (this._isLazyDelegate) {
-      assert(this._delegate.areRefsCounted);
-      assert(this._refsCounted);
+    if (this.#isLazyDelegate) {
+      assert(this.#delegate.areRefsCounted);
+      assert(this.#refsCounted);
       let refCountsUpdated;
       do {
         refCountsUpdated = false;
-        for (const hash of this._putChunks.values()) {
+        for (const hash of this.#putChunks.values()) {
           if (
-            !this._delegate.areRefsCounted(hash) &&
-            !this._refsCounted.has(hash) &&
-            this._refCountUpdates.get(hash) !== 0
+            !this.#delegate.areRefsCounted(hash) &&
+            !this.#refsCounted.has(hash) &&
+            this.#refCountUpdates.get(hash) !== 0
           ) {
-            await this._updateRefsCounts(hash, 1);
+            await this.#updateRefsCounts(hash, 1);
             refCountsUpdated = true;
             break;
           }
@@ -122,12 +122,12 @@ class RefCountUpdates {
       } while (refCountsUpdated);
     }
 
-    for (const o of this._oldHeads) {
-      await this._changeRefCount(o, -1);
+    for (const o of this.#oldHeads) {
+      await this.#changeRefCount(o, -1);
     }
 
     if (!skipGCAsserts) {
-      for (const [hash, update] of this._refCountUpdates) {
+      for (const [hash, update] of this.#refCountUpdates) {
         assert(
           update >= 0,
           `ref count update must be non-negative. ${hash}:${update}`,
@@ -135,58 +135,58 @@ class RefCountUpdates {
       }
     }
 
-    return this._refCountUpdates;
+    return this.#refCountUpdates;
   }
 
-  private async _changeRefCount(hash: Hash, delta: number): Promise<void> {
+  async #changeRefCount(hash: Hash, delta: number): Promise<void> {
     // First make sure that we have the ref count in the cache. This is async
     // because it might need to load the ref count from the store (via the delegate).
     //
     // Once we have loaded the ref count all the updates to it are sync to
     // prevent race conditions.
-    await this._ensureRefCountLoaded(hash);
-    if (this._updateRefCount(hash, delta)) {
-      await this._updateRefsCounts(hash, delta);
+    await this.#ensureRefCountLoaded(hash);
+    if (this.#updateRefCount(hash, delta)) {
+      await this.#updateRefsCounts(hash, delta);
     }
   }
 
-  private async _updateRefsCounts(hash: Hash, delta: number) {
+  async #updateRefsCounts(hash: Hash, delta: number) {
     if (hash === emptyHash) {
       return;
     }
-    const refs = await this._delegate.getRefs(hash);
+    const refs = await this.#delegate.getRefs(hash);
     if (!skipGCAsserts) {
       assert(
-        refs || (this._isLazyDelegate && !this._putChunks.has(hash)),
+        refs || (this.#isLazyDelegate && !this.#putChunks.has(hash)),
         'refs must be defined',
       );
     }
 
     if (refs !== undefined) {
-      this._refsCounted?.add(hash);
-      const ps = refs.map(ref => this._changeRefCount(ref, delta));
+      this.#refsCounted?.add(hash);
+      const ps = refs.map(ref => this.#changeRefCount(ref, delta));
       await Promise.all(ps);
     }
   }
 
-  private _ensureRefCountLoaded(hash: Hash): Promise<number> {
+  #ensureRefCountLoaded(hash: Hash): Promise<number> {
     // Only get the ref count once.
-    let p = this._loadedRefCountPromises.get(hash);
+    let p = this.#loadedRefCountPromises.get(hash);
     if (p === undefined) {
       p = (async () => {
-        const value = (await this._delegate.getRefCount(hash)) || 0;
-        this._refCountUpdates.set(hash, value);
+        const value = (await this.#delegate.getRefCount(hash)) || 0;
+        this.#refCountUpdates.set(hash, value);
         return value;
       })();
-      this._loadedRefCountPromises.set(hash, p);
+      this.#loadedRefCountPromises.set(hash, p);
     }
     return p;
   }
 
-  private _updateRefCount(hash: Hash, delta: number): boolean {
-    const oldCount = this._refCountUpdates.get(hash);
+  #updateRefCount(hash: Hash, delta: number): boolean {
+    const oldCount = this.#refCountUpdates.get(hash);
     assertNumber(oldCount);
-    this._refCountUpdates.set(hash, oldCount + delta);
+    this.#refCountUpdates.set(hash, oldCount + delta);
     return (oldCount === 0 && delta === 1) || (oldCount === 1 && delta === -1);
   }
 }

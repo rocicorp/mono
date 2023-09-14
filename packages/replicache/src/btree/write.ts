@@ -36,9 +36,8 @@ export class BTreeWrite extends BTreeRead {
    * them actually working, and it is not deterministic which one would finish
    * last.
    */
-  private readonly _lock = new Lock();
-  private readonly _modified: Map<Hash, DataNodeImpl | InternalNodeImpl> =
-    new Map();
+  readonly #lock = new Lock();
+  readonly #modified: Map<Hash, DataNodeImpl | InternalNodeImpl> = new Map();
 
   protected declare _dagRead: dag.Write;
 
@@ -60,17 +59,17 @@ export class BTreeWrite extends BTreeRead {
     this.maxSize = maxSize;
   }
 
-  private _addToModified(node: DataNodeImpl | InternalNodeImpl): void {
+  #addToModified(node: DataNodeImpl | InternalNodeImpl): void {
     assert(node.isMutable);
-    this._modified.set(node.hash, node);
+    this.#modified.set(node.hash, node);
     this._cache.set(node.hash, node);
   }
 
   updateNode(node: DataNodeImpl | InternalNodeImpl): void {
     assert(node.isMutable);
-    this._modified.delete(node.hash);
+    this.#modified.delete(node.hash);
     node.hash = newUUIDHash();
-    this._addToModified(node);
+    this.#addToModified(node);
   }
 
   newInternalNodeImpl(
@@ -78,13 +77,13 @@ export class BTreeWrite extends BTreeRead {
     level: number,
   ): InternalNodeImpl {
     const n = new InternalNodeImpl(entries, newUUIDHash(), level, true);
-    this._addToModified(n);
+    this.#addToModified(n);
     return n;
   }
 
   newDataNodeImpl(entries: Entry<FrozenJSONValue>[]): DataNodeImpl {
     const n = new DataNodeImpl(entries, newUUIDHash(), true);
-    this._addToModified(n);
+    this.#addToModified(n);
     return n;
   }
 
@@ -99,12 +98,12 @@ export class BTreeWrite extends BTreeRead {
     level: number,
   ): InternalNodeImpl | DataNodeImpl {
     const n = newNodeImpl(entries, newUUIDHash(), level, true);
-    this._addToModified(n);
+    this.#addToModified(n);
     return n;
   }
 
   put(key: string, value: FrozenJSONValue): Promise<void> {
-    return this._lock.withLock(async () => {
+    return this.#lock.withLock(async () => {
       const oldRootNode = await this.getNode(this.rootHash);
       const entrySize = this.getEntrySize(key, value);
       const rootNode = await oldRootNode.set(key, value, entrySize, this);
@@ -133,7 +132,7 @@ export class BTreeWrite extends BTreeRead {
   }
 
   del(key: string): Promise<boolean> {
-    return this._lock.withLock(async () => {
+    return this.#lock.withLock(async () => {
       const oldRootNode = await this.getNode(this.rootHash);
       const newRootNode = await oldRootNode.del(key, this);
 
@@ -154,14 +153,14 @@ export class BTreeWrite extends BTreeRead {
   }
 
   clear(): Promise<void> {
-    return this._lock.withLock(() => {
-      this._modified.clear();
+    return this.#lock.withLock(() => {
+      this.#modified.clear();
       this.rootHash = emptyHash;
     });
   }
 
   flush(): Promise<Hash> {
-    return this._lock.withLock(async () => {
+    return this.#lock.withLock(async () => {
       const dagWrite = this._dagRead;
 
       if (this.rootHash === emptyHash) {
@@ -176,11 +175,11 @@ export class BTreeWrite extends BTreeRead {
         this.rootHash,
         newChunks,
         dagWrite.createChunk,
-        this._modified,
+        this.#modified,
         this._formatVersion,
       );
       await Promise.all(newChunks.map(chunk => dagWrite.putChunk(chunk)));
-      this._modified.clear();
+      this.#modified.clear();
       this.rootHash = newRoot;
       return newRoot;
     });
