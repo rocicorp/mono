@@ -2,7 +2,6 @@ import {resolver} from '@rocicorp/resolver';
 import {assert, expect} from 'chai';
 import {sleep} from 'shared/src/sleep.js';
 import * as sinon from 'sinon';
-import type * as dag from './dag/mod.js';
 import type {IndexKey} from './db/index.js';
 import type {IndexDefinitions} from './index-defs.js';
 import type {JSONValue, ReadonlyJSONValue} from './json.js';
@@ -24,6 +23,7 @@ import type {ReadTransaction, WriteTransaction} from './transactions.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import type {TestingReplicacheWithTesting} from './replicache.js';
 
 initReplicacheTesting();
 
@@ -826,8 +826,7 @@ test('subscription coalescing', async () => {
     enablePullAndPushInOpen: false,
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const store = sinon.spy((rep as any)._memdag as dag.Store);
+  const store = sinon.spy((rep as TestingReplicacheWithTesting).memdag);
   const resetCounters = () => {
     store.read.resetHistory();
     store.write.resetHistory();

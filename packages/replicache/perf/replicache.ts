@@ -323,7 +323,7 @@ export function benchmarkRebase(opts: {
 }
 
 class ReplicachePerfTest<MD extends MutatorDefs> extends Replicache<MD> {
-  private readonly _internalAPI: ReplicacheInternalAPI;
+  readonly #internalAPI: ReplicacheInternalAPI;
   constructor(options: Omit<ReplicacheOptions<MD>, 'licenseKey'>) {
     let internalAPI!: ReplicacheInternalAPI;
     super({
@@ -337,18 +337,18 @@ class ReplicachePerfTest<MD extends MutatorDefs> extends Replicache<MD> {
       enableScheduledRefresh: false,
       enableScheduledPersist: false,
     } as ReplicacheOptions<MD>);
-    this._internalAPI = internalAPI;
+    this.#internalAPI = internalAPI;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null = () => {};
 
   persist(): Promise<void> {
-    return this._internalAPI.persist();
+    return this.#internalAPI.persist();
   }
 
   refresh(): Promise<void> {
-    return this._internalAPI.refresh();
+    return this.#internalAPI.refresh();
   }
 }
 

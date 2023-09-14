@@ -20,7 +20,12 @@ import type {
   ReplicacheInternalOptions,
   ReplicacheOptions,
 } from './replicache-options.js';
-import {BeginPullResult, MutatorDefs, Replicache} from './replicache.js';
+import {
+  BeginPullResult,
+  MutatorDefs,
+  Replicache,
+  TestingReplicacheWithTesting,
+} from './replicache.js';
 import type {DiffComputationConfig} from './sync/diff.js';
 import type {ClientID} from './sync/ids.js';
 import type {WriteTransaction} from './transactions.js';
@@ -30,11 +35,18 @@ import {uuid} from './uuid.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import type {LazyStore} from './dag/lazy-store.js';
 
 export class ReplicacheTest<
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  MD extends MutatorDefs = {},
-> extends Replicache<MD> {
+    // eslint-disable-next-line @typescript-eslint/ban-types
+    MD extends MutatorDefs = {},
+  >
+  extends Replicache<MD>
+  implements TestingReplicacheWithTesting
+{
+  // TestingReplicacheWithTesting
+  declare memdag: LazyStore;
+
   readonly #internalAPI!: ReplicacheInternalAPI;
 
   constructor(options: ReplicacheOptions<MD>) {
@@ -93,17 +105,10 @@ export class ReplicacheTest<
   }
 
   get perdag() {
-    // @ts-expect-error Property '_perdag' is private
     return this._perdag;
   }
 
-  get persistIsScheduled() {
-    // @ts-expect-error Property '_persistIsScheduled' is private
-    return this._persistIsScheduled;
-  }
-
   get isClientGroupDisabled(): boolean {
-    // @ts-expect-error Property '_isClientGroupDisabled' is private
     return this._isClientGroupDisabled;
   }
 }
