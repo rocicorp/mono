@@ -65,7 +65,16 @@
     "out"
   ],
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config"
+    "extends": "@rocicorp/eslint-config",
+    "rules": {
+      "no-restricted-syntax": [
+        "error",
+        {
+          "selector": ":matches(PropertyDefinition, MethodDefinition)[accessibility=\"private\"]",
+          "message": "Use #private instead"
+        }
+      ]
+    }
   },
   "prettier": "@rocicorp/prettier-config",
   "type": "module"

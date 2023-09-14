@@ -20,7 +20,7 @@ export type HttpsResponseContext = {
 export type OnRequestContext = HttpsRequestContext & HttpsResponseContext;
 
 export class OnRequestBuilder<Request, Context> {
-  private readonly _requestValidator: RequestContextValidator<
+  readonly #requestValidator: RequestContextValidator<
     Request,
     OnRequestContext,
     Context
@@ -33,7 +33,7 @@ export class OnRequestBuilder<Request, Context> {
       Context
     >,
   ) {
-    this._requestValidator = requestValidator;
+    this.#requestValidator = requestValidator;
   }
 
   /**
@@ -44,7 +44,7 @@ export class OnRequestBuilder<Request, Context> {
     nextValidator: RequestContextValidator<Request, Context, NewContext>,
   ): OnRequestBuilder<Request, NewContext> {
     return new OnRequestBuilder(async (request, ctx) => {
-      const context = await this._requestValidator(request, ctx);
+      const context = await this.#requestValidator(request, ctx);
       return nextValidator(request, context);
     });
   }
@@ -56,7 +56,7 @@ export class OnRequestBuilder<Request, Context> {
       const {body} = request;
       const payload =
         body instanceof Buffer ? JSON.parse(body.toString('utf-8')) : body;
-      const context = await this._requestValidator(payload, ctx);
+      const context = await this.#requestValidator(payload, ctx);
       await handler(payload, context);
     };
   }

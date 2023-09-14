@@ -34,12 +34,12 @@ export type Callable<Request, Response> = (
 ) => Promise<Response>;
 
 export class ValidatorChainer<Request, Context, Response> {
-  private readonly _requestValidator: RequestContextValidator<
+  readonly #requestValidator: RequestContextValidator<
     Request,
     CallableRequest<Request>,
     Context
   >;
-  private readonly _responseValidator: ResponseValidator<Response>;
+  readonly #responseValidator: ResponseValidator<Response>;
 
   constructor(
     requestValidator: RequestContextValidator<
@@ -49,8 +49,8 @@ export class ValidatorChainer<Request, Context, Response> {
     >,
     responseValidator: ResponseValidator<Response>,
   ) {
-    this._requestValidator = requestValidator;
-    this._responseValidator = responseValidator;
+    this.#requestValidator = requestValidator;
+    this.#responseValidator = responseValidator;
   }
 
   /**
@@ -61,9 +61,9 @@ export class ValidatorChainer<Request, Context, Response> {
     nextValidator: RequestContextValidator<Request, Context, NewContext>,
   ): ValidatorChainer<Request, NewContext, Response> {
     return new ValidatorChainer(async (request, ctx) => {
-      const context = await this._requestValidator(request, ctx);
+      const context = await this.#requestValidator(request, ctx);
       return nextValidator(request, context);
-    }, this._responseValidator);
+    }, this.#responseValidator);
   }
 
   handle(
@@ -71,9 +71,9 @@ export class ValidatorChainer<Request, Context, Response> {
   ): Callable<Request, Response> {
     return async originalContext => {
       const request = originalContext.data;
-      const context = await this._requestValidator(request, originalContext);
+      const context = await this.#requestValidator(request, originalContext);
       const response = await handler(request, context);
-      return this._responseValidator(response);
+      return this.#responseValidator(response);
     };
   }
 }
