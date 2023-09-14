@@ -13,10 +13,7 @@ export default function Auth() {
         alt="Reflect"
         className={styles.logoAnimated}
       />
-      <h3>Sign in to Reflect:</h3>
-      <div className={styles.signinOptions}>
-        <StyledFirebaseAuth uiConfig={uiConfig} firebaseAuth={auth} />
-      </div>
+      <StyledFirebaseAuth uiConfig={uiConfig} firebaseAuth={auth} />
     </div>
   );
 }

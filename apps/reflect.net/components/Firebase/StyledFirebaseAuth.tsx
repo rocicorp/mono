@@ -2,6 +2,7 @@ import {Auth, onAuthStateChanged} from 'firebase/auth';
 import type {auth} from 'firebaseui';
 import 'firebaseui/dist/firebaseui.css';
 import {useEffect, useRef, useState} from 'react';
+import styles from '@/styles/Auth.module.css';
 
 interface Props {
   // The Firebase UI Web UI Config object.
@@ -27,6 +28,12 @@ export function StyledFirebaseAuth({
   >(null);
   const [userSignedIn, setUserSignedIn] = useState(false);
   const elementRef = useRef<HTMLDivElement>(null);
+
+  const [hideElement, setHideElement] = useState(false);
+
+  firebaseAuth.beforeAuthStateChanged(() => {
+    setHideElement(true);
+  });
 
   useEffect(() => {
     // Firebase UI only works on the Client. So we're loading the package only after
@@ -63,5 +70,11 @@ export function StyledFirebaseAuth({
     };
   }, [firebaseAuth, firebaseui, uiCallback, uiConfig, userSignedIn]);
 
-  return <div className={className} ref={elementRef} />;
+  return (
+    <>
+      <div className={hideElement ? styles.hide : styles.signinOptions}>
+        <div className={className} ref={elementRef} />
+      </div>
+    </>
+  );
 }

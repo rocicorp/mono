@@ -21,6 +21,10 @@
   background: rgba(252, 32, 138, 0.05);
 }
 
+.hide {
+  display: none;
+}
+
 .authSuccess {
   border: 1px solid #00ffa3;
   padding: 1rem 1rem 1rem 2.75rem;
