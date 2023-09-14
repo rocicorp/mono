@@ -70,15 +70,12 @@ export class ReplicacheTest<
     return this.#internalAPI.persist();
   }
 
-  recoverMutationsSpy = sinon.spy(this, 'recoverMutations');
+  recoverMutationsFake = (getTestInstance(this).onRecoverMutations = sinon.fake(
+    r => r,
+  ));
 
   recoverMutations(): Promise<boolean> {
-    return super._recoverMutations();
-  }
-
-  protected override _recoverMutations(): Promise<boolean> {
-    // indirection to allow test to spy on it.
-    return this.recoverMutations();
+    return getTestInstance(this).recoverMutations();
   }
 
   licenseActive(): Promise<boolean> {

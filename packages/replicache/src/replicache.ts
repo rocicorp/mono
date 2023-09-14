@@ -75,15 +75,17 @@ export interface TestingReplicacheWithTesting extends Replicache {
 
 type TestingInstance = {
   beginPull: () => Promise<BeginPullResult>;
-  onBeginPull: () => void;
   invokePush: () => Promise<boolean>;
   isClientGroupDisabled: () => boolean;
   licenseActivePromise: Promise<boolean>;
   licenseCheckPromise: Promise<boolean>;
   maybeEndPull: (syncHead: Hash, requestID: string) => Promise<void>;
   memdag: dag.Store;
+  onBeginPull: () => void;
   onPushInvoked: () => void;
+  onRecoverMutations: <T>(r: T) => T;
   perdag: dag.Store;
+  recoverMutations: () => Promise<boolean>;
 };
 
 const exposedToTestingMap = new WeakMap<object, TestingInstance>();
@@ -539,6 +541,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
         invokePush: () => this.#invokePush(),
         onBeginPull: () => undefined,
         beginPull: () => this.#beginPull(),
+        onRecoverMutations: r => r,
+        recoverMutations: () => this.#recoverMutations(),
       });
     }
 
@@ -671,11 +675,11 @@ export class Replicache<MD extends MutatorDefs = {}> {
     );
 
     setIntervalWithSignal(
-      () => this._recoverMutations(),
+      () => this.#recoverMutations(),
       RECOVER_MUTATIONS_INTERVAL_MS,
       signal,
     );
-    void this._recoverMutations(clients);
+    void this.#recoverMutations(clients);
 
     getDocument()?.addEventListener(
       'visibilitychange',
@@ -1063,7 +1067,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         this.#online = online;
         this.onOnlineChange?.(online);
         if (online) {
-          void this._recoverMutations();
+          void this.#recoverMutations();
         }
       }
     }
@@ -1688,10 +1692,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
     return ex;
   }
 
-  protected _recoverMutations(
-    preReadClientMap?: persist.ClientMap,
-  ): Promise<boolean> {
-    return this.#mutationRecovery.recoverMutations(
+  #recoverMutations(preReadClientMap?: persist.ClientMap): Promise<boolean> {
+    const result = this.#mutationRecovery.recoverMutations(
       preReadClientMap,
       this.#ready,
       this.#perdag,
@@ -1699,6 +1701,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this.#idbDatabases,
       this.#createStore,
     );
+    if (TESTING) {
+      void getTestInstance(this).onRecoverMutations(result);
+    }
+    return result;
   }
 
   /**
