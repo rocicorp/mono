@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.4.2",
+    "@rocicorp/eslint-config": "^0.5.0",
     "@rocicorp/lock": "^1.0.3",
     "@rocicorp/logger": "^5.2.1",
     "@rocicorp/prettier-config": "^0.1.1",
@@ -28,16 +28,7 @@
     "./src/mod.js": "./out/mod.js"
   },
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config",
-    "rules": {
-      "no-restricted-syntax": [
-        "error",
-        {
-          "selector": ":matches(PropertyDefinition, MethodDefinition)[accessibility=\"private\"]",
-          "message": "Use #private instead"
-        }
-      ]
-    }
+    "extends": "@rocicorp/eslint-config"
   },
   "prettier": "@rocicorp/prettier-config"
 }

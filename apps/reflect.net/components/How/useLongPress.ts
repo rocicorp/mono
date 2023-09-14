@@ -60,9 +60,9 @@ export function useLongPress(
   };
 }
 
-const isTouchEvent = (event: any): event is TouchEvent => 'touches' in event;
+const isTouchEvent = (event: Event): event is TouchEvent => 'touches' in event;
 
-const preventDefault = (event: any) => {
+const preventDefault = (event: Event) => {
   if (!isTouchEvent(event)) return;
   // only prevent default when touching with one finger
   if (event.touches.length < 2 && event.preventDefault) {
