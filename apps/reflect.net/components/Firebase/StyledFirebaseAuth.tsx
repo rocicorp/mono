@@ -2,6 +2,7 @@ import {Auth, onAuthStateChanged} from 'firebase/auth';
 import type {auth} from 'firebaseui';
 import 'firebaseui/dist/firebaseui.css';
 import {useEffect, useRef, useState} from 'react';
+import styles from '@/styles/Auth.module.css';
 
 interface Props {
   // The Firebase UI Web UI Config object.
@@ -28,6 +29,8 @@ export function StyledFirebaseAuth({
   const [userSignedIn, setUserSignedIn] = useState(false);
   const elementRef = useRef<HTMLDivElement>(null);
 
+  const [authStateChanged, setAuthStateChanged] = useState(false);
+
   useEffect(() => {
     // Firebase UI only works on the Client. So we're loading the package only after
     // the component has mounted, so that this works when doing server-side rendering.
@@ -42,6 +45,10 @@ export function StyledFirebaseAuth({
       firebaseui.auth.AuthUI.getInstance() ||
       new firebaseui.auth.AuthUI(firebaseAuth);
     if (uiConfig.signInFlow === 'popup') firebaseUiWidget.reset();
+
+    firebaseAuth.beforeAuthStateChanged(() => {
+      setAuthStateChanged(true);
+    });
 
     // We track the auth state to reset firebaseUi if the user signs out.
     const unregisterAuthObserver = onAuthStateChanged(firebaseAuth, user => {
@@ -63,5 +70,11 @@ export function StyledFirebaseAuth({
     };
   }, [firebaseAuth, firebaseui, uiCallback, uiConfig, userSignedIn]);
 
-  return <div className={className} ref={elementRef} />;
+  return (
+    <>
+      <div hidden={authStateChanged} className={styles.signinOptions}>
+        <div className={className} ref={elementRef} />
+      </div>
+    </>
+  );
 }
