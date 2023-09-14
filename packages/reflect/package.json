@@ -80,15 +80,6 @@
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config",
-    "rules": {
-      "no-restricted-syntax": [
-        "error",
-        {
-          "selector": ":matches(PropertyDefinition, MethodDefinition)[accessibility=\"private\"]",
-          "message": "Use #private instead"
-        }
-      ]
-    },
     "env": {
       "node": true
     }
