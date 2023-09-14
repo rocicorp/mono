@@ -50,6 +50,10 @@ export function StyledFirebaseAuth({
       new firebaseui.auth.AuthUI(firebaseAuth);
     if (uiConfig.signInFlow === 'popup') firebaseUiWidget.reset();
 
+    firebaseAuth.beforeAuthStateChanged(() => {
+      setHideElement(true);
+    });
+
     // We track the auth state to reset firebaseUi if the user signs out.
     const unregisterAuthObserver = onAuthStateChanged(firebaseAuth, user => {
       if (!user && userSignedIn) firebaseUiWidget.reset();
