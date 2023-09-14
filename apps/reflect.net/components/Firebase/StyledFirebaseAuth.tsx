@@ -29,11 +29,7 @@ export function StyledFirebaseAuth({
   const [userSignedIn, setUserSignedIn] = useState(false);
   const elementRef = useRef<HTMLDivElement>(null);
 
-  const [hideElement, setHideElement] = useState(false);
-
-  firebaseAuth.beforeAuthStateChanged(() => {
-    setHideElement(true);
-  });
+  const [authStateChanged, setAuthStateChanged] = useState(false);
 
   useEffect(() => {
     // Firebase UI only works on the Client. So we're loading the package only after
@@ -51,7 +47,7 @@ export function StyledFirebaseAuth({
     if (uiConfig.signInFlow === 'popup') firebaseUiWidget.reset();
 
     firebaseAuth.beforeAuthStateChanged(() => {
-      setHideElement(true);
+      setAuthStateChanged(true);
     });
 
     // We track the auth state to reset firebaseUi if the user signs out.
@@ -76,7 +72,7 @@ export function StyledFirebaseAuth({
 
   return (
     <>
-      <div className={hideElement ? styles.hide : styles.signinOptions}>
+      <div className={authStateChanged ? styles.hide : styles.signinOptions}>
         <div className={className} ref={elementRef} />
       </div>
     </>
