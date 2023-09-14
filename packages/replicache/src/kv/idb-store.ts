@@ -9,35 +9,35 @@ const RELAXED = {durability: 'relaxed'} as const;
 const OBJECT_STORE = 'chunks';
 
 export class IDBStore implements Store {
-  private _db: Promise<IDBDatabase>;
-  private _closed = false;
-  private _idbDeleted = false;
+  #db: Promise<IDBDatabase>;
+  #closed = false;
+  #idbDeleted = false;
 
   constructor(name: string) {
-    this._db = openDatabase(name);
+    this.#db = openDatabase(name);
   }
 
   read(): Promise<Read> {
-    return this._withReopen(readImpl);
+    return this.#withReopen(readImpl);
   }
 
   write(): Promise<Write> {
-    return this._withReopen(writeImpl);
+    return this.#withReopen(writeImpl);
   }
 
   async close(): Promise<void> {
-    if (!this._idbDeleted) {
-      const db = await this._db;
+    if (!this.#idbDeleted) {
+      const db = await this.#db;
       db.close();
     }
-    this._closed = true;
+    this.#closed = true;
   }
 
   get closed(): boolean {
-    return this._closed;
+    return this.#closed;
   }
 
-  private async _withReopen<R>(fn: (db: IDBDatabase) => R): Promise<R> {
+  async #withReopen<R>(fn: (db: IDBDatabase) => R): Promise<R> {
     // Tries to reopen an IndexedDB, and rejects if the database needs
     // upgrading (is missing for whatever reason).
     const reopenExistingDB = async (name: string): Promise<IDBDatabase> => {
@@ -48,7 +48,7 @@ export class IDBStore implements Store {
         const tx = req.transaction;
         assertNotNull(tx);
         tx.abort();
-        this._idbDeleted = true;
+        this.#idbDeleted = true;
         reject(new IDBNotFoundError(`Replicache IndexedDB not found: ${name}`));
       };
 
@@ -67,21 +67,21 @@ export class IDBStore implements Store {
     // transaction and the return of this function. By doing `await this._db`
     // here we only await the db and no await is involved with the transaction.
     // See https://github.com/jakearchibald/idb-keyval/commit/1af0a00b1a70a678d2f9cf5e74c55a22e57324c5#r55989916
-    const db = await this._db;
+    const db = await this.#db;
 
     try {
       return fn(db);
     } catch (e: unknown) {
-      if (!this._closed && e instanceof DOMException) {
+      if (!this.#closed && e instanceof DOMException) {
         if (e.name === 'InvalidStateError') {
-          this._db = reopenExistingDB(db.name);
-          const reopened = await this._db;
+          this.#db = reopenExistingDB(db.name);
+          const reopened = await this.#db;
           return fn(reopened);
         } else if (e.name === 'NotFoundError') {
           // This edge-case can happen if the db has been deleted and the
           // user/developer has DevTools open in certain browsers.
           // See discussion at https://github.com/rocicorp/replicache-internal/pull/216
-          this._idbDeleted = true;
+          this.#idbDeleted = true;
           indexedDB.deleteDatabase(db.name);
           throw new IDBNotFoundError(
             `Replicache IndexedDB ${db.name} missing object store. Deleting db.`,
@@ -94,16 +94,16 @@ export class IDBStore implements Store {
 }
 
 class ReadImpl implements Read {
-  private readonly _tx: IDBTransaction;
-  private _closed = false;
+  readonly #tx: IDBTransaction;
+  #closed = false;
 
   constructor(tx: IDBTransaction) {
-    this._tx = tx;
+    this.#tx = tx;
   }
 
   has(key: string): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      const req = objectStore(this._tx).count(key);
+      const req = objectStore(this.#tx).count(key);
       req.onsuccess = () => resolve(req.result > 0);
       req.onerror = () => reject(req.error);
     });
@@ -111,29 +111,29 @@ class ReadImpl implements Read {
 
   get(key: string): Promise<FrozenJSONValue | undefined> {
     return new Promise((resolve, reject) => {
-      const req = objectStore(this._tx).get(key);
+      const req = objectStore(this.#tx).get(key);
       req.onsuccess = () => resolve(deepFreeze(req.result));
       req.onerror = () => reject(req.error);
     });
   }
 
   release(): void {
-    this._closed = true;
+    this.#closed = true;
     // Do nothing. We rely on IDB locking.
   }
 
   get closed(): boolean {
-    return this._closed;
+    return this.#closed;
   }
 }
 
 class WriteImpl extends WriteImplBase {
-  private readonly _tx: IDBTransaction;
-  private _closed = false;
+  readonly #tx: IDBTransaction;
+  #closed = false;
 
   constructor(tx: IDBTransaction) {
     super(new ReadImpl(tx));
-    this._tx = tx;
+    this.#tx = tx;
   }
 
   commit(): Promise<void> {
@@ -142,7 +142,7 @@ class WriteImpl extends WriteImplBase {
     }
 
     return new Promise((resolve, reject) => {
-      const tx = this._tx;
+      const tx = this.#tx;
       const store = objectStore(tx);
       for (const [key, val] of this._pending) {
         if (val === deleteSentinel) {
@@ -158,11 +158,11 @@ class WriteImpl extends WriteImplBase {
 
   release(): void {
     // We rely on IDB locking so no need to do anything here.
-    this._closed = true;
+    this.#closed = true;
   }
 
   get closed(): boolean {
-    return this._closed;
+    return this.#closed;
   }
 }
 

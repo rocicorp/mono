@@ -1,4 +1,5 @@
 import {expect} from 'chai';
+import * as sinon from 'sinon';
 import {withRead, withWrite} from '../with-transactions.js';
 import {IDBNotFoundError, IDBStore} from './idb-store.js';
 import {dropStore} from './idb-util.js';
@@ -48,9 +49,19 @@ suite('reopening IDB', () => {
     name = `reopen-${Math.random()}`;
     await dropStore(name);
 
+    // Use spy to get a hold of the request object and then the idb instance.
+    const openSpy = sinon.spy(indexedDB, 'open');
+
     store = new IDBStore(name);
-    // @ts-expect-error _db is private
-    idb = store._db;
+    const req = openSpy.returnValues[0];
+    idb = new Promise((resolve, reject) => {
+      req.addEventListener('success', () => resolve(req.result));
+      req.addEventListener('error', () => reject(req.error));
+    });
+  });
+
+  teardown(() => {
+    sinon.restore();
   });
 
   test('succeeds if IDB still exists', async () => {
