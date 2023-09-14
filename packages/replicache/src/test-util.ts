@@ -5,6 +5,7 @@ import {expect} from 'chai';
 import * as sinon from 'sinon';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Cookie} from './cookies.js';
+import type {Store} from './dag/store.js';
 import type {Hash} from './hash.js';
 import type {JSONValue} from './json.js';
 import {MemStore} from './kv/mem-store.js';
@@ -24,7 +25,7 @@ import {
   BeginPullResult,
   MutatorDefs,
   Replicache,
-  TestingReplicacheWithTesting,
+  getTestInstance,
 } from './replicache.js';
 import type {DiffComputationConfig} from './sync/diff.js';
 import type {ClientID} from './sync/ids.js';
@@ -35,18 +36,11 @@ import {uuid} from './uuid.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import type {LazyStore} from './dag/lazy-store.js';
 
 export class ReplicacheTest<
-    // eslint-disable-next-line @typescript-eslint/ban-types
-    MD extends MutatorDefs = {},
-  >
-  extends Replicache<MD>
-  implements TestingReplicacheWithTesting
-{
-  // TestingReplicacheWithTesting
-  declare memdag: LazyStore;
-
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  MD extends MutatorDefs = {},
+> extends Replicache<MD> {
   readonly #internalAPI!: ReplicacheInternalAPI;
 
   constructor(options: ReplicacheOptions<MD>) {
@@ -61,24 +55,15 @@ export class ReplicacheTest<
   }
 
   beginPull(): Promise<BeginPullResult> {
-    return super._beginPull();
+    return getTestInstance(this).beginPull();
   }
 
   maybeEndPull(syncHead: Hash, requestID: string): Promise<void> {
-    return super._maybeEndPull(syncHead, requestID);
+    return getTestInstance(this).maybeEndPull(syncHead, requestID);
   }
 
   invokePush(): Promise<boolean> {
-    return super._invokePush();
-  }
-
-  protected override _invokePush(): Promise<boolean> {
-    // indirection to allow test to spy on it.
-    return this.invokePush();
-  }
-
-  protected override _beginPull(): Promise<BeginPullResult> {
-    return this.beginPull();
+    return getTestInstance(this).invokePush();
   }
 
   persist() {
@@ -97,19 +82,23 @@ export class ReplicacheTest<
   }
 
   licenseActive(): Promise<boolean> {
-    return this._licenseActivePromise;
+    return getTestInstance(this).licenseActivePromise;
   }
 
   licenseValid(): Promise<boolean> {
-    return this._licenseCheckPromise;
+    return getTestInstance(this).licenseCheckPromise;
   }
 
   get perdag() {
-    return this._perdag;
+    return getTestInstance(this).perdag;
   }
 
   get isClientGroupDisabled(): boolean {
-    return this._isClientGroupDisabled;
+    return getTestInstance(this).isClientGroupDisabled();
+  }
+
+  get memdag(): Store {
+    return getTestInstance(this).memdag;
   }
 }
 

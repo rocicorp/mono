@@ -9,6 +9,7 @@ import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from 'shared/src/abort-error.js';
 import {assert} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.js';
 import {initBgIntervalProcess} from './bg-interval.js';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
@@ -70,6 +71,29 @@ import {withRead, withWrite} from './with-transactions.js';
 declare const TESTING: boolean;
 export interface TestingReplicacheWithTesting extends Replicache {
   memdag: dag.Store;
+}
+
+type TestingInstance = {
+  beginPull: () => Promise<BeginPullResult>;
+  onBeginPull: () => void;
+  invokePush: () => Promise<boolean>;
+  isClientGroupDisabled: () => boolean;
+  licenseActivePromise: Promise<boolean>;
+  licenseCheckPromise: Promise<boolean>;
+  maybeEndPull: (syncHead: Hash, requestID: string) => Promise<void>;
+  memdag: dag.Store;
+  onPushInvoked: () => void;
+  perdag: dag.Store;
+};
+
+const exposedToTestingMap = new WeakMap<object, TestingInstance>();
+
+export function getTestInstance(rep: Replicache): TestingInstance {
+  return must(exposedToTestingMap.get(rep));
+}
+
+function exposeToTesting(rep: object, testingInstance: TestingInstance): void {
+  exposedToTestingMap.set(rep, testingInstance);
 }
 
 export type BeginPullResult = {
@@ -232,7 +256,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * Client groups gets disabled when the server does not know about it.
    * A disabled client group prevents the client from pushing and pulling.
    */
-  protected _isClientGroupDisabled = false;
+  #isClientGroupDisabled = false;
 
   /**
    * Factory function to create the persisted stores. Defaults to use `new
@@ -265,13 +289,13 @@ export class Replicache<MD extends MutatorDefs = {}> {
   readonly #profileIDPromise: Promise<string>;
   readonly #clientIDPromise: Promise<string>;
   readonly #clientGroupIDPromise: Promise<string>;
-  protected readonly _licenseCheckPromise: Promise<boolean>;
+  readonly #licenseCheckPromise: Promise<boolean>;
 
   /* The license is active if we have sent at least one license active ping
    * (and we will continue to). We do not send license active pings when
    * for the TEST_LICENSE_KEY.
    */
-  protected _licenseActivePromise: Promise<boolean>;
+  readonly #licenseActivePromise: Promise<boolean>;
   #testLicenseKeyTimeout: ReturnType<typeof setTimeout> | null = null;
   #root: Promise<Hash | undefined> = Promise.resolve(undefined);
   readonly #mutatorRegistry: MutatorDefs = {};
@@ -316,7 +340,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
   readonly #licenseKey: string | undefined;
 
   readonly #memdag: dag.LazyStore;
-  protected readonly _perdag: dag.Store;
+  readonly #perdag: dag.Store;
   readonly #idbDatabases: persist.IDBDatabasesStore;
   readonly #lc: LogContext;
 
@@ -479,20 +503,17 @@ export class Replicache<MD extends MutatorDefs = {}> {
     }
     this.#createStore = createStore;
     this.#idbDatabases = new persist.IDBDatabasesStore(createStore);
-    this._perdag = new dag.StoreImpl(
+    this.#perdag = new dag.StoreImpl(
       perKVStore,
       dag.uuidChunkHasher,
       assertHash,
     );
     this.#memdag = new dag.LazyStore(
-      this._perdag,
+      this.#perdag,
       LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
       dag.uuidChunkHasher,
       assertHash,
     );
-    if (TESTING) {
-      (this as unknown as TestingReplicacheWithTesting).memdag = this.#memdag;
-    }
 
     // Use a promise-resolve pair so that we have a promise to use even before
     // we call the Open RPC.
@@ -501,9 +522,25 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     this.#licenseKey = licenseKey;
     const licenseCheckResolver = resolver<boolean>();
-    this._licenseCheckPromise = licenseCheckResolver.promise;
+    this.#licenseCheckPromise = licenseCheckResolver.promise;
     const licenseActiveResolver = resolver<boolean>();
-    this._licenseActivePromise = licenseActiveResolver.promise;
+    this.#licenseActivePromise = licenseActiveResolver.promise;
+
+    if (TESTING) {
+      exposeToTesting(this, {
+        memdag: this.#memdag,
+        perdag: this.#perdag,
+        isClientGroupDisabled: () => this.#isClientGroupDisabled,
+        licenseCheckPromise: this.#licenseCheckPromise,
+        licenseActivePromise: this.#licenseActivePromise,
+        maybeEndPull: (syncHead, requestID) =>
+          this.#maybeEndPull(syncHead, requestID),
+        onPushInvoked: () => undefined,
+        invokePush: () => this.#invokePush(),
+        onBeginPull: () => undefined,
+        beginPull: () => this.#beginPull(),
+      });
+    }
 
     const {minDelayMs = MIN_DELAY_MS, maxDelayMs = MAX_DELAY_MS} =
       requestOptions;
@@ -520,7 +557,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     this.#pushConnectionLoop = new ConnectionLoop(
       new PushDelegate(
         this,
-        () => this._invokePush(),
+        () => this.#invokePush(),
         this.#lc.withContext('PUSH'),
       ),
     );
@@ -581,7 +618,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const [clientID, client, headHash, clients, isNewClientGroup] =
       await persist.initClientV6(
         this.#lc,
-        this._perdag,
+        this.#perdag,
         Object.keys(this.#mutatorRegistry),
         indexes,
         FormatVersion.Latest,
@@ -611,16 +648,16 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     persist.startHeartbeats(
       clientID,
-      this._perdag,
+      this.#perdag,
       () => {
         this.#clientStateNotFoundOnClient(clientID);
       },
       this.#lc,
       signal,
     );
-    persist.initClientGC(clientID, this._perdag, this.#lc, signal);
+    persist.initClientGC(clientID, this.#perdag, this.#lc, signal);
     persist.initCollectIDBDatabases(this.#idbDatabases, this.#lc, signal);
-    persist.initClientGroupGC(this._perdag, this.#lc, signal);
+    persist.initClientGroupGC(this.#perdag, this.#lc, signal);
     initNewClientChannel(
       this.name,
       this.idbName,
@@ -630,7 +667,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       () => {
         this.#fireOnUpdateNeeded(updateNeededReasonNewClientGroup);
       },
-      this._perdag,
+      this.#perdag,
     );
 
     setIntervalWithSignal(
@@ -663,7 +700,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
   async #checkForClientStateNotFoundAndCallHandler(): Promise<boolean> {
     const clientID = await this.#clientIDPromise;
-    const hasClientState = await withRead(this._perdag, read =>
+    const hasClientState = await withRead(this.#perdag, read =>
       persist.hasClientState(clientID, read),
     );
     if (!hasClientState) {
@@ -871,7 +908,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     await this.#ready;
     const closingPromises = [
       this.#memdag.close(),
-      this._perdag.close(),
+      this.#perdag.close(),
       this.#idbDatabases.close(),
     ];
 
@@ -908,10 +945,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     }
   }
 
-  protected async _maybeEndPull(
-    syncHead: Hash,
-    requestID: string,
-  ): Promise<void> {
+  async #maybeEndPull(syncHead: Hash, requestID: string): Promise<void> {
     for (;;) {
       if (this.#closed) {
         return;
@@ -971,12 +1005,12 @@ export class Replicache<MD extends MutatorDefs = {}> {
     return this.#wrapInOnlineCheck(async () => {
       try {
         this.#changeSyncCounters(0, 1);
-        const {syncHead, requestID, ok} = await this._beginPull();
+        const {syncHead, requestID, ok} = await this.#beginPull();
         if (!ok) {
           return false;
         }
         if (syncHead !== emptyHash) {
-          await this._maybeEndPull(syncHead, requestID);
+          await this.#maybeEndPull(syncHead, requestID);
         }
       } catch (e) {
         throw await this.#convertToClientStateNotFoundError(e);
@@ -989,7 +1023,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
   #isPullDisabled() {
     return (
-      this._isClientGroupDisabled ||
+      this.#isClientGroupDisabled ||
       (this.pullURL === '' && isDefaultPuller(this.puller))
     );
   }
@@ -1113,12 +1147,15 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
   #isPushDisabled() {
     return (
-      this._isClientGroupDisabled ||
+      this.#isClientGroupDisabled ||
       (this.pushURL === '' && isDefaultPusher(this.pusher))
     );
   }
 
-  protected async _invokePush(): Promise<boolean> {
+  async #invokePush(): Promise<boolean> {
+    if (TESTING) {
+      getTestInstance(this).onPushInvoked();
+    }
     if (this.#isPushDisabled()) {
       return true;
     }
@@ -1249,7 +1286,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     switch (result.type) {
       case HandlePullResponseResultType.Applied:
-        await this._maybeEndPull(result.syncHead, requestID);
+        await this.#maybeEndPull(result.syncHead, requestID);
         break;
       case HandlePullResponseResultType.CookieMismatch:
         throw new Error(
@@ -1261,7 +1298,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
     }
   }
 
-  protected async _beginPull(): Promise<BeginPullResult> {
+  async #beginPull(): Promise<BeginPullResult> {
+    if (TESTING) {
+      getTestInstance(this).onBeginPull();
+    }
     await this.#ready;
     const profileID = await this.profileID;
     const clientID = await this.#clientIDPromise;
@@ -1317,7 +1357,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           this.#lc,
           clientID,
           this.#memdag,
-          this._perdag,
+          this.#perdag,
           this.#mutatorRegistry,
           () => this.closed,
           FormatVersion.Latest,
@@ -1352,7 +1392,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       result = await persist.refresh(
         this.#lc,
         this.#memdag,
-        this._perdag,
+        this.#perdag,
         clientID,
         this.#mutatorRegistry,
         this.#subscriptions,
@@ -1385,8 +1425,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
   async #clientStateNotFoundOnServer() {
     const clientGroupID = await this.#clientGroupIDPromise;
     assert(clientGroupID);
-    this._isClientGroupDisabled = true;
-    await withWrite(this._perdag, async dagWrite => {
+    this.#isClientGroupDisabled = true;
+    await withWrite(this.#perdag, async dagWrite => {
       await persist.disableClientGroup(clientGroupID, dagWrite);
       await dagWrite.commit();
     });
@@ -1654,7 +1694,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     return this.#mutationRecovery.recoverMutations(
       preReadClientMap,
       this.#ready,
-      this._perdag,
+      this.#perdag,
       this.#idbDatabase,
       this.#idbDatabases,
       this.#createStore,

@@ -24,6 +24,7 @@ import {
   MutatorDefs,
   Poke,
   Replicache,
+  getTestInstance,
   httpStatusUnauthorized,
 } from './replicache.js';
 import type {ScanOptions} from './scan-options.js';
@@ -1323,7 +1324,7 @@ test('push timing', async () => {
     mutators: {addData},
   });
 
-  const invokePushSpy = sinon.spy(rep, 'invokePush');
+  const onInvokePush = (getTestInstance(rep).onPushInvoked = sinon.fake());
 
   const add = rep.mutate.addData;
 
@@ -1332,8 +1333,8 @@ test('push timing', async () => {
   await tickAFewTimes();
 
   const pushCallCount = () => {
-    const rv = invokePushSpy.callCount;
-    invokePushSpy.resetHistory();
+    const rv = onInvokePush.callCount;
+    onInvokePush.resetHistory();
     return rv;
   };
 
@@ -1380,21 +1381,21 @@ test('push and pull concurrently', async () => {
     enablePullAndPushInOpen: false,
   });
 
-  const beginPullSpy = sinon.spy(rep, 'beginPull');
+  const onBeginPull = (getTestInstance(rep).onBeginPull = sinon.fake());
   const commitSpy = sinon.spy(db.Write.prototype, 'commitWithDiffs');
-  const invokePushSpy = sinon.spy(rep, 'invokePush');
+  const onPushInvoked = (getTestInstance(rep).onPushInvoked = sinon.fake());
 
   function resetSpies() {
-    beginPullSpy.resetHistory();
+    onBeginPull.resetHistory();
     commitSpy.resetHistory();
-    invokePushSpy.resetHistory();
+    onPushInvoked.resetHistory();
   }
 
   const callCounts = () => {
     const rv = {
-      beginPull: beginPullSpy.callCount,
+      beginPull: onBeginPull.callCount,
       commit: commitSpy.callCount,
-      invokePush: invokePushSpy.callCount,
+      invokePush: onPushInvoked.callCount,
     };
     resetSpies();
     return rv;
