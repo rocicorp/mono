@@ -27,6 +27,11 @@ export function uploadReflectServerOptions(yargs: CommonYargsArgv) {
       type: 'array',
       string: true,
       default: [CANARY_RELEASE_CHANNEL],
+    })
+    .option('build-from-source-version', {
+      describe:
+        'Build the server from source and give it the specified version string. This is only intended for testing in local development.',
+      type: 'string',
     });
 }
 
@@ -41,11 +46,17 @@ export async function uploadReflectServerHandler(
     'Make sure you run `npm run build` from the root of the repo first',
   );
 
+  const {buildFromSourceVersion} = yargs;
+
   const firestore = getFirestore();
   const storage = getStorage();
   const bucketName = `reflect-mirror-${yargs.stack}-modules`;
-  const source = await buildReflectServerContent();
-  const version = await findVersion();
+  const source = await buildReflectServerContent(
+    buildFromSourceVersion !== undefined,
+  );
+  const version = buildFromSourceVersion
+    ? new SemVer(buildFromSourceVersion)
+    : await findVersion();
   const scriptTemplate = await getScriptTemplate('prod');
   console.log('Script template:\n', scriptTemplate);
   console.log('Version (from @rocicorp/reflect):', version.toString());
@@ -65,15 +76,27 @@ export async function uploadReflectServerHandler(
   console.log(`Uploaded version ${version} successfully`);
 }
 
-async function buildReflectServerContent(): Promise<string> {
+async function buildReflectServerContent(
+  buildFromSource: boolean,
+): Promise<string> {
   const serverPath = require.resolve('@rocicorp/reflect/server');
-  assert(
-    // Note: Don't include the full directory name because that trips up some
-    // unrelated build checks.
-    serverPath.indexOf('/node_module') >= 0,
-    `Must reference a published npm and not a monorepo source directory: ${serverPath}.\n` +
-      `Try temporarily bumping the version in 'packages/reflect/package.json' and re-running 'npm install' from the repo root.`,
-  );
+  if (buildFromSource) {
+    assert(
+      // Note: Don't include the full directory name because that trips up some
+      // unrelated build checks.
+      serverPath.indexOf('/node_module') < 0,
+      `mirror-cli is referencing a published node package. Make sure the package.json version of @rocicorp/reflect ` +
+        `matches the version in packages/reflect/package.json, and rerun 'npm install' from the repo root.`,
+    );
+  } else {
+    assert(
+      // Note: Don't include the full directory name because that trips up some
+      // unrelated build checks.
+      serverPath.indexOf('/node_module') >= 0,
+      `Must reference a published npm and not a monorepo source directory: ${serverPath}.\n` +
+        `Try temporarily bumping the version in 'packages/reflect/package.json' and re-running 'npm install' from the repo root.`,
+    );
+  }
   console.info(`Building server from ${serverPath}`);
   const {code} = await compile(serverPath, false, 'production');
   return code.text;
