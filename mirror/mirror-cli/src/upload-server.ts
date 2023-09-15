@@ -4,7 +4,10 @@ import type {Storage} from 'firebase-admin/storage';
 import {getStorage} from 'firebase-admin/storage';
 import {storeModule, type Module} from 'mirror-schema/src/module.js';
 import * as schema from 'mirror-schema/src/server.js';
-import {CANARY_RELEASE_CHANNEL} from 'mirror-schema/src/server.js';
+import {
+  CANARY_RELEASE_CHANNEL,
+  STABLE_RELEASE_CHANNEL,
+} from 'mirror-schema/src/server.js';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {pkgUp} from 'pkg-up';
@@ -46,7 +49,15 @@ export async function uploadReflectServerHandler(
     'Make sure you run `npm run build` from the root of the repo first',
   );
 
-  const {buildFromSourceVersion} = yargs;
+  const {buildFromSourceVersion, channels} = yargs;
+
+  if (buildFromSourceVersion) {
+    assert(
+      !channels.includes(STABLE_RELEASE_CHANNEL) &&
+        !channels.includes(CANARY_RELEASE_CHANNEL),
+      '--build-from-source-version may only be used with a non-standard --channels',
+    );
+  }
 
   const firestore = getFirestore();
   const storage = getStorage();
@@ -70,7 +81,7 @@ export async function uploadReflectServerHandler(
     version,
     source,
     scriptTemplate,
-    yargs.channels,
+    channels,
   );
 
   console.log(`Uploaded version ${version} successfully`);
