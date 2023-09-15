@@ -74,6 +74,7 @@ try {
 
   process.chdir(path.join(__dirname, '..', '..', '..'));
   execute('npm install');
+  execute('npm run format');
   execute('git add **/package.json');
   execute('git add package-lock.json');
   execute(`git commit -m "Bump version to ${nextCanaryVersion}"`);
