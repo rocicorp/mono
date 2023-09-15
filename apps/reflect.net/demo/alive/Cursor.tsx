@@ -3,7 +3,7 @@ import type {Reflect} from '@rocicorp/reflect/client';
 import classNames from 'classnames';
 import {useSubscribe} from 'replicache-react';
 import type {M} from '../shared/mutators';
-import {ClientModel, getClient} from './client-model';
+import {getClient} from './client-model';
 import {Rect, coordinateToPosition, simpleHash} from './util';
 
 export function Cursor({
@@ -23,11 +23,7 @@ export function Cursor({
   hideArrow: boolean;
   setBodyClass: (cls: string, enabled: boolean) => void;
 }) {
-  const client = useSubscribe<ClientModel | undefined>(
-    r,
-    tx => getClient(tx, clientID),
-    undefined,
-  );
+  const client = useSubscribe(r, tx => getClient(tx, clientID), undefined);
   const pos = client && coordinateToPosition(client, home, stage);
   const hash = simpleHash(clientID);
 

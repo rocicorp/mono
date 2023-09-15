@@ -6,7 +6,7 @@ import {useSubscribe} from 'replicache-react';
 import type {M} from '../shared/mutators';
 import {Piece} from './Piece';
 import {Bots} from './bots';
-import {ClientModel, getClient} from './client-model';
+import {getClient} from './client-model';
 import {
   PIECE_DEFINITIONS,
   PieceDefinition,
@@ -39,10 +39,7 @@ export function Puzzle({
   stage: Rect;
   setBodyClass: (cls: string, enabled: boolean) => void;
 }) {
-  const {pieces, myClient} = useSubscribe<{
-    pieces: Record<string, PieceInfo>;
-    myClient: ClientModel | null;
-  }>(
+  const {pieces, myClient} = useSubscribe(
     r,
     async tx => ({
       pieces: await getPieceInfos(tx),
