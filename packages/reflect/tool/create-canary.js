@@ -1,8 +1,14 @@
-import {writeFileSync, readFileSync} from 'node:fs';
+import * as fs from 'node:fs';
 import {execSync} from 'node:child_process';
 import * as path from 'path';
+import {fileURLToPath} from 'node:url';
 
-const REFLECT_PACKAGE_JSON_PATH = path.join(__dirname, '..', 'package.json');
+const REFLECT_PACKAGE_JSON_PATH = basePath('..', 'package.json');
+
+/** @param {string[]} parts */
+function basePath(...parts) {
+  return path.join(path.dirname(fileURLToPath(import.meta.url)), ...parts);
+}
 
 function execute(command) {
   console.log(`Executing: ${command}`);
@@ -10,11 +16,11 @@ function execute(command) {
 }
 
 function getPackageData(packagePath) {
-  return JSON.parse(readFileSync(packagePath, 'utf8'));
+  return JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 }
 
 function writePackageData(packagePath, data) {
-  writeFileSync(packagePath, JSON.stringify(data, null, 2));
+  fs.writeFileSync(packagePath, JSON.stringify(data, null, 2));
 }
 
 function bumpCanaryVersion(version) {
@@ -27,38 +33,23 @@ function bumpCanaryVersion(version) {
 }
 
 try {
+  const currentPackageData = getPackageData(REFLECT_PACKAGE_JSON_PATH);
+  const nextCanaryVersion = bumpCanaryVersion(currentPackageData.version);
+  currentPackageData.version = nextCanaryVersion;
+
   execute('git pull');
   const tagName = `reflect/v${nextCanaryVersion}`;
   const branchName = `release_reflect/v${nextCanaryVersion}`;
   execute(`git checkout -b ${branchName} origin/main`);
 
-  const currentPackageData = getPackageData(REFLECT_PACKAGE_JSON_PATH);
-  const nextCanaryVersion = bumpCanaryVersion(currentPackageData.version);
-  currentPackageData.version = nextCanaryVersion;
   writePackageData(REFLECT_PACKAGE_JSON_PATH, currentPackageData);
 
   // publish current canary version so that `npm install` will work down the line
   execute('npm publish --tag=canary');
 
   const dependencyPaths = [
-    path.join(
-      __dirname,
-      '..',
-      '..',
-      '..',
-      'apps',
-      'reflect.net',
-      'package.json',
-    ),
-    path.join(
-      __dirname,
-      '..',
-      '..',
-      '..',
-      'mirror',
-      'mirror-cli',
-      'package.json',
-    ),
+    basePath('..', '..', '..', 'apps', 'reflect.net', 'package.json'),
+    basePath('..', '..', '..', 'mirror', 'mirror-cli', 'package.json'),
   ];
 
   dependencyPaths.forEach(p => {
@@ -69,7 +60,7 @@ try {
     }
   });
 
-  process.chdir(path.join(__dirname, '..', '..', '..'));
+  process.chdir(basePath('..', '..', '..'));
   execute('npm install');
   execute('npm run format');
   execute('git add **/package.json');
