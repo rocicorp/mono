@@ -38,6 +38,7 @@
     "open": "^9.1.0",
     "picocolors": "^1.0.0",
     "pkg-up": "^4.0.0",
+    "replicache-react": "^3.1.0",
     "semver": "^7.5.4",
     "validate-npm-package-name": "^5.0.0",
     "ws": "^8.13.0",
@@ -64,6 +65,8 @@
     "index.js",
     "server.d.ts",
     "server.js",
+    "react.d.ts",
+    "react.js",
     "bin/cli.js",
     "script-templates/dev-script.js",
     "script-templates/prod-script.js",
@@ -76,7 +79,8 @@
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
-    "./server": "./server.js"
+    "./server": "./server.js",
+    "./react": "./react.js"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config",
