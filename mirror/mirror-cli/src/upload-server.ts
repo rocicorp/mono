@@ -33,7 +33,8 @@ export function uploadReflectServerOptions(yargs: CommonYargsArgv) {
     })
     .option('build-from-source-version', {
       describe:
-        'Build the server from source and give it the specified version string. This is only intended for testing in local development.',
+        'Build the server from source and give it the specified version string. ' +
+        'This is only intended for debugging and experiments, and requires that non-standard --channels be specified.',
       type: 'string',
     });
 }
