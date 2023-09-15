@@ -1,34 +1,31 @@
-const {execSync} = require('child_process');
-const fs = require('fs');
-const path = require('path');
+import {writeFileSync, readFileSync} from 'node:fs';
+import {execSync} from 'node:child_process';
+import * as path from 'path';
 
 const REFLECT_PACKAGE_JSON_PATH = path.join(__dirname, '..', 'package.json');
 
-// Utility Functions
 function execute(command) {
   console.log(`Executing: ${command}`);
   return execSync(command, {stdio: 'inherit'});
 }
 
 function getPackageData(packagePath) {
-  return JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+  return JSON.parse(readFileSync(packagePath, 'utf8'));
 }
 
 function writePackageData(packagePath, data) {
-  fs.writeFileSync(packagePath, JSON.stringify(data, null, 2));
+  writeFileSync(packagePath, JSON.stringify(data, null, 2));
 }
 
 function bumpCanaryVersion(version) {
   if (/-canary\.\d+$/.test(version)) {
     const canaryNum = parseInt(version.split('-canary.')[1], 10);
     return `${version.split('-canary.')[0]}-canary.${canaryNum + 1}`;
-  } else {
-    const [major, minor] = version.split('.');
-    return `${major}.${parseInt(minor, 10) + 1}.0-canary.0`;
   }
+  const [major, minor] = version.split('.');
+  return `${major}.${parseInt(minor, 10) + 1}.0-canary.0`;
 }
 
-// Main Logic
 try {
   execute('git pull');
   const tagName = `reflect/v${nextCanaryVersion}`;
