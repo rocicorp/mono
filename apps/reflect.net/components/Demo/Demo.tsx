@@ -350,7 +350,7 @@ export function Demo({
   });
   const [bodyClasses, setBodyClass] = useBodyClasses();
 
-  const isPuzzleComplete = useSubscribe<boolean>(
+  const isPuzzleComplete = useSubscribe(
     r,
     async tx => {
       const pieces = await listPieces(tx);

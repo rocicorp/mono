@@ -83,6 +83,11 @@ function main() {
   }
 
   for (const cd of currentDependencies) {
+    // @rocicorp/reflect directly depends on replicache-react (unlike all the
+    // other dependencies which come in through an internal dependency).
+    if (cd === 'replicache-react') {
+      continue;
+    }
     if (isInternalPackage(cd)) {
       console.error(
         `reflect/package.json should not have an internal dependency. Found ${colors.bold(

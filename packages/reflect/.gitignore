@@ -1,6 +1,7 @@
 /client.d.ts
 /index.d.ts
 /server.d.ts
+# Don't ignore react.d.ts. It is manually maintained.
 /bin/
 /out/
 /script-templates/

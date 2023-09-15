@@ -117,13 +117,16 @@ async function buildPackages() {
 
   fs.rmSync(basePath('out'), {recursive: true, force: true});
 
+  const external = await getExternalForPackages(
+    'reflect-server',
+    'reflect-client',
+    'reflect-shared',
+  );
+  external.push('replicache-react');
+
   await esbuild.build({
     ...shared,
-    external: await getExternalForPackages(
-      'reflect-server',
-      'reflect-client',
-      'reflect-shared',
-    ),
+    external,
     // Use neutral to remove the automatic define for process.env.NODE_ENV
     platform: 'neutral',
     define: {
@@ -136,6 +139,7 @@ async function buildPackages() {
       basePath('src', 'client.ts'),
       basePath('src', 'server.ts'),
       basePath('src', 'shared.ts'),
+      basePath('src', 'react.ts'),
     ],
     bundle: true,
     outdir: 'out',
