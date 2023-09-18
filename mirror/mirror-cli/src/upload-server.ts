@@ -8,16 +8,19 @@ import {
   CANARY_RELEASE_CHANNEL,
   STABLE_RELEASE_CHANNEL,
 } from 'mirror-schema/src/server.js';
-import {readFile} from 'node:fs/promises';
+import {execSync} from 'node:child_process';
+import {mkdtemp} from 'node:fs/promises';
 import {createRequire} from 'node:module';
-import {pkgUp} from 'pkg-up';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import colors from 'picocolors';
 import {compile} from 'reflect-cli/src/compile.js';
 import {getScriptTemplate} from 'reflect-cli/src/get-script-template.js';
 import {SemVer} from 'semver';
-import {assert, assertObject, assertString} from 'shared/src/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
-const require = createRequire(import.meta.url);
+const {bold} = colors;
 
 export function uploadReflectServerOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -36,6 +39,7 @@ export function uploadReflectServerOptions(yargs: CommonYargsArgv) {
         'Build the server from source and give it the specified version string. ' +
         'This is only intended for debugging and experiments, and requires that non-standard --channels be specified.',
       type: 'string',
+      requiresArg: true,
     });
 }
 
@@ -46,32 +50,45 @@ type UploadReflectServerHandlerArgs = YargvToInterface<
 export async function uploadReflectServerHandler(
   yargs: UploadReflectServerHandlerArgs,
 ) {
-  console.log(
-    'Make sure you run `npm run build` from the root of the repo first',
-  );
-
   const {buildFromSourceVersion, channels} = yargs;
-
-  if (buildFromSourceVersion) {
-    assert(
-      !channels.includes(STABLE_RELEASE_CHANNEL) &&
-        !channels.includes(CANARY_RELEASE_CHANNEL),
+  if (
+    buildFromSourceVersion &&
+    (channels.includes(STABLE_RELEASE_CHANNEL) ||
+      channels.includes(CANARY_RELEASE_CHANNEL))
+  ) {
+    console.error(
       '--build-from-source-version may only be used with a non-standard --channels',
     );
+    process.exit(1);
   }
-
   const firestore = getFirestore();
   const storage = getStorage();
   const bucketName = `reflect-mirror-${yargs.stack}-modules`;
-  const source = await buildReflectServerContent(
-    buildFromSourceVersion !== undefined,
-  );
-  const version = buildFromSourceVersion
-    ? new SemVer(buildFromSourceVersion)
-    : await findVersion();
+
+  let serverPath: string;
+  let version: SemVer;
+  if (buildFromSourceVersion) {
+    console.log(
+      'Make sure you run `npm run build` from the root of the repo first',
+    );
+    serverPath = getServerPathFromCurrentRepo();
+    version = new SemVer(buildFromSourceVersion);
+  } else {
+    [serverPath, version] = await installReflectPackageFromNpm();
+  }
+
+  console.info(`Building server from ${bold(serverPath)}`);
+  const {code} = await compile(serverPath, false, 'production');
+  const source = code.text;
+
   const scriptTemplate = await getScriptTemplate('prod');
-  console.log('Script template:\n', scriptTemplate);
-  console.log('Version (from @rocicorp/reflect):', version.toString());
+  console.log(
+    `Version (from ${
+      buildFromSourceVersion
+        ? '--build-from-source-version'
+        : '@rocicorp/reflect'
+    }): ${version}`,
+  );
 
   console.log('Uploading...');
   await upload(
@@ -88,41 +105,50 @@ export async function uploadReflectServerHandler(
   console.log(`Uploaded version ${version} successfully`);
 }
 
-async function buildReflectServerContent(
-  buildFromSource: boolean,
-): Promise<string> {
+function getServerPathFromCurrentRepo() {
+  const require = createRequire(import.meta.url);
   const serverPath = require.resolve('@rocicorp/reflect/server');
-  if (buildFromSource) {
-    assert(
-      // Note: Don't include the full directory name because that trips up some
-      // unrelated build checks.
-      serverPath.indexOf('/node_module') < 0,
-      `mirror-cli is referencing a published node package. Make sure the package.json version of @rocicorp/reflect ` +
-        `matches the version in packages/reflect/package.json, and rerun 'npm install' from the repo root.`,
-    );
-  } else {
-    assert(
-      // Note: Don't include the full directory name because that trips up some
-      // unrelated build checks.
-      serverPath.indexOf('/node_module') >= 0,
-      `Must reference a published npm and not a monorepo source directory: ${serverPath}.\n` +
-        `Try temporarily bumping the version in 'packages/reflect/package.json' and re-running 'npm install' from the repo root.`,
-    );
-  }
-  console.info(`Building server from ${serverPath}`);
-  const {code} = await compile(serverPath, false, 'production');
-  return code.text;
+  assert(
+    // Note: Don't include the full directory name because that trips up some
+    // unrelated build checks.
+    serverPath.indexOf('/node_module') < 0,
+    `mirror-cli is referencing a published node package. Make sure the package.json version of @rocicorp/reflect ` +
+      `matches the version in packages/reflect/package.json, and rerun 'npm install' from the repo root.`,
+  );
+  return serverPath;
 }
 
-async function findVersion(): Promise<SemVer> {
-  const serverPath = require.resolve('@rocicorp/reflect');
-  const pkg = await pkgUp({cwd: serverPath});
-  assert(pkg);
-  const s = await readFile(pkg, 'utf-8');
-  const v = JSON.parse(s);
-  assertObject(v);
-  assertString(v.version);
-  return new SemVer(v.version);
+/**
+ * Installs the latest version of @rocicorp/reflect from npm into a temporary
+ * directory and returns the path to the server file as well as the version.
+ */
+async function installReflectPackageFromNpm(): Promise<[string, SemVer]> {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), 'mirror-cli-upload-reflect-'),
+  );
+
+  const version = execSync('npm view @rocicorp/reflect dist-tags.latest', {
+    cwd: dir,
+  })
+    .toString()
+    .trim();
+
+  execSync('npm init -y', {cwd: dir, stdio: ['ignore', 'pipe', 'ignore']});
+  console.log(
+    `Installing ${bold('@rocicorp/reflect')} version ${bold(
+      version,
+    )} into ${bold(dir)}`,
+  );
+
+  execSync('npm install @rocicorp/reflect', {
+    cwd: dir,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+
+  // Use node module resolve to find server file in case it moves around.
+  const require = createRequire(path.join(dir, 'dummy.js'));
+  const serverPath = require.resolve('@rocicorp/reflect/server');
+  return [serverPath, new SemVer(version)];
 }
 
 async function upload(
