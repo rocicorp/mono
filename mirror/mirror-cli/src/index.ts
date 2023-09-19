@@ -29,6 +29,20 @@ import {
   queryAnalyticsHandler,
   queryAnalyticsOptions,
 } from './query-analytics.js';
+import {
+  publishCustomDomainsHandler,
+  publishCustomDomainsOptions,
+} from './publish-custom-domains.js';
+import {dnsRecordsHandler, dnsRecordsOptions} from './dns-records.js';
+import {
+  customHostnamesHandler,
+  customHostnamesOptions,
+} from './custom-hostnames.js';
+import {
+  publishDispatcherHandler,
+  publishDispatcherOptions,
+} from './publish-dispatcher.js';
+import {getWorkerHandler, getWorkerOptions} from './get-worker.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -80,6 +94,46 @@ function createCLIParser(argv: string[]) {
     'Grants temporary super powers (e.g. impersonation) to an account.',
     grantSuperOptions,
     grantSuperHandler,
+  );
+
+  // publish-custom-domain
+  reflectCLI.command(
+    'publish-custom-domains <script-name> [domains..]',
+    'Points the specified custom domains to a script.',
+    publishCustomDomainsOptions,
+    publishCustomDomainsHandler,
+  );
+
+  // custom-hostnames
+  reflectCLI.command(
+    'custom-hostnames [pattern]',
+    'Lists and optionally deletes custom hostnames records that match an optional pattern.',
+    customHostnamesOptions,
+    customHostnamesHandler,
+  );
+
+  // dns-records
+  reflectCLI.command(
+    'dns-records [search]',
+    'Lists and optionally deletes DNS records that match an optional pattern.',
+    dnsRecordsOptions,
+    dnsRecordsHandler,
+  );
+
+  // publish-dispatcher
+  reflectCLI.command(
+    'publish-dispatcher',
+    'Publishes the mirror dispatcher for Workers for Platforms',
+    publishDispatcherOptions,
+    publishDispatcherHandler,
+  );
+
+  // get-worker
+  reflectCLI.command(
+    'get-worker <name> [component]',
+    'Gets the script or a component thereof.',
+    getWorkerOptions,
+    getWorkerHandler,
   );
 
   // query-analytics

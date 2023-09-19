@@ -6,7 +6,7 @@ import {
   CfModule,
   CfVars,
   createScriptUploadForm,
-} from './create-script-upload-form.js';
+} from 'cloudflare-api/src/create-script-upload-form.js';
 import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
 import {publishCustomDomains} from './publish-custom-domains.js';
 import {submitSecret} from './submit-secret.js';

@@ -33,6 +33,7 @@ export async function getExternalFromPackageJSON(basePath) {
 }
 
 const internalPackages = [
+  'cloudflare-api',
   'datadog',
   'mirror-protocol',
   'mirror-schema',

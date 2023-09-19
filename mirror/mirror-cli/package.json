@@ -19,15 +19,17 @@
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "build": "node tool/build.js",
-    "mirror": "node --no-warnings --loader ts-node/esm ./src/index.ts",
+    "mirror": "npm run build && node --no-warnings ./out/index.mjs",
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20230904.0",
     "@rocicorp/eslint-config": "^0.5.0",
     "@rocicorp/prettier-config": "^0.1.1",
     "@types/node": "^18.16.0",
     "@types/semver": "^7.5.1",
     "@types/yargs": "^17.0.10",
+    "cloudflare-api": "0.0.0",
     "typescript": "^5.1.3"
   },
   "files": [

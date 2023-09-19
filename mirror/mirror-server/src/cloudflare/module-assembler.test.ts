@@ -2,7 +2,7 @@ import {describe, expect, test} from '@jest/globals';
 import type {Storage} from 'firebase-admin/storage';
 import type {Module, ModuleRef} from 'mirror-schema/src/module.js';
 import {ModuleAssembler} from './module-assembler.js';
-import type {CfModule} from './create-script-upload-form.js';
+import type {CfModule} from 'cloudflare-api/src/create-script-upload-form.js';
 
 describe('module-assembler', () => {
   const serverModules: (Module & ModuleRef)[] = [

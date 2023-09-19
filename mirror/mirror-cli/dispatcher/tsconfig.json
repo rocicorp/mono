@@ -1,0 +1,27 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["es2022"],
+    "types": ["@cloudflare/workers-types"],
+
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    "declaration": true,
+    "allowJs": true,
+
+    "incremental": true,
+    "noEmit": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["dist", "node_modules", "out"]
+}

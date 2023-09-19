@@ -102,11 +102,16 @@ A Cloudflare account is needed to run workers and Durable Objects.
   on which the workers are served.
 - [Create an API key](https://dash.cloudflare.com/profile/api-tokens) for the Mirror Server
   (i.e. Cloud Functions) to make API calls. It should have the following permissions:
+
   - `Account: Workers Scripts`: Edit
   - `Account: Workers Tail`: Read
   - `Account: Account Analytics`: Read
   - `Zone: Workers Routes`: Edit
-  - `Zone: SSL and Certificates`: Read
+  <!-- - `Zone: DNS`: Edit -->
+  - `Zone: DNS`: Edit (Manage CNAME Records)
+  - `Zone: SSL and Certificates`: Edit (Manage Custom Hostname)
+  - `Zone: Zone Settings`: Edit (Update Fallback Origin for Custom Hostnames)
+
 - In the Firestore console (https://console.firebase.google.com/project/reflect-mirror-{{stackname}}/firestore/data), create the document in a "cloudflares" collection:
 
 ```json

@@ -3,7 +3,7 @@ import {logger} from 'firebase-functions';
 import {FunctionsErrorCode, HttpsError} from 'firebase-functions/v2/https';
 import {type ModuleRef, loadModule} from 'mirror-schema/src/module.js';
 import {assert} from 'shared/src/asserts.js';
-import type {CfModule} from './create-script-upload-form.js';
+import type {CfModule} from 'cloudflare-api/src/create-script-upload-form.js';
 
 export class ModuleAssembler {
   #appName: string;

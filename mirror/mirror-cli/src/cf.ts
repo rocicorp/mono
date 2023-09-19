@@ -1,6 +1,6 @@
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {SecretManagerServiceClient} from '@google-cloud/secret-manager';
-import {assert} from 'shared/src/asserts.js';
+import {cfFetch} from 'cloudflare-api/src/fetch.js';
 
 type Account = {
   accountID: string;
@@ -42,59 +42,18 @@ export async function getCloudflareConfig(
   return {...account, apiKey};
 }
 
-export async function cfCall<ResponseType = unknown>(
-  config: {apiKey: string},
-  resource: string,
-  init: RequestInit = {},
-  searchParams?: URLSearchParams,
-): Promise<ResponseType> {
-  assert(resource.startsWith('/'), 'resource must start with /');
-  const base = 'https://api.cloudflare.com/client/v4';
-  const queryString = searchParams ? `?${searchParams.toString()}` : '';
+type Zone = {
+  id: string;
+  name: string;
+};
 
-  const url = `${base}${resource}${queryString}`;
-
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      Authorization: `Bearer ${config.apiKey}`,
-      ...init?.headers,
-    },
+export async function getZoneDomainName({
+  apiKey,
+  zoneID,
+}: CloudflareConfig): Promise<string> {
+  const zone = await cfFetch<Zone>(apiKey, `/zones/${zoneID}`, {
+    method: 'GET',
+    headers: {'Content-Type': 'application/json'},
   });
-  return (await response.json()) as ResponseType;
-}
-
-export async function cfFetch<ResponseType = unknown>(
-  config: {apiKey: string},
-  resource: string,
-  init: RequestInit = {},
-  searchParams?: URLSearchParams,
-): Promise<ResponseType> {
-  const json = await cfCall<FetchResult<ResponseType>>(
-    config,
-    resource,
-    init,
-    searchParams,
-  );
-  if (json.success) {
-    return json.result;
-  }
-  throw new Error(`Error returned for ${resource}: ${JSON.stringify(json)}`);
-}
-
-interface FetchError {
-  code: number;
-  message: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  error_chain?: FetchError[];
-}
-
-interface FetchResult<ResponseType = unknown> {
-  success: boolean;
-  result: ResponseType;
-  errors: FetchError[];
-  messages: string[];
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  result_info?: unknown;
+  return zone.name;
 }

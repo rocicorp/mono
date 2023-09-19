@@ -4,11 +4,11 @@ import {getExternalFromPackageJSON} from 'shared/src/tool/get-external-from-pack
 import {injectRequire} from 'shared/src/tool/inject-require.js';
 
 async function main() {
-  const outfile = 'out/index.mjs';
+  const cli = 'out/index.mjs';
   await esbuild.build({
     entryPoints: ['src/index.ts'],
     bundle: true,
-    outfile,
+    outfile: cli,
     external: await getExternalFromPackageJSON(import.meta.url),
     platform: 'node',
     target: 'esnext',
@@ -18,7 +18,21 @@ async function main() {
       js: injectRequire(),
     },
   });
-  await checkOutfileForNodeModules(outfile);
+  await checkOutfileForNodeModules(cli);
+
+  const dispatcher = 'out/dispatcher.js';
+  await esbuild.build({
+    entryPoints: ['dispatcher/index.ts'],
+    conditions: ['workerd', 'worker', 'browser'],
+    bundle: true,
+    outfile: dispatcher,
+    external: [],
+    platform: 'browser',
+    target: 'esnext',
+    format: 'esm',
+    sourcemap: false,
+  });
+  await checkOutfileForNodeModules(dispatcher);
 }
 
 await main();
