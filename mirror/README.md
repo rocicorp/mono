@@ -107,7 +107,6 @@ A Cloudflare account is needed to run workers and Durable Objects.
   - `Account: Workers Tail`: Read
   - `Account: Account Analytics`: Read
   - `Zone: Workers Routes`: Edit
-  <!-- - `Zone: DNS`: Edit -->
   - `Zone: DNS`: Edit (Manage CNAME Records)
   - `Zone: SSL and Certificates`: Edit (Manage Custom Hostname)
   - `Zone: Zone Settings`: Edit (Update Fallback Origin for Custom Hostnames)
