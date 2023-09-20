@@ -34,14 +34,31 @@ type LogRecord = {
   timestamp: number;
 };
 
-const methods = ['debug', 'error', 'info', 'log', 'warn'] as const;
+class TailConsole implements Console {
+  debug(...data: unknown[]): void {
+    this.#log('debug', data);
+  }
 
-const tailConsole = {} as Console;
-for (const method of methods) {
-  tailConsole[method] = (...args: unknown[]) => {
+  error(...data: unknown[]): void {
+    this.#log('error', data);
+  }
+
+  info(...data: unknown[]): void {
+    this.#log('info', data);
+  }
+
+  log(...data: unknown[]): void {
+    this.#log('log', data);
+  }
+
+  warn(...data: unknown[]): void {
+    this.#log('warn', data);
+  }
+
+  #log(level: string, message: unknown) {
     const logRecord: LogRecord = {
-      message: args,
-      level: method,
+      message,
+      level,
       timestamp: Date.now(),
     };
     const msg = JSON.stringify({logs: [logRecord]});
@@ -49,12 +66,12 @@ for (const method of methods) {
     for (const ws of tailWebSockets) {
       ws.send(msg);
     }
-  };
+  }
 }
 
 function installConsoleLogHooks(lc: LogContext, id: string) {
   lc.debug?.('installConsoleLogHooks', id);
-  (globalThis as unknown as {console: Console}).console = tailConsole;
+  (globalThis as unknown as {console: Console}).console = new TailConsole();
 }
 
 function uninstallConsoleLogHooks() {
