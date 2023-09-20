@@ -39,7 +39,12 @@ import {
   TestDurableObjectStub,
   createTestDurableObjectNamespace,
 } from './do-test-utils.js';
-import {CREATE_ROOM_PATH, INTERNAL_CREATE_ROOM_PATH} from './paths.js';
+import {upgradeWebsocketResponse} from './http-util.js';
+import {
+  CREATE_ROOM_PATH,
+  INTERNAL_CREATE_ROOM_PATH,
+  TAIL_URL_PATTERN,
+} from './paths.js';
 import {
   RoomStatus,
   roomRecordByObjectIDForTest as getRoomRecordByObjectIDOriginal,
@@ -143,7 +148,7 @@ function createCreateRoomTestFixture() {
 
 test("createRoom creates a room and doesn't allow it to be re-created", async () => {
   const {testRoomID, testRequest, testRoomDO, state, roomDOcreateRoomCounts} =
-    await createCreateRoomTestFixture();
+    createCreateRoomTestFixture();
   const testRequest2 = testRequest.clone();
 
   const authDO = new BaseAuthDO({
@@ -173,7 +178,7 @@ test("createRoom creates a room and doesn't allow it to be re-created", async ()
 });
 
 test('createRoom allows slashes in roomIDs', async () => {
-  const {testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -209,7 +214,7 @@ test('createRoom allows slashes in roomIDs', async () => {
 });
 
 test('createRoom requires roomIDs to not contain weird characters', async () => {
-  const {testRoomID, testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -249,7 +254,7 @@ function getRoomRecordByObjectID(
 
 test('createRoom returns 401 if authApiKey is wrong', async () => {
   const {testRoomID, testRequest, testRoomDO, state, roomDOcreateRoomCounts} =
-    await createCreateRoomTestFixture();
+    createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -270,7 +275,7 @@ test('createRoom returns 401 if authApiKey is wrong', async () => {
 
 test('createRoom returns 500 if roomDO createRoom fails', async () => {
   const {testRoomID, testRequest, testRoomDO, state} =
-    await createCreateRoomTestFixture();
+    createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -294,7 +299,7 @@ test('createRoom returns 500 if roomDO createRoom fails', async () => {
 });
 
 test('createRoom sets jurisdiction if requested', async () => {
-  const {testRoomID, testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
   const testRequest = newCreateRoomRequest(
     'https://test.roci.dev',
@@ -330,7 +335,7 @@ test('createRoom sets jurisdiction if requested', async () => {
 });
 
 test('migrate room creates a room record', async () => {
-  const {testRoomID, testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
   testRoomDO.idFromName = (name: string) =>
     new TestDurableObjectId(`id-${name}`);
@@ -360,7 +365,7 @@ test('migrate room creates a room record', async () => {
 });
 
 test('migrate room enforces roomID format', async () => {
-  const {testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -381,7 +386,7 @@ test('migrate room enforces roomID format', async () => {
 });
 
 test('401s if wrong auth api key', async () => {
-  const {testRoomID, testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
   const wrongApiKey = 'WRONG KEY';
   const migrateRoomRequest = newMigrateRoomRequest(
     'https://test.roci.dev',
@@ -434,7 +439,7 @@ test('401s if wrong auth api key', async () => {
 });
 
 test('400 bad body requests', async () => {
-  const {testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomDO, state} = createCreateRoomTestFixture();
   const undefinedInvalidateForUserRequest = createBadBodyRequest(
     AUTH_ROUTES.authInvalidateForUser,
     null,
@@ -496,7 +501,7 @@ function createBadBodyRequest(path: string, body: BodyInit | null): Request {
 }
 
 test('closeRoom closes an open room', async () => {
-  const {testRoomID, testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -529,7 +534,7 @@ test('closeRoom closes an open room', async () => {
 });
 
 test('closeRoom 404s on non-existent room', async () => {
-  const {testRoomID, testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -551,7 +556,7 @@ test('closeRoom 404s on non-existent room', async () => {
 });
 
 test('calling closeRoom on closed room is ok', async () => {
-  const {testRoomID, testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -576,7 +581,7 @@ test('calling closeRoom on closed room is ok', async () => {
 });
 
 test('deleteRoom calls into roomDO and marks room deleted', async () => {
-  const {testRoomID, testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
   const deleteRoomPathWithRoomID = AUTH_ROUTES.deleteRoom.replace(
     ':roomID',
@@ -636,7 +641,7 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
 });
 
 test('deleteRoom requires room to be closed', async () => {
-  const {testRoomID, testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -669,7 +674,7 @@ test('deleteRoom requires room to be closed', async () => {
 });
 
 test('deleteRoom does not delete if auth api key is incorrect', async () => {
-  const {testRoomID, testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
   const deleteRoomRequest = newDeleteRoomRequest(
     'https://test.roci.dev',
@@ -703,7 +708,7 @@ test('deleteRoom does not delete if auth api key is incorrect', async () => {
 });
 
 test('forget room forgets an existing room', async () => {
-  const {testRoomID, testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -736,7 +741,7 @@ test('forget room forgets an existing room', async () => {
 });
 
 test('foget room 404s on non-existent room', async () => {
-  const {testRoomID, testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -759,7 +764,7 @@ test('foget room 404s on non-existent room', async () => {
 
 test('roomStatusByRoomID returns status for a room that exists', async () => {
   const {testRoomID, testRequest, testRoomDO, state} =
-    await createCreateRoomTestFixture();
+    createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -786,7 +791,7 @@ test('roomStatusByRoomID returns status for a room that exists', async () => {
 });
 
 test('roomStatusByRoomID returns unknown for a room that does not exist', async () => {
-  const {testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -810,7 +815,7 @@ test('roomStatusByRoomID returns unknown for a room that does not exist', async 
 });
 
 test('roomStatusByRoomID requires authApiKey', async () => {
-  const {testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -839,7 +844,7 @@ function newRoomRecordsRequest() {
 }
 
 test('roomRecords returns empty array if no rooms exist', async () => {
-  const {testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -858,7 +863,7 @@ test('roomRecords returns empty array if no rooms exist', async () => {
 });
 
 test('roomRecords returns rooms that exists', async () => {
-  const {testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -884,7 +889,7 @@ test('roomRecords returns rooms that exists', async () => {
 });
 
 test('roomRecords requires authApiKey', async () => {
-  const {testRoomDO, state} = await createCreateRoomTestFixture();
+  const {testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new BaseAuthDO({
     roomDO: testRoomDO,
@@ -982,7 +987,8 @@ function createConnectTestFixture(
             encodedTestAuth,
           );
         }
-        return new Response(null, {status: 101, webSocket: mocket});
+
+        return upgradeWebsocketResponse(mocket, request.headers);
       });
     },
   };
@@ -2141,4 +2147,136 @@ test('revalidateConnections continues if one roomDO returns an error', async () 
     'conns_by_room/testRoomID1/conn/testUserID2/testRoomID1/testClientID4/',
     'conns_by_room/testRoomID2/conn/testUserID1/testRoomID2/testClientID3/',
   ]);
+});
+
+function createTailTestFixture(
+  options: {
+    testRoomID?: string;
+    encodedTestAuth?: string | undefined;
+    testAuth?: string | undefined;
+  } = {},
+) {
+  const optionsWithDefault = {
+    testRoomID: 'testRoomID1',
+    encodedTestAuth: 'test%20auth%20token%20value%20%25%20encoded',
+    testAuth: 'test auth token value % encoded',
+    ...options,
+  };
+  const {testRoomID, encodedTestAuth, testAuth} = optionsWithDefault;
+
+  const headers = new Headers();
+  if (encodedTestAuth !== undefined) {
+    headers.set('Sec-WebSocket-Protocol', encodedTestAuth);
+  }
+  headers.set('Upgrade', 'websocket');
+  const tailURLPath = TAIL_URL_PATTERN.replaceAll(
+    ':roomID',
+    encodeURIComponent(testRoomID),
+  );
+  const tailURL = 'ws://test.roci.dev' + tailURLPath;
+  const testRequest = new Request(tailURL, {
+    headers,
+  });
+
+  const mocket = new Mocket();
+
+  let numRooms = 0;
+  const testRoomDO: DurableObjectNamespace = {
+    ...createTestDurableObjectNamespace(),
+    idFromName() {
+      throw 'should not be called';
+    },
+    newUniqueId() {
+      return new TestDurableObjectId('room-do-' + numRooms++, undefined);
+    },
+    get(id: DurableObjectId) {
+      expect(id.toString()).toEqual('room-do-0');
+      // eslint-disable-next-line require-await
+      return new TestDurableObjectStub(id, async (request: Request) => {
+        const url = new URL(request.url);
+        if (url.pathname !== tailURLPath) {
+          return new Response();
+        }
+        expect(request.url).toEqual(testRequest.url);
+        expect(request.headers.has(AUTH_DATA_HEADER_NAME)).toBe(false);
+        if (encodedTestAuth !== undefined) {
+          expect(request.headers.get('Sec-WebSocket-Protocol')).toEqual(
+            encodedTestAuth,
+          );
+        }
+
+        return upgradeWebsocketResponse(mocket, request.headers);
+      });
+    },
+  };
+
+  return {
+    testAuth,
+    testRoomID,
+    testRequest,
+    testRoomDO,
+    mocket,
+    encodedTestAuth,
+  };
+}
+
+describe('tail', () => {
+  const t = (
+    name: string,
+    options: {
+      testAuth?: string | undefined;
+      encodedTestAuth?: string | undefined;
+      testRoomID?: string;
+    } = {},
+  ) => {
+    test(name, async () => {
+      const {testRoomID, testRequest, testRoomDO, mocket, encodedTestAuth} =
+        createTailTestFixture(options);
+      const logSink = new TestLogSink();
+      const authDO = new BaseAuthDO({
+        roomDO: testRoomDO,
+        state,
+        authApiKey: TEST_AUTH_API_KEY,
+        logSink,
+        logLevel: 'debug',
+      });
+
+      await createRoom(authDO, testRoomID);
+
+      const response = await authDO.fetch(testRequest);
+
+      expect(response.status).toEqual(101);
+      if (encodedTestAuth) {
+        expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
+          encodedTestAuth,
+        );
+      }
+      expect(response.webSocket).toBe(mocket);
+    });
+  };
+
+  t('basic', {testAuth: 'a b c', encodedTestAuth: 'a%20b%20c'});
+  t('without auth', {testAuth: undefined, encodedTestAuth: undefined});
+
+  t('without auth', {testRoomID: 'hello'});
+  t('without auth', {testRoomID: 'hel/lo'});
+});
+
+test('tail not a websocket', async () => {
+  const {testRoomID, testRequest, testRoomDO} = createTailTestFixture();
+  testRequest.headers.delete('Upgrade');
+
+  const logSink = new TestLogSink();
+  const authDO = new BaseAuthDO({
+    roomDO: testRoomDO,
+    state,
+    authApiKey: TEST_AUTH_API_KEY,
+    logSink,
+    logLevel: 'debug',
+  });
+
+  await createRoom(authDO, testRoomID);
+
+  const response = await authDO.fetch(testRequest);
+  expect(response.status).toEqual(400);
 });
