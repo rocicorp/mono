@@ -16,8 +16,8 @@ import {initializeApp} from 'firebase-admin/app';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {
   teamPath,
-  teamSubdomainIndexDataConverter,
-  teamSubdomainIndexPath,
+  teamLabelIndexDataConverter,
+  teamLabelIndexPath,
 } from 'mirror-schema/src/team.js';
 
 mockFunctionParamsAndSecrets();
@@ -49,10 +49,10 @@ describe('team-ensure function', () => {
     });
   }
 
-  async function deleteTeam(teamID: string, subdomain: string): Promise<void> {
+  async function deleteTeam(teamID: string, label: string): Promise<void> {
     const batch = firestore.batch();
     batch.delete(firestore.doc(teamPath(teamID)));
-    batch.delete(firestore.doc(teamSubdomainIndexPath(subdomain)));
+    batch.delete(firestore.doc(teamLabelIndexPath(label)));
     batch.delete(firestore.doc(teamMembershipPath(teamID, USER_ID)));
     await batch.commit();
   }
@@ -108,7 +108,7 @@ describe('team-ensure function', () => {
 
     expect(team).toEqual({
       name: 'My Team, LLC.',
-      subdomain: 'my-team-llc',
+      label: 'myteamllc',
       defaultCfID: 'default-CLOUDFLARE_ACCOUNT_ID',
       numAdmins: 1,
       numMembers: 0,
@@ -121,20 +121,18 @@ describe('team-ensure function', () => {
       email: USER_EMAIL,
       role: 'admin',
     });
-    const {subdomain} = team;
-    const subdomainIndex = await firestore
-      .doc(teamSubdomainIndexPath(subdomain))
-      .get();
-    expect(subdomainIndex.data()).toEqual({teamID});
+    const {label} = team;
+    const labelIndex = await firestore.doc(teamLabelIndexPath(label)).get();
+    expect(labelIndex.data()).toEqual({teamID});
 
     // Cleanup
-    await deleteTeam(teamID, subdomain);
+    await deleteTeam(teamID, label);
   });
 
-  test('ensure team with colliding subdomain', async () => {
+  test('ensure team with colliding label', async () => {
     await firestore
-      .doc(teamSubdomainIndexPath('existing-team-name-llc'))
-      .withConverter(teamSubdomainIndexDataConverter)
+      .doc(teamLabelIndexPath('existingteamnamellc'))
+      .withConverter(teamLabelIndexDataConverter)
       .create({
         teamID: TEAM_ID,
       });
@@ -151,7 +149,7 @@ describe('team-ensure function', () => {
 
     expect(team).toEqual({
       name: 'Existing Team Name, LLC.',
-      subdomain: expect.stringMatching(/existing-team-name-llc-\d+/),
+      label: expect.stringMatching(/existingteamnamellc\d+/),
       defaultCfID: 'default-CLOUDFLARE_ACCOUNT_ID',
       numAdmins: 1,
       numMembers: 0,
@@ -164,14 +162,12 @@ describe('team-ensure function', () => {
       email: USER_EMAIL,
       role: 'admin',
     });
-    const {subdomain} = team;
-    const subdomainIndex = await firestore
-      .doc(teamSubdomainIndexPath(subdomain))
-      .get();
-    expect(subdomainIndex.data()).toEqual({teamID});
+    const {label} = team;
+    const labelIndex = await firestore.doc(teamLabelIndexPath(label)).get();
+    expect(labelIndex.data()).toEqual({teamID});
 
     // Cleanup
-    await deleteTeam(teamID, subdomain);
-    await deleteTeam(TEAM_ID, 'existing-team-name-llc');
+    await deleteTeam(teamID, label);
+    await deleteTeam(TEAM_ID, 'existingteamnamellc');
   });
 });

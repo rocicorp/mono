@@ -105,7 +105,8 @@ export async function computeDeploymentSpec(
   return {
     serverVersionRange,
     serverVersion,
-    hostname: `${app.name}.${app.teamSubdomain}.${cf.domain}`,
+    // Note: Hyphens are not allowed in teamLabels.
+    hostname: `${app.name}-${app.teamLabel}.${cf.domain}`,
     options: app.deploymentOptions,
     hashesOfSecrets,
   };

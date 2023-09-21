@@ -5,15 +5,24 @@ import * as path from './path.js';
 export const teamSchema = v.object({
   name: v.string(),
 
-  // Subdomain of reflect-server.net where apps are hosted, e.g.
-  // https://app-name.team-subdomain.reflect-server.net
+  // A globally unique label, by default derived from the `name`, that is used as
+  // the suffix for the hostname where apps are hosted, e.g.
+  // https://app-name-teamlabel.reflect-server.net
   //
-  // This defaults to a sanitized version of the Team `name`, with a random
-  // integer suffix added in the case of collisions. In the future, users will
-  // have the ability to change the team name and subdomain.
+  // A team label is restricted to alphanumeric characters and must start with a letter
+  // (in case they need to stand alone as the hostname in the future). Unlike full
+  // subdomains, hyphens are not allowed because a hyphen is used as the delimiter
+  // between the app name and the team label in the local name of the hostname.
+  //
+  // The default value is a sanitized version of the Team `name`,
+  // with a random integer suffix added in the case of collisions. In the future, users will
+  // have the ability to change the team name and label.
   //
   // This field is denormalized to all of the Team's apps to simplify deployment logic.
-  subdomain: v.string(),
+  label: v.string(),
+
+  /** @deprecated TODO(darick): Remove with the cli migration code. */
+  subdomain: v.string().optional(),
 
   defaultCfID: v.string(),
 
@@ -39,20 +48,32 @@ export function teamPath(teamID: string): string {
   return path.join(TEAM_COLLECTION, teamID);
 }
 
-export const teamSubdomainIndexSchema = v.object({
+export const teamLabelIndexSchema = v.object({
   teamID: v.string(),
 });
 
-export type TeamSubdomainIndex = v.Infer<typeof teamSubdomainIndexSchema>;
+export type TeamLabelIndex = v.Infer<typeof teamLabelIndexSchema>;
 
-export const teamSubdomainIndexDataConverter = firestoreDataConverter(
-  teamSubdomainIndexSchema,
-);
+export const teamLabelIndexDataConverter =
+  firestoreDataConverter(teamLabelIndexSchema);
 
-export const TEAM_SUBDOMAIN_INDEX_COLLECTION = 'teamSubdomains';
+export const TEAM_LABEL_INDEX_COLLECTION = 'teamLabels';
 
-export function teamSubdomainIndexPath(subdomain: string): string {
-  return path.join(TEAM_SUBDOMAIN_INDEX_COLLECTION, subdomain);
+export function teamLabelIndexPath(label: string): string {
+  return path.join(TEAM_LABEL_INDEX_COLLECTION, label);
+}
+
+const VALID_LABEL = /^[a-z]([a-z0-9]*)$/;
+
+export function isValidLabel(name: string): boolean {
+  return VALID_LABEL.test(name);
+}
+
+export function sanitizeForLabel(orig: string): string {
+  return orig
+    .toLocaleLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, '') // Remove any illegal characters
+    .replaceAll(/^[0-9]*/g, ''); // Remove leading digits or hyphens
 }
 
 const VALID_SUBDOMAIN = /^[a-z]([a-z0-9-])*[a-z0-9]$/;
