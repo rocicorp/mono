@@ -29,10 +29,12 @@ export async function cfFetch<ResponseType = unknown>(
   searchParams?: URLSearchParams,
 ): Promise<ResponseType> {
   const resp = await cfCall(apiToken, resource, init, searchParams);
-  if (!resp.ok) {
-    throw new Error(`${resp.status}: ${resp.statusText}`);
+  let json;
+  try {
+    json = (await resp.json()) as FetchResult<ResponseType>;
+  } catch (e) {
+    throw new Error(`${resp.status}: ${resp.statusText}: ${String(e)}`);
   }
-  const json = (await resp.json()) as FetchResult<ResponseType>;
   if (json.success) {
     return json.result;
   }
@@ -43,6 +45,13 @@ export async function cfFetch<ResponseType = unknown>(
 }
 
 export class FetchResultError extends Error implements FetchError {
+  static throwIfCodeIsNot(e: unknown, code: number, ...codes: number[]) {
+    if (e instanceof FetchResultError && [code, ...codes].includes(e.code)) {
+      return;
+    }
+    throw e;
+  }
+
   readonly code: number;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   readonly error_chain: FetchError[];

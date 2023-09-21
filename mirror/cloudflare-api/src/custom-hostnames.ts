@@ -35,7 +35,7 @@ export class CustomHostnames {
   readonly create: PostFn<CustomHostname>;
   readonly get: GetFn<CustomHostname>;
   readonly edit: PatchFn<CustomHostname>;
-  readonly delete: DeleteFn<{id: string}>;
+  readonly delete: DeleteFn;
 
   constructor(apiToken: string, zoneID: string) {
     const resource = new Resource(
@@ -45,7 +45,7 @@ export class CustomHostnames {
     this.list = resource.get;
     this.create = resource.post;
     this.get = id => resource.append(id).get();
-    this.edit = (id, ch) => resource.append(id).patch(ch);
+    this.edit = (id, val) => resource.append(id).patch(val);
     this.delete = id => resource.append(id).delete();
   }
 }
