@@ -1,13 +1,11 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import {execSync} from 'node:child_process';
 import * as path from 'path';
-import {fileURLToPath} from 'node:url';
-
-const REFLECT_PACKAGE_JSON_PATH = basePath('..', 'package.json');
 
 /** @param {string[]} parts */
 function basePath(...parts) {
-  return path.join(path.dirname(fileURLToPath(import.meta.url)), ...parts);
+  return path.join(process.cwd(), ...parts);
 }
 
 function execute(command) {
@@ -24,8 +22,9 @@ function writePackageData(packagePath, data) {
 }
 
 function bumpCanaryVersion(version) {
-  if (/-canary\.\d+$/.test(version)) {
-    const canaryNum = parseInt(version.split('-canary.')[1], 10);
+  const match = version.match(/-canary\.(\d+)$/);
+  if (match) {
+    const canaryNum = parseInt(match[1], 10);
     return `${version.split('-canary.')[0]}-canary.${canaryNum + 1}`;
   }
   const [major, minor] = version.split('.');
@@ -33,11 +32,20 @@ function bumpCanaryVersion(version) {
 }
 
 try {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shallow-clone'));
+  execute(`git clone --depth 1 git@github.com:rocicorp/mono.git ${tempDir}`);
+  process.chdir(tempDir);
+  //installs turbo and other build dependencies
+  execute('npm install');
+  const REFLECT_PACKAGE_JSON_PATH = basePath(
+    'packages',
+    'reflect',
+    'package.json',
+  );
   const currentPackageData = getPackageData(REFLECT_PACKAGE_JSON_PATH);
   const nextCanaryVersion = bumpCanaryVersion(currentPackageData.version);
   currentPackageData.version = nextCanaryVersion;
 
-  execute('git pull');
   const tagName = `reflect/v${nextCanaryVersion}`;
   const branchName = `release_reflect/v${nextCanaryVersion}`;
   execute(`git checkout -b ${branchName} origin/main`);
@@ -45,11 +53,12 @@ try {
   writePackageData(REFLECT_PACKAGE_JSON_PATH, currentPackageData);
 
   // publish current canary version so that `npm install` will work down the line
+  process.chdir(basePath('packages', 'reflect'));
   execute('npm publish --tag=canary');
 
   const dependencyPaths = [
-    basePath('..', '..', '..', 'apps', 'reflect.net', 'package.json'),
-    basePath('..', '..', '..', 'mirror', 'mirror-cli', 'package.json'),
+    basePath('apps', 'reflect.net', 'package.json'),
+    basePath('mirror', 'mirror-cli', 'package.json'),
   ];
 
   dependencyPaths.forEach(p => {
@@ -60,9 +69,10 @@ try {
     }
   });
 
-  process.chdir(basePath('..', '..', '..'));
+  process.chdir(tempDir);
   execute('npm install');
   execute('npm run format');
+  execute('npx syncpack');
   execute('git add **/package.json');
   execute('git add package-lock.json');
   execute(`git commit -m "Bump version to ${nextCanaryVersion}"`);
