@@ -1,4 +1,4 @@
-import {DeleteFn, GetFn, ListFn, SetOnlyFn, Resource} from './resources.js';
+import {DeleteFn, GetFn, ListFn, Resource, SetOnlyFn} from './resources.js';
 
 /* eslint-disable @typescript-eslint/naming-convention */
 export type DispatchNamespace = {
