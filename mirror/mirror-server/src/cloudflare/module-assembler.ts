@@ -7,7 +7,7 @@ import type {CfModule} from 'cloudflare-api/src/create-script-upload-form.js';
 
 export class ModuleAssembler {
   #appName: string;
-  #teamSubdomain: string;
+  #teamLabel: string;
   #appScriptName: string;
   #appModules: ModuleRef[];
   #serverModules: ModuleRef[];
@@ -15,7 +15,7 @@ export class ModuleAssembler {
 
   constructor(
     appName: string,
-    teamSubdomain: string,
+    teamLabel: string,
     appScriptName: string,
     appModules: ModuleRef[],
     serverModules: ModuleRef[],
@@ -23,7 +23,7 @@ export class ModuleAssembler {
     assert(appModules.length >= 1);
     assert(serverModules.length === 2); // The current logic only supports the server and template modules.
     this.#appName = appName;
-    this.#teamSubdomain = teamSubdomain;
+    this.#teamLabel = teamLabel;
     this.#appScriptName = appScriptName;
     this.#appModules = appModules;
     this.#serverModules = serverModules;
@@ -56,7 +56,8 @@ export class ModuleAssembler {
           .replaceAll('app-module-name.js', appModuleName)
           .replaceAll('app-script-name', this.#appScriptName)
           .replaceAll('app-name', this.#appName)
-          .replaceAll('team-subdomain', this.#teamSubdomain);
+          .replaceAll('team-label', this.#teamLabel)
+          .replaceAll('team-subdomain', this.#teamLabel); // Note: Have to keep this around for old templates
         logger.debug('Assembled app script:\n', content);
         const name = this.#uniquifyAndAddName('script.js');
         // Main module is the first.

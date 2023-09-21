@@ -13,7 +13,7 @@ import {
   teamPath,
   appNameIndexPath,
   appNameIndexDataConverter,
-  sanitizeForSubdomain,
+  sanitizeForLabel,
   type AppNameIndex,
   type Team,
 } from 'mirror-schema/src/team.js';
@@ -73,7 +73,7 @@ export async function setTeam(
 ): Promise<Team> {
   const {
     name = `Name of ${teamID}`,
-    subdomain = sanitizeForSubdomain(name),
+    label = sanitizeForLabel(name),
     defaultCfID = 'default-cloudflare-id',
     numAdmins = 0,
     numMembers = 0,
@@ -83,7 +83,7 @@ export async function setTeam(
   } = team;
   const newTeam: Team = {
     name,
-    subdomain,
+    label,
     defaultCfID,
     numAdmins,
     numMembers,
@@ -159,7 +159,7 @@ export async function setApp(
   const {
     name = `Name of ${appID}`,
     teamID = 'team-id',
-    teamSubdomain = 'team-subdomain',
+    teamLabel = 'teamlabel',
     cfID = 'default-cloudflare-id',
     cfScriptName = 'cf-script-name',
     serverReleaseChannel = 'stable',
@@ -167,7 +167,7 @@ export async function setApp(
   const newApp: App = {
     name,
     teamID,
-    teamSubdomain,
+    teamLabel,
     cfID,
     cfScriptName,
     serverReleaseChannel,

@@ -96,7 +96,7 @@ describe('server auto-deploy', () => {
         cfID: CF_ID,
         cfScriptName: 'bar',
         teamID: 'baz',
-        teamSubdomain: 'boom',
+        teamLabel: 'boom',
         name: 'boo',
         deploymentOptions: {
           vars: {
@@ -117,7 +117,7 @@ describe('server auto-deploy', () => {
             appModules: [],
             serverVersionRange: '^0.209.0',
             serverVersion: '0.209.0',
-            hostname: 'boo.boom.reflect-o-rama.net',
+            hostname: 'boo-boom.reflect-o-rama.net',
             options: {
               vars: {
                 DISABLE: 'false',

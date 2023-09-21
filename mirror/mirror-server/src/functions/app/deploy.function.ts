@@ -79,12 +79,7 @@ export async function runDeployment(
     );
   }
 
-  const {
-    cfID,
-    cfScriptName,
-    name: appName,
-    teamSubdomain,
-  } = must(appDoc.data());
+  const {cfID, cfScriptName, name: appName, teamLabel} = must(appDoc.data());
   const {
     type: deploymentType,
     status,
@@ -132,7 +127,7 @@ export async function runDeployment(
       storage,
       config,
       appName,
-      teamSubdomain,
+      teamLabel,
       hostname,
       options,
       secrets,

@@ -8,11 +8,14 @@ export const appSchema = v.object({
   cfScriptName: v.string(),
   teamID: v.string(),
 
-  // Denormalized from the `subdomain` field of the Team doc. This is used, in conjunction
+  // Denormalized from the `label` field of the Team doc. This is used, in conjunction
   // with the app `name`, to determine the hostname of the app worker URL:
   //
-  // https://<app-name>.<team-subdomain>.reflect-server.net.
-  teamSubdomain: v.string(),
+  // https://<app-name>-<teamlabel>.reflect-server.net.
+  teamLabel: v.string(),
+
+  /** @deprecated TODO(darick): Remove with the cli migration code. */
+  teamSubdomain: v.string().optional(),
 
   // The user requested name, which must be suitable as a subdomain
   // (lower-cased alphanumeric with hyphens).

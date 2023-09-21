@@ -67,13 +67,13 @@ test('list with one teams and one app', async () => {
   const userID = 'foo';
   const email = 'foo@bar.com';
   const teamID = 'team-id';
-  const teamSubdomain = 'team-sub';
+  const teamLabel = 'teamlabel';
 
   await setUser(firestore, userID, email, 'Foo Bar', {
     [teamID]: 'admin',
   });
   await setTeam(firestore, teamID, {name: 'Team Name'});
-  await setApp(firestore, 'app-id', {teamID, teamSubdomain});
+  await setApp(firestore, 'app-id', {teamID, teamLabel});
 
   const apps = await getExistingAppsForUser(firestore, userID);
 
@@ -85,7 +85,7 @@ test('list with one teams and one app', async () => {
       name: 'Name of app-id',
       serverReleaseChannel: 'stable',
       teamID,
-      teamSubdomain,
+      teamLabel,
       deploymentOptions: defaultOptions(),
     },
   ]);
@@ -96,16 +96,16 @@ test('list with one teams and two apps', async () => {
   const userID = 'foo';
   const email = 'foo@bar.com';
   const teamID = 'team-id';
-  const teamSubdomain = 'team-sub';
+  const teamLabel = 'teamlabelsub';
 
   await setUser(firestore, userID, email, 'Foo Bar', {
     [teamID]: 'admin',
   });
   await setTeam(firestore, teamID, {name: 'Team Name'});
-  await setApp(firestore, 'app-id-1', {teamID, teamSubdomain});
+  await setApp(firestore, 'app-id-1', {teamID, teamLabel});
   await setApp(firestore, 'app-id-2', {
     teamID,
-    teamSubdomain,
+    teamLabel,
     serverReleaseChannel: 'canary',
   });
 
@@ -119,7 +119,7 @@ test('list with one teams and two apps', async () => {
       name: 'Name of app-id-1',
       serverReleaseChannel: 'stable',
       teamID,
-      teamSubdomain,
+      teamLabel,
       deploymentOptions: defaultOptions(),
     },
     {
@@ -129,7 +129,7 @@ test('list with one teams and two apps', async () => {
       name: 'Name of app-id-2',
       serverReleaseChannel: 'canary',
       teamID,
-      teamSubdomain,
+      teamLabel,
       deploymentOptions: defaultOptions(),
     },
   ]);
@@ -140,9 +140,9 @@ test('list with two teams and two apps total', async () => {
   const userID = 'foo';
   const email = 'foo@bar.com';
   const teamID1 = 'team-id-1';
-  const teamSubdomain1 = 'team-sub-1';
+  const teamLabel1 = 'team-sub-1';
   const teamID2 = 'team-id-2';
-  const teamSubdomain2 = 'team-sub-2';
+  const teamLabel2 = 'team-sub-2';
 
   await setUser(firestore, userID, email, 'Foo Bar', {
     [teamID1]: 'admin',
@@ -152,11 +152,11 @@ test('list with two teams and two apps total', async () => {
   await setTeam(firestore, teamID2, {name: 'Team Name 2'});
   await setApp(firestore, 'app-id-1', {
     teamID: teamID1,
-    teamSubdomain: teamSubdomain1,
+    teamLabel: teamLabel1,
   });
   await setApp(firestore, 'app-id-2', {
     teamID: teamID2,
-    teamSubdomain: teamSubdomain2,
+    teamLabel: teamLabel2,
     serverReleaseChannel: 'canary',
   });
 
@@ -170,7 +170,7 @@ test('list with two teams and two apps total', async () => {
       name: 'Name of app-id-1',
       serverReleaseChannel: 'stable',
       teamID: teamID1,
-      teamSubdomain: teamSubdomain1,
+      teamLabel: teamLabel1,
       deploymentOptions: defaultOptions(),
     },
     {
@@ -180,7 +180,7 @@ test('list with two teams and two apps total', async () => {
       name: 'Name of app-id-2',
       serverReleaseChannel: 'canary',
       teamID: teamID2,
-      teamSubdomain: teamSubdomain2,
+      teamLabel: teamLabel2,
       deploymentOptions: defaultOptions(),
     },
   ]);
@@ -191,9 +191,9 @@ test('list with two teams and 4 apps total', async () => {
   const userID = 'foo';
   const email = 'foo@bar.com';
   const teamID1 = 'team-id-1';
-  const teamSubdomain1 = 'team-sub-1';
+  const teamLabel1 = 'team-sub-1';
   const teamID2 = 'team-id-2';
-  const teamSubdomain2 = 'team-sub-2';
+  const teamLabel2 = 'team-sub-2';
 
   await setUser(firestore, userID, email, 'Foo Bar', {
     [teamID1]: 'admin',
@@ -203,20 +203,20 @@ test('list with two teams and 4 apps total', async () => {
   await setTeam(firestore, teamID2, {name: 'Team Name 2'});
   await setApp(firestore, 'app-id-1', {
     teamID: teamID1,
-    teamSubdomain: teamSubdomain1,
+    teamLabel: teamLabel1,
   });
   await setApp(firestore, 'app-id-2', {
     teamID: teamID2,
-    teamSubdomain: teamSubdomain2,
+    teamLabel: teamLabel2,
     serverReleaseChannel: 'canary',
   });
   await setApp(firestore, 'app-id-3', {
     teamID: teamID1,
-    teamSubdomain: teamSubdomain1,
+    teamLabel: teamLabel1,
   });
   await setApp(firestore, 'app-id-4', {
     teamID: teamID2,
-    teamSubdomain: teamSubdomain2,
+    teamLabel: teamLabel2,
     serverReleaseChannel: 'canary',
   });
 
@@ -230,7 +230,7 @@ test('list with two teams and 4 apps total', async () => {
       name: 'Name of app-id-1',
       serverReleaseChannel: 'stable',
       teamID: teamID1,
-      teamSubdomain: teamSubdomain1,
+      teamLabel: teamLabel1,
       deploymentOptions: defaultOptions(),
     },
     {
@@ -240,7 +240,7 @@ test('list with two teams and 4 apps total', async () => {
       name: 'Name of app-id-2',
       serverReleaseChannel: 'canary',
       teamID: teamID2,
-      teamSubdomain: teamSubdomain2,
+      teamLabel: teamLabel2,
       deploymentOptions: defaultOptions(),
     },
     {
@@ -250,7 +250,7 @@ test('list with two teams and 4 apps total', async () => {
       name: 'Name of app-id-3',
       serverReleaseChannel: 'stable',
       teamID: teamID1,
-      teamSubdomain: teamSubdomain1,
+      teamLabel: teamLabel1,
       deploymentOptions: defaultOptions(),
     },
     {
@@ -260,7 +260,7 @@ test('list with two teams and 4 apps total', async () => {
       name: 'Name of app-id-4',
       serverReleaseChannel: 'canary',
       teamID: teamID2,
-      teamSubdomain: teamSubdomain2,
+      teamLabel: teamLabel2,
       deploymentOptions: defaultOptions(),
     },
   ]);
