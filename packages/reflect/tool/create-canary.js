@@ -56,6 +56,7 @@ try {
   process.chdir(basePath('packages', 'reflect'));
   execute('npm publish --tag=canary');
 
+  process.chdir(tempDir);
   const dependencyPaths = [
     basePath('apps', 'reflect.net', 'package.json'),
     basePath('mirror', 'mirror-cli', 'package.json'),
@@ -69,10 +70,11 @@ try {
     }
   });
 
-  process.chdir(tempDir);
   execute('npm install');
   execute('npm run format');
   execute('npx syncpack');
+  execute('git status');
+  execute('git add package.json');
   execute('git add **/package.json');
   execute('git add package-lock.json');
   execute(`git commit -m "Bump version to ${nextCanaryVersion}"`);
@@ -81,10 +83,15 @@ try {
   execute(`git checkout main`);
   execute(`git pull`);
   execute(`git merge ${branchName}`);
-
+  console.log(`please do the following:`);
+  console.log(`1. cd ${tempDir}`);
   console.log(
-    `Please confirm the diff of the commit at HEAD and push to origin if correct`,
+    `2. Please confirm the diff of the commit at HEAD and push to origin if correct`,
   );
+  console.log(`3. git diff HEAD^ HEAD`);
+  console.log(`4. git push origin main`);
+  console.log(`5. cd ~`);
+  console.log(`6. rm -rf ${tempDir}`);
 } catch (error) {
   console.error(`Error during execution: ${error}`);
   process.exit(1);
