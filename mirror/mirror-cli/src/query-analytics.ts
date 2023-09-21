@@ -23,5 +23,5 @@ export async function queryAnalyticsHandler(yargs: QueryAnalyticsHandlerArgs) {
     method: 'POST',
     body: query,
   });
-  console.log(`${query}:`, resp);
+  console.log(`${query}:`, await resp.text());
 }

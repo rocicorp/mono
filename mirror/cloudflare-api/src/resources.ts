@@ -3,11 +3,14 @@ import {cfFetch} from './fetch.js';
 import {assert} from 'shared/src/asserts.js';
 
 export type ListFn<T> = (query?: URLSearchParams) => Promise<T[]>;
+export type GetOnlyFn<T> = () => Promise<T>;
 export type GetFn<T> = (id: string) => Promise<T>;
 export type PostFn<I, O = I> = (val: PartialDeep<I>) => Promise<O>;
 export type PutFn<I, O = I> = (id: string, val: PartialDeep<I>) => Promise<O>;
+export type PutOnlyFn<I, O = I> = (val: PartialDeep<I>) => Promise<O>;
 export type PatchFn<I, O = I> = PutFn<I, O>;
-export type DeleteFn<T = unknown> = (id: string) => Promise<T>;
+export type PatchOnlyFn<I, O = I> = PutOnlyFn<I, O>;
+export type DeleteFn<T = {id: string}> = (id: string) => Promise<T>;
 
 const headers = {'Content-Type': 'application/json'};
 

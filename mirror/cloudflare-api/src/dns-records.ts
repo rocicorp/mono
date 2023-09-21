@@ -30,15 +30,15 @@ export class DNSRecords {
   readonly get: GetFn<DNSRecord>;
   readonly patch: PatchFn<DNSRecord>;
   readonly update: PutFn<DNSRecord>;
-  readonly delete: DeleteFn<{id: string}>;
+  readonly delete: DeleteFn;
 
   constructor(apiToken: string, zoneID: string) {
     const resource = new Resource(apiToken, `/zones/${zoneID}/dns_records`);
     this.list = resource.get;
     this.create = resource.post;
     this.get = id => resource.append(id).get();
-    this.patch = (id, ch) => resource.append(id).patch(ch);
-    this.update = (id, ch) => resource.append(id).put(ch);
+    this.patch = (id, val) => resource.append(id).patch(val);
+    this.update = (id, val) => resource.append(id).put(val);
     this.delete = id => resource.append(id).delete();
   }
 }
