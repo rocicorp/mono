@@ -45,8 +45,8 @@ export async function cfFetch<ResponseType = unknown>(
 }
 
 export class FetchResultError extends Error implements FetchError {
-  static throwIfCodeIsNot(e: unknown, code: number, ...codes: number[]) {
-    if (e instanceof FetchResultError && [code, ...codes].includes(e.code)) {
+  static throwIfCodeIsNot(e: unknown, ...codes: [number, ...number[]]) {
+    if (e instanceof FetchResultError && codes.includes(e.code)) {
       return;
     }
     throw e;
@@ -86,3 +86,9 @@ interface FetchResult<ResponseType = unknown> {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   result_info?: unknown;
 }
+
+export const ERRORS = {
+  dispatchNamespaceNotFound: 100119,
+  resourceNotFound: 1551,
+  recordAlreadyExists: 81057,
+} as const;
