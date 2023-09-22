@@ -43,7 +43,7 @@ import {upgradeWebsocketResponse} from './http-util.js';
 import {
   CREATE_ROOM_PATH,
   INTERNAL_CREATE_ROOM_PATH,
-  TAIL_URL_PATTERN,
+  TAIL_URL_PATH,
 } from './paths.js';
 import {
   RoomStatus,
@@ -2169,12 +2169,10 @@ function createTailTestFixture(
     headers.set('Sec-WebSocket-Protocol', encodedTestAuth);
   }
   headers.set('Upgrade', 'websocket');
-  const tailURLPath = TAIL_URL_PATTERN.replaceAll(
-    ':roomID',
-    encodeURIComponent(testRoomID),
-  );
-  const tailURL = 'ws://test.roci.dev' + tailURLPath;
-  const testRequest = new Request(tailURL, {
+  const tailURL = new URL(TAIL_URL_PATH, 'ws://test.roci.dev');
+  tailURL.searchParams.set('roomID', testRoomID);
+
+  const testRequest = new Request(tailURL.toString(), {
     headers,
   });
 
@@ -2193,8 +2191,7 @@ function createTailTestFixture(
       expect(id.toString()).toEqual('room-do-0');
       // eslint-disable-next-line require-await
       return new TestDurableObjectStub(id, async (request: Request) => {
-        const url = new URL(request.url);
-        if (url.pathname !== tailURLPath) {
+        if (request.url !== tailURL.toString()) {
           return new Response();
         }
         expect(request.url).toEqual(testRequest.url);

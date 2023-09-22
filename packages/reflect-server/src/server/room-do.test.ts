@@ -23,7 +23,7 @@ import {newAuthConnectionsRequest} from '../util/auth-test-util.js';
 import {resolver} from '../util/resolver.js';
 import {TestLogSink, createSilentLogContext} from '../util/test-utils.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
-import {TAIL_URL_PATTERN} from './paths.js';
+import {TAIL_URL_PATH} from './paths.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
 
 const testLogSink = new TestLogSink();
@@ -423,8 +423,7 @@ test('good, bad, invalid connect requests', async () => {
 describe('good, bad, invalid tail requests', () => {
   function makeRequest(init?: RequestInit) {
     return new Request(
-      'ws://test.roci.dev' +
-        TAIL_URL_PATTERN.replaceAll(':roomID', 'testRoomID'),
+      'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
       init,
     );
   }
@@ -500,7 +499,7 @@ test('tail should replace global console', async () => {
   });
 
   const request = new Request(
-    'ws://test.roci.dev' + TAIL_URL_PATTERN.replaceAll(':roomID', 'testRoomID'),
+    'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
     {headers: {['Upgrade']: 'websocket'}},
   );
 
@@ -608,7 +607,7 @@ test('tail two websockets', async () => {
   });
 
   const request1 = new Request(
-    'ws://test.roci.dev' + TAIL_URL_PATTERN.replaceAll(':roomID', 'testRoomID'),
+    'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
     {headers: {['Upgrade']: 'websocket'}},
   );
   const response1 = await roomDO.fetch(request1);
@@ -616,7 +615,7 @@ test('tail two websockets', async () => {
   response1.webSocket!.accept();
 
   const request2 = new Request(
-    'ws://test.roci.dev' + TAIL_URL_PATTERN.replaceAll(':roomID', 'testRoomID'),
+    'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
     {headers: {['Upgrade']: 'websocket'}},
   );
   const response2 = await roomDO.fetch(request2);

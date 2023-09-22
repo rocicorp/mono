@@ -34,7 +34,7 @@ import {
   INTERNAL_CREATE_ROOM_PATH,
   LEGACY_CONNECT_PATH,
   LEGACY_CREATE_ROOM_PATH,
-  TAIL_URL_PATTERN,
+  TAIL_URL_PATH,
 } from './paths.js';
 import {initRoomSchema} from './room-schema.js';
 import type {RoomStartHandler} from './room-start.js';
@@ -76,7 +76,7 @@ export const ROOM_ROUTES = {
   internalCreateRoom: INTERNAL_CREATE_ROOM_PATH,
   legacyConnect: LEGACY_CONNECT_PATH,
   connect: CONNECT_URL_PATTERN,
-  tail: TAIL_URL_PATTERN,
+  tail: TAIL_URL_PATH,
 } as const;
 
 export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {

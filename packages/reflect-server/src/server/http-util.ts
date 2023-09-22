@@ -23,7 +23,12 @@ export function upgradeWebsocketResponse(
   ws: WebSocket,
   requestHeaders: Headers,
 ) {
-  // Need to forward the Sec-WebSocket-Protocol header
+  //  Sec-WebSocket-Protocol is being used as a mechanism for sending `auth`
+  // since custom headers are not supported by the browser WebSocket API, the
+  // Sec-WebSocket-Protocol semantics must be followed. Send a
+  // Sec-WebSocket-Protocol response header with a value matching the
+  // Sec-WebSocket-Protocol request header, to indicate support for the
+  // protocol, otherwise the client will close the connection.
   const responseHeaders = new Headers();
   const protocol = requestHeaders.get('Sec-WebSocket-Protocol');
   if (protocol) {

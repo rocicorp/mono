@@ -27,7 +27,7 @@ import {
   CREATE_ROOM_PATH,
   LEGACY_CONNECT_PATH,
   LEGACY_CREATE_ROOM_PATH,
-  TAIL_URL_PATTERN,
+  TAIL_URL_PATH,
 } from './paths.js';
 import {ROOM_ROUTES} from './room-do.js';
 import {
@@ -52,6 +52,7 @@ import {
   get,
   post,
   requireAuthAPIKey,
+  requireRoomIDSearchParam,
   withBody,
   withRoomID,
   withVersion,
@@ -95,7 +96,7 @@ export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
   authRevalidateConnections: '/api/auth/v0/revalidateConnections',
   legacyCreateRoom: LEGACY_CREATE_ROOM_PATH,
   createRoom: CREATE_ROOM_PATH,
-  tail: TAIL_URL_PATTERN,
+  tail: TAIL_URL_PATH,
 } as const;
 
 export const AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER = {
@@ -289,7 +290,7 @@ export class BaseAuthDO implements DurableObject {
   );
 
   #tail = get(
-    withRoomID(async (ctx: BaseContext & WithRoomID, request) => {
+    requireRoomIDSearchParam(async (ctx: BaseContext & WithRoomID, request) => {
       const {lc, roomID} = ctx;
 
       const errorResponse = requireUpgradeHeader(request, lc);
@@ -320,7 +321,7 @@ export class BaseAuthDO implements DurableObject {
         lc,
       );
 
-      return makeResponseFrom(responseFromDO);
+      return responseFromDO;
     }),
   );
 
@@ -681,7 +682,7 @@ export class BaseAuthDO implements DurableObject {
           roomID,
           lc,
         );
-        return makeResponseFrom(responseFromDO);
+        return responseFromDO;
       }),
     );
   }
@@ -926,15 +927,6 @@ export class BaseAuthDO implements DurableObject {
     }
     return errorResponses[0];
   }
-}
-
-function makeResponseFrom(responseFromDO: Response) {
-  return new Response(responseFromDO.body, {
-    status: responseFromDO.status,
-    statusText: responseFromDO.statusText,
-    webSocket: responseFromDO.webSocket,
-    headers: new Headers(responseFromDO.headers),
-  });
 }
 
 async function roomDOFetch(

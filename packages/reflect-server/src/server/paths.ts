@@ -9,4 +9,4 @@ export const CREATE_ROOM_PATH = '/api/room/v0/room/create';
 export const LEGACY_CREATE_ROOM_PATH = '/createRoom';
 export const INTERNAL_CREATE_ROOM_PATH = '/INTERNAL/api/room/v0/room/create';
 
-export const TAIL_URL_PATTERN = '/api/debug/v0/:roomID/tail';
+export const TAIL_URL_PATH = '/api/debug/v0/tail';

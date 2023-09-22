@@ -141,6 +141,7 @@ export function checkAuthAPIKey(
 }
 
 export type WithRoomID = {roomID: string};
+
 export function withRoomID<Context extends BaseContext, Resp>(
   next: Handler<Context & WithRoomID, Resp>,
 ) {
@@ -151,6 +152,19 @@ export function withRoomID<Context extends BaseContext, Resp>(
     }
     const decoded = decodeURIComponent(roomID);
     return next({...ctx, roomID: decoded}, req);
+  };
+}
+
+export function requireRoomIDSearchParam<Context extends BaseContext, Resp>(
+  next: Handler<Context & WithRoomID, Resp>,
+) {
+  return (ctx: Context, req: Request) => {
+    const url = new URL(req.url);
+    const roomID = url.searchParams.get('roomID');
+    if (!roomID) {
+      return new Response('roomID search param required', {status: 400});
+    }
+    return next({...ctx, roomID}, req);
   };
 }
 
