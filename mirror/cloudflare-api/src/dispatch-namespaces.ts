@@ -1,4 +1,4 @@
-import {DeleteFn, GetFn, ListFn, PostFn, Resource} from './resources.js';
+import {DeleteFn, GetFn, ListFn, SetOnlyFn, Resource} from './resources.js';
 
 /* eslint-disable @typescript-eslint/naming-convention */
 export type DispatchNamespace = {
@@ -11,7 +11,7 @@ export type DispatchNamespace = {
 
 export class DispatchNamespaces {
   readonly list: ListFn<DispatchNamespace>;
-  readonly create: PostFn<{name: string}, DispatchNamespace>;
+  readonly create: SetOnlyFn<{name: string}, DispatchNamespace>;
   readonly get: GetFn<DispatchNamespace>;
   readonly delete: DeleteFn<null>;
 
@@ -22,7 +22,7 @@ export class DispatchNamespaces {
     );
     this.list = resource.get;
     this.create = resource.post;
-    this.get = id => resource.append(id).get();
-    this.delete = id => resource.append(id).delete();
+    this.get = (id, q) => resource.append(id).get(q);
+    this.delete = (id, q) => resource.append(id).delete(q);
   }
 }

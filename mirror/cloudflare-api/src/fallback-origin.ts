@@ -1,4 +1,4 @@
-import {DeleteFn, GetOnlyFn, PutOnlyFn, Resource} from './resources.js';
+import {DeleteFn, GetOnlyFn, SetOnlyFn, Resource} from './resources.js';
 
 export type FallbackOriginState = {
   origin: string;
@@ -10,7 +10,7 @@ export type FallbackOriginState = {
 
 export class FallbackOrigin {
   readonly get: GetOnlyFn<FallbackOriginState>;
-  readonly update: PutOnlyFn<{origin: string}, FallbackOriginState>;
+  readonly update: SetOnlyFn<{origin: string}, FallbackOriginState>;
   readonly delete: DeleteFn;
 
   constructor(apiToken: string, zoneID: string) {
@@ -20,6 +20,6 @@ export class FallbackOrigin {
     );
     this.get = resource.get;
     this.update = resource.put;
-    this.delete = id => resource.append(id).delete();
+    this.delete = (id, q) => resource.append(id).delete(q);
   }
 }

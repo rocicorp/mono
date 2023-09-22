@@ -2,9 +2,9 @@
 // TODO(arv): Remove thing we don not need.
 
 /* eslint-disable @typescript-eslint/naming-convention */
-import {assert} from 'shared/src/asserts.js';
-import {cfFetch} from './cf-fetch.js';
 import type {CfDurableObjectMigrations} from 'cloudflare-api/src/create-script-upload-form.js';
+import type {Script, ScriptState} from 'cloudflare-api/src/scripts.js';
+import {ERRORS, FetchResultError} from 'cloudflare-api/src/fetch.js';
 
 export type Migration = {
   /** A unique identifier for this migration. */
@@ -31,59 +31,29 @@ type Config = {
  * to upload based on the current migration tag of the deployed Worker.
  */
 export async function getMigrationsToUpload(
-  scriptName: string,
-  apiToken: string,
+  scriptRef: Script,
   props: {
-    accountId?: string | undefined;
     config: Config;
-    legacyEnv?: boolean | undefined;
-    env?: string | undefined;
   },
 ): Promise<CfDurableObjectMigrations | undefined> {
-  const {config, accountId} = props;
+  const {config} = props;
 
-  assert(accountId, 'Missing accountId');
   // if config.migrations
   let migrations;
   if (config.migrations.length > 0) {
     // get current migration tag
-    type ScriptData = {id: string; migration_tag?: string};
-    let script: ScriptData | undefined;
-    if (!props.legacyEnv) {
-      try {
-        if (props.env) {
-          const scriptData = await cfFetch<{
-            script: ScriptData;
-          }>(
-            apiToken,
-            `/accounts/${accountId}/workers/services/${scriptName}/environments/${props.env}`,
-          );
-          script = scriptData.script;
-        } else {
-          const scriptData = await cfFetch<{
-            default_environment: {
-              script: ScriptData;
-            };
-          }>(apiToken, `/accounts/${accountId}/workers/services/${scriptName}`);
-          script = scriptData.default_environment.script;
-        }
-      } catch (err) {
-        if (
-          ![
-            10090, // corresponds to workers.api.error.service_not_found, so the script wasn't previously published at all
-            10092, // workers.api.error.environment_not_found, so the script wasn't published to this environment yet
-          ].includes((err as {code: number}).code)
-        ) {
-          throw err;
-        }
-        // else it's a 404, no script found, and we can proceed
-      }
-    } else {
-      const scripts = await cfFetch<ScriptData[]>(
-        apiToken,
-        `/accounts/${accountId}/workers/scripts`,
+    let script: ScriptState | undefined;
+    try {
+      // Note: We only support the default 'production' environment for GlobalScripts.
+      // For namespaced scripts, there is no notion of environments.
+      const scriptData = await scriptRef.productionEnvironment();
+      script = scriptData.script;
+    } catch (err) {
+      FetchResultError.throwIfCodeIsNot(
+        err,
+        ERRORS.environmentNotFound,
+        ERRORS.serviceNotFound,
       );
-      script = scripts.find(({id}) => id === scriptName);
     }
 
     if (script?.migration_tag) {

@@ -1,21 +1,7 @@
 import {logger} from 'firebase-functions';
-import {cfFetch} from './cf-fetch.js';
-import type {Config} from './config.js';
+import type {GlobalScript} from 'cloudflare-api/src/scripts.js';
 
-export function submitTriggers(config: Config, cron: string) {
+export function submitTriggers(script: GlobalScript, cron: string) {
   logger.log('Setting up triggers:', cron);
-  const {accountID, apiToken, scriptName} = config;
-  return cfFetch(
-    apiToken,
-    `/accounts/${accountID}/workers/scripts/${scriptName}/schedules`,
-    {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify([
-        {
-          cron,
-        },
-      ]),
-    },
-  );
+  return script.setSchedules([{cron}]);
 }
