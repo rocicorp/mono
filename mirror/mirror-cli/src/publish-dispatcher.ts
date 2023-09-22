@@ -3,7 +3,7 @@ import {
   getCloudflareConfig,
   getZoneDomainName,
 } from './cf.js';
-import {FetchResultError, cfFetch, ERRORS} from 'cloudflare-api/src/fetch.js';
+import {FetchResultError, cfFetch, Errors} from 'cloudflare-api/src/fetch.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {fileURLToPath} from 'url';
 import {readFile} from 'node:fs/promises';
@@ -83,7 +83,7 @@ async function ensureDispatchNamespace(
     console.log(`"${name}" namespace exists: `, exists);
     return;
   } catch (e) {
-    FetchResultError.throwIfCodeIsNot(e, ERRORS.dispatchNamespaceNotFound);
+    FetchResultError.throwIfCodeIsNot(e, Errors.DispatchNamespaceNotFound);
   }
   console.log(`Creating "${name}" namespace`);
   const result = await namespaces.create({name});
@@ -140,7 +140,7 @@ export async function ensureFallbackOrigin(
     }
     console.warn(`Overwriting existing fallback origin ${existing.origin}`);
   } catch (e) {
-    FetchResultError.throwIfCodeIsNot(e, ERRORS.resourceNotFound);
+    FetchResultError.throwIfCodeIsNot(e, Errors.ResourceNotFound);
   }
   // https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/start/advanced-settings/worker-as-origin/
   console.log(`Creating Fallback Origin DNS record for ${hostname}`);
@@ -153,7 +153,7 @@ export async function ensureFallbackOrigin(
     });
     console.log(dnsResult);
   } catch (e) {
-    FetchResultError.throwIfCodeIsNot(e, ERRORS.recordAlreadyExists); // Assume it is correct.
+    FetchResultError.throwIfCodeIsNot(e, Errors.RecordAlreadyExists); // Assume it is correct.
   }
 
   console.log(`Setting Fallback Origin to ${origin}`);
