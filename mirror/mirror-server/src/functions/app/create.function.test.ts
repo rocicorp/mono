@@ -32,7 +32,7 @@ describe('app-create function', () => {
   const USER_EMAIL = 'foo@bar.com';
   const CF_ID = 'cf-123';
   const TEAM_ID = 'app-create-test-team';
-  const TEAM_SUBDOMAIN = 'foo-team';
+  const TEAM_LABEL = 'footeam';
 
   function callCreate(appName: string) {
     const createFunction = https.onCall(create(firestore));
@@ -78,7 +78,7 @@ describe('app-create function', () => {
 
     await setTeam(firestore, TEAM_ID, {
       defaultCfID: CF_ID,
-      subdomain: TEAM_SUBDOMAIN,
+      label: TEAM_LABEL,
       numAdmins: 1,
       numApps: 2,
       maxApps: 5,
@@ -111,7 +111,7 @@ describe('app-create function', () => {
     const app = await getApp(firestore, resp.appID);
     expect(app).toMatchObject({
       teamID: TEAM_ID,
-      teamSubdomain: TEAM_SUBDOMAIN,
+      teamLabel: TEAM_LABEL,
       name: appName,
       cfID: 'default-CLOUDFLARE_ACCOUNT_ID',
       cfScriptName: expect.any(String),

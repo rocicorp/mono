@@ -292,7 +292,7 @@ describe('deploy', () => {
     }
     const deployed = must((await deploymentDoc.get()).data());
     expect(deployed.status).toBe('FAILED');
-    expect(deployed.statusMessage).toBe('oh nose');
+    expect(deployed.statusMessage).toBe('There was an error deploying the app');
 
     app = await getApp(firestore, APP_ID);
     expect(app.queuedDeploymentIDs).toEqual([]);

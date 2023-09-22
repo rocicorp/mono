@@ -80,7 +80,7 @@ describe('auto-deploy', () => {
         cfScriptName: 'bar',
         teamID: 'baz',
         name: 'boo',
-        teamSubdomain: 'yah',
+        teamLabel: 'yah',
         deploymentOptions: {
           vars: {
             DISABLE: 'false',
@@ -100,7 +100,7 @@ describe('auto-deploy', () => {
             appModules: [],
             serverVersionRange: '^0.28.0',
             serverVersion: SERVER_VERSION_1,
-            hostname: 'boo.yah.reflect-o-rama.net',
+            hostname: 'boo-yah.reflect-o-rama.net',
             options: {
               vars: {
                 DISABLE: 'false',
@@ -169,7 +169,7 @@ describe('auto-deploy', () => {
       },
       expectedType: 'HOSTNAME_UPDATE',
       expectedSpec: {
-        hostname: 'bonk.yah.reflect-o-rama.net',
+        hostname: 'bonk-yah.reflect-o-rama.net',
       },
     },
     {
@@ -310,7 +310,7 @@ describe('auto-deploy', () => {
               serverVersion: SERVER_VERSION_1,
               options: defaultOptions(),
               hashesOfSecrets: dummySecrets(),
-              hostname: 'boo.yah.reflect-o-rama.net',
+              hostname: 'boo-yah.reflect-o-rama.net',
             },
           },
         );

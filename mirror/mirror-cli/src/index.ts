@@ -20,9 +20,9 @@ import {
   revertReflectServerOptions,
 } from './release-server.js';
 import {
-  migrateTeamAppsHandler,
-  migrateTeamAppsOptions,
-} from './migrate-team-apps.js';
+  migrateTeamLabelsHandler,
+  migrateTeamLabelsOptions,
+} from './migrate-team-labels.js';
 import {grantSuperHandler, grantSuperOptions} from './grant-super.js';
 import {initFirebase} from './firebase.js';
 import {
@@ -43,6 +43,10 @@ import {
   publishDispatcherOptions,
 } from './publish-dispatcher.js';
 import {getWorkerHandler, getWorkerOptions} from './get-worker.js';
+import {
+  deleteTeamSubdomainsHandler,
+  deleteTeamSubdomainsOptions,
+} from './delete-team-subdomains.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -145,10 +149,17 @@ function createCLIParser(argv: string[]) {
   );
 
   reflectCLI.command(
-    'migrateTeamApps',
-    'Adds a team name (and corresponding subdomain) to a team and its apps. Triggers new deployments of those apps.',
-    migrateTeamAppsOptions,
-    migrateTeamAppsHandler,
+    'migrate-team-labels',
+    'Converts team subdomains to team labels. Triggers new deployments of those apps.',
+    migrateTeamLabelsOptions,
+    migrateTeamLabelsHandler,
+  );
+
+  reflectCLI.command(
+    'delete-team-subdomains',
+    'Deletes the team subdomains. They must have already been migrated by migrate-team-labels.',
+    deleteTeamSubdomainsOptions,
+    deleteTeamSubdomainsHandler,
   );
 
   reflectCLI.command(

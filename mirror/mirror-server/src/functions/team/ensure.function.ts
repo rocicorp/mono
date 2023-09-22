@@ -12,11 +12,11 @@ import {
   teamMembershipPath,
 } from 'mirror-schema/src/membership.js';
 import {
-  sanitizeForSubdomain,
+  sanitizeForLabel,
   teamDataConverter,
   teamPath,
-  teamSubdomainIndexDataConverter,
-  teamSubdomainIndexPath,
+  teamLabelIndexDataConverter,
+  teamLabelIndexPath,
 } from 'mirror-schema/src/team.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {must} from 'shared/src/must.js';
@@ -60,16 +60,16 @@ export const ensure = (firestore: Firestore) =>
         }
 
         const teamID = newTeamID();
-        const subdomain = await getSubdomain(firestore, txn, name);
+        const label = await getLabel(firestore, txn, name);
 
         logger.info(
-          `Creating team "${name}" (${teamID}) at ${subdomain}.reflect-server.net for user ${userID}`,
+          `Creating team "${name}" (${teamID}) at ${label}.reflect-server.net for user ${userID}`,
         );
         txn.create(
           firestore.doc(teamPath(teamID)).withConverter(teamDataConverter),
           {
             name,
-            subdomain,
+            label,
             defaultCfID: cloudflareAccountId.value(),
             numAdmins: 1,
             numMembers: 0,
@@ -87,8 +87,8 @@ export const ensure = (firestore: Firestore) =>
         txn.update(userDocRef, {roles: {[teamID]: 'admin'}});
         txn.create(
           firestore
-            .doc(teamSubdomainIndexPath(subdomain))
-            .withConverter(teamSubdomainIndexDataConverter),
+            .doc(teamLabelIndexPath(label))
+            .withConverter(teamLabelIndexDataConverter),
           {teamID},
         );
         return teamID;
@@ -96,30 +96,28 @@ export const ensure = (firestore: Firestore) =>
       return {teamID, success: true};
     });
 
-async function getSubdomain(
+async function getLabel(
   firestore: Firestore,
   txn: Transaction,
   name: string,
 ): Promise<string> {
-  // Try up to 5 times, adding a random number fo the subdomain if it is taken.
+  // Try up to 5 times, adding a random number fo the label if it is taken.
   for (let i = 0; i < 5; i++) {
-    const subdomain =
+    const label =
       i === 0
-        ? sanitizeForSubdomain(name)
-        : `${sanitizeForSubdomain(name)}-${randomInt(10000)}`;
-    const entry = await txn.get(
-      firestore.doc(teamSubdomainIndexPath(subdomain)),
-    );
+        ? sanitizeForLabel(name)
+        : `${sanitizeForLabel(name)}${randomInt(10000)}`;
+    const entry = await txn.get(firestore.doc(teamLabelIndexPath(label)));
     if (!entry.exists) {
-      return subdomain;
+      return label;
     }
     logger.info(
-      `Team with subdomain ${subdomain} (${entry.ref.path}) already exists. Adding a random suffix.`,
+      `Team with label ${label} (${entry.ref.path}) already exists. Adding a random suffix.`,
       entry.data(),
     );
   }
   throw new HttpsError(
     'resource-exhausted',
-    `Failed to generate a random subdomain for ${name}`,
+    `Failed to generate a random label for ${name}`,
   );
 }

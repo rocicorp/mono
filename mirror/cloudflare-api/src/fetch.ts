@@ -29,24 +29,27 @@ export async function cfFetch<ResponseType = unknown>(
   searchParams?: URLSearchParams,
 ): Promise<ResponseType> {
   const resp = await cfCall(apiToken, resource, init, searchParams);
+  const action = `${init.method ?? 'GET'} ${resource}`;
   let json;
   try {
     json = (await resp.json()) as FetchResult<ResponseType>;
   } catch (e) {
-    throw new Error(`${resp.status}: ${resp.statusText}: ${String(e)}`);
+    throw new Error(
+      `${action}: ${resp.status}: ${resp.statusText}: ${String(e)}`,
+    );
   }
   if (json.success) {
     return json.result;
   }
   if (json.errors?.length) {
-    throw new FetchResultError(json);
+    throw new FetchResultError(json, action);
   }
-  throw new Error(`Error returned for ${resource}: ${JSON.stringify(json)}`);
+  throw new Error(`Error returned for ${action}: ${JSON.stringify(json)}`);
 }
 
 export class FetchResultError extends Error implements FetchError {
-  static throwIfCodeIsNot(e: unknown, code: number, ...codes: number[]) {
-    if (e instanceof FetchResultError && [code, ...codes].includes(e.code)) {
+  static throwIfCodeIsNot(e: unknown, ...codes: [number, ...number[]]) {
+    if (e instanceof FetchResultError && codes.includes(e.code)) {
       return;
     }
     throw e;
@@ -56,9 +59,11 @@ export class FetchResultError extends Error implements FetchError {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   readonly error_chain: FetchError[];
 
-  constructor(result: FetchResult) {
+  constructor(result: FetchResult, action: string) {
     super(
-      result.messages.length > 0 ? result.messages[0] : JSON.stringify(result),
+      `${action}: ${
+        result.messages.length > 0 ? result.messages[0] : JSON.stringify(result)
+      }`,
     );
     assert(result.success === false);
 
@@ -86,3 +91,13 @@ interface FetchResult<ResponseType = unknown> {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   result_info?: unknown;
 }
+
+export const ERRORS = {
+  couldNotRouteToScript: 7003,
+  dispatchNamespaceNotFound: 100119,
+  environmentNotFound: 10092,
+  recordAlreadyExists: 81057,
+  resourceNotFound: 1551,
+  scriptNotFound: 10007,
+  serviceNotFound: 10090,
+} as const;

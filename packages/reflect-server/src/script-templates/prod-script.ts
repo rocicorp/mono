@@ -12,8 +12,8 @@ const optionsBuilder = newOptionsBuilder(makeOptions)
   .add(logLevel())
   .add(defaultConsoleLogSink())
   .add(logFilter((level, ctx) => level === 'error' || ctx?.['vis'] === 'app'))
-  .add(datadogLogging('app-name.team-subdomain', 'app-script-name'))
-  .add(datadogMetrics('app-name.team-subdomain', {script: 'app-script-name'}))
+  .add(datadogLogging('app-name-team-label', 'app-script-name'))
+  .add(datadogMetrics('app-name-team-label', {script: 'app-script-name'}))
   .build();
 const {worker, RoomDO, AuthDO} = createReflectServer(optionsBuilder);
 export {AuthDO, RoomDO, worker as default};

@@ -17,7 +17,7 @@ describe('module-assembler', () => {
       type: 'esm',
       url: 'gs://reflect-modules/script.template.js',
       content:
-        'import "server-module-name.js"; import "app-module-name.js"; console.log("app-script-name@app-name.team-subdomain");',
+        'import "server-module-name.js"; import "app-module-name.js"; console.log("app-script-name@app-name-team-label");',
     },
   ];
   type Case = {
@@ -41,7 +41,7 @@ describe('module-assembler', () => {
           name: 'script.js',
           type: 'esm',
           content:
-            'import "server.js"; import "index.js"; console.log("my-app-script@my-app-name.my-team-subdomain");',
+            'import "server.js"; import "index.js"; console.log("my-app-script@my-app-name-myteamlabel");',
         },
         {
           name: 'index.js',
@@ -76,7 +76,7 @@ describe('module-assembler', () => {
           name: 'script0.js',
           type: 'esm',
           content:
-            'import "server0.js"; import "script.js"; console.log("my-app-script@my-app-name.my-team-subdomain");',
+            'import "server0.js"; import "script.js"; console.log("my-app-script@my-app-name-myteamlabel");',
         },
         {
           name: 'script.js',
@@ -128,7 +128,7 @@ describe('module-assembler', () => {
           name: 'script1.js',
           type: 'esm',
           content:
-            'import "server1.js"; import "script.js"; console.log("my-app-script@my-app-name.my-team-subdomain");',
+            'import "server1.js"; import "script.js"; console.log("my-app-script@my-app-name-myteamlabel");',
         },
         {
           name: 'script.js',
@@ -187,7 +187,7 @@ describe('module-assembler', () => {
 
       const assembler = new ModuleAssembler(
         'my-app-name',
-        'my-team-subdomain',
+        'myteamlabel',
         'my-app-script',
         c.appModules,
         serverModules,

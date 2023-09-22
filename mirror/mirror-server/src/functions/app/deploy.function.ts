@@ -30,6 +30,7 @@ import {
   defineSecretSafely,
   getAppSecrets,
 } from './secrets.js';
+import {FetchResultError} from 'cloudflare-api/src/fetch.js';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
@@ -79,12 +80,7 @@ export async function runDeployment(
     );
   }
 
-  const {
-    cfID,
-    cfScriptName,
-    name: appName,
-    teamSubdomain,
-  } = must(appDoc.data());
+  const {cfID, cfScriptName, name: appName, teamLabel} = must(appDoc.data());
   const {
     type: deploymentType,
     status,
@@ -132,7 +128,7 @@ export async function runDeployment(
       storage,
       config,
       appName,
-      teamSubdomain,
+      teamLabel,
       hostname,
       options,
       secrets,
@@ -149,13 +145,13 @@ export async function runDeployment(
     }
     await setRunningDeployment(firestore, appID, deploymentID, hashes);
   } catch (e) {
-    await setDeploymentStatus(
-      firestore,
-      appID,
-      deploymentID,
-      'FAILED',
-      String(e),
-    );
+    logger.error(e);
+    const error =
+      `There was an error ${
+        deploymentType === 'DELETE' ? 'deleting' : 'deploying'
+      } the app` +
+      (e instanceof FetchResultError ? ` (error code ${e.code})` : '');
+    await setDeploymentStatus(firestore, appID, deploymentID, 'FAILED', error);
     throw e;
   }
 }
@@ -262,10 +258,10 @@ function deploymentUpdate(
   status: Exclude<DeploymentStatus, 'REQUESTED'>,
   statusMessage?: string,
 ): Partial<Deployment> {
-  const update: Partial<Deployment> = {status};
-  if (statusMessage) {
-    update.statusMessage = statusMessage;
-  }
+  const update: Partial<Deployment> = {
+    status,
+    statusMessage: statusMessage ?? '',
+  };
   switch (status) {
     case 'DEPLOYING':
       update.deployTime = Timestamp.now();
