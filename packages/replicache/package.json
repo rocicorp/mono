@@ -56,7 +56,7 @@
     "xbytes": "^1.7.0"
   },
   "type": "module",
-  "main": "out/replicache.cjs",
+  "main": "out/replicache.js",
   "module": "out/replicache.js",
   "types": "out/replicache.d.ts",
   "bin": {
@@ -67,13 +67,11 @@
   },
   "exports": {
     "module": "./out/replicache.js",
-    "require": "./out/replicache.cjs",
     "default": "./out/replicache.js"
   },
   "files": [
-    "out/cli.js",
+    "out/cli.cjs",
     "out/replicache.d.ts",
-    "out/replicache.cjs",
     "out/replicache.js"
   ],
   "eslintConfig": {
