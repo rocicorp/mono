@@ -2,9 +2,8 @@ import {
   DeleteFn,
   GetFn,
   ListFn,
-  PatchFn,
-  PostFn,
-  PutFn,
+  SetOnlyFn,
+  SetFn,
   Resource,
 } from './resources.js';
 
@@ -26,19 +25,19 @@ export type DNSRecord = {
 
 export class DNSRecords {
   readonly list: ListFn<DNSRecord>;
-  readonly create: PostFn<DNSRecord>;
+  readonly create: SetOnlyFn<DNSRecord>;
   readonly get: GetFn<DNSRecord>;
-  readonly patch: PatchFn<DNSRecord>;
-  readonly update: PutFn<DNSRecord>;
+  readonly patch: SetFn<DNSRecord>;
+  readonly update: SetFn<DNSRecord>;
   readonly delete: DeleteFn;
 
   constructor(apiToken: string, zoneID: string) {
     const resource = new Resource(apiToken, `/zones/${zoneID}/dns_records`);
     this.list = resource.get;
     this.create = resource.post;
-    this.get = id => resource.append(id).get();
-    this.patch = (id, val) => resource.append(id).patch(val);
-    this.update = (id, val) => resource.append(id).put(val);
-    this.delete = id => resource.append(id).delete();
+    this.get = (id, q) => resource.append(id).get(q);
+    this.patch = (id, val, q) => resource.append(id).patch(val, q);
+    this.update = (id, val, q) => resource.append(id).put(val, q);
+    this.delete = (id, q) => resource.append(id).delete(q);
   }
 }

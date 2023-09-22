@@ -1,12 +1,12 @@
 import type {Storage} from 'firebase-admin/storage';
 import {nanoid} from 'nanoid';
-import {cfFetch} from './cf-fetch.js';
 import type {Config} from './config.js';
 import {
   CfModule,
   CfVars,
   createScriptUploadForm,
 } from 'cloudflare-api/src/create-script-upload-form.js';
+import {Script, GlobalScript} from 'cloudflare-api/src/scripts.js';
 import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
 import {publishCustomDomains} from './publish-custom-domains.js';
 import {submitSecret} from './submit-secret.js';
@@ -20,20 +20,17 @@ import type {
 } from 'mirror-schema/src/deployment.js';
 
 export async function createScript(
-  {accountID, scriptName, apiToken}: Config,
+  script: Script,
   mainModule: CfModule,
   modules: CfModule[],
   vars: CfVars,
 ) {
-  const cfMigrations = await getMigrationsToUpload(scriptName, apiToken, {
-    accountId: accountID,
+  const cfMigrations = await getMigrationsToUpload(script, {
     config: {migrations},
-    legacyEnv: false,
-    env: undefined,
   });
 
   const form = createScriptUploadForm({
-    name: scriptName,
+    name: script.name,
     main: mainModule, // await createCfModule('worker.js'),
     bindings: {
       vars,
@@ -53,7 +50,6 @@ export async function createScript(
     compatibility_date: '2023-05-18',
   });
 
-  const resource = `/accounts/${accountID}/workers/scripts/${scriptName}`;
   const searchParams = new URLSearchParams({
     // eslint-disable-next-line @typescript-eslint/naming-convention
     include_subdomain_availability: 'true',
@@ -61,15 +57,7 @@ export async function createScript(
     // script doesn't get included in the response
     excludeScript: 'true',
   });
-  await cfFetch(
-    apiToken,
-    resource,
-    {
-      method: 'PUT',
-      body: form,
-    },
-    searchParams,
-  );
+  await script.upload(form, searchParams);
 }
 
 const migrations: Migration[] = [
@@ -102,7 +90,14 @@ export async function* publish(
   const modules = await assembler.assemble(storage);
 
   logger.log(`publishing ${hostname} (${config.scriptName})`);
-  await createScript(config, modules[0], modules.slice(1), options.vars);
+
+  const script = new GlobalScript(
+    config.apiToken,
+    config.accountID,
+    config.scriptName,
+  );
+
+  await createScript(script, modules[0], modules.slice(1), options.vars);
 
   let reflectAuthApiKey = process.env.REFLECT_AUTH_API_KEY;
   if (!reflectAuthApiKey) {
@@ -112,10 +107,10 @@ export async function* publish(
   }
 
   await Promise.all([
-    publishCustomDomains(config, hostname),
-    submitTriggers(config, '*/5 * * * *'),
+    publishCustomDomains(script, hostname),
+    submitTriggers(script, '*/5 * * * *'),
     ...Object.entries(secrets).map(([name, value]) =>
-      submitSecret(config, name, value),
+      submitSecret(script, name, value),
     ),
   ]);
 }

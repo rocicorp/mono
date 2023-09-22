@@ -47,7 +47,6 @@ export const tail = (
         const cfWorkerName = context.app.cfScriptName;
         const filters = {filters: []};
         const debug = true;
-        const env = undefined;
         const packageVersion = packageJson.version || '0.0.0';
 
         let createTailResult;
@@ -58,7 +57,6 @@ export const tail = (
             cfWorkerName,
             filters,
             debug,
-            env,
             packageVersion,
           );
         } catch (e) {

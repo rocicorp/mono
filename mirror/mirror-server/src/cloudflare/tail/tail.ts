@@ -1,61 +1,8 @@
 import WebSocket from 'ws';
-import {cfFetch} from '../cf-fetch.js';
 import type {Outcome, TailFilterMessage} from './filters.js';
+import {GlobalScript} from 'cloudflare-api/src/scripts.js';
 
 const TRACE_VERSION = 'trace-v1';
-
-/**
- * When creating a Tail, the response from the API contains
- * - an ID used for identifying the tail
- * - a URL to a WebSocket connection available for the tail to connect to
- * - an expiration date when the tail is no longer guaranteed to be valid
- */
-type TailCreationApiResponse = {
-  id: string;
-  url: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  expires_at: Date;
-};
-
-/**
- * Generate a URL that, when `cfetch`ed, creates a tail.
- *
- * https://api.cloudflare.com/#worker-tail-logs-start-tail
- *
- * @param accountID the account ID associated with the worker to tail
- * @param workerName the name of the worker to tail
- * @returns a `cfetch`-ready URL for creating a new tail
- */
-function makeCreateTailUrl(
-  accountID: string,
-  workerName: string,
-  env: string | undefined,
-): string {
-  return env
-    ? `/accounts/${accountID}/workers/services/${workerName}/environments/${env}/tails`
-    : `/accounts/${accountID}/workers/scripts/${workerName}/tails`;
-}
-
-/**
- * Generate a URL that, when `cfetch`ed, deletes a tail
- *
- * https://api.cloudflare.com/#worker-tail-logs-delete-tail
- *
- * @param accountId the account ID associated with the worker we're tailing
- * @param workerName the name of the worker we're tailing
- * @param tailId the ID of the tail we want to delete
- * @returns a `cfetch`-ready URL for deleting a tail
- */
-function makeDeleteTailUrl(
-  accountId: string,
-  workerName: string,
-  tailId: string,
-  env: string | undefined,
-): string {
-  return env
-    ? `/accounts/${accountId}/workers/services/${workerName}/environments/${env}/tails/${tailId}`
-    : `/accounts/${accountId}/workers/scripts/${workerName}/tails/${tailId}`;
-}
 
 /**
  * Create and connect to a tail.
@@ -77,28 +24,21 @@ export async function createTail(
   workerName: string,
   filters: TailFilterMessage,
   debug: boolean,
-  env: string | undefined,
   packageVersion: string,
 ): Promise<{
   ws: WebSocket;
   expiration: Date;
   deleteTail: () => Promise<void>;
 }> {
-  // create the tail
-  const createTailUrl = makeCreateTailUrl(accountID, workerName, env);
+  const script = new GlobalScript(apiToken, accountID, workerName);
   const {
     id: tailId,
     url: websocketUrl,
     expires_at: expiration,
-  } = await cfFetch<TailCreationApiResponse>(apiToken, createTailUrl, {
-    method: 'POST',
-    body: JSON.stringify(filters),
-  });
+  } = await script.startTail(filters);
 
-  // delete the tail (not yet!)
-  const deleteUrl = makeDeleteTailUrl(accountID, workerName, tailId, env);
   async function deleteTail() {
-    await cfFetch(apiToken, deleteUrl, {method: 'DELETE'});
+    await script.deleteTail(tailId);
   }
 
   // connect to the tail

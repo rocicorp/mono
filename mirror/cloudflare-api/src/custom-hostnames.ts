@@ -2,9 +2,9 @@ import {
   DeleteFn,
   GetFn,
   ListFn,
-  PatchFn,
-  PostFn,
+  SetOnlyFn,
   Resource,
+  SetFn,
 } from './resources.js';
 
 /* eslint-disable @typescript-eslint/naming-convention */
@@ -32,9 +32,9 @@ export type CustomHostname = {
 
 export class CustomHostnames {
   readonly list: ListFn<CustomHostname>;
-  readonly create: PostFn<CustomHostname>;
+  readonly create: SetOnlyFn<CustomHostname>;
   readonly get: GetFn<CustomHostname>;
-  readonly edit: PatchFn<CustomHostname>;
+  readonly edit: SetFn<CustomHostname>;
   readonly delete: DeleteFn;
 
   constructor(apiToken: string, zoneID: string) {
@@ -44,8 +44,8 @@ export class CustomHostnames {
     );
     this.list = resource.get;
     this.create = resource.post;
-    this.get = id => resource.append(id).get();
-    this.edit = (id, val) => resource.append(id).patch(val);
-    this.delete = id => resource.append(id).delete();
+    this.get = (id, q) => resource.append(id).get(q);
+    this.edit = (id, val, q) => resource.append(id).patch(val, q);
+    this.delete = (id, q) => resource.append(id).delete(q);
   }
 }
