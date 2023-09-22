@@ -1,4 +1,5 @@
-import type {CallableRequest} from 'firebase-functions/v2/https';
+import {logger} from 'firebase-functions';
+import {HttpsError, type CallableRequest} from 'firebase-functions/v2/https';
 import type {App} from 'mirror-schema/src/app.js';
 import type {Role} from 'mirror-schema/src/membership.js';
 import type {User} from 'mirror-schema/src/user.js';
@@ -71,9 +72,22 @@ export class ValidatorChainer<Request, Context, Response> {
   ): Callable<Request, Response> {
     return async originalContext => {
       const request = originalContext.data;
-      const context = await this.#requestValidator(request, originalContext);
-      const response = await handler(request, context);
-      return this.#responseValidator(response);
+      try {
+        const context = await this.#requestValidator(request, originalContext);
+        const response = await handler(request, context);
+        return this.#responseValidator(response);
+      } catch (e) {
+        if (!(e instanceof HttpsError)) {
+          e = new HttpsError('internal', String(e), e);
+        }
+        const status = (e as HttpsError).httpErrorCode.status;
+        if (status >= 500) {
+          logger.error(e);
+        } else {
+          logger.warn(e);
+        }
+        throw e;
+      }
     };
   }
 }
