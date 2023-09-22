@@ -77,10 +77,11 @@ export class ValidatorChainer<Request, Context, Response> {
         const response = await handler(request, context);
         return this.#responseValidator(response);
       } catch (e) {
-        if (!(e instanceof HttpsError)) {
-          e = new HttpsError('internal', String(e), e);
-        }
-        const status = (e as HttpsError).httpErrorCode.status;
+        const err =
+          e instanceof HttpsError
+            ? e
+            : new HttpsError('internal', String(e), e);
+        const {status} = err.httpErrorCode;
         if (status >= 500) {
           logger.error(e);
         } else {
