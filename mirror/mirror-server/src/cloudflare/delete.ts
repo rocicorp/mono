@@ -1,7 +1,7 @@
 import type {Config} from './config.js';
 import {logger} from 'firebase-functions';
 import {GlobalScript} from 'cloudflare-api/src/scripts.js';
-import {ERRORS, FetchResultError} from 'cloudflare-api/src/fetch.js';
+import {Errors, FetchResultError} from 'cloudflare-api/src/fetch.js';
 
 // https://github.com/cloudflare/workers-sdk/blob/e9fae5586c14eeae8bb44e0dcf940052635575b4/packages/wrangler/src/delete.ts#L93
 export async function deleteScript(config: Config): Promise<void> {
@@ -13,8 +13,8 @@ export async function deleteScript(config: Config): Promise<void> {
   } catch (e) {
     FetchResultError.throwIfCodeIsNot(
       e,
-      ERRORS.scriptNotFound,
-      ERRORS.couldNotRouteToScript,
+      Errors.ScriptNotFound,
+      Errors.CouldNotRouteToScript,
     );
   }
   logger.info(`Deleted script ${scriptName}`);

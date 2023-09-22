@@ -92,12 +92,12 @@ interface FetchResult<ResponseType = unknown> {
   result_info?: unknown;
 }
 
-export const ERRORS = {
-  couldNotRouteToScript: 7003,
-  dispatchNamespaceNotFound: 100119,
-  environmentNotFound: 10092,
-  recordAlreadyExists: 81057,
-  resourceNotFound: 1551,
-  scriptNotFound: 10007,
-  serviceNotFound: 10090,
-} as const;
+export enum Errors {
+  CouldNotRouteToScript = 7003,
+  DispatchNamespaceNotFound = 100119,
+  EnvironmentNotFound = 10092,
+  RecordAlreadyExists = 81057,
+  ResourceNotFound = 1551,
+  ScriptNotFound = 10007,
+  ServiceNotFound = 10090,
+}
