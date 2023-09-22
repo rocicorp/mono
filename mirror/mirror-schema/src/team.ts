@@ -71,9 +71,9 @@ export function isValidLabel(name: string): boolean {
 
 export function sanitizeForLabel(orig: string): string {
   return orig
-    .toLocaleLowerCase()
+    .toLowerCase()
     .replaceAll(/[^a-z0-9]+/g, '') // Remove any illegal characters
-    .replaceAll(/^[0-9]*/g, ''); // Remove leading digits or hyphens
+    .replaceAll(/^[0-9]*/g, ''); // Remove leading digits
 }
 
 const VALID_SUBDOMAIN = /^[a-z]([a-z0-9-])*[a-z0-9]$/;
@@ -84,7 +84,7 @@ export function isValidSubdomain(name: string): boolean {
 
 export function sanitizeForSubdomain(orig: string): string {
   return orig
-    .toLocaleLowerCase()
+    .toLowerCase()
     .replaceAll(/[^a-z0-9-]+/g, '-') // Replace any sequences of illegal characters with a hyphens
     .replaceAll(/^[0-9-]*/g, '') // Remove leading digits or hyphens
     .replaceAll(/[-]*$/g, ''); // Remove trailing hyphens
