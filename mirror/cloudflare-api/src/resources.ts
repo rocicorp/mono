@@ -9,7 +9,7 @@ export type SetOnlyFn<I, O = I> = (
   val: PartialDeep<I>,
   query?: URLSearchParams,
 ) => Promise<O>;
-export type SetRawOnlyFn<I extends BodyInit, O = undefined> = (
+export type RawSetOnlyFn<I extends BodyInit, O = undefined> = (
   val: I,
   query?: URLSearchParams,
 ) => Promise<O>;
