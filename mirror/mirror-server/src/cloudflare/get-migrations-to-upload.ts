@@ -3,8 +3,8 @@
 
 /* eslint-disable @typescript-eslint/naming-convention */
 import type {CfDurableObjectMigrations} from 'cloudflare-api/src/create-script-upload-form.js';
-import type {Script, ScriptState} from 'cloudflare-api/src/scripts.js';
 import {Errors, FetchResultError} from 'cloudflare-api/src/fetch.js';
+import type {Script, ScriptState} from 'cloudflare-api/src/scripts.js';
 
 export type Migration = {
   /** A unique identifier for this migration. */

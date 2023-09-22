@@ -3,14 +3,28 @@ import type {PartialDeep} from 'type-fest';
 import {cfFetch} from './fetch.js';
 
 export type ListFn<T> = (query?: URLSearchParams) => Promise<T[]>;
-export type GetOnlyFn<T> = () => Promise<T>;
-export type GetFn<T> = (id: string) => Promise<T>;
-export type PostFn<I, O = I> = (val: PartialDeep<I>) => Promise<O>;
-export type PutFn<I, O = I> = (id: string, val: PartialDeep<I>) => Promise<O>;
-export type PutOnlyFn<I, O = I> = (val: PartialDeep<I>) => Promise<O>;
-export type PatchFn<I, O = I> = PutFn<I, O>;
-export type PatchOnlyFn<I, O = I> = PutOnlyFn<I, O>;
-export type DeleteFn<T = {id: string}> = (id: string) => Promise<T>;
+export type GetOnlyFn<T> = (query?: URLSearchParams) => Promise<T>;
+export type GetFn<T> = (id: string, query?: URLSearchParams) => Promise<T>;
+export type SetOnlyFn<I, O = I> = (
+  val: PartialDeep<I>,
+  query?: URLSearchParams,
+) => Promise<O>;
+export type RawSetOnlyFn<I extends BodyInit, O = undefined> = (
+  val: I,
+  query?: URLSearchParams,
+) => Promise<O>;
+export type SetFn<I, O = I> = (
+  id: string,
+  val: PartialDeep<I>,
+  query?: URLSearchParams,
+) => Promise<O>;
+export type DeleteFn<T = {id: string}> = (
+  id: string,
+  query?: URLSearchParams,
+) => Promise<T>;
+export type DeleteOnlyFn<T = {id: string}> = (
+  query?: URLSearchParams,
+) => Promise<T>;
 
 const JSON_HEADERS = {'Content-Type': 'application/json'} as const;
 
