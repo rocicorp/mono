@@ -72,6 +72,7 @@ describe('deployment', () => {
       serverReleaseChannel: 'stable',
       teamID: 'boo',
       teamLabel: 'teamlabel',
+      teamSubdomain: 'deprecated',
       deploymentOptions: {vars: {}},
     });
 
