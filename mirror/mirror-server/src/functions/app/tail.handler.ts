@@ -19,6 +19,7 @@ import {
 } from '../validators/auth.js';
 import {validateRequest} from '../validators/schema.js';
 import {defineSecretSafely} from './secrets.js';
+import {GlobalScript} from 'cloudflare-api/src/scripts.js';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
@@ -52,9 +53,7 @@ export const tail = (
         let createTailResult;
         try {
           createTailResult = await createTail(
-            apiToken,
-            accountID,
-            cfWorkerName,
+            new GlobalScript(apiToken, accountID, cfWorkerName),
             filters,
             debug,
             packageVersion,
