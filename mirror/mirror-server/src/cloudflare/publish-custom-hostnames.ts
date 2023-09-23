@@ -20,14 +20,14 @@ export async function* publishCustomHostnames(
   const {apiToken, zoneID, zoneName} = config;
   assert(
     hostname.endsWith(`.${zoneName}`),
-    `Only hostnames at *.${zoneName} are currently supported`,
+    `hostname must be in zone ${zoneName}`,
   );
 
   const records = new DNSRecords(apiToken, zoneID);
   const currentRecords = await records.list(
     new URLSearchParams({tag: `script:${script.id}`}),
   );
-  const create = new Set<string>([hostname]);
+  const create = new Set([hostname]);
   const discard = new Set<DNSRecord>();
   currentRecords.forEach(record => {
     if (create.has(record.name)) {
