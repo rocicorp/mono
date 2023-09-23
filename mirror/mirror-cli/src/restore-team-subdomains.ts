@@ -1,4 +1,4 @@
-import {FieldValue, getFirestore} from 'firebase-admin/firestore';
+import {getFirestore} from 'firebase-admin/firestore';
 import {
   TEAM_COLLECTION,
   teamDataConverter,
