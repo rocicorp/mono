@@ -18,7 +18,7 @@ export type CustomHostname = {
     certificate_authority: 'digicert' | 'google' | 'lets_encrypt';
     method: 'http' | 'txt' | 'email';
     status: string;
-    type: string;
+    type: 'dv';
     settings: {
       min_tls_version: '1.0' | '1.1' | '1.2' | '1.3';
       http2: 'on' | 'off';

@@ -18,6 +18,7 @@ export type DNSRecord = {
   proxied: boolean;
   ttl: number; // TTL in seconds
   tags: string[];
+  comment: string;
 };
 /* eslint-enable @typescript-eslint/naming-convention */
 

@@ -50,6 +50,7 @@ export async function cfFetch<ResponseType = unknown>(
 export class FetchResultError extends Error implements FetchError {
   static throwIfCodeIsNot(e: unknown, ...codes: [number, ...number[]]) {
     if (e instanceof FetchResultError && codes.includes(e.code)) {
+      console.debug(`Allowed Error Code ${e.code}`, e);
       return;
     }
     throw e;
@@ -62,7 +63,7 @@ export class FetchResultError extends Error implements FetchError {
   constructor(result: FetchResult, action: string) {
     super(
       `${action}: ${
-        result.messages.length > 0 ? result.messages[0] : JSON.stringify(result)
+        result.messages?.length ? result.messages[0] : JSON.stringify(result)
       }`,
     );
     assert(result.success === false);
@@ -83,7 +84,7 @@ interface FetchError {
   error_chain?: FetchError[];
 }
 
-interface FetchResult<ResponseType = unknown> {
+export interface FetchResult<ResponseType = unknown> {
   success: boolean;
   result: ResponseType;
   errors: FetchError[];
@@ -94,9 +95,13 @@ interface FetchResult<ResponseType = unknown> {
 
 export enum Errors {
   CouldNotRouteToScript = 7003,
+  CustomHostnameNotFound = 1436,
   DispatchNamespaceNotFound = 100119,
+  DuplicateCustomHostnameFound = 1406,
   EnvironmentNotFound = 10092,
   RecordAlreadyExists = 81057,
+  RecordWithHostAlreadyExists = 81053, // A, AAAA, CNAME collision
+  RecordDoesNotExist = 81044,
   ResourceNotFound = 1551,
   ScriptNotFound = 10007,
   ServiceNotFound = 10090,

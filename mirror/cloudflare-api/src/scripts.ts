@@ -123,6 +123,7 @@ export abstract class Script {
 
 export class NamespacedScript extends Script {
   readonly id: string;
+  readonly namespace: string;
   readonly productionEnvironment: GetOnlyFn<ScriptEnvironment>;
 
   constructor(
@@ -140,6 +141,7 @@ export class NamespacedScript extends Script {
     );
 
     this.id = `${namespace}/${name}`;
+    this.namespace = namespace;
     this.productionEnvironment = this._script.get;
   }
 }

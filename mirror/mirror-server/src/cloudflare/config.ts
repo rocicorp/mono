@@ -7,5 +7,6 @@ export type Config = {
 
 export type ZoneConfig = {
   zoneID: string;
+  zoneName: string;
   apiToken: string;
 };
