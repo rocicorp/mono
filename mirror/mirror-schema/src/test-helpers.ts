@@ -84,6 +84,7 @@ export async function setTeam(
   const newTeam: Team = {
     name,
     label,
+    subdomain: 'deprecated',
     defaultCfID,
     numAdmins,
     numMembers,
@@ -168,6 +169,7 @@ export async function setApp(
     name,
     teamID,
     teamLabel,
+    teamSubdomain: 'deprecated',
     cfID,
     cfScriptName,
     serverReleaseChannel,

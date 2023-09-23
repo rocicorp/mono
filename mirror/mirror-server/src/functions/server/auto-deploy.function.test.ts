@@ -97,6 +97,7 @@ describe('server auto-deploy', () => {
         cfScriptName: 'bar',
         teamID: 'baz',
         teamLabel: 'boom',
+        teamSubdomain: 'deprecated',
         name: 'boo',
         deploymentOptions: {
           vars: {

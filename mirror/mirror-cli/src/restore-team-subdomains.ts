@@ -9,7 +9,7 @@ import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {assert} from 'shared/src/asserts.js';
 import {DEPRECATED_TEAM_SUBDOMAIN_INDEX_COLLECTION} from './migrate-team-labels.js';
 
-export function deleteTeamSubdomainsOptions(yargs: CommonYargsArgv) {
+export function restoreTeamSubdomainsOptions(yargs: CommonYargsArgv) {
   return yargs.option('dry-run', {
     desc: 'Print what would be done but do not commit.',
     type: 'boolean',
@@ -17,12 +17,12 @@ export function deleteTeamSubdomainsOptions(yargs: CommonYargsArgv) {
   });
 }
 
-type DeleteTeamSubdomainsHandlerArgs = YargvToInterface<
-  ReturnType<typeof deleteTeamSubdomainsOptions>
+type RestoreTeamSubdomainsHandlerArgs = YargvToInterface<
+  ReturnType<typeof restoreTeamSubdomainsOptions>
 >;
 
-export async function deleteTeamSubdomainsHandler(
-  yargs: DeleteTeamSubdomainsHandlerArgs,
+export async function restoreTeamSubdomainsHandler(
+  yargs: RestoreTeamSubdomainsHandlerArgs,
 ) {
   const firestore = getFirestore();
   await firestore.runTransaction(async txn => {
@@ -48,18 +48,18 @@ export async function deleteTeamSubdomainsHandler(
       assert(label, `Team doc at ${doc.ref.path} does not have a label`);
 
       console.log(
-        `Deleting Team(${doc.id}) subdomain field, replaceed by label ${label}`,
+        `Writing Team(${doc.id}) subdomain field with label ${label}`,
       );
-      txn.update(doc.ref, {subdomain: FieldValue.delete()});
+      txn.update(doc.ref, {subdomain: label});
     });
     apps.docs.forEach(doc => {
       const {teamLabel} = doc.data();
       assert(teamLabel, `App doc at ${doc.ref.path} does not have a teamLabel`);
 
       console.log(
-        `Deleting app(${doc.id}) teamSubdomain field, replaced by ${teamLabel}`,
+        `Writing app(${doc.id}) teamSubdomain field with ${teamLabel}`,
       );
-      txn.update(doc.ref, {teamSubdomain: FieldValue.delete()});
+      txn.update(doc.ref, {teamSubdomain: teamLabel});
     });
 
     if (yargs.dryRun) {

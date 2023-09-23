@@ -81,6 +81,7 @@ describe('auto-deploy', () => {
         teamID: 'baz',
         name: 'boo',
         teamLabel: 'yah',
+        teamSubdomain: 'deprecated',
         deploymentOptions: {
           vars: {
             DISABLE: 'false',

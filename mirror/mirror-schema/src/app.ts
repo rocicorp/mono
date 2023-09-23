@@ -14,8 +14,8 @@ export const appSchema = v.object({
   // https://<app-name>-<teamlabel>.reflect-server.net.
   teamLabel: v.string(),
 
-  /** @deprecated TODO(darick): Remove with the cli migration code. */
-  teamSubdomain: v.string().optional(),
+  /** @deprecated But cannot remove because old reflect-cli versions still expect this. */
+  teamSubdomain: v.string(),
 
   // The user requested name, which must be suitable as a subdomain
   // (lower-cased alphanumeric with hyphens).

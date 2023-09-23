@@ -44,9 +44,9 @@ import {
 } from './publish-dispatcher.js';
 import {getWorkerHandler, getWorkerOptions} from './get-worker.js';
 import {
-  deleteTeamSubdomainsHandler,
-  deleteTeamSubdomainsOptions,
-} from './delete-team-subdomains.js';
+  restoreTeamSubdomainsHandler,
+  restoreTeamSubdomainsOptions,
+} from './restore-team-subdomains.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -158,8 +158,8 @@ function createCLIParser(argv: string[]) {
   reflectCLI.command(
     'delete-team-subdomains',
     'Deletes the team subdomains. They must have already been migrated by migrate-team-labels.',
-    deleteTeamSubdomainsOptions,
-    deleteTeamSubdomainsHandler,
+    restoreTeamSubdomainsOptions,
+    restoreTeamSubdomainsHandler,
   );
 
   reflectCLI.command(

@@ -70,6 +70,7 @@ export const ensure = (firestore: Firestore) =>
           {
             name,
             label,
+            subdomain: label,
             defaultCfID: cloudflareAccountId.value(),
             numAdmins: 1,
             numMembers: 0,

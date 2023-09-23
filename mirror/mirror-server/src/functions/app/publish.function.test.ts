@@ -57,6 +57,7 @@ describe('publish', () => {
       {
         name: 'foo-bar',
         teamLabel: 'teamblue',
+        teamSubdomain: 'deprecated',
         cfID: CF_ID,
         cfScriptName: 'foo-bar-script',
         serverReleaseChannel: 'stable',

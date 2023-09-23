@@ -110,6 +110,7 @@ export const create = (firestore: Firestore) =>
           name: appName,
           teamID,
           teamLabel: team.label,
+          teamSubdomain: team.label,
           cfID: cloudflareAccountId.value(),
           cfScriptName: scriptName,
           serverReleaseChannel,

@@ -21,8 +21,8 @@ export const teamSchema = v.object({
   // This field is denormalized to all of the Team's apps to simplify deployment logic.
   label: v.string(),
 
-  /** @deprecated TODO(darick): Remove with the cli migration code. */
-  subdomain: v.string().optional(),
+  /** @deprecated But cannot remove because old reflect-cli versions still expect this. */
+  subdomain: v.string(),
 
   defaultCfID: v.string(),
 
