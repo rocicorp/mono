@@ -121,11 +121,7 @@ async function ensureDNSRecord(
   try {
     return await records.create(record);
   } catch (e) {
-    FetchResultError.throwIfCodeIsNot(
-      e,
-      Errors.RecordWithHostAlreadyExists,
-      Errors.RecordAlreadyExists,
-    );
+    FetchResultError.throwIfCodeIsNot(e, Errors.RecordWithHostAlreadyExists);
   }
   const {type, name} = record;
   const existing = await records.list(new URLSearchParams({type, name}));
