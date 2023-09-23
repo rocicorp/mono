@@ -43,7 +43,7 @@ describe('publish-custom-hostnames', () => {
     const fetch = mockFetch().result<Partial<DNSRecord>[]>(
       'GET',
       '/dns_records', // DNSRecords.list()
-      [{name: 'foo'}],
+      [{name: 'foo.reflect-o-rama.net'}],
     );
 
     expect(await publish('foo.reflect-o-rama.net')).toEqual([]);
@@ -101,7 +101,7 @@ describe('publish-custom-hostnames', () => {
       null,
       ch,
       {
-        name: 'foo',
+        name: 'foo.reflect-o-rama.net',
         type: 'CNAME',
         content: 'reflect-o-rama.net',
         proxied: true,
@@ -155,7 +155,7 @@ describe('publish-custom-hostnames', () => {
       ],
       [
         'GET',
-        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?type=CNAME&name=foo',
+        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?type=CNAME&name=foo.reflect-o-rama.net',
       ],
       [
         'PUT',
@@ -175,7 +175,7 @@ describe('publish-custom-hostnames', () => {
       },
     };
     const record = {
-      name: 'foo',
+      name: 'foo.reflect-o-rama.net',
       type: 'CNAME',
       content: 'reflect-o-rama.net',
       proxied: true,
@@ -200,8 +200,16 @@ describe('publish-custom-hostnames', () => {
         'GET',
         '/dns_records', // DNSRecords.list()
         [
-          {name: 'foo', id: 'foo-record-id', tags: ['ch:foo-ch-id']},
-          {name: 'bar', id: 'bar-record-id', tags: ['ch:bar-ch-id']},
+          {
+            name: 'foo.reflect-o-rama.net',
+            id: 'foo-record-id',
+            tags: ['ch:foo-ch-id'],
+          },
+          {
+            name: 'bar.reflect-o-rama.net',
+            id: 'bar-record-id',
+            tags: ['ch:bar-ch-id'],
+          },
         ],
       )
       .result('DELETE', '/custom_hostnames/bar-ch-id', {id: 'bar-ch-id'})
@@ -231,8 +239,16 @@ describe('publish-custom-hostnames', () => {
         'GET',
         '/dns_records', // DNSRecords.list()
         [
-          {name: 'foo', id: 'foo-record-id', tags: ['ch:foo-ch-id']},
-          {name: 'bar', id: 'bar-record-id', tags: ['ch:bar-ch-id']},
+          {
+            name: 'foo.reflect-o-rama.net',
+            id: 'foo-record-id',
+            tags: ['ch:foo-ch-id'],
+          },
+          {
+            name: 'bar.reflect-o-rama.net',
+            id: 'bar-record-id',
+            tags: ['ch:bar-ch-id'],
+          },
         ],
       )
       .error(
@@ -315,9 +331,21 @@ describe('publish-custom-hostnames', () => {
         'GET',
         '/dns_records', // DNSRecords.list()
         [
-          {name: 'foo', id: 'foo-record-id', tags: ['ch:foo-ch-id']},
-          {name: 'bar', id: 'bar-record-id', tags: ['ch:bar-ch-id']},
-          {name: 'baz', id: 'baz-record-id', tags: ['ch:baz-ch-id']},
+          {
+            name: 'foo.reflect-o-rama.net',
+            id: 'foo-record-id',
+            tags: ['ch:foo-ch-id'],
+          },
+          {
+            name: 'bar.reflect-o-rama.net',
+            id: 'bar-record-id',
+            tags: ['ch:bar-ch-id'],
+          },
+          {
+            name: 'baz.reflect-o-rama.net',
+            id: 'baz-record-id',
+            tags: ['ch:baz-ch-id'],
+          },
         ],
       )
       // Delete of bar Custom Hostname fails.

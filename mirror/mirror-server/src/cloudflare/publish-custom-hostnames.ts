@@ -22,13 +22,12 @@ export async function* publishCustomHostnames(
     hostname.endsWith(`.${zoneName}`),
     `Only hostnames at *.${zoneName} are currently supported`,
   );
-  const name = hostname.substring(0, hostname.length - zoneName.length - 1);
 
   const records = new DNSRecords(apiToken, zoneID);
   const currentRecords = await records.list(
     new URLSearchParams({tag: `script:${script.id}`}),
   );
-  const create = new Set<string>([name]);
+  const create = new Set<string>([hostname]);
   const discard = new Set<DNSRecord>();
   currentRecords.forEach(record => {
     if (create.has(record.name)) {
@@ -45,7 +44,7 @@ export async function* publishCustomHostnames(
 
   const hostnames = new CustomHostnames(apiToken, zoneID);
   for (const name of create) {
-    yield `Setting up hostname ${name}.${zoneName}`;
+    yield `Setting up hostname ${name}`;
   }
   const results = await Promise.allSettled([
     ...[...discard].map(record =>
@@ -69,13 +68,12 @@ export async function* publishCustomHostnames(
 }
 
 async function createCustomHostname(
-  name: string,
+  hostname: string,
   zoneName: string,
   script: NamespacedScript,
   records: DNSRecords,
   hostnames: CustomHostnames,
 ): Promise<void> {
-  const hostname = `${name}.${zoneName}`;
   const ch = {
     hostname,
     // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -92,7 +90,7 @@ async function createCustomHostname(
   logger.log(`Created CustomHostname`, created);
 
   const record = await ensureDNSRecord(records, {
-    name,
+    name: hostname,
     type: 'CNAME',
     content: zoneName,
     proxied: true,
