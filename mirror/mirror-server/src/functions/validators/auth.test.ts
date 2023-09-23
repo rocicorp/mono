@@ -169,6 +169,7 @@ describe('app authorization', () => {
   const defaultApp: App = {
     teamID: 'myTeam',
     teamLabel: 'teamlabel',
+    teamSubdomain: 'deprecated',
     name: 'My App',
     cfID: 'cfID',
     cfScriptName: 'cfScriptName',
