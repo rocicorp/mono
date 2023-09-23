@@ -156,8 +156,8 @@ function createCLIParser(argv: string[]) {
   );
 
   reflectCLI.command(
-    'delete-team-subdomains',
-    'Deletes the team subdomains. They must have already been migrated by migrate-team-labels.',
+    'restore-team-subdomains',
+    'Restores the team subdomains from the labels.',
     restoreTeamSubdomainsOptions,
     restoreTeamSubdomainsHandler,
   );
