@@ -31,6 +31,7 @@ import {
   getAppSecrets,
 } from './secrets.js';
 import {FetchResultError} from 'cloudflare-api/src/fetch.js';
+import {GlobalScript} from 'cloudflare-api/src/scripts.js';
 
 // This is the API token for reflect-server.net
 // https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
@@ -101,16 +102,16 @@ export async function runDeployment(
     {lastUpdateTime}, // Aborts if another trigger is already executing the same deployment.
   );
 
-  const config = {
-    accountID: cfID,
-    scriptName: cfScriptName,
-    apiToken: cloudflareApiToken.value(),
-  } as const;
+  const script = new GlobalScript(
+    cloudflareApiToken.value(),
+    cfID,
+    cfScriptName,
+  );
 
   try {
     if (deploymentType === 'DELETE') {
       // For a DELETE, the Deployment lifecycle is 'REQUESTED' -> 'DEPLOYING' -> (document deleted) | 'FAILED'
-      await deleteFromCloudflare(config);
+      await deleteFromCloudflare(script);
       await deleteAppDocs(firestore, appID);
       logger.info(`Deleted app ${appID}`);
       return;
@@ -126,7 +127,7 @@ export async function runDeployment(
 
     for await (const deploymentUpdate of publishToCloudflare(
       storage,
-      config,
+      script,
       appName,
       teamLabel,
       hostname,

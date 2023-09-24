@@ -89,7 +89,10 @@ export const create = (firestore: Firestore) =>
           `Account ${team.defaultCfID} is not properly set up.`,
         );
         if (team.numApps >= (team.maxApps ?? cf.defaultMaxApps)) {
-          throw new HttpsError('resource-exhausted', 'Team has too many apps');
+          throw new HttpsError(
+            'resource-exhausted',
+            `Maximum number of apps reached. Use 'npx @rocicorp/reflect delete' to clean up old apps.`,
+          );
         }
 
         const appIDNumber = newAppIDAsNumber();

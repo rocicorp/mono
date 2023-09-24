@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import type {CfDurableObjectMigrations} from 'cloudflare-api/src/create-script-upload-form.js';
 import type {Script, ScriptState} from 'cloudflare-api/src/scripts.js';
-import {ERRORS, FetchResultError} from 'cloudflare-api/src/fetch.js';
+import {Errors, FetchResultError} from 'cloudflare-api/src/fetch.js';
 
 export type Migration = {
   /** A unique identifier for this migration. */
@@ -51,8 +51,8 @@ export async function getMigrationsToUpload(
     } catch (err) {
       FetchResultError.throwIfCodeIsNot(
         err,
-        ERRORS.environmentNotFound,
-        ERRORS.serviceNotFound,
+        Errors.EnvironmentNotFound,
+        Errors.ServiceNotFound,
       );
     }
 

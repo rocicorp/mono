@@ -1,6 +1,5 @@
 import type {Storage} from 'firebase-admin/storage';
 import {nanoid} from 'nanoid';
-import type {Config} from './config.js';
 import {
   CfModule,
   CfVars,
@@ -71,7 +70,7 @@ const migrations: Migration[] = [
 // eslint-disable-next-line require-yield
 export async function* publish(
   storage: Storage,
-  config: Config,
+  script: Script,
   appName: string,
   teamLabel: string,
   hostname: string,
@@ -83,19 +82,13 @@ export async function* publish(
   const assembler = new ModuleAssembler(
     appName,
     teamLabel,
-    config.scriptName,
+    script.name,
     appModules,
     serverModules,
   );
   const modules = await assembler.assemble(storage);
 
-  logger.log(`publishing ${hostname} (${config.scriptName})`);
-
-  const script = new GlobalScript(
-    config.apiToken,
-    config.accountID,
-    config.scriptName,
-  );
+  logger.log(`publishing ${hostname} (${script.id})`);
 
   await createScript(script, modules[0], modules.slice(1), options.vars);
 
@@ -106,11 +99,19 @@ export async function* publish(
     reflectAuthApiKey = nanoid();
   }
 
-  await Promise.all([
-    publishCustomDomains(script, hostname),
-    submitTriggers(script, '*/5 * * * *'),
-    ...Object.entries(secrets).map(([name, value]) =>
-      submitSecret(script, name, value),
-    ),
-  ]);
+  const tasks: Promise<unknown>[] = Object.entries(secrets).map(
+    ([name, value]) => submitSecret(script, name, value),
+  );
+
+  if (script instanceof GlobalScript) {
+    tasks.push(
+      publishCustomDomains(script, hostname),
+      submitTriggers(script, '*/5 * * * *'),
+    );
+  } else {
+    // Cron is eventually going away: https://github.com/rocicorp/mono/issues/740
+    logger.warn(`Skipping triggers for namespaced worker, ${script.id}`);
+  }
+
+  await Promise.all(tasks);
 }

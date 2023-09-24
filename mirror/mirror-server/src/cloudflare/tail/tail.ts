@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import type {Outcome, TailFilterMessage} from './filters.js';
-import {GlobalScript} from 'cloudflare-api/src/scripts.js';
+import type {GlobalScript} from 'cloudflare-api/src/scripts.js';
 
 const TRACE_VERSION = 'trace-v1';
 
@@ -19,9 +19,7 @@ const TRACE_VERSION = 'trace-v1';
  * @returns a websocket connection, an expiration, and a function to call to delete the tail
  */
 export async function createTail(
-  apiToken: string,
-  accountID: string,
-  workerName: string,
+  script: GlobalScript,
   filters: TailFilterMessage,
   debug: boolean,
   packageVersion: string,
@@ -30,7 +28,6 @@ export async function createTail(
   expiration: Date;
   deleteTail: () => Promise<void>;
 }> {
-  const script = new GlobalScript(apiToken, accountID, workerName);
   const {
     id: tailId,
     url: websocketUrl,
