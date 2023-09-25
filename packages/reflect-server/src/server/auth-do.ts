@@ -21,11 +21,13 @@ import {closeWithError} from '../util/socket.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
 import {AUTH_DATA_HEADER_NAME, AuthHandler} from './auth.js';
+import {requireUpgradeHeader, roomNotFoundResponse} from './http-util.js';
 import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
   LEGACY_CONNECT_PATH,
   LEGACY_CREATE_ROOM_PATH,
+  TAIL_URL_PATH,
 } from './paths.js';
 import {ROOM_ROUTES} from './room-do.js';
 import {
@@ -50,6 +52,7 @@ import {
   get,
   post,
   requireAuthAPIKey,
+  requireRoomIDSearchParam,
   withBody,
   withRoomID,
   withVersion,
@@ -93,6 +96,7 @@ export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
   authRevalidateConnections: '/api/auth/v0/revalidateConnections',
   legacyCreateRoom: LEGACY_CREATE_ROOM_PATH,
   createRoom: CREATE_ROOM_PATH,
+  tail: TAIL_URL_PATH,
 } as const;
 
 export const AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER = {
@@ -285,6 +289,42 @@ export class BaseAuthDO implements DurableObject {
     ),
   );
 
+  #tail = get(
+    requireRoomIDSearchParam(async (ctx: BaseContext & WithRoomID, request) => {
+      const {lc, roomID} = ctx;
+
+      const errorResponse = requireUpgradeHeader(request, lc);
+      if (errorResponse) {
+        return errorResponse;
+      }
+
+      // This has been authorized using `requireAPIKeyMatchesEnv` because the
+      // url/pattern is in AUTH_ROUTES_AUTHED_BY_API_KEY
+
+      const roomRecord = await this.#roomRecordLock.withRead(() =>
+        roomRecordByRoomID(this.#durableStorage, ctx.roomID),
+      );
+      if (roomRecord === undefined) {
+        return roomNotFoundResponse();
+      }
+
+      const roomObjectID = this.#roomDO.idFromString(roomRecord.objectIDString);
+
+      // Forward the request to the Room Durable Object...
+      const stub = this.#roomDO.get(roomObjectID);
+      const requestToDO = new Request(request);
+      const responseFromDO = await roomDOFetch(
+        requestToDO,
+        'tail',
+        stub,
+        roomID,
+        lc,
+      );
+
+      return responseFromDO;
+    }),
+  );
+
   #initRoutes() {
     this.#router.register(
       AUTH_ROUTES.roomStatusByRoomID,
@@ -317,6 +357,8 @@ export class BaseAuthDO implements DurableObject {
     this.#router.register(AUTH_ROUTES.legacyConnect, this.#legacyConnect);
     this.#router.register(AUTH_ROUTES.connect, this.#connect);
     this.#router.register(AUTH_ROUTES.canaryWebSocket, this.#canaryWebSocket);
+
+    this.#router.register(AUTH_ROUTES.tail, this.#tail);
   }
 
   #canaryWebSocket = get((ctx: BaseContext, request) => {
@@ -409,9 +451,9 @@ export class BaseAuthDO implements DurableObject {
   #connectImpl(lc: LogContext, version: number, request: Request) {
     const {url} = request;
     lc.info?.('authDO received websocket connection request:', url);
-    if (request.headers.get('Upgrade') !== 'websocket') {
-      lc.error?.('authDO returning 400 bc missing Upgrade header:', url);
-      return new Response('expected websocket', {status: 400});
+    const errorResponse = requireUpgradeHeader(request, lc);
+    if (errorResponse) {
+      return errorResponse;
     }
 
     const encodedAuth = request.headers.get('Sec-WebSocket-Protocol');
@@ -640,23 +682,7 @@ export class BaseAuthDO implements DurableObject {
           roomID,
           lc,
         );
-        const responseHeaders = new Headers(responseFromDO.headers);
-        // While Sec-WebSocket-Protocol is just being used as a mechanism for
-        // sending `auth` since custom headers are not supported by the browser
-        // WebSocket API, the Sec-WebSocket-Protocol semantics must be followed.
-        // Send a Sec-WebSocket-Protocol response header with a value
-        // matching the Sec-WebSocket-Protocol request header, to indicate
-        // support for the protocol, otherwise the client will close the connection.
-        if (encodedAuth !== null) {
-          responseHeaders.set('Sec-WebSocket-Protocol', encodedAuth);
-        }
-        const response = new Response(responseFromDO.body, {
-          status: responseFromDO.status,
-          statusText: responseFromDO.statusText,
-          webSocket: responseFromDO.webSocket,
-          headers: responseHeaders,
-        });
-        return response;
+        return responseFromDO;
       }),
     );
   }
@@ -676,7 +702,7 @@ export class BaseAuthDO implements DurableObject {
             objectIDByRoomID(this.#durableStorage, this.#roomDO, roomID),
           );
           if (roomObjectID === undefined) {
-            return new Response('room not found', {status: 404});
+            return roomNotFoundResponse();
           }
           const stub = this.#roomDO.get(roomObjectID);
           const response = await roomDOFetch(

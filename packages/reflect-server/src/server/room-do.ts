@@ -26,6 +26,7 @@ import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
 import {closeConnections, getConnections} from './connections.js';
 import type {DisconnectHandler} from './disconnect.js';
+import {requireUpgradeHeader, upgradeWebsocketResponse} from './http-util.js';
 import {handleMessage} from './message.js';
 import {
   CONNECT_URL_PATTERN,
@@ -33,6 +34,7 @@ import {
   INTERNAL_CREATE_ROOM_PATH,
   LEGACY_CONNECT_PATH,
   LEGACY_CREATE_ROOM_PATH,
+  TAIL_URL_PATH,
 } from './paths.js';
 import {initRoomSchema} from './room-schema.js';
 import type {RoomStartHandler} from './room-start.js';
@@ -45,6 +47,7 @@ import {
   requireAuthAPIKey,
   withBody,
 } from './router.js';
+import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 
 const roomIDKey = '/system/roomID';
@@ -73,6 +76,7 @@ export const ROOM_ROUTES = {
   internalCreateRoom: INTERNAL_CREATE_ROOM_PATH,
   legacyConnect: LEGACY_CONNECT_PATH,
   connect: CONNECT_URL_PATTERN,
+  tail: TAIL_URL_PATH,
 } as const;
 
 export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
@@ -168,6 +172,8 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
     this.#router.register(ROOM_ROUTES.connect, this.#connect);
     this.#router.register(ROOM_ROUTES.legacyConnect, this.#connect);
+
+    this.#router.register(ROOM_ROUTES.tail, this.#tail);
   }
 
   #requireAPIKey = <Context extends BaseContext, Resp>(
@@ -294,9 +300,9 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
   #connect = get((ctx, request) => {
     const {lc} = ctx;
-    if (request.headers.get('Upgrade') !== 'websocket') {
-      lc.error?.('roomDO: missing Upgrade header');
-      return new Response('expected websocket', {status: 400});
+    const errorResponse = requireUpgradeHeader(request, lc);
+    if (errorResponse) {
+      return errorResponse;
     }
 
     const {0: clientWS, 1: serverWS} = new WebSocketPair();
@@ -322,7 +328,24 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         lc.error?.('unhandled exception in handleConnection', e);
       });
 
-    return new Response(null, {status: 101, webSocket: clientWS});
+    return upgradeWebsocketResponse(clientWS, request.headers);
+  });
+
+  #tail = get((ctx, request) => {
+    const {lc} = ctx;
+    lc.debug?.('tail request', request.url);
+
+    const errorResponse = requireUpgradeHeader(request, lc);
+    if (errorResponse) {
+      return errorResponse;
+    }
+
+    const {0: clientWS, 1: serverWS} = new WebSocketPair();
+
+    serverWS.accept();
+    connectTail(serverWS);
+
+    return upgradeWebsocketResponse(clientWS, request.headers);
   });
 
   #authInvalidateForRoom = post(
