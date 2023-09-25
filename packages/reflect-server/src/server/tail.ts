@@ -20,42 +20,34 @@ type LogRecord = {
 type Level = 'debug' | 'error' | 'info' | 'log' | 'warn';
 
 class TailConsole implements Console {
-  debug(...data: unknown[]): void {
-    this.#log('debug', data);
-  }
+  declare debug: (...data: unknown[]) => void;
+  declare error: (...data: unknown[]) => void;
+  declare info: (...data: unknown[]) => void;
+  declare log: (...data: unknown[]) => void;
+  declare warn: (...data: unknown[]) => void;
+}
 
-  error(...data: unknown[]): void {
-    this.#log('error', data);
-  }
+function log(level: Level, message: unknown[]) {
+  if (tailWebSockets.size === 0) {
+    originalConsole[level](...message);
+  } else {
+    const logRecord: LogRecord = {
+      message,
+      level,
+      timestamp: Date.now(),
+    };
+    const msg = JSON.stringify({logs: [logRecord]});
 
-  info(...data: unknown[]): void {
-    this.#log('info', data);
-  }
-
-  log(...data: unknown[]): void {
-    this.#log('log', data);
-  }
-
-  warn(...data: unknown[]): void {
-    this.#log('warn', data);
-  }
-
-  #log(level: Level, message: unknown[]) {
-    if (tailWebSockets.size === 0) {
-      originalConsole[level](...message);
-    } else {
-      const logRecord: LogRecord = {
-        message,
-        level,
-        timestamp: Date.now(),
-      };
-      const msg = JSON.stringify({logs: [logRecord]});
-
-      for (const ws of tailWebSockets) {
-        ws.send(msg);
-      }
+    for (const ws of tailWebSockets) {
+      ws.send(msg);
     }
   }
+}
+
+for (const level of ['debug', 'error', 'info', 'log', 'warn'] as const) {
+  TailConsole.prototype[level] = function (...data: unknown[]) {
+    log(level, data);
+  };
 }
 
 // Override the global console with our own ahead of time so that references to
