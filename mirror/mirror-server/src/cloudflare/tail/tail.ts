@@ -1,6 +1,6 @@
-import type {GlobalScript} from 'cloudflare-api/src/scripts.js';
 import WebSocket from 'ws';
 import type {Outcome, TailFilterMessage} from './filters.js';
+import type {GlobalScript} from 'cloudflare-api/src/scripts.js';
 
 const TRACE_VERSION = 'trace-v1';
 

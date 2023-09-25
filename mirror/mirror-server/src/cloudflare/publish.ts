@@ -1,22 +1,22 @@
+import type {Storage} from 'firebase-admin/storage';
+import {nanoid} from 'nanoid';
 import {
   CfModule,
   CfVars,
   createScriptUploadForm,
 } from 'cloudflare-api/src/create-script-upload-form.js';
-import {GlobalScript, Script} from 'cloudflare-api/src/scripts.js';
-import type {Storage} from 'firebase-admin/storage';
+import {Script, GlobalScript} from 'cloudflare-api/src/scripts.js';
+import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
+import {publishCustomDomains} from './publish-custom-domains.js';
+import {submitSecret} from './submit-secret.js';
+import {submitTriggers} from './submit-triggers.js';
 import {logger} from 'firebase-functions';
+import type {ModuleRef} from 'mirror-schema/src/module.js';
+import {ModuleAssembler} from './module-assembler.js';
 import type {
   DeploymentOptions,
   DeploymentSecrets,
 } from 'mirror-schema/src/deployment.js';
-import type {ModuleRef} from 'mirror-schema/src/module.js';
-import {nanoid} from 'nanoid';
-import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
-import {ModuleAssembler} from './module-assembler.js';
-import {publishCustomDomains} from './publish-custom-domains.js';
-import {submitSecret} from './submit-secret.js';
-import {submitTriggers} from './submit-triggers.js';
 
 export async function createScript(
   script: Script,

@@ -2,9 +2,9 @@ import {
   DeleteFn,
   GetFn,
   ListFn,
-  Resource,
-  SetFn,
   SetOnlyFn,
+  SetFn,
+  Resource,
 } from './resources.js';
 
 export type WorkerRoute = {

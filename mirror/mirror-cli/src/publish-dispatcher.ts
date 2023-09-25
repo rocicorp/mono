@@ -1,21 +1,21 @@
 import {
+  CloudflareConfig,
+  getCloudflareConfig,
+  getZoneDomainName,
+} from './cf.js';
+import {FetchResultError, cfFetch, Errors} from 'cloudflare-api/src/fetch.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import {fileURLToPath} from 'url';
+import {readFile} from 'node:fs/promises';
+import {
   createScriptUploadForm,
   type CfModule,
 } from 'cloudflare-api/src/create-script-upload-form.js';
 import {DispatchNamespaces} from 'cloudflare-api/src/dispatch-namespaces.js';
 import {DNSRecords} from 'cloudflare-api/src/dns-records.js';
 import {FallbackOrigin} from 'cloudflare-api/src/fallback-origin.js';
-import {Errors, FetchResultError, cfFetch} from 'cloudflare-api/src/fetch.js';
 import {WorkerRoutes} from 'cloudflare-api/src/worker-routes.js';
-import {readFile} from 'node:fs/promises';
 import {sleep} from 'shared/src/sleep.js';
-import {fileURLToPath} from 'url';
-import {
-  CloudflareConfig,
-  getCloudflareConfig,
-  getZoneDomainName,
-} from './cf.js';
-import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function publishDispatcherOptions(yargs: CommonYargsArgv) {
   return yargs

@@ -1,4 +1,4 @@
-import {DeleteFn, GetOnlyFn, Resource, SetOnlyFn} from './resources.js';
+import {DeleteFn, GetOnlyFn, SetOnlyFn, Resource} from './resources.js';
 
 export type FallbackOriginState = {
   origin: string;

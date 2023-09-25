@@ -1,6 +1,6 @@
-import {assert} from 'shared/src/asserts.js';
 import type {PartialDeep} from 'type-fest';
 import {cfFetch} from './fetch.js';
+import {assert} from 'shared/src/asserts.js';
 
 export type ListFn<T> = (query?: URLSearchParams) => Promise<T[]>;
 export type GetOnlyFn<T> = (query?: URLSearchParams) => Promise<T>;

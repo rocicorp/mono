@@ -2,9 +2,9 @@ import {
   DeleteFn,
   DeleteOnlyFn,
   GetOnlyFn,
+  SetOnlyFn,
   RawSetOnlyFn,
   Resource,
-  SetOnlyFn,
 } from './resources.js';
 import type {TailCreationApiResponse, TailFilterMessage} from './tail.js';
 

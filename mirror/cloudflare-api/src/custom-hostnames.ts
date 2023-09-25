@@ -2,9 +2,9 @@ import {
   DeleteFn,
   GetFn,
   ListFn,
+  SetOnlyFn,
   Resource,
   SetFn,
-  SetOnlyFn,
 } from './resources.js';
 
 /* eslint-disable @typescript-eslint/naming-convention */
