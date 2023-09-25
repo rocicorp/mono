@@ -22,6 +22,7 @@ import {getVersion, putVersion} from '../types/version.js';
 import {newAuthConnectionsRequest} from '../util/auth-test-util.js';
 import {resolver} from '../util/resolver.js';
 import {TestLogSink, createSilentLogContext} from '../util/test-utils.js';
+import {originalConsole} from './console.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
 import {TAIL_URL_PATH} from './paths.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
@@ -503,12 +504,14 @@ test('tail should replace global console', async () => {
     {headers: {['Upgrade']: 'websocket'}},
   );
 
-  const logSpyBefore = jest.spyOn(console, 'log').mockImplementation(() => {
-    // Do nothing.
-  });
+  const originalConsoleLogSpy = jest
+    .spyOn(originalConsole, 'log')
+    .mockImplementation(() => {
+      // Do nothing.
+    });
   const response = await roomDO.fetch(request);
   expect(response.status).toBe(101);
-  const logSpyAfter = jest.spyOn(console, 'log');
+  const tailConsoleLogSpy = jest.spyOn(console, 'log');
   const ws = response.webSocket;
   assert(ws);
   ws.accept();
@@ -529,11 +532,11 @@ test('tail should replace global console', async () => {
 
   console.log('hello', 'world');
 
-  expect(logSpyBefore).not.toHaveBeenCalled();
-  expect(logSpyAfter).toHaveBeenCalledTimes(1);
-  expect(logSpyAfter).toHaveBeenCalledWith('hello', 'world');
+  expect(originalConsoleLogSpy).not.toHaveBeenCalled();
+  expect(tailConsoleLogSpy).toHaveBeenCalledTimes(1);
+  expect(tailConsoleLogSpy).toHaveBeenCalledWith('hello', 'world');
 
-  logSpyAfter.mockReset();
+  tailConsoleLogSpy.mockReset();
 
   // Wait for addEventListener to get called
   await promise;
@@ -575,15 +578,18 @@ test('tail should replace global console', async () => {
   // Wait for close to be dispatched
   await Promise.resolve();
 
-  expect(logSpyAfter).toHaveBeenCalledTimes(1);
-  logSpyAfter.mockReset();
+  expect(tailConsoleLogSpy).toHaveBeenCalledTimes(1);
+  tailConsoleLogSpy.mockReset();
 
-  // This should be logged to the original console... which is mocked as logSpyBefore.
+  // This should be logged to the original console... which is spied on by
+  // originalConsoleLogSpy.
   console.log('good', 'bye');
 
-  expect(logSpyAfter).not.toHaveBeenCalled();
-  expect(logSpyBefore).toHaveBeenCalledTimes(1);
-  expect(logSpyBefore).toHaveBeenCalledWith('good', 'bye');
+  expect(tailConsoleLogSpy).toHaveBeenCalledTimes(1);
+  expect(tailConsoleLogSpy).toHaveBeenCalledWith('good', 'bye');
+
+  expect(originalConsoleLogSpy).toHaveBeenCalledTimes(1);
+  expect(originalConsoleLogSpy).toHaveBeenCalledWith('good', 'bye');
 });
 
 test('tail two websockets', async () => {
@@ -602,7 +608,7 @@ test('tail two websockets', async () => {
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
   });
 
-  jest.spyOn(console, 'log').mockImplementation(() => {
+  jest.spyOn(originalConsole, 'log').mockImplementation(() => {
     // Do nothing.
   });
 

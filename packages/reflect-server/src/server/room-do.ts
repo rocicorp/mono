@@ -343,7 +343,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     const {0: clientWS, 1: serverWS} = new WebSocketPair();
 
     serverWS.accept();
-    connectTail(serverWS, this.#state.id.toString(), lc);
+    connectTail(serverWS);
 
     return upgradeWebsocketResponse(clientWS, request.headers);
   });
