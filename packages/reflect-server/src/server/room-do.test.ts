@@ -381,6 +381,20 @@ test('Sets turn duration based on allowUnconfirmedWrites flag', () => {
   }
 });
 
+async function makeBaseRoomDO() {
+  return new BaseRoomDO({
+    mutators: {},
+    roomStartHandler: () => Promise.resolve(),
+    disconnectHandler: () => Promise.resolve(),
+    state: await createTestDurableObjectState('test-do-id'),
+    authApiKey: 'API KEY',
+    logSink: testLogSink,
+    logLevel: 'info',
+    allowUnconfirmedWrites: true,
+    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+  });
+}
+
 test('good, bad, invalid connect requests', async () => {
   const goodRequest = new Request('ws://test.roci.dev/connect');
   goodRequest.headers.set('Upgrade', 'websocket');
@@ -402,18 +416,7 @@ test('good, bad, invalid connect requests', async () => {
     expectedText: 'unsupported method',
   };
 
-  const state = await createTestDurableObjectState('test-do-id');
-  const roomDO = new BaseRoomDO({
-    mutators: {},
-    roomStartHandler: () => Promise.resolve(),
-    disconnectHandler: () => Promise.resolve(),
-    state,
-    authApiKey: 'API KEY',
-    logSink: testLogSink,
-    logLevel: 'info',
-    allowUnconfirmedWrites: true,
-    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
-  });
+  const roomDO = await makeBaseRoomDO();
   for (const test of [goodTest, nonWebSocketTest, badRequestTest]) {
     const response = await roomDO.fetch(test.request);
     expect(await response.text()).toEqual(test.expectedText);
@@ -486,18 +489,7 @@ describe('good, bad, invalid tail requests', () => {
 
 test('tail should replace global console', async () => {
   jest.setSystemTime(1984);
-  const state = await createTestDurableObjectState('test-do-id');
-  const roomDO = new BaseRoomDO({
-    mutators: {},
-    roomStartHandler: () => Promise.resolve(),
-    disconnectHandler: () => Promise.resolve(),
-    state,
-    authApiKey: 'API KEY',
-    logSink: testLogSink,
-    logLevel: 'info',
-    allowUnconfirmedWrites: true,
-    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
-  });
+  const roomDO = await makeBaseRoomDO();
 
   const request = new Request(
     'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
@@ -594,19 +586,7 @@ test('tail should replace global console', async () => {
 
 test('tail two websockets', async () => {
   jest.setSystemTime(1984);
-
-  const state = await createTestDurableObjectState('test-do-id');
-  const roomDO = new BaseRoomDO({
-    mutators: {},
-    roomStartHandler: () => Promise.resolve(),
-    disconnectHandler: () => Promise.resolve(),
-    state,
-    authApiKey: 'API KEY',
-    logSink: testLogSink,
-    logLevel: 'info',
-    allowUnconfirmedWrites: true,
-    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
-  });
+  const roomDO = await makeBaseRoomDO();
 
   jest.spyOn(originalConsole, 'log').mockImplementation(() => {
     // Do nothing.
@@ -661,4 +641,56 @@ test('tail two websockets', async () => {
 
   expect(log1).toEqual([makeLog(['hello', 'world'])]);
   expect(log2).toEqual([makeLog(['hello', 'world']), makeLog(['good', 'bye'])]);
+});
+
+test('tail log throws on json stringify', async () => {
+  jest.setSystemTime(1984);
+  const roomDO = await makeBaseRoomDO();
+
+  jest.spyOn(originalConsole, 'log').mockImplementation(() => {});
+
+  const originalConsoleErrorSpy = jest
+    .spyOn(originalConsole, 'error')
+    .mockImplementation(() => {});
+
+  const request = new Request(
+    'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
+    {headers: {['Upgrade']: 'websocket'}},
+  );
+  const response = await roomDO.fetch(request);
+  expect(response.status).toBe(101);
+  response.webSocket!.accept();
+
+  const log: unknown[] = [];
+  response.webSocket!.addEventListener('message', e => {
+    log.push(JSON.parse(e.data as string));
+  });
+
+  const o = {
+    a: 1,
+    b: {
+      toJSON() {
+        throw new TypeError();
+      },
+    },
+  };
+
+  console.log(o);
+
+  await Promise.resolve();
+  expect(log).toEqual([]);
+  expect(originalConsoleErrorSpy).toBeCalledTimes(1);
+  originalConsoleErrorSpy.mockReset();
+
+  response.webSocket!.close();
+
+  // Wait for close to be dispatched
+  await Promise.resolve();
+
+  console.error('good', 'bye');
+
+  await Promise.resolve();
+
+  expect(log).toEqual([]);
+  expect(originalConsoleErrorSpy).toBeCalledTimes(0);
 });

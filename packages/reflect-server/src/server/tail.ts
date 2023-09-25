@@ -31,15 +31,19 @@ function log(level: Level, message: unknown[]) {
   if (tailWebSockets.size === 0) {
     originalConsole[level](...message);
   } else {
-    const logRecord: LogRecord = {
-      message,
-      level,
-      timestamp: Date.now(),
-    };
-    const msg = JSON.stringify({logs: [logRecord]});
+    try {
+      const logRecord: LogRecord = {
+        message,
+        level,
+        timestamp: Date.now(),
+      };
+      const msg = JSON.stringify({logs: [logRecord]});
 
-    for (const ws of tailWebSockets) {
-      ws.send(msg);
+      for (const ws of tailWebSockets) {
+        ws.send(msg);
+      }
+    } catch (err) {
+      originalConsole.error('Failed to send msg', err);
     }
   }
 }
