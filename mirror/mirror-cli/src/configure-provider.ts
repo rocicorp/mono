@@ -34,19 +34,6 @@ type ConfigureProviderHandlerArgs = YargvToInterface<
   ReturnType<typeof configureProviderOptions>
 >;
 
-const REQUIRED_PERMISSIONS = [
-  '#zone_settings:read',
-  '#zone_settings:edit',
-  '#dns_records:read',
-  '#dns_records:edit',
-  '#ssl:read',
-  '#ssl:edit',
-  '#zone:edit',
-  '#zone:read',
-  '#worker:edit',
-  '#worker:read',
-] as const;
-
 export async function configureProviderHandler(
   yargs: ConfigureProviderHandlerArgs,
 ): Promise<void> {
@@ -90,6 +77,19 @@ export async function configureProviderHandler(
     .set(provider);
   console.log(`Successfully configured "${id}" provider`);
 }
+
+const REQUIRED_PERMISSIONS = [
+  '#zone_settings:read',
+  '#zone_settings:edit',
+  '#dns_records:read',
+  '#dns_records:edit',
+  '#ssl:read',
+  '#ssl:edit',
+  '#zone:edit',
+  '#zone:read',
+  '#worker:edit',
+  '#worker:read',
+] as const;
 
 function checkPermissions(zone: Zone) {
   const granted = new Set(zone.permissions);
