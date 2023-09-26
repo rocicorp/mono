@@ -34,7 +34,7 @@ type ConfigureProviderHandlerArgs = YargvToInterface<
   ReturnType<typeof configureProviderOptions>
 >;
 
-export const REQUIRED_PERMISSIONS = [
+const REQUIRED_PERMISSIONS = [
   '#zone_settings:read',
   '#zone_settings:edit',
   '#dns_records:read',
