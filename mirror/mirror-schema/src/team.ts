@@ -25,8 +25,9 @@ export const teamSchema = v.object({
   /** @deprecated TODO(darick): Remove with the cli migration code. */
   subdomain: v.string().optional(),
 
-  // TODO: Deprecate and replace with defaultProvider.
+  /** @deprecated Remove when reflect-cli supported versions consider this optional */
   defaultCfID: v.string().optional(),
+
   defaultProvider: v.string().default(DEFAULT_PROVIDER_ID),
 
   // Number of memberships of role 'admin'.

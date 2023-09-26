@@ -4,8 +4,9 @@ import {deploymentOptionsSchema, deploymentSchema} from './deployment.js';
 import {DEFAULT_PROVIDER_ID} from './provider.js';
 
 export const appSchema = v.object({
-  // TODO: Deprecate and replace with provider.
+  /** @deprecated Remove when reflect-cli supported versions consider this optional */
   cfID: v.string().optional(),
+
   provider: v.string().default(DEFAULT_PROVIDER_ID),
 
   // Globally unique, stable, internal script name in Cloudflare.
