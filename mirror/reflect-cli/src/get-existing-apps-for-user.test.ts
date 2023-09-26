@@ -80,9 +80,10 @@ test('list with one teams and one app', async () => {
   expect(apps).toEqual([
     {
       appID: 'app-id',
-      cfID: 'default-cloudflare-id',
+      cfID: 'deprecated',
       cfScriptName: 'cf-script-name',
       name: 'Name of app-id',
+      provider: 'default',
       serverReleaseChannel: 'stable',
       teamID,
       teamLabel,
@@ -114,9 +115,10 @@ test('list with one teams and two apps', async () => {
   expect(apps).toEqual([
     {
       appID: 'app-id-1',
-      cfID: 'default-cloudflare-id',
+      cfID: 'deprecated',
       cfScriptName: 'cf-script-name',
       name: 'Name of app-id-1',
+      provider: 'default',
       serverReleaseChannel: 'stable',
       teamID,
       teamLabel,
@@ -124,9 +126,10 @@ test('list with one teams and two apps', async () => {
     },
     {
       appID: 'app-id-2',
-      cfID: 'default-cloudflare-id',
+      cfID: 'deprecated',
       cfScriptName: 'cf-script-name',
       name: 'Name of app-id-2',
+      provider: 'default',
       serverReleaseChannel: 'canary',
       teamID,
       teamLabel,
@@ -165,9 +168,10 @@ test('list with two teams and two apps total', async () => {
   expect(apps).toEqual([
     {
       appID: 'app-id-1',
-      cfID: 'default-cloudflare-id',
+      cfID: 'deprecated',
       cfScriptName: 'cf-script-name',
       name: 'Name of app-id-1',
+      provider: 'default',
       serverReleaseChannel: 'stable',
       teamID: teamID1,
       teamLabel: teamLabel1,
@@ -175,9 +179,10 @@ test('list with two teams and two apps total', async () => {
     },
     {
       appID: 'app-id-2',
-      cfID: 'default-cloudflare-id',
+      cfID: 'deprecated',
       cfScriptName: 'cf-script-name',
       name: 'Name of app-id-2',
+      provider: 'default',
       serverReleaseChannel: 'canary',
       teamID: teamID2,
       teamLabel: teamLabel2,
@@ -225,9 +230,10 @@ test('list with two teams and 4 apps total', async () => {
   expect(apps).toEqual([
     {
       appID: 'app-id-1',
-      cfID: 'default-cloudflare-id',
+      cfID: 'deprecated',
       cfScriptName: 'cf-script-name',
       name: 'Name of app-id-1',
+      provider: 'default',
       serverReleaseChannel: 'stable',
       teamID: teamID1,
       teamLabel: teamLabel1,
@@ -235,9 +241,10 @@ test('list with two teams and 4 apps total', async () => {
     },
     {
       appID: 'app-id-2',
-      cfID: 'default-cloudflare-id',
+      cfID: 'deprecated',
       cfScriptName: 'cf-script-name',
       name: 'Name of app-id-2',
+      provider: 'default',
       serverReleaseChannel: 'canary',
       teamID: teamID2,
       teamLabel: teamLabel2,
@@ -245,9 +252,10 @@ test('list with two teams and 4 apps total', async () => {
     },
     {
       appID: 'app-id-3',
-      cfID: 'default-cloudflare-id',
+      cfID: 'deprecated',
       cfScriptName: 'cf-script-name',
       name: 'Name of app-id-3',
+      provider: 'default',
       serverReleaseChannel: 'stable',
       teamID: teamID1,
       teamLabel: teamLabel1,
@@ -255,9 +263,10 @@ test('list with two teams and 4 apps total', async () => {
     },
     {
       appID: 'app-id-4',
-      cfID: 'default-cloudflare-id',
+      cfID: 'deprecated',
       cfScriptName: 'cf-script-name',
       name: 'Name of app-id-4',
+      provider: 'default',
       serverReleaseChannel: 'canary',
       teamID: teamID2,
       teamLabel: teamLabel2,
