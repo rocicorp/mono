@@ -23,8 +23,8 @@
   },
   "dependencies": {
     "@badrap/valita": "^0.2.10",
-    "@inquirer/confirm": "^2.0.9",
-    "@inquirer/input": "^1.2.8",
+    "@inquirer/confirm": "^2.0.12",
+    "@inquirer/input": "^1.2.11",
     "@rocicorp/lock": "^1.0.3",
     "@rocicorp/logger": "^5.2.1",
     "@rocicorp/resolver": "^1.0.1",
