@@ -2,7 +2,7 @@ import type {Response} from 'express';
 import type {Auth} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
 import {https, logger} from 'firebase-functions';
-import {onRequest} from 'firebase-functions/v2/https';
+import {HttpsError, onRequest} from 'firebase-functions/v2/https';
 import {tailRequestSchema} from 'mirror-protocol/src/tail.js';
 import assert from 'node:assert';
 import {jsonSchema} from 'reflect-protocol';
@@ -66,8 +66,7 @@ export const tail = (
             packageVersion,
           );
         } catch (e) {
-          response.status(500).send({error: 'Failed to connect to backend'});
-          return;
+          throw new HttpsError('internal', `Failed to connect to backend`, e);
         }
 
         response.writeHead(200, {
@@ -93,8 +92,6 @@ export const tail = (
                 break loop;
             }
           }
-        } catch (e) {
-          logger.error(e);
         } finally {
           await deleteTail();
         }
