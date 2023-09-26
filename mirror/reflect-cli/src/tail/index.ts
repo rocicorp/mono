@@ -6,7 +6,12 @@ import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 import {TailMessage, createTailEventSource} from './tail-event-source.js';
 
 export function tailOptions(yargs: CommonYargsArgv) {
-  return yargs;
+  return yargs.option('room-id', {
+    describe: 'The room ID of the room to tail',
+    type: 'string',
+    requiresArg: true,
+    demandOption: true,
+  });
 }
 
 type TailHandlerArgs = YargvToInterface<ReturnType<typeof tailOptions>>;
@@ -15,10 +20,12 @@ export async function tailHandler(yargs: TailHandlerArgs) {
   const {appID} = await ensureAppInstantiated(yargs);
   const {userID, getIdToken} = await authenticate(yargs);
   const idToken = await getIdToken();
+  const {roomId: roomID} = yargs;
 
   const data: TailRequest = {
     requester: makeRequester(userID),
     appID,
+    roomID,
   };
 
   const tailEventSource = createTailEventSource(
@@ -28,8 +35,16 @@ export async function tailHandler(yargs: TailHandlerArgs) {
     data,
   );
 
-  for await (const entry of tailEventSource) {
-    logTailMessage(entry);
+  try {
+    console.log(`Connecting to room ${roomID} to tail log...`);
+    for await (const entry of tailEventSource) {
+      logTailMessage(entry);
+    }
+  } catch (e) {
+    if (e instanceof Error) {
+      console.error(e.message);
+      process.exit(1);
+    }
   }
 }
 

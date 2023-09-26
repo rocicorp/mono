@@ -1,29 +1,23 @@
 import type {Response} from 'express';
 import type {Auth} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
-import {https, logger} from 'firebase-functions';
+import {logger} from 'firebase-functions';
 import {HttpsError, onRequest} from 'firebase-functions/v2/https';
 import {tailRequestSchema} from 'mirror-protocol/src/tail.js';
+import type {App} from 'mirror-schema/src/app.js';
 import assert from 'node:assert';
 import {jsonSchema} from 'reflect-protocol';
+import {must} from 'shared/src/must.js';
 import {Queue} from 'shared/src/queue.js';
 import * as v from 'shared/src/valita.js';
-import type WebSocket from 'ws';
-import packageJson from '../../../package.json';
-import {createTail as createTailDefault} from '../../cloudflare/tail/tail.js';
+import WebSocket from 'ws';
 import {
   appAuthorization,
   tokenAuthentication,
   userAuthorization,
 } from '../validators/auth.js';
 import {validateRequest} from '../validators/schema.js';
-import {getApiToken} from './secrets.js';
-import {GlobalScript} from 'cloudflare-api/src/scripts.js';
-import {
-  providerDataConverter,
-  providerPath,
-} from 'mirror-schema/src/provider.js';
-import {getDataOrFail} from '../validators/data.js';
+import {REFLECT_AUTH_API_KEY} from './secrets.js';
 
 export const tail = (
   firestore: Firestore,
@@ -36,34 +30,19 @@ export const tail = (
       .validate(userAuthorization())
       .validate(appAuthorization(firestore))
       .handle(async (tailRequest, context) => {
-        const {response} = context;
-        if (response === undefined) {
-          throw new https.HttpsError('not-found', 'response is undefined');
-        }
+        const {response, app} = context;
+        const {
+          roomID,
+          requester: {userAgent},
+        } = tailRequest;
 
-        const {appID} = tailRequest;
-        const {cfScriptName: cfWorkerName, provider} = context.app;
-        const apiToken = getApiToken(provider);
-        const {accountID} = getDataOrFail(
-          await firestore
-            .doc(providerPath(provider))
-            .withConverter(providerDataConverter)
-            .get(),
-          'internal',
-          `Unknown provider "${provider}" for App ${appID} `,
-        );
-
-        const filters = {filters: []};
-        const debug = true;
-        const packageVersion = packageJson.version || '0.0.0';
-
-        let createTailResult;
+        let ws: WebSocket;
         try {
-          createTailResult = await createTail(
-            new GlobalScript(await apiToken, accountID, cfWorkerName),
-            filters,
-            debug,
-            packageVersion,
+          ws = createTail(
+            app,
+            roomID,
+            REFLECT_AUTH_API_KEY,
+            `${userAgent.type}/${userAgent.version}`,
           );
         } catch (e) {
           throw new HttpsError('internal', `Failed to connect to backend`, e);
@@ -74,10 +53,6 @@ export const tail = (
           'Content-Type': 'text/event-stream',
         });
         response.flushHeaders();
-
-        const {ws, expiration, deleteTail} = createTailResult;
-        // TODO(arv): Do we need to deal with the expiration?
-        logger.log(`tail expiration: ${expiration}`);
 
         try {
           loop: for await (const item of wsQueue(ws, 10_000)) {
@@ -92,29 +67,53 @@ export const tail = (
                 break loop;
             }
           }
+        } catch (e) {
+          logger.info(
+            'Got exception from tail websocket',
+            e,
+            'forwarding error to SSE',
+          );
+          writeEvent(response, 'error', hasStringMessage(e) ? e.message : '');
         } finally {
-          await deleteTail();
+          ws.close();
         }
         response.end();
       }),
   );
+
+function hasStringMessage(v: unknown): v is {message: string} {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'message' in v &&
+    typeof v.message === 'string'
+  );
+}
 
 type QueueItem =
   | {type: 'data'; data: string}
   | {type: 'ping'}
   | {type: 'close'};
 
+function dataAsString(e: WebSocket.MessageEvent): string {
+  const {data} = e;
+  if (typeof data === 'string') {
+    return data;
+  }
+  assert(data instanceof Buffer);
+  return data.toString('utf-8');
+}
+
 function wsQueue(
   ws: WebSocket,
   pingInterval: number,
 ): AsyncIterable<QueueItem> {
   const q = new Queue<QueueItem>();
-  ws.onmessage = ({data}) => {
-    assert(data instanceof Buffer);
-    void q.enqueue({type: 'data', data: data.toString('utf-8')});
+  ws.onmessage = e => {
+    void q.enqueue({type: 'data', data: dataAsString(e)});
   };
 
-  ws.onerror = event => void q.enqueueRejection(event);
+  ws.onerror = e => void q.enqueueRejection(e);
   ws.onclose = () => {
     void q.enqueue({type: 'close'});
   };
@@ -144,10 +143,33 @@ const partialRecordSchema = v.object({
   ),
 });
 
-export function writeData(response: Response, data: string) {
+function writeData(response: Response, data: string) {
   const cfLogRecord = JSON.parse(data);
   const logRecords = v.parse(cfLogRecord, partialRecordSchema, 'strip');
   for (const rec of logRecords.logs) {
     response.write(`data: ${JSON.stringify(rec)}\n\n`);
   }
+}
+
+function writeEvent(response: Response, event: string, data: string) {
+  response.write(`event: ${event}\n`);
+  response.write(`data: ${data}\n\n`);
+}
+
+function createTailDefault(
+  app: App,
+  roomID: string,
+  reflectAPIToken: string,
+  packageVersion: string,
+): WebSocket {
+  const {hostname} = must(app.runningDeployment).spec;
+
+  const websocketUrl = `wss://${hostname}/api/debug/v0/tail?roomID=${encodeURIComponent(
+    roomID,
+  )}`;
+  return new WebSocket(websocketUrl, reflectAPIToken, {
+    headers: {
+      'User-Agent': `reflect/${packageVersion}`,
+    },
+  });
 }

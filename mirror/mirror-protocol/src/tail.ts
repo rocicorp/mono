@@ -3,7 +3,10 @@ import * as v from 'shared/src/valita.js';
 import {baseAppRequestFields} from './app.js';
 import {baseResponseFields} from './base.js';
 
-export const tailRequestSchema = v.object(baseAppRequestFields);
+export const tailRequestSchema = v.object({
+  ...baseAppRequestFields,
+  roomID: v.string(),
+});
 
 export type TailRequest = v.Infer<typeof tailRequestSchema>;
 
