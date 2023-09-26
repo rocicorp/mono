@@ -22,6 +22,7 @@ import type {User} from 'mirror-schema/src/user.js';
 import type {App} from 'mirror-schema/src/app.js';
 import type {Role} from 'mirror-schema/src/membership.js';
 import {defaultOptions} from 'mirror-schema/src/deployment.js';
+import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
 
 const testRequestSchema = v.object({
   ...baseAppRequestFields,
@@ -170,7 +171,8 @@ describe('app authorization', () => {
     teamID: 'myTeam',
     teamLabel: 'teamlabel',
     name: 'My App',
-    cfID: 'cfID',
+    cfID: 'deprecated',
+    provider: DEFAULT_PROVIDER_ID,
     cfScriptName: 'cfScriptName',
     serverReleaseChannel: 'stable',
     deploymentOptions: defaultOptions(),
