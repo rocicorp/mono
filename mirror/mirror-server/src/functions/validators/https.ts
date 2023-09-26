@@ -71,7 +71,7 @@ export class OnRequestBuilder<Request, Context> {
         } else {
           logger.warn(e);
         }
-        throw e;
+        response.status(err.httpErrorCode.status).send(err.message);
       }
     };
   }
