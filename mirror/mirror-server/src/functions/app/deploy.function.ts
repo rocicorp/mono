@@ -95,33 +95,33 @@ export async function runDeployment(
     spec: {serverVersion, hostname, options, appModules},
   } = must(deploymentDoc.data());
 
-  const apiToken = getApiTokenSecret(provider);
-  const {accountID} = getDataOrFail(
-    await firestore
-      .doc(providerPath(provider))
-      .withConverter(providerDataConverter)
-      .get(),
-    'internal',
-    `Unknown provider ${provider} for App ${appID}`,
-  );
-
-  if (status !== 'REQUESTED') {
-    logger.warn(`Deployment is already ${status}`);
-    return;
-  }
-  const lastUpdateTime = must(deploymentDoc.updateTime);
-  await setDeploymentStatus(
-    firestore,
-    appID,
-    deploymentID,
-    'DEPLOYING',
-    undefined,
-    {lastUpdateTime}, // Aborts if another trigger is already executing the same deployment.
-  );
-
-  const script = new GlobalScript(await apiToken, accountID, cfScriptName);
-
   try {
+    const apiToken = getApiTokenSecret(provider);
+    const {accountID} = getDataOrFail(
+      await firestore
+        .doc(providerPath(provider))
+        .withConverter(providerDataConverter)
+        .get(),
+      'internal',
+      `Unknown provider ${provider} for App ${appID}`,
+    );
+
+    if (status !== 'REQUESTED') {
+      logger.warn(`Deployment is already ${status}`);
+      return;
+    }
+    const lastUpdateTime = must(deploymentDoc.updateTime);
+    await setDeploymentStatus(
+      firestore,
+      appID,
+      deploymentID,
+      'DEPLOYING',
+      undefined,
+      {lastUpdateTime}, // Aborts if another trigger is already executing the same deployment.
+    );
+
+    const script = new GlobalScript(await apiToken, accountID, cfScriptName);
+
     if (deploymentType === 'DELETE') {
       // For a DELETE, the Deployment lifecycle is 'REQUESTED' -> 'DEPLOYING' -> (document deleted) | 'FAILED'
       await deleteFromCloudflare(script);

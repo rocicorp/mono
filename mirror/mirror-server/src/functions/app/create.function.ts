@@ -110,6 +110,7 @@ export const create = (firestore: Firestore) =>
           name: appName,
           teamID,
           teamLabel: team.label,
+          teamSubdomain: '', // Deprecated
           provider: defaultProvider,
           cfID: 'deprecated',
           cfScriptName: scriptName,
