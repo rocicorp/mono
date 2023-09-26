@@ -19,7 +19,6 @@ import type {App} from 'mirror-schema/src/app.js';
 import {getAppSecrets} from './secrets.js';
 import {getDataOrFail} from '../validators/data.js';
 import {
-  DEFAULT_PROVIDER_ID,
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
@@ -92,7 +91,7 @@ export async function computeDeploymentSpec(
     `Found matching version for ${serverVersionRange}: ${serverVersion}`,
   );
 
-  const providerID = app.provider ?? DEFAULT_PROVIDER_ID;
+  const {provider: providerID} = app;
   const provider = getDataOrFail(
     await firestore
       .doc(providerPath(providerID))

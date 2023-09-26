@@ -20,7 +20,6 @@ import {validateRequest} from '../validators/schema.js';
 import {getApiToken} from './secrets.js';
 import {GlobalScript} from 'cloudflare-api/src/scripts.js';
 import {
-  DEFAULT_PROVIDER_ID,
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
@@ -43,16 +42,15 @@ export const tail = (
         }
 
         const {appID} = tailRequest;
-        const {cfScriptName: cfWorkerName, provider: appProvider} = context.app;
-        const providerID = appProvider ?? DEFAULT_PROVIDER_ID;
-        const apiToken = getApiToken(providerID);
+        const {cfScriptName: cfWorkerName, provider} = context.app;
+        const apiToken = getApiToken(provider);
         const {accountID} = getDataOrFail(
           await firestore
-            .doc(providerPath(providerID))
+            .doc(providerPath(provider))
             .withConverter(providerDataConverter)
             .get(),
           'internal',
-          `Unknown provider "${providerID}" for App ${appID} `,
+          `Unknown provider "${provider}" for App ${appID} `,
         );
 
         const filters = {filters: []};

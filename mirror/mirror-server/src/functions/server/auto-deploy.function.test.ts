@@ -101,7 +101,7 @@ describe('server auto-deploy', () => {
     appDocs.forEach((appDoc, i) => {
       batch.create(appDoc, {
         cfID: 'deprecated',
-        provider: null,
+        provider: DEFAULT_PROVIDER_ID,
         cfScriptName: 'bar',
         teamID: 'baz',
         teamLabel: 'boom',

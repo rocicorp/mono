@@ -13,7 +13,6 @@ import {
 import {
   providerDataConverter,
   providerPath,
-  DEFAULT_PROVIDER_ID,
 } from 'mirror-schema/src/provider.js';
 import {defaultOptions} from 'mirror-schema/src/deployment.js';
 import {
@@ -77,15 +76,17 @@ export const create = (firestore: Firestore) =>
           'not-found',
           `Team ${teamID} does not exist`,
         );
-        const providerID = team.defaultProvider ?? DEFAULT_PROVIDER_ID;
+        // TODO: To support onprem, allow apps to be created for a specific provider with
+        //       appropriate authorization.
+        const {defaultProvider} = team;
         const provider = getDataOrFail(
           await txn.get(
             firestore
-              .doc(providerPath(providerID))
+              .doc(providerPath(defaultProvider))
               .withConverter(providerDataConverter),
           ),
           'internal',
-          `Provider ${providerID} is not properly set up.`,
+          `Provider ${defaultProvider} is not properly set up.`,
         );
         if (team.numApps >= (team.maxApps ?? provider.defaultMaxApps)) {
           throw new HttpsError(
@@ -109,7 +110,7 @@ export const create = (firestore: Firestore) =>
           name: appName,
           teamID,
           teamLabel: team.label,
-          provider: providerID,
+          provider: defaultProvider,
           cfID: 'deprecated',
           cfScriptName: scriptName,
           serverReleaseChannel,

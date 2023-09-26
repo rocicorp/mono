@@ -1,6 +1,7 @@
 import * as v from 'shared/src/valita.js';
 import {firestoreDataConverter} from './converter.js';
 import * as path from './path.js';
+import {DEFAULT_PROVIDER_ID} from './provider.js';
 
 export const teamSchema = v.object({
   name: v.string(),
@@ -26,7 +27,7 @@ export const teamSchema = v.object({
 
   // TODO: Deprecate and replace with defaultProvider.
   defaultCfID: v.string().optional(),
-  defaultProvider: v.string().nullable().optional(),
+  defaultProvider: v.string().default(DEFAULT_PROVIDER_ID),
 
   // Number of memberships of role 'admin'.
   // A team must have at least one admin.

@@ -37,7 +37,7 @@ export async function storeSecret(
   try {
     const latest = await getSecret(stack, secretId);
     if (latest === val) {
-      console.log(`Latest secret version already matches API token`);
+      console.log(`Current version of ${secretId} matches specified value`);
       return;
     }
   } catch (e) {

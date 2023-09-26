@@ -83,7 +83,7 @@ describe('auto-deploy', () => {
       firestore.doc(appPath(APP_ID)).withConverter(appDataConverter),
       {
         cfID: 'deprecated',
-        provider: null,
+        provider: DEFAULT_PROVIDER_ID,
         cfScriptName: 'bar',
         teamID: 'baz',
         name: 'boo',

@@ -28,6 +28,7 @@ import {
   providerPath,
   type Provider,
   providerDataConverter,
+  DEFAULT_PROVIDER_ID,
 } from './provider.js';
 
 // The server and (v8) client Firestore interfaces are largely the same.
@@ -79,7 +80,7 @@ export async function setTeam(
   const {
     name = `Name of ${teamID}`,
     label = sanitizeForLabel(name),
-    defaultProvider = null,
+    defaultProvider = DEFAULT_PROVIDER_ID,
     numAdmins = 0,
     numMembers = 0,
     numInvites = 0,
@@ -193,7 +194,7 @@ export async function setApp(
     name = `Name of ${appID}`,
     teamID = 'team-id',
     teamLabel = 'teamlabel',
-    provider = null,
+    provider = DEFAULT_PROVIDER_ID,
     cfScriptName = 'cf-script-name',
     serverReleaseChannel = 'stable',
   } = app;

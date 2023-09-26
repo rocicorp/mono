@@ -22,6 +22,7 @@ import {must} from 'shared/src/must.js';
 import {newTeamID} from '../../ids.js';
 import {userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
+import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
 
 export const DEFAULT_MAX_APPS = null;
 
@@ -67,7 +68,7 @@ export const ensure = (firestore: Firestore) =>
           {
             name,
             label,
-            defaultProvider: null, // null == 'default'
+            defaultProvider: DEFAULT_PROVIDER_ID,
             defaultCfID: 'deprecated',
             numAdmins: 1,
             numMembers: 0,

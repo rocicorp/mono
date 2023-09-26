@@ -33,7 +33,6 @@ import {
 import {FetchResultError} from 'cloudflare-api/src/fetch.js';
 import {GlobalScript} from 'cloudflare-api/src/scripts.js';
 import {
-  DEFAULT_PROVIDER_ID,
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
@@ -85,7 +84,7 @@ export async function runDeployment(
   }
 
   const {
-    provider: appProvider,
+    provider,
     cfScriptName,
     name: appName,
     teamLabel,
@@ -96,15 +95,14 @@ export async function runDeployment(
     spec: {serverVersion, hostname, options, appModules},
   } = must(deploymentDoc.data());
 
-  const providerID = appProvider ?? DEFAULT_PROVIDER_ID;
-  const apiToken = getApiTokenSecret(providerID);
+  const apiToken = getApiTokenSecret(provider);
   const {accountID} = getDataOrFail(
     await firestore
-      .doc(providerPath(providerID))
+      .doc(providerPath(provider))
       .withConverter(providerDataConverter)
       .get(),
     'internal',
-    `Unknown provider ${providerID} for App ${appID}`,
+    `Unknown provider ${provider} for App ${appID}`,
   );
 
   if (status !== 'REQUESTED') {

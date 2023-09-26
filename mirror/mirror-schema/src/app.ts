@@ -1,12 +1,12 @@
 import * as v from 'shared/src/valita.js';
 import {firestoreDataConverter} from './converter.js';
 import {deploymentOptionsSchema, deploymentSchema} from './deployment.js';
+import {DEFAULT_PROVIDER_ID} from './provider.js';
 
 export const appSchema = v.object({
   // TODO: Deprecate and replace with provider.
   cfID: v.string().optional(),
-  // null == "default" provider.
-  provider: v.string().nullable().optional(),
+  provider: v.string().default(DEFAULT_PROVIDER_ID),
 
   // Globally unique, stable, internal script name in Cloudflare.
   cfScriptName: v.string(),

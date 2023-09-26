@@ -19,6 +19,7 @@ import {
   teamLabelIndexDataConverter,
   teamLabelIndexPath,
 } from 'mirror-schema/src/team.js';
+import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
 
 mockFunctionParamsAndSecrets();
 
@@ -110,7 +111,7 @@ describe('team-ensure function', () => {
       name: 'My Team, LLC.',
       label: 'myteamllc',
       defaultCfID: 'deprecated',
-      defaultProvider: null,
+      defaultProvider: DEFAULT_PROVIDER_ID,
       numAdmins: 1,
       numMembers: 0,
       numInvites: 0,
@@ -152,7 +153,7 @@ describe('team-ensure function', () => {
       name: 'Existing Team Name, LLC.',
       label: expect.stringMatching(/existingteamnamellc\d+/),
       defaultCfID: 'deprecated',
-      defaultProvider: null,
+      defaultProvider: DEFAULT_PROVIDER_ID,
       numAdmins: 1,
       numMembers: 0,
       numInvites: 0,

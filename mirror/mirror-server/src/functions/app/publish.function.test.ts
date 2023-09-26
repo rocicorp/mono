@@ -63,7 +63,7 @@ describe('publish', () => {
       {
         name: 'foo-bar',
         teamLabel: 'teamblue',
-        provider: null,
+        provider: DEFAULT_PROVIDER_ID,
         cfID: 'deprecated',
         cfScriptName: 'foo-bar-script',
         serverReleaseChannel: 'stable',
