@@ -7,6 +7,8 @@ import {connectFunctionsEmulator, getFunctions} from 'firebase/functions';
 // https://firebase.google.com/docs/web/modular-upgrade
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
+import {sendEvent} from './metrics/send-ga-event.js';
+import {randomUUID} from 'crypto';
 
 function getFirebaseConfig(stack: string) {
   switch (stack) {
@@ -60,11 +62,19 @@ export function getFirestore(): Firestore {
 
 // Wraps a command handler with cleanup code (e.g. terminating any Firestore client)
 // to ensure that the process exits after the handler completes.
-export function handleWith<T>(handler: (args: T) => Promise<void>) {
+export function handleWith<T>(
+  eventName: string,
+  handler: (args: T) => Promise<void>,
+) {
   return {
     andCleanup: () => async (args: T) => {
       try {
         await handler(args);
+        // this needs an actual userID
+        await sendEvent(eventName, randomUUID());
+      } catch (e) {
+        await sendEvent('error', randomUUID());
+        process.exit(1);
       } finally {
         await getFirestore().terminate();
       }
