@@ -17,9 +17,10 @@ import {
   getAffectedChannels,
 } from './auto-deploy.function.js';
 import {
-  cloudflareDataConverter,
-  cloudflarePath,
-} from 'mirror-schema/src/cloudflare.js';
+  DEFAULT_PROVIDER_ID,
+  providerDataConverter,
+  providerPath,
+} from 'mirror-schema/src/provider.js';
 
 test('getAffectedChannels', () => {
   expect(getAffectedChannels(['canary'], ['stable'])).toEqual([
@@ -47,7 +48,7 @@ describe('server auto-deploy', () => {
   const APP_ID = 'server-auto-deploy-test-app-';
   const SERVER_VERSION_1 = '0.209.1';
   const SERVER_VERSION_2 = '0.209.2';
-  const CF_ID = 'cf-abc';
+  const CLOUDFLARE_ACCOUNT_ID = 'cf-abc';
 
   const appDocs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(i =>
     firestore.doc(appPath(`${APP_ID}${i}`)).withConverter(appDataConverter),
@@ -84,16 +85,23 @@ describe('server auto-deploy', () => {
     );
     batch.create(
       firestore
-        .doc(cloudflarePath(CF_ID))
-        .withConverter(cloudflareDataConverter),
+        .doc(providerPath(DEFAULT_PROVIDER_ID))
+        .withConverter(providerDataConverter),
       {
-        domain: 'reflect-o-rama.net',
+        accountID: CLOUDFLARE_ACCOUNT_ID,
         defaultMaxApps: 3,
+        defaultZone: {
+          id: 'zone-id',
+          name: 'reflect-o-rama.net',
+        },
+        dispatchNamespace: 'prod',
       },
     );
+
     appDocs.forEach((appDoc, i) => {
       batch.create(appDoc, {
-        cfID: CF_ID,
+        cfID: 'deprecated',
+        provider: null,
         cfScriptName: 'bar',
         teamID: 'baz',
         teamLabel: 'boom',
@@ -141,7 +149,7 @@ describe('server auto-deploy', () => {
     for (const path of [
       serverPath(SERVER_VERSION_1),
       serverPath(SERVER_VERSION_2),
-      cloudflarePath(CF_ID),
+      providerPath(DEFAULT_PROVIDER_ID),
     ]) {
       batch.delete(firestore.doc(path));
     }

@@ -2,7 +2,6 @@ import type {Response} from 'express';
 import type {Auth} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
 import {https, logger} from 'firebase-functions';
-import {defineString} from 'firebase-functions/params';
 import {onRequest} from 'firebase-functions/v2/https';
 import {tailRequestSchema} from 'mirror-protocol/src/tail.js';
 import assert from 'node:assert';
@@ -18,14 +17,14 @@ import {
   userAuthorization,
 } from '../validators/auth.js';
 import {validateRequest} from '../validators/schema.js';
-import {defineSecretSafely} from './secrets.js';
+import {getApiToken} from './secrets.js';
 import {GlobalScript} from 'cloudflare-api/src/scripts.js';
-
-// This is the API token for reflect-server.net
-// https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
-const cloudflareApiToken = defineSecretSafely('CLOUDFLARE_API_TOKEN');
-
-const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
+import {
+  DEFAULT_PROVIDER_ID,
+  providerDataConverter,
+  providerPath,
+} from 'mirror-schema/src/provider.js';
+import {getDataOrFail} from '../validators/data.js';
 
 export const tail = (
   firestore: Firestore,
@@ -37,15 +36,25 @@ export const tail = (
       .validate(tokenAuthentication(auth))
       .validate(userAuthorization())
       .validate(appAuthorization(firestore))
-      .handle(async (_tailRequest, context) => {
+      .handle(async (tailRequest, context) => {
         const {response} = context;
         if (response === undefined) {
           throw new https.HttpsError('not-found', 'response is undefined');
         }
 
-        const apiToken = cloudflareApiToken.value();
-        const accountID = cloudflareAccountId.value();
-        const cfWorkerName = context.app.cfScriptName;
+        const {appID} = tailRequest;
+        const {cfScriptName: cfWorkerName, provider: appProvider} = context.app;
+        const providerID = appProvider ?? DEFAULT_PROVIDER_ID;
+        const apiToken = getApiToken(providerID);
+        const {accountID} = getDataOrFail(
+          await firestore
+            .doc(providerPath(providerID))
+            .withConverter(providerDataConverter)
+            .get(),
+          'internal',
+          `Unknown provider "${providerID}" for App ${appID} `,
+        );
+
         const filters = {filters: []};
         const debug = true;
         const packageVersion = packageJson.version || '0.0.0';
@@ -53,7 +62,7 @@ export const tail = (
         let createTailResult;
         try {
           createTailResult = await createTail(
-            new GlobalScript(apiToken, accountID, cfWorkerName),
+            new GlobalScript(await apiToken, accountID, cfWorkerName),
             filters,
             debug,
             packageVersion,

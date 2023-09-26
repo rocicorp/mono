@@ -47,6 +47,10 @@ import {
   deleteTeamSubdomainsHandler,
   deleteTeamSubdomainsOptions,
 } from './delete-team-subdomains.js';
+import {
+  configureProviderHandler,
+  configureProviderOptions,
+} from './configure-provider.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -98,6 +102,14 @@ function createCLIParser(argv: string[]) {
     'Grants temporary super powers (e.g. impersonation) to an account.',
     grantSuperOptions,
     grantSuperHandler,
+  );
+
+  // configure-provider
+  reflectCLI.command(
+    'configure-provider [name]',
+    'Configures a provider for hosting Workers.',
+    configureProviderOptions,
+    configureProviderHandler,
   );
 
   // publish-custom-domain

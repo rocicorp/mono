@@ -1,8 +1,4 @@
-import {
-  CloudflareConfig,
-  getCloudflareConfig,
-  getZoneDomainName,
-} from './cf.js';
+import {ProviderConfig, getProviderConfig} from './cf.js';
 import {FetchResultError, cfFetch, Errors} from 'cloudflare-api/src/fetch.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {fileURLToPath} from 'url';
@@ -19,19 +15,15 @@ import {sleep} from 'shared/src/sleep.js';
 
 export function publishDispatcherOptions(yargs: CommonYargsArgv) {
   return yargs
-    .option('namespace', {
-      desc: 'The namespace to which the dispatcher will be bound (where Workers for Platforms are uploaded)',
-      type: 'string',
-      default: 'mirror',
-    })
     .option('fallback-hostname', {
       desc: 'The hostname (before the TLD) to set the fallback origin to.',
       type: 'string',
       default: 'apps',
     })
     .option('script-name', {
-      desc: 'The script name of the dispatcher. If none is specified, defaults to `${namespace}-dispatcher`',
+      desc: 'The script name of the dispatcher. If none is specified, defaults to `dispatcher`',
       type: 'string',
+      default: 'dispatcher',
     })
     .option('overwrite-fallbacks', {
       desc: 'Overwrites an existing fallback route and origin if it is different',
@@ -47,8 +39,7 @@ type PublishDispatcherHandlerArgs = YargvToInterface<
 export async function publishDispatcherHandler(
   yargs: PublishDispatcherHandlerArgs,
 ): Promise<void> {
-  const config = await getCloudflareConfig(yargs);
-  const zoneName = await getZoneDomainName(config);
+  const config = await getProviderConfig(yargs);
 
   const {namespace, fallbackHostname, overwriteFallbacks} = yargs;
   const scriptName = yargs.scriptName ?? `${namespace}-dispatcher`;
@@ -56,28 +47,25 @@ export async function publishDispatcherHandler(
   console.log(`Publishing ${scriptName}`);
 
   // These must be done serially:
-  await ensureDispatchNamespace(config, namespace);
+  await ensureDispatchNamespace(config);
 
   // The namespace must have been created in order to setup bindings to it in the Worker.
-  await publishDispatcherScript(config, namespace, scriptName);
+  await publishDispatcherScript(config, scriptName);
 
   // The worker must have been created in order to setup the fallback Worker Route.
-  await ensureFallbackRoute(config, zoneName, scriptName, overwriteFallbacks);
+  await ensureFallbackRoute(config, scriptName, overwriteFallbacks);
 
   // This can technically be done in parallel with the rest but we keep it serial for readability.
-  await ensureFallbackOrigin(
-    config,
-    fallbackHostname,
-    zoneName,
-    overwriteFallbacks,
-  );
+  await ensureFallbackOrigin(config, fallbackHostname, overwriteFallbacks);
 }
 
-async function ensureDispatchNamespace(
-  {apiKey, accountID}: CloudflareConfig,
-  name: string,
-): Promise<void> {
+async function ensureDispatchNamespace({
+  apiKey,
+  accountID,
+  dispatchNamespace: name,
+}: ProviderConfig): Promise<void> {
   const namespaces = new DispatchNamespaces(apiKey, accountID);
+  await namespaces.delete('mirror');
   try {
     const exists = await namespaces.get(name);
     console.log(`"${name}" namespace exists: `, exists);
@@ -91,8 +79,7 @@ async function ensureDispatchNamespace(
 }
 
 export async function ensureFallbackRoute(
-  {apiKey, zoneID}: CloudflareConfig,
-  zoneName: string,
+  {apiKey, defaultZone: {id: zoneID, name: zoneName}}: ProviderConfig,
   script: string,
   overwriteExisting: boolean,
 ) {
@@ -120,9 +107,8 @@ export async function ensureFallbackRoute(
 }
 
 export async function ensureFallbackOrigin(
-  {apiKey, zoneID}: CloudflareConfig,
+  {apiKey, defaultZone: {id: zoneID, name: zoneName}}: ProviderConfig,
   hostname: string,
-  zoneName: string,
   overwrite: boolean,
 ): Promise<void> {
   const origin = `${hostname}.${zoneName}`;
@@ -167,8 +153,7 @@ export async function ensureFallbackOrigin(
 }
 
 async function publishDispatcherScript(
-  {apiKey, accountID}: CloudflareConfig,
-  namespace: string,
+  {apiKey, accountID, dispatchNamespace: namespace}: ProviderConfig,
   name: string,
 ): Promise<void> {
   const dispatcherScript = await loadDispatcherScript();

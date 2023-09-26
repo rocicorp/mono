@@ -109,7 +109,8 @@ describe('team-ensure function', () => {
     expect(team).toEqual({
       name: 'My Team, LLC.',
       label: 'myteamllc',
-      defaultCfID: 'default-CLOUDFLARE_ACCOUNT_ID',
+      defaultCfID: 'deprecated',
+      defaultProvider: null,
       numAdmins: 1,
       numMembers: 0,
       numInvites: 0,
@@ -150,7 +151,8 @@ describe('team-ensure function', () => {
     expect(team).toEqual({
       name: 'Existing Team Name, LLC.',
       label: expect.stringMatching(/existingteamnamellc\d+/),
-      defaultCfID: 'default-CLOUDFLARE_ACCOUNT_ID',
+      defaultCfID: 'deprecated',
+      defaultProvider: null,
       numAdmins: 1,
       numMembers: 0,
       numInvites: 0,

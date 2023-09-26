@@ -21,9 +21,10 @@ import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {
-  cloudflareDataConverter,
-  cloudflarePath,
-} from 'mirror-schema/src/cloudflare.js';
+  DEFAULT_PROVIDER_ID,
+  providerDataConverter,
+  providerPath,
+} from 'mirror-schema/src/provider.js';
 
 mockFunctionParamsAndSecrets();
 
@@ -45,11 +46,16 @@ describe('publish', () => {
     );
     batch.create(
       firestore
-        .doc(cloudflarePath(CF_ID))
-        .withConverter(cloudflareDataConverter),
+        .doc(providerPath(DEFAULT_PROVIDER_ID))
+        .withConverter(providerDataConverter),
       {
-        domain: 'reflect-o-rama.net',
+        accountID: CF_ID,
+        defaultZone: {
+          id: 'zone-id',
+          name: 'reflect-o-rama.net',
+        },
         defaultMaxApps: 3,
+        dispatchNamespace: 'prod',
       },
     );
     batch.create(
@@ -57,7 +63,8 @@ describe('publish', () => {
       {
         name: 'foo-bar',
         teamLabel: 'teamblue',
-        cfID: CF_ID,
+        provider: null,
+        cfID: 'deprecated',
         cfScriptName: 'foo-bar-script',
         serverReleaseChannel: 'stable',
         teamID: 'fooTeam',
@@ -103,7 +110,7 @@ describe('publish', () => {
     for (const path of [
       userPath(USER_ID),
       appPath(APP_ID),
-      cloudflarePath(CF_ID),
+      providerPath(DEFAULT_PROVIDER_ID),
       serverPath('0.28.0'),
       serverPath('0.28.1'),
       serverPath('0.29.0'),

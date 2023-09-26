@@ -1,4 +1,4 @@
-import {getCloudflareConfig} from './cf.js';
+import {getProviderConfig} from './cf.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {DNSRecords} from 'cloudflare-api/src/dns-records.js';
 
@@ -23,7 +23,10 @@ export async function dnsRecordsHandler(
   yargs: DnsRecordsHandlerArgs,
 ): Promise<void> {
   const {search, delete: deleteRecords} = yargs;
-  const {apiKey, zoneID} = await getCloudflareConfig(yargs);
+  const {
+    apiKey,
+    defaultZone: {id: zoneID},
+  } = await getProviderConfig(yargs);
   const resource = new DNSRecords(apiKey, zoneID);
   const query = search ? new URLSearchParams({search}) : undefined;
 

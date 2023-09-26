@@ -1,4 +1,4 @@
-import {getCloudflareConfig} from './cf.js';
+import {getProviderConfig} from './cf.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {CustomHostnames} from 'cloudflare-api/src/custom-hostnames.js';
 
@@ -34,8 +34,11 @@ export async function customHostnamesHandler(
   yargs: CustomHostnamesHandlerArgs,
 ): Promise<void> {
   const {pattern = '', delete: deleteHostnames = false, create, get} = yargs;
-  const config = await getCloudflareConfig(yargs);
-  const {apiKey, zoneID} = config;
+  const config = await getProviderConfig(yargs);
+  const {
+    apiKey,
+    defaultZone: {id: zoneID},
+  } = config;
 
   const resource = new CustomHostnames(apiKey, zoneID);
 

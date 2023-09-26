@@ -5,10 +5,11 @@ import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {tail} from './tail.handler.js';
 import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
 import {getMockReq, getMockRes} from '@jest-mock/express';
-import {setUser, setApp} from 'mirror-schema/src/test-helpers.js';
+import {setUser, setApp, setProvider} from 'mirror-schema/src/test-helpers.js';
 import type WebSocket from 'ws';
 import {sleep} from 'shared/src/sleep.js';
 import type {Firestore} from '@google-cloud/firestore';
+import {mockApiTokenForProvider} from './secrets.js';
 
 export class MockSocket {
   readonly url: string | URL;
@@ -87,7 +88,13 @@ describe('test tail', () => {
 
     createTailFunction = tail(firestore, auth, createCloudflareTailMock);
     await setUser(firestore, 'foo', 'foo@bar.com', 'bob', {fooTeam: 'admin'});
-    await setApp(firestore, 'myApp', {teamID: 'fooTeam', name: 'MyAppName'});
+    await setApp(firestore, 'myApp', {
+      teamID: 'fooTeam',
+      name: 'MyAppName',
+      provider: 'tail-test-provider',
+    });
+    await setProvider(firestore, 'tail-test-provider', {});
+    mockApiTokenForProvider('tail-test-provider');
   });
 
   const getRequestWithHeaders = (): https.Request =>

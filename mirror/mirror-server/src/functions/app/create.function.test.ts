@@ -19,9 +19,9 @@ import {teamDataConverter, teamPath} from 'mirror-schema/src/team.js';
 import {appPath} from 'mirror-schema/src/deployment.js';
 import {appNameIndexPath} from 'mirror-schema/src/team.js';
 import {
-  cloudflareDataConverter,
-  cloudflarePath,
-} from 'mirror-schema/src/cloudflare.js';
+  providerDataConverter,
+  providerPath,
+} from 'mirror-schema/src/provider.js';
 
 mockFunctionParamsAndSecrets();
 
@@ -30,6 +30,7 @@ describe('app-create function', () => {
   const firestore = getFirestore();
   const USER_ID = 'app-create-test-user';
   const USER_EMAIL = 'foo@bar.com';
+  const PROVIDER = 'tuesday';
   const CF_ID = 'cf-123';
   const TEAM_ID = 'app-create-test-team';
   const TEAM_LABEL = 'footeam';
@@ -69,15 +70,21 @@ describe('app-create function', () => {
     });
 
     await firestore
-      .doc(cloudflarePath(CF_ID))
-      .withConverter(cloudflareDataConverter)
-      .set({
-        domain: 'reflect-server.net',
+      .doc(providerPath(PROVIDER))
+      .withConverter(providerDataConverter)
+      .create({
+        accountID: CF_ID,
         defaultMaxApps: 3,
+        defaultZone: {
+          id: 'zone-id',
+          name: 'reflect-o-rama.net',
+        },
+        dispatchNamespace: 'prod',
       });
 
     await setTeam(firestore, TEAM_ID, {
-      defaultCfID: CF_ID,
+      defaultCfID: 'deprecated',
+      defaultProvider: PROVIDER,
       label: TEAM_LABEL,
       numAdmins: 1,
       numApps: 2,
@@ -92,7 +99,7 @@ describe('app-create function', () => {
         firestore.doc(userPath(USER_ID)),
         firestore.doc(teamPath(TEAM_ID)),
         firestore.doc(teamMembershipPath(TEAM_ID, USER_ID)),
-        firestore.doc(cloudflarePath(CF_ID)),
+        firestore.doc(providerPath(PROVIDER)),
       );
       for (const doc of docs) {
         tx.delete(doc.ref);
@@ -113,7 +120,7 @@ describe('app-create function', () => {
       teamID: TEAM_ID,
       teamLabel: TEAM_LABEL,
       name: appName,
-      cfID: 'default-CLOUDFLARE_ACCOUNT_ID',
+      provider: PROVIDER,
       cfScriptName: expect.any(String),
       serverReleaseChannel: 'stable',
       deploymentOptions: {

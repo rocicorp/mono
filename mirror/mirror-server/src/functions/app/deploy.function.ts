@@ -27,21 +27,23 @@ import {newDeploymentID} from '../../ids.js';
 import {deleteAppDocs} from './delete.function.js';
 import {
   DEPLOYMENT_SECRETS_NAMES,
-  defineSecretSafely,
+  getApiToken,
   getAppSecrets,
 } from './secrets.js';
 import {FetchResultError} from 'cloudflare-api/src/fetch.js';
 import {GlobalScript} from 'cloudflare-api/src/scripts.js';
-
-// This is the API token for reflect-server.net
-// https://dash.cloudflare.com/085f6d8eb08e5b23debfb08b21bda1eb/
-const cloudflareApiToken = defineSecretSafely('CLOUDFLARE_API_TOKEN');
+import {
+  DEFAULT_PROVIDER_ID,
+  providerDataConverter,
+  providerPath,
+} from 'mirror-schema/src/provider.js';
+import {getDataOrFail} from '../validators/data.js';
 
 export const deploy = (firestore: Firestore, storage: Storage) =>
   onDocumentCreated(
     {
       document: 'apps/{appID}/deployments/{deploymentID}',
-      secrets: ['CLOUDFLARE_API_TOKEN', ...DEPLOYMENT_SECRETS_NAMES],
+      secrets: [...DEPLOYMENT_SECRETS_NAMES],
     },
     async event => {
       const {appID, deploymentID} = event.params;
@@ -56,6 +58,7 @@ export async function runDeployment(
   storage: Storage,
   appID: string,
   deploymentID: string,
+  getApiTokenSecret = getApiToken, // Overridden in tests.
   publishToCloudflare = publish, // Overridden in tests.
   deleteFromCloudflare = deleteScript, // Overridden in tests.
 ): Promise<void> {
@@ -81,12 +84,28 @@ export async function runDeployment(
     );
   }
 
-  const {cfID, cfScriptName, name: appName, teamLabel} = must(appDoc.data());
+  const {
+    provider: appProvider,
+    cfScriptName,
+    name: appName,
+    teamLabel,
+  } = must(appDoc.data());
   const {
     type: deploymentType,
     status,
     spec: {serverVersion, hostname, options, appModules},
   } = must(deploymentDoc.data());
+
+  const providerID = appProvider ?? DEFAULT_PROVIDER_ID;
+  const apiToken = getApiTokenSecret(providerID);
+  const {accountID} = getDataOrFail(
+    await firestore
+      .doc(providerPath(providerID))
+      .withConverter(providerDataConverter)
+      .get(),
+    'internal',
+    `Unknown provider ${providerID} for App ${appID}`,
+  );
 
   if (status !== 'REQUESTED') {
     logger.warn(`Deployment is already ${status}`);
@@ -102,11 +121,7 @@ export async function runDeployment(
     {lastUpdateTime}, // Aborts if another trigger is already executing the same deployment.
   );
 
-  const script = new GlobalScript(
-    cloudflareApiToken.value(),
-    cfID,
-    cfScriptName,
-  );
+  const script = new GlobalScript(await apiToken, accountID, cfScriptName);
 
   try {
     if (deploymentType === 'DELETE') {

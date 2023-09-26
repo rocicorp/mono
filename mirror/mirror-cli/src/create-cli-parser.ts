@@ -6,6 +6,7 @@ export const scriptName = `npm run mirror`;
 
 export function createCLIParserBase(argv: string[]): Argv<{
   stack: string;
+  provider: string;
 }> {
   // Type check result against CommonYargsOptions to make sure we've included
   // all common options
@@ -26,6 +27,12 @@ export function createCLIParserBase(argv: string[]): Argv<{
       describe: 'The Firebase stack to execute on',
       choices: ['prod', 'sandbox'],
       default: 'prod',
+      requiresArg: true,
+    })
+    .option('provider', {
+      describe: 'The Cloudflare provider',
+      choices: ['default'],
+      default: 'default',
       requiresArg: true,
     });
 

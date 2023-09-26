@@ -25,6 +25,7 @@
     "@badrap/valita": "^0.2.10",
     "@google-cloud/firestore": "^6.6.1",
     "@google-cloud/functions-framework": "^3.2.0",
+    "@google-cloud/secret-manager": "^5.0.1",
     "cors": "^2.8.5",
     "firebase-admin": "^11.10.1",
     "firebase-functions": "^4.4.0",

@@ -1,7 +1,6 @@
 import {randomInt} from 'crypto';
 import type {Firestore, Transaction} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
-import {defineString} from 'firebase-functions/params';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {
   ensureTeamRequestSchema,
@@ -23,8 +22,6 @@ import {must} from 'shared/src/must.js';
 import {newTeamID} from '../../ids.js';
 import {userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
-
-const cloudflareAccountId = defineString('CLOUDFLARE_ACCOUNT_ID');
 
 export const DEFAULT_MAX_APPS = null;
 
@@ -70,7 +67,8 @@ export const ensure = (firestore: Firestore) =>
           {
             name,
             label,
-            defaultCfID: cloudflareAccountId.value(),
+            defaultProvider: null, // null == 'default'
+            defaultCfID: 'deprecated',
             numAdmins: 1,
             numMembers: 0,
             numInvites: 0,

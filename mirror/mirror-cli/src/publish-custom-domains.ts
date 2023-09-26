@@ -1,4 +1,4 @@
-import {CloudflareConfig, getCloudflareConfig} from './cf.js';
+import {ProviderConfig, getProviderConfig} from './cf.js';
 import {cfFetch} from 'cloudflare-api/src/fetch.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
@@ -24,7 +24,7 @@ type PublishCustomDomainsHandlerArgs = YargvToInterface<
 export async function publishCustomDomainsHandler(
   yargs: PublishCustomDomainsHandlerArgs,
 ): Promise<void> {
-  const config = await getCloudflareConfig(yargs);
+  const config = await getProviderConfig(yargs);
   const {scriptName, domains} = yargs;
   await publishCustomDomains(config, scriptName, ...domains);
 }
@@ -38,7 +38,7 @@ export async function publishCustomDomainsHandler(
 // so we aggressively update rather than aggressively fail
 
 export async function publishCustomDomains(
-  {apiKey, accountID}: CloudflareConfig,
+  {apiKey, accountID}: ProviderConfig,
   scriptName: string,
   ...hostnames: string[]
 ): Promise<void> {

@@ -1,4 +1,4 @@
-import {getCloudflareConfig} from './cf.js';
+import {getProviderConfig} from './cf.js';
 import {cfCall} from 'cloudflare-api/src/fetch.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
@@ -16,7 +16,7 @@ type QueryAnalyticsHandlerArgs = YargvToInterface<
 
 // https://developers.cloudflare.com/analytics/analytics-engine/sql-api/
 export async function queryAnalyticsHandler(yargs: QueryAnalyticsHandlerArgs) {
-  const {apiKey, accountID} = await getCloudflareConfig(yargs);
+  const {apiKey, accountID} = await getProviderConfig(yargs);
   const resource = `/accounts/${accountID}/analytics_engine/sql`;
   const {query} = yargs;
   const resp = await cfCall(apiKey, resource, {

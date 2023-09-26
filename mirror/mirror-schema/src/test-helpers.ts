@@ -24,6 +24,11 @@ import {
 } from 'mirror-schema/src/user.js';
 import {must} from 'shared/src/must.js';
 import {DeploymentSecrets, defaultOptions} from './deployment.js';
+import {
+  providerPath,
+  type Provider,
+  providerDataConverter,
+} from './provider.js';
 
 // The server and (v8) client Firestore interfaces are largely the same.
 // Have the jest mock implement both, which should largely work for our testing purposes.
@@ -74,7 +79,7 @@ export async function setTeam(
   const {
     name = `Name of ${teamID}`,
     label = sanitizeForLabel(name),
-    defaultCfID = 'default-cloudflare-id',
+    defaultProvider = null,
     numAdmins = 0,
     numMembers = 0,
     numInvites = 0,
@@ -84,7 +89,8 @@ export async function setTeam(
   const newTeam: Team = {
     name,
     label,
-    defaultCfID,
+    defaultCfID: 'deprecated',
+    defaultProvider,
     numAdmins,
     numMembers,
     numInvites,
@@ -140,6 +146,33 @@ export async function getMembership(
   return must(membershipDoc.data());
 }
 
+export async function setProvider(
+  firestore: Firestore,
+  providerID: string,
+  provider: Partial<Provider>,
+): Promise<Provider> {
+  const {
+    accountID = `${providerID}-account-id`,
+    defaultZone = {
+      id: `${providerID}-zone-id`,
+      name: `${providerID}-zone-name`,
+    },
+    defaultMaxApps = 3,
+    dispatchNamespace = 'prod',
+  } = provider;
+  const newProvider: Provider = {
+    accountID,
+    defaultZone,
+    defaultMaxApps,
+    dispatchNamespace,
+  };
+  await firestore
+    .doc(providerPath(providerID))
+    .withConverter(providerDataConverter)
+    .set(newProvider);
+  return newProvider;
+}
+
 export async function getApp(
   firestore: Firestore,
   appID: string,
@@ -160,7 +193,7 @@ export async function setApp(
     name = `Name of ${appID}`,
     teamID = 'team-id',
     teamLabel = 'teamlabel',
-    cfID = 'default-cloudflare-id',
+    provider = null,
     cfScriptName = 'cf-script-name',
     serverReleaseChannel = 'stable',
   } = app;
@@ -168,7 +201,8 @@ export async function setApp(
     name,
     teamID,
     teamLabel,
-    cfID,
+    cfID: 'deprecated',
+    provider,
     cfScriptName,
     serverReleaseChannel,
     deploymentOptions: defaultOptions(),

@@ -23,9 +23,10 @@ import {
 } from './auto-deploy.function.js';
 import {dummySecrets} from 'mirror-schema/src/test-helpers.js';
 import {
-  cloudflareDataConverter,
-  cloudflarePath,
-} from 'mirror-schema/src/cloudflare.js';
+  DEFAULT_PROVIDER_ID,
+  providerDataConverter,
+  providerPath,
+} from 'mirror-schema/src/provider.js';
 
 describe('auto-deploy', () => {
   initializeApp({projectId: 'auto-deploy-function-test'});
@@ -33,7 +34,7 @@ describe('auto-deploy', () => {
   const APP_ID = 'auto-deploy-test-app-id';
   const SERVER_VERSION_1 = '0.28.0';
   const SERVER_VERSION_2 = '0.28.2';
-  const CF_ID = 'cf-abc';
+  const CLOUDFLARE_ACCOUNT_ID = 'foo-cloudflare-account';
 
   beforeEach(async () => {
     mockFunctionParamsAndSecrets();
@@ -66,17 +67,23 @@ describe('auto-deploy', () => {
     );
     batch.create(
       firestore
-        .doc(cloudflarePath(CF_ID))
-        .withConverter(cloudflareDataConverter),
+        .doc(providerPath(DEFAULT_PROVIDER_ID))
+        .withConverter(providerDataConverter),
       {
-        domain: 'reflect-o-rama.net',
+        accountID: CLOUDFLARE_ACCOUNT_ID,
         defaultMaxApps: 3,
+        defaultZone: {
+          id: 'zone-id',
+          name: 'reflect-o-rama.net',
+        },
+        dispatchNamespace: 'prod',
       },
     );
     batch.create(
       firestore.doc(appPath(APP_ID)).withConverter(appDataConverter),
       {
-        cfID: CF_ID,
+        cfID: 'deprecated',
+        provider: null,
         cfScriptName: 'bar',
         teamID: 'baz',
         name: 'boo',
@@ -128,7 +135,7 @@ describe('auto-deploy', () => {
       appPath(APP_ID),
       serverPath(SERVER_VERSION_1),
       serverPath(SERVER_VERSION_2),
-      cloudflarePath(CF_ID),
+      providerPath(DEFAULT_PROVIDER_ID),
     ]) {
       batch.delete(firestore.doc(path));
     }

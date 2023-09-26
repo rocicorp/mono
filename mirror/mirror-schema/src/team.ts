@@ -24,7 +24,9 @@ export const teamSchema = v.object({
   /** @deprecated TODO(darick): Remove with the cli migration code. */
   subdomain: v.string().optional(),
 
-  defaultCfID: v.string(),
+  // TODO: Deprecate and replace with defaultProvider.
+  defaultCfID: v.string().optional(),
+  defaultProvider: v.string().nullable().optional(),
 
   // Number of memberships of role 'admin'.
   // A team must have at least one admin.

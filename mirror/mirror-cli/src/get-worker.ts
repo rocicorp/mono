@@ -1,4 +1,4 @@
-import {getCloudflareConfig} from './cf.js';
+import {getProviderConfig} from './cf.js';
 import {cfCall} from 'cloudflare-api/src/fetch.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
@@ -32,7 +32,7 @@ type GetWorkerHandlerArgs = YargvToInterface<
 export async function getWorkerHandler(
   yargs: GetWorkerHandlerArgs,
 ): Promise<void> {
-  const config = await getCloudflareConfig(yargs);
+  const config = await getProviderConfig(yargs);
   const {apiKey, accountID} = config;
   const {name, component, namespace, resource} = yargs;
 

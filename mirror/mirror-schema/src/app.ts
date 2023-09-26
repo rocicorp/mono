@@ -3,7 +3,11 @@ import {firestoreDataConverter} from './converter.js';
 import {deploymentOptionsSchema, deploymentSchema} from './deployment.js';
 
 export const appSchema = v.object({
-  cfID: v.string(),
+  // TODO: Deprecate and replace with provider.
+  cfID: v.string().optional(),
+  // null == "default" provider.
+  provider: v.string().nullable().optional(),
+
   // Globally unique, stable, internal script name in Cloudflare.
   cfScriptName: v.string(),
   teamID: v.string(),

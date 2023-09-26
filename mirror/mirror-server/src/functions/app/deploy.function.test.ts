@@ -42,6 +42,11 @@ import {Queue} from 'shared/src/queue.js';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {appNameIndexPath, teamPath} from 'mirror-schema/src/team.js';
 import {sleep} from 'shared/src/sleep.js';
+import {
+  DEFAULT_PROVIDER_ID,
+  providerDataConverter,
+  providerPath,
+} from 'mirror-schema/src/provider.js';
 
 mockFunctionParamsAndSecrets();
 
@@ -57,22 +62,49 @@ describe('deploy', () => {
   const APP_NAME = 'my-app';
   const TEAM_ID = 'my-team';
   const SERVER_VERSION = 'deploy-server-version';
+  const CLOUDFLARE_ACCOUNT_ID = 'foo-cloudflare-account';
+
+  function mockGetApiToken(provider: string): Promise<string> {
+    expect(provider).toBe(DEFAULT_PROVIDER_ID);
+    return Promise.resolve('api-token');
+  }
 
   beforeAll(async () => {
-    await firestore
-      .doc(serverPath(SERVER_VERSION))
-      .withConverter(serverDataConverter)
-      .create({
+    const batch = firestore.batch();
+    batch.create(
+      firestore
+        .doc(serverPath(SERVER_VERSION))
+        .withConverter(serverDataConverter),
+      {
         major: 1,
         minor: 2,
         patch: 3,
         modules: [],
         channels: ['stable'],
-      });
+      },
+    );
+    batch.create(
+      firestore
+        .doc(providerPath(DEFAULT_PROVIDER_ID))
+        .withConverter(providerDataConverter),
+      {
+        accountID: CLOUDFLARE_ACCOUNT_ID,
+        defaultMaxApps: 3,
+        defaultZone: {
+          id: 'zone-id',
+          name: 'reflect-o-rama.net',
+        },
+        dispatchNamespace: 'prod',
+      },
+    );
+    await batch.commit();
   });
 
   afterAll(async () => {
-    await firestore.doc(serverPath(SERVER_VERSION)).delete();
+    const batch = firestore.batch();
+    batch.delete(firestore.doc(serverPath(SERVER_VERSION)));
+    batch.delete(firestore.doc(providerPath(DEFAULT_PROVIDER_ID)));
+    await batch.commit();
   });
 
   beforeEach(async () => {
@@ -190,6 +222,7 @@ describe('deploy', () => {
       null as unknown as Storage,
       APP_ID,
       deploymentID,
+      mockGetApiToken,
       publish,
     );
     await isPublishing;
@@ -229,6 +262,7 @@ describe('deploy', () => {
       null as unknown as Storage,
       APP_ID,
       nextDeploymentID,
+      mockGetApiToken,
       noopPublish,
     );
 
@@ -275,6 +309,7 @@ describe('deploy', () => {
       null as unknown as Storage,
       APP_ID,
       deploymentID,
+      mockGetApiToken,
       publish,
     );
     await isPublishing;
@@ -352,8 +387,22 @@ describe('deploy', () => {
     }
 
     const results = await Promise.allSettled([
-      runDeployment(firestore, null as unknown as Storage, APP_ID, id, publish),
-      runDeployment(firestore, null as unknown as Storage, APP_ID, id, publish),
+      runDeployment(
+        firestore,
+        null as unknown as Storage,
+        APP_ID,
+        id,
+        mockGetApiToken,
+        publish,
+      ),
+      runDeployment(
+        firestore,
+        null as unknown as Storage,
+        APP_ID,
+        id,
+        mockGetApiToken,
+        publish,
+      ),
     ]);
 
     // Verify that only one of the runs succeeded.
@@ -381,6 +430,7 @@ describe('deploy', () => {
       null as unknown as Storage,
       APP_ID,
       deleteID,
+      mockGetApiToken,
       noopPublish,
       // eslint-disable-next-line require-await
       async () => {

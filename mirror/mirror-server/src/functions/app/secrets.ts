@@ -2,6 +2,8 @@ import {defineSecret} from 'firebase-functions/params';
 import type {DeploymentSecrets} from 'mirror-schema/src/deployment.js';
 import {assert} from 'shared/src/asserts.js';
 import {sha256OfString} from 'shared/src/sha256.js';
+import {SecretManagerServiceClient} from '@google-cloud/secret-manager';
+import {projectId} from '../../config/index.js';
 
 export function defineSecretSafely(name: string) {
   const secret = defineSecret(name);
@@ -65,4 +67,23 @@ export async function hashSecrets(
     Object.keys(secrets).map(key => hashSecret(key as keyof DeploymentSecrets)),
   );
   return hashes;
+}
+
+export function mockApiTokenForProvider(provider: string | undefined) {
+  mockProvider = provider;
+}
+let mockProvider: string | undefined;
+
+export async function getApiToken(provider: string): Promise<string> {
+  if (provider === mockProvider) {
+    return mockProvider;
+  }
+  const secrets = new SecretManagerServiceClient();
+  const name = `projects/${projectId}/secrets/${provider}_api_token/versions/latest`;
+  const [{payload}] = await secrets.accessSecretVersion({name});
+  if (!payload || !payload.data) {
+    throw new Error(`No data for ${provider} secret`);
+  }
+  const {data} = payload;
+  return typeof data === 'string' ? data : Buffer.from(data).toString('utf-8');
 }

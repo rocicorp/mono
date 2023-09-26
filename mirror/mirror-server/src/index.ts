@@ -45,7 +45,7 @@ export const app = {
     {
       timeoutSeconds: 3600,
       ...baseHttpsOptions,
-      secrets: ['CLOUDFLARE_API_TOKEN', ...DEPLOYMENT_SECRETS_NAMES],
+      secrets: [...DEPLOYMENT_SECRETS_NAMES],
     },
     appFunctions.tail(getFirestore(), getAuth()),
   ),
