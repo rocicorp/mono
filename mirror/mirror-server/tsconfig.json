@@ -4,5 +4,5 @@
     "types": ["node"],
     "skipLibCheck": true
   },
-  "include": ["src", "tool/fix-jest-mock.js", "tool/build.js"],
+  "include": ["src", "tool/fix-jest-mock.js", "tool/build.js"]
 }
