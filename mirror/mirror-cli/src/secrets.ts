@@ -34,6 +34,21 @@ export async function storeSecret(
     }
   }
 
+  const secretName = `${parent}/secrets/${secretId}`;
+  await secrets.setIamPolicy({
+    resource: secretName,
+    policy: {
+      bindings: [
+        {
+          role: 'roles/secretmanager.secretAccessor',
+          members: [
+            `serviceAccount:functions@reflect-mirror-${stack}.iam.gserviceaccount.com`,
+          ],
+        },
+      ],
+    },
+  });
+
   try {
     const latest = await getSecret(stack, secretId);
     if (latest === val) {
@@ -46,7 +61,6 @@ export async function storeSecret(
     }
   }
 
-  const secretName = `${parent}/secrets/${secretId}`;
   const result = await secrets.addSecretVersion({
     parent: secretName,
     payload: {data: Buffer.from(val, 'utf-8')},
