@@ -84,5 +84,5 @@ export async function getApiToken(provider: string): Promise<string> {
     throw new Error(`No data for ${provider} secret`);
   }
   const {data} = payload;
-  return typeof data === 'string' ? data : Buffer.from(data).toString('utf-8');
+  return typeof data === 'string' ? data : new TextDecoder().decode(data);
 }

@@ -15,16 +15,16 @@ export async function getProviderConfig(
   yargs: YargvToInterface<CommonYargsArgv>,
 ): Promise<ProviderConfig> {
   const {stack, provider} = yargs;
-  const cloudflare = (
+  const providerData = (
     await getFirestore()
       .doc(providerPath(provider))
       .withConverter(providerDataConverter)
       .get()
   ).data();
-  if (!cloudflare) {
+  if (!providerData) {
     throw new Error(`No "${provider}" provider is setup for ${stack}`);
   }
 
   const apiKey = await getSecret(stack, `${provider}_api_token`);
-  return {...cloudflare, apiKey};
+  return {...providerData, apiKey};
 }

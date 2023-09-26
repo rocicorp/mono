@@ -46,14 +46,14 @@ export async function* publishCustomHostnames(
   for (const name of create) {
     yield `Setting up hostname ${name}`;
   }
-  const results = await Promise.allSettled([
-    ...[...discard].map(record =>
-      deleteCustomHostname(record, records, hostnames),
-    ),
-    ...[...create].map(name =>
-      createCustomHostname(name, zoneName, script, records, hostnames),
-    ),
-  ]);
+  const p: Promise<unknown>[] = [];
+  discard.forEach(record =>
+    p.push(deleteCustomHostname(record, records, hostnames)),
+  );
+  create.forEach(name =>
+    p.push(createCustomHostname(name, zoneName, script, records, hostnames)),
+  );
+  const results = await Promise.allSettled(p);
 
   let error;
   results.forEach(result => {

@@ -9,7 +9,7 @@ export async function getSecret(stack: string, id: string): Promise<string> {
     throw new Error(`No data for ${id} secret`);
   }
   const {data} = payload;
-  return typeof data === 'string' ? data : Buffer.from(data).toString('utf-8');
+  return typeof data === 'string' ? data : new TextDecoder().decode(data);
 }
 
 export async function storeSecret(
@@ -63,7 +63,7 @@ export async function storeSecret(
 
   const result = await secrets.addSecretVersion({
     parent: secretName,
-    payload: {data: Buffer.from(val, 'utf-8')},
+    payload: {data: new TextEncoder().encode(val)},
   });
   console.log(`Successfully stored secret`, result);
 }
