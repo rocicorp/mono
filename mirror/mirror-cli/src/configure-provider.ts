@@ -80,9 +80,6 @@ export async function configureProviderHandler(
     console.warn(`Action aborted`);
     process.exit(-1);
   }
-  ('Z_s6N3wN5v9ZbxKoemxxn6tkd6fVRWZF8-uPc7ys');
-
-  ('9-QV7xgnYISfPJwtY6081cpueAKCAoXhKjDuJZJo');
   console.log(`Storing API token`);
   await storeSecret(stack, `${id}_api_token`, apiToken);
 
