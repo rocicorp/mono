@@ -100,6 +100,11 @@ A Cloudflare account is needed to run workers and Durable Objects.
 - This must be a PAID account ($5/mo) in order to run Durable Objects.
 - It must be configured with a domain name (e.g. sandbox uses `reflect-server.dev`)
   on which the workers are served.
+- Custom Hostnames must be enabled by enabling Cloudflare for SaaS (`SSL/TLS -> Custom Hostnames`).
+- The Custom Hostname [Metadata](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/domain-support/custom-metadata/)
+  capability must be requested through a Cloudflare Sales Associate.
+- DNS Record tag capability must be enabled. This is supposedly [automatically available for Enterprise](https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/#record-tags)
+  but depending on the account / zone setup, it may have to be requested through a Cloudflare Sales Associate.
 - [Create an API key](https://dash.cloudflare.com/profile/api-tokens) for the Mirror Server
   (i.e. Cloud Functions) to make API calls. It should have the following permissions:
 
@@ -111,23 +116,25 @@ A Cloudflare account is needed to run workers and Durable Objects.
   - `Zone: SSL and Certificates`: Edit (Manage Custom Hostname)
   - `Zone: Zone Settings`: Edit (Update Fallback Origin for Custom Hostnames)
 
-- In the Firestore console (https://console.firebase.google.com/project/reflect-mirror-{{stackname}}/firestore/data), create the document in a "cloudflares" collection:
+- Once you have the API Key, in the `mirror-cli` directory run:
 
-```json
-"cloudflares/<cloudflare-account-id>": {
-  "defaultMaxApps": 5,
-  "domain": "<the-domain-name-of-the-cloudflare-account>"
-}
-```
+  ```sh
+  $ npm run mirror -- --stack=<stack-name> --namespace=<name-you-want> configure-provider
+  ```
 
-For example, the sandbox document is:
+  Examples:
 
-```json
-"cloudflares/b50bbcc3bb7e6f0383c8048e1978c660": {
-  "defaultMaxApps": 100,
-  "domain": "reflect-server.dev"
-}
-```
+  ```sh
+  $ npm run mirror -- --stack=prod --namespace=prod configure-provider default
+  $ npm run mirror -- --stack=prod --namespace=mond configure-provider monday
+  $ npm run mirror -- --stack=sandbox --namespace=sand configure-provider default --max-apps=50
+  ```
+
+  The cli command will accept the API key via a password input and validate that
+  the necessary permissions and account capabilities are available.
+
+  If everything checks it, it uploads the API key to the Secret Manager and writes the
+  `Provider` configuration to Firestore, which enables the hosting and management of Workers.
 
 ### Cloud Functions
 

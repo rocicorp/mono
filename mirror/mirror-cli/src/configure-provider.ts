@@ -1,6 +1,8 @@
 import {confirm, password, select} from './inquirer.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {Accounts} from 'cloudflare-api/src/accounts.js';
+import {CustomHostnames} from 'cloudflare-api/src/custom-hostnames.js';
+import {DNSRecords} from 'cloudflare-api/src/dns-records.js';
 import {Zones, Zone} from 'cloudflare-api/src/zones.js';
 import {
   providerPath,
@@ -27,6 +29,11 @@ export function configureProviderOptions(yargs: CommonYargsArgv) {
       desc: 'The default number of Apps each Team is allowed to create',
       type: 'number',
       default: 3,
+    })
+    .option('dry-run', {
+      desc: 'Verify the API key, but do not store it or the resulting Provider.',
+      type: 'boolean',
+      default: false,
     });
 }
 
@@ -37,7 +44,7 @@ type ConfigureProviderHandlerArgs = YargvToInterface<
 export async function configureProviderHandler(
   yargs: ConfigureProviderHandlerArgs,
 ): Promise<void> {
-  const {id, stack, namespace, maxApps} = yargs;
+  const {id, stack, namespace, maxApps, dryRun} = yargs;
   const apiToken = await password({
     message: 'Enter the Cloudflare API token for the provider:',
   });
@@ -47,6 +54,11 @@ export async function configureProviderHandler(
   const zone = await selectOneOf('Zone', zones);
 
   checkPermissions(zone);
+  await checkCapabilities(
+    zone.name,
+    new CustomHostnames(apiToken, zone.id),
+    new DNSRecords(apiToken, zone.id),
+  );
 
   // TODO: Verify that the account can perform the necessary functions
   // by creating (and cleaning up) temporary records, hostnames, etc.
@@ -63,8 +75,8 @@ export async function configureProviderHandler(
     },
   };
   console.log(`Configuring "${id}" provider`, provider);
-  if (!(await confirm({message: `Continue`, default: true}))) {
-    console.warn(`Action aborted`);
+  if (dryRun || !(await confirm({message: `Continue`, default: true}))) {
+    console.warn(`Action aborted ${dryRun ? '(--dry-run)' : ''}`);
     process.exit(-1);
   }
   console.log(`Storing API token`);
@@ -99,6 +111,33 @@ function checkPermissions(zone: Zone) {
       `API token is missing permissions [${missing}] for zone [${zone.permissions}]`,
     );
   }
+}
+
+async function checkCapabilities(
+  zoneName: string,
+  customHostnames: CustomHostnames,
+  dnsRecords: DNSRecords,
+): Promise<void> {
+  console.debug(`Verifying Custom Hostname metadata capability`);
+  const ch = await customHostnames.create({
+    hostname: `test-mirror-hostame.${zoneName}`,
+    custom_metadata: {
+      namespace: 'foo',
+      script: 'bar',
+    },
+  });
+  await customHostnames.delete(ch.id);
+
+  console.debug(`Verifying DNS Record tagging capability`);
+  // Create a TXT record with a tag to ensure that tags are enabled on the account.
+  const record = await dnsRecords.create({
+    type: 'TXT',
+    name: 'test-mirror-record',
+    content: 'test-mirror-content',
+    comment: 'Temporarily created by mirror-cli. Delete me.',
+    tags: ['foo:bar'],
+  });
+  await dnsRecords.delete(record.id);
 }
 
 async function selectOneOf<T extends {name: string}>(
