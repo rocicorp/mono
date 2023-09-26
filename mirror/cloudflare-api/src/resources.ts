@@ -98,3 +98,13 @@ export class Resource {
   readonly delete = <T>(query?: URLSearchParams): Promise<T> =>
     this.#fetch('DELETE', undefined, query);
 }
+
+export type ZoneAccess = {
+  apiToken: string;
+  zoneID: string;
+};
+
+export type AccountAccess = {
+  apiToken: string;
+  accountID: string;
+};

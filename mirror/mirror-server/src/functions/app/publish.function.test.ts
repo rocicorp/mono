@@ -51,8 +51,8 @@ describe('publish', () => {
       {
         accountID: CF_ID,
         defaultZone: {
-          id: 'zone-id',
-          name: 'reflect-o-rama.net',
+          zoneID: 'zone-id',
+          zoneName: 'reflect-o-rama.net',
         },
         defaultMaxApps: 3,
         dispatchNamespace: 'prod',

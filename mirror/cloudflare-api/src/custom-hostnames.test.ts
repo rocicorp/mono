@@ -9,7 +9,10 @@ afterEach(() => {
 test('custom-hostnames', async () => {
   const fetch = mockFetch().default({});
 
-  const resource = new CustomHostnames('api-token', 'zone-id');
+  const resource = new CustomHostnames({
+    apiToken: 'api-token',
+    zoneID: 'zone-id',
+  });
   await resource.list();
   await resource.delete('hostname-id');
 

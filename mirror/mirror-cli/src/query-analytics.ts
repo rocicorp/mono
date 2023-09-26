@@ -16,10 +16,10 @@ type QueryAnalyticsHandlerArgs = YargvToInterface<
 
 // https://developers.cloudflare.com/analytics/analytics-engine/sql-api/
 export async function queryAnalyticsHandler(yargs: QueryAnalyticsHandlerArgs) {
-  const {apiKey, accountID} = await getProviderConfig(yargs);
+  const {apiToken, accountID} = await getProviderConfig(yargs);
   const resource = `/accounts/${accountID}/analytics_engine/sql`;
   const {query} = yargs;
-  const resp = await cfCall(apiKey, resource, {
+  const resp = await cfCall(apiToken, resource, {
     method: 'POST',
     body: query,
   });

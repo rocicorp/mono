@@ -96,12 +96,15 @@ export async function runDeployment(
   } = must(deploymentDoc.data());
 
   try {
-    const apiToken = getApiTokenSecret(provider);
-    const {accountID} = getDataOrFail(
-      await firestore
+    const [apiToken, accountDoc] = await Promise.all([
+      getApiTokenSecret(provider),
+      firestore
         .doc(providerPath(provider))
         .withConverter(providerDataConverter)
         .get(),
+    ]);
+    const {accountID} = getDataOrFail(
+      accountDoc,
       'internal',
       `Unknown provider ${provider} for App ${appID}`,
     );
@@ -120,7 +123,7 @@ export async function runDeployment(
       {lastUpdateTime}, // Aborts if another trigger is already executing the same deployment.
     );
 
-    const script = new GlobalScript(await apiToken, accountID, cfScriptName);
+    const script = new GlobalScript({apiToken, accountID}, cfScriptName);
 
     if (deploymentType === 'DELETE') {
       // For a DELETE, the Deployment lifecycle is 'REQUESTED' -> 'DEPLOYING' -> (document deleted) | 'FAILED'

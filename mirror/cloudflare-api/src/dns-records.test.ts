@@ -9,7 +9,7 @@ afterEach(() => {
 test('dns-records', async () => {
   const fetch = mockFetch().default({});
 
-  const resource = new DNSRecords('api-token', 'zone-id');
+  const resource = new DNSRecords({apiToken: 'api-token', zoneID: 'zone-id'});
   await resource.list();
   await resource.delete('dns-record-id');
 

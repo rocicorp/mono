@@ -1,4 +1,11 @@
-import {DeleteFn, GetFn, ListFn, SetOnlyFn, Resource} from './resources.js';
+import {
+  DeleteFn,
+  GetFn,
+  ListFn,
+  SetOnlyFn,
+  Resource,
+  AccountAccess,
+} from './resources.js';
 
 /* eslint-disable @typescript-eslint/naming-convention */
 export type DispatchNamespace = {
@@ -15,7 +22,7 @@ export class DispatchNamespaces {
   readonly get: GetFn<DispatchNamespace>;
   readonly delete: DeleteFn<null>;
 
-  constructor(apiToken: string, accountID: string) {
+  constructor({apiToken, accountID}: AccountAccess) {
     const resource = new Resource(
       apiToken,
       `/accounts/${accountID}/workers/dispatch/namespaces`,

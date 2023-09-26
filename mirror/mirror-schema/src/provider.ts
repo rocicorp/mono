@@ -3,8 +3,8 @@ import {firestoreDataConverter} from './converter.js';
 import * as path from './path.js';
 
 export const zoneSchema = v.object({
-  id: v.string(),
-  name: v.string(), // e.g. 'reflect.net'
+  zoneID: v.string(),
+  zoneName: v.string(), // e.g. 'reflect.net'
 });
 
 /**

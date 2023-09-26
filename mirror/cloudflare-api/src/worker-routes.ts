@@ -5,6 +5,7 @@ import {
   SetOnlyFn,
   SetFn,
   Resource,
+  ZoneAccess,
 } from './resources.js';
 
 export type WorkerRoute = {
@@ -22,7 +23,7 @@ export class WorkerRoutes {
   readonly update: SetFn<WorkerRoute>;
   readonly delete: DeleteFn;
 
-  constructor(apiToken: string, zoneID: string) {
+  constructor({apiToken, zoneID}: ZoneAccess) {
     const resource = new Resource(apiToken, `/zones/${zoneID}/workers/routes`);
     this.list = resource.get;
     this.create = resource.post;

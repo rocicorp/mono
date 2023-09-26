@@ -13,17 +13,17 @@ import type {PartialDeep} from 'type-fest';
 import {HttpsError} from 'firebase-functions/v2/https';
 
 export async function* publishCustomHostnames(
-  config: ZoneConfig,
+  zone: ZoneConfig,
   script: NamespacedScript,
   hostname: string,
 ): AsyncGenerator<string> {
-  const {apiToken, zoneID, zoneName} = config;
+  const {zoneName} = zone;
   assert(
     hostname.endsWith(`.${zoneName}`),
     `hostname must be in zone ${zoneName}`,
   );
 
-  const records = new DNSRecords(apiToken, zoneID);
+  const records = new DNSRecords(zone);
   const currentRecords = await records.list(
     new URLSearchParams({tag: `script:${script.id}`}),
   );
@@ -42,7 +42,7 @@ export async function* publishCustomHostnames(
     return;
   }
 
-  const hostnames = new CustomHostnames(apiToken, zoneID);
+  const hostnames = new CustomHostnames(zone);
   for (const name of create) {
     yield `Setting up hostname ${name}`;
   }

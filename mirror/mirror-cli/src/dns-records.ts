@@ -24,10 +24,10 @@ export async function dnsRecordsHandler(
 ): Promise<void> {
   const {search, delete: deleteRecords} = yargs;
   const {
-    apiKey,
-    defaultZone: {id: zoneID},
+    apiToken,
+    defaultZone: {zoneID},
   } = await getProviderConfig(yargs);
-  const resource = new DNSRecords(apiKey, zoneID);
+  const resource = new DNSRecords({apiToken, zoneID});
   const query = search ? new URLSearchParams({search}) : undefined;
 
   for (const record of await resource.list(query)) {

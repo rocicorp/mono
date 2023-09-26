@@ -60,11 +60,11 @@ export async function publishDispatcherHandler(
 }
 
 async function ensureDispatchNamespace({
-  apiKey,
+  apiToken,
   accountID,
   dispatchNamespace: name,
 }: ProviderConfig): Promise<void> {
-  const namespaces = new DispatchNamespaces(apiKey, accountID);
+  const namespaces = new DispatchNamespaces({apiToken, accountID});
   await namespaces.delete('mirror');
   try {
     const exists = await namespaces.get(name);
@@ -79,12 +79,12 @@ async function ensureDispatchNamespace({
 }
 
 export async function ensureFallbackRoute(
-  {apiKey, defaultZone: {id: zoneID, name: zoneName}}: ProviderConfig,
+  {apiToken, defaultZone: {zoneID, zoneName}}: ProviderConfig,
   script: string,
   overwriteExisting: boolean,
 ) {
   const pattern = `*.${zoneName}/*`;
-  const resource = new WorkerRoutes(apiKey, zoneID);
+  const resource = new WorkerRoutes({apiToken, zoneID});
   for (const route of await resource.list()) {
     if (route.pattern === pattern) {
       if (route.script === script) {
@@ -107,12 +107,12 @@ export async function ensureFallbackRoute(
 }
 
 export async function ensureFallbackOrigin(
-  {apiKey, defaultZone: {id: zoneID, name: zoneName}}: ProviderConfig,
+  {apiToken, defaultZone: {zoneID, zoneName}}: ProviderConfig,
   hostname: string,
   overwrite: boolean,
 ): Promise<void> {
   const origin = `${hostname}.${zoneName}`;
-  const current = new FallbackOrigin(apiKey, zoneID);
+  const current = new FallbackOrigin({apiToken, zoneID});
   try {
     const existing = await current.get();
     if (existing.origin === origin) {
@@ -131,7 +131,7 @@ export async function ensureFallbackOrigin(
   // https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/start/advanced-settings/worker-as-origin/
   console.log(`Creating Fallback Origin DNS record for ${hostname}`);
   try {
-    const dnsRecords = new DNSRecords(apiKey, zoneID);
+    const dnsRecords = new DNSRecords({apiToken, zoneID});
     const dnsResult = await dnsRecords.create({
       type: 'AAAA',
       name: hostname,
@@ -153,7 +153,7 @@ export async function ensureFallbackOrigin(
 }
 
 async function publishDispatcherScript(
-  {apiKey, accountID, dispatchNamespace: namespace}: ProviderConfig,
+  {apiToken, accountID, dispatchNamespace: namespace}: ProviderConfig,
   name: string,
 ): Promise<void> {
   const dispatcherScript = await loadDispatcherScript();
@@ -177,7 +177,7 @@ async function publishDispatcherScript(
   /* eslint-enable @typescript-eslint/naming-convention */
 
   const result = await cfFetch(
-    apiKey,
+    apiToken,
     `/accounts/${accountID}/workers/scripts/${name}`,
     {
       method: 'PUT',

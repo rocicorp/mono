@@ -5,6 +5,7 @@ import {
   SetOnlyFn,
   SetFn,
   Resource,
+  ZoneAccess,
 } from './resources.js';
 
 /* eslint-disable @typescript-eslint/naming-convention */
@@ -32,7 +33,7 @@ export class DNSRecords {
   readonly update: SetFn<DNSRecord>;
   readonly delete: DeleteFn;
 
-  constructor(apiToken: string, zoneID: string) {
+  constructor({apiToken, zoneID}: ZoneAccess) {
     const resource = new Resource(apiToken, `/zones/${zoneID}/dns_records`);
     this.list = resource.get;
     this.create = resource.post;

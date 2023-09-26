@@ -1,4 +1,10 @@
-import {DeleteFn, GetOnlyFn, SetOnlyFn, Resource} from './resources.js';
+import {
+  DeleteFn,
+  GetOnlyFn,
+  SetOnlyFn,
+  Resource,
+  ZoneAccess,
+} from './resources.js';
 
 export type FallbackOriginState = {
   origin: string;
@@ -13,7 +19,7 @@ export class FallbackOrigin {
   readonly update: SetOnlyFn<{origin: string}, FallbackOriginState>;
   readonly delete: DeleteFn;
 
-  constructor(apiToken: string, zoneID: string) {
+  constructor({apiToken, zoneID}: ZoneAccess) {
     const resource = new Resource(
       apiToken,
       `/zones/${zoneID}/custom_hostnames/fallback_origin`,

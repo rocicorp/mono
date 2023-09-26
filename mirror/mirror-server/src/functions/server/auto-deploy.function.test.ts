@@ -91,8 +91,8 @@ describe('server auto-deploy', () => {
         accountID: CLOUDFLARE_ACCOUNT_ID,
         defaultMaxApps: 3,
         defaultZone: {
-          id: 'zone-id',
-          name: 'reflect-o-rama.net',
+          zoneID: 'zone-id',
+          zoneName: 'reflect-o-rama.net',
         },
         dispatchNamespace: 'prod',
       },

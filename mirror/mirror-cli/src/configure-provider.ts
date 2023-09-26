@@ -52,12 +52,13 @@ export async function configureProviderHandler(
   const account = await selectOneOf('Cloudflare Account', accounts);
   const zones = await new Zones(apiToken).list();
   const zone = await selectOneOf('Zone', zones);
+  const {id: zoneID, name: zoneName} = zone;
 
   checkPermissions(zone);
   await checkCapabilities(
-    zone.name,
-    new CustomHostnames(apiToken, zone.id),
-    new DNSRecords(apiToken, zone.id),
+    zoneName,
+    new CustomHostnames({apiToken, zoneID}),
+    new DNSRecords({apiToken, zoneID}),
   );
 
   // TODO: Verify that the account can perform the necessary functions
@@ -69,10 +70,7 @@ export async function configureProviderHandler(
     accountID: account.id,
     dispatchNamespace: namespace,
     defaultMaxApps: maxApps,
-    defaultZone: {
-      id: zone.id,
-      name: zone.name,
-    },
+    defaultZone: {zoneID, zoneName},
   };
   console.log(`Configuring "${id}" provider`, provider);
   if (dryRun || !(await confirm({message: `Continue`, default: true}))) {

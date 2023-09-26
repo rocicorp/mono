@@ -36,11 +36,11 @@ export async function customHostnamesHandler(
   const {pattern = '', delete: deleteHostnames = false, create, get} = yargs;
   const config = await getProviderConfig(yargs);
   const {
-    apiKey,
-    defaultZone: {id: zoneID},
+    apiToken,
+    defaultZone: {zoneID},
   } = config;
 
-  const resource = new CustomHostnames(apiKey, zoneID);
+  const resource = new CustomHostnames({apiToken, zoneID});
 
   if (get) {
     const result = await resource.get(get);

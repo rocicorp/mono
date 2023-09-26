@@ -155,8 +155,8 @@ export async function setProvider(
   const {
     accountID = `${providerID}-account-id`,
     defaultZone = {
-      id: `${providerID}-zone-id`,
-      name: `${providerID}-zone-name`,
+      zoneID: `${providerID}-zone-id`,
+      zoneName: `${providerID}-zone-name`,
     },
     defaultMaxApps = 3,
     dispatchNamespace = 'prod',

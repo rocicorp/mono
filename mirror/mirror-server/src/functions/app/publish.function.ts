@@ -91,7 +91,7 @@ export async function computeDeploymentSpec(
     `Found matching version for ${serverVersionRange}: ${serverVersion}`,
   );
 
-  const {provider: providerID} = app;
+  const {provider: providerID, name: appName, teamLabel} = app;
   const provider = getDataOrFail(
     await firestore
       .doc(providerPath(providerID))
@@ -100,6 +100,9 @@ export async function computeDeploymentSpec(
     'internal',
     `Provider ${providerID} is not properly set up.`,
   );
+  const {
+    defaultZone: {zoneName},
+  } = provider;
 
   const {hashes: hashesOfSecrets} = await getAppSecrets();
 
@@ -107,7 +110,7 @@ export async function computeDeploymentSpec(
     serverVersionRange,
     serverVersion,
     // Note: Hyphens are not allowed in teamLabels.
-    hostname: `${app.name}-${app.teamLabel}.${provider.defaultZone.name}`,
+    hostname: `${appName}-${teamLabel}.${zoneName}`,
     options: app.deploymentOptions,
     hashesOfSecrets,
   };

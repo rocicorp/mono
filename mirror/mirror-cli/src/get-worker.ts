@@ -33,7 +33,7 @@ export async function getWorkerHandler(
   yargs: GetWorkerHandlerArgs,
 ): Promise<void> {
   const config = await getProviderConfig(yargs);
-  const {apiKey, accountID} = config;
+  const {apiToken, accountID} = config;
   const {name, component, namespace, resource} = yargs;
 
   const base = namespace
@@ -42,6 +42,6 @@ export async function getWorkerHandler(
   const url = component ? `${base}/${component}` : base;
 
   console.log(`GET ${url}`);
-  const result = await cfCall(apiKey, url);
+  const result = await cfCall(apiToken, url);
   console.log(await result.text());
 }

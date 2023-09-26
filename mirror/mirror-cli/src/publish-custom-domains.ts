@@ -38,7 +38,7 @@ export async function publishCustomDomainsHandler(
 // so we aggressively update rather than aggressively fail
 
 export async function publishCustomDomains(
-  {apiKey, accountID}: ProviderConfig,
+  {apiToken, accountID}: ProviderConfig,
   scriptName: string,
   ...hostnames: string[]
 ): Promise<void> {
@@ -55,7 +55,7 @@ export async function publishCustomDomains(
 
   // deploy to domains
   const results = await cfFetch(
-    apiKey,
+    apiToken,
     `/accounts/${accountID}/workers/scripts/${scriptName}/domains/records`,
     {
       method: 'PUT',

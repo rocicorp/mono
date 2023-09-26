@@ -8,7 +8,7 @@ import {
 } from 'mirror-schema/src/provider.js';
 
 export type ProviderConfig = Provider & {
-  apiKey: string;
+  apiToken: string;
 };
 
 export async function getProviderConfig(
@@ -25,6 +25,6 @@ export async function getProviderConfig(
     throw new Error(`No "${provider}" provider is setup for ${stack}`);
   }
 
-  const apiKey = await getSecret(stack, `${provider}_api_token`);
-  return {...providerData, apiKey};
+  const apiToken = await getSecret(stack, `${provider}_api_token`);
+  return {...providerData, apiToken};
 }

@@ -1,4 +1,5 @@
 import {
+  AccountAccess,
   DeleteOnlyFn,
   GetOnlyFn,
   RawSetOnlyFn,
@@ -125,8 +126,7 @@ export class NamespacedScript extends Script {
   readonly productionEnvironment: GetOnlyFn<ScriptEnvironment>;
 
   constructor(
-    apiToken: string,
-    accountID: string,
+    {apiToken, accountID}: AccountAccess,
     namespace: string,
     name: string,
   ) {
@@ -150,7 +150,7 @@ export class GlobalScript extends Script {
   readonly setSchedules: SetOnlyFn<ScriptSchedule[]>;
   readonly setCustomDomains: SetOnlyFn<CustomDomains>;
 
-  constructor(apiToken: string, accountID: string, name: string) {
+  constructor({apiToken, accountID}: AccountAccess, name: string) {
     super(
       new Resource(apiToken, `/accounts/${accountID}/workers/scripts`),
       name,

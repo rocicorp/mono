@@ -5,6 +5,7 @@ import {
   SetOnlyFn,
   Resource,
   SetFn,
+  ZoneAccess,
 } from './resources.js';
 
 /* eslint-disable @typescript-eslint/naming-convention */
@@ -37,7 +38,7 @@ export class CustomHostnames {
   readonly edit: SetFn<CustomHostname>;
   readonly delete: DeleteFn;
 
-  constructor(apiToken: string, zoneID: string) {
+  constructor({apiToken, zoneID}: ZoneAccess) {
     const resource = new Resource(
       apiToken,
       `/zones/${zoneID}/custom_hostnames`,

@@ -21,8 +21,7 @@ describe('publish-custom-hostnames', () => {
   };
 
   const script = new NamespacedScript(
-    ZONE_CONFIG.apiToken,
-    ACCOUNT_ID,
+    {apiToken: ZONE_CONFIG.apiToken, accountID: ACCOUNT_ID},
     NAMESPACE,
     SCRIPT_NAME,
   );
