@@ -38,7 +38,7 @@ function createCLIParser(argv: string[]) {
     'create <name>',
     '🛠  Create a basic Reflect project',
     createOptions,
-    handleWith(createHandler).andCleanup(),
+    handleWith('cmd_create', createHandler).andCleanup(),
   );
 
   // init
@@ -46,7 +46,7 @@ function createCLIParser(argv: string[]) {
     ['init', 'lfg'],
     '🚀 Add Reflect and basic mutators to an existing project',
     initOptions,
-    handleWith(initHandler).andCleanup(),
+    handleWith('cmd_init', initHandler).andCleanup(),
   );
 
   // dev
@@ -54,7 +54,7 @@ function createCLIParser(argv: string[]) {
     'dev',
     '👷 Start a local dev server for your Reflect project',
     devOptions,
-    handleWith(devHandler).andCleanup(),
+    handleWith('cmd_dev', devHandler).andCleanup(),
   );
 
   // login
@@ -63,16 +63,19 @@ function createCLIParser(argv: string[]) {
     '🔓 Login to Reflect',
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},
-    handleWith(async (yargs: YargvToInterface<CommonYargsArgv>) => {
-      try {
-        await loginHandler(yargs);
-        // authenticate() validates that credentials were written
-        // and outputs the logged in user to the console.
-        await authenticate(yargs);
-      } catch (e) {
-        console.error(e);
-      }
-    }).andCleanup(),
+    handleWith(
+      'cmd_login',
+      async (yargs: YargvToInterface<CommonYargsArgv>) => {
+        try {
+          await loginHandler(yargs);
+          // authenticate() validates that credentials were written
+          // and outputs the logged in user to the console.
+          await authenticate(yargs);
+        } catch (e) {
+          console.error(e);
+        }
+      },
+    ).andCleanup(),
   );
 
   // publish
@@ -80,7 +83,7 @@ function createCLIParser(argv: string[]) {
     'publish',
     '🆙 Publish your Reflect project',
     publishOptions,
-    handleWith(publishHandler).andCleanup(),
+    handleWith('cmd_publish', publishHandler).andCleanup(),
   );
 
   // tail
@@ -88,7 +91,7 @@ function createCLIParser(argv: string[]) {
     'tail',
     '🦚 Start a log tailing session',
     tailOptions,
-    handleWith(tailHandler).andCleanup(),
+    handleWith('cmd_tail', tailHandler).andCleanup(),
   );
 
   // delete
@@ -96,7 +99,7 @@ function createCLIParser(argv: string[]) {
     'delete',
     '🗑️  Delete one or more Apps and their associated data. If no flags are specified, defaults to the App of the current directory.',
     deleteOptions,
-    handleWith(deleteHandler).andCleanup(),
+    handleWith('cmd_delete', deleteHandler).andCleanup(),
   );
 
   reflectCLI.command(
@@ -104,7 +107,7 @@ function createCLIParser(argv: string[]) {
     false, // Don't show in help.
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},
-    handleWith(statusHandler).andCleanup(),
+    handleWith('cmd_status', statusHandler).andCleanup(),
   );
 
   return reflectCLI;
