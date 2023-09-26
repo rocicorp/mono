@@ -121,6 +121,7 @@ async function checkCapabilities(
   console.debug(`Verifying Custom Hostname metadata capability`);
   const ch = await customHostnames.create({
     hostname: `test-mirror-hostame.${zoneName}`,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     custom_metadata: {
       namespace: 'foo',
       script: 'bar',
