@@ -142,7 +142,13 @@ const logLogs = post<WorkerContext, Response>(
     ddUrl.pathname = 'api/v2/logs';
     ddUrl.searchParams.set('dd-api-key', DATADOG_CLIENT_TOKEN);
     if (ip) {
-      ddUrl.searchParams.append('ddtags', `network.client.ip:${ip}`);
+      const tags = ddUrl.searchParams.get('ddtags');
+      ddUrl.searchParams.set(
+        'ddtags',
+        tags === null
+          ? `network.client.ip:${ip}`
+          : `${tags},network.client.ip:${ip}`,
+      );
     }
 
     const ddRequest = new Request(ddUrl.toString(), {
