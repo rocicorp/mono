@@ -134,15 +134,23 @@ const DATADOG_CLIENT_TOKEN = 'pub2324df3021d6fb6d6361802c3a7f6604';
 const logLogs = post<WorkerContext, Response>(
   async (ctx: WorkerContext, req: Request) => {
     const {lc} = ctx;
+
+    const ip = req.headers.get('CF-Connecting-IP');
     const ddUrl = new URL(req.url);
     ddUrl.protocol = 'https';
     ddUrl.host = 'http-intake.logs.datadoghq.com';
     ddUrl.pathname = 'api/v2/logs';
     ddUrl.searchParams.set('dd-api-key', DATADOG_CLIENT_TOKEN);
+    if (ip) {
+      ddUrl.searchParams.append('ddtags', `network.client.ip:${ip}`);
+    }
 
     const ddRequest = new Request(ddUrl.toString(), {
       method: 'POST',
       body: await req.text(),
+      headers: {
+        ['User-Agent']: req.headers.get('User-Agent') ?? '',
+      },
     });
     lc.info?.('ddRequest', ddRequest.url, [...ddRequest.headers.entries()]);
     try {
