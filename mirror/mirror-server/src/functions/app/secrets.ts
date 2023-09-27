@@ -1,8 +1,8 @@
+import {SecretManagerServiceClient} from '@google-cloud/secret-manager';
 import {defineSecret} from 'firebase-functions/params';
 import type {DeploymentSecrets} from 'mirror-schema/src/deployment.js';
 import {assert} from 'shared/src/asserts.js';
 import {sha256OfString} from 'shared/src/sha256.js';
-import {SecretManagerServiceClient} from '@google-cloud/secret-manager';
 import {projectId} from '../../config/index.js';
 
 export function defineSecretSafely(name: string) {
@@ -31,6 +31,9 @@ export function defineSecretSafely(name: string) {
 const datadogLogsApiKey = defineSecretSafely('DATADOG_LOGS_API_KEY');
 const datadogMetricsApiKey = defineSecretSafely('DATADOG_METRICS_API_KEY');
 
+// TODO(darick): Replace with a stable per-app secret.
+export const REFLECT_AUTH_API_KEY = 'dummy-api-key';
+
 export const DEPLOYMENT_SECRETS_NAMES = [
   'DATADOG_LOGS_API_KEY',
   'DATADOG_METRICS_API_KEY',
@@ -38,22 +41,18 @@ export const DEPLOYMENT_SECRETS_NAMES = [
 
 export async function getAppSecrets() {
   const secrets: DeploymentSecrets = {
-    /* eslint-disable @typescript-eslint/naming-convention */
-    REFLECT_AUTH_API_KEY: 'dummy-api-key', // TODO(darick): Replace with a stable per-app secret.
-    DATADOG_LOGS_API_KEY: datadogLogsApiKey.value(),
-    DATADOG_METRICS_API_KEY: datadogMetricsApiKey.value(),
-    /* eslint-enable @typescript-eslint/naming-convention */
+    ['REFLECT_AUTH_API_KEY']: REFLECT_AUTH_API_KEY,
+    ['DATADOG_LOGS_API_KEY']: datadogLogsApiKey.value(),
+    ['DATADOG_METRICS_API_KEY']: datadogMetricsApiKey.value(),
   };
   const hashes = await hashSecrets(secrets);
   return {secrets, hashes};
 }
 
 export const NULL_SECRETS: DeploymentSecrets = {
-  /* eslint-disable @typescript-eslint/naming-convention */
-  REFLECT_AUTH_API_KEY: '',
-  DATADOG_LOGS_API_KEY: '',
-  DATADOG_METRICS_API_KEY: '',
-  /* eslint-enable @typescript-eslint/naming-convention */
+  ['REFLECT_AUTH_API_KEY']: '',
+  ['DATADOG_LOGS_API_KEY']: '',
+  ['DATADOG_METRICS_API_KEY']: '',
 } as const;
 
 export async function hashSecrets(

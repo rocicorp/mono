@@ -10,6 +10,7 @@ import {
   serviceAccountId,
 } from './config/index.js';
 import * as appFunctions from './functions/app/index.js';
+import * as roomFunctions from './functions/room/index.js';
 import * as serverFunctions from './functions/server/index.js';
 import * as teamFunctions from './functions/team/index.js';
 import * as userFunctions from './functions/user/index.js';
@@ -50,6 +51,17 @@ export const app = {
     appFunctions.tail(getFirestore(), getAuth()),
   ),
   delete: https.onCall(baseHttpsOptions, appFunctions.delete(getFirestore())),
+};
+
+export const room = {
+  tail: https.onRequest(
+    {
+      timeoutSeconds: 3600,
+      ...baseHttpsOptions,
+      secrets: [...DEPLOYMENT_SECRETS_NAMES],
+    },
+    roomFunctions.tail(getFirestore(), getAuth()),
+  ),
 };
 
 export const server = {
