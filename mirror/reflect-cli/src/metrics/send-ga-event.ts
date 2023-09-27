@@ -1,17 +1,22 @@
 import * as querystring from 'querystring';
 import * as https from 'https';
-import * as os from 'os';
+import {networkInterfaces, arch, platform, release} from 'os';
 import {randomUUID, createHash} from 'crypto';
 import {version} from '../version.js';
-const interfaces = os.networkInterfaces();
+import {stringify} from 'querystring';
+
+const TRACKING_ID = 'G-69B1QV88XF';
 
 export type PrimitiveTypes = string | number | boolean;
 
-const deviceFingerprint = createHash('md5')
-  .update(JSON.stringify(interfaces))
-  .digest('hex');
+const deviceFingerprint = computeFingerprint();
 
-const TRACKING_ID = 'G-69B1QV88XF';
+function computeFingerprint(): string {
+  return createHash('md5')
+    .update(JSON.stringify(networkInterfaces()))
+    .digest('hex');
+}
+
 /**
  * GA built-in request parameters
  */
@@ -51,29 +56,24 @@ export async function sendAnalyticsEvent(eventName: EventNames): Promise<void> {
   ]);
 }
 
-function createRequestParameter(): string {
-  const requestParameters: Partial<Record<RequestParameter, PrimitiveTypes>> = {
+function getRequestParameters(): string {
+  const params = {
     [RequestParameter.ProtocolVersion]: 2,
     [RequestParameter.ClientId]: deviceFingerprint,
     [RequestParameter.UserId]: deviceFingerprint,
     [RequestParameter.TrackingId]: TRACKING_ID,
     [RequestParameter.AppVersion]: version,
-    //node version
     [RequestParameter.Dimension1]: process.version,
-    // Built-in user properties
     [RequestParameter.SessionId]: randomUUID(),
-    [RequestParameter.UserAgentArchitecture]: os.arch(),
-    [RequestParameter.UserAgentPlatform]: os.platform(),
-    [RequestParameter.UserAgentPlatformVersion]: os.release(),
+    [RequestParameter.UserAgentArchitecture]: arch(),
+    [RequestParameter.UserAgentPlatform]: platform(),
+    [RequestParameter.UserAgentPlatformVersion]: release(),
     [RequestParameter.UserAgentMobile]: 0,
     [RequestParameter.SessionEngaged]: 1,
-    // The below is needed for tech details to be collected.
     [RequestParameter.UserAgentFullVersionList]:
       'Google%20Chrome;111.0.5563.64|Not(A%3ABrand;8.0.0.0|Chromium;111.0.5563.64',
   };
-
-  const requestParameterStringified = querystring.stringify(requestParameters);
-  return requestParameterStringified;
+  return stringify(params);
 }
 
 function sendGAEvent(data: Record<string, PrimitiveTypes | undefined>[]) {
@@ -82,7 +82,7 @@ function sendGAEvent(data: Record<string, PrimitiveTypes | undefined>[]) {
       {
         host: 'www.google-analytics.com',
         method: 'POST',
-        path: '/g/collect?' + createRequestParameter(),
+        path: '/g/collect?' + getRequestParameters(),
         headers: {
           // The below is needed for tech details to be collected even though we provide our own information from the OS Node.js module
           'user-agent':
@@ -105,11 +105,8 @@ function sendGAEvent(data: Record<string, PrimitiveTypes | undefined>[]) {
         }
       },
     );
-
-    console.log('request', request);
     request.on('error', reject);
     const queryParameters = data.map(p => querystring.stringify(p)).join('\n');
-    console.log('queryParams', queryParameters);
     request.write(queryParameters);
     request.end();
   });
