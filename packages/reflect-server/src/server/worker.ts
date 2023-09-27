@@ -144,15 +144,10 @@ const logLogs = post<WorkerContext, Response>(
     ddUrl.host = 'http-intake.logs.datadoghq.com';
     ddUrl.pathname = 'api/v2/logs';
     ddUrl.searchParams.set('dd-api-key', env.DATADOG_LOGS_API_KEY);
+    // We set ddsource to the custom string 'client'.  We don't want
     ddUrl.searchParams.set('ddsource', 'client');
-    const body = await req.text();
     if (ip) {
       ddUrl.searchParams.set('network.client.ip', ip);
-      // const messages = body.split('\n').map(s => JSON.parse(s));
-      // for (const message of messages) {
-      //   message['network.client.ip'] = ip;
-      // }
-      // body = messages.map(v => JSON.stringify(v)).join('\n');
     }
     const userAgent = req.headers.get('User-Agent');
     if (userAgent) {
@@ -161,8 +156,10 @@ const logLogs = post<WorkerContext, Response>(
 
     const ddRequest = new Request(ddUrl.toString(), {
       method: 'POST',
-      body,
+      headers: new Headers({'content-type': 'text/plain;charset=UTF-8'}),
+      body: req.body,
     });
+
     lc.info?.('ddRequest', ddRequest.url, [...ddRequest.headers.entries()]);
     try {
       const ddResponse = await fetch(ddRequest);

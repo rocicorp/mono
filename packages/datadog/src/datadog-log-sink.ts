@@ -8,10 +8,10 @@ export interface DatadogLogSinkOptions {
   host?: string | undefined;
   version?: string | undefined;
   interval?: number | undefined;
-  baseUrl?: string | undefined;
+  baseUrl?: URL | undefined;
 }
 
-const DD_URL = 'https://http-intake.logs.datadoghq.com/api/v2/logs';
+const DD_URL = new URL('https://http-intake.logs.datadoghq.com/api/v2/logs');
 
 // https://docs.datadoghq.com/api/latest/logs/
 export const MAX_LOG_ENTRIES_PER_FLUSH = 1000;
@@ -53,7 +53,7 @@ export class DatadogLogSink implements LogSink {
     this.#host = host;
     this.#version = version;
     this.#interval = interval;
-    this.#baseUrl = baseUrl;
+    this.#baseUrl = baseUrl.toString();
   }
 
   log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {

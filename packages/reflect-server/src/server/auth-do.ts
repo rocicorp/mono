@@ -539,166 +539,151 @@ export class BaseAuthDO implements DurableObject {
       }
     }
 
-    return timed(
-      lc.debug,
-      'inside authLock',
-      () =>
-        this.#authLock.withRead(async () => {
-          let authData: AuthData = {
-            userID,
+    return timed(lc.debug, 'inside authLock', () =>
+      this.#authLock.withRead(async () => {
+        let authData: AuthData = {
+          userID,
+        };
+
+        if (this.#authHandler) {
+          const auth = decodedAuth;
+          assert(auth);
+          const authHandler = this.#authHandler;
+
+          const timeout = async () => {
+            await sleep(AUTH_HANDLER_TIMEOUT_MS);
+            throw new Error('authHandler timed out');
           };
 
-          if (this.#authHandler) {
-            const auth = decodedAuth;
-            assert(auth);
-            const authHandler = this.#authHandler;
+          const callHandlerWithTimeout = () =>
+            Promise.race([authHandler(auth, roomID), timeout()]);
 
-            const timeout = async () => {
-              await sleep(AUTH_HANDLER_TIMEOUT_MS);
-              throw new Error('authHandler timed out');
-            };
-
-            const callHandlerWithTimeout = () =>
-              Promise.race([authHandler(auth, roomID), timeout()]);
-
-            const [authHandlerAuthData, response] = await timed(
-              lc.info,
-              'calling authHandler',
-              async () => {
-                try {
-                  return [await callHandlerWithTimeout(), undefined] as const;
-                } catch (e) {
-                  return [
-                    undefined,
-                    closeWithErrorLocal(
-                      'Unauthorized',
-                      `authHandler rejected: ${String(e)}`,
-                    ),
-                  ] as const;
-                }
-              },
-            );
-            if (response !== undefined) {
-              return response;
-            }
-
-            if (!authHandlerAuthData || !authHandlerAuthData.userID) {
-              if (!authHandlerAuthData) {
-                lc.info?.('authData returned by authHandler is not an object.');
-              } else if (!authHandlerAuthData.userID) {
-                lc.info?.('authData returned by authHandler has no userID.');
+          const [authHandlerAuthData, response] = await timed(
+            lc.info,
+            'calling authHandler',
+            async () => {
+              try {
+                return [await callHandlerWithTimeout(), undefined] as const;
+              } catch (e) {
+                return [
+                  undefined,
+                  closeWithErrorLocal(
+                    'Unauthorized',
+                    `authHandler rejected: ${String(e)}`,
+                  ),
+                ] as const;
               }
-              return closeWithErrorLocal('Unauthorized', 'no authData');
-            }
-            if (authHandlerAuthData.userID !== userID) {
-              lc.info?.(
-                'authData returned by authHandler has a different userID.',
-                authHandlerAuthData.userID,
-                userID,
-              );
-              return closeWithErrorLocal(
-                'Unauthorized',
-                'userID returned by authHandler does not match userID url parameter',
-              );
-            }
-            authData = authHandlerAuthData;
+            },
+          );
+          if (response !== undefined) {
+            return response;
           }
 
-          // Find the room's objectID so we can connect to it. Do this BEFORE
-          // writing the connection record, in case it doesn't exist or is
-          // closed/deleted.
-
-          let roomRecord = await timed(lc.debug, 'looking up roomRecord', () =>
-            this.#roomRecordLock.withRead(
-              // Check if room already exists.
-              () => roomRecordByRoomID(this.#durableStorage, roomID),
-            ),
-          );
-
-          if (!roomRecord) {
-            roomRecord = await timed(lc.debug, 'creating roomRecord', () =>
-              this.#roomRecordLock.withWrite(async () => {
-                // checking again in case it was created while we were waiting for writeLock
-                const rr = await roomRecordByRoomID(
-                  this.#durableStorage,
-                  roomID,
-                );
-                if (rr) {
-                  return rr;
-                }
-                lc.debug?.('room not found, trying to create it');
-
-                const resp = await internalCreateRoom(
-                  lc,
-                  this.#roomDO,
-                  this.#durableStorage,
-                  roomID,
-                  jurisdiction,
-                );
-                if (!resp.ok) {
-                  return undefined;
-                }
-                return roomRecordByRoomID(this.#durableStorage, roomID);
-              }),
+          if (!authHandlerAuthData || !authHandlerAuthData.userID) {
+            if (!authHandlerAuthData) {
+              lc.info?.('authData returned by authHandler is not an object.');
+            } else if (!authHandlerAuthData.userID) {
+              lc.info?.('authData returned by authHandler has no userID.');
+            }
+            return closeWithErrorLocal('Unauthorized', 'no authData');
+          }
+          if (authHandlerAuthData.userID !== userID) {
+            lc.info?.(
+              'authData returned by authHandler has a different userID.',
+              authHandlerAuthData.userID,
+              userID,
+            );
+            return closeWithErrorLocal(
+              'Unauthorized',
+              'userID returned by authHandler does not match userID url parameter',
             );
           }
+          authData = authHandlerAuthData;
+        }
 
-          // If the room is closed or we failed to implicitly create it, we need to
-          // give the client some visibility into this. If we just return a 404 here
-          // without accepting the connection the client doesn't have any access to
-          // the return code or body. So we accept the connection and send an error
-          // message to the client, then close the connection. We trust it will be
-          // logged by onSocketError in the client.
+        // Find the room's objectID so we can connect to it. Do this BEFORE
+        // writing the connection record, in case it doesn't exist or is
+        // closed/deleted.
 
-          if (
-            roomRecord === undefined ||
-            roomRecord.status !== RoomStatus.Open
-          ) {
-            const kind = roomRecord ? 'RoomClosed' : 'RoomNotFound';
-            return createWSAndCloseWithError(
-              lc,
-              url,
-              kind,
-              roomID,
-              encodedAuth,
-            );
-          }
+        let roomRecord = await timed(lc.debug, 'looking up roomRecord', () =>
+          this.#roomRecordLock.withRead(
+            // Check if room already exists.
+            () => roomRecordByRoomID(this.#durableStorage, roomID),
+          ),
+        );
 
-          const roomObjectID = this.#roomDO.idFromString(
-            roomRecord.objectIDString,
-          );
+        if (!roomRecord) {
+          roomRecord = await timed(lc.debug, 'creating roomRecord', () =>
+            this.#roomRecordLock.withWrite(async () => {
+              // checking again in case it was created while we were waiting for writeLock
+              const rr = await roomRecordByRoomID(this.#durableStorage, roomID);
+              if (rr) {
+                return rr;
+              }
+              lc.debug?.('room not found, trying to create it');
 
-          // Record the connection in DO storage
-          await timed(lc.debug, 'writing connection record', () =>
-            recordConnection(
-              {
-                userID: authData.userID,
+              const resp = await internalCreateRoom(
+                lc,
+                this.#roomDO,
+                this.#durableStorage,
                 roomID,
-                clientID,
-              },
-              this.#durableStorage,
-              {
-                connectTimestamp: Date.now(),
-              },
-            ),
+                jurisdiction,
+              );
+              if (!resp.ok) {
+                return undefined;
+              }
+              return roomRecordByRoomID(this.#durableStorage, roomID);
+            }),
           );
+        }
 
-          // Forward the request to the Room Durable Object...
-          const stub = this.#roomDO.get(roomObjectID);
-          const requestToDO = new Request(request);
-          requestToDO.headers.set(
-            AUTH_DATA_HEADER_NAME,
-            encodeHeaderValue(JSON.stringify(authData)),
-          );
-          const responseFromDO = await roomDOFetch(
-            requestToDO,
-            'connect',
-            stub,
-            roomID,
-            lc,
-          );
-          return responseFromDO;
-        }), //here
+        // If the room is closed or we failed to implicitly create it, we need to
+        // give the client some visibility into this. If we just return a 404 here
+        // without accepting the connection the client doesn't have any access to
+        // the return code or body. So we accept the connection and send an error
+        // message to the client, then close the connection. We trust it will be
+        // logged by onSocketError in the client.
+
+        if (roomRecord === undefined || roomRecord.status !== RoomStatus.Open) {
+          const kind = roomRecord ? 'RoomClosed' : 'RoomNotFound';
+          return createWSAndCloseWithError(lc, url, kind, roomID, encodedAuth);
+        }
+
+        const roomObjectID = this.#roomDO.idFromString(
+          roomRecord.objectIDString,
+        );
+
+        // Record the connection in DO storage
+        await timed(lc.debug, 'writing connection record', () =>
+          recordConnection(
+            {
+              userID: authData.userID,
+              roomID,
+              clientID,
+            },
+            this.#durableStorage,
+            {
+              connectTimestamp: Date.now(),
+            },
+          ),
+        );
+
+        // Forward the request to the Room Durable Object...
+        const stub = this.#roomDO.get(roomObjectID);
+        const requestToDO = new Request(request);
+        requestToDO.headers.set(
+          AUTH_DATA_HEADER_NAME,
+          encodeHeaderValue(JSON.stringify(authData)),
+        );
+        const responseFromDO = await roomDOFetch(
+          requestToDO,
+          'connect',
+          stub,
+          roomID,
+          lc,
+        );
+        return responseFromDO;
+      }),
     );
   }
 

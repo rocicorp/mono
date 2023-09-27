@@ -94,7 +94,7 @@ export function createLogOptions(
         service: datadogServiceLabel,
         host: location.host,
         version,
-        baseUrl: baseUrl.toString(),
+        baseUrl,
       }),
       DATADOG_LOG_LEVEL,
     ),
