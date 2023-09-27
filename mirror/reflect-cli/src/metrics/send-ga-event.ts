@@ -1,9 +1,14 @@
 import * as querystring from 'querystring';
 import * as https from 'https';
 import * as os from 'os';
-import {randomUUID} from 'crypto';
+import {randomUUID, createHash} from 'crypto';
+const interfaces = os.networkInterfaces();
 
 export type PrimitiveTypes = string | number | boolean;
+
+const deviceFingerprint = createHash('md5')
+  .update(JSON.stringify(interfaces))
+  .digest('hex');
 
 const TRACKING_ID = 'G-69B1QV88XF';
 /**
@@ -37,30 +42,26 @@ export enum RequestParameter {
 
 export async function sendEvent(
   eventName: string,
-  userId: string,
   parameters?: Record<string, PrimitiveTypes>,
 ): Promise<void> {
   const params = {
-    os: os.platform(),
     nodeVersion: process.version,
+    eventName,
     ...parameters,
   };
-  await sendGAEvent(
-    [
-      {
-        ...params,
-        en: eventName,
-      },
-    ],
-    userId,
-  );
+  await sendGAEvent([
+    {
+      ...params,
+      en: eventName,
+    },
+  ]);
 }
 
-function createRequestParameter(userId: string): string {
+function createRequestParameter(): string {
   const requestParameters: Partial<Record<RequestParameter, PrimitiveTypes>> = {
     [RequestParameter.ProtocolVersion]: 2,
-    [RequestParameter.ClientId]: userId,
-    [RequestParameter.UserId]: userId,
+    [RequestParameter.ClientId]: deviceFingerprint,
+    [RequestParameter.UserId]: deviceFingerprint,
     [RequestParameter.TrackingId]: TRACKING_ID,
 
     // Built-in user properties
@@ -79,16 +80,13 @@ function createRequestParameter(userId: string): string {
   return requestParameterStringified;
 }
 
-function sendGAEvent(
-  data: Record<string, PrimitiveTypes | undefined>[],
-  userID: string,
-) {
+function sendGAEvent(data: Record<string, PrimitiveTypes | undefined>[]) {
   return new Promise<void>((resolve, reject) => {
     const request = https.request(
       {
         host: 'www.google-analytics.com',
         method: 'POST',
-        path: '/g/collect?' + createRequestParameter(userID),
+        path: '/g/collect?' + createRequestParameter(),
         headers: {
           // The below is needed for tech details to be collected even though we provide our own information from the OS Node.js module
           'user-agent':

@@ -8,7 +8,6 @@ import {connectFunctionsEmulator, getFunctions} from 'firebase/functions';
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 import {sendEvent} from './metrics/send-ga-event.js';
-import {randomUUID} from 'crypto';
 
 function getFirebaseConfig(stack: string) {
   switch (stack) {
@@ -70,11 +69,7 @@ export function handleWith<T>(
     andCleanup: () => async (args: T) => {
       try {
         await handler(args);
-        // this needs an actual userID
-        await sendEvent(eventName, randomUUID());
-      } catch (e) {
-        await sendEvent('error', randomUUID());
-        process.exit(1);
+        await sendEvent(eventName);
       } finally {
         await getFirestore().terminate();
       }
