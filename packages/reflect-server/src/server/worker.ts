@@ -135,7 +135,7 @@ const logLogs = post<WorkerContext, Response>(
     ddUrl.pathname = 'api/v2/logs';
     const ddRequest = new Request(ddUrl.toString(), {
       method: 'POST',
-      body: req.body,
+      body: await req.text(),
     });
     ctx.lc.info?.('ddRequest', ddRequest.url, [...ddRequest.headers.entries()]);
     try {
