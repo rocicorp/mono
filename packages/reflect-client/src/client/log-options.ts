@@ -43,8 +43,6 @@ class LevelFilterLogSink implements LogSink {
   }
 }
 
-const DATADOG_CLIENT_TOKEN = 'pub2324df3021d6fb6d6361802c3a7f6604';
-
 const DATADOG_LOG_LEVEL = 'info';
 const REFLECT_SAAS_DOMAIN = '.reflect-server.net';
 
@@ -70,6 +68,7 @@ export function createLogOptions(
   // this is most likely a test or local development, in which case we
   // do not want to send logs to datadog, instead only log to console.
   if (
+    socketOrigin === null ||
     socketHostname === undefined ||
     socketHostname === 'localhost' ||
     IP_ADDRESS_HOSTNAME_REGEX.test(socketHostname)
@@ -85,18 +84,17 @@ export function createLogOptions(
         .substring(0, socketHostname.length - REFLECT_SAAS_DOMAIN.length)
         .toLowerCase()
     : socketHostname;
+  const baseURL = new URL(socketOrigin.replace(/^ws/, 'http'));
+  baseURL.pathname = '/api/logs/v0/log';
   const logLevel = consoleLogLevel === 'debug' ? 'debug' : 'info';
   const logSink = new TeeLogSink([
     new LevelFilterLogSink(consoleLogSink, consoleLogLevel),
     new LevelFilterLogSink(
       createDatadogLogSink({
-        apiKey: DATADOG_CLIENT_TOKEN,
         service: datadogServiceLabel,
         host: location.host,
         version,
-        // This has to be set to 'browser' so the server thinks we are the Datadog
-        // browser SDK and we get the extra special UA/IP/GEO parsing goodness.
-        source: 'browser',
+        baseURL,
       }),
       DATADOG_LOG_LEVEL,
     ),

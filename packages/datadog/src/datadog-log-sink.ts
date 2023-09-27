@@ -2,15 +2,18 @@ import {Lock} from '@rocicorp/lock';
 import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
 
 export interface DatadogLogSinkOptions {
-  apiKey: string;
+  apiKey?: string | undefined;
   source?: string | undefined;
   service?: string | undefined;
   host?: string | undefined;
   version?: string | undefined;
   interval?: number | undefined;
+  baseURL?: URL | undefined;
 }
 
-const DD_URL = 'https://http-intake.logs.datadoghq.com/api/v2/logs';
+const DD_BASE_URL = new URL(
+  'https://http-intake.logs.datadoghq.com/api/v2/logs',
+);
 
 // https://docs.datadoghq.com/api/latest/logs/
 export const MAX_LOG_ENTRIES_PER_FLUSH = 1000;
@@ -25,17 +28,26 @@ export const MAX_ENTRY_CHARS = MAX_ENTRY_BYTES / 4;
 
 export class DatadogLogSink implements LogSink {
   #messages: Message[] = [];
-  readonly #apiKey: string;
+  readonly #apiKey: string | undefined;
   readonly #source: string | undefined;
   readonly #service: string | undefined;
   readonly #host: string | undefined;
   readonly #version: string | undefined;
   readonly #interval: number;
+  readonly #baseURL: string;
   #timerID: ReturnType<typeof setTimeout> | 0 = 0;
   #flushLock = new Lock();
 
   constructor(options: DatadogLogSinkOptions) {
-    const {apiKey, source, service, host, version, interval = 5_000} = options;
+    const {
+      apiKey,
+      source,
+      service,
+      host,
+      version,
+      interval = 5_000,
+      baseURL: baseUrl = DD_BASE_URL,
+    } = options;
 
     this.#apiKey = apiKey;
     this.#source = source;
@@ -43,6 +55,7 @@ export class DatadogLogSink implements LogSink {
     this.#host = host;
     this.#version = version;
     this.#interval = interval;
+    this.#baseURL = baseUrl.toString();
   }
 
   log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
@@ -104,8 +117,10 @@ export class DatadogLogSink implements LogSink {
         }
 
         const body = stringified.join('\n');
-        const url = new URL(DD_URL);
-        url.searchParams.set('dd-api-key', this.#apiKey);
+        const url = new URL(this.#baseURL);
+        if (this.#apiKey !== undefined) {
+          url.searchParams.set('dd-api-key', this.#apiKey);
+        }
 
         if (this.#source) {
           // Both need to be set for server to treat us as the browser SDK for

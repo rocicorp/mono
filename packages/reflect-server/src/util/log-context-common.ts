@@ -14,9 +14,12 @@ export function populateLogContextFromRequest(
   lc = maybeAddContext(lc, url.searchParams, 'userID');
 
   const ip = request.headers.get('CF-Connecting-IP');
-  // We use the same attribute path that the datadog RUM does for the ip collected
-  // on client side so that we can tie them together.
-  return ip ? lc.withContext('network.client.clientIP', ip) : lc;
+  // We use the same attribute path that the datadog RUM does for ip
+  // and UserAgent
+  lc = ip ? lc.withContext('network.client.ip', ip) : lc;
+  const userAgent = request.headers.get('User-Agent');
+  lc = userAgent ? lc.withContext('http.useragent', userAgent) : lc;
+  return lc;
 }
 
 function maybeAddContext(lc: LogContext, qs: URLSearchParams, key: string) {

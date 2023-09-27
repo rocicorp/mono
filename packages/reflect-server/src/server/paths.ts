@@ -1,6 +1,7 @@
 export const HELLO = '/';
 export const CANARY_GET = '/api/canary/v0/get';
 export const REPORT_METRICS_PATH = '/api/metrics/v0/report';
+export const LOG_LOGS_PATH = '/api/logs/v0/log';
 
 export const CONNECT_URL_PATTERN = '/api/sync/:version/connect';
 export const LEGACY_CONNECT_PATH = '/connect';
