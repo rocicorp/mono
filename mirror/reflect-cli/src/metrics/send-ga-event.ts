@@ -2,6 +2,7 @@ import * as querystring from 'querystring';
 import * as https from 'https';
 import * as os from 'os';
 import {randomUUID, createHash} from 'crypto';
+import {version} from '../version.js';
 const interfaces = os.networkInterfaces();
 
 export type PrimitiveTypes = string | number | boolean;
@@ -38,20 +39,25 @@ export enum RequestParameter {
   UserAgentPlatform = 'uap',
   UserAgentPlatformVersion = 'uapv',
   UserId = 'uid',
+  AppVersion = 'av',
+  Dimension1 = 'cd1',
+  Dimension2 = 'cd2',
 }
+export type EventNames =
+  | 'cmd_login'
+  | 'cmd_dev'
+  | 'cmd_status'
+  | 'cmd_publish'
+  | 'cmd_init'
+  | 'cnd_create'
+  | 'cmd_tail'
+  | 'cmd_delete'
+  | 'cmd_create'
+  | 'error';
 
-export async function sendEvent(
-  eventName: string,
-  parameters?: Record<string, PrimitiveTypes>,
-): Promise<void> {
-  const params = {
-    nodeVersion: process.version,
-    eventName,
-    ...parameters,
-  };
+export async function sendAnalyticsEvent(eventName: EventNames): Promise<void> {
   await sendGAEvent([
     {
-      ...params,
       en: eventName,
     },
   ]);
@@ -63,7 +69,9 @@ function createRequestParameter(): string {
     [RequestParameter.ClientId]: deviceFingerprint,
     [RequestParameter.UserId]: deviceFingerprint,
     [RequestParameter.TrackingId]: TRACKING_ID,
-
+    [RequestParameter.AppVersion]: version,
+    //node version
+    [RequestParameter.Dimension1]: process.version,
     // Built-in user properties
     [RequestParameter.SessionId]: randomUUID(),
     [RequestParameter.UserAgentArchitecture]: os.arch(),
