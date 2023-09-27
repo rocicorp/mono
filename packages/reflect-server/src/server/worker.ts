@@ -11,7 +11,12 @@ import {
   AUTH_ROUTES_UNAUTHED,
 } from './auth-do.js';
 import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
-import {CANARY_GET, HELLO, REPORT_METRICS_PATH} from './paths.js';
+import {
+  CANARY_GET,
+  HELLO,
+  LOG_LOGS_PATH,
+  REPORT_METRICS_PATH,
+} from './paths.js';
 import type {DatadogMetricsOptions} from './reflect.js';
 import {
   BaseContext,
@@ -122,6 +127,32 @@ const reportMetrics = post<WorkerContext, Response>(
   }),
 );
 
+const logLogs = post<WorkerContext, Response>(
+  async (ctx: WorkerContext, req: Request) => {
+    const ddUrl = new URL(req.url);
+    ddUrl.host = 'https://http-intake.logs.datadoghq.com';
+    ddUrl.pathname = 'api/v2/logs';
+    const ddRequest = new Request(ddUrl.toString(), req);
+    try {
+      const ddResponse = await fetch(ddRequest);
+      if (ddResponse.ok) {
+        ctx.lc.debug?.('Successfully sent client logs to Datadog.');
+        return new Response('ok');
+      }
+      ctx.lc.error?.(
+        'Failed to send client logs to DataDog, error response',
+        ddResponse.status,
+        ddResponse.statusText,
+        await ddResponse.text,
+      );
+      return new Response('Proxy error response.', {status: ddResponse.status});
+    } catch (e) {
+      ctx.lc.error?.('Failed to send client logs to DataDog, error', e);
+      return new Response('Proxy error.', {status: 500});
+    }
+  },
+);
+
 const hello = get<WorkerContext, Response>(
   asJSON(() => ({
     reflectServerVersion: version,
@@ -164,7 +195,7 @@ export function createWorker<Env extends BaseWorkerEnv>(
         logLevel,
         request,
         withUnhandledRejectionHandler(lc =>
-          fetch(request, env, router, lc, datadogMetricsOptions),
+          workerFetch(request, env, router, lc, datadogMetricsOptions),
         ),
       );
     },
@@ -212,7 +243,7 @@ async function scheduled(env: BaseWorkerEnv, lc: LogContext): Promise<void> {
   lc.info?.(`Response: ${resp.status} ${resp.statusText}`);
 }
 
-async function fetch(
+async function workerFetch(
   request: Request,
   env: BaseWorkerEnv,
   router: WorkerRouter,
@@ -356,6 +387,7 @@ async function sendToAuthDO(
 
 export const WORKER_ROUTES = {
   [REPORT_METRICS_PATH]: reportMetrics,
+  [LOG_LOGS_PATH]: logLogs,
   [HELLO]: hello,
   [CANARY_GET]: canaryGet,
 } as const;

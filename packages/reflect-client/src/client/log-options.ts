@@ -70,6 +70,7 @@ export function createLogOptions(
   // this is most likely a test or local development, in which case we
   // do not want to send logs to datadog, instead only log to console.
   if (
+    socketOrigin === null ||
     socketHostname === undefined ||
     socketHostname === 'localhost' ||
     IP_ADDRESS_HOSTNAME_REGEX.test(socketHostname)
@@ -85,6 +86,8 @@ export function createLogOptions(
         .substring(0, socketHostname.length - REFLECT_SAAS_DOMAIN.length)
         .toLowerCase()
     : socketHostname;
+  const baseUrl = new URL(socketOrigin.replace(/^ws/, 'http'));
+  baseUrl.pathname = '/api/logs/v0/log';
   const logLevel = consoleLogLevel === 'debug' ? 'debug' : 'info';
   const logSink = new TeeLogSink([
     new LevelFilterLogSink(consoleLogSink, consoleLogLevel),
@@ -97,6 +100,7 @@ export function createLogOptions(
         // This has to be set to 'browser' so the server thinks we are the Datadog
         // browser SDK and we get the extra special UA/IP/GEO parsing goodness.
         source: 'browser',
+        baseUrl,
       }),
       DATADOG_LOG_LEVEL,
     ),

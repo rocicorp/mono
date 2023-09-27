@@ -8,6 +8,7 @@ export interface DatadogLogSinkOptions {
   host?: string | undefined;
   version?: string | undefined;
   interval?: number | undefined;
+  baseUrl?: string | undefined;
 }
 
 const DD_URL = 'https://http-intake.logs.datadoghq.com/api/v2/logs';
@@ -31,11 +32,20 @@ export class DatadogLogSink implements LogSink {
   readonly #host: string | undefined;
   readonly #version: string | undefined;
   readonly #interval: number;
+  readonly #baseUrl: string;
   #timerID: ReturnType<typeof setTimeout> | 0 = 0;
   #flushLock = new Lock();
 
   constructor(options: DatadogLogSinkOptions) {
-    const {apiKey, source, service, host, version, interval = 5_000} = options;
+    const {
+      apiKey,
+      source,
+      service,
+      host,
+      version,
+      interval = 5_000,
+      baseUrl = DD_URL,
+    } = options;
 
     this.#apiKey = apiKey;
     this.#source = source;
@@ -43,6 +53,7 @@ export class DatadogLogSink implements LogSink {
     this.#host = host;
     this.#version = version;
     this.#interval = interval;
+    this.#baseUrl = baseUrl;
   }
 
   log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
@@ -104,7 +115,7 @@ export class DatadogLogSink implements LogSink {
         }
 
         const body = stringified.join('\n');
-        const url = new URL(DD_URL);
+        const url = new URL(this.#baseUrl);
         url.searchParams.set('dd-api-key', this.#apiKey);
 
         if (this.#source) {
