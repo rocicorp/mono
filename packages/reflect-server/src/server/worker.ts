@@ -130,9 +130,13 @@ const reportMetrics = post<WorkerContext, Response>(
 const logLogs = post<WorkerContext, Response>(
   async (ctx: WorkerContext, req: Request) => {
     const ddUrl = new URL(req.url);
-    ddUrl.host = 'https://http-intake.logs.datadoghq.com';
+    ddUrl.protocol = 'https';
+    ddUrl.host = 'http-intake.logs.datadoghq.com';
     ddUrl.pathname = 'api/v2/logs';
-    const ddRequest = new Request(ddUrl.toString(), req);
+    const ddRequest = new Request(ddUrl.toString(), {
+      method: 'POST',
+      body: req.body,
+    });
     ctx.lc.info?.('ddRequest', ddRequest.url, [...ddRequest.headers.entries()]);
     try {
       const ddResponse = await fetch(ddRequest);
