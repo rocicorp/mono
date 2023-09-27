@@ -141,22 +141,24 @@ const logLogs = post<WorkerContext, Response>(
     ddUrl.host = 'http-intake.logs.datadoghq.com';
     ddUrl.pathname = 'api/v2/logs';
     ddUrl.searchParams.set('dd-api-key', DATADOG_CLIENT_TOKEN);
-    ddUrl.searchParams.set('source', 'client');
-    let body = await req.text();
+    ddUrl.searchParams.set('ddsource', 'client');
+    const body = await req.text();
     if (ip) {
-      const messages = body.split('\n').map(s => JSON.parse(s));
-      for (const message of messages) {
-        message['network.client.ip'] = ip;
-      }
-      body = messages.map(v => JSON.stringify(v)).join('\n');
+      ddUrl.searchParams.set('network.client.ip', ip);
+      // const messages = body.split('\n').map(s => JSON.parse(s));
+      // for (const message of messages) {
+      //   message['network.client.ip'] = ip;
+      // }
+      // body = messages.map(v => JSON.stringify(v)).join('\n');
+    }
+    const userAgent = req.headers.get('User-Agent');
+    if (userAgent) {
+      ddUrl.searchParams.set('http.useragent', userAgent);
     }
 
     const ddRequest = new Request(ddUrl.toString(), {
       method: 'POST',
       body,
-      headers: {
-        ['User-Agent']: req.headers.get('User-Agent') ?? '',
-      },
     });
     lc.info?.('ddRequest', ddRequest.url, [...ddRequest.headers.entries()]);
     try {
