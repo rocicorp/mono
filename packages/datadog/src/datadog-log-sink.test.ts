@@ -225,6 +225,45 @@ test('flush calls fetch', async () => {
   );
 });
 
+test('flush calls fetch with specified baseURL', async () => {
+  const l = new DatadogLogSink({
+    apiKey: 'apiKey',
+    baseURL: new URL('http://custom.base.com/api/path/log'),
+  });
+  jest.setSystemTime(1);
+  l.log('debug', {usr: {name: 'bob'}}, 'debug message');
+  jest.setSystemTime(2);
+  l.log('info', {usr: {name: 'bob'}}, 'info message');
+
+  jest.setSystemTime(10);
+  await l.flush();
+
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledWith(
+    'http://custom.base.com/api/path/log?dd-api-key=apiKey',
+    {
+      body: stringifyMany(
+        {
+          usr: {name: 'bob'},
+          date: 1,
+          message: 'debug message',
+          status: 'debug',
+          flushDelayMs: 9,
+        },
+        {
+          usr: {name: 'bob'},
+          date: 2,
+          message: 'info message',
+          status: 'info',
+          flushDelayMs: 8,
+        },
+      ),
+      method: 'POST',
+      keepalive: true,
+    },
+  );
+});
+
 test('flush truncates large messages and batches', async () => {
   const l = new DatadogLogSink({
     apiKey: 'apiKey',

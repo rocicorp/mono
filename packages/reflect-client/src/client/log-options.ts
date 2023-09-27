@@ -84,8 +84,8 @@ export function createLogOptions(
         .substring(0, socketHostname.length - REFLECT_SAAS_DOMAIN.length)
         .toLowerCase()
     : socketHostname;
-  const baseUrl = new URL(socketOrigin.replace(/^ws/, 'http'));
-  baseUrl.pathname = '/api/logs/v0/log';
+  const baseURL = new URL(socketOrigin.replace(/^ws/, 'http'));
+  baseURL.pathname = '/api/logs/v0/log';
   const logLevel = consoleLogLevel === 'debug' ? 'debug' : 'info';
   const logSink = new TeeLogSink([
     new LevelFilterLogSink(consoleLogSink, consoleLogLevel),
@@ -94,7 +94,7 @@ export function createLogOptions(
         service: datadogServiceLabel,
         host: location.host,
         version,
-        baseUrl,
+        baseURL,
       }),
       DATADOG_LOG_LEVEL,
     ),

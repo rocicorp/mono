@@ -144,7 +144,14 @@ const logLogs = post<WorkerContext, Response>(
     ddUrl.host = 'http-intake.logs.datadoghq.com';
     ddUrl.pathname = 'api/v2/logs';
     ddUrl.searchParams.set('dd-api-key', env.DATADOG_LOGS_API_KEY);
-    // We set ddsource to the custom string 'client'.  We don't want
+    // Set ddsource to the custom string 'client', instead of 'browser'
+    // because 'browser' triggers automatic DataDog pipeline processing
+    // behavior that will be incorrect for these requests since
+    // they are proxied and not directly from the browser (in particular the
+    // automatic behavior of populating the attirbutes http.useragent from the
+    // User-Agent header and network.client.ip from the Request's ip).  Instead
+    // set network.client.ip and http.useragent attributes explicitly
+    // to the values from the request being proxied.
     ddUrl.searchParams.set('ddsource', 'client');
     if (ip) {
       ddUrl.searchParams.set('network.client.ip', ip);
