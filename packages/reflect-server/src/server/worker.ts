@@ -129,18 +129,16 @@ const reportMetrics = post<WorkerContext, Response>(
   }),
 );
 
+const DATADOG_CLIENT_TOKEN = 'pub2324df3021d6fb6d6361802c3a7f6604';
+
 const logLogs = post<WorkerContext, Response>(
   async (ctx: WorkerContext, req: Request) => {
-    const {lc, env} = ctx;
-    if (env.DATADOG_LOGS_API_KEY === undefined) {
-      lc.debug?.('No DatadogMetricsOptions configured, dropping metrics.');
-      return new Response('noop');
-    }
+    const {lc} = ctx;
     const ddUrl = new URL(req.url);
     ddUrl.protocol = 'https';
     ddUrl.host = 'http-intake.logs.datadoghq.com';
     ddUrl.pathname = 'api/v2/logs';
-    ddUrl.searchParams.set('dd-api-key', env.DATADOG_LOGS_API_KEY);
+    ddUrl.searchParams.set('dd-api-key', DATADOG_CLIENT_TOKEN);
 
     const ddRequest = new Request(ddUrl.toString(), {
       method: 'POST',
