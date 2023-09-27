@@ -68,8 +68,8 @@ export function handleWith<T>(
   return {
     andCleanup: () => async (args: T) => {
       try {
-        await handler(args);
         await sendAnalyticsEvent(eventName);
+        await handler(args);
       } finally {
         await getFirestore().terminate();
       }
