@@ -94,9 +94,6 @@ export function createLogOptions(
         service: datadogServiceLabel,
         host: location.host,
         version,
-        // This has to be set to 'browser' so the server thinks we are the Datadog
-        // browser SDK and we get the extra special UA/IP/GEO parsing goodness.
-        source: 'browser',
         baseUrl: baseUrl.toString(),
       }),
       DATADOG_LOG_LEVEL,
