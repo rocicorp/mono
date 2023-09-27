@@ -25,7 +25,14 @@ export async function* publishCustomHostnames(
 
   const records = new DNSRecords(zone);
   const currentRecords = await records.list(
-    new URLSearchParams({tag: `script:${script.id}`}),
+    // TODO: Standardize on tags when they're enabled and all records are
+    // migrated to use them. Until then, accept either tags or tags encoded
+    // in comments.
+    new URLSearchParams({
+      tag: `script:${script.id}`,
+      ['comment.contains']: `|script:${script.id}|`,
+      match: 'any',
+    }),
   );
   const create = new Set([hostname]);
   const discard = new Set<DNSRecord>();
@@ -89,13 +96,16 @@ async function createCustomHostname(
   const created = await ensureCustomHostname(hostnames, ch);
   logger.log(`Created CustomHostname`, created);
 
+  const tags = [`script:${script.id}`, `ch:${created.id}`];
   const record = await ensureDNSRecord(records, {
     name: hostname,
     type: 'CNAME',
     content: zoneName,
     proxied: true,
-    tags: [`script:${script.id}`, `ch:${created.id}`],
-    comment: 'Managed by Rocicorp (reflect.net)',
+    // TODO: Use tags when Cloudflare enables tag support for us.
+    // tags,
+    // comment: 'Managed by Rocicorp (reflect.net)',
+    comment: `|${tags.join('|')}|`,
   });
   logger.log(`Created DNSRecord`, record);
 
@@ -170,13 +180,32 @@ async function ensureCustomHostname(
 
 const CUSTOM_HOSTNAME_STATUS_POLL_INTERVAL = 1000;
 
+function chTagFromComment(comment?: string): string | undefined {
+  if (!comment) {
+    return undefined;
+  }
+  const start = comment.indexOf('|ch:');
+  if (start < 0) {
+    return undefined;
+  }
+  const end = comment.indexOf('|', start + 1);
+  if (end < 0) {
+    return undefined;
+  }
+  const chTag = comment.substring(start + 1, end);
+  logger.debug(`Found ch tag "${chTag}" in comment ${comment}`);
+  return chTag;
+}
+
 async function deleteCustomHostname(
   record: DNSRecord,
   records: DNSRecords,
   hostnames: CustomHostnames,
 ): Promise<void> {
   logger.log(`Deleting custom hostname ${record.name}`);
-  const chTag = (record.tags ?? []).find(tag => tag.startsWith('ch:'));
+  const chTag =
+    (record.tags ?? []).find(tag => tag.startsWith('ch:')) ??
+    chTagFromComment(record.comment);
   if (!chTag) {
     logger.warn(`No ch:<ch-id> tag for ${record.name}`, record);
   } else {
