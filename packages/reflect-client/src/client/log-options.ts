@@ -43,8 +43,6 @@ class LevelFilterLogSink implements LogSink {
   }
 }
 
-const DATADOG_CLIENT_TOKEN = 'pub2324df3021d6fb6d6361802c3a7f6604';
-
 const DATADOG_LOG_LEVEL = 'info';
 const REFLECT_SAAS_DOMAIN = '.reflect-server.net';
 
@@ -93,7 +91,6 @@ export function createLogOptions(
     new LevelFilterLogSink(consoleLogSink, consoleLogLevel),
     new LevelFilterLogSink(
       createDatadogLogSink({
-        apiKey: DATADOG_CLIENT_TOKEN,
         service: datadogServiceLabel,
         host: location.host,
         version,

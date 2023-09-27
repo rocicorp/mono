@@ -55,6 +55,8 @@ export interface BaseWorkerEnv {
   DISABLE?: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   REFLECT_AUTH_API_KEY?: string;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  DATADOG_LOGS_API_KEY?: string;
 }
 
 type WithEnv = {
@@ -105,7 +107,7 @@ const reportMetrics = post<WorkerContext, Response>(
 
     if (!datadogMetricsOptions) {
       lc.debug?.('No DatadogMetricsOptions configured, dropping metrics.');
-      return new Response('ok');
+      return new Response('noop');
     }
 
     if (body.series.length === 0) {
@@ -129,31 +131,38 @@ const reportMetrics = post<WorkerContext, Response>(
 
 const logLogs = post<WorkerContext, Response>(
   async (ctx: WorkerContext, req: Request) => {
+    const {lc, env} = ctx;
+    if (env.DATADOG_LOGS_API_KEY === undefined) {
+      lc.debug?.('No DatadogMetricsOptions configured, dropping metrics.');
+      return new Response('noop');
+    }
     const ddUrl = new URL(req.url);
     ddUrl.protocol = 'https';
     ddUrl.host = 'http-intake.logs.datadoghq.com';
     ddUrl.pathname = 'api/v2/logs';
+    ddUrl.searchParams.set('dd-api-key', env.DATADOG_LOGS_API_KEY);
+
     const ddRequest = new Request(ddUrl.toString(), {
       method: 'POST',
       body: await req.text(),
     });
-    ctx.lc.info?.('ddRequest', ddRequest.url, [...ddRequest.headers.entries()]);
+    lc.info?.('ddRequest', ddRequest.url, [...ddRequest.headers.entries()]);
     try {
       const ddResponse = await fetch(ddRequest);
       if (ddResponse.ok) {
-        ctx.lc.debug?.('Successfully sent client logs to Datadog.');
+        lc.debug?.('Successfully sent client logs to Datadog.');
         return new Response('ok');
       }
-      ctx.lc.error?.(
+      lc.error?.(
         'Failed to send client logs to DataDog, error response',
         ddResponse.status,
         ddResponse.statusText,
         await ddResponse.text,
       );
-      return new Response('Proxy error response.', {status: ddResponse.status});
+      return new Response('Error response.', {status: ddResponse.status});
     } catch (e) {
-      ctx.lc.error?.('Failed to send client logs to DataDog, error', e);
-      return new Response('Proxy error.', {status: 500});
+      lc.error?.('Failed to send client logs to DataDog, error', e);
+      return new Response('Error.', {status: 500});
     }
   },
 );

@@ -2,7 +2,7 @@ import {Lock} from '@rocicorp/lock';
 import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
 
 export interface DatadogLogSinkOptions {
-  apiKey: string;
+  apiKey?: string | undefined;
   source?: string | undefined;
   service?: string | undefined;
   host?: string | undefined;
@@ -26,7 +26,7 @@ export const MAX_ENTRY_CHARS = MAX_ENTRY_BYTES / 4;
 
 export class DatadogLogSink implements LogSink {
   #messages: Message[] = [];
-  readonly #apiKey: string;
+  readonly #apiKey: string | undefined;
   readonly #source: string | undefined;
   readonly #service: string | undefined;
   readonly #host: string | undefined;
@@ -116,7 +116,9 @@ export class DatadogLogSink implements LogSink {
 
         const body = stringified.join('\n');
         const url = new URL(this.#baseUrl);
-        url.searchParams.set('dd-api-key', this.#apiKey);
+        if (this.#apiKey !== undefined) {
+          url.searchParams.set('dd-api-key', this.#apiKey);
+        }
 
         if (this.#source) {
           // Both need to be set for server to treat us as the browser SDK for
