@@ -36,6 +36,13 @@ export enum RequestParameter {
   Dimension1 = 'cd1',
   Dimension2 = 'cd2',
 }
+
+export enum UserCustomDimension {
+  OsArchitecture = 'up.reflect_os_architecture',
+  NodeVersion = 'up.reflect_node_version',
+  ReflectCLIVersion = 'up.reflect_cli_version',
+}
+
 export type EventNames =
   | 'cmd_login'
   | 'cmd_dev'
@@ -49,8 +56,15 @@ export type EventNames =
   | 'error';
 
 export async function sendAnalyticsEvent(eventName: EventNames): Promise<void> {
+  const userParameters = {
+    [UserCustomDimension.OsArchitecture]: arch(),
+    [UserCustomDimension.NodeVersion]: process.version,
+    [UserCustomDimension.ReflectCLIVersion]: version,
+  };
+
   await sendGAEvent([
     {
+      ...userParameters,
       en: eventName,
     },
   ]);
