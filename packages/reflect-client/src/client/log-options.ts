@@ -55,12 +55,13 @@ export function createLogOptions(
   options: {
     consoleLogLevel: LogLevel;
     socketOrigin: string | null;
+    enableAnalytics: boolean;
   },
   createDatadogLogSink: (options: DatadogLogSinkOptions) => LogSink = (
     options: DatadogLogSinkOptions,
   ) => new DatadogLogSink(options),
 ): LogOptions {
-  const {consoleLogLevel, socketOrigin} = options;
+  const {consoleLogLevel, socketOrigin, enableAnalytics} = options;
   const socketOriginURL = socketOrigin === null ? null : new URL(socketOrigin);
   const socketHostname = socketOriginURL?.hostname;
 
@@ -71,7 +72,8 @@ export function createLogOptions(
     socketOrigin === null ||
     socketHostname === undefined ||
     socketHostname === 'localhost' ||
-    IP_ADDRESS_HOSTNAME_REGEX.test(socketHostname)
+    IP_ADDRESS_HOSTNAME_REGEX.test(socketHostname) ||
+    !enableAnalytics
   ) {
     return {
       logLevel: consoleLogLevel,

@@ -297,6 +297,7 @@ export class Reflect<MD extends MutatorDefs> {
       onOnlineChange,
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
+      enableAnalytics = true,
     } = options;
     if (!userID) {
       throw new Error('ReflectOptions.userID must not be empty.');
@@ -326,6 +327,7 @@ export class Reflect<MD extends MutatorDefs> {
     this.#logOptions = this.#createLogOptions({
       consoleLogLevel: options.logLevel ?? 'error',
       socketOrigin,
+      enableAnalytics,
     });
     const logOptions = this.#logOptions;
 
@@ -373,7 +375,9 @@ export class Reflect<MD extends MutatorDefs> {
       reportIntervalMs: REPORT_INTERVAL_MS,
       host: location.host,
       source: 'client',
-      reporter: allSeries => this.#reportMetrics(allSeries),
+      reporter: enableAnalytics
+        ? allSeries => this.#reportMetrics(allSeries)
+        : () => Promise.resolve(),
       lc: this.#l,
     });
     this.#metrics.tags.push(`version:${this.version}`);
@@ -411,6 +415,7 @@ export class Reflect<MD extends MutatorDefs> {
   #createLogOptions(options: {
     consoleLogLevel: LogLevel;
     socketOrigin: string | null;
+    enableAnalytics: boolean;
   }): LogOptions {
     if (TESTING) {
       return forTesting(this)[createLogOptionsSymbol](options);

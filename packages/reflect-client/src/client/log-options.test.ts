@@ -22,6 +22,22 @@ teardown(() => {
   sinon.restore();
 });
 
+function testEnableAnalyticsFalse(socketOrigin: string | null) {
+  test(`socketOrigin ${socketOrigin}, enableAnalytics false`, () => {
+    const {logLevel, logSink} = createLogOptions(
+      {
+        consoleLogLevel: 'info',
+        socketOrigin,
+        enableAnalytics: false,
+      },
+      fakeCreateDatadogLogSink,
+    );
+    expect(fakeCreateDatadogLogSink.callCount).to.equal(0);
+    expect(logLevel).to.equal('info');
+    expect(logSink).to.equal(consoleLogSink);
+  });
+}
+
 suite('when socketOrigin indicates testing or local dev', () => {
   const cases: (string | null)[] = [
     null,
@@ -37,6 +53,7 @@ suite('when socketOrigin indicates testing or local dev', () => {
         {
           consoleLogLevel: 'info',
           socketOrigin: c,
+          enableAnalytics: true,
         },
         fakeCreateDatadogLogSink,
       );
@@ -44,6 +61,7 @@ suite('when socketOrigin indicates testing or local dev', () => {
       expect(logLevel).to.equal('info');
       expect(logSink).to.equal(consoleLogSink);
     });
+    testEnableAnalyticsFalse(c);
   }
 });
 
@@ -61,6 +79,7 @@ function testLogLevels(
       {
         consoleLogLevel: 'debug',
         socketOrigin,
+        enableAnalytics: true,
       },
       fakeCreateDatadogLogSink,
     );
@@ -117,6 +136,7 @@ function testLogLevels(
       {
         consoleLogLevel: 'info',
         socketOrigin,
+        enableAnalytics: true,
       },
       fakeCreateDatadogLogSink,
     );
@@ -164,6 +184,7 @@ function testLogLevels(
       {
         consoleLogLevel: 'error',
         socketOrigin,
+        enableAnalytics: true,
       },
       fakeCreateDatadogLogSink,
     );
@@ -201,17 +222,21 @@ function testLogLevels(
 }
 
 suite('when socketOrigin is subdomain of .reflect-server.net', () => {
+  const socketOrigin = 'wss://testSubdomain.reflect-server.net';
   testLogLevels(
-    'wss://testSubdomain.reflect-server.net',
+    socketOrigin,
     'testsubdomain',
     'https://testsubdomain.reflect-server.net/api/logs/v0/log',
   );
+  testEnableAnalyticsFalse(socketOrigin);
 });
 
 suite('when socketOrigin is not a subdomain of .reflect-server.net', () => {
+  const socketOrigin = 'wss://fooBar.FuzzyWuzzy.com';
   testLogLevels(
-    'wss://fooBar.FuzzyWuzzy.com',
+    socketOrigin,
     'foobar.fuzzywuzzy.com',
     'https://foobar.fuzzywuzzy.com/api/logs/v0/log',
   );
+  testEnableAnalyticsFalse(socketOrigin);
 });
