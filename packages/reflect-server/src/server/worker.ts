@@ -156,7 +156,10 @@ const logLogs = post<WorkerContext, Response>(
 
     const ddRequest = new Request(ddUrl.toString(), {
       method: 'POST',
-      headers: new Headers({'content-type': 'text/plain;charset=UTF-8'}),
+      headers: new Headers({
+        'content-type':
+          req.headers.get('content-type') ?? 'text/plain;charset=UTF-8',
+      }),
       body: req.body,
     });
 
