@@ -133,6 +133,7 @@ const logLogs = post<WorkerContext, Response>(
     ddUrl.host = 'https://http-intake.logs.datadoghq.com';
     ddUrl.pathname = 'api/v2/logs';
     const ddRequest = new Request(ddUrl.toString(), req);
+    ctx.lc.info?.('ddRequest', ddRequest.url, [...ddRequest.headers.entries()]);
     try {
       const ddResponse = await fetch(ddRequest);
       if (ddResponse.ok) {
