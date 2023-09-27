@@ -16,7 +16,7 @@ export function populateLogContextFromRequest(
   const ip = request.headers.get('CF-Connecting-IP');
   // We use the same attribute path that the datadog RUM does for the ip collected
   // on client side so that we can tie them together.
-  return ip ? lc.withContext('network.client.clientIP', ip) : lc;
+  return ip ? lc.withContext('network.client.ip', ip) : lc;
 }
 
 function maybeAddContext(lc: LogContext, qs: URLSearchParams, key: string) {
