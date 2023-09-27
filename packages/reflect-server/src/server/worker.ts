@@ -152,6 +152,7 @@ const logLogs = post<WorkerContext, Response>(
       // );
       for (const message of messages) {
         message['network.client.ip'] = ip;
+        message['networkClientIP'] = ip;
       }
     }
 
