@@ -56,7 +56,7 @@
     "replicache": "13.0.1"
   },
   "peerDependencies": {
-    "wrangler": "^2.13.0"
+    "wrangler": "^3.10.0"
   },
   "files": [
     "cli.js",

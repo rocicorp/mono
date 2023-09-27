@@ -6,7 +6,7 @@
   "scripts": {
     "dev-next": "NEXT_PUBLIC_FIREBASE_STAGING=1 next dev",
     "dev-next-local": "NEXT_PUBLIC_USE_FUNCTIONS_EMULATOR=1 npm run dev-next",
-    "dev-worker": "npm run dev-worker-prod -- --experimental-local",
+    "dev-worker": "npm run dev-worker-prod",
     "dev-worker-sandbox": "npm run wrangler-sandbox -- dev",
     "dev-worker-preview": "npm run wrangler-preview -- dev",
     "dev-worker-prod": "npm run wrangler-prod -- dev",

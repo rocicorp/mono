@@ -62,7 +62,7 @@ lerna-debug.log*
 next-env.d.ts
 
 # wrangler
-.wrangler/*
+.wrangler/
 .mf
 
 reflect.config.json
