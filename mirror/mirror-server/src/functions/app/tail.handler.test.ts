@@ -1,19 +1,15 @@
-import type {Firestore} from '@google-cloud/firestore';
-import {getMockReq, getMockRes} from '@jest-mock/express';
-import {beforeEach, describe, expect, jest, test} from '@jest/globals';
+import {describe, test, jest, expect, beforeEach} from '@jest/globals';
 import type {Auth} from 'firebase-admin/auth';
 import type {https} from 'firebase-functions/v2';
-import {
-  fakeFirestore,
-  setApp,
-  setProvider,
-  setUser,
-} from 'mirror-schema/src/test-helpers.js';
-import {sleep} from 'shared/src/sleep.js';
-import type WebSocket from 'ws';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
-import {mockApiTokenForProvider} from './secrets.js';
 import {tail} from './tail.handler.js';
+import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
+import {getMockReq, getMockRes} from '@jest-mock/express';
+import {setUser, setApp, setProvider} from 'mirror-schema/src/test-helpers.js';
+import type WebSocket from 'ws';
+import {sleep} from 'shared/src/sleep.js';
+import type {Firestore} from '@google-cloud/firestore';
+import {mockApiTokenForProvider} from './secrets.js';
 
 export class MockSocket {
   readonly url: string | URL;
@@ -64,8 +60,8 @@ describe('test tail', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     res: any,
   ) => void | Promise<void>;
-  let createTailMockPromise: Promise<void>;
-  let createTailResolver: () => void;
+  let createCloudflareTailMockPromise: Promise<void>;
+  let createCloudflareTailResolver: () => void;
 
   beforeEach(async () => {
     firestore = fakeFirestore();
@@ -77,16 +73,20 @@ describe('test tail', () => {
         .mockImplementation(() => Promise.resolve({uid: 'foo'})),
     } as unknown as Auth;
 
-    createTailMockPromise = new Promise<void>(resolve => {
-      createTailResolver = resolve;
+    createCloudflareTailMockPromise = new Promise<void>(resolve => {
+      createCloudflareTailResolver = resolve;
     });
 
-    const createTailMock = () => {
-      setTimeout(createTailResolver, 0);
-      return wsMock as unknown as WebSocket;
+    const createCloudflareTailMock = () => {
+      setTimeout(createCloudflareTailResolver, 0);
+      return Promise.resolve({
+        ws: wsMock as unknown as WebSocket,
+        expiration: new Date(),
+        deleteTail: () => Promise.resolve(),
+      });
     };
 
-    createTailFunction = tail(firestore, auth, createTailMock);
+    createTailFunction = tail(firestore, auth, createCloudflareTailMock);
     await setUser(firestore, 'foo', 'foo@bar.com', 'bob', {fooTeam: 'admin'});
     await setApp(firestore, 'myApp', {
       teamID: 'fooTeam',
@@ -105,7 +105,6 @@ describe('test tail', () => {
           userAgent: {type: 'reflect-cli', version: '0.0.1'},
         },
         appID: 'myApp',
-        roomID: 'myRoom',
       },
       headers: {
         // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -116,10 +115,11 @@ describe('test tail', () => {
   test('valid auth in header', async () => {
     const req = getRequestWithHeaders();
 
+    console.log('req', req.body);
     const {res} = getMockRes();
     req.res = res;
     const createTailPromise = createTailFunction(req, res);
-    await createTailMockPromise;
+    await createCloudflareTailMockPromise;
     wsMock.close();
     await createTailPromise;
     expect(auth.verifyIdToken).toBeCalledWith('this-is-the-encoded-token');
@@ -131,7 +131,7 @@ describe('test tail', () => {
     const {res} = getMockRes();
     req.res = res;
     const createTailPromise = createTailFunction(req, res);
-    await createTailMockPromise;
+    await createCloudflareTailMockPromise;
     wsMock.message(
       JSON.stringify({
         outcome: 'ok',

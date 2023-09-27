@@ -65,23 +65,27 @@ async function* createIter<R extends BaseRequest>(
     throw new Error(`HTTP ${response.status} ${response.statusText}`);
   }
 
-  console.log('Connected.');
-
   assert(response.body);
   const reader = response.body
     .pipeThrough(new TextDecoderStream())
     .pipeThrough(lineByLineStream())
     .pipeThrough(eventSourceStream());
   try {
-    for await (const entry of reader as unknown as AsyncIterable<EventSourceEntry>) {
-      if (entry.event === 'message') {
-        const v = JSON.parse(entry.data);
-        yield valita.parse(v, messageSchema, 'passthrough');
-      } else if (entry.event === 'error') {
-        throw new Error(entry.data);
-      }
+    for await (const entry of messagesAsJSON(
+      reader as unknown as AsyncIterable<EventSourceEntry>,
+    )) {
+      yield entry;
     }
   } finally {
     abortController.abort();
+  }
+}
+
+async function* messagesAsJSON(eventSource: AsyncIterable<EventSourceEntry>) {
+  for await (const entry of eventSource) {
+    if (entry.event === 'message') {
+      const v = JSON.parse(entry.data);
+      yield valita.parse(v, messageSchema, 'passthrough');
+    }
   }
 }

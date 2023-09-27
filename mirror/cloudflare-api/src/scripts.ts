@@ -1,11 +1,13 @@
 import {
   AccountAccess,
+  DeleteFn,
   DeleteOnlyFn,
   GetOnlyFn,
+  SetOnlyFn,
   RawSetOnlyFn,
   Resource,
-  SetOnlyFn,
 } from './resources.js';
+import type {TailCreationApiResponse, TailFilterMessage} from './tail.js';
 
 /* eslint-disable @typescript-eslint/naming-convention */
 export type Binding = {
@@ -147,6 +149,8 @@ export class NamespacedScript extends Script {
 export class GlobalScript extends Script {
   readonly id: string;
   readonly productionEnvironment: GetOnlyFn<ScriptEnvironment>;
+  readonly startTail: SetOnlyFn<TailFilterMessage, TailCreationApiResponse>;
+  readonly deleteTail: DeleteFn;
   readonly setSchedules: SetOnlyFn<ScriptSchedule[]>;
   readonly setCustomDomains: SetOnlyFn<CustomDomains>;
 
@@ -163,6 +167,9 @@ export class GlobalScript extends Script {
 
     this.id = name;
     this.productionEnvironment = service.append(`environments/production`).get;
+    this.startTail = this._script.append('tails').post;
+    this.deleteTail = (id, q) =>
+      this._script.append('tails').append(id).delete(q);
     this.setSchedules = this._script.append('schedules').put;
     this.setCustomDomains = this._script.append('domains/records').put;
   }
