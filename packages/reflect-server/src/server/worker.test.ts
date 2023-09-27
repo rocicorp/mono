@@ -12,7 +12,7 @@ import {
   TestExecutionContext,
   createTestDurableObjectNamespace,
 } from './do-test-utils.js';
-import {REPORT_METRICS_PATH} from './paths.js';
+import {LOG_LOGS_PATH, REPORT_METRICS_PATH} from './paths.js';
 import {BaseWorkerEnv, createWorker} from './worker.js';
 
 const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
@@ -671,6 +671,101 @@ describe('reportMetrics', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     }
   }
+});
+
+describe('log logs', () => {
+  async function testLogLogs(
+    fetchSpy: jest.SpiedFunction<typeof fetch>,
+    expectedResponseStatusCode: number,
+    ddLogsApiKeyInEnv = true,
+  ) {
+    const logLogsURL = new URL(LOG_LOGS_PATH, 'https://test.roci.dev/');
+    logLogsURL.searchParams.set('service', 'test-service');
+    logLogsURL.searchParams.set('ddtags', 'version:0.35.0');
+    logLogsURL.searchParams.set('host', 'test.host.com');
+    logLogsURL.searchParams.set('foo', 'bar');
+
+    const testEnv: BaseWorkerEnv = {
+      authDO: {
+        ...createTestDurableObjectNamespace(),
+      },
+    };
+    if (ddLogsApiKeyInEnv) {
+      testEnv['DATADOG_LOGS_API_KEY'] = 'test-dd-logs-api-key';
+    }
+
+    const worker = createWorker(() => ({
+      logSink: new TestLogSink(),
+      logLevel: 'error',
+      datadogMetricsOptions: {
+        apiKey: 'test-dd-key',
+        service: 'test-service',
+        tags: {script: 'test-script'},
+      },
+    }));
+
+    const testBody = 'test-body';
+
+    const testRequest = new Request(logLogsURL.toString(), {
+      method: 'POST',
+      body: testBody,
+    });
+    if (worker.fetch === undefined) {
+      throw new Error('Expect fetch to be defined');
+    }
+    const response = await worker.fetch(
+      testRequest,
+      testEnv,
+      new TestExecutionContext(),
+    );
+
+    expect(response.status).toEqual(expectedResponseStatusCode);
+
+    if (!ddLogsApiKeyInEnv) {
+      expect(fetchSpy).toHaveBeenCalledTimes(0);
+      return;
+    }
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const fetchedRequest = fetchSpy.mock.calls[0][0];
+    if (typeof fetchedRequest === 'string') {
+      throw new Error('Expected request not string fetched');
+    }
+    expect(fetchedRequest.url).toEqual(
+      'https://http-intake.logs.datadoghq.com/api/v2/logs?service=test-service&ddtags=version%3A0.35.0&host=test.host.com&foo=bar&dd-api-key=test-dd-logs-api-key&ddsource=client',
+    );
+    expect(fetchedRequest.headers.get('content-type')).toEqual(
+      'text/plain;charset=UTF-8',
+    );
+    expect(await fetchedRequest.text()).toEqual(testBody);
+  }
+
+  test('success', async () => {
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockReturnValue(Promise.resolve(new Response('{}')));
+    await testLogLogs(fetchSpy, 200);
+  });
+
+  test('error response', async () => {
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockReturnValue(Promise.resolve(new Response('failed', {status: 403})));
+    await testLogLogs(fetchSpy, 403);
+  });
+
+  test('error', async () => {
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(() => {
+      throw new Error('test error');
+    });
+    await testLogLogs(fetchSpy, 500);
+  });
+
+  test('no api key in env', async () => {
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockReturnValue(Promise.resolve(new Response('{}')));
+    await testLogLogs(fetchSpy, 200, false);
+  });
 });
 
 test('hello', async () => {

@@ -47,7 +47,11 @@ suite('when socketOrigin indicates testing or local dev', () => {
   }
 });
 
-function testLogLevels(socketOrigin: string, expectedServiceLabel: string) {
+function testLogLevels(
+  socketOrigin: string,
+  expectedServiceLabel: string,
+  expectedBaseURLString: string,
+) {
   test('consoleLogLevel debug', () => {
     sinon.stub(console, 'debug');
     sinon.stub(console, 'info');
@@ -64,6 +68,9 @@ function testLogLevels(socketOrigin: string, expectedServiceLabel: string) {
     expect(fakeCreateDatadogLogSink.getCall(0).args[0].service).to.equal(
       expectedServiceLabel,
     );
+    expect(
+      fakeCreateDatadogLogSink.getCall(0).args[0].baseURL?.toString(),
+    ).to.equal(expectedBaseURLString);
     expect(logLevel).to.equal('debug');
 
     logSink.log('debug', {foo: 'bar'}, 'hello');
@@ -194,9 +201,17 @@ function testLogLevels(socketOrigin: string, expectedServiceLabel: string) {
 }
 
 suite('when socketOrigin is subdomain of .reflect-server.net', () => {
-  testLogLevels('wss://testSubdomain.reflect-server.net', 'testsubdomain');
+  testLogLevels(
+    'wss://testSubdomain.reflect-server.net',
+    'testsubdomain',
+    'https://testsubdomain.reflect-server.net/api/logs/v0/log',
+  );
 });
 
 suite('when socketOrigin is not a subdomain of .reflect-server.net', () => {
-  testLogLevels('wss://fooBar.FuzzyWuzzy.com', 'foobar.fuzzywuzzy.com');
+  testLogLevels(
+    'wss://fooBar.FuzzyWuzzy.com',
+    'foobar.fuzzywuzzy.com',
+    'https://foobar.fuzzywuzzy.com/api/logs/v0/log',
+  );
 });
