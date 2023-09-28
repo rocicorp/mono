@@ -7,7 +7,7 @@ import {connectFunctionsEmulator, getFunctions} from 'firebase/functions';
 // https://firebase.google.com/docs/web/modular-upgrade
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
-import {EventNames, sendAnalyticsEvent} from './metrics/send-ga-event.js';
+import {sendAnalyticsEvent} from './metrics/send-ga-event.js';
 import type {ArgumentsCamelCase} from 'yargs';
 
 function getFirebaseConfig(stack: string) {
