@@ -20,9 +20,7 @@ import {
 import {toMillis} from 'mirror-schema/src/timestamp.js';
 import {watch} from 'mirror-schema/src/watch.js';
 import {must} from 'shared/src/must.js';
-import {deleteScript} from '../../cloudflare/delete.js';
 import {getServerModuleMetadata} from '../../cloudflare/get-server-modules.js';
-import {publish} from '../../cloudflare/publish.js';
 import {newDeploymentID} from '../../ids.js';
 import {deleteAppDocs} from './delete.function.js';
 import {
@@ -31,12 +29,16 @@ import {
   getAppSecrets,
 } from './secrets.js';
 import {FetchResultError} from 'cloudflare-api/src/fetch.js';
-import {GlobalScript} from 'cloudflare-api/src/scripts.js';
 import {
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
 import {getDataOrFail} from '../validators/data.js';
+import {
+  GlobalScriptHandler,
+  NamespacedScriptHandler,
+  ScriptHandler,
+} from '../../cloudflare/script-handler.js';
 
 export const deploy = (firestore: Firestore, storage: Storage) =>
   onDocumentCreated(
@@ -58,8 +60,7 @@ export async function runDeployment(
   appID: string,
   deploymentID: string,
   getApiTokenSecret = getApiToken, // Overridden in tests.
-  publishToCloudflare = publish, // Overridden in tests.
-  deleteFromCloudflare = deleteScript, // Overridden in tests.
+  testScriptHandler?: ScriptHandler, // Overridden in tests.
 ): Promise<void> {
   const [appDoc, deploymentDoc] = await firestore.runTransaction(
     tx =>
@@ -86,6 +87,7 @@ export async function runDeployment(
   const {
     provider,
     cfScriptName,
+    scriptRef,
     name: appName,
     teamLabel,
   } = must(appDoc.data());
@@ -108,6 +110,7 @@ export async function runDeployment(
       'internal',
       `Unknown provider ${provider} for App ${appID}`,
     );
+    const account = {apiToken, accountID};
     const zone = {apiToken, ...defaultZone};
 
     if (status !== 'REQUESTED') {
@@ -124,11 +127,15 @@ export async function runDeployment(
       {lastUpdateTime}, // Aborts if another trigger is already executing the same deployment.
     );
 
-    const script = new GlobalScript({apiToken, accountID}, cfScriptName);
+    const script = testScriptHandler
+      ? testScriptHandler
+      : scriptRef
+      ? new NamespacedScriptHandler(account, zone, scriptRef)
+      : new GlobalScriptHandler(account, zone, cfScriptName);
 
     if (deploymentType === 'DELETE') {
       // For a DELETE, the Deployment lifecycle is 'REQUESTED' -> 'DEPLOYING' -> (document deleted) | 'FAILED'
-      await deleteFromCloudflare(script, zone);
+      await script.delete();
       await deleteAppDocs(firestore, appID);
       logger.info(`Deleted app ${appID}`);
       return;
@@ -142,9 +149,8 @@ export async function runDeployment(
 
     const {secrets, hashes} = await getAppSecrets();
 
-    for await (const deploymentUpdate of publishToCloudflare(
+    for await (const deploymentUpdate of script.publish(
       storage,
-      script,
       appName,
       teamLabel,
       hostname,
@@ -168,7 +174,11 @@ export async function runDeployment(
       `There was an error ${
         deploymentType === 'DELETE' ? 'deleting' : 'deploying'
       } the app` +
-      (e instanceof FetchResultError ? ` (error code ${e.code})` : '');
+      (e instanceof FetchResultError
+        ? ` (error code ${e.code})`
+        : e instanceof HttpsError
+        ? `: ${e.message}`
+        : '');
     await setDeploymentStatus(firestore, appID, deploymentID, 'FAILED', error);
     throw e;
   }

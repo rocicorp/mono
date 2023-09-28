@@ -47,13 +47,9 @@ import {
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
+import type {ScriptHandler} from '../../cloudflare/script-handler.js';
 
 mockFunctionParamsAndSecrets();
-
-// eslint-disable-next-line require-await
-async function* noopPublish() {
-  // empty
-}
 
 describe('deploy', () => {
   initializeApp({projectId: 'deploy-function-test'});
@@ -63,6 +59,11 @@ describe('deploy', () => {
   const TEAM_ID = 'my-team';
   const SERVER_VERSION = 'deploy-server-version';
   const CLOUDFLARE_ACCOUNT_ID = 'foo-cloudflare-account';
+
+  const noopScriptHandler: ScriptHandler = {
+    async *publish(): AsyncGenerator<string> {},
+    async delete(): Promise<void> {},
+  };
 
   function mockGetApiToken(provider: string): Promise<string> {
     expect(provider).toBe(DEFAULT_PROVIDER_ID);
@@ -206,24 +207,25 @@ describe('deploy', () => {
     expect(app.queuedDeploymentIDs).toEqual([deploymentID]);
     expect(app.runningDeployment).toBeUndefined;
 
-    async function* publish() {
-      publishing();
-      for (;;) {
-        const update = await deploymentUpdates.dequeue();
-        if (!update) {
-          break;
-        }
-        yield update;
-      }
-    }
-
     const deploymentFinished = runDeployment(
       firestore,
       null as unknown as Storage,
       APP_ID,
       deploymentID,
       mockGetApiToken,
-      publish,
+      {
+        async *publish() {
+          publishing();
+          for (;;) {
+            const update = await deploymentUpdates.dequeue();
+            if (!update) {
+              break;
+            }
+            yield update;
+          }
+        },
+        async delete(): Promise<void> {},
+      },
     );
     await isPublishing;
 
@@ -263,7 +265,7 @@ describe('deploy', () => {
       APP_ID,
       nextDeploymentID,
       mockGetApiToken,
-      noopPublish,
+      noopScriptHandler,
     );
 
     const first = await getDeployment(deploymentID);
@@ -298,19 +300,20 @@ describe('deploy', () => {
     expect(app.queuedDeploymentIDs).toEqual([deploymentID]);
     expect(app.runningDeployment).toEqual(runningDeployment);
 
-    // eslint-disable-next-line require-yield
-    async function* publish() {
-      publishing();
-      await canFinishPublishing;
-    }
-
     const deploymentFinished = runDeployment(
       firestore,
       null as unknown as Storage,
       APP_ID,
       deploymentID,
       mockGetApiToken,
-      publish,
+      {
+        // eslint-disable-next-line require-yield
+        async *publish() {
+          publishing();
+          await canFinishPublishing;
+        },
+        async delete() {},
+      },
     );
     await isPublishing;
 
@@ -380,11 +383,14 @@ describe('deploy', () => {
     const id = await requestTestDeployment();
     let timesDeployed = 0;
 
-    // eslint-disable-next-line require-await
-    // eslint-disable-next-line require-yield
-    async function* publish() {
-      timesDeployed++;
-    }
+    const testScriptHandler: ScriptHandler = {
+      // eslint-disable-next-line require-await
+      // eslint-disable-next-line require-yield
+      async *publish() {
+        timesDeployed++;
+      },
+      async delete() {},
+    };
 
     const results = await Promise.allSettled([
       runDeployment(
@@ -393,7 +399,7 @@ describe('deploy', () => {
         APP_ID,
         id,
         mockGetApiToken,
-        publish,
+        testScriptHandler,
       ),
       runDeployment(
         firestore,
@@ -401,7 +407,7 @@ describe('deploy', () => {
         APP_ID,
         id,
         mockGetApiToken,
-        publish,
+        testScriptHandler,
       ),
     ]);
 
@@ -431,10 +437,12 @@ describe('deploy', () => {
       APP_ID,
       deleteID,
       mockGetApiToken,
-      noopPublish,
-      // eslint-disable-next-line require-await
-      async () => {
-        scriptDeleted = true;
+      {
+        async *publish() {},
+        // eslint-disable-next-line require-await
+        async delete() {
+          scriptDeleted = true;
+        },
       },
     );
     expect(scriptDeleted).toBe(true);

@@ -3,14 +3,24 @@ import {firestoreDataConverter} from './converter.js';
 import {deploymentOptionsSchema, deploymentSchema} from './deployment.js';
 import {DEFAULT_PROVIDER_ID} from './provider.js';
 
+const scriptRefSchema = v.object({
+  namespace: v.string(),
+  name: v.string(),
+});
+
+export type ScriptRef = v.Infer<typeof scriptRefSchema>;
+
 export const appSchema = v.object({
   /** @deprecated Remove when reflect-cli supported versions consider this optional */
   cfID: v.string().optional(),
 
   provider: v.string().default(DEFAULT_PROVIDER_ID),
+  scriptRef: scriptRefSchema.optional(),
 
   // Globally unique, stable, internal script name in Cloudflare.
+  // TODO: Deprecate when migrating to `scriptRef`
   cfScriptName: v.string(),
+
   teamID: v.string(),
 
   // Denormalized from the `label` field of the Team doc. This is used, in conjunction
