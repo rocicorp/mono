@@ -161,6 +161,14 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   hiddenTabDisconnectDelay?: number | undefined;
 
   /**
+   * Help Reflect improve its service by automatically sending diagnostic and
+   * usage data.
+   *
+   * Default is true.
+   */
+  enableAnalytics?: boolean | undefined;
+
+  /**
    * Determines what kind of storage implementation to use on the client.
    *
    * Defaults to `'mem'` which means that Reflect uses an in memory storage and
