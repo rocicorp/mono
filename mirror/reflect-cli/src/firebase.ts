@@ -69,9 +69,7 @@ export function handleWith<T extends ArgumentsCamelCase>(
     andCleanup: () => async (args: T) => {
       try {
         const eventName =
-          args._ && args._.length
-            ? (`cmd_${args._[0]}` as EventNames)
-            : ('cmd_unknown' as EventNames);
+          args._ && args._.length ? `cmd_${args._[0]}` : 'cmd_unknown';
         await Promise.all([
           sendAnalyticsEvent(eventName).catch(_e => {
             /* swallow */

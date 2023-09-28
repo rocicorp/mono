@@ -43,19 +43,7 @@ export enum UserCustomDimension {
   ReflectCLIVersion = 'up.reflect_cli_version',
 }
 
-export type EventNames =
-  | 'cmd_login'
-  | 'cmd_dev'
-  | 'cmd_status'
-  | 'cmd_publish'
-  | 'cmd_init'
-  | 'cnd_create'
-  | 'cmd_tail'
-  | 'cmd_delete'
-  | 'cmd_create'
-  | 'error';
-
-export async function sendAnalyticsEvent(eventName: EventNames): Promise<void> {
+export async function sendAnalyticsEvent(eventName: string): Promise<void> {
   const userParameters = {
     [UserCustomDimension.OsArchitecture]: arch(),
     [UserCustomDimension.NodeVersion]: process.version,
