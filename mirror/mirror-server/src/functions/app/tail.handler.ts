@@ -47,7 +47,8 @@ export const tail = (
         if (scriptRef) {
           throw new HttpsError(
             'unavailable',
-            'The App does not support this version of tail. Please run `npm install @rocicorp/reflect@latest` and try again.',
+            'The App does not support this version of tail. ' +
+              'Please try again with `npx @rocicorp/reflect@latest`.',
           );
         }
 
