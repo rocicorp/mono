@@ -65,7 +65,7 @@ describe('custom-hostnames', () => {
       .result('PATCH', '/custom_hostnames/ch-id', {status: 'active'}); // CustomHostnames.edit()
 
     expect(await publish('foo.reflect-o-rama.net')).toEqual([
-      'Setting up hostname foo.reflect-o-rama.net',
+      'Setting up DNS and TLS for foo.reflect-o-rama.net. This may take a minute.',
     ]);
 
     expect(fetch.requests()).toEqual([
@@ -127,7 +127,7 @@ describe('custom-hostnames', () => {
       }); // DNSRecords.update()
 
     expect(await publish('foo.reflect-o-rama.net')).toEqual([
-      'Setting up hostname foo.reflect-o-rama.net',
+      'Setting up DNS and TLS for foo.reflect-o-rama.net. This may take a minute.',
     ]);
 
     expect(fetch.requests()).toEqual([
@@ -197,7 +197,7 @@ describe('custom-hostnames', () => {
       .result('PATCH', '/custom_hostnames/ch-id', {status: 'active'}); // CustomHostnames.edit()
 
     expect(await publish('foo.bar.reflect-o-rama.net')).toEqual([
-      'Setting up hostname foo.bar.reflect-o-rama.net',
+      'Setting up DNS and TLS for foo.bar.reflect-o-rama.net. This may take a minute.',
     ]);
 
     expect(fetch.requests()).toEqual([
@@ -404,7 +404,7 @@ describe('custom-hostnames', () => {
 
     expect(await publish('foo.reflect-o-rama.net')).toEqual(
       expect.arrayContaining([
-        'Setting up hostname foo.reflect-o-rama.net',
+        'Setting up DNS and TLS for foo.reflect-o-rama.net. This may take a minute.',
         'Deleting hostname baz.reflect-o-rama.net',
       ]),
     );
