@@ -78,7 +78,7 @@ export function handleWith<T extends ArgumentsCamelCase>(
           }),
           handler(args),
         ]);
-        throw new Error("blah blah");
+        throw new Error('blah blah');
       } catch (e) {
         await errorReporting({
           requester: makeRequester(''),
