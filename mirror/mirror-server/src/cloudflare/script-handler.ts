@@ -215,7 +215,7 @@ export async function* waitForLiveness(host: string): AsyncGenerator<string> {
       logger.debug(`resolve(${host}) DNS error`, err);
     }
     if (first) {
-      yield `Waiting for ${host} DNS to resolve. This can take about 30 seconds ...`;
+      yield `Waiting for DNS to resolve`;
     }
     if (Date.now() - start > LIVENESS_TIMEOUT) {
       throw new HttpsError(
@@ -226,7 +226,7 @@ export async function* waitForLiveness(host: string): AsyncGenerator<string> {
     await sleep(DNS_POLL_INTERVAL);
   }
 
-  yield `Checking liveness of https://${host}/ ...`;
+  yield `Verifying liveness of https://${host}/`;
   const url = `https://${ip}:443/`;
   for (;;) {
     try {

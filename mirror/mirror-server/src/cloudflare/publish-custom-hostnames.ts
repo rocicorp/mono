@@ -72,7 +72,7 @@ async function* setCustomHostnames(
 
   const chs = new CustomHostnames(zone);
   for (const name of create) {
-    yield `Setting up hostname ${name}`;
+    yield `Setting up DNS and TLS for ${name}. This may take a minute.`;
   }
   for (const record of discard) {
     yield `Deleting hostname ${record.name}`;
