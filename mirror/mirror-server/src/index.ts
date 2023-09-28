@@ -51,6 +51,7 @@ export const app = {
     appFunctions.tail(getFirestore(), getAuth()),
   ),
   delete: https.onCall(baseHttpsOptions, appFunctions.delete(getFirestore())),
+  errorReporting:  https.onCall(baseHttpsOptions, appFunctions.errorReporting()),
 };
 
 export const room = {

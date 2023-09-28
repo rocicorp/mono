@@ -70,3 +70,22 @@ export const deleteApp = createCall(
   deleteAppRequestSchema,
   deleteAppResponseSchema,
 );
+
+
+export const errorReportingRequestSchema = v.object({
+  ...baseAppRequestFields,
+  errorMessage: v.string(),
+});
+
+export type ErrorReportingRequest = v.Infer<typeof errorReportingRequestSchema>;
+
+export const errorReportingResponseSchema = v.object({
+  ...baseResponseFields,
+});
+export type ErrorReportingResponse = v.Infer<typeof errorReportingResponseSchema>;
+
+export const errorReporting = createCall(
+  'app-error-reporting',
+  errorReportingRequestSchema,
+  errorReportingResponseSchema,
+);
