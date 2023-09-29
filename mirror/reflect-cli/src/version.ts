@@ -56,20 +56,18 @@ function getOrRefetchDistTags(
 
 export function findReflectVersion(): string {
   const pkgDir = fileURLToPath(import.meta.url);
-  if (!pkgDir.includes('/node_module')) {
-    const reflectPkg = path.resolve(pkgDir, '../../../../', 'packages/reflect');
-    const pkg = pkgUpSync({cwd: reflectPkg});
-    assert(pkg);
-    const s = readFileSync(pkg, 'utf-8');
-    const v = JSON.parse(s);
-    assertObject(v);
-    assertString(v.version);
-    console.debug(
-      `reflect-cli run from source. Using version from packages/reflect/package.json: ${v.version}.`,
-    );
-    return v.version;
+  if (pkgDir.includes('/node_module')) {
+    return version;
   }
-  return version;
+  // When the reflect-cli is run from source, use the version from `packages/reflect/package.json`.
+  const reflectPkg = path.resolve(pkgDir, '../../../../', 'packages/reflect');
+  const pkg = pkgUpSync({cwd: reflectPkg});
+  assert(pkg);
+  const s = readFileSync(pkg, 'utf-8');
+  const v = JSON.parse(s);
+  assertObject(v);
+  assertString(v.version);
+  return v.version;
 }
 
 async function checkForCliDeprecation(): Promise<DistTags> {
