@@ -1,8 +1,6 @@
 // TODO(arv): Use esbuild define instead.
 import packageJSON from '../package.json' assert {type: 'json'};
 import color from 'picocolors';
-import {exec} from 'node:child_process';
-import {resolver} from '@rocicorp/resolver';
 import {Range, SemVer, gt, gtr} from 'semver';
 import type {ArgumentsCamelCase} from 'yargs';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
@@ -57,19 +55,12 @@ function getOrRefetchDistTags(
 }
 
 async function lookupDistTags(timeout: number): Promise<DistTags> {
-  const {promise: output, resolve, reject} = resolver<string>();
-  exec(
-    'npm view @rocicorp/reflect dist-tags --json',
-    {timeout},
-    (error, stdout) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(stdout.toString().trim());
-      }
-    },
-  );
-  const distTags = JSON.parse(await output) as Record<string, string>;
+  // https://github.com/npm/registry/blob/master/docs/REGISTRY-API.md
+  const resp = await fetch('https://registry.npmjs.org/@rocicorp/reflect', {
+    signal: AbortSignal.timeout(timeout),
+  });
+  const pkgMeta = await resp.json();
+  const distTags = pkgMeta['dist-tags'] as Record<string, string>;
   return Object.fromEntries(
     Object.entries(distTags).map(([tag, value]) => [tag, new SemVer(value)]),
   );
