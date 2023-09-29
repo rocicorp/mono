@@ -51,6 +51,7 @@ import {
   configureProviderHandler,
   configureProviderOptions,
 } from './configure-provider.js';
+import {migrateToWFPHandler, migrateToWFPOptions} from './migrate-to-wfp.js';
 import {certificatesHandler, certificatesOptions} from './certificates.js';
 
 async function main(argv: string[]): Promise<void> {
@@ -111,6 +112,14 @@ function createCLIParser(argv: string[]) {
     'Configures a provider for hosting Workers.',
     configureProviderOptions,
     configureProviderHandler,
+  );
+
+  // wfp
+  reflectCLI.command(
+    'wfp <appID>',
+    'Migrates an App to Workers for Platforms',
+    migrateToWFPOptions,
+    migrateToWFPHandler,
   );
 
   // publish-custom-domain

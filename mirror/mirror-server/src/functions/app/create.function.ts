@@ -1,4 +1,5 @@
 import type {Firestore} from 'firebase-admin/firestore';
+import {logger} from 'firebase-functions';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {
   createRequestSchema,
@@ -27,6 +28,8 @@ import {userAuthorization} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
+import type {UserAgent} from 'mirror-protocol/src/user-agent.js';
+import {SemVer, gte} from 'semver';
 
 export const create = (firestore: Firestore) =>
   validateSchema(createRequestSchema, createResponseSchema)
@@ -34,7 +37,12 @@ export const create = (firestore: Firestore) =>
     .validate(userAuthorization())
     .handle((request, context) => {
       const {userID} = context;
-      const {teamID, serverReleaseChannel, name: appName} = request;
+      const {
+        requester: {userAgent},
+        teamID,
+        serverReleaseChannel,
+        name: appName,
+      } = request;
 
       if (!teamID || !appName) {
         throw new HttpsError(
@@ -81,7 +89,7 @@ export const create = (firestore: Firestore) =>
         // TODO: To support onprem, allow apps to be created for a specific provider with
         //       appropriate authorization.
         const {defaultProvider} = team;
-        const provider = getDataOrFail(
+        const {defaultMaxApps, dispatchNamespace} = getDataOrFail(
           await txn.get(
             firestore
               .doc(providerPath(defaultProvider))
@@ -90,7 +98,7 @@ export const create = (firestore: Firestore) =>
           'internal',
           `Provider ${defaultProvider} is not properly set up.`,
         );
-        if (team.numApps >= (team.maxApps ?? provider.defaultMaxApps)) {
+        if (team.numApps >= (team.maxApps ?? defaultMaxApps)) {
           throw new HttpsError(
             'resource-exhausted',
             `Maximum number of apps reached. Use 'npx @rocicorp/reflect delete' to clean up old apps.`,
@@ -120,9 +128,33 @@ export const create = (firestore: Firestore) =>
           deploymentOptions: defaultOptions(),
         };
 
+        if (supportsWorkersForPlatforms(userAgent)) {
+          app.scriptRef = {
+            namespace: dispatchNamespace,
+            name: scriptName,
+          };
+        }
         txn.update(teamDocRef, {numApps: team.numApps + 1});
         txn.create(appDocRef, app);
         txn.create(appNameDocRef, {appID});
         return {appID, success: true};
       });
     });
+
+const MIN_WFP_VERSION = new SemVer('0.37.0');
+
+function supportsWorkersForPlatforms(userAgent: UserAgent): boolean {
+  const {type: agent, version} = userAgent;
+  if (agent !== 'reflect-cli') {
+    throw new HttpsError(
+      'unavailable',
+      'Please use @rocicorp/reflect to create and publish apps.',
+    );
+  }
+  if (gte(new SemVer(version), MIN_WFP_VERSION)) {
+    logger.info(`Creating WFP app for reflect-cli v${version}`);
+    return true;
+  }
+  logger.info(`Creating legacy app for reflect-cli v${version}`);
+  return false;
+}
