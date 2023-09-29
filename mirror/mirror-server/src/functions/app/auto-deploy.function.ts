@@ -65,21 +65,19 @@ export async function checkForAutoDeployment(
     return;
   }
 
-  if (!app.forceRedeployment) {
-    // Sanity check: Protect against pathological auto-deploy loops by short-circuiting
-    // if there are too many auto-deploy's in the last minute.
-    const recentAutoDeploys = await firestore
-      .collection(deploymentsCollection(appID))
-      .where('requesterID', '==', MIRROR_SERVER_REQUESTER_ID)
-      .where('requestTime', '>=', Timestamp.fromMillis(Date.now() - 1000 * 60))
-      .count()
-      .get();
-    if (recentAutoDeploys.data().count > MAX_AUTO_DEPLOYMENTS_PER_MINUTE) {
-      throw new HttpsError(
-        'resource-exhausted',
-        `Already reached ${MAX_AUTO_DEPLOYMENTS_PER_MINUTE} deployments per minute. Check for a redeployment loop!`,
-      );
-    }
+  // Sanity check: Protect against pathological auto-deploy loops by short-circuiting
+  // if there are too many auto-deploy's in the last minute.
+  const recentAutoDeploys = await firestore
+    .collection(deploymentsCollection(appID))
+    .where('requesterID', '==', MIRROR_SERVER_REQUESTER_ID)
+    .where('requestTime', '>=', Timestamp.fromMillis(Date.now() - 1000 * 60))
+    .count()
+    .get();
+  if (recentAutoDeploys.data().count > MAX_AUTO_DEPLOYMENTS_PER_MINUTE) {
+    throw new HttpsError(
+      'resource-exhausted',
+      `Already reached ${MAX_AUTO_DEPLOYMENTS_PER_MINUTE} deployments per minute. Check for a redeployment loop!`,
+    );
   }
 
   logger.info(`Requesting ${autoDeploymentType}`, desiredSpec);
@@ -107,7 +105,7 @@ export function getAutoDeploymentType(
     DeploymentSpec,
     'serverVersion' | 'options' | 'hashesOfSecrets' | 'hostname'
   >,
-  forceRedeployment?: boolean,
+  forceRedeployment: boolean | undefined,
 ): DeploymentType | undefined {
   if (current.serverVersion !== desired.serverVersion) {
     return 'SERVER_UPDATE';
