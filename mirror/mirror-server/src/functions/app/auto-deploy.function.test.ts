@@ -215,6 +215,15 @@ describe('auto-deploy', () => {
         },
       },
     },
+    {
+      name: 'forced redeployment',
+      prep: async () => {
+        await firestore.doc(appPath(APP_ID)).update({
+          forceRedeployment: true,
+        });
+      },
+      expectedType: 'MAINTENANCE_UPDATE',
+    },
   ];
 
   for (const c of cases) {
@@ -241,6 +250,7 @@ describe('auto-deploy', () => {
         expect(afterApp.queuedDeploymentIDs).toBeUndefined;
       } else {
         expect(afterApp.queuedDeploymentIDs).toHaveLength(1);
+        expect(afterApp.forceRedeployment).toBeUndefined;
         const queuedDeploymentID = must(afterApp.queuedDeploymentIDs)[0];
 
         const deployment = await firestore

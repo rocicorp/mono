@@ -60,6 +60,16 @@ export const appSchema = v.object({
   // deployments subcollection.
   runningDeployment: deploymentSchema.optional(),
   queuedDeploymentIDs: v.array(v.string()).optional(),
+
+  // When set to true, forces a redeployment of the App even if the DeploymentSpec
+  // has not changed. This is useful for testing deployment-related changes (e.g.
+  // manually through the Firebase console) or for facilitating infrastructure
+  // migrations that aren't triggered by changes to the App's DeploymentSpec.
+  //
+  // A deployment triggered by this field, in the absence of any other change that
+  // would trigger a redeployment, is given the DeploymentType `MAINTENANCE_UPDATE`.
+  // The field is always deleted upon queueing a new deployment.
+  forceRedeployment: v.boolean().optional(),
 });
 
 export type App = v.Infer<typeof appSchema>;

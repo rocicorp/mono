@@ -59,24 +59,27 @@ export async function checkForAutoDeployment(
   const autoDeploymentType = getAutoDeploymentType(
     app.runningDeployment.spec,
     desiredSpec,
+    app.forceRedeployment,
   );
   if (!autoDeploymentType) {
     return;
   }
 
-  // Sanity check: Protect against pathological auto-deploy loops by short-circuiting
-  // if there are too many auto-deploy's in the last minute.
-  const recentAutoDeploys = await firestore
-    .collection(deploymentsCollection(appID))
-    .where('requesterID', '==', MIRROR_SERVER_REQUESTER_ID)
-    .where('requestTime', '>=', Timestamp.fromMillis(Date.now() - 1000 * 60))
-    .count()
-    .get();
-  if (recentAutoDeploys.data().count > MAX_AUTO_DEPLOYMENTS_PER_MINUTE) {
-    throw new HttpsError(
-      'resource-exhausted',
-      `Already reached ${MAX_AUTO_DEPLOYMENTS_PER_MINUTE} deployments per minute. Check for a redeployment loop!`,
-    );
+  if (!app.forceRedeployment) {
+    // Sanity check: Protect against pathological auto-deploy loops by short-circuiting
+    // if there are too many auto-deploy's in the last minute.
+    const recentAutoDeploys = await firestore
+      .collection(deploymentsCollection(appID))
+      .where('requesterID', '==', MIRROR_SERVER_REQUESTER_ID)
+      .where('requestTime', '>=', Timestamp.fromMillis(Date.now() - 1000 * 60))
+      .count()
+      .get();
+    if (recentAutoDeploys.data().count > MAX_AUTO_DEPLOYMENTS_PER_MINUTE) {
+      throw new HttpsError(
+        'resource-exhausted',
+        `Already reached ${MAX_AUTO_DEPLOYMENTS_PER_MINUTE} deployments per minute. Check for a redeployment loop!`,
+      );
+    }
   }
 
   logger.info(`Requesting ${autoDeploymentType}`, desiredSpec);
@@ -104,6 +107,7 @@ export function getAutoDeploymentType(
     DeploymentSpec,
     'serverVersion' | 'options' | 'hashesOfSecrets' | 'hostname'
   >,
+  forceRedeployment?: boolean,
 ): DeploymentType | undefined {
   if (current.serverVersion !== desired.serverVersion) {
     return 'SERVER_UPDATE';
@@ -116,6 +120,9 @@ export function getAutoDeploymentType(
   }
   if (!_.isEqual(current.hostname, desired.hostname)) {
     return 'HOSTNAME_UPDATE';
+  }
+  if (forceRedeployment) {
+    return 'MAINTENANCE_UPDATE';
   }
   return undefined;
 }

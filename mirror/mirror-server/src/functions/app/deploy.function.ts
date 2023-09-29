@@ -217,6 +217,7 @@ export function requestDeployment(
         appDocRef,
         {
           queuedDeploymentIDs: FieldValue.arrayUnion(deploymentID),
+          forceRedeployment: FieldValue.delete(),
         },
         lastAppUpdateTime ? {lastUpdateTime: lastAppUpdateTime} : {},
       );
