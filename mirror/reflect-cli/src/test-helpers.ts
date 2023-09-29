@@ -1,6 +1,8 @@
-import {afterEach, beforeEach} from '@jest/globals';
+import {afterEach, beforeEach, expect} from '@jest/globals';
 import {setAppConfigForTesting, type AppConfig} from './app-config.js';
 import {UserAuthConfig, setAuthConfigForTesting} from './auth-config.js';
+
+export const reflectVersionMatcher = expect.stringMatching(/0\.\d{2,}\.\d+/);
 
 export function useFakeAuthConfig() {
   const newConfig: UserAuthConfig = {

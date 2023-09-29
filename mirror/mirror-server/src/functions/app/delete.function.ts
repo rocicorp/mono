@@ -20,6 +20,7 @@ import {
 import {NULL_SECRETS} from './secrets.js';
 import {requestDeployment} from './deploy.function.js';
 import {logger} from 'firebase-functions';
+import {userAgentVersion} from '../validators/version.js';
 
 const NULL_SPEC: DeploymentSpec = {
   appModules: [],
@@ -33,6 +34,7 @@ const NULL_SPEC: DeploymentSpec = {
 // Note: 'delete' is a reserved word, so we have to call the variable something else.
 export const deleteApp = (firestore: Firestore) =>
   validateSchema(deleteAppRequestSchema, deleteAppResponseSchema)
+    .validate(userAgentVersion())
     .validate(userAuthorization())
     .validate(appAuthorization(firestore, ['admin']))
     .handle(async (request, context) => {

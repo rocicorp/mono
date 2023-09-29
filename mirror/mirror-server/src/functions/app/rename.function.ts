@@ -17,9 +17,11 @@ import {must} from 'shared/src/must.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {logger} from 'firebase-functions';
+import {userAgentVersion} from '../validators/version.js';
 
 export const rename = (firestore: Firestore) =>
   validateSchema(renameAppRequestSchema, renameAppResponseSchema)
+    .validate(userAgentVersion())
     .validate(userAuthorization())
     .validate(appAuthorization(firestore))
     .handle(async (request, context) => {

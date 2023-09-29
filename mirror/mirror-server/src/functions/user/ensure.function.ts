@@ -15,9 +15,11 @@ import {
   teamInvitePath,
   teamMembershipPath,
 } from 'mirror-schema/src/membership.js';
+import {userAgentVersion} from '../validators/version.js';
 
 export const ensure = (firestore: Firestore, auth: Auth) =>
   validateSchema(ensureUserRequestSchema, ensureUserResponseSchema)
+    .validate(userAgentVersion())
     .validate(userAuthorization())
     .handle(async (_, context) => {
       const {userID} = context;

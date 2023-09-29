@@ -22,18 +22,23 @@ import {
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
+import {userAgentVersion, DistTags} from '../validators/version.js';
+import {DistTag} from 'mirror-protocol/src/version.js';
+import {gtr} from 'semver';
 
 export const publish = (
   firestore: Firestore,
   storage: Storage,
   bucketName: string,
+  testDistTags?: DistTags,
 ) =>
   validateSchema(publishRequestSchema, publishResponseSchema)
+    .validate(userAgentVersion(testDistTags))
     .validate(userAuthorization())
     .validate(appAuthorization(firestore))
     .handle(async (publishRequest, context) => {
       const {serverVersionRange, appID} = publishRequest;
-      const {userID, app} = context;
+      const {userID, app, distTags} = context;
 
       const appModules: Module[] = [
         {...publishRequest.source, type: 'esm'},
@@ -46,6 +51,17 @@ export const publish = (
         app,
         serverVersionRange,
       );
+
+      if (app.runningDeployment === undefined) {
+        // If this is the first publish to the App, disallow deprecated server version ranges.
+        const minNonDeprecated = distTags[DistTag.MinNonDeprecated];
+        if (minNonDeprecated && gtr(minNonDeprecated, serverVersionRange)) {
+          throw new HttpsError(
+            'out-of-range',
+            `The app depends on a deprecated version of Reflect (${serverVersionRange}). Please update to @rocicorp/reflect/latest and try again.`,
+          );
+        }
+      }
 
       const appModuleRefs = await saveToGoogleCloudStorage(
         storage,

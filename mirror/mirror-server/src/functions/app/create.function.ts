@@ -26,9 +26,11 @@ import {newAppID, newAppIDAsNumber, newAppScriptName} from '../../ids.js';
 import {userAuthorization} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
+import {userAgentVersion} from '../validators/version.js';
 
 export const create = (firestore: Firestore) =>
   validateSchema(createRequestSchema, createResponseSchema)
+    .validate(userAgentVersion())
     .validate(userAuthorization())
     .handle((request, context) => {
       const {userID} = context;

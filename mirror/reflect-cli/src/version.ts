@@ -7,25 +7,25 @@ import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
-import {pkgUp} from 'pkg-up';
-import {readFile} from 'node:fs/promises';
+import {pkgUpSync} from 'pkg-up';
+import {readFileSync} from 'node:fs';
+import type {UserAgent} from 'mirror-protocol/src/user-agent.js';
+import {
+  DistTag,
+  DistTagMap,
+  lookupDistTags,
+} from 'mirror-protocol/src/version.js';
 
 export const {version} = packageJSON;
 
-export const userAgent = {
-  type: packageJSON.name,
-  version,
-} as const;
-
-export type UserAgent = typeof userAgent;
-
-const enum DistTag {
-  Latest = 'latest',
-  MinSupported = 'sup',
-  MinNonDeprecated = 'rec',
+export function getUserAgent(): UserAgent {
+  return {
+    type: packageJSON.name,
+    version: findReflectVersion(),
+  };
 }
 
-type DistTags = {[tag: string]: SemVer};
+type DistTags = DistTagMap<SemVer>;
 
 // Run by yargs middleware. Stashes the DistTags in argv so that `npm view` is only run once.
 export async function tryDeprecationCheck(
@@ -51,32 +51,20 @@ function getOrRefetchDistTags(
     return Promise.resolve(yargs._distTags as DistTags);
   }
   // Use a longer, 30 second timeout when DistTags are needed to proceed.
-  return lookupDistTags(30000);
+  return lookupDistTags(SemVer, 30000);
 }
 
-async function lookupDistTags(timeout: number): Promise<DistTags> {
-  // https://github.com/npm/registry/blob/master/docs/REGISTRY-API.md
-  const resp = await fetch('https://registry.npmjs.org/@rocicorp/reflect', {
-    signal: AbortSignal.timeout(timeout),
-  });
-  const pkgMeta = await resp.json();
-  const distTags = pkgMeta['dist-tags'] as Record<string, string>;
-  return Object.fromEntries(
-    Object.entries(distTags).map(([tag, value]) => [tag, new SemVer(value)]),
-  );
-}
-
-export async function findReflectVersion(): Promise<string> {
+export function findReflectVersion(): string {
   const pkgDir = fileURLToPath(import.meta.url);
   if (!pkgDir.includes('/node_module')) {
     const reflectPkg = path.resolve(pkgDir, '../../../../', 'packages/reflect');
-    const pkg = await pkgUp({cwd: reflectPkg});
+    const pkg = pkgUpSync({cwd: reflectPkg});
     assert(pkg);
-    const s = await readFile(pkg, 'utf-8');
+    const s = readFileSync(pkg, 'utf-8');
     const v = JSON.parse(s);
     assertObject(v);
     assertString(v.version);
-    console.log(
+    console.debug(
       `reflect-cli run from source. Using version from packages/reflect/package.json: ${v.version}.`,
     );
     return v.version;
@@ -86,11 +74,11 @@ export async function findReflectVersion(): Promise<string> {
 
 async function checkForCliDeprecation(): Promise<DistTags> {
   // Use a short, 3 second timeout to reduce delays if machine is offline (e.g. `reflect dev`).
-  const versions = await lookupDistTags(3000);
+  const versions = await lookupDistTags(SemVer, 3000);
   const minSupported = versions[DistTag.MinSupported];
   const minNonDeprecated = versions[DistTag.MinNonDeprecated];
   const latest = versions[DistTag.Latest];
-  const current = new SemVer(await findReflectVersion());
+  const current = new SemVer(findReflectVersion());
   if (minSupported && gt(minSupported, current)) {
     notifyUnsupported();
   } else if (minNonDeprecated && gt(minNonDeprecated, current)) {
