@@ -72,7 +72,6 @@ export const deleteApp = createCall(
 );
 
 export const errorReportingRequestSchema = v.object({
-  ...baseAppRequestFields,
   errorMessage: v.string(),
 });
 
@@ -86,7 +85,7 @@ export type ErrorReportingResponse = v.Infer<
 >;
 
 export const errorReporting = createCall(
-  'app-error-reporting',
+  'app-errorReporting',
   errorReportingRequestSchema,
   errorReportingResponseSchema,
 );

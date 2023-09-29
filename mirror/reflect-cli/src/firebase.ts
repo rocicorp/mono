@@ -10,7 +10,6 @@ import 'firebase/compat/firestore';
 import {sendAnalyticsEvent} from './metrics/send-ga-event.js';
 import type {ArgumentsCamelCase} from 'yargs';
 import {errorReporting} from '../../mirror-protocol/src/app.js';
-import {makeRequester} from './requester.js';
 
 function getFirebaseConfig(stack: string) {
   switch (stack) {
@@ -78,12 +77,9 @@ export function handleWith<T extends ArgumentsCamelCase>(
           }),
           handler(args),
         ]);
-        throw new Error('blah blah');
       } catch (e) {
         await errorReporting({
-          requester: makeRequester(''),
-          errorMessage: JSON.stringify(e),
-          appID: '',
+          errorMessage: String(e),
         });
       } finally {
         await getFirestore().terminate();
