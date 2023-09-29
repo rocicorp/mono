@@ -86,8 +86,7 @@ export function createLogOptions(
         .substring(0, socketHostname.length - REFLECT_SAAS_DOMAIN.length)
         .toLowerCase()
     : socketHostname;
-  const baseURL = new URL(server.replace(/^ws/, 'http'));
-  baseURL.pathname = '/api/logs/v0/log';
+  const baseURL = new URL('/api/logs/v0/log', server);
   const logLevel = consoleLogLevel === 'debug' ? 'debug' : 'info';
   const logSink = new TeeLogSink([
     new LevelFilterLogSink(consoleLogSink, consoleLogLevel),

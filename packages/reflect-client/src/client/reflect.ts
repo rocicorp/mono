@@ -303,9 +303,13 @@ export class Reflect<MD extends MutatorDefs> {
       throw new Error('ReflectOptions.userID must not be empty.');
     }
 
-    if (server && !server.startsWith('ws://') && !server.startsWith('wss://')) {
+    if (
+      server &&
+      !server.startsWith('http://') &&
+      !server.startsWith('https://')
+    ) {
       throw new Error(
-        "ReflectOptions.socketOrigin must use the 'ws' or 'wss' scheme.",
+        "ReflectOptions.server must use the 'http' or 'https' scheme.",
       );
     }
     if (jurisdiction !== undefined && jurisdiction !== 'eu') {
@@ -354,7 +358,7 @@ export class Reflect<MD extends MutatorDefs> {
     });
     this.#rep.getAuth = this.#getAuthToken;
     this.#onUpdateNeeded = this.#rep.onUpdateNeeded; // defaults to reload.
-    this.#socketOrigin = server ?? null;
+    this.#socketOrigin = server?.replace(/^http/, 'ws') ?? null;
     this.roomID = roomID;
     this.userID = userID;
     this.#jurisdiction = jurisdiction;

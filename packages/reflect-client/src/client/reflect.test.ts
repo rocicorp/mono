@@ -755,7 +755,7 @@ test('smokeTest', async () => {
 });
 
 test('poke log context includes requestID', async () => {
-  const url = 'ws://example.com/';
+  const url = 'http://example.com/';
 
   const {promise: foundRequestIDFromLogPromise, resolve} = resolver<string>();
 

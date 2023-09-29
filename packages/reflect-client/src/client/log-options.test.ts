@@ -23,7 +23,7 @@ teardown(() => {
 });
 
 function testEnableAnalyticsFalse(server: string | null) {
-  test(`socketOrigin ${server}, enableAnalytics false`, () => {
+  test(`server ${server}, enableAnalytics false`, () => {
     const {logLevel, logSink} = createLogOptions(
       {
         consoleLogLevel: 'info',
@@ -38,14 +38,14 @@ function testEnableAnalyticsFalse(server: string | null) {
   });
 }
 
-suite('when socketOrigin indicates testing or local dev', () => {
+suite('when server indicates testing or local dev', () => {
   const cases: (string | null)[] = [
     null,
-    'ws://localhost',
-    'ws://localhost:8000',
-    'ws://127.0.0.1',
-    'ws://127.0.0.1:1900',
-    'wss://[2001:db8:3333:4444:5555:6666:7777:8888]:9000',
+    'http://localhost',
+    'http://localhost:8000',
+    'http://127.0.0.1',
+    'http://127.0.0.1:1900',
+    'https://[2001:db8:3333:4444:5555:6666:7777:8888]:9000',
   ];
   for (const c of cases) {
     test(c + '', () => {
@@ -221,22 +221,22 @@ function testLogLevels(
   });
 }
 
-suite('when socketOrigin is subdomain of .reflect-server.net', () => {
-  const socketOrigin = 'wss://testSubdomain.reflect-server.net';
+suite('when server is subdomain of .reflect-server.net', () => {
+  const server = 'https://testSubdomain.reflect-server.net';
   testLogLevels(
-    socketOrigin,
+    server,
     'testsubdomain',
     'https://testsubdomain.reflect-server.net/api/logs/v0/log',
   );
-  testEnableAnalyticsFalse(socketOrigin);
+  testEnableAnalyticsFalse(server);
 });
 
-suite('when socketOrigin is not a subdomain of .reflect-server.net', () => {
-  const socketOrigin = 'wss://fooBar.FuzzyWuzzy.com';
+suite('when server is not a subdomain of .reflect-server.net', () => {
+  const server = 'https://fooBar.FuzzyWuzzy.com';
   testLogLevels(
-    socketOrigin,
+    server,
     'foobar.fuzzywuzzy.com',
     'https://foobar.fuzzywuzzy.com/api/logs/v0/log',
   );
-  testEnableAnalyticsFalse(socketOrigin);
+  testEnableAnalyticsFalse(server);
 });
