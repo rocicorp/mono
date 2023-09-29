@@ -4,7 +4,6 @@ import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import {AUTH_API_KEY_HEADER_NAME} from './auth-api-headers.js';
 import {createUnauthorizedResponse} from './create-unauthorized-response.js';
-import {isWebsocketUpgrade} from './http-util.js';
 
 /**
  * Handles a request dispatched by router. Handlers are meant to be nested
@@ -123,17 +122,7 @@ export function checkAuthAPIKey(
     throw new Error('Internal error: expected auth api key cannot be empty');
   }
 
-  let authHeader: string | null | undefined;
-  if (isWebsocketUpgrade(request)) {
-    // For websocket requests, the AUTH_API_KEY is in the Sec-WebSocket-Protocol header.
-    const encodedAuth = request.headers.get('Sec-WebSocket-Protocol');
-    if (encodedAuth) {
-      authHeader = decodeURIComponent(encodedAuth);
-    }
-  } else {
-    authHeader = request.headers.get(AUTH_API_KEY_HEADER_NAME);
-  }
-
+  const authHeader = request.headers.get(AUTH_API_KEY_HEADER_NAME);
   if (authHeader !== required) {
     return createUnauthorizedResponse();
   }
@@ -152,19 +141,6 @@ export function withRoomID<Context extends BaseContext, Resp>(
     }
     const decoded = decodeURIComponent(roomID);
     return next({...ctx, roomID: decoded}, req);
-  };
-}
-
-export function requireRoomIDSearchParam<Context extends BaseContext, Resp>(
-  next: Handler<Context & WithRoomID, Resp>,
-) {
-  return (ctx: Context, req: Request) => {
-    const url = new URL(req.url);
-    const roomID = url.searchParams.get('roomID');
-    if (!roomID) {
-      return new Response('roomID search param required', {status: 400});
-    }
-    return next({...ctx, roomID}, req);
   };
 }
 

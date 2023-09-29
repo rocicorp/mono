@@ -4,20 +4,32 @@ const tailWebSockets = new Set<WebSocket>();
 
 export function connectTail(ws: WebSocket) {
   ws.addEventListener('close', () => disconnectTail(ws), {once: true});
+  ws.send(JSON.stringify(['connected'] satisfies TailMessage));
   tailWebSockets.add(ws);
 }
+
+export type TailErrorKind =
+  | 'Unauthorized'
+  | 'InvalidConnectionRequest'
+  | 'RoomNotFound';
+
+type Level = keyof Console;
+
+type LogRecord = [
+  level: Level,
+  timestamp: number,
+  // Really JSON but we will JSON stringify this soon...
+  message: unknown[],
+];
+
+export type TailMessage =
+  | ['connected']
+  | ['error', TailErrorKind, string]
+  | LogRecord;
 
 function disconnectTail(ws: WebSocket) {
   tailWebSockets.delete(ws);
 }
-
-type LogRecord = {
-  message: unknown; // Really JSON but we will JSON stringify this soon...
-  level: string;
-  timestamp: number;
-};
-
-type Level = 'debug' | 'error' | 'info' | 'log' | 'warn';
 
 class TailConsole implements Console {
   declare debug: (...data: unknown[]) => void;
@@ -32,12 +44,11 @@ function log(level: Level, message: unknown[]) {
     originalConsole[level](...message);
   } else {
     try {
-      const logRecord: LogRecord = {
-        message,
+      const msg = JSON.stringify([
         level,
-        timestamp: Date.now(),
-      };
-      const msg = JSON.stringify({logs: [logRecord]});
+        Date.now(),
+        message,
+      ] satisfies TailMessage);
 
       for (const ws of tailWebSockets) {
         ws.send(msg);

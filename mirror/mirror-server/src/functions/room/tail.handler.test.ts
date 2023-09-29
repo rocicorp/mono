@@ -3,6 +3,7 @@ import {getMockReq, getMockRes} from '@jest-mock/express';
 import {beforeEach, describe, expect, jest, test} from '@jest/globals';
 import type {Auth} from 'firebase-admin/auth';
 import type {https} from 'firebase-functions/v2';
+import type {TailMessage} from 'mirror-protocol/src/tail.js';
 import {
   fakeFirestore,
   setApp,
@@ -132,46 +133,84 @@ describe('test tail', () => {
     req.res = res;
     const createTailPromise = createTailFunction(req, res);
     await createTailMockPromise;
+    wsMock.message(JSON.stringify(['connected']));
     wsMock.message(
-      JSON.stringify({
-        outcome: 'ok',
-        scriptName: 'arv-cli-test-1',
-        diagnosticsChannelEvents: [],
-        exceptions: [],
-        logs: [
-          {
-            message: [
-              'component=Worker',
-              'scheduled=ry5fw9fphyb',
-              'Handling scheduled event',
-            ],
-            level: 'info',
-            timestamp: 1691593226241,
-          },
-          {
-            message: [
-              'component=Worker',
-              'scheduled=ry5fw9fphyb',
-              'Returning early because REFLECT_AUTH_API_KEY is not defined in env.',
-            ],
-            level: 'debug',
-            timestamp: 1691593226241,
-          },
-        ],
-        eventTimestamp: 1691593226234,
-        event: {
-          cron: '* /5 * * * *',
-          scheduledTime: 1691593225000,
-        },
-      }),
+      JSON.stringify(['info', 1691593226241, ['info message', 'one']]),
+    );
+    wsMock.message(
+      JSON.stringify(['debug', 1691593226241, ['debug message', 123, true]]),
     );
     await sleep(1);
-    expect(res.write).toBeCalledTimes(2);
-    expect(req.res.write).toBeCalledWith(
-      `data: {"message":["component=Worker","scheduled=ry5fw9fphyb","Returning early because REFLECT_AUTH_API_KEY is not defined in env."],"level":"debug","timestamp":1691593226241}\n\n`,
+    expect(res.write).toBeCalledTimes(3);
+    expect(req.res.write).toHaveBeenNthCalledWith(1, 'data: ["connected"]\n\n');
+    expect(req.res.write).toHaveBeenNthCalledWith(
+      2,
+      'data: ["info",1691593226241,["info message","one"]]\n\n',
     );
+    expect(req.res.write).toHaveBeenNthCalledWith(
+      3,
+      'data: ["debug",1691593226241,["debug message",123,true]]\n\n',
+    );
+
     wsMock.close();
     await createTailPromise;
     expect(auth.verifyIdToken).toBeCalledWith('this-is-the-encoded-token');
+  });
+
+  async function testForwardMessage(
+    m: TailMessage,
+    expected: string,
+    expectsError?: boolean,
+  ) {
+    const req = getRequestWithHeaders();
+
+    const {res} = getMockRes();
+    req.res = res;
+    const createTailPromise = createTailFunction(req, res);
+    await createTailMockPromise;
+    wsMock.message(JSON.stringify(m));
+    await sleep(1);
+    if (expectsError) {
+      expect(res.write).toBeCalledTimes(2);
+      expect(req.res.write).toHaveBeenNthCalledWith(1, 'event: error\n');
+      expect(req.res.write).toHaveBeenNthCalledWith(2, expected);
+    } else {
+      expect(res.write).toBeCalledTimes(1);
+      expect(req.res.write).toHaveBeenNthCalledWith(1, expected);
+    }
+
+    wsMock.close();
+    await createTailPromise;
+    expect(auth.verifyIdToken).toBeCalledWith('this-is-the-encoded-token');
+  }
+
+  test('Invalid auth in header', async () => {
+    const m: TailMessage = ['error', 'Unauthorized', 'missing x'];
+    await testForwardMessage(
+      m,
+      'data: ["error","Unauthorized","missing x"]\n\n',
+    );
+  });
+
+  test('No such room', async () => {
+    await testForwardMessage(
+      ['error', 'RoomNotFound', 'no such room'],
+      'data: ["error","RoomNotFound","no such room"]\n\n',
+    );
+  });
+
+  test('InvalidConnectionRequest', async () => {
+    await testForwardMessage(
+      ['error', 'InvalidConnectionRequest', 'missing roomID'],
+      'data: ["error","InvalidConnectionRequest","missing roomID"]\n\n',
+    );
+  });
+
+  test('Invalid type', async () => {
+    await testForwardMessage(
+      42 as unknown as TailMessage,
+      'data: Expected array. Got 42\n\n',
+      true,
+    );
   });
 });

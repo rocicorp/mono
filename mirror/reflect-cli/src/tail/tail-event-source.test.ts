@@ -1,8 +1,9 @@
 import {afterEach, beforeEach, expect, jest, test} from '@jest/globals';
 import {resolver} from '@rocicorp/resolver';
+import type {TailMessage} from 'mirror-protocol/src/tail.js';
 import assert from 'node:assert';
 import {makeRequester} from '../requester.js';
-import {TailMessage, createTailEventSource} from './tail-event-source.js';
+import {createTailEventSource} from './tail-event-source.js';
 
 beforeEach(() => {
   jest.useFakeTimers();
@@ -14,14 +15,13 @@ afterEach(() => {
 });
 
 test('Error in response should be handled', async () => {
-  jest.spyOn(globalThis, 'fetch').mockImplementation(() => {
-    console.log('mockImplementationOnce');
-    return Promise.resolve({
+  jest.spyOn(globalThis, 'fetch').mockImplementation(() =>
+    Promise.resolve({
       ok: false,
       status: 555,
       statusText: 'Error in test',
-    } as Response);
-  });
+    } as Response),
+  );
 
   const src = createTailEventSource(
     'test-tail',
@@ -86,7 +86,7 @@ test('Streaming data should emit messages', async () => {
   const iter = src[Symbol.asyncIterator]();
 
   {
-    const data = {message: ['foo'], timestamp: 123, level: 'info'};
+    const data: TailMessage = ['info', 123, ['foo']];
     enqueue(data);
     expect(await iter.next()).toEqual({done: false, value: data});
   }
@@ -99,7 +99,7 @@ test('Streaming data should emit messages', async () => {
   expect(signal.aborted).toBe(false);
 
   {
-    const data = {message: [1, true, [], {}], timestamp: 456, level: 'error'};
+    const data: TailMessage = ['error', 456, [1, true, [], {}]];
     enqueue(data);
     expect(await iter.next()).toEqual({done: false, value: data});
   }

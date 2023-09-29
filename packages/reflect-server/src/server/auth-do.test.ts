@@ -1795,10 +1795,14 @@ async function connectAndTestThatRoomGotCreated(
   }
 }
 
-async function createRoom(authDO: BaseAuthDO, roomID: string) {
+async function createRoom(
+  authDO: BaseAuthDO,
+  roomID: string,
+  authApiKey = TEST_AUTH_API_KEY,
+) {
   const createRoomRequest = newCreateRoomRequest(
     'https://test.roci.dev/',
-    TEST_AUTH_API_KEY,
+    authApiKey,
     roomID,
   );
   const resp = await authDO.fetch(createRoomRequest);
@@ -2151,32 +2155,27 @@ test('revalidateConnections continues if one roomDO returns an error', async () 
 
 function createTailTestFixture(
   options: {
-    testRoomID?: string;
-    encodedTestAuth?: string | undefined;
-    testAuth?: string | undefined;
+    testRoomID?: string | null;
+    testApiToken?: string | null;
   } = {},
 ) {
-  const optionsWithDefault = {
-    testRoomID: 'testRoomID1',
-    encodedTestAuth: 'test%20auth%20token%20value%20%25%20encoded',
-    testAuth: 'test auth token value % encoded',
-    ...options,
-  };
-  const {testRoomID, encodedTestAuth, testAuth} = optionsWithDefault;
+  const {testRoomID = null, testApiToken = null} = options;
 
   const headers = new Headers();
-  if (encodedTestAuth !== undefined) {
-    headers.set('Sec-WebSocket-Protocol', encodedTestAuth);
+  if (testApiToken !== null) {
+    headers.set('Sec-WebSocket-Protocol', testApiToken);
   }
   headers.set('Upgrade', 'websocket');
   const tailURL = new URL(TAIL_URL_PATH, 'ws://test.roci.dev');
-  tailURL.searchParams.set('roomID', testRoomID);
+  if (testRoomID !== null) {
+    tailURL.searchParams.set('roomID', testRoomID);
+  }
 
   const testRequest = new Request(tailURL.toString(), {
     headers,
   });
 
-  const mocket = new Mocket();
+  const socketFromRoomDO = new Mocket();
 
   let numRooms = 0;
   const testRoomDO: DurableObjectNamespace = {
@@ -2196,24 +2195,25 @@ function createTailTestFixture(
         }
         expect(request.url).toEqual(testRequest.url);
         expect(request.headers.has(AUTH_DATA_HEADER_NAME)).toBe(false);
-        if (encodedTestAuth !== undefined) {
+        if (testApiToken !== undefined) {
           expect(request.headers.get('Sec-WebSocket-Protocol')).toEqual(
-            encodedTestAuth,
+            testApiToken,
           );
+        } else {
+          expect(request.headers.has('Sec-WebSocket-Protocol')).toBe(false);
         }
 
-        return upgradeWebsocketResponse(mocket, request.headers);
+        return upgradeWebsocketResponse(socketFromRoomDO, request.headers);
       });
     },
   };
 
   return {
-    testAuth,
     testRoomID,
     testRequest,
     testRoomDO,
-    mocket,
-    encodedTestAuth,
+    socketFromRoomDO,
+    testApiToken,
   };
 }
 
@@ -2221,46 +2221,89 @@ describe('tail', () => {
   const t = (
     name: string,
     options: {
-      testAuth?: string | undefined;
-      encodedTestAuth?: string | undefined;
-      testRoomID?: string;
-    } = {},
+      testApiToken: string | null;
+      authApiKey?: string;
+      testRoomID: string | null;
+      expectedError?: unknown;
+    },
   ) => {
     test(name, async () => {
-      const {testRoomID, testRequest, testRoomDO, mocket, encodedTestAuth} =
+      const [, server] = mockWebSocketPair();
+      const {testRoomID, testRequest, testRoomDO, socketFromRoomDO} =
         createTailTestFixture(options);
+      const {
+        testApiToken,
+        expectedError,
+        authApiKey = TEST_AUTH_API_KEY,
+      } = options;
       const logSink = new TestLogSink();
       const authDO = new BaseAuthDO({
         roomDO: testRoomDO,
         state,
-        authApiKey: TEST_AUTH_API_KEY,
+        authApiKey,
         logSink,
         logLevel: 'debug',
       });
 
-      await createRoom(authDO, testRoomID);
+      if (testRoomID) {
+        await createRoom(authDO, testRoomID, authApiKey);
+      }
 
       const response = await authDO.fetch(testRequest);
 
       expect(response.status).toEqual(101);
-      if (encodedTestAuth) {
-        expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
-          encodedTestAuth,
-        );
+      expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
+        testApiToken,
+      );
+
+      if (expectedError) {
+        // The server sends an error followed by a close message
+        expect(server.log).toEqual([
+          ['send', JSON.stringify(expectedError)],
+          ['close'],
+        ]);
+      } else {
+        expect(server.log).toEqual([]);
+        expect(response.webSocket).toBe(socketFromRoomDO);
       }
-      expect(response.webSocket).toBe(mocket);
     });
   };
 
-  t('basic', {testAuth: 'a b c', encodedTestAuth: 'a%20b%20c'});
-  t('without auth', {testAuth: undefined, encodedTestAuth: undefined});
-
-  t('without auth', {testRoomID: 'hello'});
-  t('without auth', {testRoomID: 'hel/lo'});
+  t('basic', {testApiToken: TEST_AUTH_API_KEY, testRoomID: 'testRoomID1'});
+  t('without api token', {
+    testApiToken: null,
+    testRoomID: 'testRoomID1',
+    expectedError: ['error', 'Unauthorized', 'auth required'],
+  });
+  t('wrong api token', {
+    testApiToken: 'wrong',
+    testRoomID: 'testRoomID1',
+    expectedError: ['error', 'Unauthorized', 'auth required'],
+  });
+  t('without api token but with roomID', {
+    testApiToken: null,
+    testRoomID: 'hello',
+    expectedError: ['error', 'Unauthorized', 'auth required'],
+  });
+  t('missing room id', {
+    testApiToken: TEST_AUTH_API_KEY,
+    testRoomID: null,
+    expectedError: [
+      'error',
+      'InvalidConnectionRequest',
+      'roomID parameter required',
+    ],
+  });
+  t('api token with spaces', {
+    testApiToken: 'a b c',
+    authApiKey: 'a b c',
+    testRoomID: 'testRoomID1',
+  });
 });
 
 test('tail not a websocket', async () => {
-  const {testRoomID, testRequest, testRoomDO} = createTailTestFixture();
+  const testRoomID = 'testRoomID1';
+  const {testRequest, testRoomDO} = createTailTestFixture({testRoomID});
   testRequest.headers.delete('Upgrade');
 
   const logSink = new TestLogSink();

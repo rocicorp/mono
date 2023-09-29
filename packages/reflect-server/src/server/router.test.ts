@@ -13,7 +13,6 @@ import {
   get,
   post,
   requireAuthAPIKey,
-  requireRoomIDSearchParam,
   withBody,
   withRoomID,
   withVersion,
@@ -227,32 +226,6 @@ describe('checkAuthAPIKey', () => {
       },
       expectedError: undefined,
     },
-    {
-      name: 'websocket correct api key sent as sec-websocket-protocol',
-      required: 'foo',
-      headers: {
-        ['Upgrade']: 'websocket',
-        ['Sec-Websocket-protocol']: 'foo',
-      },
-      expectedError: undefined,
-    },
-    {
-      name: 'websocket no api key sent',
-      required: 'foo',
-      headers: {
-        ['Upgrade']: 'websocket',
-      },
-      expectedError: {result: {status: 401, text: 'Unauthorized'}},
-    },
-    {
-      name: 'websocket api key sent but with wrong header',
-      required: 'foo',
-      headers: {
-        ['Upgrade']: 'websocket',
-        ['x-reflect-auth-api-key']: 'foo',
-      },
-      expectedError: {result: {status: 401, text: 'Unauthorized'}},
-    },
   ];
 
   for (const c of cases) {
@@ -439,63 +412,6 @@ test('withRoomID', async () => {
     }
 
     expect(result).toEqual(c.expected);
-  }
-});
-
-describe('requireRoomIDSearchParam', () => {
-  type Case = {
-    url: string;
-    expected: {result: {text: string; status: number}} | {error: string};
-  };
-
-  const cases: Case[] = [
-    {
-      url: 'https://roci.dev/?roomID=monkey',
-      expected: {result: {text: 'roomID:monkey', status: 200}},
-    },
-    {
-      url: 'https://roci.dev/?roomID=%24',
-      expected: {result: {text: 'roomID:$', status: 200}},
-    },
-    {
-      url: 'https://roci.dev/?roomID=a%2Fb',
-      expected: {result: {text: 'roomID:a/b', status: 200}},
-    },
-    {
-      url: 'https://roci.dev/?roomIDX=monkey',
-      expected: {
-        result: {
-          status: 400,
-          text: 'roomID search param required',
-        },
-      },
-    },
-  ];
-
-  const handler = requireRoomIDSearchParam(
-    ctx => new Response(`roomID:${ctx.roomID}`, {status: 200}),
-  );
-
-  for (const c of cases) {
-    test(c.url, async () => {
-      const request = new Request(c.url);
-      const ctx = {
-        parsedURL: null as unknown as URLPatternURLPatternResult,
-        lc: createSilentLogContext(),
-      };
-
-      let result: Case['expected'] | undefined = undefined;
-      try {
-        const response = await handler(ctx, request);
-        result = {
-          result: {status: response.status, text: await response.text()},
-        };
-      } catch (e) {
-        result = {error: String(e)};
-      }
-
-      expect(result).toEqual(c.expected);
-    });
   }
 });
 

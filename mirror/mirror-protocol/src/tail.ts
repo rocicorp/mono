@@ -37,3 +37,43 @@ export function createTailEventSourceURL(
   }
   return `https://${functions.region}-${functions.app.options.projectId}.cloudfunctions.net/${functionName}/${appID}`;
 }
+
+const errorKindSchema = v.union(
+  v.literal('Unauthorized'),
+  v.literal('InvalidConnectionRequest'),
+  v.literal('RoomNotFound'),
+);
+
+export const errorMessageSchema = v.tuple([
+  v.literal('error'),
+  errorKindSchema,
+  v.string(),
+]);
+
+export type TailErrorKind = v.Infer<typeof errorKindSchema>;
+
+export const connectedMessageSchema = v.tuple([v.literal('connected')]);
+
+const logLevelSchema = v.union(
+  v.literal('debug'),
+  v.literal('error'),
+  v.literal('info'),
+  v.literal('log'),
+  v.literal('warn'),
+);
+
+const logMessageSchema = v.tuple([
+  logLevelSchema,
+  v.number(),
+  v.array(v.unknown()),
+]);
+
+export type LogMessage = v.Infer<typeof logMessageSchema>;
+
+export const tailMessageSchema = v.union(
+  connectedMessageSchema,
+  errorMessageSchema,
+  logMessageSchema,
+);
+
+export type TailMessage = v.Infer<typeof tailMessageSchema>;

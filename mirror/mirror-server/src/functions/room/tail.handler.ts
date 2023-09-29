@@ -3,21 +3,23 @@ import type {Auth} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {HttpsError, onRequest} from 'firebase-functions/v2/https';
-import {roomTailRequestSchema} from 'mirror-protocol/src/tail.js';
+import {
+  roomTailRequestSchema,
+  tailMessageSchema,
+} from 'mirror-protocol/src/tail.js';
 import type {App} from 'mirror-schema/src/app.js';
 import assert from 'node:assert';
-import {jsonSchema} from 'reflect-protocol';
 import {must} from 'shared/src/must.js';
 import {Queue} from 'shared/src/queue.js';
-import * as v from 'shared/src/valita.js';
+import * as valita from 'shared/src/valita.js';
 import WebSocket from 'ws';
+import {REFLECT_AUTH_API_KEY} from '../app/secrets.js';
 import {
   appAuthorization,
   tokenAuthentication,
   userAuthorization,
 } from '../validators/auth.js';
 import {validateRequest} from '../validators/schema.js';
-import {REFLECT_AUTH_API_KEY} from '../app/secrets.js';
 
 export const tail = (
   firestore: Firestore,
@@ -133,22 +135,9 @@ function wsQueue(
   };
 }
 
-const partialRecordSchema = v.object({
-  logs: v.array(
-    v.object({
-      message: jsonSchema,
-      level: v.string(),
-      timestamp: v.number(),
-    }),
-  ),
-});
-
 function writeData(response: Response, data: string) {
-  const cfLogRecord = JSON.parse(data);
-  const logRecords = v.parse(cfLogRecord, partialRecordSchema, 'strip');
-  for (const rec of logRecords.logs) {
-    response.write(`data: ${JSON.stringify(rec)}\n\n`);
-  }
+  const parsedData = valita.parse(JSON.parse(data), tailMessageSchema, 'strip');
+  response.write(`data: ${JSON.stringify(parsedData)}\n\n`);
 }
 
 function writeEvent(response: Response, event: string, data: string) {

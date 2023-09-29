@@ -1,13 +1,16 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {version} from 'reflect-shared';
 import type {MaybePromise} from 'replicache';
+import {timed} from 'shared/src/timed.js';
 import {Series, reportMetricsSchema} from '../types/report-metrics.js';
+import {isTrueEnvValue} from '../util/env.js';
+import {populateLogContextFromRequest} from '../util/log-context-common.js';
 import {randomID} from '../util/rand.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {
   AUTH_ROUTES,
   AUTH_ROUTES_AUTHED_BY_API_KEY,
-  AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER,
+  AUTH_ROUTES_CUSTOM_AUTH,
   AUTH_ROUTES_UNAUTHED,
 } from './auth-do.js';
 import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
@@ -30,9 +33,6 @@ import {
   withBody,
 } from './router.js';
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
-import {timed} from 'shared/src/timed.js';
-import {populateLogContextFromRequest} from '../util/log-context-common.js';
-import {isTrueEnvValue} from '../util/env.js';
 
 export type MetricsSink = (
   allSeries: Series[],
@@ -83,7 +83,7 @@ function registerRoutes(router: WorkerRouter) {
       requireAPIKeyMatchesEnv((ctx, req) => sendToAuthDO(ctx, req)),
     );
   }
-  for (const pattern of Object.values(AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER)) {
+  for (const pattern of Object.values(AUTH_ROUTES_CUSTOM_AUTH)) {
     router.register(pattern, sendToAuthDO);
   }
   for (const pattern of Object.values(AUTH_ROUTES_UNAUTHED)) {

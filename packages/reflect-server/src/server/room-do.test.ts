@@ -514,9 +514,11 @@ test('tail should replace global console', async () => {
     'message',
     e => {
       expect(typeof e.data).toBe('string');
-      expect(JSON.parse(e.data as string)).toEqual({
-        logs: [{message: ['hello', 'world'], level: 'log', timestamp: 1984}],
-      });
+      expect(JSON.parse(e.data as string)).toEqual([
+        'log',
+        1984,
+        ['hello', 'world'],
+      ]);
       resolve();
     },
     {once: true},
@@ -553,9 +555,7 @@ test('tail should replace global console', async () => {
   await promise;
 
   function makeLog(s: string) {
-    return {
-      logs: [{message: [s], level: s, timestamp: 1984}],
-    };
+    return [s, 1984, [s]];
   }
 
   expect(log).toEqual([
@@ -620,10 +620,8 @@ test('tail two websockets', async () => {
 
   console.log('hello', 'world');
 
-  function makeLog(message: unknown) {
-    return {
-      logs: [{message, level: 'log', timestamp: 1984}],
-    };
+  function makeLog(message: unknown[]) {
+    return ['log', 1984, message];
   }
 
   await Promise.resolve();
