@@ -131,9 +131,9 @@ export type Deployment = v.Infer<typeof deploymentSchema>;
 export const deploymentDataConverter = firestoreDataConverter(deploymentSchema);
 
 // The slice of Deployment fields read by the cli.
-// Having the cli use a constrained schema makes it easier
+// Having the cli use a constrained schema makes it easier to
 // refactor/rewrite other parts of the schema.
-// Add more fields to the schema as necessary.
+// Pick more fields as necessary.
 const deploymentViewSchema = deploymentSchema
   .pick('status', 'statusMessage')
   .extend({spec: deploymentSpecSchema.pick('hostname')});

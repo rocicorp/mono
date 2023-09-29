@@ -77,9 +77,9 @@ export type App = v.Infer<typeof appSchema>;
 export const appDataConverter = firestoreDataConverter(appSchema);
 
 // The slice of App fields read by the cli.
-// Having the cli use a constrained schema makes it easier
+// Having the cli use a constrained schema makes it easier to
 // refactor/rewrite other parts of the schema.
-// Add more fields to the schema as necessary.
+// Pick more fields as necessary.
 const appViewSchema = appSchema.pick('name');
 
 export type AppView = v.Infer<typeof appViewSchema>;

@@ -22,9 +22,9 @@ export function userPath(userID: string): string {
 }
 
 // The slice of User fields read by the cli.
-// Having the cli use a constrained schema makes it easier
+// Having the cli use a constrained schema makes it easier to
 // refactor/rewrite other parts of the schema.
-// Add more fields to the schema as necessary.
+// Pick more fields as necessary.
 const userViewSchema = userSchema.pick('roles');
 
 export type UserView = v.Infer<typeof userViewSchema>;
