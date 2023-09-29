@@ -51,6 +51,7 @@ import {
   configureProviderHandler,
   configureProviderOptions,
 } from './configure-provider.js';
+import {certificatesHandler, certificatesOptions} from './certificates.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -134,6 +135,14 @@ function createCLIParser(argv: string[]) {
     'Lists and optionally deletes DNS records that match an optional pattern.',
     dnsRecordsOptions,
     dnsRecordsHandler,
+  );
+
+  // certs
+  reflectCLI.command(
+    'certs [pattern]',
+    'Lists and optionally deletes certificate packs that match an optional pattern.',
+    certificatesOptions,
+    certificatesHandler,
   );
 
   // publish-dispatcher
