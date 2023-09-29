@@ -189,14 +189,21 @@ let testReflectCounter = 0;
 export function reflectForTest<MD extends MutatorDefs>(
   options: Partial<ReflectOptions<MD>> = {},
 ): TestReflect<MD> {
-  const r = new TestReflect({
-    socketOrigin: 'wss://example.com/',
+  const newOpts = {
+    server: 'wss://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
     userID: 'test-user-id-' + testReflectCounter++,
     roomID: 'test-room-id',
     auth: 'test-auth',
     ...options,
-  });
+  };
+
+  // Need explict undefined to override.
+  if ('server' in options) {
+    newOpts.server = options.server;
+  }
+
+  const r = new TestReflect(newOpts);
   // We do not want any unexpected onUpdateNeeded calls in tests. If the test
   // needs to call onUpdateNeeded it should set this as needed.
   r.onUpdateNeeded = () => {

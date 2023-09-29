@@ -22,12 +22,12 @@ teardown(() => {
   sinon.restore();
 });
 
-function testEnableAnalyticsFalse(socketOrigin: string | null) {
-  test(`socketOrigin ${socketOrigin}, enableAnalytics false`, () => {
+function testEnableAnalyticsFalse(server: string | null) {
+  test(`socketOrigin ${server}, enableAnalytics false`, () => {
     const {logLevel, logSink} = createLogOptions(
       {
         consoleLogLevel: 'info',
-        socketOrigin,
+        server,
         enableAnalytics: false,
       },
       fakeCreateDatadogLogSink,
@@ -52,7 +52,7 @@ suite('when socketOrigin indicates testing or local dev', () => {
       const {logLevel, logSink} = createLogOptions(
         {
           consoleLogLevel: 'info',
-          socketOrigin: c,
+          server: c,
           enableAnalytics: true,
         },
         fakeCreateDatadogLogSink,
@@ -66,7 +66,7 @@ suite('when socketOrigin indicates testing or local dev', () => {
 });
 
 function testLogLevels(
-  socketOrigin: string,
+  server: string,
   expectedServiceLabel: string,
   expectedBaseURLString: string,
 ) {
@@ -78,7 +78,7 @@ function testLogLevels(
     const {logLevel, logSink} = createLogOptions(
       {
         consoleLogLevel: 'debug',
-        socketOrigin,
+        server,
         enableAnalytics: true,
       },
       fakeCreateDatadogLogSink,
@@ -135,7 +135,7 @@ function testLogLevels(
     const {logLevel, logSink} = createLogOptions(
       {
         consoleLogLevel: 'info',
-        socketOrigin,
+        server,
         enableAnalytics: true,
       },
       fakeCreateDatadogLogSink,
@@ -183,7 +183,7 @@ function testLogLevels(
     const {logLevel, logSink} = createLogOptions(
       {
         consoleLogLevel: 'error',
-        socketOrigin,
+        server,
         enableAnalytics: true,
       },
       fakeCreateDatadogLogSink,

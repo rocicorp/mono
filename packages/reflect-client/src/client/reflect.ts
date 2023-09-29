@@ -82,7 +82,7 @@ interface TestReflect {
   [onSetConnectionStateSymbol]: (state: ConnectionState) => void;
   [createLogOptionsSymbol]: (options: {
     consoleLogLevel: LogLevel;
-    socketOrigin: string | null;
+    server: string | null;
   }) => LogOptions;
 }
 
@@ -293,7 +293,7 @@ export class Reflect<MD extends MutatorDefs> {
     const {
       userID,
       roomID,
-      socketOrigin,
+      server,
       onOnlineChange,
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
@@ -303,11 +303,7 @@ export class Reflect<MD extends MutatorDefs> {
       throw new Error('ReflectOptions.userID must not be empty.');
     }
 
-    if (
-      socketOrigin &&
-      !socketOrigin.startsWith('ws://') &&
-      !socketOrigin.startsWith('wss://')
-    ) {
+    if (server && !server.startsWith('ws://') && !server.startsWith('wss://')) {
       throw new Error(
         "ReflectOptions.socketOrigin must use the 'ws' or 'wss' scheme.",
       );
@@ -326,7 +322,7 @@ export class Reflect<MD extends MutatorDefs> {
 
     this.#logOptions = this.#createLogOptions({
       consoleLogLevel: options.logLevel ?? 'error',
-      socketOrigin,
+      server: server ?? null,
       enableAnalytics,
     });
     const logOptions = this.#logOptions;
@@ -358,7 +354,7 @@ export class Reflect<MD extends MutatorDefs> {
     });
     this.#rep.getAuth = this.#getAuthToken;
     this.#onUpdateNeeded = this.#rep.onUpdateNeeded; // defaults to reload.
-    this.#socketOrigin = socketOrigin;
+    this.#socketOrigin = server ?? null;
     this.roomID = roomID;
     this.userID = userID;
     this.#jurisdiction = jurisdiction;
@@ -414,7 +410,7 @@ export class Reflect<MD extends MutatorDefs> {
 
   #createLogOptions(options: {
     consoleLogLevel: LogLevel;
-    socketOrigin: string | null;
+    server: string | null;
     enableAnalytics: boolean;
   }): LogOptions {
     if (TESTING) {
