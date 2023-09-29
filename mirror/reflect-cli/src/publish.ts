@@ -2,7 +2,7 @@ import {
   publish as publishCaller,
   type PublishRequest,
 } from 'mirror-protocol/src/publish.js';
-import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
+import {deploymentViewDataConverter} from 'mirror-schema/src/deployment.js';
 import {watch} from 'mirror-schema/src/watch.js';
 import assert from 'node:assert';
 import * as fs from 'node:fs/promises';
@@ -77,7 +77,7 @@ export async function publishHandler(
 
   const deploymentDoc = firestore
     .doc(deploymentPath)
-    .withConverter(deploymentDataConverter);
+    .withConverter(deploymentViewDataConverter);
 
   for await (const snapshot of watch(deploymentDoc)) {
     const deployment = snapshot.data();
