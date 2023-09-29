@@ -15,6 +15,12 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   server?: string | undefined;
 
   /**
+   * Server to connect to, for example "wss://myapp-myteam.reflect.net/".
+   * @deprecated
+   */
+  socketOrigin?: string | null | undefined;
+
+  /**
    * Identifies and authenticates the user.
    *
    * This value is required when you provide a `authHandler` to your ReflectServer.

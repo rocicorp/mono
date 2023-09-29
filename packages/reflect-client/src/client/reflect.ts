@@ -294,6 +294,7 @@ export class Reflect<MD extends MutatorDefs> {
       userID,
       roomID,
       server,
+      socketOrigin,
       onOnlineChange,
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
@@ -303,15 +304,37 @@ export class Reflect<MD extends MutatorDefs> {
       throw new Error('ReflectOptions.userID must not be empty.');
     }
 
-    if (
-      server &&
-      !server.startsWith('http://') &&
-      !server.startsWith('https://')
-    ) {
-      throw new Error(
-        "ReflectOptions.server must use the 'http' or 'https' scheme.",
-      );
-    }
+    const validateServerParam = (
+      paramName: string,
+      server: string | null | undefined,
+      expectedProtocol: string,
+    ) => {
+      if (
+        server &&
+        !server.startsWith(`${expectedProtocol}://`) &&
+        !server.startsWith(`${expectedProtocol}s://`)
+      ) {
+        throw new Error(
+          `ReflectOptions.${paramName} must use the '${expectedProtocol}' or '${expectedProtocol}s' scheme.`,
+        );
+      }
+      if (server && !server.endsWith('/')) {
+        throw new Error(
+          `ReflectOptions.${paramName} must not contain a path component. For example: "https://myapp-myteam.reflect.net/".`,
+        );
+      }
+      return server;
+    };
+
+    const validServer = validateServerParam('server', server, 'http');
+    const validSocketOrigin = validateServerParam(
+      'socketOrigin',
+      socketOrigin,
+      'ws',
+    );
+
+    const finalServer = validServer ?? validSocketOrigin ?? null;
+
     if (jurisdiction !== undefined && jurisdiction !== 'eu') {
       throw new Error('ReflectOptions.jurisdiction must be "eu" if present.');
     }
@@ -326,7 +349,7 @@ export class Reflect<MD extends MutatorDefs> {
 
     this.#logOptions = this.#createLogOptions({
       consoleLogLevel: options.logLevel ?? 'error',
-      server: server ?? null,
+      server: finalServer ?? null,
       enableAnalytics,
     });
     const logOptions = this.#logOptions;
@@ -358,7 +381,7 @@ export class Reflect<MD extends MutatorDefs> {
     });
     this.#rep.getAuth = this.#getAuthToken;
     this.#onUpdateNeeded = this.#rep.onUpdateNeeded; // defaults to reload.
-    this.#socketOrigin = server?.replace(/^http/, 'ws') ?? null;
+    this.#socketOrigin = finalServer?.replace(/^http/, 'ws') ?? null;
     this.roomID = roomID;
     this.userID = userID;
     this.#jurisdiction = jurisdiction;
