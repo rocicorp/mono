@@ -15,6 +15,11 @@ import {sleep} from 'shared/src/sleep.js';
 
 export function publishDispatcherOptions(yargs: CommonYargsArgv) {
   return yargs
+    .option('namespace', {
+      desc: 'The dispatch namespace (e.g. "prod" or "sand"',
+      type: 'string',
+      demandOption: true,
+    })
     .option('fallback-hostname', {
       desc: 'The hostname (before the TLD) to set the fallback origin to.',
       type: 'string',
@@ -65,7 +70,6 @@ async function ensureDispatchNamespace({
   dispatchNamespace: name,
 }: ProviderConfig): Promise<void> {
   const namespaces = new DispatchNamespaces({apiToken, accountID});
-  await namespaces.delete('mirror');
   try {
     const exists = await namespaces.get(name);
     console.log(`"${name}" namespace exists: `, exists);

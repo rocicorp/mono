@@ -3,7 +3,7 @@ interface Namespace {
 }
 
 interface CustomHostMetadata {
-  script_name: string;
+  script: string;
 }
 
 interface Env {
@@ -15,7 +15,7 @@ export default {
     try {
       // Namespaced (Workers for Platform) Workers are routed via Custom Hostname,
       // for which the metadata contains the name of the script to dispatch to.
-      const name = (req.cf?.hostMetadata as CustomHostMetadata)?.script_name;
+      const name = (req.cf?.hostMetadata as CustomHostMetadata)?.script;
       if (name) {
         console.log(`Dispatching ${req.url} to ${name}`);
         const worker = env.workers.get(name);

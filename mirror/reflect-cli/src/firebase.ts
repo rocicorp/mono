@@ -7,6 +7,8 @@ import {connectFunctionsEmulator, getFunctions} from 'firebase/functions';
 // https://firebase.google.com/docs/web/modular-upgrade
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
+import {sendAnalyticsEvent} from './metrics/send-ga-event.js';
+import type {ArgumentsCamelCase} from 'yargs';
 
 function getFirebaseConfig(stack: string) {
   switch (stack) {
@@ -60,11 +62,20 @@ export function getFirestore(): Firestore {
 
 // Wraps a command handler with cleanup code (e.g. terminating any Firestore client)
 // to ensure that the process exits after the handler completes.
-export function handleWith<T>(handler: (args: T) => Promise<void>) {
+export function handleWith<T extends ArgumentsCamelCase>(
+  handler: (args: T) => Promise<void>,
+) {
   return {
     andCleanup: () => async (args: T) => {
       try {
-        await handler(args);
+        const eventName =
+          args._ && args._.length ? `cmd_${args._[0]}` : 'cmd_unknown';
+        await Promise.all([
+          sendAnalyticsEvent(eventName).catch(_e => {
+            /* swallow */
+          }),
+          handler(args),
+        ]);
       } finally {
         await getFirestore().terminate();
       }

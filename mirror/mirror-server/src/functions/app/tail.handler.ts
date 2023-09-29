@@ -42,7 +42,16 @@ export const tail = (
         }
 
         const {appID} = tailRequest;
-        const {cfScriptName: cfWorkerName, provider} = context.app;
+        const {cfScriptName: cfWorkerName, scriptRef, provider} = context.app;
+
+        if (scriptRef) {
+          throw new HttpsError(
+            'unavailable',
+            'The App does not support this version of tail. ' +
+              'Please try again with `npx @rocicorp/reflect@latest`.',
+          );
+        }
+
         const apiToken = getApiToken(provider);
         const {accountID} = getDataOrFail(
           await firestore

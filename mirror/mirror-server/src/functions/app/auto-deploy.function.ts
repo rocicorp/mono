@@ -59,6 +59,7 @@ export async function checkForAutoDeployment(
   const autoDeploymentType = getAutoDeploymentType(
     app.runningDeployment.spec,
     desiredSpec,
+    app.forceRedeployment,
   );
   if (!autoDeploymentType) {
     return;
@@ -104,6 +105,7 @@ export function getAutoDeploymentType(
     DeploymentSpec,
     'serverVersion' | 'options' | 'hashesOfSecrets' | 'hostname'
   >,
+  forceRedeployment: boolean | undefined,
 ): DeploymentType | undefined {
   if (current.serverVersion !== desired.serverVersion) {
     return 'SERVER_UPDATE';
@@ -116,6 +118,9 @@ export function getAutoDeploymentType(
   }
   if (!_.isEqual(current.hostname, desired.hostname)) {
     return 'HOSTNAME_UPDATE';
+  }
+  if (forceRedeployment) {
+    return 'MAINTENANCE_UPDATE';
   }
   return undefined;
 }

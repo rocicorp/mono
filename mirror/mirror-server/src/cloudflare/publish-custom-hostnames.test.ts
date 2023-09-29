@@ -57,7 +57,7 @@ describe('custom-hostnames', () => {
     ]);
   });
 
-  test('creates new hostname', async () => {
+  test('creates single-level hostname', async () => {
     const fetch = mockFetch()
       .result('GET', '/dns_records', []) // DNSRecords.list()
       .result('POST', '/custom_hostnames', {id: 'ch-id', status: 'initial'}) // CustomHostnames.create()
@@ -65,7 +65,7 @@ describe('custom-hostnames', () => {
       .result('PATCH', '/custom_hostnames/ch-id', {status: 'active'}); // CustomHostnames.edit()
 
     expect(await publish('foo.reflect-o-rama.net')).toEqual([
-      'Setting up hostname foo.reflect-o-rama.net',
+      'Setting up DNS and TLS for foo.reflect-o-rama.net. This may take a minute.',
     ]);
 
     expect(fetch.requests()).toEqual([
@@ -92,10 +92,6 @@ describe('custom-hostnames', () => {
       custom_metadata: {
         script: 'foo-script',
         namespace: 'prod',
-      },
-      ssl: {
-        method: 'http',
-        type: 'dv',
       },
     };
     expect(fetch.jsonPayloads()).toEqual([
@@ -131,7 +127,7 @@ describe('custom-hostnames', () => {
       }); // DNSRecords.update()
 
     expect(await publish('foo.reflect-o-rama.net')).toEqual([
-      'Setting up hostname foo.reflect-o-rama.net',
+      'Setting up DNS and TLS for foo.reflect-o-rama.net. This may take a minute.',
     ]);
 
     expect(fetch.requests()).toEqual([
@@ -171,10 +167,6 @@ describe('custom-hostnames', () => {
         script: 'foo-script',
         namespace: 'prod',
       },
-      ssl: {
-        method: 'http',
-        type: 'dv',
-      },
     };
     const record = {
       name: 'foo.reflect-o-rama.net',
@@ -194,6 +186,63 @@ describe('custom-hostnames', () => {
       record, // DNSRecords.create()
       null, // DNSRecords.list()
       record, // DNSRecords.update()
+    ]);
+  });
+
+  test('requests SSL for multi-level hostname', async () => {
+    const fetch = mockFetch()
+      .result('GET', '/dns_records', []) // DNSRecords.list()
+      .result('POST', '/custom_hostnames', {id: 'ch-id', status: 'initial'}) // CustomHostnames.create()
+      .result('POST', '/dns_records', {id: 'record-id'}) // DNSRecords.create()
+      .result('PATCH', '/custom_hostnames/ch-id', {status: 'active'}); // CustomHostnames.edit()
+
+    expect(await publish('foo.bar.reflect-o-rama.net')).toEqual([
+      'Setting up DNS and TLS for foo.bar.reflect-o-rama.net. This may take a minute.',
+    ]);
+
+    expect(fetch.requests()).toEqual([
+      [
+        'GET',
+        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script&comment.contains=%7Cscript%3Aprod%2Ffoo-script%7C&match=any',
+      ],
+      [
+        'POST',
+        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/custom_hostnames',
+      ],
+      [
+        'POST',
+        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records',
+      ],
+      [
+        'PATCH',
+        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/custom_hostnames/ch-id',
+      ],
+    ]);
+    const ch = {
+      hostname: 'foo.bar.reflect-o-rama.net',
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      custom_metadata: {
+        script: 'foo-script',
+        namespace: 'prod',
+      },
+      ssl: {
+        method: 'http',
+        type: 'dv',
+      },
+    };
+    expect(fetch.jsonPayloads()).toEqual([
+      null,
+      ch,
+      {
+        name: 'foo.bar.reflect-o-rama.net',
+        type: 'CNAME',
+        content: 'reflect-o-rama.net',
+        proxied: true,
+        // tags: ['script:prod/foo-script', 'ch:ch-id'],
+        // comment: 'Managed by Rocicorp (reflect.net)',
+        comment: '|script:prod/foo-script|ch:ch-id|',
+      },
+      ch,
     ]);
   });
 
@@ -355,7 +404,7 @@ describe('custom-hostnames', () => {
 
     expect(await publish('foo.reflect-o-rama.net')).toEqual(
       expect.arrayContaining([
-        'Setting up hostname foo.reflect-o-rama.net',
+        'Setting up DNS and TLS for foo.reflect-o-rama.net. This may take a minute.',
         'Deleting hostname baz.reflect-o-rama.net',
       ]),
     );

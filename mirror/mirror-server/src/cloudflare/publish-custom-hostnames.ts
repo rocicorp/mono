@@ -72,7 +72,7 @@ async function* setCustomHostnames(
 
   const chs = new CustomHostnames(zone);
   for (const name of create) {
-    yield `Setting up hostname ${name}`;
+    yield `Setting up DNS and TLS for ${name}. This may take a minute.`;
   }
   for (const record of discard) {
     yield `Deleting hostname ${record.name}`;
@@ -96,6 +96,19 @@ async function* setCustomHostnames(
   }
 }
 
+type CustomHostnameSpec = PartialDeep<CustomHostname> & {
+  hostname: string;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  custom_metadata: Record<string, unknown>;
+};
+
+const SSL_PARAMS = {
+  ssl: {
+    method: 'http',
+    type: 'dv',
+  },
+} as const;
+
 async function createCustomHostname(
   hostname: string,
   zoneName: string,
@@ -103,20 +116,25 @@ async function createCustomHostname(
   records: DNSRecords,
   hostnames: CustomHostnames,
 ): Promise<void> {
-  const ch = {
+  logger.log(`Ensuring CustomHostname ${hostname}`);
+
+  // SSL certificates are only requested for multi-level hostnames. (e.g. "foo.bar.<zone>")
+  // Single level hostnames (e.g. "foo-bar.<zone>") are covered by the zone's
+  // Universal SSL certificate at "*.<zone>", which makes Custom Hostname provisioning
+  // must faster (~30 seconds vs 2 minutes).
+  const levels = hostname.split('.').length - zoneName.split('.').length;
+  const ch: CustomHostnameSpec = {
     hostname,
     // eslint-disable-next-line @typescript-eslint/naming-convention
     custom_metadata: {
       script: script.name,
       namespace: script.namespace,
     },
-    ssl: {
-      method: 'http',
-      type: 'dv',
-    },
+    ...(levels > 1 ? SSL_PARAMS : {}),
   } as const;
+
   const created = await ensureCustomHostname(hostnames, ch);
-  logger.log(`Created CustomHostname`, created);
+  logger.log(`CustomHostname`, created);
 
   const tags = [`script:${script.id}`, `ch:${created.id}`];
   const record = await ensureDNSRecord(records, {
@@ -129,13 +147,15 @@ async function createCustomHostname(
     // comment: 'Managed by Rocicorp (reflect.net)',
     comment: `|${tags.join('|')}|`,
   });
-  logger.log(`Created DNSRecord`, record);
+  logger.log(`DNSRecord`, record);
 
   let {status} = created;
-  while (status !== 'active') {
+  for (let first = true; status !== 'active'; first = false) {
     // Sending a PATCH request resets the backoff schedule to immediately revalidate.
     // https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/security/certificate-management/issue-and-validate/validate-certificates/http/
-    const state = await hostnames.edit(created.id, ch);
+    const state = first
+      ? await hostnames.edit(created.id, ch)
+      : await hostnames.get(created.id);
     if (state.status !== status) {
       status = state.status;
       logger.log(`Status of ${hostname}: ${status}`, state);
@@ -171,11 +191,7 @@ async function ensureDNSRecord(
 
 async function ensureCustomHostname(
   hostnames: CustomHostnames,
-  ch: PartialDeep<CustomHostname> & {
-    hostname: string;
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    custom_metadata: Record<string, unknown>;
-  },
+  ch: CustomHostnameSpec,
 ): Promise<CustomHostname> {
   try {
     return await hostnames.create(ch);

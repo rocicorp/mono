@@ -3,8 +3,9 @@ import {existsSync} from 'node:fs';
 import color from 'picocolors';
 import {configFileExists} from './app-config.js';
 import {logErrorAndExit, noFormat} from './log-error-and-exit.js';
-import {copyTemplate, findReflectVersion} from './scaffold.js';
+import {copyTemplate} from './scaffold.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import {findReflectVersion} from './version.js';
 
 export function initOptions(yargs: CommonYargsArgv) {
   return yargs;

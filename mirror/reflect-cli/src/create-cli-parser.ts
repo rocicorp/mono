@@ -1,6 +1,6 @@
 import makeCLI, {Argv} from 'yargs';
 import {initFirebase} from './firebase.js';
-import {version} from './version.js';
+import {tryDeprecationCheck, version} from './version.js';
 
 export class CommandLineArgsError extends Error {}
 
@@ -25,7 +25,7 @@ export function createCLIParserBase(argv: string[]): Argv<{
     })
     .scriptName(scriptName)
     .wrap(null)
-    .version(false)
+    .version(false) // This set to false to allow overwrite of default behavior
     .option('v', {
       describe: 'Show version number',
       alias: 'version',
@@ -57,20 +57,20 @@ export function createCLIParserBase(argv: string[]): Argv<{
   reflectCLI.command(['*'], false, {}, args => {
     if (args._.length > 0) {
       throw new CommandLineArgsError(`Unknown command: ${args._}.`);
+    } else if (args.v) {
+      console.log(version);
     } else {
-      if (args.v) {
-        reflectCLI.showVersion();
-      }
       reflectCLI.showHelp();
     }
   });
 
-  // This set to false to allow overwrite of default behavior
-  reflectCLI.version(false);
-
   // version
   reflectCLI.command('version', false, {}, () => {
     console.log(version);
+  });
+
+  reflectCLI.middleware(async argv => {
+    await tryDeprecationCheck(argv);
   });
 
   reflectCLI.middleware(argv => initFirebase(argv));

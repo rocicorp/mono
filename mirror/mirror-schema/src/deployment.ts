@@ -63,6 +63,7 @@ export const deploymentTypeSchema = v.union(
   v.literal('OPTIONS_UPDATE'),
   v.literal('SECRETS_UPDATE'),
   v.literal('HOSTNAME_UPDATE'),
+  v.literal('MAINTENANCE_UPDATE'), // Triggered by the App.forceDeployment field
   // Although DELETE is not technically a cloudflare "deployment", all cloudflare
   // worker commands are serialized via the deployment queue to avoid race
   // conditions that could otherwise arise from concurrent execution.

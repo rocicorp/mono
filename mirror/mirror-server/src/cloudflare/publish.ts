@@ -1,24 +1,12 @@
-import type {Storage} from 'firebase-admin/storage';
-import {nanoid} from 'nanoid';
 import {
   CfModule,
   CfVars,
   createScriptUploadForm,
 } from 'cloudflare-api/src/create-script-upload-form.js';
-import {Script, GlobalScript} from 'cloudflare-api/src/scripts.js';
+import type {Script} from 'cloudflare-api/src/scripts.js';
 import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
-import {publishCustomDomains} from './publish-custom-domains.js';
-import {submitSecret} from './submit-secret.js';
-import {submitTriggers} from './submit-triggers.js';
-import {logger} from 'firebase-functions';
-import type {ModuleRef} from 'mirror-schema/src/module.js';
-import {ModuleAssembler} from './module-assembler.js';
-import type {
-  DeploymentOptions,
-  DeploymentSecrets,
-} from 'mirror-schema/src/deployment.js';
 
-export async function createScript(
+export async function uploadScript(
   script: Script,
   mainModule: CfModule,
   modules: CfModule[],
@@ -66,52 +54,3 @@ const migrations: Migration[] = [
     new_classes: ['RoomDO', 'AuthDO'],
   },
 ];
-
-// eslint-disable-next-line require-yield
-export async function* publish(
-  storage: Storage,
-  script: Script,
-  appName: string,
-  teamLabel: string,
-  hostname: string,
-  options: DeploymentOptions,
-  secrets: DeploymentSecrets,
-  appModules: ModuleRef[],
-  serverModules: ModuleRef[],
-): AsyncGenerator<string> {
-  const assembler = new ModuleAssembler(
-    appName,
-    teamLabel,
-    script.name,
-    appModules,
-    serverModules,
-  );
-  const modules = await assembler.assemble(storage);
-
-  logger.log(`publishing ${hostname} (${script.id})`);
-
-  await createScript(script, modules[0], modules.slice(1), options.vars);
-
-  let reflectAuthApiKey = process.env.REFLECT_AUTH_API_KEY;
-  if (!reflectAuthApiKey) {
-    // TODO(arv): Figure this out once and for all.
-    logger.log('Missing REFLECT_AUTH_API_KEY, using a random one');
-    reflectAuthApiKey = nanoid();
-  }
-
-  const tasks: Promise<unknown>[] = Object.entries(secrets).map(
-    ([name, value]) => submitSecret(script, name, value),
-  );
-
-  if (script instanceof GlobalScript) {
-    tasks.push(
-      publishCustomDomains(script, hostname),
-      submitTriggers(script, '*/5 * * * *'),
-    );
-  } else {
-    // Cron is eventually going away: https://github.com/rocicorp/mono/issues/740
-    logger.warn(`Skipping triggers for namespaced worker, ${script.id}`);
-  }
-
-  await Promise.all(tasks);
-}
