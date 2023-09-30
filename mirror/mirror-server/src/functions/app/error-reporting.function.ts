@@ -11,5 +11,5 @@ export const errorReporting = () =>
     errorReportingRequestSchema,
     errorReportingResponseSchema,
   ).handle((request, _context) => {
-    throw new HttpsError('unknown', request.errorMessage);
+    throw new HttpsError('unknown', JSON.stringify(request));
   });

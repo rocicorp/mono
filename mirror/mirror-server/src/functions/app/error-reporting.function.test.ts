@@ -4,6 +4,7 @@ import {HttpsError, type Request} from 'firebase-functions/v2/https';
 import type {ErrorReportingRequest} from 'mirror-protocol/src/app.js';
 import {initializeApp} from 'firebase-admin/app';
 import {errorReporting} from './error-reporting.function.js';
+import {getUserParameters} from 'mirror-schema/src/reporting.js';
 
 describe('error-report function', () => {
   initializeApp({projectId: 'error-report-function-test'});
@@ -12,6 +13,7 @@ describe('error-report function', () => {
 
   const request: ErrorReportingRequest = {
     errorMessage: 'error-reporting-test',
+    userParameters: getUserParameters('0.0.0'),
   } as const;
 
   test('requests delete deployment', async () => {
@@ -24,7 +26,9 @@ describe('error-report function', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(HttpsError);
       expect((e as HttpsError).code).toBe('unknown');
-      expect((e as HttpsError).message).toBe('error-reporting-test');
+      expect((e as HttpsError).message).toContain(
+        '{"errorMessage":"error-reporting-test","userParameters":{"up.reflect_os_architecture"',
+      );
     }
   });
 });

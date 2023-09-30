@@ -10,7 +10,8 @@ import 'firebase/compat/firestore';
 import {sendAnalyticsEvent} from './metrics/send-ga-event.js';
 import type {ArgumentsCamelCase} from 'yargs';
 import {errorReporting} from '../../mirror-protocol/src/app.js';
-
+import {version} from './version.js';
+import {getUserParameters} from 'mirror-protocol/src/reporting.js';
 function getFirebaseConfig(stack: string) {
   switch (stack) {
     case 'sandbox':
@@ -80,6 +81,7 @@ export function handleWith<T extends ArgumentsCamelCase>(
       } catch (e) {
         await errorReporting({
           errorMessage: String(e),
+          userParameters: getUserParameters(version),
         });
       } finally {
         await getFirestore().terminate();
