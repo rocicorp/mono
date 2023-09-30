@@ -27,16 +27,17 @@ import {newAppID, newAppIDAsNumber, newAppScriptName} from '../../ids.js';
 import {userAuthorization} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
-import {userAgentVersion} from '../validators/version.js';
+import {userAgentVersion, DistTags} from '../validators/version.js';
 import type {UserAgent} from 'mirror-protocol/src/user-agent.js';
-import {SemVer, gte} from 'semver';
+import {DistTag} from 'mirror-protocol/src/version.js';
+import {SemVer, gte, gt} from 'semver';
 
-export const create = (firestore: Firestore) =>
+export const create = (firestore: Firestore, testDistTags?: DistTags) =>
   validateSchema(createRequestSchema, createResponseSchema)
-    .validate(userAgentVersion())
+    .validate(userAgentVersion(testDistTags))
     .validate(userAuthorization())
     .handle((request, context) => {
-      const {userID} = context;
+      const {userID, distTags} = context;
       const {
         requester: {userAgent},
         teamID,
@@ -48,6 +49,17 @@ export const create = (firestore: Firestore) =>
         throw new HttpsError(
           'invalid-argument',
           'Please update to the latest release of @rocicorp/reflect',
+        );
+      }
+
+      const minNonDeprecated = distTags[DistTag.MinNonDeprecated];
+      if (
+        minNonDeprecated &&
+        gt(minNonDeprecated, new SemVer(userAgent.version))
+      ) {
+        throw new HttpsError(
+          'unavailable',
+          'This version of Reflect is deprecated. Please update to @rocicorp/reflect@latest to create a new app.',
         );
       }
 
