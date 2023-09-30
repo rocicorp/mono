@@ -4,7 +4,7 @@ import {HttpsError, type Request} from 'firebase-functions/v2/https';
 import type {ErrorReportingRequest} from 'mirror-protocol/src/app.js';
 import {initializeApp} from 'firebase-admin/app';
 import {errorReporting} from './error-reporting.function.js';
-import {getUserParameters} from 'mirror-schema/src/reporting.js';
+import {getUserParameters} from 'mirror-protocol/src/reporting.js';
 
 describe('error-report function', () => {
   initializeApp({projectId: 'error-report-function-test'});
