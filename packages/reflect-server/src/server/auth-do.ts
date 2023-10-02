@@ -17,7 +17,10 @@ import {DurableStorage} from '../storage/durable-storage.js';
 import {encodeHeaderValue} from '../util/headers.js';
 import {populateLogContextFromRequest} from '../util/log-context-common.js';
 import {sleep} from '../util/sleep.js';
-import {closeWithError} from '../util/socket.js';
+import {
+  SEC_WEBSOCKET_PROTOCOL_HEADER,
+  createWSAndCloseWithError,
+} from '../util/socket.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
 import {AUTH_DATA_HEADER_NAME, AuthHandler} from './auth.js';
@@ -52,11 +55,11 @@ import {
   get,
   post,
   requireAuthAPIKey,
-  requireRoomIDSearchParam,
   withBody,
   withRoomID,
   withVersion,
 } from './router.js';
+import type {TailErrorKind} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 
 export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
@@ -96,12 +99,12 @@ export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
   authRevalidateConnections: '/api/auth/v0/revalidateConnections',
   legacyCreateRoom: LEGACY_CREATE_ROOM_PATH,
   createRoom: CREATE_ROOM_PATH,
-  tail: TAIL_URL_PATH,
 } as const;
 
-export const AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER = {
+export const AUTH_ROUTES_CUSTOM_AUTH = {
   legacyConnect: LEGACY_CONNECT_PATH,
   connect: CONNECT_URL_PATTERN,
+  tail: TAIL_URL_PATH,
 } as const;
 
 export const AUTH_ROUTES_UNAUTHED = {
@@ -110,7 +113,7 @@ export const AUTH_ROUTES_UNAUTHED = {
 
 export const AUTH_ROUTES = {
   ...AUTH_ROUTES_AUTHED_BY_API_KEY,
-  ...AUTH_ROUTES_AUTHED_BY_AUTH_HANDLER,
+  ...AUTH_ROUTES_CUSTOM_AUTH,
   ...AUTH_ROUTES_UNAUTHED,
 } as const;
 
@@ -289,41 +292,53 @@ export class BaseAuthDO implements DurableObject {
     ),
   );
 
-  #tail = get(
-    requireRoomIDSearchParam(async (ctx: BaseContext & WithRoomID, request) => {
-      const {lc, roomID} = ctx;
+  #tail = get(async (ctx: BaseContext, request) => {
+    const {lc} = ctx;
+    lc.info?.('authDO received websocket tail request:', request.url);
 
-      const errorResponse = requireUpgradeHeader(request, lc);
-      if (errorResponse) {
-        return errorResponse;
-      }
+    const errorResponse = requireUpgradeHeader(request, lc);
+    if (errorResponse) {
+      return errorResponse;
+    }
 
-      // This has been authorized using `requireAPIKeyMatchesEnv` because the
-      // url/pattern is in AUTH_ROUTES_AUTHED_BY_API_KEY
+    // From this point forward we want to return errors over the websocket so
+    // the client can see them.
+    //
+    // See comment in #connectImpl for more details.
 
-      const roomRecord = await this.#roomRecordLock.withRead(() =>
-        roomRecordByRoomID(this.#durableStorage, ctx.roomID),
+    const closeWithErrorLocal = (errorKind: TailErrorKind, msg: string) =>
+      createWSAndCloseWithError(lc, request, errorKind, msg);
+
+    // For tail we send the REFLECT_AUTH_API_KEY in the Sec-WebSocket-Protocol
+    // header and it is always required
+    const authApiKey = request.headers.get(SEC_WEBSOCKET_PROTOCOL_HEADER);
+    if (authApiKey !== this.#authApiKey) {
+      return closeWithErrorLocal('Unauthorized', 'auth required');
+    }
+
+    const url = new URL(request.url);
+    const roomID = url.searchParams.get('roomID');
+    if (!roomID) {
+      return closeWithErrorLocal(
+        'InvalidConnectionRequest',
+        'roomID parameter required',
       );
-      if (roomRecord === undefined) {
-        return roomNotFoundResponse();
-      }
+    }
 
-      const roomObjectID = this.#roomDO.idFromString(roomRecord.objectIDString);
+    const roomRecord = await this.#roomRecordLock.withRead(() =>
+      roomRecordByRoomID(this.#durableStorage, roomID),
+    );
+    if (roomRecord === undefined) {
+      return closeWithErrorLocal('RoomNotFound', `room not found: ${roomID}`);
+    }
 
-      // Forward the request to the Room Durable Object...
-      const stub = this.#roomDO.get(roomObjectID);
-      const requestToDO = new Request(request);
-      const responseFromDO = await roomDOFetch(
-        requestToDO,
-        'tail',
-        stub,
-        roomID,
-        lc,
-      );
+    const roomObjectID = this.#roomDO.idFromString(roomRecord.objectIDString);
 
-      return responseFromDO;
-    }),
-  );
+    // Forward the request to the Room Durable Object...
+    const stub = this.#roomDO.get(roomObjectID);
+    const requestToDO = new Request(request);
+    return roomDOFetch(requestToDO, 'tail', stub, roomID, lc);
+  });
 
   #initRoutes() {
     this.#router.register(
@@ -376,9 +391,10 @@ export class BaseAuthDO implements DurableObject {
           : 'cfWebSocket',
       );
     lc.debug?.('Handling WebSocket connection check.');
-    if (request.headers.get('Upgrade') !== 'websocket') {
-      lc.error?.('returning 400 bc missing Upgrade header:', url);
-      return new Response('expected websocket', {status: 400});
+
+    const errorResponse = requireUpgradeHeader(request, lc);
+    if (errorResponse) {
+      return errorResponse;
     }
 
     const secWebSocketProtocolHeader = request.headers.get(
@@ -451,12 +467,11 @@ export class BaseAuthDO implements DurableObject {
   #connectImpl(lc: LogContext, version: number, request: Request) {
     const {url} = request;
     lc.info?.('authDO received websocket connection request:', url);
+
     const errorResponse = requireUpgradeHeader(request, lc);
     if (errorResponse) {
       return errorResponse;
     }
-
-    const encodedAuth = request.headers.get('Sec-WebSocket-Protocol');
 
     // From this point forward we want to return errors over the websocket so
     // the client can see them.
@@ -476,12 +491,14 @@ export class BaseAuthDO implements DurableObject {
     //   does it.
 
     const closeWithErrorLocal = (errorKind: ErrorKind, msg: string) =>
-      createWSAndCloseWithError(lc, url, errorKind, msg, encodedAuth);
+      createWSAndCloseWithError(lc, request, errorKind, msg);
 
+    const encodedAuth = request.headers.get('Sec-WebSocket-Protocol');
     if (this.#authHandler && !encodedAuth) {
       lc.error?.('authDO auth not found in Sec-WebSocket-Protocol header.');
       return closeWithErrorLocal('InvalidConnectionRequest', 'auth required');
     }
+
     const expectedVersion = 1;
     if (version !== expectedVersion) {
       lc.debug?.(
@@ -646,7 +663,7 @@ export class BaseAuthDO implements DurableObject {
 
         if (roomRecord === undefined || roomRecord.status !== RoomStatus.Open) {
           const kind = roomRecord ? 'RoomClosed' : 'RoomNotFound';
-          return createWSAndCloseWithError(lc, url, kind, roomID, encodedAuth);
+          return createWSAndCloseWithError(lc, request, kind, roomID);
         }
 
         const roomObjectID = this.#roomDO.idFromString(
@@ -969,39 +986,6 @@ async function roomDOFetch(
 // we simply changed prefixes and abandoned the old entries.
 const CONNECTION_KEY_PREFIX = 'conn/';
 const CONNECTIONS_BY_ROOM_INDEX_PREFIX = 'conns_by_room/';
-
-function createWSAndCloseWithError(
-  lc: LogContext,
-  url: string,
-  kind: ErrorKind,
-  msg: string,
-  encodedAuth: string | null,
-) {
-  const pair = new WebSocketPair();
-  const ws = pair[1];
-  lc.info?.('accepting connection to send error', url);
-  ws.accept();
-
-  // MDN tells me that the message will be delivered even if we call close
-  // immediately after send:
-  //   https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close
-  // However the relevant section of the RFC says this behavior is non-normative?
-  //   https://www.rfc-editor.org/rfc/rfc6455.html#section-1.4
-  // In any case, it seems to work just fine to send the message and
-  // close before even returning the response.
-
-  closeWithError(lc, ws, kind, msg);
-
-  const responseHeaders = new Headers();
-  if (encodedAuth) {
-    responseHeaders.set('Sec-WebSocket-Protocol', encodedAuth);
-  }
-  return new Response(null, {
-    status: 101,
-    headers: responseHeaders,
-    webSocket: pair[0],
-  });
-}
 
 function connectionKeyToString(key: ConnectionKey): string {
   return `${getConnectionKeyStringUserPrefix(key.userID)}${encodeURIComponent(

@@ -1,6 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Downstream} from 'reflect-protocol';
-import type {ErrorKind, ErrorMessage} from 'reflect-protocol';
+import type {Downstream, ErrorKind, ErrorMessage} from 'reflect-protocol';
 import type {Socket} from '../types/client-state.js';
 
 export function sendError(
@@ -70,4 +69,44 @@ export function encodeReason(msg: string): string {
   }
 
   return msg;
+}
+
+export const SEC_WEBSOCKET_PROTOCOL_HEADER = 'Sec-WebSocket-Protocol';
+
+/**
+ * Creates a WebSocketPair and immediately closes the server side with an error.
+ *
+ * The request headers needs to be passed so that we can copy the
+ * Sec-WebSocket-Protocol header to the response as per the spec.
+ */
+export function createWSAndCloseWithError(
+  lc: LogContext,
+  request: Request,
+  kind: ErrorKind,
+  msg: string,
+) {
+  const pair = new WebSocketPair();
+  const ws = pair[1];
+  lc.info?.('accepting connection to send error', request.url);
+  ws.accept();
+
+  // MDN tells me that the message will be delivered even if we call close
+  // immediately after send:
+  //   https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close
+  // However the relevant section of the RFC says this behavior is non-normative?
+  //   https://www.rfc-editor.org/rfc/rfc6455.html#section-1.4
+  // In any case, it seems to work just fine to send the message and
+  // close before even returning the response.
+  closeWithError(lc, ws, kind, msg);
+
+  const responseHeaders = new Headers();
+  const protocolHeader = request.headers.get(SEC_WEBSOCKET_PROTOCOL_HEADER);
+  if (protocolHeader !== null) {
+    responseHeaders.set(SEC_WEBSOCKET_PROTOCOL_HEADER, protocolHeader);
+  }
+  return new Response(null, {
+    status: 101,
+    headers: responseHeaders,
+    webSocket: pair[0],
+  });
 }
