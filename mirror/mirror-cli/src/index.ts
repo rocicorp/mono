@@ -51,6 +51,8 @@ import {
   configureProviderHandler,
   configureProviderOptions,
 } from './configure-provider.js';
+import {migrateToWFPHandler, migrateToWFPOptions} from './migrate-to-wfp.js';
+import {certificatesHandler, certificatesOptions} from './certificates.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -112,6 +114,14 @@ function createCLIParser(argv: string[]) {
     configureProviderHandler,
   );
 
+  // wfp
+  reflectCLI.command(
+    'wfp <appID>',
+    'Migrates an App to Workers for Platforms',
+    migrateToWFPOptions,
+    migrateToWFPHandler,
+  );
+
   // publish-custom-domain
   reflectCLI.command(
     'publish-custom-domains <script-name> [domains..]',
@@ -134,6 +144,14 @@ function createCLIParser(argv: string[]) {
     'Lists and optionally deletes DNS records that match an optional pattern.',
     dnsRecordsOptions,
     dnsRecordsHandler,
+  );
+
+  // certs
+  reflectCLI.command(
+    'certs [pattern]',
+    'Lists and optionally deletes certificate packs that match an optional pattern.',
+    certificatesOptions,
+    certificatesHandler,
   );
 
   // publish-dispatcher

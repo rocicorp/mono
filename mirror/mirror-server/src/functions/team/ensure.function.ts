@@ -23,11 +23,13 @@ import {newTeamID} from '../../ids.js';
 import {userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
+import {userAgentVersion} from '../validators/version.js';
 
 export const DEFAULT_MAX_APPS = null;
 
 export const ensure = (firestore: Firestore) =>
   validateSchema(ensureTeamRequestSchema, ensureTeamResponseSchema)
+    .validate(userAgentVersion())
     .validate(userAuthorization())
     .handle(async (req, context) => {
       const {userID} = context;

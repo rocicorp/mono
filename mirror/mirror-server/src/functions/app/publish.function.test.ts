@@ -25,6 +25,8 @@ import {
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
+import type {DistTags} from '../validators/version.js';
+import {SemVer} from 'semver';
 
 mockFunctionParamsAndSecrets();
 
@@ -143,6 +145,7 @@ describe('publish', () => {
     expectedServerVersion?: string;
     requestAdditions?: Partial<PublishRequest>;
     errorCode?: FunctionsErrorCode;
+    testDistTags?: DistTags;
   };
   const cases: Case[] = [
     {
@@ -154,6 +157,12 @@ describe('publish', () => {
       name: 'multiple server candidates',
       serverReleaseChannel: 'canary',
       expectedServerVersion: '0.28.1',
+    },
+    {
+      name: 'deprecated server version',
+      serverReleaseChannel: 'stable',
+      testDistTags: {rec: new SemVer('0.29.0')},
+      errorCode: 'out-of-range',
     },
     {
       name: 'no matching server version',
@@ -194,7 +203,7 @@ describe('publish', () => {
         },
       } as unknown as Storage;
       const publishFunction = https.onCall(
-        publish(firestore, storage, 'modulez'),
+        publish(firestore, storage, 'modulez', c.testDistTags ?? {}),
       );
 
       let error: HttpsError | undefined = undefined;

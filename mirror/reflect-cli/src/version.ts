@@ -1,33 +1,31 @@
 // TODO(arv): Use esbuild define instead.
 import packageJSON from '../package.json' assert {type: 'json'};
 import color from 'picocolors';
-import {exec} from 'node:child_process';
-import {resolver} from '@rocicorp/resolver';
 import {Range, SemVer, gt, gtr} from 'semver';
 import type {ArgumentsCamelCase} from 'yargs';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {assert, assertObject, assertString} from 'shared/src/asserts.js';
-import {pkgUp} from 'pkg-up';
-import {readFile} from 'node:fs/promises';
+import {pkgUpSync} from 'pkg-up';
+import {readFileSync} from 'node:fs';
+import type {UserAgent} from 'mirror-protocol/src/user-agent.js';
+import {
+  DistTag,
+  DistTagMap,
+  lookupDistTags,
+} from 'mirror-protocol/src/version.js';
 
 export const {version} = packageJSON;
 
-export const userAgent = {
-  type: packageJSON.name,
-  version,
-} as const;
-
-export type UserAgent = typeof userAgent;
-
-const enum DistTag {
-  Latest = 'latest',
-  MinSupported = 'sup',
-  MinNonDeprecated = 'rec',
+export function getUserAgent(): UserAgent {
+  return {
+    type: packageJSON.name,
+    version: findReflectVersion(),
+  };
 }
 
-type DistTags = {[tag: string]: SemVer};
+type DistTags = DistTagMap<SemVer>;
 
 // Run by yargs middleware. Stashes the DistTags in argv so that `npm view` is only run once.
 export async function tryDeprecationCheck(
@@ -53,53 +51,32 @@ function getOrRefetchDistTags(
     return Promise.resolve(yargs._distTags as DistTags);
   }
   // Use a longer, 30 second timeout when DistTags are needed to proceed.
-  return lookupDistTags(30000);
+  return lookupDistTags(SemVer, 30000);
 }
 
-async function lookupDistTags(timeout: number): Promise<DistTags> {
-  const {promise: output, resolve, reject} = resolver<string>();
-  exec(
-    'npm view @rocicorp/reflect dist-tags --json',
-    {timeout},
-    (error, stdout) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(stdout.toString().trim());
-      }
-    },
-  );
-  const distTags = JSON.parse(await output) as Record<string, string>;
-  return Object.fromEntries(
-    Object.entries(distTags).map(([tag, value]) => [tag, new SemVer(value)]),
-  );
-}
-
-export async function findReflectVersion(): Promise<string> {
+export function findReflectVersion(): string {
   const pkgDir = fileURLToPath(import.meta.url);
-  if (!pkgDir.includes('/node_module')) {
-    const reflectPkg = path.resolve(pkgDir, '../../../../', 'packages/reflect');
-    const pkg = await pkgUp({cwd: reflectPkg});
-    assert(pkg);
-    const s = await readFile(pkg, 'utf-8');
-    const v = JSON.parse(s);
-    assertObject(v);
-    assertString(v.version);
-    console.log(
-      `reflect-cli run from source. Using version from packages/reflect/package.json: ${v.version}.`,
-    );
-    return v.version;
+  if (pkgDir.includes('/node_module')) {
+    return version;
   }
-  return version;
+  // When the reflect-cli is run from source, use the version from `packages/reflect/package.json`.
+  const reflectPkg = path.resolve(pkgDir, '../../../../', 'packages/reflect');
+  const pkg = pkgUpSync({cwd: reflectPkg});
+  assert(pkg);
+  const s = readFileSync(pkg, 'utf-8');
+  const v = JSON.parse(s);
+  assertObject(v);
+  assertString(v.version);
+  return v.version;
 }
 
 async function checkForCliDeprecation(): Promise<DistTags> {
   // Use a short, 3 second timeout to reduce delays if machine is offline (e.g. `reflect dev`).
-  const versions = await lookupDistTags(3000);
+  const versions = await lookupDistTags(SemVer, 3000);
   const minSupported = versions[DistTag.MinSupported];
   const minNonDeprecated = versions[DistTag.MinNonDeprecated];
   const latest = versions[DistTag.Latest];
-  const current = new SemVer(await findReflectVersion());
+  const current = new SemVer(findReflectVersion());
   if (minSupported && gt(minSupported, current)) {
     notifyUnsupported();
   } else if (minNonDeprecated && gt(minNonDeprecated, current)) {

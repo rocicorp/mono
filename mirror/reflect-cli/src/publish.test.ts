@@ -19,7 +19,7 @@ import {fileURLToPath} from 'node:url';
 import {setAppConfigForTesting} from './app-config.js';
 import {initFirebase} from './firebase.js';
 import {publishHandler, type PublishCaller} from './publish.js';
-import {useFakeAuthConfig} from './test-helpers.js';
+import {reflectVersionMatcher, useFakeAuthConfig} from './test-helpers.js';
 import {version} from './version.js';
 
 type Args = Parameters<typeof publishHandler>[0];
@@ -128,7 +128,7 @@ async function testPublishedCode(source: string, expectedOutputs: string[]) {
       requester: {
         userAgent: {
           type: 'reflect-cli',
-          version,
+          version: reflectVersionMatcher,
         },
         userID: 'fake-uid',
       },

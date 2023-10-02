@@ -1,11 +1,11 @@
 import {deleteApp} from 'mirror-protocol/src/app.js';
 import {
   APP_COLLECTION,
-  appDataConverter,
+  appViewDataConverter,
   appPath,
 } from 'mirror-schema/src/app.js';
-import {deploymentDataConverter} from 'mirror-schema/src/deployment.js';
-import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
+import {deploymentViewDataConverter} from 'mirror-schema/src/deployment.js';
+import {userViewDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {watch} from 'mirror-schema/src/watch.js';
 import {must} from 'shared/src/must.js';
 import {readAppConfig, writeAppConfig} from './app-config.js';
@@ -67,7 +67,7 @@ export async function deleteHandler(yargs: DeleteHandlerArgs) {
 
     const deploymentDoc = firestore
       .doc(deploymentPath)
-      .withConverter(deploymentDataConverter);
+      .withConverter(deploymentViewDataConverter);
 
     try {
       for await (const snapshot of watch(deploymentDoc)) {
@@ -126,7 +126,7 @@ async function getAppsToDelete(
     const teamID = await getSingleAdminTeam(firestore, userID);
     let query = firestore
       .collection(APP_COLLECTION)
-      .withConverter(appDataConverter)
+      .withConverter(appViewDataConverter)
       .where('teamID', '==', teamID);
     if (name) {
       query = query.where('name', '==', name);
@@ -151,7 +151,7 @@ async function getApp(
 ): Promise<AppInfo[]> {
   const appDoc = await firestore
     .doc(appPath(id))
-    .withConverter(appDataConverter)
+    .withConverter(appViewDataConverter)
     .get();
   if (!appDoc.exists) {
     throw new Error(`App is already deleted`);
@@ -166,13 +166,13 @@ async function getSingleAdminTeam(
 ): Promise<string> {
   const userDoc = await firestore
     .doc(userPath(userID))
-    .withConverter(userDataConverter)
+    .withConverter(userViewDataConverter)
     .get();
   if (!userDoc.exists) {
     throw new Error('UserDoc does not exist.');
   }
-  const user = must(userDoc.data());
-  const adminTeams = Object.entries(user.roles)
+  const {roles} = must(userDoc.data());
+  const adminTeams = Object.entries(roles)
     .filter(([_, role]) => role === 'admin')
     .map(([teamID]) => teamID);
   switch (adminTeams.length) {

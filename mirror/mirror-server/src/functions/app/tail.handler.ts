@@ -24,6 +24,7 @@ import {
   providerPath,
 } from 'mirror-schema/src/provider.js';
 import {getDataOrFail} from '../validators/data.js';
+import {userAgentVersion} from '../validators/version.js';
 
 export const tail = (
   firestore: Firestore,
@@ -33,6 +34,7 @@ export const tail = (
   onRequest(
     validateRequest(tailRequestSchema)
       .validate(tokenAuthentication(auth))
+      .validate(userAgentVersion())
       .validate(userAuthorization())
       .validate(appAuthorization(firestore))
       .handle(async (tailRequest, context) => {

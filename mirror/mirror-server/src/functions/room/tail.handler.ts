@@ -20,6 +20,7 @@ import {
   userAuthorization,
 } from '../validators/auth.js';
 import {validateRequest} from '../validators/schema.js';
+import {userAgentVersion} from '../validators/version.js';
 
 export const tail = (
   firestore: Firestore,
@@ -29,6 +30,7 @@ export const tail = (
   onRequest(
     validateRequest(roomTailRequestSchema)
       .validate(tokenAuthentication(auth))
+      .validate(userAgentVersion())
       .validate(userAuthorization())
       .validate(appAuthorization(firestore))
       .handle(async (tailRequest, context) => {

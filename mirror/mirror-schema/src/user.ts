@@ -20,3 +20,13 @@ export const USER_COLLECTION = 'users';
 export function userPath(userID: string): string {
   return path.join(USER_COLLECTION, userID);
 }
+
+// The slice of User fields read by the cli.
+// Having the cli use a constrained schema makes it easier to
+// refactor/rewrite other parts of the schema.
+// Pick more fields as necessary.
+const userViewSchema = userSchema.pick('roles');
+
+export type UserView = v.Infer<typeof userViewSchema>;
+
+export const userViewDataConverter = firestoreDataConverter(userViewSchema);

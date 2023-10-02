@@ -22,6 +22,8 @@ import {
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
+import type {DistTags} from '../validators/version.js';
+import {SemVer} from 'semver';
 
 mockFunctionParamsAndSecrets();
 
@@ -35,14 +37,18 @@ describe('app-create function', () => {
   const TEAM_ID = 'app-create-test-team';
   const TEAM_LABEL = 'footeam';
 
-  function callCreate(appName: string) {
-    const createFunction = https.onCall(create(firestore));
+  function callCreate(
+    appName: string,
+    reflectVersion = '0.35.0',
+    testDistTags?: DistTags,
+  ) {
+    const createFunction = https.onCall(create(firestore, testDistTags));
 
     return createFunction.run({
       data: {
         requester: {
           userID: USER_ID,
-          userAgent: {type: 'reflect-cli', version: '0.0.1'},
+          userAgent: {type: 'reflect-cli', version: reflectVersion},
         },
         teamID: TEAM_ID,
         name: appName,
@@ -132,6 +138,8 @@ describe('app-create function', () => {
         },
       },
     });
+    // Not a WFP app.
+    expect(app.scriptRef).toBeUndefined;
 
     const team = await getTeam(firestore, TEAM_ID);
     expect(team.numApps).toBe(3); // This was initialized with 2 in beforeEach()
@@ -143,6 +151,67 @@ describe('app-create function', () => {
 
     // Cleanup
     await deleteApp(resp.appID, appName);
+  });
+
+  test('create WFP app', async () => {
+    const appName = 'my-app';
+    const resp = await callCreate(appName, '0.37.0'); // MIN_WFP_VERSION
+    expect(resp).toMatchObject({
+      success: true,
+      appID: expect.any(String),
+    });
+
+    const app = await getApp(firestore, resp.appID);
+    expect(app).toMatchObject({
+      teamID: TEAM_ID,
+      teamLabel: TEAM_LABEL,
+      name: appName,
+      provider: PROVIDER,
+      cfScriptName: expect.any(String),
+      scriptRef: {
+        namespace: 'prod',
+        name: app.cfScriptName,
+      },
+      serverReleaseChannel: 'stable',
+      deploymentOptions: {
+        vars: {
+          /* eslint-disable @typescript-eslint/naming-convention */
+          DISABLE_LOG_FILTERING: 'false',
+          LOG_LEVEL: 'info',
+          /* eslint-enable @typescript-eslint/naming-convention */
+        },
+      },
+    });
+
+    const team = await getTeam(firestore, TEAM_ID);
+    expect(team.numApps).toBe(3); // This was initialized with 2 in beforeEach()
+
+    const appNameEntry = await getAppName(firestore, TEAM_ID, appName);
+    expect(appNameEntry).toEqual({
+      appID: resp.appID,
+    });
+
+    // Cleanup
+    await deleteApp(resp.appID, appName);
+  });
+
+  test('cannot create app with deprecated cli', async () => {
+    const appName = 'my-app';
+    try {
+      await callCreate(appName, '0.36.0', {rec: new SemVer('0.36.1')});
+      throw new Error('Expected unavailable');
+    } catch (e) {
+      expect(e).toBeInstanceOf(HttpsError);
+      expect((e as HttpsError).code).toBe('unavailable');
+    }
+
+    const resp = await callCreate(appName, '0.36.1', {
+      rec: new SemVer('0.36.1'),
+    });
+    expect(resp).toMatchObject({
+      success: true,
+      appID: expect.any(String),
+    });
   });
 
   test('cannot create app as non-admin', async () => {
