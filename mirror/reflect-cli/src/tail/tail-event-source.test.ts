@@ -86,7 +86,7 @@ test('Streaming data should emit messages', async () => {
   const iter = src[Symbol.asyncIterator]();
 
   {
-    const data: TailMessage = ['info', 123, ['foo']];
+    const data: TailMessage = {type: 'log', level: 'info', message: ['foo']};
     enqueue(data);
     expect(await iter.next()).toEqual({done: false, value: data});
   }
@@ -99,7 +99,11 @@ test('Streaming data should emit messages', async () => {
   expect(signal.aborted).toBe(false);
 
   {
-    const data: TailMessage = ['error', 456, [1, true, [], {}]];
+    const data: TailMessage = {
+      type: 'log',
+      level: 'error',
+      message: [1, true, [], {}],
+    };
     enqueue(data);
     expect(await iter.next()).toEqual({done: false, value: data});
   }

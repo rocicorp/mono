@@ -50,8 +50,9 @@ export async function tailHandler(yargs: TailHandlerArgs) {
     if (e instanceof Error) {
       if (/\b404\b/.test(e.message)) {
         console.error('404 Not found');
+        console.error('Could not connect to room to tail log.');
         console.error(
-          'Could not connect to room to tail log. Make sure you published a version of Reflect that has tail support.',
+          'Please update your app dependencies to @rocicorp/reflect@latest.',
         );
       } else {
         console.error(e.message);
@@ -71,11 +72,11 @@ function logTailMessage(entry: TailMessage) {
 
   if (valita.is(entry, errorMessageSchema)) {
     // failed to connect
-    console.error(`${entry[1]}: ${entry[2]}`);
+    console.error(`${entry.kind}: ${entry.message}`);
     process.exit(1);
   }
 
-  const [level, , message] = entry;
+  const {level, message} = entry;
   switch (level) {
     case 'debug':
     case 'error':

@@ -133,23 +133,34 @@ describe('test tail', () => {
     req.res = res;
     const createTailPromise = createTailFunction(req, res);
     await createTailMockPromise;
-    wsMock.message(JSON.stringify(['connected']));
+    wsMock.message(JSON.stringify({type: 'connected'}));
     wsMock.message(
-      JSON.stringify(['info', 1691593226241, ['info message', 'one']]),
+      JSON.stringify({
+        type: 'log',
+        level: 'info',
+        message: ['info message', 'one'],
+      }),
     );
     wsMock.message(
-      JSON.stringify(['debug', 1691593226241, ['debug message', 123, true]]),
+      JSON.stringify({
+        type: 'log',
+        level: 'debug',
+        message: ['debug message', 123, true],
+      }),
     );
     await sleep(1);
     expect(res.write).toBeCalledTimes(3);
-    expect(req.res.write).toHaveBeenNthCalledWith(1, 'data: ["connected"]\n\n');
+    expect(req.res.write).toHaveBeenNthCalledWith(
+      1,
+      'data: {"type":"connected"}\n\n',
+    );
     expect(req.res.write).toHaveBeenNthCalledWith(
       2,
-      'data: ["info",1691593226241,["info message","one"]]\n\n',
+      'data: {"type":"log","level":"info","message":["info message","one"]}\n\n',
     );
     expect(req.res.write).toHaveBeenNthCalledWith(
       3,
-      'data: ["debug",1691593226241,["debug message",123,true]]\n\n',
+      'data: {"type":"log","level":"debug","message":["debug message",123,true]}\n\n',
     );
 
     wsMock.close();
@@ -185,31 +196,39 @@ describe('test tail', () => {
   }
 
   test('Invalid auth in header', async () => {
-    const m: TailMessage = ['error', 'Unauthorized', 'missing x'];
+    const m: TailMessage = {
+      type: 'error',
+      kind: 'Unauthorized',
+      message: 'missing x',
+    };
     await testForwardMessage(
       m,
-      'data: ["error","Unauthorized","missing x"]\n\n',
+      'data: {"type":"error","kind":"Unauthorized","message":"missing x"}\n\n',
     );
   });
 
   test('No such room', async () => {
     await testForwardMessage(
-      ['error', 'RoomNotFound', 'no such room'],
-      'data: ["error","RoomNotFound","no such room"]\n\n',
+      {type: 'error', kind: 'RoomNotFound', message: 'no such room'},
+      'data: {"type":"error","kind":"RoomNotFound","message":"no such room"}\n\n',
     );
   });
 
   test('InvalidConnectionRequest', async () => {
     await testForwardMessage(
-      ['error', 'InvalidConnectionRequest', 'missing roomID'],
-      'data: ["error","InvalidConnectionRequest","missing roomID"]\n\n',
+      {
+        type: 'error',
+        kind: 'InvalidConnectionRequest',
+        message: 'missing roomID',
+      },
+      'data: {"type":"error","kind":"InvalidConnectionRequest","message":"missing roomID"}\n\n',
     );
   });
 
   test('Invalid type', async () => {
     await testForwardMessage(
       42 as unknown as TailMessage,
-      'data: Expected array. Got 42\n\n',
+      'data: Expected object. Got 42\n\n',
       true,
     );
   });

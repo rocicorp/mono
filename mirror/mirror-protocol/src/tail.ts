@@ -44,15 +44,17 @@ const errorKindSchema = v.union(
   v.literal('RoomNotFound'),
 );
 
-export const errorMessageSchema = v.tuple([
-  v.literal('error'),
-  errorKindSchema,
-  v.string(),
-]);
+export const errorMessageSchema = v.object({
+  type: v.literal('error'),
+  kind: errorKindSchema,
+  message: v.string(),
+});
 
 export type TailErrorKind = v.Infer<typeof errorKindSchema>;
 
-export const connectedMessageSchema = v.tuple([v.literal('connected')]);
+export const connectedMessageSchema = v.object({
+  type: v.literal('connected'),
+});
 
 const logLevelSchema = v.union(
   v.literal('debug'),
@@ -62,11 +64,11 @@ const logLevelSchema = v.union(
   v.literal('warn'),
 );
 
-const logMessageSchema = v.tuple([
-  logLevelSchema,
-  v.number(),
-  v.array(v.unknown()),
-]);
+const logMessageSchema = v.object({
+  type: v.literal('log'),
+  level: logLevelSchema,
+  message: v.array(v.unknown()),
+});
 
 export type LogMessage = v.Infer<typeof logMessageSchema>;
 
