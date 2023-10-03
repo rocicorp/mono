@@ -117,9 +117,12 @@ export const AUTH_ROUTES = {
   ...AUTH_ROUTES_UNAUTHED,
 } as const;
 
+export const ALARM_INTERVAL = 5 * 60 * 1000;
+
 export class BaseAuthDO implements DurableObject {
   readonly #router = new Router();
   readonly #roomDO: DurableObjectNamespace;
+  readonly #state: DurableObjectState;
   // _durableStorage is a type-aware wrapper around _state.storage. It
   // always disables the input gate. The output gate is configured in the
   // constructor below. Anything that needs to read *values* out of
@@ -142,6 +145,7 @@ export class BaseAuthDO implements DurableObject {
   constructor(options: AuthDOOptions) {
     const {roomDO, state, authHandler, authApiKey, logSink, logLevel} = options;
     this.#roomDO = roomDO;
+    this.#state = state;
     this.#durableStorage = new DurableStorage(
       state.storage,
       false, // don't allow unconfirmed
@@ -366,7 +370,7 @@ export class BaseAuthDO implements DurableObject {
     );
     this.#router.register(
       AUTH_ROUTES.authRevalidateConnections,
-      this.#authRevalidateConnections,
+      this.#authRevalidateConnectionsRequest,
     );
 
     this.#router.register(AUTH_ROUTES.legacyConnect, this.#legacyConnect);
@@ -699,6 +703,9 @@ export class BaseAuthDO implements DurableObject {
           roomID,
           lc,
         );
+
+        await this.#scheduleReauthentication(lc);
+
         return responseFromDO;
       }),
     );
@@ -791,98 +798,134 @@ export class BaseAuthDO implements DurableObject {
     }),
   );
 
-  #authRevalidateConnections = post(
+  async alarm(): Promise<void> {
+    const lc = this.#lc.withContext('alarm');
+    const connectionCount = await this.#authRevalidateConnections(lc);
+    if (connectionCount > 0) {
+      await this.#scheduleReauthentication(lc);
+    }
+  }
+
+  async #scheduleReauthentication(lc: LogContext): Promise<void> {
+    // Without an API token there is nothing to reauthenticate.
+    if (!this.#authApiKey) {
+      return;
+    }
+
+    lc.debug?.('Ensuring alarm is scheduled.');
+    const {storage} = this.#state;
+    const currentAlarm = await storage.getAlarm();
+    if (currentAlarm === null) {
+      lc.debug?.('Scheduling alarm.');
+      await storage.setAlarm(Date.now() + ALARM_INTERVAL);
+    }
+  }
+
+  /**
+   * This is forwarded from the worker REST endpoint.
+   */
+  #authRevalidateConnectionsRequest = post(
     this.#requireAPIKey(async ctx => {
-      const {lc} = ctx;
-      lc.info?.('Revalidating connections.');
-      const connectionsByRoom = getConnectionsByRoom(this.#durableStorage, lc);
-      let connectionCount = 0;
-      let revalidatedCount = 0;
-      let deleteCount = 0;
-      for await (const {roomID, connectionKeys} of connectionsByRoom) {
-        connectionCount += connectionKeys.length;
-        lc.info?.(
-          `Revalidating ${connectionKeys.length} connections for room ${roomID}.`,
-        );
-        await this.#authLock.withWrite(async () => {
-          lc.debug?.('got lock.');
-          const roomObjectID = await this.#roomRecordLock.withRead(() =>
-            objectIDByRoomID(this.#durableStorage, this.#roomDO, roomID),
-          );
-          if (roomObjectID === undefined) {
-            lc.error?.(`Can't find room ${roomID}, skipping`);
-            return;
-          }
-          const stub = this.#roomDO.get(roomObjectID);
-          const req = new Request(
-            `https://unused-reflect-room-do.dev${ROOM_ROUTES.authConnections}`,
-            {
-              method: 'POST',
-              headers: createAuthAPIHeaders(this.#authApiKey),
-            },
-          );
-          const response = await roomDOFetch(
-            req,
-            'revalidate connections',
-            stub,
-            roomID,
-            lc,
-          );
-          let connectionsResponse: ConnectionsResponse;
-          try {
-            const responseJSON = valita.parse(
-              await response.json(),
-              connectionsResponseSchema,
-            );
-            connectionsResponse = responseJSON;
-          } catch (e) {
-            lc.error?.(
-              `Bad ${ROOM_ROUTES.authConnections} response from roomDO ${roomID}`,
-              e,
-            );
-            return;
-          }
-          const openConnectionKeyStrings = new Set(
-            connectionsResponse.map(({userID, clientID}) =>
-              connectionKeyToString({
-                roomID,
-                userID,
-                clientID,
-              }),
-            ),
-          );
-          const toDelete: [ConnectionKey, string][] = connectionKeys
-            .map((key): [ConnectionKey, string] => [
-              key,
-              connectionKeyToString(key),
-            ])
-            .filter(
-              ([_, keyString]) => !openConnectionKeyStrings.has(keyString),
-            );
-          try {
-            for (const [keyToDelete] of toDelete) {
-              await deleteConnection(keyToDelete, this.#durableStorage);
-            }
-            await this.#durableStorage.flush();
-          } catch (e) {
-            lc.info?.('Failed to delete connections for roomID', roomID);
-            return;
-          }
-          revalidatedCount += connectionKeys.length;
-          deleteCount += toDelete.length;
-          lc.info?.(
-            `Revalidated ${connectionKeys.length} connections for room ${roomID}, deleted ${toDelete.length} connections.`,
-          );
-        });
-      }
-      lc.info?.(
-        `Revalidated ${revalidatedCount} connections, deleted ${deleteCount} connections.  Failed to revalidate ${
-          connectionCount - revalidatedCount
-        } connections.`,
-      );
+      const lc = ctx.lc.withContext('authRevalidateConnectionsLegacy');
+      await this.#authRevalidateConnections(lc);
       return new Response('Complete', {status: 200});
     }),
   );
+
+  /**
+   * Revalidates all connections in the server by sending a request to the roomDO API.
+   * Deletes any connections that are no longer valid.
+   * @param lc The log context to use for logging.
+   * @returns The number of connections that are still connected.
+   */
+  async #authRevalidateConnections(lc: LogContext): Promise<number> {
+    lc.info?.('Revalidating connections.');
+    const connectionsByRoom = getConnectionsByRoom(this.#durableStorage, lc);
+    let connectionCount = 0;
+    let revalidatedCount = 0;
+    let deleteCount = 0;
+    for await (const {roomID, connectionKeys} of connectionsByRoom) {
+      connectionCount += connectionKeys.length;
+      lc.info?.(
+        `Revalidating ${connectionKeys.length} connections for room ${roomID}.`,
+      );
+      await this.#authLock.withWrite(async () => {
+        lc.debug?.('got lock.');
+        const roomObjectID = await this.#roomRecordLock.withRead(() =>
+          objectIDByRoomID(this.#durableStorage, this.#roomDO, roomID),
+        );
+        if (roomObjectID === undefined) {
+          lc.error?.(`Can't find room ${roomID}, skipping`);
+          return;
+        }
+        const stub = this.#roomDO.get(roomObjectID);
+        const req = new Request(
+          `https://unused-reflect-room-do.dev${ROOM_ROUTES.authConnections}`,
+          {
+            method: 'POST',
+            headers: createAuthAPIHeaders(this.#authApiKey),
+          },
+        );
+        const response = await roomDOFetch(
+          req,
+          'revalidate connections',
+          stub,
+          roomID,
+          lc,
+        );
+        let connectionsResponse: ConnectionsResponse;
+        try {
+          const responseJSON = valita.parse(
+            await response.json(),
+            connectionsResponseSchema,
+          );
+          connectionsResponse = responseJSON;
+        } catch (e) {
+          lc.error?.(
+            `Bad ${ROOM_ROUTES.authConnections} response from roomDO ${roomID}`,
+            e,
+          );
+          return;
+        }
+        const openConnectionKeyStrings = new Set(
+          connectionsResponse.map(({userID, clientID}) =>
+            connectionKeyToString({
+              roomID,
+              userID,
+              clientID,
+            }),
+          ),
+        );
+        const toDelete: [ConnectionKey, string][] = connectionKeys
+          .map((key): [ConnectionKey, string] => [
+            key,
+            connectionKeyToString(key),
+          ])
+          .filter(([_, keyString]) => !openConnectionKeyStrings.has(keyString));
+        try {
+          for (const [keyToDelete] of toDelete) {
+            await deleteConnection(keyToDelete, this.#durableStorage);
+          }
+          await this.#durableStorage.flush();
+        } catch (e) {
+          lc.info?.('Failed to delete connections for roomID', roomID);
+          return;
+        }
+        revalidatedCount += connectionKeys.length;
+        deleteCount += toDelete.length;
+        lc.info?.(
+          `Revalidated ${connectionKeys.length} connections for room ${roomID}, deleted ${toDelete.length} connections.`,
+        );
+      });
+    }
+    lc.info?.(
+      `Revalidated ${revalidatedCount} connections, deleted ${deleteCount} connections.  Failed to revalidate ${
+        connectionCount - revalidatedCount
+      } connections.`,
+    );
+
+    return connectionCount - deleteCount;
+  }
 
   async #forwardInvalidateRequest(
     lc: LogContext,

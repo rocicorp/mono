@@ -26,7 +26,9 @@ import {
   AUTH_API_KEY_HEADER_NAME,
   createAuthAPIHeaders,
 } from './auth-api-headers.js';
+import {TestAuthDO} from './auth-do-test-util.js';
 import {
+  ALARM_INTERVAL,
   AUTH_HANDLER_TIMEOUT_MS,
   AUTH_ROUTES,
   BaseAuthDO,
@@ -41,6 +43,7 @@ import {
 } from './do-test-utils.js';
 import {upgradeWebsocketResponse} from './http-util.js';
 import {
+  AUTH_CONNECTIONS_PATH,
   CREATE_ROOM_PATH,
   INTERNAL_CREATE_ROOM_PATH,
   TAIL_URL_PATH,
@@ -151,7 +154,7 @@ test("createRoom creates a room and doesn't allow it to be re-created", async ()
     createCreateRoomTestFixture();
   const testRequest2 = testRequest.clone();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -180,7 +183,7 @@ test("createRoom creates a room and doesn't allow it to be re-created", async ()
 test('createRoom allows slashes in roomIDs', async () => {
   const {testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -216,7 +219,7 @@ test('createRoom allows slashes in roomIDs', async () => {
 test('createRoom requires roomIDs to not contain weird characters', async () => {
   const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -256,7 +259,7 @@ test('createRoom returns 401 if authApiKey is wrong', async () => {
   const {testRoomID, testRequest, testRoomDO, state, roomDOcreateRoomCounts} =
     createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -277,7 +280,7 @@ test('createRoom returns 500 if roomDO createRoom fails', async () => {
   const {testRoomID, testRequest, testRoomDO, state} =
     createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -308,7 +311,7 @@ test('createRoom sets jurisdiction if requested', async () => {
     'eu',
   );
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -341,7 +344,7 @@ test('migrate room creates a room record', async () => {
     new TestDurableObjectId(`id-${name}`);
   const expectedObjectIDString = testRoomDO.idFromName(testRoomID).toString();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -367,7 +370,7 @@ test('migrate room creates a room record', async () => {
 test('migrate room enforces roomID format', async () => {
   const {testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -425,7 +428,7 @@ test('401s if wrong auth api key', async () => {
   ];
 
   for (const request of requests) {
-    const authDO = new BaseAuthDO({
+    const authDO = new TestAuthDO({
       roomDO: testRoomDO,
       state,
       authHandler: () => Promise.reject('should not be called'),
@@ -478,7 +481,7 @@ test('400 bad body requests', async () => {
   ];
 
   for (const request of requests) {
-    const authDO = new BaseAuthDO({
+    const authDO = new TestAuthDO({
       roomDO: testRoomDO,
       state,
       authHandler: () => Promise.reject('should not be called'),
@@ -503,7 +506,7 @@ function createBadBodyRequest(path: string, body: BodyInit | null): Request {
 test('closeRoom closes an open room', async () => {
   const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -536,7 +539,7 @@ test('closeRoom closes an open room', async () => {
 test('closeRoom 404s on non-existent room', async () => {
   const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -558,7 +561,7 @@ test('closeRoom 404s on non-existent room', async () => {
 test('calling closeRoom on closed room is ok', async () => {
   const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -600,7 +603,7 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
       return new Response('', {status: 200});
     });
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -643,7 +646,7 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
 test('deleteRoom requires room to be closed', async () => {
   const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -682,7 +685,7 @@ test('deleteRoom does not delete if auth api key is incorrect', async () => {
     testRoomID,
   );
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -710,7 +713,7 @@ test('deleteRoom does not delete if auth api key is incorrect', async () => {
 test('forget room forgets an existing room', async () => {
   const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -743,7 +746,7 @@ test('forget room forgets an existing room', async () => {
 test('foget room 404s on non-existent room', async () => {
   const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -766,7 +769,7 @@ test('roomStatusByRoomID returns status for a room that exists', async () => {
   const {testRoomID, testRequest, testRoomDO, state} =
     createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -793,7 +796,7 @@ test('roomStatusByRoomID returns status for a room that exists', async () => {
 test('roomStatusByRoomID returns unknown for a room that does not exist', async () => {
   const {testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -817,7 +820,7 @@ test('roomStatusByRoomID returns unknown for a room that does not exist', async 
 test('roomStatusByRoomID requires authApiKey', async () => {
   const {testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -846,7 +849,7 @@ function newRoomRecordsRequest() {
 test('roomRecords returns empty array if no rooms exist', async () => {
   const {testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -865,7 +868,7 @@ test('roomRecords returns empty array if no rooms exist', async () => {
 test('roomRecords returns rooms that exists', async () => {
   const {testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -891,7 +894,7 @@ test('roomRecords returns rooms that exists', async () => {
 test('roomRecords requires authApiKey', async () => {
   const {testRoomDO, state} = createCreateRoomTestFixture();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
@@ -920,6 +923,7 @@ function createConnectTestFixture(
     jurisdiction?: string | undefined;
     encodedTestAuth?: string | undefined;
     testAuth?: string | undefined;
+    connectedClients?: {clientID: string; userID: string}[] | undefined;
   } = {},
 ) {
   const optionsWithDefault = {
@@ -937,6 +941,7 @@ function createConnectTestFixture(
     jurisdiction,
     encodedTestAuth,
     testAuth,
+    connectedClients,
   } = optionsWithDefault;
 
   const headers = new Headers();
@@ -978,6 +983,17 @@ function createConnectTestFixture(
         ) {
           return new Response();
         }
+
+        if (url.pathname === AUTH_CONNECTIONS_PATH) {
+          return new Response(
+            JSON.stringify(
+              connectedClients ?? [
+                {userID: testUserID, clientID: testClientID},
+              ],
+            ),
+          );
+        }
+
         expect(request.url).toEqual(testRequest.url);
         expect(request.headers.get(AUTH_DATA_HEADER_NAME)).toEqual(
           encodeHeaderValue(JSON.stringify({userID: testUserID})),
@@ -1029,7 +1045,7 @@ describe("connect will implicitly create a room that doesn't exist", () => {
         encodedTestAuth,
       } = createConnectTestFixture({jurisdiction});
       const logSink = new TestLogSink();
-      const authDO = new BaseAuthDO({
+      const authDO = new TestAuthDO({
         roomDO: testRoomDO,
         state,
         // eslint-disable-next-line require-await
@@ -1071,7 +1087,7 @@ test('connect calls authHandler and sends resolved AuthData in header to Room DO
     encodedTestAuth,
   } = createConnectTestFixture();
   const logSink = new TestLogSink();
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     // eslint-disable-next-line require-await
@@ -1116,7 +1132,7 @@ describe('connect with undefined authHandler sends AuthData with url param userI
         encodedTestAuth: tEncodedTestAuth,
       });
       const logSink = new TestLogSink();
-      const authDO = new BaseAuthDO({
+      const authDO = new TestAuthDO({
         roomDO: testRoomDO,
         state,
         authHandler: undefined,
@@ -1152,7 +1168,7 @@ test('connect wont connect to a room that is closed', async () => {
     createConnectTestFixture();
   const logSink = new TestLogSink();
   const [, serverWS] = mockWebSocketPair();
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     // eslint-disable-next-line require-await
@@ -1195,7 +1211,7 @@ test('connect percent escapes components of the connection key', async () => {
     testClientID: '/testClientID/&',
   });
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     // eslint-disable-next-line require-await
@@ -1257,7 +1273,7 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
       );
       const [clientWS, serverWS] = mockWebSocketPair();
 
-      const authDO = new BaseAuthDO({
+      const authDO = new TestAuthDO({
         roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
         state,
         authHandler,
@@ -1353,7 +1369,7 @@ describe('connect sends InvalidConnectionRequest over ws without calling Room DO
         },
       );
 
-      const authDO = new BaseAuthDO({
+      const authDO = new TestAuthDO({
         roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
         state,
         // eslint-disable-next-line require-await
@@ -1408,7 +1424,7 @@ test('connect sends over InvalidConnectionRequest over ws without calling Room D
   );
   const [clientWS, serverWS] = mockWebSocketPair();
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
     state,
     // eslint-disable-next-line require-await
@@ -1459,7 +1475,7 @@ describe('connect sends VersionNotSupported error over ws if path is for unsuppo
       );
       const [clientWS, serverWS] = mockWebSocketPair();
 
-      const authDO = new BaseAuthDO({
+      const authDO = new TestAuthDO({
         roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
         state,
         // eslint-disable-next-line require-await
@@ -1532,7 +1548,7 @@ test('authInvalidateForUser when requests to roomDOs are successful', async () =
   };
 
   const logSink = new TestLogSink();
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () =>
@@ -1607,7 +1623,7 @@ test('authInvalidateForUser when connection ids have chars that need to be perce
   };
 
   const logSink = new TestLogSink();
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     // eslint-disable-next-line require-await
@@ -1673,7 +1689,7 @@ test('authInvalidateForUser when any request to roomDOs returns error response',
   };
 
   const logSink = new TestLogSink();
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () =>
@@ -1727,7 +1743,7 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
       });
     },
   };
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () =>
@@ -1843,7 +1859,7 @@ test('authInvalidateForRoom when request to roomDO returns error response', asyn
     },
   };
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () =>
@@ -1901,7 +1917,7 @@ test('authInvalidateAll when requests to roomDOs are successful', async () => {
       }),
   };
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () =>
@@ -1976,7 +1992,7 @@ test('authInvalidateAll when any request to roomDOs returns error response', asy
       }),
   };
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () =>
@@ -2062,7 +2078,7 @@ async function createRevalidateConnectionsTestFixture({
       }),
   };
 
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authHandler: () =>
@@ -2237,7 +2253,7 @@ describe('tail', () => {
         authApiKey = TEST_AUTH_API_KEY,
       } = options;
       const logSink = new TestLogSink();
-      const authDO = new BaseAuthDO({
+      const authDO = new TestAuthDO({
         roomDO: testRoomDO,
         state,
         authApiKey,
@@ -2307,7 +2323,7 @@ test('tail not a websocket', async () => {
   testRequest.headers.delete('Upgrade');
 
   const logSink = new TestLogSink();
-  const authDO = new BaseAuthDO({
+  const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
     authApiKey: TEST_AUTH_API_KEY,
@@ -2319,4 +2335,102 @@ test('tail not a websocket', async () => {
 
   const response = await authDO.fetch(testRequest);
   expect(response.status).toEqual(400);
+});
+
+describe('Alarms', () => {
+  async function connect(
+    testAuth: string,
+    connectedClients?: {clientID: string; userID: string}[],
+  ) {
+    const jurisdiction = undefined;
+    const {testUserID, testRequest, testRoomDO, mocket, encodedTestAuth} =
+      createConnectTestFixture({
+        testAuth,
+        encodedTestAuth: testAuth,
+        connectedClients,
+      });
+    const logSink = new TestLogSink();
+    const authDO = new TestAuthDO({
+      roomDO: testRoomDO,
+      state,
+      authApiKey: testAuth,
+      logSink,
+      logLevel: 'debug',
+    });
+
+    await connectAndTestThatRoomGotCreated(
+      authDO,
+      testRequest,
+      mocket,
+      encodedTestAuth,
+      testUserID,
+      storage,
+      jurisdiction,
+    );
+
+    return {authDO, logSink};
+  }
+
+  test('If the auth API key is empty we should not schedule an alarm', async () => {
+    await connect('');
+    expect(await state.storage.getAlarm()).toBeNull();
+  });
+
+  test('If the auth API key is set we should schedule an alarm', async () => {
+    await connect('abc');
+    const alarm = await state.storage.getAlarm();
+    // In tests the time doesn't change unless we manually increment it so the
+    // alarm should be set to the current time + the interval. In a non test
+    // environment the alarm will be dependent on the time of the call to
+    // setAlarm.
+    expect(alarm).toBe(Date.now() + ALARM_INTERVAL);
+  });
+
+  test('When the alarm is triggered we should revalidate the connections', async () => {
+    const {logSink} = await connect('abc');
+    logSink.messages.length = 0;
+    await jest.advanceTimersByTimeAsync(ALARM_INTERVAL);
+
+    // What happens during reauthentication is a black box except for the logs...
+    expect(logSink.messages.flatMap(msg => msg[2])).toMatchInlineSnapshot(`
+      [
+        "Revalidating connections.",
+        "Revalidating 1 connections for room testRoomID1.",
+        "got lock.",
+        "Sending request https://unused-reflect-room-do.dev/api/auth/v0/connections to roomDO with roomID testRoomID1",
+        "Starting RoomDO fetch for revalidate connections",
+        "Finished RoomDO fetch for revalidate connections in 0ms",
+        "received DO response",
+        200,
+        "",
+        "Revalidated 1 connections for room testRoomID1, deleted 0 connections.",
+        "Revalidated 1 connections, deleted 0 connections.  Failed to revalidate 0 connections.",
+        "Ensuring alarm is scheduled.",
+        "Scheduling alarm.",
+      ]
+    `);
+  });
+
+  test('When the alarm is triggered we should revalidate the connections (delete one)', async () => {
+    const {logSink} = await connect('abc', []);
+    logSink.messages.length = 0;
+    await jest.advanceTimersByTimeAsync(ALARM_INTERVAL);
+
+    // What happens during reauthentication is a black box except for the logs...
+    expect(logSink.messages.flatMap(msg => msg[2])).toMatchInlineSnapshot(`
+      [
+        "Revalidating connections.",
+        "Revalidating 1 connections for room testRoomID1.",
+        "got lock.",
+        "Sending request https://unused-reflect-room-do.dev/api/auth/v0/connections to roomDO with roomID testRoomID1",
+        "Starting RoomDO fetch for revalidate connections",
+        "Finished RoomDO fetch for revalidate connections in 0ms",
+        "received DO response",
+        200,
+        "",
+        "Revalidated 1 connections for room testRoomID1, deleted 1 connections.",
+        "Revalidated 1 connections, deleted 1 connections.  Failed to revalidate 0 connections.",
+      ]
+    `);
+  });
 });

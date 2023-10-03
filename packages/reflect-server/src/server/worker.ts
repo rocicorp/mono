@@ -5,10 +5,7 @@ import {timed} from 'shared/src/timed.js';
 import {Series, reportMetricsSchema} from '../types/report-metrics.js';
 import {isTrueEnvValue} from '../util/env.js';
 import {populateLogContextFromRequest} from '../util/log-context-common.js';
-import {randomID} from '../util/rand.js';
-import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {
-  AUTH_ROUTES,
   AUTH_ROUTES_AUTHED_BY_API_KEY,
   AUTH_ROUTES_CUSTOM_AUTH,
   AUTH_ROUTES_UNAUTHED,
@@ -237,48 +234,7 @@ export function createWorker<Env extends BaseWorkerEnv>(
         ),
       );
     },
-    scheduled: (
-      _controller: ScheduledController,
-      env: Env,
-      ctx: ExecutionContext,
-    ) => {
-      const {logSink, logLevel} = getOptions(env);
-      return withLogContext(
-        ctx,
-        logSink,
-        logLevel,
-        undefined,
-        withUnhandledRejectionHandler(lc => scheduled(env, lc)),
-      );
-    },
   };
-}
-
-async function scheduled(env: BaseWorkerEnv, lc: LogContext): Promise<void> {
-  lc = lc.withContext('scheduled', randomID());
-  lc.info?.('Handling scheduled event');
-  if (isTrueEnvValue(env.DISABLE)) {
-    lc.debug?.('Returning early because env.DISABLE is true.');
-    return;
-  }
-  if (!env.REFLECT_AUTH_API_KEY) {
-    lc.debug?.(
-      'Returning early because REFLECT_AUTH_API_KEY is not defined in env.',
-    );
-    return;
-  }
-  lc.info?.(
-    `Sending ${AUTH_ROUTES.authRevalidateConnections} request to AuthDO`,
-  );
-  const req = new Request(
-    `https://unused-reflect-auth-do.dev${AUTH_ROUTES.authRevalidateConnections}`,
-    {
-      method: 'POST',
-      headers: createAuthAPIHeaders(env.REFLECT_AUTH_API_KEY),
-    },
-  );
-  const resp = await sendToAuthDO({lc, env}, req);
-  lc.info?.(`Response: ${resp.status} ${resp.statusText}`);
 }
 
 async function workerFetch(

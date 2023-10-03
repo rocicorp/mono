@@ -281,65 +281,6 @@ test('worker forwards authDO api requests to authDO', async () => {
   }
 });
 
-test('on scheduled event sends api/auth/v0/revalidateConnections to AuthDO when REFLECT_AUTH_API_KEY is defined', async () => {
-  const worker = createWorkerWithTestLogSink();
-
-  const {testEnv, authDORequests} = createTestFixture();
-
-  if (!worker.scheduled) {
-    throw new Error('Expect scheduled to be defined');
-  }
-  await worker.scheduled(
-    {scheduledTime: 100, cron: '', noRetry: () => undefined},
-    testEnv,
-    new TestExecutionContext(),
-  );
-  expect(authDORequests.length).toEqual(1);
-  const {req} = authDORequests[0];
-  expect(req.method).toEqual('POST');
-  expect(req.url).toEqual(
-    'https://unused-reflect-auth-do.dev/api/auth/v0/revalidateConnections',
-  );
-  expect(req.headers.get('x-reflect-auth-api-key')).toEqual(TEST_AUTH_API_KEY);
-});
-
-test('on scheduled event does not send api/auth/v0/revalidateConnections to AuthDO when REFLECT_AUTH_API_KEY is undefined', async () => {
-  const worker = createWorkerWithTestLogSink();
-
-  const {testEnv, authDORequests} = createTestFixture({
-    authApiKeyDefined: false,
-  });
-
-  if (!worker.scheduled) {
-    throw new Error('Expect scheduled to be defined');
-  }
-  await worker.scheduled(
-    {scheduledTime: 100, cron: '', noRetry: () => undefined},
-    testEnv,
-    new TestExecutionContext(),
-  );
-  expect(authDORequests.length).toEqual(0);
-});
-
-test('on scheduled event does not send api/auth/v0/revalidateConnections to AuthDO when DISABLE is true', async () => {
-  const worker = createWorkerWithTestLogSink();
-
-  const {testEnv, authDORequests} = createTestFixture({
-    authApiKeyDefined: true,
-    disable: 'true',
-  });
-
-  if (!worker.scheduled) {
-    throw new Error('Expect scheduled to be defined');
-  }
-  await worker.scheduled(
-    {scheduledTime: 100, cron: '', noRetry: () => undefined},
-    testEnv,
-    new TestExecutionContext(),
-  );
-  expect(authDORequests.length).toEqual(0);
-});
-
 async function testLogging(
   fn: (
     worker: ExportedHandler<BaseWorkerEnv>,
@@ -412,20 +353,6 @@ test('fetch logging', async () => {
       throw new Error('Expected fetch to be defined');
     }
     return worker.fetch(testRequest, testEnv, testExecutionContext);
-  });
-});
-
-test('scheduled logging', async () => {
-  // eslint-disable-next-line require-await
-  await testLogging(async (worker, testEnv, testExecutionContext) => {
-    if (!worker.scheduled) {
-      throw new Error('Expected scheduled to be defined');
-    }
-    return worker.scheduled(
-      {scheduledTime: 100, cron: '', noRetry: () => undefined},
-      testEnv,
-      testExecutionContext,
-    );
   });
 });
 
