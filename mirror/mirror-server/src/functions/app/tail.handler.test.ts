@@ -1,15 +1,19 @@
-import {describe, test, jest, expect, beforeEach} from '@jest/globals';
+import type {Firestore} from '@google-cloud/firestore';
+import {getMockReq, getMockRes} from '@jest-mock/express';
+import {beforeEach, describe, expect, jest, test} from '@jest/globals';
 import type {Auth} from 'firebase-admin/auth';
 import type {https} from 'firebase-functions/v2';
-import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
-import {tail} from './tail.handler.js';
-import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
-import {getMockReq, getMockRes} from '@jest-mock/express';
-import {setUser, setApp, setProvider} from 'mirror-schema/src/test-helpers.js';
-import type WebSocket from 'ws';
+import {
+  fakeFirestore,
+  setApp,
+  setProvider,
+  setUser,
+} from 'mirror-schema/src/test-helpers.js';
 import {sleep} from 'shared/src/sleep.js';
-import type {Firestore} from '@google-cloud/firestore';
+import type WebSocket from 'ws';
+import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {mockApiTokenForProvider} from './secrets.js';
+import {tail} from './tail.handler.js';
 
 export class MockSocket {
   readonly url: string | URL;
@@ -159,10 +163,6 @@ describe('test tail', () => {
           },
         ],
         eventTimestamp: 1691593226234,
-        event: {
-          cron: '* /5 * * * *',
-          scheduledTime: 1691593225000,
-        },
       }),
     );
     await sleep(1);
