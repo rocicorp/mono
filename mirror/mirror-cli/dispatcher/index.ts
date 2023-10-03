@@ -1,13 +1,9 @@
-interface Namespace {
-  get(name: string): Fetcher;
-}
-
 interface CustomHostMetadata {
   script: string;
 }
 
 interface Env {
-  workers: Namespace;
+  workers: DispatchNamespace;
 }
 
 export default {
