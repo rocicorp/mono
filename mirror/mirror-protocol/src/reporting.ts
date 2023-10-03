@@ -6,7 +6,12 @@ export const deviceFingerprint = computeFingerprint();
 
 function computeFingerprint(): string {
   return createHash('md5')
-    .update(JSON.stringify(networkInterfaces()))
+    .update(
+      JSON.stringify(
+        networkInterfaces(),
+        Object.keys(networkInterfaces()).sort(),
+      ),
+    )
     .digest('hex');
 }
 
