@@ -7,11 +7,13 @@ import {connectFunctionsEmulator, getFunctions} from 'firebase/functions';
 // https://firebase.google.com/docs/web/modular-upgrade
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
-import {sendAnalyticsEvent} from './metrics/send-ga-event.js';
+import {
+  sendAnalyticsEvent,
+  getUserParameters,
+} from './metrics/send-ga-event.js';
 import type {ArgumentsCamelCase} from 'yargs';
-import {errorReporting} from '../../mirror-protocol/src/app.js';
+import {errorReporting, ErrorInfo} from 'mirror-protocol/src/error.js';
 import {version} from './version.js';
-import {getUserParameters} from 'mirror-protocol/src/reporting.js';
 function getFirebaseConfig(stack: string) {
   switch (stack) {
     case 'sandbox':
@@ -69,9 +71,9 @@ export function handleWith<T extends ArgumentsCamelCase>(
 ) {
   return {
     andCleanup: () => async (args: T) => {
+      const eventName =
+        args._ && args._.length ? `cmd_${args._[0]}` : 'cmd_unknown';
       try {
-        const eventName =
-          args._ && args._.length ? `cmd_${args._[0]}` : 'cmd_unknown';
         await Promise.all([
           sendAnalyticsEvent(eventName).catch(_e => {
             /* swallow */
@@ -80,12 +82,34 @@ export function handleWith<T extends ArgumentsCamelCase>(
         ]);
       } catch (e) {
         await errorReporting({
-          errorMessage: String(e),
-          userParameters: getUserParameters(version),
+          action: eventName,
+          error: createErrorInfo(e),
+          requester: {
+            userID: '',
+            userAgent: {type: 'reflect-cli', version},
+          },
+          agentContext: getUserParameters(version),
+        }).then(_err => {
+          /* swallow */
         });
+
+        throw e;
       } finally {
         await getFirestore().terminate();
       }
     },
+  };
+}
+
+function createErrorInfo(e: unknown): ErrorInfo {
+  if (!(e instanceof Error)) {
+    return {desc: String(e)};
+  }
+  return {
+    desc: e.message,
+    name: e.name,
+    message: e.message,
+    stack: e.stack,
+    cause: createErrorInfo(e.cause),
   };
 }

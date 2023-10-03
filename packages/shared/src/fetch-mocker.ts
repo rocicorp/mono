@@ -9,12 +9,28 @@ type Handler = {
   once?: boolean;
 };
 
+function defaultSuccessResponse<T>(result: T): Response {
+  return {
+    ok: true,
+    status: 200,
+    json: () => Promise.resolve(result),
+  } as unknown as Response;
+}
+
+function defaultErrorResponse(code: number, message?: string): Response {
+  return {
+    ok: false,
+    status: code,
+    statusText: message ?? '',
+  } as unknown as Response;
+}
+
 export class FetchMocker {
   #success: (result: unknown) => Response;
   #error: (code: number, message?: string) => Response;
   constructor(
-    success: (result: unknown) => Response,
-    error: (code: number, message?: string) => Response,
+    success: (result: unknown) => Response = defaultSuccessResponse,
+    error: (code: number, message?: string) => Response = defaultErrorResponse,
   ) {
     this.#success = success;
     this.#error = error;

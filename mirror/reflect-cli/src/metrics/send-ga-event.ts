@@ -1,12 +1,11 @@
-import * as querystring from 'querystring';
 import {arch, platform, release} from 'os';
 import {randomUUID} from 'crypto';
 import {version} from '../version.js';
 import {stringify} from 'querystring';
 import {
-  getUserParameters,
-  PrimitiveTypes,
   deviceFingerprint,
+  UserParameters,
+  UserCustomDimension,
 } from 'mirror-protocol/src/reporting.js';
 
 const TRACKING_ID = 'G-69B1QV88XF';
@@ -61,14 +60,23 @@ function getRequestParameters(): string {
   return stringify(params);
 }
 
+export function getUserParameters(version: string): UserParameters {
+  return {
+    [UserCustomDimension.OsArchitecture]: arch(),
+    [UserCustomDimension.NodeVersion]: process.version,
+    [UserCustomDimension.ReflectCLIVersion]: version,
+    [UserCustomDimension.DeviceFingerprint]: deviceFingerprint,
+  };
+}
+
 export function sendGAEvent(
-  data: Record<string, PrimitiveTypes>[],
+  data: Record<string, string>[],
 ): Promise<void> {
   const baseUrl = 'https://www.google-analytics.com/g/collect?';
   const queryString = getRequestParameters();
   const fullUrl = baseUrl + queryString;
 
-  const queryParameters = data.map(p => querystring.stringify(p)).join('\n');
+  const postBody = data.map(p => stringify(p)).join('\n');
 
   return fetch(fullUrl, {
     method: 'POST',
@@ -76,7 +84,7 @@ export function sendGAEvent(
       'user-agent':
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
     },
-    body: queryParameters,
+    body: postBody,
   }).then(response => {
     if (!response.ok) {
       throw new Error(
