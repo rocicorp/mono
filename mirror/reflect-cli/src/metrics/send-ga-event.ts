@@ -69,9 +69,7 @@ export function getUserParameters(version: string): UserParameters {
   };
 }
 
-export function sendGAEvent(
-  data: Record<string, string>[],
-): Promise<void> {
+export function sendGAEvent(data: Record<string, string>[]): Promise<void> {
   const baseUrl = 'https://www.google-analytics.com/g/collect?';
   const queryString = getRequestParameters();
   const fullUrl = baseUrl + queryString;

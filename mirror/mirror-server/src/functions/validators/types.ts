@@ -83,9 +83,9 @@ export class ValidatorChainer<Request, Context, Response> {
             : new HttpsError('internal', String(e), e);
         const {status} = err.httpErrorCode;
         if (status >= 500) {
-          logger.error(e);
+          logger.error(e, request);
         } else {
-          logger.warn(e);
+          logger.warn(e, request);
         }
         throw e;
       }
