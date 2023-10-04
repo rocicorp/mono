@@ -106,7 +106,7 @@ function createErrorInfo(e: unknown): ErrorInfo {
     return {desc: String(e)};
   }
   return {
-    desc: e.message,
+    desc: String(e),
     name: e.name,
     message: e.message,
     stack: e.stack,
