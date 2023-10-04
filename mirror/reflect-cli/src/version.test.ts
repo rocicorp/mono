@@ -1,11 +1,13 @@
 import {expect, test} from '@jest/globals';
 import {userAgentSchema} from 'mirror-protocol/src/user-agent.js';
 import * as v from 'shared/src/valita.js';
-import {getUserAgent, version} from './version.js';
 import {reflectVersionMatcher} from './test-helpers.js';
+import {getUserAgent, version} from './version.js';
 
 test('version', () => {
-  expect(version).toBe('0.1.2');
+  // We could read the version from package.json, but this way acts as a sanity
+  // check.
+  expect(version).toBe('0.35.0');
 });
 
 test('userAgent', () => {
