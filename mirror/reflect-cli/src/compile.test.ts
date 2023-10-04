@@ -108,21 +108,37 @@ test('it should bundle into one file', async () => {
 });
 
 describe('watch', () => {
+  type CheckResult = (snapshot: string) => Promise<void>;
+  type Write = (
+    filename: string,
+    data: string,
+    options: {compilationExpected: false} | {expectedResult: string},
+  ) => Promise<void>;
+
   async function watchHarness(
     entryPoint: string,
-    testBody: (
-      checkResult: (snapshot: string) => Promise<void>,
-      setCompilationExpected: (expected: boolean) => void,
-    ) => Promise<void>,
+    testBody: (checkResult: CheckResult, write: Write) => Promise<void>,
   ) {
     const ac = new AbortController();
     const q = new Queue<CompileResult>();
 
     let compilationExpected = true;
 
-    function setCompilationExpected(expected: boolean) {
-      compilationExpected = expected;
-    }
+    const write: Write = async (filename, data, options) => {
+      compilationExpected = !('compilationExpected' in options);
+      await sleep(50);
+      await fs.writeFile(filename, data, 'utf-8');
+      if ('expectedResult' in options) {
+        await checkResult(options.expectedResult);
+      }
+    };
+
+    const checkResult: CheckResult = async (snapshot: string) => {
+      const result = await q.dequeue();
+      expect(result.code.path).toBe(path.resolve('a.js'));
+      expect(result.sourcemap?.path).toBe(path.resolve('a.js.map'));
+      expect(stripCommentLines(result.code.text)).toBe(snapshot);
+    };
 
     try {
       (async () => {
@@ -147,18 +163,11 @@ describe('watch', () => {
         }
       })().catch(e => fail(e));
 
-      await testBody(checkResult, setCompilationExpected);
+      await testBody(checkResult, write);
 
       await sleep(100);
     } finally {
       ac.abort();
-    }
-
-    async function checkResult(snapshot: string) {
-      const result = await q.dequeue();
-      expect(result.code.path).toBe(path.resolve('a.js'));
-      expect(result.sourcemap?.path).toBe(path.resolve('a.js.map'));
-      expect(stripCommentLines(result.code.text)).toBe(snapshot);
     }
   }
 
@@ -175,24 +184,26 @@ describe('watch', () => {
     const fileB = path.join(dir, 'b.js');
     await fs.writeFile(fileB, `export const b = 'BBB';`, 'utf-8');
 
-    await watchHarness(fileA, async (checkResult, setCompilationExpected) => {
+    await watchHarness(fileA, async (checkResult, write) => {
       await checkResult(`var b = "BBB";
 console.log(b);`);
 
-      await fs.writeFile(fileA, `console.log('changed');`, 'utf-8');
-      await checkResult(`console.log("changed");`);
+      await write(fileA, `console.log('changed');`, {
+        expectedResult: `console.log("changed");`,
+      });
 
       // Changing b now should not trigger the watcher since a no longer depends on b.
-      setCompilationExpected(false);
-      await fs.writeFile(fileB, `console.log('changed b');`, 'utf-8');
+      await write(fileB, `console.log('changed b');`, {
+        compilationExpected: false,
+      });
 
-      setCompilationExpected(true);
-      await fs.writeFile(fileA, `console.log('changed a again');`, 'utf-8');
-      await checkResult(`console.log("changed a again");`);
+      await write(fileA, `console.log('changed a again');`, {
+        expectedResult: `console.log("changed a again");`,
+      });
 
-      setCompilationExpected(true);
-      await fs.writeFile(fileA, `console.log(process.env.NODE_ENV);`, 'utf-8');
-      await checkResult(`console.log("development");`);
+      await write(fileA, `console.log(process.env.NODE_ENV);`, {
+        expectedResult: `console.log("development");`,
+      });
     });
   });
 
@@ -203,18 +214,16 @@ console.log(b);`);
     const fileA = path.join(dir, 'a.js');
     await fs.writeFile(fileA, `console.log(1);`, 'utf-8');
 
-    await watchHarness(fileA, async (checkResult, setCompilationExpected) => {
+    await watchHarness(fileA, async (checkResult, write) => {
       await checkResult(`console.log(1);`);
 
-      setCompilationExpected(false);
-      await fs.writeFile(fileA, `console.log(`, 'utf-8');
+      await write(fileA, `console.log(`, {compilationExpected: false});
 
-      setCompilationExpected(false);
-      await fs.writeFile(fileA, `console.log('`, 'utf-8');
+      await write(fileA, `console.log('`, {compilationExpected: false});
 
-      setCompilationExpected(true);
-      await fs.writeFile(fileA, `console.log(2)`, 'utf-8');
-      await checkResult(`console.log(2);`);
+      await write(fileA, `console.log(2);`, {
+        expectedResult: `console.log(2);`,
+      });
     });
   });
 });
