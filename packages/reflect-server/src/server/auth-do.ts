@@ -701,7 +701,7 @@ export class BaseAuthDO implements DurableObject {
           lc,
         );
 
-        await this.#scheduleReauthentication(lc);
+        await this.#scheduleAlarm(lc);
 
         return responseFromDO;
       }),
@@ -797,13 +797,13 @@ export class BaseAuthDO implements DurableObject {
 
   async alarm(): Promise<void> {
     const lc = this.#lc.withContext('alarm');
-    const connectionCount = await this.#authRevalidateConnections(lc);
-    if (connectionCount > 0) {
-      await this.#scheduleReauthentication(lc);
+    await this.#authRevalidateConnections(lc);
+    if (await hasAnyConnection(this.#durableStorage)) {
+      await this.#scheduleAlarm(lc);
     }
   }
 
-  async #scheduleReauthentication(lc: LogContext): Promise<void> {
+  async #scheduleAlarm(lc: LogContext): Promise<void> {
     lc.debug?.('Ensuring alarm is scheduled.');
     const {storage} = this.#state;
     const currentAlarm = await storage.getAlarm();
@@ -816,10 +816,8 @@ export class BaseAuthDO implements DurableObject {
   /**
    * Revalidates all connections in the server by sending a request to the roomDO API.
    * Deletes any connections that are no longer valid.
-   * @param lc The log context to use for logging.
-   * @returns The number of connections that are still connected.
    */
-  #authRevalidateConnections(lc: LogContext): Promise<number> {
+  #authRevalidateConnections(lc: LogContext): Promise<void> {
     lc.debug?.('Revalidating connections waiting for lock.');
     return this.#authRevalidateConnectionsLock.withLock(async () => {
       lc.debug?.('Revalidating connections acquired lock.');
@@ -909,8 +907,6 @@ export class BaseAuthDO implements DurableObject {
           connectionCount - revalidatedCount
         } connections.`,
       );
-
-      return connectionCount - deleteCount;
     });
   }
 
@@ -1140,6 +1136,14 @@ async function* getConnections(
       yield entry;
     }
   }
+}
+
+async function hasAnyConnection(storage: DurableStorage): Promise<boolean> {
+  const entries = await storage.list(
+    {prefix: CONNECTION_KEY_PREFIX, limit: 1},
+    connectionRecordSchema,
+  );
+  return entries.size > 0;
 }
 
 export async function recordConnection(
