@@ -96,7 +96,6 @@ export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
   authInvalidateAll: '/api/auth/v0/invalidateAll',
   authInvalidateForUser: '/api/auth/v0/invalidateForUser',
   authInvalidateForRoom: '/api/auth/v0/invalidateForRoom',
-  authRevalidateConnections: '/api/auth/v0/revalidateConnections',
   legacyCreateRoom: LEGACY_CREATE_ROOM_PATH,
   createRoom: CREATE_ROOM_PATH,
 } as const;
@@ -367,10 +366,6 @@ export class BaseAuthDO implements DurableObject {
     this.#router.register(
       AUTH_ROUTES.authInvalidateForRoom,
       this.#authInvalidateForRoom,
-    );
-    this.#router.register(
-      AUTH_ROUTES.authRevalidateConnections,
-      this.#authRevalidateConnectionsRequest,
     );
 
     this.#router.register(AUTH_ROUTES.legacyConnect, this.#legacyConnect);
@@ -807,11 +802,6 @@ export class BaseAuthDO implements DurableObject {
   }
 
   async #scheduleReauthentication(lc: LogContext): Promise<void> {
-    // Without an API token there is nothing to reauthenticate.
-    if (!this.#authApiKey) {
-      return;
-    }
-
     lc.debug?.('Ensuring alarm is scheduled.');
     const {storage} = this.#state;
     const currentAlarm = await storage.getAlarm();
@@ -820,17 +810,6 @@ export class BaseAuthDO implements DurableObject {
       await storage.setAlarm(Date.now() + ALARM_INTERVAL);
     }
   }
-
-  /**
-   * This is forwarded from the worker REST endpoint.
-   */
-  #authRevalidateConnectionsRequest = post(
-    this.#requireAPIKey(async ctx => {
-      const lc = ctx.lc.withContext('authRevalidateConnectionsLegacy');
-      await this.#authRevalidateConnections(lc);
-      return new Response('Complete', {status: 200});
-    }),
-  );
 
   /**
    * Revalidates all connections in the server by sending a request to the roomDO API.

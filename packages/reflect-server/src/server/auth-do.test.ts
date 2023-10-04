@@ -18,7 +18,6 @@ import {
   newRoomStatusRequest,
 } from '../client/room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {newAuthRevalidateConnections} from '../util/auth-test-util.js';
 import {encodeHeaderValue} from '../util/headers.js';
 import {sleep} from '../util/sleep.js';
 import {Mocket, TestLogSink, mockWebSocketPair} from '../util/test-utils.js';
@@ -104,9 +103,9 @@ async function storeTestConnectionState() {
   await recordConnectionHelper('testUserID3', 'testRoomID3', 'testClientID6');
 }
 
-function createCreateRoomTestFixture() {
-  const testRoomID = 'testRoomID1';
-
+function createCreateRoomTestFixture({
+  testRoomID = 'testRoomID1',
+}: {testRoomID?: string | undefined} = {}) {
   const testRequest = newCreateRoomRequest(
     'https://test.roci.dev',
     TEST_AUTH_API_KEY,
@@ -388,8 +387,8 @@ test('migrate room enforces roomID format', async () => {
   expect(response.status).toEqual(400);
 });
 
-test('401s if wrong auth api key', async () => {
-  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
+describe('401s if wrong auth api key', () => {
+  const testRoomID = 'testRoomID1';
   const wrongApiKey = 'WRONG KEY';
   const migrateRoomRequest = newMigrateRoomRequest(
     'https://test.roci.dev',
@@ -414,30 +413,28 @@ test('401s if wrong auth api key', async () => {
     wrongApiKey,
   );
 
-  const authRevalidateConnections = newAuthRevalidateConnections(
-    'https://test.roci.dev',
-    wrongApiKey,
-  );
-
-  const requests = [
-    migrateRoomRequest,
-    deleteRoomRequest,
-    forgetRoomRequest,
-    invalidateAllRequest,
-    authRevalidateConnections,
+  const cases = [
+    {name: 'migrateRoom', request: migrateRoomRequest},
+    {name: 'deleteRoom', request: deleteRoomRequest},
+    {name: 'forgetRoom', request: forgetRoomRequest},
+    {name: 'invalidateAll', request: invalidateAllRequest},
   ];
 
-  for (const request of requests) {
-    const authDO = new TestAuthDO({
-      roomDO: testRoomDO,
-      state,
-      authHandler: () => Promise.reject('should not be called'),
-      authApiKey: TEST_AUTH_API_KEY,
-      logSink: new TestLogSink(),
-      logLevel: 'debug',
+  for (const c of cases) {
+    test(c.name, async () => {
+      const {testRoomDO, state} = createCreateRoomTestFixture({testRoomID});
+
+      const authDO = new TestAuthDO({
+        roomDO: testRoomDO,
+        state,
+        authHandler: () => Promise.reject('should not be called'),
+        authApiKey: TEST_AUTH_API_KEY,
+        logSink: new TestLogSink(),
+        logLevel: 'debug',
+      });
+      const response = await authDO.fetch(c.request);
+      expect(response.status).toEqual(401);
     });
-    const response = await authDO.fetch(request);
-    expect(response.status).toEqual(401);
   }
 });
 
@@ -2020,13 +2017,6 @@ test('authInvalidateAll when any request to roomDOs returns error response', asy
 async function createRevalidateConnectionsTestFixture({
   roomDOIDWithErrorResponse,
 }: {roomDOIDWithErrorResponse?: string} = {}) {
-  const testRequest = new Request(
-    `https://test.roci.dev/api/auth/v0/revalidateConnections`,
-    {
-      headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
-      method: 'post',
-    },
-  );
   await storeTestConnectionState();
 
   const roomDORequestCountsByRoomID = new Map();
@@ -2090,15 +2080,15 @@ async function createRevalidateConnectionsTestFixture({
   await createRoom(authDO, 'testRoomID1');
   await createRoom(authDO, 'testRoomID2');
   await createRoom(authDO, 'testRoomID3');
-  return {authDO, testRequest, roomDORequestCountsByRoomID, storage};
+  return {authDO, roomDORequestCountsByRoomID, storage};
 }
 
 test('revalidateConnections', async () => {
-  const {authDO, testRequest, roomDORequestCountsByRoomID, storage} =
+  const {authDO, roomDORequestCountsByRoomID, storage} =
     await createRevalidateConnectionsTestFixture();
 
-  const response = await authDO.fetch(testRequest);
-  expect(response.status).toEqual(200);
+  await authDO.alarm();
+
   expect(roomDORequestCountsByRoomID.get('testRoomID1')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(1);
@@ -2116,15 +2106,15 @@ test('revalidateConnections', async () => {
 });
 
 test('revalidateConnections continues if one storage delete throws an error', async () => {
-  const {authDO, testRequest, roomDORequestCountsByRoomID, storage} =
+  const {authDO, roomDORequestCountsByRoomID, storage} =
     await createRevalidateConnectionsTestFixture();
 
   jest.spyOn(storage, 'delete').mockImplementationOnce(() => {
     throw new Error('test delete error');
   });
 
-  const response = await authDO.fetch(testRequest);
-  expect(response.status).toEqual(200);
+  await authDO.alarm();
+
   expect(roomDORequestCountsByRoomID.get('testRoomID1')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(1);
@@ -2144,13 +2134,13 @@ test('revalidateConnections continues if one storage delete throws an error', as
 });
 
 test('revalidateConnections continues if one roomDO returns an error', async () => {
-  const {authDO, testRequest, roomDORequestCountsByRoomID, storage} =
+  const {authDO, roomDORequestCountsByRoomID, storage} =
     await createRevalidateConnectionsTestFixture({
       roomDOIDWithErrorResponse: 'testRoomID1',
     });
 
-  const response = await authDO.fetch(testRequest);
-  expect(response.status).toEqual(200);
+  await authDO.alarm();
+
   expect(roomDORequestCountsByRoomID.get('testRoomID1')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(1);
@@ -2371,12 +2361,7 @@ describe('Alarms', () => {
     return {authDO, logSink};
   }
 
-  test('If the auth API key is empty we should not schedule an alarm', async () => {
-    await connect('');
-    expect(await state.storage.getAlarm()).toBeNull();
-  });
-
-  test('If the auth API key is set we should schedule an alarm', async () => {
+  test('Ensure the alarm is set after connect', async () => {
     await connect('abc');
     const alarm = await state.storage.getAlarm();
     // In tests the time doesn't change unless we manually increment it so the
