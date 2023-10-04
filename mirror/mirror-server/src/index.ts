@@ -35,7 +35,10 @@ export const user = {
 };
 
 export const error = {
-  report: https.onCall(baseHttpsOptions, errorFunctions.report()),
+  report: https.onCall(
+    {...baseHttpsOptions, invoker: 'allUsers'},
+    errorFunctions.report(),
+  ),
 };
 
 export const app = {

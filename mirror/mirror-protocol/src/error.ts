@@ -39,7 +39,7 @@ export type ErrorReportingResponse = v.Infer<
   typeof errorReportingResponseSchema
 >;
 
-export const errorReporting = createCall(
+export const reportError = createCall(
   'error-report',
   errorReportingRequestSchema,
   errorReportingResponseSchema,
