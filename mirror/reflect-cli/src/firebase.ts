@@ -14,6 +14,8 @@ import {
 import type {ArgumentsCamelCase} from 'yargs';
 import {reportError, ErrorInfo} from 'mirror-protocol/src/error.js';
 import {version} from './version.js';
+import {authenticate} from './auth-config.js';
+import type {CommonYargsOptions} from './yarg-types.js';
 function getFirebaseConfig(stack: string) {
   switch (stack) {
     case 'sandbox':
@@ -64,9 +66,33 @@ export function getFirestore(): Firestore {
   return firebase.default.firestore();
 }
 
+async function reportE(
+  args: ArgumentsCamelCase<CommonYargsOptions>,
+  eventName: string,
+  e: unknown,
+) {
+  let userID = '';
+  try {
+    ({userID} = await authenticate(args, false, false));
+  } catch (e) {
+    /* swallow */
+  }
+  await reportError({
+    action: eventName,
+    error: createErrorInfo(e),
+    requester: {
+      userID,
+      userAgent: {type: 'reflect-cli', version},
+    },
+    agentContext: getUserParameters(version),
+  }).then(_err => {
+    /* swallow */
+  });
+}
+
 // Wraps a command handler with cleanup code (e.g. terminating any Firestore client)
 // to ensure that the process exits after the handler completes.
-export function handleWith<T extends ArgumentsCamelCase>(
+export function handleWith<T extends ArgumentsCamelCase<CommonYargsOptions>>(
   handler: (args: T) => Promise<void>,
 ) {
   return {
@@ -75,24 +101,13 @@ export function handleWith<T extends ArgumentsCamelCase>(
         args._ && args._.length ? `cmd_${args._[0]}` : 'cmd_unknown';
       try {
         await Promise.all([
-          sendAnalyticsEvent(eventName).catch(_e => {
-            /* swallow */
+          sendAnalyticsEvent(eventName).catch(async e => {
+            await reportE(args, eventName, e);
           }),
           handler(args),
         ]);
       } catch (e) {
-        await reportError({
-          action: eventName,
-          error: createErrorInfo(e),
-          requester: {
-            userID: '',
-            userAgent: {type: 'reflect-cli', version},
-          },
-          agentContext: getUserParameters(version),
-        }).then(_err => {
-          /* swallow */
-        });
-
+        await reportE(args, eventName, e);
         throw e;
       } finally {
         await getFirestore().terminate();

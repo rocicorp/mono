@@ -115,6 +115,7 @@ type AuthenticatedUser = {
 export async function authenticate(
   yargs: YargvToInterface<CommonYargsArgv>,
   output = true,
+  promptLogin = true,
 ): Promise<AuthenticatedUser> {
   if (authConfigForTesting) {
     return {
@@ -124,6 +125,9 @@ export async function authenticate(
   }
   const authConfigFilePath = getUserAuthConfigFile(yargs);
   if (fs.statSync(authConfigFilePath, {throwIfNoEntry: false}) === undefined) {
+    if (!promptLogin) {
+      throw new Error(`No auth config file found.`);
+    }
     console.info('Login required');
     await loginHandler(yargs);
   }
