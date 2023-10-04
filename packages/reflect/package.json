@@ -55,9 +55,6 @@
     "reflect-shared": "0.0.0",
     "replicache": "13.0.1"
   },
-  "peerDependencies": {
-    "wrangler": "^3.10.0"
-  },
   "files": [
     "cli.js",
     "client.d.ts",
