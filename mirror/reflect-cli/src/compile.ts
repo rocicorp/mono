@@ -96,6 +96,7 @@ export async function* watch(
 
   const hashes = new Map<string, string>();
   let first = true;
+  let filesToWatch = [entryPoint];
   try {
     while (!signal.aborted) {
       if (first) {
@@ -106,22 +107,31 @@ export async function* watch(
         process.stdout.write('Rebuilding...');
       }
       const start = Date.now();
-      const res = await buildContext.rebuild();
+      let res;
+      try {
+        res = await buildContext.rebuild();
+      } catch {
+        // esbuild already printed the error.
+      }
+
       if (signal.aborted) {
         break;
       }
 
-      process.stdout.write(` Done in ${Date.now() - start}ms.\n`);
-
-      yield getResultFromEsbuildResult(res, sourcemap);
-
-      if (signal.aborted) {
-        return;
-      }
-
-      const filesToWatch = Object.keys(res.metafile.inputs).filter(
-        input => !input.startsWith('<define:'),
+      process.stdout.write(
+        ` ${res ? `Done in` : `\nGot error after`} ${Date.now() - start}ms.\n`,
       );
+
+      if (res) {
+        yield getResultFromEsbuildResult(res, sourcemap);
+        if (signal.aborted) {
+          return;
+        }
+
+        filesToWatch = Object.keys(res.metafile.inputs).filter(
+          input => !input.startsWith('<define:'),
+        );
+      }
 
       await watchFiles(filesToWatch, signal, hashes);
       if (!signal.aborted) {

@@ -175,3 +175,58 @@ console.log(b);`);
     expect(stripCommentLines(result.code.text)).toBe(snapshot);
   }
 });
+
+test('watch should continue after syntax errors', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'reflect-compile-test-'));
+  const fileA = path.join(dir, 'a.js');
+  await fs.writeFile(fileA, `console.log(1);`, 'utf-8');
+
+  const ac = new AbortController();
+  const q = new Queue<CompileResult>();
+
+  try {
+    let compilationExpected = true;
+    (async () => {
+      try {
+        for await (const change of watch(
+          fileA,
+          true,
+          'development',
+          ac.signal,
+        )) {
+          if (!compilationExpected) {
+            throw new Error('Unexpected recompilation');
+          }
+          q.enqueue(change).catch(e => fail(e));
+        }
+      } catch (e) {
+        // In Jest e is not an instance of Error?!?
+        // https://github.com/jestjs/jest/issues/2549
+        if ((e as AbortError).name !== 'AbortError') {
+          throw e;
+        }
+      }
+    })().catch(e => fail(e));
+
+    await checkResult(`console.log(1);`);
+
+    compilationExpected = false;
+    await fs.writeFile(fileA, `console.log(`, 'utf-8');
+
+    compilationExpected = false;
+    await fs.writeFile(fileA, `console.log('`, 'utf-8');
+
+    compilationExpected = true;
+    await fs.writeFile(fileA, `console.log(2)`, 'utf-8');
+    await checkResult(`console.log(2);`);
+  } finally {
+    ac.abort();
+  }
+
+  async function checkResult(snapshot: string) {
+    const result = await q.dequeue();
+    expect(result.code.path).toBe(path.resolve('a.js'));
+    expect(result.sourcemap?.path).toBe(path.resolve('a.js.map'));
+    expect(stripCommentLines(result.code.text)).toBe(snapshot);
+  }
+});
