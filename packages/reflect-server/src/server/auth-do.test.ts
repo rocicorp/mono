@@ -2379,9 +2379,11 @@ describe('Alarms', () => {
     // What happens during reauthentication is a black box except for the logs...
     expect(logSink.messages.flatMap(msg => msg[2])).toMatchInlineSnapshot(`
       [
-        "Revalidating connections.",
+        "Revalidating connections waiting for lock.",
+        "Revalidating connections acquired lock.",
         "Revalidating 1 connections for room testRoomID1.",
-        "got lock.",
+        "waiting for authLock.",
+        "authLock acquired.",
         "Sending request https://unused-reflect-room-do.dev/api/auth/v0/connections to roomDO with roomID testRoomID1",
         "Starting RoomDO fetch for revalidate connections",
         "Finished RoomDO fetch for revalidate connections in 0ms",
@@ -2404,9 +2406,11 @@ describe('Alarms', () => {
     // What happens during reauthentication is a black box except for the logs...
     expect(logSink.messages.flatMap(msg => msg[2])).toMatchInlineSnapshot(`
       [
-        "Revalidating connections.",
+        "Revalidating connections waiting for lock.",
+        "Revalidating connections acquired lock.",
         "Revalidating 1 connections for room testRoomID1.",
-        "got lock.",
+        "waiting for authLock.",
+        "authLock acquired.",
         "Sending request https://unused-reflect-room-do.dev/api/auth/v0/connections to roomDO with roomID testRoomID1",
         "Starting RoomDO fetch for revalidate connections",
         "Finished RoomDO fetch for revalidate connections in 0ms",
