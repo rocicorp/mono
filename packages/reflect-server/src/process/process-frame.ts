@@ -18,6 +18,8 @@ import {getVersion} from '../types/version.js';
 import {processDisconnects} from './process-disconnects.js';
 import {MutatorMap, processMutation} from './process-mutation.js';
 
+const EMPTY_PRESENCE: Patch = [];
+
 // Processes zero or more mutations as a single "frame", returning pokes.
 // Pokes are returned if the version changes, even if there is no patch,
 // because we need clients to be in sync with server version so that pokes
@@ -160,6 +162,7 @@ function buildClientPokesAndUpdateClientRecords(
           baseCookie: prevVersion,
           cookie: nextVersion,
           lastMutationIDChanges: await getLastMutationIDChanges(clientRecord),
+          presence: EMPTY_PRESENCE,
           patch,
           timestamp: timestamps?.normalizedTimestamp,
           debugOriginTimestamp: client.debugPerf

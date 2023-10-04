@@ -785,6 +785,7 @@ test('poke log context includes requestID', async () => {
         baseCookie: null,
         cookie: 1,
         lastMutationIDChanges: {c1: 1},
+        presence: [],
         patch: [],
         timestamp: 123456,
       },

@@ -12,6 +12,13 @@ test('merge multiple pokes', () => {
       baseCookie: 1,
       cookie: 2,
       lastMutationIDChanges: {c1: 2},
+      presence: [
+        {
+          op: 'put',
+          key: '123',
+          value: 1,
+        },
+      ],
       patch: [
         {
           op: 'put',
@@ -25,6 +32,7 @@ test('merge multiple pokes', () => {
       baseCookie: 2,
       cookie: 3,
       lastMutationIDChanges: {c2: 2},
+      presence: [],
       patch: [
         {
           op: 'put',
@@ -38,6 +46,12 @@ test('merge multiple pokes', () => {
       baseCookie: 3,
       cookie: 4,
       lastMutationIDChanges: {c1: 3, c3: 1},
+      presence: [
+        {
+          op: 'del',
+          key: '234',
+        },
+      ],
       patch: [
         {
           op: 'put',
@@ -52,6 +66,17 @@ test('merge multiple pokes', () => {
     baseCookie: 1,
     cookie: 4,
     lastMutationIDChanges: {c1: 3, c2: 2, c3: 1},
+    presence: [
+      {
+        op: 'put',
+        key: '123',
+        value: 1,
+      },
+      {
+        op: 'del',
+        key: '234',
+      },
+    ],
     patch: [
       {
         op: 'put',

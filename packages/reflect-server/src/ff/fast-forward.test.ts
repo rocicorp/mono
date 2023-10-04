@@ -64,6 +64,7 @@ test('fastForward', async () => {
             baseCookie: 10,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c1: 1},
+            presence: [],
             patch: [],
             timestamp: undefined,
           },
@@ -118,6 +119,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c1: 3},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -171,6 +173,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c1: 3, c2: 4},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -191,6 +194,7 @@ test('fastForward', async () => {
             baseCookie: 41,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c2: 4},
+            presence: [],
             patch: [
               {
                 op: 'del',
@@ -239,6 +243,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c1: 3, c2: 4},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -313,6 +318,7 @@ test('fastForward', async () => {
             baseCookie: 30,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c1: 2, c2: 3, c3: 4},
+            presence: [],
             patch: [],
             timestamp: undefined,
           },
@@ -323,6 +329,7 @@ test('fastForward', async () => {
             baseCookie: 30,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c1: 2, c2: 3, c3: 4},
+            presence: [],
             patch: [],
             timestamp: undefined,
           },
@@ -333,6 +340,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c1: 2},
+            presence: [],
             patch: [],
             timestamp: undefined,
           },
@@ -343,6 +351,7 @@ test('fastForward', async () => {
             baseCookie: 30,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c4: 5, c5: 6},
+            presence: [],
             patch: [],
             timestamp: undefined,
           },
@@ -353,6 +362,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {},
+            presence: [],
             patch: [],
             timestamp: undefined,
           },
@@ -414,6 +424,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c1: 3, c2: 4},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -434,6 +445,7 @@ test('fastForward', async () => {
             baseCookie: 41,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c2: 4},
+            presence: [],
             patch: [
               {
                 op: 'del',
@@ -449,6 +461,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c3: 3, c4: 4},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -469,6 +482,7 @@ test('fastForward', async () => {
             baseCookie: 41,
             cookie: CURRENT_VERSION_FOR_TEST,
             lastMutationIDChanges: {c4: 4},
+            presence: [],
             patch: [
               {
                 op: 'del',

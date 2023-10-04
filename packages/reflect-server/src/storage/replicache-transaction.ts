@@ -1,4 +1,4 @@
-import type {Patch, Version} from 'reflect-protocol';
+import type {DelOp, PutOp, Version} from 'reflect-protocol';
 import type {AuthData, WriteTransaction} from 'reflect-shared';
 import {
   ScanNoIndexOptions,
@@ -136,7 +136,7 @@ function stripPrefix(key: string) {
   return key.slice(userValuePrefix.length);
 }
 
-export function unwrapPatch(inner: Patch): Patch {
+export function unwrapPatch(inner: (PutOp | DelOp)[]): (PutOp | DelOp)[] {
   return inner
     .filter(p => p.key.startsWith(userValuePrefix))
     .map(p => {

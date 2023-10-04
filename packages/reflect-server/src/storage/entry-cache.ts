@@ -1,5 +1,5 @@
 import {compareUTF8} from 'compare-utf8';
-import type {Patch} from 'reflect-protocol';
+import type {DelOp, PutOp} from 'reflect-protocol';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import {batchScan, scan} from './scan-storage.js';
@@ -116,8 +116,8 @@ export class EntryCache implements Storage {
     return false;
   }
 
-  pending(): Patch {
-    const res: Patch = [];
+  pending(): (PutOp | DelOp)[] {
+    const res: (PutOp | DelOp)[] = [];
     for (const [key, {value, dirty}] of this.#cache.entries()) {
       if (dirty) {
         if (value === undefined) {

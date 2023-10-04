@@ -30,11 +30,13 @@ import {
 
 export function Puzzle({
   r,
+  presentClientIDs,
   home,
   stage,
   setBodyClass,
 }: {
   r: Reflect<M>;
+  presentClientIDs: string[];
   home: Rect;
   stage: Rect;
   setBodyClass: (cls: string, enabled: boolean) => void;
@@ -42,10 +44,11 @@ export function Puzzle({
   const {pieces, myClient} = useSubscribe(
     r,
     async tx => ({
-      pieces: await getPieceInfos(tx),
+      pieces: await getPieceInfos(tx, presentClientIDs),
       myClient: (await getClient(tx, tx.clientID)) ?? null,
     }),
     {pieces: {}, myClient: null},
+    [presentClientIDs],
   );
 
   const ref = useRef<HTMLDivElement>(null);
@@ -79,7 +82,7 @@ export function Puzzle({
     setBlurTimeout(() => {
       if (!isMouseDown.current) {
         setBodyClass('grab', false);
-        r.mutate.updateClient({id: myClient!.id, selectedPieceID: ''});
+        r.mutate.updateClient({selectedPieceID: ''});
       }
     }, 1000);
   };
@@ -93,7 +96,7 @@ export function Puzzle({
     if (!myClient) {
       return;
     }
-    return sharedSelectIfAvailable(myClient.id, model, r);
+    return sharedSelectIfAvailable(myClient.id, 'client', model, r);
   };
 
   const handlePiecePointerDown = (
@@ -123,7 +126,7 @@ export function Puzzle({
       // clear selection when clicking outside of a piece
       // the pointerdown handler inside piece cancels bubbling
       cancelBlur();
-      r.mutate.updateClient({id: myClient!.id, selectedPieceID: ''});
+      r.mutate.updateClient({selectedPieceID: ''});
     };
     window.addEventListener('pointerdown', handlePointerDown);
     return () => {
@@ -187,9 +190,7 @@ export function Puzzle({
       throw new Error(`Piece ${dragInfo.pieceID} not found`);
     }
 
-    if (
-      sharedHandleDrag(myClient.id, e, piece, dragInfo.offset, r, home, stage)
-    ) {
+    if (sharedHandleDrag(e, piece, dragInfo.offset, r, home, stage)) {
       ref.current?.releasePointerCapture(e.pointerId);
       cancelBlur();
     }

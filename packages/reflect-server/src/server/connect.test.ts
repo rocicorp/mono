@@ -52,6 +52,7 @@ function freshClient(
   clientGroupID: ClientGroupID,
   socket: Socket = new Mocket(),
   debugPerf = false,
+  sentInitialPresence = false,
 ) {
   const [clientID, c] = client(
     id,
@@ -60,6 +61,7 @@ function freshClient(
     socket,
     undefined,
     debugPerf,
+    sentInitialPresence,
   );
   c.clockOffsetMs = undefined;
   return [clientID, c] as const;

@@ -3,12 +3,13 @@ import type {Reflect} from '@rocicorp/reflect/client';
 import {useSubscribe} from '@rocicorp/reflect/react';
 import classNames from 'classnames';
 import type {M} from '../shared/mutators';
-import {getClient} from './client-model';
+import {getBot, getClient} from './client-model';
 import {Rect, coordinateToPosition, simpleHash} from './util';
 
 export function Cursor({
   r,
-  clientID,
+  id,
+  type,
   home,
   stage,
   isSelf,
@@ -16,16 +17,22 @@ export function Cursor({
   setBodyClass,
 }: {
   r: Reflect<M>;
-  clientID: string;
+  id: string;
+  type: 'client' | 'bot';
   home: Rect;
   stage: Rect;
   isSelf: boolean;
   hideArrow: boolean;
   setBodyClass: (cls: string, enabled: boolean) => void;
 }) {
-  const client = useSubscribe(r, tx => getClient(tx, clientID), undefined);
+  const client = useSubscribe(
+    r,
+    tx => (type === 'client' ? getClient(tx, id) : getBot(tx, id)),
+    undefined,
+    [id, type],
+  );
   const pos = client && coordinateToPosition(client, home, stage);
-  const hash = simpleHash(clientID);
+  const hash = simpleHash(id);
 
   let active: boolean;
   if (!isSelf) {

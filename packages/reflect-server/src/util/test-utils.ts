@@ -30,6 +30,7 @@ export function client(
   socket: Socket = new Mocket(),
   clockBehindByMs?: number | undefined,
   debugPerf = false,
+  sentInitialPresence = true,
 ): [ClientID, ClientState] {
   return [
     id,
@@ -39,6 +40,7 @@ export function client(
       clientGroupID,
       clockOffsetMs: clockBehindByMs,
       debugPerf,
+      sentInitialPresence,
     },
   ];
 }

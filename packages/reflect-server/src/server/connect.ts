@@ -174,6 +174,7 @@ export async function handleConnection(
     auth,
     clockOffsetMs: undefined,
     clientGroupID: requestClientGroupID,
+    sentInitialPresence: false,
     debugPerf: result.debugPerf,
   };
   lc.debug?.('Setting client map entry', clientID, client);

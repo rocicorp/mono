@@ -1,9 +1,8 @@
 import {describe, expect, test} from '@jest/globals';
-import type {Version} from 'reflect-protocol';
-import type {WriteTransaction} from 'reflect-shared';
+import type {Poke, Version} from 'reflect-protocol';
+import type {ClientID, WriteTransaction} from 'reflect-shared';
 import {processRoom} from '../process/process-room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import type {ClientPoke} from '../types/client-poke.js';
 import {
   ClientRecordMap,
   getClientRecord,
@@ -21,6 +20,7 @@ import {
   mockMathRandom,
   pendingMutation,
 } from '../util/test-utils.js';
+import {putConnectedClients} from '../types/connected-clients.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -58,266 +58,251 @@ const pendingMutations1: PendingMutation[] = [
   }),
 ];
 
-const expectedPokesForPendingMutations1: ClientPoke[] = [
-  {
-    clientID: 'c1',
-    poke: {
-      baseCookie: 1,
-      cookie: 2,
-      lastMutationIDChanges: {c1: 2},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 1,
-        },
-      ],
-      timestamp: 50,
-    },
-  },
-  {
-    clientID: 'c2',
-    poke: {
-      baseCookie: 1,
-      cookie: 2,
-      lastMutationIDChanges: {c1: 2},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 1,
-        },
-      ],
-      timestamp: 50,
-    },
-  },
-  {
-    clientID: 'c3',
-    poke: {
-      baseCookie: 1,
-      cookie: 2,
-      lastMutationIDChanges: {},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 1,
-        },
-      ],
-      timestamp: 50,
-    },
-  },
-  {
-    clientID: 'c4',
-    poke: {
-      baseCookie: 1,
-      cookie: 2,
-      lastMutationIDChanges: {},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 1,
-        },
-      ],
-      timestamp: 50,
-    },
-  },
-
-  {
-    clientID: 'c1',
-    poke: {
-      baseCookie: 2,
-      cookie: 3,
-      lastMutationIDChanges: {},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 2,
-        },
-      ],
-      timestamp: 50,
-    },
-  },
-  {
-    clientID: 'c2',
-    poke: {
-      baseCookie: 2,
-      cookie: 3,
-      lastMutationIDChanges: {},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 2,
-        },
-      ],
-      timestamp: 50,
-    },
-  },
-  {
-    clientID: 'c3',
-    poke: {
-      baseCookie: 2,
-      cookie: 3,
-      lastMutationIDChanges: {c3: 5},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 2,
-        },
-      ],
-      timestamp: 50,
-    },
-  },
-  {
-    clientID: 'c4',
-    poke: {
-      baseCookie: 2,
-      cookie: 3,
-      lastMutationIDChanges: {},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 2,
-        },
-      ],
-      timestamp: 50,
-    },
-  },
-
-  {
-    clientID: 'c1',
-    poke: {
-      baseCookie: 3,
-      cookie: 4,
-      lastMutationIDChanges: {c1: 3},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 3,
-        },
-      ],
-      timestamp: 100,
-    },
-  },
-  {
-    clientID: 'c2',
-    poke: {
-      baseCookie: 3,
-      cookie: 4,
-      lastMutationIDChanges: {c1: 3},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 3,
-        },
-      ],
-      timestamp: 100,
-    },
-  },
-  {
-    clientID: 'c3',
-    poke: {
-      baseCookie: 3,
-      cookie: 4,
-      lastMutationIDChanges: {},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 3,
-        },
-      ],
-      timestamp: 100,
-    },
-  },
-  {
-    clientID: 'c4',
-    poke: {
-      baseCookie: 3,
-      cookie: 4,
-      lastMutationIDChanges: {},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 3,
-        },
-      ],
-      timestamp: 100,
-    },
-  },
-
-  {
-    clientID: 'c1',
-    poke: {
-      baseCookie: 4,
-      cookie: 5,
-      lastMutationIDChanges: {c2: 2},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 4,
-        },
-      ],
-      timestamp: 10,
-    },
-  },
-  {
-    clientID: 'c2',
-    poke: {
-      baseCookie: 4,
-      cookie: 5,
-      lastMutationIDChanges: {c2: 2},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 4,
-        },
-      ],
-      timestamp: 10,
-    },
-  },
-  {
-    clientID: 'c3',
-    poke: {
-      baseCookie: 4,
-      cookie: 5,
-      lastMutationIDChanges: {},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 4,
-        },
-      ],
-      timestamp: 10,
-    },
-  },
-  {
-    clientID: 'c4',
-    poke: {
-      baseCookie: 4,
-      cookie: 5,
-      lastMutationIDChanges: {},
-      patch: [
-        {
-          op: 'put',
-          key: 'count',
-          value: 4,
-        },
-      ],
-      timestamp: 10,
-    },
-  },
+const expectedPokesForPendingMutations1: [ClientID, Poke[]][] = [
+  [
+    'c1',
+    [
+      {
+        baseCookie: 1,
+        cookie: 2,
+        lastMutationIDChanges: {c1: 2},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 1,
+          },
+        ],
+        timestamp: 50,
+      },
+      {
+        baseCookie: 2,
+        cookie: 3,
+        lastMutationIDChanges: {},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 2,
+          },
+        ],
+        timestamp: 50,
+      },
+      {
+        baseCookie: 3,
+        cookie: 4,
+        lastMutationIDChanges: {c1: 3},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 3,
+          },
+        ],
+        timestamp: 100,
+      },
+      {
+        baseCookie: 4,
+        cookie: 5,
+        lastMutationIDChanges: {c2: 2},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 4,
+          },
+        ],
+        timestamp: 10,
+      },
+    ],
+  ],
+  [
+    'c2',
+    [
+      {
+        baseCookie: 1,
+        cookie: 2,
+        lastMutationIDChanges: {c1: 2},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 1,
+          },
+        ],
+        timestamp: 50,
+      },
+      {
+        baseCookie: 2,
+        cookie: 3,
+        lastMutationIDChanges: {},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 2,
+          },
+        ],
+        timestamp: 50,
+      },
+      {
+        baseCookie: 3,
+        cookie: 4,
+        lastMutationIDChanges: {c1: 3},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 3,
+          },
+        ],
+        timestamp: 100,
+      },
+      {
+        baseCookie: 4,
+        cookie: 5,
+        lastMutationIDChanges: {c2: 2},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 4,
+          },
+        ],
+        timestamp: 10,
+      },
+    ],
+  ],
+  [
+    'c3',
+    [
+      {
+        baseCookie: 1,
+        cookie: 2,
+        lastMutationIDChanges: {},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 1,
+          },
+        ],
+        timestamp: 50,
+      },
+      {
+        baseCookie: 2,
+        cookie: 3,
+        lastMutationIDChanges: {c3: 5},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 2,
+          },
+        ],
+        timestamp: 50,
+      },
+      {
+        baseCookie: 3,
+        cookie: 4,
+        lastMutationIDChanges: {},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 3,
+          },
+        ],
+        timestamp: 100,
+      },
+      {
+        baseCookie: 4,
+        cookie: 5,
+        lastMutationIDChanges: {},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 4,
+          },
+        ],
+        timestamp: 10,
+      },
+    ],
+  ],
+  [
+    'c4',
+    [
+      {
+        baseCookie: 1,
+        cookie: 2,
+        lastMutationIDChanges: {},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 1,
+          },
+        ],
+        timestamp: 50,
+      },
+      {
+        baseCookie: 2,
+        cookie: 3,
+        lastMutationIDChanges: {},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 2,
+          },
+        ],
+        timestamp: 50,
+      },
+      {
+        baseCookie: 3,
+        cookie: 4,
+        lastMutationIDChanges: {},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 3,
+          },
+        ],
+        timestamp: 100,
+      },
+      {
+        baseCookie: 4,
+        cookie: 5,
+        lastMutationIDChanges: {},
+        presence: [],
+        patch: [
+          {
+            op: 'put',
+            key: 'count',
+            value: 4,
+          },
+        ],
+        timestamp: 10,
+      },
+    ],
+  ],
 ];
 
 describe('processRoom', () => {
@@ -326,9 +311,10 @@ describe('processRoom', () => {
     clientRecords: ClientRecordMap;
     headVersion: Version;
     clients: ClientMap;
+    storedConnectedClients: ClientID[];
     pendingMutations: PendingMutation[];
     expectedError?: string;
-    expectedPokes?: ClientPoke[];
+    expectedPokes?: Map<ClientID, Poke[]>;
     expectedUserValues?: Map<string, UserValue>;
     expectedClientRecords?: ClientRecordMap;
     expectedVersion: Version;
@@ -341,6 +327,7 @@ describe('processRoom', () => {
       pendingMutations: [],
       headVersion: 42,
       clients: new Map([client('c1', 'u1', 'cg1')]),
+      storedConnectedClients: ['c1'],
       expectedUserValues: new Map(),
       expectedError: 'Error: Client record not found: c1',
       expectedVersion: 42,
@@ -358,39 +345,49 @@ describe('processRoom', () => {
         client('c2', 'u2', 'cg1'),
         client('c3', 'u3', 'cg2'),
       ]),
+      storedConnectedClients: ['c1', 'c2', 'c3'],
       pendingMutations: [],
-      expectedPokes: [
-        {
-          clientID: 'c1',
-          poke: {
-            baseCookie: null,
-            cookie: 2,
-            lastMutationIDChanges: {c1: 1, c2: 1},
-            patch: [],
-            timestamp: undefined,
-          },
-        },
-        {
-          clientID: 'c2',
-          poke: {
-            baseCookie: null,
-            cookie: 2,
-            lastMutationIDChanges: {c1: 1, c2: 1},
-            patch: [],
-            timestamp: undefined,
-          },
-        },
-        {
-          clientID: 'c3',
-          poke: {
-            baseCookie: null,
-            cookie: 2,
-            lastMutationIDChanges: {c3: 1},
-            patch: [],
-            timestamp: undefined,
-          },
-        },
-      ],
+      expectedPokes: new Map<ClientID, Poke[]>([
+        [
+          'c1',
+          [
+            {
+              baseCookie: null,
+              cookie: 2,
+              lastMutationIDChanges: {c1: 1, c2: 1},
+              presence: [],
+              patch: [],
+              timestamp: undefined,
+            },
+          ],
+        ],
+        [
+          'c2',
+          [
+            {
+              baseCookie: null,
+              cookie: 2,
+              lastMutationIDChanges: {c1: 1, c2: 1},
+              presence: [],
+              patch: [],
+              timestamp: undefined,
+            },
+          ],
+        ],
+        [
+          'c3',
+          [
+            {
+              baseCookie: null,
+              cookie: 2,
+              lastMutationIDChanges: {c3: 1},
+              presence: [],
+              patch: [],
+              timestamp: undefined,
+            },
+          ],
+        ],
+      ]),
       expectedClientRecords: new Map([
         ['c1', clientRecord('cg1', 2)],
         ['c2', clientRecord('cg1', 2)],
@@ -412,19 +409,23 @@ describe('processRoom', () => {
         client('c2', 'u2', 'cg1'),
         client('c3', 'u3', 'cg2'),
       ]),
+      storedConnectedClients: ['c1', 'c2', 'c3'],
       pendingMutations: [],
-      expectedPokes: [
-        {
-          clientID: 'c2',
-          poke: {
-            baseCookie: null,
-            cookie: 2,
-            lastMutationIDChanges: {c1: 1, c2: 1},
-            patch: [],
-            timestamp: undefined,
-          },
-        },
-      ],
+      expectedPokes: new Map<ClientID, Poke[]>([
+        [
+          'c2',
+          [
+            {
+              baseCookie: null,
+              cookie: 2,
+              lastMutationIDChanges: {c1: 1, c2: 1},
+              presence: [],
+              patch: [],
+              timestamp: undefined,
+            },
+          ],
+        ],
+      ]),
       expectedClientRecords: new Map([
         ['c1', clientRecord('cg1', 2)],
         ['c2', clientRecord('cg1', 2)],
@@ -438,6 +439,7 @@ describe('processRoom', () => {
       clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
       headVersion: 1,
       clients: new Map([client('c1', 'u1', 'cg1')]),
+      storedConnectedClients: ['c1'],
       pendingMutations: [
         pendingMutation({
           clientID: 'c1',
@@ -447,24 +449,27 @@ describe('processRoom', () => {
           name: 'inc',
         }),
       ],
-      expectedPokes: [
-        {
-          clientID: 'c1',
-          poke: {
-            baseCookie: 1,
-            cookie: 2,
-            lastMutationIDChanges: {c1: 2},
-            patch: [
-              {
-                key: 'count',
-                op: 'put',
-                value: 1,
-              },
-            ],
-            timestamp: 300,
-          },
-        },
-      ],
+      expectedPokes: new Map<ClientID, Poke[]>([
+        [
+          'c1',
+          [
+            {
+              baseCookie: 1,
+              cookie: 2,
+              lastMutationIDChanges: {c1: 2},
+              presence: [],
+              patch: [
+                {
+                  key: 'count',
+                  op: 'put',
+                  value: 1,
+                },
+              ],
+              timestamp: 300,
+            },
+          ],
+        ],
+      ]),
       expectedClientRecords: new Map([['c1', clientRecord('cg1', 2, 2, 2)]]),
       expectedUserValues: new Map(),
       expectedVersion: 2,
@@ -474,6 +479,7 @@ describe('processRoom', () => {
       clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
       headVersion: 1,
       clients: new Map([client('c1', 'u1', 'cg1')]),
+      storedConnectedClients: ['c1'],
       pendingMutations: [
         pendingMutation({
           clientID: 'c1',
@@ -490,40 +496,41 @@ describe('processRoom', () => {
           name: 'inc',
         }),
       ],
-      expectedPokes: [
-        {
-          clientID: 'c1',
-          poke: {
-            baseCookie: 1,
-            cookie: 2,
-            lastMutationIDChanges: {c1: 2},
-            patch: [
-              {
-                op: 'put',
-                key: 'count',
-                value: 1,
-              },
-            ],
-            timestamp: 50,
-          },
-        },
-        {
-          clientID: 'c1',
-          poke: {
-            baseCookie: 2,
-            cookie: 3,
-            lastMutationIDChanges: {c1: 3},
-            patch: [
-              {
-                op: 'put',
-                key: 'count',
-                value: 2,
-              },
-            ],
-            timestamp: 100,
-          },
-        },
-      ],
+      expectedPokes: new Map<ClientID, Poke[]>([
+        [
+          'c1',
+          [
+            {
+              baseCookie: 1,
+              cookie: 2,
+              lastMutationIDChanges: {c1: 2},
+              presence: [],
+              patch: [
+                {
+                  op: 'put',
+                  key: 'count',
+                  value: 1,
+                },
+              ],
+              timestamp: 50,
+            },
+            {
+              baseCookie: 2,
+              cookie: 3,
+              lastMutationIDChanges: {c1: 3},
+              presence: [],
+              patch: [
+                {
+                  op: 'put',
+                  key: 'count',
+                  value: 2,
+                },
+              ],
+              timestamp: 100,
+            },
+          ],
+        ],
+      ]),
       expectedClientRecords: new Map([['c1', clientRecord('cg1', 3, 3, 3)]]),
       expectedUserValues: new Map(),
       expectedVersion: 3,
@@ -543,8 +550,9 @@ describe('processRoom', () => {
         client('c3', 'u3', 'cg2'),
         client('c4', 'u4', 'cg3'),
       ]),
+      storedConnectedClients: ['c1', 'c2', 'c3', 'c4'],
       pendingMutations: pendingMutations1,
-      expectedPokes: expectedPokesForPendingMutations1,
+      expectedPokes: new Map(expectedPokesForPendingMutations1),
       expectedClientRecords: new Map([
         ['c1', clientRecord('cg1', 5, 3, 4)],
         ['c2', clientRecord('cg1', 5, 2, 5)],
@@ -569,36 +577,39 @@ describe('processRoom', () => {
         client('c3', 'u3', 'cg2'),
         client('c4', 'u4', 'cg3'),
       ]),
+      storedConnectedClients: ['c1', 'c2', 'c3', 'c4'],
       pendingMutations: pendingMutations1,
-      expectedPokes: [
-        // fast forward pokes
-        {
-          clientID: 'c1',
-          poke: {
+      expectedPokes: (() => {
+        const pokesByClientID = new Map(expectedPokesForPendingMutations1);
+        pokesByClientID.set('c1', [
+          {
             baseCookie: null,
             cookie: 1,
             lastMutationIDChanges: {
               c1: 1,
               c2: 1,
             },
+            presence: [],
             patch: [],
             timestamp: undefined,
           },
-        },
-        {
-          clientID: 'c3',
-          poke: {
+          ...(pokesByClientID.get('c1') ?? []),
+        ]);
+        pokesByClientID.set('c3', [
+          {
             baseCookie: null,
             cookie: 1,
             lastMutationIDChanges: {
               c3: 4,
             },
+            presence: [],
             patch: [],
             timestamp: undefined,
           },
-        },
-        ...expectedPokesForPendingMutations1,
-      ],
+          ...(pokesByClientID.get('c3') ?? []),
+        ]);
+        return pokesByClientID;
+      })(),
       expectedClientRecords: new Map([
         ['c1', clientRecord('cg1', 5, 3, 4)],
         ['c2', clientRecord('cg1', 5, 2, 5)],
@@ -629,6 +640,7 @@ describe('processRoom', () => {
       for (const [clientID, record] of c.clientRecords) {
         await putClientRecord(clientID, record, storage);
       }
+      await putConnectedClients(new Set(c.storedConnectedClients), storage);
 
       const p = processRoom(
         createSilentLogContext(),

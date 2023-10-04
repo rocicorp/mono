@@ -1,6 +1,7 @@
 import {entitySchema, generate, Update} from '@rocicorp/rails';
 import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect';
 import {z} from 'zod';
+import {colorToString, idToColor} from './colors';
 
 const DEAD_BOT_CONTROLLER_THRESHHOLD_MS = 5_000;
 
@@ -31,6 +32,19 @@ export const clientModelSchema = entitySchema.extend({
   color: z.string(),
   location: z.union([z.string(), z.null()]),
   focused: z.boolean(),
+});
+
+export type ClientModel = z.infer<typeof clientModelSchema>;
+export type ClientModelUpdate = Update<ClientModel>;
+const clientGenerateResult = generate('client', clientModelSchema);
+
+export const {
+  get: getClient,
+  has: hasClient,
+  list: listClients,
+} = clientGenerateResult;
+
+export const botModelSchema = clientModelSchema.extend({
   // If non-empty, this client is a bot controlled
   // by the client with this id.
   botControllerID: z.string(),
@@ -40,37 +54,36 @@ export const clientModelSchema = entitySchema.extend({
   manuallyTriggeredBot: z.boolean(),
 });
 
-// Export generated interface.
-export type ClientModel = z.infer<typeof clientModelSchema>;
-export type ClientModelUpdate = Update<ClientModel>;
-const clientGenerateResult = generate('client', clientModelSchema);
+export type BotModel = z.infer<typeof botModelSchema>;
+export type BotModelUpdate = Update<BotModel>;
+const botGenerateResult = generate('bot', botModelSchema);
 
 export const {
-  get: getClient,
-  has: hasClient,
-  init: initClient,
-  list: listClients,
-} = clientGenerateResult;
+  get: getBot,
+  list: listBots,
+  delete: deleteBot,
+} = botGenerateResult;
 
-export const deleteClient = async (tx: WriteTransaction, id: string) => {
-  const botController = await getBotController(tx);
+export const ensureNotBotController = async (
+  tx: WriteTransaction,
+  clientID: string,
+) => {
   if (tx.environment === 'server') {
-    const clients = await listClients(tx);
-    let potentialNewBotControllerClient = undefined;
-    for (const client of clients) {
-      if (client.id !== id && client.botControllerID === '') {
-        potentialNewBotControllerClient = client;
+    const botController = await getBotController(tx);
+    await deleteBotsControlledBy(tx, clientID);
+    if (botController?.clientID === clientID) {
+      const clients = await listClients(tx);
+      let potentialNewBotControllerClient = undefined;
+      for (const client of clients) {
+        if (client.id !== clientID) {
+          potentialNewBotControllerClient = client;
+        }
       }
-      if (client.botControllerID === id) {
-        await clientGenerateResult.delete(tx, client.id);
-      }
-    }
-    if (botController?.clientID === id) {
       // Set new bot controller.
       if (potentialNewBotControllerClient) {
         console.log(
-          'Bot controller deleted',
-          id,
+          'Bot controller unassigned',
+          clientID,
           'assigning',
           potentialNewBotControllerClient.id,
         );
@@ -79,27 +92,27 @@ export const deleteClient = async (tx: WriteTransaction, id: string) => {
           aliveTimestamp: Date.now(),
         });
       } else {
-        console.log('Bot controller deleted', id, 'no client to assign');
+        console.log(
+          'Bot controller unassigned',
+          clientID,
+          'no client to assign',
+        );
         await deleteBotController(tx);
       }
     }
   }
-  await clientGenerateResult.delete(tx, id);
 };
 
-function canModifyClient(
+function canModifyBot(
   tx: WriteTransaction,
-  client: ClientModel,
+  bot: BotModel,
   botController: BotControllerModel | undefined,
 ) {
-  if (!client.botControllerID) {
-    return true;
-  }
-  if (client.manuallyTriggeredBot) {
-    return tx.clientID === client.botControllerID;
+  if (bot.manuallyTriggeredBot) {
+    return tx.clientID === bot.botControllerID;
   }
   return (
-    tx.clientID === client.botControllerID &&
+    tx.clientID === bot.botControllerID &&
     tx.clientID === botController?.clientID
   );
 }
@@ -126,16 +139,7 @@ async function ensureAliveBotController(tx: WriteTransaction) {
         'assigning',
         tx.clientID,
       );
-      // Delete non-manual bots controlled by dead bot controller
-      const clients = await listClients(tx);
-      for (const client of clients) {
-        if (
-          !client.manuallyTriggeredBot &&
-          client.botControllerID === botController.clientID
-        ) {
-          await clientGenerateResult.delete(tx, client.id);
-        }
-      }
+      await deleteBotsControlledBy(tx, botController.clientID);
       botController = {
         clientID: tx.clientID,
         aliveTimestamp: Date.now(),
@@ -146,52 +150,80 @@ async function ensureAliveBotController(tx: WriteTransaction) {
   return botController;
 }
 
-/**
- * Returns whether or not the client was updated.
- */
 export const updateClient = async (
   tx: WriteTransaction,
-  update: ClientModelUpdate,
+  update: Omit<ClientModelUpdate, 'id'>,
 ) => {
-  const client = await getClient(tx, update.id);
-  if (!client) {
+  await ensureAliveBotController(tx);
+  await clientGenerateResult.update(tx, {
+    id: tx.clientID,
+    ...update,
+  });
+};
+
+export const initClient = async (
+  tx: WriteTransaction,
+  args: {focused: boolean},
+) => {
+  const id = tx.clientID;
+  const {focused} = args;
+  const client = {
+    id,
+    selectedPieceID: '',
+    // off the page, so not visible till user moves cursor
+    // avoids cursors stacking up at 0,0
+    x: Number.MIN_SAFE_INTEGER,
+    y: 0,
+    color: colorToString(idToColor(id)),
+    location: null,
+    focused,
+    botControllerID: '',
+    manuallyTriggeredBot: false,
+  };
+  await ensureAliveBotController(tx);
+  await clientGenerateResult.put(tx, client);
+};
+
+/**
+ * Returns whether or not the bot was updated.
+ */
+export const updateBot = async (
+  tx: WriteTransaction,
+  update: BotModelUpdate,
+) => {
+  const bot = await getBot(tx, update.id);
+  if (!bot) {
     // pass through for default error messaging
-    await clientGenerateResult.update(tx, update);
+    await botGenerateResult.update(tx, update);
     return false;
   }
   const botController = await ensureAliveBotController(tx);
-  if (!canModifyClient(tx, client, botController)) {
+  if (!canModifyBot(tx, bot, botController)) {
     return false;
   }
-  if (
-    tx.environment === 'server' &&
-    client.botControllerID &&
-    !client.manuallyTriggeredBot
-  ) {
+  if (tx.environment === 'server' && !bot.manuallyTriggeredBot) {
     await setBotController(tx, {
       clientID: tx.clientID,
       aliveTimestamp: Date.now(),
     });
   }
-  await clientGenerateResult.update(tx, update);
+  await botGenerateResult.update(tx, update);
   return true;
 };
 
-export const putClient = async (tx: WriteTransaction, value: ClientModel) => {
+export const putBot = async (tx: WriteTransaction, value: BotModel) => {
   const botController = await ensureAliveBotController(tx);
-  if (!canModifyClient(tx, value, botController)) {
+  if (!canModifyBot(tx, value, botController)) {
     return;
   }
-  await clientGenerateResult.put(tx, value);
+  await botGenerateResult.put(tx, value);
 };
 
-export const ensureClient = async (
-  tx: WriteTransaction,
-  value: ClientModel,
-) => {
-  const client = await getClient(tx, value.id);
-  if (client) {
-    return;
+async function deleteBotsControlledBy(tx: WriteTransaction, clientID: string) {
+  const bots = await listBots(tx);
+  for (const bot of bots) {
+    if (bot.botControllerID === clientID) {
+      await botGenerateResult.delete(tx, bot.id);
+    }
   }
-  await putClient(tx, value);
-};
+}

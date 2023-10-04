@@ -1,5 +1,5 @@
 import type {ReadTransaction} from '@rocicorp/reflect';
-import {ClientModel, listClients} from './client-model';
+import {getClient} from './client-model';
 import {PieceModel, listPieces} from './piece-model';
 
 // Synced model + derived/runtime state.
@@ -10,6 +10,7 @@ export type PieceInfo = PieceModel & {
 
 export async function getPieceInfos(
   tx: ReadTransaction,
+  presentClientIDs: string[],
 ): Promise<Record<string, PieceInfo>> {
   const lp = await listPieces(tx);
   const mp: Record<string, PieceInfo> = {};
@@ -19,12 +20,16 @@ export async function getPieceInfos(
       selector: null,
     };
   }
-  const lc = await listClients(tx);
-  const mc: Record<string, ClientModel> = {};
-  for (const client of lc) {
-    mc[client.id] = client;
-    if (client.selectedPieceID) {
-      mp[client.selectedPieceID].selector = client.id;
+  const presentClients = [];
+  for (const presentClientID of presentClientIDs) {
+    const presentClient = await getClient(tx, presentClientID);
+    if (presentClient) {
+      presentClients.push(presentClient);
+    }
+  }
+  for (const presentClient of presentClients) {
+    if (presentClient.selectedPieceID) {
+      mp[presentClient.selectedPieceID].selector = presentClient.id;
     }
   }
   return mp;

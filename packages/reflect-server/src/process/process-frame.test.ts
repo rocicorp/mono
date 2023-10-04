@@ -144,6 +144,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {c1: 2},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -190,6 +191,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {c1: 2},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -206,6 +208,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {c1: 2},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -260,6 +263,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {c1: 2},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -279,6 +283,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {c1: 2},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -341,6 +346,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {c1: 2},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -357,6 +363,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {c1: 2},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -373,6 +380,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -389,6 +397,7 @@ describe('processFrame', () => {
             baseCookie: startVersion + 1,
             cookie: startVersion + 2,
             lastMutationIDChanges: {},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -405,6 +414,7 @@ describe('processFrame', () => {
             baseCookie: startVersion + 1,
             cookie: startVersion + 2,
             lastMutationIDChanges: {},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -421,6 +431,7 @@ describe('processFrame', () => {
             baseCookie: startVersion + 1,
             cookie: startVersion + 2,
             lastMutationIDChanges: {c3: 8},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -478,6 +489,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {c1: 2},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -494,6 +506,7 @@ describe('processFrame', () => {
             baseCookie: startVersion + 1,
             cookie: startVersion + 2,
             lastMutationIDChanges: {c1: 3},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -565,6 +578,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {},
+            presence: [],
             patch: [
               {
                 key: 'test-disconnected-c1',
@@ -602,6 +616,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {},
+            presence: [],
             patch: [
               {
                 key: 'test-disconnected-c1',
@@ -654,6 +669,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {c1: 2},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -670,6 +686,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {c1: 2},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -686,6 +703,7 @@ describe('processFrame', () => {
             baseCookie: startVersion + 1,
             cookie: startVersion + 2,
             lastMutationIDChanges: {},
+            presence: [],
             patch: [
               {
                 key: 'test-disconnected-c3',
@@ -702,6 +720,7 @@ describe('processFrame', () => {
             baseCookie: startVersion + 1,
             cookie: startVersion + 2,
             lastMutationIDChanges: {},
+            presence: [],
             patch: [
               {
                 key: 'test-disconnected-c3',
@@ -761,6 +780,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {c1: 2},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -777,6 +797,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {c1: 2},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -835,6 +856,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -851,6 +873,7 @@ describe('processFrame', () => {
             baseCookie: startVersion,
             cookie: startVersion + 1,
             lastMutationIDChanges: {},
+            presence: [],
             patch: [
               {
                 op: 'put',
@@ -867,6 +890,7 @@ describe('processFrame', () => {
             baseCookie: startVersion + 1,
             cookie: startVersion + 2,
             lastMutationIDChanges: {},
+            presence: [],
             patch: [
               {
                 key: 'test-disconnected-c3',
@@ -883,6 +907,7 @@ describe('processFrame', () => {
             baseCookie: startVersion + 1,
             cookie: startVersion + 2,
             lastMutationIDChanges: {},
+            presence: [],
             patch: [
               {
                 key: 'test-disconnected-c3',
