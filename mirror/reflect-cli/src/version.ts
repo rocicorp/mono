@@ -1,26 +1,23 @@
-// TODO(arv): Use esbuild define instead.
-import packageJSON from '../package.json' assert {type: 'json'};
-import color from 'picocolors';
-import {Range, SemVer, gt, gtr} from 'semver';
-import type {ArgumentsCamelCase} from 'yargs';
-import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import {fileURLToPath} from 'node:url';
-import path from 'node:path';
-import {assert, assertObject, assertString} from 'shared/src/asserts.js';
-import {pkgUpSync} from 'pkg-up';
-import {readFileSync} from 'node:fs';
 import type {UserAgent} from 'mirror-protocol/src/user-agent.js';
 import {
   DistTag,
   DistTagMap,
   lookupDistTags,
 } from 'mirror-protocol/src/version.js';
+import color from 'picocolors';
+import {Range, SemVer, gt, gtr} from 'semver';
+import type {ArgumentsCamelCase} from 'yargs';
+import {getVersion} from '../../../packages/reflect-shared/tool/get-version.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
-export const {version} = packageJSON;
+declare const REFLECT_VERSION: string;
+declare const REFLECT_CLI_NAME: string;
+
+export const version = findReflectVersion();
 
 export function getUserAgent(): UserAgent {
   return {
-    type: packageJSON.name,
+    type: REFLECT_CLI_NAME,
     version: findReflectVersion(),
   };
 }
@@ -55,19 +52,12 @@ function getOrRefetchDistTags(
 }
 
 export function findReflectVersion(): string {
-  const pkgDir = fileURLToPath(import.meta.url);
-  if (pkgDir.includes('/node_module')) {
-    return version;
+  if (typeof REFLECT_VERSION === 'string') {
+    return REFLECT_VERSION;
   }
+
   // When the reflect-cli is run from source, use the version from `packages/reflect/package.json`.
-  const reflectPkg = path.resolve(pkgDir, '../../../../', 'packages/reflect');
-  const pkg = pkgUpSync({cwd: reflectPkg});
-  assert(pkg);
-  const s = readFileSync(pkg, 'utf-8');
-  const v = JSON.parse(s);
-  assertObject(v);
-  assertString(v.version);
-  return v.version;
+  return getVersion();
 }
 
 async function checkForCliDeprecation(): Promise<DistTags> {
