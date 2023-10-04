@@ -107,126 +107,114 @@ test('it should bundle into one file', async () => {
   `);
 });
 
-test('watch should work', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'reflect-compile-test-'));
-  const fileA = path.join(dir, 'a.js');
-  await fs.writeFile(
-    fileA,
-    `import {b} from './b.js'; console.log(b);`,
-    'utf-8',
-  );
-  const fileB = path.join(dir, 'b.js');
-  await fs.writeFile(fileB, `export const b = 'BBB';`, 'utf-8');
+describe('watch', () => {
+  async function watchHarness(
+    entryPoint: string,
+    testBody: (
+      checkResult: (snapshot: string) => Promise<void>,
+      setCompilationExpected: (expected: boolean) => void,
+    ) => Promise<void>,
+  ) {
+    const ac = new AbortController();
+    const q = new Queue<CompileResult>();
 
-  const ac = new AbortController();
-  const q = new Queue<CompileResult>();
-
-  try {
     let compilationExpected = true;
-    (async () => {
-      try {
-        for await (const change of watch(
-          fileA,
-          true,
-          'development',
-          ac.signal,
-        )) {
-          if (!compilationExpected) {
-            throw new Error('Unexpected recompilation');
-          }
-          q.enqueue(change).catch(e => fail(e));
-        }
-      } catch (e) {
-        // In Jest e is not an instance of Error?!?
-        // https://github.com/jestjs/jest/issues/2549
-        if ((e as AbortError).name !== 'AbortError') {
-          throw e;
-        }
-      }
-    })().catch(e => fail(e));
 
-    await checkResult(`var b = "BBB";
+    function setCompilationExpected(expected: boolean) {
+      compilationExpected = expected;
+    }
+
+    try {
+      (async () => {
+        try {
+          for await (const change of watch(
+            entryPoint,
+            true,
+            'development',
+            ac.signal,
+          )) {
+            if (!compilationExpected) {
+              throw new Error('Unexpected recompilation');
+            }
+            q.enqueue(change).catch(e => fail(e));
+          }
+        } catch (e) {
+          // In Jest e is not an instance of Error?!?
+          // https://github.com/jestjs/jest/issues/2549
+          if ((e as AbortError).name !== 'AbortError') {
+            throw e;
+          }
+        }
+      })().catch(e => fail(e));
+
+      await testBody(checkResult, setCompilationExpected);
+
+      await sleep(100);
+    } finally {
+      ac.abort();
+    }
+
+    async function checkResult(snapshot: string) {
+      const result = await q.dequeue();
+      expect(result.code.path).toBe(path.resolve('a.js'));
+      expect(result.sourcemap?.path).toBe(path.resolve('a.js.map'));
+      expect(stripCommentLines(result.code.text)).toBe(snapshot);
+    }
+  }
+
+  test('watch should work', async () => {
+    const dir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'reflect-compile-test-'),
+    );
+    const fileA = path.join(dir, 'a.js');
+    await fs.writeFile(
+      fileA,
+      `import {b} from './b.js'; console.log(b);`,
+      'utf-8',
+    );
+    const fileB = path.join(dir, 'b.js');
+    await fs.writeFile(fileB, `export const b = 'BBB';`, 'utf-8');
+
+    await watchHarness(fileA, async (checkResult, setCompilationExpected) => {
+      await checkResult(`var b = "BBB";
 console.log(b);`);
 
-    await fs.writeFile(fileA, `console.log('changed');`, 'utf-8');
-    await checkResult(`console.log("changed");`);
+      await fs.writeFile(fileA, `console.log('changed');`, 'utf-8');
+      await checkResult(`console.log("changed");`);
 
-    // Changing b now should not trigger the watcher since a no longer depends on b.
-    compilationExpected = false;
-    await fs.writeFile(fileB, `console.log('changed b');`, 'utf-8');
+      // Changing b now should not trigger the watcher since a no longer depends on b.
+      setCompilationExpected(false);
+      await fs.writeFile(fileB, `console.log('changed b');`, 'utf-8');
 
-    compilationExpected = true;
-    await fs.writeFile(fileA, `console.log('changed a again');`, 'utf-8');
-    await checkResult(`console.log("changed a again");`);
+      setCompilationExpected(true);
+      await fs.writeFile(fileA, `console.log('changed a again');`, 'utf-8');
+      await checkResult(`console.log("changed a again");`);
 
-    compilationExpected = true;
-    await fs.writeFile(fileA, `console.log(process.env.NODE_ENV);`, 'utf-8');
-    await checkResult(`console.log("development");`);
+      setCompilationExpected(true);
+      await fs.writeFile(fileA, `console.log(process.env.NODE_ENV);`, 'utf-8');
+      await checkResult(`console.log("development");`);
+    });
+  });
 
-    await sleep(100);
-  } finally {
-    ac.abort();
-  }
+  test('watch should continue after syntax errors', async () => {
+    const dir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'reflect-compile-test-'),
+    );
+    const fileA = path.join(dir, 'a.js');
+    await fs.writeFile(fileA, `console.log(1);`, 'utf-8');
 
-  async function checkResult(snapshot: string) {
-    const result = await q.dequeue();
-    expect(result.code.path).toBe(path.resolve('a.js'));
-    expect(result.sourcemap?.path).toBe(path.resolve('a.js.map'));
-    expect(stripCommentLines(result.code.text)).toBe(snapshot);
-  }
-});
+    await watchHarness(fileA, async (checkResult, setCompilationExpected) => {
+      await checkResult(`console.log(1);`);
 
-test('watch should continue after syntax errors', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'reflect-compile-test-'));
-  const fileA = path.join(dir, 'a.js');
-  await fs.writeFile(fileA, `console.log(1);`, 'utf-8');
+      setCompilationExpected(false);
+      await fs.writeFile(fileA, `console.log(`, 'utf-8');
 
-  const ac = new AbortController();
-  const q = new Queue<CompileResult>();
+      setCompilationExpected(false);
+      await fs.writeFile(fileA, `console.log('`, 'utf-8');
 
-  try {
-    let compilationExpected = true;
-    (async () => {
-      try {
-        for await (const change of watch(
-          fileA,
-          true,
-          'development',
-          ac.signal,
-        )) {
-          if (!compilationExpected) {
-            throw new Error('Unexpected recompilation');
-          }
-          q.enqueue(change).catch(e => fail(e));
-        }
-      } catch (e) {
-        // In Jest e is not an instance of Error?!?
-        // https://github.com/jestjs/jest/issues/2549
-        if ((e as AbortError).name !== 'AbortError') {
-          throw e;
-        }
-      }
-    })().catch(e => fail(e));
-
-    await checkResult(`console.log(1);`);
-
-    compilationExpected = false;
-    await fs.writeFile(fileA, `console.log(`, 'utf-8');
-
-    compilationExpected = false;
-    await fs.writeFile(fileA, `console.log('`, 'utf-8');
-
-    compilationExpected = true;
-    await fs.writeFile(fileA, `console.log(2)`, 'utf-8');
-    await checkResult(`console.log(2);`);
-  } finally {
-    ac.abort();
-  }
-
-  async function checkResult(snapshot: string) {
-    const result = await q.dequeue();
-    expect(result.code.path).toBe(path.resolve('a.js'));
-    expect(result.sourcemap?.path).toBe(path.resolve('a.js.map'));
-    expect(stripCommentLines(result.code.text)).toBe(snapshot);
-  }
+      setCompilationExpected(true);
+      await fs.writeFile(fileA, `console.log(2)`, 'utf-8');
+      await checkResult(`console.log(2);`);
+    });
+  });
 });
