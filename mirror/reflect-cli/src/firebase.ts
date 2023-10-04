@@ -12,7 +12,7 @@ import {
   getUserParameters,
 } from './metrics/send-ga-event.js';
 import type {ArgumentsCamelCase} from 'yargs';
-import {errorReporting, ErrorInfo} from 'mirror-protocol/src/error.js';
+import {reportError, ErrorInfo} from 'mirror-protocol/src/error.js';
 import {version} from './version.js';
 function getFirebaseConfig(stack: string) {
   switch (stack) {
@@ -81,7 +81,7 @@ export function handleWith<T extends ArgumentsCamelCase>(
           handler(args),
         ]);
       } catch (e) {
-        await errorReporting({
+        await reportError({
           action: eventName,
           error: createErrorInfo(e),
           requester: {
