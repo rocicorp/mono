@@ -234,9 +234,6 @@ export function createWorker<Env extends BaseWorkerEnv>(
         ),
       );
     },
-    // Kept for backwards compatibility with older versions in case they still
-    // have cron setup.
-    scheduled: async () => {},
   };
 }
 
