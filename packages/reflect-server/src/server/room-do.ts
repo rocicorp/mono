@@ -29,6 +29,7 @@ import type {DisconnectHandler} from './disconnect.js';
 import {requireUpgradeHeader, upgradeWebsocketResponse} from './http-util.js';
 import {handleMessage} from './message.js';
 import {
+  AUTH_CONNECTIONS_PATH,
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
   INTERNAL_CREATE_ROOM_PATH,
@@ -70,7 +71,7 @@ export const ROOM_ROUTES = {
   authInvalidateAll: '/api/auth/v0/invalidateAll',
   authInvalidateForUser: '/api/auth/v0/invalidateForUser',
   authInvalidateForRoom: '/api/auth/v0/invalidateForRoom',
-  authConnections: '/api/auth/v0/connections',
+  authConnections: AUTH_CONNECTIONS_PATH,
   legacyCreateRoom: LEGACY_CREATE_ROOM_PATH,
   createRoom: CREATE_ROOM_PATH,
   internalCreateRoom: INTERNAL_CREATE_ROOM_PATH,

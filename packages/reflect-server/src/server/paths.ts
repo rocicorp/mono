@@ -6,6 +6,7 @@ export const LOG_LOGS_PATH = '/api/logs/v0/log';
 export const CONNECT_URL_PATTERN = '/api/sync/:version/connect';
 export const LEGACY_CONNECT_PATH = '/connect';
 
+export const AUTH_CONNECTIONS_PATH = '/api/auth/v0/connections';
 export const CREATE_ROOM_PATH = '/api/room/v0/room/create';
 export const LEGACY_CREATE_ROOM_PATH = '/createRoom';
 export const INTERNAL_CREATE_ROOM_PATH = '/INTERNAL/api/room/v0/room/create';

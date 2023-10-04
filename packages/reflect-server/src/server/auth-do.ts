@@ -1,4 +1,4 @@
-import {RWLock} from '@rocicorp/lock';
+import {Lock, RWLock} from '@rocicorp/lock';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import type {ErrorKind} from 'reflect-protocol';
 import {
@@ -96,7 +96,6 @@ export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
   authInvalidateAll: '/api/auth/v0/invalidateAll',
   authInvalidateForUser: '/api/auth/v0/invalidateForUser',
   authInvalidateForRoom: '/api/auth/v0/invalidateForRoom',
-  authRevalidateConnections: '/api/auth/v0/revalidateConnections',
   legacyCreateRoom: LEGACY_CREATE_ROOM_PATH,
   createRoom: CREATE_ROOM_PATH,
 } as const;
@@ -117,9 +116,12 @@ export const AUTH_ROUTES = {
   ...AUTH_ROUTES_UNAUTHED,
 } as const;
 
+export const ALARM_INTERVAL = 5 * 60 * 1000;
+
 export class BaseAuthDO implements DurableObject {
   readonly #router = new Router();
   readonly #roomDO: DurableObjectNamespace;
+  readonly #state: DurableObjectState;
   // _durableStorage is a type-aware wrapper around _state.storage. It
   // always disables the input gate. The output gate is configured in the
   // constructor below. Anything that needs to read *values* out of
@@ -139,9 +141,12 @@ export class BaseAuthDO implements DurableObject {
   // acquired first.
   readonly #roomRecordLock = new RWLock();
 
+  readonly #authRevalidateConnectionsLock = new Lock();
+
   constructor(options: AuthDOOptions) {
     const {roomDO, state, authHandler, authApiKey, logSink, logLevel} = options;
     this.#roomDO = roomDO;
+    this.#state = state;
     this.#durableStorage = new DurableStorage(
       state.storage,
       false, // don't allow unconfirmed
@@ -363,10 +368,6 @@ export class BaseAuthDO implements DurableObject {
     this.#router.register(
       AUTH_ROUTES.authInvalidateForRoom,
       this.#authInvalidateForRoom,
-    );
-    this.#router.register(
-      AUTH_ROUTES.authRevalidateConnections,
-      this.#authRevalidateConnections,
     );
 
     this.#router.register(AUTH_ROUTES.legacyConnect, this.#legacyConnect);
@@ -699,6 +700,9 @@ export class BaseAuthDO implements DurableObject {
           roomID,
           lc,
         );
+
+        await this.#scheduleAlarm(lc);
+
         return responseFromDO;
       }),
     );
@@ -711,7 +715,7 @@ export class BaseAuthDO implements DurableObject {
         const {roomID} = body;
         lc.debug?.(`authInvalidateForRoom ${roomID} waiting for lock.`);
         return this.#authLock.withWrite(async () => {
-          lc.debug?.('got lock.');
+          lc.debug?.(`authInvalidateForRoom ${roomID} acquired lock.`);
           lc.debug?.(`Sending authInvalidateForRoom request to ${roomID}`);
           // The request to the Room DO must be completed inside the write lock
           // to avoid races with connect requests for this room.
@@ -747,9 +751,9 @@ export class BaseAuthDO implements DurableObject {
       withBody(invalidateForUserRequestSchema, (ctx, req) => {
         const {lc, body} = ctx;
         const {userID} = body;
-        lc.debug?.(`_authInvalidateForUser waiting for lock.`);
+        lc.debug?.(`authInvalidateForUser waiting for lock.`);
         return this.#authLock.withWrite(async () => {
-          lc.debug?.('got lock.');
+          lc.debug?.(`authInvalidateForUser acquired lock.`);
           const connections = await this.#durableStorage.list(
             {
               prefix: getConnectionKeyStringUserPrefix(userID),
@@ -775,7 +779,7 @@ export class BaseAuthDO implements DurableObject {
       const {lc} = ctx;
       lc.debug?.(`authInvalidateAll waiting for lock.`);
       return this.#authLock.withWrite(() => {
-        lc.debug?.('got lock.');
+        lc.debug?.(`authInvalidateAll acquired lock.`);
         // The request to the Room DOs must be completed inside the write lock
         // to avoid races with connect requests.
         return this.#forwardInvalidateRequest(
@@ -791,10 +795,32 @@ export class BaseAuthDO implements DurableObject {
     }),
   );
 
-  #authRevalidateConnections = post(
-    this.#requireAPIKey(async ctx => {
-      const {lc} = ctx;
-      lc.info?.('Revalidating connections.');
+  async alarm(): Promise<void> {
+    const lc = this.#lc.withContext('alarm');
+    await this.#authRevalidateConnections(lc);
+    if (await hasAnyConnection(this.#durableStorage)) {
+      await this.#scheduleAlarm(lc);
+    }
+  }
+
+  async #scheduleAlarm(lc: LogContext): Promise<void> {
+    lc.debug?.('Ensuring alarm is scheduled.');
+    const {storage} = this.#state;
+    const currentAlarm = await storage.getAlarm();
+    if (currentAlarm === null) {
+      lc.debug?.('Scheduling alarm.');
+      await storage.setAlarm(Date.now() + ALARM_INTERVAL);
+    }
+  }
+
+  /**
+   * Revalidates all connections in the server by sending a request to the roomDO API.
+   * Deletes any connections that are no longer valid.
+   */
+  #authRevalidateConnections(lc: LogContext): Promise<void> {
+    lc.debug?.('Revalidating connections waiting for lock.');
+    return this.#authRevalidateConnectionsLock.withLock(async () => {
+      lc.debug?.('Revalidating connections acquired lock.');
       const connectionsByRoom = getConnectionsByRoom(this.#durableStorage, lc);
       let connectionCount = 0;
       let revalidatedCount = 0;
@@ -804,8 +830,9 @@ export class BaseAuthDO implements DurableObject {
         lc.info?.(
           `Revalidating ${connectionKeys.length} connections for room ${roomID}.`,
         );
+        lc.debug?.('waiting for authLock.');
         await this.#authLock.withWrite(async () => {
-          lc.debug?.('got lock.');
+          lc.debug?.('authLock acquired.');
           const roomObjectID = await this.#roomRecordLock.withRead(() =>
             objectIDByRoomID(this.#durableStorage, this.#roomDO, roomID),
           );
@@ -880,9 +907,8 @@ export class BaseAuthDO implements DurableObject {
           connectionCount - revalidatedCount
         } connections.`,
       );
-      return new Response('Complete', {status: 200});
-    }),
-  );
+    });
+  }
 
   async #forwardInvalidateRequest(
     lc: LogContext,
@@ -1110,6 +1136,14 @@ async function* getConnections(
       yield entry;
     }
   }
+}
+
+async function hasAnyConnection(storage: DurableStorage): Promise<boolean> {
+  const entries = await storage.list(
+    {prefix: CONNECTION_KEY_PREFIX, limit: 1},
+    connectionRecordSchema,
+  );
+  return entries.size > 0;
 }
 
 export async function recordConnection(
