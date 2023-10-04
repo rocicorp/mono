@@ -1,31 +1,32 @@
-import type {CfModule} from 'cloudflare-api/src/create-script-upload-form.js';
-import {Errors, FetchResultError} from 'cloudflare-api/src/fetch.js';
-import type {AccountAccess} from 'cloudflare-api/src/resources.js';
+import type {Storage} from 'firebase-admin/storage';
 import {
+  Script,
+  NamespacedScript,
   GlobalScript,
   NamespacedName,
-  NamespacedScript,
-  Script,
 } from 'cloudflare-api/src/scripts.js';
-import {Resolver} from 'dns/promises';
-import type {Storage} from 'firebase-admin/storage';
+import {Errors, FetchResultError} from 'cloudflare-api/src/fetch.js';
+import type {ZoneConfig} from './config.js';
+import {
+  deleteCustomHostnames,
+  publishCustomHostname,
+} from './publish-custom-hostnames.js';
 import {logger} from 'firebase-functions';
-import {HttpsError} from 'firebase-functions/v2/https';
 import type {
   DeploymentOptions,
   DeploymentSecrets,
 } from 'mirror-schema/src/deployment.js';
 import type {ModuleRef} from 'mirror-schema/src/module.js';
-import {sleep} from 'shared/src/sleep.js';
-import type {ZoneConfig} from './config.js';
 import {ModuleAssembler} from './module-assembler.js';
-import {publishCustomDomains} from './publish-custom-domains.js';
-import {
-  deleteCustomHostnames,
-  publishCustomHostname,
-} from './publish-custom-hostnames.js';
+import type {CfModule} from 'cloudflare-api/src/create-script-upload-form.js';
 import {uploadScript} from './publish.js';
 import {submitSecret} from './submit-secret.js';
+import {publishCustomDomains} from './publish-custom-domains.js';
+import {submitTriggers} from './submit-triggers.js';
+import type {AccountAccess} from 'cloudflare-api/src/resources.js';
+import {Resolver} from 'dns/promises';
+import {HttpsError} from 'firebase-functions/v2/https';
+import {sleep} from 'shared/src/sleep.js';
 
 export type ScriptHandler = {
   publish(
@@ -128,6 +129,7 @@ export class GlobalScriptHandler extends AbstractScriptHandler<GlobalScript> {
 
     await Promise.all([
       publishCustomDomains(this._script, hostname),
+      submitTriggers(this._script, '*/5 * * * *'),
       ...Object.entries(secrets).map(([name, value]) =>
         submitSecret(this._script, name, value),
       ),

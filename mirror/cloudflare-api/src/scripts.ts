@@ -3,9 +3,9 @@ import {
   DeleteFn,
   DeleteOnlyFn,
   GetOnlyFn,
+  SetOnlyFn,
   RawSetOnlyFn,
   Resource,
-  SetOnlyFn,
 } from './resources.js';
 import type {TailCreationApiResponse, TailFilterMessage} from './tail.js';
 
@@ -82,6 +82,10 @@ export type ScriptSecret = {
   type: 'secret_text';
 };
 
+export type ScriptSchedule = {
+  cron: string;
+};
+
 export type CustomDomains = {
   override_scope: boolean;
   override_existing_origin: boolean;
@@ -151,6 +155,7 @@ export class GlobalScript extends Script {
   readonly productionEnvironment: GetOnlyFn<ScriptEnvironment>;
   readonly startTail: SetOnlyFn<TailFilterMessage, TailCreationApiResponse>;
   readonly deleteTail: DeleteFn;
+  readonly setSchedules: SetOnlyFn<ScriptSchedule[]>;
   readonly setCustomDomains: SetOnlyFn<CustomDomains>;
 
   constructor({apiToken, accountID}: AccountAccess, name: string) {
@@ -169,6 +174,7 @@ export class GlobalScript extends Script {
     this.startTail = this._script.append('tails').post;
     this.deleteTail = (id, q) =>
       this._script.append('tails').append(id).delete(q);
+    this.setSchedules = this._script.append('schedules').put;
     this.setCustomDomains = this._script.append('domains/records').put;
   }
 }
