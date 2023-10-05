@@ -112,7 +112,19 @@ type AuthenticatedUser = {
   additionalUserInfo: AdditionalUserInfo | null;
 };
 
-export async function authenticate(
+export function getAuthentication(yargs: YargvToInterface<CommonYargsArgv>) {
+  return authenticateImpl(yargs, false, false);
+}
+
+/** Prompts user to login if not authenticated. */
+export function authenticate(
+  yargs: YargvToInterface<CommonYargsArgv>,
+  output = true,
+) {
+  return authenticateImpl(yargs, output, true);
+}
+
+async function authenticateImpl(
   yargs: YargvToInterface<CommonYargsArgv>,
   output = true,
   promptLogin = true,

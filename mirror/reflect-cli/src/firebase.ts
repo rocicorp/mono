@@ -14,7 +14,7 @@ import {
 import type {ArgumentsCamelCase} from 'yargs';
 import {reportError, ErrorInfo} from 'mirror-protocol/src/error.js';
 import {version} from './version.js';
-import {authenticate} from './auth-config.js';
+import {getAuthentication} from './auth-config.js';
 import type {CommonYargsOptions} from './yarg-types.js';
 function getFirebaseConfig(stack: string) {
   switch (stack) {
@@ -73,7 +73,7 @@ async function reportE(
 ) {
   let userID = '';
   try {
-    ({userID} = await authenticate(args, false, false));
+    ({userID} = await getAuthentication(args));
   } catch (e) {
     /* swallow */
   }
