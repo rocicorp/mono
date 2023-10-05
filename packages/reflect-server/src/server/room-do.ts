@@ -582,5 +582,5 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 export function getDefaultTurnDuration(
   allowUnconfirmedWrites: boolean,
 ): number {
-  return 1000 / (allowUnconfirmedWrites ? 60 : 15);
+  return Math.floor(1000 / (allowUnconfirmedWrites ? 60 : 15));
 }
