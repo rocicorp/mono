@@ -85,7 +85,7 @@ async function reportE(
       userAgent: {type: 'reflect-cli', version},
     },
     agentContext: getUserParameters(version),
-  }).then(_err => {
+  }).catch(_err => {
     /* swallow */
   });
 }
