@@ -26,7 +26,8 @@
     "@rocicorp/lock": "^1.0.3",
     "@rocicorp/logger": "^5.2.1",
     "@rocicorp/resolver": "^1.0.1",
-    "esbuild": "^0.18.3"
+    "esbuild": "^0.18.3",
+    "workerd": "^1.20231002.0"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.0",
