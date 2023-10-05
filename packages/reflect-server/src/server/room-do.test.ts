@@ -373,8 +373,8 @@ test('clear interval call', async () => {
 
 test('Sets turn duration based on allowUnconfirmedWrites flag', () => {
   const cases = [
-    {allowUnconfirmed: true, turnDuration: 1000 / 60},
-    {allowUnconfirmed: false, turnDuration: 1000 / 15},
+    {allowUnconfirmed: true, turnDuration: 16},
+    {allowUnconfirmed: false, turnDuration: 66},
   ];
   for (const {allowUnconfirmed, turnDuration} of cases) {
     expect(getDefaultTurnDuration(allowUnconfirmed)).toBe(turnDuration);
