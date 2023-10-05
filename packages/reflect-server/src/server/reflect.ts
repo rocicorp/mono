@@ -50,7 +50,7 @@ export interface ReflectServerOptions<MD extends MutatorDefs> {
    * Lowering this limit can prevent busy rooms from experiencing "overloaded"
    * exceptions at the cost of peer-to-peer latency.
    *
-   * Defaults to `66` if `allowUnconfirmedWrites` is `false` and `16` if
+   * Default is `66` when `allowUnconfirmedWrites` is `false`, or `16` when
    * `allowUnconfirmedWrites` is `true`.
    */
   maxMutationsPerTurn?: number | undefined;
@@ -152,6 +152,7 @@ function makeNormalizedOptionsGetter<
       logLevel,
       allowUnconfirmedWrites,
       datadogMetricsOptions,
+      // default to a max of 1 mutation per millisecond of turn duration
       maxMutationsPerTurn:
         maxMutationsPerTurn ?? getDefaultTurnDuration(allowUnconfirmedWrites),
     };
