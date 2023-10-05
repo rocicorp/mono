@@ -40,8 +40,8 @@ describe('error-report function', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(HttpsError);
       expect((e as HttpsError).code).toBe('unknown');
-      expect((e as HttpsError).message).toContain(
-        '{"requester":{"userID":"foo","userAgent":{"type":"reflect-cli","version":"0.0.1"}},"error":{"desc":"error-reporting-test","name":"Error","message":"error-reporting-test","stack":"error-reporting-test"},"agentContext":{"up.reflect_os_architecture":"x86_64","up.reflect_os_name":"Mac OS X","up.reflect_os_version":"10.15.7","up.reflect_version":"0.0.1"},"action":"error-reporting-test"}',
+      expect((e as HttpsError).message).toBe(
+        'action: error-reporting-test, description: error-reporting-test',
       );
     }
   });
