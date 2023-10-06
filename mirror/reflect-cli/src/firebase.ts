@@ -7,9 +7,15 @@ import {connectFunctionsEmulator, getFunctions} from 'firebase/functions';
 // https://firebase.google.com/docs/web/modular-upgrade
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
-import {sendAnalyticsEvent} from './metrics/send-ga-event.js';
+import {
+  sendAnalyticsEvent,
+  getUserParameters,
+} from './metrics/send-ga-event.js';
 import type {ArgumentsCamelCase} from 'yargs';
-
+import {reportError, ErrorInfo} from 'mirror-protocol/src/error.js';
+import {version} from './version.js';
+import {getAuthentication} from './auth-config.js';
+import type {CommonYargsOptions} from './yarg-types.js';
 function getFirebaseConfig(stack: string) {
   switch (stack) {
     case 'sandbox':
@@ -60,25 +66,65 @@ export function getFirestore(): Firestore {
   return firebase.default.firestore();
 }
 
+async function reportE(
+  args: ArgumentsCamelCase<CommonYargsOptions>,
+  eventName: string,
+  e: unknown,
+) {
+  let userID = '';
+  try {
+    ({userID} = await getAuthentication(args));
+  } catch (e) {
+    /* swallow */
+  }
+  await reportError({
+    action: eventName,
+    error: createErrorInfo(e),
+    requester: {
+      userID,
+      userAgent: {type: 'reflect-cli', version},
+    },
+    agentContext: getUserParameters(version),
+  }).catch(_err => {
+    /* swallow */
+  });
+}
+
 // Wraps a command handler with cleanup code (e.g. terminating any Firestore client)
 // to ensure that the process exits after the handler completes.
-export function handleWith<T extends ArgumentsCamelCase>(
+export function handleWith<T extends ArgumentsCamelCase<CommonYargsOptions>>(
   handler: (args: T) => Promise<void>,
 ) {
   return {
     andCleanup: () => async (args: T) => {
+      const eventName =
+        args._ && args._.length ? `cmd_${args._[0]}` : 'cmd_unknown';
       try {
-        const eventName =
-          args._ && args._.length ? `cmd_${args._[0]}` : 'cmd_unknown';
         await Promise.all([
-          sendAnalyticsEvent(eventName).catch(_e => {
-            /* swallow */
+          sendAnalyticsEvent(eventName).catch(async e => {
+            await reportE(args, eventName, e);
           }),
           handler(args),
         ]);
+      } catch (e) {
+        await reportE(args, eventName, e);
+        throw e;
       } finally {
         await getFirestore().terminate();
       }
     },
+  };
+}
+
+function createErrorInfo(e: unknown): ErrorInfo {
+  if (!(e instanceof Error)) {
+    return {desc: String(e)};
+  }
+  return {
+    desc: String(e),
+    name: e.name,
+    message: e.message,
+    stack: e.stack,
+    cause: createErrorInfo(e.cause),
   };
 }

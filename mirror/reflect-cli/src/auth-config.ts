@@ -112,9 +112,22 @@ type AuthenticatedUser = {
   additionalUserInfo: AdditionalUserInfo | null;
 };
 
-export async function authenticate(
+export function getAuthentication(yargs: YargvToInterface<CommonYargsArgv>) {
+  return authenticateImpl(yargs, false, false);
+}
+
+/** Prompts user to login if not authenticated. */
+export function authenticate(
   yargs: YargvToInterface<CommonYargsArgv>,
   output = true,
+) {
+  return authenticateImpl(yargs, output, true);
+}
+
+async function authenticateImpl(
+  yargs: YargvToInterface<CommonYargsArgv>,
+  output = true,
+  promptLogin = true,
 ): Promise<AuthenticatedUser> {
   if (authConfigForTesting) {
     return {
@@ -124,6 +137,9 @@ export async function authenticate(
   }
   const authConfigFilePath = getUserAuthConfigFile(yargs);
   if (fs.statSync(authConfigFilePath, {throwIfNoEntry: false}) === undefined) {
+    if (!promptLogin) {
+      throw new Error(`No auth config file found.`);
+    }
     console.info('Login required');
     await loginHandler(yargs);
   }

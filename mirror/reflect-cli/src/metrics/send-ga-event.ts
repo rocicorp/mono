@@ -1,21 +1,14 @@
-import * as querystring from 'querystring';
-import * as https from 'https';
-import {networkInterfaces, arch, platform, release} from 'os';
-import {randomUUID, createHash} from 'crypto';
+import {arch, platform, release} from 'os';
+import {randomUUID} from 'crypto';
 import {version} from '../version.js';
 import {stringify} from 'querystring';
+import {
+  deviceFingerprint,
+  UserParameters,
+  UserCustomDimension,
+} from 'mirror-protocol/src/reporting.js';
 
 const TRACKING_ID = 'G-69B1QV88XF';
-
-export type PrimitiveTypes = string | number | boolean;
-
-const deviceFingerprint = computeFingerprint();
-
-function computeFingerprint(): string {
-  return createHash('md5')
-    .update(JSON.stringify(networkInterfaces()))
-    .digest('hex');
-}
 
 /**
  * GA built-in request parameters
@@ -37,19 +30,8 @@ export enum RequestParameter {
   Dimension2 = 'cd2',
 }
 
-export enum UserCustomDimension {
-  OsArchitecture = 'up.reflect_os_architecture',
-  NodeVersion = 'up.reflect_node_version',
-  ReflectCLIVersion = 'up.reflect_cli_version',
-}
-
 export async function sendAnalyticsEvent(eventName: string): Promise<void> {
-  const userParameters = {
-    [UserCustomDimension.OsArchitecture]: arch(),
-    [UserCustomDimension.NodeVersion]: process.version,
-    [UserCustomDimension.ReflectCLIVersion]: version,
-  };
-
+  const userParameters = getUserParameters(version);
   await sendGAEvent([
     {
       ...userParameters,
@@ -78,38 +60,34 @@ function getRequestParameters(): string {
   return stringify(params);
 }
 
-function sendGAEvent(data: Record<string, PrimitiveTypes | undefined>[]) {
-  return new Promise<void>((resolve, reject) => {
-    const request = https.request(
-      {
-        host: 'www.google-analytics.com',
-        method: 'POST',
-        path: '/g/collect?' + getRequestParameters(),
-        headers: {
-          // The below is needed for tech details to be collected even though we provide our own information from the OS Node.js module
-          'user-agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
-        },
-      },
-      response => {
-        // The below is needed as otherwise the response will never close which will cause the CLI not to terminate.
-        // eslint-disable-next-line @typescript-eslint/no-empty-function
-        response.on('data', () => {});
+export function getUserParameters(version: string): UserParameters {
+  return {
+    [UserCustomDimension.OsArchitecture]: arch(),
+    [UserCustomDimension.NodeVersion]: process.version,
+    [UserCustomDimension.ReflectCLIVersion]: version,
+    [UserCustomDimension.DeviceFingerprint]: deviceFingerprint,
+  };
+}
 
-        if (response.statusCode !== 200 && response.statusCode !== 204) {
-          reject(
-            new Error(
-              `Analytics reporting failed with status code: ${response.statusCode}.`,
-            ),
-          );
-        } else {
-          resolve();
-        }
-      },
-    );
-    request.on('error', reject);
-    const queryParameters = data.map(p => querystring.stringify(p)).join('\n');
-    request.write(queryParameters);
-    request.end();
+export function sendGAEvent(data: Record<string, string>[]): Promise<void> {
+  const baseUrl = 'https://www.google-analytics.com/g/collect?';
+  const queryString = getRequestParameters();
+  const fullUrl = baseUrl + queryString;
+
+  const postBody = data.map(p => stringify(p)).join('\n');
+
+  return fetch(fullUrl, {
+    method: 'POST',
+    headers: {
+      'user-agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
+    },
+    body: postBody,
+  }).then(response => {
+    if (!response.ok) {
+      throw new Error(
+        `Analytics reporting failed with status code: ${response.status}.`,
+      );
+    }
   });
 }
