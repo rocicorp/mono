@@ -54,7 +54,7 @@ function displayStatus(appData?: AppData): void {
   console.log(getStatusText('App', appData?.name));
 
   if (appData?.name) {
-    console.log(appData?.appID, 'ID');
+    console.log(getStatusText('ID', appData?.appID));
     console.log(
       getStatusText('Status', appData.runningDeployment?.status + '🏃'),
     );
