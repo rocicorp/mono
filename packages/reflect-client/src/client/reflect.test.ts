@@ -14,6 +14,7 @@ import {assert} from 'shared/src/asserts.js';
 import type {JSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
+import type {WSString} from './http-string.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
 import type {ReflectOptions} from './options.js';
 import {
@@ -247,7 +248,7 @@ test('createSocket', () => {
   const nowStub = sinon.stub(performance, 'now').returns(0);
 
   const t = (
-    socketURL: string,
+    socketURL: WSString,
     baseCookie: NullableVersion,
     clientID: string,
     roomID: string,

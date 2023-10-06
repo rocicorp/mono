@@ -4,19 +4,20 @@ import type {
   ExperimentalCreateKVStore as CreateKVStore,
   MaybePromise,
 } from 'replicache';
+import {WSString, toHTTPString, type HTTPString} from './http-string.js';
 
 /**
  * Configuration for [[Reflect]].
  */
 export interface ReflectOptions<MD extends MutatorDefs> {
   /**
-   * Server to connect to, for example "wss://myapp-myteam.reflect.net/".
+   * Server to connect to, for example "https://myapp-myteam.reflect.net".
    */
-  server?: string | undefined;
+  server?: string | null | undefined;
 
   /**
-   * Server to connect to, for example "wss://myapp-myteam.reflect.net/".
-   * @deprecated
+   * Server to connect to, for example "wss://myapp-myteam.reflect.net".
+   * @deprecated Use {@code server} instead.
    */
   socketOrigin?: string | null | undefined;
 
@@ -186,4 +187,46 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * allowing a custom implementation of the underlying storage layer.
    */
   kvStore?: 'mem' | 'idb' | CreateKVStore | undefined;
+}
+
+function validateServerParam<
+  S extends 'ws' | 'http',
+  R = S extends 'ws' ? WSString : HTTPString,
+>(paramName: string, server: string, expectedProtocol: S): R {
+  if (server) {
+    if (
+      !server.startsWith(`${expectedProtocol}://`) &&
+      !server.startsWith(`${expectedProtocol}s://`)
+    ) {
+      throw new Error(
+        `ReflectOptions.${paramName} must use the '${expectedProtocol}' or '${expectedProtocol}s' scheme.`,
+      );
+    }
+    if (!server.endsWith('/')) {
+      throw new Error(
+        `ReflectOptions.${paramName} must not contain a path component. For example: "https://myapp-myteam.reflect.net/".`,
+      );
+    }
+  }
+  return server as R;
+}
+
+export function getServer(
+  server: string | null | undefined,
+  socketOrigin: string | null | undefined,
+): HTTPString | null {
+  if (server) {
+    return validateServerParam('server', server, 'http') as HTTPString;
+  }
+
+  if (socketOrigin) {
+    const validatedSocketOrigin = validateServerParam(
+      'socketOrigin',
+      socketOrigin,
+      'ws',
+    );
+    return toHTTPString(validatedSocketOrigin);
+  }
+
+  return null;
 }
