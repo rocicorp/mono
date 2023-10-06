@@ -189,15 +189,14 @@ let testReflectCounter = 0;
 export function reflectForTest<MD extends MutatorDefs>(
   options: Partial<ReflectOptions<MD>> = {},
 ): TestReflect<MD> {
-  const newOpts = {
+  const r = new TestReflect({
     server: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
     userID: 'test-user-id-' + testReflectCounter++,
     roomID: 'test-room-id',
     auth: 'test-auth',
     ...options,
-  };
-  const r = new TestReflect(newOpts);
+  });
   // We do not want any unexpected onUpdateNeeded calls in tests. If the test
   // needs to call onUpdateNeeded it should set this as needed.
   r.onUpdateNeeded = () => {
