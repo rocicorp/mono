@@ -2361,18 +2361,15 @@ describe('Alarms', () => {
     return {authDO, logSink};
   }
 
-  test('Ensure the alarm is set after connect', async () => {
-    await connect('abc');
+  test('When the alarm is triggered we should revalidate the connections', async () => {
+    const {logSink} = await connect('abc');
     const alarm = await state.storage.getAlarm();
     // In tests the time doesn't change unless we manually increment it so the
     // alarm should be set to the current time + the interval. In a non test
     // environment the alarm will be dependent on the time of the call to
     // setAlarm.
     expect(alarm).toBe(Date.now() + ALARM_INTERVAL);
-  });
 
-  test('When the alarm is triggered we should revalidate the connections', async () => {
-    const {logSink} = await connect('abc');
     logSink.messages.length = 0;
     await jest.advanceTimersByTimeAsync(ALARM_INTERVAL);
 
