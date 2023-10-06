@@ -97,7 +97,7 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    *
    * ```ts
    * const reflect = new Reflect({
-   *   socketOrigin: 'wss://example.com/',
+   *   server: 'https://example.com/',
    *   userID: 'user-id',
    *   roomID: 'room-id',
    *   mutators: {
