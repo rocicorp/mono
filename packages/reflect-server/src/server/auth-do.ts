@@ -132,7 +132,7 @@ export class BaseAuthDO implements DurableObject {
   readonly #lc: LogContext;
   readonly #alarm: AlarmManager;
 
-  #revalidateConnectionsTimeoutID: TimeoutID | null = null;
+  #revalidateConnectionsTimeoutID: TimeoutID = 0;
 
   // _authLock ensures that at most one auth api call is processed at a time.
   // For safety, if something requires both the auth lock and the room record
@@ -808,7 +808,7 @@ export class BaseAuthDO implements DurableObject {
   }
 
   async #revalidateConnectionsTask(lc: LogContext) {
-    this.#revalidateConnectionsTimeoutID = null;
+    this.#revalidateConnectionsTimeoutID = 0;
     await this.#authRevalidateConnections(lc);
     if (await hasAnyConnection(this.#durableStorage)) {
       await this.#scheduleRevalidateConnectionsTask(lc);
@@ -817,7 +817,7 @@ export class BaseAuthDO implements DurableObject {
 
   async #scheduleRevalidateConnectionsTask(lc: LogContext): Promise<void> {
     lc.debug?.('Ensuring revalidate connections task is scheduled.');
-    if (this.#revalidateConnectionsTimeoutID === null) {
+    if (this.#revalidateConnectionsTimeoutID === 0) {
       lc.debug?.('Scheduling revalidate connections task.');
       this.#revalidateConnectionsTimeoutID =
         await this.#alarm.scheduler.promiseTimeout(

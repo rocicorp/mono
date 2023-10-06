@@ -208,6 +208,36 @@ describe('alarm timeout tests', () => {
     expect(fireTime).toBe(null);
   });
 
+  test('timeout errors are isolated and logged', async () => {
+    const results: string[] = [];
+    await scheduler.promiseTimeout(
+      () => Promise.reject('error from async'),
+      30,
+    );
+    await scheduler.promiseTimeout(() => {
+      throw 'error from sync';
+    }, 30);
+    await scheduler.promiseTimeout(() => {
+      results.push('bar');
+    }, 30);
+
+    expect(results).toEqual([]);
+    expect(await alarmManager.nextAlarmTime()).toBe(STARTING_TIME + 30);
+    expect(fireTime).toBe(STARTING_TIME + 30);
+
+    jest.advanceTimersByTime(30);
+
+    const logSink = new TestLogSink();
+    await alarmManager.fireScheduled(new LogContext('info', {}, logSink));
+
+    expect(results).toEqual(expect.arrayContaining(['bar']));
+    expect(logSink.messages).toEqual([
+      ['error', {}, ['error from async']],
+      ['error', {}, ['error from sync']],
+    ]);
+    expect(fireTime).toBe(null);
+  });
+
   test('log context passed to callback', async () => {
     await scheduler.promiseTimeout(
       (lc, ...args) => {

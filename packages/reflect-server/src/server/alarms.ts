@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 
+/** A TimeoutID will always be a positive integer. */
 export type TimeoutID = number;
 
 /**
@@ -28,8 +29,7 @@ export interface AlarmScheduler {
    * Prefer `promiseTimeout()` when the caller is able to await the setting
    * of the Durable Object Alarm.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  setTimeout<Args extends any[]>(
+  setTimeout<Args extends unknown[]>(
     callback: (lc: LogContext, ...args: Args) => void | Promise<void>,
     msDelay?: number | undefined,
     ...args: Args
@@ -39,8 +39,7 @@ export interface AlarmScheduler {
    * Promise-returning equivalent of `setTimeout()` that allows the caller to
    * wait for the DurableStorage alarm to be updated (if necessary).
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  promiseTimeout<Args extends any[]>(
+  promiseTimeout<Args extends unknown[]>(
     callback: (lc: LogContext, ...args: Args) => void | Promise<void>,
     msDelay?: number | undefined,
     ...args: Args
@@ -62,6 +61,10 @@ type Timeout = {
 export class AlarmManager {
   readonly #storage: DurableObjectStorage;
   readonly #timeouts: Map<TimeoutID, Timeout> = new Map();
+
+  // The AlarmScheduler component is constrained to its own interface (and
+  // object) to make it obvious to developers that components that only need
+  // scheduling logic should never need or have access to the AlarmManager.
   readonly scheduler: AlarmScheduler;
 
   // To keep setTimeout() and clearTimeout() non-blocking, alarm scheduling is
@@ -75,18 +78,15 @@ export class AlarmManager {
     this.#storage = storage;
     this.#nextAlarm = storage.getAlarm();
 
-    // Constrained interface to pass into components that shouldn't deal with an AlarmManager.
     this.scheduler = {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setTimeout: <Args extends any[]>(
+      setTimeout: <Args extends unknown[]>(
         callback: (lc: LogContext, ...args: Args) => void | Promise<void>,
         msDelay?: number | undefined,
         ...args: Args
       ): TimeoutID =>
         this.#promiseTimeout(callback, msDelay, ...args).timeoutID,
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      promiseTimeout: <Args extends any[]>(
+      promiseTimeout: <Args extends unknown[]>(
         callback: (lc: LogContext, ...args: Args) => void | Promise<void>,
         msDelay?: number | undefined,
         ...args: Args
@@ -98,13 +98,12 @@ export class AlarmManager {
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  #promiseTimeout<Args extends any[]>(
+  #promiseTimeout<Args extends unknown[]>(
     cb: (lc: LogContext, ...args: Args) => void | Promise<void>,
-    msDelay?: number | undefined,
+    msDelay: number = 0,
     ...args: Args
   ): {promise: Promise<TimeoutID>; timeoutID: TimeoutID} {
-    const fireTime = Date.now() + (msDelay ?? 0);
+    const fireTime = Date.now() + msDelay;
     const timeoutID = this.#nextID++;
     this.#timeouts.set(timeoutID, {fireTime, fire: lc => cb(lc, ...args)});
     return {promise: this.#schedule().then(() => timeoutID), timeoutID};
@@ -150,7 +149,25 @@ export class AlarmManager {
     // Remove the alarms to fire from the Map.
     timeouts.forEach(([timeoutID]) => this.#timeouts.delete(timeoutID));
     lc.debug?.(`Firing ${timeouts.length} timeout(s)`);
-    await Promise.all(timeouts.map(([_, timeout]) => timeout.fire(lc)));
+
+    // Errors or rejections from timeouts should not be bubbled up, as that would put
+    // the Durable Object Alarm framework into exponential-backoff-retry mode.
+    // Instead we follow a behavior closer to that of setTimeout() by catching and
+    // logging errors / rejections, and proceeding with remaining timeouts as scheduled.
+    const results = await Promise.allSettled(
+      timeouts.map(([_, timeout]) => {
+        try {
+          return timeout.fire(lc);
+        } catch (e) {
+          return Promise.reject(e);
+        }
+      }),
+    );
+    results.forEach(result => {
+      if (result.status === 'rejected') {
+        lc.error?.(result.reason);
+      }
+    });
 
     const next = await this.#schedule();
     if (next) {
