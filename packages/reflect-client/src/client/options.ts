@@ -11,12 +11,12 @@ import {WSString, toHTTPString, type HTTPString} from './http-string.js';
  */
 export interface ReflectOptions<MD extends MutatorDefs> {
   /**
-   * Server to connect to, for example "https://myapp-myteam.reflect.net".
+   * Server to connect to, for example "https://myapp-myteam.reflect.net/".
    */
   server?: string | null | undefined;
 
   /**
-   * Server to connect to, for example "wss://myapp-myteam.reflect.net".
+   * Server to connect to, for example "wss://myapp-myteam.reflect.net/".
    * @deprecated Use {@code server} instead.
    */
   socketOrigin?: string | null | undefined;
