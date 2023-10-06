@@ -89,6 +89,7 @@ export async function runDeployment(
     cfScriptName,
     scriptRef,
     name: appName,
+    teamID,
     teamLabel,
   } = must(appDoc.data());
   const {
@@ -151,8 +152,8 @@ export async function runDeployment(
 
     for await (const deploymentUpdate of script.publish(
       storage,
-      appName,
-      teamLabel,
+      {id: appID, name: appName},
+      {id: teamID, label: teamLabel},
       hostname,
       options,
       secrets,

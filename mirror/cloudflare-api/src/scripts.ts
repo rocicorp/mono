@@ -132,6 +132,10 @@ export class NamespacedScript extends Script {
   readonly namespace: string;
   readonly productionEnvironment: GetOnlyFn<ScriptEnvironment>;
 
+  readonly getTags: GetOnlyFn<unknown>;
+  readonly putTag: SetOnlyFn<undefined>;
+  readonly deleteTag: DeleteFn<undefined>;
+
   constructor(
     {apiToken, accountID}: AccountAccess,
     {namespace, name}: NamespacedName,
@@ -147,6 +151,11 @@ export class NamespacedScript extends Script {
     this.id = `${namespace}/${name}`;
     this.namespace = namespace;
     this.productionEnvironment = this._script.get;
+
+    this.getTags = this._script.append('tags').get;
+    this.putTag = (tag, q) =>
+      this._script.append(`tags/${tag}`).put(undefined, q);
+    this.deleteTag = (tag, q) => this._script.append(`tags/${tag}`).delete(q);
   }
 }
 

@@ -293,6 +293,8 @@ export interface CfWorkerInit {
   logpush?: boolean | undefined;
   placement?: CfPlacement | undefined;
   tail_consumers?: CfTailConsumer[] | undefined;
+  // https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/platform/tags/
+  tags?: string[] | undefined;
 }
 
 // export interface CfWorkerContext {
@@ -404,6 +406,7 @@ export function createScriptUploadForm(worker: CfWorkerInit): FormData {
     logpush,
     placement,
     tail_consumers,
+    tags,
   } = worker;
 
   let {modules} = worker;
@@ -661,6 +664,7 @@ export function createScriptUploadForm(worker: CfWorkerInit): FormData {
     ...(logpush !== undefined && {logpush}),
     ...(placement && {placement}),
     ...(tail_consumers && {tail_consumers}),
+    ...(tags && {tags}),
   };
 
   if (bindings.unsafe?.metadata !== undefined) {
