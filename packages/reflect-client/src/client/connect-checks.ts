@@ -5,6 +5,7 @@ import {nanoid} from '../util/nanoid.js';
 import {
   HTTPString,
   WSString,
+  assertHTTPString,
   assertWSString,
   toWSString,
 } from './http-string.js';
@@ -84,10 +85,12 @@ function checkRenderGet(id: string) {
 function checkCfGet(id: string, server: HTTPString) {
   const cfGetCheckBaseURL = new URL(server);
   cfGetCheckBaseURL.pathname = '/api/canary/v0/get';
-  return checkGet(id, cfGetCheckBaseURL.toString());
+  const url = cfGetCheckBaseURL.toString();
+  assertHTTPString(url);
+  return checkGet(id, url);
 }
 
-function checkGet(id: string, baseURL: string) {
+function checkGet(id: string, baseURL: HTTPString) {
   const getCheckURL = new URL(baseURL);
   getCheckURL.searchParams.set('id', id);
   return Promise.race([
