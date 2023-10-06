@@ -197,12 +197,6 @@ export function reflectForTest<MD extends MutatorDefs>(
     auth: 'test-auth',
     ...options,
   };
-
-  // Need explict undefined to override.
-  if ('server' in options) {
-    newOpts.server = options.server;
-  }
-
   const r = new TestReflect(newOpts);
   // We do not want any unexpected onUpdateNeeded calls in tests. If the test
   // needs to call onUpdateNeeded it should set this as needed.

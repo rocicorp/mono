@@ -1063,7 +1063,7 @@ test('socketOrigin', async () => {
   ];
 
   for (const c of cases) {
-    const r = reflectForTest(c.socketEnabled ? {} : {server: undefined});
+    const r = reflectForTest(c.socketEnabled ? {} : {server: null});
 
     await tickAFewTimes(clock);
 
@@ -1520,7 +1520,7 @@ test('kvStore option', async () => {
     expectedValue: JSONValue | undefined = undefined,
   ) => {
     const r = reflectForTest({
-      server: undefined,
+      server: null,
       userID,
       kvStore,
       mutators: {
