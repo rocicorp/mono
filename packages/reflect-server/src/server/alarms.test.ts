@@ -231,4 +231,30 @@ describe('alarm timeout tests', () => {
     ]);
     expect(fireTime).toBe(null);
   });
+
+  test('reschedules if no timeouts to fire', async () => {
+    const results: string[] = [];
+    await scheduler.promiseTimeout(() => {
+      results.push('foo');
+    }, 20);
+
+    expect(results).toEqual([]);
+    expect(fireTime).toBe(STARTING_TIME + 20);
+
+    // Simulate a race condition in which an alarm for
+    // a deleted timeout (at timeout = 10) fires. The AlarmManager
+    // should still reschedule to the next alarm.
+    fireTime = null;
+    jest.advanceTimersByTime(10);
+    await alarmManager.fireScheduled(lc);
+
+    expect(results).toEqual([]);
+    expect(fireTime).toBe(STARTING_TIME + 20);
+
+    jest.advanceTimersByTime(10);
+    await alarmManager.fireScheduled(lc);
+
+    expect(results).toEqual(['foo']);
+    expect(fireTime).toBe(null);
+  });
 });

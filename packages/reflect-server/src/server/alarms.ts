@@ -147,13 +147,6 @@ export class AlarmManager {
       ([_, val]) => val.fireTime <= now,
     );
 
-    if (timeouts.length === 0) {
-      // This can happen in a race between a clearTimeout() / deleteAlarm()
-      // and the DO Alarm invocation.
-      lc.info?.(`No timeouts to fire`);
-      return;
-    }
-
     // Remove the alarms to fire from the Map.
     timeouts.forEach(([timeoutID]) => this.#timeouts.delete(timeoutID));
     lc.debug?.(`Firing ${timeouts.length} timeout(s)`);
