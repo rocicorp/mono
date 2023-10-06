@@ -8,13 +8,13 @@ import {readAppConfig} from './app-config.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 interface AppData {
-  appID?: string;
-  name?: string;
+  appID?: string | undefined;
+  name?: string | undefined;
   runningDeployment?: {
-    status?: string;
+    status?: string | undefined;
     spec?: {
-      hostname?: string;
-      serverVersion?: string;
+      hostname?: string | undefined;
+      serverVersion?: string | undefined;
     };
   };
 }
