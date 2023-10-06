@@ -8,6 +8,7 @@ import {readAppConfig} from './app-config.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 interface AppData {
+  appID?: string;
   name?: string;
   runningDeployment?: {
     status?: string;
@@ -37,28 +38,33 @@ export async function statusHandler(
     await firestore.doc(appPath(defaultAppID)).get()
   ).data();
 
+  if (appData) {
+    appData.appID = defaultAppID;
+  }
+
   displayStatus(appData);
 }
 
 function displayStatus(appData?: AppData): void {
-  const getStatusText = (value: string | undefined, label: string): string =>
+  const getStatusText = (label: string, value: string | undefined): string =>
     color.green(`${label}: `) +
     color.reset(value ? value : color.red('Unknown'));
 
   console.log(`-------------------------------------------------`);
-  console.log(getStatusText(appData?.name, 'App'));
+  console.log(getStatusText('App', appData?.name));
 
   if (appData?.name) {
+    console.log(appData?.appID, 'ID');
     console.log(
-      getStatusText(appData.runningDeployment?.status + '🏃', 'Status'),
+      getStatusText('Status', appData.runningDeployment?.status + '🏃'),
     );
     console.log(
-      getStatusText(appData.runningDeployment?.spec?.hostname, 'Hostname'),
+      getStatusText('Hostname', appData.runningDeployment?.spec?.hostname),
     );
     console.log(
       getStatusText(
-        appData.runningDeployment?.spec?.serverVersion,
         'Server Version',
+        appData.runningDeployment?.spec?.serverVersion,
       ),
     );
   }
