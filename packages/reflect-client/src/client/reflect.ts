@@ -47,6 +47,7 @@ import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {checkConnectivity} from './connect-checks.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
+import {toWSString, type HTTPString, type WSString} from './http-string.js';
 import {LogOptions, createLogOptions} from './log-options.js';
 import {
   DID_NOT_CONNECT_VALUE,
@@ -57,6 +58,7 @@ import {
   getLastConnectErrorValue,
 } from './metrics.js';
 import type {ReflectOptions} from './options.js';
+import {getServer} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
@@ -82,7 +84,7 @@ interface TestReflect {
   [onSetConnectionStateSymbol]: (state: ConnectionState) => void;
   [createLogOptionsSymbol]: (options: {
     consoleLogLevel: LogLevel;
-    socketOrigin: string | null;
+    server: string | null;
   }) => LogOptions;
 }
 
@@ -161,7 +163,7 @@ export class Reflect<MD extends MutatorDefs> {
   readonly version = version;
 
   readonly #rep: Replicache<MD>;
-  readonly #socketOrigin: string | null;
+  readonly #server: HTTPString | null;
   readonly userID: string;
   readonly roomID: string;
 
@@ -293,7 +295,6 @@ export class Reflect<MD extends MutatorDefs> {
     const {
       userID,
       roomID,
-      socketOrigin,
       onOnlineChange,
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
@@ -303,15 +304,8 @@ export class Reflect<MD extends MutatorDefs> {
       throw new Error('ReflectOptions.userID must not be empty.');
     }
 
-    if (
-      socketOrigin &&
-      !socketOrigin.startsWith('ws://') &&
-      !socketOrigin.startsWith('wss://')
-    ) {
-      throw new Error(
-        "ReflectOptions.socketOrigin must use the 'ws' or 'wss' scheme.",
-      );
-    }
+    const server = getServer(options.server, options.socketOrigin);
+
     if (jurisdiction !== undefined && jurisdiction !== 'eu') {
       throw new Error('ReflectOptions.jurisdiction must be "eu" if present.');
     }
@@ -326,7 +320,7 @@ export class Reflect<MD extends MutatorDefs> {
 
     this.#logOptions = this.#createLogOptions({
       consoleLogLevel: options.logLevel ?? 'error',
-      socketOrigin,
+      server,
       enableAnalytics,
     });
     const logOptions = this.#logOptions;
@@ -358,7 +352,7 @@ export class Reflect<MD extends MutatorDefs> {
     });
     this.#rep.getAuth = this.#getAuthToken;
     this.#onUpdateNeeded = this.#rep.onUpdateNeeded; // defaults to reload.
-    this.#socketOrigin = socketOrigin;
+    this.#server = server;
     this.roomID = roomID;
     this.userID = userID;
     this.#jurisdiction = jurisdiction;
@@ -414,7 +408,7 @@ export class Reflect<MD extends MutatorDefs> {
 
   #createLogOptions(options: {
     consoleLogLevel: LogLevel;
-    socketOrigin: string | null;
+    server: string | null;
     enableAnalytics: boolean;
   }): LogOptions {
     if (TESTING) {
@@ -736,7 +730,7 @@ export class Reflect<MD extends MutatorDefs> {
    * attempt times out.
    */
   async #connect(l: LogContext): Promise<void> {
-    assert(this.#socketOrigin);
+    assert(this.#server);
 
     // All the callers check this state already.
     assert(this.#connectionState === ConnectionState.Disconnected);
@@ -770,7 +764,7 @@ export class Reflect<MD extends MutatorDefs> {
     }, CONNECT_TIMEOUT_MS);
 
     const ws = createSocket(
-      this.#socketOrigin,
+      toWSString(this.#server),
       baseCookie,
       await this.clientID,
       await this.clientGroupID,
@@ -1002,7 +996,7 @@ export class Reflect<MD extends MutatorDefs> {
   async #runLoop() {
     (await this.#l).info?.(`Starting Reflect version: ${this.version}`);
 
-    if (this.#socketOrigin === null) {
+    if (this.#server === null) {
       (await this.#l).info?.(
         'No socket origin provided, not starting connect loop.',
       );
@@ -1164,9 +1158,7 @@ export class Reflect<MD extends MutatorDefs> {
       if (gotError) {
         this.#setOnline(false);
         let cfGetCheckSucceeded = false;
-        const cfGetCheckURL = new URL(
-          this.#socketOrigin.replace(/^ws/, 'http'),
-        );
+        const cfGetCheckURL = new URL(this.#server);
         cfGetCheckURL.pathname = '/api/canary/v0/get';
         cfGetCheckURL.searchParams.set('id', nanoid());
         const cfGetCheckController = new AbortController();
@@ -1344,18 +1336,17 @@ export class Reflect<MD extends MutatorDefs> {
   // Sends a set of metrics to the server. Throws unless the server
   // returns 200.
   async #reportMetrics(allSeries: Series[]) {
-    if (this.#socketOrigin === null) {
+    if (this.#server === null) {
       (await this.#l).info?.('Skipping metrics report, socketOrigin is null');
       return;
     }
     const body = JSON.stringify({series: allSeries});
-    const url = new URL('/api/metrics/v0/report', this.#socketOrigin);
+    const url = new URL('/api/metrics/v0/report', this.#server);
     url.searchParams.set('clientID', await this.clientID);
     url.searchParams.set('clientGroupID', await this.clientGroupID);
     url.searchParams.set('roomID', this.roomID);
     url.searchParams.set('userID', this.userID);
     url.searchParams.set('requestID', nanoid());
-    url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
     const res = await fetch(url.toString(), {
       method: 'POST',
       body,
@@ -1374,9 +1365,9 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   async #checkConnectivityAsync(reason: string) {
-    assert(this.#socketOrigin);
+    assert(this.#server);
     try {
-      await checkConnectivity(reason, this.#socketOrigin, await this.#l);
+      await checkConnectivity(reason, this.#server, await this.#l);
     } catch (e) {
       (await this.#l).info?.('Error checking connectivity for', reason, e);
     }
@@ -1390,7 +1381,7 @@ export class Reflect<MD extends MutatorDefs> {
 }
 
 export function createSocket(
-  socketOrigin: string,
+  socketOrigin: WSString,
   baseCookie: NullableVersion,
   clientID: string,
   clientGroupID: string,

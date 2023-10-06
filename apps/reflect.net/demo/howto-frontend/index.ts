@@ -7,7 +7,7 @@ export const init = (roomID: string, userID: string): Reflect<M> => {
   // Set up our connection to reflect
   // Create a reflect client
   const reflectClient = new Reflect<M>({
-    socketOrigin: getWorkerHost(),
+    server: getWorkerHost(),
     onOnlineChange: online => {
       console.log(`${userID} online: ${online}`);
     },
