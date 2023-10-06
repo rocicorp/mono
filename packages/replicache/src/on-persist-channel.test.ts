@@ -1,5 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
+import {BroadcastChannel} from './broadcast-channel.js';
 import {initOnPersistChannel, PersistInfo} from './on-persist-channel.js';
 
 suite('initOnPersistChannel', () => {
