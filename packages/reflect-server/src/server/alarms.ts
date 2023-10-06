@@ -1,6 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 
-/** A TimeoutID will always be a positive integer. */
+/**
+ * A valid TimeoutID will always be a positive integer.
+ * `0` can be used as a "null" value.
+ */
 export type TimeoutID = number;
 
 /**
