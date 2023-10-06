@@ -406,12 +406,21 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     );
   }
 
-  #handleMessage = async (
+  #handleMessage = (
     lc: LogContext,
     clientID: ClientID,
     data: string,
     ws: Socket,
-  ): Promise<void> => {
+  ): void => {
+    void this.#handleMessageInner(lc, clientID, data, ws);
+  };
+
+  async #handleMessageInner(
+    lc: LogContext,
+    clientID: ClientID,
+    data: string,
+    ws: Socket,
+  ): Promise<void> {
     lc = lc.withContext('msgID', randomID());
     lc.debug?.('handling message', data);
 
@@ -429,9 +438,9 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         );
       });
     } catch (e) {
-      lc.error?.('Unhandled exception in _handleMessage', e);
+      lc.error?.('Unhandled exception in handleMessage', e);
     }
-  };
+  }
 
   async addAlarmTask(task: () => Promise<void>) {
     this.#alarmTasks.push(task);
