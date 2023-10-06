@@ -31,7 +31,7 @@ function usePuzzleRoomID() {
   const [puzzleRoomID, setPuzzleRoomID] = useState<string | null>(null);
   useEffect(() => {
     const orchestratorClient = new Reflect<M>({
-      socketOrigin: getWorkerHost(),
+      server: getWorkerHost(),
       userID: 'anon',
       roomID: ORCHESTRATOR_ROOM,
       mutators,
@@ -109,7 +109,7 @@ function useReflect(
     }
 
     const reflect = new Reflect<M>({
-      socketOrigin: getWorkerHost(),
+      server: getWorkerHost(),
       userID: 'anon',
       roomID: puzzleRoomID,
       mutators,

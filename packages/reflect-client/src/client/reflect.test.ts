@@ -14,6 +14,7 @@ import {assert} from 'shared/src/asserts.js';
 import type {JSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
+import type {WSString} from './http-string.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
 import type {ReflectOptions} from './options.js';
 import {
@@ -247,7 +248,7 @@ test('createSocket', () => {
   const nowStub = sinon.stub(performance, 'now').returns(0);
 
   const t = (
-    socketURL: string,
+    socketURL: WSString,
     baseCookie: NullableVersion,
     clientID: string,
     roomID: string,
@@ -755,12 +756,12 @@ test('smokeTest', async () => {
 });
 
 test('poke log context includes requestID', async () => {
-  const url = 'ws://example.com/';
+  const url = 'http://example.com/';
 
   const {promise: foundRequestIDFromLogPromise, resolve} = resolver<string>();
 
   const r = new TestReflect({
-    socketOrigin: url,
+    server: url,
     auth: '',
     userID: 'user-id',
     roomID: 'room-id',
@@ -1062,7 +1063,7 @@ test('socketOrigin', async () => {
   ];
 
   for (const c of cases) {
-    const r = reflectForTest(c.socketEnabled ? {} : {socketOrigin: null});
+    const r = reflectForTest(c.socketEnabled ? {} : {server: null});
 
     await tickAFewTimes(clock);
 
@@ -1519,7 +1520,7 @@ test('kvStore option', async () => {
     expectedValue: JSONValue | undefined = undefined,
   ) => {
     const r = reflectForTest({
-      socketOrigin: null,
+      server: null,
       userID,
       kvStore,
       mutators: {

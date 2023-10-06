@@ -1,8 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {nanoid} from '../util/nanoid.js';
+import {
+  HTTPString,
+  WSString,
+  assertHTTPString,
+  assertWSString,
+  toWSString,
+} from './http-string.js';
 
 type CheckResult = {success: boolean; detail: string};
 type Check = (l: LogContext) => Promise<CheckResult>;
@@ -10,17 +16,17 @@ type Checks = Record<string, Check>;
 
 export async function checkConnectivity(
   reason: string,
-  socketOrigin: string,
+  server: HTTPString,
   lc: LogContext,
 ) {
-  assert(socketOrigin.startsWith('ws://') || socketOrigin.startsWith('wss://'));
   const id = nanoid();
   lc = lc.withContext('connectCheckID', id).withContext('checkReason', reason);
   lc.info?.('Starting connectivity checks', {
     navigatorOnline: navigator.onLine,
   });
+  const socketOrigin = toWSString(server);
   const checks: Checks = {
-    cfGet: _ => checkCfGet(id, socketOrigin),
+    cfGet: _ => checkCfGet(id, server),
     cfWebSocket: l => checkCfSocket(id, socketOrigin, false, l),
     cfWebSocketWSecWebSocketProtocolHeader: l =>
       checkCfSocket(id, socketOrigin, true, l),
@@ -76,13 +82,15 @@ function checkRenderGet(id: string) {
   return checkGet(id, 'https://canary-render.onrender.com/canary/get');
 }
 
-function checkCfGet(id: string, socketOrigin: string) {
-  const cfGetCheckBaseURL = new URL(socketOrigin.replace(/^ws/, 'http'));
+function checkCfGet(id: string, server: HTTPString) {
+  const cfGetCheckBaseURL = new URL(server);
   cfGetCheckBaseURL.pathname = '/api/canary/v0/get';
-  return checkGet(id, cfGetCheckBaseURL.toString());
+  const url = cfGetCheckBaseURL.toString();
+  assertHTTPString(url);
+  return checkGet(id, url);
 }
 
-function checkGet(id: string, baseURL: string) {
+function checkGet(id: string, baseURL: HTTPString) {
   const getCheckURL = new URL(baseURL);
   getCheckURL.searchParams.set('id', id);
   return Promise.race([
@@ -112,23 +120,20 @@ function checkRenderSocket(
 
 function checkCfSocket(
   id: string,
-  socketOrigin: string,
+  socketOrigin: WSString,
   wSecWebSocketProtocolHeader: boolean,
   lc: LogContext,
 ) {
   const cfSocketCheckBaseURL = new URL(socketOrigin);
   cfSocketCheckBaseURL.pathname = '/api/canary/v0/websocket';
-  return checkSocket(
-    id,
-    cfSocketCheckBaseURL.toString(),
-    wSecWebSocketProtocolHeader,
-    lc,
-  );
+  const url = cfSocketCheckBaseURL.toString();
+  assertWSString(url);
+  return checkSocket(id, url, wSecWebSocketProtocolHeader, lc);
 }
 
 async function checkSocket(
   id: string,
-  socketBaseURL: string,
+  socketBaseURL: WSString,
   wSecWebSocketProtocolHeader: boolean,
   lc: LogContext,
 ) {

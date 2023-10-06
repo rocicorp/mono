@@ -190,7 +190,7 @@ export function reflectForTest<MD extends MutatorDefs>(
   options: Partial<ReflectOptions<MD>> = {},
 ): TestReflect<MD> {
   const r = new TestReflect({
-    socketOrigin: 'wss://example.com/',
+    server: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
     userID: 'test-user-id-' + testReflectCounter++,
     roomID: 'test-room-id',

@@ -54,22 +54,22 @@ export type LogOptions = {
 export function createLogOptions(
   options: {
     consoleLogLevel: LogLevel;
-    socketOrigin: string | null;
+    server: string | null;
     enableAnalytics: boolean;
   },
   createDatadogLogSink: (options: DatadogLogSinkOptions) => LogSink = (
     options: DatadogLogSinkOptions,
   ) => new DatadogLogSink(options),
 ): LogOptions {
-  const {consoleLogLevel, socketOrigin, enableAnalytics} = options;
-  const socketOriginURL = socketOrigin === null ? null : new URL(socketOrigin);
+  const {consoleLogLevel, server, enableAnalytics} = options;
+  const socketOriginURL = server === null ? null : new URL(server);
   const socketHostname = socketOriginURL?.hostname;
 
   // If the hostname is undefined, localhost, or an ip address, then
   // this is most likely a test or local development, in which case we
   // do not want to send logs to datadog, instead only log to console.
   if (
-    socketOrigin === null ||
+    server === null ||
     socketHostname === undefined ||
     socketHostname === 'localhost' ||
     IP_ADDRESS_HOSTNAME_REGEX.test(socketHostname) ||
@@ -86,8 +86,7 @@ export function createLogOptions(
         .substring(0, socketHostname.length - REFLECT_SAAS_DOMAIN.length)
         .toLowerCase()
     : socketHostname;
-  const baseURL = new URL(socketOrigin.replace(/^ws/, 'http'));
-  baseURL.pathname = '/api/logs/v0/log';
+  const baseURL = new URL('/api/logs/v0/log', server);
   const logLevel = consoleLogLevel === 'debug' ? 'debug' : 'info';
   const logSink = new TeeLogSink([
     new LevelFilterLogSink(consoleLogSink, consoleLogLevel),
