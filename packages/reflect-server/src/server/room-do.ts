@@ -50,6 +50,7 @@ import {
 } from './router.js';
 import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import {AlarmManager} from './alarms.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -103,8 +104,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   readonly #turnDuration: number;
   readonly #router = new Router();
 
-  #state: DurableObjectState;
-  readonly #alarmTasks: (() => Promise<void>)[] = [];
+  readonly #alarm: AlarmManager;
 
   constructor(options: RoomDOOptions<MD>) {
     const {
@@ -126,7 +126,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       options.allowUnconfirmedWrites,
     );
 
-    this.#state = options.state;
+    this.#alarm = new AlarmManager(state.storage);
 
     this.#initRoutes();
 
@@ -433,19 +433,9 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     }
   };
 
-  async addAlarmTask(task: () => Promise<void>) {
-    this.#alarmTasks.push(task);
-    await this.#state.storage.setAlarm(Date.now());
-  }
-
   async alarm(): Promise<void> {
-    const task = this.#alarmTasks.shift();
-    if (task) {
-      await task();
-    }
-    if (this.#alarmTasks.length > 0) {
-      await this.#state.storage.setAlarm(Date.now());
-    }
+    const lc = this.#lc.withContext('event', 'alarm');
+    await this.#alarm.fireScheduled(lc);
   }
 
   #processUntilDone(lc: LogContext) {
@@ -454,7 +444,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       lc.debug?.('already processing, nothing to do');
       return;
     }
-    void this.addAlarmTask(() => this.#processUntilDoneTask());
+    this.#alarm.scheduler.setTimeout(lc => this.#processUntilDoneTask(lc));
   }
 
   // Exposed for testing.
@@ -537,13 +527,13 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       clearInterval(this.#turnTimerID);
       this.#turnTimerID = 0;
       // Empty task to flush logs to tail
-      await this.addAlarmTask(() => Promise.resolve());
+      await this.#alarm.scheduler.promiseTimeout(() => Promise.resolve());
     }
   }
 
-  #processUntilDoneTask() {
+  #processUntilDoneTask(lc: LogContext) {
     if (this.#turnTimerID) {
-      this.#lc.debug?.('already processing, nothing to do');
+      lc.debug?.('already processing, nothing to do');
       return Promise.resolve();
     }
 
@@ -551,7 +541,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       // The logging in turn processing should use this.#lc (i.e. the RoomDO's
       // general log context), rather than lc which has the context of a
       // specific request/connection
-      this.#lc,
+      lc,
       '#processNext',
       this.#turnDuration,
       logContext => this.#processNextInLock(logContext),
@@ -561,7 +551,9 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       async _lc => {
         clearInterval(this.#turnTimerID);
         this.#turnTimerID = 0;
-        await this.addAlarmTask(() => this.#processUntilDoneTask());
+        await this.#alarm.scheduler.promiseTimeout(lc =>
+          this.#processUntilDoneTask(lc),
+        );
       },
     );
     return Promise.resolve();

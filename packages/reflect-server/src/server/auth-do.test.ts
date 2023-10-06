@@ -2087,7 +2087,7 @@ test('revalidateConnections', async () => {
   const {authDO, roomDORequestCountsByRoomID, storage} =
     await createRevalidateConnectionsTestFixture();
 
-  await authDO.alarm();
+  await authDO.runRevalidateConnectionsTaskForTest();
 
   expect(roomDORequestCountsByRoomID.get('testRoomID1')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
@@ -2113,7 +2113,7 @@ test('revalidateConnections continues if one storage delete throws an error', as
     throw new Error('test delete error');
   });
 
-  await authDO.alarm();
+  await authDO.runRevalidateConnectionsTaskForTest();
 
   expect(roomDORequestCountsByRoomID.get('testRoomID1')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
@@ -2139,7 +2139,7 @@ test('revalidateConnections continues if one roomDO returns an error', async () 
       roomDOIDWithErrorResponse: 'testRoomID1',
     });
 
-  await authDO.alarm();
+  await authDO.runRevalidateConnectionsTaskForTest();
 
   expect(roomDORequestCountsByRoomID.get('testRoomID1')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
@@ -2379,6 +2379,7 @@ describe('Alarms', () => {
     // What happens during reauthentication is a black box except for the logs...
     expect(logSink.messages.flatMap(msg => msg[2])).toMatchInlineSnapshot(`
       [
+        "Firing 1 timeout(s)",
         "Revalidating connections waiting for lock.",
         "Revalidating connections acquired lock.",
         "Revalidating 1 connections for room testRoomID1.",
@@ -2392,8 +2393,9 @@ describe('Alarms', () => {
         "",
         "Revalidated 1 connections for room testRoomID1, deleted 0 connections.",
         "Revalidated 1 connections, deleted 0 connections.  Failed to revalidate 0 connections.",
-        "Ensuring alarm is scheduled.",
-        "Scheduling alarm.",
+        "Ensuring revalidate connections task is scheduled.",
+        "Scheduling revalidate connections task.",
+        "Next alarm fires in 300000 ms",
       ]
     `);
   });
@@ -2406,6 +2408,7 @@ describe('Alarms', () => {
     // What happens during reauthentication is a black box except for the logs...
     expect(logSink.messages.flatMap(msg => msg[2])).toMatchInlineSnapshot(`
       [
+        "Firing 1 timeout(s)",
         "Revalidating connections waiting for lock.",
         "Revalidating connections acquired lock.",
         "Revalidating 1 connections for room testRoomID1.",
@@ -2419,6 +2422,7 @@ describe('Alarms', () => {
         "",
         "Revalidated 1 connections for room testRoomID1, deleted 1 connections.",
         "Revalidated 1 connections, deleted 1 connections.  Failed to revalidate 0 connections.",
+        "No more timeouts scheduled",
       ]
     `);
   });
