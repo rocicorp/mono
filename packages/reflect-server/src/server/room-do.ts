@@ -443,7 +443,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   }
 
   async alarm(): Promise<void> {
-    const lc = this.#lc.withContext('event', 'alarm');
+    const lc = this.#lc.withContext('handler', 'alarm');
     await this.#alarm.fireScheduled(lc);
   }
 
