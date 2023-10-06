@@ -28,6 +28,7 @@ export interface AlarmScheduler {
    * Prefer `promiseTimeout()` when the caller is able to await the setting
    * of the Durable Object Alarm.
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setTimeout<Args extends any[]>(
     callback: (lc: LogContext, ...args: Args) => void | Promise<void>,
     msDelay?: number | undefined,
@@ -38,6 +39,7 @@ export interface AlarmScheduler {
    * Promise-returning equivalent of `setTimeout()` that allows the caller to
    * wait for the DurableStorage alarm to be updated (if necessary).
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   promiseTimeout<Args extends any[]>(
     callback: (lc: LogContext, ...args: Args) => void | Promise<void>,
     msDelay?: number | undefined,
@@ -75,6 +77,7 @@ export class AlarmManager {
 
     // Constrained interface to pass into components that shouldn't deal with an AlarmManager.
     this.scheduler = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setTimeout: <Args extends any[]>(
         callback: (lc: LogContext, ...args: Args) => void | Promise<void>,
         msDelay?: number | undefined,
@@ -82,6 +85,7 @@ export class AlarmManager {
       ): TimeoutID =>
         this.#promiseTimeout(callback, msDelay, ...args).timeoutID,
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       promiseTimeout: <Args extends any[]>(
         callback: (lc: LogContext, ...args: Args) => void | Promise<void>,
         msDelay?: number | undefined,
@@ -94,6 +98,7 @@ export class AlarmManager {
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   #promiseTimeout<Args extends any[]>(
     cb: (lc: LogContext, ...args: Args) => void | Promise<void>,
     msDelay?: number | undefined,
