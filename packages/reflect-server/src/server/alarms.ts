@@ -149,7 +149,7 @@ export class AlarmManager {
       ([_, val]) => val.fireTime <= now,
     );
 
-    // Remove the alarms to fire from the Map.
+    // Remove the timeouts to fire from the Map.
     timeouts.forEach(([timeoutID]) => this.#timeouts.delete(timeoutID));
     lc.debug?.(`Firing ${timeouts.length} timeout(s)`);
 
