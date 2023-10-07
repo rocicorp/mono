@@ -9,7 +9,7 @@
     "@inquirer/input": "^1.2.11",
     "@inquirer/password": "^1.1.11",
     "@inquirer/select": "^1.2.11",
-    "@rocicorp/reflect": "0.35.0",
+    "@rocicorp/reflect": "0.36.0-canary.0",
     "esbuild": "^0.18.3",
     "firebase-admin": "^11.10.1",
     "pkg-up": "^4.0.0",
