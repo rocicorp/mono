@@ -42,7 +42,7 @@ import {
   ScriptHandler,
 } from '../../cloudflare/script-handler.js';
 import {MIN_WFP_VERSION} from './create.function.js';
-import {lt} from 'semver';
+import {lt, coerce} from 'semver';
 
 export const deploy = (firestore: Firestore, storage: Storage) =>
   onDocumentCreated(
@@ -435,7 +435,11 @@ async function migrateToWFP(
   script: ScriptHandler,
   serverVersion: string,
 ): Promise<boolean> {
-  if (scriptRef || lt(serverVersion, MIN_WFP_VERSION)) {
+  if (
+    scriptRef ||
+    // coerce to pre-releases equally.
+    lt(coerce(serverVersion) ?? serverVersion, MIN_WFP_VERSION)
+  ) {
     // Already on WFP or cannot migrate to WFP
     return false;
   }

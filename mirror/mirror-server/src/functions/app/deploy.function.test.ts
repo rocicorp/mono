@@ -60,6 +60,7 @@ describe('deploy', () => {
   const TEAM_ID = 'my-team';
   const SERVER_VERSION = '0.35.0';
   const WFP_SERVER_VERSION = MIN_WFP_VERSION.raw;
+  const WFP_SERVER_VERSION_PRE_RELEASE_TAG = `${WFP_SERVER_VERSION}-canary.0`;
   const CLOUDFLARE_ACCOUNT_ID = 'foo-cloudflare-account';
   const NAMESPACE = 'prod';
   const SCRIPT_NAME = 'foo-bar-baz';
@@ -102,6 +103,18 @@ describe('deploy', () => {
     );
     batch.create(
       firestore
+        .doc(serverPath(WFP_SERVER_VERSION_PRE_RELEASE_TAG))
+        .withConverter(serverDataConverter),
+      {
+        major: MIN_WFP_VERSION.major,
+        minor: MIN_WFP_VERSION.minor,
+        patch: MIN_WFP_VERSION.patch,
+        modules: [],
+        channels: ['stable'],
+      },
+    );
+    batch.create(
+      firestore
         .doc(providerPath(DEFAULT_PROVIDER_ID))
         .withConverter(providerDataConverter),
       {
@@ -120,6 +133,8 @@ describe('deploy', () => {
   afterAll(async () => {
     const batch = firestore.batch();
     batch.delete(firestore.doc(serverPath(SERVER_VERSION)));
+    batch.delete(firestore.doc(serverPath(WFP_SERVER_VERSION)));
+    batch.delete(firestore.doc(serverPath(WFP_SERVER_VERSION_PRE_RELEASE_TAG)));
     batch.delete(firestore.doc(providerPath(DEFAULT_PROVIDER_ID)));
     await batch.commit();
   });
@@ -501,6 +516,11 @@ describe('deploy', () => {
       {
         name: 'supported version',
         serverVersion: WFP_SERVER_VERSION,
+        expectMigration: true,
+      },
+      {
+        name: 'supported version pre-release tag',
+        serverVersion: WFP_SERVER_VERSION_PRE_RELEASE_TAG,
         expectMigration: true,
       },
     ];

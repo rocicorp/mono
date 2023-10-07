@@ -30,7 +30,7 @@ import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion, DistTags} from '../validators/version.js';
 import type {UserAgent} from 'mirror-protocol/src/user-agent.js';
 import {DistTag} from 'mirror-protocol/src/version.js';
-import {SemVer, gte, gt} from 'semver';
+import {SemVer, gte, gt, coerce} from 'semver';
 
 export const create = (firestore: Firestore, testDistTags?: DistTags) =>
   validateSchema(createRequestSchema, createResponseSchema)
@@ -163,7 +163,8 @@ function supportsWorkersForPlatforms(userAgent: UserAgent): boolean {
       'Please use @rocicorp/reflect to create and publish apps.',
     );
   }
-  if (gte(new SemVer(version), MIN_WFP_VERSION)) {
+  // coerce to treat pre-releases equally.
+  if (gte(coerce(version) ?? version, MIN_WFP_VERSION)) {
     logger.info(`Creating WFP app for reflect-cli v${version}`);
     return true;
   }
