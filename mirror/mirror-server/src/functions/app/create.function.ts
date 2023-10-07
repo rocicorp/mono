@@ -153,7 +153,7 @@ export const create = (firestore: Firestore, testDistTags?: DistTags) =>
       });
     });
 
-const MIN_WFP_VERSION = new SemVer('0.37.0');
+export const MIN_WFP_VERSION = new SemVer('0.36.0');
 
 function supportsWorkersForPlatforms(userAgent: UserAgent): boolean {
   const {type: agent, version} = userAgent;
