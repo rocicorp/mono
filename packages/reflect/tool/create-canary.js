@@ -52,11 +52,6 @@ try {
 
   writePackageData(REFLECT_PACKAGE_JSON_PATH, currentPackageData);
 
-  // publish current canary version so that `npm install` will work down the line
-  process.chdir(basePath('packages', 'reflect'));
-  execute('npm publish --tag=canary');
-
-  process.chdir(tempDir);
   const dependencyPaths = [
     basePath('apps', 'reflect.net', 'package.json'),
     basePath('mirror', 'mirror-cli', 'package.json'),
@@ -78,6 +73,12 @@ try {
   execute('git add **/package.json');
   execute('git add package-lock.json');
   execute(`git commit -m "Bump version to ${nextCanaryVersion}"`);
+
+  process.chdir(basePath('packages', 'reflect'));
+  execute('npm publish --tag=canary');
+
+  process.chdir(tempDir);
+
   execute(`git tag ${tagName}`);
   execute(`git push origin ${tagName}`);
   execute(`git checkout main`);
@@ -86,12 +87,10 @@ try {
   console.log(`please do the following:`);
   console.log(`1. cd ${tempDir}`);
   console.log(
-    `2. Please confirm the diff of the commit at HEAD and push to origin if correct`,
+    '2. Review the head commit with `git show HEAD`. Note: If work has happened on main since this release began, HEAD will be a merge commit. Otherwise it will be a normal commit.',
   );
-  console.log(`3. git diff HEAD^ HEAD`);
-  console.log(`4. git push origin main`);
-  console.log(`5. cd ~`);
-  console.log(`6. rm -rf ${tempDir}`);
+  console.log(`3. git push origin main`);
+  console.log(`4. cd -`);
 } catch (error) {
   console.error(`Error during execution: ${error}`);
   process.exit(1);
