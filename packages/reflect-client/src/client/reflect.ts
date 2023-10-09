@@ -58,10 +58,10 @@ import {
   getLastConnectErrorValue,
 } from './metrics.js';
 import type {ReflectOptions} from './options.js';
-import {getServer} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
+import {getServer} from './server-option.js';
 
 declare const TESTING: boolean;
 
