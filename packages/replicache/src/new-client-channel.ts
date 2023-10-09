@@ -1,3 +1,4 @@
+import {BroadcastChannel} from './broadcast-channel.js';
 import type * as dag from './dag/mod.js';
 import {getClientGroup} from './persist/client-groups.js';
 import {withRead} from './with-transactions.js';
@@ -18,8 +19,10 @@ function makeChannelNameV1(replicacheName: string): string {
   return `replicache-new-client-group-v1:${replicacheName}`;
 }
 
-export {makeChannelNameV0 as makeChannelNameV0ForTesting};
-export {makeChannelNameV1 as makeChannelNameV1ForTesting};
+export {
+  makeChannelNameV0 as makeChannelNameV0ForTesting,
+  makeChannelNameV1 as makeChannelNameV1ForTesting,
+};
 
 // This message type can be extended with optional properties.
 type NewClientChannelMessageV1 = {clientGroupID: string; idbName: string};
