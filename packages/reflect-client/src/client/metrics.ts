@@ -238,8 +238,8 @@ export class MetricManager {
 
   stop() {
     if (this.#timerID === null) {
-      void this.#lc.then(l =>
-        l.error?.('MetricManager.stop() called but already stopped'),
+      void this.#lc.then(
+        l => l.error?.('MetricManager.stop() called but already stopped'),
       );
       return;
     }

@@ -59,7 +59,8 @@ export class LoggingLock {
 
       const elapsed = t1 - t0;
       if (elapsed >= this.#minThresholdMs) {
-        lc.withContext('lockStage', 'acquired')
+        lc
+          .withContext('lockStage', 'acquired')
           .withContext('lockTiming', elapsed)
           .debug?.(`${name} acquired lock in ${elapsed} ms`);
       }

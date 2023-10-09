@@ -24,7 +24,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^3.8.0",
     "@rocicorp/eslint-config": "^0.5.0",
-    "@rocicorp/prettier-config": "^0.1.1",
+    "@rocicorp/prettier-config": "^0.2.0",
     "compare-utf8": "^0.1.1",
     "datadog": "0.0.0",
     "esbuild": "^0.18.3",

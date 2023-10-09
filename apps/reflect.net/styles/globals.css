@@ -23,8 +23,18 @@ html,
 body {
   padding: 0;
   margin: 0;
-  font-family: 'Muoto 205tf', -apple-system, BlinkMacSystemFont, Segoe UI,
-    Roboto, Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue,
+  font-family:
+    'Muoto 205tf',
+    -apple-system,
+    BlinkMacSystemFont,
+    Segoe UI,
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    Fira Sans,
+    Droid Sans,
+    Helvetica Neue,
     sans-serif;
   -webkit-font-smoothing: antialiased;
   color: #2a2c2e;
@@ -46,8 +56,18 @@ a {
 }
 
 button {
-  font-family: 'Muoto 205tf', -apple-system, BlinkMacSystemFont, Segoe UI,
-    Roboto, Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue,
+  font-family:
+    'Muoto 205tf',
+    -apple-system,
+    BlinkMacSystemFont,
+    Segoe UI,
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    Fira Sans,
+    Droid Sans,
+    Helvetica Neue,
     sans-serif;
 }
 

@@ -47,7 +47,7 @@
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.0",
-    "@rocicorp/prettier-config": "^0.1.1",
+    "@rocicorp/prettier-config": "^0.2.0",
     "@types/node": "^18.16.0",
     "reflect-cli": "0.0.0",
     "reflect-client": "0.0.0",

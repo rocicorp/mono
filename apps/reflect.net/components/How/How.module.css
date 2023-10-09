@@ -130,7 +130,9 @@
   width: 0;
   border-right: 0.5em solid #fc208a;
   white-space: nowrap;
-  animation: typing 8s steps(20, end) infinite, fade 8s infinite;
+  animation:
+    typing 8s steps(20, end) infinite,
+    fade 8s infinite;
 }
 
 @keyframes typing {
@@ -195,8 +197,18 @@
 }
 
 .codeBlockToggle button {
-  font-family: 'Muoto 205tf', -apple-system, BlinkMacSystemFont, Segoe UI,
-    Roboto, Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue,
+  font-family:
+    'Muoto 205tf',
+    -apple-system,
+    BlinkMacSystemFont,
+    Segoe UI,
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    Fira Sans,
+    Droid Sans,
+    Helvetica Neue,
     sans-serif;
   background-color: transparent;
   padding: 12px 14px;
