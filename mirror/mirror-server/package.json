@@ -37,7 +37,7 @@
   "devDependencies": {
     "@jest-mock/express": "^2.0.2",
     "@rocicorp/eslint-config": "^0.5.0",
-    "@rocicorp/prettier-config": "^0.1.1",
+    "@rocicorp/prettier-config": "^0.2.0",
     "@types/cors": "^2.8.12",
     "@types/friendly-words": "^1.2.0",
     "@types/lodash": "^4.14.197",

@@ -866,9 +866,8 @@ export class Reflect<MD extends MutatorDefs> {
   async #handlePoke(_lc: LogContext, pokeMessage: PokeMessage) {
     this.#abortPingTimeout();
     const pokeBody = pokeMessage[1];
-    const lastMutationIDChangeForSelf = await this.#pokeHandler.handlePoke(
-      pokeBody,
-    );
+    const lastMutationIDChangeForSelf =
+      await this.#pokeHandler.handlePoke(pokeBody);
     if (lastMutationIDChangeForSelf !== undefined) {
       this.#lastMutationIDReceived = lastMutationIDChangeForSelf;
     }
