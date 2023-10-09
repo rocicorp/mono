@@ -156,7 +156,7 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   onOnlineChange?: ((online: boolean) => void) | undefined;
 
   /**
-   * The number of milliseconds to wait before disconnecting a Reflect˝
+   * The number of milliseconds to wait before disconnecting a Reflect
    * instance whose tab has become hidden.
    *
    * Instances in hidden tabs are disconnected to save resources.
