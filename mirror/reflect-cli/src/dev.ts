@@ -83,7 +83,6 @@ export async function devHandler(yargs: DevHandlerArgs) {
       console.log(`
 Dev server running at:
   ${href}
-  ${href.replace(/^http/, 'ws')}
 `);
 
       first = false;
