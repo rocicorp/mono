@@ -3,6 +3,7 @@ import {
   Precondition,
   Timestamp,
   type Firestore,
+  type UpdateData,
 } from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {logger} from 'firebase-functions';
@@ -29,6 +30,7 @@ import {
   getAppSecrets,
 } from './secrets.js';
 import {FetchResultError} from 'cloudflare-api/src/fetch.js';
+import type {App, ScriptRef} from 'mirror-schema/src/app.js';
 import {
   providerDataConverter,
   providerPath,
@@ -39,6 +41,8 @@ import {
   NamespacedScriptHandler,
   ScriptHandler,
 } from '../../cloudflare/script-handler.js';
+import {MIN_WFP_VERSION} from './create.function.js';
+import {lt, coerce} from 'semver';
 
 export const deploy = (firestore: Firestore, storage: Storage) =>
   onDocumentCreated(
@@ -89,6 +93,7 @@ export async function runDeployment(
     cfScriptName,
     scriptRef,
     name: appName,
+    teamID,
     teamLabel,
   } = must(appDoc.data());
   const {
@@ -105,7 +110,7 @@ export async function runDeployment(
         .withConverter(providerDataConverter)
         .get(),
     ]);
-    const {accountID, defaultZone} = getDataOrFail(
+    const {accountID, defaultZone, dispatchNamespace} = getDataOrFail(
       providerDoc,
       'internal',
       `Unknown provider ${provider} for App ${appID}`,
@@ -149,10 +154,28 @@ export async function runDeployment(
 
     const {secrets, hashes} = await getAppSecrets();
 
-    for await (const deploymentUpdate of script.publish(
+    const newScriptRef = (await migrateToWFP(
+      firestore,
+      appID,
+      deploymentID,
+      scriptRef,
+      script,
+      serverVersion,
+    ))
+      ? {
+          name: cfScriptName,
+          namespace: dispatchNamespace,
+        }
+      : undefined;
+    const publisher =
+      newScriptRef && script instanceof GlobalScriptHandler // Note: Leaves testScriptHandler as is.
+        ? new NamespacedScriptHandler(account, zone, newScriptRef)
+        : script;
+
+    for await (const deploymentUpdate of publisher.publish(
       storage,
-      appName,
-      teamLabel,
+      {id: appID, name: appName},
+      {id: teamID, label: teamLabel},
       hostname,
       options,
       secrets,
@@ -167,7 +190,13 @@ export async function runDeployment(
         deploymentUpdate,
       );
     }
-    await setRunningDeployment(firestore, appID, deploymentID, hashes);
+    await setRunningDeployment(
+      firestore,
+      appID,
+      deploymentID,
+      hashes,
+      newScriptRef,
+    );
   } catch (e) {
     logger.error(e);
     const error =
@@ -342,6 +371,7 @@ async function setRunningDeployment(
   appID: string,
   newDeploymentID: string,
   hashesOfSecrets: DeploymentSecrets,
+  newScriptRef: ScriptRef | undefined,
 ): Promise<void> {
   const appDocRef = firestore
     .doc(appPath(appID))
@@ -376,11 +406,16 @@ async function setRunningDeployment(
       ...deploymentUpdate('RUNNING'),
     };
 
-    tx.set(newDeploymentDocRef, newRunningDeployment);
-    tx.update(appDocRef, {
+    const appUpdate: UpdateData<App> = {
       runningDeployment: newRunningDeployment,
       queuedDeploymentIDs: FieldValue.arrayRemove(newDeploymentID),
-    });
+    };
+    if (newScriptRef) {
+      appUpdate.scriptRef = newScriptRef;
+    }
+
+    tx.set(newDeploymentDocRef, newRunningDeployment);
+    tx.update(appDocRef, appUpdate);
 
     const oldDeploymentID = appDoc.data()?.runningDeployment?.deploymentID;
     if (oldDeploymentID) {
@@ -390,4 +425,33 @@ async function setRunningDeployment(
       tx.update(oldDeploymentDoc, deploymentUpdate('STOPPED'));
     }
   });
+}
+
+async function migrateToWFP(
+  firestore: Firestore,
+  appID: string,
+  deploymentID: string,
+  scriptRef: ScriptRef | undefined,
+  script: ScriptHandler,
+  serverVersion: string,
+): Promise<boolean> {
+  if (
+    scriptRef ||
+    // coerce to pre-releases equally.
+    lt(coerce(serverVersion) ?? serverVersion, MIN_WFP_VERSION)
+  ) {
+    // Already on WFP or cannot migrate to WFP
+    return false;
+  }
+  await setDeploymentStatus(
+    firestore,
+    appID,
+    deploymentID,
+    'DEPLOYING',
+    'Upgrading to new infrastructure',
+  );
+  logger.info(`Deleting legacy script and custom domain for App ${appID}`);
+  await script.delete();
+
+  return true;
 }

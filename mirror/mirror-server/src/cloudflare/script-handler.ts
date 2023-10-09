@@ -31,8 +31,8 @@ import {sleep} from 'shared/src/sleep.js';
 export type ScriptHandler = {
   publish(
     storage: Storage,
-    appName: string,
-    teamLabel: string,
+    app: {id: string; name: string},
+    team: {id: string; label: string},
     hostname: string,
     options: DeploymentOptions,
     secrets: DeploymentSecrets,
@@ -56,8 +56,8 @@ abstract class AbstractScriptHandler<S extends Script = Script>
 
   async *publish(
     storage: Storage,
-    appName: string,
-    teamLabel: string,
+    app: {id: string; name: string},
+    team: {id: string; label: string},
     hostname: string,
     options: DeploymentOptions,
     secrets: DeploymentSecrets,
@@ -67,18 +67,25 @@ abstract class AbstractScriptHandler<S extends Script = Script>
     logger.log(`Publishing ${hostname} (${this._script.id})`);
 
     const assembler = new ModuleAssembler(
-      appName,
-      teamLabel,
+      app.name,
+      team.label,
       this._script.id,
       appModules,
       serverModules,
     );
+    const tags = [
+      `appID:${app.id}`,
+      `appName:${app.name}`,
+      `teamID:${team.id}`,
+      `teamLabel:${team.label}`,
+    ];
 
     for await (const msg of this._doPublish(
       assembler.assemble(storage),
       hostname,
       options,
       secrets,
+      tags,
     )) {
       yield msg;
     }
@@ -92,6 +99,7 @@ abstract class AbstractScriptHandler<S extends Script = Script>
     hostname: string,
     options: DeploymentOptions,
     secrets: DeploymentSecrets,
+    tags: string[],
   ): AsyncGenerator<string>;
 
   async delete(): Promise<void> {
@@ -118,6 +126,7 @@ export class GlobalScriptHandler extends AbstractScriptHandler<GlobalScript> {
     hostname: string,
     options: DeploymentOptions,
     secrets: DeploymentSecrets,
+    tags: string[],
   ): AsyncGenerator<string> {
     const modules = await assembled;
     await uploadScript(
@@ -125,6 +134,7 @@ export class GlobalScriptHandler extends AbstractScriptHandler<GlobalScript> {
       modules[0],
       modules.slice(1),
       options.vars,
+      tags,
     );
 
     await Promise.all([
@@ -147,10 +157,17 @@ export class NamespacedScriptHandler extends AbstractScriptHandler<NamespacedScr
     hostname: string,
     options: DeploymentOptions,
     secrets: DeploymentSecrets,
+    tags: string[],
   ): AsyncGenerator<string> {
     const published = assembled
       .then(modules =>
-        uploadScript(this._script, modules[0], modules.slice(1), options.vars),
+        uploadScript(
+          this._script,
+          modules[0],
+          modules.slice(1),
+          options.vars,
+          tags,
+        ),
       )
       .then(() =>
         Promise.all(

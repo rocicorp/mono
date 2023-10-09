@@ -1,6 +1,6 @@
 import {
-  consoleLogSink,
   TeeLogSink,
+  consoleLogSink,
   type Context,
   type LogLevel,
   type LogSink,
@@ -62,8 +62,8 @@ export function createLogOptions(
   ) => new DatadogLogSink(options),
 ): LogOptions {
   const {consoleLogLevel, server, enableAnalytics} = options;
-  const socketOriginURL = server === null ? null : new URL(server);
-  const socketHostname = socketOriginURL?.hostname;
+  const serverURL = server === null ? null : new URL(server);
+  const socketHostname = serverURL?.hostname;
 
   // If the hostname is undefined, localhost, or an ip address, then
   // this is most likely a test or local development, in which case we

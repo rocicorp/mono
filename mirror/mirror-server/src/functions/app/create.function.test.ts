@@ -12,7 +12,7 @@ import {
   setUser,
 } from 'mirror-schema/src/test-helpers.js';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
-import {create} from './create.function.js';
+import {MIN_WFP_VERSION, create} from './create.function.js';
 import {initializeApp} from 'firebase-admin/app';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {teamDataConverter, teamPath} from 'mirror-schema/src/team.js';
@@ -153,60 +153,65 @@ describe('app-create function', () => {
     await deleteApp(resp.appID, appName);
   });
 
-  test('create WFP app', async () => {
-    const appName = 'my-app';
-    const resp = await callCreate(appName, '0.37.0'); // MIN_WFP_VERSION
-    expect(resp).toMatchObject({
-      success: true,
-      appID: expect.any(String),
-    });
+  describe('crate WFP app', () => {
+    const minWFPRelease = MIN_WFP_VERSION.raw;
+    for (const release of [minWFPRelease, `${minWFPRelease}-canary.0`]) {
+      test(`release ${release}`, async () => {
+        const appName = 'my-app';
+        const resp = await callCreate(appName, release);
+        expect(resp).toMatchObject({
+          success: true,
+          appID: expect.any(String),
+        });
 
-    const app = await getApp(firestore, resp.appID);
-    expect(app).toMatchObject({
-      teamID: TEAM_ID,
-      teamLabel: TEAM_LABEL,
-      name: appName,
-      provider: PROVIDER,
-      cfScriptName: expect.any(String),
-      scriptRef: {
-        namespace: 'prod',
-        name: app.cfScriptName,
-      },
-      serverReleaseChannel: 'stable',
-      deploymentOptions: {
-        vars: {
-          /* eslint-disable @typescript-eslint/naming-convention */
-          DISABLE_LOG_FILTERING: 'false',
-          LOG_LEVEL: 'info',
-          /* eslint-enable @typescript-eslint/naming-convention */
-        },
-      },
-    });
+        const app = await getApp(firestore, resp.appID);
+        expect(app).toMatchObject({
+          teamID: TEAM_ID,
+          teamLabel: TEAM_LABEL,
+          name: appName,
+          provider: PROVIDER,
+          cfScriptName: expect.any(String),
+          scriptRef: {
+            namespace: 'prod',
+            name: app.cfScriptName,
+          },
+          serverReleaseChannel: 'stable',
+          deploymentOptions: {
+            vars: {
+              /* eslint-disable @typescript-eslint/naming-convention */
+              DISABLE_LOG_FILTERING: 'false',
+              LOG_LEVEL: 'info',
+              /* eslint-enable @typescript-eslint/naming-convention */
+            },
+          },
+        });
 
-    const team = await getTeam(firestore, TEAM_ID);
-    expect(team.numApps).toBe(3); // This was initialized with 2 in beforeEach()
+        const team = await getTeam(firestore, TEAM_ID);
+        expect(team.numApps).toBe(3); // This was initialized with 2 in beforeEach()
 
-    const appNameEntry = await getAppName(firestore, TEAM_ID, appName);
-    expect(appNameEntry).toEqual({
-      appID: resp.appID,
-    });
+        const appNameEntry = await getAppName(firestore, TEAM_ID, appName);
+        expect(appNameEntry).toEqual({
+          appID: resp.appID,
+        });
 
-    // Cleanup
-    await deleteApp(resp.appID, appName);
+        // Cleanup
+        await deleteApp(resp.appID, appName);
+      });
+    }
   });
 
   test('cannot create app with deprecated cli', async () => {
     const appName = 'my-app';
     try {
-      await callCreate(appName, '0.36.0', {rec: new SemVer('0.36.1')});
+      await callCreate(appName, '0.35.0', {rec: new SemVer('0.35.1')});
       throw new Error('Expected unavailable');
     } catch (e) {
       expect(e).toBeInstanceOf(HttpsError);
       expect((e as HttpsError).code).toBe('unavailable');
     }
 
-    const resp = await callCreate(appName, '0.36.1', {
-      rec: new SemVer('0.36.1'),
+    const resp = await callCreate(appName, '0.35.1', {
+      rec: new SemVer('0.35.1'),
     });
     expect(resp).toMatchObject({
       success: true,

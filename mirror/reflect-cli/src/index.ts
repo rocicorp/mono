@@ -101,7 +101,7 @@ function createCLIParser(argv: string[]) {
 
   reflectCLI.command(
     'status',
-    false, // Don't show in help.
+    '📊 Show the status of current deployed app',
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},
     handleWith(statusHandler).andCleanup(),

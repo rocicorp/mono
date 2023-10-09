@@ -10,7 +10,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["*"]
-    }
+    },
+    "module": "esnext"
   },
   "ts-node": {
     "experimentalResolver": true,

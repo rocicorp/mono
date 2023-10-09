@@ -663,21 +663,21 @@ test('puller with normal non-mutation recovery pull', async () => {
 test('smokeTest', async () => {
   const cases: {
     name: string;
-    enableSocket: boolean;
+    enableServer: boolean;
   }[] = [
     {
       name: 'socket enabled',
-      enableSocket: true,
+      enableServer: true,
     },
     {
       name: 'socket disabled',
-      enableSocket: false,
+      enableServer: false,
     },
   ];
 
   for (const c of cases) {
     // reflectForTest adds the socket by default.
-    const socketOptions = c.enableSocket ? {} : {socketOrigin: null};
+    const serverOptions = c.enableServer ? {} : {server: null};
     const r = reflectForTest({
       roomID: 'smokeTestRoom',
       mutators: {
@@ -693,7 +693,7 @@ test('smokeTest', async () => {
           await tx.del(key);
         },
       },
-      ...socketOptions,
+      ...serverOptions,
     });
 
     const spy = sinon.spy();
