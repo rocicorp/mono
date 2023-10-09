@@ -55,7 +55,6 @@ import {
 } from './configure-provider.js';
 import {migrateToWFPHandler, migrateToWFPOptions} from './migrate-to-wfp.js';
 import {certificatesHandler, certificatesOptions} from './certificates.js';
-import {setCronHandler, setCronOptions} from './set-cron.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
