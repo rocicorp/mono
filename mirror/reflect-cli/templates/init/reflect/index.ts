@@ -1,5 +1,5 @@
-import type { ReflectServerOptions } from "@rocicorp/reflect/server";
-import { M, mutators } from "./mutators.js";
+import type {ReflectServerOptions} from '@rocicorp/reflect/server';
+import {M, mutators} from './mutators.js';
 
 function makeOptions(): ReflectServerOptions<M> {
   return {
@@ -7,4 +7,4 @@ function makeOptions(): ReflectServerOptions<M> {
   };
 }
 
-export { makeOptions as default };
+export {makeOptions as default};
