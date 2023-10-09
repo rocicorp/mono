@@ -48,11 +48,14 @@ import {
   deleteTeamSubdomainsOptions,
 } from './delete-team-subdomains.js';
 import {
+  checkProviderHandler,
+  checkProviderOptions,
   configureProviderHandler,
   configureProviderOptions,
 } from './configure-provider.js';
 import {migrateToWFPHandler, migrateToWFPOptions} from './migrate-to-wfp.js';
 import {certificatesHandler, certificatesOptions} from './certificates.js';
+import {setCronHandler, setCronOptions} from './set-cron.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -112,6 +115,14 @@ function createCLIParser(argv: string[]) {
     'Configures a provider for hosting Workers.',
     configureProviderOptions,
     configureProviderHandler,
+  );
+
+  // check-provider
+  reflectCLI.command(
+    'check-provider',
+    'Checks that the provider is properly set up.',
+    checkProviderOptions,
+    checkProviderHandler,
   );
 
   // wfp
