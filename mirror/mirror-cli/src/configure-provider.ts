@@ -115,14 +115,13 @@ export async function checkProviderHandler(
 ): Promise<void> {
   const {
     apiToken,
-    defaultZone: {zoneID},
+    defaultZone: {zoneID, zoneName},
   } = await getProviderConfig(yargs);
   const zones = await new Zones(apiToken).list();
   const zone = zones.find(z => z.id === zoneID);
   if (!zone) {
     throw new Error(`Zone with ID ${zoneID} not accessible with apiToken`);
   }
-  const {name: zoneName} = zone;
 
   checkPermissions(zone);
   await checkCapabilities(
