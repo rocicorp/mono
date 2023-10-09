@@ -1,8 +1,8 @@
 import {useIsomorphicLayoutEffect} from '@/hooks/use-isomorphic-layout-effect';
 import {useEventTimeout} from '@/hooks/use-timeout';
 import type {Reflect} from '@rocicorp/reflect/client';
+import {useSubscribe} from '@rocicorp/reflect/react';
 import {useRef} from 'react';
-import {useSubscribe} from 'replicache-react';
 import type {M} from '../shared/mutators';
 import {Piece} from './Piece';
 import {Bots} from './bots';
