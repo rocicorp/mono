@@ -1,15 +1,16 @@
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import {sleep} from 'shared/src/sleep.js';
+import {BroadcastChannel} from './broadcast-channel.js';
+import * as dag from './dag/mod.js';
+import {fakeHash} from './hash.js';
 import {
   initNewClientChannel,
   makeChannelNameV0ForTesting,
   makeChannelNameV1ForTesting,
 } from './new-client-channel.js';
-import * as dag from './dag/mod.js';
-import {withWrite} from './with-transactions.js';
 import {setClientGroup} from './persist/client-groups.js';
-import {fakeHash} from './hash.js';
+import {withWrite} from './with-transactions.js';
 
 function getChannelMessagePromise(
   replicacheName: string,
