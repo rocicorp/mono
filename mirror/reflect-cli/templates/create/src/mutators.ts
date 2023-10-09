@@ -16,8 +16,8 @@
 // thing. The Reflect sync protocol ensures that the server-side result takes
 // precedence over the client-side optimistic result.
 
-import type { WriteTransaction } from "@rocicorp/reflect";
-import { initClientState, updateClientState } from "./client-state.js";
+import type {WriteTransaction} from '@rocicorp/reflect';
+import {initClientState, updateClientState} from './client-state.js';
 
 export const mutators = {
   setCursor,
@@ -29,7 +29,7 @@ export type M = typeof mutators;
 
 async function increment(
   tx: WriteTransaction,
-  { key, delta }: { key: string; delta: number }
+  {key, delta}: {key: string; delta: number},
 ) {
   console.log(`incrementing ${key} by ${delta}`);
   const prev = await tx.get<number>(key);
@@ -39,7 +39,7 @@ async function increment(
 
 async function setCursor(
   tx: WriteTransaction,
-  { x, y }: { x: number; y: number }
+  {x, y}: {x: number; y: number},
 ): Promise<void> {
-  await updateClientState(tx, { id: tx.clientID, cursor: { x, y } });
+  await updateClientState(tx, {id: tx.clientID, cursor: {x, y}});
 }

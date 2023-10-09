@@ -9,17 +9,13 @@
 // subscription "query" is re-run whenever any of the data it depends on
 // changes. The subscription "fires" when the result of the query changes.
 
-import type { Reflect } from "@rocicorp/reflect/client";
-import { useSubscribe } from "replicache-react";
-import { getClientState, listClientStateIDs } from "./client-state.js";
-import type { M } from "./mutators.js";
+import type {Reflect} from '@rocicorp/reflect/client';
+import {useSubscribe} from 'replicache-react';
+import {getClientState, listClientStateIDs} from './client-state.js';
+import type {M} from './mutators.js';
 
 export function useCount(reflect: Reflect<M>, key: string) {
-  return useSubscribe(
-    reflect,
-    async (tx) => (await tx.get<number>(key)) ?? 0,
-    0
-  );
+  return useSubscribe(reflect, async tx => (await tx.get<number>(key)) ?? 0, 0);
 }
 
 export function useClientStateIDs(reflect: Reflect<M>) {
@@ -27,5 +23,5 @@ export function useClientStateIDs(reflect: Reflect<M>) {
 }
 
 export function useClientState(r: Reflect<M>, id: string) {
-  return useSubscribe(r, (tx) => getClientState(tx, id), null);
+  return useSubscribe(r, tx => getClientState(tx, id), null);
 }
