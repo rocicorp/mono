@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.5.0",
+    "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/lock": "^1.0.3",
     "@rocicorp/logger": "^5.2.1",
     "@rocicorp/prettier-config": "^0.2.0",
