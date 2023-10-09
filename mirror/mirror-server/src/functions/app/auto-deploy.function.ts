@@ -92,6 +92,7 @@ export async function checkForAutoDeployment(
         ...desiredSpec,
       },
     },
+    undefined,
     lastAppUpdateTime,
   );
 }

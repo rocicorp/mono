@@ -13,6 +13,9 @@ export const publishRequestSchema = v.object({
   source: fileSchema,
   sourcemap: fileSchema,
   serverVersionRange: v.string(),
+
+  // Sets the App's server release channel when present.
+  serverReleaseChannel: v.string().optional(),
 });
 
 export type PublishRequest = v.Infer<typeof publishRequestSchema>;

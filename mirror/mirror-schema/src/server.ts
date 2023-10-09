@@ -3,12 +3,17 @@ import {firestoreDataConverter} from './converter.js';
 import {moduleRefSchema} from './module.js';
 import * as path from './path.js';
 
-export const CANARY_RELEASE_CHANNEL = 'canary';
 export const STABLE_RELEASE_CHANNEL = 'stable';
+export const CANARY_RELEASE_CHANNEL = 'canary';
+
+export const STANDARD_RELEASE_CHANNELS: readonly string[] = [
+  STABLE_RELEASE_CHANNEL,
+  CANARY_RELEASE_CHANNEL,
+] as const;
 
 export const standardReleaseChannelSchema = v.union(
-  v.literal(CANARY_RELEASE_CHANNEL),
   v.literal(STABLE_RELEASE_CHANNEL),
+  v.literal(CANARY_RELEASE_CHANNEL),
 );
 
 // Defines the StandardReleaseChannels to which a newly created app should be limited

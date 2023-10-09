@@ -22,7 +22,11 @@ import {
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
-import {userAgentVersion, DistTags} from '../validators/version.js';
+import {
+  userAgentVersion,
+  DistTags,
+  checkStandardReleaseChannel,
+} from '../validators/version.js';
 import {DistTag} from 'mirror-protocol/src/version.js';
 import {gtr} from 'semver';
 
@@ -37,8 +41,18 @@ export const publish = (
     .validate(userAuthorization())
     .validate(appAuthorization(firestore))
     .handle(async (publishRequest, context) => {
-      const {serverVersionRange, appID} = publishRequest;
+      const {
+        serverVersionRange,
+        appID,
+        serverReleaseChannel: newServerReleaseChannel,
+      } = publishRequest;
       const {userID, app, distTags} = context;
+
+      if (newServerReleaseChannel) {
+        checkStandardReleaseChannel(newServerReleaseChannel);
+      }
+      const serverReleaseChannel =
+        newServerReleaseChannel ?? app.serverReleaseChannel;
 
       const appModules: Module[] = [
         {...publishRequest.source, type: 'esm'},
@@ -48,7 +62,10 @@ export const publish = (
 
       const spec = await computeDeploymentSpec(
         firestore,
-        app,
+        {
+          ...app,
+          serverReleaseChannel,
+        },
         serverVersionRange,
       );
 
@@ -69,16 +86,21 @@ export const publish = (
         appModules,
       );
 
-      const deploymentPath = await requestDeployment(firestore, appID, {
-        requesterID: userID,
-        type: 'USER_UPLOAD',
-        spec: {
-          ...spec,
-          appModules: appModuleRefs,
-          // appVersion
-          // description
+      const deploymentPath = await requestDeployment(
+        firestore,
+        appID,
+        {
+          requesterID: userID,
+          type: 'USER_UPLOAD',
+          spec: {
+            ...spec,
+            appModules: appModuleRefs,
+            // appVersion
+            // description
+          },
         },
-      });
+        serverReleaseChannel,
+      );
 
       logger.log(`Requested ${deploymentPath}`);
       return {deploymentPath, success: true};

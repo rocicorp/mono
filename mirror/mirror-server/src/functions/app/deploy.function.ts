@@ -217,6 +217,7 @@ export function requestDeployment(
   firestore: Firestore,
   appID: string,
   data: Pick<Deployment, 'requesterID' | 'type' | 'spec'>,
+  newServerReleaseChannel?: string,
   lastAppUpdateTime?: Timestamp,
 ): Promise<string> {
   const appDocRef = firestore
@@ -241,13 +242,18 @@ export function requestDeployment(
       };
       logger.debug(`Creating Deployment ${deploymentID}`, deployment);
 
+      const appUpdate: UpdateData<App> = {
+        queuedDeploymentIDs: FieldValue.arrayUnion(deploymentID),
+        forceRedeployment: FieldValue.delete(),
+      };
+      if (newServerReleaseChannel) {
+        appUpdate.serverReleaseChannel = newServerReleaseChannel;
+      }
+
       tx.create(docRef, deployment);
       tx.update(
         appDocRef,
-        {
-          queuedDeploymentIDs: FieldValue.arrayUnion(deploymentID),
-          forceRedeployment: FieldValue.delete(),
-        },
+        appUpdate,
         lastAppUpdateTime ? {lastUpdateTime: lastAppUpdateTime} : {},
       );
       return docRef.path;
@@ -298,20 +304,17 @@ export async function earlierDeployments(
     const deployment = must(deploymentDoc.data());
     const lastUpdateTime = must(deploymentDoc.updateTime);
     const lastActionTime = deployment.deployTime ?? deployment.requestTime;
-    failureTimeout = setTimeoutFn(
-      async () => {
-        await setDeploymentStatus(
-          firestore,
-          appID,
-          nextDeploymentID,
-          'FAILED',
-          'Deployment timed out',
-          {lastUpdateTime},
-        );
-        logger.warn(`Set ${nextDeploymentID} to FAILED after timeout`);
-      },
-      toMillis(lastActionTime) + DEPLOYMENT_FAILURE_TIMEOUT_MS - Date.now(),
-    );
+    failureTimeout = setTimeoutFn(async () => {
+      await setDeploymentStatus(
+        firestore,
+        appID,
+        nextDeploymentID,
+        'FAILED',
+        'Deployment timed out',
+        {lastUpdateTime},
+      );
+      logger.warn(`Set ${nextDeploymentID} to FAILED after timeout`);
+    }, toMillis(lastActionTime) + DEPLOYMENT_FAILURE_TIMEOUT_MS - Date.now());
   }
 }
 

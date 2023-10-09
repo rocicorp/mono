@@ -24,6 +24,7 @@ import {
 } from 'mirror-schema/src/provider.js';
 import type {DistTags} from '../validators/version.js';
 import {SemVer} from 'semver';
+import type {StandardReleaseChannel} from 'mirror-schema/src/server.js';
 
 mockFunctionParamsAndSecrets();
 
@@ -40,6 +41,7 @@ describe('app-create function', () => {
   function callCreate(
     appName: string,
     reflectVersion = '0.35.0',
+    serverReleaseChannel?: string,
     testDistTags?: DistTags,
   ) {
     const createFunction = https.onCall(create(firestore, testDistTags));
@@ -52,7 +54,8 @@ describe('app-create function', () => {
         },
         teamID: TEAM_ID,
         name: appName,
-        serverReleaseChannel: 'stable',
+        serverReleaseChannel: (serverReleaseChannel ??
+          'stable') as StandardReleaseChannel,
       },
 
       auth: {
@@ -200,23 +203,46 @@ describe('app-create function', () => {
     }
   });
 
+  test('cannot create app on non-standard release channel', async () => {
+    const appName = 'my-app';
+    try {
+      await callCreate(appName, '0.35.0', 'debug');
+      throw new Error('Expected invalid-argument');
+    } catch (e) {
+      expect(e).toBeInstanceOf(HttpsError);
+      expect((e as HttpsError).code).toBe('invalid-argument');
+    }
+
+    const resp = await callCreate(appName, '0.35.0', 'canary');
+    expect(resp).toMatchObject({
+      success: true,
+      appID: expect.any(String),
+    });
+
+    await deleteApp(resp.appID, appName);
+  });
+
   test('cannot create app with deprecated cli', async () => {
     const appName = 'my-app';
     try {
-      await callCreate(appName, '0.35.0', {rec: new SemVer('0.35.1')});
+      await callCreate(appName, '0.35.0', undefined, {
+        rec: new SemVer('0.35.1'),
+      });
       throw new Error('Expected unavailable');
     } catch (e) {
       expect(e).toBeInstanceOf(HttpsError);
       expect((e as HttpsError).code).toBe('unavailable');
     }
 
-    const resp = await callCreate(appName, '0.35.1', {
+    const resp = await callCreate(appName, '0.35.1', undefined, {
       rec: new SemVer('0.35.1'),
     });
     expect(resp).toMatchObject({
       success: true,
       appID: expect.any(String),
     });
+
+    await deleteApp(resp.appID, appName);
   });
 
   test('cannot create app as non-admin', async () => {

@@ -20,7 +20,10 @@ import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {checkForServerDeprecation} from './version.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
-  return yargs;
+  return yargs.option('reflect-channel', {
+    desc: 'Set the Reflect Channel for server updates',
+    type: 'string',
+  });
 }
 
 async function exists(path: string) {
@@ -41,6 +44,7 @@ export async function publishHandler(
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
+  const {reflectChannel} = yargs;
   const {appID, server: script} = await ensureAppInstantiated(yargs);
 
   const absPath = path.resolve(script);
@@ -71,6 +75,9 @@ export async function publishHandler(
     serverVersionRange,
     appID,
   };
+  if (reflectChannel) {
+    data.serverReleaseChannel = reflectChannel;
+  }
 
   console.log('Requesting deployment');
   const {deploymentPath} = await publish(data);

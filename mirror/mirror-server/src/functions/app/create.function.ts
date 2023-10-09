@@ -27,7 +27,11 @@ import {newAppID, newAppIDAsNumber, newAppScriptName} from '../../ids.js';
 import {userAuthorization} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
-import {userAgentVersion, DistTags} from '../validators/version.js';
+import {
+  userAgentVersion,
+  DistTags,
+  checkStandardReleaseChannel,
+} from '../validators/version.js';
 import type {UserAgent} from 'mirror-protocol/src/user-agent.js';
 import {DistTag} from 'mirror-protocol/src/version.js';
 import {SemVer, gte, gt, coerce} from 'semver';
@@ -69,6 +73,8 @@ export const create = (firestore: Firestore, testDistTags?: DistTags) =>
           `Invalid App Name "${appName}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
         );
       }
+
+      checkStandardReleaseChannel(serverReleaseChannel);
 
       const userDocRef = firestore
         .doc(userPath(userID))
