@@ -21,7 +21,7 @@
     "@rocicorp/resolver": "^1.0.1"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.5.0",
+    "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "@types/mocha": "^10.0.1",
     "@types/sinon": "^10.0.11",

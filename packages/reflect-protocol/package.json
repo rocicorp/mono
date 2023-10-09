@@ -15,7 +15,7 @@
     "@badrap/valita": "^0.2.10"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.5.0",
+    "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "shared": "0.0.0",
     "ts-jest": "^29.1.0",
