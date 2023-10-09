@@ -10,7 +10,7 @@
 // changes. The subscription "fires" when the result of the query changes.
 
 import type {Reflect} from '@rocicorp/reflect/client';
-import {useSubscribe} from 'replicache-react';
+import {useSubscribe} from '@rocicorp/reflect/react';
 import {getClientState, listClientStateIDs} from './client-state.js';
 import type {M} from './mutators.js';
 
