@@ -156,7 +156,7 @@ describe('app-create function', () => {
     await deleteApp(resp.appID, appName);
   });
 
-  describe('crate WFP app', () => {
+  describe('create WFP app', () => {
     const minWFPRelease = MIN_WFP_VERSION.raw;
     for (const release of [minWFPRelease, `${minWFPRelease}-canary.0`]) {
       test(`release ${release}`, async () => {
