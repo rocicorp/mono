@@ -11,8 +11,16 @@ export const report = () =>
     errorReportingRequestSchema,
     errorReportingResponseSchema,
   ).handle((request, _context) => {
+    const {
+      severity,
+      action,
+      error: {desc},
+    } = request;
+
+    // 4xx and 5xx errors have different alerting thresholds.
+    // "cancelled" maps to 499 and "unknown" maps to 500
     throw new HttpsError(
-      'unknown',
-      `action: ${request.action}, description: ${request.error.desc}`,
+      severity === 'WARNING' ? 'cancelled' : 'unknown',
+      `action: ${action}, description: ${desc}`,
     );
   });
