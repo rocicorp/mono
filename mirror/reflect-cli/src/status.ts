@@ -49,7 +49,6 @@ function displayStatus(appID?: string, appView?: AppView): void {
         ['ID', appID],
         ['Status', getDeploymentStatus(appView?.runningDeployment)],
         ['Hostname', appView?.runningDeployment?.spec.hostname],
-        ['Reflect Channel', appView?.serverReleaseChannel],
         ['Server Version', appView?.runningDeployment?.spec.serverVersion],
       ]
     : [['App', undefined]];

@@ -7,11 +7,9 @@ import {appSchema} from '../app.js';
 // Having the cli use a constrained schema makes it easier to
 // refactor/rewrite other parts of the schema.
 // Pick more fields as necessary.
-const appViewSchema = appSchema
-  .pick('name', 'serverReleaseChannel', 'runningDeployment')
-  .extend({
-    runningDeployment: deploymentViewSchema.optional(),
-  });
+const appViewSchema = appSchema.pick('name', 'runningDeployment').extend({
+  runningDeployment: deploymentViewSchema.optional(),
+});
 
 export type AppView = v.Infer<typeof appViewSchema>;
 
