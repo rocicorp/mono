@@ -61,6 +61,7 @@ import {
 } from './router.js';
 import type {TailErrorKind} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import {AlarmManager, TimeoutID} from './alarms.js';
 
 export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
 
@@ -121,7 +122,6 @@ export const ALARM_INTERVAL = 5 * 60 * 1000;
 export class BaseAuthDO implements DurableObject {
   readonly #router = new Router();
   readonly #roomDO: DurableObjectNamespace;
-  readonly #state: DurableObjectState;
   // _durableStorage is a type-aware wrapper around _state.storage. It
   // always disables the input gate. The output gate is configured in the
   // constructor below. Anything that needs to read *values* out of
@@ -130,6 +130,9 @@ export class BaseAuthDO implements DurableObject {
   readonly #authHandler: AuthHandler | undefined;
   readonly #authApiKey: string;
   readonly #lc: LogContext;
+  readonly #alarm: AlarmManager;
+
+  #revalidateConnectionsTimeoutID: TimeoutID = 0;
 
   // _authLock ensures that at most one auth api call is processed at a time.
   // For safety, if something requires both the auth lock and the room record
@@ -146,7 +149,6 @@ export class BaseAuthDO implements DurableObject {
   constructor(options: AuthDOOptions) {
     const {roomDO, state, authHandler, authApiKey, logSink, logLevel} = options;
     this.#roomDO = roomDO;
-    this.#state = state;
     this.#durableStorage = new DurableStorage(
       state.storage,
       false, // don't allow unconfirmed
@@ -159,6 +161,7 @@ export class BaseAuthDO implements DurableObject {
     );
     registerUnhandledRejectionHandler(lc);
     this.#lc = lc.withContext('doID', state.id.toString());
+    this.#alarm = new AlarmManager(state.storage);
 
     this.#initRoutes();
     this.#lc.info?.('Starting AuthDO. Version:', version);
@@ -701,7 +704,7 @@ export class BaseAuthDO implements DurableObject {
           lc,
         );
 
-        await this.#scheduleAlarm(lc);
+        await this.#scheduleRevalidateConnectionsTask(lc);
 
         return responseFromDO;
       }),
@@ -796,20 +799,31 @@ export class BaseAuthDO implements DurableObject {
   );
 
   async alarm(): Promise<void> {
-    const lc = this.#lc.withContext('alarm');
+    const lc = this.#lc.withContext('handler', 'alarm');
+    await this.#alarm.fireScheduled(lc);
+  }
+
+  runRevalidateConnectionsTaskForTest() {
+    return this.#revalidateConnectionsTask(this.#lc);
+  }
+
+  async #revalidateConnectionsTask(lc: LogContext) {
+    this.#revalidateConnectionsTimeoutID = 0;
     await this.#authRevalidateConnections(lc);
     if (await hasAnyConnection(this.#durableStorage)) {
-      await this.#scheduleAlarm(lc);
+      await this.#scheduleRevalidateConnectionsTask(lc);
     }
   }
 
-  async #scheduleAlarm(lc: LogContext): Promise<void> {
-    lc.debug?.('Ensuring alarm is scheduled.');
-    const {storage} = this.#state;
-    const currentAlarm = await storage.getAlarm();
-    if (currentAlarm === null) {
-      lc.debug?.('Scheduling alarm.');
-      await storage.setAlarm(Date.now() + ALARM_INTERVAL);
+  async #scheduleRevalidateConnectionsTask(lc: LogContext): Promise<void> {
+    lc.debug?.('Ensuring revalidate connections task is scheduled.');
+    if (this.#revalidateConnectionsTimeoutID === 0) {
+      lc.debug?.('Scheduling revalidate connections task.');
+      this.#revalidateConnectionsTimeoutID =
+        await this.#alarm.scheduler.promiseTimeout(
+          lc => this.#revalidateConnectionsTask(lc),
+          ALARM_INTERVAL,
+        );
     }
   }
 

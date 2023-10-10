@@ -50,6 +50,7 @@ import {
 } from './router.js';
 import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import {AlarmManager} from './alarms.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -103,6 +104,8 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   readonly #turnDuration: number;
   readonly #router = new Router();
 
+  readonly #alarm: AlarmManager;
+
   constructor(options: RoomDOOptions<MD>) {
     const {
       mutators,
@@ -122,6 +125,8 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       state.storage,
       options.allowUnconfirmedWrites,
     );
+
+    this.#alarm = new AlarmManager(state.storage);
 
     this.#initRoutes();
 
@@ -434,6 +439,11 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     } catch (e) {
       lc.error?.('Unhandled exception in handleMessage', e);
     }
+  }
+
+  async alarm(): Promise<void> {
+    const lc = this.#lc.withContext('handler', 'alarm');
+    await this.#alarm.fireScheduled(lc);
   }
 
   #processUntilDone(lc: LogContext) {
