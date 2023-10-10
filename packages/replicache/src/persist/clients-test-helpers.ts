@@ -1,9 +1,15 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
-import * as btree from '../btree/mod.js';
-import * as dag from '../dag/mod.js';
-import {getRefs, newSnapshotCommitDataSDD} from '../db/commit.js';
-import * as db from '../db/mod.js';
+import {emptyDataNode} from '../btree/node.js';
+import {Chunk} from '../dag/chunk.js';
+import type {Store} from '../dag/store.js';
+import {
+  CommitData,
+  SnapshotMetaSDD,
+  baseSnapshotFromHash,
+  getRefs,
+  newSnapshotCommitDataSDD,
+} from '../db/commit.js';
 import {FormatVersion} from '../format-version.js';
 import {newUUIDHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';
@@ -25,7 +31,7 @@ import {
 
 export function setClientsForTesting(
   clients: ClientMap,
-  dagStore: dag.Store,
+  dagStore: Store,
 ): Promise<ClientMap> {
   return withWrite(dagStore, async dagWrite => {
     await setClients(clients, dagWrite);
@@ -81,7 +87,7 @@ export function makeClientMapDD31(
 
 export async function deleteClientForTesting(
   clientID: ClientID,
-  dagStore: dag.Store,
+  dagStore: Store,
 ): Promise<void> {
   await withWrite(dagStore, async dagWrite => {
     const clients = new Map(await getClients(dagWrite));
@@ -93,7 +99,7 @@ export async function deleteClientForTesting(
 
 export async function initClientWithClientID(
   clientID: ClientID,
-  dagStore: dag.Store,
+  dagStore: Store,
   mutatorNames: string[],
   indexes: IndexDefinitions,
   formatVersion: FormatVersion,
@@ -118,7 +124,7 @@ export async function initClientWithClientID(
 
 // We only keep this around for testing purposes.
 function initClientV4(
-  perdag: dag.Store,
+  perdag: Store,
 ): Promise<
   [
     clientID: ClientID,
@@ -141,12 +147,12 @@ function initClientV4(
       }
     }
 
-    let newClientCommitData: db.CommitData<db.SnapshotMetaSDD>;
-    const chunksToPut: dag.Chunk[] = [];
+    let newClientCommitData: CommitData<SnapshotMetaSDD>;
+    const chunksToPut: Chunk[] = [];
     if (bootstrapClient) {
       const constBootstrapClient = bootstrapClient;
       assert(isClientV4(constBootstrapClient));
-      const bootstrapCommit = await db.baseSnapshotFromHash(
+      const bootstrapCommit = await baseSnapshotFromHash(
         constBootstrapClient.headHash,
         dagWrite,
       );
@@ -163,11 +169,7 @@ function initClientV4(
       );
     } else {
       // No existing snapshot to bootstrap from. Create empty snapshot.
-      const emptyBTreeChunk = new dag.Chunk(
-        newUUIDHash(),
-        btree.emptyDataNode,
-        [],
-      );
+      const emptyBTreeChunk = new Chunk(newUUIDHash(), emptyDataNode, []);
       chunksToPut.push(emptyBTreeChunk);
       newClientCommitData = newSnapshotCommitDataSDD(
         null /* basisHash */,
@@ -178,7 +180,7 @@ function initClientV4(
       );
     }
 
-    const newClientCommitChunk = new dag.Chunk(
+    const newClientCommitChunk = new Chunk(
       newUUIDHash(),
       newClientCommitData,
       getRefs(newClientCommitData),

@@ -10,11 +10,12 @@ import type {
   InternalDiffOperation,
   NoIndexDiff,
 } from './btree/node.js';
-import * as db from './db/mod.js';
+import type {IndexKey} from './db/index.js';
+import {decodeIndexKey} from './db/index.js';
+import type {ScanOptions} from './db/scan.js';
 import {ReadonlyJSONValue, deepEqual} from './json.js';
 import type {QueryInternal} from './replicache.js';
-import type {DiffComputationConfig} from './sync/diff.js';
-import type * as sync from './sync/mod.js';
+import type {DiffComputationConfig, DiffsMap} from './sync/diff.js';
 import {
   ReadTransaction,
   SubscriptionTransactionWrapper,
@@ -31,10 +32,10 @@ interface Subscription<R> {
   invoke(
     tx: ReadTransaction,
     kind: InvokeKind,
-    diffs: sync.DiffsMap | undefined,
+    diffs: DiffsMap | undefined,
   ): Promise<R>;
 
-  matches(diffs: sync.DiffsMap): boolean;
+  matches(diffs: DiffsMap): boolean;
 
   updateDeps(
     keys: ReadonlySet<string>,
@@ -85,12 +86,12 @@ class SubscriptionImpl<R extends ReadonlyJSONValue | undefined>
   invoke(
     tx: ReadTransaction,
     _kind: InvokeKind,
-    _diffs: sync.DiffsMap | undefined,
+    _diffs: DiffsMap | undefined,
   ): Promise<R> {
     return this.#body(tx);
   }
 
-  matches(diffs: sync.DiffsMap): boolean {
+  matches(diffs: DiffsMap): boolean {
     for (const [indexName, diff] of diffs) {
       if (diffMatchesSubscription(this.#keys, this.#scans, indexName, diff)) {
         return true;
@@ -206,9 +207,9 @@ class WatchImpl implements Subscription<Diff | undefined> {
   invoke(
     tx: ReadTransaction,
     kind: InvokeKind,
-    diffs: sync.DiffsMap | undefined,
+    diffs: DiffsMap | undefined,
   ): Promise<Diff | undefined> {
-    const invoke = async <Key extends db.IndexKey | string>(
+    const invoke = async <Key extends IndexKey | string>(
       indexName: string | undefined,
       prefix: string,
       compareKey: (diff: DiffOperation<Key>) => string,
@@ -262,11 +263,11 @@ class WatchImpl implements Subscription<Diff | undefined> {
     };
 
     if (this.#indexName) {
-      return invoke<db.IndexKey>(
+      return invoke<IndexKey>(
         this.#indexName,
         this.#prefix,
         diff => diff.key[0],
-        internalDiff => convertDiffValues(internalDiff, db.decodeIndexKey),
+        internalDiff => convertDiffValues(internalDiff, decodeIndexKey),
       );
     }
 
@@ -278,7 +279,7 @@ class WatchImpl implements Subscription<Diff | undefined> {
     );
   }
 
-  matches(diffs: sync.DiffsMap): boolean {
+  matches(diffs: DiffsMap): boolean {
     const diff = diffs.get(this.#indexName ?? '');
     if (diff === undefined) {
       return false;
@@ -396,7 +397,7 @@ export class SubscriptionsManager implements DiffComputationConfig {
     this.#subscriptions.clear();
   }
 
-  async fire(diffs: sync.DiffsMap): Promise<void> {
+  async fire(diffs: DiffsMap): Promise<void> {
     const subscriptions = subscriptionsForDiffs(this.#subscriptions, diffs);
     await this.#fireSubscriptions(subscriptions, InvokeKind.Regular, diffs);
   }
@@ -404,7 +405,7 @@ export class SubscriptionsManager implements DiffComputationConfig {
   async #fireSubscriptions(
     subscriptions: Iterable<UnknownSubscription>,
     kind: InvokeKind,
-    diffs: sync.DiffsMap | undefined,
+    diffs: DiffsMap | undefined,
   ) {
     const subs = [...subscriptions] as readonly Subscription<unknown>[];
     if (subs.length === 0) {
@@ -474,7 +475,7 @@ export class SubscriptionsManager implements DiffComputationConfig {
 }
 
 export type ScanSubscriptionInfo = {
-  options: db.ScanOptions;
+  options: ScanOptions;
   inclusiveLimitKey?: string | undefined;
 };
 
@@ -572,8 +573,7 @@ export function scanInfoMatchesKey(
     return true;
   }
 
-  const [changedKeySecondary, changedKeyPrimary] =
-    db.decodeIndexKey(changedKey);
+  const [changedKeySecondary, changedKeyPrimary] = decodeIndexKey(changedKey);
 
   if (prefix) {
     if (!changedKeySecondary.startsWith(prefix)) {
@@ -614,7 +614,7 @@ function isKeyPastInclusiveLimit(
 
 function* subscriptionsForDiffs<V>(
   subscriptions: Set<Subscription<V>>,
-  diffs: sync.DiffsMap,
+  diffs: DiffsMap,
 ): Generator<Subscription<V>> {
   for (const subscription of subscriptions) {
     if (subscription.matches(diffs)) {
@@ -633,7 +633,7 @@ function watcherMatchesDiff(
   }
 
   const compareKey = indexName
-    ? (diffOp: InternalDiffOperation) => db.decodeIndexKey(diffOp.key)[0]
+    ? (diffOp: InternalDiffOperation) => decodeIndexKey(diffOp.key)[0]
     : (diffOp: InternalDiffOperation) => diffOp.key;
   const i = diffBinarySearch(diff, prefix, compareKey);
   return i < diff.length && compareKey(diff[i]).startsWith(prefix);

@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
-import type * as dag from '../dag/mod.js';
+import type {Write as DagWrite} from '../dag/store.js';
 import {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
 import type {MutatorDefs} from '../replicache.js';
@@ -20,7 +20,7 @@ import {Write, newWriteLocal} from './write.js';
 
 async function rebaseMutation(
   mutation: Commit<LocalMetaDD31 | LocalMetaSDD>,
-  dagWrite: dag.Write,
+  dagWrite: DagWrite,
   basisHash: Hash,
   mutators: MutatorDefs,
   lc: LogContext,
@@ -94,7 +94,7 @@ async function rebaseMutation(
 
 export async function rebaseMutationAndPutCommit(
   mutation: Commit<LocalMeta>,
-  dagWrite: dag.Write,
+  dagWrite: DagWrite,
   basis: Hash,
   mutators: MutatorDefs,
   lc: LogContext,
@@ -117,7 +117,7 @@ export async function rebaseMutationAndPutCommit(
 
 export async function rebaseMutationAndCommit(
   mutation: Commit<LocalMeta>,
-  dagWrite: dag.Write,
+  dagWrite: DagWrite,
   basis: Hash,
   headName: string,
   mutators: MutatorDefs,

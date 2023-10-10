@@ -2,7 +2,7 @@ import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import {sleep} from 'shared/src/sleep.js';
 import {BroadcastChannel} from './broadcast-channel.js';
-import * as dag from './dag/mod.js';
+import {TestStore} from './dag/test-store.js';
 import {fakeHash} from './hash.js';
 import {
   initNewClientChannel,
@@ -45,7 +45,7 @@ suite('initNewClientChannel', () => {
       clientGroupID,
       true,
       () => undefined,
-      new dag.TestStore(),
+      new TestStore(),
     );
     expect(await channelMessageV0Promise).to.deep.equal([clientGroupID]);
     expect(await channelMessageV1Promise).to.deep.equal({
@@ -74,7 +74,7 @@ suite('initNewClientChannel', () => {
       clientGroupID,
       false,
       () => undefined,
-      new dag.TestStore(),
+      new TestStore(),
     );
 
     const sentinel = Symbol();
@@ -96,7 +96,7 @@ suite('initNewClientChannel', () => {
         anotherClientGroupID,
         true,
         () => undefined,
-        new dag.TestStore(),
+        new TestStore(),
       );
       expect(await channelMessageV0Promise).to.deep.equal([
         anotherClientGroupID,
@@ -115,7 +115,7 @@ suite('initNewClientChannel', () => {
     const controller = new AbortController();
     const clientGroupID1 = 'client-group-1';
     const clientGroupID2 = 'client-group-2';
-    const perdag = new dag.TestStore();
+    const perdag = new TestStore();
 
     await putClientGroup(perdag, clientGroupID1);
     let client1OnUpdateNeededCallCount = 0;
@@ -128,7 +128,7 @@ suite('initNewClientChannel', () => {
       () => {
         client1OnUpdateNeededCallCount++;
       },
-      new dag.TestStore(),
+      new TestStore(),
     );
     expect(client1OnUpdateNeededCallCount).to.equal(0);
 
@@ -143,7 +143,7 @@ suite('initNewClientChannel', () => {
       () => {
         client2OnUpdateNeededCallCount++;
       },
-      new dag.TestStore(),
+      new TestStore(),
     );
     await channelMessagePromise;
     expect(client1OnUpdateNeededCallCount).to.equal(1);
@@ -156,7 +156,7 @@ suite('initNewClientChannel', () => {
     const controller = new AbortController();
     const clientGroupID1 = 'client-group-1';
     const clientGroupID2 = 'client-group-2';
-    const perdag = new dag.TestStore();
+    const perdag = new TestStore();
 
     await putClientGroup(perdag, clientGroupID1);
     let client1OnUpdateNeededCallCount = 0;
@@ -198,7 +198,7 @@ suite('initNewClientChannel', () => {
     const controller = new AbortController();
     const clientGroupID1 = 'client-group-1';
     const clientGroupID2 = 'client-group-2';
-    const perdag = new dag.TestStore();
+    const perdag = new TestStore();
 
     await putClientGroup(perdag, clientGroupID1);
     let client1OnUpdateNeededCallCount = 0;
@@ -240,7 +240,7 @@ suite('initNewClientChannel', () => {
     const idbName = 'test-idb-name';
     const controller = new AbortController();
     const clientGroupID1 = 'client-group-1';
-    const perdag = new dag.TestStore();
+    const perdag = new TestStore();
 
     await putClientGroup(perdag, clientGroupID1);
     let client1OnUpdateNeededCallCount = 0;
@@ -253,7 +253,7 @@ suite('initNewClientChannel', () => {
       () => {
         client1OnUpdateNeededCallCount++;
       },
-      new dag.TestStore(),
+      new TestStore(),
     );
     expect(client1OnUpdateNeededCallCount).to.equal(0);
 
@@ -268,7 +268,7 @@ suite('initNewClientChannel', () => {
       () => {
         client2OnUpdateNeededCallCount++;
       },
-      new dag.TestStore(),
+      new TestStore(),
     );
     await channelMessagePromise;
     expect(client1OnUpdateNeededCallCount).to.equal(0);
@@ -282,7 +282,7 @@ suite('initNewClientChannel', () => {
     const controller2 = new AbortController();
     const clientGroupID1 = 'client-group-1';
     const clientGroupID2 = 'client-group-2';
-    const perdag = new dag.TestStore();
+    const perdag = new TestStore();
 
     await putClientGroup(perdag, clientGroupID1);
     let client1OnUpdateNeededCallCount = 0;
@@ -295,7 +295,7 @@ suite('initNewClientChannel', () => {
       () => {
         client1OnUpdateNeededCallCount++;
       },
-      new dag.TestStore(),
+      new TestStore(),
     );
     expect(client1OnUpdateNeededCallCount).to.equal(0);
     let client2OnUpdateNeededCallCount = 0;
@@ -312,7 +312,7 @@ suite('initNewClientChannel', () => {
       () => {
         client2OnUpdateNeededCallCount++;
       },
-      new dag.TestStore(),
+      new TestStore(),
     );
     await channelMessagePromise;
     // 0 because controller1.abort was called, causing
@@ -322,7 +322,7 @@ suite('initNewClientChannel', () => {
   });
 });
 
-async function putClientGroup(perdag: dag.TestStore, clientGroupID1: string) {
+async function putClientGroup(perdag: TestStore, clientGroupID1: string) {
   await withWrite(perdag, async perdagWrite => {
     await setClientGroup(
       clientGroupID1,
@@ -345,7 +345,7 @@ test('v0 message is not handled', async () => {
   const idbName = 'test-idb-name';
   const controller = new AbortController();
   const clientGroupID1 = 'client-group-1';
-  const perdag = new dag.TestStore();
+  const perdag = new TestStore();
 
   let client1OnUpdateNeededCallCount = 0;
   initNewClientChannel(

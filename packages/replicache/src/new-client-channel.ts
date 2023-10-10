@@ -1,5 +1,5 @@
 import {BroadcastChannel} from './broadcast-channel.js';
-import type * as dag from './dag/mod.js';
+import type {Read, Store} from './dag/store.js';
 import {getClientGroup} from './persist/client-groups.js';
 import {withRead} from './with-transactions.js';
 
@@ -44,7 +44,7 @@ export function initNewClientChannel(
   clientGroupID: string,
   isNewClientGroup: boolean,
   onUpdateNeeded: () => void,
-  perdag: dag.Store,
+  perdag: Store,
 ) {
   if (signal.aborted) {
     return;
@@ -75,7 +75,7 @@ export function initNewClientChannel(
           // on each update the clients get assigned a new client group.
           const updateNeeded = await withRead(
             perdag,
-            async (perdagRead: dag.Read) =>
+            async (perdagRead: Read) =>
               (await getClientGroup(newClientGroupID, perdagRead)) !==
               undefined,
           );

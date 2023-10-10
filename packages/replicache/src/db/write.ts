@@ -1,18 +1,18 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
-import * as btree from '../btree/mod.js';
-import {BTreeRead, BTreeWrite} from '../btree/mod.js';
+import {diff} from '../btree/diff.js';
 import type {InternalDiff} from '../btree/node.js';
-import {allEntriesAsDiff} from '../btree/read.js';
+import {BTreeRead, allEntriesAsDiff} from '../btree/read.js';
+import {BTreeWrite} from '../btree/write.js';
 import type {FrozenCookie} from '../cookies.js';
-import type * as dag from '../dag/mod.js';
+import type {Write as DagWrite} from '../dag/store.js';
 import {FormatVersion} from '../format-version.js';
 import {Hash, emptyHash} from '../hash.js';
 import type {FrozenJSONValue} from '../json.js';
 import {lazy} from '../lazy.js';
 import type {DiffComputationConfig} from '../sync/diff.js';
+import {DiffsMap} from '../sync/diff.js';
 import type {ClientID} from '../sync/ids.js';
-import * as sync from '../sync/mod.js';
 import {
   Commit,
   Meta as CommitMeta,
@@ -32,7 +32,7 @@ import {IndexOperation, IndexRead, IndexWrite, indexValue} from './index.js';
 import {Read, readIndexesForRead} from './read.js';
 
 export class Write extends Read {
-  readonly #dagWrite: dag.Write;
+  readonly #dagWrite: DagWrite;
   readonly #basis: Commit<CommitMeta> | undefined;
   readonly #meta: CommitMeta;
 
@@ -43,7 +43,7 @@ export class Write extends Read {
   readonly #formatVersion: FormatVersion;
 
   constructor(
-    dagWrite: dag.Write,
+    dagWrite: DagWrite,
     map: BTreeWrite,
     basis: Commit<CommitMeta> | undefined,
     meta: CommitMeta,
@@ -249,7 +249,7 @@ export class Write extends Read {
   async commitWithDiffs(
     headName: string,
     diffConfig: DiffComputationConfig,
-  ): Promise<[Hash, sync.DiffsMap]> {
+  ): Promise<[Hash, DiffsMap]> {
     const commit = this.putCommit();
     const diffMap = await this.#generateDiffs(diffConfig);
     const commitHash = (await commit).chunk.hash;
@@ -258,10 +258,8 @@ export class Write extends Read {
     return [commitHash, diffMap];
   }
 
-  async #generateDiffs(
-    diffConfig: DiffComputationConfig,
-  ): Promise<sync.DiffsMap> {
-    const diffsMap = new sync.DiffsMap();
+  async #generateDiffs(diffConfig: DiffComputationConfig): Promise<DiffsMap> {
+    const diffsMap = new DiffsMap();
     if (!diffConfig.shouldComputeDiffs()) {
       return diffsMap;
     }
@@ -273,7 +271,7 @@ export class Write extends Read {
         this.#formatVersion,
         this.#basis.valueHash,
       );
-      valueDiff = await btree.diff(basisMap, this.map);
+      valueDiff = await diff(basisMap, this.map);
     }
     diffsMap.set('', valueDiff);
     let basisIndexes: Map<string, IndexRead>;
@@ -295,7 +293,7 @@ export class Write extends Read {
       assert(index !== basisIndex);
 
       const indexDiffResult = await (basisIndex
-        ? btree.diff(basisIndex.map, index.map)
+        ? diff(basisIndex.map, index.map)
         : // No basis. All keys are new.
           allEntriesAsDiff(index.map, 'add'));
       diffsMap.set(name, indexDiffResult);
@@ -325,7 +323,7 @@ export async function newWriteLocal(
   mutatorName: string,
   mutatorArgsJSON: FrozenJSONValue,
   originalHash: Hash | null,
-  dagWrite: dag.Write,
+  dagWrite: DagWrite,
   timestamp: number,
   clientID: ClientID,
   formatVersion: FormatVersion,
@@ -369,7 +367,7 @@ export async function newWriteSnapshotSDD(
   basisHash: Hash,
   lastMutationID: number,
   cookieJSON: FrozenJSONValue,
-  dagWrite: dag.Write,
+  dagWrite: DagWrite,
   indexes: Map<string, IndexWrite>,
   clientID: ClientID,
   formatVersion: FormatVersion,
@@ -392,7 +390,7 @@ export async function newWriteSnapshotDD31(
   basisHash: Hash,
   lastMutationIDs: Record<ClientID, number>,
   cookieJSON: FrozenCookie,
-  dagWrite: dag.Write,
+  dagWrite: DagWrite,
   clientID: ClientID,
   formatVersion: FormatVersion,
 ): Promise<Write> {
@@ -454,7 +452,7 @@ export async function updateIndexes(
 
 export function readIndexesForWrite(
   commit: Commit<CommitMeta>,
-  dagWrite: dag.Write,
+  dagWrite: DagWrite,
   formatVersion: FormatVersion,
 ): Map<string, IndexWrite> {
   const m = new Map();
@@ -472,7 +470,7 @@ export function readIndexesForWrite(
 
 export async function createIndexBTree(
   lc: LogContext,
-  dagWrite: dag.Write,
+  dagWrite: DagWrite,
   valueMap: BTreeRead,
   prefix: string,
   jsonPointer: string,

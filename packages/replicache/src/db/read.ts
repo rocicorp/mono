@@ -1,5 +1,5 @@
-import {BTreeRead} from '../btree/mod.js';
-import type * as dag from '../dag/mod.js';
+import {BTreeRead} from '../btree/read.js';
+import type {Read as DagRead} from '../dag/store.js';
 import type {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
 import type {FrozenJSONValue} from '../json.js';
@@ -13,12 +13,12 @@ import {
 import {IndexRead} from './index.js';
 
 export class Read {
-  readonly #dagRead: dag.Read;
+  readonly #dagRead: DagRead;
   map: BTreeRead;
   readonly indexes: Map<string, IndexRead>;
 
   constructor(
-    dagRead: dag.Read,
+    dagRead: DagRead,
     map: BTreeRead,
     indexes: Map<string, IndexRead>,
   ) {
@@ -57,7 +57,7 @@ export class Read {
 }
 
 export function readFromDefaultHead(
-  dagRead: dag.Read,
+  dagRead: DagRead,
   formatVersion: FormatVersion,
 ): Promise<Read> {
   return readFromHead(DEFAULT_HEAD_NAME, dagRead, formatVersion);
@@ -65,7 +65,7 @@ export function readFromDefaultHead(
 
 export async function readFromHead(
   name: string,
-  dagRead: dag.Read,
+  dagRead: DagRead,
   formatVersion: FormatVersion,
 ): Promise<Read> {
   const commit = await commitFromHead(name, dagRead);
@@ -74,7 +74,7 @@ export async function readFromHead(
 
 export async function readFromHash(
   hash: Hash,
-  dagRead: dag.Read,
+  dagRead: DagRead,
   formatVersion: FormatVersion,
 ): Promise<Read> {
   const commit = await commitFromHash(hash, dagRead);
@@ -83,7 +83,7 @@ export async function readFromHash(
 
 function readFromCommit(
   commit: Commit<Meta>,
-  dagRead: dag.Read,
+  dagRead: DagRead,
   formatVersion: FormatVersion,
 ): Read {
   const indexes = readIndexesForRead(commit, dagRead, formatVersion);
@@ -93,7 +93,7 @@ function readFromCommit(
 
 export function readIndexesForRead(
   commit: Commit<Meta>,
-  dagRead: dag.Read,
+  dagRead: DagRead,
   formatVersion: FormatVersion,
 ): Map<string, IndexRead> {
   const m = new Map();

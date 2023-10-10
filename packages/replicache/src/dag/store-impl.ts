@@ -1,19 +1,23 @@
 import {assertNumber} from 'shared/src/asserts.js';
 import {Hash, assertHash} from '../hash.js';
 import type {ReadonlyJSONValue} from '../json.js';
-import type * as kv from '../kv/mod.js';
+import type {
+  Read as KVRead,
+  Store as KVStore,
+  Write as KVWrite,
+} from '../kv/store.js';
 import {Chunk, ChunkHasher, assertMeta, createChunk} from './chunk.js';
 import {RefCountUpdatesDelegate, computeRefCountUpdates} from './gc.js';
 import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.js';
 import {Read, Store, Write, mustGetChunk} from './store.js';
 
 export class StoreImpl implements Store {
-  readonly #kv: kv.Store;
+  readonly #kv: KVStore;
   readonly #chunkHasher: ChunkHasher;
   readonly #assertValidHash: (hash: Hash) => void;
 
   constructor(
-    kv: kv.Store,
+    kv: KVStore,
     chunkHasher: ChunkHasher,
     assertValidHash: (hash: Hash) => void,
   ) {
@@ -40,10 +44,10 @@ export class StoreImpl implements Store {
 }
 
 export class ReadImpl implements Read {
-  protected readonly _tx: kv.Read;
+  protected readonly _tx: KVRead;
   readonly assertValidHash: (hash: Hash) => void;
 
-  constructor(kv: kv.Read, assertValidHash: (hash: Hash) => void) {
+  constructor(kv: KVRead, assertValidHash: (hash: Hash) => void) {
     this._tx = kv;
     this.assertValidHash = assertValidHash;
   }
@@ -100,14 +104,14 @@ export class WriteImpl
   extends ReadImpl
   implements Write, RefCountUpdatesDelegate
 {
-  protected declare readonly _tx: kv.Write;
+  protected declare readonly _tx: KVWrite;
   readonly #chunkHasher: ChunkHasher;
 
   readonly #putChunks = new Set<Hash>();
   readonly #changedHeads = new Map<string, HeadChange>();
 
   constructor(
-    kvw: kv.Write,
+    kvw: KVWrite,
     chunkHasher: ChunkHasher,
     assertValidHash: (hash: Hash) => void,
   ) {
@@ -118,7 +122,7 @@ export class WriteImpl
   createChunk = <V>(data: V, refs: readonly Hash[]): Chunk<V> =>
     createChunk(data, refs, this.#chunkHasher);
 
-  get kvWrite(): kv.Write {
+  get kvWrite(): KVWrite {
     return this._tx;
   }
 

@@ -1,9 +1,9 @@
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import * as sinon from 'sinon';
+import type {VersionNotSupportedResponse} from './error-responses.js';
 import {getDefaultPuller} from './get-default-puller.js';
 import {Hash, emptyHash} from './hash.js';
-import type {VersionNotSupportedResponse, WriteTransaction} from './mod.js';
 import type {Puller} from './puller.js';
 import {UpdateNeededReason, httpStatusUnauthorized} from './replicache.js';
 import {
@@ -16,6 +16,7 @@ import {
   tickAFewTimes,
   waitForSync,
 } from './test-util.js';
+import type {WriteTransaction} from './transactions.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
