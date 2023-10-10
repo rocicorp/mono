@@ -1,23 +1,25 @@
-import type * as dag from '../dag/mod.js';
+import type {Chunk} from '../dag/chunk.js';
+import type {LazyStore} from '../dag/lazy-store.js';
+import type {Read} from '../dag/store.js';
 import {Visitor} from '../dag/visitor.js';
 import type {Hash} from '../hash.js';
 import {promiseVoid} from '../resolved-promises.js';
 import {getSizeOfValue} from '../size-of-value.js';
 
-export type ChunkWithSize = {chunk: dag.Chunk; size: number};
+export type ChunkWithSize = {chunk: Chunk; size: number};
 
 export class GatherNotCachedVisitor extends Visitor {
   readonly #gatheredChunks: Map<Hash, ChunkWithSize> = new Map();
   #gatheredChunksTotalSize = 0;
-  readonly #lazyStore: dag.LazyStore;
+  readonly #lazyStore: LazyStore;
   readonly #gatherSizeLimit: number;
-  readonly #getSizeOfChunk: (chunk: dag.Chunk) => number;
+  readonly #getSizeOfChunk: (chunk: Chunk) => number;
 
   constructor(
-    dagRead: dag.Read,
-    lazyStore: dag.LazyStore,
+    dagRead: Read,
+    lazyStore: LazyStore,
     gatherSizeLimit: number,
-    getSizeOfChunk: (chunk: dag.Chunk) => number = getSizeOfValue,
+    getSizeOfChunk: (chunk: Chunk) => number = getSizeOfValue,
   ) {
     super(dagRead);
     this.#lazyStore = lazyStore;
@@ -39,7 +41,7 @@ export class GatherNotCachedVisitor extends Visitor {
     return super.visit(h);
   }
 
-  override visitChunk(chunk: dag.Chunk): Promise<void> {
+  override visitChunk(chunk: Chunk): Promise<void> {
     if (this.#gatheredChunksTotalSize < this.#gatherSizeLimit) {
       const size = this.#getSizeOfChunk(chunk);
       this.#gatheredChunks.set(chunk.hash, {chunk, size});

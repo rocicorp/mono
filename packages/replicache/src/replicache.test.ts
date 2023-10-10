@@ -14,7 +14,7 @@ import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import * as sinon from 'sinon';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
-import * as db from './db/mod.js';
+import {Write} from './db/write.js';
 import type {JSONValue, ReadonlyJSONValue} from './json.js';
 import {TestMemStore} from './kv/test-mem-store.js';
 import type {PatchOperation} from './patch-operation.js';
@@ -1382,7 +1382,7 @@ test('push and pull concurrently', async () => {
   });
 
   const onBeginPull = (getTestInstance(rep).onBeginPull = sinon.fake());
-  const commitSpy = sinon.spy(db.Write.prototype, 'commitWithDiffs');
+  const commitSpy = sinon.spy(Write.prototype, 'commitWithDiffs');
   const onPushInvoked = (getTestInstance(rep).onPushInvoked = sinon.fake());
 
   function resetSpies() {

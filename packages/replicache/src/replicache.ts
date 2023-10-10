@@ -13,10 +13,21 @@ import {must} from 'shared/src/must.js';
 import {initBgIntervalProcess} from './bg-interval.js';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
-import * as dag from './dag/mod.js';
-import {mustGetHeadHash} from './dag/store.js';
-import {assertLocalCommitDD31} from './db/commit.js';
-import * as db from './db/mod.js';
+import {uuidChunkHasher} from './dag/chunk.js';
+import {LazyStore} from './dag/lazy-store.js';
+import {StoreImpl} from './dag/store-impl.js';
+import {ChunkNotFoundError, mustGetHeadHash, Store} from './dag/store.js';
+import {
+  assertLocalCommitDD31,
+  DEFAULT_HEAD_NAME,
+  isLocalMetaDD31,
+  LocalMeta,
+  localMutations,
+} from './db/commit.js';
+import {readFromDefaultHead} from './db/read.js';
+import {rebaseMutationAndCommit} from './db/rebase.js';
+import {getRoot} from './db/root.js';
+import {newWriteLocal} from './db/write.js';
 import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
@@ -31,7 +42,7 @@ import type {IndexDefinitions} from './index-defs.js';
 import type {JSONValue} from './json.js';
 import {deepFreeze, ReadonlyJSONValue} from './json.js';
 import {newIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
-import type {CreateStore} from './kv/mod.js';
+import type {CreateStore} from './kv/store.js';
 import {MutationRecovery} from './mutation-recovery.js';
 import {initNewClientChannel} from './new-client-channel.js';
 import {
@@ -39,7 +50,23 @@ import {
   OnPersist,
   PersistInfo,
 } from './on-persist-channel.js';
-import * as persist from './persist/mod.js';
+import {initClientGC} from './persist/client-gc.js';
+import {initClientGroupGC} from './persist/client-group-gc.js';
+import {disableClientGroup} from './persist/client-groups.js';
+import {
+  ClientMap,
+  ClientStateNotFoundError,
+  initClientV6,
+  hasClientState as persistHasClientState,
+} from './persist/clients.js';
+import {initCollectIDBDatabases} from './persist/collect-idb-databases.js';
+import {startHeartbeats} from './persist/heartbeat.js';
+import {
+  IDBDatabasesStore,
+  IndexedDBDatabase,
+} from './persist/idb-databases-store.js';
+import {persistDD31} from './persist/persist.js';
+import {refresh} from './persist/refresh.js';
 import {ProcessScheduler} from './process-scheduler.js';
 import type {Puller, PullResponseV1} from './puller.js';
 import {Pusher, PushError} from './pusher.js';
@@ -57,11 +84,18 @@ import {
   WatchNoIndexCallback,
   WatchOptions,
 } from './subscriptions.js';
+import type {DiffsMap} from './sync/diff.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
-import * as sync from './sync/mod.js';
 import {PullError} from './sync/pull-error.js';
-import {HandlePullResponseResultType} from './sync/pull.js';
-import {PUSH_VERSION_DD31} from './sync/push.js';
+import {
+  beginPullV1,
+  HandlePullResponseResultType,
+  handlePullResponseV1,
+  maybeEndPull,
+} from './sync/pull.js';
+import {push, PUSH_VERSION_DD31} from './sync/push.js';
+import {newRequestID} from './sync/request-id.js';
+import {SYNC_HEAD_NAME} from './sync/sync-head-name.js';
 import {throwIfClosed} from './transaction-closed-error.js';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';
 import {ReadTransactionImpl, WriteTransactionImpl} from './transactions.js';
@@ -70,7 +104,7 @@ import {withRead, withWrite} from './with-transactions.js';
 
 declare const TESTING: boolean;
 export interface TestingReplicacheWithTesting extends Replicache {
-  memdag: dag.Store;
+  memdag: Store;
 }
 
 type TestingInstance = {
@@ -80,11 +114,11 @@ type TestingInstance = {
   licenseActivePromise: Promise<boolean>;
   licenseCheckPromise: Promise<boolean>;
   maybeEndPull: (syncHead: Hash, requestID: string) => Promise<void>;
-  memdag: dag.Store;
+  memdag: Store;
   onBeginPull: () => void;
   onPushInvoked: () => void;
   onRecoverMutations: <T>(r: T) => T;
-  perdag: dag.Store;
+  perdag: Store;
   recoverMutations: () => Promise<boolean>;
 };
 
@@ -277,7 +311,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
   /** The schema version of the data understood by this application. */
   readonly schemaVersion: string;
 
-  get #idbDatabase(): persist.IndexedDBDatabase {
+  get #idbDatabase(): IndexedDBDatabase {
     return {
       name: this.idbName,
       replicacheName: this.name,
@@ -341,9 +375,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
   readonly #licenseKey: string | undefined;
 
-  readonly #memdag: dag.LazyStore;
-  readonly #perdag: dag.Store;
-  readonly #idbDatabases: persist.IDBDatabasesStore;
+  readonly #memdag: LazyStore;
+  readonly #perdag: Store;
+  readonly #idbDatabases: IDBDatabasesStore;
   readonly #lc: LogContext;
 
   readonly #closeAbortController = new AbortController();
@@ -504,16 +538,12 @@ export class Replicache<MD extends MutatorDefs = {}> {
       perKVStore = createStore(this.idbName);
     }
     this.#createStore = createStore;
-    this.#idbDatabases = new persist.IDBDatabasesStore(createStore);
-    this.#perdag = new dag.StoreImpl(
-      perKVStore,
-      dag.uuidChunkHasher,
-      assertHash,
-    );
-    this.#memdag = new dag.LazyStore(
+    this.#idbDatabases = new IDBDatabasesStore(createStore);
+    this.#perdag = new StoreImpl(perKVStore, uuidChunkHasher, assertHash);
+    this.#memdag = new LazyStore(
       this.#perdag,
       LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
-      dag.uuidChunkHasher,
+      uuidChunkHasher,
       assertHash,
     );
 
@@ -620,7 +650,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     await this.#idbDatabases.getProfileID().then(profileIDResolver);
     await this.#idbDatabases.putDatabase(this.#idbDatabase);
     const [clientID, client, headHash, clients, isNewClientGroup] =
-      await persist.initClientV6(
+      await initClientV6(
         this.#lc,
         this.#perdag,
         Object.keys(this.#mutatorRegistry),
@@ -631,7 +661,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     resolveClientGroupID(client.clientGroupID);
     resolveClientID(clientID);
     await withWrite(this.#memdag, async write => {
-      await write.setHead(db.DEFAULT_HEAD_NAME, headHash);
+      await write.setHead(DEFAULT_HEAD_NAME, headHash);
       await write.commit();
     });
 
@@ -650,7 +680,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     const {signal} = this.#closeAbortController;
 
-    persist.startHeartbeats(
+    startHeartbeats(
       clientID,
       this.#perdag,
       () => {
@@ -659,9 +689,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this.#lc,
       signal,
     );
-    persist.initClientGC(clientID, this.#perdag, this.#lc, signal);
-    persist.initCollectIDBDatabases(this.#idbDatabases, this.#lc, signal);
-    persist.initClientGroupGC(this.#perdag, this.#lc, signal);
+    initClientGC(clientID, this.#perdag, this.#lc, signal);
+    initCollectIDBDatabases(this.#idbDatabases, this.#lc, signal);
+    initClientGroupGC(this.#perdag, this.#lc, signal);
     initNewClientChannel(
       this.name,
       this.idbName,
@@ -705,7 +735,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
   async #checkForClientStateNotFoundAndCallHandler(): Promise<boolean> {
     const clientID = await this.#clientIDPromise;
     const hasClientState = await withRead(this.#perdag, read =>
-      persist.hasClientState(clientID, read),
+      persistHasClientState(clientID, read),
     );
     if (!hasClientState) {
       this.#clientStateNotFoundOnClient(clientID);
@@ -935,13 +965,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
       return undefined;
     }
     await this.#ready;
-    return db.getRoot(this.#memdag, db.DEFAULT_HEAD_NAME);
+    return getRoot(this.#memdag, DEFAULT_HEAD_NAME);
   }
 
-  async #checkChange(
-    root: Hash | undefined,
-    diffs: sync.DiffsMap,
-  ): Promise<void> {
+  async #checkChange(root: Hash | undefined, diffs: DiffsMap): Promise<void> {
     const currentRoot = await this.#root; // instantaneous except maybe first time
     if (root !== undefined && root !== currentRoot) {
       this.#root = Promise.resolve(root);
@@ -960,7 +987,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       const lc = this.#lc
         .withContext('maybeEndPull')
         .withContext('requestID', requestID);
-      const {replayMutations, diffs} = await sync.maybeEndPull<db.LocalMeta>(
+      const {replayMutations, diffs} = await maybeEndPull<LocalMeta>(
         this.#memdag,
         lc,
         syncHead,
@@ -986,14 +1013,14 @@ export class Replicache<MD extends MutatorDefs = {}> {
         }
         const {meta} = mutation;
         syncHead = await withWrite(this.#memdag, dagWrite =>
-          db.rebaseMutationAndCommit(
+          rebaseMutationAndCommit(
             mutation,
             dagWrite,
             syncHead,
-            sync.SYNC_HEAD_NAME,
+            SYNC_HEAD_NAME,
             this.#mutatorRegistry,
             lc,
-            db.isLocalMetaDD31(meta) ? meta.clientID : clientID,
+            isLocalMetaDD31(meta) ? meta.clientID : clientID,
             FormatVersion.Latest,
           ),
         );
@@ -1094,7 +1121,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     let lastResult;
     lc = lc.withContext(verb);
     do {
-      const requestID = sync.newRequestID(clientID);
+      const requestID = newRequestID(clientID);
       const requestLc = lc.withContext('requestID', requestID);
       const {httpRequestInfo, result} = await f(requestID, requestLc);
       lastResult = result;
@@ -1173,7 +1200,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         async (requestID: string, requestLc: LogContext) => {
           try {
             this.#changeSyncCounters(1, 0);
-            const pusherResult = await sync.push(
+            const pusherResult = await push(
               requestID,
               this.#memdag,
               requestLc,
@@ -1262,7 +1289,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     // on the *server* and passing it down in the poke for inclusion here in the log
     // context.
     const clientID = await this.#clientIDPromise;
-    const requestID = sync.newRequestID(clientID);
+    const requestID = newRequestID(clientID);
     const lc = this.#lc
       .withContext('handlePullResponse')
       .withContext('requestID', requestID);
@@ -1279,7 +1306,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       return;
     }
 
-    const result = await sync.handlePullResponseDD31(
+    const result = await handlePullResponseV1(
       lc,
       this.#memdag,
       deepFreeze(poke.baseCookie),
@@ -1314,7 +1341,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       result: {beginPullResponse, requestID},
     } = await this.#wrapInReauthRetries(
       async (requestID: string, requestLc: LogContext) => {
-        const beginPullResponse = await sync.beginPullDD31(
+        const beginPullResponse = await beginPullV1(
           profileID,
           clientID,
           clientGroupID,
@@ -1357,7 +1384,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         return;
       }
       try {
-        await persist.persistDD31(
+        await persistDD31(
           this.#lc,
           clientID,
           this.#memdag,
@@ -1367,7 +1394,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           FormatVersion.Latest,
         );
       } catch (e) {
-        if (e instanceof persist.ClientStateNotFoundError) {
+        if (e instanceof ClientStateNotFoundError) {
           this.#clientStateNotFoundOnClient(clientID);
         } else if (this.#closed) {
           this.#lc.debug?.('Exception persisting during close', e);
@@ -1393,7 +1420,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     }
     let result;
     try {
-      result = await persist.refresh(
+      result = await refresh(
         this.#lc,
         this.#memdag,
         this.#perdag,
@@ -1404,7 +1431,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         FormatVersion.Latest,
       );
     } catch (e) {
-      if (e instanceof persist.ClientStateNotFoundError) {
+      if (e instanceof ClientStateNotFoundError) {
         this.#clientStateNotFoundOnClient(clientID);
       } else if (this.#closed) {
         this.#lc.debug?.('Exception refreshing during close', e);
@@ -1431,7 +1458,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     assert(clientGroupID);
     this.#isClientGroupDisabled = true;
     await withWrite(this.#perdag, async dagWrite => {
-      await persist.disableClientGroup(clientGroupID, dagWrite);
+      await disableClientGroup(clientGroupID, dagWrite);
       await dagWrite.commit();
     });
     this.#lc.error?.(
@@ -1578,10 +1605,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const clientID = await this.#clientIDPromise;
     return withRead(this.#memdag, async dagRead => {
       try {
-        const dbRead = await db.readFromDefaultHead(
-          dagRead,
-          FormatVersion.Latest,
-        );
+        const dbRead = await readFromDefaultHead(dagRead, FormatVersion.Latest);
         const tx = new ReadTransactionImpl(clientID, dbRead, this.#lc);
         return await body(tx);
       } catch (ex) {
@@ -1640,10 +1664,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const clientID = await this.#clientIDPromise;
     return withWrite(this.#memdag, async dagWrite => {
       try {
-        const headHash = await mustGetHeadHash(db.DEFAULT_HEAD_NAME, dagWrite);
+        const headHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite);
         const originalHash = null;
 
-        const dbWrite = await db.newWriteLocal(
+        const dbWrite = await newWriteLocal(
           headHash,
           name,
           frozenArgs,
@@ -1664,7 +1688,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         const result: R = await mutatorImpl(tx, args);
         throwIfClosed(dbWrite);
         const [ref, diffs] = await dbWrite.commitWithDiffs(
-          db.DEFAULT_HEAD_NAME,
+          DEFAULT_HEAD_NAME,
           this.#subscriptions,
         );
         this.#pushConnectionLoop.send();
@@ -1683,16 +1707,16 @@ export class Replicache<MD extends MutatorDefs = {}> {
    */
   async #convertToClientStateNotFoundError(ex: unknown): Promise<unknown> {
     if (
-      ex instanceof dag.ChunkNotFoundError &&
+      ex instanceof ChunkNotFoundError &&
       (await this.#checkForClientStateNotFoundAndCallHandler())
     ) {
-      return new persist.ClientStateNotFoundError(await this.#clientIDPromise);
+      return new ClientStateNotFoundError(await this.#clientIDPromise);
     }
 
     return ex;
   }
 
-  #recoverMutations(preReadClientMap?: persist.ClientMap): Promise<boolean> {
+  #recoverMutations(preReadClientMap?: ClientMap): Promise<boolean> {
     const result = this.#mutationRecovery.recoverMutations(
       preReadClientMap,
       this.#ready,
@@ -1717,11 +1741,11 @@ export class Replicache<MD extends MutatorDefs = {}> {
    */
   experimentalPendingMutations(): Promise<readonly PendingMutation[]> {
     return withRead(this.#memdag, async dagRead => {
-      const mainHeadHash = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
+      const mainHeadHash = await dagRead.getHead(DEFAULT_HEAD_NAME);
       if (mainHeadHash === undefined) {
         throw new Error('Missing main head');
       }
-      const pending = await db.localMutations(mainHeadHash, dagRead);
+      const pending = await localMutations(mainHeadHash, dagRead);
       const clientID = await this.#clientIDPromise;
       return Promise.all(
         pending.map(async p => {

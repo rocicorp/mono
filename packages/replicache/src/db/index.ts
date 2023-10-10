@@ -1,8 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {FrozenJSONValue, FrozenJSONObject} from '../json.js';
-import type {IndexRecord} from './commit.js';
-import type {BTreeRead, BTreeWrite} from '../btree/mod.js';
+import type {BTreeRead} from '../btree/read.js';
+import type {BTreeWrite} from '../btree/write.js';
 import type {Hash} from '../hash.js';
+import type {FrozenJSONObject, FrozenJSONValue} from '../json.js';
+import type {IndexRecord} from './commit.js';
 
 export class IndexRead<BTree = BTreeRead> {
   readonly meta: IndexRecord;

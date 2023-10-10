@@ -1,4 +1,4 @@
-import type * as dag from '../dag/mod.js';
+import type {Read} from '../dag/store.js';
 import type {FormatVersion} from '../format-version.js';
 import {Hash, emptyHash} from '../hash.js';
 import {FrozenJSONValue, deepEqual} from '../json.js';
@@ -39,14 +39,14 @@ export class BTreeRead implements AsyncIterable<Entry<FrozenJSONValue>> {
   protected readonly _cache: Map<Hash, DataNodeImpl | InternalNodeImpl> =
     new Map();
 
-  protected readonly _dagRead: dag.Read;
+  protected readonly _dagRead: Read;
   protected readonly _formatVersion: FormatVersion;
   rootHash: Hash;
   readonly getEntrySize: <K, V>(k: K, v: V) => number;
   readonly chunkHeaderSize: number;
 
   constructor(
-    dagRead: dag.Read,
+    dagRead: Read,
     formatVersion: FormatVersion,
     root: Hash = emptyHash,
     getEntrySize: <K, V>(k: K, v: V) => number = getSizeOfEntry,

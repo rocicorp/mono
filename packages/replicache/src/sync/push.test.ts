@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
-import * as dag from '../dag/mod.js';
+import {TestStore} from '../dag/test-store.js';
 import {DEFAULT_HEAD_NAME} from '../db/commit.js';
 import {readFromDefaultHead} from '../db/read.js';
 import {ChainBuilder} from '../db/test-helpers.js';
@@ -70,7 +70,7 @@ test('try push [SDD]', async () => {
   const formatVersion = FormatVersion.SDD;
   const clientGroupID = undefined;
   const clientID = 'test_client_id';
-  const store = new dag.TestStore();
+  const store = new TestStore();
   const lc = new LogContext();
   const b = new ChainBuilder(store, undefined, formatVersion);
   await b.addGenesis(clientID);
@@ -273,7 +273,7 @@ test('try push [DD31]', async () => {
   const formatVersion = FormatVersion.Latest;
   const clientGroupID = 'test_client_group_id';
   const clientID = 'test_client_id';
-  const store = new dag.TestStore();
+  const store = new TestStore();
   const lc = new LogContext();
   const b = new ChainBuilder(store);
   await b.addGenesis(clientID, {

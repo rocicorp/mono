@@ -1,11 +1,15 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
-import * as dag from '../dag/mod.js';
+import {uuidChunkHasher} from '../dag/chunk.js';
+import {StoreImpl} from '../dag/store-impl.js';
+import type {Store} from '../dag/store.js';
 import {FormatVersion} from '../format-version.js';
 import {assertHash} from '../hash.js';
+import {newIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
+import {IDBStore} from '../kv/idb-store.js';
 import {dropStore} from '../kv/idb-util.js';
-import * as kv from '../kv/mod.js';
+import type {CreateStore} from '../kv/store.js';
 import {withRead} from '../with-transactions.js';
 import {
   clientGroupHasPendingMutations,
@@ -120,9 +124,9 @@ async function dropDatabases(
   return {dropped, errors};
 }
 
-function defaultNewDagStore(name: string): dag.Store {
-  const perKvStore = new kv.IDBStore(name);
-  return new dag.StoreImpl(perKvStore, dag.uuidChunkHasher, assertHash);
+function defaultNewDagStore(name: string): Store {
+  const perKvStore = new IDBStore(name);
+  return new StoreImpl(perKvStore, uuidChunkHasher, assertHash);
 }
 
 async function canCollectDatabase(
@@ -190,8 +194,8 @@ function allClientsOlderThan(
  */
 export async function dropDatabase(
   dbName: string,
-  createKVStore: kv.CreateStore = name =>
-    kv.newIDBStoreWithMemFallback(new LogContext(), name),
+  createKVStore: CreateStore = name =>
+    newIDBStoreWithMemFallback(new LogContext(), name),
 ) {
   await dropDatabaseInternal(dbName, new IDBDatabasesStore(createKVStore));
 }
@@ -203,8 +207,8 @@ export async function dropDatabase(
  * and any errors encountered while dropping.
  */
 export async function dropAllDatabases(
-  createKVStore: kv.CreateStore = name =>
-    kv.newIDBStoreWithMemFallback(new LogContext(), name),
+  createKVStore: CreateStore = name =>
+    newIDBStoreWithMemFallback(new LogContext(), name),
 ): Promise<{
   dropped: string[];
   errors: unknown[];
@@ -225,12 +229,12 @@ export async function dropAllDatabases(
  *
  * @deprecated Use `dropAllDatabases` instead.
  */
-export function deleteAllReplicacheData(createKVStore?: kv.CreateStore) {
+export function deleteAllReplicacheData(createKVStore?: CreateStore) {
   return dropAllDatabases(createKVStore);
 }
 
 async function anyPendingMutationsInClientGroups(
-  perdag: dag.Store,
+  perdag: Store,
 ): Promise<boolean> {
   const clientGroups = await withRead(perdag, getClientGroups);
   for (const clientGroup of clientGroups.values()) {

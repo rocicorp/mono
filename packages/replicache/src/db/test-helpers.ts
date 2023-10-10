@@ -1,11 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
-import * as btree from '../btree/mod.js';
-import {BTreeWrite} from '../btree/mod.js';
+import {emptyDataNode} from '../btree/node.js';
+import type {BTreeRead} from '../btree/read.js';
+import {BTreeWrite} from '../btree/write.js';
 import type {Cookie} from '../cookies.js';
-import type * as dag from '../dag/mod.js';
-import {mustGetHeadHash} from '../dag/store.js';
+import type {Chunk} from '../dag/chunk.js';
+import {Write as DagWrite, Store, mustGetHeadHash} from '../dag/store.js';
 import {Visitor} from '../dag/visitor.js';
 import {FormatVersion} from '../format-version.js';
 import {Hash, emptyHash} from '../hash.js';
@@ -48,7 +49,7 @@ export type Chain = Commit<Meta>[];
 
 async function addGenesis(
   chain: Chain,
-  store: dag.Store,
+  store: Store,
   clientID: ClientID,
   headName = DEFAULT_HEAD_NAME,
   indexDefinitions: IndexDefinitions,
@@ -67,7 +68,7 @@ async function addGenesis(
 }
 
 async function createGenesis(
-  store: dag.Store,
+  store: Store,
   clientID: ClientID,
   headName: string,
   indexDefinitions: IndexDefinitions,
@@ -83,7 +84,7 @@ async function createGenesis(
 // chain.
 async function addLocal(
   chain: Chain,
-  store: dag.Store,
+  store: Store,
   clientID: ClientID,
   entries: [string, JSONValue][] | undefined,
   headName: string,
@@ -106,7 +107,7 @@ async function addLocal(
 
 async function createLocal(
   entries: [string, JSONValue][],
-  store: dag.Store,
+  store: Store,
   i: number,
   clientID: ClientID,
   headName: string,
@@ -138,7 +139,7 @@ export function createMutatorName(chainIndex: number): string {
 
 async function addIndexChange(
   chain: Chain,
-  store: dag.Store,
+  store: Store,
   clientID: ClientID,
   indexName: string | undefined,
   indexDefinition: IndexDefinition | undefined,
@@ -170,7 +171,7 @@ async function addIndexChange(
 }
 
 async function createIndex(
-  store: dag.Store,
+  store: Store,
   clientID: ClientID,
   name: string,
   prefix: string,
@@ -210,7 +211,7 @@ async function createIndex(
 // The optional map for the commit is treated as key, value pairs.
 async function addSnapshot(
   chain: Chain,
-  store: dag.Store,
+  store: Store,
   map: [string, JSONValue][] | undefined,
   clientID: ClientID,
   cookie: Cookie = `cookie_${chain.length}`,
@@ -263,13 +264,13 @@ async function addSnapshot(
 }
 
 export class ChainBuilder {
-  readonly store: dag.Store;
+  readonly store: Store;
   readonly headName: string;
   chain: Chain;
   readonly formatVersion: FormatVersion;
 
   constructor(
-    store: dag.Store,
+    store: Store,
     headName = DEFAULT_HEAD_NAME,
     formatVersion: FormatVersion = FormatVersion.Latest,
   ) {
@@ -395,7 +396,7 @@ export class ChainBuilder {
 }
 
 export async function initDB(
-  dagWrite: dag.Write,
+  dagWrite: DagWrite,
   headName: string,
   clientID: ClientID,
   indexDefinitions: IndexDefinitions,
@@ -437,7 +438,7 @@ export async function initDB(
 
 async function createEmptyIndexMaps(
   indexDefinitions: IndexDefinitions,
-  dagWrite: dag.Write,
+  dagWrite: DagWrite,
   formatVersion: FormatVersion,
 ): Promise<Map<string, IndexWrite>> {
   const indexes = new Map();
@@ -445,7 +446,7 @@ async function createEmptyIndexMaps(
   let emptyTreeHash: Hash | undefined;
   for (const [name, indexDefinition] of Object.entries(indexDefinitions)) {
     if (!emptyTreeHash) {
-      const emptyBTreeChunk = dagWrite.createChunk(btree.emptyDataNode, []);
+      const emptyBTreeChunk = dagWrite.createChunk(emptyDataNode, []);
       await dagWrite.putChunk(emptyBTreeChunk);
       emptyTreeHash = emptyBTreeChunk.hash;
     }
@@ -467,14 +468,14 @@ async function createEmptyIndexMaps(
 class ChunkSnapshotVisitor extends Visitor {
   snapshot: Record<string, unknown> = {};
 
-  override visitChunk(chunk: dag.Chunk): Promise<void> {
+  override visitChunk(chunk: Chunk): Promise<void> {
     this.snapshot[chunk.hash.toString()] = chunk.data;
     return super.visitChunk(chunk);
   }
 }
 
 export function getChunkSnapshot(
-  dagStore: dag.Store,
+  dagStore: Store,
   hash: Hash,
 ): Promise<Record<string, unknown>> {
   return withRead(dagStore, async dagRead => {
@@ -486,7 +487,7 @@ export function getChunkSnapshot(
 
 async function newWriteIndexChange(
   basisHash: Hash,
-  dagWrite: dag.Write,
+  dagWrite: DagWrite,
   clientID: ClientID,
   formatVersion: FormatVersion,
 ): Promise<Write> {
@@ -513,8 +514,8 @@ async function createIndexForTesting(
   jsonPointer: string,
   allowEmpty: boolean,
   indexes: Map<string, IndexWrite>,
-  dagWrite: dag.Write,
-  map: btree.BTreeRead,
+  dagWrite: DagWrite,
+  map: BTreeRead,
   formatVersion: FormatVersion,
 ): Promise<void> {
   const chunkIndexDefinition: ChunkIndexDefinition = {
