@@ -207,11 +207,7 @@ export class NamespacedScriptHandler extends AbstractScriptHandler<NamespacedScr
 // we use dns.Resolver.resolve() instead of lookup, and we have fetch connect directly
 // to the resulting IP address (to avoid fetch calling `getaddrinfo` to resolve the
 // hostname).
-//
-// When polling DNS, avoid being too aggressive, as resolve() anecdotally gets stuck
-// when polling too frequently because of some downstream caching or DOS-protection
-// logic.
-const DNS_POLL_INTERVAL = 8000;
+const DNS_POLL_INTERVAL = 3000;
 const FETCH_POLL_INTERVAL = 1000;
 const LIVENESS_TIMEOUT = 3 * 60 * 1000;
 const CLOUDFLARE_DNS_SERVERS = ['1.1.1.1'] as const;
