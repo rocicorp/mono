@@ -7,7 +7,7 @@ import {deploymentSchema, deploymentSpecSchema} from '../deployment.js';
 // refactor/rewrite other parts of the schema.
 // Pick more fields as necessary.
 export const deploymentViewSchema = deploymentSchema
-  .pick('status', 'statusMessage')
+  .pick('status', 'statusMessage', 'spec')
   .extend({spec: deploymentSpecSchema.pick('hostname', 'serverVersion')});
 
 export type DeploymentView = v.Infer<typeof deploymentViewSchema>;
