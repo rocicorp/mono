@@ -23,6 +23,7 @@ export function publishOptions(yargs: CommonYargsArgv) {
   return yargs.option('reflect-channel', {
     desc: 'Set the Reflect Channel for server updates',
     type: 'string',
+    hidden: true,
   });
 }
 
