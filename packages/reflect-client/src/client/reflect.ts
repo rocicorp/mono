@@ -468,12 +468,13 @@ export class Reflect<MD extends MutatorDefs> {
    * When closed all subscriptions end and no more read or writes are allowed.
    */
   async close(): Promise<void> {
+    const lc = await this.#l;
     if (this.#connectionState !== ConnectionState.Disconnected) {
-      const lc = await this.#l;
       await this.#disconnect(lc, {
         client: 'ReflectClosed',
       });
     }
+    lc.debug?.('Aborting closeAbortController due to close()');
     this.#closeAbortController.abort();
     this.#metrics.stop();
     return this.#rep.close();
@@ -752,16 +753,22 @@ export class Reflect<MD extends MutatorDefs> {
     }
 
     const baseCookie = await this.#getBaseCookie();
+    if (this.closed) {
+      return;
+    }
     this.#baseCookie = baseCookie;
 
     // Reject connect after a timeout.
-    const id = setTimeout(async () => {
+    const timeoutID = setTimeout(async () => {
       l.debug?.('Rejecting connect resolver due to timeout');
       this.#connectResolver.reject(new TimedOutError('Connect'));
       await this.#disconnect(l, {
         client: 'ConnectTimeout',
       });
     }, CONNECT_TIMEOUT_MS);
+    this.#closeAbortController.signal.addEventListener('abort', () => {
+      clearTimeout(timeoutID);
+    });
 
     const ws = createSocket(
       toWSString(this.#server),
@@ -778,6 +785,10 @@ export class Reflect<MD extends MutatorDefs> {
       l,
     );
 
+    if (this.closed) {
+      return;
+    }
+
     ws.addEventListener('message', this.#onMessage);
     ws.addEventListener('open', this.#onOpen);
     ws.addEventListener('close', this.#onClose);
@@ -788,7 +799,7 @@ export class Reflect<MD extends MutatorDefs> {
       l.debug?.('Waiting for connection to be acknowledged');
       await this.#connectResolver.promise;
     } finally {
-      clearTimeout(id);
+      clearTimeout(timeoutID);
     }
   }
 
@@ -1039,6 +1050,9 @@ export class Reflect<MD extends MutatorDefs> {
             }
 
             await this.#connect(lc);
+            if (this.closed) {
+              break;
+            }
 
             // Now we have a new socket, update lc with the new wsid.
             assert(this.#socket);
@@ -1365,12 +1379,21 @@ export class Reflect<MD extends MutatorDefs> {
 
   async #checkConnectivityAsync(reason: string) {
     assert(this.#server);
+    if (this.closed) {
+      return;
+    }
     try {
-      await checkConnectivity(reason, this.#server, await this.#l);
+      await checkConnectivity(
+        reason,
+        this.#server,
+        await this.#l,
+        this.#closeAbortController.signal,
+      );
     } catch (e) {
       (await this.#l).info?.('Error checking connectivity for', reason, e);
     }
   }
+
   // Total hack to get base cookie, see _puller for how the promise is resolved.
   #getBaseCookie(): Promise<NullableVersion> {
     this.#baseCookieResolver ??= resolver();
