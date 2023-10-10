@@ -1,9 +1,6 @@
 import * as v from 'shared/src/valita.js';
 import {firestoreDataConverter} from './converter.js';
-import {
-  deploymentOptionsSchema,
-  deploymentSchema,
-} from './deployment.js';
+import {deploymentOptionsSchema, deploymentSchema} from './deployment.js';
 import {DEFAULT_PROVIDER_ID} from './provider.js';
 
 const scriptRefSchema = v.object({
