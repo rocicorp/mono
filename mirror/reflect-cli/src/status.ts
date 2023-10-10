@@ -3,8 +3,12 @@ import {authenticate} from './auth-config.js';
 import {makeRequester} from './requester.js';
 import {getFirestore} from './firebase.js';
 import color from 'picocolors';
-import {appPath, AppView, appViewDataConverter} from 'mirror-schema/src/app.js';
-import type {DeploymentView} from 'mirror-schema/src/deployment.js';
+import {
+  appPath,
+  AppView,
+  appViewDataConverter,
+} from 'mirror-schema/src/client-view/app.js';
+import type {DeploymentView} from 'mirror-schema/src/client-view/deployment.js';
 import {readAppConfig} from './app-config.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 

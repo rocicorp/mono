@@ -3,7 +3,6 @@ import {firestoreDataConverter} from './converter.js';
 import {
   deploymentOptionsSchema,
   deploymentSchema,
-  deploymentViewSchema,
 } from './deployment.js';
 import {DEFAULT_PROVIDER_ID} from './provider.js';
 
@@ -79,20 +78,6 @@ export const appSchema = v.object({
 export type App = v.Infer<typeof appSchema>;
 
 export const appDataConverter = firestoreDataConverter(appSchema);
-
-// TODO: Move cli views to cli/... subdirectory.
-
-// The slice of App fields read by the cli.
-// Having the cli use a constrained schema makes it easier to
-// refactor/rewrite other parts of the schema.
-// Pick more fields as necessary.
-const appViewSchema = appSchema.pick('name', 'serverReleaseChannel').extend({
-  runningDeployment: deploymentViewSchema.optional(),
-});
-
-export type AppView = v.Infer<typeof appViewSchema>;
-
-export const appViewDataConverter = firestoreDataConverter(appViewSchema);
 
 // APP_COLLECTION and appPath() are defined in deployment.js to avoid a cyclic
 // dependency (which otherwise breaks mjs targets). Re-export them here to be

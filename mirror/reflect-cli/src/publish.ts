@@ -2,8 +2,8 @@ import {
   publish as publishCaller,
   type PublishRequest,
 } from 'mirror-protocol/src/publish.js';
-import {deploymentViewDataConverter} from 'mirror-schema/src/deployment.js';
-import {watch} from 'mirror-schema/src/watch.js';
+import {deploymentViewDataConverter} from 'mirror-schema/src/client-view/deployment.js';
+import {watch} from 'mirror-schema/src/client-view/watch.js';
 import assert from 'node:assert';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
