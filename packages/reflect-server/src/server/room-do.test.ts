@@ -27,8 +27,6 @@ import {createTestDurableObjectState} from './do-test-utils.js';
 import {TAIL_URL_PATH} from './paths.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
 
-const testLogSink = new TestLogSink();
-
 const START_TIME = 1000;
 beforeEach(() => {
   jest.useFakeTimers();
@@ -40,6 +38,7 @@ afterEach(() => {
 });
 
 test('sets roomID in createRoom', async () => {
+  const testLogSink = new TestLogSink();
   const roomDO = new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
@@ -64,6 +63,7 @@ test('sets roomID in createRoom', async () => {
 });
 
 test('inits storage schema', async () => {
+  const testLogSink = new TestLogSink();
   const state = await createTestDurableObjectState('test-do-id');
 
   expect(await state.storage.get('storage_schema_meta')).toBeUndefined();
@@ -88,6 +88,7 @@ test('inits storage schema', async () => {
 });
 
 test('runs roomStartHandler', async () => {
+  const testLogSink = new TestLogSink();
   const state = await createTestDurableObjectState('test-do-id');
 
   const storage = new DurableStorage(state.storage);
@@ -126,6 +127,7 @@ test('runs roomStartHandler', async () => {
 });
 
 test('deleteAllData deletes all data', async () => {
+  const testLogSink = new TestLogSink();
   const state = await createTestDurableObjectState('test-do-id');
   const someKey = 'foo';
   await state.storage.put(someKey, 'bar');
@@ -165,6 +167,8 @@ test('deleteAllData deletes all data', async () => {
 });
 
 test('after deleteAllData the roomDO just 410s', async () => {
+  const testLogSink = new TestLogSink();
+
   const roomDO = new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
@@ -246,6 +250,8 @@ test('401s if wrong auth api key', async () => {
   ];
 
   for (const testRequest of testRequests) {
+    const testLogSink = new TestLogSink();
+
     const roomDO = new BaseRoomDO({
       mutators: {},
       roomStartHandler: () => Promise.resolve(),
@@ -289,6 +295,7 @@ test('Logs version during construction', async () => {
 });
 
 test('Avoids queueing many intervals in the lock', async () => {
+  const testLogSink = new TestLogSink();
   const room = new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
@@ -338,6 +345,7 @@ test('Avoids queueing many intervals in the lock', async () => {
 });
 
 test('clear interval call', async () => {
+  const testLogSink = new TestLogSink();
   const room = new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
@@ -382,6 +390,7 @@ test('Sets turn duration based on allowUnconfirmedWrites flag', () => {
 });
 
 async function makeBaseRoomDO() {
+  const testLogSink = new TestLogSink();
   return new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
@@ -461,6 +470,7 @@ describe('good, bad, invalid tail requests', () => {
   ];
   for (const c of cases) {
     test(c.name, async () => {
+      const testLogSink = new TestLogSink();
       const state = await createTestDurableObjectState('test-do-id');
       const roomDO = new BaseRoomDO({
         mutators: {},
