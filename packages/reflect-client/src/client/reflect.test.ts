@@ -61,6 +61,7 @@ test('onOnlineChange callback', async () => {
   let offlineCount = 0;
 
   const r = reflectForTest({
+    logLevel: 'debug',
     onOnlineChange: online => {
       if (online) {
         onlineCount++;
@@ -1009,8 +1010,18 @@ test('Ping timeout', async () => {
   expect(r.connectionState).to.equal(ConnectionState.Connected);
 });
 
+const connectTimeoutMessage = 'Rejecting connect resolver due to timeout';
+
+function expectLogMessages(r: TestReflect<MutatorDefs>) {
+  return expect(
+    r.testLogSink.messages.flatMap(([level, _context, msg]) =>
+      level === 'debug' ? msg : [],
+    ),
+  );
+}
+
 test('Connect timeout', async () => {
-  const r = reflectForTest();
+  const r = reflectForTest({logLevel: 'debug'});
 
   await r.waitForConnectionState(ConnectionState.Connecting);
 
@@ -1026,6 +1037,7 @@ test('Connect timeout', async () => {
     expect(r.connectionState).to.equal(ConnectionState.Connecting);
     await clock.tickAsync(1);
     expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+    expectLogMessages(r).contain(connectTimeoutMessage);
 
     // We got disconnected so we sleep for RUN_LOOP_INTERVAL_MS before trying again
 
@@ -1582,4 +1594,15 @@ test('Close during connect should sleep', async () => {
   await r.waitForConnectionState(ConnectionState.Connected);
   await clock.tickAsync(0);
   expect(r.online).equal(true);
+});
+
+test('Reflect close should stop timeout', async () => {
+  const r = reflectForTest({
+    logLevel: 'debug',
+  });
+
+  await r.waitForConnectionState(ConnectionState.Connecting);
+  await r.close();
+  await clock.tickAsync(CONNECT_TIMEOUT_MS);
+  expectLogMessages(r).not.contain(connectTimeoutMessage);
 });
