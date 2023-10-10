@@ -26,20 +26,10 @@ import {originalConsole} from './console.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
 import {TAIL_URL_PATH} from './paths.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
-
-const testLogSink = new TestLogSink();
-
-const START_TIME = 1000;
-beforeEach(() => {
-  jest.useFakeTimers();
-  jest.setSystemTime(START_TIME);
-});
-
-afterEach(() => {
-  jest.restoreAllMocks();
-});
+import {sleep} from '../util/sleep.js';
 
 test('sets roomID in createRoom', async () => {
+  const testLogSink = new TestLogSink();
   const roomDO = new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
@@ -64,6 +54,7 @@ test('sets roomID in createRoom', async () => {
 });
 
 test('inits storage schema', async () => {
+  const testLogSink = new TestLogSink();
   const state = await createTestDurableObjectState('test-do-id');
 
   expect(await state.storage.get('storage_schema_meta')).toBeUndefined();
@@ -88,6 +79,7 @@ test('inits storage schema', async () => {
 });
 
 test('runs roomStartHandler', async () => {
+  const testLogSink = new TestLogSink();
   const state = await createTestDurableObjectState('test-do-id');
 
   const storage = new DurableStorage(state.storage);
@@ -126,6 +118,7 @@ test('runs roomStartHandler', async () => {
 });
 
 test('deleteAllData deletes all data', async () => {
+  const testLogSink = new TestLogSink();
   const state = await createTestDurableObjectState('test-do-id');
   const someKey = 'foo';
   await state.storage.put(someKey, 'bar');
@@ -165,6 +158,8 @@ test('deleteAllData deletes all data', async () => {
 });
 
 test('after deleteAllData the roomDO just 410s', async () => {
+  const testLogSink = new TestLogSink();
+
   const roomDO = new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
@@ -246,6 +241,8 @@ test('401s if wrong auth api key', async () => {
   ];
 
   for (const testRequest of testRequests) {
+    const testLogSink = new TestLogSink();
+
     const roomDO = new BaseRoomDO({
       mutators: {},
       roomStartHandler: () => Promise.resolve(),
@@ -289,6 +286,7 @@ test('Logs version during construction', async () => {
 });
 
 test('Avoids queueing many intervals in the lock', async () => {
+  const testLogSink = new TestLogSink();
   const room = new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
@@ -315,8 +313,6 @@ test('Avoids queueing many intervals in the lock', async () => {
       latches[invoked++].resolve();
       await canFinishCallback; // Make the first invocation hold the lock.
     },
-    1,
-    () => undefined,
     () => {
       fired++;
     },
@@ -326,49 +322,15 @@ test('Avoids queueing many intervals in the lock', async () => {
   // Note: jest.useFakeTimers() doesn't quite work as expected for setInterval()
   // so we're using real timers with real sleep().
   while (fired < 5) {
-    await jest.advanceTimersByTimeAsync(2);
+    await sleep(2);
   }
   clearTimeout(timerID);
 
   finishCallback();
   await latches[1].promise; // Wait for the second invocation.
 
-  await jest.advanceTimersByTimeAsync(1); // No other invocations should happen, even with sleep.
+  await sleep(1); // No other invocations should happen, even with sleep.
   expect(invoked).toBe(2); // All other invocations should have been aborted.
-});
-
-test('clear interval call', async () => {
-  const room = new BaseRoomDO({
-    mutators: {},
-    roomStartHandler: () => Promise.resolve(),
-    disconnectHandler: () => Promise.resolve(),
-    state: await createTestDurableObjectState('test-do-id'),
-    authApiKey: 'foo',
-    logSink: testLogSink,
-    logLevel: 'info',
-    allowUnconfirmedWrites: true,
-    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
-  });
-
-  let fired = 0;
-  let invoked = 0;
-  room.runInLockAtInterval(
-    new LogContext('debug', {}, testLogSink),
-    'fakeProcessNext',
-    1, // Fire once every ms.
-    () => {
-      void invoked++;
-      return Promise.resolve();
-    },
-    3,
-    () => {
-      fired++;
-    },
-  );
-  await jest.advanceTimersByTimeAsync(5);
-  expect(Date.now()).toEqual(1005);
-  expect(invoked).toBe(5);
-  expect(fired).toBe(1);
 });
 
 test('Sets turn duration based on allowUnconfirmedWrites flag', () => {
@@ -382,6 +344,7 @@ test('Sets turn duration based on allowUnconfirmedWrites flag', () => {
 });
 
 async function makeBaseRoomDO() {
+  const testLogSink = new TestLogSink();
   return new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
@@ -461,6 +424,7 @@ describe('good, bad, invalid tail requests', () => {
   ];
   for (const c of cases) {
     test(c.name, async () => {
+      const testLogSink = new TestLogSink();
       const state = await createTestDurableObjectState('test-do-id');
       const roomDO = new BaseRoomDO({
         mutators: {},
@@ -487,208 +451,221 @@ describe('good, bad, invalid tail requests', () => {
   }
 });
 
-test('tail should replace global console', async () => {
-  jest.setSystemTime(1984);
-  const roomDO = await makeBaseRoomDO();
+describe('tail', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
 
-  const request = new Request(
-    'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
-    {headers: {['Upgrade']: 'websocket'}},
-  );
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
 
-  const originalConsoleLogSpy = jest
-    .spyOn(originalConsole, 'log')
-    .mockImplementation(() => {
+  test('tail should replace global console', async () => {
+    jest.setSystemTime(1984);
+    const roomDO = await makeBaseRoomDO();
+
+    const request = new Request(
+      'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
+      {headers: {['Upgrade']: 'websocket'}},
+    );
+
+    const originalConsoleLogSpy = jest
+      .spyOn(originalConsole, 'log')
+      .mockImplementation(() => {
+        // Do nothing.
+      });
+    const response = await roomDO.fetch(request);
+    expect(response.status).toBe(101);
+    const tailConsoleLogSpy = jest.spyOn(console, 'log');
+    const ws = response.webSocket;
+    assert(ws);
+    ws.accept();
+
+    let {promise, resolve} = resolver<void>();
+
+    ws.addEventListener(
+      'message',
+      e => {
+        expect(typeof e.data).toBe('string');
+        expect(JSON.parse(e.data as string)).toEqual([
+          'log',
+          1984,
+          ['hello', 'world'],
+        ]);
+        resolve();
+      },
+      {once: true},
+    );
+
+    console.log('hello', 'world');
+
+    expect(originalConsoleLogSpy).not.toHaveBeenCalled();
+    expect(tailConsoleLogSpy).toHaveBeenCalledTimes(1);
+    expect(tailConsoleLogSpy).toHaveBeenCalledWith('hello', 'world');
+
+    tailConsoleLogSpy.mockReset();
+
+    // Wait for addEventListener to get called
+    await promise;
+
+    ({promise, resolve} = resolver<void>());
+    const log: unknown[] = [];
+    ws.addEventListener('message', e => {
+      expect(typeof e.data).toBe('string');
+      log.push(JSON.parse(e.data as string));
+      if (log.length === 5) {
+        resolve();
+      }
+    });
+
+    console.debug('debug');
+    console.error('error');
+    console.info('info');
+    console.log('log');
+    console.warn('warn');
+
+    // Wait to allow event listeners to get called
+    await promise;
+
+    function makeLog(s: string) {
+      return [s, 1984, [s]];
+    }
+
+    expect(log).toEqual([
+      makeLog('debug'),
+      makeLog('error'),
+      makeLog('info'),
+      makeLog('log'),
+      makeLog('warn'),
+    ]);
+
+    ws.close();
+    // Wait for close to be dispatched
+    await Promise.resolve();
+
+    expect(tailConsoleLogSpy).toHaveBeenCalledTimes(1);
+    tailConsoleLogSpy.mockReset();
+
+    // This should be logged to the original console... which is spied on by
+    // originalConsoleLogSpy.
+    console.log('good', 'bye');
+
+    expect(tailConsoleLogSpy).toHaveBeenCalledTimes(1);
+    expect(tailConsoleLogSpy).toHaveBeenCalledWith('good', 'bye');
+
+    expect(originalConsoleLogSpy).toHaveBeenCalledTimes(1);
+    expect(originalConsoleLogSpy).toHaveBeenCalledWith('good', 'bye');
+  });
+
+  test('tail two websockets', async () => {
+    jest.setSystemTime(1984);
+    const roomDO = await makeBaseRoomDO();
+
+    jest.spyOn(originalConsole, 'log').mockImplementation(() => {
       // Do nothing.
     });
-  const response = await roomDO.fetch(request);
-  expect(response.status).toBe(101);
-  const tailConsoleLogSpy = jest.spyOn(console, 'log');
-  const ws = response.webSocket;
-  assert(ws);
-  ws.accept();
 
-  let {promise, resolve} = resolver<void>();
+    const request1 = new Request(
+      'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
+      {headers: {['Upgrade']: 'websocket'}},
+    );
+    const response1 = await roomDO.fetch(request1);
+    expect(response1.status).toBe(101);
+    response1.webSocket!.accept();
 
-  ws.addEventListener(
-    'message',
-    e => {
-      expect(typeof e.data).toBe('string');
-      expect(JSON.parse(e.data as string)).toEqual([
-        'log',
-        1984,
-        ['hello', 'world'],
-      ]);
-      resolve();
-    },
-    {once: true},
-  );
+    const request2 = new Request(
+      'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
+      {headers: {['Upgrade']: 'websocket'}},
+    );
+    const response2 = await roomDO.fetch(request2);
+    expect(response2.status).toBe(101);
+    response2.webSocket!.accept();
 
-  console.log('hello', 'world');
+    const log1: unknown[] = [];
+    response1.webSocket!.addEventListener('message', e => {
+      log1.push(JSON.parse(e.data as string));
+    });
 
-  expect(originalConsoleLogSpy).not.toHaveBeenCalled();
-  expect(tailConsoleLogSpy).toHaveBeenCalledTimes(1);
-  expect(tailConsoleLogSpy).toHaveBeenCalledWith('hello', 'world');
+    const log2: unknown[] = [];
+    response2.webSocket!.addEventListener('message', e => {
+      log2.push(JSON.parse(e.data as string));
+    });
 
-  tailConsoleLogSpy.mockReset();
+    console.log('hello', 'world');
 
-  // Wait for addEventListener to get called
-  await promise;
-
-  ({promise, resolve} = resolver<void>());
-  const log: unknown[] = [];
-  ws.addEventListener('message', e => {
-    expect(typeof e.data).toBe('string');
-    log.push(JSON.parse(e.data as string));
-    if (log.length === 5) {
-      resolve();
+    function makeLog(message: unknown[]) {
+      return ['log', 1984, message];
     }
+
+    await Promise.resolve();
+    expect(log1).toEqual([makeLog(['hello', 'world'])]);
+    expect(log2).toEqual(log1);
+
+    response1.webSocket!.close();
+
+    // Wait for close to be dispatched
+    await Promise.resolve();
+
+    console.log('good', 'bye');
+
+    await Promise.resolve();
+
+    expect(log1).toEqual([makeLog(['hello', 'world'])]);
+    expect(log2).toEqual([
+      makeLog(['hello', 'world']),
+      makeLog(['good', 'bye']),
+    ]);
   });
 
-  console.debug('debug');
-  console.error('error');
-  console.info('info');
-  console.log('log');
-  console.warn('warn');
+  test('tail log throws on json stringify', async () => {
+    jest.setSystemTime(1984);
+    const roomDO = await makeBaseRoomDO();
 
-  // Wait to allow event listeners to get called
-  await promise;
+    jest.spyOn(originalConsole, 'log').mockImplementation(() => {});
 
-  function makeLog(s: string) {
-    return [s, 1984, [s]];
-  }
+    const originalConsoleErrorSpy = jest
+      .spyOn(originalConsole, 'error')
+      .mockImplementation(() => {});
 
-  expect(log).toEqual([
-    makeLog('debug'),
-    makeLog('error'),
-    makeLog('info'),
-    makeLog('log'),
-    makeLog('warn'),
-  ]);
+    const request = new Request(
+      'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
+      {headers: {['Upgrade']: 'websocket'}},
+    );
+    const response = await roomDO.fetch(request);
+    expect(response.status).toBe(101);
+    response.webSocket!.accept();
 
-  ws.close();
-  // Wait for close to be dispatched
-  await Promise.resolve();
+    const log: unknown[] = [];
+    response.webSocket!.addEventListener('message', e => {
+      log.push(JSON.parse(e.data as string));
+    });
 
-  expect(tailConsoleLogSpy).toHaveBeenCalledTimes(1);
-  tailConsoleLogSpy.mockReset();
-
-  // This should be logged to the original console... which is spied on by
-  // originalConsoleLogSpy.
-  console.log('good', 'bye');
-
-  expect(tailConsoleLogSpy).toHaveBeenCalledTimes(1);
-  expect(tailConsoleLogSpy).toHaveBeenCalledWith('good', 'bye');
-
-  expect(originalConsoleLogSpy).toHaveBeenCalledTimes(1);
-  expect(originalConsoleLogSpy).toHaveBeenCalledWith('good', 'bye');
-});
-
-test('tail two websockets', async () => {
-  jest.setSystemTime(1984);
-  const roomDO = await makeBaseRoomDO();
-
-  jest.spyOn(originalConsole, 'log').mockImplementation(() => {
-    // Do nothing.
-  });
-
-  const request1 = new Request(
-    'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
-    {headers: {['Upgrade']: 'websocket'}},
-  );
-  const response1 = await roomDO.fetch(request1);
-  expect(response1.status).toBe(101);
-  response1.webSocket!.accept();
-
-  const request2 = new Request(
-    'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
-    {headers: {['Upgrade']: 'websocket'}},
-  );
-  const response2 = await roomDO.fetch(request2);
-  expect(response2.status).toBe(101);
-  response2.webSocket!.accept();
-
-  const log1: unknown[] = [];
-  response1.webSocket!.addEventListener('message', e => {
-    log1.push(JSON.parse(e.data as string));
-  });
-
-  const log2: unknown[] = [];
-  response2.webSocket!.addEventListener('message', e => {
-    log2.push(JSON.parse(e.data as string));
-  });
-
-  console.log('hello', 'world');
-
-  function makeLog(message: unknown[]) {
-    return ['log', 1984, message];
-  }
-
-  await Promise.resolve();
-  expect(log1).toEqual([makeLog(['hello', 'world'])]);
-  expect(log2).toEqual(log1);
-
-  response1.webSocket!.close();
-
-  // Wait for close to be dispatched
-  await Promise.resolve();
-
-  console.log('good', 'bye');
-
-  await Promise.resolve();
-
-  expect(log1).toEqual([makeLog(['hello', 'world'])]);
-  expect(log2).toEqual([makeLog(['hello', 'world']), makeLog(['good', 'bye'])]);
-});
-
-test('tail log throws on json stringify', async () => {
-  jest.setSystemTime(1984);
-  const roomDO = await makeBaseRoomDO();
-
-  jest.spyOn(originalConsole, 'log').mockImplementation(() => {});
-
-  const originalConsoleErrorSpy = jest
-    .spyOn(originalConsole, 'error')
-    .mockImplementation(() => {});
-
-  const request = new Request(
-    'ws://test.roci.dev' + TAIL_URL_PATH + '?roomID=testRoomID',
-    {headers: {['Upgrade']: 'websocket'}},
-  );
-  const response = await roomDO.fetch(request);
-  expect(response.status).toBe(101);
-  response.webSocket!.accept();
-
-  const log: unknown[] = [];
-  response.webSocket!.addEventListener('message', e => {
-    log.push(JSON.parse(e.data as string));
-  });
-
-  const o = {
-    a: 1,
-    b: {
-      toJSON() {
-        throw new TypeError();
+    const o = {
+      a: 1,
+      b: {
+        toJSON() {
+          throw new TypeError();
+        },
       },
-    },
-  };
+    };
 
-  console.log(o);
+    console.log(o);
 
-  await Promise.resolve();
-  expect(log).toEqual([]);
-  expect(originalConsoleErrorSpy).toBeCalledTimes(1);
-  originalConsoleErrorSpy.mockReset();
+    await Promise.resolve();
+    expect(log).toEqual([]);
+    expect(originalConsoleErrorSpy).toBeCalledTimes(1);
+    originalConsoleErrorSpy.mockReset();
 
-  response.webSocket!.close();
+    response.webSocket!.close();
 
-  // Wait for close to be dispatched
-  await Promise.resolve();
+    // Wait for close to be dispatched
+    await Promise.resolve();
 
-  console.error('good', 'bye');
+    console.error('good', 'bye');
 
-  await Promise.resolve();
+    await Promise.resolve();
 
-  expect(log).toEqual([]);
-  expect(originalConsoleErrorSpy).toBeCalledTimes(0);
+    expect(log).toEqual([]);
+    expect(originalConsoleErrorSpy).toBeCalledTimes(0);
+  });
 });
