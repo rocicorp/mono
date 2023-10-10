@@ -2,7 +2,8 @@ import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {assertNotUndefined} from 'shared/src/asserts.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
-import * as dag from '../dag/mod.js';
+import type {Read} from '../dag/store.js';
+import {TestStore} from '../dag/test-store.js';
 import {fakeHash} from '../hash.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {getLatestGCUpdate, initClientGroupGC} from './client-group-gc.js';
@@ -33,17 +34,17 @@ function awaitLatestGCUpdate(): Promise<ClientGroupMap> {
 }
 
 async function expectClientGroups(
-  dagStore: dag.TestStore,
+  dagStore: TestStore,
   clientGroups: Record<string, ClientGroup>,
 ) {
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientGroupMap = await getClientGroups(read);
     expect(Object.fromEntries(readClientGroupMap)).to.deep.equal(clientGroups);
   });
 }
 
 test('initClientGroupGC starts 5 min interval that collects client groups that are not referred to by any clients and have no pending mutations', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   const clientGroup1 = {
     headHash: fakeHash('eadbac1'),
     mutatorNames: [],
@@ -109,7 +110,7 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
   const controller = new AbortController();
   initClientGroupGC(dagStore, new LogContext(), controller.signal);
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientGroupMap = await getClientGroups(read);
     expect(readClientGroupMap).to.deep.equal(clientGroupMap);
   });

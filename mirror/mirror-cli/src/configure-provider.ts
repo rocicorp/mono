@@ -12,6 +12,7 @@ import {
 import {assert} from 'shared/src/asserts.js';
 import {storeSecret} from './secrets.js';
 import {getFirestore} from 'firebase-admin/firestore';
+import {getProviderConfig} from './cf.js';
 
 export function configureProviderOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -100,6 +101,35 @@ const REQUIRED_PERMISSIONS = [
   '#worker:edit',
   '#worker:read',
 ] as const;
+
+export function checkProviderOptions(yargs: CommonYargsArgv) {
+  return yargs;
+}
+
+type CheckProviderHandlerArgs = YargvToInterface<
+  ReturnType<typeof checkProviderOptions>
+>;
+
+export async function checkProviderHandler(
+  yargs: CheckProviderHandlerArgs,
+): Promise<void> {
+  const {
+    apiToken,
+    defaultZone: {zoneID, zoneName},
+  } = await getProviderConfig(yargs);
+  const zones = await new Zones(apiToken).list();
+  const zone = zones.find(z => z.id === zoneID);
+  if (!zone) {
+    throw new Error(`Zone with ID ${zoneID} not accessible with apiToken`);
+  }
+
+  checkPermissions(zone);
+  await checkCapabilities(
+    zoneName,
+    new CustomHostnames({apiToken, zoneID}),
+    new DNSRecords({apiToken, zoneID}),
+  );
+}
 
 function checkPermissions(zone: Zone) {
   const granted = new Set(zone.permissions);

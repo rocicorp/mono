@@ -37,7 +37,7 @@ import {
 } from 'mirror-schema/src/test-helpers.js';
 import {must} from 'shared/src/must.js';
 import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
-import {appDataConverter} from 'mirror-schema/src/app.js';
+import {type ScriptRef, appDataConverter} from 'mirror-schema/src/app.js';
 import {Queue} from 'shared/src/queue.js';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {appNameIndexPath, teamPath} from 'mirror-schema/src/team.js';
@@ -48,6 +48,7 @@ import {
   providerPath,
 } from 'mirror-schema/src/provider.js';
 import type {ScriptHandler} from '../../cloudflare/script-handler.js';
+import {MIN_WFP_VERSION} from './create.function.js';
 
 mockFunctionParamsAndSecrets();
 
@@ -57,8 +58,12 @@ describe('deploy', () => {
   const APP_ID = 'deploy-test-app-id';
   const APP_NAME = 'my-app';
   const TEAM_ID = 'my-team';
-  const SERVER_VERSION = 'deploy-server-version';
+  const SERVER_VERSION = '0.35.0';
+  const WFP_SERVER_VERSION = MIN_WFP_VERSION.raw;
+  const WFP_SERVER_VERSION_PRE_RELEASE_TAG = `${WFP_SERVER_VERSION}-canary.0`;
   const CLOUDFLARE_ACCOUNT_ID = 'foo-cloudflare-account';
+  const NAMESPACE = 'prod';
+  const SCRIPT_NAME = 'foo-bar-baz';
 
   const noopScriptHandler: ScriptHandler = {
     async *publish(): AsyncGenerator<string> {},
@@ -77,9 +82,33 @@ describe('deploy', () => {
         .doc(serverPath(SERVER_VERSION))
         .withConverter(serverDataConverter),
       {
-        major: 1,
-        minor: 2,
-        patch: 3,
+        major: 0,
+        minor: 35,
+        patch: 0,
+        modules: [],
+        channels: ['stable'],
+      },
+    );
+    batch.create(
+      firestore
+        .doc(serverPath(WFP_SERVER_VERSION))
+        .withConverter(serverDataConverter),
+      {
+        major: MIN_WFP_VERSION.major,
+        minor: MIN_WFP_VERSION.minor,
+        patch: MIN_WFP_VERSION.patch,
+        modules: [],
+        channels: ['stable'],
+      },
+    );
+    batch.create(
+      firestore
+        .doc(serverPath(WFP_SERVER_VERSION_PRE_RELEASE_TAG))
+        .withConverter(serverDataConverter),
+      {
+        major: MIN_WFP_VERSION.major,
+        minor: MIN_WFP_VERSION.minor,
+        patch: MIN_WFP_VERSION.patch,
         modules: [],
         channels: ['stable'],
       },
@@ -95,7 +124,7 @@ describe('deploy', () => {
           zoneID: 'zone-id',
           zoneName: 'reflect-o-rama.net',
         },
-        dispatchNamespace: 'prod',
+        dispatchNamespace: NAMESPACE,
       },
     );
     await batch.commit();
@@ -104,12 +133,18 @@ describe('deploy', () => {
   afterAll(async () => {
     const batch = firestore.batch();
     batch.delete(firestore.doc(serverPath(SERVER_VERSION)));
+    batch.delete(firestore.doc(serverPath(WFP_SERVER_VERSION)));
+    batch.delete(firestore.doc(serverPath(WFP_SERVER_VERSION_PRE_RELEASE_TAG)));
     batch.delete(firestore.doc(providerPath(DEFAULT_PROVIDER_ID)));
     await batch.commit();
   });
 
   beforeEach(async () => {
-    await setApp(firestore, APP_ID, {teamID: TEAM_ID, name: APP_NAME});
+    await setApp(firestore, APP_ID, {
+      teamID: TEAM_ID,
+      name: APP_NAME,
+      cfScriptName: SCRIPT_NAME,
+    });
     await setTeam(firestore, TEAM_ID, {numApps: 1});
     await setAppName(firestore, TEAM_ID, APP_ID, APP_NAME);
   });
@@ -158,6 +193,7 @@ describe('deploy', () => {
 
   async function requestTestDeployment(
     type: DeploymentType = 'USER_UPLOAD',
+    serverVersion = SERVER_VERSION,
   ): Promise<string> {
     const deploymentPath = await requestDeployment(firestore, APP_ID, {
       requesterID: 'foo',
@@ -165,8 +201,8 @@ describe('deploy', () => {
       spec: {
         appModules: [],
         hostname: 'boo',
-        serverVersion: SERVER_VERSION,
-        serverVersionRange: '1',
+        serverVersion,
+        serverVersionRange: `^${serverVersion}`,
         options: defaultOptions(),
         hashesOfSecrets: dummySecrets(),
       },
@@ -457,5 +493,81 @@ describe('deploy', () => {
 
     const team = await getTeam(firestore, TEAM_ID);
     expect(team.numApps).toBe(0);
+  });
+
+  describe('WFP migration', () => {
+    type Case = {
+      name: string;
+      serverVersion: string;
+      scriptRef?: ScriptRef;
+      expectMigration?: boolean;
+    };
+
+    const cases: Case[] = [
+      {
+        name: 'already WFP',
+        serverVersion: SERVER_VERSION,
+        scriptRef: {name: SCRIPT_NAME, namespace: NAMESPACE},
+      },
+      {
+        name: 'unsupported version',
+        serverVersion: SERVER_VERSION,
+      },
+      {
+        name: 'supported version',
+        serverVersion: WFP_SERVER_VERSION,
+        expectMigration: true,
+      },
+      {
+        name: 'supported version pre-release tag',
+        serverVersion: WFP_SERVER_VERSION_PRE_RELEASE_TAG,
+        expectMigration: true,
+      },
+    ];
+    for (const c of cases) {
+      test(c.name, async () => {
+        if (c.scriptRef) {
+          await firestore
+            .doc(appPath(APP_ID))
+            .withConverter(appDataConverter)
+            .update({
+              scriptRef: c.scriptRef,
+            });
+        }
+        const deploymentID = await requestTestDeployment(
+          'USER_UPLOAD',
+          c.serverVersion,
+        );
+
+        let scriptDeleted = false;
+
+        await runDeployment(
+          firestore,
+          null as unknown as Storage,
+          APP_ID,
+          deploymentID,
+          mockGetApiToken,
+          {
+            async *publish() {},
+            // eslint-disable-next-line require-await
+            async delete() {
+              scriptDeleted = true;
+            },
+          },
+        );
+
+        expect(scriptDeleted).toBe(c.expectMigration ?? false);
+
+        const app = await getApp(firestore, APP_ID);
+        if (c.expectMigration) {
+          expect(app.scriptRef).toEqual({
+            name: SCRIPT_NAME,
+            namespace: NAMESPACE,
+          });
+        } else {
+          expect(app.scriptRef).toEqual(c.scriptRef);
+        }
+      });
+    }
   });
 });

@@ -142,6 +142,7 @@ describe('publish', () => {
   type Case = {
     name: string;
     serverReleaseChannel: string;
+    newServerReleaseChannel?: string;
     expectedServerVersion?: string;
     requestAdditions?: Partial<PublishRequest>;
     errorCode?: FunctionsErrorCode;
@@ -156,6 +157,12 @@ describe('publish', () => {
     {
       name: 'multiple server candidates',
       serverReleaseChannel: 'canary',
+      expectedServerVersion: '0.28.1',
+    },
+    {
+      name: 'update server release channel',
+      serverReleaseChannel: 'stable',
+      newServerReleaseChannel: 'canary',
       expectedServerVersion: '0.28.1',
     },
     {
@@ -184,10 +191,10 @@ describe('publish', () => {
 
   for (const c of cases) {
     test(c.name, async () => {
-      await firestore
+      const appDoc = firestore
         .doc(appPath(APP_ID))
-        .withConverter(appDataConverter)
-        .update({serverReleaseChannel: c.serverReleaseChannel});
+        .withConverter(appDataConverter);
+      await appDoc.update({serverReleaseChannel: c.serverReleaseChannel});
 
       const save = jest.fn();
       const storage = {
@@ -212,6 +219,7 @@ describe('publish', () => {
           auth: {uid: USER_ID} as AuthData,
           data: {
             ...request,
+            serverReleaseChannel: c.newServerReleaseChannel,
             ...c.requestAdditions,
           },
           rawRequest: null as unknown as Request,
@@ -262,6 +270,11 @@ describe('publish', () => {
           status: 'REQUESTED',
         });
         expect(deployment).toHaveProperty('requestTime');
+
+        const app = (await appDoc.get()).data();
+        expect(app?.serverReleaseChannel).toBe(
+          c.newServerReleaseChannel ?? c.serverReleaseChannel,
+        );
 
         // Cleanup.
         await deployments.docs[0].ref.delete();

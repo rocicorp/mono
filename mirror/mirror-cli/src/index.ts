@@ -48,6 +48,8 @@ import {
   deleteTeamSubdomainsOptions,
 } from './delete-team-subdomains.js';
 import {
+  checkProviderHandler,
+  checkProviderOptions,
   configureProviderHandler,
   configureProviderOptions,
 } from './configure-provider.js';
@@ -112,6 +114,14 @@ function createCLIParser(argv: string[]) {
     'Configures a provider for hosting Workers.',
     configureProviderOptions,
     configureProviderHandler,
+  );
+
+  // check-provider
+  reflectCLI.command(
+    'check-provider',
+    'Checks that the provider is properly set up.',
+    checkProviderOptions,
+    checkProviderHandler,
   );
 
   // wfp

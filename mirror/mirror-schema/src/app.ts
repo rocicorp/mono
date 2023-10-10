@@ -76,16 +76,6 @@ export type App = v.Infer<typeof appSchema>;
 
 export const appDataConverter = firestoreDataConverter(appSchema);
 
-// The slice of App fields read by the cli.
-// Having the cli use a constrained schema makes it easier to
-// refactor/rewrite other parts of the schema.
-// Pick more fields as necessary.
-const appViewSchema = appSchema.pick('name');
-
-export type AppView = v.Infer<typeof appViewSchema>;
-
-export const appViewDataConverter = firestoreDataConverter(appViewSchema);
-
 // APP_COLLECTION and appPath() are defined in deployment.js to avoid a cyclic
 // dependency (which otherwise breaks mjs targets). Re-export them here to be
 // consistent with other schema files.

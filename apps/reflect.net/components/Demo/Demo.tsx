@@ -1,29 +1,29 @@
+import {CursorField} from '@/demo/alive/CursorField';
+import {Puzzle} from '@/demo/alive/Puzzle';
 import {hasClient, listClients} from '@/demo/alive/client-model';
 import {colorToString, idToColor} from '@/demo/alive/colors';
-import {CursorField} from '@/demo/alive/CursorField';
 import {
-  getClientRoomAssignment,
   ORCHESTRATOR_ROOM,
+  getClientRoomAssignment,
 } from '@/demo/alive/orchestrator-model';
 import {listPieces} from '@/demo/alive/piece-model';
-import {Puzzle} from '@/demo/alive/Puzzle';
 import {TouchPrompt} from '@/demo/alive/touch-prompt';
-import {generateRandomPieces, getStage, Rect, Size} from '@/demo/alive/util';
+import {Rect, Size, generateRandomPieces, getStage} from '@/demo/alive/util';
 import {loggingOptions} from '@/demo/frontend/logging-options';
 import {mutators, type M} from '@/demo/shared/mutators';
 import {useElementSize} from '@/hooks/use-element-size';
 import {useIsomorphicLayoutEffect} from '@/hooks/use-isomorphic-layout-effect';
 import styles from '@/styles/Home.module.css';
-import {getLocationString, Location} from '@/util/get-location-string';
+import {Location, getLocationString} from '@/util/get-location-string';
 import {closeReflect} from '@/util/reflect';
 import {getWorkerHost} from '@/util/worker-host';
 import {Reflect} from '@rocicorp/reflect/client';
+import {useSubscribe} from '@rocicorp/reflect/react';
 import classNames from 'classnames';
 import {event} from 'nextjs-google-analytics';
 import {useCallback, useEffect, useState} from 'react';
 import ConfettiExplosion from 'react-confetti-explosion';
 import {useInView} from 'react-intersection-observer';
-import {useSubscribe} from 'replicache-react';
 
 const ORCHESTRATOR_ALIVE_INTERVAL_MS = 10_000;
 

@@ -1,8 +1,8 @@
 import {expect} from 'chai';
-import * as dag from '../dag/mod.js';
+import {LazyStore} from '../dag/lazy-store.js';
 import {TestLazyStore} from '../dag/test-lazy-store.js';
-import {MetaType} from '../db/commit.js';
-import * as db from '../db/mod.js';
+import {TestStore} from '../dag/test-store.js';
+import {DEFAULT_HEAD_NAME, MetaType} from '../db/commit.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
 import {assertHash, makeNewFakeHashFunction} from '../hash.js';
@@ -13,7 +13,7 @@ suite('dag with no memory-only hashes gathers nothing', () => {
   const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const hashFunction = makeNewFakeHashFunction();
-    const perdag = new dag.TestStore(undefined, hashFunction);
+    const perdag = new TestStore(undefined, hashFunction);
     const memdag = new TestLazyStore(
       perdag,
       100 * 2 ** 20, // 100 MB,
@@ -54,7 +54,7 @@ suite('dag with only memory-only hashes gathers everything', () => {
   const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const hashFunction = makeNewFakeHashFunction();
-    const perdag = new dag.TestStore(undefined, hashFunction);
+    const perdag = new TestStore(undefined, hashFunction);
     const memdag = new TestLazyStore(
       perdag,
       100 * 2 ** 20, // 100 MB,
@@ -98,8 +98,8 @@ suite(
     const t = async (formatVersion: FormatVersion) => {
       const clientID = 'client-id';
       const hashFunction = makeNewFakeHashFunction();
-      const perdag = new dag.TestStore(undefined, hashFunction);
-      const memdag = new dag.LazyStore(
+      const perdag = new TestStore(undefined, hashFunction);
+      const memdag = new LazyStore(
         perdag,
         100 * 2 ** 20, // 100 MB,
         hashFunction,
@@ -113,7 +113,7 @@ suite(
       await pb.addLocal(clientID);
 
       await withWrite(memdag, async memdagWrite => {
-        await memdagWrite.setHead(db.DEFAULT_HEAD_NAME, pb.headHash);
+        await memdagWrite.setHead(DEFAULT_HEAD_NAME, pb.headHash);
         await memdagWrite.commit();
       });
       mb.chain = pb.chain.slice();
@@ -180,8 +180,8 @@ suite(
     const t = async (formatVersion: FormatVersion) => {
       const clientID = 'client-id';
       const hashFunction = makeNewFakeHashFunction();
-      const perdag = new dag.TestStore(undefined, hashFunction);
-      const memdag = new dag.LazyStore(
+      const perdag = new TestStore(undefined, hashFunction);
+      const memdag = new LazyStore(
         perdag,
         100 * 2 ** 20, // 100 MB,
         hashFunction,
@@ -205,7 +205,7 @@ suite(
         undefined,
       );
       await withWrite(memdag, async memdagWrite => {
-        await memdagWrite.setHead(db.DEFAULT_HEAD_NAME, pb.headHash);
+        await memdagWrite.setHead(DEFAULT_HEAD_NAME, pb.headHash);
         await memdagWrite.commit();
       });
 

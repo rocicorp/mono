@@ -14,6 +14,7 @@ import {
   Deployment,
 } from 'mirror-schema/src/deployment.js';
 import {watch} from 'mirror-schema/src/watch.js';
+import {unreachable} from 'shared/src/asserts.js';
 
 export function migrateToWFPOptions(yargs: CommonYargsArgv) {
   return yargs.positional('appID', {
@@ -103,5 +104,5 @@ async function getNewDeployment(
       return deployments.docs[0].ref;
     }
   }
-  throw new Error('impossible');
+  unreachable();
 }

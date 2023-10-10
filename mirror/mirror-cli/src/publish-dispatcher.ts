@@ -140,6 +140,7 @@ export async function ensureFallbackOrigin(
       type: 'AAAA',
       name: hostname,
       content: '100::',
+      proxied: true,
     });
     console.log(dnsResult);
   } catch (e) {

@@ -26,7 +26,7 @@ export type M = typeof mutators;
 
 async function increment(
   tx: WriteTransaction,
-  { key, delta }: { key: string; delta: number }
+  {key, delta}: {key: string; delta: number},
 ) {
   console.log(`incrementing ${key} by ${delta}`);
   const prev = await tx.get<number>(key);

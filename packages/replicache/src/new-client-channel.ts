@@ -1,4 +1,5 @@
-import type * as dag from './dag/mod.js';
+import {BroadcastChannel} from './broadcast-channel.js';
+import type {Read, Store} from './dag/store.js';
 import {getClientGroup} from './persist/client-groups.js';
 import {withRead} from './with-transactions.js';
 
@@ -18,8 +19,10 @@ function makeChannelNameV1(replicacheName: string): string {
   return `replicache-new-client-group-v1:${replicacheName}`;
 }
 
-export {makeChannelNameV0 as makeChannelNameV0ForTesting};
-export {makeChannelNameV1 as makeChannelNameV1ForTesting};
+export {
+  makeChannelNameV0 as makeChannelNameV0ForTesting,
+  makeChannelNameV1 as makeChannelNameV1ForTesting,
+};
 
 // This message type can be extended with optional properties.
 type NewClientChannelMessageV1 = {clientGroupID: string; idbName: string};
@@ -41,7 +44,7 @@ export function initNewClientChannel(
   clientGroupID: string,
   isNewClientGroup: boolean,
   onUpdateNeeded: () => void,
-  perdag: dag.Store,
+  perdag: Store,
 ) {
   if (signal.aborted) {
     return;
@@ -72,7 +75,7 @@ export function initNewClientChannel(
           // on each update the clients get assigned a new client group.
           const updateNeeded = await withRead(
             perdag,
-            async (perdagRead: dag.Read) =>
+            async (perdagRead: Read) =>
               (await getClientGroup(newClientGroupID, perdagRead)) !==
               undefined,
           );

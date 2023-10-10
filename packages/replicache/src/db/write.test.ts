@@ -3,8 +3,8 @@ import {expect} from 'chai';
 import {assertNotUndefined} from 'shared/src/asserts.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import {BTreeRead} from '../btree/read.js';
-import * as dag from '../dag/mod.js';
 import {mustGetHeadHash} from '../dag/store.js';
+import {TestStore} from '../dag/test-store.js';
 import {FormatVersion} from '../format-version.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {DEFAULT_HEAD_NAME, commitFromHead} from './commit.js';
@@ -15,7 +15,7 @@ import {newWriteLocal} from './write.js';
 suite('basics w/ commit', () => {
   const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
-    const ds = new dag.TestStore();
+    const ds = new TestStore();
     const lc = new LogContext();
     await initDB(
       await ds.write(),
@@ -104,7 +104,7 @@ suite('basics w/ commit', () => {
 suite('basics w/ putCommit', () => {
   const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
-    const ds = new dag.TestStore();
+    const ds = new TestStore();
     const lc = new LogContext();
     await initDB(
       await ds.write(),
@@ -197,7 +197,7 @@ suite('basics w/ putCommit', () => {
 test('clear', async () => {
   const formatVersion = FormatVersion.Latest;
   const clientID = 'client-id';
-  const ds = new dag.TestStore();
+  const ds = new TestStore();
   const lc = new LogContext();
   await withWrite(ds, dagWrite =>
     initDB(
@@ -278,7 +278,7 @@ test('clear', async () => {
 
 test('mutationID on newWriteLocal', async () => {
   const clientID = 'client-id';
-  const ds = new dag.TestStore();
+  const ds = new TestStore();
   const lc = new LogContext();
   await withWrite(ds, dagWrite =>
     initDB(

@@ -21,6 +21,7 @@ describe('error-report function', () => {
       message: 'error-reporting-test',
       stack: 'error-reporting-test',
     },
+    severity: 'ERROR',
     agentContext: {
       'up.reflect_os_architecture': 'x86_64',
       'up.reflect_os_name': 'Mac OS X',
@@ -40,6 +41,25 @@ describe('error-report function', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(HttpsError);
       expect((e as HttpsError).code).toBe('unknown');
+      expect((e as HttpsError).message).toBe(
+        'action: error-reporting-test, description: error-reporting-test',
+      );
+    }
+  });
+
+  test('request push a warning', async () => {
+    try {
+      const resp = await errorReportingFunction.run({
+        data: {
+          ...request,
+          severity: 'WARNING',
+        },
+        rawRequest: null as unknown as Request,
+      });
+      console.log(resp);
+    } catch (e) {
+      expect(e).toBeInstanceOf(HttpsError);
+      expect((e as HttpsError).code).toBe('cancelled');
       expect((e as HttpsError).message).toBe(
         'action: error-reporting-test, description: error-reporting-test',
       );

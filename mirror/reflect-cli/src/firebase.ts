@@ -11,8 +11,9 @@ import {
   sendAnalyticsEvent,
   getUserParameters,
 } from './metrics/send-ga-event.js';
+import color from 'picocolors';
 import type {ArgumentsCamelCase} from 'yargs';
-import {reportError, ErrorInfo} from 'mirror-protocol/src/error.js';
+import {reportError, ErrorInfo, Severity} from 'mirror-protocol/src/error.js';
 import {version} from './version.js';
 import {getAuthentication} from './auth-config.js';
 import type {CommonYargsOptions} from './yarg-types.js';
@@ -70,6 +71,7 @@ async function reportE(
   args: ArgumentsCamelCase<CommonYargsOptions>,
   eventName: string,
   e: unknown,
+  severity: Severity,
 ) {
   let userID = '';
   try {
@@ -80,6 +82,7 @@ async function reportE(
   await reportError({
     action: eventName,
     error: createErrorInfo(e),
+    severity,
     requester: {
       userID,
       userAgent: {type: 'reflect-cli', version},
@@ -102,13 +105,15 @@ export function handleWith<T extends ArgumentsCamelCase<CommonYargsOptions>>(
       try {
         await Promise.all([
           sendAnalyticsEvent(eventName).catch(async e => {
-            await reportE(args, eventName, e);
+            await reportE(args, eventName, e, 'WARNING');
           }),
           handler(args),
         ]);
       } catch (e) {
-        await reportE(args, eventName, e);
-        throw e;
+        await reportE(args, eventName, e, 'ERROR');
+        const message = e instanceof Error ? e.message : String(e);
+        console.error(`\n${color.red(color.bold('Error'))}: ${message}`);
+        process.exit(-1);
       } finally {
         await getFirestore().terminate();
       }

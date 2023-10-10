@@ -1,9 +1,8 @@
-import {useReducer} from 'react';
-
 import {M, getServerLogs} from '@/demo/shared/mutators';
 import type {ReadTransaction} from '@rocicorp/reflect';
 import type {Reflect} from '@rocicorp/reflect/client';
-import {useSubscribe} from 'replicache-react';
+import {useSubscribe} from '@rocicorp/reflect/react';
+import {useReducer} from 'react';
 
 export function useCount(
   reflect: Reflect<M> | undefined,

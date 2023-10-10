@@ -27,10 +27,14 @@ import {newAppID, newAppIDAsNumber, newAppScriptName} from '../../ids.js';
 import {userAuthorization} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
-import {userAgentVersion, DistTags} from '../validators/version.js';
+import {
+  userAgentVersion,
+  DistTags,
+  checkStandardReleaseChannel,
+} from '../validators/version.js';
 import type {UserAgent} from 'mirror-protocol/src/user-agent.js';
 import {DistTag} from 'mirror-protocol/src/version.js';
-import {SemVer, gte, gt} from 'semver';
+import {SemVer, gte, gt, coerce} from 'semver';
 
 export const create = (firestore: Firestore, testDistTags?: DistTags) =>
   validateSchema(createRequestSchema, createResponseSchema)
@@ -69,6 +73,8 @@ export const create = (firestore: Firestore, testDistTags?: DistTags) =>
           `Invalid App Name "${appName}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
         );
       }
+
+      checkStandardReleaseChannel(serverReleaseChannel);
 
       const userDocRef = firestore
         .doc(userPath(userID))
@@ -153,7 +159,7 @@ export const create = (firestore: Firestore, testDistTags?: DistTags) =>
       });
     });
 
-const MIN_WFP_VERSION = new SemVer('0.37.0');
+export const MIN_WFP_VERSION = new SemVer('0.36.0');
 
 function supportsWorkersForPlatforms(userAgent: UserAgent): boolean {
   const {type: agent, version} = userAgent;
@@ -163,7 +169,8 @@ function supportsWorkersForPlatforms(userAgent: UserAgent): boolean {
       'Please use @rocicorp/reflect to create and publish apps.',
     );
   }
-  if (gte(new SemVer(version), MIN_WFP_VERSION)) {
+  // coerce to treat pre-releases equally.
+  if (gte(coerce(version) ?? version, MIN_WFP_VERSION)) {
     logger.info(`Creating WFP app for reflect-cli v${version}`);
     return true;
   }

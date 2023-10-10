@@ -8,8 +8,9 @@ import type {Cookie} from './cookies.js';
 import type {Store} from './dag/store.js';
 import type {Hash} from './hash.js';
 import type {JSONValue} from './json.js';
+import {dropStore as dropIDBStore} from './kv/idb-util.js';
 import {MemStore} from './kv/mem-store.js';
-import * as kv from './kv/mod.js';
+import type {Store as KVStore} from './kv/store.js';
 import type {PatchOperation} from './patch-operation.js';
 import {
   setupForTest as setupIDBDatabasesStoreForTest,
@@ -128,7 +129,7 @@ async function closeAllCloseables(): Promise<void> {
 export const dbsToDrop: Set<string> = new Set();
 export async function deleteAllDatabases(): Promise<void> {
   for (const name of dbsToDrop) {
-    await kv.dropIDBStore(name);
+    await dropIDBStore(name);
   }
   dbsToDrop.clear();
 }
@@ -226,8 +227,8 @@ export async function tickUntil(f: () => boolean, msPerTest = 10) {
   }
 }
 
-export class MemStoreWithCounters implements kv.Store {
-  readonly store: kv.Store;
+export class MemStoreWithCounters implements KVStore {
+  readonly store: KVStore;
   readCount = 0;
   writeCount = 0;
   closeCount = 0;

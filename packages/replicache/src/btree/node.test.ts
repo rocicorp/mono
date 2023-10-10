@@ -1,6 +1,7 @@
 import {expect} from 'chai';
 import {assert} from 'shared/src/asserts.js';
-import * as dag from '../dag/mod.js';
+import type {Read, Store, Write} from '../dag/store.js';
+import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
 import {Hash, emptyHash, makeNewFakeHashFunction} from '../hash.js';
@@ -38,7 +39,7 @@ suite('btree node', () => {
 
   function makeTree(
     node: TreeData,
-    dagStore: dag.Store,
+    dagStore: Store,
     formatVersion: FormatVersion,
   ): Promise<Hash> {
     return withWrite(dagStore, async dagWrite => {
@@ -50,7 +51,7 @@ suite('btree node', () => {
 
     async function makeTreeInner(
       node: TreeData,
-      dagWrite: dag.Write,
+      dagWrite: Write,
     ): Promise<[Hash, number]> {
       const entries: [string, ReadonlyJSONValue | string][] = Object.entries(
         node,
@@ -88,7 +89,7 @@ suite('btree node', () => {
 
   async function readTreeData(
     rootHash: Hash,
-    dagRead: dag.Read,
+    dagRead: Read,
     formatVersion: FormatVersion,
   ): Promise<Record<string, unknown>> {
     const chunk = await dagRead.getChunk(rootHash);
@@ -121,7 +122,7 @@ suite('btree node', () => {
 
   async function expectTree(
     rootHash: Hash,
-    dagStore: dag.Store,
+    dagStore: Store,
     formatVersion: FormatVersion,
     expected: TreeData,
   ) {
@@ -146,7 +147,7 @@ suite('btree node', () => {
 
   function doRead<R>(
     rootHash: Hash,
-    dagStore: dag.Store,
+    dagStore: Store,
     formatVersion: FormatVersion,
     fn: (r: BTreeRead) => R | Promise<R>,
   ): Promise<R> {
@@ -164,7 +165,7 @@ suite('btree node', () => {
 
   function doWrite(
     rootHash: Hash,
-    dagStore: dag.Store,
+    dagStore: Store,
     formatVersion: FormatVersion,
     fn: (w: BTreeWrite) => void | Promise<void>,
   ): Promise<Hash> {
@@ -196,7 +197,7 @@ suite('btree node', () => {
 
   for (const formatVersion of [FormatVersion.V6, FormatVersion.V7] as const) {
     test(`findLeaf > v${formatVersion}`, async () => {
-      const dagStore = new dag.TestStore();
+      const dagStore = new TestStore();
 
       const leaf0 = makeNodeChunkData(
         0,
@@ -298,7 +299,7 @@ suite('btree node', () => {
     });
 
     test(`empty read tree > v${formatVersion}`, async () => {
-      const dagStore = new dag.TestStore();
+      const dagStore = new TestStore();
       await withRead(dagStore, async dagRead => {
         const r = new BTreeRead(dagRead, formatVersion);
         expect(await r.get('a')).to.be.undefined;
@@ -309,7 +310,7 @@ suite('btree node', () => {
 
     test(`empty write tree > v${formatVersion}`, async () => {
       const chunkHasher = makeNewFakeHashFunction();
-      const dagStore = new dag.TestStore(undefined, chunkHasher);
+      const dagStore = new TestStore(undefined, chunkHasher);
 
       const emptyTreeHash = chunkHasher();
 
@@ -361,7 +362,7 @@ suite('btree node', () => {
     });
 
     test(`get > v${formatVersion}`, async () => {
-      const dagStore = new dag.TestStore();
+      const dagStore = new TestStore();
 
       const tree: TreeData = {
         $level: 1,
@@ -420,7 +421,7 @@ suite('btree node', () => {
     });
 
     test(`has > v${formatVersion}`, async () => {
-      const dagStore = new dag.TestStore();
+      const dagStore = new TestStore();
 
       const tree: TreeData = {
         $level: 1,
@@ -528,7 +529,7 @@ suite('btree node', () => {
     });
 
     test(`put > v${formatVersion}`, async () => {
-      const dagStore = new dag.TestStore();
+      const dagStore = new TestStore();
 
       const tree: TreeData = {
         $level: 0,
@@ -871,7 +872,7 @@ suite('btree node', () => {
     });
 
     test(`del - single data node > v${formatVersion}`, async () => {
-      const dagStore = new dag.TestStore();
+      const dagStore = new TestStore();
 
       const tree: TreeData = {
         $level: 0,
@@ -912,7 +913,7 @@ suite('btree node', () => {
     });
 
     test(`del - flatten > v${formatVersion}`, async () => {
-      const dagStore = new dag.TestStore();
+      const dagStore = new TestStore();
 
       // This tests that we can flatten "an invalid tree"
 
@@ -974,7 +975,7 @@ suite('btree node', () => {
     });
 
     test(`del - with internal nodes > v${formatVersion}`, async () => {
-      const dagStore = new dag.TestStore();
+      const dagStore = new TestStore();
 
       const tree: TreeData = {
         $level: 2,
@@ -1142,7 +1143,7 @@ suite('btree node', () => {
     });
 
     test(`put - invalid > v${formatVersion}`, async () => {
-      const dagStore = new dag.TestStore();
+      const dagStore = new TestStore();
 
       // This tests that we can do puts on "an invalid tree"
 
@@ -1181,7 +1182,7 @@ suite('btree node', () => {
       maxSize = minSize * 2;
       getEntrySize = (k, v) => getSizeOfEntry(k, v);
 
-      const dagStore = new dag.TestStore();
+      const dagStore = new TestStore();
 
       // This tests that we can do puts on "an invalid tree"
 
@@ -1247,7 +1248,7 @@ suite('btree node', () => {
         fromKey = '',
         expectedEntries = entries,
       ) => {
-        const dagStore = new dag.TestStore();
+        const dagStore = new TestStore();
 
         const tree: TreeData = {
           $level: 0,
@@ -1343,7 +1344,7 @@ suite('btree node', () => {
         newEntries: Entry<ReadonlyJSONValue>[],
         expectedDiff: Diff,
       ) => {
-        const dagStore = new dag.TestStore();
+        const dagStore = new TestStore();
 
         const [oldHash, newHash] = await withWrite(dagStore, async dagWrite => {
           const oldTree = new BTreeWrite(
@@ -1568,7 +1569,7 @@ suite('btree node', () => {
   }
 
   test('ChunkNotFound?', async () => {
-    const dagStore = new dag.TestStore();
+    const dagStore = new TestStore();
 
     const tree: TreeData = {
       $level: 2,
@@ -1657,7 +1658,7 @@ suite('Write nodes using ChainBuilder', () => {
   }
 
   const getBTreeNodes = async (formatVersion: FormatVersion) => {
-    const dagStore = new dag.TestStore();
+    const dagStore = new TestStore();
     const clientID = 'client1';
     const b = new ChainBuilder(dagStore, undefined, formatVersion);
     await b.addGenesis(clientID);

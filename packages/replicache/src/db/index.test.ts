@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
-import {BTreeWrite} from '../btree/mod.js';
-import * as dag from '../dag/mod.js';
+import {BTreeWrite} from '../btree/write.js';
+import {TestStore} from '../dag/test-store.js';
 import {FormatVersion} from '../format-version.js';
 import {JSONValue, deepFreeze} from '../json.js';
 import {stringCompare} from '../string-compare.js';
@@ -200,7 +200,7 @@ test('index value', async () => {
     op: IndexOperation,
     expected: number[] | string,
   ) => {
-    const dagStore = new dag.TestStore();
+    const dagStore = new TestStore();
     await withWrite(dagStore, async dagWrite => {
       const index = new BTreeWrite(dagWrite, formatVersion);
       await index.put(encodeIndexKey(['s1', '1']), 'v1');

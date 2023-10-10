@@ -2,8 +2,8 @@ import {
   publish as publishCaller,
   type PublishRequest,
 } from 'mirror-protocol/src/publish.js';
-import {deploymentViewDataConverter} from 'mirror-schema/src/deployment.js';
-import {watch} from 'mirror-schema/src/watch.js';
+import {deploymentViewDataConverter} from 'mirror-schema/src/client-view/deployment.js';
+import {watch} from 'mirror-schema/src/client-view/watch.js';
 import assert from 'node:assert';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -20,7 +20,11 @@ import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {checkForServerDeprecation} from './version.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
-  return yargs;
+  return yargs.option('reflect-channel', {
+    desc: 'Set the Reflect Channel for server updates',
+    type: 'string',
+    hidden: true,
+  });
 }
 
 async function exists(path: string) {
@@ -41,6 +45,7 @@ export async function publishHandler(
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
+  const {reflectChannel} = yargs;
   const {appID, server: script} = await ensureAppInstantiated(yargs);
 
   const absPath = path.resolve(script);
@@ -71,6 +76,9 @@ export async function publishHandler(
     serverVersionRange,
     appID,
   };
+  if (reflectChannel) {
+    data.serverReleaseChannel = reflectChannel;
+  }
 
   console.log('Requesting deployment');
   const {deploymentPath} = await publish(data);

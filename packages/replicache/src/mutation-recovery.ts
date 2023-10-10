@@ -1,7 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
-import * as dag from './dag/mod.js';
-import * as db from './db/mod.js';
+import {throwChunkHasher, uuidChunkHasher} from './dag/chunk.js';
+import {LazyStore} from './dag/lazy-store.js';
+import {StoreImpl} from './dag/store-impl.js';
+import type {Store} from './dag/store.js';
+import {DEFAULT_HEAD_NAME} from './db/commit.js';
 import {
   ClientStateNotFoundResponse,
   VersionNotSupportedResponse,
@@ -15,8 +18,24 @@ import {
 import {assertHash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {CreateStore} from './kv/store.js';
-import {assertClientV4, setClients} from './persist/clients.js';
-import * as persist from './persist/mod.js';
+import {
+  ClientGroup,
+  ClientGroupMap,
+  getClientGroups,
+  disableClientGroup as persistDisableClientGroup,
+  setClientGroups,
+} from './persist/client-groups.js';
+import {
+  Client,
+  ClientMap,
+  assertClientV4,
+  getClients,
+  setClients,
+} from './persist/clients.js';
+import type {
+  IDBDatabasesStore,
+  IndexedDBDatabase,
+} from './persist/idb-databases-store.js';
 import type {
   PullResponseOKV1,
   PullResponseV0,
@@ -26,8 +45,8 @@ import type {
 import type {PushResponse, Pusher} from './pusher.js';
 import type {MaybePromise} from './replicache.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
-import * as sync from './sync/mod.js';
-import {PUSH_VERSION_DD31, PUSH_VERSION_SDD} from './sync/push.js';
+import {beginPullV0, beginPullV1} from './sync/pull.js';
+import {PUSH_VERSION_DD31, PUSH_VERSION_SDD, push} from './sync/push.js';
 import {withRead, withWrite} from './with-transactions.js';
 
 const MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 10 * 2 ** 20; // 10 MB
@@ -81,11 +100,11 @@ export class MutationRecovery {
   }
 
   async recoverMutations(
-    preReadClientMap: persist.ClientMap | undefined,
+    preReadClientMap: ClientMap | undefined,
     ready: Promise<unknown>,
-    perdag: dag.Store,
-    idbDatabase: persist.IndexedDBDatabase,
-    idbDatabases: persist.IDBDatabasesStore,
+    perdag: Store,
+    idbDatabase: IndexedDBDatabase,
+    idbDatabases: IDBDatabasesStore,
     createStore: CreateStore,
   ): Promise<boolean> {
     const {lc, enableMutationRecovery, isPushDisabled, delegate} =
@@ -170,13 +189,13 @@ function logMutationRecoveryError(
  *   mutations.
  */
 async function recoverMutationsOfClientV4(
-  client: persist.Client,
+  client: Client,
   clientID: ClientID,
-  perdag: dag.Store,
-  database: persist.IndexedDBDatabase,
+  perdag: Store,
+  database: IndexedDBDatabase,
   options: MutationRecoveryOptions,
   formatVersion: FormatVersion,
-): Promise<persist.ClientMap | undefined> {
+): Promise<ClientMap | undefined> {
   assert(database.replicacheFormatVersion === FormatVersion.SDD);
   assertClientV4(client);
 
@@ -197,15 +216,15 @@ async function recoverMutationsOfClientV4(
   }
   const stepDescription = `Recovering mutations for ${clientID}.`;
   lc.debug?.('Start:', stepDescription);
-  const lazyDagForOtherClient = new dag.LazyStore(
+  const lazyDagForOtherClient = new LazyStore(
     perdag,
     MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
-    dag.throwChunkHasher,
+    throwChunkHasher,
     assertHash,
   );
   try {
     await withWrite(lazyDagForOtherClient, async write => {
-      await write.setHead(db.DEFAULT_HEAD_NAME, client.headHash);
+      await write.setHead(DEFAULT_HEAD_NAME, client.headHash);
       await write.commit();
     });
 
@@ -222,7 +241,7 @@ async function recoverMutationsOfClientV4(
       const {result: pusherResult} = await wrapInReauthRetries(
         async (requestID: string, requestLc: LogContext) => {
           assertNotUndefined(lazyDagForOtherClient);
-          const pusherResult = await sync.push(
+          const pusherResult = await push(
             requestID,
             lazyDagForOtherClient,
             requestLc,
@@ -267,7 +286,7 @@ async function recoverMutationsOfClientV4(
     const pullSucceeded = await wrapInOnlineCheck(async () => {
       const {result: beginPullResponse} = await wrapInReauthRetries(
         async (requestID: string, requestLc: LogContext) => {
-          const beginPullResponse = await sync.beginPullSDD(
+          const beginPullResponse = await beginPullV0(
             await delegate.profileID,
             clientID,
             database.schemaVersion,
@@ -323,7 +342,7 @@ async function recoverMutationsOfClientV4(
     }
 
     return await withWrite(perdag, async dagWrite => {
-      const clients = await persist.getClients(dagWrite);
+      const clients = await getClients(dagWrite);
       const clientToUpdate = clients.get(clientID);
       if (!clientToUpdate) {
         return clients;
@@ -331,7 +350,7 @@ async function recoverMutationsOfClientV4(
 
       assertClientV4(clientToUpdate);
 
-      const setNewClients = async (newClients: persist.ClientMap) => {
+      const setNewClients = async (newClients: ClientMap) => {
         await setClients(newClients, dagWrite);
         await dagWrite.commit();
         return newClients;
@@ -372,13 +391,13 @@ async function recoverMutationsOfClientV4(
 }
 
 async function recoverMutationsWithNewPerdag(
-  database: persist.IndexedDBDatabase,
+  database: IndexedDBDatabase,
   options: MutationRecoveryOptions,
-  preReadClientMap: persist.ClientMap | undefined,
+  preReadClientMap: ClientMap | undefined,
   createStore: CreateStore,
 ) {
   const perKvStore = createStore(database.name);
-  const perdag = new dag.StoreImpl(perKvStore, dag.uuidChunkHasher, assertHash);
+  const perdag = new StoreImpl(perKvStore, uuidChunkHasher, assertHash);
   try {
     await recoverMutationsFromPerdag(
       database,
@@ -392,10 +411,10 @@ async function recoverMutationsWithNewPerdag(
 }
 
 function recoverMutationsFromPerdag(
-  database: persist.IndexedDBDatabase,
+  database: IndexedDBDatabase,
   options: MutationRecoveryOptions,
-  perdag: dag.Store,
-  preReadClientMap: persist.ClientMap | undefined,
+  perdag: Store,
+  preReadClientMap: ClientMap | undefined,
 ): Promise<void> {
   if (database.replicacheFormatVersion >= FormatVersion.DD31) {
     return recoverMutationsFromPerdagDD31(database, options, perdag);
@@ -409,22 +428,21 @@ function recoverMutationsFromPerdag(
 }
 
 async function recoverMutationsFromPerdagSDD(
-  database: persist.IndexedDBDatabase,
+  database: IndexedDBDatabase,
   options: MutationRecoveryOptions,
-  perdag: dag.Store,
-  preReadClientMap: persist.ClientMap | undefined,
+  perdag: Store,
+  preReadClientMap: ClientMap | undefined,
 ): Promise<void> {
   const {delegate, lc} = options;
   const stepDescription = `Recovering mutations from db ${database.name}.`;
   lc.debug?.('Start:', stepDescription);
   try {
     const formatVersion = parseFormatVersion(database.replicacheFormatVersion);
-    let clientMap: persist.ClientMap | undefined =
-      preReadClientMap ||
-      (await withRead(perdag, read => persist.getClients(read)));
+    let clientMap: ClientMap | undefined =
+      preReadClientMap || (await withRead(perdag, read => getClients(read)));
     const clientIDsVisited = new Set<ClientID>();
     while (clientMap) {
-      let newClientMap: persist.ClientMap | undefined;
+      let newClientMap: ClientMap | undefined;
       for (const [clientID, client] of clientMap) {
         if (delegate.closed) {
           lc.debug?.('Exiting early due to close:', stepDescription);
@@ -454,22 +472,22 @@ async function recoverMutationsFromPerdagSDD(
 }
 
 async function recoverMutationsFromPerdagDD31(
-  database: persist.IndexedDBDatabase,
+  database: IndexedDBDatabase,
   options: MutationRecoveryOptions,
-  perdag: dag.Store,
+  perdag: Store,
 ): Promise<void> {
   const {delegate, lc} = options;
   const stepDescription = `Recovering mutations from db ${database.name}.`;
   lc.debug?.('Start:', stepDescription);
   try {
     const formatVersion = parseFormatVersion(database.replicacheFormatVersion);
-    let clientGroups: persist.ClientGroupMap | undefined = await withRead(
+    let clientGroups: ClientGroupMap | undefined = await withRead(
       perdag,
-      read => persist.getClientGroups(read),
+      read => getClientGroups(read),
     );
     const clientGroupIDsVisited = new Set<ClientGroupID>();
     while (clientGroups) {
-      let newClientGroups: persist.ClientGroupMap | undefined;
+      let newClientGroups: ClientGroupMap | undefined;
       for (const [clientGroupID, clientGroup] of clientGroups) {
         if (delegate.closed) {
           lc.debug?.('Exiting early due to close:', stepDescription);
@@ -512,7 +530,7 @@ async function disableClientGroup(
   selfClientGroupID: string,
   clientGroupID: string,
   response: ClientStateNotFoundResponse | VersionNotSupportedResponse,
-  perdag: dag.Store,
+  perdag: Store,
 ) {
   if (isClientStateNotFoundResponse(response)) {
     lc.debug?.(
@@ -527,7 +545,7 @@ async function disableClientGroup(
   // Replicache instance to update its internal _isClientGroupDisabled
   // property.
   await withWrite(perdag, async perdagWrite => {
-    await persist.disableClientGroup(clientGroupID, perdagWrite);
+    await persistDisableClientGroup(clientGroupID, perdagWrite);
     await perdagWrite.commit();
   });
 }
@@ -538,13 +556,13 @@ async function disableClientGroup(
  *   recover, or because an error occurred when trying to recover the mutations.
  */
 async function recoverMutationsOfClientGroupDD31(
-  clientGroup: persist.ClientGroup,
+  clientGroup: ClientGroup,
   clientGroupID: ClientGroupID,
-  perdag: dag.Store,
-  database: persist.IndexedDBDatabase,
+  perdag: Store,
+  database: IndexedDBDatabase,
   options: MutationRecoveryOptions,
   formatVersion: FormatVersion,
-): Promise<persist.ClientGroupMap | undefined> {
+): Promise<ClientGroupMap | undefined> {
   assert(database.replicacheFormatVersion >= FormatVersion.DD31);
 
   const {
@@ -590,15 +608,15 @@ async function recoverMutationsOfClientGroupDD31(
 
   const stepDescription = `Recovering mutations for client group ${clientGroupID}.`;
   lc.debug?.('Start:', stepDescription);
-  const lazyDagForOtherClientGroup = new dag.LazyStore(
+  const lazyDagForOtherClientGroup = new LazyStore(
     perdag,
     MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
-    dag.throwChunkHasher,
+    throwChunkHasher,
     assertHash,
   );
   try {
     await withWrite(lazyDagForOtherClientGroup, async write => {
-      await write.setHead(db.DEFAULT_HEAD_NAME, clientGroup.headHash);
+      await write.setHead(DEFAULT_HEAD_NAME, clientGroup.headHash);
       await write.commit();
     });
 
@@ -617,7 +635,7 @@ async function recoverMutationsOfClientGroupDD31(
         async (requestID: string, requestLc: LogContext) => {
           assert(clientID);
           assert(lazyDagForOtherClientGroup);
-          const pusherResult = await sync.push(
+          const pusherResult = await push(
             requestID,
             lazyDagForOtherClientGroup,
             requestLc,
@@ -675,7 +693,7 @@ async function recoverMutationsOfClientGroupDD31(
       const {result: beginPullResponse} = await wrapInReauthRetries(
         async (requestID: string, requestLc: LogContext) => {
           assert(clientID);
-          const beginPullResponse = await sync.beginPullDD31(
+          const beginPullResponse = await beginPullV1(
             await delegate.profileID,
             clientID,
             clientGroupID,
@@ -735,7 +753,7 @@ async function recoverMutationsOfClientGroupDD31(
     );
 
     return await withWrite(perdag, async dagWrite => {
-      const clientGroups = await persist.getClientGroups(dagWrite);
+      const clientGroups = await getClientGroups(dagWrite);
       const clientGroupToUpdate = clientGroups.get(clientGroupID);
       if (!clientGroupToUpdate) {
         return clientGroups;
@@ -766,7 +784,7 @@ async function recoverMutationsOfClientGroupDD31(
           ...lastServerAckdMutationIDsUpdates,
         },
       });
-      await persist.setClientGroups(newClientGroups, dagWrite);
+      await setClientGroups(newClientGroups, dagWrite);
       await dagWrite.commit();
       return newClientGroups;
     });

@@ -8,6 +8,7 @@ import {
   DistTagMap,
   lookupDistTags,
 } from 'mirror-protocol/src/version.js';
+import {STANDARD_RELEASE_CHANNELS} from 'mirror-schema/src/server.js';
 
 export type DistTags = DistTagMap<SemVer>;
 
@@ -74,6 +75,15 @@ function checkAgent(
     throw new HttpsError(
       'unavailable',
       'This version of Reflect is no longer supported. Please update to @rocicorp/reflect@latest.',
+    );
+  }
+}
+
+export function checkStandardReleaseChannel(channel: string) {
+  if (!STANDARD_RELEASE_CHANNELS.includes(channel)) {
+    throw new HttpsError(
+      'invalid-argument',
+      `Reflect Channel must be one of [${STANDARD_RELEASE_CHANNELS}]`,
     );
   }
 }
