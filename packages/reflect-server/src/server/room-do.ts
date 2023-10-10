@@ -103,9 +103,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   readonly #turnDuration: number;
   readonly #router = new Router();
 
-  #state: DurableObjectState;
-  readonly #alarmTasks: (() => Promise<void>)[] = [];
-
   constructor(options: RoomDOOptions<MD>) {
     const {
       mutators,
@@ -126,13 +123,10 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       options.allowUnconfirmedWrites,
     );
 
-    this.#state = options.state;
-
     this.#initRoutes();
 
     this.#turnDuration = getDefaultTurnDuration(options.allowUnconfirmedWrites);
     this.#authApiKey = authApiKey;
-
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
       'RoomDO',
@@ -442,28 +436,22 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     }
   }
 
-  async addAlarmTask(task: () => Promise<void>) {
-    this.#alarmTasks.push(task);
-    await this.#state.storage.setAlarm(Date.now());
-  }
-
-  async alarm(): Promise<void> {
-    const task = this.#alarmTasks.shift();
-    if (task) {
-      await task();
-    }
-    if (this.#alarmTasks.length > 0) {
-      await this.#state.storage.setAlarm(Date.now());
-    }
-  }
-
   #processUntilDone(lc: LogContext) {
     lc.debug?.('handling processUntilDone');
     if (this.#turnTimerID) {
       lc.debug?.('already processing, nothing to do');
       return;
     }
-    void this.addAlarmTask(() => this.#processUntilDoneTask());
+
+    this.#turnTimerID = this.runInLockAtInterval(
+      // The logging in turn processing should use this.#lc (i.e. the RoomDO's
+      // general log context), rather than lc which has the context of a
+      // specific request/connection
+      this.#lc,
+      '#processNext',
+      this.#turnDuration,
+      logContext => this.#processNextInLock(logContext),
+    );
   }
 
   // Exposed for testing.
@@ -472,15 +460,12 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     name: string,
     interval: number,
     callback: (lc: LogContext) => Promise<void>,
-    timeout: number,
-    timeoutCallback: (lc: LogContext) => void,
     beforeQueue = () => {
       /* hook for testing */
     },
   ): ReturnType<typeof setInterval> {
     let queued = false;
-    const startIntervalTime = Date.now();
-    let timeoutCallbackCalled = false;
+
     return setInterval(async () => {
       beforeQueue(); // Hook for testing.
 
@@ -515,16 +500,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         // Log if it runs for more than 1.5x the interval.
         interval * 1.5,
       );
-
-      const elapsed = Date.now() - startIntervalTime;
-
-      if (elapsed > timeout && !timeoutCallbackCalled) {
-        lc.debug?.(
-          `${name} interval ran for ${elapsed}ms, calling timeoutCallback`,
-        );
-        timeoutCallback(lc);
-        timeoutCallbackCalled = true;
-      }
     }, interval);
   }
 
@@ -545,35 +520,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     if (nothingToProcess && this.#turnTimerID) {
       clearInterval(this.#turnTimerID);
       this.#turnTimerID = 0;
-      // Empty task to flush logs to tail
-      await this.addAlarmTask(() => Promise.resolve());
     }
-  }
-
-  #processUntilDoneTask() {
-    if (this.#turnTimerID) {
-      this.#lc.debug?.('already processing, nothing to do');
-      return Promise.resolve();
-    }
-
-    this.#turnTimerID = this.runInLockAtInterval(
-      // The logging in turn processing should use this.#lc (i.e. the RoomDO's
-      // general log context), rather than lc which has the context of a
-      // specific request/connection
-      this.#lc,
-      '#processNext',
-      this.#turnDuration,
-      logContext => this.#processNextInLock(logContext),
-      this.#turnDuration * 20,
-      // If the interval runs for more than 20x the intervaltime we want to clear the interval and reschedule it via alarm
-      // so that logs will be flushed to tail
-      async _lc => {
-        clearInterval(this.#turnTimerID);
-        this.#turnTimerID = 0;
-        await this.addAlarmTask(() => this.#processUntilDoneTask());
-      },
-    );
-    return Promise.resolve();
   }
 
   #handleClose = async (
