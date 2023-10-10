@@ -1,10 +1,22 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
-import * as btree from '../btree/mod.js';
+import type {Entry} from '../btree/node.js';
+import {BTreeWrite} from '../btree/write.js';
 import type {Cookie} from '../cookies.js';
-import * as dag from '../dag/mod.js';
-import * as db from '../db/mod.js';
+import {LazyStore} from '../dag/lazy-store.js';
+import type {Store} from '../dag/store.js';
+import {TestStore} from '../dag/test-store.js';
+import {
+  Commit,
+  DEFAULT_HEAD_NAME,
+  IndexRecord,
+  LocalMetaDD31,
+  SnapshotMetaDD31,
+  baseSnapshotHashFromHash,
+  newLocalDD31,
+  newSnapshotDD31,
+} from '../db/commit.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
 import {Hash, assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
@@ -28,7 +40,7 @@ import {withRead, withWrite} from '../with-transactions.js';
 import {refresh} from './refresh.js';
 
 async function makeChain(
-  store: dag.Store,
+  store: Store,
   clientID: ClientID,
   cookie: number,
   headName: string,
@@ -46,16 +58,16 @@ async function makeChain(
 }
 
 function makeMemdagChain(
-  memdag: dag.Store,
+  memdag: Store,
   clientID: ClientID,
   cookie: number,
 ): Promise<{headHash: Hash; chainBuilder: ChainBuilder}> {
-  return makeChain(memdag, clientID, cookie, db.DEFAULT_HEAD_NAME);
+  return makeChain(memdag, clientID, cookie, DEFAULT_HEAD_NAME);
 }
 
 const PERDAG_TEST_SETUP_HEAD_NAME = 'test-setup-head';
 async function makePerdagChainAndSetClientsAndClientGroup(
-  perdag: dag.Store,
+  perdag: Store,
   clientID: ClientID,
   cookie: number,
   withLocal = true,
@@ -77,7 +89,7 @@ async function makePerdagChainAndSetClientsAndClientGroup(
 async function setClientsAndClientGroups(
   headHash: Hash,
   clientID: ClientID,
-  perdag: dag.Store,
+  perdag: Store,
 ) {
   const clientGroupID = 'client-group-1';
   const clientGroups: ClientGroupMap = new Map([
@@ -116,8 +128,8 @@ async function setClientsAndClientGroups(
 function makeStores() {
   const LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 10 * 2 ** 20; // 10 MB
   const chunkHasher = makeNewFakeHashFunction();
-  const perdag = new dag.TestStore(undefined, chunkHasher);
-  const memdag = new dag.LazyStore(
+  const perdag = new TestStore(undefined, chunkHasher);
+  const memdag = new LazyStore(
     perdag,
     LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
     chunkHasher,
@@ -140,7 +152,7 @@ function mutatorsProxy(): MutatorDefs {
 }
 
 function assertRefreshHashes(
-  perdag: dag.TestStore,
+  perdag: TestStore,
   clientID: string,
   hashes: readonly (Hash | undefined)[],
 ) {
@@ -175,7 +187,7 @@ suite('refresh', () => {
     );
     assert(result);
     expect(result[0]).to.deep.equal(
-      await withRead(memdag, read => read.getHead(db.DEFAULT_HEAD_NAME)),
+      await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     );
     expect(Object.fromEntries(result[1])).to.deep.equal({});
 
@@ -225,7 +237,7 @@ suite('refresh', () => {
     );
     assert(result);
     expect(result[0]).to.deep.equal(
-      await withRead(memdag, read => read.getHead(db.DEFAULT_HEAD_NAME)),
+      await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     );
     expect(Object.fromEntries(result[1])).to.deep.equal({});
 
@@ -260,7 +272,7 @@ suite('refresh', () => {
     );
     assert(result);
     expect(result[0]).to.deep.equal(
-      await withRead(memdag, read => read.getHead(db.DEFAULT_HEAD_NAME)),
+      await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     );
     expect(Object.fromEntries(result[1])).to.deep.equal({
       '': [
@@ -370,7 +382,7 @@ suite('refresh', () => {
     );
     assert(result);
     expect(result[0]).to.deep.equal(
-      await withRead(memdag, read => read.getHead(db.DEFAULT_HEAD_NAME)),
+      await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     );
     expect(Object.fromEntries(result[1])).to.deep.equal({
       '': [
@@ -414,7 +426,7 @@ suite('refresh', () => {
 
     const memdagChainBuilder: ChainBuilder = new ChainBuilder(
       memdag,
-      db.DEFAULT_HEAD_NAME,
+      DEFAULT_HEAD_NAME,
     );
     await memdagChainBuilder.addGenesis(clientID1);
     await memdagChainBuilder.addSnapshot([], clientID1, 1, {
@@ -436,7 +448,7 @@ suite('refresh', () => {
     );
     assert(result);
     expect(result[0]).to.deep.equal(
-      await withRead(memdag, read => read.getHead(db.DEFAULT_HEAD_NAME)),
+      await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     );
     expect(Object.fromEntries(result[1])).to.deep.equal({
       '': [
@@ -606,19 +618,19 @@ suite('refresh', () => {
       valueHash,
       indexes = [],
     }: {
-      store: dag.Store;
+      store: Store;
       basisHash?: Hash | null;
       lastMutationIDs: Record<ClientID, number>;
       cookieJSON: Cookie;
       valueHash?: Hash;
-      indexes?: db.IndexRecord[];
-    }): Promise<db.Commit<db.SnapshotMetaDD31>> {
+      indexes?: IndexRecord[];
+    }): Promise<Commit<SnapshotMetaDD31>> {
       return withWrite(store, async dagWrite => {
         if (!valueHash) {
-          const map = new btree.BTreeWrite(dagWrite, formatVersion);
+          const map = new BTreeWrite(dagWrite, formatVersion);
           valueHash = await map.flush();
         }
-        const c = db.newSnapshotDD31(
+        const c = newSnapshotDD31(
           dagWrite.createChunk,
           basisHash,
           lastMutationIDs,
@@ -650,29 +662,29 @@ suite('refresh', () => {
       timestamp = timestampCounter++,
       entries = [],
     }: {
-      store: dag.Store;
+      store: Store;
       clientID: ClientID;
       mutationID: number;
       basisHash: Hash;
       mutatorName: string;
       mutatorArgsJSON: JSONValue;
       originalHash?: Hash | null;
-      indexes?: readonly db.IndexRecord[];
+      indexes?: readonly IndexRecord[];
       valueHash: Hash;
       timestamp?: number;
-      entries?: readonly btree.Entry<ReadonlyJSONValue>[];
-    }): Promise<db.Commit<db.LocalMetaDD31>> {
+      entries?: readonly Entry<ReadonlyJSONValue>[];
+    }): Promise<Commit<LocalMetaDD31>> {
       return withWrite(store, async dagWrite => {
-        const m = new btree.BTreeWrite(dagWrite, formatVersion, valueHash);
+        const m = new BTreeWrite(dagWrite, formatVersion, valueHash);
         for (const [k, v] of entries) {
           await m.put(k, deepFreeze(v));
         }
         const newValueHash = await m.flush();
 
-        const c = db.newLocalDD31(
+        const c = newLocalDD31(
           dagWrite.createChunk,
           basisHash,
-          await db.baseSnapshotHashFromHash(basisHash, dagWrite),
+          await baseSnapshotHashFromHash(basisHash, dagWrite),
           mutationID,
           mutatorName,
           deepFreeze(mutatorArgsJSON),
@@ -786,7 +798,7 @@ suite('refresh', () => {
       });
 
       await withWrite(memdag, async dagWrite => {
-        await dagWrite.setHead(db.DEFAULT_HEAD_NAME, l2.chunk.hash);
+        await dagWrite.setHead(DEFAULT_HEAD_NAME, l2.chunk.hash);
         await dagWrite.removeHead('test');
         await dagWrite.commit();
       });
@@ -806,7 +818,7 @@ suite('refresh', () => {
     );
     assert(result);
     expect(result[0]).to.deep.equal(
-      await withRead(memdag, read => read.getHead(db.DEFAULT_HEAD_NAME)),
+      await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     );
     expect(Object.fromEntries(result[1])).to.deep.equal({
       '': [{key: 'c', newValue: 3, op: 'add'}],

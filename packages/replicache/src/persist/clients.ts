@@ -7,18 +7,22 @@ import {
   assertString,
 } from 'shared/src/asserts.js';
 import {hasOwn} from 'shared/src/has-own.js';
-import * as btree from '../btree/mod.js';
+import {emptyDataNode} from '../btree/node.js';
+import {BTreeRead} from '../btree/read.js';
 import {FrozenCookie, compareCookies} from '../cookies.js';
-import type * as dag from '../dag/mod.js';
+import type {Read, Store, Write} from '../dag/store.js';
 import {
   ChunkIndexDefinition,
+  Commit,
+  IndexRecord,
+  SnapshotMetaDD31,
   assertSnapshotCommitDD31,
+  baseSnapshotFromHash,
   chunkIndexDefinitionEqualIgnoreName,
   getRefs,
   newSnapshotCommitDataDD31,
   toChunkIndexDefinition,
 } from '../db/commit.js';
-import * as db from '../db/mod.js';
 import {createIndexBTree} from '../db/write.js';
 import type {FormatVersion} from '../format-version.js';
 import {Hash, assertHash} from '../hash.js';
@@ -214,7 +218,7 @@ function chunkDataToClientMap(chunkData: unknown): ClientMap {
 
 function clientMapToChunkData(
   clients: ClientMap,
-  dagWrite: dag.Write,
+  dagWrite: Write,
 ): FrozenJSONValue {
   for (const client of clients.values()) {
     if (isClientV6(client)) {
@@ -232,14 +236,14 @@ function clientMapToChunkData(
   return deepFreeze(Object.fromEntries(clients));
 }
 
-export async function getClients(dagRead: dag.Read): Promise<ClientMap> {
+export async function getClients(dagRead: Read): Promise<ClientMap> {
   const hash = await dagRead.getHead(CLIENTS_HEAD_NAME);
   return getClientsAtHash(hash, dagRead);
 }
 
 async function getClientsAtHash(
   hash: Hash | undefined,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<ClientMap> {
   if (!hash) {
     return new Map();
@@ -265,7 +269,7 @@ export class ClientStateNotFoundError extends Error {
  */
 export async function assertHasClientState(
   id: ClientID,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<void> {
   if (!(await hasClientState(id, dagRead))) {
     throw new ClientStateNotFoundError(id);
@@ -274,14 +278,14 @@ export async function assertHasClientState(
 
 export async function hasClientState(
   id: ClientID,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<boolean> {
   return !!(await getClient(id, dagRead));
 }
 
 export async function getClient(
   id: ClientID,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<Client | undefined> {
   const clients = await getClients(dagRead);
   return clients.get(id);
@@ -289,7 +293,7 @@ export async function getClient(
 
 export async function mustGetClient(
   id: ClientID,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<Client> {
   const client = await getClient(id, dagRead);
   if (!client) {
@@ -308,7 +312,7 @@ type InitClientV6Result = [
 
 export function initClientV6(
   lc: LogContext,
-  perdag: dag.Store,
+  perdag: Store,
   mutatorNames: string[],
   indexes: IndexDefinitions,
   formatVersion: FormatVersion,
@@ -318,7 +322,7 @@ export function initClientV6(
       basisHash: Hash | null,
       cookieJSON: FrozenCookie,
       valueHash: Hash,
-      indexRecords: readonly db.IndexRecord[],
+      indexRecords: readonly IndexRecord[],
     ): Promise<InitClientV6Result> {
       const newSnapshotData = newSnapshotCommitDataDD31(
         basisHash,
@@ -387,11 +391,11 @@ export function initClientV6(
 
     if (res.type === FIND_MATCHING_CLIENT_TYPE_NEW) {
       // No client group to fork from. Create empty snapshot.
-      const emptyBTreeChunk = dagWrite.createChunk(btree.emptyDataNode, []);
+      const emptyBTreeChunk = dagWrite.createChunk(emptyDataNode, []);
       await dagWrite.putChunk(emptyBTreeChunk);
 
       // Create indexes
-      const indexRecords: db.IndexRecord[] = [];
+      const indexRecords: IndexRecord[] = [];
 
       // At this point the value of replicache is the empty tree so all index
       // maps will also be the empty tree.
@@ -421,9 +425,9 @@ export function initClientV6(
     const {snapshot} = res;
 
     // Create indexes
-    const indexRecords: db.IndexRecord[] = [];
+    const indexRecords: IndexRecord[] = [];
     const {valueHash, indexes: oldIndexes} = snapshot;
-    const map = new btree.BTreeRead(dagWrite, formatVersion, valueHash);
+    const map = new BTreeRead(dagWrite, formatVersion, valueHash);
 
     for (const [name, indexDefinition] of Object.entries(indexes)) {
       const {prefix = '', jsonPointer, allowEmpty = false} = indexDefinition;
@@ -467,7 +471,7 @@ export function initClientV6(
 }
 
 function findMatchingOldIndex(
-  oldIndexes: readonly db.IndexRecord[],
+  oldIndexes: readonly IndexRecord[],
   chunkIndexDefinition: ChunkIndexDefinition,
 ) {
   return oldIndexes.find(index =>
@@ -485,7 +489,7 @@ export type FindMatchingClientResult =
     }
   | {
       type: typeof FIND_MATCHING_CLIENT_TYPE_FORK;
-      snapshot: db.Commit<db.SnapshotMetaDD31>;
+      snapshot: Commit<SnapshotMetaDD31>;
     }
   | {
       type: typeof FIND_MATCHING_CLIENT_TYPE_HEAD;
@@ -494,12 +498,12 @@ export type FindMatchingClientResult =
     };
 
 export async function findMatchingClient(
-  dagRead: dag.Read,
+  dagRead: Read,
   mutatorNames: string[],
   indexes: IndexDefinitions,
 ): Promise<FindMatchingClientResult> {
   let newestCookie: FrozenCookie | undefined;
-  let bestSnapshot: db.Commit<db.SnapshotMetaDD31> | undefined;
+  let bestSnapshot: Commit<SnapshotMetaDD31> | undefined;
   const mutatorNamesSet = new Set(mutatorNames);
 
   const clientGroups = await getClientGroups(dagRead);
@@ -517,7 +521,7 @@ export async function findMatchingClient(
       };
     }
 
-    const clientGroupSnapshotCommit = await db.baseSnapshotFromHash(
+    const clientGroupSnapshotCommit = await baseSnapshotFromHash(
       clientGroup.headHash,
       dagRead,
     );
@@ -563,7 +567,7 @@ function getRefsForClients(clients: ClientMap): Hash[] {
 
 export async function getClientGroupForClient(
   clientID: ClientID,
-  read: dag.Read,
+  read: Read,
 ): Promise<ClientGroup | undefined> {
   const clientGroupID = await getClientGroupIDForClient(clientID, read);
   if (!clientGroupID) {
@@ -574,7 +578,7 @@ export async function getClientGroupForClient(
 
 export async function getClientGroupIDForClient(
   clientID: ClientID,
-  read: dag.Read,
+  read: Read,
 ): Promise<ClientGroupID | undefined> {
   const client = await getClient(clientID, read);
   if (!client || !isClientV5(client)) {
@@ -590,7 +594,7 @@ export async function getClientGroupIDForClient(
 export async function setClient(
   clientID: ClientID,
   client: Client,
-  dagWrite: dag.Write,
+  dagWrite: Write,
 ): Promise<Hash> {
   const clients = await getClients(dagWrite);
   const newClients = new Map(clients).set(clientID, client);
@@ -603,7 +607,7 @@ export async function setClient(
  */
 export async function setClients(
   clients: ClientMap,
-  dagWrite: dag.Write,
+  dagWrite: Write,
 ): Promise<Hash> {
   const chunkData = clientMapToChunkData(clients, dagWrite);
   const chunk = dagWrite.createChunk(chunkData, getRefsForClients(clients));

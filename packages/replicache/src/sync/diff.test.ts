@@ -1,6 +1,6 @@
 import {expect} from 'chai';
 import type {InternalDiff} from '../btree/node.js';
-import * as dag from '../dag/mod.js';
+import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
 import type {IndexDefinitions} from '../index-defs.js';
@@ -27,7 +27,7 @@ test('db diff dd31', async () => {
     setupChain?: (b: ChainBuilder) => Promise<void>;
   }) => {
     const formatVersion = FormatVersion.Latest;
-    const store = new dag.TestStore();
+    const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);
     await b.addGenesis(clientID, indexDefinitions);
     await b.addLocal(clientID, [['a', 'a2']]);
@@ -219,7 +219,7 @@ test('db diff sdd', async () => {
     expectedDiff: DiffsRecord;
     setupChain?: (b: ChainBuilder) => Promise<void>;
   }) => {
-    const store = new dag.TestStore();
+    const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);
     await b.addGenesis(clientID);
     await b.addLocal(clientID, [['a', 'a2']]);

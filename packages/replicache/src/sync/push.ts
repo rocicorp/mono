@@ -6,20 +6,26 @@ import {
   assertObject,
   assertString,
 } from 'shared/src/asserts.js';
-import type * as dag from '../dag/mod.js';
-import {commitIsLocalDD31, commitIsLocalSDD} from '../db/commit.js';
-import * as db from '../db/mod.js';
+import type {Store} from '../dag/store.js';
 import {
-  assertJSONValue,
+  DEFAULT_HEAD_NAME,
+  LocalMetaDD31,
+  LocalMetaSDD,
+  commitIsLocalDD31,
+  commitIsLocalSDD,
+  localMutations,
+} from '../db/commit.js';
+import {
   FrozenJSONValue,
   ReadonlyJSONObject,
   ReadonlyJSONValue,
+  assertJSONValue,
 } from '../json.js';
 import {
-  assertPusherResult,
+  PushError,
   Pusher,
   PusherResult,
-  PushError,
+  assertPusherResult,
 } from '../pusher.js';
 import {toError} from '../to-error.js';
 import {withRead} from '../with-transactions.js';
@@ -126,7 +132,7 @@ type FrozenMutationV1 = FrozenMutationV0 & {
   readonly clientID: ClientID;
 };
 
-function convertSDD(lm: db.LocalMetaSDD): FrozenMutationV0 {
+function convertSDD(lm: LocalMetaSDD): FrozenMutationV0 {
   return {
     id: lm.mutationID,
     name: lm.mutatorName,
@@ -135,7 +141,7 @@ function convertSDD(lm: db.LocalMetaSDD): FrozenMutationV0 {
   };
 }
 
-function convertDD31(lm: db.LocalMetaDD31): FrozenMutationV1 {
+function convertDD31(lm: LocalMetaDD31): FrozenMutationV1 {
   return {
     id: lm.mutationID,
     name: lm.mutatorName,
@@ -147,7 +153,7 @@ function convertDD31(lm: db.LocalMetaDD31): FrozenMutationV1 {
 
 export async function push(
   requestID: string,
-  store: dag.Store,
+  store: Store,
   lc: LogContext,
   profileID: string,
   clientGroupID: ClientGroupID | undefined,
@@ -159,11 +165,11 @@ export async function push(
   // Find pending commits between the base snapshot and the main head and push
   // them to the data layer.
   const pending = await withRead(store, async dagRead => {
-    const mainHeadHash = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
+    const mainHeadHash = await dagRead.getHead(DEFAULT_HEAD_NAME);
     if (!mainHeadHash) {
       throw new Error('Internal no main head');
     }
-    return db.localMutations(mainHeadHash, dagRead);
+    return localMutations(mainHeadHash, dagRead);
     // Important! Don't hold the lock through an HTTP request!
   });
 

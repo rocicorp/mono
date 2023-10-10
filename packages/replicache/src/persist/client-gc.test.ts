@@ -2,7 +2,8 @@ import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {assertNotUndefined} from 'shared/src/asserts.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
-import * as dag from '../dag/mod.js';
+import type {Read} from '../dag/store.js';
+import {TestStore} from '../dag/test-store.js';
 import {newUUIDHash} from '../hash.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {getLatestGCUpdate, initClientGC} from './client-gc.js';
@@ -28,7 +29,7 @@ function awaitLatestGCUpdate(): Promise<ClientMap> {
 }
 
 test('initClientGC starts 5 min interval that collects clients that have been inactive for > 7 days', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   const client1 = makeClientV4({
     heartbeatTimestampMs: START_TIME,
     headHash: newUUIDHash(),
@@ -61,7 +62,7 @@ test('initClientGC starts 5 min interval that collects clients that have been in
   const controller = new AbortController();
   initClientGC('client1', dagStore, new LogContext(), controller.signal);
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(readClientMap).to.deep.equal(clientMap);
   });
@@ -74,7 +75,7 @@ test('initClientGC starts 5 min interval that collects clients that have been in
   // client2 is collected because it is > 7 days inactive
   // client3 is not collected because it is < 7 days inactive (by 1 minute)
   // client4 is not collected because it is < 7 days inactive (by 1 minute)
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(Object.fromEntries(readClientMap)).to.deep.equal({
       client1,
@@ -100,7 +101,7 @@ test('initClientGC starts 5 min interval that collects clients that have been in
   // client1 is not collected because it is the current client (despite being old enough to collect)
   // client3 is collected because it is > 7 days inactive (by 4 mins)
   // client4 is not collected because its update heartbeat is < 7 days inactive (7 days - 5 mins)
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(Object.fromEntries(readClientMap)).to.deep.equal({
       client1,
@@ -114,7 +115,7 @@ test('initClientGC starts 5 min interval that collects clients that have been in
 
   // client1 is not collected because it is the current client (despite being old enough to collect)
   // client4 is collected because it is > 7 days inactive
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(Object.fromEntries(readClientMap)).to.deep.equal({
       client1,

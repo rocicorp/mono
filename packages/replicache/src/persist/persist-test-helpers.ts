@@ -1,7 +1,13 @@
 import {assert} from 'shared/src/asserts.js';
-import type * as dag from '../dag/mod.js';
-import {assertSnapshotMetaSDD} from '../db/commit.js';
-import * as db from '../db/mod.js';
+import type {Chunk} from '../dag/chunk.js';
+import type {LazyStore} from '../dag/lazy-store.js';
+import type {Store} from '../dag/store.js';
+import {
+  DEFAULT_HEAD_NAME,
+  assertSnapshotMetaSDD,
+  baseSnapshotFromHash,
+  commitFromHash,
+} from '../db/commit.js';
 import type {Hash} from '../hash.js';
 import type {ClientID} from '../sync/ids.js';
 import {withRead, withWrite} from '../with-transactions.js';
@@ -20,8 +26,8 @@ import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
  */
 export async function persistSDD(
   clientID: ClientID,
-  memdag: dag.LazyStore,
-  perdag: dag.Store,
+  memdag: LazyStore,
+  perdag: Store,
   closed: () => boolean,
 ): Promise<void> {
   // This is only used for testing.
@@ -64,23 +70,23 @@ export async function persistSDD(
 }
 
 function gatherMemOnlyChunks(
-  memdag: dag.LazyStore,
+  memdag: LazyStore,
   clientID: ClientID,
 ): Promise<
   [
-    map: ReadonlyMap<Hash, dag.Chunk>,
+    map: ReadonlyMap<Hash, Chunk>,
     hash: Hash,
     mutationID: number,
     lastMutationID: number,
   ]
 > {
   return withRead(memdag, async dagRead => {
-    const mainHeadHash = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
+    const mainHeadHash = await dagRead.getHead(DEFAULT_HEAD_NAME);
     assert(mainHeadHash);
     const visitor = new GatherMemoryOnlyVisitor(dagRead);
     await visitor.visit(mainHeadHash);
-    const headCommit = await db.commitFromHash(mainHeadHash, dagRead);
-    const baseSnapshotCommit = await db.baseSnapshotFromHash(
+    const headCommit = await commitFromHash(mainHeadHash, dagRead);
+    const baseSnapshotCommit = await baseSnapshotFromHash(
       mainHeadHash,
       dagRead,
     );
@@ -96,8 +102,8 @@ function gatherMemOnlyChunks(
 }
 
 async function writeChunks(
-  perdag: dag.Store,
-  chunks: ReadonlyMap<Hash, dag.Chunk>,
+  perdag: Store,
+  chunks: ReadonlyMap<Hash, Chunk>,
   mainHeadHash: Hash,
   clientID: ClientID,
   mutationID: number,

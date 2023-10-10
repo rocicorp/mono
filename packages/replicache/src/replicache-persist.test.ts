@@ -18,21 +18,30 @@ import {
 import fetchMock from 'fetch-mock/esm/client';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
-import * as dag from './dag/mod.js';
+import {uuidChunkHasher} from './dag/chunk.js';
+import {StoreImpl} from './dag/store-impl.js';
+import type {Store} from './dag/store.js';
 import {assertHash} from './hash.js';
-import {IDBNotFoundError} from './kv/idb-store.js';
-import * as kv from './kv/mod.js';
-import {deleteClientGroup} from './persist/client-groups.js';
+import {IDBNotFoundError, IDBStore} from './kv/idb-store.js';
+import {dropStore as dropIDBStore} from './kv/idb-util.js';
+import {
+  ClientGroup,
+  deleteClientGroup,
+  getClientGroup,
+} from './persist/client-groups.js';
 import {deleteClientForTesting} from './persist/clients-test-helpers.js';
-import {assertClientV6} from './persist/clients.js';
-import * as persist from './persist/mod.js';
+import {
+  assertClientV6,
+  ClientStateNotFoundError,
+  getClient,
+} from './persist/clients.js';
 import type {MutatorDefs} from './replicache.js';
 import type {WriteTransaction} from './transactions.js';
 import {withRead, withWrite} from './with-transactions.js';
 
 initReplicacheTesting();
 
-let perdag: dag.Store | undefined;
+let perdag: Store | undefined;
 teardown(async () => {
   await perdag?.close();
 });
@@ -56,20 +65,20 @@ test('basic persist & load', async () => {
   });
   const clientID = await rep.clientID;
 
-  perdag = new dag.StoreImpl(
-    new kv.IDBStore(rep.idbName),
-    dag.uuidChunkHasher,
+  perdag = new StoreImpl(
+    new IDBStore(rep.idbName),
+    uuidChunkHasher,
     assertHash,
   );
 
   const clientBeforePull = await withRead(perdag, read =>
-    persist.getClient(clientID, read),
+    getClient(clientID, read),
   );
   assertNotUndefined(clientBeforePull);
 
   assertClientV6(clientBeforePull);
   const clientGroupBeforePull = await withRead(perdag, read =>
-    persist.getClientGroup(clientBeforePull.clientGroupID, read),
+    getClientGroup(clientBeforePull.clientGroupID, read),
   );
   assertNotUndefined(clientGroupBeforePull);
 
@@ -106,9 +115,8 @@ test('basic persist & load', async () => {
     await tickAFewTimes(waitMs);
     assertClientV6(clientBeforePull);
     assertNotUndefined(clientGroupBeforePull);
-    const clientGroup: persist.ClientGroup | undefined = await withRead(
-      perdag,
-      read => persist.getClientGroup(clientBeforePull.clientGroupID, read),
+    const clientGroup: ClientGroup | undefined = await withRead(perdag, read =>
+      getClientGroup(clientBeforePull.clientGroupID, read),
     );
     assertNotUndefined(clientGroup);
     if (clientGroupBeforePull.headHash !== clientGroup.headHash) {
@@ -222,7 +230,7 @@ suite('onClientStateNotFound', () => {
     } catch (err) {
       e = err;
     }
-    expect(e).to.be.instanceOf(persist.ClientStateNotFoundError);
+    expect(e).to.be.instanceOf(ClientStateNotFoundError);
     expectLogContext(
       consoleErrorStub,
       0,
@@ -283,7 +291,7 @@ suite('onClientStateNotFound', () => {
       e = err;
     }
 
-    expect(e).to.be.instanceOf(persist.ClientStateNotFoundError);
+    expect(e).to.be.instanceOf(ClientStateNotFoundError);
     expectLogContext(
       consoleErrorStub,
       0,
@@ -306,7 +314,7 @@ test('Persist throws if idb dropped', async () => {
 
   await rep.mutate.addData({foo: 'bar'});
 
-  await kv.dropIDBStore(rep.idbName);
+  await dropIDBStore(rep.idbName);
 
   const onClientStateNotFound = sinon.fake();
   rep.onClientStateNotFound = onClientStateNotFound;

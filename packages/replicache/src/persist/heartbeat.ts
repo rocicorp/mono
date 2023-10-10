@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {initBgIntervalProcess} from '../bg-interval.js';
-import type * as dag from '../dag/mod.js';
+import type {Store} from '../dag/store.js';
 import type {ClientID} from '../sync/ids.js';
 import {withWrite} from '../with-transactions.js';
 import {
@@ -16,7 +16,7 @@ export let latestHeartbeatUpdate: Promise<ClientMap> | undefined;
 
 export function startHeartbeats(
   clientID: ClientID,
-  dagStore: dag.Store,
+  dagStore: Store,
   onClientStateNotFound: () => void,
   lc: LogContext,
   signal: AbortSignal,
@@ -43,7 +43,7 @@ export function startHeartbeats(
 
 export function writeHeartbeat(
   clientID: ClientID,
-  dagStore: dag.Store,
+  dagStore: Store,
 ): Promise<ClientMap> {
   return withWrite(dagStore, async dagWrite => {
     const clients = await getClients(dagWrite);

@@ -1,7 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import {greaterThan} from 'compare-utf8';
 import {IndexKey, decodeIndexKey} from './db/index.js';
-import type * as db from './db/mod.js';
+import type {Read} from './db/read.js';
+import type {Write} from './db/write.js';
 import type {IndexDefinition} from './index-defs.js';
 import {JSONValue, ReadonlyJSONValue, deepFreeze} from './json.js';
 import type {ScanResult} from './scan-iterator.js';
@@ -114,7 +115,7 @@ let transactionIDCounter = 0;
 
 export class ReadTransactionImpl implements ReadTransaction {
   readonly clientID: ClientID;
-  readonly dbtx: db.Read;
+  readonly dbtx: Read;
   protected readonly _lc: LogContext;
 
   /**
@@ -124,7 +125,7 @@ export class ReadTransactionImpl implements ReadTransaction {
 
   constructor(
     clientID: ClientID,
-    dbRead: db.Read,
+    dbRead: Read,
     lc: LogContext,
     rpcName = 'openReadTransaction',
   ) {
@@ -177,7 +178,7 @@ function noop(_: unknown): void {
 
 function scan<Options extends ScanOptions, V extends JSONValue>(
   options: Options | undefined,
-  dbRead: db.Read,
+  dbRead: Read,
   onLimitKey: (inclusiveLimitKey: string) => void,
 ): ScanResult<KeyTypeForScanOptions<Options>, V> {
   const iter = getScanIterator<Options, V>(dbRead, options);
@@ -288,7 +289,7 @@ export class WriteTransactionImpl
   implements WriteTransaction
 {
   // use `declare` to specialize the type.
-  declare readonly dbtx: db.Write;
+  declare readonly dbtx: Write;
   readonly reason: TransactionReason;
   readonly mutationID: number;
 
@@ -296,7 +297,7 @@ export class WriteTransactionImpl
     clientID: ClientID,
     mutationID: number,
     reason: TransactionReason,
-    dbWrite: db.Write,
+    dbWrite: Write,
     lc: LogContext,
     rpcName = 'openWriteTransaction',
   ) {
@@ -329,7 +330,7 @@ export type EntryForOptions<
 > = Options extends ScanIndexOptions ? IndexKeyEntry<V> : StringKeyEntry<V>;
 
 function getScanIterator<Options extends ScanOptions, V>(
-  dbRead: db.Read,
+  dbRead: Read,
   options: Options | undefined,
 ): AsyncIterable<EntryForOptions<Options, V>> {
   if (options && isScanIndexOptions(options)) {
@@ -363,14 +364,14 @@ function makeScanResultFromScanIteratorInternal<
 >(
   iter: AsyncIterable<EntryForOptions<Options, V>>,
   options: Options,
-  dbRead: db.Read,
+  dbRead: Read,
   onLimitKey: (inclusiveLimitKey: string) => void,
 ): ScanResult<KeyTypeForScanOptions<Options>, V> {
   return new ScanResultImpl(iter, options, dbRead, onLimitKey);
 }
 
 async function* getScanIteratorForIndexMap(
-  dbRead: db.Read,
+  dbRead: Read,
   options: ScanIndexOptions,
 ): AsyncIterable<IndexKeyEntry<ReadonlyJSONValue>> {
   const map = dbRead.getMapForIndex(options.indexName);

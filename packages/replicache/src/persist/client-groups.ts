@@ -5,7 +5,7 @@ import {
   assertObject,
   assertString,
 } from 'shared/src/asserts.js';
-import type * as dag from '../dag/mod.js';
+import type {Read, Write} from '../dag/store.js';
 import {Hash, assertHash} from '../hash.js';
 import {
   IndexDefinitions,
@@ -113,7 +113,7 @@ function chunkDataToClientGroupMap(chunkData: unknown): ClientGroupMap {
 
 function clientGroupMapToChunkData(
   clientGroups: ClientGroupMap,
-  dagWrite: dag.Write,
+  dagWrite: Write,
 ): FrozenJSONValue {
   const chunkData: {[id: ClientGroupID]: ClientGroup} = {};
   for (const [clientGroupID, clientGroup] of clientGroups.entries()) {
@@ -128,15 +128,13 @@ function clientGroupMapToChunkData(
 
 async function getClientGroupsAtHash(
   hash: Hash,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<ClientGroupMap> {
   const chunk = await dagRead.getChunk(hash);
   return chunkDataToClientGroupMap(chunk?.data);
 }
 
-export async function getClientGroups(
-  dagRead: dag.Read,
-): Promise<ClientGroupMap> {
+export async function getClientGroups(dagRead: Read): Promise<ClientGroupMap> {
   const hash = await dagRead.getHead(CLIENT_GROUPS_HEAD_NAME);
   if (!hash) {
     return new Map();
@@ -146,7 +144,7 @@ export async function getClientGroups(
 
 export async function setClientGroups(
   clientGroups: ClientGroupMap,
-  dagWrite: dag.Write,
+  dagWrite: Write,
 ): Promise<ClientGroupMap> {
   const currClientGroups = await getClientGroups(dagWrite);
   for (const [clientGroupID, clientGroup] of clientGroups) {
@@ -159,7 +157,7 @@ export async function setClientGroups(
 export async function setClientGroup(
   clientGroupID: ClientGroupID,
   clientGroup: ClientGroup,
-  dagWrite: dag.Write,
+  dagWrite: Write,
 ): Promise<ClientGroupMap> {
   const currClientGroups = await getClientGroups(dagWrite);
   const currClientGroup = currClientGroups.get(clientGroupID);
@@ -171,7 +169,7 @@ export async function setClientGroup(
 
 export async function deleteClientGroup(
   clientGroupID: ClientGroupID,
-  dagWrite: dag.Write,
+  dagWrite: Write,
 ): Promise<ClientGroupMap> {
   const currClientGroups = await getClientGroups(dagWrite);
   if (!currClientGroups.has(clientGroupID)) {
@@ -205,7 +203,7 @@ function validateClientGroupUpdate(
 
 async function setValidatedClientGroups(
   clientGroups: ClientGroupMap,
-  dagWrite: dag.Write,
+  dagWrite: Write,
 ): Promise<ClientGroupMap> {
   const chunkData = clientGroupMapToChunkData(clientGroups, dagWrite);
   const refs = Array.from(
@@ -235,7 +233,7 @@ export function mutatorNamesEqual(
 
 export async function getClientGroup(
   id: ClientGroupID,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<ClientGroup | undefined> {
   const clientGroups = await getClientGroups(dagRead);
   return clientGroups.get(id);
@@ -266,7 +264,7 @@ export function clientGroupHasPendingMutations(clientGroup: ClientGroup) {
  */
 export async function disableClientGroup(
   clientGroupID: string,
-  dagWrite: dag.Write,
+  dagWrite: Write,
 ): Promise<void> {
   const clientGroup = await getClientGroup(clientGroupID, dagWrite);
   if (!clientGroup) {

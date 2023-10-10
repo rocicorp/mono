@@ -1,8 +1,8 @@
 import {assert} from 'shared/src/asserts.js';
-import * as btree from '../btree/mod.js';
+import {diff as btreeDiff} from '../btree/diff.js';
 import type {InternalDiff} from '../btree/node.js';
 import {allEntriesAsDiff, BTreeRead} from '../btree/read.js';
-import type * as dag from '../dag/mod.js';
+import type {Read} from '../dag/store.js';
 import {Commit, commitFromHash, Meta} from '../db/commit.js';
 import {readIndexesForRead} from '../db/read.js';
 import type {FormatVersion} from '../format-version.js';
@@ -36,7 +36,7 @@ export class DiffsMap extends Map<string, InternalDiff> {
 export async function diff(
   oldHash: Hash,
   newHash: Hash,
-  read: dag.Read,
+  read: Read,
   diffConfig: DiffComputationConfig,
   formatVersion: FormatVersion,
 ): Promise<DiffsMap> {
@@ -56,7 +56,7 @@ export async function diff(
 export async function diffCommits(
   oldCommit: Commit<Meta>,
   newCommit: Commit<Meta>,
-  read: dag.Read,
+  read: Read,
   diffConfig: DiffComputationConfig,
   formatVersion: FormatVersion,
 ): Promise<DiffsMap> {
@@ -67,7 +67,7 @@ export async function diffCommits(
 
   const oldMap = new BTreeRead(read, formatVersion, oldCommit.valueHash);
   const newMap = new BTreeRead(read, formatVersion, newCommit.valueHash);
-  const valueDiff = await btree.diff(oldMap, newMap);
+  const valueDiff = await btreeDiff(oldMap, newMap);
   diffsMap.set('', valueDiff);
 
   await addDiffsForIndexes(
@@ -85,7 +85,7 @@ export async function diffCommits(
 export async function addDiffsForIndexes(
   mainCommit: Commit<Meta>,
   syncCommit: Commit<Meta>,
-  read: dag.Read,
+  read: Read,
   diffsMap: DiffsMap,
   diffConfig: DiffComputationConfig,
   formatVersion: FormatVersion,
@@ -101,7 +101,7 @@ export async function addDiffsForIndexes(
     const newIndex = newIndexes.get(oldIndexName);
     if (newIndex !== undefined) {
       assert(newIndex !== oldIndex);
-      const diffs = await btree.diff(oldIndex.map, newIndex.map);
+      const diffs = await btreeDiff(oldIndex.map, newIndex.map);
       newIndexes.delete(oldIndexName);
       diffsMap.set(oldIndexName, diffs);
     } else {

@@ -1,13 +1,13 @@
 import {expect} from 'chai';
 import * as sinon from 'sinon';
 import type {JSONValue} from './json.js';
-import type {WriteTransaction} from './mod.js';
 import {
   disableAllBackgroundProcesses,
   initReplicacheTesting,
   replicacheForTesting,
   tickAFewTimes,
 } from './test-util.js';
+import type {WriteTransaction} from './transactions.js';
 
 initReplicacheTesting();
 

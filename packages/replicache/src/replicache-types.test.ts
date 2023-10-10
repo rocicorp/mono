@@ -2,8 +2,8 @@
 
 import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
 import {assert} from 'shared/src/asserts.js';
+import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import type {IndexKey} from './db/index.js';
-import type {ReadonlyJSONObject} from './mod.js';
 import {Replicache} from './replicache.js';
 import type {WriteTransaction} from './transactions.js';
 

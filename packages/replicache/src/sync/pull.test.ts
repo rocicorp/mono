@@ -4,15 +4,25 @@ import {assertObject, assertString} from 'shared/src/asserts.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import {BTreeRead} from '../btree/read.js';
 import type {Cookie, FrozenCookie} from '../cookies.js';
-import * as dag from '../dag/mod.js';
+import {TestStore} from '../dag/test-store.js';
 import {
+  DEFAULT_HEAD_NAME,
   assertSnapshotCommitDD31,
   assertSnapshotCommitSDD,
+  commitFromHash,
+  commitFromHead,
   commitIsLocal,
+  snapshotMetaParts,
 } from '../db/commit.js';
-import * as db from '../db/mod.js';
-import {DEFAULT_HEAD_NAME} from '../db/mod.js';
+import {encodeIndexKey} from '../db/index.js';
+import {readFromDefaultHead, readFromHead} from '../db/read.js';
 import {ChainBuilder} from '../db/test-helpers.js';
+import {
+  newWriteLocal,
+  newWriteSnapshotDD31,
+  newWriteSnapshotSDD,
+  readIndexesForWrite,
+} from '../db/write.js';
 import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
@@ -59,13 +69,13 @@ import {SYNC_HEAD_NAME} from './sync-head-name.js';
 test('begin try pull SDD', async () => {
   const formatVersion = FormatVersion.SDD;
   const clientID = 'test_client_id';
-  const store = new dag.TestStore();
+  const store = new TestStore();
   const b = new ChainBuilder(store, undefined, FormatVersion.SDD);
   await b.addGenesis(clientID);
   const baseSnapshot = await b.addSnapshot([['foo', '"bar"']], clientID);
   await b.addIndexChange(clientID);
   const startingNumCommits = b.chain.length;
-  const parts = db.snapshotMetaParts(baseSnapshot, clientID);
+  const parts = snapshotMetaParts(baseSnapshot, clientID);
 
   const baseLastMutationID = parts[0];
   const baseCookie = deepFreeze(parts[1]);
@@ -416,7 +426,7 @@ test('begin try pull SDD', async () => {
     // the index no longer returns values, demonstrating that it was rebuilt.
     if (c.numPendingMutations > 0) {
       await withRead(store, async dagRead => {
-        const read = await db.readFromDefaultHead(dagRead, formatVersion);
+        const read = await readFromDefaultHead(dagRead, formatVersion);
         let got = false;
 
         const indexMap = read.getMapForIndex('2');
@@ -467,9 +477,9 @@ test('begin try pull SDD', async () => {
     await withRead(store, async read => {
       if (c.expNewSyncHead !== undefined) {
         const expSyncHead = c.expNewSyncHead;
-        const syncHeadCommit = await db.commitFromHead(SYNC_HEAD_NAME, read);
+        const syncHeadCommit = await commitFromHead(SYNC_HEAD_NAME, read);
         assertSnapshotCommitSDD(syncHeadCommit);
-        const [gotLastMutationID, gotCookie] = db.snapshotMetaParts(
+        const [gotLastMutationID, gotCookie] = snapshotMetaParts(
           syncHeadCommit,
           clientID,
         );
@@ -506,7 +516,7 @@ test('begin try pull SDD', async () => {
         // change's index ("2").
         if (expSyncHead.indexes.length > 1) {
           await withRead(store, async dagRead => {
-            const read = await db.readFromHead(
+            const read = await readFromHead(
               SYNC_HEAD_NAME,
               dagRead,
               formatVersion,
@@ -556,7 +566,7 @@ test('begin try pull DD31', async () => {
   const clientID = 'test_client_id';
   const clientGroupID = 'test_client_group_id';
   const baseCookie = 'cookie_1';
-  const store = new dag.TestStore();
+  const store = new TestStore();
   const b = new ChainBuilder(store);
   await b.addGenesis(clientID, {
     '2': {prefix: 'local', jsonPointer: '', allowEmpty: false},
@@ -568,7 +578,7 @@ test('begin try pull DD31', async () => {
     undefined,
   );
   const startingNumCommits = b.chain.length;
-  const parts = db.snapshotMetaParts(baseSnapshot, clientID);
+  const parts = snapshotMetaParts(baseSnapshot, clientID);
 
   const baseLastMutationID = parts[0];
   const baseValueMap = new Map([['foo', '"bar"']]);
@@ -957,7 +967,7 @@ test('begin try pull DD31', async () => {
     // the index no longer returns values, demonstrating that it was rebuilt.
     if (c.numPendingMutations > 0) {
       await withRead(store, async dagRead => {
-        const read = await db.readFromDefaultHead(dagRead, formatVersion);
+        const read = await readFromDefaultHead(dagRead, formatVersion);
         let got = false;
 
         const indexMap = read.getMapForIndex('2');
@@ -1010,9 +1020,9 @@ test('begin try pull DD31', async () => {
     await withRead(store, async read => {
       if (c.expNewSyncHead !== undefined) {
         const expSyncHead = c.expNewSyncHead;
-        const syncHeadCommit = await db.commitFromHead(SYNC_HEAD_NAME, read);
+        const syncHeadCommit = await commitFromHead(SYNC_HEAD_NAME, read);
         assertSnapshotCommitDD31(syncHeadCommit);
-        const [gotLastMutationID, gotCookie] = db.snapshotMetaParts(
+        const [gotLastMutationID, gotCookie] = snapshotMetaParts(
           syncHeadCommit,
           clientID,
         );
@@ -1045,7 +1055,7 @@ test('begin try pull DD31', async () => {
         // change's index ("2").
         if (expSyncHead.indexes.length > 1) {
           await withRead(store, async dagRead => {
-            const read = await db.readFromHead(
+            const read = await readFromHead(
               SYNC_HEAD_NAME,
               dagRead,
               formatVersion,
@@ -1152,7 +1162,7 @@ suite('maybe end try pull', () => {
     ];
 
     for (const [i, c] of cases.entries()) {
-      const store = new dag.TestStore();
+      const store = new TestStore();
       const lc = new LogContext();
       const b = new ChainBuilder(store);
       await b.addGenesis(clientID);
@@ -1162,14 +1172,14 @@ suite('maybe end try pull', () => {
       }
       let basisHash = await withWrite(store, async dagWrite => {
         await dagWrite.setHead(
-          db.DEFAULT_HEAD_NAME,
+          DEFAULT_HEAD_NAME,
           b.chain[b.chain.length - 1].chunk.hash,
         );
 
         // Add snapshot and replayed commits to the sync chain.
         const w =
           formatVersion >= FormatVersion.DD31
-            ? await db.newWriteSnapshotDD31(
+            ? await newWriteSnapshotDD31(
                 b.chain[0].chunk.hash,
                 {[clientID]: 0},
                 'sync_cookie',
@@ -1177,12 +1187,12 @@ suite('maybe end try pull', () => {
                 clientID,
                 formatVersion,
               )
-            : await db.newWriteSnapshotSDD(
+            : await newWriteSnapshotSDD(
                 b.chain[0].chunk.hash,
                 0,
                 'sync_cookie',
                 dagWrite,
-                db.readIndexesForWrite(b.chain[0], dagWrite, formatVersion),
+                readIndexesForWrite(b.chain[0], dagWrite, formatVersion),
                 clientID,
                 formatVersion,
               );
@@ -1207,7 +1217,7 @@ suite('maybe end try pull', () => {
           throw new Error('impossible');
         }
         basisHash = await withWrite(store, async dagWrite => {
-          const w = await db.newWriteLocal(
+          const w = await newWriteLocal(
             basisHash,
             mutatorName,
             mutatorArgs,
@@ -1268,7 +1278,7 @@ suite('maybe end try pull', () => {
         if (c.expReplayIDs.length === 0) {
           await withRead(store, async read => {
             expect(syncHead).to.equal(
-              await read.getHead(db.DEFAULT_HEAD_NAME),
+              await read.getHead(DEFAULT_HEAD_NAME),
               c.name,
             );
             expect(await read.getHead(SYNC_HEAD_NAME)).to.be.undefined;
@@ -1362,7 +1372,7 @@ suite('changed keys', () => {
     ) => {
       const clientID = 'test_client_id';
       const clientGroupID = 'test_client_group__id';
-      const store = new dag.TestStore();
+      const store = new TestStore();
       const lc = new LogContext();
       const b = new ChainBuilder(store, undefined, formatVersion);
 
@@ -1393,7 +1403,7 @@ suite('changed keys', () => {
 
       const entries = [...baseMap];
       const baseSnapshot = await b.addSnapshot(entries, clientID);
-      const parts = db.snapshotMetaParts(baseSnapshot, clientID);
+      const parts = snapshotMetaParts(baseSnapshot, clientID);
       const baseLastMutationID = parts[0];
       const baseCookie = deepFreeze(parts[1]);
 
@@ -1701,7 +1711,7 @@ test('pull for client group with multiple client local changes', async () => {
   const clientGroupID = 'test-client-group-id';
   const schemaVersion = 'test-schema-version';
 
-  const store = new dag.TestStore();
+  const store = new TestStore();
   const lc = new LogContext();
 
   const pullResponse = {
@@ -1767,7 +1777,7 @@ suite('beginPull DD31', () => {
   const lc = new LogContext();
 
   test('no response should still return http status', async () => {
-    const store = new dag.TestStore();
+    const store = new TestStore();
 
     const b = new ChainBuilder(store);
     await b.addGenesis(clientID1);
@@ -1838,7 +1848,7 @@ suite('handlePullResponseDD31', () => {
     indexDefinitions?: IndexDefinitions | undefined;
   }) {
     const lc = new LogContext();
-    const store = new dag.TestStore();
+    const store = new TestStore();
 
     const b = new ChainBuilder(store);
     await b.addGenesis(clientID1, indexDefinitions);
@@ -1865,7 +1875,7 @@ suite('handlePullResponseDD31', () => {
       assertHash(result.syncHead);
 
       await withRead(store, async dagRead => {
-        const head = await db.commitFromHash(result.syncHead, dagRead);
+        const head = await commitFromHash(result.syncHead, dagRead);
         assertSnapshotCommitDD31(head);
         expect(head.chunk.data.meta.lastMutationIDs).to.deep.equal(
           expectedLastMutationIDs,
@@ -2077,7 +2087,7 @@ suite('handlePullResponseDD31', () => {
       expectedMap: {a: {id: 'aId', x: 2}},
       expectedIndex: [
         'i1',
-        {[db.encodeIndexKey(['aId', 'a'])]: {id: 'aId', x: 2}},
+        {[encodeIndexKey(['aId', 'a'])]: {id: 'aId', x: 2}},
       ],
     });
 
@@ -2106,7 +2116,7 @@ suite('handlePullResponseDD31', () => {
       expectedMap: {a: {id: 'aId', x: 2}},
       expectedIndex: [
         'i1',
-        {[db.encodeIndexKey(['aId', 'a'])]: {id: 'aId', x: 2}},
+        {[encodeIndexKey(['aId', 'a'])]: {id: 'aId', x: 2}},
       ],
     });
   });

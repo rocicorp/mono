@@ -3,9 +3,17 @@ import {expect} from 'chai';
 import {assert, assertNotNull, assertNotUndefined} from 'shared/src/asserts.js';
 import sinon from 'sinon';
 import {BTreeRead} from '../btree/read.js';
-import * as dag from '../dag/mod.js';
-import {assertLocalMetaDD31, assertSnapshotCommitDD31} from '../db/commit.js';
-import * as db from '../db/mod.js';
+import {LazyStore, LazyWrite} from '../dag/lazy-store.js';
+import {TestStore} from '../dag/test-store.js';
+import {
+  Commit,
+  DEFAULT_HEAD_NAME,
+  Meta,
+  assertLocalMetaDD31,
+  assertSnapshotCommitDD31,
+  baseSnapshotFromHash,
+  commitFromHash,
+} from '../db/commit.js';
 import {
   ChainBuilder,
   createMutatorName,
@@ -48,8 +56,8 @@ enum PersistedExpectation {
 }
 
 suite('persistDD31', () => {
-  let memdag: dag.LazyStore,
-    perdag: dag.TestStore,
+  let memdag: LazyStore,
+    perdag: TestStore,
     memdagChainBuilder: ChainBuilder,
     perdagClientGroupChainBuilder: ChainBuilder,
     clients: {clientID: ClientID; client: Client}[],
@@ -235,7 +243,7 @@ suite('persistDD31', () => {
 
   async function getClientMapClientGroupAndHeadHashes() {
     const memdagHeadHash = await withRead(memdag, memdagRead =>
-      memdagRead.getHead(db.DEFAULT_HEAD_NAME),
+      memdagRead.getHead(DEFAULT_HEAD_NAME),
     );
     assertNotUndefined(memdagHeadHash);
 
@@ -320,7 +328,7 @@ suite('persistDD31', () => {
     // memdagLocalCommit3Client0M2 rebased on to perdag client group rest of
     // perdag client group unchanged
     await withRead(perdag, async perdagRead => {
-      const afterPersistPerdagClientGroupLocalCommit4 = await db.commitFromHash(
+      const afterPersistPerdagClientGroupLocalCommit4 = await commitFromHash(
         afterPersist.perdagClientGroupHeadHash,
         perdagRead,
       );
@@ -329,7 +337,7 @@ suite('persistDD31', () => {
         memdagLocalCommit3Client0M2,
       );
       assertNotNull(afterPersistPerdagClientGroupLocalCommit4.meta.basisHash);
-      const afterPersistPerdagClientGroupLocalCommit3 = await db.commitFromHash(
+      const afterPersistPerdagClientGroupLocalCommit3 = await commitFromHash(
         afterPersistPerdagClientGroupLocalCommit4.meta.basisHash,
         perdagRead,
       );
@@ -417,7 +425,7 @@ suite('persistDD31', () => {
     // memdagLocalCommit3Client0M2 rebased on to perdag client group rest of
     // perdag client group unchanged
     await withRead(perdag, async perdagRead => {
-      const afterPersistPerdagClientGroupLocalCommit4 = await db.commitFromHash(
+      const afterPersistPerdagClientGroupLocalCommit4 = await commitFromHash(
         afterPersist.perdagClientGroupHeadHash,
         perdagRead,
       );
@@ -426,7 +434,7 @@ suite('persistDD31', () => {
         memdagLocalCommit3Client0M2,
       );
       assertNotNull(afterPersistPerdagClientGroupLocalCommit4.meta.basisHash);
-      const afterPersistPerdagClientGroupLocalCommit3 = await db.commitFromHash(
+      const afterPersistPerdagClientGroupLocalCommit3 = await commitFromHash(
         afterPersistPerdagClientGroupLocalCommit4.meta.basisHash,
         perdagRead,
       );
@@ -553,7 +561,7 @@ suite('persistDD31', () => {
     );
     // expect values from memdag snapshot are persisted to perdag client group
     await withRead(perdag, async perdagRead => {
-      const commit = await db.commitFromHash(
+      const commit = await commitFromHash(
         afterPersist.perdagClientGroupHeadHash,
         perdagRead,
       );
@@ -628,31 +636,28 @@ suite('persistDD31', () => {
     const afterPersistPerdagBaseSnapshotHash = await withRead(
       perdag,
       async perdagRead => {
-        const afterPersistPerdagClientGroupLocalCommit2 =
-          await db.commitFromHash(
-            afterPersist.perdagClientGroupHeadHash,
-            perdagRead,
-          );
+        const afterPersistPerdagClientGroupLocalCommit2 = await commitFromHash(
+          afterPersist.perdagClientGroupHeadHash,
+          perdagRead,
+        );
         expectRebasedLocal(
           afterPersistPerdagClientGroupLocalCommit2,
           memdagLocalCommit2Client0M2,
         );
         assertNotNull(afterPersistPerdagClientGroupLocalCommit2.meta.basisHash);
-        const afterPersistPerdagClientGroupLocalCommit1 =
-          await db.commitFromHash(
-            afterPersistPerdagClientGroupLocalCommit2.meta.basisHash,
-            perdagRead,
-          );
+        const afterPersistPerdagClientGroupLocalCommit1 = await commitFromHash(
+          afterPersistPerdagClientGroupLocalCommit2.meta.basisHash,
+          perdagRead,
+        );
         expectRebasedLocal(
           afterPersistPerdagClientGroupLocalCommit1,
           perdagClientGroupLocalCommit2Client1M1,
         );
         assertNotNull(afterPersistPerdagClientGroupLocalCommit1.meta.basisHash);
-        const afterPersistPerdagClientGroupBaseSnapshot =
-          await db.commitFromHash(
-            afterPersistPerdagClientGroupLocalCommit1.meta.basisHash,
-            perdagRead,
-          );
+        const afterPersistPerdagClientGroupBaseSnapshot = await commitFromHash(
+          afterPersistPerdagClientGroupLocalCommit1.meta.basisHash,
+          perdagRead,
+        );
         assertSnapshotCommitDD31(afterPersistPerdagClientGroupBaseSnapshot);
         expect(
           afterPersistPerdagClientGroupBaseSnapshot.meta.cookieJSON,
@@ -662,7 +667,7 @@ suite('persistDD31', () => {
         ).to.deep.equal(memdagMutationIDs);
 
         // expect values from memdag snapshot are persisted to perdag client group
-        const commit = await db.commitFromHash(
+        const commit = await commitFromHash(
           afterPersist.perdagClientGroupHeadHash,
           perdagRead,
         );
@@ -680,7 +685,7 @@ suite('persistDD31', () => {
     const afterPersistMemdagBaseSnapshotHash = await withRead(
       memdag,
       async memdagRead => {
-        const baseSnapshot = await db.baseSnapshotFromHash(
+        const baseSnapshot = await baseSnapshotFromHash(
           afterPersist.memdagHeadHash,
           memdagRead,
         );
@@ -790,22 +795,20 @@ suite('persistDD31', () => {
     const afterPersistPerdagClientGroupBaseSnapshotHash = await withRead(
       perdag,
       async perdagRead => {
-        const afterPersistPerdagClientGroupLocalCommit1 =
-          await db.commitFromHash(
-            afterPersist.perdagClientGroupHeadHash,
-            perdagRead,
-          );
+        const afterPersistPerdagClientGroupLocalCommit1 = await commitFromHash(
+          afterPersist.perdagClientGroupHeadHash,
+          perdagRead,
+        );
         expectRebasedLocal(
           afterPersistPerdagClientGroupLocalCommit1,
           memdagLocalCommit3Client0M2,
         );
 
         assertNotNull(afterPersistPerdagClientGroupLocalCommit1.meta.basisHash);
-        const afterPersistPerdagClientGroupBaseSnapshot =
-          await db.commitFromHash(
-            afterPersistPerdagClientGroupLocalCommit1.meta.basisHash,
-            perdagRead,
-          );
+        const afterPersistPerdagClientGroupBaseSnapshot = await commitFromHash(
+          afterPersistPerdagClientGroupLocalCommit1.meta.basisHash,
+          perdagRead,
+        );
         assertSnapshotCommitDD31(afterPersistPerdagClientGroupBaseSnapshot);
         expect(
           afterPersistPerdagClientGroupBaseSnapshot.meta.cookieJSON,
@@ -864,17 +867,14 @@ function expectUpdatedClientPersistHash(
 async function setupPersistTest() {
   const formatVersion = FormatVersion.Latest;
   const hashFunction = makeNewFakeHashFunction();
-  const perdag = new dag.TestStore(undefined, hashFunction);
-  const memdag = new dag.LazyStore(
+  const perdag = new TestStore(undefined, hashFunction);
+  const memdag = new LazyStore(
     perdag,
     100 * 2 ** 20, // 100 MB,
     hashFunction,
     assertHash,
   );
-  const chunksPersistedSpy = sinon.spy(
-    dag.LazyWrite.prototype,
-    'chunksPersisted',
-  );
+  const chunksPersistedSpy = sinon.spy(LazyWrite.prototype, 'chunksPersisted');
 
   const mutatorNames = Array.from({length: 10}, (_, index) =>
     createMutatorName(index),
@@ -986,7 +986,7 @@ async function setupPersistTest() {
   };
 }
 function getClientMapAndClientGroup(
-  perdag: dag.TestStore,
+  perdag: TestStore,
   clientGroupID: string,
 ): Promise<{clientMap: ClientMap; clientGroup: ClientGroup | undefined}> {
   return withRead(perdag, async perdagRead => ({
@@ -995,10 +995,7 @@ function getClientMapAndClientGroup(
   }));
 }
 
-function expectRebasedLocal(
-  rebased: db.Commit<db.Meta>,
-  original: db.Commit<db.Meta>,
-) {
+function expectRebasedLocal(rebased: Commit<Meta>, original: Commit<Meta>) {
   expect(rebased.chunk.hash).to.not.equal(original.chunk.hash);
   const rebasedMeta = rebased.meta;
   assertLocalMetaDD31(rebasedMeta);

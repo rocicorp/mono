@@ -1,5 +1,5 @@
-import type {IndexKey} from './db/mod.js';
-import type * as db from './db/mod.js';
+import type {IndexKey} from './db/index.js';
+import type {ScanOptions as DbScanOptions} from './db/scan.js';
 
 /**
  * Options for {@link ReadTransaction.scan | scan}
@@ -96,7 +96,7 @@ export function normalizeScanOptionIndexedStartKey(
   return startKey;
 }
 
-export function toDbScanOptions(options?: ScanOptions): db.ScanOptions {
+export function toDbScanOptions(options?: ScanOptions): DbScanOptions {
   if (!options) {
     return {};
   }

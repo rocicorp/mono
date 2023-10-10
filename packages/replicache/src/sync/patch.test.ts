@@ -1,8 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
-import * as dag from '../dag/mod.js';
-import * as db from '../db/mod.js';
+import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
+import {
+  newWriteSnapshotDD31,
+  newWriteSnapshotSDD,
+  readIndexesForWrite,
+} from '../db/write.js';
 import {FormatVersion} from '../format-version.js';
 import type {JSONValue} from '../json.js';
 import {assertPatchOperations} from '../patch-operation.js';
@@ -12,7 +16,7 @@ import {apply} from './patch.js';
 suite('patch', () => {
   const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
-    const store = new dag.TestStore();
+    const store = new TestStore();
     const lc = new LogContext();
 
     type Case = {
@@ -164,7 +168,7 @@ suite('patch', () => {
       await withWrite(store, async dagWrite => {
         let dbWrite;
         if (formatVersion >= FormatVersion.DD31) {
-          dbWrite = await db.newWriteSnapshotDD31(
+          dbWrite = await newWriteSnapshotDD31(
             b.chain[0].chunk.hash,
             {[clientID]: 1},
             'cookie',
@@ -173,12 +177,12 @@ suite('patch', () => {
             formatVersion,
           );
         } else {
-          dbWrite = await db.newWriteSnapshotSDD(
+          dbWrite = await newWriteSnapshotSDD(
             b.chain[0].chunk.hash,
             1,
             'cookie',
             dagWrite,
-            db.readIndexesForWrite(b.chain[0], dagWrite, formatVersion),
+            readIndexesForWrite(b.chain[0], dagWrite, formatVersion),
             clientID,
             formatVersion,
           );

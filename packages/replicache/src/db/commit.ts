@@ -9,8 +9,8 @@ import {
 } from 'shared/src/asserts.js';
 import {skipCommitDataAsserts} from '../config.js';
 import {FrozenCookie, compareCookies} from '../cookies.js';
-import type * as dag from '../dag/mod.js';
-import {MustGetChunk, mustGetHeadHash} from '../dag/store.js';
+import type {Chunk, CreateChunk} from '../dag/chunk.js';
+import {MustGetChunk, Read, mustGetHeadHash} from '../dag/store.js';
 import {Hash, assertHash} from '../hash.js';
 import type {IndexDefinition} from '../index-defs.js';
 import {
@@ -69,9 +69,9 @@ export function commitIsSnapshot(
 }
 
 export class Commit<M extends Meta> {
-  readonly chunk: dag.Chunk<CommitData<M>>;
+  readonly chunk: Chunk<CommitData<M>>;
 
-  constructor(chunk: dag.Chunk<CommitData<M>>) {
+  constructor(chunk: Chunk<CommitData<M>>) {
     this.chunk = chunk;
   }
 
@@ -84,16 +84,13 @@ export class Commit<M extends Meta> {
     return this.chunk.data.valueHash;
   }
 
-  getMutationID(
-    clientID: ClientID,
-    dagRead: dag.MustGetChunk,
-  ): Promise<number> {
+  getMutationID(clientID: ClientID, dagRead: MustGetChunk): Promise<number> {
     return getMutationID(clientID, dagRead, this.meta);
   }
 
   async getNextMutationID(
     clientID: ClientID,
-    dagRead: dag.MustGetChunk,
+    dagRead: MustGetChunk,
   ): Promise<number> {
     return (await this.getMutationID(clientID, dagRead)) + 1;
   }
@@ -106,7 +103,7 @@ export class Commit<M extends Meta> {
 
 export async function getMutationID(
   clientID: ClientID,
-  dagRead: dag.MustGetChunk,
+  dagRead: MustGetChunk,
   meta: Meta,
 ): Promise<number> {
   switch (meta.type) {
@@ -148,7 +145,7 @@ export async function getMutationID(
  */
 export async function localMutations(
   fromCommitHash: Hash,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<Commit<LocalMetaSDD | LocalMetaDD31>[]> {
   const commits = await commitChain(fromCommitHash, dagRead);
   // Filter does not deal with type narrowing.
@@ -159,7 +156,7 @@ export async function localMutations(
 
 export async function localMutationsDD31(
   fromCommitHash: Hash,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<Commit<LocalMetaDD31>[]> {
   const commits = await commitChain(fromCommitHash, dagRead);
   // Filter does not deal with type narrowing.
@@ -169,7 +166,7 @@ export async function localMutationsDD31(
 export async function localMutationsGreaterThan(
   commit: Commit<Meta>,
   mutationIDLimits: Record<ClientID, number>,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<Commit<LocalMetaDD31>[]> {
   const commits: Commit<LocalMetaDD31>[] = [];
   const remainingMutationIDLimits = new Map(Object.entries(mutationIDLimits));
@@ -196,7 +193,7 @@ export async function localMutationsGreaterThan(
 
 export async function baseSnapshotFromHead(
   name: string,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<Commit<SnapshotMetaSDD | SnapshotMetaDD31>> {
   const hash = await dagRead.getHead(name);
   assert(hash, `Missing head ${name}`);
@@ -205,14 +202,14 @@ export async function baseSnapshotFromHead(
 
 export async function baseSnapshotHashFromHash(
   hash: Hash,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<Hash> {
   return (await baseSnapshotFromHash(hash, dagRead)).chunk.hash;
 }
 
 export async function baseSnapshotFromHash(
   hash: Hash,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<Commit<SnapshotMetaSDD | SnapshotMetaDD31>> {
   const commit = await commitFromHash(hash, dagRead);
   return baseSnapshotFromCommit(commit, dagRead);
@@ -220,7 +217,7 @@ export async function baseSnapshotFromHash(
 
 export async function baseSnapshotFromCommit(
   commit: Commit<Meta>,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<Commit<SnapshotMetaSDD | SnapshotMetaDD31>> {
   while (!commitIsSnapshot(commit)) {
     const {meta} = commit;
@@ -263,7 +260,7 @@ export function compareCookiesForSnapshots(
  */
 export async function commitChain(
   fromCommitHash: Hash,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<Commit<Meta>[]> {
   let commit = await commitFromHash(fromCommitHash, dagRead);
   const commits = [];
@@ -290,7 +287,7 @@ export async function commitFromHash(
 
 export async function commitFromHead(
   name: string,
-  dagRead: dag.Read,
+  dagRead: Read,
 ): Promise<Commit<Meta>> {
   const hash = await mustGetHeadHash(name, dagRead);
   return commitFromHash(hash, dagRead);
@@ -557,7 +554,7 @@ function assertIndexRecords(v: unknown): asserts v is IndexRecord[] {
 }
 
 export function newLocalSDD(
-  createChunk: dag.CreateChunk,
+  createChunk: CreateChunk,
   basisHash: Hash,
   mutationID: number,
   mutatorName: string,
@@ -583,7 +580,7 @@ export function newLocalSDD(
 }
 
 export function newLocalDD31(
-  createChunk: dag.CreateChunk,
+  createChunk: CreateChunk,
   basisHash: Hash,
   baseSnapshotHash: Hash,
   mutationID: number,
@@ -613,7 +610,7 @@ export function newLocalDD31(
 }
 
 export function newSnapshotSDD(
-  createChunk: dag.CreateChunk,
+  createChunk: CreateChunk,
   basisHash: Hash | null,
   lastMutationID: number,
   cookieJSON: FrozenJSONValue,
@@ -633,7 +630,7 @@ export function newSnapshotSDD(
 }
 
 export function newSnapshotDD31(
-  createChunk: dag.CreateChunk,
+  createChunk: CreateChunk,
   basisHash: Hash | null,
   lastMutationIDs: Record<ClientID, number>,
   cookieJSON: FrozenCookie,
@@ -685,7 +682,7 @@ export function newSnapshotCommitDataDD31(
 }
 
 export function newIndexChange(
-  createChunk: dag.CreateChunk,
+  createChunk: CreateChunk,
   basisHash: Hash,
   lastMutationID: number,
   valueHash: Hash,
@@ -702,13 +699,13 @@ export function newIndexChange(
   );
 }
 
-export function fromChunk(chunk: dag.Chunk): Commit<Meta> {
+export function fromChunk(chunk: Chunk): Commit<Meta> {
   validateChunk(chunk);
   return new Commit(chunk);
 }
 
 function commitFromCommitData<M extends Meta>(
-  createChunk: dag.CreateChunk,
+  createChunk: CreateChunk,
   data: CommitData<M>,
 ): Commit<M> {
   return new Commit(createChunk(data, getRefs(data)));
@@ -771,9 +768,7 @@ export function assertCommitData(v: unknown): asserts v is CommitData<Meta> {
   assertIndexRecords(v.indexes);
 }
 
-function validateChunk(
-  chunk: dag.Chunk,
-): asserts chunk is dag.Chunk<CommitData<Meta>> {
+function validateChunk(chunk: Chunk): asserts chunk is Chunk<CommitData<Meta>> {
   const {data} = chunk;
   assertCommitData(data);
 

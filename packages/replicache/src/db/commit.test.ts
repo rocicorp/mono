@@ -1,5 +1,6 @@
 import {expect} from 'chai';
-import * as dag from '../dag/mod.js';
+import {Chunk} from '../dag/chunk.js';
+import {TestStore} from '../dag/test-store.js';
 import {FormatVersion} from '../format-version.js';
 import {Hash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {deepFreeze} from '../json.js';
@@ -30,7 +31,7 @@ import {ChainBuilder} from './test-helpers.js';
 suite('base snapshot', () => {
   const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
-    const store = new dag.TestStore();
+    const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);
     await b.addGenesis(clientID);
     let genesisHash = b.chain[0].chunk.hash;
@@ -92,7 +93,7 @@ suite('base snapshot', () => {
 suite('local mutations', () => {
   const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
-    const store = new dag.TestStore();
+    const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);
     await b.addGenesis(clientID);
     const genesisHash = b.chain[0].chunk.hash;
@@ -124,7 +125,7 @@ suite('local mutations', () => {
 test('local mutations greater than', async () => {
   const clientID1 = 'client-id-1';
   const clientID2 = 'client-id-2';
-  const store = new dag.TestStore();
+  const store = new TestStore();
   const b = new ChainBuilder(store);
   await b.addGenesis(clientID1);
   const genesisCommit = b.chain[0];
@@ -200,7 +201,7 @@ test('local mutations greater than', async () => {
 suite('chain', () => {
   const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
-    const store = new dag.TestStore();
+    const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);
     await b.addGenesis(clientID);
 
@@ -232,7 +233,7 @@ suite('chain', () => {
 
 test('load roundtrip', () => {
   const clientID = 'client-id';
-  const t = (chunk: dag.Chunk, expected: Commit<Meta> | Error) => {
+  const t = (chunk: Chunk, expected: Commit<Meta> | Error) => {
     {
       if (expected instanceof Error) {
         expect(() => fromChunk(chunk)).to.throw(
@@ -752,7 +753,7 @@ const chunkHasher = makeNewFakeHashFunction('face55');
 
 const hashMapper: Map<string, Hash> = new Map();
 
-function createChunk<V>(data: V, refs: readonly Hash[]): dag.Chunk<V> {
+function createChunk<V>(data: V, refs: readonly Hash[]): Chunk<V> {
   const s = JSON.stringify(data);
   let hash = hashMapper.get(s);
   if (!hash) {
@@ -760,14 +761,14 @@ function createChunk<V>(data: V, refs: readonly Hash[]): dag.Chunk<V> {
     hashMapper.set(s, hash);
   }
 
-  return new dag.Chunk(hash, data, refs);
+  return new Chunk(hash, data, refs);
 }
 
 function makeCommit<M extends Meta>(
   meta: M,
   valueHash: Hash,
   refs: Hash[],
-): dag.Chunk<CommitData<M>> {
+): Chunk<CommitData<M>> {
   const data: CommitData<M> = makeCommitData(meta, valueHash, []);
   return createChunk(data, refs);
 }
@@ -788,7 +789,7 @@ test('getMutationID across commits with different clients', async () => {
 
   const clientID = 'client-id';
   const clientID2 = 'client-id-2';
-  const store = new dag.TestStore();
+  const store = new TestStore();
   const b = new ChainBuilder(store);
   await b.addGenesis(clientID);
   await b.addLocal(clientID);

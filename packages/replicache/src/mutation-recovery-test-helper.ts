@@ -1,16 +1,19 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
-import * as dag from './dag/mod.js';
-import {assertLocalMetaDD31} from './db/commit.js';
-import type * as db from './db/mod.js';
+import {uuidChunkHasher} from './dag/chunk.js';
+import {LazyStore} from './dag/lazy-store.js';
+import {StoreImpl} from './dag/store-impl.js';
+import type {Store} from './dag/store.js';
+import {LocalMetaDD31, LocalMetaSDD, assertLocalMetaDD31} from './db/commit.js';
 import {ChainBuilder} from './db/test-helpers.js';
 import {FormatVersion} from './format-version.js';
 import {assertHash} from './hash.js';
-import * as kv from './kv/mod.js';
+import {IDBStore} from './kv/idb-store.js';
 import {initClientWithClientID} from './persist/clients-test-helpers.js';
-import * as persist from './persist/mod.js';
+import {IDBDatabasesStore} from './persist/idb-databases-store.js';
 import {persistSDD} from './persist/persist-test-helpers.js';
+import {persistDD31} from './persist/persist.js';
 import type {MutatorDefs} from './replicache.js';
 import {makeIDBNameForTesting} from './replicache.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
@@ -22,19 +25,19 @@ export async function createPerdag(args: {
   replicacheName: string;
   schemaVersion: string;
   formatVersion: FormatVersion;
-}): Promise<dag.Store> {
+}): Promise<Store> {
   const {replicacheName, schemaVersion, formatVersion: formatVersion} = args;
   const idbName = makeIDBNameForTesting(
     replicacheName,
     schemaVersion,
     formatVersion,
   );
-  const idb = new kv.IDBStore(idbName);
+  const idb = new IDBStore(idbName);
   closeablesToClose.add(idb);
   dbsToDrop.add(idbName);
 
-  const createKVStore = (name: string) => new kv.IDBStore(name);
-  const idbDatabases = new persist.IDBDatabasesStore(createKVStore);
+  const createKVStore = (name: string) => new IDBStore(name);
+  const idbDatabases = new IDBDatabasesStore(createKVStore);
   try {
     await idbDatabases.putDatabase({
       name: idbName,
@@ -45,20 +48,20 @@ export async function createPerdag(args: {
   } finally {
     await idbDatabases.close();
   }
-  const perdag = new dag.StoreImpl(idb, dag.uuidChunkHasher, assertHash);
+  const perdag = new StoreImpl(idb, uuidChunkHasher, assertHash);
   return perdag;
 }
 
 export async function createAndPersistClientWithPendingLocalSDD(
   clientID: ClientID,
-  perdag: dag.Store,
+  perdag: Store,
   numLocal: number,
-): Promise<db.LocalMetaSDD[]> {
+): Promise<LocalMetaSDD[]> {
   const formatVersion = FormatVersion.SDD;
-  const testMemdag = new dag.LazyStore(
+  const testMemdag = new LazyStore(
     perdag,
     100 * 2 ** 20,
-    dag.uuidChunkHasher,
+    uuidChunkHasher,
     assertHash,
   );
   const b = new ChainBuilder(testMemdag, undefined, formatVersion);
@@ -67,10 +70,10 @@ export async function createAndPersistClientWithPendingLocalSDD(
 
   await initClientWithClientID(clientID, perdag, [], {}, formatVersion);
 
-  const localMetas: db.LocalMetaSDD[] = [];
+  const localMetas: LocalMetaSDD[] = [];
   for (let i = 0; i < numLocal; i++) {
     await b.addLocal(clientID);
-    localMetas.push(b.chain[b.chain.length - 1].meta as db.LocalMetaSDD);
+    localMetas.push(b.chain[b.chain.length - 1].meta as LocalMetaSDD);
   }
 
   await persistSDD(clientID, testMemdag, perdag, () => false);
@@ -87,18 +90,18 @@ export async function createAndPersistClientWithPendingLocalDD31({
   snapshotLastMutationIDs,
 }: {
   clientID: ClientID;
-  perdag: dag.Store;
+  perdag: Store;
   numLocal: number;
   mutatorNames: string[];
   cookie: string | number;
   formatVersion: FormatVersion;
   snapshotLastMutationIDs?: Record<ClientID, number> | undefined;
-}): Promise<db.LocalMetaDD31[]> {
+}): Promise<LocalMetaDD31[]> {
   assert(formatVersion >= FormatVersion.DD31);
-  const testMemdag = new dag.LazyStore(
+  const testMemdag = new LazyStore(
     perdag,
     100 * 2 ** 20, // 100 MB,
-    dag.uuidChunkHasher,
+    uuidChunkHasher,
     assertHash,
   );
 
@@ -120,7 +123,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
     formatVersion,
   );
 
-  const localMetas: db.LocalMetaDD31[] = [];
+  const localMetas: LocalMetaDD31[] = [];
   for (let i = 0; i < numLocal; i++) {
     await b.addLocal(clientID);
     const {meta} = b.chain[b.chain.length - 1];
@@ -132,7 +135,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
     mutatorNames.map(n => [n, () => Promise.resolve()]),
   );
 
-  await persist.persistDD31(
+  await persistDD31(
     new LogContext(),
     clientID,
     testMemdag,
@@ -147,16 +150,16 @@ export async function createAndPersistClientWithPendingLocalDD31({
 
 export async function persistSnapshotDD31(
   clientID: ClientID,
-  perdag: dag.Store,
+  perdag: Store,
   cookie: string | number,
   mutatorNames: string[],
   snapshotLastMutationIDs: Record<ClientID, number>,
   formatVersion: FormatVersion,
 ): Promise<void> {
-  const testMemdag = new dag.LazyStore(
+  const testMemdag = new LazyStore(
     perdag,
     100 * 2 ** 20, // 100 MB,
-    dag.uuidChunkHasher,
+    uuidChunkHasher,
     assertHash,
   );
 
@@ -174,7 +177,7 @@ export async function persistSnapshotDD31(
     mutatorNames.map(n => [n, () => Promise.resolve()]),
   );
 
-  await persist.persistDD31(
+  await persistDD31(
     new LogContext(),
     clientID,
     testMemdag,
@@ -189,7 +192,7 @@ export function createPushRequestBodyDD31(
   profileID: string,
   clientGroupID: ClientGroupID,
   clientID: ClientID,
-  localMetas: db.LocalMetaDD31[],
+  localMetas: LocalMetaDD31[],
   schemaVersion: string,
 ): ReadonlyJSONObject {
   return {
@@ -210,7 +213,7 @@ export function createPushRequestBodyDD31(
 export function createPushBodySDD(
   profileID: string,
   clientID: ClientID,
-  localMetas: db.LocalMetaSDD[],
+  localMetas: LocalMetaSDD[],
   schemaVersion: string,
 ): ReadonlyJSONObject {
   return {

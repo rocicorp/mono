@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
-import type * as db from '../db/mod.js';
+import type {Write} from '../db/write.js';
 import {deepFreeze} from '../json.js';
 import type {PatchOperation} from '../patch-operation.js';
 
 export async function apply(
   lc: LogContext,
-  dbWrite: db.Write,
+  dbWrite: Write,
   patch: readonly PatchOperation[],
 ): Promise<void> {
   for (const p of patch) {

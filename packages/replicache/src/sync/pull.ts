@@ -1,12 +1,29 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
-import * as btree from '../btree/mod.js';
-import {BTreeRead} from '../btree/mod.js';
+import {diff} from '../btree/diff.js';
+import {BTreeRead} from '../btree/read.js';
 import {compareCookies, Cookie} from '../cookies.js';
-import type * as dag from '../dag/mod.js';
-import {assertSnapshotMetaDD31, commitIsLocalDD31} from '../db/commit.js';
-import * as db from '../db/mod.js';
-import {updateIndexes} from '../db/write.js';
+import type {Store} from '../dag/store.js';
+import {
+  assertSnapshotMetaDD31,
+  baseSnapshotFromHash,
+  Commit,
+  commitChain,
+  commitFromHash,
+  commitIsLocalDD31,
+  DEFAULT_HEAD_NAME,
+  LocalMeta,
+  LocalMetaSDD,
+  localMutations as localMutations_1,
+  Meta,
+  snapshotMetaParts,
+} from '../db/commit.js';
+import {
+  newWriteSnapshotDD31,
+  newWriteSnapshotSDD,
+  readIndexesForWrite,
+  updateIndexes,
+} from '../db/write.js';
 import {isErrorResponse} from '../error-responses.js';
 import {FormatVersion} from '../format-version.js';
 import {
@@ -104,17 +121,17 @@ export async function beginPullV0(
   schemaVersion: string,
   puller: Puller,
   requestID: string,
-  store: dag.Store,
+  store: Store,
   formatVersion: FormatVersion,
   lc: LogContext,
   createSyncBranch = true,
 ): Promise<BeginPullResponseV0> {
   const [lastMutationID, baseCookie] = await withRead(store, async dagRead => {
-    const mainHeadHash = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
+    const mainHeadHash = await dagRead.getHead(DEFAULT_HEAD_NAME);
     if (!mainHeadHash) {
       throw new Error('Internal no main head found');
     }
-    const baseSnapshot = await db.baseSnapshotFromHash(mainHeadHash, dagRead);
+    const baseSnapshot = await baseSnapshotFromHash(mainHeadHash, dagRead);
     const baseSnapshotMeta = baseSnapshot.meta;
     const baseCookie = baseSnapshotMeta.cookieJSON;
     const lastMutationID = await baseSnapshot.getMutationID(clientID, dagRead);
@@ -182,17 +199,17 @@ export async function beginPullV1(
   schemaVersion: string,
   puller: Puller,
   requestID: string,
-  store: dag.Store,
+  store: Store,
   formatVersion: FormatVersion,
   lc: LogContext,
   createSyncBranch = true,
 ): Promise<BeginPullResponseV1> {
   const baseCookie = await withRead(store, async dagRead => {
-    const mainHeadHash = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
+    const mainHeadHash = await dagRead.getHead(DEFAULT_HEAD_NAME);
     if (!mainHeadHash) {
       throw new Error('Internal no main head found');
     }
-    const baseSnapshot = await db.baseSnapshotFromHash(mainHeadHash, dagRead);
+    const baseSnapshot = await baseSnapshotFromHash(mainHeadHash, dagRead);
     const baseSnapshotMeta = baseSnapshot.meta;
     assertSnapshotMetaDD31(baseSnapshotMeta);
     return baseSnapshotMeta.cookieJSON;
@@ -280,7 +297,7 @@ async function callPuller(
 // Returns new sync head, or null if response did not apply due to mismatched cookie.
 export function handlePullResponseV0(
   lc: LogContext,
-  store: dag.Store,
+  store: Store,
   expectedBaseCookie: ReadonlyJSONValue,
   response: PullResponseOKV0,
   clientID: ClientID,
@@ -291,13 +308,13 @@ export function handlePullResponseV0(
   return withWrite(store, async dagWrite => {
     assert(formatVersion <= FormatVersion.SDD);
     const dagRead = dagWrite;
-    const mainHead = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
+    const mainHead = await dagRead.getHead(DEFAULT_HEAD_NAME);
 
     if (mainHead === undefined) {
       throw new Error('Main head disappeared');
     }
-    const baseSnapshot = await db.baseSnapshotFromHash(mainHead, dagRead);
-    const [baseLastMutationID, baseCookie] = db.snapshotMetaParts(
+    const baseSnapshot = await baseSnapshotFromHash(mainHead, dagRead);
+    const [baseLastMutationID, baseCookie] = snapshotMetaParts(
       baseSnapshot,
       clientID,
     );
@@ -357,8 +374,8 @@ export function handlePullResponseV0(
     //
     // We start with the index definitions in the last commit that was
     // integrated into the new snapshot.
-    const chain = await db.commitChain(mainHead, dagRead);
-    let lastIntegrated: db.Commit<db.Meta> | undefined;
+    const chain = await commitChain(mainHead, dagRead);
+    let lastIntegrated: Commit<Meta> | undefined;
     for (const commit of chain) {
       if (
         (await commit.getMutationID(clientID, dagRead)) <=
@@ -373,12 +390,12 @@ export function handlePullResponseV0(
       throw new Error('Internal invalid chain');
     }
 
-    const dbWrite = await db.newWriteSnapshotSDD(
+    const dbWrite = await newWriteSnapshotSDD(
       baseSnapshot.chunk.hash,
       response.lastMutationID,
       frozenCookie,
       dagWrite,
-      db.readIndexesForWrite(lastIntegrated, dagWrite, formatVersion),
+      readIndexesForWrite(lastIntegrated, dagWrite, formatVersion),
       clientID,
       formatVersion,
     );
@@ -436,7 +453,7 @@ function badOrderMessage(
 
 export function handlePullResponseV1(
   lc: LogContext,
-  store: dag.Store,
+  store: Store,
   expectedBaseCookie: FrozenJSONValue,
   response: PullResponseOKV1,
   clientID: ClientID,
@@ -446,11 +463,11 @@ export function handlePullResponseV1(
   // that is not the case by re-checking the base snapshot.
   return withWrite(store, async dagWrite => {
     const dagRead = dagWrite;
-    const mainHead = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
+    const mainHead = await dagRead.getHead(DEFAULT_HEAD_NAME);
     if (mainHead === undefined) {
       throw new Error('Main head disappeared');
     }
-    const baseSnapshot = await db.baseSnapshotFromHash(mainHead, dagRead);
+    const baseSnapshot = await baseSnapshotFromHash(mainHead, dagRead);
     const baseSnapshotMeta = baseSnapshot.meta;
     assertSnapshotMetaDD31(baseSnapshotMeta);
     const baseCookie = baseSnapshotMeta.cookieJSON;
@@ -508,7 +525,7 @@ export function handlePullResponseV1(
       };
     }
 
-    const dbWrite = await db.newWriteSnapshotDD31(
+    const dbWrite = await newWriteSnapshotDD31(
       baseSnapshot.chunk.hash,
       {...baseSnapshotMeta.lastMutationIDs, ...response.lastMutationIDChanges},
       frozenResponseCookie,
@@ -526,16 +543,16 @@ export function handlePullResponseV1(
   });
 }
 
-type MaybeEndPullResultBase<M extends db.Meta> = {
-  replayMutations?: db.Commit<M>[];
+type MaybeEndPullResultBase<M extends Meta> = {
+  replayMutations?: Commit<M>[];
   syncHead: Hash;
   diffs: DiffsMap;
 };
 
-export type MaybeEndPullResultV0 = MaybeEndPullResultBase<db.LocalMetaSDD>;
+export type MaybeEndPullResultV0 = MaybeEndPullResultBase<LocalMetaSDD>;
 
-export function maybeEndPull<M extends db.LocalMeta>(
-  store: dag.Store,
+export function maybeEndPull<M extends LocalMeta>(
+  store: Store,
   lc: LogContext,
   expectedSyncHead: Hash,
   clientID: ClientID,
@@ -543,7 +560,7 @@ export function maybeEndPull<M extends db.LocalMeta>(
   formatVersion: FormatVersion,
 ): Promise<{
   syncHead: Hash;
-  replayMutations: db.Commit<M>[];
+  replayMutations: Commit<M>[];
   diffs: DiffsMap;
 }> {
   return withWrite(store, async dagWrite => {
@@ -566,12 +583,12 @@ export function maybeEndPull<M extends db.LocalMeta>(
     // Ensure another sync has not landed a new snapshot on the main chain.
     // TODO: In DD31, it is expected that a newer snapshot might have appeared
     // on the main chain. In that case, we just abort this pull.
-    const syncSnapshot = await db.baseSnapshotFromHash(syncHeadHash, dagRead);
-    const mainHeadHash = await dagRead.getHead(db.DEFAULT_HEAD_NAME);
+    const syncSnapshot = await baseSnapshotFromHash(syncHeadHash, dagRead);
+    const mainHeadHash = await dagRead.getHead(DEFAULT_HEAD_NAME);
     if (mainHeadHash === undefined) {
       throw new Error('Missing main head');
     }
-    const mainSnapshot = await db.baseSnapshotFromHash(mainHeadHash, dagRead);
+    const mainSnapshot = await baseSnapshotFromHash(mainHeadHash, dagRead);
 
     const {meta} = syncSnapshot;
     const syncSnapshotBasis = meta.basisHash;
@@ -584,9 +601,9 @@ export function maybeEndPull<M extends db.LocalMeta>(
 
     // Collect pending commits from the main chain and determine which
     // of them if any need to be replayed.
-    const syncHead = await db.commitFromHash(syncHeadHash, dagRead);
-    const pending: db.Commit<M>[] = [];
-    const localMutations = await db.localMutations(mainHeadHash, dagRead);
+    const syncHead = await commitFromHash(syncHeadHash, dagRead);
+    const pending: Commit<M>[] = [];
+    const localMutations = await localMutations_1(mainHeadHash, dagRead);
     for (const commit of localMutations) {
       let cid = clientID;
       if (commitIsLocalDD31(commit)) {
@@ -597,7 +614,7 @@ export function maybeEndPull<M extends db.LocalMeta>(
         (await syncHead.getMutationID(cid, dagRead))
       ) {
         // We know that the dag can only contain either LocalMetaSDD or LocalMetaDD31
-        pending.push(commit as db.Commit<M>);
+        pending.push(commit as Commit<M>);
       }
     }
     // pending() gave us the pending mutations in sync-head-first order whereas
@@ -624,7 +641,7 @@ export function maybeEndPull<M extends db.LocalMeta>(
     // TODO check invariants
 
     // Compute diffs (changed keys) for value map and index maps.
-    const mainHead = await db.commitFromHash(mainHeadHash, dagRead);
+    const mainHead = await commitFromHash(mainHeadHash, dagRead);
     if (diffConfig.shouldComputeDiffs()) {
       const mainHeadMap = new BTreeRead(
         dagRead,
@@ -636,7 +653,7 @@ export function maybeEndPull<M extends db.LocalMeta>(
         formatVersion,
         syncHead.valueHash,
       );
-      const valueDiff = await btree.diff(mainHeadMap, syncHeadMap);
+      const valueDiff = await diff(mainHeadMap, syncHeadMap);
       diffsMap.set('', valueDiff);
       await addDiffsForIndexes(
         mainHead,
@@ -650,17 +667,17 @@ export function maybeEndPull<M extends db.LocalMeta>(
 
     // No mutations to replay so set the main head to the sync head and sync complete!
     await Promise.all([
-      dagWrite.setHead(db.DEFAULT_HEAD_NAME, syncHeadHash),
+      dagWrite.setHead(DEFAULT_HEAD_NAME, syncHeadHash),
       dagWrite.removeHead(SYNC_HEAD_NAME),
     ]);
     await dagWrite.commit();
 
     if (lc.debug) {
-      const [oldLastMutationID, oldCookie] = db.snapshotMetaParts(
+      const [oldLastMutationID, oldCookie] = snapshotMetaParts(
         mainSnapshot,
         clientID,
       );
-      const [newLastMutationID, newCookie] = db.snapshotMetaParts(
+      const [newLastMutationID, newCookie] = snapshotMetaParts(
         syncSnapshot,
         clientID,
       );

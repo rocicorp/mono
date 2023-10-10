@@ -4,10 +4,13 @@ import {expect} from 'chai';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import * as sinon from 'sinon';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
-import * as dag from '../dag/mod.js';
+import {uuidChunkHasher} from '../dag/chunk.js';
+import {StoreImpl} from '../dag/store-impl.js';
+import type {Read} from '../dag/store.js';
+import {TestStore} from '../dag/test-store.js';
 import {assertHash, fakeHash} from '../hash.js';
 import {IDBNotFoundError, IDBStore} from '../kv/idb-store.js';
-import {dropIDBStore} from '../kv/mod.js';
+import {dropStore as dropIDBStore} from '../kv/idb-util.js';
 import {withRead} from '../with-transactions.js';
 import {makeClientV5, setClientsForTesting} from './clients-test-helpers.js';
 import {ClientMap, ClientStateNotFoundError, getClients} from './clients.js';
@@ -36,7 +39,7 @@ function awaitLatestHeartbeatUpdate(): Promise<ClientMap> {
 }
 
 test('startHeartbeats starts interval that writes heartbeat each minute', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   const client1 = {
     heartbeatTimestampMs: 1000,
     headHash: fakeHash('eadc1e1'),
@@ -66,7 +69,7 @@ test('startHeartbeats starts interval that writes heartbeat each minute', async 
     controller.signal,
   );
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(readClientMap).to.deep.equal(clientMap);
   });
@@ -74,7 +77,7 @@ test('startHeartbeats starts interval that writes heartbeat each minute', async 
   await clock.tickAsync(ONE_MIN_IN_MS);
   await awaitLatestHeartbeatUpdate();
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(readClientMap).to.deep.equal(
       new Map(
@@ -92,7 +95,7 @@ test('startHeartbeats starts interval that writes heartbeat each minute', async 
   await clock.tickAsync(ONE_MIN_IN_MS);
   await awaitLatestHeartbeatUpdate();
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(readClientMap).to.deep.equal(
       new Map(
@@ -109,7 +112,7 @@ test('startHeartbeats starts interval that writes heartbeat each minute', async 
 });
 
 test('calling function returned by startHeartbeats, stops heartbeats', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   const client1 = makeClientV5({
     heartbeatTimestampMs: 1000,
     headHash: fakeHash('eadc1e1'),
@@ -135,7 +138,7 @@ test('calling function returned by startHeartbeats, stops heartbeats', async () 
     controller.signal,
   );
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(readClientMap).to.deep.equal(clientMap);
   });
@@ -143,7 +146,7 @@ test('calling function returned by startHeartbeats, stops heartbeats', async () 
   await clock.tickAsync(ONE_MIN_IN_MS);
   await awaitLatestHeartbeatUpdate();
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(Object.fromEntries(readClientMap)).to.deep.equal({
       client1: {
@@ -159,7 +162,7 @@ test('calling function returned by startHeartbeats, stops heartbeats', async () 
   clock.tick(ONE_MIN_IN_MS);
   await awaitLatestHeartbeatUpdate();
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(Object.fromEntries(readClientMap)).to.deep.equal({
       client1: {
@@ -174,7 +177,7 @@ test('calling function returned by startHeartbeats, stops heartbeats', async () 
 });
 
 test('writeHeartbeat writes heartbeat', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   const client1 = {
     heartbeatTimestampMs: 1000,
     headHash: fakeHash('eadc1e1'),
@@ -200,7 +203,7 @@ test('writeHeartbeat writes heartbeat', async () => {
   clock.tick(TICK_IN_MS);
 
   await writeHeartbeat('client1', dagStore);
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(readClientMap).to.deep.equal(
       new Map(
@@ -217,7 +220,7 @@ test('writeHeartbeat writes heartbeat', async () => {
 });
 
 test('writeHeartbeat throws Error if no Client is found for clientID', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   let e;
   try {
     await writeHeartbeat('client1', dagStore);
@@ -230,7 +233,7 @@ test('writeHeartbeat throws Error if no Client is found for clientID', async () 
 });
 
 test('heartbeat with missing client calls callback', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   const onClientStateNotFound = sinon.fake();
   const controller = new AbortController();
   startHeartbeats(
@@ -249,7 +252,7 @@ test('heartbeat with dropped idb throws', async () => {
   const {resolve, promise} = resolver();
   const name = `heartbeat-test-dropped-idb-${Math.random()}`;
   const ibdStore = new IDBStore(name);
-  const dagStore = new dag.StoreImpl(ibdStore, dag.uuidChunkHasher, assertHash);
+  const dagStore = new StoreImpl(ibdStore, uuidChunkHasher, assertHash);
   const onClientStateNotFound = sinon.fake();
   const controller = new AbortController();
 

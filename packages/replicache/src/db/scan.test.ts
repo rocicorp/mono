@@ -1,6 +1,7 @@
 import {expect} from 'chai';
-import {BTreeWrite} from '../btree/mod.js';
-import * as dag from '../dag/mod.js';
+import {BTreeWrite} from '../btree/write.js';
+import type {Write} from '../dag/store.js';
+import {TestStore} from '../dag/test-store.js';
 import {FormatVersion} from '../format-version.js';
 import {fromKeyForIndexScanInternal} from '../scan-iterator.js';
 import {withWrite} from '../with-transactions.js';
@@ -10,7 +11,7 @@ import type {ScanItem} from './scan.js';
 test('scan', async () => {
   const formatVersion = FormatVersion.Latest;
   const t = async (fromKey: string, expected: string[]) => {
-    const dagStore = new dag.TestStore();
+    const dagStore = new TestStore();
 
     await withWrite(dagStore, async dagWrite => {
       const map = new BTreeWrite(dagWrite, formatVersion);
@@ -38,7 +39,7 @@ test('scan', async () => {
 });
 
 async function makeBTreeWrite(
-  dagWrite: dag.Write,
+  dagWrite: Write,
   entries: Iterable<[string, string]>,
   formatVersion: FormatVersion,
 ): Promise<BTreeWrite> {
@@ -62,7 +63,7 @@ test('scan index startKey', async () => {
     },
     expected: ScanItem[],
   ) => {
-    const dagStore = new dag.TestStore();
+    const dagStore = new TestStore();
 
     await withWrite(dagStore, async dagWrite => {
       const map = await makeBTreeWrite(dagWrite, entries, formatVersion);

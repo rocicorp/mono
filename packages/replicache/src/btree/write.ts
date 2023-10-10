@@ -1,7 +1,7 @@
 import {Lock} from '@rocicorp/lock';
 import {assert} from 'shared/src/asserts.js';
-import type {CreateChunk} from '../dag/chunk.js';
-import type * as dag from '../dag/mod.js';
+import type {Chunk, CreateChunk} from '../dag/chunk.js';
+import type {Write} from '../dag/store.js';
 import type {FormatVersion} from '../format-version.js';
 import {Hash, emptyHash, newUUIDHash} from '../hash.js';
 import type {FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
@@ -39,13 +39,13 @@ export class BTreeWrite extends BTreeRead {
   readonly #lock = new Lock();
   readonly #modified: Map<Hash, DataNodeImpl | InternalNodeImpl> = new Map();
 
-  protected declare _dagRead: dag.Write;
+  protected declare _dagRead: Write;
 
   readonly minSize: number;
   readonly maxSize: number;
 
   constructor(
-    dagWrite: dag.Write,
+    dagWrite: Write,
     formatVersion: FormatVersion,
     root: Hash = emptyHash,
     minSize = 8 * 1024,
@@ -166,11 +166,11 @@ export class BTreeWrite extends BTreeRead {
       if (this.rootHash === emptyHash) {
         // Write a chunk for the empty tree.
         const chunk = dagWrite.createChunk(emptyDataNode, []);
-        await dagWrite.putChunk(chunk as dag.Chunk<ReadonlyJSONValue>);
+        await dagWrite.putChunk(chunk as Chunk<ReadonlyJSONValue>);
         return chunk.hash;
       }
 
-      const newChunks: dag.Chunk[] = [];
+      const newChunks: Chunk[] = [];
       const newRoot = gatherNewChunks(
         this.rootHash,
         newChunks,
@@ -188,7 +188,7 @@ export class BTreeWrite extends BTreeRead {
 
 function gatherNewChunks(
   hash: Hash,
-  newChunks: dag.Chunk[],
+  newChunks: Chunk[],
   createChunk: CreateChunk,
   modified: Map<Hash, DataNodeImpl | InternalNodeImpl>,
   formatVersion: FormatVersion,

@@ -1,13 +1,26 @@
 import type {LogContext} from '@rocicorp/logger';
 import {sleep} from 'shared/src/sleep.js';
-import type * as dag from '../dag/mod.js';
-import {assertSnapshotCommitDD31} from '../db/commit.js';
-import * as db from '../db/mod.js';
+import type {LazyStore} from '../dag/lazy-store.js';
+import type {Store} from '../dag/store.js';
+import {
+  Commit,
+  DEFAULT_HEAD_NAME,
+  SnapshotMetaDD31,
+  assertSnapshotCommitDD31,
+  baseSnapshotFromCommit,
+  baseSnapshotFromHash,
+  baseSnapshotFromHead,
+  commitFromHash,
+  commitFromHead,
+  compareCookiesForSnapshots,
+  localMutationsGreaterThan,
+} from '../db/commit.js';
+import {rebaseMutationAndPutCommit} from '../db/rebase.js';
 import type {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
 import type {MutatorDefs} from '../replicache.js';
+import {DiffComputationConfig, DiffsMap, diffCommits} from '../sync/diff.js';
 import type {ClientID} from '../sync/ids.js';
-import * as sync from '../sync/mod.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {
   ClientStateNotFoundError,
@@ -33,7 +46,7 @@ type RefreshResult =
   | {
       type: 'complete';
       newMemdagHeadHash: Hash;
-      diffs: sync.DiffsMap;
+      diffs: DiffsMap;
       newPerdagClientHeadHash: Hash;
     };
 
@@ -43,25 +56,25 @@ type RefreshResult =
  */
 export async function refresh(
   lc: LogContext,
-  memdag: dag.LazyStore,
-  perdag: dag.Store,
+  memdag: LazyStore,
+  perdag: Store,
   clientID: ClientID,
   mutators: MutatorDefs,
-  diffConfig: sync.DiffComputationConfig,
+  diffConfig: DiffComputationConfig,
   closed: () => boolean,
   formatVersion: FormatVersion,
-): Promise<[Hash, sync.DiffsMap] | undefined> {
+): Promise<[Hash, DiffsMap] | undefined> {
   if (closed()) {
     return;
   }
   const memdagBaseSnapshot = await withRead(memdag, memdagRead =>
-    db.baseSnapshotFromHead(db.DEFAULT_HEAD_NAME, memdagRead),
+    baseSnapshotFromHead(DEFAULT_HEAD_NAME, memdagRead),
   );
   assertSnapshotCommitDD31(memdagBaseSnapshot);
 
   type PerdagWriteResult = [
     perdagClientGroupHeadHash: Hash,
-    perdagClientGroupBaseSnapshot: db.Commit<db.SnapshotMetaDD31>,
+    perdagClientGroupBaseSnapshot: Commit<SnapshotMetaDD31>,
     perdagLmid: number,
     gatheredChunks: ReadonlyMap<Hash, ChunkWithSize>,
     refreshHashesForRevert: readonly Hash[],
@@ -90,7 +103,7 @@ export async function refresh(
           }
 
           const perdagClientGroupHeadHash = clientGroup.headHash;
-          const perdagClientGroupHeadCommit = await db.commitFromHash(
+          const perdagClientGroupHeadCommit = await commitFromHash(
             perdagClientGroupHeadHash,
             perdagWrite,
           );
@@ -106,7 +119,7 @@ export async function refresh(
           // perdag.
           const client = await mustGetClient(clientID, perdagWrite);
           assertClientV6(client);
-          const perdagClientGroupBaseSnapshot = await db.baseSnapshotFromHash(
+          const perdagClientGroupBaseSnapshot = await baseSnapshotFromHash(
             perdagClientGroupHeadHash,
             perdagWrite,
           );
@@ -178,11 +191,11 @@ export async function refresh(
         refreshHashesForRevert,
       ] = perdagWriteResult;
       return withWrite(memdag, async memdagWrite => {
-        const memdagHeadCommit = await db.commitFromHead(
-          db.DEFAULT_HEAD_NAME,
+        const memdagHeadCommit = await commitFromHead(
+          DEFAULT_HEAD_NAME,
           memdagWrite,
         );
-        const memdagBaseSnapshot = await db.baseSnapshotFromCommit(
+        const memdagBaseSnapshot = await baseSnapshotFromCommit(
           memdagHeadCommit,
           memdagWrite,
         );
@@ -200,7 +213,7 @@ export async function refresh(
           };
         }
 
-        const newMemdagMutations = await db.localMutationsGreaterThan(
+        const newMemdagMutations = await localMutationsGreaterThan(
           memdagHeadCommit,
           {[clientID]: perdagLmid},
           memdagWrite,
@@ -214,7 +227,7 @@ export async function refresh(
         let newMemdagHeadHash = perdagClientGroupHeadHash;
         for (let i = newMemdagMutations.length - 1; i >= 0; i--) {
           newMemdagHeadHash = (
-            await db.rebaseMutationAndPutCommit(
+            await rebaseMutationAndPutCommit(
               newMemdagMutations[i],
               memdagWrite,
               newMemdagHeadHash,
@@ -226,15 +239,15 @@ export async function refresh(
           ).chunk.hash;
         }
 
-        const diffs = await sync.diffCommits(
+        const diffs = await diffCommits(
           memdagHeadCommit,
-          await db.commitFromHash(newMemdagHeadHash, memdagWrite),
+          await commitFromHash(newMemdagHeadHash, memdagWrite),
           memdagWrite,
           diffConfig,
           formatVersion,
         );
 
-        await memdagWrite.setHead(db.DEFAULT_HEAD_NAME, newMemdagHeadHash);
+        await memdagWrite.setHead(DEFAULT_HEAD_NAME, newMemdagHeadHash);
         await memdagWrite.commit();
         return {
           type: 'complete',
@@ -275,11 +288,11 @@ export async function refresh(
 }
 
 function shouldAbortRefresh(
-  memdagBaseSnapshot: db.Commit<db.SnapshotMetaDD31>,
-  perdagClientGroupBaseSnapshot: db.Commit<db.SnapshotMetaDD31>,
+  memdagBaseSnapshot: Commit<SnapshotMetaDD31>,
+  perdagClientGroupBaseSnapshot: Commit<SnapshotMetaDD31>,
   perdagClientGroupHeadHash: Hash,
 ): boolean {
-  const baseSnapshotCookieCompareResult = db.compareCookiesForSnapshots(
+  const baseSnapshotCookieCompareResult = compareCookiesForSnapshots(
     memdagBaseSnapshot,
     perdagClientGroupBaseSnapshot,
   );

@@ -41,7 +41,7 @@ export {
   deleteAllReplicacheData,
   dropAllDatabases,
   dropDatabase,
-} from './persist/mod.js';
+} from './persist/collect-idb-databases.js';
 export type {
   PullResponse,
   PullResponseOKV0,

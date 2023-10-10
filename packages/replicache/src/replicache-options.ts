@@ -1,9 +1,9 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
-import type {Pusher} from './pusher.js';
-import type {Puller} from './puller.js';
-import type {MutatorDefs, RequestOptions} from './replicache.js';
-import type * as kv from './kv/mod.js';
 import type {IndexDefinitions} from './index-defs.js';
+import type {CreateStore} from './kv/store.js';
+import type {Puller} from './puller.js';
+import type {Pusher} from './pusher.js';
+import type {MutatorDefs, RequestOptions} from './replicache.js';
 
 /**
  * The options passed to {@link Replicache}.
@@ -213,7 +213,7 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
    * @experimental This option is experimental and might be removed or changed
    * in the future without following semver versioning. Please be cautious.
    */
-  experimentalCreateKVStore?: kv.CreateStore | undefined;
+  experimentalCreateKVStore?: CreateStore | undefined;
 
   /**
    * Defines the indexes, if any, to use on the data.

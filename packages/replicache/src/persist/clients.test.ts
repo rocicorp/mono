@@ -3,7 +3,8 @@ import {expect} from 'chai';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {BTreeRead} from '../btree/read.js';
-import * as dag from '../dag/mod.js';
+import type {Read, Write} from '../dag/store.js';
+import {TestStore} from '../dag/test-store.js';
 import {
   Commit,
   SnapshotMetaDD31,
@@ -54,15 +55,15 @@ const randomStuffHash = fakeHash('c3');
 const refresh1Hash = fakeHash('e1');
 
 test('getClients with no existing ClientMap in dag store', async () => {
-  const dagStore = new dag.TestStore();
-  await withRead(dagStore, async (read: dag.Read) => {
+  const dagStore = new TestStore();
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(readClientMap.size).to.equal(0);
   });
 });
 
 test('updateClients and getClients', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   const clientMap = new Map(
     Object.entries({
       client1: makeClientV6({
@@ -77,14 +78,14 @@ test('updateClients and getClients', async () => {
   );
   await setClientsForTesting(clientMap, dagStore);
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(readClientMap).to.deep.equal(clientMap);
   });
 });
 
 test('updateClients and getClients for DD31', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   const clientMap = new Map(
     Object.entries({
       client1: makeClientV6({
@@ -101,7 +102,7 @@ test('updateClients and getClients for DD31', async () => {
   );
   await setClientsForTesting(clientMap, dagStore);
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
     expect(readClientMap).to.deep.equal(clientMap);
   });
@@ -121,7 +122,7 @@ test('updateClients and getClients for DD31', async () => {
 });
 
 test('updateClients and getClients sequence', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   const clientMap1 = new Map(
     Object.entries({
       client1: makeClientV6({
@@ -145,21 +146,21 @@ test('updateClients and getClients sequence', async () => {
   );
   await setClientsForTesting(clientMap1, dagStore);
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap1 = await getClients(read);
     expect(readClientMap1).to.deep.equal(clientMap1);
   });
 
   await setClientsForTesting(clientMap2, dagStore);
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClientMap2 = await getClients(read);
     expect(readClientMap2).to.deep.equal(clientMap2);
   });
 });
 
 test('updateClients properly manages refs to client heads when clients are removed and added', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   const client1HeadHash = headClient1Hash;
   const client2HeadHash = headClient2Hash;
 
@@ -187,7 +188,7 @@ test('updateClients properly manages refs to client heads when clients are remov
   );
   await setClientsForTesting(clientMap1, dagStore);
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const clientsHash = await read.getHead('clients');
     assertHash(clientsHash);
     const clientsChunk = await read.getChunk(clientsHash);
@@ -198,7 +199,7 @@ test('updateClients properly manages refs to client heads when clients are remov
   });
   await setClientsForTesting(clientMap2, dagStore);
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const clientsHash = await read.getHead('clients');
     assertHash(clientsHash);
     const clientsChunk = await read.getChunk(clientsHash);
@@ -207,7 +208,7 @@ test('updateClients properly manages refs to client heads when clients are remov
 });
 
 test("updateClients properly manages refs to client heads when a client's head changes", async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   const client1V1HeadHash = fakeHash('c11');
   const client1V2HeadHash = fakeHash('c12');
   const client2HeadHash = fakeHash('c2');
@@ -234,7 +235,7 @@ test("updateClients properly manages refs to client heads when a client's head c
 
   await setClientsForTesting(clientMap1, dagStore);
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const clientsHash = await read.getHead('clients');
     assertHash(clientsHash);
     const clientsChunk = await read.getChunk(clientsHash);
@@ -254,7 +255,7 @@ test("updateClients properly manages refs to client heads when a client's head c
     dagStore,
   );
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const clientsHash = await read.getHead('clients');
     assertHash(clientsHash);
     const clientsChunk = await read.getChunk(clientsHash);
@@ -266,7 +267,7 @@ test("updateClients properly manages refs to client heads when a client's head c
 });
 
 test('getClient', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   const client1 = makeClientV6({
     heartbeatTimestampMs: 1000,
     refreshHashes: [headClient1Hash],
@@ -282,19 +283,19 @@ test('getClient', async () => {
   );
   await setClientsForTesting(clientMap, dagStore);
 
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     const readClient1 = await getClient('client1', read);
     expect(readClient1).to.deep.equal(client1);
   });
 });
 
 test('updateClients throws errors if clients head exist but the chunk it references does not', async () => {
-  const dagStore = new dag.TestStore();
-  await withWrite(dagStore, async (write: dag.Write) => {
+  const dagStore = new TestStore();
+  await withWrite(dagStore, async (write: Write) => {
     await write.setHead('clients', randomStuffHash);
     await write.commit();
   });
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     let e;
     try {
       await getClients(read);
@@ -306,8 +307,8 @@ test('updateClients throws errors if clients head exist but the chunk it referen
 });
 
 test('updateClients throws errors if chunk pointed to by clients head does not contain a valid ClientMap', async () => {
-  const dagStore = new dag.TestStore();
-  await withWrite(dagStore, async (write: dag.Write) => {
+  const dagStore = new TestStore();
+  await withWrite(dagStore, async (write: Write) => {
     const headHash = headClient1Hash;
     const chunk = write.createChunk(
       deepFreeze({
@@ -323,7 +324,7 @@ test('updateClients throws errors if chunk pointed to by clients head does not c
     ]);
     await write.commit();
   });
-  await withRead(dagStore, async (read: dag.Read) => {
+  await withRead(dagStore, async (read: Read) => {
     let e;
     try {
       await getClients(read);
@@ -336,7 +337,7 @@ test('updateClients throws errors if chunk pointed to by clients head does not c
 
 test('initClient creates new empty snapshot when no existing snapshot to bootstrap from', async () => {
   const formatVersion = FormatVersion.Latest;
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
   clock.tick(4000);
   const [clientID, client, headHash, clients] = await initClientV6(
     new LogContext(),
@@ -354,7 +355,7 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
     ),
   );
 
-  await withRead(dagStore, async (dagRead: dag.Read) => {
+  await withRead(dagStore, async (dagRead: Read) => {
     // New client was added to the client map.
     expect(await getClient(clientID, dagRead)).to.deep.equal(client);
     expect(client.heartbeatTimestampMs).to.equal(clock.now);
@@ -382,15 +383,15 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
 });
 
 test('setClient', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
 
   const t = async (clientID: ClientID, client: ClientV5) => {
-    await withWrite(dagStore, async (write: dag.Write) => {
+    await withWrite(dagStore, async (write: Write) => {
       await setClient(clientID, client, write);
       await write.commit();
     });
 
-    await withRead(dagStore, async (read: dag.Read) => {
+    await withRead(dagStore, async (read: Read) => {
       const actualClient = await getClient(clientID, read);
       expect(actualClient).to.deep.equal(client);
     });
@@ -421,7 +422,7 @@ test('setClient', async () => {
 });
 
 test('getClientGroupID', async () => {
-  const dagStore = new dag.TestStore();
+  const dagStore = new TestStore();
 
   const t = async (
     clientID: ClientID,
@@ -513,7 +514,7 @@ test('getClientGroupID', async () => {
 
 suite('findMatchingClient', () => {
   test('new (empty perdag)', async () => {
-    const perdag = new dag.TestStore();
+    const perdag = new TestStore();
     await withRead(perdag, async read => {
       const mutatorNames: string[] = [];
       const indexes = {};
@@ -529,7 +530,7 @@ suite('findMatchingClient', () => {
     newIndexes: IndexDefinitions,
     initialDisabled = false,
   ) {
-    const perdag = new dag.TestStore();
+    const perdag = new TestStore();
     const clientID = 'client-id';
     const clientGroupID = 'client-group-id';
     const b = new ChainBuilder(perdag);
@@ -620,7 +621,7 @@ suite('findMatchingClient', () => {
     newMutatorNames: string[] = initialMutatorNames,
     newIndexes: IndexDefinitions = initialIndexes,
   ) {
-    const perdag = new dag.TestStore();
+    const perdag = new TestStore();
     const clientID = 'client-id';
     const clientGroupID = 'client-group-id';
 
@@ -667,7 +668,7 @@ suite('initClientV6', () => {
   test('new client for empty db', async () => {
     const formatVersion = FormatVersion.Latest;
     const lc = new LogContext();
-    const perdag = new dag.TestStore();
+    const perdag = new TestStore();
     const mutatorNames: string[] = [];
     const indexes: IndexDefinitions = {};
 
@@ -689,7 +690,7 @@ suite('initClientV6', () => {
     const formatVersion = FormatVersion.Latest;
     const lc = new LogContext();
 
-    const perdag = new dag.TestStore();
+    const perdag = new TestStore();
     const clientID1 = 'client-id-1';
     const clientGroupID = 'client-group-id';
     const b = new ChainBuilder(perdag);
@@ -757,7 +758,7 @@ suite('initClientV6', () => {
     const formatVersion = FormatVersion.Latest;
     const lc = new LogContext();
 
-    const perdag = new dag.TestStore();
+    const perdag = new TestStore();
     const clientID1 = 'client-id-1';
     const clientGroupID1 = 'client-group-id-1';
     const b = new ChainBuilder(perdag);
@@ -830,7 +831,7 @@ suite('initClientV6', () => {
     const formatVersion = FormatVersion.Latest;
     const lc = new LogContext();
 
-    const perdag = new dag.TestStore();
+    const perdag = new TestStore();
     const clientID1 = 'client-id-1';
     const clientGroupID1 = 'client-group-id-1';
     const b = new ChainBuilder(perdag);

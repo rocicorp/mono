@@ -2,7 +2,7 @@ import {expect} from 'chai';
 import {assert} from 'shared/src/asserts.js';
 import {Hash, assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {ReadonlyJSONValue, deepFreeze} from '../json.js';
-import type * as kv from '../kv/mod.js';
+import type {Read, Store} from '../kv/store.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
 import {using, withRead, withWrite} from '../with-transactions.js';
 import {Chunk, createChunk} from './chunk.js';
@@ -114,7 +114,7 @@ suite('write', () => {
     await t({a: 42}, []);
   });
 
-  async function assertRefCount(kvr: kv.Read, hash: Hash, count: number) {
+  async function assertRefCount(kvr: Read, hash: Hash, count: number) {
     const value = await kvr.get(chunkRefCountKey(hash));
     if (count === 0) {
       expect(value).to.be.undefined;
@@ -128,7 +128,7 @@ suite('write', () => {
 
   test('set head', async () => {
     const chunkHasher = makeNewFakeHashFunction();
-    const t = async (kv: kv.Store, name: string, hash: Hash | undefined) => {
+    const t = async (kv: Store, name: string, hash: Hash | undefined) => {
       await withWrite(kv, async kvw => {
         const w = new WriteImpl(kvw, chunkHasher, assertHash);
         await (hash === undefined ? w.removeHead(name) : w.setHead(name, hash));
@@ -361,7 +361,7 @@ suite('write', () => {
     }
   });
 
-  async function expectUndefinedForAllChunkKeys(kvRead: kv.Read, hash: Hash) {
+  async function expectUndefinedForAllChunkKeys(kvRead: Read, hash: Hash) {
     expect(await kvRead.get(chunkRefCountKey(hash))).to.be.undefined;
     expect(await kvRead.get(chunkDataKey(hash))).to.be.undefined;
     expect(await kvRead.get(chunkMetaKey(hash))).to.be.undefined;

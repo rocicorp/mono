@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {ClientID} from '../sync/ids.js';
-import type * as dag from '../dag/mod.js';
-import {ClientMap, getClients, setClients} from './clients.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
+import type {Store} from '../dag/store.js';
+import type {ClientID} from '../sync/ids.js';
 import {withWrite} from '../with-transactions.js';
+import {ClientMap, getClients, setClients} from './clients.js';
 
 const CLIENT_MAX_INACTIVE_IN_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const GC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -15,7 +15,7 @@ export function getLatestGCUpdate(): Promise<ClientMap> | undefined {
 
 export function initClientGC(
   clientID: ClientID,
-  dagStore: dag.Store,
+  dagStore: Store,
   lc: LogContext,
   signal: AbortSignal,
 ): void {
@@ -31,10 +31,7 @@ export function initClientGC(
   );
 }
 
-function gcClients(
-  clientID: ClientID,
-  dagStore: dag.Store,
-): Promise<ClientMap> {
+function gcClients(clientID: ClientID, dagStore: Store): Promise<ClientMap> {
   return withWrite(dagStore, async dagWrite => {
     const now = Date.now();
     const clients = await getClients(dagWrite);

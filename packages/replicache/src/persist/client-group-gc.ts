@@ -1,14 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
-import type * as dag from '../dag/mod.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
+import type {Store} from '../dag/store.js';
+import {withWrite} from '../with-transactions.js';
 import {
   ClientGroupMap,
+  clientGroupHasPendingMutations,
   getClientGroups,
   setClientGroups,
-  clientGroupHasPendingMutations,
 } from './client-groups.js';
 import {assertClientV6, getClients} from './clients.js';
-import {withWrite} from '../with-transactions.js';
 
 const GC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -18,7 +18,7 @@ export function getLatestGCUpdate(): Promise<ClientGroupMap> | undefined {
 }
 
 export function initClientGroupGC(
-  dagStore: dag.Store,
+  dagStore: Store,
   lc: LogContext,
   signal: AbortSignal,
 ): void {
@@ -34,7 +34,7 @@ export function initClientGroupGC(
   );
 }
 
-export function gcClientGroups(dagStore: dag.Store): Promise<ClientGroupMap> {
+export function gcClientGroups(dagStore: Store): Promise<ClientGroupMap> {
   return withWrite(dagStore, async tx => {
     const clients = await getClients(tx);
     const clientGroupIDs = new Set();
