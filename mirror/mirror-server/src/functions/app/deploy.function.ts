@@ -304,17 +304,20 @@ export async function earlierDeployments(
     const deployment = must(deploymentDoc.data());
     const lastUpdateTime = must(deploymentDoc.updateTime);
     const lastActionTime = deployment.deployTime ?? deployment.requestTime;
-    failureTimeout = setTimeoutFn(async () => {
-      await setDeploymentStatus(
-        firestore,
-        appID,
-        nextDeploymentID,
-        'FAILED',
-        'Deployment timed out',
-        {lastUpdateTime},
-      );
-      logger.warn(`Set ${nextDeploymentID} to FAILED after timeout`);
-    }, toMillis(lastActionTime) + DEPLOYMENT_FAILURE_TIMEOUT_MS - Date.now());
+    failureTimeout = setTimeoutFn(
+      async () => {
+        await setDeploymentStatus(
+          firestore,
+          appID,
+          nextDeploymentID,
+          'FAILED',
+          'Deployment timed out',
+          {lastUpdateTime},
+        );
+        logger.warn(`Set ${nextDeploymentID} to FAILED after timeout`);
+      },
+      toMillis(lastActionTime) + DEPLOYMENT_FAILURE_TIMEOUT_MS - Date.now(),
+    );
   }
 }
 
