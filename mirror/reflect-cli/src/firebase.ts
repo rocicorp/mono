@@ -11,6 +11,7 @@ import {
   sendAnalyticsEvent,
   getUserParameters,
 } from './metrics/send-ga-event.js';
+import color from 'picocolors';
 import type {ArgumentsCamelCase} from 'yargs';
 import {reportError, ErrorInfo} from 'mirror-protocol/src/error.js';
 import {version} from './version.js';
@@ -108,7 +109,9 @@ export function handleWith<T extends ArgumentsCamelCase<CommonYargsOptions>>(
         ]);
       } catch (e) {
         await reportE(args, eventName, e);
-        throw e;
+        const message = e instanceof Error ? e.message : String(e);
+        console.error(`\n${color.red(color.bold('Error'))}: ${message}`);
+        process.exit(-1);
       } finally {
         await getFirestore().terminate();
       }
