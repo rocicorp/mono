@@ -459,6 +459,7 @@ describe('tail', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
+
   test('tail should replace global console', async () => {
     jest.setSystemTime(1984);
     const roomDO = await makeBaseRoomDO();
