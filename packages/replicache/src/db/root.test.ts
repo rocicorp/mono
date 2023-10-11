@@ -11,7 +11,6 @@ test('getRoot', async () => {
     if (headHash !== undefined) {
       await withWrite(ds, async dw => {
         await dw.setHead(DEFAULT_HEAD_NAME, headHash);
-        await dw.commit();
       });
     }
     if (expected instanceof Error) {

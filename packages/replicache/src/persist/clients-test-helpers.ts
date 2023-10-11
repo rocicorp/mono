@@ -35,7 +35,6 @@ export function setClientsForTesting(
 ): Promise<ClientMap> {
   return withWrite(dagStore, async dagWrite => {
     await setClients(clients, dagWrite);
-    await dagWrite.commit();
     return clients;
   });
 }
@@ -93,7 +92,6 @@ export async function deleteClientForTesting(
     const clients = new Map(await getClients(dagWrite));
     clients.delete(clientID);
     await setClients(clients, dagWrite);
-    await dagWrite.commit();
   });
 }
 
@@ -197,8 +195,6 @@ function initClientV4(
     await setClients(updatedClients, dagWrite);
 
     await Promise.all(chunksToPut.map(c => dagWrite.putChunk(c)));
-
-    await dagWrite.commit();
 
     return [newClientID, newClient, updatedClients, false];
   });

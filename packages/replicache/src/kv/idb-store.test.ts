@@ -21,7 +21,6 @@ test('dropStore', async () => {
   // Write a value.
   await withWrite(store, async wt => {
     await wt.put('foo', 'bar');
-    await wt.commit();
   });
 
   // Verify it's there.
@@ -68,7 +67,6 @@ suite('reopening IDB', () => {
     // Write a value.
     await withWrite(store, async wt => {
       await wt.put('foo', 'bar');
-      await wt.commit();
     });
 
     // close the IDB from under the IDBStore
@@ -77,7 +75,6 @@ suite('reopening IDB', () => {
     // write again, without error
     await withWrite(store, async wt => {
       await wt.put('baz', 'qux');
-      await wt.commit();
     });
 
     await withRead(store, async rt => {
@@ -90,7 +87,6 @@ suite('reopening IDB', () => {
     // Write a value.
     await withWrite(store, async wt => {
       await wt.put('foo', 'bar');
-      await wt.commit();
     });
 
     await dropStore(name);

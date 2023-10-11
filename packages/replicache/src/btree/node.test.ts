@@ -45,7 +45,6 @@ suite('btree node', () => {
     return withWrite(dagStore, async dagWrite => {
       const [h] = await makeTreeInner(node, dagWrite);
       await dagWrite.setHead('test', h);
-      await dagWrite.commit();
       return h;
     });
 
@@ -182,7 +181,6 @@ suite('btree node', () => {
       await fn(w);
       const h = await w.flush();
       await dagWrite.setHead('test', h);
-      await dagWrite.commit();
       return h;
     });
   }
@@ -260,7 +258,6 @@ suite('btree node', () => {
         await dagWrite.putChunk(c2);
         await dagWrite.putChunk(rootChunk);
         await dagWrite.setHead('test', rootHash);
-        await dagWrite.commit();
       });
 
       await withRead(dagStore, async dagRead => {
@@ -346,7 +343,6 @@ suite('btree node', () => {
         expect(h).to.not.equal(emptyHash);
         expect(h).to.not.equal(emptyTreeHash);
         await dagWrite.setHead('test', h);
-        await dagWrite.commit();
         return h;
       });
 
@@ -602,7 +598,6 @@ suite('btree node', () => {
           }
 
           await dagWrite.setHead('test', h);
-          await dagWrite.commit();
 
           for (const [k, v] of Object.entries(data)) {
             expect(await w.get(k)).to.equal(v);
@@ -1378,7 +1373,6 @@ suite('btree node', () => {
 
           await dagWrite.setHead('test/old', oldHash);
           await dagWrite.setHead('test/new', newHash);
-          await dagWrite.commit();
 
           return [oldHash, newHash];
         });

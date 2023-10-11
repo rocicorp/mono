@@ -45,7 +45,6 @@ function gcClients(clientID: ClientID, dagStore: Store): Promise<ClientMap> {
     }
     const newClients = new Map(clientsAfterGC);
     await setClients(newClients, dagWrite);
-    await dagWrite.commit();
     return newClients;
   });
 }

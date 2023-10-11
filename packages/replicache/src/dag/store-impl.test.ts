@@ -4,7 +4,12 @@ import {Hash, assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {ReadonlyJSONValue, deepFreeze} from '../json.js';
 import type {Read, Store} from '../kv/store.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
-import {using, withRead, withWrite} from '../with-transactions.js';
+import {
+  using,
+  withRead,
+  withWrite,
+  withWriteNoImplicitCommit,
+} from '../with-transactions.js';
 import {Chunk, createChunk} from './chunk.js';
 import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.js';
 import {ReadImpl, StoreImpl, WriteImpl} from './store-impl.js';
@@ -18,7 +23,6 @@ suite('read', () => {
       const kv = new TestMemStore();
       await withWrite(kv, async kvw => {
         await kvw.put(chunkDataKey(h), [0, 1]);
-        await kvw.commit();
       });
 
       await withRead(kv, async kvr => {
@@ -45,7 +49,6 @@ suite('read', () => {
         if (chunk.meta.length > 0) {
           await kvw.put(chunkMetaKey(chunk.hash), chunk.meta);
         }
-        await kvw.commit();
       });
 
       await withRead(kv, async kvr => {
@@ -129,7 +132,7 @@ suite('write', () => {
   test('set head', async () => {
     const chunkHasher = makeNewFakeHashFunction();
     const t = async (kv: Store, name: string, hash: Hash | undefined) => {
-      await withWrite(kv, async kvw => {
+      await withWriteNoImplicitCommit(kv, async kvw => {
         const w = new WriteImpl(kvw, chunkHasher, assertHash);
         await (hash === undefined ? w.removeHead(name) : w.setHead(name, hash));
         if (hash !== undefined) {
@@ -195,7 +198,6 @@ suite('write', () => {
       const h = fakeHash('face1');
       await withWrite(kv, async kvw => {
         await kvw.put(chunkRefCountKey(h), v);
-        await kvw.commit();
       });
       await withWrite(kv, async kvw => {
         const w = new WriteImpl(kvw, chunkHasher, assertHash);
@@ -243,7 +245,7 @@ suite('write', () => {
     const t = async (commit: boolean, setHead: boolean) => {
       let key: string;
       const kv = new TestMemStore();
-      await withWrite(kv, async kvw => {
+      await withWriteNoImplicitCommit(kv, async kvw => {
         const w = new WriteImpl(kvw, chunkHasher, assertHash);
         const c = w.createChunk(deepFreeze([0, 1]), []);
         await w.putChunk(c);
@@ -289,7 +291,6 @@ suite('write', () => {
         const h = await w.getHead(name);
         expect(c2).to.deep.equal(c);
         expect(c.hash).to.equal(h);
-        await w.commit();
       });
 
       // Read the changes outside the tx.
@@ -334,7 +335,6 @@ suite('write', () => {
         const c = dagWrite.createChunk(data, []);
         await dagWrite.putChunk(c);
         await dagWrite.setHead('test', c.hash);
-        await dagWrite.commit();
       });
 
       await withRead(store, async dagRead => {
@@ -392,7 +392,6 @@ suite('write', () => {
         dagWrite.putChunk(d),
         dagWrite.putChunk(r),
       ]);
-      await dagWrite.commit();
     });
 
     await withRead(dagStore.kvStore, async kvRead => {
@@ -413,7 +412,6 @@ suite('write', () => {
         dagWrite.setHead('test', e.hash),
         dagWrite.putChunk(e),
       ]);
-      await dagWrite.commit();
     });
 
     await withRead(dagStore.kvStore, async kvRead => {
@@ -443,7 +441,6 @@ async function testChunkNotFoundError(methodName: 'read' | 'write') {
     const c = dagWrite.createChunk(data, []);
     await dagWrite.putChunk(c);
     await dagWrite.setHead('test', c.hash);
-    await dagWrite.commit();
     return c.hash;
   });
 

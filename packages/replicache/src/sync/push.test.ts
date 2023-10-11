@@ -206,7 +206,6 @@ test('try push [SDD]', async () => {
         b.chain[b.chain.length - 1].chunk.hash,
       );
       await w.removeHead(SYNC_HEAD_NAME);
-      await w.commit();
     });
     for (let i = 0; i < c.numPendingMutations; i++) {
       await b.addLocal(clientID);
@@ -452,7 +451,6 @@ test('try push [DD31]', async () => {
         b.chain[b.chain.length - 1].chunk.hash,
       );
       await w.removeHead(SYNC_HEAD_NAME);
-      await w.commit();
     });
     for (let i = 0; i < c.numPendingMutations; i++) {
       await b.addLocal(clientID);

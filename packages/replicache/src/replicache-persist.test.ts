@@ -37,7 +37,7 @@ import {
 } from './persist/clients.js';
 import type {MutatorDefs} from './replicache.js';
 import type {WriteTransaction} from './transactions.js';
-import {withRead, withWrite} from './with-transactions.js';
+import {withRead, withWriteNoImplicitCommit} from './with-transactions.js';
 
 initReplicacheTesting();
 
@@ -52,7 +52,7 @@ async function deleteClientGroupForTesting<
 >(rep: ReplicacheTest<MD>) {
   const clientGroupID = await rep.clientGroupID;
   assert(clientGroupID);
-  await withWrite(rep.perdag, async tx => {
+  await withWriteNoImplicitCommit(rep.perdag, async tx => {
     await deleteClientGroup(clientGroupID, tx);
     await tx.commit();
   });

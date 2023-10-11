@@ -19,7 +19,7 @@ import {assertHash, fakeHash, newUUIDHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';
 import {deepFreeze} from '../json.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
 import {makeClientV6, setClientsForTesting} from './clients-test-helpers.js';
 import {
@@ -291,7 +291,7 @@ test('getClient', async () => {
 
 test('updateClients throws errors if clients head exist but the chunk it references does not', async () => {
   const dagStore = new TestStore();
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await write.setHead('clients', randomStuffHash);
     await write.commit();
   });
@@ -308,7 +308,7 @@ test('updateClients throws errors if clients head exist but the chunk it referen
 
 test('updateClients throws errors if chunk pointed to by clients head does not contain a valid ClientMap', async () => {
   const dagStore = new TestStore();
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     const headHash = headClient1Hash;
     const chunk = write.createChunk(
       deepFreeze({
@@ -386,7 +386,7 @@ test('setClient', async () => {
   const dagStore = new TestStore();
 
   const t = async (clientID: ClientID, client: ClientV5) => {
-    await withWrite(dagStore, async (write: Write) => {
+    await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
       await setClient(clientID, client, write);
       await write.commit();
     });
@@ -432,7 +432,7 @@ test('getClientGroupID', async () => {
     expectedClientGroupID: ClientGroupID | undefined,
     expectedClientGroup: ClientGroup | undefined,
   ) => {
-    await withWrite(dagStore, async write => {
+    await withWriteNoImplicitCommit(dagStore, async write => {
       await setClient(clientID, client, write);
       await setClientGroup(clientGroupID, clientGroup, write);
       await write.commit();
@@ -537,7 +537,7 @@ suite('findMatchingClient', () => {
     await b.addGenesis(clientID);
     await b.addLocal(clientID, []);
 
-    await withWrite(perdag, async write => {
+    await withWriteNoImplicitCommit(perdag, async write => {
       const client: ClientV5 = {
         clientGroupID,
         headHash: b.chain[1].chunk.hash,
@@ -638,7 +638,7 @@ suite('findMatchingClient', () => {
       mutatorNames: initialMutatorNames,
       disabled: false,
     };
-    await withWrite(perdag, async write => {
+    await withWriteNoImplicitCommit(perdag, async write => {
       await setClientGroup(clientGroupID, clientGroup, write);
       await write.commit();
     });
@@ -717,7 +717,7 @@ suite('initClientV6', () => {
       disabled: false,
     };
 
-    await withWrite(perdag, async write => {
+    await withWriteNoImplicitCommit(perdag, async write => {
       await setClient(clientID1, client1, write);
       await setClientGroup(clientGroupID, clientGroup1, write);
       await write.commit();
@@ -787,7 +787,7 @@ suite('initClientV6', () => {
       disabled: false,
     };
 
-    await withWrite(perdag, async write => {
+    await withWriteNoImplicitCommit(perdag, async write => {
       await setClient(clientID1, client1, write);
       await setClientGroup(clientGroupID1, clientGroup1, write);
       await write.commit();
@@ -876,7 +876,7 @@ suite('initClientV6', () => {
       disabled: false,
     };
 
-    await withWrite(perdag, async write => {
+    await withWriteNoImplicitCommit(perdag, async write => {
       await setClient(clientID1, client1, write);
       await setClientGroup(clientGroupID1, clientGroup1, write);
       await write.commit();

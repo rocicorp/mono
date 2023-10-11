@@ -1,7 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import {withRead, withWrite} from '../with-transactions.js';
-import {clearAllNamedMemStoresForTesting, MemStore} from './mem-store.js';
+import {MemStore, clearAllNamedMemStoresForTesting} from './mem-store.js';
 import {runAll} from './store-test-util.js';
 
 runAll('NamedMemStore', () => new MemStore('test'));
@@ -14,7 +14,6 @@ test('Creating multiple with same name shares data', async () => {
   const store = new MemStore('test');
   await withWrite(store, async wt => {
     await wt.put('foo', 'bar');
-    await wt.commit();
   });
 
   const store2 = new MemStore('test');
@@ -27,7 +26,6 @@ test('Creating multiple with different name gets unique data', async () => {
   const store = new MemStore('test');
   await withWrite(store, async wt => {
     await wt.put('foo', 'bar');
-    await wt.commit();
   });
 
   const store2 = new MemStore('test2');
@@ -40,7 +38,6 @@ test('Multiple reads at the same time', async () => {
   const store = new MemStore('test');
   await withWrite(store, async wt => {
     await wt.put('foo', 'bar');
-    await wt.commit();
   });
 
   const {promise, resolve} = resolver();
@@ -67,7 +64,6 @@ test('Single write at a time', async () => {
   const store = new MemStore('test');
   await withWrite(store, async wt => {
     await wt.put('foo', 'bar');
-    await wt.commit();
   });
 
   const {promise: promise1, resolve: resolve1} = resolver();

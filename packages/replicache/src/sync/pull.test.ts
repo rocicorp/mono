@@ -47,7 +47,11 @@ import type {
 } from '../puller.js';
 import {stringCompare} from '../string-compare.js';
 import {testSubscriptionsManagerOptions} from '../test-util.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {
+  withRead,
+  withWrite,
+  withWriteNoImplicitCommit,
+} from '../with-transactions.js';
 import type {DiffsMap} from './diff.js';
 import {
   BeginPullResponseV0,
@@ -413,7 +417,6 @@ test('begin try pull SDD', async () => {
         b.chain[b.chain.length - 1].chunk.hash,
       );
       await w.removeHead(SYNC_HEAD_NAME);
-      await w.commit();
     });
     for (let i = 0; i < c.numPendingMutations; i++) {
       await b.addLocal(clientID);
@@ -955,7 +958,6 @@ test('begin try pull DD31', async () => {
         b.chain[b.chain.length - 1].chunk.hash,
       );
       await w.removeHead(SYNC_HEAD_NAME);
-      await w.commit();
     });
     for (let i = 0; i < c.numPendingMutations; i++) {
       await b.addLocal(clientID);
@@ -1170,7 +1172,7 @@ suite('maybe end try pull', () => {
       for (let j = 0; j < c.numPending; j++) {
         await b.addLocal(clientID);
       }
-      let basisHash = await withWrite(store, async dagWrite => {
+      let basisHash = await withWriteNoImplicitCommit(store, async dagWrite => {
         await dagWrite.setHead(
           DEFAULT_HEAD_NAME,
           b.chain[b.chain.length - 1].chunk.hash,
@@ -1216,7 +1218,7 @@ suite('maybe end try pull', () => {
         } else {
           throw new Error('impossible');
         }
-        basisHash = await withWrite(store, async dagWrite => {
+        basisHash = await withWriteNoImplicitCommit(store, async dagWrite => {
           const w = await newWriteLocal(
             basisHash,
             mutatorName,

@@ -30,7 +30,7 @@ import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
 import {FrozenJSONValue, deepFreeze} from '../json.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import {uuid as makeUuid} from '../uuid.js';
-import {withWrite} from '../with-transactions.js';
+import {withWriteNoImplicitCommit} from '../with-transactions.js';
 import {
   ClientGroup,
   getClientGroup,
@@ -317,7 +317,7 @@ export function initClientV6(
   indexes: IndexDefinitions,
   formatVersion: FormatVersion,
 ): Promise<InitClientV6Result> {
-  return withWrite(perdag, async dagWrite => {
+  return withWriteNoImplicitCommit(perdag, async dagWrite => {
     async function setClientsAndClientGroupAndCommit(
       basisHash: Hash | null,
       cookieJSON: FrozenCookie,

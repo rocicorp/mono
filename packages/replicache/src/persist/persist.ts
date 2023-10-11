@@ -224,14 +224,12 @@ export async function persistDD31(
     };
 
     await setClientGroup(mainClientGroupID, newMainClientGroup, perdagWrite);
-    await perdagWrite.commit();
   });
 
   if (gatheredChunks && memdagBaseSnapshotPersisted) {
-    await withWrite(memdag, async memdagWrite => {
-      memdagWrite.chunksPersisted([...gatheredChunks.keys()]);
-      await memdagWrite.commit();
-    });
+    await withWrite(memdag, memdagWrite =>
+      memdagWrite.chunksPersisted([...gatheredChunks.keys()]),
+    );
   }
 }
 

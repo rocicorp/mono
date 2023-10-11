@@ -1,6 +1,10 @@
 import {expect} from 'chai';
 import type {FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {
+  withRead,
+  withWrite,
+  withWriteNoImplicitCommit,
+} from '../with-transactions.js';
 import type {Read, Store, Write} from './store.js';
 
 class TestStore implements Store {
@@ -29,14 +33,12 @@ class TestStore implements Store {
   async put(key: string, value: FrozenJSONValue): Promise<void> {
     await withWrite(this, async write => {
       await write.put(key, value);
-      await write.commit();
     });
   }
 
   async del(key: string): Promise<void> {
     await withWrite(this, async write => {
       await write.del(key);
-      await write.commit();
     });
   }
 
@@ -81,7 +83,6 @@ async function simpleCommit(store: TestStore): Promise<void> {
     expect(await wt.get('bar')).to.deep.equal('baz');
     await wt.put('other', 'abc');
     expect(await wt.get('other')).to.deep.equal('abc');
-    await wt.commit();
   });
 
   // Verify that the write was effective.
@@ -99,7 +100,6 @@ async function del(store: TestStore): Promise<void> {
     expect(await wt.has('bar')).to.be.false;
     await wt.put('bar', 'baz');
     await wt.put('other', 'abc');
-    await wt.commit();
   });
 
   // Delete
@@ -109,7 +109,6 @@ async function del(store: TestStore): Promise<void> {
     expect(await wt.has('bar')).to.be.false;
     await wt.del('other');
     expect(await wt.has('other')).to.be.false;
-    await wt.commit();
   });
 
   // Verify that the delete was effective.
@@ -124,19 +123,18 @@ async function del(store: TestStore): Promise<void> {
 async function readOnlyCommit(store: TestStore): Promise<void> {
   await withWrite(store, async wt => {
     expect(await wt.has('bar')).to.be.false;
-    await wt.commit();
   });
 }
 
 async function readOnlyRollback(store: TestStore): Promise<void> {
-  await withWrite(store, async wt => {
+  await withWriteNoImplicitCommit(store, async wt => {
     expect(await wt.has('bar')).to.be.false;
   });
 }
 
 async function simpleRollback(store: TestStore): Promise<void> {
   // Start a write transaction and put a value, then abort.
-  await withWrite(store, async wt => {
+  await withWriteNoImplicitCommit(store, async wt => {
     await wt.put('bar', 'baz');
     await wt.put('other', 'abc');
     // no commit, implicit rollback
@@ -186,13 +184,12 @@ async function writeTransaction(store: TestStore): Promise<void> {
     expect(await wt.has('k1')).to.be.true;
     expect(await wt.has('k2')).to.be.true;
     await wt.put('k1', 'overwrite');
-    await wt.commit();
   });
   expect(await store.get('k1')).to.deep.equal('overwrite');
   expect(await store.get('k2')).to.deep.equal('v2');
 
   // Test put then rollback.
-  await withWrite(store, async wt => {
+  await withWriteNoImplicitCommit(store, async wt => {
     await wt.put('k1', 'should be rolled back');
   });
   expect(await store.get('k1')).to.deep.equal('overwrite');
@@ -201,13 +198,12 @@ async function writeTransaction(store: TestStore): Promise<void> {
   await withWrite(store, async wt => {
     await wt.del('k1');
     expect(await wt.has('k1')).to.be.false;
-    await wt.commit();
   });
   expect(await store.has('k1')).to.be.false;
 
   // Test del then rollback.
   expect(await store.has('k2')).to.be.true;
-  await withWrite(store, async wt => {
+  await withWriteNoImplicitCommit(store, async wt => {
     await wt.del('k2');
     expect(await wt.has('k2')).to.be.false;
   });
@@ -218,7 +214,6 @@ async function writeTransaction(store: TestStore): Promise<void> {
     await wt.put('k2', 'overwrite');
     await wt.del('k2');
     await wt.put('k2', 'final');
-    await wt.commit();
   });
   expect(await store.get('k2')).to.deep.equal('final');
 
@@ -227,7 +222,6 @@ async function writeTransaction(store: TestStore): Promise<void> {
     await wt.put('k2', 'new value');
     expect(await wt.has('k2')).to.be.true;
     expect(await wt.get('k2')).to.deep.equal('new value');
-    await wt.commit();
   });
 }
 

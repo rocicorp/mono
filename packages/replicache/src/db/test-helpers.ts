@@ -14,7 +14,11 @@ import type {IndexDefinition, IndexDefinitions} from '../index-defs.js';
 import {JSONValue, deepFreeze} from '../json.js';
 import type {ClientID} from '../sync/ids.js';
 import {addSyncSnapshot} from '../sync/test-helpers.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {
+  withRead,
+  withWrite,
+  withWriteNoImplicitCommit,
+} from '../with-transactions.js';
 import {
   ChunkIndexDefinition,
   Commit,
@@ -74,7 +78,7 @@ async function createGenesis(
   indexDefinitions: IndexDefinitions,
   formatVersion: FormatVersion,
 ): Promise<Commit<Meta>> {
-  await withWrite(store, async w => {
+  await withWriteNoImplicitCommit(store, async w => {
     await initDB(w, headName, clientID, indexDefinitions, formatVersion);
   });
   return withRead(store, read => commitFromHead(headName, read));
@@ -114,7 +118,7 @@ async function createLocal(
   formatVersion: FormatVersion,
 ): Promise<Commit<Meta>> {
   const lc = new LogContext();
-  await withWrite(store, async dagWrite => {
+  await withWriteNoImplicitCommit(store, async dagWrite => {
     const w = await newWriteLocal(
       await mustGetHeadHash(headName, dagWrite),
       createMutatorName(i),
@@ -182,7 +186,7 @@ async function createIndex(
 ): Promise<Commit<Meta>> {
   assert(formatVersion <= FormatVersion.SDD);
   const lc = new LogContext();
-  await withWrite(store, async dagWrite => {
+  await withWriteNoImplicitCommit(store, async dagWrite => {
     const w = await newWriteIndexChange(
       await mustGetHeadHash(headName, dagWrite),
       dagWrite,
@@ -221,7 +225,7 @@ async function addSnapshot(
 ): Promise<Chain> {
   expect(chain).to.have.length.greaterThan(0);
   const lc = new LogContext();
-  await withWrite(store, async dagWrite => {
+  await withWriteNoImplicitCommit(store, async dagWrite => {
     let w;
     if (formatVersion >= FormatVersion.DD31) {
       w = await newWriteSnapshotDD31(
@@ -384,7 +388,6 @@ export class ChainBuilder {
   async removeHead(): Promise<void> {
     await withWrite(this.store, async write => {
       await write.removeHead(this.headName);
-      await write.commit();
     });
   }
 

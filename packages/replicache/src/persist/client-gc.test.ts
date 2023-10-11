@@ -92,7 +92,6 @@ test('initClientGC starts 5 min interval that collects clients that have been in
 
   await withWrite(dagStore, async dagWrite => {
     await setClient('client4', client4WUpdatedHeartbeat, dagWrite);
-    await dagWrite.commit();
   });
 
   await clock.tickAsync(FIVE_MINS_IN_MS);

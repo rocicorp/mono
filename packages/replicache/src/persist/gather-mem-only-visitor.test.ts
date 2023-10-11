@@ -6,7 +6,7 @@ import {DEFAULT_HEAD_NAME, MetaType} from '../db/commit.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
 import {assertHash, makeNewFakeHashFunction} from '../hash.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
 
 suite('dag with no memory-only hashes gathers nothing', () => {
@@ -112,7 +112,7 @@ suite(
       await pb.addGenesis(clientID);
       await pb.addLocal(clientID);
 
-      await withWrite(memdag, async memdagWrite => {
+      await withWriteNoImplicitCommit(memdag, async memdagWrite => {
         await memdagWrite.setHead(DEFAULT_HEAD_NAME, pb.headHash);
         await memdagWrite.commit();
       });
@@ -204,7 +204,7 @@ suite(
         undefined,
         undefined,
       );
-      await withWrite(memdag, async memdagWrite => {
+      await withWriteNoImplicitCommit(memdag, async memdagWrite => {
         await memdagWrite.setHead(DEFAULT_HEAD_NAME, pb.headHash);
         await memdagWrite.commit();
       });

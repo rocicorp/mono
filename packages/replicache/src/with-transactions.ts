@@ -2,6 +2,10 @@ export interface Release {
   release(): void;
 }
 
+export interface Commit {
+  commit(): Promise<void>;
+}
+
 interface ReadStore<Read extends Release> {
   read(): Promise<Read>;
 }
@@ -17,11 +21,22 @@ export function withRead<Read extends Release, Return>(
   return using(store.read(), fn);
 }
 
-export function withWrite<Write extends Release, Return>(
+export function withWriteNoImplicitCommit<Write extends Release, Return>(
   store: WriteStore<Write>,
   fn: (write: Write) => Return | Promise<Return>,
 ): Promise<Return> {
   return using(store.write(), fn);
+}
+
+export function withWrite<Write extends Release & Commit, Return>(
+  store: WriteStore<Write>,
+  fn: (write: Write) => Return | Promise<Return>,
+): Promise<Return> {
+  return using(store.write(), async write => {
+    const result = await fn(write);
+    await write.commit();
+    return result;
+  });
 }
 
 /**
