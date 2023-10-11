@@ -119,32 +119,53 @@ export async function ensureFallbackOrigin(
   const current = new FallbackOrigin({apiToken, zoneID});
   try {
     const existing = await current.get();
-    if (existing.origin === origin) {
+    if (overwrite) {
+      console.warn(`Overwriting existing fallback origin ${existing.origin}`);
+    } else if (existing.origin === origin) {
       console.log(`Fallback Origin is already set to ${origin}`);
       return;
-    }
-    if (!overwrite) {
+    } else {
       throw new Error(
         `Fallback origin is currently set to ${existing.origin}. Use --overwrite-fallbacks to overwrite it.`,
       );
     }
-    console.warn(`Overwriting existing fallback origin ${existing.origin}`);
   } catch (e) {
     FetchResultError.throwIfCodeIsNot(e, Errors.ResourceNotFound);
   }
   // https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/start/advanced-settings/worker-as-origin/
-  console.log(`Creating Fallback Origin DNS record for ${hostname}`);
+  console.log(`Creating Fallback Origin DNS record for ${origin}`);
+  const originRecord = {
+    type: 'AAAA',
+    name: origin,
+    content: '100::',
+    proxied: true,
+    comment: 'Managed by Rocicorp (reflect.net)',
+    tags: ['managed:rocicorp'],
+  };
+  const dnsRecords = new DNSRecords({apiToken, zoneID});
   try {
-    const dnsRecords = new DNSRecords({apiToken, zoneID});
-    const dnsResult = await dnsRecords.create({
-      type: 'AAAA',
-      name: hostname,
-      content: '100::',
-      proxied: true,
-    });
+    const dnsResult = await dnsRecords.create(originRecord);
     console.log(dnsResult);
   } catch (e) {
-    FetchResultError.throwIfCodeIsNot(e, Errors.RecordAlreadyExists); // Assume it is correct.
+    FetchResultError.throwIfCodeIsNot(e, Errors.RecordAlreadyExists);
+
+    const existing = await dnsRecords.list(
+      new URLSearchParams({name: origin, type: 'AAAA'}),
+    );
+    if (existing.length !== 1) {
+      throw new Error(
+        `Unexpected number of existing records for ${origin}: ${JSON.stringify(
+          existing,
+        )}`,
+      );
+    }
+    console.log(
+      `Overwriting existing DNSRecord:`,
+      existing[0],
+      'with',
+      originRecord,
+    );
+    await dnsRecords.update(existing[0].id, originRecord);
   }
 
   console.log(`Setting Fallback Origin to ${origin}`);
