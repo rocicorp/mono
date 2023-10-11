@@ -279,6 +279,11 @@ export interface WriteTransaction extends ReadTransaction {
   set(key: string, value: ReadonlyJSONValue): Promise<void>;
 
   /**
+   * @deprecated Use {@link WriteTransaction.set} instead.
+   */
+  put(key: string, value: ReadonlyJSONValue): Promise<void>;
+
+  /**
    * Removes a `key` and its value from the database. Returns `true` if there was a
    * `key` to remove.
    */
@@ -305,6 +310,10 @@ export class WriteTransactionImpl
     super(clientID, dbWrite, lc, rpcName);
     this.mutationID = mutationID;
     this.reason = reason;
+  }
+
+  put(key: string, value: ReadonlyJSONValue): Promise<void> {
+    return this.set(key, value);
   }
 
   async set(key: string, value: ReadonlyJSONValue): Promise<void> {
