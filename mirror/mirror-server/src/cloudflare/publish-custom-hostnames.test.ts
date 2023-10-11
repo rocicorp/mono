@@ -52,7 +52,7 @@ describe('custom-hostnames', () => {
     expect(fetch.requests()).toEqual([
       [
         'GET',
-        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script&comment.contains=%7Cscript%3Aprod%2Ffoo-script%7C&match=any',
+        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script',
       ],
     ]);
   });
@@ -71,7 +71,7 @@ describe('custom-hostnames', () => {
     expect(fetch.requests()).toEqual([
       [
         'GET',
-        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script&comment.contains=%7Cscript%3Aprod%2Ffoo-script%7C&match=any',
+        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script',
       ],
       [
         'POST',
@@ -102,9 +102,8 @@ describe('custom-hostnames', () => {
         type: 'CNAME',
         content: 'reflect-o-rama.net',
         proxied: true,
-        // tags: ['script:prod/foo-script', 'ch:ch-id'],
-        // comment: 'Managed by Rocicorp (reflect.net)',
-        comment: '|script:prod/foo-script|ch:ch-id|',
+        tags: ['script:prod/foo-script', 'ch:ch-id', 'managed:rocicorp'],
+        comment: 'Managed by Rocicorp (reflect.net)',
       },
       ch,
     ]);
@@ -133,7 +132,7 @@ describe('custom-hostnames', () => {
     expect(fetch.requests()).toEqual([
       [
         'GET',
-        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script&comment.contains=%7Cscript%3Aprod%2Ffoo-script%7C&match=any',
+        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script',
       ],
       [
         'POST',
@@ -173,9 +172,8 @@ describe('custom-hostnames', () => {
       type: 'CNAME',
       content: 'reflect-o-rama.net',
       proxied: true,
-      // tags: ['script:prod/foo-script', 'ch:existing-ch-id'],
-      // comment: 'Managed by Rocicorp (reflect.net)',
-      comment: '|script:prod/foo-script|ch:existing-ch-id|',
+      tags: ['script:prod/foo-script', 'ch:existing-ch-id', 'managed:rocicorp'],
+      comment: 'Managed by Rocicorp (reflect.net)',
     };
     expect(fetch.jsonPayloads()).toEqual([
       null, // DNSRecords.list()
@@ -203,7 +201,7 @@ describe('custom-hostnames', () => {
     expect(fetch.requests()).toEqual([
       [
         'GET',
-        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script&comment.contains=%7Cscript%3Aprod%2Ffoo-script%7C&match=any',
+        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script',
       ],
       [
         'POST',
@@ -238,9 +236,8 @@ describe('custom-hostnames', () => {
         type: 'CNAME',
         content: 'reflect-o-rama.net',
         proxied: true,
-        // tags: ['script:prod/foo-script', 'ch:ch-id'],
-        // comment: 'Managed by Rocicorp (reflect.net)',
-        comment: '|script:prod/foo-script|ch:ch-id|',
+        tags: ['script:prod/foo-script', 'ch:ch-id', 'managed:rocicorp'],
+        comment: 'Managed by Rocicorp (reflect.net)',
       },
       ch,
     ]);
@@ -274,7 +271,7 @@ describe('custom-hostnames', () => {
     expect(fetch.requests()).toEqual([
       [
         'GET',
-        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script&comment.contains=%7Cscript%3Aprod%2Ffoo-script%7C&match=any',
+        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script',
       ],
       [
         'DELETE',
@@ -316,7 +313,7 @@ describe('custom-hostnames', () => {
       expect.arrayContaining([
         [
           'GET',
-          'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script&comment.contains=%7Cscript%3Aprod%2Ffoo-script%7C&match=any',
+          'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script',
         ],
         [
           'DELETE',
@@ -370,7 +367,7 @@ describe('custom-hostnames', () => {
     expect(fetch.requests()).toEqual([
       [
         'GET',
-        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script&comment.contains=%7Cscript%3Aprod%2Ffoo-script%7C&match=any',
+        'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script',
       ],
       [
         'DELETE',
@@ -414,7 +411,7 @@ describe('custom-hostnames', () => {
       expect.arrayContaining([
         [
           'GET',
-          'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script&comment.contains=%7Cscript%3Aprod%2Ffoo-script%7C&match=any',
+          'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script',
         ],
         [
           'DELETE',
@@ -490,7 +487,7 @@ describe('custom-hostnames', () => {
       expect.arrayContaining([
         [
           'GET',
-          'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script&comment.contains=%7Cscript%3Aprod%2Ffoo-script%7C&match=any',
+          'https://api.cloudflare.com/client/v4/zones/1ab3d299c/dns_records?tag=script%3Aprod%2Ffoo-script',
         ],
         [
           'DELETE',

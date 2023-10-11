@@ -164,8 +164,7 @@ async function checkCapabilities(
     name: 'test-mirror-record',
     content: 'test-mirror-content',
     comment: 'Temporarily created by mirror-cli. Delete me.',
-    // TODO: Uncomment when Cloudflare enables tags for us.
-    // tags: ['foo:bar'],
+    tags: ['foo:bar'],
   });
   await dnsRecords.delete(record.id);
 }
