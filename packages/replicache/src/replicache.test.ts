@@ -93,7 +93,7 @@ test('put, get, has, del inside tx', async () => {
         args: {key: string; value: JSONValue},
       ) => {
         const {key, value} = args;
-        await tx.put(key, value);
+        await tx.set(key, value);
         expect(await tx.has(key)).to.equal(true);
         const v = await tx.get(key);
         expect(v).to.deep.equal(value);
@@ -388,7 +388,7 @@ test('push delay', async () => {
         tx: WriteTransaction,
         args: A,
       ) => {
-        await tx.put(`/todo/${args.id}`, args);
+        await tx.set(`/todo/${args.id}`, args);
       },
     },
   });
@@ -583,7 +583,7 @@ test('closed tx', async () => {
 
   await rep.mutate.mut();
   expect(wtx).to.not.be.undefined;
-  await expectAsyncFuncToThrow(() => wtx?.put('z', 1), TransactionClosedError);
+  await expectAsyncFuncToThrow(() => wtx?.set('z', 1), TransactionClosedError);
   await expectAsyncFuncToThrow(() => wtx?.del('w'), TransactionClosedError);
 });
 
@@ -1186,7 +1186,7 @@ test('isEmpty', async () => {
         await tx.del('a');
         expect(await tx.isEmpty()).to.equal(true);
 
-        await tx.put('d', 4);
+        await tx.set('d', 4);
         expect(await tx.isEmpty()).to.equal(false);
       },
     },
@@ -1222,7 +1222,7 @@ test('mutationID on transaction', async () => {
         data: {[key: string]: JSONValue},
       ) => {
         for (const [key, value] of Object.entries(data)) {
-          await tx.put(key, value);
+          await tx.set(key, value);
         }
         expect(tx.mutationID).to.equal(expectedMutationID++);
       },
@@ -2132,7 +2132,7 @@ test('mutate args in mutation throws due to frozen', async () => {
     mutators: {
       async mutArgs(tx: WriteTransaction, args: {v: number}) {
         args.v = 42;
-        await tx.put('v', args.v);
+        await tx.set('v', args.v);
       },
     },
   });
@@ -2178,7 +2178,7 @@ test('mutation timestamps are immutable', async () => {
   const rep = await replicacheForTesting('mutation-timestamps-are-immutable', {
     mutators: {
       foo: async (tx: WriteTransaction, _: JSONValue) => {
-        await tx.put('foo', 'bar');
+        await tx.set('foo', 'bar');
       },
     },
     // eslint-disable-next-line require-await
@@ -2308,7 +2308,7 @@ test('scan in write transaction', async () => {
   const rep = await replicacheForTesting('scan-before-commit', {
     mutators: {
       async test(tx: WriteTransaction, v: number) {
-        await tx.put('a', v);
+        await tx.set('a', v);
         expect(await tx.scan().toArray()).to.deep.equal([v]);
         x++;
       },
@@ -2331,7 +2331,7 @@ test('scan mutate', async () => {
           switch (entry[0]) {
             case 'a':
               // put upcoming entry
-              await tx.put('e', 4);
+              await tx.set('e', 4);
               break;
             case 'b':
               // delete upcoming entry
@@ -2343,11 +2343,11 @@ test('scan mutate', async () => {
               break;
             case 'g':
               // set existing key to new value
-              await tx.put('h', 77);
+              await tx.set('h', 77);
               break;
             case 'h':
               // set already visited key to new value
-              await tx.put('b', 11);
+              await tx.set('b', 11);
               break;
           }
         }
@@ -2390,7 +2390,7 @@ test('index scan mutate', async () => {
           switch (entry[0][1]) {
             case 'a':
               // put upcoming entry
-              await tx.put('e', {a: '4'});
+              await tx.set('e', {a: '4'});
               break;
             case 'b':
               // delete upcoming entry
@@ -2402,11 +2402,11 @@ test('index scan mutate', async () => {
               break;
             case 'g':
               // set existing key to new value
-              await tx.put('h', {a: '77'});
+              await tx.set('h', {a: '77'});
               break;
             case 'h':
               // set already visited key to new value
-              await tx.put('b', {a: '11'});
+              await tx.set('b', {a: '11'});
               break;
           }
         }
@@ -2442,17 +2442,17 @@ test('concurrent puts and gets', async () => {
   const rep = await replicacheForTesting('concurrent-puts', {
     mutators: {
       async insert(tx: WriteTransaction, args: Record<string, number>) {
-        const ps = Object.entries(args).map(([k, v]) => tx.put(k, v));
+        const ps = Object.entries(args).map(([k, v]) => tx.set(k, v));
         await Promise.all(ps);
       },
       async race(tx: WriteTransaction) {
         // Conceptually the put could finish first but in practice that does not
         // happen.
-        const p1 = tx.put('a', 4);
+        const p1 = tx.set('a', 4);
         const p2 = tx.get('a');
         await Promise.all([p1, p2]);
         const v = await p2;
-        await tx.put('d', v ?? null);
+        await tx.set('d', v ?? null);
       },
     },
   });

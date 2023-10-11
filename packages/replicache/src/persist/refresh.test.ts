@@ -144,7 +144,7 @@ function mutatorsProxy(): MutatorDefs {
     {
       get(_target, prop) {
         return async (tx: WriteTransaction, args: JSONValue) => {
-          await tx.put(`from ${String(prop)}`, args);
+          await tx.set(`from ${String(prop)}`, args);
         };
       },
     },

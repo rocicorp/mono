@@ -268,7 +268,7 @@ export async function addData(
   data: {[key: string]: JSONValue},
 ) {
   for (const [key, value] of Object.entries(data)) {
-    await tx.put(key, value);
+    await tx.set(key, value);
   }
 }
 

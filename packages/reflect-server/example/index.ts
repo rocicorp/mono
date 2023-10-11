@@ -7,7 +7,7 @@ const mutators = {
     object: {[key: string]: ReadonlyJSONValue},
   ) {
     for (const [key, value] of Object.entries(object)) {
-      await tx.put(key, value);
+      await tx.set(key, value);
     }
   },
 };

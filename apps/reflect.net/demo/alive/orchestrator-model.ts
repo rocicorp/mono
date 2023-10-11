@@ -66,7 +66,7 @@ async function putClientRoomAssignmentMeta(
   tx: WriteTransaction,
   meta: ClientRoomAssignmentMetaModel,
 ) {
-  await tx.put(clientRoomAssignmentMetaKey, meta);
+  await tx.set(clientRoomAssignmentMetaKey, meta);
 }
 
 async function updateRoomClientCount(

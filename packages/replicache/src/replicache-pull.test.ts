@@ -37,7 +37,7 @@ test('pull', async () => {
         args: A,
       ) => {
         createCount++;
-        await tx.put(`/todo/${args.id}`, args);
+        await tx.set(`/todo/${args.id}`, args);
       },
       deleteTodo: async <A extends {id: number}>(
         tx: WriteTransaction,

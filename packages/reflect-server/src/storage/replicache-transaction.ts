@@ -46,7 +46,14 @@ export class ReplicacheTransaction implements WriteTransaction {
     this.auth = auth;
   }
 
-  async put(key: string, value: ReadonlyJSONValue): Promise<void> {
+  /**
+   * @deprecated Use `set` instead.
+   */
+  put(key: string, value: ReadonlyJSONValue): Promise<void> {
+    return this.set(key, value);
+  }
+
+  async set(key: string, value: ReadonlyJSONValue): Promise<void> {
     const userValue: UserValue = {
       deleted: false,
       version: this.#version,

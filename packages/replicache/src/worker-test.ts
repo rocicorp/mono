@@ -30,7 +30,7 @@ async function testGetHasScanOnEmptyDB(name: string) {
         args: {key: string; value: JSONValue},
       ) => {
         const {key, value} = args;
-        await tx.put(key, value);
+        await tx.set(key, value);
         expect(await tx.has(key)).to.equal(true);
         const v = await tx.get(key);
         expect(v).to.deep.equal(value);

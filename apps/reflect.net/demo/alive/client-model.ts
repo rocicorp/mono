@@ -20,7 +20,7 @@ export const getBotController = async (
     : botControllerSchema.parse(botController);
 };
 const setBotController = (tx: WriteTransaction, value: BotControllerModel) =>
-  tx.put(botControllerKey, value);
+  tx.set(botControllerKey, value);
 
 const deleteBotController = (tx: WriteTransaction) => tx.del(botControllerKey);
 

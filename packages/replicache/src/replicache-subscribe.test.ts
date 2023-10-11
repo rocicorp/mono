@@ -29,7 +29,7 @@ initReplicacheTesting();
 
 async function addData(tx: WriteTransaction, data: {[key: string]: JSONValue}) {
   for (const [key, value] of Object.entries(data)) {
-    await tx.put(key, value);
+    await tx.set(key, value);
   }
 }
 
@@ -911,11 +911,11 @@ test('subscribe perf test regression', async () => {
     mutators: {
       async init(tx: WriteTransaction) {
         await Promise.all(
-          Array.from({length: maxCount}, (_, i) => tx.put(key(i), i)),
+          Array.from({length: maxCount}, (_, i) => tx.set(key(i), i)),
         );
       },
       async put(tx: WriteTransaction, options: {key: string; val: JSONValue}) {
-        await tx.put(options.key, options.val);
+        await tx.set(options.key, options.val);
       },
     },
   });

@@ -885,7 +885,7 @@ async function setupPersistTest() {
       tx: WriteTransaction,
       args: JSONValue,
     ) => {
-      await tx.put(`key-${i}`, args);
+      await tx.set(`key-${i}`, args);
     };
   }
 

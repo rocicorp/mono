@@ -253,7 +253,7 @@ test.skip('mut [type checking only]', async () => {
         // @ts-expect-error xxx
         custom.n as boolean;
 
-        await tx.put('c', custom);
+        await tx.set('c', custom);
       },
 
       k: async (tx: WriteTransaction, custom: CustomInterface) => {
@@ -264,7 +264,7 @@ test.skip('mut [type checking only]', async () => {
         custom.n as boolean;
 
         // @ts-expect-error Index signature is missing in type 'CustomInterface'
-        await tx.put('c', custom);
+        await tx.set('c', custom);
       },
 
       l: async (tx: WriteTransaction, custom: ToRecord<CustomInterface>) => {
@@ -274,7 +274,7 @@ test.skip('mut [type checking only]', async () => {
         // @ts-expect-error xxx
         custom.n as boolean;
 
-        await tx.put('c', custom);
+        await tx.set('c', custom);
       },
     },
   });
