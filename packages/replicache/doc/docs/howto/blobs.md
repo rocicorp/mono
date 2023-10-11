@@ -295,9 +295,9 @@ const rep = new Replicache({
 
 The server side implementation of the `addBlob` mutator does not have to do
 much. It can just store the key and value as pushed. It is important that the
-client view includes the key-value pair for this blob. A better implementation
-would be to set `shouldUpload` depending on wether the blob has been uploaded or
-not.
+client view includes the key-value pair for this blob or the client will lose
+track of the state of the blob. A better implementation would be to set
+`shouldUpload` depending on wether the blob has been uploaded or not.
 
 #### Syncing the blobs
 
