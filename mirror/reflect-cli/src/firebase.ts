@@ -100,22 +100,32 @@ export function handleWith<T extends ArgumentsCamelCase<CommonYargsOptions>>(
 ) {
   return {
     andCleanup: () => async (args: T) => {
+      let success = false;
       const eventName =
         args._ && args._.length ? `cmd_${args._[0]}` : 'cmd_unknown';
       try {
-        await Promise.all([
-          sendAnalyticsEvent(eventName).catch(async e => {
-            await reportE(args, eventName, e, 'WARNING');
-          }),
-          handler(args),
-        ]);
+        await handler(args);
+        success = true;
       } catch (e) {
         await reportE(args, eventName, e, 'ERROR');
         const message = e instanceof Error ? e.message : String(e);
         console.error(`\n${color.red(color.bold('Error'))}: ${message}`);
-        process.exit(-1);
       } finally {
         await getFirestore().terminate();
+      }
+
+      // It is tempting to send analytics in parallel with running
+      // the handler, but that appears to cause problems for some commands
+      // for reasons unknown.
+      // https://github.com/rocicorp/mono/issues/1078
+      try {
+        await sendAnalyticsEvent(eventName);
+      } catch (e) {
+        await reportE(args, eventName, e, 'WARNING');
+      }
+
+      if (!success) {
+        process.exit(-1);
       }
     },
   };
