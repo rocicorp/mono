@@ -100,7 +100,11 @@ import {throwIfClosed} from './transaction-closed-error.js';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';
 import {ReadTransactionImpl, WriteTransactionImpl} from './transactions.js';
 import {version} from './version.js';
-import {withRead, withWrite} from './with-transactions.js';
+import {
+  withRead,
+  withWrite,
+  withWriteNoImplicitCommit,
+} from './with-transactions.js';
 
 declare const TESTING: boolean;
 export interface TestingReplicacheWithTesting extends Replicache {
@@ -660,10 +664,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     resolveClientGroupID(client.clientGroupID);
     resolveClientID(clientID);
-    await withWrite(this.#memdag, async write => {
-      await write.setHead(DEFAULT_HEAD_NAME, headHash);
-      await write.commit();
-    });
+    await withWrite(this.#memdag, write =>
+      write.setHead(DEFAULT_HEAD_NAME, headHash),
+    );
 
     // Now we have a profileID, a clientID, a clientGroupID and DB!
     resolveReady();
@@ -1012,7 +1015,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           await Promise.resolve();
         }
         const {meta} = mutation;
-        syncHead = await withWrite(this.#memdag, dagWrite =>
+        syncHead = await withWriteNoImplicitCommit(this.#memdag, dagWrite =>
           rebaseMutationAndCommit(
             mutation,
             dagWrite,
@@ -1457,10 +1460,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
     const clientGroupID = await this.#clientGroupIDPromise;
     assert(clientGroupID);
     this.#isClientGroupDisabled = true;
-    await withWrite(this.#perdag, async dagWrite => {
-      await disableClientGroup(clientGroupID, dagWrite);
-      await dagWrite.commit();
-    });
+    await withWrite(this.#perdag, dagWrite =>
+      disableClientGroup(clientGroupID, dagWrite),
+    );
     this.#lc.error?.(
       `Client state not found on server, clientGroupID: ${clientGroupID}`,
     );
@@ -1662,7 +1664,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     await this.#ready;
     const clientID = await this.#clientIDPromise;
-    return withWrite(this.#memdag, async dagWrite => {
+    return withWriteNoImplicitCommit(this.#memdag, async dagWrite => {
       try {
         const headHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite);
         const originalHash = null;

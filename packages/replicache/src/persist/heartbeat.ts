@@ -59,7 +59,6 @@ export function writeHeartbeat(
     const newClients = new Map(clients).set(clientID, newClient);
 
     await setClients(newClients, dagWrite);
-    await dagWrite.commit();
     return newClients;
   });
 }

@@ -7,7 +7,7 @@ import {FormatVersion} from '../format-version.js';
 import {fakeHash} from '../hash.js';
 import {IDBStore} from '../kv/idb-store.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
-import {withWrite} from '../with-transactions.js';
+import {withWriteNoImplicitCommit} from '../with-transactions.js';
 import {ClientGroupMap, setClientGroups} from './client-groups.js';
 import {makeClientGroupMap} from './client-groups.test.js';
 import {
@@ -87,7 +87,7 @@ suite('collectIDBDatabases', () => {
 
           await setClientsForTesting(clients, dagStore);
           if (clientGroups) {
-            await withWrite(dagStore, async tx => {
+            await withWriteNoImplicitCommit(dagStore, async tx => {
               await setClientGroups(clientGroups, tx);
               await tx.commit();
             });

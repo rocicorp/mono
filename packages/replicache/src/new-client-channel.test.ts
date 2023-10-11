@@ -10,7 +10,7 @@ import {
   makeChannelNameV1ForTesting,
 } from './new-client-channel.js';
 import {setClientGroup} from './persist/client-groups.js';
-import {withWrite} from './with-transactions.js';
+import {withWriteNoImplicitCommit} from './with-transactions.js';
 
 function getChannelMessagePromise(
   replicacheName: string,
@@ -323,7 +323,7 @@ suite('initNewClientChannel', () => {
 });
 
 async function putClientGroup(perdag: TestStore, clientGroupID1: string) {
-  await withWrite(perdag, async perdagWrite => {
+  await withWriteNoImplicitCommit(perdag, async perdagWrite => {
     await setClientGroup(
       clientGroupID1,
       {

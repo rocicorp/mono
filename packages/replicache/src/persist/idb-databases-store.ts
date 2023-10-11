@@ -77,16 +77,12 @@ export class IDBDatabasesStore {
         [db.name]: db,
       };
       await write.put(DBS_KEY, dbRecord);
-      await write.commit();
       return dbRecord;
     });
   }
 
   clearDatabases(): Promise<void> {
-    return withWrite(this.#kvStore, async write => {
-      await write.del(DBS_KEY);
-      await write.commit();
-    });
+    return withWrite(this.#kvStore, write => write.del(DBS_KEY));
   }
 
   deleteDatabases(names: Iterable<IndexedDBName>): Promise<void> {
@@ -99,7 +95,6 @@ export class IDBDatabasesStore {
         delete dbRecord[name];
       }
       await write.put(DBS_KEY, dbRecord);
-      await write.commit();
     });
   }
 
@@ -118,7 +113,6 @@ export class IDBDatabasesStore {
         // Profile id is 'p' followed by the guid with no dashes.
         profileId = `p${uuid().replace(/-/g, '')}`;
         await write.put(PROFILE_ID_KEY, profileId);
-        await write.commit();
       }
       assertString(profileId);
       return profileId;

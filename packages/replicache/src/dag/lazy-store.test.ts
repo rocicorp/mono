@@ -1,7 +1,11 @@
 import {expect} from 'chai';
 import {assertHash, fakeHash, Hash, makeNewFakeHashFunction} from '../hash.js';
 import {deepFreeze} from '../json.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {
+  withRead,
+  withWrite,
+  withWriteNoImplicitCommit,
+} from '../with-transactions.js';
 import type {Chunk} from './chunk.js';
 import {TestLazyStore} from './test-lazy-store.js';
 import {TestStore} from './test-store.js';
@@ -46,24 +50,26 @@ test('isMemOnlyChunkHash', async () => {
     const chunk = write.createChunk('testValue1', []);
     await write.putChunk(chunk);
     await write.setHead('test', chunk.hash);
-    await write.commit();
     return chunk;
   });
   await withRead(lazyStore, read => {
     // not true for source chunk
     expect(read.isMemOnlyChunkHash(testValue1SourceChunk.hash)).to.be.false;
   });
-  const testValue2MemOnlyChunk = await withWrite(lazyStore, async write => {
-    const chunk = write.createChunk('testValue2', []);
-    // not true if chunk not put
-    expect(write.isMemOnlyChunkHash(chunk.hash)).to.be.false;
-    await write.putChunk(chunk);
-    // true inside transaction once chunk put
-    expect(write.isMemOnlyChunkHash(chunk.hash)).to.be.true;
-    await write.setHead('test', chunk.hash);
-    // don't commit
-    return chunk;
-  });
+  const testValue2MemOnlyChunk = await withWriteNoImplicitCommit(
+    lazyStore,
+    async write => {
+      const chunk = write.createChunk('testValue2', []);
+      // not true if chunk not put
+      expect(write.isMemOnlyChunkHash(chunk.hash)).to.be.false;
+      await write.putChunk(chunk);
+      // true inside transaction once chunk put
+      expect(write.isMemOnlyChunkHash(chunk.hash)).to.be.true;
+      await write.setHead('test', chunk.hash);
+      // don't commit
+      return chunk;
+    },
+  );
   await withRead(lazyStore, read => {
     // not true because not committed
     expect(read.isMemOnlyChunkHash(testValue2MemOnlyChunk.hash)).to.be.false;
@@ -77,7 +83,7 @@ test('isMemOnlyChunkHash', async () => {
     // true inside transaction once chunk put
     expect(write.isMemOnlyChunkHash(chunk.hash)).to.be.true;
     // don't retain with head
-    await write.commit();
+
     return chunk;
   });
 
@@ -94,7 +100,6 @@ test('isMemOnlyChunkHash', async () => {
     // true inside transaction once chunk put
     expect(write.isMemOnlyChunkHash(chunk.hash)).to.be.true;
     await write.setHead('test', chunk.hash);
-    await write.commit();
     return chunk;
   });
 
@@ -106,7 +111,6 @@ test('isMemOnlyChunkHash', async () => {
     await write.removeHead('test');
     // true because GC does not happen till commit.
     expect(write.isMemOnlyChunkHash(testValue4MemOnlyChunk.hash)).to.be.true;
-    await write.commit();
   });
 
   await withRead(lazyStore, read => {
@@ -131,7 +135,6 @@ test('chunksPersisted', async () => {
       chunks.push(chunk);
     }
     await write.setHead('test-head', chunks[chunks.length - 1].hash);
-    await write.commit();
     return chunks;
   });
   await withRead(lazyStore, read => {
@@ -140,12 +143,11 @@ test('chunksPersisted', async () => {
     expect(read.isMemOnlyChunkHash(testValue3MemOnlyChunk.hash)).to.be.true;
   });
 
-  await withWrite(lazyStore, async write => {
+  await withWrite(lazyStore, write => {
     write.chunksPersisted([
       testValue1MemOnlyChunk.hash,
       testValue3MemOnlyChunk.hash,
     ]);
-    await write.commit();
   });
 
   await withRead(lazyStore, read => {
@@ -165,13 +167,11 @@ test(
       const testValue1Chunk = write.createChunk(testValue1, []);
       await write.putChunk(testValue1Chunk);
       await write.setHead('testHeadSource', testValue1Chunk.hash);
-      await write.commit();
       return testValue1Chunk.hash;
     });
 
     await withWrite(lazyStore, async write => {
       await write.setHead('testHeadLazy', testValue1Hash);
-      await write.commit();
     });
 
     await withRead(lazyStore, async read => {
@@ -179,7 +179,6 @@ test(
     });
     await withWrite(sourceStore, async write => {
       await write.removeHead('testHeadSource');
-      await write.commit();
     });
     await withRead(sourceStore, async read => {
       expect(await read.getChunk(testValue1Hash)).to.be.undefined;
@@ -201,7 +200,6 @@ test(
       const testValue1Chunk = write.createChunk(testValue1, []);
       await write.putChunk(testValue1Chunk);
       await write.setHead('testHeadSource', testValue1Chunk.hash);
-      await write.commit();
       return testValue1Chunk.hash;
     });
     await withRead(lazyStore, async read => {
@@ -209,7 +207,6 @@ test(
     });
     await withWrite(sourceStore, async write => {
       await write.removeHead('testHeadSource');
-      await write.commit();
     });
     await withRead(sourceStore, async read => {
       expect(await read.getChunk(testValue1Hash)).to.be.undefined;
@@ -232,7 +229,6 @@ test('heads are *not* loaded from source store', async () => {
     const testValue1Chunk = write.createChunk(testValue1, []);
     await write.putChunk(testValue1Chunk);
     await write.setHead('testHeadSource', testValue1Chunk.hash);
-    await write.commit();
   });
   await withRead(lazyStore, async read => {
     expect(await read.getHead('testHeadSource')).to.be.undefined;
@@ -247,7 +243,6 @@ test('setHead stores head in memory but does not write through to source store',
   const fakeHash1 = fakeHash('face');
   await withWrite(lazyStore, async write => {
     await write.setHead('testHead1', fakeHash1);
-    await write.commit();
   });
   await withRead(lazyStore, async read => {
     expect(await read.getHead('testHead1')).to.equal(fakeHash1);
@@ -265,12 +260,10 @@ test('removeHead removes head from memory but does not write through to source s
   const fakeHash1 = fakeHash('face');
   await withWrite(lazyStore, async write => {
     await write.setHead('testHead1', fakeHash1);
-    await write.commit();
   });
   const testValue1Hash = chunkHasher();
   await withWrite(sourceStore, async write => {
     await write.setHead('testHead1', testValue1Hash);
-    await write.commit();
   });
   await withRead(lazyStore, async read => {
     expect(await read.getHead('testHead1')).to.equal(fakeHash1);
@@ -280,7 +273,6 @@ test('removeHead removes head from memory but does not write through to source s
   });
   await withWrite(lazyStore, async write => {
     await write.removeHead('testHead1');
-    await write.commit();
   });
   await withRead(lazyStore, async read => {
     expect(await read.getHead('testHead1')).to.be.undefined;
@@ -299,11 +291,9 @@ test('putChunk with memory-only hashes updates memory but does not write through
     // be gc'd
     await withWrite(sourceStore, async write => {
       await write.setHead('testHeadSource', testValue1Chunk.hash);
-      await write.commit();
     });
     await write.putChunk(testValue1Chunk);
     await write.setHead('testHeadLazy', testValue1Chunk.hash);
-    await write.commit();
     return testValue1Chunk;
   });
   await withRead(lazyStore, async read => {
@@ -319,16 +309,19 @@ test('putChunk with memory-only hashes updates memory but does not write through
 test('writes are visible within same write transaction but not other transactions when not committed', async () => {
   const {lazyStore} = createLazyStoreForTest();
   const testValue1 = 'testValue1';
-  const testValue1Chunk = await withWrite(lazyStore, async write => {
-    const chunk = write.createChunk(testValue1, []);
-    await write.putChunk(chunk);
-    await write.setHead('testHeadLazy', chunk.hash);
-    // visible within this write transaction
-    expect((await write.getChunk(chunk.hash))?.data).to.equal(testValue1);
-    expect(await write.getHead('testHeadLazy')).to.equal(chunk.hash);
-    // do not commit
-    return chunk;
-  });
+  const testValue1Chunk = await withWriteNoImplicitCommit(
+    lazyStore,
+    async write => {
+      const chunk = write.createChunk(testValue1, []);
+      await write.putChunk(chunk);
+      await write.setHead('testHeadLazy', chunk.hash);
+      // visible within this write transaction
+      expect((await write.getChunk(chunk.hash))?.data).to.equal(testValue1);
+      expect(await write.getHead('testHeadLazy')).to.equal(chunk.hash);
+      // do not commit
+      return chunk;
+    },
+  );
   await withRead(lazyStore, async read => {
     // was never committed, so not visible in another transaction
     expect(await read.getChunk(testValue1Chunk.hash)).to.be.undefined;
@@ -355,7 +348,6 @@ async function setupTestChunks(
       const testValue3Chunk = write.createChunk(testValue3, []);
       await write.putChunk(testValue3Chunk);
       await write.setHead('testHeadSource3', testValue3Chunk.hash);
-      await write.commit();
       return {testValue1Chunk, testValue2Chunk, testValue3Chunk};
     },
   );
@@ -364,7 +356,6 @@ async function setupTestChunks(
     await write.setHead('testHeadLazy1', testValue1Chunk.hash);
     await write.setHead('testHeadLazy2', testValue2Chunk.hash);
     await write.setHead('testHeadLazy3', testValue3Chunk.hash);
-    await write.commit();
   });
   return {testValue1Chunk, testValue2Chunk, testValue3Chunk};
 }
@@ -504,7 +495,6 @@ test('cache evicts in lru fashion, basic test of evict on write', async () => {
   await withWrite(lazyStore, async write => {
     // Evicts testValue1Chunk
     await write.getChunk(testValue3Chunk.hash);
-    await write.commit();
   });
 
   expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
@@ -531,7 +521,6 @@ test('cache eviction suspension, basic test of evict on write', async () => {
     await withWrite(lazyStore, async write => {
       // would evict testValue1Chunk, but doesn't because evicts are suspended
       await write.getChunk(testValue3Chunk.hash);
-      await write.commit();
     });
     expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
       testValue1Chunk.hash,
@@ -569,7 +558,6 @@ test('cache will evict multiple chunks to make room for newly read chunk', async
       const testValue4Chunk = write.createChunk(testValue4, []);
       await write.putChunk(testValue4Chunk);
       await write.setHead('testHeadSource4', testValue4Chunk.hash);
-      await write.commit();
       return {
         testValue1Chunk,
         testValue2Chunk,
@@ -583,7 +571,6 @@ test('cache will evict multiple chunks to make room for newly read chunk', async
     await write.setHead('testHeadLazy2', testValue2Chunk.hash);
     await write.setHead('testHeadLazy3', testValue3Chunk.hash);
     await write.setHead('testHeadLazy4', testValue4Chunk.hash);
-    await write.commit();
   });
 
   await withRead(lazyStore, async read => {
@@ -630,7 +617,6 @@ test('cache will evict multiple chunks to make room for newly cached chunk on Wr
       const testValue4Chunk = write.createChunk(testValue4, []);
       await write.putChunk(testValue4Chunk);
       await write.setHead('testHeadSource4', testValue4Chunk.hash);
-      await write.commit();
       return {
         testValue1Chunk,
         testValue2Chunk,
@@ -644,7 +630,6 @@ test('cache will evict multiple chunks to make room for newly cached chunk on Wr
     await write.setHead('testHeadLazy2', testValue2Chunk.hash);
     await write.setHead('testHeadLazy3', testValue3Chunk.hash);
     await write.setHead('testHeadLazy4', testValue4Chunk.hash);
-    await write.commit();
   });
 
   await withRead(lazyStore, async read => {
@@ -662,7 +647,6 @@ test('cache will evict multiple chunks to make room for newly cached chunk on Wr
   await withWrite(lazyStore, async write => {
     // evicts testValue1Chunk and testValue2Chunk as its size is 200
     await write.getChunk(testValue4Chunk.hash);
-    await write.commit();
   });
 
   expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
@@ -693,7 +677,6 @@ test('cache will evict all cached values to make room for new chunk', async () =
       const testValue4Chunk = write.createChunk(testValue4, []);
       await write.putChunk(testValue4Chunk);
       await write.setHead('testHeadSource4', testValue4Chunk.hash);
-      await write.commit();
       return {
         testValue1Chunk,
         testValue2Chunk,
@@ -707,7 +690,6 @@ test('cache will evict all cached values to make room for new chunk', async () =
     await write.setHead('testHeadLazy2', testValue2Chunk.hash);
     await write.setHead('testHeadLazy3', testValue3Chunk.hash);
     await write.setHead('testHeadLazy4', testValue4Chunk.hash);
-    await write.commit();
   });
 
   await withRead(lazyStore, async read => {
@@ -756,7 +738,6 @@ test(
         const testValue4Chunk = write.createChunk(testValue4, []);
         await write.putChunk(testValue4Chunk);
         await write.setHead('testHeadSource4', testValue4Chunk.hash);
-        await write.commit();
         return {
           testValue1Chunk,
           testValue2Chunk,
@@ -770,7 +751,6 @@ test(
       await write.setHead('testHeadLazy2', testValue2Chunk.hash);
       await write.setHead('testHeadLazy3', testValue3Chunk.hash);
       await write.setHead('testHeadLazy4', testValue4Chunk.hash);
-      await write.commit();
     });
 
     await withRead(lazyStore, async read => {
@@ -832,7 +812,6 @@ test(
       const testValue5Chunk = write.createChunk(testValue5, []);
       await write.putChunk(testValue5Chunk);
       await write.setHead('testHeadSource5', testValue5Chunk.hash);
-      await write.commit();
       return {
         testValue1Chunk,
         testValue2Chunk,
@@ -848,7 +827,6 @@ test(
       await write.setHead('testHeadLazy3', testValue3Chunk.hash);
       await write.setHead('testHeadLazy4', testValue4Chunk.hash);
       await write.setHead('testHeadLazy5', testValue5Chunk.hash);
-      await write.commit();
     });
 
     await withRead(lazyStore, async read => {
@@ -867,7 +845,6 @@ test(
       // their sizes exceeds cache size limit. Other chunks are not evicted.
       await write.getChunk(testValue4Chunk.hash);
       await write.getChunk(testValue5Chunk.hash);
-      await write.commit();
     });
 
     expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
@@ -906,7 +883,6 @@ test('cache eviction does not change ref counts or remove refs', async () => {
       ]);
       await write.putChunk(testValue4Chunk);
       await write.setHead('testHeadSource', testValue4Chunk.hash);
-      await write.commit();
       return {
         testValue1Chunk,
         testValue2Chunk,
@@ -917,7 +893,6 @@ test('cache eviction does not change ref counts or remove refs', async () => {
 
   await withWrite(lazyStore, async write => {
     await write.setHead('testHeadLazy', testValue4Chunk.hash);
-    await write.commit();
   });
 
   await withRead(lazyStore, async read => {
@@ -984,7 +959,6 @@ test('cache eviction does not change ref counts or remove refs', async () => {
   // Delete chunks from lazy store
   await withWrite(lazyStore, async write => {
     await write.removeHead('testHeadLazy');
-    await write.commit();
   });
 
   // Refs and ref counts of delete chunks are deleted
@@ -1010,7 +984,6 @@ test('memory-only chunks are not evicted when cache size is exceeded', async () 
       const testValue3Chunk = write.createChunk(testValue3, []);
       await write.putChunk(testValue3Chunk);
       await write.setHead('testHeadSource3', testValue3Chunk.hash);
-      await write.commit();
       return {testValue1Chunk, testValue2Chunk, testValue3Chunk};
     },
   );
@@ -1030,7 +1003,6 @@ test('memory-only chunks are not evicted when cache size is exceeded', async () 
       await write.setHead('testHeadLazy2', testValue2Chunk.hash);
       await write.setHead('testHeadLazy3', testValue3Chunk.hash);
 
-      await write.commit();
       return {tempValue1Chunk, tempValue2Chunk};
     },
   );
@@ -1096,7 +1068,6 @@ test(
       await write.putChunk(c);
       await write.putChunk(d);
       await write.setHead('test', r.hash);
-      await write.commit();
       return {r, a, b, c, d};
     });
 
@@ -1122,7 +1093,6 @@ test(
       const e = write.createChunk('e', [d.hash]);
       await write.putChunk(e);
       await write.setHead('test', e.hash);
-      await write.commit();
       return e;
     });
 
@@ -1176,7 +1146,6 @@ test(
       await write.putChunk(c);
       await write.putChunk(d);
       await write.setHead('testSource', r.hash);
-      await write.commit();
       return {r, a, b, c, d};
     });
 
@@ -1187,7 +1156,6 @@ test(
       await write.getChunk(c.hash);
       await write.getChunk(d.hash);
       await write.setHead('testLazy', r.hash);
-      await write.commit();
     });
 
     expect(lazyStore.getRefsSnapshot()).to.deep.equal({
@@ -1213,14 +1181,12 @@ test(
       const e = write.createChunk('e', [d.hash]);
       await write.putChunk(e);
       await write.setHead('testSource', e.hash);
-      await write.commit();
       return e;
     });
 
     await withWrite(lazyStore, async write => {
       await write.getChunk(e.hash);
       await write.setHead('testLazy', e.hash);
-      await write.commit();
       return e;
     });
 
@@ -1274,7 +1240,6 @@ test(
       await write.putChunk(c);
       await write.putChunk(d);
       await write.setHead('testSource', r.hash);
-      await write.commit();
       return {r, a, b, c, d};
     });
 
@@ -1285,7 +1250,6 @@ test(
       await write.getChunk(c.hash);
       await write.getChunk(d.hash);
       await write.setHead('testLazy', r.hash);
-      await write.commit();
     });
 
     expect(lazyStore.getRefsSnapshot()).to.deep.equal({
@@ -1311,7 +1275,6 @@ test(
       const tempE = write.createChunk('e', [d.hash]);
       await write.putChunk(tempE);
       await write.setHead('testLazy', tempE.hash);
-      await write.commit();
       return tempE;
     });
 
@@ -1331,14 +1294,12 @@ test(
       const e = write.createChunk('e', [d.hash]);
       await write.putChunk(e);
       await write.setHead('testSource', e.hash);
-      await write.commit();
       return e;
     });
 
     await withWrite(lazyStore, async write => {
       await write.getChunk(e.hash);
       await write.setHead('testLazy', e.hash);
-      await write.commit();
       return e;
     });
 
@@ -1395,7 +1356,6 @@ test(
       await write.putChunk(c);
       await write.putChunk(d);
       await write.setHead('testSource', r.hash);
-      await write.commit();
       return {r, a, b, c, d};
     });
 
@@ -1408,7 +1368,6 @@ test(
       const tempR1 = await write.createChunk('tempR1', [r.hash]);
       await write.putChunk(tempR1);
       await write.setHead('testLazy', tempR1.hash);
-      await write.commit();
       return tempR1;
     });
 
@@ -1448,7 +1407,6 @@ test(
           const tempR2 = write.createChunk('tempR2', [d.hash]);
           await write.putChunk(tempR2);
           await write.setHead('testLazy', tempR2.hash);
-          await write.commit();
           return tempR2;
         });
 
@@ -1483,7 +1441,6 @@ test(
         // D
         await withWrite(lazyStore, async write => {
           await write.setHead('testLazy', c.hash);
-          await write.commit();
         });
 
         expect(lazyStore.getRefsSnapshot()).to.deep.equal({
@@ -1573,7 +1530,6 @@ async function testChunksCacheForFirstTimeRefsAreCounted(
     await write.putChunk(a);
     await write.putChunk(b);
     await write.setHead('headSource', b.hash);
-    await write.commit();
     return {a, b};
   });
 
@@ -1584,7 +1540,6 @@ async function testChunksCacheForFirstTimeRefsAreCounted(
   //  A
   await withWrite(lazyStore, async write => {
     await write.setHead('headLazy', b.hash);
-    await write.commit();
   });
 
   expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
@@ -1610,7 +1565,6 @@ async function testChunksCacheForFirstTimeRefsAreCounted(
     const c = write.createChunk('c', [a.hash, b.hash]);
     await write.putChunk(c);
     await write.setHead('headLazy', c.hash);
-    await write.commit();
     return c;
   });
 
@@ -1627,7 +1581,6 @@ async function testChunksCacheForFirstTimeRefsAreCounted(
     // delete headLazy
     await withWrite(lazyStore, async write => {
       await write.removeHead('headLazy');
-      await write.commit();
     });
     // If B's ref to A was not counted despite being previously
     // reachable, A would now have a negative refCount (as its refCount
@@ -1669,7 +1622,6 @@ test('the refs of chunks being cached for a *second* time are not counted on com
   await withWrite(lazyStore, async write => {
     // recache B, A is evicted
     await write.getChunk(b.hash);
-    await write.commit();
   });
   expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([b.hash]);
 
@@ -1683,7 +1635,6 @@ test('the refs of chunks being cached for a *second* time are not counted on com
   // delete headLazy
   await withWrite(lazyStore, async write => {
     await write.removeHead('headLazy');
-    await write.commit();
   });
   expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({});
   expect(lazyStore.getRefsSnapshot()).to.deep.equal({});

@@ -6,7 +6,7 @@ import {BTreeRead} from '../btree/read.js';
 import {mustGetHeadHash} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {FormatVersion} from '../format-version.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {DEFAULT_HEAD_NAME, commitFromHead} from './commit.js';
 import {readIndexesForRead} from './read.js';
 import {initDB} from './test-helpers.js';
@@ -26,7 +26,7 @@ suite('basics w/ commit', () => {
     );
 
     // Put.
-    await withWrite(ds, async dagWrite => {
+    await withWriteNoImplicitCommit(ds, async dagWrite => {
       const headHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite);
       const w = await newWriteLocal(
         headHash,
@@ -46,7 +46,7 @@ suite('basics w/ commit', () => {
     });
 
     // As well as after it has committed.
-    await withWrite(ds, async dagWrite => {
+    await withWriteNoImplicitCommit(ds, async dagWrite => {
       const w = await newWriteLocal(
         await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
         'mutator_name',
@@ -62,7 +62,7 @@ suite('basics w/ commit', () => {
     });
 
     // Del.
-    await withWrite(ds, async dagWrite => {
+    await withWriteNoImplicitCommit(ds, async dagWrite => {
       const w = await newWriteLocal(
         await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
         'mutator_name',
@@ -81,7 +81,7 @@ suite('basics w/ commit', () => {
     });
 
     // As well as after it has committed.
-    await withWrite(ds, async dagWrite => {
+    await withWriteNoImplicitCommit(ds, async dagWrite => {
       const w = await newWriteLocal(
         await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
         'mutator_name',
@@ -115,7 +115,7 @@ suite('basics w/ putCommit', () => {
     );
 
     // Put.
-    const commit1 = await withWrite(ds, async dagWrite => {
+    const commit1 = await withWriteNoImplicitCommit(ds, async dagWrite => {
       const w = await newWriteLocal(
         await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
         'mutator_name',
@@ -137,7 +137,7 @@ suite('basics w/ putCommit', () => {
     });
 
     // As well as from the Commit that was put.
-    await withWrite(ds, async dagWrite => {
+    await withWriteNoImplicitCommit(ds, async dagWrite => {
       const w = await newWriteLocal(
         commit1.chunk.hash,
         'mutator_name',
@@ -153,7 +153,7 @@ suite('basics w/ putCommit', () => {
     });
 
     // Del.
-    const commit2 = await withWrite(ds, async dagWrite => {
+    const commit2 = await withWriteNoImplicitCommit(ds, async dagWrite => {
       const w = await newWriteLocal(
         commit1.chunk.hash,
         'mutator_name',
@@ -175,7 +175,7 @@ suite('basics w/ putCommit', () => {
     });
 
     // As well as from the commit after it was put.
-    await withWrite(ds, async dagWrite => {
+    await withWriteNoImplicitCommit(ds, async dagWrite => {
       const w = await newWriteLocal(
         commit2.chunk.hash,
         'mutator_name',
@@ -199,7 +199,7 @@ test('clear', async () => {
   const clientID = 'client-id';
   const ds = new TestStore();
   const lc = new LogContext();
-  await withWrite(ds, dagWrite =>
+  await withWriteNoImplicitCommit(ds, dagWrite =>
     initDB(
       dagWrite,
       DEFAULT_HEAD_NAME,
@@ -211,7 +211,7 @@ test('clear', async () => {
       FormatVersion.Latest,
     ),
   );
-  await withWrite(ds, async dagWrite => {
+  await withWriteNoImplicitCommit(ds, async dagWrite => {
     const w = await newWriteLocal(
       await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
       'mutator_name',
@@ -226,7 +226,7 @@ test('clear', async () => {
     await w.commit(DEFAULT_HEAD_NAME);
   });
 
-  await withWrite(ds, async dagWrite => {
+  await withWriteNoImplicitCommit(ds, async dagWrite => {
     const w = await newWriteLocal(
       await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
       'mutator_name',
@@ -280,7 +280,7 @@ test('mutationID on newWriteLocal', async () => {
   const clientID = 'client-id';
   const ds = new TestStore();
   const lc = new LogContext();
-  await withWrite(ds, dagWrite =>
+  await withWriteNoImplicitCommit(ds, dagWrite =>
     initDB(
       dagWrite,
       DEFAULT_HEAD_NAME,
@@ -292,7 +292,7 @@ test('mutationID on newWriteLocal', async () => {
       FormatVersion.Latest,
     ),
   );
-  await withWrite(ds, async dagWrite => {
+  await withWriteNoImplicitCommit(ds, async dagWrite => {
     const headHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite);
     const w = await newWriteLocal(
       headHash,
@@ -309,7 +309,7 @@ test('mutationID on newWriteLocal', async () => {
     expect(await w.getMutationID()).equals(1);
   });
 
-  await withWrite(ds, async dagWrite => {
+  await withWriteNoImplicitCommit(ds, async dagWrite => {
     const headHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite);
     const w = await newWriteLocal(
       headHash,

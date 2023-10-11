@@ -48,7 +48,7 @@ import {
   tickAFewTimes,
 } from './test-util.js';
 import {uuid} from './uuid.js';
-import {withRead, withWrite} from './with-transactions.js';
+import {withRead, withWriteNoImplicitCommit} from './with-transactions.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -2155,7 +2155,7 @@ suite('DD31', () => {
     );
     assertClientV6(client1);
     expect(client1.clientGroupID).to.not.equal(await rep.clientGroupID);
-    await withWrite(testPerdagDD31, async write => {
+    await withWriteNoImplicitCommit(testPerdagDD31, async write => {
       await disableClientGroup(client1.clientGroupID, write);
       await write.commit();
     });

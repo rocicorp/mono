@@ -3,7 +3,7 @@ import type {Read, Store, Write} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {Hash, assertHash, fakeHash} from '../hash.js';
 import type {ClientGroupID} from '../sync/ids.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {
   ClientGroup,
   ClientGroupMap,
@@ -61,7 +61,7 @@ async function testSetClientGroups(
   dagStore: Store,
 ) {
   const clientGroupMap = makeClientGroupMap(partialClientGroupMap);
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     const returnClientGroupMap = await setClientGroups(clientGroupMap, write);
     expect(returnClientGroupMap).to.deep.equal(clientGroupMap);
     const readClientGroupMap = await getClientGroups(write);
@@ -110,7 +110,7 @@ async function testSetClientGroupsSequenceThrowsError(
 ) {
   await testSetClientGroups(partialClientGroupMap1, dagStore);
   const clientGroupMap2 = makeClientGroupMap(partialClientGroupMap2);
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     let expectedE: unknown;
     try {
       await setClientGroups(clientGroupMap2, write);
@@ -324,7 +324,7 @@ async function testSetClientGroup(
   const expectedClientGroupMap = makeClientGroupMap(
     expectedPartialClientGroupMap,
   );
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     const [clientGroupID, partialClientGroup] = partialClientGroupEntryToSet;
     const returnClientGroupMap = await setClientGroup(
       clientGroupID,
@@ -350,7 +350,7 @@ async function testSetClientGroupThrowsError(
   dagStore: Store,
 ) {
   const clientGroupMap1 = makeClientGroupMap(partialClientGroupMap1);
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     const returnClientGroupMap1 = await setClientGroups(clientGroupMap1, write);
     expect(returnClientGroupMap1).to.deep.equal(clientGroupMap1);
     const readClientGroupMap1 = await getClientGroups(write);
@@ -362,7 +362,7 @@ async function testSetClientGroupThrowsError(
     expect(readClientGroupMap1).to.deep.equal(readClientGroupMap1);
   });
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     const [clientGroupID, partialClientGroup] = partialClientGroupEntryToSet;
     const clientGroup = makeClientGroup(partialClientGroup);
     let expectedE: unknown;
@@ -640,12 +640,12 @@ test('deleteClientGroup', async () => {
     'client-group-2': clientGroup2,
   });
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroups(clientGroupMap1, write);
     await write.commit();
   });
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     const returnClientGroupMap = await deleteClientGroup(
       'client-group-3',
       write,
@@ -664,7 +664,7 @@ test('deleteClientGroup', async () => {
   const expectedClientGroupAfterDeletingClientGroup1 = makeClientGroupMap({
     'client-group-2': clientGroup2,
   });
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     const returnClientGroupMap = await deleteClientGroup(
       'client-group-1',
       write,
@@ -717,13 +717,13 @@ test('setClientGroups properly manages refs to client group heads when client gr
     },
   });
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroups(clientGroupMap1, write);
     await write.commit();
   });
   await expectRefs([clientGroup1HeadHash, clientGroup2HeadHash], dagStore);
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroups(clientGroupMap2, write);
     await write.commit();
   });
@@ -756,13 +756,13 @@ test("setClientGroup properly manages refs to client group heads when a client g
     'client-group-2': clientGroup2,
   });
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroups(clientGroupMap1, write);
     await write.commit();
   });
   await expectRefs([clientGroup1V1HeadHash, clientGroup2HeadHash], dagStore);
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroups(clientGroupMap2, write);
     await write.commit();
   });
@@ -784,13 +784,13 @@ test('setClientGroup properly manages refs to client group heads when a client g
     },
   });
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroups(clientGroupMap1, write);
     await write.commit();
   });
   await expectRefs([clientGroup1HeadHash, clientGroup2HeadHash], dagStore);
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroup(
       'client-group-3',
       makeClientGroup({
@@ -822,13 +822,13 @@ test("setClientGroup properly manages refs to client group heads when a client g
     },
   });
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroups(clientGroupMap1, write);
     await write.commit();
   });
   await expectRefs([clientGroup1V1HeadHash, clientGroup2HeadHash], dagStore);
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroup(
       'client-group-1',
       makeClientGroup({
@@ -856,13 +856,13 @@ test('deleteClientGroup properly manages refs to client group heads', async () =
     },
   });
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroups(clientGroupMap1, write);
     await write.commit();
   });
   await expectRefs([clientGroup1HeadHash, clientGroup2HeadHash], dagStore);
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await deleteClientGroup('client-group-1', write);
     await write.commit();
   });
@@ -881,7 +881,7 @@ test('getClientGroup', async () => {
       headHash: headClientGroup2Hash,
     },
   });
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroups(clientGroupMap, write);
     await write.commit();
   });
@@ -983,7 +983,7 @@ test('Disable Client Group', async () => {
     'client-group-2': clientGroup2,
   });
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroups(clientGroupMap1, write);
     await write.commit();
   });
@@ -999,7 +999,7 @@ test('Disable Client Group', async () => {
     expect(readClientGroupMap.get('client-group-2')?.disabled).false;
   }
 
-  await withWrite(dagStore, async (write: Write) => {
+  await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await disableClientGroup('client-group-1', write);
     await testDisabledState(write);
     await write.commit();

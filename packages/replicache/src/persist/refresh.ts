@@ -153,7 +153,6 @@ export async function refresh(
           };
 
           await setClient(clientID, newClient, perdagWrite);
-          await perdagWrite.commit();
           return [
             perdagClientGroupHeadHash,
             perdagClientGroupBaseSnapshot,
@@ -248,7 +247,6 @@ export async function refresh(
         );
 
         await memdagWrite.setHead(DEFAULT_HEAD_NAME, newMemdagHeadHash);
-        await memdagWrite.commit();
         return {
           type: 'complete',
           newMemdagHeadHash,
@@ -273,8 +271,6 @@ export async function refresh(
       // If this cleanup never happens, it's no big deal, some data will stay
       // alive longer but next refresh will fix it.
       await setClient(clientID, newClient, perdagWrite);
-
-      await perdagWrite.commit();
     });
 
   if (result.type === 'aborted') {

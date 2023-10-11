@@ -2,7 +2,11 @@ import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {assert} from 'shared/src/asserts.js';
 import * as sinon from 'sinon';
-import {withRead, withWrite} from '../with-transactions.js';
+import {
+  withRead,
+  withWrite,
+  withWriteNoImplicitCommit,
+} from '../with-transactions.js';
 import {
   IDBStoreWithMemFallback,
   newIDBStoreWithMemFallback,
@@ -23,7 +27,6 @@ test('Firefox private browsing', async () => {
 
   await withWrite(store, async tx => {
     await tx.put('foo', 'bar');
-    await tx.commit();
   });
   await withRead(store, async tx => {
     expect(await tx.get('foo')).to.equal('bar');
@@ -49,8 +52,8 @@ test('race condition', async () => {
     name,
   );
 
-  const p1 = withWrite(store, () => undefined);
-  const p2 = withWrite(store, () => undefined);
+  const p1 = withWriteNoImplicitCommit(store, () => undefined);
+  const p2 = withWriteNoImplicitCommit(store, () => undefined);
   await p1;
   await p2;
 

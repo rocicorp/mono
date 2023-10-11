@@ -26,7 +26,7 @@ import type {MutatorDefs} from '../replicache.js';
 import {promiseVoid} from '../resolved-promises.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import type {WriteTransaction} from '../transactions.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {
   CLIENT_GROUPS_HEAD_NAME,
   ClientGroup,
@@ -225,7 +225,7 @@ suite('persistDD31', () => {
     perdagClientGroupHeadHash: Hash,
     clientGroupPartial?: Partial<ClientGroup>,
   ) {
-    await withWrite(perdag, async perdagWrite => {
+    await withWriteNoImplicitCommit(perdag, async perdagWrite => {
       const clientGroup = await getClientGroup(clientGroupID, perdagWrite);
       assertNotUndefined(clientGroup);
       await setClientGroup(
@@ -828,7 +828,7 @@ suite('persistDD31', () => {
   test('persist throws a ClientStateNotFoundError if client is missing', async () => {
     await setupSnapshots();
 
-    await withWrite(perdag, async perdagWrite => {
+    await withWriteNoImplicitCommit(perdag, async perdagWrite => {
       const clientMap = await getClients(perdagWrite);
       const newClientMap = new Map(clientMap);
       newClientMap.delete(clients[0].clientID);

@@ -36,7 +36,7 @@ import type {MutatorDefs} from '../replicache.js';
 import type {ClientID} from '../sync/ids.js';
 import {addData, testSubscriptionsManagerOptions} from '../test-util.js';
 import type {WriteTransaction} from '../transactions.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {refresh} from './refresh.js';
 
 async function makeChain(
@@ -116,7 +116,7 @@ async function setClientsAndClientGroups(
     persistHash: null,
   };
 
-  await withWrite(perdag, async perdagWrite => {
+  await withWriteNoImplicitCommit(perdag, async perdagWrite => {
     await setClientGroups(clientGroups, perdagWrite);
     await setClient(clientID, client, perdagWrite);
     await perdagWrite.removeHead(PERDAG_TEST_SETUP_HEAD_NAME);
@@ -206,7 +206,7 @@ suite('refresh', () => {
       1,
       undefined,
     );
-    await withWrite(perdag, async perdagWrite => {
+    await withWriteNoImplicitCommit(perdag, async perdagWrite => {
       const client = await getClient(clientID, perdagWrite);
       assertClientV6(client);
       await setClient(
@@ -474,7 +474,7 @@ suite('refresh', () => {
       clientID,
       2,
     );
-    client = await withWrite(perdag, async perdagWrite => {
+    client = await withWriteNoImplicitCommit(perdag, async perdagWrite => {
       const newClient = {
         ...client,
         refreshHashes: [fakeHash('a'), fakeHash('b')],
@@ -525,15 +525,18 @@ suite('refresh', () => {
 
     const {chainBuilder: perdagChainBuilder, client: c} =
       await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 2);
-    const client = await withWrite(perdag, async perdagWrite => {
-      const newClient = {
-        ...c,
-        refreshHashes: [fakeHash('a'), fakeHash('b')],
-      };
-      await setClient(clientID, newClient, perdagWrite);
-      await perdagWrite.commit();
-      return newClient;
-    });
+    const client = await withWriteNoImplicitCommit(
+      perdag,
+      async perdagWrite => {
+        const newClient = {
+          ...c,
+          refreshHashes: [fakeHash('a'), fakeHash('b')],
+        };
+        await setClient(clientID, newClient, perdagWrite);
+        await perdagWrite.commit();
+        return newClient;
+      },
+    );
 
     // Memdag has one more LM than perdag.
     const {chainBuilder: memdagChainBuilder} = await makeMemdagChain(
@@ -625,7 +628,7 @@ suite('refresh', () => {
       valueHash?: Hash;
       indexes?: IndexRecord[];
     }): Promise<Commit<SnapshotMetaDD31>> {
-      return withWrite(store, async dagWrite => {
+      return withWriteNoImplicitCommit(store, async dagWrite => {
         if (!valueHash) {
           const map = new BTreeWrite(dagWrite, formatVersion);
           valueHash = await map.flush();
@@ -674,7 +677,7 @@ suite('refresh', () => {
       timestamp?: number;
       entries?: readonly Entry<ReadonlyJSONValue>[];
     }): Promise<Commit<LocalMetaDD31>> {
-      return withWrite(store, async dagWrite => {
+      return withWriteNoImplicitCommit(store, async dagWrite => {
         const m = new BTreeWrite(dagWrite, formatVersion, valueHash);
         for (const [k, v] of entries) {
           await m.put(k, deepFreeze(v));
@@ -733,7 +736,7 @@ suite('refresh', () => {
       // entries: [['b', 2]],
     });
 
-    await withWrite(perdag, async dagWrite => {
+    await withWriteNoImplicitCommit(perdag, async dagWrite => {
       await setClient(
         clientID1,
         {
@@ -797,7 +800,7 @@ suite('refresh', () => {
         valueHash: l1.chunk.data.valueHash,
       });
 
-      await withWrite(memdag, async dagWrite => {
+      await withWriteNoImplicitCommit(memdag, async dagWrite => {
         await dagWrite.setHead(DEFAULT_HEAD_NAME, l2.chunk.hash);
         await dagWrite.removeHead('test');
         await dagWrite.commit();

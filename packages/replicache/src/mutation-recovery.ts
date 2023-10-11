@@ -223,10 +223,9 @@ async function recoverMutationsOfClientV4(
     assertHash,
   );
   try {
-    await withWrite(lazyDagForOtherClient, async write => {
-      await write.setHead(DEFAULT_HEAD_NAME, client.headHash);
-      await write.commit();
-    });
+    await withWrite(lazyDagForOtherClient, write =>
+      write.setHead(DEFAULT_HEAD_NAME, client.headHash),
+    );
 
     if (isPushDisabled()) {
       lc.debug?.(
@@ -352,7 +351,6 @@ async function recoverMutationsOfClientV4(
 
       const setNewClients = async (newClients: ClientMap) => {
         await setClients(newClients, dagWrite);
-        await dagWrite.commit();
         return newClients;
       };
 
@@ -544,10 +542,9 @@ async function disableClientGroup(
   // The client group is not the main client group so we do not need the
   // Replicache instance to update its internal _isClientGroupDisabled
   // property.
-  await withWrite(perdag, async perdagWrite => {
-    await persistDisableClientGroup(clientGroupID, perdagWrite);
-    await perdagWrite.commit();
-  });
+  await withWrite(perdag, perdagWrite =>
+    persistDisableClientGroup(clientGroupID, perdagWrite),
+  );
 }
 
 /**
@@ -615,10 +612,9 @@ async function recoverMutationsOfClientGroupDD31(
     assertHash,
   );
   try {
-    await withWrite(lazyDagForOtherClientGroup, async write => {
-      await write.setHead(DEFAULT_HEAD_NAME, clientGroup.headHash);
-      await write.commit();
-    });
+    await withWrite(lazyDagForOtherClientGroup, write =>
+      write.setHead(DEFAULT_HEAD_NAME, clientGroup.headHash),
+    );
 
     if (isPushDisabled()) {
       lc.debug?.(
@@ -785,7 +781,6 @@ async function recoverMutationsOfClientGroupDD31(
         },
       });
       await setClientGroups(newClientGroups, dagWrite);
-      await dagWrite.commit();
       return newClientGroups;
     });
   } catch (e) {

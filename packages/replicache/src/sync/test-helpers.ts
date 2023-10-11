@@ -14,7 +14,7 @@ import {
 } from '../db/write.js';
 import {FormatVersion} from '../format-version.js';
 import {SYNC_HEAD_NAME} from '../sync/sync-head-name.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import type {ClientID} from './ids.js';
 
 // See db.test_helpers for addLocal, addSnapshot, etc. We can't put addLocalRebase
@@ -50,7 +50,7 @@ export async function addSyncSnapshot(
 
   // Add sync snapshot.
   const cookie = `sync_cookie_${chain.length}`;
-  await withWrite(store, async dagWrite => {
+  await withWriteNoImplicitCommit(store, async dagWrite => {
     if (formatVersion >= FormatVersion.DD31) {
       const w = await newWriteSnapshotDD31(
         baseSnapshot.chunk.hash,

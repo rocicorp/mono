@@ -49,7 +49,7 @@ import type {
   PullResponseV1,
 } from '../puller.js';
 import {toError} from '../to-error.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {addDiffsForIndexes, DiffComputationConfig, DiffsMap} from './diff.js';
 import type {ClientGroupID, ClientID} from './ids.js';
 import * as patch from './patch.js';
@@ -305,7 +305,7 @@ export function handlePullResponseV0(
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
   // that is not the case by re-checking the base snapshot.
-  return withWrite(store, async dagWrite => {
+  return withWriteNoImplicitCommit(store, async dagWrite => {
     assert(formatVersion <= FormatVersion.SDD);
     const dagRead = dagWrite;
     const mainHead = await dagRead.getHead(DEFAULT_HEAD_NAME);
@@ -461,7 +461,7 @@ export function handlePullResponseV1(
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
   // that is not the case by re-checking the base snapshot.
-  return withWrite(store, async dagWrite => {
+  return withWriteNoImplicitCommit(store, async dagWrite => {
     const dagRead = dagWrite;
     const mainHead = await dagRead.getHead(DEFAULT_HEAD_NAME);
     if (mainHead === undefined) {
@@ -563,7 +563,7 @@ export function maybeEndPull<M extends LocalMeta>(
   replayMutations: Commit<M>[];
   diffs: DiffsMap;
 }> {
-  return withWrite(store, async dagWrite => {
+  return withWriteNoImplicitCommit(store, async dagWrite => {
     const dagRead = dagWrite;
     // Ensure sync head is what the caller thinks it is.
     const syncHeadHash = await dagRead.getHead(SYNC_HEAD_NAME);

@@ -130,7 +130,5 @@ async function writeChunks(
     }
 
     await Promise.all(ps);
-
-    await dagWrite.commit();
   });
 }

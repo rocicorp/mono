@@ -52,7 +52,6 @@ export function gcClientGroups(dagStore: Store): Promise<ClientGroupMap> {
       }
     }
     await setClientGroups(clientGroups, tx);
-    await tx.commit();
     return clientGroups;
   });
 }

@@ -10,7 +10,7 @@ import {
 import {FormatVersion} from '../format-version.js';
 import type {JSONValue} from '../json.js';
 import {assertPatchOperations} from '../patch-operation.js';
-import {withWrite} from '../with-transactions.js';
+import {withWriteNoImplicitCommit} from '../with-transactions.js';
 import {apply} from './patch.js';
 
 suite('patch', () => {
@@ -165,7 +165,7 @@ suite('patch', () => {
     for (const c of cases) {
       const b = new ChainBuilder(store, undefined, formatVersion);
       await b.addGenesis(clientID);
-      await withWrite(store, async dagWrite => {
+      await withWriteNoImplicitCommit(store, async dagWrite => {
         let dbWrite;
         if (formatVersion >= FormatVersion.DD31) {
           dbWrite = await newWriteSnapshotDD31(
