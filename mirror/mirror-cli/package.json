@@ -10,7 +10,7 @@
     "@inquirer/password": "^1.1.11",
     "@inquirer/select": "^1.2.11",
     "@rocicorp/reflect": "0.36.0-canary.0",
-    "esbuild": "^0.18.3",
+    "esbuild": "^0.19.4",
     "firebase-admin": "^11.10.1",
     "pkg-up": "^4.0.0",
     "reflect-cli": "0.0.0",

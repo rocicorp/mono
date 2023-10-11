@@ -45,7 +45,7 @@
     "@types/semver": "^7.5.1",
     "cloudflare-api": "0.0.0",
     "datadog": "0.0.0",
-    "esbuild": "^0.18.3",
+    "esbuild": "^0.19.4",
     "firebase-tools": "^12.3.0",
     "firestore-jest-mock": "^0.21.0",
     "mirror-protocol": "0.0.0",
