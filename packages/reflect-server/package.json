@@ -27,7 +27,7 @@
     "@rocicorp/prettier-config": "^0.2.0",
     "compare-utf8": "^0.1.1",
     "datadog": "0.0.0",
-    "esbuild": "^0.18.3",
+    "esbuild": "^0.19.4",
     "jest-environment-miniflare": "^2.11.0",
     "miniflare": "^3.20230717.0",
     "reflect-protocol": "0.0.0",
