@@ -18,6 +18,7 @@ function getEsbuildOptions(
   entryPoint: string,
   sourcemap: esbuild.BuildOptions['sourcemap'] = 'external',
   mode: 'production' | 'development',
+  platform: 'node' | 'browser',
 ) {
   return {
     bundle: true,
@@ -28,7 +29,7 @@ function getEsbuildOptions(
     external: [],
     format: 'esm',
     outdir: '.',
-    platform: 'browser',
+    platform,
     plugins: [replaceReflectServerPlugin],
     target: 'esnext',
     write: false,
@@ -47,9 +48,10 @@ export async function compile(
   entryPoint: string,
   sourcemap: esbuild.BuildOptions['sourcemap'],
   mode: 'production' | 'development',
+  platform: 'node' | 'browser' = 'browser',
 ): Promise<CompileResult> {
   const res = await esbuild.build(
-    getEsbuildOptions(entryPoint, sourcemap, mode),
+    getEsbuildOptions(entryPoint, sourcemap, mode, platform),
   );
   return getResultFromEsbuildResult(res, sourcemap);
 }
@@ -91,7 +93,7 @@ export async function* watch(
   signal: AbortSignal,
 ): AsyncGenerator<CompileResult> {
   const buildContext = await esbuild.context(
-    getEsbuildOptions(entryPoint, sourcemap, mode),
+    getEsbuildOptions(entryPoint, sourcemap, mode, 'browser'),
   );
 
   const hashes = new Map<string, string>();
@@ -164,6 +166,6 @@ export async function buildReflectServerContent(
 ): Promise<string> {
   const require = createRequire(import.meta.url);
   const serverPath = require.resolve('@rocicorp/reflect/server');
-  const {code} = await compile(serverPath, false, mode);
+  const {code} = await compile(serverPath, false, mode, 'node');
   return code.text;
 }

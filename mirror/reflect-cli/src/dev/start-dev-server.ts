@@ -64,6 +64,7 @@ export async function startDevServer(
     inspectorPort,
 
     compatibilityDate: '2023-05-18',
+    compatibilityFlags: ['nodejs_compat'],
   });
 
   const url = await mf.ready;

@@ -127,8 +127,8 @@ async function buildPackages() {
   await esbuild.build({
     ...shared,
     external,
-    // Use neutral to remove the automatic define for process.env.NODE_ENV
-    platform: 'neutral',
+    platform: 'node',
+    target: 'node18.16',
     define: {
       ...define,
       ['REFLECT_VERSION']: JSON.stringify(getReflectVersion()),

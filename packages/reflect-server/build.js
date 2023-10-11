@@ -19,6 +19,7 @@ function buildExample() {
     // Jest builds this target and tries to load it... Maybe related to
     // `testEnvironment: 'miniflare'`
     external: [],
+    platform: 'node',
   });
 }
 

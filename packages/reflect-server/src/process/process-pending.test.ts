@@ -1321,6 +1321,7 @@ describe('processPending', () => {
         c.pendingMutations,
         mutators,
         () => Promise.resolve(),
+        {onConnectionCountChange: () => Promise.resolve()},
         c.maxProcessedMutationTimestamp,
         fakeBufferSizer,
         c.maxMutationsToProcess ?? Number.MAX_SAFE_INTEGER,

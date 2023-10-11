@@ -37,6 +37,7 @@ export async function uploadScript(
     tags,
     // eslint-disable-next-line @typescript-eslint/naming-convention
     compatibility_date: '2023-05-18',
+    compatibility_flags: ['nodejs_compat'],
   });
 
   const searchParams = new URLSearchParams({

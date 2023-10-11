@@ -17,6 +17,7 @@ import type {PendingMutation} from '../types/mutation.js';
 import {getVersion} from '../types/version.js';
 import {processDisconnects} from './process-disconnects.js';
 import {MutatorMap, processMutation} from './process-mutation.js';
+import type {ConnectionCountTracker} from '../events/connection-seconds.js';
 
 // Processes zero or more mutations as a single "frame", returning pokes.
 // Pokes are returned if the version changes, even if there is no patch,
@@ -28,6 +29,7 @@ export async function processFrame(
   numPendingMutationsToProcess: number,
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
+  connectionCountTracker: ConnectionCountTracker,
   clients: ClientMap,
   storage: Storage,
 ): Promise<ClientPoke[]> {
@@ -92,6 +94,7 @@ export async function processFrame(
   await processDisconnects(
     lc,
     disconnectHandler,
+    connectionCountTracker,
     clientIDs,
     pendingMutations,
     numPendingMutationsToProcess,
