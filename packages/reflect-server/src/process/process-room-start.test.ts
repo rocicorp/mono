@@ -28,7 +28,7 @@ describe('processRoomStart', () => {
     {
       name: 'room handler with no starting version',
       roomStartHandler: async (tx: WriteTransaction) => {
-        await tx.put('foo', 'bar');
+        await tx.set('foo', 'bar');
       },
       endingVersion: 1,
       expectFooBar: true,
@@ -36,7 +36,7 @@ describe('processRoomStart', () => {
     {
       name: 'room handler with starting version',
       roomStartHandler: async (tx: WriteTransaction) => {
-        await tx.put('foo', 'bar');
+        await tx.set('foo', 'bar');
       },
       startingVersion: 12,
       endingVersion: 13,

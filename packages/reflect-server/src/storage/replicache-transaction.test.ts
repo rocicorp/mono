@@ -27,7 +27,7 @@ test('ReplicacheTransaction', async () => {
   expect(await writeTx.get('foo')).toBeUndefined;
   expect(await writeTx.isEmpty()).toBe(true);
 
-  await writeTx.put('foo', 'bar');
+  await writeTx.set('foo', 'bar');
   expect(await writeTx.has('foo'));
   expect(await writeTx.get('foo')).toEqual('bar');
   expect(await writeTx.isEmpty()).toBe(false);
@@ -101,8 +101,8 @@ test('ReplicacheTransaction scan()', async () => {
     return [tx, cache];
   }
 
-  async function put(tx: ReplicacheTransaction, key: string) {
-    await tx.put(key, key);
+  async function set(tx: ReplicacheTransaction, key: string) {
+    await tx.set(key, key);
   }
 
   async function expectScan(
@@ -132,7 +132,7 @@ test('ReplicacheTransaction scan()', async () => {
 
   let [tx, cache] = makeTx();
   for (const k of existingKeys) {
-    await put(tx, k);
+    await set(tx, k);
   }
   await cache.flush();
 
@@ -179,8 +179,8 @@ test('ReplicacheTransaction scan()', async () => {
   );
 
   // pending put()s
-  await put(tx, 'item/1.5');
-  await put(tx, 'user/4.5');
+  await set(tx, 'item/1.5');
+  await set(tx, 'user/4.5');
 
   async function testScanForPuts(tx: ReplicacheTransaction) {
     await expectScan(tx, {}, [
@@ -284,7 +284,7 @@ test('ReplicacheTransaction scan()', async () => {
   await testScanForDels(tx);
 });
 
-test('put with non JSON value', async () => {
+test('set with non JSON value', async () => {
   const storage = new DurableStorage(
     await getMiniflareDurableObjectStorage(id),
   );
@@ -294,7 +294,7 @@ test('put with non JSON value', async () => {
 
   let err;
   try {
-    await writeTx.put('key', {a: Symbol()} as unknown as ReadonlyJSONValue);
+    await writeTx.set('key', {a: Symbol()} as unknown as ReadonlyJSONValue);
   } catch (e) {
     err = e;
   }

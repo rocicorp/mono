@@ -1,4 +1,4 @@
-import {expect, describe, test} from '@jest/globals';
+import {describe, expect, test} from '@jest/globals';
 import type {NullableVersion} from 'reflect-protocol';
 import type {PatchOperation} from 'replicache';
 import {getPatch} from '../../src/ff/get-patch.js';
@@ -158,7 +158,7 @@ describe('getPatch', () => {
           undefined,
         );
         if (p.value !== undefined) {
-          await tx.put(p.key, p.value);
+          await tx.set(p.key, p.value);
         } else {
           await tx.del(p.key);
         }

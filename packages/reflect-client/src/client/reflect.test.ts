@@ -687,7 +687,7 @@ test('smokeTest', async () => {
           data: {[key: string]: JSONValue},
         ) => {
           for (const [key, value] of Object.entries(data)) {
-            await tx.put(key, value);
+            await tx.set(key, value);
           }
         },
         del: async (tx: WriteTransaction, key: string) => {
@@ -1537,7 +1537,7 @@ test('kvStore option', async () => {
       kvStore,
       mutators: {
         putFoo: async (tx, val: string) => {
-          await tx.put('foo', val);
+          await tx.set('foo', val);
         },
       },
     });

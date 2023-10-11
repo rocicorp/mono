@@ -271,11 +271,12 @@ export interface WriteTransaction extends ReadTransaction {
    * The reason for the transaction. This can be `initial`, `rebase` or `authoriative`.
    */
   readonly reason: TransactionReason;
+
   /**
    * Sets a single `value` in the database. The value will be frozen (using
    * `Object.freeze`) in debug mode.
    */
-  put(key: string, value: ReadonlyJSONValue): Promise<void>;
+  set(key: string, value: ReadonlyJSONValue): Promise<void>;
 
   /**
    * Removes a `key` and its value from the database. Returns `true` if there was a
@@ -306,7 +307,7 @@ export class WriteTransactionImpl
     this.reason = reason;
   }
 
-  async put(key: string, value: ReadonlyJSONValue): Promise<void> {
+  async set(key: string, value: ReadonlyJSONValue): Promise<void> {
     throwIfClosed(this.dbtx);
     await this.dbtx.put(this._lc, key, deepFreeze(value));
   }

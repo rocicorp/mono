@@ -75,7 +75,7 @@ describe('processFrame', () => {
         tx: WriteTransaction,
         {key, value}: {key: string; value: ReadonlyJSONValue},
       ) => {
-        await tx.put(key, value);
+        await tx.set(key, value);
       },
       del: async (tx: WriteTransaction, {key}: {key: string}) => {
         await tx.del(key);
@@ -929,7 +929,7 @@ describe('processFrame', () => {
         c.numPendingMutationsToProcess,
         mutators,
         async write => {
-          await write.put(disconnectHandlerWriteKey(write.clientID), true);
+          await write.set(disconnectHandlerWriteKey(write.clientID), true);
           disconnectCallClients.push(write.clientID);
           // Throw after writes to confirm they are not saved.
           if (c.disconnectHandlerThrows) {

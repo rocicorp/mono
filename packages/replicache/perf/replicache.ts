@@ -730,7 +730,7 @@ function benchmarkTmcw(kind: 'populate' | 'persist'): Benchmark {
         mutators: {
           async putFeatures(tx: WriteTransaction, updates: Array<JSONValue>) {
             for (let i = 0; i < updates.length; i++) {
-              await tx.put(String(i), updates[i]);
+              await tx.set(String(i), updates[i]);
             }
           },
         },
@@ -785,7 +785,7 @@ async function populate(
   }: {numKeys: number; randomValues: TestDataObject[]},
 ) {
   for (let i = 0; i < numKeys; i++) {
-    await tx.put(`key${i}`, randomValues[i]);
+    await tx.set(`key${i}`, randomValues[i]);
   }
 }
 
@@ -794,7 +794,7 @@ async function putMap(
   map: Record<string, TestDataObject>,
 ) {
   for (const [key, value] of Object.entries(map)) {
-    await tx.put(key, value);
+    await tx.set(key, value);
   }
 }
 

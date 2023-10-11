@@ -129,14 +129,14 @@ test('processMutation', async () => {
       'foo',
       async (tx: WriteTransaction) => {
         expect(tx.auth).toEqual(auth);
-        await tx.put('foo', 'bar');
+        await tx.set('foo', 'bar');
       },
     ],
     [
       'throws',
       async (tx: WriteTransaction) => {
         expect(tx.auth).toEqual(auth);
-        await tx.put('foo', 'bar');
+        await tx.set('foo', 'bar');
         throw new Error('bonk');
       },
     ],

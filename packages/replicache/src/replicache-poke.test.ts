@@ -26,7 +26,7 @@ test('poke', async () => {
         tx: WriteTransaction,
         args: A,
       ) => {
-        await tx.put(`/todo/${args.id}`, args);
+        await tx.set(`/todo/${args.id}`, args);
       },
     },
   });

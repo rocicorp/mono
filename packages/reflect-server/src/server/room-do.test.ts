@@ -95,7 +95,7 @@ test('runs roomStartHandler', async () => {
     mutators: {},
     roomStartHandler: async (tx: WriteTransaction) => {
       const value = await tx.get('foo');
-      await tx.put('foo', `${value}+`);
+      await tx.set('foo', `${value}+`);
     },
     disconnectHandler: () => Promise.resolve(),
     state,

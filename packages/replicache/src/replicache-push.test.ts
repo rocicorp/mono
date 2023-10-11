@@ -31,7 +31,7 @@ test('push', async () => {
         tx: WriteTransaction,
         args: A,
       ) => {
-        await tx.put(`/todo/${args.id}`, args);
+        await tx.set(`/todo/${args.id}`, args);
       },
       deleteTodo: async <A extends {id: number}>(
         tx: WriteTransaction,
@@ -196,7 +196,7 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
           tx: WriteTransaction,
           args: A,
         ) => {
-          await tx.put(`/todo/${args.id}`, args);
+          await tx.set(`/todo/${args.id}`, args);
         },
       },
     },

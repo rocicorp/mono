@@ -44,12 +44,12 @@ async function createMutationSequenceFixture() {
   const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaDD31>;
 
   const testMutator1 = async (tx: WriteTransaction, args?: unknown) => {
-    await tx.put('whiz', 'bang');
+    await tx.set('whiz', 'bang');
     expect(args).to.deep.equal(localCommit1.meta.mutatorArgsJSON);
     fixture.testMutator1CallCount++;
   };
   const testMutator2 = async (tx: WriteTransaction, args?: unknown) => {
-    await tx.put('fuzzy', 'wuzzy');
+    await tx.set('fuzzy', 'wuzzy');
     expect(args).to.deep.equal(localCommit2.meta.mutatorArgsJSON);
     fixture.testMutator2CallCount++;
   };
@@ -454,7 +454,7 @@ async function testThrowsErrorOnClientIDMismatch(
 
   let testMutatorCallCount = 0;
   const testMutator = async (tx: WriteTransaction, args?: unknown) => {
-    await tx.put('whiz', 'bang');
+    await tx.set('whiz', 'bang');
     expect(args).to.deep.equal(localCommit.meta.mutatorArgsJSON);
     testMutatorCallCount++;
   };
@@ -513,13 +513,13 @@ async function testThrowsErrorOnMutationIDMismatch(
 
   let testMutator1CallCount = 0;
   const testMutator1 = async (tx: WriteTransaction, args?: unknown) => {
-    await tx.put('whiz', 'bang');
+    await tx.set('whiz', 'bang');
     expect(args).to.deep.equal(localCommit1.meta.mutatorArgsJSON);
     testMutator1CallCount++;
   };
   let testMutator2CallCount = 0;
   const testMutator2 = async (tx: WriteTransaction, args?: unknown) => {
-    await tx.put('fuzzy', 'wuzzy');
+    await tx.set('fuzzy', 'wuzzy');
     expect(args).to.deep.equal(localCommit2.meta.mutatorArgsJSON);
     testMutator2CallCount++;
   };
