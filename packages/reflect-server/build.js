@@ -20,6 +20,7 @@ function buildExample() {
     // `testEnvironment: 'miniflare'`
     external: [],
     platform: 'node',
+    target: 'node18.16',
   });
 }
 
