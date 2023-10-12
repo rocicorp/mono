@@ -44,12 +44,12 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
     if (currentCount > 0 && this.#timeoutID === 0) {
       // currentCount moves from 0 to non-zero. Schedule a new timeout.
       this.#intervalStartTime = now;
-      this.#scheduleFlush(REPORTING_INTERVAL_MS);
+      await this.#scheduleFlush(REPORTING_INTERVAL_MS);
     }
     if (currentCount === 0 && this.#timeoutID !== 0) {
       // currentCount moves from non-zero to 0. (Re)schedule a flush to happen
       // immediately so that connection times are reported before the DO is shut down.
-      this.#scheduleFlush(0);
+      await this.#scheduleFlush(0);
     }
 
     const elapsedMs = this.#elapsedMs;
