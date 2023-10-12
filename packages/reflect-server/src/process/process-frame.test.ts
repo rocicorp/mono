@@ -923,6 +923,7 @@ describe('processFrame', () => {
       await putConnectedClients(new Set(c.storedConnectedClients), storage);
 
       const disconnectCallClients: ClientID[] = [];
+      const connectionCounts: number[] = [];
       const result = await processFrame(
         createSilentLogContext(),
         c.pendingMutations,
@@ -935,6 +936,12 @@ describe('processFrame', () => {
           if (c.disconnectHandlerThrows) {
             throw new Error('disconnectHandler threw');
           }
+        },
+        {
+          onConnectionCountChange: count => {
+            connectionCounts.push(count);
+            return Promise.resolve();
+          },
         },
         c.clients,
         storage,
@@ -967,6 +974,8 @@ describe('processFrame', () => {
       for (const [key, value] of expectedState) {
         expect(await storage.get(key, jsonSchema)).toEqual(value);
       }
+
+      expect(connectionCounts).toEqual([c.expectedConnectedClients.length]);
     });
   }
 });

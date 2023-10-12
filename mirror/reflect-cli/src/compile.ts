@@ -25,7 +25,7 @@ function getEsbuildOptions(
     // Remove process.env. It does not exist in CF workers and we have npm
     // packages that use it.
     define: {'process.env.NODE_ENV': JSON.stringify(mode), 'process.env': '{}'},
-    external: [],
+    external: ['node:diagnostics_channel'],
     format: 'esm',
     outdir: '.',
     platform: 'browser',

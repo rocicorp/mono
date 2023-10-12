@@ -2,6 +2,7 @@
 /* eslint-env node, es2022 */
 
 import * as esbuild from 'esbuild';
+import {polyfillNode} from 'esbuild-plugin-polyfill-node';
 import * as fs from 'node:fs';
 import * as path from 'path';
 import {sharedOptions} from 'shared/src/build.js';
@@ -11,14 +12,24 @@ const metafile = process.argv.includes('--metafile');
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// jest-environment-miniflare looks at the wrangler.toml file which builds the example.
 function buildExample() {
   return buildInternal({
     entryPoints: [path.join(dirname, 'example', 'index.ts')],
     outdir: path.join(dirname, 'out', 'example'),
-
-    // Jest builds this target and tries to load it... Maybe related to
-    // `testEnvironment: 'miniflare'`
     external: [],
+    // miniflare does not yet support "node:diagnostics_channel", even with the "nodejs_compat" flag:
+    // https://github.com/cloudflare/miniflare/blob/f919a2eaccf30d63f435154969e4233aa3b9531c/packages/core/src/plugins/node/index.ts#L9
+    //
+    // Stub it out with a polyfill to get tests working.
+    plugins: [
+      /** @type {esbuild.Plugin} */ (
+        polyfillNode({
+          diagnostics_channel: true,
+          globals: false,
+        })
+      ),
+    ],
   });
 }
 
