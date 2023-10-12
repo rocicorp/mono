@@ -11,6 +11,7 @@ import type {PendingMutation} from '../types/mutation.js';
 import {randomID} from '../util/rand.js';
 import type {MutatorMap} from './process-mutation.js';
 import {processRoom} from './process-room.js';
+import type {ConnectionCountTracker} from '../events/connection-seconds.js';
 
 /**
  * Processes pending mutations and client disconnect/connects, and sends
@@ -25,6 +26,7 @@ export async function processPending(
   pendingMutations: PendingMutation[],
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
+  connectionCountTracker: ConnectionCountTracker,
   maxProcessedMutationTimestamp: number,
   bufferSizer: BufferSizer,
   maxMutationsToProcess: number,
@@ -114,6 +116,7 @@ export async function processPending(
     endIndex,
     mutators,
     disconnectHandler,
+    connectionCountTracker,
     storage,
   );
   sendPokes(lc, pokes, clients, bufferMs, start);

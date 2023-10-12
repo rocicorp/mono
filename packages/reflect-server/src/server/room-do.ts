@@ -51,6 +51,7 @@ import {
 import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import {AlarmManager} from './alarms.js';
+import {ConnectionSecondsReporter} from '../events/connection-seconds.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -105,6 +106,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   readonly #router = new Router();
 
   readonly #alarm: AlarmManager;
+  readonly #connectionSecondsReporter: ConnectionSecondsReporter;
 
   constructor(options: RoomDOOptions<MD>) {
     const {
@@ -127,6 +129,9 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     );
 
     this.#alarm = new AlarmManager(state.storage);
+    this.#connectionSecondsReporter = new ConnectionSecondsReporter(
+      this.#alarm.scheduler,
+    );
 
     this.#initRoutes();
 
@@ -522,6 +527,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         this.#pendingMutations,
         this.#mutators,
         this.#disconnectHandler,
+        this.#connectionSecondsReporter,
         this.#maxProcessedMutationTimestamp,
         this.#bufferSizer,
         this.#maxMutationsPerTurn,
