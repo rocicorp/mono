@@ -52,7 +52,23 @@
     "out"
   ],
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config"
+    "extends": "@rocicorp/eslint-config",
+    "rules": {
+      "no-restricted-imports": [
+        "error",
+        {
+          "patterns": [
+            {
+              "group": [
+                "mirror-schema/src/*.js",
+                "!mirror-schema/src/client-view/*.js"
+              ],
+              "message": "Use mirror-schema/src/client-view/* instead"
+            }
+          ]
+        }
+      ]
+    }
   },
   "prettier": "@rocicorp/prettier-config"
 }

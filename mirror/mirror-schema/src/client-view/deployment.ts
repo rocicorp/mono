@@ -17,6 +17,7 @@ export const deploymentViewDataConverter =
 
 export {
   APP_DEPLOYMENTS_COLLECTION_ID,
-  deploymentsCollection,
+  defaultOptions,
   deploymentPath,
+  deploymentsCollection,
 } from '../deployment.js';

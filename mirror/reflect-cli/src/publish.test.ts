@@ -1,4 +1,3 @@
-import {Timestamp} from '@google-cloud/firestore';
 import {
   afterEach,
   beforeAll,
@@ -7,11 +6,8 @@ import {
   jest,
   test,
 } from '@jest/globals';
-import {
-  defaultOptions,
-  deploymentDataConverter,
-} from 'mirror-schema/src/deployment.js';
-import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
+import {deploymentViewDataConverter} from 'mirror-schema/src/client-view/deployment.js';
+import {fakeFirestore} from 'mirror-schema/src/client-view/test-helpers.js';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -20,7 +16,6 @@ import {setAppConfigForTesting} from './app-config.js';
 import {initFirebase} from './firebase.js';
 import {publishHandler, type PublishCaller} from './publish.js';
 import {reflectVersionMatcher, useFakeAuthConfig} from './test-helpers.js';
-import {version} from './version.js';
 
 type Args = Parameters<typeof publishHandler>[0];
 
@@ -154,25 +149,13 @@ async function testPublishedCode(source: string, expectedOutputs: string[]) {
   const firestore = fakeFirestore();
   await firestore
     .doc('apps/foo/deployments/bar')
-    .withConverter(deploymentDataConverter)
+    .withConverter(deploymentViewDataConverter)
     .set({
-      deploymentID: 'bar',
-      requesterID: 'foo',
-      type: 'USER_UPLOAD',
       status: 'RUNNING',
       spec: {
-        appModules: [],
         hostname: 'app-name.reflect-server-net',
         serverVersion: '0.1.0',
-        serverVersionRange: `^${version}`,
-        options: defaultOptions(),
-        hashesOfSecrets: {
-          ['REFLECT_AUTH_API_KEY']: 'aaa',
-          ['DATADOG_LOGS_API_KEY']: 'bbb',
-          ['DATADOG_METRICS_API_KEY']: 'ccc',
-        },
       },
-      requestTime: Timestamp.now(),
     });
 
   await publishHandler(
