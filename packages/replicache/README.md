@@ -1,6 +1,6 @@
 # Cutting a release
 
-## Build then code
+## Build the code
 
 First make double-check the current build has passed tests on GitHub.
 
@@ -53,6 +53,8 @@ cd -
 npx syncpack fix-mismatches
 # Ensure all fixed, else fix manually
 npx syncpack
+# make sure package-lock.json is also up to date
+npm install
 git commit -a -m 'chore(replicache): Bump version to v$NEW_VERSION'
 ```
 

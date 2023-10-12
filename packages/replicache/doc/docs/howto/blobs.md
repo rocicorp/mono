@@ -274,7 +274,7 @@ async function uploadBlob(rep: Replicache, data: Uint8Array, hash: string) {
     method: 'PUT',
     body: data,
   });
-  await rep.mutate.addBlob({hash, uploaded: resp.ok});
+  await rep.mutate.addBlob({hash, shouldUpload: !resp.ok});
 }
 
 async function addBlobToCache(hash: string, data: Uint8Array) {
@@ -286,15 +286,18 @@ async function addBlobToCache(hash: string, data: Uint8Array) {
 const rep = new Replicache({
   name: 'user-id',
   mutators: {
-    async addBlob(tx, {hash, uploaded}) {
-      await tx.put(blobKey(hash), {uploaded});
+    async addBlob(tx, {hash, shouldUpload}) {
+      await tx.put(blobKey(hash), {shouldUpload});
     },
   },
 });
 ```
 
-One thing worth pointing out here is that the `addBlob` mutator does not have to
-do anything in the push response. It should be a no op.
+The server side implementation of the `addBlob` mutator does not have to do
+much. It can just store the key and value as pushed. It is important that the
+client view includes the key-value pair for this blob or the client will lose
+track of the state of the blob. A better implementation would be to set
+`shouldUpload` depending on wether the blob has been uploaded or not.
 
 #### Syncing the blobs
 
@@ -304,20 +307,20 @@ of the uploaded state.
 
 ```ts
 rep.subscribe(tx => tx.scan({prefix: blobPrefix}).entries().toArray(), {
-  async onData(blobs: [string, {uploaded: boolean}][]) {
+  async onData(blobs: [string, {shouldUpload: boolean}][]) {
     const cache = await caches.open(cacheName);
     for (const [key, value] of blobs) {
       const hash = key.slice(blobPrefix.length);
-      const {uploaded} = value;
-      await syncBlob(rep, cache, hash, uploaded);
+      const {shouldUpload} = value;
+      await syncBlob(rep, cache, hash, shouldUpload);
     }
   },
 });
 
-async function syncBlob(rep, cache, hash, uploaded) {
+async function syncBlob(rep, cache, hash, shouldUpload) {
   const response = await cache.match(blobURL(hash));
   if (response) {
-    if (!uploaded) {
+    if (shouldUpload) {
       const buffer = await response.arrayBuffer();
       await uploadBlob(rep, new Uint8Array(buffer), hash);
     }
@@ -325,9 +328,9 @@ async function syncBlob(rep, cache, hash, uploaded) {
     const resp = await downloadBlob(hash);
     if (resp.ok) {
       await cache.put(blobURL(hash), resp);
-      if (!uploaded) {
+      if (shouldUpload) {
         // Mark as uploaded, so we don't try to upload it again.
-        await rep.mutate.addBlob({hash, uploaded: true});
+        await rep.mutate.addBlob({hash, shouldUpload: false});
       }
     }
   }
@@ -337,8 +340,8 @@ async function syncBlob(rep, cache, hash, uploaded) {
 Change download blob to do nothing but download...
 
 ```ts
-async function downloadBlob(hash) {
-  return await fetch(blobURL(hash));
+function downloadBlob(hash) {
+  return fetch(blobURL(hash));
 }
 ```
 
@@ -347,10 +350,48 @@ we register the hash in Replicache and we store the blob in a CacheStorage
 cache. We subscribe to changes in Replicache keys starting with `'blob/'` and
 resync the file as needed when this changes.
 
+#### Failure to upload or download
+
+In any network app the network can go down. In case we failed to upload or
+download the files we need to handle the cases where upload or download
+failed and keep trying. We can run the sync code on an interval to keep trying.
+
+We can extract some of the above code and put it in an `setInterval`.
+
+```ts
+const blobsTx = (tx: ReadTransaction) =>
+  tx.scan({prefix: blobPrefix}).entries().toArray();
+
+async function syncAllBlobs(blobs: [string, {shouldUpload: boolean}][]) {
+  const cache = await caches.open(cacheName);
+  for (const [key, value] of blobs) {
+    const hash = key.slice(blobPrefix.length);
+    const {shouldUpload} = value;
+    await syncBlob(rep, cache, hash, shouldUpload);
+  }
+}
+
+rep.subscribe(blobsTx, {
+  onData: syncAllBlobs,
+});
+
+setInterval(
+  async () => {
+    const blobs = await rep.query(blobsTx);
+    await syncAllBlobs(blobs);
+  },
+  5 * 60 * 1000,
+);
+```
+
+This will run the sync code every 5 minutes. This is of course a bit too
+simplistic. We should ensure that there are no overlapping syncs and we can keep
+track of network failure to detect if we need to retry or not.
+
 #### Pull Response
 
 The above works well for blobs added by the current client. However, if we want
-to get blobs from other clients we need to ensure that the pull resonponse
+to get blobs from other clients we need to ensure that the pull response
 includes the hashes of the blobs from them too.
 
 In this simple case we can check if a key starting with `user/` is included in
