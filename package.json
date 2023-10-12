@@ -26,5 +26,18 @@
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },
-  "prettier": "@rocicorp/prettier-config"
+  "prettier": "@rocicorp/prettier-config",
+  "syncpack": {
+    "versionGroups": [
+      {
+        "dependencies": [
+          "@cloudflare/workers-types"
+        ],
+        "packages": [
+          "mirror-workers"
+        ],
+        "label": "Mirror workers reference beta CF interfaces in 4.x.x"
+      }
+    ]
+  }
 }
