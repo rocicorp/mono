@@ -5,6 +5,7 @@ import {GetStarted} from '@/components/GetStarted/GetStarted';
 import {How} from '@/components/How/How';
 import {Nav} from '@/components/Nav/Nav';
 import {Pricing} from '@/components/Pricing/Pricing';
+import {Contact} from '@/components/Contact/Contact';
 import {Testimonials} from '@/components/Testimonials/Testimonials';
 import {useDocumentSize} from '@/hooks/use-document-size';
 import {useIsomorphicLayoutEffect} from '@/hooks/use-isomorphic-layout-effect';
@@ -144,19 +145,24 @@ export default function Home() {
           <How />
         </section>
 
-        <section id="pricing" className={styles.section}>
-          <h2 className={styles.subheader}>Simple, Usage-Based Pricing</h2>
-          <Pricing />
-        </section>
-
         <section id="get-started" className={styles.section}>
           <h2 className={styles.subheader}>Get Started Now</h2>
           <GetStarted />
         </section>
 
+        <section id="pricing" className={styles.section}>
+          <h2 className={styles.subheader}>Simple, Usage-Based Pricing</h2>
+          <Pricing />
+        </section>
+
         <section id="customers" className={styles.section}>
           <h2 className={styles.subheader}>Early Reactions</h2>
           <Testimonials />
+        </section>
+
+        <section id="contact" className={styles.section}>
+          <h2 className={styles.subheader}>Contact Us</h2>
+          <Contact />
         </section>
       </main>
 

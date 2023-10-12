@@ -123,6 +123,21 @@ export function Nav({gameMode}: {gameMode: boolean}) {
           <li>
             <Link
               href="#"
+              className={styles.navLink}
+              activeClass={styles.navLinkActive}
+              to="contact"
+              spy={true}
+              hashSpy={true}
+              isDynamic={true}
+              smooth={true}
+              duration={250}
+            >
+              Contact
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="#"
               className={styles.buttonPrimary}
               to="get-started"
               smooth={true}
