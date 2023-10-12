@@ -1,5 +1,4 @@
 import * as esbuild from 'esbuild';
-import {checkOutfileForNodeModules} from 'shared/src/tool/check-outfile-for-node-modules.js';
 import {getExternalFromPackageJSON} from 'shared/src/tool/get-external-from-package-json.js';
 import {injectRequire} from 'shared/src/tool/inject-require.js';
 
@@ -18,7 +17,6 @@ async function main() {
       js: injectRequire(),
     },
   });
-  await checkOutfileForNodeModules(cli);
 
   const dispatcher = 'out/dispatcher.js';
   await esbuild.build({
@@ -32,7 +30,6 @@ async function main() {
     format: 'esm',
     sourcemap: false,
   });
-  await checkOutfileForNodeModules(dispatcher);
 }
 
 await main();

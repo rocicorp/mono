@@ -4,7 +4,6 @@ import * as esbuild from 'esbuild';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {getVersion} from '../../../packages/reflect-shared/tool/get-version.js';
-import {checkOutfileForNodeModules} from '../../../packages/shared/src/tool/check-outfile-for-node-modules.js';
 import {getExternalFromPackageJSON} from '../../../packages/shared/src/tool/get-external-from-package-json.js';
 import {injectRequire} from '../../../packages/shared/src/tool/inject-require.js';
 
@@ -42,7 +41,6 @@ async function main() {
       REFLECT_CLI_NAME: JSON.stringify(reflectCliName),
     },
   });
-  await checkOutfileForNodeModules(outfile);
 }
 
 await main();
