@@ -7,7 +7,7 @@ workers_dev = true
 # zone_id = ""
 
 compatibility_date = "2021-11-15"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = []
 
 [durable_objects]
 bindings = [

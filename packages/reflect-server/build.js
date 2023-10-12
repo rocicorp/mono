@@ -6,6 +6,7 @@ import * as fs from 'node:fs';
 import * as path from 'path';
 import {sharedOptions} from 'shared/src/build.js';
 import {fileURLToPath} from 'url';
+import {polyfillNode} from 'esbuild-plugin-polyfill-node';
 
 const metafile = process.argv.includes('--metafile');
 
@@ -19,8 +20,11 @@ function buildExample() {
     // Jest builds this target and tries to load it... Maybe related to
     // `testEnvironment: 'miniflare'`
     external: [],
-    platform: 'node',
-    target: 'node18.16',
+    // miniflare does not yet support "node:diagnostics_channel", even with the "nodejs_compat" flag:
+    // https://github.com/cloudflare/miniflare/blob/f919a2eaccf30d63f435154969e4233aa3b9531c/packages/core/src/plugins/node/index.ts#L9
+    //
+    // Stub it out with a polyfill to get tests working.
+    plugins: [polyfillNode({diagnostics_channel: true})],
   });
 }
 
