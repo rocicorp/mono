@@ -1,0 +1,23 @@
+{
+  "name": "mirror-workers",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20231010.0",
+    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/prettier-config": "^0.2.0",
+    "esbuild": "^0.19.4",
+    "typescript": "^5.2.2"
+  },
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}

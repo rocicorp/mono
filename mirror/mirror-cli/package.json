@@ -27,7 +27,6 @@
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^3.8.0",
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "@types/node": "^18.16.0",

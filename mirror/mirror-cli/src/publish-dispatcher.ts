@@ -1,7 +1,6 @@
 import {ProviderConfig, getProviderConfig} from './cf.js';
 import {FetchResultError, cfFetch, Errors} from 'cloudflare-api/src/fetch.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import {fileURLToPath} from 'url';
 import {readFile} from 'node:fs/promises';
 import {
   createScriptUploadForm,
@@ -11,6 +10,7 @@ import {DispatchNamespaces} from 'cloudflare-api/src/dispatch-namespaces.js';
 import {DNSRecords} from 'cloudflare-api/src/dns-records.js';
 import {FallbackOrigin} from 'cloudflare-api/src/fallback-origin.js';
 import {WorkerRoutes} from 'cloudflare-api/src/worker-routes.js';
+import {buildWorker} from './build-worker.js';
 import {sleep} from 'shared/src/sleep.js';
 
 export function publishDispatcherOptions(yargs: CommonYargsArgv) {
@@ -182,8 +182,8 @@ async function publishDispatcherScript(
   {apiToken, accountID, dispatchNamespace: namespace}: ProviderConfig,
   name: string,
 ): Promise<void> {
-  const dispatcherScript = await loadDispatcherScript();
-  console.log(`Loaded ${name}`, dispatcherScript);
+  const dispatcherScript = await buildDispatcherScript();
+  console.log(`Loaded ${name}\n`, dispatcherScript);
 
   const main: CfModule = {
     name: 'dispatcher.js',
@@ -220,10 +220,8 @@ async function publishDispatcherScript(
   console.log(`Publish result:`, result);
 }
 
-function loadDispatcherScript(): Promise<string> {
-  const dispatcherFile = fileURLToPath(
-    new URL('../out/dispatcher.js', import.meta.url),
-  );
-  console.log('Loading ', dispatcherFile);
+async function buildDispatcherScript(): Promise<string> {
+  const dispatcherFile = await buildWorker('dispatcher');
+  console.log('Loading', dispatcherFile);
   return readFile(dispatcherFile, 'utf-8');
 }
