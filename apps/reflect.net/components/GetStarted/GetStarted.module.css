@@ -126,7 +126,6 @@
   transform: scale(0.95);
 }
 
-
 @keyframes ring {
   0% {
     border-width: 12px;
