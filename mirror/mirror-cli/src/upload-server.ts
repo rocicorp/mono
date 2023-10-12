@@ -78,7 +78,7 @@ export async function uploadReflectServerHandler(
   }
 
   console.info(`Building server from ${bold(serverPath)}`);
-  const {code} = await compile(serverPath, false, 'production', 'node');
+  const {code} = await compile(serverPath, false, 'production');
   const source = code.text;
 
   const scriptTemplate = await getScriptTemplate('prod');

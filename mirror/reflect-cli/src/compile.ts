@@ -18,7 +18,6 @@ function getEsbuildOptions(
   entryPoint: string,
   sourcemap: esbuild.BuildOptions['sourcemap'] = 'external',
   mode: 'production' | 'development',
-  platform: 'node' | 'browser',
 ) {
   return {
     bundle: true,
@@ -26,10 +25,10 @@ function getEsbuildOptions(
     // Remove process.env. It does not exist in CF workers and we have npm
     // packages that use it.
     define: {'process.env.NODE_ENV': JSON.stringify(mode), 'process.env': '{}'},
-    external: [],
+    external: ['node:diagnostics_channel'],
     format: 'esm',
     outdir: '.',
-    platform,
+    platform: 'browser',
     plugins: [replaceReflectServerPlugin],
     target: 'esnext',
     write: false,
@@ -48,10 +47,9 @@ export async function compile(
   entryPoint: string,
   sourcemap: esbuild.BuildOptions['sourcemap'],
   mode: 'production' | 'development',
-  platform: 'node' | 'browser' = 'browser',
 ): Promise<CompileResult> {
   const res = await esbuild.build(
-    getEsbuildOptions(entryPoint, sourcemap, mode, platform),
+    getEsbuildOptions(entryPoint, sourcemap, mode),
   );
   return getResultFromEsbuildResult(res, sourcemap);
 }
@@ -93,7 +91,7 @@ export async function* watch(
   signal: AbortSignal,
 ): AsyncGenerator<CompileResult> {
   const buildContext = await esbuild.context(
-    getEsbuildOptions(entryPoint, sourcemap, mode, 'browser'),
+    getEsbuildOptions(entryPoint, sourcemap, mode),
   );
 
   const hashes = new Map<string, string>();
@@ -166,6 +164,6 @@ export async function buildReflectServerContent(
 ): Promise<string> {
   const require = createRequire(import.meta.url);
   const serverPath = require.resolve('@rocicorp/reflect/server');
-  const {code} = await compile(serverPath, false, mode, 'node');
+  const {code} = await compile(serverPath, false, mode);
   return code.text;
 }

@@ -122,13 +122,12 @@ async function buildPackages() {
     'reflect-client',
     'reflect-shared',
   );
-  external.push('replicache-react');
+  external.push('replicache-react', 'node:diagnostics_channel');
 
   await esbuild.build({
     ...shared,
     external,
-    platform: 'node',
-    target: 'node18.16',
+    platform: 'browser',
     define: {
       ...define,
       ['REFLECT_VERSION']: JSON.stringify(getReflectVersion()),
