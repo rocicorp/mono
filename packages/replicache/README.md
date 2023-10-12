@@ -54,7 +54,7 @@ npx syncpack fix-mismatches
 # Ensure all fixed, else fix manually
 npx syncpack
 # make sure package-lock.json is also up to date
-npm install 
+npm install
 git commit -a -m 'chore(replicache): Bump version to v$NEW_VERSION'
 ```
 
