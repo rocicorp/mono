@@ -84,7 +84,11 @@ export async function checkConnectivity(
 }
 
 function checkRenderGet(id: string, signal: AbortSignal) {
-  return checkGet(id, 'https://canary-render.onrender.com/canary/get', signal);
+  return checkGet(
+    id,
+    'https://networkcheck.reflect-server.net/canary/get',
+    signal,
+  );
 }
 
 function checkCfGet(id: string, server: HTTPString, signal: AbortSignal) {
@@ -118,7 +122,7 @@ function checkRenderSocket(
 ) {
   return checkSocket(
     id,
-    'wss://canary-render.onrender.com/canary/websocket',
+    'wss://networkcheck.reflect-server.net/canary/websocket',
     wSecWebSocketProtocolHeader,
     lc,
     signal,
