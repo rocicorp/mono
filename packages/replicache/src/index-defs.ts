@@ -1,4 +1,4 @@
-import {assertBoolean, assertObject, assertString} from 'shared/src/asserts.js';
+import * as valita from 'shared/src/valita.js';
 
 /**
  * The definition of a single index.
@@ -8,7 +8,7 @@ export type IndexDefinition = {
    * The prefix, if any, to limit the index over. If not provided the values of
    * all keys are indexed.
    */
-  readonly prefix?: string;
+  readonly prefix?: string | undefined;
 
   /**
    * A [JSON Pointer](https://tools.ietf.org/html/rfc6901) pointing at the sub
@@ -22,14 +22,25 @@ export type IndexDefinition = {
   /**
    * If `true`, indexing empty values will not emit a warning.  Defaults to `false`.
    */
-  readonly allowEmpty?: boolean;
+  readonly allowEmpty?: boolean | undefined;
 };
+
+export const indexDefinitionSchema: valita.ValitaType<IndexDefinition> =
+  valita.readonlyObject({
+    prefix: valita.string().optional(),
+    jsonPointer: valita.string(),
+    allowEmpty: valita.boolean().optional(),
+  });
 
 /**
  * An object as a map defining the indexes. The keys are the index names and the
  * values are the index definitions.
  */
 export type IndexDefinitions = {readonly [name: string]: IndexDefinition};
+
+export const indexDefinitionsSchema = valita.readonlyRecord(
+  indexDefinitionSchema,
+);
 
 export function indexDefinitionEqual(
   a: IndexDefinition,
@@ -58,24 +69,8 @@ export function indexDefinitionsEqual(
   return true;
 }
 
-function assertIndexDefinition(
-  value: unknown,
-): asserts value is IndexDefinition {
-  const indexDef = value as IndexDefinition;
-  assertString(indexDef.jsonPointer);
-  if (indexDef.allowEmpty !== undefined) {
-    assertBoolean(indexDef.allowEmpty);
-  }
-  if (indexDef.prefix !== undefined) {
-    assertString(indexDef.prefix);
-  }
-}
-
 export function assertIndexDefinitions(
   value: unknown,
 ): asserts value is IndexDefinitions {
-  assertObject(value);
-  for (const indexDef of Object.values(value)) {
-    assertIndexDefinition(indexDef);
-  }
+  valita.assert(value, indexDefinitionsSchema);
 }

@@ -191,3 +191,7 @@ export function readonlyObject<T extends Record<string, v.Type | v.Optional>>(
 export function readonlyArray<T extends v.Type>(t: T) {
   return readonly(v.array(t));
 }
+
+export function readonlyRecord<T extends v.Type>(t: T) {
+  return readonly(v.record(t));
+}
