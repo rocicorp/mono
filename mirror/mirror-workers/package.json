@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --silent",
+    "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
@@ -14,6 +16,7 @@
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "esbuild": "^0.19.4",
+    "ts-jest": "^29.1.0",
     "typescript": "^5.2.2"
   },
   "eslintConfig": {
