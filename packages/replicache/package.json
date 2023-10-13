@@ -21,6 +21,7 @@
     "perf": "npm run build-perf && node perf/runner.js"
   },
   "dependencies": {
+    "@badrap/valita": "^0.2.10",
     "@rocicorp/lock": "^1.0.3",
     "@rocicorp/logger": "^5.2.1",
     "@rocicorp/resolver": "^1.0.1"

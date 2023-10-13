@@ -1,9 +1,11 @@
 import {expect} from 'chai';
+import * as valita from 'shared/src/valita.js';
 import {
   Hash,
   STRING_LENGTH,
   emptyHash,
   fakeHash,
+  hashSchema,
   isHash,
   makeNewFakeHashFunction,
   newUUIDHash,
@@ -91,5 +93,20 @@ test('fakeHash', () => {
   expect(fakeHash('aa')).to.equal(fakeHash('aa'));
   expect(fakeHash('aa')).to.equal(
     'face0000000040008000000000000000' + '0000000000aa',
+  );
+});
+
+test('valita schema', () => {
+  for (const h of hashes()) {
+    expect(valita.is(h, hashSchema)).to.be.true;
+  }
+  expect(valita.is('xyz', hashSchema)).to.be.false;
+
+  for (const h of hashes()) {
+    expect(() => valita.assert(h, hashSchema)).not.to.throw();
+  }
+  expect(() => valita.assert('xyz', hashSchema)).to.throw(TypeError);
+  expect(() => valita.assert('xyz', hashSchema)).to.throw(
+    'Invalid hash. Got "xyz"',
   );
 });

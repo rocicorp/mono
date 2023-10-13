@@ -42,7 +42,7 @@ export type Key =
     };
 
 export function parse(key: string): Key {
-  const invalidKey = () => new Error(`Invalid key: '${key}'`);
+  const invalidKey = () => new Error(`Invalid key. Got "${key}"`);
   const hash = () => parseHash(key.substring(2, key.length - 2));
 
   // '/'
