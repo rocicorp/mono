@@ -1,22 +1,22 @@
-import type * as v from '@badrap/valita';
+import * as v from '@badrap/valita';
 
 export * from '@badrap/valita';
 
-function toDisplay(v: unknown): string {
-  switch (typeof v) {
+function toDisplay(value: unknown): string {
+  switch (typeof value) {
     case 'string':
     case 'number':
     case 'boolean':
-      return JSON.stringify(v);
+      return JSON.stringify(value);
     case 'undefined':
       return 'undefined';
     case 'bigint':
-      return v.toString() + 'n';
+      return value.toString() + 'n';
     default:
-      if (v === null) {
+      if (value === null) {
         return 'null';
       }
-      return typeof v;
+      return typeof value;
   }
 }
 
@@ -174,3 +174,20 @@ export type Type<T> = Omit<
 // we do need it in a few places.
 // TODO(arv): Figure out a better way to do this.
 export type ValitaType<T> = v.Type<T>;
+
+/**
+ * Shallowly marks the schema as readonly.
+ */
+export function readonly<T extends v.Type>(t: T) {
+  return t as v.Type<Readonly<v.Infer<T>>>;
+}
+
+export function readonlyObject<T extends Record<string, v.Type | v.Optional>>(
+  t: T,
+) {
+  return readonly(v.object(t));
+}
+
+export function readonlyArray<T extends v.Type>(t: T) {
+  return readonly(v.array(t));
+}

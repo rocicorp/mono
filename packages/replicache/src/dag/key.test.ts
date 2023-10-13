@@ -52,18 +52,18 @@ test('parse', () => {
       .with.property('message', message);
   };
 
-  invalid('', `Invalid key: ''`);
-  invalid('c', `Invalid key: 'c'`);
-  invalid('c/', `Invalid key: 'c/'`);
-  invalid('c/abc', `Invalid key: 'c/abc'`);
-  invalid('c/abc/', `Invalid key: 'c/abc/'`);
-  invalid('c/abc/x', `Invalid key: 'c/abc/x'`);
+  invalid('', `Invalid key. Got ""`);
+  invalid('c', `Invalid key. Got "c"`);
+  invalid('c/', `Invalid key. Got "c/"`);
+  invalid('c/abc', `Invalid key. Got "c/abc"`);
+  invalid('c/abc/', `Invalid key. Got "c/abc/"`);
+  invalid('c/abc/x', `Invalid key. Got "c/abc/x"`);
 
-  invalid('c//d', `Invalid hash: ''`);
-  invalid('c//m', `Invalid hash: ''`);
-  invalid('c//r', `Invalid hash: ''`);
+  invalid('c//d', `Invalid hash. Got ""`);
+  invalid('c//m', `Invalid hash. Got ""`);
+  invalid('c//r', `Invalid hash. Got ""`);
 
-  invalid('c/d', `Invalid key: 'c/d'`);
-  invalid('c/m', `Invalid key: 'c/m'`);
-  invalid('c/r', `Invalid key: 'c/r'`);
+  invalid('c/d', `Invalid key. Got "c/d"`);
+  invalid('c/m', `Invalid key. Got "c/m"`);
+  invalid('c/r', `Invalid key. Got "c/r"`);
 });
