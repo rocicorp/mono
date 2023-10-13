@@ -13,7 +13,7 @@ describe('connections reporter', () => {
   });
 
   function env(): Env {
-    return {runningConnectionsDS: dataset};
+    return {runningConnectionSecondsDS: dataset};
   }
 
   test('reports valid data points', () => {

@@ -20,8 +20,8 @@ export async function publishTailWorkersHandler(
     bindings: {
       analytics_engine_datasets: [
         {
-          binding: 'runningConnectionsDS',
-          dataset: 'RunningConnectionsDS',
+          binding: 'runningConnectionSecondsDS',
+          dataset: 'RunningConnectionSeconds',
         },
       ],
     },

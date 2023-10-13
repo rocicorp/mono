@@ -9,11 +9,11 @@ export interface Env {
   // blob1  | blob2 | double1 | double2
   // -----------------------------------
   // teamID | appID | elapsed | interval
-  runningConnectionsDS: AnalyticsEngineDataset;
+  runningConnectionSecondsDS: AnalyticsEngineDataset;
 }
 
 function reportConnectionSeconds(
-  runningConnectionsDS: AnalyticsEngineDataset,
+  runningConnectionSecondsDS: AnalyticsEngineDataset,
   scriptTags: ScriptTags,
   diagnosticChannelMessage: unknown,
 ) {
@@ -25,7 +25,7 @@ function reportConnectionSeconds(
     );
     return;
   }
-  runningConnectionsDS.writeDataPoint({
+  runningConnectionSecondsDS.writeDataPoint({
     blobs: [scriptTags.teamID, scriptTags.appID],
     doubles: [report.elapsed, report.interval],
   });
@@ -47,7 +47,11 @@ export default {
       for (const e of diagnosticsChannelEvents) {
         if (e.channel === CONNECTION_SECONDS_CHANNEL_NAME) {
           try {
-            reportConnectionSeconds(env.runningConnectionsDS, tags, e.message);
+            reportConnectionSeconds(
+              env.runningConnectionSecondsDS,
+              tags,
+              e.message,
+            );
           } catch (e) {
             console.error(`Invalid ConnectionSecondsReport: ${String(e)}`, e);
           }
