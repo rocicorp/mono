@@ -151,7 +151,11 @@ export class AlarmManager {
 
     // Remove the timeouts to fire from the Map.
     timeouts.forEach(([timeoutID]) => this.#timeouts.delete(timeoutID));
-    lc.debug?.(`Firing ${timeouts.length} timeout(s)`);
+    if (timeouts.length) {
+      lc.debug?.(`Firing ${timeouts.length} timeout(s)`);
+    } else {
+      lc.debug?.(`Fired empty Alarm to flush events to Tail Log`);
+    }
 
     // Errors or rejections from timeouts should not be bubbled up, as that would put
     // the Durable Object Alarm framework into exponential-backoff-retry mode.
@@ -172,11 +176,22 @@ export class AlarmManager {
       }
     });
 
-    const next = await this.#schedule();
-    if (next) {
-      lc.debug?.(`Next alarm fires in ${next - Date.now()} ms`);
+    if (timeouts.length) {
+      // The observed (but undocumented) behavior of AlarmEvents is that each AlarmEvent is not
+      // flushed until the next AlarmEvent fires. (As an interesting aside, a buffered AlarmEvent
+      // appears to pick up log items from other events, including FetchEvents.)
+      //
+      // For more deterministic behavior in terms of both timing and contents of AlarmEvents,
+      // all timeout-invoking Alarms are followed up with an empty "flush" Alarm.
+      await this.#storage.setAlarm(now);
+      lc.debug?.(`Scheduled immediate Alarm to flush items from this Alarm`);
     } else {
-      lc.debug?.(`No more timeouts scheduled`);
+      const next = await this.#schedule();
+      if (next) {
+        lc.debug?.(`Next Alarm fires in ${next - Date.now()} ms`);
+      } else {
+        lc.info?.(`No more timeouts scheduled`);
+      }
     }
   }
 
