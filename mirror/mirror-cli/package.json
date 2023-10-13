@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "dependencies": {
+    "@cloudflare/workers-types": "^4.20231010.0",
     "@google-cloud/secret-manager": "^5.0.1",
     "@inquirer/confirm": "^2.0.12",
     "@inquirer/input": "^1.2.11",
