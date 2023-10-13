@@ -178,7 +178,7 @@ export class AlarmManager {
 
     if (timeouts.length) {
       // The observed (but undocumented) behavior of AlarmEvents is that each AlarmEvent is not
-      // flushed until the next AlarmEvent fires. (As an interesting aside, an buffered AlarmEvent
+      // flushed until the next AlarmEvent fires. (As an interesting aside, a buffered AlarmEvent
       // appears to pick up log items from other events, including FetchEvents.)
       //
       // For more deterministic behavior in terms of both timing and contents of AlarmEvents,
