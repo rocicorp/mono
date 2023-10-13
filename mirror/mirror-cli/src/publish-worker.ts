@@ -6,7 +6,7 @@ import {
 import type {AccountAccess} from 'cloudflare-api/src/resources.js';
 import {GlobalScript} from 'cloudflare-api/src/scripts.js';
 import * as esbuild from 'esbuild';
-import {readFile} from 'node:fs/promises';
+import {assert} from 'shared/src/asserts.js';
 import {fileURLToPath} from 'url';
 
 export type WorkerName = 'dispatcher' | 'connections-reporter';
@@ -48,19 +48,19 @@ async function buildWorker(worker: WorkerName): Promise<string> {
   const entryPoint = fileURLToPath(
     new URL(`../../mirror-workers/src/${worker}/index.ts`, import.meta.url),
   );
-  const outfile = `out/${worker}.js`;
-  await esbuild.build({
+  const {outputFiles} = await esbuild.build({
     entryPoints: [entryPoint],
     conditions: ['workerd', 'worker', 'browser'],
     bundle: true,
-    outfile,
+    write: false,
     external: [],
     platform: 'browser',
     target: 'esnext',
     format: 'esm',
     sourcemap: false,
   });
-  const script = await readFile(outfile, 'utf-8');
-  console.log(`Built ${worker}:\n`, script);
-  return script;
+  assert(outputFiles.length === 1);
+  const {text} = outputFiles[0];
+  console.log(`Built ${worker}:\n`, text);
+  return text;
 }
