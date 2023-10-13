@@ -4,8 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
-    "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
@@ -18,7 +16,6 @@
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "shared": "0.0.0",
-    "ts-jest": "^29.1.0",
     "typescript": "^5.2.2"
   },
   "exports": {
