@@ -1,38 +1,29 @@
-import {
-  assert,
-  assertArray,
-  assertNumber,
-  assertObject,
-  assertString,
-} from 'shared/src/asserts.js';
+import {assert, assertObject} from 'shared/src/asserts.js';
+import * as valita from 'shared/src/valita.js';
 import type {Read, Write} from '../dag/store.js';
-import {Hash, assertHash} from '../hash.js';
-import {
-  IndexDefinitions,
-  assertIndexDefinitions,
-  indexDefinitionsEqual,
-} from '../index-defs.js';
+import {Hash, hashSchema} from '../hash.js';
+import {indexDefinitionsEqual, indexDefinitionsSchema} from '../index-defs.js';
 import {FrozenJSONValue, deepFreeze} from '../json.js';
-import type {ClientGroupID, ClientID} from '../sync/ids.js';
+import type {ClientGroupID} from '../sync/ids.js';
 
 export type ClientGroupMap = ReadonlyMap<ClientGroupID, ClientGroup>;
 
-export type ClientGroup = {
+const clientGroupSchema = valita.readonlyObject({
   /**
    * The hash of the commit in the perdag last persisted to this client group.
    * Should only be updated by clients assigned to this client group.
    */
-  readonly headHash: Hash;
+  headHash: hashSchema,
 
   /**
    * Set of mutator names common to all clients assigned to this client group.
    */
-  readonly mutatorNames: string[];
+  mutatorNames: valita.readonlyArray(valita.string()),
 
   /**
    * Index definitions common to all clients assigned to this client group.
    */
-  readonly indexes: IndexDefinitions;
+  indexes: indexDefinitionsSchema,
 
   /**
    * The highest mutation ID of every client assigned to this client group.
@@ -43,7 +34,7 @@ export type ClientGroup = {
    * are unacknowledged pending mutations without having to load the commit
    * graph.
    */
-  readonly mutationIDs: Readonly<Record<ClientID, number>>;
+  mutationIDs: valita.readonlyRecord(valita.number()),
 
   /**
    * The highest lastMutationID received from the server for every client
@@ -61,42 +52,22 @@ export type ClientGroup = {
    * it may be different because the other client does not update the commit
    * graph.
    */
-  readonly lastServerAckdMutationIDs: Readonly<Record<ClientID, number>>;
+  lastServerAckdMutationIDs: valita.record(valita.number()),
 
   /**
    * If the server deletes this client group it can signal that the client group
    * was deleted. If that happens we mark this client group as disabled so that
    * we do not use it again when creating new clients.
    */
-  readonly disabled: boolean;
-};
+  disabled: valita.boolean(),
+});
+
+export type ClientGroup = valita.Infer<typeof clientGroupSchema>;
 
 export const CLIENT_GROUPS_HEAD_NAME = 'client-groups';
 
 function assertClientGroup(value: unknown): asserts value is ClientGroup {
-  assertObject(value);
-  const {
-    headHash,
-    mutatorNames,
-    indexes,
-    mutationIDs,
-    lastServerAckdMutationIDs,
-  } = value;
-  assertHash(headHash);
-  assertArray(mutatorNames);
-  for (const name of mutatorNames) {
-    assertString(name);
-  }
-  assertObject(indexes);
-  assertIndexDefinitions(indexes);
-  assertObject(mutationIDs);
-  for (const mutationID of Object.values(mutationIDs)) {
-    assertNumber(mutationID);
-  }
-  assertObject(lastServerAckdMutationIDs);
-  for (const mutationID of Object.values(lastServerAckdMutationIDs)) {
-    assertNumber(mutationID);
-  }
+  valita.assert(value, clientGroupSchema);
 }
 
 function chunkDataToClientGroupMap(chunkData: unknown): ClientGroupMap {
@@ -218,7 +189,7 @@ async function setValidatedClientGroups(
 
 export function mutatorNamesEqual(
   mutatorNamesSet: ReadonlySet<string>,
-  mutatorNames: string[],
+  mutatorNames: readonly string[],
 ): boolean {
   if (mutatorNames.length !== mutatorNamesSet.size) {
     return false;
