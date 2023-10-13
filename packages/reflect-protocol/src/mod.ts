@@ -3,7 +3,6 @@ export * from './api/room.js';
 export * from './connected.js';
 export * from './down.js';
 export * from './error.js';
-export * from './json.js';
 export * from './patch.js';
 export * from './ping.js';
 export * from './poke.js';

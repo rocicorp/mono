@@ -1,4 +1,5 @@
-import {jsonSchema, versionSchema} from 'reflect-protocol';
+import {versionSchema} from 'reflect-protocol';
+import {jsonSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
 import type {Storage} from '../storage/storage.js';
 

@@ -1,8 +1,8 @@
 import * as valita from '@badrap/valita';
-import {skipAssertJSONValue} from 'shared/src/config.js';
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
-import {isJSONValue} from 'shared/src/json.js';
-import * as v from 'shared/src/valita.js';
+import {skipAssertJSONValue} from './config.js';
+import type {ReadonlyJSONValue} from './json.js';
+import {isJSONValue} from './json.js';
+import * as v from './valita.js';
 
 const path: (string | number)[] = [];
 

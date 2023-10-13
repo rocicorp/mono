@@ -1,13 +1,14 @@
-import {jsonSchema, Patch, Version} from 'reflect-protocol';
+import type {Patch, Version} from 'reflect-protocol';
 import type {AuthData, WriteTransaction} from 'reflect-shared';
 import {
-  isScanIndexOptions,
-  makeScanResult,
   ScanNoIndexOptions,
   ScanOptions,
   TransactionEnvironment,
   TransactionReason,
+  isScanIndexOptions,
+  makeScanResult,
 } from 'replicache';
+import {jsonSchema} from 'shared/src/json-schema.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as v from 'shared/src/valita.js';
 import type {ClientID} from '../types/client-state.js';

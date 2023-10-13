@@ -1,5 +1,5 @@
+import {jsonSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
-import {jsonSchema} from './json.js';
 
 export const mutationSchema = v.object({
   id: v.number(),
