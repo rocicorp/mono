@@ -43,7 +43,7 @@ describe('script tags', () => {
     },
   ];
   for (const c of cases) {
-    test(c.name, async () => {
+    test(c.name, () => {
       let error;
       let result;
       try {

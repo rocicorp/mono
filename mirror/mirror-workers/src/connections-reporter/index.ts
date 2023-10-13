@@ -35,7 +35,7 @@ function reportConnectionSeconds(
 type TailItem = Pick<TraceItem, 'scriptTags' | 'diagnosticsChannelEvents'>;
 
 export default {
-  async tail(events: TailItem[], env: Env) {
+  tail(events: TailItem[], env: Env) {
     for (const {scriptTags, diagnosticsChannelEvents} of events) {
       let tags: ScriptTags;
       try {

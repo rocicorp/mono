@@ -176,8 +176,10 @@ async function publishDispatcherScript({
   dispatchNamespace: namespace,
 }: ProviderConfig): Promise<void> {
   await publishWorker({apiToken, accountID}, DISPATCHER_NAME, {
+    /* eslint-disable @typescript-eslint/naming-convention */
     bindings: {dispatch_namespaces: [{binding: 'workers', namespace}]},
     // no_minimal_subrequests is required to dispatch to non-namespaced workers by Custom Domain.
     compatibility_flags: ['no_minimal_subrequests'],
+    /* eslint-enable @typescript-eslint/naming-convention */
   });
 }

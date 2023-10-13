@@ -16,6 +16,7 @@ export async function publishTailWorkersHandler(
   const config = await getProviderConfig(yargs);
 
   await publishWorker(config, 'connections-reporter', {
+    /* eslint-disable @typescript-eslint/naming-convention */
     bindings: {
       analytics_engine_datasets: [
         {
@@ -24,5 +25,6 @@ export async function publishTailWorkersHandler(
         },
       ],
     },
+    /* eslint-enable @typescript-eslint/naming-convention */
   });
 }
