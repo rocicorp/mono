@@ -1,8 +1,8 @@
 import {expect, test} from '@jest/globals';
-import {assert} from 'shared/src/asserts.js';
-import * as v from 'shared/src/valita.js';
-import {parse} from 'shared/src/valita.js';
-import {jsonSchema} from './json.js';
+import {assert} from './asserts.js';
+import {jsonSchema} from './json-schema.js';
+import * as v from './valita.js';
+import {parse} from './valita.js';
 
 test('json schema', () => {
   const t = <T>(s: v.Type<T>, v: unknown, message?: string) => {

@@ -1,11 +1,16 @@
+import {GlobalScript} from 'cloudflare-api/src/scripts.js';
 import type {Response} from 'express';
 import type {Auth} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
 import {https, logger} from 'firebase-functions';
 import {HttpsError, onRequest} from 'firebase-functions/v2/https';
 import {tailRequestSchema} from 'mirror-protocol/src/tail.js';
+import {
+  providerDataConverter,
+  providerPath,
+} from 'mirror-schema/src/provider.js';
 import assert from 'node:assert';
-import {jsonSchema} from 'reflect-protocol';
+import {jsonSchema} from 'shared/src/json-schema.js';
 import {Queue} from 'shared/src/queue.js';
 import * as v from 'shared/src/valita.js';
 import type WebSocket from 'ws';
@@ -16,15 +21,10 @@ import {
   tokenAuthentication,
   userAuthorization,
 } from '../validators/auth.js';
-import {validateRequest} from '../validators/schema.js';
-import {getApiToken} from './secrets.js';
-import {GlobalScript} from 'cloudflare-api/src/scripts.js';
-import {
-  providerDataConverter,
-  providerPath,
-} from 'mirror-schema/src/provider.js';
 import {getDataOrFail} from '../validators/data.js';
+import {validateRequest} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
+import {getApiToken} from './secrets.js';
 
 export const tail = (
   firestore: Firestore,

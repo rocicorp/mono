@@ -23,6 +23,10 @@ export async function publishTailWorkersHandler(
           binding: 'runningConnectionSecondsDS',
           dataset: 'RunningConnectionSeconds',
         },
+        {
+          binding: 'connectionLifetimesDS',
+          dataset: 'ConnectionLifetimes',
+        },
       ],
     },
     /* eslint-enable @typescript-eslint/naming-convention */

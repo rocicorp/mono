@@ -6,8 +6,9 @@ import {
   jest,
   test,
 } from '@jest/globals';
-import {Version, jsonSchema} from 'reflect-protocol';
+import type {Version} from 'reflect-protocol';
 import type {WriteTransaction} from 'reflect-shared';
+import {jsonSchema} from 'shared/src/json-schema.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
 import {
