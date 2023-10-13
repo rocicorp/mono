@@ -18,8 +18,4 @@ export default {
     'mirror-schema/(.*)\\.js$': '<rootDir>/../mirror-schema/$1',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
-  globals: {
-    ['REFLECT_VERSION']: getVersion(),
-    ['REFLECT_CLI_NAME']: 'reflect-cli',
-  },
 };
