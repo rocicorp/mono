@@ -1,12 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import {
-  assert,
-  assertArray,
-  assertNumber,
-  assertObject,
-  assertString,
-} from 'shared/src/asserts.js';
+import {assert, assertObject} from 'shared/src/asserts.js';
 import {hasOwn} from 'shared/src/has-own.js';
+import * as valita from 'shared/src/valita.js';
 import {emptyDataNode} from '../btree/node.js';
 import {BTreeRead} from '../btree/read.js';
 import {FrozenCookie, compareCookies} from '../cookies.js';
@@ -25,10 +20,14 @@ import {
 } from '../db/commit.js';
 import {createIndexBTree} from '../db/write.js';
 import type {FormatVersion} from '../format-version.js';
-import {Hash, assertHash} from '../hash.js';
+import {Hash, hashSchema} from '../hash.js';
 import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
 import {FrozenJSONValue, deepFreeze} from '../json.js';
-import type {ClientGroupID, ClientID} from '../sync/ids.js';
+import {
+  clientGroupIDSchema,
+  type ClientGroupID,
+  type ClientID,
+} from '../sync/ids.js';
 import {uuid as makeUuid} from '../uuid.js';
 import {withWriteNoImplicitCommit} from '../with-transactions.js';
 import {
@@ -42,19 +41,21 @@ import {
 export type ClientMap = ReadonlyMap<ClientID, ClientV4 | ClientV5 | ClientV6>;
 export type ClientMapDD31 = ReadonlyMap<ClientID, ClientV5 | ClientV6>;
 
-export type ClientV4 = {
+const clientV4Schema = valita.readonlyObject({
   /**
    * A UNIX timestamp in milliseconds updated by the client once a minute
    * while it is active and every time the client persists its state to
    * the perdag.
    * Should only be updated by the client represented by this structure.
    */
-  readonly heartbeatTimestampMs: number;
+  heartbeatTimestampMs: valita.number(),
+
   /**
    * The hash of the commit in the perdag this client last persisted.
    * Should only be updated by the client represented by this structure.
    */
-  readonly headHash: Hash;
+  headHash: hashSchema,
+
   /**
    * The mutationID of the commit at headHash (mutationID if it is a
    * local commit, lastMutationID if it is an index change or snapshot commit).
@@ -66,7 +67,8 @@ export type ClientV4 = {
    * but allows other clients to determine if there are unacknowledged pending
    * mutations without having to load the commit graph at headHash.
    */
-  readonly mutationID: number;
+  mutationID: valita.number(),
+
   /**
    * The highest lastMutationID received from the server for this client.
    *
@@ -84,28 +86,34 @@ export type ClientV4 = {
    * the other client does not update the commit graph (it is unsafe to update
    * another client's commit graph).
    */
-  readonly lastServerAckdMutationID: number;
-};
+  lastServerAckdMutationID: valita.number(),
+});
 
-export type ClientV5 = {
-  readonly heartbeatTimestampMs: number;
-  readonly headHash: Hash;
+export type ClientV4 = valita.Infer<typeof clientV4Schema>;
+
+const clientV5Schema = valita.readonlyObject({
+  heartbeatTimestampMs: valita.number(),
+
+  headHash: hashSchema,
 
   /**
    * The hash of a commit we are in the middle of refreshing into this client's
    * memdag.
    */
-  readonly tempRefreshHash: Hash | null;
+  tempRefreshHash: hashSchema.nullable(),
 
   /**
    * ID of this client's perdag client group. This needs to be sent in pull
    * request (to enable syncing all last mutation ids in the client group).
    */
-  readonly clientGroupID: ClientGroupID;
-};
+  clientGroupID: clientGroupIDSchema,
+});
 
-export type ClientV6 = {
-  readonly heartbeatTimestampMs: number;
+export type ClientV5 = valita.Infer<typeof clientV5Schema>;
+
+const clientV6Schema = valita.readonlyObject({
+  heartbeatTimestampMs: valita.number(),
+
   /**
    * A set of hashes, which contains:
    * 1. The hash of the last commit this client refreshed from its client group
@@ -118,20 +126,22 @@ export type ClientV6 = {
    * set will contain a single hash: the hash of the last commit this client
    * refreshed.
    */
-  readonly refreshHashes: readonly Hash[];
+  refreshHashes: valita.readonlyArray(hashSchema),
 
   /**
    * The hash of the last snapshot commit persisted by this client to this
    * client's client group, or null if has never persisted a snapshot.
    */
-  readonly persistHash: Hash | null;
+  persistHash: hashSchema.nullable(),
 
   /**
    * ID of this client's perdag client group. This needs to be sent in pull
    * request (to enable syncing all last mutation ids in the client group).
    */
-  readonly clientGroupID: ClientGroupID;
-};
+  clientGroupID: clientGroupIDSchema,
+});
+
+export type ClientV6 = valita.Infer<typeof clientV6Schema>;
 
 export type Client = ClientV4 | ClientV5 | ClientV6;
 
@@ -149,56 +159,26 @@ export function isClientV4(client: Client): client is ClientV4 {
 
 export const CLIENTS_HEAD_NAME = 'clients';
 
+const clientSchema = valita.union(
+  clientV4Schema,
+  clientV5Schema,
+  clientV6Schema,
+);
+
 function assertClient(value: unknown): asserts value is Client {
-  assertClientBase(value);
-
-  if (typeof value.mutationID === 'number') {
-    assertNumber(value.lastServerAckdMutationID);
-  } else {
-    const {tempRefreshHash} = value;
-    if (tempRefreshHash) {
-      assertHash(tempRefreshHash);
-    }
-    assertString(value.clientGroupID);
-  }
-}
-
-function assertClientBase(value: unknown): asserts value is {
-  heartbeatTimestampMs: number;
-  [key: string]: unknown;
-} {
-  assertObject(value);
-  assertNumber(value.heartbeatTimestampMs);
+  valita.assert(value, clientSchema);
 }
 
 export function assertClientV4(value: unknown): asserts value is ClientV4 {
-  assertClientBase(value);
-  const {headHash, mutationID, lastServerAckdMutationID} = value;
-  assertHash(headHash);
-  assertNumber(mutationID);
-  assertNumber(lastServerAckdMutationID);
+  valita.assert(value, clientV4Schema);
 }
 
 export function assertClientV5(value: unknown): asserts value is ClientV5 {
-  assertClientBase(value);
-  const {headHash, tempRefreshHash} = value;
-  assertHash(headHash);
-  if (tempRefreshHash) {
-    assertHash(tempRefreshHash);
-  }
-  assertString(value.clientGroupID);
+  valita.assert(value, clientV5Schema);
 }
 
 export function assertClientV6(value: unknown): asserts value is ClientV6 {
-  assertClientBase(value);
-  const {refreshHashes, persistHash} = value;
-  assertArray(refreshHashes);
-  assert(refreshHashes.length > 0);
-  refreshHashes.forEach(assertHash);
-  if (persistHash) {
-    assertHash(persistHash);
-  }
-  assertString(value.clientGroupID);
+  valita.assert(value, clientV6Schema);
 }
 
 function chunkDataToClientMap(chunkData: unknown): ClientMap {
