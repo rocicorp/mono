@@ -59,6 +59,10 @@ import {
   migrateDnsCommentsToTagsHandler,
   migrateDnsCommentsToTagsOptions,
 } from './migrate-dns-comments-to-tags.js';
+import {
+  publishTailWorkersHandler,
+  publishTailWorkersOptions,
+} from './publish-tail-workers.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -174,6 +178,14 @@ function createCLIParser(argv: string[]) {
     'Publishes the mirror dispatcher for Workers for Platforms',
     publishDispatcherOptions,
     publishDispatcherHandler,
+  );
+
+  // publish-tail-workers
+  reflectCLI.command(
+    'publish-tail-workers',
+    'Publishes the tail workers servicing app Workers',
+    publishTailWorkersOptions,
+    publishTailWorkersHandler,
   );
 
   // get-worker
