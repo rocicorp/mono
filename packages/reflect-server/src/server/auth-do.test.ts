@@ -2392,8 +2392,18 @@ describe('Alarms', () => {
         "Revalidated 1 connections, deleted 0 connections.  Failed to revalidate 0 connections.",
         "Ensuring revalidate connections task is scheduled.",
         "Scheduling revalidate connections task.",
-        "Next alarm fires in 300000 ms",
+        "Scheduled immediate Alarm to flush items from this Alarm",
       ]
+    `);
+
+    // Fire the flush Alarm.
+    logSink.messages.length = 0;
+    await jest.advanceTimersByTimeAsync(1);
+    expect(logSink.messages.flatMap(msg => msg[2])).toMatchInlineSnapshot(`
+    [
+      "Fired empty Alarm to flush events to Tail Log",
+      "Next Alarm fires in 299999 ms",
+    ]
     `);
   });
 
@@ -2419,8 +2429,18 @@ describe('Alarms', () => {
         "",
         "Revalidated 1 connections for room testRoomID1, deleted 1 connections.",
         "Revalidated 1 connections, deleted 1 connections.  Failed to revalidate 0 connections.",
-        "No more timeouts scheduled",
+        "Scheduled immediate Alarm to flush items from this Alarm",
       ]
+    `);
+
+    // Fire the flush Alarm.
+    logSink.messages.length = 0;
+    await jest.advanceTimersByTimeAsync(1);
+    expect(logSink.messages.flatMap(msg => msg[2])).toMatchInlineSnapshot(`
+    [
+      "Fired empty Alarm to flush events to Tail Log",
+      "No more timeouts scheduled",
+    ]
     `);
   });
 });

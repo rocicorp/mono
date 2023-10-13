@@ -42,6 +42,12 @@ describe('alarm timeout tests', () => {
     jest.resetAllMocks();
   });
 
+  async function expectFlushAlarm(at: number, then: number | null) {
+    expect(fireTime).toBe(at);
+    await alarmManager.fireScheduled(lc);
+    expect(fireTime).toBe(then);
+  }
+
   test('fire single timeout', async () => {
     const results: string[] = [];
     scheduler.setTimeout(() => {
@@ -62,7 +68,7 @@ describe('alarm timeout tests', () => {
     await alarmManager.fireScheduled(lc);
 
     expect(results).toEqual(['foo']);
-    expect(fireTime).toBe(null);
+    await expectFlushAlarm(STARTING_TIME + 10, null);
   });
 
   test('fire promised timeout', async () => {
@@ -84,7 +90,7 @@ describe('alarm timeout tests', () => {
     await alarmManager.fireScheduled(lc);
 
     expect(results).toEqual(['foo']);
-    expect(fireTime).toBe(null);
+    await expectFlushAlarm(STARTING_TIME + 10, null);
   });
 
   test('timeout with args', async () => {
@@ -102,7 +108,7 @@ describe('alarm timeout tests', () => {
     await alarmManager.fireScheduled(lc);
 
     expect(results).toEqual(['food', 'bard']);
-    expect(fireTime).toBe(null);
+    await expectFlushAlarm(STARTING_TIME + 10, null);
 
     await scheduler.promiseTimeout(
       (_, ...items) => {
@@ -117,7 +123,7 @@ describe('alarm timeout tests', () => {
     await alarmManager.fireScheduled(lc);
 
     expect(results).toEqual(['food', 'bard', 'bazd', 'bonkd']);
-    expect(fireTime).toBe(null);
+    await expectFlushAlarm(STARTING_TIME + 30, null);
   });
 
   test('clear single timeout', async () => {
@@ -156,13 +162,13 @@ describe('alarm timeout tests', () => {
     await alarmManager.fireScheduled(lc);
 
     expect(results).toEqual(['bar']);
-    expect(fireTime).toBe(STARTING_TIME + 30);
+    await expectFlushAlarm(STARTING_TIME + 20, STARTING_TIME + 30);
 
     jest.advanceTimersByTime(10);
     await alarmManager.fireScheduled(lc);
 
     expect(results).toEqual(['bar', 'foo']);
-    expect(fireTime).toBe(null);
+    await expectFlushAlarm(STARTING_TIME + 30, null);
   });
 
   test('clear one of many timeouts', async () => {
@@ -185,7 +191,7 @@ describe('alarm timeout tests', () => {
     await alarmManager.fireScheduled(lc);
 
     expect(results).toEqual(['bar']);
-    expect(fireTime).toBe(null);
+    await expectFlushAlarm(STARTING_TIME + 30, null);
   });
 
   test('fire concurrent timeouts', async () => {
@@ -205,7 +211,7 @@ describe('alarm timeout tests', () => {
     await alarmManager.fireScheduled(lc);
 
     expect(results).toEqual(expect.arrayContaining(['foo', 'bar']));
-    expect(fireTime).toBe(null);
+    await expectFlushAlarm(STARTING_TIME + 30, null);
   });
 
   test('timeout errors are isolated and logged', async () => {
@@ -235,7 +241,7 @@ describe('alarm timeout tests', () => {
       ['error', {}, ['error from async']],
       ['error', {}, ['error from sync']],
     ]);
-    expect(fireTime).toBe(null);
+    await expectFlushAlarm(STARTING_TIME + 30, null);
   });
 
   test('log context passed to callback', async () => {
@@ -259,7 +265,7 @@ describe('alarm timeout tests', () => {
     expect(logSink.messages).toEqual([
       ['info', {}, ['ABC is easy as', 1, 2, 3]],
     ]);
-    expect(fireTime).toBe(null);
+    await expectFlushAlarm(STARTING_TIME + 10, null);
   });
 
   test('reschedules if no timeouts to fire', async () => {
@@ -285,6 +291,6 @@ describe('alarm timeout tests', () => {
     await alarmManager.fireScheduled(lc);
 
     expect(results).toEqual(['foo']);
-    expect(fireTime).toBe(null);
+    await expectFlushAlarm(STARTING_TIME + 20, null);
   });
 });
