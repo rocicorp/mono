@@ -34,9 +34,10 @@
           "@cloudflare/workers-types"
         ],
         "packages": [
+          "mirror-cli",
           "mirror-workers"
         ],
-        "label": "Mirror workers reference beta CF interfaces in 4.x.x"
+        "label": "TODO: Move reflect packages to 4.x.x"
       }
     ]
   }
