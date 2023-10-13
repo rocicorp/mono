@@ -1,16 +1,11 @@
 import {ProviderConfig, getProviderConfig} from './cf.js';
-import {FetchResultError, cfFetch, Errors} from 'cloudflare-api/src/fetch.js';
+import {FetchResultError, Errors} from 'cloudflare-api/src/fetch.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import {readFile} from 'node:fs/promises';
-import {
-  createScriptUploadForm,
-  type CfModule,
-} from 'cloudflare-api/src/create-script-upload-form.js';
 import {DispatchNamespaces} from 'cloudflare-api/src/dispatch-namespaces.js';
 import {DNSRecords} from 'cloudflare-api/src/dns-records.js';
 import {FallbackOrigin} from 'cloudflare-api/src/fallback-origin.js';
 import {WorkerRoutes} from 'cloudflare-api/src/worker-routes.js';
-import {buildWorker} from './build-worker.js';
+import {publishWorker} from './publish-worker.js';
 import {sleep} from 'shared/src/sleep.js';
 
 export function publishDispatcherOptions(yargs: CommonYargsArgv) {
@@ -24,11 +19,6 @@ export function publishDispatcherOptions(yargs: CommonYargsArgv) {
       desc: 'The hostname (before the TLD) to set the fallback origin to.',
       type: 'string',
       default: 'apps',
-    })
-    .option('script-name', {
-      desc: 'The script name of the dispatcher. If none is specified, defaults to `dispatcher`',
-      type: 'string',
-      default: 'dispatcher',
     })
     .option('overwrite-fallbacks', {
       desc: 'Overwrites an existing fallback route and origin if it is different',
@@ -55,14 +45,16 @@ export async function publishDispatcherHandler(
   await ensureDispatchNamespace(config);
 
   // The namespace must have been created in order to setup bindings to it in the Worker.
-  await publishDispatcherScript(config, scriptName);
+  await publishDispatcherScript(config);
 
   // The worker must have been created in order to setup the fallback Worker Route.
-  await ensureFallbackRoute(config, scriptName, overwriteFallbacks);
+  await ensureFallbackRoute(config, overwriteFallbacks);
 
   // This can technically be done in parallel with the rest but we keep it serial for readability.
   await ensureFallbackOrigin(config, fallbackHostname, overwriteFallbacks);
 }
+
+const DISPATCHER_NAME = 'dispatcher';
 
 async function ensureDispatchNamespace({
   apiToken,
@@ -84,9 +76,9 @@ async function ensureDispatchNamespace({
 
 export async function ensureFallbackRoute(
   {apiToken, defaultZone: {zoneID, zoneName}}: ProviderConfig,
-  script: string,
   overwriteExisting: boolean,
 ) {
+  const script = DISPATCHER_NAME;
   const pattern = `*.${zoneName}/*`;
   const resource = new WorkerRoutes({apiToken, zoneID});
   for (const route of await resource.list()) {
@@ -178,50 +170,16 @@ export async function ensureFallbackOrigin(
   console.log(state);
 }
 
-async function publishDispatcherScript(
-  {apiToken, accountID, dispatchNamespace: namespace}: ProviderConfig,
-  name: string,
-): Promise<void> {
-  const dispatcherScript = await buildDispatcherScript();
-  console.log(`Loaded ${name}\n`, dispatcherScript);
-
-  const main: CfModule = {
-    name: 'dispatcher.js',
-    content: dispatcherScript,
-    type: 'esm',
-  };
-
-  /* eslint-disable @typescript-eslint/naming-convention */
-  const form = createScriptUploadForm({
-    name,
-    main,
+async function publishDispatcherScript({
+  apiToken,
+  accountID,
+  dispatchNamespace: namespace,
+}: ProviderConfig): Promise<void> {
+  await publishWorker({apiToken, accountID}, DISPATCHER_NAME, {
+    /* eslint-disable @typescript-eslint/naming-convention */
     bindings: {dispatch_namespaces: [{binding: 'workers', namespace}]},
-    compatibility_date: '2023-09-04',
     // no_minimal_subrequests is required to dispatch to non-namespaced workers by Custom Domain.
     compatibility_flags: ['no_minimal_subrequests'],
+    /* eslint-enable @typescript-eslint/naming-convention */
   });
-  /* eslint-enable @typescript-eslint/naming-convention */
-
-  const result = await cfFetch(
-    apiToken,
-    `/accounts/${accountID}/workers/scripts/${name}`,
-    {
-      method: 'PUT',
-      body: form,
-    },
-    new URLSearchParams({
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      include_subdomain_availability: 'true',
-      // pass excludeScript so the whole body of the
-      // script doesn't get included in the response
-      excludeScript: 'true',
-    }),
-  );
-  console.log(`Publish result:`, result);
-}
-
-async function buildDispatcherScript(): Promise<string> {
-  const dispatcherFile = await buildWorker('dispatcher');
-  console.log('Loading', dispatcherFile);
-  return readFile(dispatcherFile, 'utf-8');
 }
