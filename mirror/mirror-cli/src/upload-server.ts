@@ -79,7 +79,7 @@ export async function uploadReflectServerHandler(
     serverPath = getServerPathFromCurrentRepo();
     semver = new SemVer(buildFromSourceVersion);
   } else if (!version) {
-    console.log('Either --version or --build-from-source is required');
+    console.error('Either --version or --build-from-source is required');
     return;
   } else {
     semver = new SemVer(version);
@@ -143,7 +143,7 @@ async function installReflectPackageFromNpm(v: SemVer): Promise<string> {
     )} into ${bold(dir)}`,
   );
 
-  execSync(`npm install @rocicorp/reflect@${v.toString()}`, {
+  execSync(`npm install @rocicorp/reflect@${v}`, {
     cwd: dir,
     stdio: ['ignore', 'pipe', 'ignore'],
   });
