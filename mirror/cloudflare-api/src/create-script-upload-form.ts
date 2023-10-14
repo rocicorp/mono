@@ -243,6 +243,7 @@ export interface CfPlacement {
 
 export interface CfTailConsumer {
   service: string;
+  namespace?: string;
   environment?: string;
 }
 
@@ -293,7 +294,6 @@ export interface CfWorkerInit {
   logpush?: boolean | undefined;
   placement?: CfPlacement | undefined;
   tail_consumers?: CfTailConsumer[] | undefined;
-  // https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/platform/tags/
   tags?: string[] | undefined;
 }
 
@@ -386,6 +386,7 @@ export interface WorkerMetadata {
   logpush?: boolean;
   placement?: CfPlacement;
   tail_consumers?: CfTailConsumer[];
+  tags?: string[];
   // Allow unsafe.metadata to add arbitary properties at runtime
   [key: string]: unknown;
 }

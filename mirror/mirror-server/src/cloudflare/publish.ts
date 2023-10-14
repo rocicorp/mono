@@ -5,6 +5,8 @@ import {
 } from 'cloudflare-api/src/create-script-upload-form.js';
 import type {Script} from 'cloudflare-api/src/scripts.js';
 import {Migration, getMigrationsToUpload} from './get-migrations-to-upload.js';
+import {TAIL_WORKERS} from 'mirror-workers/src/service-names.js';
+import {logger} from 'firebase-functions';
 
 export async function uploadScript(
   script: Script,
@@ -17,17 +19,17 @@ export async function uploadScript(
     config: {migrations},
   });
 
+  const tailWorkers = TAIL_WORKERS.map(service => ({service}));
+
   const form = createScriptUploadForm({
+    /* eslint-disable @typescript-eslint/naming-convention */
     name: script.name,
-    main: mainModule, // await createCfModule('worker.js'),
+    main: mainModule,
     bindings: {
       vars,
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       durable_objects: {
         bindings: [
-          // eslint-disable-next-line @typescript-eslint/naming-convention
           {name: 'roomDO', class_name: 'RoomDO'},
-          // eslint-disable-next-line @typescript-eslint/naming-convention
           {name: 'authDO', class_name: 'AuthDO'},
         ],
       },
@@ -35,11 +37,17 @@ export async function uploadScript(
     modules,
     migrations: cfMigrations,
     tags,
-    // eslint-disable-next-line @typescript-eslint/naming-convention
+    tail_consumers: tailWorkers,
     compatibility_date: '2023-05-18',
-    // eslint-disable-next-line @typescript-eslint/naming-convention
     compatibility_flags: ['nodejs_compat'],
+    /* eslint-enable @typescript-eslint/naming-convention */
   });
+
+  try {
+    logger.debug(`Worker Metadata`, JSON.parse(String(form.get('metadata'))));
+  } catch (e) {
+    logger.warn(`Could not log Worker Metadata`, e);
+  }
 
   const searchParams = new URLSearchParams({
     // eslint-disable-next-line @typescript-eslint/naming-convention

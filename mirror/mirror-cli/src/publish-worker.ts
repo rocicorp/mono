@@ -8,8 +8,7 @@ import {GlobalScript} from 'cloudflare-api/src/scripts.js';
 import * as esbuild from 'esbuild';
 import {assert} from 'shared/src/asserts.js';
 import {fileURLToPath} from 'url';
-
-export type WorkerName = 'dispatcher' | 'connections-reporter';
+import type {WorkerName} from 'mirror-workers/src/service-names.js';
 
 export async function publishWorker(
   account: AccountAccess,
