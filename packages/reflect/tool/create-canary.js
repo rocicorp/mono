@@ -12,11 +12,11 @@ function basePath(...parts) {
 
 /**
  * @param {string} command
- * @param {string|undefined} cwd
+ * @param {{stdio?:'inherit'|'pipe'|undefined, cwd?:string|undefined}|undefined} [options]
  */
-function execute(command, cwd = undefined) {
+function execute(command, options) {
   console.log(`Executing: ${command}`);
-  return execSync(command, {cwd});
+  return execSync(command, {stdio: 'inherit', ...options});
 }
 
 /**
@@ -65,13 +65,16 @@ try {
     'package.json',
   );
 
-  const changes = execute('git diff HEAD .').toString().trim();
+  const changes = execute('git diff HEAD .', {stdio: 'pipe'}).toString().trim();
   if (changes.length > 0) {
     console.error('There are uncommitted changes, cannot continue');
     process.exit(1);
   }
 
-  const hash = execute('git rev-parse HEAD').toString().trim().substring(0, 6);
+  const hash = execute('git rev-parse HEAD', {stdio: 'pipe'})
+    .toString()
+    .trim()
+    .substring(0, 6);
   const currentPackageData = getPackageData(REFLECT_PACKAGE_JSON_PATH);
   const nextCanaryVersion = bumpCanaryVersion(currentPackageData.version, hash);
   currentPackageData.version = nextCanaryVersion;
@@ -104,10 +107,7 @@ try {
   execute('git add package-lock.json');
   execute(`git commit -m "Bump version to ${nextCanaryVersion}"`);
 
-  execute(
-    'npm publish --verbose --tag=canary',
-    basePath('packages', 'reflect'),
-  );
+  execute('npm publish --tag=canary', {cwd: basePath('packages', 'reflect')});
 
   execute(`git tag ${tagName}`);
   execute(`git push origin ${tagName}`);

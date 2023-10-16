@@ -17,7 +17,6 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx tool/",
     "//": "Force is used to ensure reflect-shared is rebuilt picking up the latest version from this package.json",
-    "prepack": "turbo run test --force",
     "postpack": "node tool/check-version.js && node tool/check-ambient-context.js",
     "create-canary": "node tool/create-canary.js"
   },
