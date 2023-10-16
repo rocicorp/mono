@@ -122,7 +122,7 @@ export type ParseOptionsMode = 'passthrough' | 'strict' | 'strip';
 
 export function parse<T>(
   value: unknown,
-  schema: Type<T>,
+  schema: v.Type<T>,
   mode?: ParseOptionsMode,
 ): T {
   const res = test(value, schema, mode);
@@ -134,7 +134,7 @@ export function parse<T>(
 
 export function is<T>(
   value: unknown,
-  schema: Type<T>,
+  schema: v.Type<T>,
   mode?: ParseOptionsMode,
 ): value is T {
   return test(value, schema, mode).ok;
@@ -142,7 +142,7 @@ export function is<T>(
 
 export function assert<T>(
   value: unknown,
-  schema: Type<T>,
+  schema: v.Type<T>,
   mode?: ParseOptionsMode,
 ): asserts value is T {
   parse(value, schema, mode);
@@ -152,7 +152,7 @@ type Result<T> = {ok: true; value: T} | {ok: false; error: string};
 
 export function test<T>(
   value: unknown,
-  schema: Type<T>,
+  schema: v.Type<T>,
   mode?: ParseOptionsMode,
 ): Result<T> {
   const res = (schema as v.Type<T>).try(value, mode ? {mode} : undefined);
@@ -161,19 +161,6 @@ export function test<T>(
   }
   return res;
 }
-
-// We re-export the valita type `Type` but we only allow the `optional`
-// property. This is to prevent calling `.parse` on it which would not use our
-// formatting of the error message.
-export type Type<T> = Omit<
-  v.Type<T>,
-  'parse' | 'try' | 'assert' | 'map' | 'chain'
->;
-
-// Re-export the valita type `Type` using a longer less convenient name because
-// we do need it in a few places.
-// TODO(arv): Figure out a better way to do this.
-export type ValitaType<T> = v.Type<T>;
 
 /**
  * Shallowly marks the schema as readonly.
