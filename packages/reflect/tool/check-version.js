@@ -24,7 +24,10 @@ async function versionFromPackageJSON() {
  */
 async function fileContainsVersionString(fileName, version) {
   const js = await readFile(fileName, 'utf-8');
-  return new RegExp('var [a-zA-Z0-9]+ ?= ?"' + version + '";', 'g').test(js);
+  return new RegExp(
+    'var [a-zA-Z0-9]+ ?= ?"' + version.replace(/([+.])/g, '\\$1') + '";',
+    'g',
+  ).test(js);
 }
 
 /**
