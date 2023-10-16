@@ -10,7 +10,7 @@ export type ErrorInfo = {
   cause?: ErrorInfo | undefined;
 };
 
-const errorInfoSchema: v.ValitaType<ErrorInfo> = v.lazy<ErrorInfo>(() =>
+const errorInfoSchema: v.Type<ErrorInfo> = v.lazy<ErrorInfo>(() =>
   v.object({
     desc: v.string(), // String(e)
     name: v.string().optional(), // Error.name
