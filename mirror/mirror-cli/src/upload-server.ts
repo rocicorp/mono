@@ -80,7 +80,7 @@ export async function uploadReflectServerHandler(
     semver = new SemVer(buildFromSourceVersion);
   } else if (!version) {
     console.error('Either --version or --build-from-source is required');
-    return;
+    process.exit(1);
   } else {
     semver = new SemVer(version);
     serverPath = await installReflectPackageFromNpm(semver);
