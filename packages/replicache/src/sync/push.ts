@@ -41,7 +41,7 @@ export type MutationV0 = {
   readonly timestamp: number;
 };
 
-const mutationV0Schema: valita.ValitaType<MutationV0> = valita.readonlyObject({
+const mutationV0Schema: valita.Type<MutationV0> = valita.readonlyObject({
   id: valita.number(),
   name: valita.string(),
   args: jsonSchema,
@@ -59,7 +59,7 @@ export type MutationV1 = {
   readonly clientID: ClientID;
 };
 
-const mutationV1Schema: valita.ValitaType<MutationV1> = valita.readonlyObject({
+const mutationV1Schema: valita.Type<MutationV1> = valita.readonlyObject({
   id: valita.number(),
   name: valita.string(),
   args: jsonSchema,
@@ -90,7 +90,7 @@ export type PushRequestV0 = {
   mutations: MutationV0[];
 };
 
-const pushRequestV0Schema: valita.ValitaType<PushRequestV0> = valita.object({
+const pushRequestV0Schema: valita.Type<PushRequestV0> = valita.object({
   pushVersion: valita.literal(0),
   schemaVersion: valita.string(),
   profileID: valita.string(),
