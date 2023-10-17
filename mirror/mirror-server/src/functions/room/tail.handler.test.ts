@@ -3,7 +3,7 @@ import {getMockReq, getMockRes} from '@jest-mock/express';
 import {beforeEach, describe, expect, jest, test} from '@jest/globals';
 import type {Auth} from 'firebase-admin/auth';
 import type {https} from 'firebase-functions/v2';
-import type {TailMessage} from 'mirror-protocol/src/tail.js';
+import type {TailMessage} from 'mirror-protocol/src/tail-message.js';
 import {
   fakeFirestore,
   setApp,

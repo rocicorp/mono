@@ -6,11 +6,6 @@ import * as path from './path.js';
 export const STABLE_RELEASE_CHANNEL = 'stable';
 export const CANARY_RELEASE_CHANNEL = 'canary';
 
-export const STANDARD_RELEASE_CHANNELS: readonly string[] = [
-  STABLE_RELEASE_CHANNEL,
-  CANARY_RELEASE_CHANNEL,
-] as const;
-
 export const standardReleaseChannelSchema = v.union(
   v.literal(STABLE_RELEASE_CHANNEL),
   v.literal(CANARY_RELEASE_CHANNEL),

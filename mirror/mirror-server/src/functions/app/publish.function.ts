@@ -6,29 +6,25 @@ import {
   publishRequestSchema,
   publishResponseSchema,
 } from 'mirror-protocol/src/publish.js';
-import * as semver from 'semver';
-import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
-import {storeModule, type Module, ModuleRef} from 'mirror-schema/src/module.js';
-import type {DeploymentSpec} from 'mirror-schema/src/deployment.js';
-import {assertAllModulesHaveUniqueNames} from '../../cloudflare/module-assembler.js';
-import {findNewestMatchingVersion} from './find-newest-matching-version.js';
-import {appAuthorization, userAuthorization} from '../validators/auth.js';
-import {validateSchema} from '../validators/schema.js';
-import {requestDeployment} from './deploy.function.js';
+import {DistTag} from 'mirror-protocol/src/version.js';
 import type {App} from 'mirror-schema/src/app.js';
-import {getAppSecrets} from './secrets.js';
-import {getDataOrFail} from '../validators/data.js';
+import type {DeploymentSpec} from 'mirror-schema/src/deployment.js';
+import {ModuleRef, storeModule, type Module} from 'mirror-schema/src/module.js';
 import {
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
-import {
-  userAgentVersion,
-  DistTags,
-  checkStandardReleaseChannel,
-} from '../validators/version.js';
-import {DistTag} from 'mirror-protocol/src/version.js';
+import * as semver from 'semver';
 import {gtr} from 'semver';
+import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
+import {assertAllModulesHaveUniqueNames} from '../../cloudflare/module-assembler.js';
+import {appAuthorization, userAuthorization} from '../validators/auth.js';
+import {getDataOrFail} from '../validators/data.js';
+import {validateSchema} from '../validators/schema.js';
+import {DistTags, userAgentVersion} from '../validators/version.js';
+import {requestDeployment} from './deploy.function.js';
+import {findNewestMatchingVersion} from './find-newest-matching-version.js';
+import {getAppSecrets} from './secrets.js';
 
 export const publish = (
   firestore: Firestore,
@@ -48,9 +44,6 @@ export const publish = (
       } = publishRequest;
       const {userID, app, distTags} = context;
 
-      if (newServerReleaseChannel) {
-        checkStandardReleaseChannel(newServerReleaseChannel);
-      }
       const serverReleaseChannel =
         newServerReleaseChannel ?? app.serverReleaseChannel;
 

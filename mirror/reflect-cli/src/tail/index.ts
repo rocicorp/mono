@@ -1,9 +1,9 @@
 import {
-  RoomTailRequest,
   TailMessage,
   connectedMessageSchema,
   errorMessageSchema,
-} from 'mirror-protocol/src/tail.js';
+} from 'mirror-protocol/src/tail-message.js';
+import type {RoomTailRequest} from 'mirror-protocol/src/tail.js';
 import * as valita from 'shared/src/valita.js';
 import {ensureAppInstantiated} from '../app-config.js';
 import {authenticate} from '../auth-config.js';
