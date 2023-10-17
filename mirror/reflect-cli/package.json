@@ -61,9 +61,9 @@
             {
               "group": [
                 "mirror-schema/src/*.js",
-                "!mirror-schema/src/client-view/*.js"
+                "!mirror-schema/src/external/*.js"
               ],
-              "message": "Use mirror-schema/src/client-view/* instead"
+              "message": "Use mirror-schema/src/external/* instead"
             }
           ]
         }

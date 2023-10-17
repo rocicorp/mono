@@ -7,8 +7,8 @@ import {
   appPath,
   AppView,
   appViewDataConverter,
-} from 'mirror-schema/src/client-view/app.js';
-import type {DeploymentView} from 'mirror-schema/src/client-view/deployment.js';
+} from 'mirror-schema/src/external/app.js';
+import type {DeploymentView} from 'mirror-schema/src/external/deployment.js';
 import {readAppConfig} from './app-config.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 

@@ -3,13 +3,13 @@ import {
   APP_COLLECTION,
   appViewDataConverter,
   appPath,
-} from 'mirror-schema/src/client-view/app.js';
-import {deploymentViewDataConverter} from 'mirror-schema/src/client-view/deployment.js';
+} from 'mirror-schema/src/external/app.js';
+import {deploymentViewDataConverter} from 'mirror-schema/src/external/deployment.js';
 import {
   userViewDataConverter,
   userPath,
-} from 'mirror-schema/src/client-view/user.js';
-import {watch} from 'mirror-schema/src/client-view/watch.js';
+} from 'mirror-schema/src/external/user.js';
+import {watch} from 'mirror-schema/src/external/watch.js';
 import {must} from 'shared/src/must.js';
 import {readAppConfig, writeAppConfig} from './app-config.js';
 import {authenticate} from './auth-config.js';

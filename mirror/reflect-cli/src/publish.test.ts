@@ -6,8 +6,8 @@ import {
   jest,
   test,
 } from '@jest/globals';
-import {deploymentViewDataConverter} from 'mirror-schema/src/client-view/deployment.js';
-import {fakeFirestore} from 'mirror-schema/src/client-view/test-helpers.js';
+import {deploymentViewDataConverter} from 'mirror-schema/src/external/deployment.js';
+import {fakeFirestore} from 'mirror-schema/src/external/test-helpers.js';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';

@@ -1,12 +1,12 @@
 import {readFile} from 'fs/promises';
 import {createApp} from 'mirror-protocol/src/app.js';
 import {ensureTeam} from 'mirror-protocol/src/team.js';
-import {isValidAppName} from 'mirror-schema/src/client-view/app.js';
+import {isValidAppName} from 'mirror-schema/src/external/app.js';
 import {
   appNameIndexDataConverter,
   appNameIndexPath,
   sanitizeForSubdomain,
-} from 'mirror-schema/src/client-view/team.js';
+} from 'mirror-schema/src/external/team.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {basename, resolve} from 'node:path';
