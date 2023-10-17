@@ -404,7 +404,7 @@ describe('connection seconds tracking', () => {
     expect(alarmTime).toBe(START_TIME + REPORTING_INTERVAL_MS);
 
     // Fire the alarm at the scheduled time.
-    jest.setSystemTime(START_TIME + REPORTING_INTERVAL_MS);
+    jest.setSystemTime(alarmTime ?? 0);
     await roomDO.alarm();
 
     expect(await reports.dequeue()).toEqual({
