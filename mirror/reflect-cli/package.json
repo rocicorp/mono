@@ -36,6 +36,7 @@
     "firebase-tools": "^12.7.0",
     "get-port": "^7.0.0",
     "is-port-reachable": "^4.0.0",
+    "mirror-server": "0.0.1",
     "nanoid": "^4.0.2",
     "open": "^9.1.0",
     "picocolors": "^1.0.0",
