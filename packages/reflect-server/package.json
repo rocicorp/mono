@@ -16,7 +16,7 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@badrap/valita": "^0.2.10",
+    "@badrap/valita": "^0.3.0",
     "@rocicorp/lock": "^1.0.3",
     "@rocicorp/logger": "^5.2.1"
   },
