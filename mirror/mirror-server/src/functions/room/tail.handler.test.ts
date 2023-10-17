@@ -57,7 +57,7 @@ export class MockSocket {
 mockFunctionParamsAndSecrets();
 
 describe('test tail', () => {
-  let firestore: Firestore & firebase.default.firestore.Firestore;
+  let firestore: Firestore;
   let auth: Auth;
   let wsMock: MockSocket;
   let createTailFunction: (

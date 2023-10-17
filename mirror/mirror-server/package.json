@@ -46,7 +46,7 @@
     "cloudflare-api": "0.0.0",
     "datadog": "0.0.0",
     "esbuild": "^0.19.4",
-    "firebase-tools": "^12.3.0",
+    "firebase-tools": "^12.7.0",
     "firestore-jest-mock": "^0.21.0",
     "mirror-protocol": "0.0.0",
     "mirror-schema": "0.0.0",

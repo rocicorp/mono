@@ -1,3 +1,13 @@
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  Firestore,
+  query,
+  where,
+} from 'firebase/firestore';
 import {deleteApp} from 'mirror-protocol/src/app.js';
 import {
   APP_COLLECTION,
@@ -9,11 +19,10 @@ import {
   userViewDataConverter,
   userPath,
 } from 'mirror-schema/src/external/user.js';
-import {watch} from 'mirror-schema/src/external/watch.js';
+import {watchDoc} from 'mirror-schema/src/external/watch.js';
 import {must} from 'shared/src/must.js';
 import {readAppConfig, writeAppConfig} from './app-config.js';
 import {authenticate} from './auth-config.js';
-import {Firestore, getFirestore} from './firebase.js';
 import {confirm} from './inquirer.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
@@ -68,12 +77,12 @@ export async function deleteHandler(yargs: DeleteHandlerArgs) {
       appID: app.id,
     });
 
-    const deploymentDoc = firestore
-      .doc(deploymentPath)
-      .withConverter(deploymentViewDataConverter);
+    const deploymentDoc = doc(firestore, deploymentPath).withConverter(
+      deploymentViewDataConverter,
+    );
 
     try {
-      for await (const snapshot of watch(deploymentDoc)) {
+      for await (const snapshot of watchDoc(deploymentDoc)) {
         const deployment = snapshot.data();
         if (!deployment) {
           // Happens if requested by a superAdmin that has permission to read any doc.
@@ -127,14 +136,14 @@ async function getAppsToDelete(
   }
   if (all || name) {
     const teamID = await getSingleAdminTeam(firestore, userID);
-    let query = firestore
-      .collection(APP_COLLECTION)
-      .withConverter(appViewDataConverter)
-      .where('teamID', '==', teamID);
+    let q = query(
+      collection(firestore, APP_COLLECTION).withConverter(appViewDataConverter),
+      where('teamID', '==', teamID),
+    );
     if (name) {
-      query = query.where('name', '==', name);
+      q = query(q, where('name', '==', name));
     }
-    const apps = await query.get();
+    const apps = await getDocs(q);
     return apps.docs.map(doc => ({id: doc.id, name: doc.data().name}));
   }
   const config = readAppConfig();
@@ -152,11 +161,10 @@ async function getApp(
   id: string,
   fromAppConfig?: boolean,
 ): Promise<AppInfo[]> {
-  const appDoc = await firestore
-    .doc(appPath(id))
-    .withConverter(appViewDataConverter)
-    .get();
-  if (!appDoc.exists) {
+  const appDoc = await getDoc(
+    doc(firestore, appPath(id)).withConverter(appViewDataConverter),
+  );
+  if (!appDoc.exists()) {
     throw new Error(`App is already deleted`);
   }
   const {name} = must(appDoc.data());
@@ -167,11 +175,10 @@ async function getSingleAdminTeam(
   firestore: Firestore,
   userID: string,
 ): Promise<string> {
-  const userDoc = await firestore
-    .doc(userPath(userID))
-    .withConverter(userViewDataConverter)
-    .get();
-  if (!userDoc.exists) {
+  const userDoc = await getDoc(
+    doc(firestore, userPath(userID)).withConverter(userViewDataConverter),
+  );
+  if (!userDoc.exists()) {
     throw new Error('UserDoc does not exist.');
   }
   const {roles} = must(userDoc.data());

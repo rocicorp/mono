@@ -1,3 +1,4 @@
+import {doc, getDoc, getFirestore} from 'firebase/firestore';
 import {readFile} from 'fs/promises';
 import {createApp} from 'mirror-protocol/src/app.js';
 import {ensureTeam} from 'mirror-protocol/src/team.js';
@@ -15,7 +16,6 @@ import {must} from 'shared/src/must.js';
 import {randInt} from 'shared/src/rand.js';
 import * as v from 'shared/src/valita.js';
 import {authenticate} from './auth-config.js';
-import {getFirestore} from './firebase.js';
 import {confirm, input} from './inquirer.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
@@ -189,11 +189,12 @@ async function getNewAppNameOrExistingID(
   const firestore = getFirestore();
   const defaultAppName = await getDefaultAppName();
   if (isValidAppName(defaultAppName)) {
-    const nameEntry = await firestore
-      .doc(appNameIndexPath(teamID, defaultAppName))
-      .withConverter(appNameIndexDataConverter)
-      .get();
-    if (!nameEntry.exists) {
+    const nameEntry = await getDoc(
+      doc(firestore, appNameIndexPath(teamID, defaultAppName)).withConverter(
+        appNameIndexDataConverter,
+      ),
+    );
+    if (!nameEntry.exists()) {
       // Common case. The name in package.json is not taken. Create an app with it.
       return {name: defaultAppName};
     }
@@ -204,11 +205,12 @@ async function getNewAppNameOrExistingID(
       default: `${defaultAppName}${appNameSuffix}`,
       validate: isValidAppName,
     });
-    const nameEntry = await firestore
-      .doc(appNameIndexPath(teamID, name))
-      .withConverter(appNameIndexDataConverter)
-      .get();
-    if (!nameEntry.exists) {
+    const nameEntry = await getDoc(
+      doc(firestore, appNameIndexPath(teamID, name)).withConverter(
+        appNameIndexDataConverter,
+      ),
+    );
+    if (!nameEntry.exists()) {
       return {name};
     }
     const {appID: id} = must(nameEntry.data());

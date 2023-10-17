@@ -6,8 +6,8 @@ import {
   jest,
   test,
 } from '@jest/globals';
+import {doc, getFirestore, setDoc} from 'firebase/firestore';
 import {deploymentViewDataConverter} from 'mirror-schema/src/external/deployment.js';
-import {fakeFirestore} from 'mirror-schema/src/external/test-helpers.js';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -146,17 +146,19 @@ async function testPublishedCode(source: string, expectedOutputs: string[]) {
   await writeTempFiles(source, 'test.ts');
 
   // Set the Deployment doc to RUNNING so that the cli command exits.
-  const firestore = fakeFirestore();
-  await firestore
-    .doc('apps/foo/deployments/bar')
-    .withConverter(deploymentViewDataConverter)
-    .set({
+  const firestore = getFirestore();
+  await setDoc(
+    doc(firestore, 'apps/foo/deployments/bar').withConverter(
+      deploymentViewDataConverter,
+    ),
+    {
       status: 'RUNNING',
       spec: {
         hostname: 'app-name.reflect-server-net',
         serverVersion: '0.1.0',
       },
-    });
+    },
+  );
 
   await publishHandler(
     {} as Args,

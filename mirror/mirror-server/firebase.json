@@ -12,6 +12,9 @@
     ]
   },
   "emulators": {
+    "hub": {
+      "port": 4400
+    },
     "functions": {
       "port": 5001
     },
@@ -22,7 +25,8 @@
       "port": 9099
     },
     "firestore": {
-      "port": 8080
+      "port": 8080,
+      "websocketPort": 9150
     },
     "singleProjectMode": true
   }

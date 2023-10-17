@@ -3,7 +3,11 @@ import type {
   FirestoreDataConverter,
   QueryDocumentSnapshot,
 } from '@google-cloud/firestore';
-import type firebase from 'firebase/compat/app';
+import type {
+  FirestoreDataConverter as ClientDataConverter,
+  QueryDocumentSnapshot as ClientQueryDocumentSnapshot,
+  SnapshotOptions,
+} from 'firebase/firestore';
 import * as v from 'shared/src/valita.js';
 
 export function firestoreDataConverter<T extends DocumentData>(
@@ -13,9 +17,7 @@ export function firestoreDataConverter<T extends DocumentData>(
 }
 
 export class DataConverter<T extends DocumentData>
-  implements
-    FirestoreDataConverter<T>,
-    firebase.default.firestore.FirestoreDataConverter<T>
+  implements FirestoreDataConverter<T>, ClientDataConverter<T>
 {
   readonly #schema: v.Type<T>;
   readonly #mode: v.ParseOptionsMode;
@@ -35,15 +37,13 @@ export class DataConverter<T extends DocumentData>
 
   fromFirestore(snapshot: QueryDocumentSnapshot): T;
   fromFirestore(
-    snapshot: firebase.default.firestore.QueryDocumentSnapshot,
-    options: firebase.default.firestore.SnapshotOptions,
+    snapshot: ClientQueryDocumentSnapshot,
+    options: SnapshotOptions,
   ): T;
 
   fromFirestore(
-    snapshot:
-      | QueryDocumentSnapshot
-      | firebase.default.firestore.QueryDocumentSnapshot,
-    _?: firebase.default.firestore.SnapshotOptions,
+    snapshot: QueryDocumentSnapshot | ClientQueryDocumentSnapshot,
+    _?: SnapshotOptions,
   ): T {
     return v.parse(snapshot.data(), this.#schema, this.#mode);
   }
