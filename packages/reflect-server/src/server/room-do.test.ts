@@ -379,9 +379,9 @@ describe('connection seconds tracking', () => {
 
     const state = await createTestDurableObjectState('test-do-id');
     const roomDO = await makeBaseRoomDO(state);
-    const counts = new Queue<unknown>();
+    const reports = new Queue<unknown>();
     function onPublish(message: unknown) {
-      void counts.enqueue(message);
+      void reports.enqueue(message);
     }
     subscribe(CONNECTION_SECONDS_CHANNEL_NAME, onPublish);
 
@@ -400,16 +400,16 @@ describe('connection seconds tracking', () => {
     // Let the async handleConnection() code run.
     await jest.advanceTimersByTimeAsync(1);
 
-    const alarmInterval = await state.storage.getAlarm();
-    expect(alarmInterval).toBe(START_TIME + REPORTING_INTERVAL_MS);
+    const alarmTime = await state.storage.getAlarm();
+    expect(alarmTime).toBe(START_TIME + REPORTING_INTERVAL_MS);
 
     // Fire the alarm at the scheduled time.
     jest.setSystemTime(START_TIME + REPORTING_INTERVAL_MS);
     await roomDO.alarm();
 
-    expect(await counts.dequeue()).toEqual({
-      elapsed: 60,
-      interval: 60,
+    expect(await reports.dequeue()).toEqual({
+      elapsed: REPORTING_INTERVAL_MS / 1000,
+      interval: REPORTING_INTERVAL_MS / 1000,
     });
 
     unsubscribe(CONNECTION_SECONDS_CHANNEL_NAME, onPublish);
