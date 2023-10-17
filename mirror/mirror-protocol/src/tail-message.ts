@@ -17,6 +17,7 @@ export type TailErrorKind = v.Infer<typeof errorKindSchema>;
 export const connectedMessageSchema = v.object({
   type: v.literal('connected'),
 });
+
 const logLevelSchema = v.union(
   v.literal('debug'),
   v.literal('error'),
@@ -24,6 +25,9 @@ const logLevelSchema = v.union(
   v.literal('log'),
   v.literal('warn'),
 );
+
+export type LogLevel = v.Infer<typeof logLevelSchema>;
+
 const logMessageSchema = v.object({
   type: v.literal('log'),
   level: logLevelSchema,

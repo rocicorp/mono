@@ -7,6 +7,7 @@ import {
   test,
 } from '@jest/globals';
 import {LogContext} from '@rocicorp/logger';
+import type {LogLevel, TailMessage} from 'mirror-protocol/src/tail-message.js';
 import assert from 'node:assert';
 import type {WriteTransaction} from 'reflect-shared';
 import {version} from 'reflect-shared';
@@ -21,12 +22,12 @@ import {getUserValue, putUserValue} from '../types/user-value.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {newAuthConnectionsRequest} from '../util/auth-test-util.js';
 import {resolver} from '../util/resolver.js';
+import {sleep} from '../util/sleep.js';
 import {TestLogSink, createSilentLogContext} from '../util/test-utils.js';
 import {originalConsole} from './console.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
 import {TAIL_URL_PATH} from './paths.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
-import {sleep} from '../util/sleep.js';
 
 test('sets roomID in createRoom', async () => {
   const testLogSink = new TestLogSink();
@@ -487,11 +488,11 @@ describe('tail', () => {
       'message',
       e => {
         expect(typeof e.data).toBe('string');
-        expect(JSON.parse(e.data as string)).toEqual([
-          'log',
-          1984,
-          ['hello', 'world'],
-        ]);
+        expect(JSON.parse(e.data as string)).toEqual({
+          type: 'log',
+          level: 'log',
+          message: ['hello', 'world'],
+        });
         resolve();
       },
       {once: true},
@@ -527,8 +528,8 @@ describe('tail', () => {
     // Wait to allow event listeners to get called
     await promise;
 
-    function makeLog(s: string) {
-      return [s, 1984, [s]];
+    function makeLog(s: LogLevel): TailMessage {
+      return {type: 'log', level: s, message: [s]};
     }
 
     expect(log).toEqual([
@@ -594,7 +595,7 @@ describe('tail', () => {
     console.log('hello', 'world');
 
     function makeLog(message: unknown[]) {
-      return ['log', 1984, message];
+      return {type: 'log', level: 'log', message};
     }
 
     await Promise.resolve();
