@@ -1,12 +1,10 @@
+import {initializeApp} from 'firebase/app';
 import {connectFunctionsEmulator, getFunctions} from 'firebase/functions';
-
-// This magically sets things up so that we can use the old firestore() API
-// via the compatibility layer. We use the namespaced API so that we can share
-// more code with the server-side logic (e.g. mirror-schema, testing mocks, etc.).
-//
-// https://firebase.google.com/docs/web/modular-upgrade
-import firebase from 'firebase/compat/app';
-import 'firebase/compat/firestore';
+import {
+  getFirestore,
+  connectFirestoreEmulator,
+  terminate,
+} from 'firebase/firestore';
 import {
   sendAnalyticsEvent,
   getUserParameters,
@@ -17,6 +15,7 @@ import {reportError, ErrorInfo, Severity} from 'mirror-protocol/src/error.js';
 import {version} from './version.js';
 import {getAuthentication} from './auth-config.js';
 import type {CommonYargsOptions} from './yarg-types.js';
+
 function getFirebaseConfig(stack: string) {
   switch (stack) {
     case 'sandbox':
@@ -54,17 +53,14 @@ export function initFirebase(args: {stack: string; local: boolean}) {
   const {stack, local} = args;
   const firebaseConfig = getFirebaseConfig(stack);
 
-  firebase.default.initializeApp(firebaseConfig);
+  initializeApp(firebaseConfig);
 
   if (local) {
     connectFunctionsEmulator(getFunctions(), '127.0.0.1', 5001);
+    // Note: Make sure this is different from the port that mirror-server uses,
+    // as unit tests from the two packages will otherwise interfere with each other.
+    connectFirestoreEmulator(getFirestore(), '127.0.0.1', 8081);
   }
-}
-
-export type Firestore = firebase.default.firestore.Firestore;
-
-export function getFirestore(): Firestore {
-  return firebase.default.firestore();
 }
 
 async function reportE(
@@ -111,7 +107,7 @@ export function handleWith<T extends ArgumentsCamelCase<CommonYargsOptions>>(
         const message = e instanceof Error ? e.message : String(e);
         console.error(`\n${color.red(color.bold('Error'))}: ${message}`);
       } finally {
-        await getFirestore().terminate();
+        await terminate(getFirestore());
       }
 
       // It is tempting to send analytics in parallel with running

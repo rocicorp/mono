@@ -12,6 +12,9 @@
     ]
   },
   "emulators": {
+    "hub": {
+      "port": 4400
+    },
     "functions": {
       "port": 5001
     },

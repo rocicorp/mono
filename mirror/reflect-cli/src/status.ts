@@ -1,7 +1,7 @@
+import {doc, getDoc, getFirestore} from 'firebase/firestore';
 import {ensureUser} from 'mirror-protocol/src/user.js';
 import {authenticate} from './auth-config.js';
 import {makeRequester} from './requester.js';
-import {getFirestore} from './firebase.js';
 import color from 'picocolors';
 import {
   appPath,
@@ -28,10 +28,9 @@ export async function statusHandler(
   }
 
   const appView = (
-    await firestore
-      .doc(appPath(appID))
-      .withConverter(appViewDataConverter)
-      .get()
+    await getDoc(
+      doc(firestore, appPath(appID)).withConverter(appViewDataConverter),
+    )
   ).data();
 
   displayStatus(appID, appView);
