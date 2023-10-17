@@ -13,7 +13,6 @@ import type {PendingMutation} from '../types/mutation.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {processFrame} from './process-frame.js';
 import type {MutatorMap} from './process-mutation.js';
-import type {ConnectionCountTracker} from '../events/connection-seconds.js';
 
 export const FRAME_LENGTH_MS = 1000 / 60;
 const FLUSH_SIZE_THRESHOLD_FOR_LOG_FLUSH = 500;
@@ -25,7 +24,6 @@ export async function processRoom(
   numPendingMutationsToProcess: number,
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
-  connectionCountTracker: ConnectionCountTracker,
   storage: DurableStorage,
 ): Promise<ClientPoke[]> {
   const cache = new EntryCache(storage);
@@ -67,7 +65,6 @@ export async function processRoom(
       numPendingMutationsToProcess,
       mutators,
       disconnectHandler,
-      connectionCountTracker,
       clients,
       cache,
     )),

@@ -5,6 +5,45 @@ export type ClientGroupID = string;
 
 export type ClientMap = Map<ClientID, ClientState>;
 
+export interface ConnectionCountTracker {
+  onConnectionCountChange(currentCount: number): void;
+}
+
+export class ConnectionCountTrackingClientMap
+  extends Map<ClientID, ClientState>
+  implements ClientMap
+{
+  #countTracker: ConnectionCountTracker;
+
+  constructor(countTracker: ConnectionCountTracker) {
+    super();
+    this.#countTracker = countTracker;
+  }
+
+  #trackCount() {
+    this.#countTracker.onConnectionCountChange(this.size);
+  }
+
+  clear(): void {
+    super.clear();
+    this.#trackCount();
+  }
+
+  delete(key: ClientID): boolean {
+    if (super.delete(key)) {
+      this.#trackCount();
+      return true;
+    }
+    return false;
+  }
+
+  set(key: ClientID, value: ClientState): this {
+    super.set(key, value);
+    this.#trackCount();
+    return this;
+  }
+}
+
 export interface Socket extends EventTarget<WebSocketEventMap> {
   accept(): void;
   send(message: ArrayBuffer | string): void;

@@ -5,10 +5,7 @@ import {
 } from 'shared/src/events/connection-seconds.js';
 import type {AlarmScheduler, TimeoutID} from '../server/alarms.js';
 import type {LogContext} from '@rocicorp/logger';
-
-export interface ConnectionCountTracker {
-  onConnectionCountChange(currentCount: number): Promise<void>;
-}
+import type {ConnectionCountTracker} from '../types/client-state.js';
 
 export const REPORTING_INTERVAL_MS = 60 * 1000;
 
