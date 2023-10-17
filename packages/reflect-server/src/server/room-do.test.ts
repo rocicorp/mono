@@ -28,6 +28,11 @@ import {originalConsole} from './console.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
 import {TAIL_URL_PATH} from './paths.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
+import {Queue} from 'shared/src/queue.js';
+import {subscribe, unsubscribe} from 'node:diagnostics_channel';
+import {CONNECTION_SECONDS_CHANNEL_NAME} from 'shared/src/events/connection-seconds.js';
+import {AUTH_DATA_HEADER_NAME} from './auth.js';
+import {REPORTING_INTERVAL_MS} from '../events/connection-seconds.js';
 
 test('sets roomID in createRoom', async () => {
   const testLogSink = new TestLogSink();
@@ -344,13 +349,13 @@ test('Sets turn duration based on allowUnconfirmedWrites flag', () => {
   }
 });
 
-async function makeBaseRoomDO() {
+async function makeBaseRoomDO(state?: DurableObjectState) {
   const testLogSink = new TestLogSink();
   return new BaseRoomDO({
     mutators: {},
     roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
-    state: await createTestDurableObjectState('test-do-id'),
+    state: state ?? (await createTestDurableObjectState('test-do-id')),
     authApiKey: 'API KEY',
     logSink: testLogSink,
     logLevel: 'info',
@@ -358,6 +363,58 @@ async function makeBaseRoomDO() {
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
   });
 }
+
+describe('connection seconds tracking', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('tracks', async () => {
+    const START_TIME = 10000;
+    jest.setSystemTime(START_TIME);
+
+    const state = await createTestDurableObjectState('test-do-id');
+    const roomDO = await makeBaseRoomDO(state);
+    const counts = new Queue<unknown>();
+    function onPublish(message: unknown) {
+      void counts.enqueue(message);
+    }
+    subscribe(CONNECTION_SECONDS_CHANNEL_NAME, onPublish);
+
+    const request = new Request(
+      'ws://test.roci.dev/connect?clientID=cid1&clientGroupID=cg1&ts=123&lmid=0&wsid=wsidx1',
+      {
+        headers: {
+          [AUTH_DATA_HEADER_NAME]: '{"userID":"u1","more":"data"}',
+          ['Upgrade']: 'websocket',
+        },
+      },
+    );
+    const response = await roomDO.fetch(request);
+    expect(response.status).toBe(101);
+
+    // Let the async handleConnection() code run.
+    await jest.advanceTimersByTimeAsync(1);
+
+    const alarmInterval = await state.storage.getAlarm();
+    expect(alarmInterval).toBe(START_TIME + REPORTING_INTERVAL_MS);
+
+    // Fire the alarm at the scheduled time.
+    jest.setSystemTime(START_TIME + REPORTING_INTERVAL_MS);
+    await roomDO.alarm();
+
+    expect(await counts.dequeue()).toEqual({
+      elapsed: 60,
+      interval: 60,
+    });
+
+    unsubscribe(CONNECTION_SECONDS_CHANNEL_NAME, onPublish);
+  });
+});
 
 test('good, bad, invalid connect requests', async () => {
   const goodRequest = new Request('ws://test.roci.dev/connect');

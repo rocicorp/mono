@@ -637,7 +637,6 @@ describe('processRoom', () => {
         c.pendingMutations.length,
         mutators,
         () => Promise.resolve(),
-        {onConnectionCountChange: () => Promise.resolve()},
         storage,
       );
       if (c.expectedError) {

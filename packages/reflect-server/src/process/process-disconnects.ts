@@ -11,14 +11,12 @@ import {
 } from '../types/connected-clients.js';
 import {putVersion} from '../types/version.js';
 import type {PendingMutation} from 'replicache';
-import type {ConnectionCountTracker} from '../events/connection-seconds.js';
 
 const NOOP_MUTATION_ID = -1;
 
 export async function processDisconnects(
   lc: LogContext,
   disconnectHandler: DisconnectHandler,
-  connectionCountTracker: ConnectionCountTracker,
   connectedClients: ClientID[],
   pendingMutations: PendingMutation[],
   numPendingMutationsProcessed: number,
@@ -75,7 +73,4 @@ export async function processDisconnects(
     }
   }
   await putConnectedClients(newStoredConnectedClients, storage);
-  await connectionCountTracker.onConnectionCountChange(
-    newStoredConnectedClients.size,
-  );
 }

@@ -12,11 +12,12 @@ import type {MutatorMap} from '../process/process-mutation.js';
 import {processPending} from '../process/process-pending.js';
 import {processRoomStart} from '../process/process-room-start.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import type {
-  ClientID,
-  ClientMap,
-  ClientState,
-  Socket,
+import {
+  ConnectionCountTrackingClientMap,
+  type ClientID,
+  type ClientMap,
+  type ClientState,
+  type Socket,
 } from '../types/client-state.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {LoggingLock} from '../util/lock.js';
@@ -83,7 +84,7 @@ export const ROOM_ROUTES = {
 } as const;
 
 export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
-  readonly #clients: ClientMap = new Map();
+  readonly #clients: ClientMap;
   readonly #pendingMutations: PendingMutation[] = [];
   readonly #bufferSizer = new BufferSizer({
     initialBufferSizeMs: 25,
@@ -131,6 +132,9 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     this.#alarm = new AlarmManager(state.storage);
     this.#connectionSecondsReporter = new ConnectionSecondsReporter(
       this.#alarm.scheduler,
+    );
+    this.#clients = new ConnectionCountTrackingClientMap(
+      this.#connectionSecondsReporter,
     );
 
     this.#initRoutes();
@@ -527,7 +531,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         this.#pendingMutations,
         this.#mutators,
         this.#disconnectHandler,
-        this.#connectionSecondsReporter,
         this.#maxProcessedMutationTimestamp,
         this.#bufferSizer,
         this.#maxMutationsPerTurn,
