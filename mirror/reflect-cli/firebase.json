@@ -7,7 +7,8 @@
       "port": 5001
     },
     "firestore": {
-      "port": 8081
+      "port": 8081,
+      "websocketPort": 9151
     },
     "singleProjectMode": true
   }

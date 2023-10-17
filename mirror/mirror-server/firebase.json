@@ -19,14 +19,14 @@
       "port": 5001
     },
     "ui": {
-      "enabled": true,
-      "port": 9151
+      "enabled": true
     },
     "auth": {
       "port": 9099
     },
     "firestore": {
-      "port": 8080
+      "port": 8080,
+      "websocketPort": 9150
     },
     "singleProjectMode": true
   }
