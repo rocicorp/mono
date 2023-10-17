@@ -164,7 +164,7 @@ async function getApp(
   const appDoc = await getDoc(
     doc(firestore, appPath(id)).withConverter(appViewDataConverter),
   );
-  if (!appDoc.exists) {
+  if (!appDoc.exists()) {
     throw new Error(`App is already deleted`);
   }
   const {name} = must(appDoc.data());
@@ -178,7 +178,7 @@ async function getSingleAdminTeam(
   const userDoc = await getDoc(
     doc(firestore, userPath(userID)).withConverter(userViewDataConverter),
   );
-  if (!userDoc.exists) {
+  if (!userDoc.exists()) {
     throw new Error('UserDoc does not exist.');
   }
   const {roles} = must(userDoc.data());

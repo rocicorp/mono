@@ -194,7 +194,7 @@ async function getNewAppNameOrExistingID(
         appNameIndexDataConverter,
       ),
     );
-    if (!nameEntry.exists) {
+    if (!nameEntry.exists()) {
       // Common case. The name in package.json is not taken. Create an app with it.
       return {name: defaultAppName};
     }
@@ -210,7 +210,7 @@ async function getNewAppNameOrExistingID(
         appNameIndexDataConverter,
       ),
     );
-    if (!nameEntry.exists) {
+    if (!nameEntry.exists()) {
       return {name};
     }
     const {appID: id} = must(nameEntry.data());

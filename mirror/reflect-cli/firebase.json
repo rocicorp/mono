@@ -1,0 +1,14 @@
+{
+  "emulators": {
+    "hub": {
+      "port": 4401
+    },
+    "functions": {
+      "port": 5001
+    },
+    "firestore": {
+      "port": 8081
+    },
+    "singleProjectMode": true
+  }
+}
