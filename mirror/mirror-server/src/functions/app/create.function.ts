@@ -5,17 +5,19 @@ import {
   createRequestSchema,
   createResponseSchema,
 } from 'mirror-protocol/src/app.js';
+import type {UserAgent} from 'mirror-protocol/src/user-agent.js';
+import {DistTag} from 'mirror-protocol/src/version.js';
 import {
   App,
   appDataConverter,
   appPath,
   isValidAppName,
 } from 'mirror-schema/src/app.js';
+import {defaultOptions} from 'mirror-schema/src/deployment.js';
 import {
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
-import {defaultOptions} from 'mirror-schema/src/deployment.js';
 import {
   appNameIndexDataConverter,
   appNameIndexPath,
@@ -23,18 +25,12 @@ import {
   teamPath,
 } from 'mirror-schema/src/team.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
+import {SemVer, coerce, gt, gte} from 'semver';
 import {newAppID, newAppIDAsNumber, newAppScriptName} from '../../ids.js';
 import {userAuthorization} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
-import {
-  userAgentVersion,
-  DistTags,
-  checkStandardReleaseChannel,
-} from '../validators/version.js';
-import type {UserAgent} from 'mirror-protocol/src/user-agent.js';
-import {DistTag} from 'mirror-protocol/src/version.js';
-import {SemVer, gte, gt, coerce} from 'semver';
+import {DistTags, userAgentVersion} from '../validators/version.js';
 
 export const create = (firestore: Firestore, testDistTags?: DistTags) =>
   validateSchema(createRequestSchema, createResponseSchema)
@@ -73,8 +69,6 @@ export const create = (firestore: Firestore, testDistTags?: DistTags) =>
           `Invalid App Name "${appName}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
         );
       }
-
-      checkStandardReleaseChannel(serverReleaseChannel);
 
       const userDocRef = firestore
         .doc(userPath(userID))

@@ -96,7 +96,7 @@ export async function uploadReflectServerHandler(
       buildFromSourceVersion
         ? '--build-from-source-version'
         : '@rocicorp/reflect'
-    }): ${version}`,
+    }): ${buildFromSourceVersion ?? version}`,
   );
 
   console.log('Uploading...');
@@ -111,7 +111,13 @@ export async function uploadReflectServerHandler(
     channels,
   );
 
-  console.log(`Uploaded version ${version} successfully`);
+  console.log(
+    `Uploaded version ${
+      buildFromSourceVersion
+        ? `${buildFromSourceVersion} (from source)`
+        : version
+    } successfully`,
+  );
 }
 
 function getServerPathFromCurrentRepo() {

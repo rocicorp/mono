@@ -3,10 +3,8 @@ import type {Auth} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {HttpsError, onRequest} from 'firebase-functions/v2/https';
-import {
-  roomTailRequestSchema,
-  tailMessageSchema,
-} from 'mirror-protocol/src/tail.js';
+import {tailMessageSchema} from 'mirror-protocol/src/tail-message.js';
+import {roomTailRequestSchema} from 'mirror-protocol/src/tail.js';
 import type {App} from 'mirror-schema/src/app.js';
 import assert from 'node:assert';
 import {must} from 'shared/src/must.js';
@@ -62,12 +60,15 @@ export const tail = (
           loop: for await (const item of wsQueue(ws, 10_000)) {
             switch (item.type) {
               case 'data':
+                logger.debug('Got data from tail websocket', item.data);
                 writeData(response, item.data);
                 break;
               case 'ping':
+                logger.debug('Got ping from tail websocket');
                 response.write('\n\n');
                 break;
               case 'close':
+                logger.debug('Got close from tail websocket');
                 break loop;
             }
           }

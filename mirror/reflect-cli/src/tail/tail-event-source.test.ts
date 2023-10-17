@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, expect, jest, test} from '@jest/globals';
 import {resolver} from '@rocicorp/resolver';
-import type {TailMessage} from 'mirror-protocol/src/tail.js';
+import type {TailMessage} from 'mirror-protocol/src/tail-message.js';
 import assert from 'node:assert';
 import {makeRequester} from '../requester.js';
 import {createTailEventSource} from './tail-event-source.js';

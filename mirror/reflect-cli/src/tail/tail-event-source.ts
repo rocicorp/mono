@@ -1,9 +1,9 @@
 import type {BaseRequest} from 'mirror-protocol/src/base.js';
 import {
-  createTailEventSourceURL,
   TailMessage,
   tailMessageSchema,
-} from 'mirror-protocol/src/tail.js';
+} from 'mirror-protocol/src/tail-message.js';
+import {createTailEventSourceURL} from 'mirror-protocol/src/tail.js';
 import assert from 'node:assert';
 import * as valita from 'shared/src/valita.js';
 import {EventSourceEntry, eventSourceStream} from './event-source-stream.js';

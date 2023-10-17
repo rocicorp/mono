@@ -16,15 +16,22 @@ import {compile} from './compile.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
 import {Firestore, getFirestore} from './firebase.js';
 import {makeRequester} from './requester.js';
-import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {checkForServerDeprecation} from './version.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
-  return yargs.option('reflect-channel', {
-    desc: 'Set the Reflect Channel for server updates',
-    type: 'string',
-    hidden: true,
-  });
+  return yargs
+    .option('reflect-channel', {
+      desc: 'Set the Reflect Channel for server updates',
+      type: 'string',
+      hidden: true,
+    })
+    .option('force-version-range', {
+      describe: 'Force the version range',
+      type: 'string',
+      requiresArg: true,
+      hidden: true,
+    });
 }
 
 async function exists(path: string) {
@@ -53,9 +60,14 @@ export async function publishHandler(
     throw new Error(`File not found: ${absPath}`);
   }
 
-  const range = await findServerVersionRange(absPath);
-  await checkForServerDeprecation(yargs, range);
-  const serverVersionRange = range.raw;
+  let serverVersionRange;
+  if (yargs.forceVersionRange) {
+    serverVersionRange = yargs.forceVersionRange;
+  } else {
+    const range = await findServerVersionRange(absPath);
+    await checkForServerDeprecation(yargs, range);
+    serverVersionRange = yargs.forceVersionRange ?? range.raw;
+  }
 
   console.log(`Compiling ${script}`);
   const {code, sourcemap} = await compile(absPath, 'linked', 'production');
