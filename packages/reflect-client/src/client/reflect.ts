@@ -37,6 +37,7 @@ import {
   Replicache,
   ReplicacheOptions,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
+  SubscribeOptions,
   dropDatabase,
 } from 'replicache';
 import {assert} from 'shared/src/asserts.js';
@@ -493,21 +494,9 @@ export class Reflect<MD extends MutatorDefs> {
    */
   subscribe<R extends ReadonlyJSONValue | undefined>(
     body: (tx: ReadTransaction) => Promise<R>,
-    {
-      onData,
-      onError,
-      onDone,
-    }: {
-      onData: (result: R) => void;
-      onError?: (error: unknown) => void;
-      onDone?: () => void;
-    },
+    options: SubscribeOptions<R> | ((result: R) => void),
   ): () => void {
-    return this.#rep.subscribe(body, {
-      onData,
-      onError,
-      onDone,
-    });
+    return this.#rep.subscribe(body, options);
   }
 
   /**
