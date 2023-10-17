@@ -222,3 +222,15 @@ test('basic', () => {
     t(s2, {x: []}, 'Invalid union value at x');
   }
 });
+
+test('array instead of object error message', () => {
+  const s = v.object({
+    x: v.number(),
+  });
+
+  expect(v.test({x: 1}, s)).toEqual({ok: true, value: {x: 1}});
+  expect(v.test([], s)).toEqual({
+    error: 'Expected object. Got array',
+    ok: false,
+  });
+});
