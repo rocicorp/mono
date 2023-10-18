@@ -1,4 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
+import {sleep} from 'shared/src/sleep.js';
 
 export function cfCall(
   apiToken: string,
@@ -12,7 +13,7 @@ export function cfCall(
 
   const url = `${base}${resource}${queryString}`;
 
-  return fetch(url, {
+  return fetchWithRetries(url, {
     ...init,
     headers: {
       // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -20,6 +21,34 @@ export function cfCall(
       ...init?.headers,
     },
   });
+}
+
+// Backoff parameters are chosen to emulate Cloudflare's policy for
+// Durable Object Alarm retries. Arbitrary but reasonable.
+// https://developers.cloudflare.com/durable-objects/api/alarms/
+//
+// The resulting maximum delay is around 42 seconds.
+const INITIAL_RETRY_DELAY = 2000;
+const BACKOFF = 1.5;
+const MAX_ATTEMPTS = 6;
+
+async function fetchWithRetries(
+  url: string,
+  init: RequestInit,
+  attempt = 0,
+): Promise<Response> {
+  const resp = await fetch(url, init);
+  if (resp.status < 500 || attempt >= MAX_ATTEMPTS) {
+    return resp;
+  }
+  console.error(
+    `${resp.status}: ${resp.statusText} (${init.method ?? 'GET'} ${url})`,
+  );
+  const timeout = INITIAL_RETRY_DELAY * BACKOFF ** attempt;
+  console.info(`Attempt ${attempt}: retrying after ${timeout / 1000} seconds`);
+
+  await sleep(timeout);
+  return fetchWithRetries(url, init, attempt + 1);
 }
 
 export async function cfFetch<ResponseType = unknown>(
