@@ -81,12 +81,11 @@
   text-decoration: none;
   cursor: pointer;
   padding: 1.4rem 2rem;
-  border: 1px solid #fc208a;
   border-radius: 8px;
-  background: #fff;
+  background: #fc208a;
   box-shadow: 0 2px 6px -2px rgb(0 0 0 / 37%);
   transition: transform 200ms cubic-bezier(0.645, 0.045, 0.355, 1);
-  color: #fc208a;
+  color: #fff;
   font-size: 1.6rem;
   line-height: 1.2;
   font-weight: 700;
@@ -96,7 +95,6 @@
 .buttonPrimary:hover,
 .buttonPrimary:focus {
   transform: scale(1.06);
-  background: #fff;
 }
 
 .buttonPrimary::before {
