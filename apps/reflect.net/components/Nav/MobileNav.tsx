@@ -84,6 +84,21 @@ export function MobileNav() {
               href="#"
               className={styles.navLink}
               activeClass={styles.navLinkActive}
+              to="pricing"
+              offset={100}
+              spy={false}
+              smooth={true}
+              duration={250}
+              onClick={toggleNav}
+            >
+              Pricing
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="#"
+              className={styles.navLink}
+              activeClass={styles.navLinkActive}
               to="customers"
               offset={116}
               smooth={true}
@@ -98,14 +113,13 @@ export function MobileNav() {
               href="#"
               className={styles.navLink}
               activeClass={styles.navLinkActive}
-              to="pricing"
-              offset={100}
-              spy={false}
+              to="contact"
+              offset={116}
               smooth={true}
               duration={250}
               onClick={toggleNav}
             >
-              Pricing
+              Contact
             </Link>
           </li>
           <li>
