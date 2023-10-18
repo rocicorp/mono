@@ -21,7 +21,7 @@ new Replicache({
       tx: WriteTransaction,
       {id, from, content, order}: MessageWithID,
     ) {
-      await tx.put(`message/${id}`, {
+      await tx.set(`message/${id}`, {
         from,
         content,
         order,

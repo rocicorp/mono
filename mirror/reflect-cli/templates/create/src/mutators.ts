@@ -34,7 +34,7 @@ async function increment(
   console.log(`incrementing ${key} by ${delta}`);
   const prev = await tx.get<number>(key);
   const next = (prev ?? 0) + delta;
-  await tx.put(key, next);
+  await tx.set(key, next);
 }
 
 async function setCursor(

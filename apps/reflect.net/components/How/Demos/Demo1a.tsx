@@ -9,7 +9,7 @@ export function Demo1a() {
     const next = prev + delta;
     console.log(\`Running mutation \${tx.clientID}@\${tx.mutationID} \` +
                 \`on \${tx.environment}: \${prev} → \${next}\`);
-    await tx.put(key, next);
+    await tx.set(key, next);
   },
 }`;
   const codeBlock = {

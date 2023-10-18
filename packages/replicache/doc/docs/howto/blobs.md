@@ -41,7 +41,7 @@ const rep = new Replicache({
   licenseKey: '...',
   mutators: {
     async setUserData(tx: WriteTransaction, user: RepUser) {
-      await tx.put(`user/${user.id}`, user);
+      await tx.set(`user/${user.id}`, user);
     },
   },
 });
@@ -82,8 +82,8 @@ const rep = new Replicache({
   mutators: {
     async setUserData(tx: WriteTransaction, user: RepUser) {
       const {id, name, picture} = user;
-      await tx.put(`user/${id}`, {id, name});
-      await tx.put(`user/${id}/picture`, picture);
+      await tx.set(`user/${id}`, {id, name});
+      await tx.set(`user/${id}/picture`, picture);
     },
   },
 });
@@ -136,8 +136,8 @@ const rep = new Replicache({
   mutators: {
     async setUserData(tx: WriteTransaction, user: RepUser) {
       const {id, name, picture, pictureHash} = user;
-      await tx.put(`user/${id}`, {id, name, pictureHash});
-      await tx.put(`blob/${pictureHash}`, picture);
+      await tx.set(`user/${id}`, {id, name, pictureHash});
+      await tx.set(`blob/${pictureHash}`, picture);
     },
   },
 });
@@ -287,7 +287,7 @@ const rep = new Replicache({
   name: 'user-id',
   mutators: {
     async addBlob(tx, {hash, shouldUpload}) {
-      await tx.put(blobKey(hash), {shouldUpload});
+      await tx.set(blobKey(hash), {shouldUpload});
     },
   },
 });

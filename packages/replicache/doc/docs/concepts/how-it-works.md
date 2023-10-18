@@ -123,7 +123,7 @@ const rep = new Replicache({
 });
 
 async function createTodo(tx: WriteTransaction, todo: Todo) {
-  await tx.put(`/todo/${todo.id}`, todo);
+  await tx.set(`/todo/${todo.id}`, todo);
 }
 
 async function markTodoComplete(tx: WriteTransaction,
@@ -134,7 +134,7 @@ async function markTodoComplete(tx: WriteTransaction,
     return;
   }
   todo.complete = complete;
-  await tx.put(key, todo);
+  await tx.set(key, todo);
 }
 ```
 
