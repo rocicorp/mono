@@ -5,8 +5,6 @@ export function GetStarted() {
   return (
     <div className={styles.getStarted}>
       <p>Build your first multiplayer app in under a minute:</p>
-      <div className={styles.imageContainer}>
-      </div>
       <div className={styles.ctaWrap}>
         <Link
           href="https://hello.reflect.net/scaffold"
