@@ -9,7 +9,7 @@ export function mergePokes(toMerge: Poke[]): Poke | undefined {
   const mergedLastMutationIDChanges: Record<string, number> = {};
   for (const poke of toMerge) {
     mergedPatch.push(...poke.patch);
-    mergedPresence.push(...poke.presence);
+    mergedPresence.push(...(poke.presence ?? []));
     for (const [clientID, lastMutationID] of Object.entries(
       poke.lastMutationIDChanges,
     )) {

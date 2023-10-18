@@ -301,7 +301,7 @@ export class PokeHandler {
         };
         lc.debug?.('poking replicache');
         await this.#replicachePoke(poke);
-        await this.#presenceManager.updatePresence(merged.presence);
+        await this.#presenceManager.updatePresence(merged.presence ?? []);
         lc.debug?.('poking replicache took', performance.now() - start);
       } catch (e) {
         if (String(e).indexOf('unexpected base cookie for poke') > -1) {

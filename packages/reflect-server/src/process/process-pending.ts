@@ -159,7 +159,7 @@ function sendPokes(
   const patchesLogStrings = lc.info ? ['Patches:'] : undefined;
   const presenceLogStrings = lc.info ? ['Presence:'] : undefined;
   for (const pokes of pokesByClientID.values()) {
-    for (const {patch, presence} of pokes) {
+    for (const {patch, presence = []} of pokes) {
       memoize(patch, memoizedPatchStrings, patchesLogStrings);
       memoize(presence, memoizedPresencePatchStrings, presenceLogStrings);
     }
@@ -173,7 +173,7 @@ function sendPokes(
     let pokesLogString = '[';
     for (let i = 0; i < pokes.length; i++) {
       const poke = pokes[i];
-      const {patch, presence, ...pokeMinusPatchStrings} = poke;
+      const {patch, presence = [], ...pokeMinusPatchStrings} = poke;
       const pokeMinusPatchStringsString = JSON.stringify(pokeMinusPatchStrings);
       const pokeMinusPatchStringStringPrefix =
         pokeMinusPatchStringsString.substring(

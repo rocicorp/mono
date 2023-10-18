@@ -12,7 +12,7 @@ export const pokeSchema = v.object({
   // Patch keys are clientIDs.  Currently only the keys are used to indicate
   // presense/absence of clientID, values are ignored but may be used
   // in the future.
-  presence: patchSchema,
+  presence: patchSchema.optional(),
   patch: patchSchema,
   timestamp: v.number().optional(),
   // Following debug fields are set when client's connect request has
