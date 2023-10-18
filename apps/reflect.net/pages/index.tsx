@@ -150,7 +150,7 @@ export default function Home() {
         </section>
 
         <section id="get-started" className={styles.section}>
-          <h2 className={styles.subheader}>Coming Soon, from Rocicorp</h2>
+          <h2 className={styles.subheader}>Get Started Now</h2>
           <GetStarted />
         </section>
 
