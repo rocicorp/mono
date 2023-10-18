@@ -18,7 +18,7 @@ export type JSONValue =
  *
  * ```
  * // Time t1
- * await tx.put('a', {a: undefined});
+ * await tx.set('a', {a: undefined});
  *
  * // time passes, in a new transaction
  * const v = await tx.get('a');

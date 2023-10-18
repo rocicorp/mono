@@ -105,7 +105,7 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    *       if (await tx.has(key)) {
    *         throw new Error('Todo already exists');
    *       }
-   *       await tx.put(key, args);
+   *       await tx.set(key, args);
    *     },
    *     async deleteTodo(tx: WriteTransaction, id: number) {
    *       ...

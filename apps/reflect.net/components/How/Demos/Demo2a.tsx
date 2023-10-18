@@ -6,7 +6,7 @@ export function Demo2a() {
     async setDegree(tx, degree: number) {
       console.log(\`Running mutation \${tx.clientID}@\${tx.mutationID} \` +
                   \`on \${tx.environment}: \${degree}\`);
-      await tx.put("degree", degree);
+      await tx.set("degree", degree);
     },
   }`;
 
