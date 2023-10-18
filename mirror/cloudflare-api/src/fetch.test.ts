@@ -23,6 +23,12 @@ describe('cf fetch', () => {
     zoneID: 'zone-id',
   });
 
+  const expectedRequests = (num: number) =>
+    Array(num).fill([
+      'GET',
+      'https://api.cloudflare.com/client/v4/zones/zone-id/custom_hostnames/ch-id',
+    ]);
+
   test('exponential backoff with recovery', async () => {
     const fetch = new FetchMocker()
       .error('GET', 'custom_hostnames', 504, 'Gateway Timeout')
@@ -32,12 +38,6 @@ describe('cf fetch', () => {
       .result('GET', 'custom_hostnames', {success: true, result: {foo: 'bar'}});
 
     const result = resource.get('ch-id');
-
-    const expectedRequests = (num: number) =>
-      Array(num).fill([
-        'GET',
-        'https://api.cloudflare.com/client/v4/zones/zone-id/custom_hostnames/ch-id',
-      ]);
 
     expect(fetch.requests()).toEqual(expectedRequests(1));
 
@@ -54,12 +54,6 @@ describe('cf fetch', () => {
     const fetch = new FetchMocker().default(504, 'Gateway Timeout');
 
     const result = resource.get('ch-id').catch(e => e);
-
-    const expectedRequests = (num: number) =>
-      Array(num).fill([
-        'GET',
-        'https://api.cloudflare.com/client/v4/zones/zone-id/custom_hostnames/ch-id',
-      ]);
 
     expect(fetch.requests()).toEqual(expectedRequests(1));
 
@@ -82,5 +76,19 @@ describe('cf fetch', () => {
     expect(fetch.requests()).toEqual(expectedRequests(7));
 
     expect(await result).toBeInstanceOf(Error);
+  });
+
+  test('no exponential backoff for 4xx responses', async () => {
+    const fetch = new FetchMocker().error(
+      'GET',
+      'custom_hostnames',
+      400,
+      'Bad Request',
+    );
+
+    const result = await resource.get('ch-id').catch(e => e);
+    expect(result).toBeInstanceOf(Error);
+
+    expect(fetch.requests()).toEqual(expectedRequests(1));
   });
 });
