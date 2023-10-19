@@ -19,7 +19,7 @@ r.subscribe(tx => tx.get("degree"), val => {
   document.querySelector("#degreeImage").rotation = val;
 });
 
-<Slider onChange={(val) => reflect.mutate.setDegree(val)} \\>`;
+<Slider onChange={(val) => r.mutate.setDegree(val)} \\>`;
 
   const codeBlock = {
     background: 'transparent',
