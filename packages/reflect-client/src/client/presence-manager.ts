@@ -27,11 +27,16 @@ export class PresenceManager {
   ) {
     this.#clientIDPromise = clientIDPromise;
     this.#lcPromise = lcPromise;
-    void this.#updateToOnlySelfPresent();
+    void this.#updateToOnlySelfPresent().catch(async e => {
+      (await lcPromise).error?.(
+        'Unexpected error initializing presence manager',
+        e,
+      );
+    });
   }
 
-  async updatePresence(patch: Patch) {
-    await this.#lock.withLock(async () => {
+  updatePresence(patch: Patch) {
+    return this.#lock.withLock(async () => {
       const clientID = await this.#clientIDPromise;
       const lc = await this.#lcPromise;
       if (patch.length === 0) {

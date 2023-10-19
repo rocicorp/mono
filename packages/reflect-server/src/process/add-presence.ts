@@ -17,21 +17,19 @@ export async function addPresence(
   previousConnectedClients: Set<string>,
   nextConnectedClients: Set<string>,
 ) {
-  const clientsThatNeedInitialPresence = new Set<ClientID>();
+  let numClientsThatNeedInitialPresence = 0;
+  let needPokeForInitialPresence = false;
   for (const [clientID, clientState] of clients) {
     if (!clientState.sentInitialPresence) {
-      clientsThatNeedInitialPresence.add(clientID);
-    }
-  }
-  let needPokeForInitialPresence = false;
-  for (const clientID of clientsThatNeedInitialPresence) {
-    if (!pokesByClientID.has(clientID)) {
-      needPokeForInitialPresence = true;
+      numClientsThatNeedInitialPresence++;
+      if (!pokesByClientID.has(clientID)) {
+        needPokeForInitialPresence = true;
+      }
     }
   }
 
   const incrementalPresencePatch: Patch = [];
-  if (clientsThatNeedInitialPresence.size !== clients.size) {
+  if (numClientsThatNeedInitialPresence !== clients.size) {
     for (const clientID of nextConnectedClients) {
       if (!previousConnectedClients.has(clientID)) {
         incrementalPresencePatch.push({
@@ -90,7 +88,7 @@ export async function addPresence(
   }
 
   const initialPresencePatch: Patch = [];
-  if (clientsThatNeedInitialPresence.size > 0) {
+  if (numClientsThatNeedInitialPresence > 0) {
     initialPresencePatch.push({op: 'clear'});
     for (const clientID of nextConnectedClients) {
       initialPresencePatch.push({op: 'put', key: clientID, value: 1});
