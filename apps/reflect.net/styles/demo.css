@@ -301,7 +301,7 @@ body.grabbing {
 
 .piece.E #shape {
   fill: rgba(29, 157, 229, 0.5);
-  stroke: rgba(29, 157, 229, 0.8);
+  stroke: rgba(20, 122, 179, 0.8);
 }
 
 .piece.E.placed #shape {

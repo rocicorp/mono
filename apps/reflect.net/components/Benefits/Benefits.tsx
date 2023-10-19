@@ -83,7 +83,9 @@ export function Benefits() {
           />
         </div>
         <div className={styles.benefitInfoContainer}>
-          <h3 className={styles.benefitTitle}>First-Class Text (coming soon!)</h3>
+          <h3 className={styles.benefitTitle}>
+            First-Class Text (coming soon!)
+          </h3>
           <p className={styles.benefitDescription}>
             Your may have heard that multiplayer text is hard. No worries.
             Reflect has built-in, high-quality text support.
