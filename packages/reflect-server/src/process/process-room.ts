@@ -14,7 +14,6 @@ import {getVersion, putVersion} from '../types/version.js';
 import {addPresence} from './add-presence.js';
 import {processFrame} from './process-frame.js';
 import type {MutatorMap} from './process-mutation.js';
-import type {ConnectionCountTracker} from '../events/connection-seconds.js';
 import type {Poke} from 'reflect-protocol';
 import {getConnectedClients} from '../types/connected-clients.js';
 
