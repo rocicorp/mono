@@ -14,7 +14,7 @@ export const delayWebSocket = (host: string) => {
   delayWebSocketCalled = true;
 
   let halfTripPing = 0;
-  fetchPing(`${host}/ping`)
+  fetchPing(host)
     .then(ping => {
       halfTripPing = ping / 2;
     })
