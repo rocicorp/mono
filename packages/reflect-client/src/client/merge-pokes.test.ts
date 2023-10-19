@@ -165,4 +165,3 @@ test('merge multiple pokes no presence', () => {
     timestamp: 100,
   });
 });
-
