@@ -1,9 +1,21 @@
-import {describe, expect, test, beforeEach, afterEach} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
+import {initializeApp} from 'firebase-admin/app';
 import type {DecodedIdToken} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
+import {appPath} from 'mirror-schema/src/deployment.js';
 import {teamMembershipPath} from 'mirror-schema/src/membership.js';
+import {
+  providerDataConverter,
+  providerPath,
+} from 'mirror-schema/src/provider.js';
+import type {StandardReleaseChannel} from 'mirror-schema/src/server.js';
+import {
+  appNameIndexPath,
+  teamDataConverter,
+  teamPath,
+} from 'mirror-schema/src/team.js';
 import {
   getApp,
   getAppName,
@@ -11,20 +23,11 @@ import {
   setTeam,
   setUser,
 } from 'mirror-schema/src/test-helpers.js';
-import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
-import {MIN_WFP_VERSION, create} from './create.function.js';
-import {initializeApp} from 'firebase-admin/app';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
-import {teamDataConverter, teamPath} from 'mirror-schema/src/team.js';
-import {appPath} from 'mirror-schema/src/deployment.js';
-import {appNameIndexPath} from 'mirror-schema/src/team.js';
-import {
-  providerDataConverter,
-  providerPath,
-} from 'mirror-schema/src/provider.js';
-import type {DistTags} from '../validators/version.js';
 import {SemVer} from 'semver';
-import type {StandardReleaseChannel} from 'mirror-schema/src/server.js';
+import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
+import type {DistTags} from '../validators/version.js';
+import {MIN_WFP_VERSION, create} from './create.function.js';
 
 mockFunctionParamsAndSecrets();
 
@@ -42,7 +45,7 @@ describe('app-create function', () => {
     appName: string,
     reflectVersion = '0.35.0',
     serverReleaseChannel?: string,
-    testDistTags?: DistTags,
+    testDistTags: DistTags = {},
   ) {
     const createFunction = https.onCall(create(firestore, testDistTags));
 
