@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run lint && tsc && vite build",
+    "build": "tsc && vite build",
     "preview": "vite preview",
     "watch": "concurrently --kill-others 'npx reflect dev --silence-startup-message' 'VITE_REFLECT_URL=http://127.0.0.1:8080/ npm run dev'"
   },
