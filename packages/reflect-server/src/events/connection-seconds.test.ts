@@ -3,18 +3,19 @@ import {
   beforeEach,
   describe,
   expect,
-  test,
   jest,
+  test,
 } from '@jest/globals';
+import type {LogContext} from '@rocicorp/logger';
 import {subscribe, unsubscribe} from 'node:diagnostics_channel';
+import {Queue} from 'shared/src/queue.js';
 import type {AlarmScheduler} from '../server/alarms.js';
+import {createSilentLogContext} from '../util/test-utils.js';
 import {
+  CONNECTION_CLOSED_FLUSH_INTERVAL_MS,
   ConnectionSecondsReporter,
   REPORTING_INTERVAL_MS,
 } from './connection-seconds.js';
-import {Queue} from 'shared/src/queue.js';
-import type {LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from '../util/test-utils.js';
 
 describe('connection-seconds', () => {
   const TEST_DIAGNOSTICS_CHANNEL_NAME = 'connection-seconds-test';
@@ -61,18 +62,24 @@ describe('connection-seconds', () => {
       lc: LogContext,
     ) => Promise<void>;
 
-    await reporter.onConnectionCountChange(1);
-    expect(scheduler.promiseTimeout).toBeCalledTimes(1);
-
-    jest.advanceTimersByTime(1000);
     await reporter.onConnectionCountChange(3);
     expect(scheduler.promiseTimeout).toBeCalledTimes(1);
 
     jest.advanceTimersByTime(1000);
-    // Flush should reschedule the timeout since there are open connectinos.
-    await flush1(createSilentLogContext());
+    expect(scheduler.clearTimeout).toBeCalledTimes(0);
+    await reporter.onConnectionCountChange(2);
+    // Flush should be rescheduled because a connection was closed.
+    expect(scheduler.clearTimeout).toBeCalledTimes(1);
     expect(scheduler.promiseTimeout).toBeCalledTimes(2);
     expect(scheduler.promiseTimeout.mock.calls[1][1]).toEqual(
+      CONNECTION_CLOSED_FLUSH_INTERVAL_MS,
+    );
+
+    jest.advanceTimersByTime(1000);
+    await flush1(createSilentLogContext());
+    // Flush should reschedule the timeout since there are open connectinos.
+    expect(scheduler.promiseTimeout).toBeCalledTimes(3);
+    expect(scheduler.promiseTimeout.mock.calls[2][1]).toEqual(
       REPORTING_INTERVAL_MS,
     );
     const flush2 = scheduler.promiseTimeout.mock.calls[1][0] as (
@@ -82,18 +89,20 @@ describe('connection-seconds', () => {
     jest.advanceTimersByTime(1000);
     // Setting the connections to zero should schedule an immediate flush
     // so that the elapsed times can be reported before the DO is shut down.
-    expect(scheduler.clearTimeout).toBeCalledTimes(0);
+    expect(scheduler.clearTimeout).toBeCalledTimes(1);
     await reporter.onConnectionCountChange(0);
 
-    expect(scheduler.clearTimeout).toBeCalledTimes(1);
-    expect(scheduler.promiseTimeout).toBeCalledTimes(3);
-    expect(scheduler.promiseTimeout.mock.calls[2][1]).toEqual(0);
+    expect(scheduler.clearTimeout).toBeCalledTimes(2);
+    expect(scheduler.promiseTimeout).toBeCalledTimes(4);
+    expect(scheduler.promiseTimeout.mock.calls[3][1]).toEqual(
+      CONNECTION_CLOSED_FLUSH_INTERVAL_MS,
+    );
 
     jest.advanceTimersByTime(1000);
     // Flush should not reschedule the timeout when there are no more connections
     await flush2(createSilentLogContext());
-    expect(scheduler.clearTimeout).toBeCalledTimes(1);
-    expect(scheduler.promiseTimeout).toBeCalledTimes(3);
+    expect(scheduler.clearTimeout).toBeCalledTimes(2);
+    expect(scheduler.promiseTimeout).toBeCalledTimes(4);
   });
 
   test('tracks connection seconds', async () => {
@@ -139,7 +148,7 @@ describe('connection-seconds', () => {
     // + 2.5 seconds with 5 connections.
     jest.advanceTimersByTime(2500);
 
-    // Setting to zero requests an immediate flush.
+    // Setting to zero requests an earlier flush.
     expect(scheduler.clearTimeout).toBeCalledTimes(1);
     await reporter.onConnectionCountChange(0);
     expect(scheduler.clearTimeout).toBeCalledTimes(2);

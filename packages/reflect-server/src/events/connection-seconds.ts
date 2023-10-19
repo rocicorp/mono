@@ -1,13 +1,17 @@
+import type {LogContext} from '@rocicorp/logger';
 import {channel, Channel} from 'node:diagnostics_channel';
 import {
-  type ConnectionSecondsReport,
   CONNECTION_SECONDS_CHANNEL_NAME,
+  type ConnectionSecondsReport,
 } from 'shared/src/events/connection-seconds.js';
 import type {AlarmScheduler, TimeoutID} from '../server/alarms.js';
-import type {LogContext} from '@rocicorp/logger';
 import type {ConnectionCountTracker} from '../types/client-state.js';
 
+// Normal reporting interval.
 export const REPORTING_INTERVAL_MS = 60 * 1000;
+
+// Shorter flush interval when the number of connections drops.
+export const CONNECTION_CLOSED_FLUSH_INTERVAL_MS = 10 * 1000;
 
 export class ConnectionSecondsReporter implements ConnectionCountTracker {
   readonly #channel: Channel;
@@ -34,6 +38,7 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
   async #update(currentCount: number, resetElapsed: boolean): Promise<number> {
     const now = Date.now();
 
+    const prevCount = this.#currentCount;
     this.#elapsedMs += this.#currentCount * (now - this.#lastCountChange);
     this.#currentCount = currentCount;
     this.#lastCountChange = now;
@@ -42,11 +47,12 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
       // currentCount moves from 0 to non-zero. Schedule a new timeout.
       this.#intervalStartTime = now;
       await this.#scheduleFlush(REPORTING_INTERVAL_MS);
-    }
-    if (currentCount === 0 && this.#timeoutID !== 0) {
-      // currentCount moves from non-zero to 0. (Re)schedule a flush to happen
-      // immediately so that connection times are reported before the DO is shut down.
-      await this.#scheduleFlush(0);
+    } else if (currentCount < prevCount) {
+      // When a connection closes, schedule an earlier flush so that (1) the FetchEvents
+      // that correspond to the closed websocket are immediately flushed to the tail log
+      // and (2) in the case that there are no longer any connections, we report the connection
+      // times before the DO is shut down.
+      await this.#scheduleFlush(CONNECTION_CLOSED_FLUSH_INTERVAL_MS);
     }
 
     const elapsedMs = this.#elapsedMs;
