@@ -2,10 +2,10 @@ import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect';
 import {assert} from 'shared/src/valita';
 import * as v from 'shared/src/valita.js';
 import {
-  deleteClient,
-  ensureClient,
+  deleteBot,
   initClient,
-  putClient,
+  putBot,
+  updateBot,
   updateClient,
 } from '../alive/client-model';
 import {alive, unload} from '../alive/orchestrator-model';
@@ -100,12 +100,12 @@ export const mutators = {
     }
   },
 
-  putClient: wrapToFilterBadLocation(putClient),
-  initClient: wrapToFilterBadLocation(initClient),
+  initClient,
   updateClient: wrapToFilterBadLocation(updateClient),
-  deleteClient,
-  ensureClient: wrapToFilterBadLocation(ensureClient),
   updatePiece,
+  putBot: wrapToFilterBadLocation(putBot),
+  updateBot: wrapToFilterBadLocation(updateBot),
+  deleteBot,
 
   // These mutators are for the how it works demos
   increment: async (

@@ -12,10 +12,15 @@ const delOpSchema = v.object({
   key: v.string(),
 });
 
-const patchOpSchema = v.union(putOpSchema, delOpSchema);
+const clearOpSchema = v.object({
+  op: v.literal('clear'),
+});
+
+const patchOpSchema = v.union(putOpSchema, delOpSchema, clearOpSchema);
 
 export const patchSchema = v.array(patchOpSchema);
 export type PutOp = v.Infer<typeof putOpSchema>;
 export type DelOp = v.Infer<typeof delOpSchema>;
+export type ClearOp = v.Infer<typeof clearOpSchema>;
 export type PatchOp = v.Infer<typeof patchOpSchema>;
 export type Patch = v.Infer<typeof patchSchema>;

@@ -6,7 +6,7 @@ import {z} from 'zod';
 // will force all new orchestrator and puzzle rooms.  This
 // can be useful if we make breaking schema changes or simply want
 // rooms with less garbage built up (which can slow down initial sync).
-const ROOMS_VERSION = 'b';
+const ROOMS_VERSION = 'c';
 
 export const ORCHESTRATOR_ROOM = `orch-${ROOMS_VERSION}`;
 

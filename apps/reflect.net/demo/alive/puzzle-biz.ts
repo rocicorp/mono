@@ -13,13 +13,13 @@ import {
 } from './util';
 
 export const handleDrag = (
-  clientID: string,
   e: {pageX: number; pageY: number},
   piece: PieceModel,
   offset: Position,
   r: Reflect<M>,
   home: Rect,
   stage: Rect,
+  botID?: string | undefined,
 ) => {
   const def = PIECE_DEFINITIONS[parseInt(piece.id)];
 
@@ -45,7 +45,11 @@ export const handleDrag = (
   r.mutate.updatePiece({id: piece.id, ...coordinate});
 
   if (checkSnap(piece, def, pos, r, home, stage)) {
-    r.mutate.updateClient({id: clientID, selectedPieceID: ''});
+    if (botID) {
+      r.mutate.updateBot({id: botID, selectedPieceID: ''});
+    } else {
+      r.mutate.updateClient({selectedPieceID: ''});
+    }
     event('alive_snap_piece', {
       category: 'Alive Demo',
       action: 'Snap puzzle piece',
@@ -85,7 +89,8 @@ export function checkSnap(
 }
 
 export function selectIfAvailable(
-  clientID: string,
+  id: string,
+  type: 'client' | 'bot',
   piece: PieceInfo,
   r: Reflect<M>,
 ) {
@@ -94,19 +99,23 @@ export function selectIfAvailable(
     return false;
   }
 
-  if (piece.selector === clientID) {
+  if (piece.selector === id) {
     // already selected by this client, nothing to do.
     return true;
   }
 
   if (piece.selector !== null) {
     console.debug(
-      `Client ${clientID} cannot select piece ${piece.id}, already selected by ${piece.selector}}`,
+      `${type} ${id} cannot select piece ${piece.id}, already selected by ${piece.selector}}`,
     );
     return false;
   }
 
-  r.mutate.updateClient({id: clientID, selectedPieceID: piece.id});
+  if (type === 'client') {
+    r.mutate.updateClient({selectedPieceID: piece.id});
+  } else {
+    r.mutate.updateBot({id, selectedPieceID: piece.id});
+  }
   r.mutate.updatePiece({id: piece.id, handleRotation: -Math.PI / 2});
   return true;
 }

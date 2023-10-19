@@ -9,6 +9,10 @@ export const pokeSchema = v.object({
   baseCookie: nullableVersionSchema,
   cookie: versionSchema,
   lastMutationIDChanges: v.record(v.number()),
+  // Patch keys are clientIDs.  Currently only the keys are used to indicate
+  // presense/absence of clientID, values are ignored but may be used
+  // in the future.
+  presence: patchSchema.optional(),
   patch: patchSchema,
   timestamp: v.number().optional(),
   // Following debug fields are set when client's connect request has

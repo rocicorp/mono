@@ -55,6 +55,7 @@ export type ClientState = {
   socket: Socket;
   auth: AuthData;
   clientGroupID: ClientGroupID;
+  sentInitialPresence: boolean;
   // How long is the client's timestamp behind the local timestamp?
   // This is initialized in the first push message from the client, not
   // connect, which is why we need the |undefined here. We need to do that

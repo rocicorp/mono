@@ -68,38 +68,38 @@ async function getBotRecordings(): Promise<BotRecording[]> {
 }
 
 export class Bots {
-  private _home: Rect;
-  private _stage: Rect;
-  private _currentRecording:
+  #home: Rect;
+  #stage: Rect;
+  #currentRecording:
     | {
         start: number;
         moves: BotMove[];
       }
     | undefined = undefined;
-  private _lastRecording: BotMove[] | undefined = undefined;
-  private _botPlaybackByClientID: Map<string, BotPlayback> = new Map();
-  private readonly _cleanup: () => void;
-  private _raf = 0;
+  #lastRecording: BotMove[] | undefined = undefined;
+  #botPlaybackByID: Map<string, BotPlayback> = new Map();
+  readonly #cleanup: () => void;
+  #raf = 0;
 
-  private _r: Reflect<M>;
-  private _clientID: ClientID | undefined = undefined;
-  private _isBotController = false;
-  private _pieces: Record<string, PieceInfo> | undefined = undefined;
+  #r: Reflect<M>;
+  #clientID: ClientID | undefined = undefined;
+  #isBotController = false;
+  #pieces: Record<string, PieceInfo> | undefined = undefined;
 
   constructor(r: Reflect<M>, home: Rect, stage: Rect) {
-    this._r = r;
-    this._home = home;
-    this._stage = stage;
+    this.#r = r;
+    this.#home = home;
+    this.#stage = stage;
 
     const handlePointerMove = (e: PointerEvent) => {
-      if (this._currentRecording) {
+      if (this.#currentRecording) {
         const coord = positionToCoordinate(
           {x: e.pageX, y: e.pageY},
-          this._home,
-          this._stage,
+          this.#home,
+          this.#stage,
         );
-        this._currentRecording.moves.push({
-          time: performance.now() - this._currentRecording.start,
+        this.#currentRecording.moves.push({
+          time: performance.now() - this.#currentRecording.start,
           coordX: coord.x,
           coordY: coord.y,
         });
@@ -108,47 +108,47 @@ export class Bots {
 
     window.addEventListener('pointermove', handlePointerMove);
     const handleKeyPress = async (e: KeyboardEvent) => {
-      if (!this._clientID) {
+      if (!this.#clientID) {
         return;
       }
       if (e.key === '`') {
-        if (this._currentRecording) {
+        if (this.#currentRecording) {
           console.log(
             JSON.stringify(
               {
                 clientID: 'bot-' + nanoid(),
-                moves: this._currentRecording.moves,
+                moves: this.#currentRecording.moves,
               },
               undefined,
               2,
             ),
           );
-          this._lastRecording = this._currentRecording.moves;
-          this._currentRecording = undefined;
+          this.#lastRecording = this.#currentRecording.moves;
+          this.#currentRecording = undefined;
         } else {
           console.log('starting recording');
-          this._currentRecording = {
+          this.#currentRecording = {
             start: performance.now(),
             moves: [],
           };
         }
       }
-      if (e.key === '!' || (e.key === '@' && this._lastRecording)) {
+      if (e.key === '!' || (e.key === '@' && this.#lastRecording)) {
         const multiply =
           new URL(window.location.href).searchParams.get('mult') ?? '1';
         for (let i = 0; i < parseInt(multiply); i++) {
-          for (const bot of e.key === '@' && this._lastRecording
-            ? [{clientID: 'latest-bot', moves: this._lastRecording}]
+          for (const bot of e.key === '@' && this.#lastRecording
+            ? [{clientID: 'latest-bot', moves: this.#lastRecording}]
             : await getBotRecordings()) {
             const transformedMoves = bot.moves.map(move => ({
               time: move.time,
               coordX: move.coordX - i * 0.1,
               coordY: move.coordY - i * 0.2,
             }));
-            const botClientID = bot.clientID + i;
-            this._startPlayback(
-              this._clientID,
-              botClientID,
+            const botID = bot.clientID + i;
+            this.#startPlayback(
+              this.#clientID,
+              botID,
               transformedMoves,
               'puzzle',
               true,
@@ -156,19 +156,19 @@ export class Bots {
             );
           }
         }
-        this._maybeRaf();
+        this.#maybeRaf();
       }
     };
     window.addEventListener('keypress', handleKeyPress);
 
     const maybeLaunchBots = async () => {
-      if (this._clientID && this._isBotController) {
-        const currentNumPuzzleBots = [
-          ...this._botPlaybackByClientID.values(),
-        ].filter(p => p.type === 'puzzle').length;
-        const currentNumWanderBots = [
-          ...this._botPlaybackByClientID.values(),
-        ].filter(p => p.type === 'wander').length;
+      if (this.#clientID && this.#isBotController) {
+        const currentNumPuzzleBots = [...this.#botPlaybackByID.values()].filter(
+          p => p.type === 'puzzle',
+        ).length;
+        const currentNumWanderBots = [...this.#botPlaybackByID.values()].filter(
+          p => p.type === 'wander',
+        ).length;
 
         const toPlayback: BotRecording[] = [];
         const shuffled = shuffle(await getBotRecordings());
@@ -187,15 +187,15 @@ export class Bots {
         }
 
         for (const bot of toPlayback) {
-          this._startPlayback(
-            this._clientID,
+          this.#startPlayback(
+            this.#clientID,
             bot.clientID,
             bot.moves,
             bot.type,
             false,
           );
         }
-        this._maybeRaf();
+        this.#maybeRaf();
       }
     };
 
@@ -203,7 +203,7 @@ export class Bots {
     void maybeLaunchBots();
     const interval = setInterval(maybeLaunchBots, 3_000);
 
-    r.clientID.then(clientID => (this._clientID = clientID));
+    void r.clientID.then(clientID => (this.#clientID = clientID));
     const cleanupSubscribe = r.subscribe(
       async tx => {
         const botController = (await getBotController(tx)) ?? null;
@@ -215,16 +215,16 @@ export class Bots {
       {
         onData: async result => {
           console.log('botController change', result);
-          this._isBotController = result.isBotController;
-          if (this._isBotController) {
+          this.#isBotController = result.isBotController;
+          if (this.#isBotController) {
             // Don't wait for 3s to expire to launch bots.
             await maybeLaunchBots();
           } else {
             // No longer bot controller, stop playing bots
-            for (const [botClientID, {manuallyTriggeredBot}] of this
-              ._botPlaybackByClientID) {
+            for (const [botID, {manuallyTriggeredBot}] of this
+              .#botPlaybackByID) {
               if (!manuallyTriggeredBot) {
-                this._botPlaybackByClientID.delete(botClientID);
+                this.#botPlaybackByID.delete(botID);
               }
             }
           }
@@ -232,7 +232,7 @@ export class Bots {
       },
     );
 
-    this._cleanup = () => {
+    this.#cleanup = () => {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('keypress', handleKeyPress);
       clearInterval(interval);
@@ -240,20 +240,20 @@ export class Bots {
     };
   }
 
-  private _startPlayback(
+  #startPlayback(
     clientID: string,
-    botClientID: string,
+    botID: string,
     moves: BotMove[],
     type: BotType,
     manuallyTriggeredBot: boolean,
     timeShift = 0,
   ) {
-    this._r.mutate.putClient({
+    this.#r.mutate.putBot({
       x: moves[0]?.coordX ?? 0,
       y: moves[0]?.coordY ?? 0,
-      id: botClientID,
+      id: botID,
       selectedPieceID: '',
-      color: colorToString(idToColor(botClientID)),
+      color: colorToString(idToColor(botID)),
       location: getLocationString(
         botLocations[Math.floor(Math.random() * botLocations.length)],
       ),
@@ -261,31 +261,30 @@ export class Bots {
       botControllerID: clientID,
       manuallyTriggeredBot,
     });
-    this._botPlaybackByClientID.set(botClientID, {
+    this.#botPlaybackByID.set(botID, {
       startTime: performance.now(),
       moveIndex: 0,
-      timeShift: timeShift,
-      moves: moves,
+      timeShift,
+      moves,
       manuallyTriggeredBot,
       type,
     });
   }
 
-  private _maybeRaf() {
-    for (const [botClientID, {moveIndex, moves}] of this
-      ._botPlaybackByClientID) {
+  #maybeRaf() {
+    for (const [botID, {moveIndex, moves}] of this.#botPlaybackByID) {
       if (moveIndex >= moves.length) {
-        this._botPlaybackByClientID.delete(botClientID);
-        this._r.mutate.deleteClient(botClientID);
+        this.#botPlaybackByID.delete(botID);
+        this.#r.mutate.deleteBot(botID);
       }
     }
-    if (this._botPlaybackByClientID.size > 0) {
-      this._raf = requestAnimationFrame(this._onRaf);
+    if (this.#botPlaybackByID.size > 0) {
+      this.#raf = requestAnimationFrame(this.#onRaf);
     }
   }
 
-  private _onRaf = async () => {
-    for (const [botClientID, playback] of this._botPlaybackByClientID) {
+  #onRaf = async () => {
+    for (const [botID, playback] of this.#botPlaybackByID) {
       const now = performance.now() - playback.startTime;
       let move = undefined;
       for (
@@ -297,18 +296,18 @@ export class Bots {
         move = playback.moves[playback.moveIndex];
       }
       if (move) {
-        const updated = await this._r.mutate.updateClient({
+        const updated = await this.#r.mutate.updateBot({
           x: move.coordX,
           y: move.coordY,
-          id: botClientID,
+          id: botID,
         });
         if (!updated) {
           console.log(
             'failed to update bot client',
-            botClientID,
+            botID,
             'stopping playback',
           );
-          this._botPlaybackByClientID.delete(botClientID);
+          this.#botPlaybackByID.delete(botID);
           continue;
         }
 
@@ -316,17 +315,17 @@ export class Bots {
           // If bot has been dragging for at least 5 seconds,
           // 90% chance it drops the piece
           if (now - playback.dragInfo.start > 5_000 && Math.random() > 0.9) {
-            const updated = this._r.mutate.updateClient({
-              id: botClientID,
+            const updated = this.#r.mutate.updateBot({
+              id: botID,
               selectedPieceID: '',
             });
             if (!updated) {
               console.log(
                 'failed to update bot client',
-                botClientID,
+                botID,
                 'stopping playback',
               );
-              this._botPlaybackByClientID.delete(botClientID);
+              this.#botPlaybackByID.delete(botID);
               continue;
             }
             playback.dragInfo = undefined;
@@ -336,19 +335,19 @@ export class Bots {
                 x: move.coordX,
                 y: move.coordY,
               },
-              this._home,
-              this._stage,
+              this.#home,
+              this.#stage,
             );
             if (
-              this._pieces &&
+              this.#pieces &&
               handleDrag(
-                botClientID,
                 {pageX: position.x, pageY: position.y},
-                this._pieces[playback.dragInfo.pieceID],
+                this.#pieces[playback.dragInfo.pieceID],
                 playback.dragInfo.offset,
-                this._r,
-                this._home,
-                this._stage,
+                this.#r,
+                this.#home,
+                this.#stage,
+                botID,
               )
             ) {
               // piece snapped and selection was cleared
@@ -364,15 +363,15 @@ export class Bots {
               x: move.coordX,
               y: move.coordY,
             },
-            this._home,
-            this._stage,
+            this.#home,
+            this.#stage,
           );
           const el = document.elementFromPoint(position.x, position.y);
           if (el) {
             const pieceID = el.getAttribute('data-pieceid');
-            if (pieceID && this._pieces && !playback.dragInfo) {
-              const piece = this._pieces[pieceID];
-              if (piece && selectIfAvailable(botClientID, piece, this._r)) {
+            if (pieceID && this.#pieces && !playback.dragInfo) {
+              const piece = this.#pieces[pieceID];
+              if (piece && selectIfAvailable(botID, 'bot', piece, this.#r)) {
                 // Pause bot for 200 - 350 ms to simulate the small
                 // pause humans make when selecting a piece (pause is done
                 // by time shifting remaining moves).  Otherwise
@@ -381,8 +380,8 @@ export class Bots {
                 playback.timeShift += Math.random() * 150 + 350;
                 const piecePos = coordinateToPosition(
                   {x: piece.x, y: piece.y},
-                  this._home,
-                  this._stage,
+                  this.#home,
+                  this.#stage,
                 );
                 playback.dragInfo = {
                   pieceID,
@@ -398,21 +397,21 @@ export class Bots {
         }
       }
     }
-    this._maybeRaf();
+    this.#maybeRaf();
   };
 
-  async setPieces(pieces: Record<string, PieceInfo>) {
-    this._pieces = pieces;
+  setPieces(pieces: Record<string, PieceInfo>) {
+    this.#pieces = pieces;
   }
 
-  async handleResize(home: Rect, stage: Rect) {
-    this._home = home;
-    this._stage = stage;
+  handleResize(home: Rect, stage: Rect) {
+    this.#home = home;
+    this.#stage = stage;
   }
 
   cleanup() {
-    this._cleanup();
-    cancelAnimationFrame(this._raf);
+    this.#cleanup();
+    cancelAnimationFrame(this.#raf);
   }
 }
 

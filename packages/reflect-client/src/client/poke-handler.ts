@@ -5,6 +5,7 @@ import type {ClientID, MaybePromise, Poke as ReplicachePoke} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import {mergePokes} from './merge-pokes.js';
+import type {PresenceManager} from './presence-manager.js';
 
 const BUFFER_SIZER_OPTIONS = {
   initialBufferSizeMs: 50,
@@ -33,6 +34,7 @@ type PendingPoke = Poke & {
 
 export class PokeHandler {
   readonly #replicachePoke: (poke: ReplicachePoke) => Promise<void>;
+  readonly #presenceManager: PresenceManager;
   readonly #onOutOfOrderPoke: () => MaybePromise<void>;
   readonly #clientIDPromise: Promise<ClientID>;
   readonly #lcPromise: Promise<LogContext>;
@@ -54,6 +56,7 @@ export class PokeHandler {
 
   constructor(
     replicachePoke: (poke: ReplicachePoke) => Promise<void>,
+    presenceManager: PresenceManager,
     onOutOfOrderPoke: () => MaybePromise<void>,
     clientIDPromise: Promise<ClientID>,
     lcPromise: Promise<LogContext>,
@@ -61,6 +64,7 @@ export class PokeHandler {
     maxRecentPokeLatenciesSize = MAX_RECENT_POKE_LATENCIES_SIZE,
   ) {
     this.#replicachePoke = replicachePoke;
+    this.#presenceManager = presenceManager;
     this.#onOutOfOrderPoke = onOutOfOrderPoke;
     this.#clientIDPromise = clientIDPromise;
     this.#lcPromise = lcPromise.then(lc => lc.withContext('PokeHandler'));
@@ -297,6 +301,7 @@ export class PokeHandler {
         };
         lc.debug?.('poking replicache');
         await this.#replicachePoke(poke);
+        await this.#presenceManager.updatePresence(merged.presence ?? []);
         lc.debug?.('poking replicache took', performance.now() - start);
       } catch (e) {
         if (String(e).indexOf('unexpected base cookie for poke') > -1) {

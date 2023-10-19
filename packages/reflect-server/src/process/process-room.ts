@@ -8,11 +8,14 @@ import type {DurableStorage} from '../storage/durable-storage.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import type {ClientPoke} from '../types/client-poke.js';
 import {getClientRecord, putClientRecord} from '../types/client-record.js';
-import type {ClientMap} from '../types/client-state.js';
+import type {ClientID, ClientMap} from '../types/client-state.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {getVersion, putVersion} from '../types/version.js';
+import {addPresence} from './add-presence.js';
 import {processFrame} from './process-frame.js';
 import type {MutatorMap} from './process-mutation.js';
+import type {Poke} from 'reflect-protocol';
+import {getConnectedClients} from '../types/connected-clients.js';
 
 export const FRAME_LENGTH_MS = 1000 / 60;
 const FLUSH_SIZE_THRESHOLD_FOR_LOG_FLUSH = 500;
@@ -25,10 +28,12 @@ export async function processRoom(
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
   storage: DurableStorage,
-): Promise<ClientPoke[]> {
+): Promise<Map<ClientID, Poke[]>> {
   const cache = new EntryCache(storage);
   const clientIDs = [...clients.keys()];
   lc.debug?.('processing room');
+
+  const previousConnectedClients = await getConnectedClients(storage);
 
   // Before running any mutations, fast forward connected clients to
   // current state.
@@ -70,6 +75,17 @@ export async function processRoom(
     )),
   );
 
+  const pokesByClientID = groupByClientID(clientPokes);
+  const nextConnectedClients = await getConnectedClients(cache);
+
+  await addPresence(
+    clients,
+    pokesByClientID,
+    cache,
+    previousConnectedClients,
+    nextConnectedClients,
+  );
+
   const startCacheFlush = Date.now();
   const pendingCounts = cache.pendingCounts();
   lc = lc.withContext('cacheFlushDelCount', pendingCounts.delCount);
@@ -92,5 +108,18 @@ export async function processRoom(
     `Finished cache flush in ${cacheFlushLatencyMs} ms.`,
     pendingCounts,
   );
-  return clientPokes;
+  return pokesByClientID;
+}
+
+function groupByClientID(clientPokes: ClientPoke[]): Map<ClientID, Poke[]> {
+  const pokesByClientID = new Map<ClientID, Poke[]>();
+  for (const clientPoke of clientPokes) {
+    let pokes = pokesByClientID.get(clientPoke.clientID);
+    if (!pokes) {
+      pokes = [];
+      pokesByClientID.set(clientPoke.clientID, pokes);
+    }
+    pokes.push(clientPoke.poke);
+  }
+  return pokesByClientID;
 }

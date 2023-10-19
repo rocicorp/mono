@@ -63,6 +63,10 @@ import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
+import {
+  PresenceManager,
+  type SubscribeToPresenceCallback,
+} from './presence-manager.js';
 
 declare const TESTING: boolean;
 
@@ -174,6 +178,7 @@ export class Reflect<MD extends MutatorDefs> {
   readonly #logOptions: LogOptions;
 
   readonly #pokeHandler: PokeHandler;
+  readonly #presenceManager: PresenceManager;
 
   #lastMutationIDSent: {clientID: string; id: number} =
     NULL_LAST_MUTATION_ID_SENT;
@@ -377,10 +382,13 @@ export class Reflect<MD extends MutatorDefs> {
     });
     this.#metrics.tags.push(`version:${this.version}`);
 
+    this.#presenceManager = new PresenceManager(this.#rep.clientID, this.#l);
+
     this.#pokeHandler = new PokeHandler(
       pokeDD31 => this.#rep.poke(pokeDD31),
+      this.#presenceManager,
       () => this.#onOutOfOrderPoke(),
-      this.clientID,
+      this.#rep.clientID,
       this.#l,
     );
 
@@ -478,6 +486,7 @@ export class Reflect<MD extends MutatorDefs> {
     lc.debug?.('Aborting closeAbortController due to close()');
     this.#closeAbortController.abort();
     this.#metrics.stop();
+    this.#presenceManager.clearSubscriptions();
     return this.#rep.close();
   }
 
@@ -531,6 +540,18 @@ export class Reflect<MD extends MutatorDefs> {
     options?: Options,
   ): () => void {
     return this.#rep.experimentalWatch(callback, options);
+  }
+
+  /**
+   * Subscribe to the set of present client ids.
+   *
+   * When offline this set will contain just this
+   * Reflect instances clientID.
+   *
+   * To cancel the subscription call the returned function.
+   */
+  subscribeToPresence(callback: SubscribeToPresenceCallback): () => void {
+    return this.#presenceManager.addSubscription(callback);
   }
 
   #onMessage = async (e: MessageEvent<string>): Promise<void> => {
@@ -861,6 +882,7 @@ export class Reflect<MD extends MutatorDefs> {
     this.#socket = undefined;
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
     await this.#pokeHandler.handleDisconnect();
+    await this.#presenceManager.handleDisconnect();
   }
 
   async #handlePoke(_lc: LogContext, pokeMessage: PokeMessage) {

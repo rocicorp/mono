@@ -7,7 +7,7 @@ import {
   logLevel,
   defaultConsoleLogSink,
 } from '@rocicorp/reflect/server';
-import {deleteClient} from '../alive/client-model';
+import {ensureNotBotController} from '../alive/client-model';
 import {mutators} from '../shared/mutators';
 
 import {version} from '@rocicorp/reflect';
@@ -42,7 +42,7 @@ const {
     mutators,
     disconnectHandler: async tx => {
       console.log('deleting old client', tx.clientID);
-      await deleteClient(tx, tx.clientID);
+      await ensureNotBotController(tx, tx.clientID);
     },
     maxMutationsPerTurn: 100,
   }))

@@ -8,6 +8,8 @@ import {compareVersions} from '../types/version.js';
 import {getPatch} from './get-patch.js';
 import type {LogContext} from '@rocicorp/logger';
 
+const EMPTY_PRESENCE: Patch = [];
+
 /**
  * Returns zero or more pokes necessary to fast forward any clients in a room
  * that are behind head.
@@ -106,6 +108,7 @@ export async function fastForwardRoom(
         lastMutationIDChangesByBaseCookieByClientGroupID
           .get(clientGroupID)
           ?.get(record.baseCookie) ?? {},
+      presence: EMPTY_PRESENCE,
       patch,
       // apply immediately
       timestamp: undefined,

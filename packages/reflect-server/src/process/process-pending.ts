@@ -4,7 +4,6 @@ import type {BufferSizer} from 'shared/src/buffer-sizer.js';
 import {must} from 'shared/src/must.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
-import type {ClientPoke} from '../types/client-poke.js';
 import type {ClientID, ClientMap, ClientState} from '../types/client-state.js';
 import {getConnectedClients} from '../types/connected-clients.js';
 import type {PendingMutation} from '../types/mutation.js';
@@ -33,20 +32,29 @@ export async function processPending(
   lc = lc.withContext('numClients', clients.size);
   lc.debug?.('process pending');
   const storedConnectedClients = await getConnectedClients(storage);
-  let hasConnectsOrDisconnectsToProcess = false;
-  if (storedConnectedClients.size === clients.size) {
+  let hasConnectsOrDisconnectsToProcess =
+    storedConnectedClients.size !== clients.size;
+  if (!hasConnectsOrDisconnectsToProcess) {
+    for (const clientState of clients.values()) {
+      if (!clientState.sentInitialPresence) {
+        hasConnectsOrDisconnectsToProcess = true;
+        break;
+      }
+    }
+  }
+  if (!hasConnectsOrDisconnectsToProcess) {
     for (const clientID of storedConnectedClients) {
       if (!clients.has(clientID)) {
         hasConnectsOrDisconnectsToProcess = true;
         break;
       }
     }
-  } else {
-    hasConnectsOrDisconnectsToProcess = true;
   }
   if (pendingMutations.length === 0 && !hasConnectsOrDisconnectsToProcess) {
     return {maxProcessedMutationTimestamp, nothingToProcess: true};
-    lc.debug?.('No pending mutations or disconnects to process, exiting');
+    lc.debug?.(
+      'No pending mutations, connects or disconnects to process, exiting',
+    );
   }
 
   const bufferMs = bufferSizer.bufferSizeMs;
@@ -107,7 +115,7 @@ export async function processPending(
     },
     toProcessMutations,
   );
-  const pokes = await processRoom(
+  const pokesByClientID = await processRoom(
     lc,
     clients,
     pendingMutations,
@@ -116,9 +124,12 @@ export async function processPending(
     disconnectHandler,
     storage,
   );
-  sendPokes(lc, pokes, clients, bufferMs, start);
+  sendPokes(lc, pokesByClientID, clients, bufferMs, start);
   lc.debug?.('clearing pending mutations');
   pendingMutations.splice(0, endIndex);
+  for (const clientState of clients.values()) {
+    clientState.sentInitialPresence = true;
+  }
   return {
     nothingToProcess: false,
     maxProcessedMutationTimestamp: toProcessMutations.reduce<number>(
@@ -134,7 +145,7 @@ const MAX_PATCH_CHARS_TO_LOG = 5000;
 
 function sendPokes(
   lc: LogContext,
-  clientPokes: ClientPoke[],
+  pokesByClientID: Map<ClientID, Poke[]>,
   clients: ClientMap,
   bufferMs: number,
   start: number,
@@ -143,28 +154,15 @@ function sendPokes(
   // unique patch once.  Other than fast-forward patches, patches sent to
   // clients are identical.  If they are large, running JSON.stringify on them
   // for each client is slow and can be the dominate cost of processPending.
-  const pokesByClientID = new Map<ClientID, [Poke, MemoizedPatchString][]>();
   const memoizedPatchStrings = new Map<Patch, MemoizedPatchString>();
-  let patchesLogString = 'Patches:';
-  for (const clientPoke of clientPokes) {
-    let pokes = pokesByClientID.get(clientPoke.clientID);
-    if (!pokes) {
-      pokes = [];
-      pokesByClientID.set(clientPoke.clientID, pokes);
+  const memoizedPresencePatchStrings = new Map<Patch, MemoizedPatchString>();
+  const patchesLogStrings = lc.info ? ['Patches:'] : undefined;
+  const presenceLogStrings = lc.info ? ['Presence:'] : undefined;
+  for (const pokes of pokesByClientID.values()) {
+    for (const {patch, presence = []} of pokes) {
+      memoize(patch, memoizedPatchStrings, patchesLogStrings);
+      memoize(presence, memoizedPresencePatchStrings, presenceLogStrings);
     }
-    const {patch} = clientPoke.poke;
-    let memoizedPatchString = memoizedPatchStrings.get(patch);
-    if (memoizedPatchString === undefined) {
-      memoizedPatchString = {string: JSON.stringify(patch), id: randomID()};
-      memoizedPatchStrings.set(clientPoke.poke.patch, memoizedPatchString);
-      if (lc.info) {
-        patchesLogString += ` ${memoizedPatchString.id}=${truncate(
-          memoizedPatchString.string,
-          MAX_PATCH_CHARS_TO_LOG,
-        )}`;
-      }
-    }
-    pokes.push([clientPoke.poke, memoizedPatchString]);
   }
   // This manual json string building is necessary, to avoid JSON.stringify-ing
   // the same patches for each client.
@@ -174,23 +172,30 @@ function sendPokes(
     let pokesString = '[';
     let pokesLogString = '[';
     for (let i = 0; i < pokes.length; i++) {
-      const [poke, memoizedPatchString] = pokes[i];
-      const {patch: _, ...pokeMinusPatch} = poke;
-      const pokeMinusPatchString = JSON.stringify(pokeMinusPatch);
-      const pokeMinusPatchStringPrefix = pokeMinusPatchString.substring(
-        0,
-        pokeMinusPatchString.length - 1,
+      const poke = pokes[i];
+      const {patch, presence = [], ...pokeMinusPatchStrings} = poke;
+      const pokeMinusPatchStringsString = JSON.stringify(pokeMinusPatchStrings);
+      const pokeMinusPatchStringStringPrefix =
+        pokeMinusPatchStringsString.substring(
+          0,
+          pokeMinusPatchStringsString.length - 1,
+        );
+      const memoizedPatchString = must(memoizedPatchStrings.get(patch));
+      const memoizedPresenceString = must(
+        memoizedPresencePatchStrings.get(presence),
       );
       pokesString += appendPatch(
-        pokeMinusPatchStringPrefix,
+        pokeMinusPatchStringStringPrefix,
         memoizedPatchString.string,
+        memoizedPresenceString.string,
         i,
         pokes.length,
       );
       if (lc.info) {
         pokesLogString += appendPatch(
-          pokeMinusPatchStringPrefix,
+          pokeMinusPatchStringsString,
           memoizedPatchString.id,
+          memoizedPresenceString.string,
           i,
           pokes.length,
         );
@@ -228,13 +233,40 @@ function sendPokes(
       ' pokes.' +
       (pokesByClientID.size === 0
         ? ''
-        : ' ' + pokesForClientsLogString + '\n' + patchesLogString),
+        : ' ' +
+          pokesForClientsLogString +
+          '\n' +
+          patchesLogStrings?.join('') +
+          '\n' +
+          presenceLogStrings?.join('')),
   );
+}
+
+function memoize(
+  patch: Patch,
+  memoizedPatchStrings: Map<Patch, MemoizedPatchString>,
+  logStrings: string[] | undefined,
+) {
+  let memoizedPatchString = memoizedPatchStrings.get(patch);
+  if (memoizedPatchString === undefined) {
+    memoizedPatchString = {
+      string: JSON.stringify(patch),
+      id: randomID(),
+    };
+    memoizedPatchStrings.set(patch, memoizedPatchString);
+    logStrings?.push(
+      ` ${memoizedPatchString.id}=${truncate(
+        memoizedPatchString.string,
+        MAX_PATCH_CHARS_TO_LOG,
+      )}`,
+    );
+  }
 }
 
 function appendPatch(
   pokeMinusPatchStringPrefix: string,
   patchString: string,
+  presenceString: string,
   i: number,
   length: number,
 ) {
@@ -242,6 +274,8 @@ function appendPatch(
     pokeMinusPatchStringPrefix +
     ',"patch":' +
     patchString +
+    ',"presence":' +
+    presenceString +
     '}' +
     (i === length - 1 ? '' : ',')
   );
