@@ -54,13 +54,12 @@ export type AppConfig = v.Infer<typeof appConfigSchema>;
  * Finds the root of the git repository.
  */
 function findGitRoot(p = process.cwd()): string | undefined {
-  if (!fs.existsSync(p)) {
-    return undefined;
-  }
-
   const gitDir = path.join(p, '.git');
   if (fs.existsSync(gitDir)) {
     return p;
+  }
+  if (p === path.sep || !fs.existsSync(p)) {
+    return undefined;
   }
   const parent = path.join(p, '..');
   return findGitRoot(parent);
