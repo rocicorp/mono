@@ -23,7 +23,7 @@ import {watchDoc} from 'mirror-schema/src/external/watch.js';
 import {must} from 'shared/src/must.js';
 import {readAppConfig, writeAppConfig} from './app-config.js';
 import {authenticate} from './auth-config.js';
-import {confirm} from './inquirer.js';
+import {checkbox} from './inquirer.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
@@ -61,16 +61,16 @@ export async function deleteHandler(yargs: DeleteHandlerArgs) {
   const firestore = getFirestore();
   const {userID} = await authenticate(yargs);
   const apps = await getAppsToDelete(firestore, userID, yargs);
-  for (const app of apps) {
-    const confirmed =
-      yargs.force ||
-      (await confirm({
-        message: `Delete "${app.name}" and associated data?`,
-        default: false,
-      }));
-    if (!confirmed) {
-      continue;
-    }
+  let selectedApps = [];
+  if (apps.length > 1) {
+    selectedApps = await checkbox({
+      message: `Select the apps and associated data to delete:`,
+      choices: apps.map(app => ({name: app.name, value: app})),
+    });
+  } else {
+    selectedApps = apps;
+  }
+  for (const app of selectedApps) {
     console.info(`Requesting delete of "${app.name}"`);
     const {deploymentPath} = await deleteApp({
       requester: makeRequester(userID),

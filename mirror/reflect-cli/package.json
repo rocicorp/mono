@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@google-cloud/firestore": "^6.6.1",
+    "@inquirer/checkbox": "^1.2.8",
     "@inquirer/confirm": "^2.0.12",
     "@inquirer/input": "^1.2.11",
     "@rocicorp/eslint-config": "^0.5.1",
