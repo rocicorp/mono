@@ -1,8 +1,8 @@
 import {describe, expect, test} from '@jest/globals';
+import {initializeApp} from 'firebase-admin/app';
 import {https} from 'firebase-functions/v2';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
 import type {ErrorReportingRequest} from 'mirror-protocol/src/error.js';
-import {initializeApp} from 'firebase-admin/app';
 import {report} from './report.function.js';
 
 describe('error-report function', () => {
@@ -60,6 +60,52 @@ describe('error-report function', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(HttpsError);
       expect((e as HttpsError).code).toBe('cancelled');
+      expect((e as HttpsError).message).toBe(
+        'action: error-reporting-test, description: error-reporting-test',
+      );
+    }
+  });
+
+  test('request from roci team', async () => {
+    try {
+      const resp = await errorReportingFunction.run({
+        data: {
+          ...request,
+          requester: {
+            userID: 'hu0ggohMptVpC4GRn6GhfN9dhcO2',
+            userAgent: {type: 'reflect-cli', version: '0.0.1'},
+          },
+        },
+        rawRequest: null as unknown as Request,
+      });
+      console.log(resp);
+    } catch (e) {
+      expect(e).toBeInstanceOf(HttpsError);
+      expect((e as HttpsError).code).toBe('aborted');
+      expect((e as HttpsError).message).toBe(
+        'action: error-reporting-test, description: error-reporting-test',
+      );
+    }
+  });
+
+  test('FirebaseError', async () => {
+    try {
+      const resp = await errorReportingFunction.run({
+        data: {
+          ...request,
+          error: {
+            desc: 'error-reporting-test',
+            name: 'FirebaseError',
+            message: 'error-reporting-test',
+            stack: 'error-reporting-test',
+          },
+        },
+        rawRequest: null as unknown as Request,
+      });
+      console.log(resp);
+    } catch (e) {
+      expect(e).toBeInstanceOf(HttpsError);
+      expect((e as HttpsError).code).toBe('already-exists');
       expect((e as HttpsError).message).toBe(
         'action: error-reporting-test, description: error-reporting-test',
       );
