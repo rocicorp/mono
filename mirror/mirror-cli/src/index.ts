@@ -23,7 +23,10 @@ import {dnsRecordsHandler, dnsRecordsOptions} from './dns-records.js';
 import {initFirebase} from './firebase.js';
 import {getWorkerHandler, getWorkerOptions} from './get-worker.js';
 import {grantSuperHandler, grantSuperOptions} from './grant-super.js';
-import {listAppsHandler, listAppsOptions} from './list-apps.js';
+import {
+  listDeployedAppsHandler,
+  listDeployedAppsOptions,
+} from './list-deployed-apps.js';
 import {
   migrateDnsCommentsToTagsHandler,
   migrateDnsCommentsToTagsOptions,
@@ -117,12 +120,12 @@ function createCLIParser(argv: string[]) {
     grantSuperHandler,
   );
 
-  // list-apps
+  // list-deployed-apps
   reflectCLI.command(
-    'list-apps',
+    'list-deployed-apps',
     'Lists hostnames of running apps.',
-    listAppsOptions,
-    listAppsHandler,
+    listDeployedAppsOptions,
+    listDeployedAppsHandler,
   );
 
   // configure-provider
