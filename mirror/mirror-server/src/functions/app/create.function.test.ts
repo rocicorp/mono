@@ -231,10 +231,10 @@ describe('app-create function', () => {
       await callCreate(appName, '0.35.0', undefined, {
         rec: new SemVer('0.35.1'),
       });
-      throw new Error('Expected unavailable');
+      throw new Error('Expected out-of-range');
     } catch (e) {
       expect(e).toBeInstanceOf(HttpsError);
-      expect((e as HttpsError).code).toBe('unavailable');
+      expect((e as HttpsError).code).toBe('out-of-range');
     }
 
     const resp = await callCreate(appName, '0.35.1', undefined, {

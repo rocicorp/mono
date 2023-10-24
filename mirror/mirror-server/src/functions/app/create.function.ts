@@ -58,7 +58,7 @@ export const create = (firestore: Firestore, testDistTags?: DistTags) =>
         gt(minNonDeprecated, new SemVer(userAgent.version))
       ) {
         throw new HttpsError(
-          'unavailable',
+          'out-of-range',
           'This version of Reflect is deprecated. Please update to @rocicorp/reflect@latest to create a new app.',
         );
       }
@@ -159,7 +159,7 @@ function supportsWorkersForPlatforms(userAgent: UserAgent): boolean {
   const {type: agent, version} = userAgent;
   if (agent !== 'reflect-cli') {
     throw new HttpsError(
-      'unavailable',
+      'invalid-argument',
       'Please use @rocicorp/reflect to create and publish apps.',
     );
   }

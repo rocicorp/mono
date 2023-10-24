@@ -72,7 +72,7 @@ function checkAgent(
   const minSupported = distTags[DistTag.MinSupported];
   if (minSupported && gt(minSupported, version)) {
     throw new HttpsError(
-      'unavailable',
+      'out-of-range',
       'This version of Reflect is no longer supported. Please update to @rocicorp/reflect@latest.',
     );
   }

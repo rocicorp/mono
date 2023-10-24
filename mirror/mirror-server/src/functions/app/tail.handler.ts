@@ -48,7 +48,7 @@ export const tail = (
 
         if (scriptRef) {
           throw new HttpsError(
-            'unavailable',
+            'out-of-range',
             'The App does not support this version of tail. ' +
               'Please try again with `npx @rocicorp/reflect@latest`.',
           );

@@ -7,15 +7,15 @@ import {
   Request,
 } from 'firebase-functions/v2/https';
 import type {AuthData} from 'firebase-functions/v2/tasks';
-import {validateSchema} from './schema.js';
 import {
   baseRequestFields,
   baseResponseFields,
 } from 'mirror-protocol/src/base.js';
+import {SemVer} from 'semver';
 import * as v from 'shared/src/valita.js';
+import {validateSchema} from './schema.js';
 import type {Callable} from './types.js';
 import {userAgentVersion, type DistTags} from './version.js';
-import {SemVer} from 'semver';
 
 const testRequestSchema = v.object({
   ...baseRequestFields,
@@ -69,7 +69,7 @@ describe('user agent version check', () => {
       agent: 'reflect-cli',
       version: '0.35.1',
       distTags: {sup: '0.36.0'},
-      errorCode: 'unavailable',
+      errorCode: 'out-of-range',
     },
     {
       name: 'unregulated agent',
