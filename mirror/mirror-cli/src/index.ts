@@ -1,8 +1,61 @@
+import {hideBin} from 'yargs/helpers';
+import {addDeploymentsOptionsHandler} from './add-deployment-options.js';
+import {certificatesHandler, certificatesOptions} from './certificates.js';
+import {
+  checkProviderHandler,
+  checkProviderOptions,
+  configureProviderHandler,
+  configureProviderOptions,
+} from './configure-provider.js';
 import {
   CommandLineArgsError,
   createCLIParserBase,
 } from './create-cli-parser.js';
-import {hideBin} from 'yargs/helpers';
+import {
+  customHostnamesHandler,
+  customHostnamesOptions,
+} from './custom-hostnames.js';
+import {
+  deleteTeamSubdomainsHandler,
+  deleteTeamSubdomainsOptions,
+} from './delete-team-subdomains.js';
+import {dnsRecordsHandler, dnsRecordsOptions} from './dns-records.js';
+import {initFirebase} from './firebase.js';
+import {getWorkerHandler, getWorkerOptions} from './get-worker.js';
+import {grantSuperHandler, grantSuperOptions} from './grant-super.js';
+import {listAppsHandler, listAppsOptions} from './list-apps.js';
+import {
+  migrateDnsCommentsToTagsHandler,
+  migrateDnsCommentsToTagsOptions,
+} from './migrate-dns-comments-to-tags.js';
+import {
+  migrateTeamLabelsHandler,
+  migrateTeamLabelsOptions,
+} from './migrate-team-labels.js';
+import {migrateToWFPHandler, migrateToWFPOptions} from './migrate-to-wfp.js';
+import {
+  publishCustomDomainsHandler,
+  publishCustomDomainsOptions,
+} from './publish-custom-domains.js';
+import {
+  publishDispatcherHandler,
+  publishDispatcherOptions,
+} from './publish-dispatcher.js';
+import {
+  publishTailWorkersHandler,
+  publishTailWorkersOptions,
+} from './publish-tail-workers.js';
+import {
+  queryAnalyticsHandler,
+  queryAnalyticsOptions,
+} from './query-analytics.js';
+import {
+  releaseReflectServerHandler,
+  releaseReflectServerOptions,
+  revertReflectServerHandler,
+  revertReflectServerOptions,
+} from './release-server.js';
+import {runQueryHandler} from './run-query.js';
 import {
   uploadReflectServerHandler,
   uploadReflectServerOptions,
@@ -11,58 +64,6 @@ import {
   wipeDeploymentsHandler,
   wipeDeploymentsOptions,
 } from './wipe-deployments.js';
-import {addDeploymentsOptionsHandler} from './add-deployment-options.js';
-import {runQueryHandler} from './run-query.js';
-import {
-  releaseReflectServerHandler,
-  releaseReflectServerOptions,
-  revertReflectServerHandler,
-  revertReflectServerOptions,
-} from './release-server.js';
-import {
-  migrateTeamLabelsHandler,
-  migrateTeamLabelsOptions,
-} from './migrate-team-labels.js';
-import {grantSuperHandler, grantSuperOptions} from './grant-super.js';
-import {initFirebase} from './firebase.js';
-import {
-  queryAnalyticsHandler,
-  queryAnalyticsOptions,
-} from './query-analytics.js';
-import {
-  publishCustomDomainsHandler,
-  publishCustomDomainsOptions,
-} from './publish-custom-domains.js';
-import {dnsRecordsHandler, dnsRecordsOptions} from './dns-records.js';
-import {
-  customHostnamesHandler,
-  customHostnamesOptions,
-} from './custom-hostnames.js';
-import {
-  publishDispatcherHandler,
-  publishDispatcherOptions,
-} from './publish-dispatcher.js';
-import {getWorkerHandler, getWorkerOptions} from './get-worker.js';
-import {
-  deleteTeamSubdomainsHandler,
-  deleteTeamSubdomainsOptions,
-} from './delete-team-subdomains.js';
-import {
-  checkProviderHandler,
-  checkProviderOptions,
-  configureProviderHandler,
-  configureProviderOptions,
-} from './configure-provider.js';
-import {migrateToWFPHandler, migrateToWFPOptions} from './migrate-to-wfp.js';
-import {certificatesHandler, certificatesOptions} from './certificates.js';
-import {
-  migrateDnsCommentsToTagsHandler,
-  migrateDnsCommentsToTagsOptions,
-} from './migrate-dns-comments-to-tags.js';
-import {
-  publishTailWorkersHandler,
-  publishTailWorkersOptions,
-} from './publish-tail-workers.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -100,20 +101,28 @@ function createCLIParser(argv: string[]) {
     releaseReflectServerHandler,
   );
 
-  // unreleaseServer
+  // unrelease-server
   reflectCLI.command(
-    'unreleaseServer',
+    'unrelease-server',
     'Removes a server version from a set of server channels. The resulting highest server version will be re-deployed to apps in those channels.',
     revertReflectServerOptions,
     revertReflectServerHandler,
   );
 
-  // grantSuper
+  // grant-super
   reflectCLI.command(
-    'grantSuper <email>',
+    'grant-super <email>',
     'Grants temporary super powers (e.g. impersonation) to an account.',
     grantSuperOptions,
     grantSuperHandler,
+  );
+
+  // list-apps
+  reflectCLI.command(
+    'list-apps',
+    'Lists hostnames of running apps.',
+    listAppsOptions,
+    listAppsHandler,
   );
 
   // configure-provider
