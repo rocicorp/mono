@@ -8,10 +8,9 @@ import type {CommonYargsOptions} from './yarg-types.js';
 export class ErrorWrapper extends Error {
   readonly severity: Severity;
 
-  constructor(error: unknown, severity: Severity) {
-    super(String(error));
+  constructor(e: unknown, severity: Severity) {
+    super(e instanceof Error ? e.message : String(e), {cause: e});
     this.severity = severity;
-    this.cause = error;
   }
 }
 

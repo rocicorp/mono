@@ -5,6 +5,7 @@ import {nanoid} from 'nanoid';
 import * as path from 'node:path';
 import {mustFindAppConfigRoot} from '../app-config.js';
 import {buildReflectServerContent} from '../compile.js';
+import {ErrorWrapper} from '../error.js';
 import {getScriptTemplate} from '../get-script-template.js';
 import {inspectorConsoleClient} from './inspector-console-client.js';
 
@@ -67,7 +68,15 @@ export async function startDevServer(
     compatibilityFlags: ['nodejs_compat'],
   });
 
-  const url = await mf.ready;
+  let url;
+  try {
+    url = await mf.ready;
+  } catch (e) {
+    // Errors from Miniflare initialization are more likely to represent a
+    // problem with the customer's code or environment, rather than a problem
+    // with our code.
+    throw new ErrorWrapper(e, 'WARNING');
+  }
 
   await inspectorConsoleClient(url, inspectorPort, signal);
 
