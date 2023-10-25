@@ -53,6 +53,8 @@ import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import {AlarmManager} from './alarms.js';
 import {ConnectionSecondsReporter} from '../events/connection-seconds.js';
+import {ROOM_ID_HEADER_NAME} from './internal-headers.js';
+import {decodeHeaderValue} from '../util/headers.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -95,9 +97,10 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   #maxProcessedMutationTimestamp = 0;
   readonly #lock = new LoggingLock();
   readonly #mutators: MutatorMap;
+  readonly #roomStartHandler: RoomStartHandler;
   readonly #disconnectHandler: DisconnectHandler;
   readonly #maxMutationsPerTurn: number;
-  #lcHasRoomIdContext = false;
+  #roomIDDependentInitCompleted = false;
   #lc: LogContext;
   readonly #storage: DurableStorage;
   readonly #authApiKey: string;
@@ -122,6 +125,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     } = options;
 
     this.#mutators = new Map([...Object.entries(mutators)]) as MutatorMap;
+    this.#roomStartHandler = roomStartHandler;
     this.#disconnectHandler = disconnectHandler;
     this.#maxMutationsPerTurn = maxMutationsPerTurn;
     this.#storage = new DurableStorage(
@@ -152,7 +156,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
     void state.blockConcurrencyWhile(async () => {
       await initRoomSchema(this.#lc, this.#storage);
-      await processRoomStart(this.#lc, roomStartHandler, this.#storage);
     });
   }
 
@@ -190,47 +193,33 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   ) => requireAuthAPIKey(() => this.#authApiKey, next);
 
   async fetch(request: Request): Promise<Response> {
-    let lc = populateLogContextFromRequest(this.#lc, request);
-
+    const lc = populateLogContextFromRequest(this.#lc, request);
     try {
       if (await this.deleted()) {
         return new Response('deleted', {
           status: 410, // Gone
         });
       }
-      const roomID = await this.maybeRoomID();
-      const url = new URL(request.url);
-      const urlRoomID = url.searchParams.get('roomID');
-      if (
-        // roomID is not going to be set on the createRoom request, or after
-        // the room has been deleted.
-        roomID !== undefined &&
-        // roomID is not going to be set for all calls, eg to delete the room.
-        urlRoomID !== null &&
-        urlRoomID !== roomID
-      ) {
-        lc.error?.('roomID mismatch', 'urlRoomID', urlRoomID, 'roomID', roomID);
-        return new Response('Unexpected roomID', {status: 400});
+      const roomIDHeaderValue = request.headers.get(ROOM_ID_HEADER_NAME);
+      if (roomIDHeaderValue === null || roomIDHeaderValue === '') {
+        return new Response('Missing Room ID Header', {status: 500});
       }
-
-      if (!this.#lcHasRoomIdContext) {
-        await this.#lock.withLock(lc, 'initRoomIDContext', lcInLock => {
-          if (this.#lcHasRoomIdContext) {
-            lcInLock.debug?.('roomID context already initialized, returning');
+      if (!this.#roomIDDependentInitCompleted) {
+        await this.#lock.withLock(lc, 'initRoomID', async lcInLock => {
+          if (this.#roomIDDependentInitCompleted) {
+            lcInLock.debug?.('roomID already initialized, returning');
             return;
           }
-          if (urlRoomID !== null && roomID === undefined) {
-            lcInLock.error?.('Expected roomID to be present in storage', {
-              urlRoomID,
-            });
-          }
-          if (roomID || urlRoomID) {
-            const roomIDForContext = roomID ?? urlRoomID;
-            this.#lc = this.#lc.withContext('roomID', roomIDForContext);
-            lc = lc.withContext('roomID', roomIDForContext);
-            this.#lcHasRoomIdContext = true;
-            lc.info?.('initialized roomID context');
-          }
+          const roomID = decodeHeaderValue(roomIDHeaderValue);
+          await processRoomStart(
+            lcInLock,
+            this.#roomStartHandler,
+            this.#storage,
+            roomID,
+          );
+          this.#lc = this.#lc.withContext('roomID', roomID);
+          this.#roomIDDependentInitCompleted = true;
+          lc.info?.('initialized roomID');
         });
       }
 
@@ -258,18 +247,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
   async deleted(): Promise<boolean> {
     return (await this.#storage.get(deletedKey, valita.boolean())) === true;
-  }
-
-  // roomID errors and returns "unknown" if the roomID is not set. Prefer
-  // roomID() to maybeRoomID() in cases where the roomID is expected to be set,
-  // which is most cases.
-  async roomID(lc: LogContext): Promise<string> {
-    const roomID = await this.maybeRoomID();
-    if (roomID !== undefined) {
-      return roomID;
-    }
-    lc.error?.('roomID is not set');
-    return 'unknown';
   }
 
   /**
