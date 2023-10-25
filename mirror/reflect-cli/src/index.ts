@@ -5,15 +5,15 @@ import {
   createCLIParserBase,
 } from './create-cli-parser.js';
 import {createHandler, createOptions} from './create.js';
+import {deleteHandler, deleteOptions} from './delete.js';
 import {devHandler, devOptions} from './dev.js';
-import {handleWith} from './firebase.js';
+import {handleWith} from './handler.js';
+import {initHandler, initOptions} from './init.js';
 import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
 import {tailHandler, tailOptions} from './tail/index.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import {deleteHandler, deleteOptions} from './delete.js';
-import {initHandler, initOptions} from './init.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);

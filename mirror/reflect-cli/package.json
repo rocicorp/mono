@@ -9,7 +9,7 @@
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "reflect": "node --no-warnings --loader ts-node/esm ./src/index.ts",
+    "reflect": "npm run build && node ./out/index.mjs",
     "reflect-local": "npm run reflect -- --stack sandbox --local",
     "build": "node tool/build.js",
     "check-types": "tsc --noEmit"
