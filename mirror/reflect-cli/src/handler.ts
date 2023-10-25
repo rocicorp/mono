@@ -20,7 +20,7 @@ export function handleWith<T extends ArgumentsCamelCase<CommonYargsOptions>>(
         await handler(args);
         success = true;
       } catch (e) {
-        await reportE(args, eventName, e, 'ERROR');
+        await reportE(args, eventName, e);
         const message = e instanceof Error ? e.message : String(e);
         console.error(`\n${color.red(color.bold('Error'))}: ${message}`);
       } finally {

@@ -1,11 +1,11 @@
-import {execSync} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import color from 'picocolors';
 import {configFileExists} from './app-config.js';
+import {execOrReportWarning} from './exec.js';
 import {logErrorAndExit, noFormat} from './log-error-and-exit.js';
 import {copyTemplate} from './scaffold.js';
-import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {findReflectVersion} from './version.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function initOptions(yargs: CommonYargsArgv) {
   return yargs;
@@ -41,7 +41,7 @@ export async function initHandler(_: InitHandlerArgs) {
   console.log(`Installing @rocicorp/reflect`);
 
   const reflectVersion = await findReflectVersion();
-  execSync(`npm add '@rocicorp/reflect@^${reflectVersion}'`, {
+  execOrReportWarning(`npm add '@rocicorp/reflect@^${reflectVersion}'`, {
     stdio: ['ignore', 'inherit', 'inherit'],
   });
 

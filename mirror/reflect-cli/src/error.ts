@@ -5,11 +5,21 @@ import {getUserParameters} from './metrics/send-ga-event.js';
 import {version} from './version.js';
 import type {CommonYargsOptions} from './yarg-types.js';
 
+export class ErrorWrapper extends Error {
+  readonly severity: Severity;
+
+  constructor(error: unknown, severity: Severity) {
+    super(String(error));
+    this.severity = severity;
+    this.cause = error;
+  }
+}
+
 export async function reportE(
   args: ArgumentsCamelCase<CommonYargsOptions>,
   eventName: string,
   e: unknown,
-  severity: Severity,
+  severity?: Severity,
 ) {
   let userID = '';
   try {
@@ -17,6 +27,8 @@ export async function reportE(
   } catch (e) {
     /* swallow */
   }
+
+  severity ??= e instanceof ErrorWrapper ? e.severity : 'ERROR';
   await reportError({
     action: eventName,
     error: createErrorInfo(e),
@@ -32,6 +44,7 @@ export async function reportE(
 }
 
 function createErrorInfo(e: unknown): ErrorInfo {
+  e = e instanceof ErrorWrapper ? e.cause : e;
   if (!(e instanceof Error)) {
     return {desc: String(e)};
   }

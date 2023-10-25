@@ -1,8 +1,8 @@
-import {execSync} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import {mkdir} from 'node:fs/promises';
 import color from 'picocolors';
 import validateProjectName from 'validate-npm-package-name';
+import {execOrReportWarning} from './exec.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {scaffold} from './scaffold.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
@@ -37,7 +37,7 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
   await mkdir(name, {recursive: true});
   await scaffold(name, name);
   console.log(color.cyan(`Installing @rocicorp/reflect`));
-  execSync(`npm install --silent`, {
+  execOrReportWarning(`npm install --silent`, {
     cwd: name,
     stdio: ['ignore', 'inherit', 'inherit'],
   });
