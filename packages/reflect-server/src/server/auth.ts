@@ -17,9 +17,3 @@ export type AuthHandler = (
   auth: string,
   roomID: string,
 ) => MaybePromise<AuthData | null>;
-
-/**
- * Value should be an `AuthData` value JSON stringified and encoded
- * with `encodeUrlComponent`.
- */
-export const AUTH_DATA_HEADER_NAME = 'x-reflect-auth-data';

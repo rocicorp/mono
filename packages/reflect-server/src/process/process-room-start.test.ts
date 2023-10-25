@@ -50,6 +50,14 @@ describe('processRoomStart', () => {
       expectFooBar: false,
       expectedError: 'tossed!',
     },
+    {
+      name: 'room start handler is passed roomID',
+      roomStartHandler: (_: WriteTransaction, roomID: string) => {
+        expect(roomID).toEqual('testRoomID');
+        return Promise.resolve();
+      },
+      expectFooBar: false,
+    },
   ];
 
   for (const c of cases) {
@@ -68,6 +76,7 @@ describe('processRoomStart', () => {
           createSilentLogContext(),
           c.roomStartHandler,
           storage,
+          'testRoomID',
         );
       } catch (e) {
         err = String(e);
@@ -76,7 +85,7 @@ describe('processRoomStart', () => {
       expect(err).toEqual(c.expectedError);
       expect(await getUserValue('foo', storage)).toEqual(
         c.expectFooBar
-          ? {version: c.startingVersion ?? 0, deleted: false, value: 'bar'}
+          ? {version: c.endingVersion, deleted: false, value: 'bar'}
           : undefined,
       );
       expect(await getVersion(storage)).toEqual(c.endingVersion);
