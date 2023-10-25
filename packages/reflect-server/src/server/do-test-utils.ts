@@ -1,5 +1,3 @@
-import {assert} from 'shared/src/asserts.js';
-
 export class TestExecutionContext implements ExecutionContext {
   waitUntil(_promise: Promise<unknown>): void {
     return;
@@ -38,24 +36,7 @@ export class TestDurableObjectStub implements DurableObjectStub {
   ) {
     this.id = id;
     this.objectIDString = id.toString();
-    this.fetch = (
-      requestOrUrl: Request | string,
-      requestInit?: RequestInit | Request,
-    ) => {
-      if (requestOrUrl instanceof Request) {
-        assert(
-          !requestOrUrl.bodyUsed,
-          'Body of request passed to TestDurableObjectStub fetch already used.',
-        );
-      }
-      if (requestInit instanceof Request) {
-        assert(
-          !requestInit.bodyUsed,
-          'Body of request passed to TestDurableObjectStub fetch already used.',
-        );
-      }
-      return fetch(requestOrUrl, requestInit);
-    };
+    this.fetch = fetch;
   }
 }
 

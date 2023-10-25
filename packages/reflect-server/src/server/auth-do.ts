@@ -23,7 +23,7 @@ import {
 } from '../util/socket.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
-import type {AuthHandler} from './auth.js';
+import {AUTH_DATA_HEADER_NAME, AuthHandler} from './auth.js';
 import {requireUpgradeHeader, roomNotFoundResponse} from './http-util.js';
 import {
   CONNECT_URL_PATTERN,
@@ -62,7 +62,6 @@ import {
 import type {TailErrorKind} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import {AlarmManager, TimeoutID} from './alarms.js';
-import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
 
 export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
 
@@ -731,7 +730,7 @@ export class BaseAuthDO implements DurableObject {
           }
           const stub = this.#roomDO.get(roomObjectID);
           const response = await roomDOFetch(
-            new Request(req, {body: JSON.stringify(body)}),
+            req,
             'authInvalidateForRoom',
             stub,
             roomID,
@@ -987,7 +986,7 @@ export class BaseAuthDO implements DurableObject {
   }
 }
 
-export async function roomDOFetch(
+async function roomDOFetch(
   request: Request,
   fetchDescription: string,
   roomDOStub: DurableObjectStub,
@@ -995,16 +994,15 @@ export async function roomDOFetch(
   lc: LogContext,
 ): Promise<Response> {
   lc.debug?.(`Sending request ${request.url} to roomDO with roomID ${roomID}`);
-  const requestWithRoomID = addRoomIDHeader(new Request(request), roomID);
   const responseFromDO = await timed(
     lc.debug,
     `RoomDO fetch for ${fetchDescription}`,
     async () => {
       try {
-        return await roomDOStub.fetch(requestWithRoomID);
+        return await roomDOStub.fetch(request);
       } catch (e) {
         lc.error?.(
-          `Exception fetching ${requestWithRoomID.url} from roomDO with roomID ${roomID}`,
+          `Exception fetching ${request.url} from roomDO with roomID ${roomID}`,
           e,
         );
         throw e;

@@ -1,6 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {ROOM_ID_HEADER_NAME} from '../server/internal-headers.js';
-import {decodeHeaderValue} from './headers.js';
 
 export function populateLogContextFromRequest(
   lc: LogContext,
@@ -12,12 +10,7 @@ export function populateLogContextFromRequest(
   lc = maybeAddContext(lc, url.searchParams, 'requestID');
   lc = maybeAddContext(lc, url.searchParams, 'clientID');
   lc = maybeAddContext(lc, url.searchParams, 'clientGroupID');
-  const roomIDHeaderValue = request.headers.get(ROOM_ID_HEADER_NAME);
-  if (roomIDHeaderValue !== null) {
-    lc = lc.withContext('roomID', decodeHeaderValue(roomIDHeaderValue));
-  } else {
-    lc = maybeAddContext(lc, url.searchParams, 'roomID');
-  }
+  lc = maybeAddContext(lc, url.searchParams, 'roomID');
   lc = maybeAddContext(lc, url.searchParams, 'userID');
 
   const ip = request.headers.get('CF-Connecting-IP');

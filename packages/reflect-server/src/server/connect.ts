@@ -22,7 +22,7 @@ import type {
 import {compareVersions, getVersion} from '../types/version.js';
 import {decodeHeaderValue} from '../util/headers.js';
 import {closeWithError, send} from '../util/socket.js';
-import {AUTH_DATA_HEADER_NAME} from './internal-headers.js';
+import {AUTH_DATA_HEADER_NAME} from './auth.js';
 
 export type MessageHandler = (
   lc: LogContext,
