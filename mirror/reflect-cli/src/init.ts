@@ -13,7 +13,7 @@ export function initOptions(yargs: CommonYargsArgv) {
 
 type InitHandlerArgs = YargvToInterface<ReturnType<typeof initOptions>>;
 
-export async function initHandler(_: InitHandlerArgs) {
+export function initHandler(_: InitHandlerArgs) {
   if (configFileExists('./')) {
     logErrorAndExit(
       `Cannot initialize. There is already a ${color.white(
@@ -40,7 +40,7 @@ export async function initHandler(_: InitHandlerArgs) {
   copyTemplate('init', './');
   console.log(`Installing @rocicorp/reflect`);
 
-  const reflectVersion = await findReflectVersion();
+  const reflectVersion = findReflectVersion();
   execOrReportWarning(`npm add '@rocicorp/reflect@^${reflectVersion}'`, {
     stdio: ['ignore', 'inherit', 'inherit'],
   });

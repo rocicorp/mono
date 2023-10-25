@@ -28,8 +28,8 @@ export function copyTemplate(name: string, dest: string) {
   copyDir(sourceDir, dest);
 }
 
-export async function scaffold(appName: string, dest: string) {
-  const reflectVersion = await findReflectVersion();
+export function scaffold(appName: string, dest: string) {
+  const reflectVersion = findReflectVersion();
   copyTemplate('create', dest);
   writeTemplatedFilePlaceholders({appName, reflectVersion}, dest, false);
 }

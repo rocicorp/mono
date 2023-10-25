@@ -9,7 +9,7 @@ import type {CommonYargsOptions} from './yarg-types.js';
 // to ensure that the process exits after the handler completes.
 
 export function handleWith<T extends ArgumentsCamelCase<CommonYargsOptions>>(
-  handler: (args: T) => Promise<void>,
+  handler: (args: T) => void | Promise<void>,
 ) {
   return {
     andCleanup: () => async (args: T) => {

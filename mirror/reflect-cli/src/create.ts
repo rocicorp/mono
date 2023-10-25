@@ -35,7 +35,7 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
   }
 
   await mkdir(name, {recursive: true});
-  await scaffold(name, name);
+  scaffold(name, name);
   console.log(color.cyan(`Installing @rocicorp/reflect`));
   execOrReportWarning(`npm install --silent`, {
     cwd: name,
