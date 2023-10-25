@@ -20,7 +20,4 @@ import type {WriteTransaction} from 'reflect-shared';
  * As the transaction is not associated with any client, `write.clientID`
  * will be empty and `write.mutationID` will be -1.
  */
-export type RoomStartHandler = (
-  write: WriteTransaction,
-  roomID: string,
-) => Promise<void>;
+export type RoomStartHandler = (write: WriteTransaction) => Promise<void>;

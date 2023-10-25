@@ -12,9 +12,11 @@ export async function processRoomStart(
   lc: LogContext,
   roomStartHandler: RoomStartHandler,
   storage: Storage,
-  roomID: string,
 ): Promise<void> {
   lc.debug?.('processing room start');
+
+  // Note: Internal schema migrations will go here, before
+  // invoking the app-specified RoomStartHandler.
 
   const cache = new EntryCache(storage);
   const startVersion = (await getVersion(cache)) ?? 0;
@@ -24,11 +26,11 @@ export async function processRoomStart(
     cache,
     '', // clientID,
     -1, // mutationID,
-    nextVersion,
+    startVersion,
     undefined,
   );
   try {
-    await roomStartHandler(tx, roomID);
+    await roomStartHandler(tx);
     if (!cache.isDirty()) {
       lc.debug?.('noop roomStartHandler');
       return;
