@@ -32,9 +32,7 @@ import {Queue} from 'shared/src/queue.js';
 import {subscribe, unsubscribe} from 'node:diagnostics_channel';
 import {CONNECTION_SECONDS_CHANNEL_NAME} from 'shared/src/events/connection-seconds.js';
 import {REPORTING_INTERVAL_MS} from '../events/connection-seconds.js';
-import {
-  /*AUTH_DATA_HEADER_NAME, */ addRoomIDHeader,
-} from './internal-headers.js';
+import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
 
 test('inits storage schema', async () => {
   const testLogSink = new TestLogSink();
