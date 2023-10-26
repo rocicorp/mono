@@ -1,3 +1,4 @@
+import {SemVer} from 'semver';
 import makeCLI, {Argv} from 'yargs';
 import {initFirebase} from './firebase.js';
 import {tryDeprecationCheck, version} from './version.js';
@@ -67,6 +68,17 @@ export function createCLIParserBase(argv: string[]): Argv<{
   // version
   reflectCLI.command('version', false, {}, () => {
     console.log(version);
+  });
+
+  reflectCLI.middleware(() => {
+    const nodeVersion = new SemVer(process.versions.node);
+    if (nodeVersion.major < 18) {
+      console.log(
+        `\nNode.js v18 or higher is required. (Current: v${nodeVersion})`,
+      );
+      console.log('Please update to newer version.\n');
+      process.exit(-1);
+    }
   });
 
   reflectCLI.middleware(async argv => {
