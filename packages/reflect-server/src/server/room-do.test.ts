@@ -9,7 +9,7 @@ import {
 import {LogContext} from '@rocicorp/logger';
 import type {LogLevel, TailMessage} from 'mirror-protocol/src/tail-message.js';
 import assert from 'node:assert';
-// import type {WriteTransaction} from 'reflect-shared';
+import type {WriteTransaction} from 'reflect-shared';
 import {version} from 'reflect-shared';
 import {
   newInvalidateAllAuthRequest,
@@ -17,9 +17,9 @@ import {
   newInvalidateForUserAuthRequest,
 } from '../client/auth.js';
 import {newCreateRoomRequest, newDeleteRoomRequest} from '../client/room.js';
-// import {DurableStorage} from '../storage/durable-storage.js';
-// import {getUserValue, putUserValue} from '../types/user-value.js';
-// import {getVersion, putVersion} from '../types/version.js';
+import {DurableStorage} from '../storage/durable-storage.js';
+import {getUserValue, putUserValue} from '../types/user-value.js';
+import {getVersion, putVersion} from '../types/version.js';
 import {newAuthConnectionsRequest} from '../util/auth-test-util.js';
 import {resolver} from '../util/resolver.js';
 import {sleep} from '../util/sleep.js';
@@ -59,67 +59,67 @@ test('inits storage schema', async () => {
   expect(await state.storage.get('storage_schema_meta')).not.toBeUndefined();
 });
 
-// test('runs roomStartHandler on first fetch', async () => {
-//   const testLogSink = new TestLogSink();
-//   const testRoomID = 'testRoomID';
-//   const state = await createTestDurableObjectState('test-do-id');
+test('runs roomStartHandler on first fetch', async () => {
+  const testLogSink = new TestLogSink();
+  const testRoomID = 'testRoomID';
+  const state = await createTestDurableObjectState('test-do-id');
 
-//   const storage = new DurableStorage(state.storage);
-//   const startingVersion = 23;
-//   await putVersion(startingVersion, storage);
-//   await putUserValue(
-//     'foo',
-//     {version: 1, deleted: false, value: 'bar'},
-//     storage,
-//   );
+  const storage = new DurableStorage(state.storage);
+  const startingVersion = 23;
+  await putVersion(startingVersion, storage);
+  await putUserValue(
+    'foo',
+    {version: 1, deleted: false, value: 'bar'},
+    storage,
+  );
 
-//   let roomStartHandlerCallCount = 0;
-//   const roomDO = new BaseRoomDO({
-//     mutators: {},
-//     roomStartHandler: async (tx: WriteTransaction, roomID: string) => {
-//       expect(roomID).toEqual(testRoomID);
-//       roomStartHandlerCallCount++;
-//       const value = await tx.get('foo');
-//       await tx.set('foo', `${value}+${roomStartHandlerCallCount}`);
-//     },
-//     disconnectHandler: () => Promise.resolve(),
-//     state,
-//     authApiKey: 'API KEY',
-//     logSink: testLogSink,
-//     logLevel: 'info',
-//     allowUnconfirmedWrites: true,
-//     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
-//   });
+  let roomStartHandlerCallCount = 0;
+  const roomDO = new BaseRoomDO({
+    mutators: {},
+    roomStartHandler: async (tx: WriteTransaction, roomID: string) => {
+      expect(roomID).toEqual(testRoomID);
+      roomStartHandlerCallCount++;
+      const value = await tx.get('foo');
+      await tx.set('foo', `${value}+${roomStartHandlerCallCount}`);
+    },
+    disconnectHandler: () => Promise.resolve(),
+    state,
+    authApiKey: 'API KEY',
+    logSink: testLogSink,
+    logLevel: 'info',
+    allowUnconfirmedWrites: true,
+    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+  });
 
-//   await state.concurrencyBlockingCallbacks();
+  await state.concurrencyBlockingCallbacks();
 
-//   // The roomHandler should not have been run yet.
-//   expect(roomStartHandlerCallCount).toEqual(0);
+  // The roomHandler should not have been run yet.
+  expect(roomStartHandlerCallCount).toEqual(0);
 
-//   const firstRequest = createConnectRequest(testRoomID);
-//   await roomDO.fetch(firstRequest);
+  const firstRequest = createConnectRequest(testRoomID);
+  await roomDO.fetch(firstRequest);
 
-//   // The roomHandler should have been run.
-//   expect(roomStartHandlerCallCount).toEqual(1);
-//   expect(await getVersion(storage)).toEqual(startingVersion + 1);
-//   expect(await getUserValue('foo', storage)).toEqual({
-//     version: startingVersion + 1,
-//     deleted: false,
-//     value: 'bar+1',
-//   });
+  // The roomHandler should have been run.
+  expect(roomStartHandlerCallCount).toEqual(1);
+  expect(await getVersion(storage)).toEqual(startingVersion + 1);
+  expect(await getUserValue('foo', storage)).toEqual({
+    version: startingVersion + 1,
+    deleted: false,
+    value: 'bar+1',
+  });
 
-//   const secondRequest = createConnectRequest(testRoomID);
-//   await roomDO.fetch(secondRequest);
+  const secondRequest = createConnectRequest(testRoomID);
+  await roomDO.fetch(secondRequest);
 
-//   // The roomHandler should not have been run again.
-//   expect(roomStartHandlerCallCount).toEqual(1);
-//   expect(await getVersion(storage)).toEqual(startingVersion + 1);
-//   expect(await getUserValue('foo', storage)).toEqual({
-//     version: startingVersion + 1,
-//     deleted: false,
-//     value: 'bar+1',
-//   });
-// });
+  // The roomHandler should not have been run again.
+  expect(roomStartHandlerCallCount).toEqual(1);
+  expect(await getVersion(storage)).toEqual(startingVersion + 1);
+  expect(await getUserValue('foo', storage)).toEqual({
+    version: startingVersion + 1,
+    deleted: false,
+    value: 'bar+1',
+  });
+});
 
 // test('runs roomStartHandler on next fetch if throws on first fetch', async () => {
 //   const testLogSink = new TestLogSink();
