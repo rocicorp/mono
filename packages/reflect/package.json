@@ -54,6 +54,9 @@
     "reflect-shared": "0.0.0",
     "replicache": "13.0.1"
   },
+  "engines": {
+    "node": ">=18"
+  },
   "files": [
     "cli.js",
     "client.d.ts",
