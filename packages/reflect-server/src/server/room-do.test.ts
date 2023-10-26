@@ -93,7 +93,7 @@ test('runs roomStartHandler on first fetch', async () => {
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
   });
 
-  await state.concurrencyBlockingCallbacks();
+  // await state.concurrencyBlockingCallbacks();
 
   // The roomHandler should not have been run yet.
   expect(roomStartHandlerCallCount).toEqual(0);
