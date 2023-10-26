@@ -792,18 +792,18 @@ test('Avoids queueing many intervals in the lock', async () => {
 //     expect(originalConsoleErrorSpy).toBeCalledTimes(0);
 //   });
 // });
-
-function createConnectRequest(roomID: string) {
-  return addRoomIDHeader(
-    new Request(
-      `ws://test.roci.dev/connect?clientID=cid1&clientGroupID=cg1&ts=123&lmid=0&wsid=wsidx1&roomID=${roomID}`,
-      {
-        headers: {
-          [AUTH_DATA_HEADER_NAME]: '{"userID":"u1","more":"data"}',
-          ['Upgrade']: 'websocket',
-        },
-      },
-    ),
-    roomID,
-  );
-}
+//
+// function createConnectRequest(roomID: string) {
+//   return addRoomIDHeader(
+//     new Request(
+//       `ws://test.roci.dev/connect?clientID=cid1&clientGroupID=cg1&ts=123&lmid=0&wsid=wsidx1&roomID=${roomID}`,
+//       {
+//         headers: {
+//           [AUTH_DATA_HEADER_NAME]: '{"userID":"u1","more":"data"}',
+//           ['Upgrade']: 'websocket',
+//         },
+//       },
+//     ),
+//     roomID,
+//   );
+// }
