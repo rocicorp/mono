@@ -27,6 +27,7 @@
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "firebase-tools": "^12.7.0",
+    "firestore-size": "^2.0.7",
     "shared": "0.0.0",
     "ts-jest": "^29.1.0",
     "typescript": "^5.2.2"
