@@ -102,7 +102,8 @@ test('runs roomStartHandler on first fetch', async () => {
     newCreateRoomRequest('http://example.com/', 'API KEY', testRoomID),
     'testRoomID',
   );
-  await roomDO.fetch(firstRequest);
+  const firstResponse = await roomDO.fetch(firstRequest);
+  expect(firstResponse.ok).toBeTruthy();
 
   // The roomHandler should have been run.
   expect(roomStartHandlerCallCount).toEqual(1);
@@ -117,7 +118,8 @@ test('runs roomStartHandler on first fetch', async () => {
     newCreateRoomRequest('http://example.com/', 'API KEY', testRoomID),
     'testRoomID',
   );
-  await roomDO.fetch(secondRequest);
+  const secondResponse = await roomDO.fetch(secondRequest);
+  expect(secondResponse.ok).toBeTruthy();
 
   // The roomHandler should not have been run again.
   expect(roomStartHandlerCallCount).toEqual(1);
@@ -173,7 +175,8 @@ test('runs roomStartHandler on next fetch if throws on first fetch', async () =>
     newCreateRoomRequest('http://example.com/', 'API KEY', testRoomID),
     'testRoomID',
   );
-  await roomDO.fetch(firstRequest);
+  const firstResponse = await roomDO.fetch(firstRequest);
+  expect(firstResponse.ok).toBeFalsy();
 
   // The roomHandler should have been run, but not modified state.
   expect(roomStartHandlerCallCount).toEqual(1);
@@ -188,7 +191,8 @@ test('runs roomStartHandler on next fetch if throws on first fetch', async () =>
     newCreateRoomRequest('http://example.com/', 'API KEY', testRoomID),
     'testRoomID',
   );
-  await roomDO.fetch(secondRequest);
+  const secondResponse = await roomDO.fetch(secondRequest);
+  expect(secondResponse.ok).toBeTruthy();
 
   // The roomHandler should have been run again, since the first run failed.
   expect(roomStartHandlerCallCount).toEqual(2);
