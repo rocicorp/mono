@@ -93,12 +93,15 @@ test('runs roomStartHandler on first fetch', async () => {
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
   });
 
-  // await state.concurrencyBlockingCallbacks();
+  await state.concurrencyBlockingCallbacks();
 
   // The roomHandler should not have been run yet.
   expect(roomStartHandlerCallCount).toEqual(0);
 
-  const firstRequest = createConnectRequest(testRoomID);
+  const firstRequest = addRoomIDHeader(
+    newCreateRoomRequest('http://example.com/', 'API KEY', 'testRoomID'),
+    'testRoomID',
+  );
   await roomDO.fetch(firstRequest);
 
   // The roomHandler should have been run.
@@ -110,7 +113,10 @@ test('runs roomStartHandler on first fetch', async () => {
     value: 'bar+1',
   });
 
-  const secondRequest = createConnectRequest(testRoomID);
+  const secondRequest = addRoomIDHeader(
+    newCreateRoomRequest('http://example.com/', 'API KEY', 'testRoomID'),
+    'testRoomID',
+  );
   await roomDO.fetch(secondRequest);
 
   // The roomHandler should not have been run again.
@@ -121,6 +127,7 @@ test('runs roomStartHandler on first fetch', async () => {
     deleted: false,
     value: 'bar+1',
   });
+  console.log('here');
 });
 
 // test('runs roomStartHandler on next fetch if throws on first fetch', async () => {
