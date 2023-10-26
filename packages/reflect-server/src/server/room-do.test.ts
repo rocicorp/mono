@@ -62,7 +62,9 @@ test('inits storage schema', async () => {
 test('runs roomStartHandler on first fetch', async () => {
   const testLogSink = new TestLogSink();
   const testRoomID = 'testRoomID';
-  const state = await createTestDurableObjectState('test-do-id');
+  const state = await createTestDurableObjectState(
+    'test-do-id-foo-bar-baz-boom',
+  );
 
   const storage = new DurableStorage(state.storage);
   const startingVersion = 23;
