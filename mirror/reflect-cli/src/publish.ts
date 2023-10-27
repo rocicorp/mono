@@ -1,4 +1,4 @@
-import {doc, getFirestore, Firestore} from 'firebase/firestore';
+import {Firestore, doc, getFirestore} from 'firebase/firestore';
 import {
   publish as publishCaller,
   type PublishRequest,
@@ -13,8 +13,9 @@ import {
   writeTemplatedFilePlaceholders,
 } from './app-config.js';
 import {authenticate} from './auth-config.js';
-import {compile} from './compile.js';
+import {compileOrReportWarning} from './compile.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
+import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
 import {checkForServerDeprecation} from './version.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
@@ -57,7 +58,7 @@ export async function publishHandler(
 
   const absPath = path.resolve(script);
   if (!(await exists(absPath))) {
-    throw new Error(`File not found: ${absPath}`);
+    logErrorAndExit(`File not found: ${absPath}`);
   }
 
   let serverVersionRange;
@@ -70,7 +71,11 @@ export async function publishHandler(
   }
 
   console.log(`Compiling ${script}`);
-  const {code, sourcemap} = await compile(absPath, 'linked', 'production');
+  const {code, sourcemap} = await compileOrReportWarning(
+    absPath,
+    'linked',
+    'production',
+  );
   assert(sourcemap);
 
   const {userID} = await authenticate(yargs);

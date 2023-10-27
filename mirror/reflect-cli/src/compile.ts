@@ -1,5 +1,6 @@
 import * as esbuild from 'esbuild';
 import {createRequire} from 'node:module';
+import {ErrorWrapper} from './error.js';
 import {watchFiles} from './watch-files.js';
 
 const reflectServerFileName = 'reflect-server.js';
@@ -42,6 +43,19 @@ export type CompileResult = {
   code: esbuild.OutputFile;
   sourcemap: esbuild.OutputFile | undefined;
 };
+
+export async function compileOrReportWarning(
+  entryPoint: string,
+  sourcemap: esbuild.BuildOptions['sourcemap'],
+  mode: 'production' | 'development',
+): Promise<CompileResult> {
+  try {
+    // await to catch errors.
+    return await compile(entryPoint, sourcemap, mode);
+  } catch (e) {
+    throw new ErrorWrapper(e, 'WARNING');
+  }
+}
 
 export async function compile(
   entryPoint: string,
