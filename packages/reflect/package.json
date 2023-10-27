@@ -26,8 +26,19 @@
     "@rocicorp/logger": "^5.2.1",
     "@rocicorp/resolver": "^1.0.1",
     "esbuild": "^0.19.4",
-    "miniflare": "^3.20230717.0",
-    "replicache-react": "^3.1.0"
+    "miniflare": "^3.20230717.0"
+  },
+  "peerDependencies": {
+    "react": ">=16.0 <19.0",
+    "react-dom": ">=16.0 <19.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "nanoid": "^4.0.2",
@@ -52,6 +63,7 @@
     "reflect-client": "0.0.0",
     "reflect-server": "0.0.0",
     "reflect-shared": "0.0.0",
+    "reflect-react": "0.0.0",
     "replicache": "13.0.1"
   },
   "engines": {

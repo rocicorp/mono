@@ -19,7 +19,7 @@ export function CursorField({
   stage: Rect;
   docSize: Size;
   r: Reflect<M>;
-  presentClientIDs: string[];
+  presentClientIDs: ReadonlySet<string>;
   botIDs: string[];
   myClientID: string;
   hideLocalArrow: boolean;

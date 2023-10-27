@@ -16,9 +16,8 @@ import styles from '@/styles/Home.module.css';
 import {Location, getLocationString} from '@/util/get-location-string';
 import {closeReflect} from '@/util/reflect';
 import {getWorkerHost} from '@/util/worker-host';
-import type {ClientID} from '@rocicorp/reflect';
 import {Reflect} from '@rocicorp/reflect/client';
-import {useSubscribe} from '@rocicorp/reflect/react';
+import {useSubscribe, usePresence} from '@rocicorp/reflect/react';
 import classNames from 'classnames';
 import {event} from 'nextjs-google-analytics';
 import {useCallback, useEffect, useState} from 'react';
@@ -209,25 +208,6 @@ function useEnsureLocation(r: Reflect<M> | null) {
   }, [location, r]);
 }
 
-function usePresentClientIDs(r: Reflect<M> | null) {
-  const [presentClientIDs, setPresentClientIDs] = useState([] as ClientID[]);
-  useEffect(() => {
-    if (!r) {
-      return;
-    }
-    const unsubscribe = r.subscribeToPresence(ids => {
-      setPresentClientIDs([...ids]);
-    });
-
-    return () => {
-      unsubscribe();
-      setPresentClientIDs([] as ClientID[]);
-    };
-  }, [r]);
-
-  return presentClientIDs;
-}
-
 function useBotIDs(r: Reflect<M> | null) {
   const botIDs = useSubscribe(
     r,
@@ -285,7 +265,7 @@ export function Demo({
   const {r, online} = useReflect(puzzleRoomID, stage, home);
   const myClientID = useThisClient(r);
   useEnsureLocation(r);
-  const presentClientIDs = usePresentClientIDs(r);
+  const presentClientIDs = usePresence(r);
   const botIDs = useBotIDs(r);
   const [demoInView, setDemoInView] = useState(false);
   const {ref} = useInView({
@@ -389,7 +369,7 @@ export function Demo({
           <div className="online-dot"></div>
           Active Users:&nbsp;
           <span id="active-user-count">
-            {Math.max(presentClientIDs.length + botIDs.length, 1)}
+            {Math.max(presentClientIDs.size + botIDs.length, 1)}
           </span>
         </div>
       </div>

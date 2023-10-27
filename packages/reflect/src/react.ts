@@ -1,1 +1,1 @@
-export * from 'replicache-react';
+export * from 'reflect-react';
