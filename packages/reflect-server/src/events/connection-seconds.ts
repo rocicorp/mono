@@ -17,7 +17,7 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
   readonly #channel: Channel;
   readonly #scheduler: AlarmScheduler;
 
-  #timeoutID: TimeoutID = 0;
+  #timeoutID: Promise<TimeoutID> = Promise.resolve(0);
   #elapsedMs: number = 0;
   #currentCount: number = 0;
   #lastCountChange: number = 0;
@@ -35,7 +35,9 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
     await this.#update(currentCount, false);
   }
 
-  async #update(currentCount: number, resetElapsed: boolean): Promise<number> {
+  async #update(currentCount: number, flush: boolean): Promise<void> {
+    // Note: All bookkeeping variables must be updated before the (blocking)
+    // scheduling to ensure that they are atomicity updated.
     const now = Date.now();
 
     const prevCount = this.#currentCount;
@@ -43,48 +45,64 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
     this.#currentCount = currentCount;
     this.#lastCountChange = now;
 
-    if (currentCount > 0 && this.#timeoutID === 0) {
-      // currentCount moves from 0 to non-zero. Schedule a new timeout.
-      this.#intervalStartTime = now;
-      await this.#scheduleFlush(REPORTING_INTERVAL_MS);
-    } else if (currentCount < prevCount) {
-      // When a connection closes, schedule an earlier flush so that (1) the FetchEvents
-      // that correspond to the closed websocket are immediately flushed to the tail log
-      // and (2) in the case that there are no longer any connections, we report the connection
-      // times before the DO is shut down.
-      await this.#scheduleFlush(CONNECTION_CLOSED_FLUSH_INTERVAL_MS);
+    if (flush) {
+      const interval = (now - this.#intervalStartTime) / 1000;
+      const elapsed = this.#elapsedMs / 1000;
+
+      const report: ConnectionSecondsReport = {interval, elapsed};
+      this.#channel.publish(report);
+
+      this.#elapsedMs = 0;
+      this.#timeoutID = Promise.resolve(0);
     }
 
-    const elapsedMs = this.#elapsedMs;
-    if (resetElapsed) {
-      this.#elapsedMs = 0;
-    }
-    return elapsedMs;
+    // After updating the bookkeeping state, the next timeout is scheduled.
+    // Scheduling state is kept consistent by serializing updates on the
+    // `#timeoutID` Promise.
+    this.#timeoutID = this.#timeoutID.then(timeoutID =>
+      this.#scheduleFlush(timeoutID, prevCount, currentCount, now),
+    );
+    await this.#timeoutID;
   }
 
-  async #scheduleFlush(intervalMs: number): Promise<void> {
-    const prevTimeoutID = this.#timeoutID;
-    this.#timeoutID = await this.#scheduler.promiseTimeout(
+  async #scheduleFlush(
+    currTimeoutID: TimeoutID,
+    prevCount: number,
+    currentCount: number,
+    now: number,
+  ): Promise<TimeoutID> {
+    // When a connection closes, schedule an earlier flush so that (1) the FetchEvents
+    // that correspond to the closed websocket are immediately flushed to the tail log
+    // and (2) in the case that there are no longer any connections, we report the connection
+    // times before the DO is shut down.
+    const fastFlush = currentCount < prevCount;
+    if (!fastFlush) {
+      if (
+        currTimeoutID !== 0 || // Keep the existing schedule.
+        currentCount === 0 // Nothing to flush.
+      ) {
+        return currTimeoutID;
+      }
+    }
+    if (currTimeoutID === 0) {
+      this.#intervalStartTime = now;
+    }
+    const newTimeoutID = await this.#scheduler.promiseTimeout(
       lc => this.#flush(lc),
-      intervalMs,
+      fastFlush ? CONNECTION_CLOSED_FLUSH_INTERVAL_MS : REPORTING_INTERVAL_MS,
     );
     // Optimization: Because rescheduling is always to an earlier timeout,
     // schedule the new (earlier) timeout first before clearing the later one.
     // This avoids unnecessarily clearing the DO Alarm, or setting it later, before
     // setting the earlier Alarm.
-    if (prevTimeoutID !== 0) {
-      await this.#scheduler.clearTimeout(prevTimeoutID);
+    if (currTimeoutID !== 0) {
+      await this.#scheduler.clearTimeout(currTimeoutID);
     }
+    return newTimeoutID;
   }
 
   async #flush(lc: LogContext): Promise<void> {
-    this.#timeoutID = 0; // Clear the TimeoutID so that it can be rescheduled as necessary.
-    const interval = (Date.now() - this.#intervalStartTime) / 1000;
-    const elapsedMs = await this.#update(this.#currentCount, true);
-    const elapsed = elapsedMs / 1000;
-
-    lc.info?.(`Flushing connection seconds ${elapsed}`);
-    const report: ConnectionSecondsReport = {interval, elapsed};
-    this.#channel.publish(report);
+    lc.info?.(`Flushing connection seconds`);
+    await this.#update(this.#currentCount, true);
   }
 }
