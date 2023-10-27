@@ -28,7 +28,7 @@ export async function reportE(
   }
 
   severity ??= e instanceof ErrorWrapper ? e.severity : 'ERROR';
-  await reportError({
+  const error = {
     action: eventName,
     error: createErrorInfo(e),
     severity,
@@ -37,7 +37,9 @@ export async function reportE(
       userAgent: {type: 'reflect-cli', version},
     },
     agentContext: getUserParameters(version),
-  }).catch(_err => {
+  };
+  // console.debug(error); // For testing
+  await reportError(error).catch(_err => {
     /* swallow */
   });
 }

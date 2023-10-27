@@ -1,4 +1,5 @@
-import {doc, getFirestore, Firestore} from 'firebase/firestore';
+import type * as esbuild from 'esbuild';
+import {Firestore, doc, getFirestore} from 'firebase/firestore';
 import {
   publish as publishCaller,
   type PublishRequest,
@@ -13,8 +14,10 @@ import {
   writeTemplatedFilePlaceholders,
 } from './app-config.js';
 import {authenticate} from './auth-config.js';
-import {compile} from './compile.js';
+import {CompileResult, compile} from './compile.js';
+import {ErrorWrapper} from './error.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
+import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
 import {checkForServerDeprecation} from './version.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
@@ -57,7 +60,7 @@ export async function publishHandler(
 
   const absPath = path.resolve(script);
   if (!(await exists(absPath))) {
-    throw new Error(`File not found: ${absPath}`);
+    logErrorAndExit(`File not found: ${absPath}`);
   }
 
   let serverVersionRange;
@@ -70,7 +73,11 @@ export async function publishHandler(
   }
 
   console.log(`Compiling ${script}`);
-  const {code, sourcemap} = await compile(absPath, 'linked', 'production');
+  const {code, sourcemap} = await compileOrReportWarning(
+    absPath,
+    'linked',
+    'production',
+  );
   assert(sourcemap);
 
   const {userID} = await authenticate(yargs);
@@ -121,5 +128,18 @@ export async function publishHandler(
     if (deployment.status === 'FAILED' || deployment.status === 'STOPPED') {
       break;
     }
+  }
+}
+
+async function compileOrReportWarning(
+  entryPoint: string,
+  sourcemap: esbuild.BuildOptions['sourcemap'],
+  mode: 'production' | 'development',
+): Promise<CompileResult> {
+  try {
+    // await to catch errors.
+    return await compile(entryPoint, sourcemap, mode);
+  } catch (e) {
+    throw new ErrorWrapper(e, 'WARNING');
   }
 }

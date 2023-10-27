@@ -13,6 +13,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {setAppConfigForTesting} from './app-config.js';
+import {ErrorWrapper} from './error.js';
 import {initFirebase} from './firebase.js';
 import {publishHandler, type PublishCaller} from './publish.js';
 import {reflectVersionMatcher, useFakeAuthConfig} from './test-helpers.js';
@@ -34,23 +35,6 @@ beforeEach(() => {
 afterEach(() => {
   setAppConfigForTesting(undefined);
   jest.restoreAllMocks();
-});
-
-test('it should throw if file not found', async () => {
-  const script = `./test${Math.random().toString(32).slice(2)}.ts`;
-  setAppConfigForTesting({
-    apps: {default: {appID: 'test-app-id'}},
-    server: script,
-  });
-
-  await expect(publishHandler({} as Args)).rejects.toEqual(
-    expect.objectContaining({
-      constructor: Error,
-      message: expect.stringMatching(
-        new RegExp('^File not found: .*' + script + '$'),
-      ),
-    }),
-  );
 });
 
 async function writeTempFiles(
@@ -94,24 +78,26 @@ async function writeTempFiles(
   );
 }
 
-test('it should throw if the source has syntax errors', async () => {
+test('it should throw warning if the source has syntax errors', async () => {
   await writeTempFiles('const x =');
   await expect(publishHandler({} as Args)).rejects.toEqual(
     expect.objectContaining({
-      constructor: Error,
+      constructor: ErrorWrapper,
       message: expect.stringMatching(/Unexpected end of file/),
+      severity: 'WARNING',
     }),
   );
 });
 
-test('it should throw if invalid version', async () => {
+test('it should throw warning if invalid version', async () => {
   await writeTempFiles('const x = 42;', 'test.ts', '1.0.0');
   await expect(publishHandler({} as Args)).rejects.toEqual(
     expect.objectContaining({
-      constructor: Error,
+      constructor: ErrorWrapper,
       message: expect.stringMatching(
         /^Unsupported version range "1.0.0" for "@rocicorp\/reflect" in /,
       ),
+      severity: 'WARNING',
     }),
   );
 });
