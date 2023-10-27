@@ -17,7 +17,9 @@ describe('bytes schema', () => {
     expect(v.is(data, schema)).toBe(true);
     const parsed = v.parse(data, schema);
     expect(parsed.foo).toBeInstanceOf(Uint8Array);
-    expect(parsed.foo.buffer).toEqual(buffer.buffer);
+    expect(Buffer.from(parsed.foo).toString('hex')).toEqual(
+      buffer.toString('hex'),
+    );
   });
 
   test('Bytes', () => {
@@ -30,7 +32,9 @@ describe('bytes schema', () => {
     const parsed = v.parse(data, schema);
     expect(parsed.foo).not.toBeInstanceOf(Bytes);
     expect(parsed.foo).toBeInstanceOf(Uint8Array);
-    expect(parsed.foo.buffer).toEqual(buffer.buffer);
+    expect(Buffer.from(parsed.foo).toString('hex')).toEqual(
+      buffer.toString('hex'),
+    );
   });
 
   test('invalid bytes', () => {
