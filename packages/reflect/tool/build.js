@@ -17,6 +17,7 @@ function basePath(...parts) {
 }
 
 function copyPackages() {
+  // Don't include 'react', react.d.ts is maintained manually
   for (const name of ['client', 'server', 'shared']) {
     for (const ext of ['d.ts']) {
       const src = basePath(
@@ -121,8 +122,10 @@ async function buildPackages() {
     'reflect-server',
     'reflect-client',
     'reflect-shared',
+    'reflect-react',
   );
   external.push('replicache-react', 'node:diagnostics_channel');
+  console.log(external);
 
   await esbuild.build({
     ...shared,

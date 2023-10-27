@@ -1,14 +1,24 @@
 import {useEffect, useState} from 'react';
-import type {Reflect} from 'reflect-client';
-import type {ClientID, MutatorDefs} from 'reflect-shared';
+import type {ClientID} from 'reflect-shared';
 
-export function usePresence<MD extends MutatorDefs>(
-  r: Reflect<MD>,
+export type SubscribeToPresenceCallback = (
+  presentClientIDs: ReadonlySet<ClientID>,
+) => void;
+
+export type PresenceSubscribable = {
+  subscribeToPresence(callback: SubscribeToPresenceCallback): () => void;
+};
+
+export function usePresence(
+  r: PresenceSubscribable | null | undefined,
 ): ReadonlySet<ClientID> {
   const [presentClientIDs, setPresentClientIDs] = useState(
     new Set() as ReadonlySet<ClientID>,
   );
   useEffect(() => {
+    if (!r) {
+      return;
+    }
     const unsubscribe = r.subscribeToPresence(ids => {
       setPresentClientIDs(ids);
     });
