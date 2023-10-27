@@ -89,14 +89,15 @@ test('it should throw warning if the source has syntax errors', async () => {
   );
 });
 
-test('it should throw if invalid version', async () => {
+test('it should throw warning if invalid version', async () => {
   await writeTempFiles('const x = 42;', 'test.ts', '1.0.0');
   await expect(publishHandler({} as Args)).rejects.toEqual(
     expect.objectContaining({
-      constructor: Error,
+      constructor: ErrorWrapper,
       message: expect.stringMatching(
         /^Unsupported version range "1.0.0" for "@rocicorp\/reflect" in /,
       ),
+      severity: 'WARNING',
     }),
   );
 });

@@ -3,14 +3,19 @@ import path from 'node:path';
 import {pkgUp} from 'pkg-up';
 import {Range, validRange} from 'semver';
 import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
+import {ErrorWrapper} from './error.js';
 
 /**
  * This finds the version of the reflect-server that an app is depending on. It
  * does this by finding the first package.json that has @rocicorp/reflect as a
  * dependency and returns the version from there.
  */
-export function findServerVersionRange(appPath: string): Promise<Range> {
-  return findServerVersionRangeInternal(appPath, appPath);
+export async function findServerVersionRange(appPath: string): Promise<Range> {
+  try {
+    return await findServerVersionRangeInternal(appPath, appPath);
+  } catch (e) {
+    throw new ErrorWrapper(e, 'WARNING');
+  }
 }
 
 async function findServerVersionRangeInternal(
