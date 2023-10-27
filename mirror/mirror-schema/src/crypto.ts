@@ -18,11 +18,11 @@ export function encrypt(
     key,
     iv,
   );
-  const bytes = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const encryptedBytes: EncryptedBytes = {
     key: keySpec,
     iv,
-    bytes,
+    ciphertext,
   };
   if (algo) {
     encryptedBytes.algo = algo;
@@ -34,11 +34,11 @@ export function decrypt(
   encryptedBytes: EncryptedBytes,
   key: Uint8Array,
 ): Uint8Array {
-  const {algo, iv, bytes} = encryptedBytes;
+  const {algo, iv, ciphertext} = encryptedBytes;
   const decipher = crypto.createDecipheriv(
     algo ?? DEFAULT_CIPHER_ALGORITHM,
     key,
     iv,
   );
-  return Buffer.concat([decipher.update(bytes), decipher.final()]);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 }

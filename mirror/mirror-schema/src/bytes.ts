@@ -43,7 +43,7 @@ export const encryptedBytesSchema = v.object({
   algo: v.string().optional(), // or DEFAULT_CIPHER_ALGORITHM
   key: keySpecSchema,
   iv: bytesSchema,
-  bytes: bytesSchema,
+  ciphertext: bytesSchema,
 });
 
 export type EncryptedBytes = v.Infer<typeof encryptedBytesSchema>;

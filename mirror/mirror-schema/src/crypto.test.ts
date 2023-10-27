@@ -14,8 +14,8 @@ test('encryption / decryption', () => {
 
   expect(encrypted1.key).toEqual(keySpec);
   expect(encrypted1.iv.length).toBe(16);
-  expect(encrypted1.bytes.length).toBe(32); // Two cipher blocks
-  expect(Buffer.from(encrypted1.bytes).toString('utf-8')).not.toBe(
+  expect(encrypted1.ciphertext.length).toBe(32); // Two cipher blocks
+  expect(Buffer.from(encrypted1.ciphertext).toString('utf-8')).not.toBe(
     'this is the plaintext',
   );
 
@@ -26,15 +26,15 @@ test('encryption / decryption', () => {
   );
   expect(encrypted2.key).toEqual(keySpec);
   expect(encrypted2.iv.length).toBe(16);
-  expect(encrypted2.bytes.length).toBe(32); // Two cipher blocks
-  expect(Buffer.from(encrypted2.bytes).toString('utf-8')).not.toBe(
+  expect(encrypted2.ciphertext.length).toBe(32); // Two cipher blocks
+  expect(Buffer.from(encrypted2.ciphertext).toString('utf-8')).not.toBe(
     'this is the plaintext',
   );
 
   // Encryptions of the same plaintext should result in different
   // IVs and thus different ciphertexts.
-  expect(Buffer.from(encrypted1.bytes).toString('hex')).not.toEqual(
-    Buffer.from(encrypted2.bytes).toString('hex'),
+  expect(Buffer.from(encrypted1.ciphertext).toString('hex')).not.toEqual(
+    Buffer.from(encrypted2.ciphertext).toString('hex'),
   );
 
   const decrypted1 = decrypt(encrypted1, key);
