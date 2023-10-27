@@ -31,10 +31,6 @@
     "update-reflect-pull": "./build-latest-reflect.sh pull",
     "generate-puzzle-pieces": "node raw-assets/puzzle-pieces/generate-puzzle-pieces.js"
   },
-  "peerDependencies": {
-    "react": ">=16.0 <19.0",
-    "react-dom": ">=16.0 <19.0"
-  },
   "dependencies": {
     "@rocicorp/logger": "^5.2.1",
     "@rocicorp/reflect": "0.36.202310172246+95297b",
