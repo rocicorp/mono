@@ -1,3 +1,4 @@
+import type * as esbuild from 'esbuild';
 import {Firestore, doc, getFirestore} from 'firebase/firestore';
 import {
   publish as publishCaller,
@@ -13,7 +14,8 @@ import {
   writeTemplatedFilePlaceholders,
 } from './app-config.js';
 import {authenticate} from './auth-config.js';
-import {compileOrReportWarning} from './compile.js';
+import {CompileResult, compile} from './compile.js';
+import {ErrorWrapper} from './error.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
@@ -126,5 +128,18 @@ export async function publishHandler(
     if (deployment.status === 'FAILED' || deployment.status === 'STOPPED') {
       break;
     }
+  }
+}
+
+async function compileOrReportWarning(
+  entryPoint: string,
+  sourcemap: esbuild.BuildOptions['sourcemap'],
+  mode: 'production' | 'development',
+): Promise<CompileResult> {
+  try {
+    // await to catch errors.
+    return await compile(entryPoint, sourcemap, mode);
+  } catch (e) {
+    throw new ErrorWrapper(e, 'WARNING');
   }
 }
