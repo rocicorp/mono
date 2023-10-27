@@ -17,6 +17,9 @@
     "react": ">=16.0 <19.0",
     "react-dom": ">=16.0 <19.0"
   },
+  "dependencies": {
+    "replicache-react": "^3.1.0"
+  },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",

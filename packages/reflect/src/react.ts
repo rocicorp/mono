@@ -1,2 +1,1 @@
-export * from 'replicache-react';
-export {usePresence} from 'reflect-react';
+export {usePresence, useSubscribe} from 'reflect-react';

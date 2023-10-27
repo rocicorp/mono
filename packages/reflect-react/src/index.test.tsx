@@ -16,7 +16,7 @@ test('undefined/null PresenceSubscribable', async () => {
   const t = async (presenceSubscribable: null | undefined) => {
     let root: ReactTestRenderer | undefined;
     await act(() => {
-      root = create(React.createElement(A, {presenceSubscribable}));
+      root = create(<A presenceSubscribable={presenceSubscribable}></A>);
     });
 
     expect(root?.toJSON()).toEqual('[]');
@@ -46,7 +46,7 @@ test('updating', async () => {
 
   let root: ReactTestRenderer | undefined;
   await act(() => {
-    root = create(React.createElement(A, {presenceSubscribable}));
+    root = create(<A presenceSubscribable={presenceSubscribable}></A>);
   });
 
   expect(root?.toJSON()).toEqual('[]');
@@ -91,7 +91,7 @@ test('cleanup', async () => {
 
   let root: ReactTestRenderer | undefined;
   await act(() => {
-    root = create(React.createElement(A, {presenceSubscribable}));
+    root = create(<A presenceSubscribable={presenceSubscribable}></A>);
   });
 
   expect(root?.toJSON()).toEqual('[]');

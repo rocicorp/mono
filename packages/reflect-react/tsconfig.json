@@ -1,8 +1,8 @@
 {
   "extends": "../../tsconfig.json",
-  "jsx": "react",
   "compilerOptions": {
-    "lib": ["dom", "es2022"]
+    "lib": ["dom", "es2022"],
+    "jsx": "react"
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }
