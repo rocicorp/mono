@@ -10,7 +10,7 @@ export type PieceInfo = PieceModel & {
 
 export async function getPieceInfos(
   tx: ReadTransaction,
-  presentClientIDs: string[],
+  presentClientIDs: ReadonlySet<string>,
 ): Promise<Record<string, PieceInfo>> {
   const lp = await listPieces(tx);
   const mp: Record<string, PieceInfo> = {};
