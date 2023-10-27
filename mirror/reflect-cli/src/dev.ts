@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import {mustReadAppConfig} from './app-config.js';
 import {watch} from './compile.js';
 import {startDevServer} from './dev/start-dev-server.js';
+import {ErrorWrapper} from './error.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
@@ -56,38 +57,43 @@ export async function devHandler(yargs: DevHandlerArgs) {
   const ac = new AbortController();
   let mfAc: AbortController | undefined;
   const mode = 'development';
-  for await (const {code, sourcemap} of watch(
-    absPath,
-    'linked',
-    mode,
-    ac.signal,
-  )) {
-    assert(sourcemap);
-    const start = Date.now();
-    process.stdout.write(
-      (first ? 'Starting' : 'Restarting') + ' dev server...',
-    );
 
-    mfAc?.abort();
-    mfAc = new AbortController();
-
-    const {href} = await startDevServer(
-      code,
-      sourcemap,
-      port,
+  try {
+    for await (const {code, sourcemap} of watch(
+      absPath,
+      'linked',
       mode,
-      mfAc.signal,
-    );
-    process.stdout.write(` Done in ${Date.now() - start}ms.\n`);
-    if (first && !silenceStartupMessage) {
-      console.log(`
+      ac.signal,
+    )) {
+      assert(sourcemap);
+      const start = Date.now();
+      process.stdout.write(
+        (first ? 'Starting' : 'Restarting') + ' dev server...',
+      );
+
+      mfAc?.abort();
+      mfAc = new AbortController();
+
+      const {href} = await startDevServer(
+        code,
+        sourcemap,
+        port,
+        mode,
+        mfAc.signal,
+      );
+      process.stdout.write(` Done in ${Date.now() - start}ms.\n`);
+      if (first && !silenceStartupMessage) {
+        console.log(`
 Dev server running at:
   ${href}
 `);
 
-      first = false;
+        first = false;
+      }
     }
+  } catch (e) {
+    throw new ErrorWrapper(e, 'WARNING');
+  } finally {
+    mfAc?.abort();
   }
-
-  mfAc?.abort();
 }
