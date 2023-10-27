@@ -1,3 +1,4 @@
+import {FetchResultError} from 'cloudflare-api/src/fetch.js';
 import {
   FieldValue,
   Precondition,
@@ -10,6 +11,7 @@ import {logger} from 'firebase-functions';
 import {onDocumentCreated} from 'firebase-functions/v2/firestore';
 import {HttpsError} from 'firebase-functions/v2/https';
 import _ from 'lodash';
+import type {App, ScriptRef} from 'mirror-schema/src/app.js';
 import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {
   Deployment,
@@ -18,31 +20,28 @@ import {
   deploymentDataConverter,
   deploymentPath,
 } from 'mirror-schema/src/deployment.js';
-import {toMillis} from 'mirror-schema/src/timestamp.js';
+import {
+  providerDataConverter,
+  providerPath,
+} from 'mirror-schema/src/provider.js';
 import {watch} from 'mirror-schema/src/watch.js';
+import {coerce, lt} from 'semver';
 import {must} from 'shared/src/must.js';
 import {getServerModuleMetadata} from '../../cloudflare/get-server-modules.js';
+import {
+  GlobalScriptHandler,
+  NamespacedScriptHandler,
+  ScriptHandler,
+} from '../../cloudflare/script-handler.js';
 import {newDeploymentID} from '../../ids.js';
+import {getDataOrFail} from '../validators/data.js';
+import {MIN_WFP_VERSION} from './create.function.js';
 import {deleteAppDocs} from './delete.function.js';
 import {
   DEPLOYMENT_SECRETS_NAMES,
   getApiToken,
   getAppSecrets,
 } from './secrets.js';
-import {FetchResultError} from 'cloudflare-api/src/fetch.js';
-import type {App, ScriptRef} from 'mirror-schema/src/app.js';
-import {
-  providerDataConverter,
-  providerPath,
-} from 'mirror-schema/src/provider.js';
-import {getDataOrFail} from '../validators/data.js';
-import {
-  GlobalScriptHandler,
-  NamespacedScriptHandler,
-  ScriptHandler,
-} from '../../cloudflare/script-handler.js';
-import {MIN_WFP_VERSION} from './create.function.js';
-import {lt, coerce} from 'semver';
 
 export const deploy = (firestore: Firestore, storage: Storage) =>
   onDocumentCreated(
@@ -316,7 +315,7 @@ export async function earlierDeployments(
         );
         logger.warn(`Set ${nextDeploymentID} to FAILED after timeout`);
       },
-      toMillis(lastActionTime) + DEPLOYMENT_FAILURE_TIMEOUT_MS - Date.now(),
+      lastActionTime.toMillis() + DEPLOYMENT_FAILURE_TIMEOUT_MS - Date.now(),
     );
   }
 }
