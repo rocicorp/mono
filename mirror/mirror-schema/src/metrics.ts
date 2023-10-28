@@ -127,7 +127,7 @@ export function yearMonth(date: Date): number {
 //
 // Nuance: Note that the `teamID` field is present for app-level metrics documents. Although
 // this might seem redundant with the `teamID` in the App doc itself, keeping track of the
-// `teamID` it is necessary here because metrics documents are historic. In the event that
+// `teamID` is necessary here because metrics documents are historic. In the event that
 // we add support for transferring Apps to another team, the schema correctly attributes
 // metrics to the team that the app belonged to when the metrics happened, and metrics for
 // the App under the new team will be written to a different app-level document (the teamID
