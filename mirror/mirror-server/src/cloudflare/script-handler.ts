@@ -215,19 +215,18 @@ export class NamespacedScriptHandler extends AbstractScriptHandler<NamespacedScr
 // hostname).
 const DNS_POLL_INTERVAL = 3000;
 const DNS_TIMEOUT = 2 * 60 * 1000;
-// const FETCH_POLL_INTERVAL = 1000;
-// const LIVENESS_TIMEOUT = 5 * 1000;
+const FETCH_POLL_INTERVAL = 1000;
+const LIVENESS_TIMEOUT = 5 * 1000;
 const CLOUDFLARE_DNS_SERVERS = ['1.1.1.1'] as const;
 
 export async function* waitForLiveness(host: string): AsyncGenerator<string> {
   const resolver = new Resolver();
   resolver.setServers(CLOUDFLARE_DNS_SERVERS);
 
-  const start = Date.now();
-  let ips: string[];
+  let start = Date.now();
   for (let first = true; ; first = false) {
     try {
-      ips = await resolver.resolve4(host);
+      const ips = await resolver.resolve4(host);
       logger.info(`${host} resolves to ${ips}`);
       break;
     } catch (err) {
@@ -245,28 +244,26 @@ export async function* waitForLiveness(host: string): AsyncGenerator<string> {
     await sleep(DNS_POLL_INTERVAL);
   }
 
-  // Disabled while investigating https://github.com/rocicorp/mono/issues/1159
-  //
-  // yield `Verifying liveness of https://${host}/`;
-  // start = Date.now();
-  // for (let i = 0; ; i++) {
-  //   const url = `https://${ips[i % ips.length]}:443/`;
-  //   try {
-  //     const res = await fetch(url, {headers: {host}});
-  //     if (res.ok) {
-  //       logger.info(`${url} (Host: ${host}) is live`);
-  //       break;
-  //     }
-  //     logger.debug(`GET ${url}: ${res.status}`);
-  //   } catch (err) {
-  //     logger.debug(`GET ${url} error`, err);
-  //   }
-  //   if (Date.now() - start > LIVENESS_TIMEOUT) {
-  //     logger.warn(
-  //       `Timed out waiting for https://${host}/. But the Worker was presumably successfully deployed.`,
-  //     );
-  //     break;
-  //   }
-  //   await sleep(FETCH_POLL_INTERVAL);
-  // }
+  const url = `https://${host}/`;
+  yield `Verifying liveness of ${url}/`;
+  start = Date.now();
+  for (let i = 0; ; i++) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        logger.info(`${url} (Host: ${host}) is live`);
+        break;
+      }
+      logger.debug(`GET ${url}: ${res.status}`);
+    } catch (err) {
+      logger.debug(`GET ${url} error`, err);
+    }
+    if (Date.now() - start > LIVENESS_TIMEOUT) {
+      logger.warn(
+        `Timed out waiting for https://${host}/. But the Worker was presumably successfully deployed.`,
+      );
+      break;
+    }
+    await sleep(FETCH_POLL_INTERVAL);
+  }
 }
