@@ -4,7 +4,7 @@ import {decrypt, encrypt} from './crypto.js';
 
 test('encryption / decryption', () => {
   const key = crypto.randomBytes(32);
-  const keySpec = {version: 2};
+  const keySpec = {version: '2'};
 
   const encrypted1 = encrypt(
     Buffer.from('this is the plaintext', 'utf-8'),

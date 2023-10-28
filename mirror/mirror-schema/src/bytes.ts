@@ -30,7 +30,7 @@ export const keySpecSchema = v.object({
   // or absent for the default secret (which may be context dependent).
   secretName: v.string().optional(),
   // The version of the secret.
-  version: v.number(),
+  version: v.string(),
 });
 
 export type KeySpec = v.Infer<typeof keySpecSchema>;
