@@ -216,7 +216,7 @@ export class NamespacedScriptHandler extends AbstractScriptHandler<NamespacedScr
 const DNS_POLL_INTERVAL = 3000;
 const FETCH_POLL_INTERVAL = 1000;
 const DNS_TIMEOUT = 2 * 60 * 1000;
-const LIVENESS_TIMEOUT = 10 * 1000;
+const LIVENESS_TIMEOUT = 5 * 1000;
 const CLOUDFLARE_DNS_SERVERS = ['1.1.1.1'] as const;
 
 export async function* waitForLiveness(host: string): AsyncGenerator<string> {
