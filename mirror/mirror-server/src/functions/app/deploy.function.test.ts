@@ -250,9 +250,9 @@ describe('deploy', () => {
     const deploymentFinished = runDeployment(
       firestore,
       null as unknown as Storage,
+      new MockSecrets(),
       APP_ID,
       deploymentID,
-      new MockSecrets(),
       {
         async *publish() {
           publishing();
@@ -302,9 +302,9 @@ describe('deploy', () => {
     await runDeployment(
       firestore,
       null as unknown as Storage,
+      new MockSecrets(),
       APP_ID,
       nextDeploymentID,
-      new MockSecrets(),
       noopScriptHandler,
     );
 
@@ -343,9 +343,9 @@ describe('deploy', () => {
     const deploymentFinished = runDeployment(
       firestore,
       null as unknown as Storage,
+      new MockSecrets(),
       APP_ID,
       deploymentID,
-      new MockSecrets(),
       {
         // eslint-disable-next-line require-yield
         async *publish() {
@@ -436,17 +436,17 @@ describe('deploy', () => {
       runDeployment(
         firestore,
         null as unknown as Storage,
+        new MockSecrets(),
         APP_ID,
         id,
-        new MockSecrets(),
         testScriptHandler,
       ),
       runDeployment(
         firestore,
         null as unknown as Storage,
+        new MockSecrets(),
         APP_ID,
         id,
-        new MockSecrets(),
         testScriptHandler,
       ),
     ]);
@@ -474,9 +474,9 @@ describe('deploy', () => {
     await runDeployment(
       firestore,
       null as unknown as Storage,
+      new MockSecrets(),
       APP_ID,
       deleteID,
-      new MockSecrets(),
       {
         async *publish() {},
         // eslint-disable-next-line require-await
@@ -548,9 +548,9 @@ describe('deploy', () => {
         await runDeployment(
           firestore,
           null as unknown as Storage,
+          new MockSecrets(),
           APP_ID,
           deploymentID,
-          new MockSecrets(),
           {
             async *publish() {},
             // eslint-disable-next-line require-await

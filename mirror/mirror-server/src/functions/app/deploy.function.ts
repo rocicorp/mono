@@ -54,16 +54,16 @@ export const deploy = (
       const {appID, deploymentID} = event.params;
 
       await earlierDeployments(firestore, appID, deploymentID);
-      await runDeployment(firestore, storage, appID, deploymentID, secrets);
+      await runDeployment(firestore, storage, secrets, appID, deploymentID);
     },
   );
 
 export async function runDeployment(
   firestore: Firestore,
   storage: Storage,
+  secrets: Secrets,
   appID: string,
   deploymentID: string,
-  secrets: Secrets, // Overridden in tests.
   testScriptHandler?: ScriptHandler, // Overridden in tests.
 ): Promise<void> {
   const [appDoc, deploymentDoc] = await firestore.runTransaction(
