@@ -223,7 +223,7 @@ export async function* waitForLiveness(host: string): AsyncGenerator<string> {
   const resolver = new Resolver();
   resolver.setServers(CLOUDFLARE_DNS_SERVERS);
 
-  let start = Date.now();
+  const start = Date.now();
   let ips: string[];
   for (let first = true; ; first = false) {
     try {
