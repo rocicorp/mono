@@ -46,7 +46,11 @@ export const error = {
 export const app = {
   create: https.onCall(baseHttpsOptions, appFunctions.create(getFirestore())),
   publish: https.onCall(
-    {...baseHttpsOptions, secrets: [...DEPLOYMENT_SECRETS_NAMES]},
+    {
+      ...baseHttpsOptions,
+      secrets: [...DEPLOYMENT_SECRETS_NAMES],
+      memory: '512MiB',
+    },
     appFunctions.publish(getFirestore(), getStorage(), modulesBucketName),
   ),
   deploy: appFunctions.deploy(getFirestore(), getStorage(), secrets),
