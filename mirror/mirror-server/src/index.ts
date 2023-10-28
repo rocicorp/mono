@@ -10,16 +10,21 @@ import {
   serviceAccountId,
 } from './config/index.js';
 import * as appFunctions from './functions/app/index.js';
+import {DEPLOYMENT_SECRETS_NAMES} from './functions/app/secrets.js';
+import * as errorFunctions from './functions/error/index.js';
 import * as roomFunctions from './functions/room/index.js';
 import * as serverFunctions from './functions/server/index.js';
 import * as teamFunctions from './functions/team/index.js';
 import * as userFunctions from './functions/user/index.js';
-import * as errorFunctions from './functions/error/index.js';
-import {DEPLOYMENT_SECRETS_NAMES} from './functions/app/secrets.js';
+import {SecretsClient} from './secrets/index.js';
 
 // Initializes firestore et al. (e.g. for subsequent calls to getFirestore())
 initializeApp(appOptions);
 setGlobalOptions({serviceAccount: serviceAccountId});
+
+// Cache the secrets manager client to amortize connection establishment time.
+// https://cloud.google.com/functions/docs/samples/functions-tips-gcp-apis#functions_tips_gcp_apis-nodejs
+const secrets = new SecretsClient();
 
 // Per https://firebase.google.com/docs/functions/manage-functions
 // functions should be deployed in groups of 10 or fewer
@@ -44,7 +49,7 @@ export const app = {
     {...baseHttpsOptions, secrets: [...DEPLOYMENT_SECRETS_NAMES]},
     appFunctions.publish(getFirestore(), getStorage(), modulesBucketName),
   ),
-  deploy: appFunctions.deploy(getFirestore(), getStorage()),
+  deploy: appFunctions.deploy(getFirestore(), getStorage(), secrets),
   autoDeploy: appFunctions.autoDeploy(getFirestore()),
   rename: https.onCall(baseHttpsOptions, appFunctions.rename(getFirestore())),
   tail: https.onRequest(
@@ -53,7 +58,7 @@ export const app = {
       ...baseHttpsOptions,
       secrets: [...DEPLOYMENT_SECRETS_NAMES],
     },
-    appFunctions.tail(getFirestore(), getAuth()),
+    appFunctions.tail(getFirestore(), getAuth(), secrets),
   ),
   delete: https.onCall(baseHttpsOptions, appFunctions.delete(getFirestore())),
 };

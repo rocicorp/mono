@@ -13,7 +13,6 @@ import {
 import {sleep} from 'shared/src/sleep.js';
 import type WebSocket from 'ws';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
-import {mockApiTokenForProvider} from '../app/secrets.js';
 import {tail} from './tail.handler.js';
 
 export class MockSocket {
@@ -95,7 +94,6 @@ describe('test tail', () => {
       provider: 'tail-test-provider',
     });
     await setProvider(firestore, 'tail-test-provider', {});
-    mockApiTokenForProvider('tail-test-provider');
   });
 
   const getRequestWithHeaders = (): https.Request =>

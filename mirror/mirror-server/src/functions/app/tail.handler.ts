@@ -16,6 +16,7 @@ import * as v from 'shared/src/valita.js';
 import type WebSocket from 'ws';
 import packageJson from '../../../package.json';
 import {createTail as createTailDefault} from '../../cloudflare/tail/tail.js';
+import type {Secrets} from '../../secrets/index.js';
 import {
   appAuthorization,
   tokenAuthentication,
@@ -24,11 +25,11 @@ import {
 import {getDataOrFail} from '../validators/data.js';
 import {validateRequest} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
-import {getApiToken} from './secrets.js';
 
 export const tail = (
   firestore: Firestore,
   auth: Auth,
+  secrets: Secrets,
   createTail = createTailDefault,
 ) =>
   onRequest(
@@ -54,7 +55,8 @@ export const tail = (
           );
         }
 
-        const apiToken = getApiToken(provider);
+        const apiToken = (await secrets.getSecret(`${provider}_api_token`))
+          .payload;
         const {accountID} = getDataOrFail(
           await firestore
             .doc(providerPath(provider))

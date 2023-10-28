@@ -11,9 +11,20 @@ import {
 } from 'mirror-schema/src/test-helpers.js';
 import {sleep} from 'shared/src/sleep.js';
 import type WebSocket from 'ws';
+import type {SecretValue, Secrets} from '../../secrets/index.js';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
-import {mockApiTokenForProvider} from './secrets.js';
 import {tail} from './tail.handler.js';
+
+class MockSecrets implements Secrets {
+  getSecret(name: string, version = 'latest'): Promise<SecretValue> {
+    expect(name).toBe(`tail-test-provider_api_token`);
+    expect(version).toBe('latest');
+    return Promise.resolve({
+      payload: 'tail-test-provider-api-token',
+      version: '1',
+    });
+  }
+}
 
 export class MockSocket {
   readonly url: string | URL;
@@ -90,7 +101,12 @@ describe('test tail', () => {
       });
     };
 
-    createTailFunction = tail(firestore, auth, createCloudflareTailMock);
+    createTailFunction = tail(
+      firestore,
+      auth,
+      new MockSecrets(),
+      createCloudflareTailMock,
+    );
     await setUser(firestore, 'foo', 'foo@bar.com', 'bob', {fooTeam: 'admin'});
     await setApp(firestore, 'myApp', {
       teamID: 'fooTeam',
@@ -98,7 +114,6 @@ describe('test tail', () => {
       provider: 'tail-test-provider',
     });
     await setProvider(firestore, 'tail-test-provider', {});
-    mockApiTokenForProvider('tail-test-provider');
   });
 
   const getRequestWithHeaders = (): https.Request =>

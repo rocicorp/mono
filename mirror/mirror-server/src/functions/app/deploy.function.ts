@@ -34,16 +34,17 @@ import {
   ScriptHandler,
 } from '../../cloudflare/script-handler.js';
 import {newDeploymentID} from '../../ids.js';
+import type {Secrets} from '../../secrets/index.js';
 import {getDataOrFail} from '../validators/data.js';
 import {MIN_WFP_VERSION} from './create.function.js';
 import {deleteAppDocs} from './delete.function.js';
-import {
-  DEPLOYMENT_SECRETS_NAMES,
-  getApiToken,
-  getAppSecrets,
-} from './secrets.js';
+import {DEPLOYMENT_SECRETS_NAMES, getAppSecrets} from './secrets.js';
 
-export const deploy = (firestore: Firestore, storage: Storage) =>
+export const deploy = (
+  firestore: Firestore,
+  storage: Storage,
+  secrets: Secrets,
+) =>
   onDocumentCreated(
     {
       document: 'apps/{appID}/deployments/{deploymentID}',
@@ -53,7 +54,7 @@ export const deploy = (firestore: Firestore, storage: Storage) =>
       const {appID, deploymentID} = event.params;
 
       await earlierDeployments(firestore, appID, deploymentID);
-      await runDeployment(firestore, storage, appID, deploymentID);
+      await runDeployment(firestore, storage, appID, deploymentID, secrets);
     },
   );
 
@@ -62,7 +63,7 @@ export async function runDeployment(
   storage: Storage,
   appID: string,
   deploymentID: string,
-  getApiTokenSecret = getApiToken, // Overridden in tests.
+  secrets: Secrets, // Overridden in tests.
   testScriptHandler?: ScriptHandler, // Overridden in tests.
 ): Promise<void> {
   const [appDoc, deploymentDoc] = await firestore.runTransaction(
@@ -103,7 +104,7 @@ export async function runDeployment(
 
   try {
     const [apiToken, providerDoc] = await Promise.all([
-      getApiTokenSecret(provider),
+      secrets.getSecret(`${provider}_api_token`).then(value => value.payload),
       firestore
         .doc(providerPath(provider))
         .withConverter(providerDataConverter)
@@ -151,7 +152,7 @@ export async function runDeployment(
       serverVersion,
     );
 
-    const {secrets, hashes} = await getAppSecrets();
+    const {secrets: appSecrets, hashes} = await getAppSecrets();
 
     const newScriptRef = (await migrateToWFP(
       firestore,
@@ -177,7 +178,7 @@ export async function runDeployment(
       {id: teamID, label: teamLabel},
       hostname,
       options,
-      secrets,
+      appSecrets,
       appModules,
       serverModules,
     )) {
