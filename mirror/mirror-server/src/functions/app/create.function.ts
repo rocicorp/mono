@@ -9,10 +9,12 @@ import type {UserAgent} from 'mirror-protocol/src/user-agent.js';
 import {DistTag} from 'mirror-protocol/src/version.js';
 import {
   App,
+  ENCRYPTION_KEY_SECRET_NAME,
   appDataConverter,
   appPath,
   isValidAppName,
 } from 'mirror-schema/src/app.js';
+import {encryptUtf8} from 'mirror-schema/src/crypto.js';
 import {defaultOptions} from 'mirror-schema/src/deployment.js';
 import {
   providerDataConverter,
@@ -25,18 +27,26 @@ import {
   teamPath,
 } from 'mirror-schema/src/team.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
+import {randomBytes} from 'node:crypto';
 import {SemVer, coerce, gt, gte} from 'semver';
 import {newAppID, newAppIDAsNumber, newAppScriptName} from '../../ids.js';
+import {SecretsCache, type Secrets} from '../../secrets/index.js';
 import {userAuthorization} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
 import {DistTags, userAgentVersion} from '../validators/version.js';
+import {REFLECT_AUTH_API_KEY} from './secrets.js';
 
-export const create = (firestore: Firestore, testDistTags?: DistTags) =>
+export const create = (
+  firestore: Firestore,
+  secretsClient: Secrets,
+  testDistTags?: DistTags,
+) =>
   validateSchema(createRequestSchema, createResponseSchema)
     .validate(userAgentVersion(testDistTags))
     .validate(userAuthorization())
     .handle((request, context) => {
+      const secrets = new SecretsCache(secretsClient);
       const {userID, distTags} = context;
       const {
         requester: {userAgent},
@@ -69,6 +79,10 @@ export const create = (firestore: Firestore, testDistTags?: DistTags) =>
           `Invalid App Name "${appName}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
         );
       }
+
+      // Fetch the secret in parallel with the Firestore transaction.
+      const encryptionKey = secrets.getSecret(ENCRYPTION_KEY_SECRET_NAME);
+      const reflectAuthApiKey = randomBytes(32).toString('base64url');
 
       const userDocRef = firestore
         .doc(userPath(userID))
@@ -128,6 +142,13 @@ export const create = (firestore: Firestore, testDistTags?: DistTags) =>
           .doc(appNameIndexPath(teamID, appName))
           .withConverter(appNameIndexDataConverter);
 
+        const {version, payload: secretKey} = await encryptionKey;
+        const encryptedApiKey = encryptUtf8(
+          reflectAuthApiKey,
+          Buffer.from(secretKey, 'base64url'),
+          {version},
+        );
+
         const app: App = {
           name: appName,
           teamID,
@@ -138,6 +159,7 @@ export const create = (firestore: Firestore, testDistTags?: DistTags) =>
           cfScriptName: scriptName,
           serverReleaseChannel,
           deploymentOptions: defaultOptions(),
+          secrets: {[REFLECT_AUTH_API_KEY]: encryptedApiKey},
         };
 
         if (supportsWorkersForPlatforms(userAgent)) {

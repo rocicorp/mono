@@ -1,7 +1,12 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {describe, test, expect, beforeEach, afterEach} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import {initializeApp} from 'firebase-admin/app';
 import {FieldValue, Timestamp, getFirestore} from 'firebase-admin/firestore';
+import {
+  ENCRYPTION_KEY_SECRET_NAME,
+  appDataConverter,
+} from 'mirror-schema/src/app.js';
+import {encryptUtf8} from 'mirror-schema/src/crypto.js';
 import {
   DeploymentSpec,
   DeploymentType,
@@ -11,22 +16,22 @@ import {
   deploymentPath,
   deploymentsCollection,
 } from 'mirror-schema/src/deployment.js';
-import {must} from 'shared/src/must.js';
-import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
-import {appDataConverter} from 'mirror-schema/src/app.js';
-import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
-import {getAppSecrets} from './secrets.js';
-import {
-  MAX_AUTO_DEPLOYMENTS_PER_MINUTE,
-  MIRROR_SERVER_REQUESTER_ID,
-  checkForAutoDeployment,
-} from './auto-deploy.function.js';
-import {dummySecrets} from 'mirror-schema/src/test-helpers.js';
 import {
   DEFAULT_PROVIDER_ID,
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
+import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
+import {dummySecrets} from 'mirror-schema/src/test-helpers.js';
+import {must} from 'shared/src/must.js';
+import {TestSecrets} from '../../secrets/test-utils.js';
+import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
+import {
+  MAX_AUTO_DEPLOYMENTS_PER_MINUTE,
+  MIRROR_SERVER_REQUESTER_ID,
+  checkForAutoDeployment,
+} from './auto-deploy.function.js';
+import {getAppSecrets} from './secrets.js';
 
 describe('auto-deploy', () => {
   initializeApp({projectId: 'auto-deploy-function-test'});
@@ -36,11 +41,19 @@ describe('auto-deploy', () => {
   const SERVER_VERSION_2 = '0.28.2';
   const CLOUDFLARE_ACCOUNT_ID = 'foo-cloudflare-account';
 
+  function testSecrets() {
+    return new TestSecrets([
+      ENCRYPTION_KEY_SECRET_NAME,
+      '2',
+      TestSecrets.TEST_KEY,
+    ]);
+  }
+
   beforeEach(async () => {
     mockFunctionParamsAndSecrets();
 
     const batch = firestore.batch();
-    const {hashes} = await getAppSecrets();
+    const {hashes} = await getAppSecrets(testSecrets(), {});
     batch.create(
       firestore
         .doc(serverPath(SERVER_VERSION_1))
@@ -198,7 +211,7 @@ describe('auto-deploy', () => {
       },
     },
     {
-      name: 'secrets update',
+      name: 'global secrets update',
       // eslint-disable-next-line require-await
       prep: async () => {
         process.env['DATADOG_LOGS_API_KEY'] = 'new-test-logs-api-key';
@@ -206,10 +219,40 @@ describe('auto-deploy', () => {
       expectedType: 'SECRETS_UPDATE',
       expectedSpec: {
         hashesOfSecrets: {
-          REFLECT_AUTH_API_KEY:
-            '285dc16b33d25be52925bde20ee776bc512e0f2bde27e5a51e103bef7466e4',
           DATADOG_LOGS_API_KEY:
             'd9da1b936f37db9f7106c3c6c11678161e8ca22f21963e645d5f41c29def50',
+          DATADOG_METRICS_API_KEY:
+            '25340f89a65b75e8ebd4b0e621fa55270eba047a9b0ffbe65daeace5bc0',
+        },
+      },
+    },
+    {
+      name: 'app secrets update',
+      prep: async () => {
+        // Use a static IV for deterministic test output.
+        const IV = Buffer.from('kv6RDRyNgT2UoId8-NoO4w', 'base64url');
+        const encryptedValue = encryptUtf8(
+          'this-is-the-auth-api-key',
+          Buffer.from(TestSecrets.TEST_KEY, 'base64url'),
+          {version: '2'},
+          IV,
+        );
+        await firestore
+          .doc(appPath(APP_ID))
+          .withConverter(appDataConverter)
+          .update({
+            secrets: {
+              REFLECT_AUTH_API_KEY: encryptedValue,
+            },
+          });
+      },
+      expectedType: 'SECRETS_UPDATE',
+      expectedSpec: {
+        hashesOfSecrets: {
+          REFLECT_AUTH_API_KEY:
+            '1d64bfd6aca7146f51b676c7c98ef46e7ea4efd1a2db8cb829d1b7ff03e7fa9',
+          DATADOG_LOGS_API_KEY:
+            'a4abc81e0d678a79caad1c725dcc114c7ceb5111903ca289697594cce2b5b',
           DATADOG_METRICS_API_KEY:
             '25340f89a65b75e8ebd4b0e621fa55270eba047a9b0ffbe65daeace5bc0',
         },
@@ -240,6 +283,7 @@ describe('auto-deploy', () => {
 
       await checkForAutoDeployment(
         firestore,
+        testSecrets(),
         APP_ID,
         beforeApp,
         lastUpdateTime,
@@ -288,6 +332,7 @@ describe('auto-deploy', () => {
 
       await checkForAutoDeployment(
         firestore,
+        testSecrets(),
         APP_ID,
         beforeApp,
         lastUpdateTime,
@@ -339,6 +384,7 @@ describe('auto-deploy', () => {
 
       await checkForAutoDeployment(
         firestore,
+        testSecrets(),
         APP_ID,
         beforeApp,
         lastUpdateTime,

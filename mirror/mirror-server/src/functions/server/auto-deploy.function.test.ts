@@ -1,26 +1,27 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {describe, test, expect, beforeEach, afterEach} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import {initializeApp} from 'firebase-admin/app';
 import {Timestamp, getFirestore} from 'firebase-admin/firestore';
+import {appDataConverter} from 'mirror-schema/src/app.js';
 import {
   appPath,
   deploymentDataConverter,
   deploymentPath,
 } from 'mirror-schema/src/deployment.js';
-import {must} from 'shared/src/must.js';
+import {
+  DEFAULT_PROVIDER_ID,
+  providerDataConverter,
+  providerPath,
+} from 'mirror-schema/src/provider.js';
 import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
-import {appDataConverter} from 'mirror-schema/src/app.js';
+import {must} from 'shared/src/must.js';
+import {TestSecrets} from '../../secrets/test-utils.js';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {getAppSecrets} from '../app/secrets.js';
 import {
   checkAppsInChannels,
   getAffectedChannels,
 } from './auto-deploy.function.js';
-import {
-  DEFAULT_PROVIDER_ID,
-  providerDataConverter,
-  providerPath,
-} from 'mirror-schema/src/provider.js';
 
 test('getAffectedChannels', () => {
   expect(getAffectedChannels(['canary'], ['stable'])).toEqual([
@@ -58,7 +59,7 @@ describe('server auto-deploy', () => {
     mockFunctionParamsAndSecrets();
 
     const batch = firestore.batch();
-    const {hashes} = await getAppSecrets();
+    const {hashes} = await getAppSecrets(new TestSecrets(), {});
     batch.create(
       firestore
         .doc(serverPath(SERVER_VERSION_1))
@@ -210,7 +211,7 @@ describe('server auto-deploy', () => {
 
   for (const c of cases) {
     test(c.name, async () => {
-      await checkAppsInChannels(firestore, c.channels, 3);
+      await checkAppsInChannels(firestore, new TestSecrets(), c.channels, 3);
 
       const apps = await Promise.all(appDocs.map(doc => doc.get()));
       apps.forEach(async (app, i) => {

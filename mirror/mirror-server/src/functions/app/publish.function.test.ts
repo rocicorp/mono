@@ -1,6 +1,7 @@
-import {describe, expect, test, jest, beforeAll, afterAll} from '@jest/globals';
+import {afterAll, beforeAll, describe, expect, jest, test} from '@jest/globals';
 import {initializeApp} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
+import type {Storage} from 'firebase-admin/storage';
 import {https} from 'firebase-functions/v2';
 import {
   FunctionsErrorCode,
@@ -8,25 +9,25 @@ import {
   Request,
 } from 'firebase-functions/v2/https';
 import type {AuthData} from 'firebase-functions/v2/tasks';
-import {publish} from './publish.function.js';
 import type {PublishRequest} from 'mirror-protocol/src/publish.js';
-import type {Storage} from 'firebase-admin/storage';
+import {appDataConverter} from 'mirror-schema/src/app.js';
 import {
   appPath,
   defaultOptions,
   deploymentDataConverter,
 } from 'mirror-schema/src/deployment.js';
-import {appDataConverter} from 'mirror-schema/src/app.js';
-import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
-import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
-import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {
   DEFAULT_PROVIDER_ID,
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
-import type {DistTags} from '../validators/version.js';
+import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
+import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {SemVer} from 'semver';
+import {TestSecrets} from '../../secrets/test-utils.js';
+import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
+import type {DistTags} from '../validators/version.js';
+import {publish} from './publish.function.js';
 
 mockFunctionParamsAndSecrets();
 
@@ -210,7 +211,13 @@ describe('publish', () => {
         },
       } as unknown as Storage;
       const publishFunction = https.onCall(
-        publish(firestore, storage, 'modulez', c.testDistTags ?? {}),
+        publish(
+          firestore,
+          new TestSecrets(),
+          storage,
+          'modulez',
+          c.testDistTags ?? {},
+        ),
       );
 
       let error: HttpsError | undefined = undefined;

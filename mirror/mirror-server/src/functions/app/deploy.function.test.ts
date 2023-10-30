@@ -12,7 +12,12 @@ import {resolver} from '@rocicorp/resolver';
 import {initializeApp} from 'firebase-admin/app';
 import {FieldValue, Timestamp, getFirestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
-import {appDataConverter, type ScriptRef} from 'mirror-schema/src/app.js';
+import {
+  ENCRYPTION_KEY_SECRET_NAME,
+  appDataConverter,
+  type ScriptRef,
+} from 'mirror-schema/src/app.js';
+import {encryptUtf8} from 'mirror-schema/src/crypto.js';
 import {
   Deployment,
   DeploymentStatus,
@@ -42,7 +47,7 @@ import {must} from 'shared/src/must.js';
 import {Queue} from 'shared/src/queue.js';
 import {sleep} from 'shared/src/sleep.js';
 import type {ScriptHandler} from '../../cloudflare/script-handler.js';
-import type {SecretValue, Secrets} from '../../secrets/index.js';
+import {TestSecrets} from '../../secrets/test-utils.js';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {MIN_WFP_VERSION} from './create.function.js';
 import {
@@ -71,12 +76,12 @@ describe('deploy', () => {
     async delete(): Promise<void> {},
   };
 
-  class MockSecrets implements Secrets {
-    getSecret(name: string, version = 'latest'): Promise<SecretValue> {
-      expect(name).toBe(`${DEFAULT_PROVIDER_ID}_api_token`);
-      expect(version).toBe('latest');
-      return Promise.resolve({payload: 'api-token', version: '1'});
-    }
+  function testSecrets() {
+    return new TestSecrets([
+      `${DEFAULT_PROVIDER_ID}_api_token`,
+      'latest',
+      'api-token',
+    ]);
   }
 
   beforeAll(async () => {
@@ -235,6 +240,46 @@ describe('deploy', () => {
     ]);
   });
 
+  test('deploys app secrets', async () => {
+    const testSecrets = new TestSecrets(
+      [`${DEFAULT_PROVIDER_ID}_api_token`, 'latest', 'api-token'],
+      [ENCRYPTION_KEY_SECRET_NAME, '2', TestSecrets.TEST_KEY],
+    );
+    const encryptedSecret = encryptUtf8(
+      'this is the decrypted app secret',
+      Buffer.from(TestSecrets.TEST_KEY, 'base64url'),
+      {version: '2'},
+    );
+    await firestore
+      .doc(appPath(APP_ID))
+      .withConverter(appDataConverter)
+      .update({secrets: {['MY_APP_SECRET']: encryptedSecret}});
+
+    let deployedSecrets;
+
+    const deploymentID = await requestTestDeployment();
+    await runDeployment(
+      firestore,
+      null as unknown as Storage,
+      testSecrets,
+      APP_ID,
+      deploymentID,
+      {
+        // eslint-disable-next-line require-yield
+        async *publish(_storage, _app, _team, _hostname, _options, secrets) {
+          deployedSecrets = secrets;
+        },
+        async delete(): Promise<void> {},
+      },
+    );
+
+    expect(deployedSecrets).toEqual({
+      ['MY_APP_SECRET']: 'this is the decrypted app secret',
+      ['DATADOG_LOGS_API_KEY']: 'default-DATADOG_LOGS_API_KEY',
+      ['DATADOG_METRICS_API_KEY']: 'default-DATADOG_METRICS_API_KEY',
+    });
+  });
+
   test('state tracking: success', async () => {
     const {promise: isPublishing, resolve: publishing} = resolver<void>();
     const deploymentUpdates = new Queue<string>();
@@ -250,7 +295,7 @@ describe('deploy', () => {
     const deploymentFinished = runDeployment(
       firestore,
       null as unknown as Storage,
-      new MockSecrets(),
+      testSecrets(),
       APP_ID,
       deploymentID,
       {
@@ -302,7 +347,7 @@ describe('deploy', () => {
     await runDeployment(
       firestore,
       null as unknown as Storage,
-      new MockSecrets(),
+      testSecrets(),
       APP_ID,
       nextDeploymentID,
       noopScriptHandler,
@@ -343,7 +388,7 @@ describe('deploy', () => {
     const deploymentFinished = runDeployment(
       firestore,
       null as unknown as Storage,
-      new MockSecrets(),
+      testSecrets(),
       APP_ID,
       deploymentID,
       {
@@ -436,7 +481,7 @@ describe('deploy', () => {
       runDeployment(
         firestore,
         null as unknown as Storage,
-        new MockSecrets(),
+        testSecrets(),
         APP_ID,
         id,
         testScriptHandler,
@@ -444,7 +489,7 @@ describe('deploy', () => {
       runDeployment(
         firestore,
         null as unknown as Storage,
-        new MockSecrets(),
+        testSecrets(),
         APP_ID,
         id,
         testScriptHandler,
@@ -474,7 +519,7 @@ describe('deploy', () => {
     await runDeployment(
       firestore,
       null as unknown as Storage,
-      new MockSecrets(),
+      testSecrets(),
       APP_ID,
       deleteID,
       {
@@ -548,7 +593,7 @@ describe('deploy', () => {
         await runDeployment(
           firestore,
           null as unknown as Storage,
-          new MockSecrets(),
+          testSecrets(),
           APP_ID,
           deploymentID,
           {

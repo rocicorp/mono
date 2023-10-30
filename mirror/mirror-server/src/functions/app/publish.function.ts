@@ -18,6 +18,7 @@ import * as semver from 'semver';
 import {gtr} from 'semver';
 import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
 import {assertAllModulesHaveUniqueNames} from '../../cloudflare/module-assembler.js';
+import {SecretsCache, type Secrets} from '../../secrets/index.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
@@ -28,6 +29,7 @@ import {getAppSecrets} from './secrets.js';
 
 export const publish = (
   firestore: Firestore,
+  secretsClient: Secrets,
   storage: Storage,
   bucketName: string,
   testDistTags?: DistTags,
@@ -37,6 +39,7 @@ export const publish = (
     .validate(userAuthorization())
     .validate(appAuthorization(firestore))
     .handle(async (publishRequest, context) => {
+      const secrets = new SecretsCache(secretsClient);
       const {
         serverVersionRange,
         appID,
@@ -55,6 +58,7 @@ export const publish = (
 
       const spec = await computeDeploymentSpec(
         firestore,
+        secrets,
         {
           ...app,
           serverReleaseChannel,
@@ -101,6 +105,7 @@ export const publish = (
 
 export async function computeDeploymentSpec(
   firestore: Firestore,
+  secrets: Secrets,
   app: App,
   serverVersionRange: string,
 ): Promise<Omit<DeploymentSpec, 'appModules' | 'appVersion' | 'description'>> {
@@ -113,10 +118,11 @@ export async function computeDeploymentSpec(
     throw new HttpsError('invalid-argument', 'Unsupported desired version');
   }
 
+  const {serverReleaseChannel, secrets: appSecrets = {}} = app;
   const serverVersion = await findNewestMatchingVersion(
     firestore,
     range,
-    app.serverReleaseChannel,
+    serverReleaseChannel,
   );
   logger.log(
     `Found matching version for ${serverVersionRange}: ${serverVersion}`,
@@ -135,7 +141,7 @@ export async function computeDeploymentSpec(
     defaultZone: {zoneName},
   } = provider;
 
-  const {hashes: hashesOfSecrets} = await getAppSecrets();
+  const {hashes: hashesOfSecrets} = await getAppSecrets(secrets, appSecrets);
 
   return {
     serverVersionRange,

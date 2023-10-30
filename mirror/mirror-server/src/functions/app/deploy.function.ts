@@ -34,7 +34,7 @@ import {
   ScriptHandler,
 } from '../../cloudflare/script-handler.js';
 import {newDeploymentID} from '../../ids.js';
-import type {Secrets} from '../../secrets/index.js';
+import {SecretsCache, type Secrets} from '../../secrets/index.js';
 import {getDataOrFail} from '../validators/data.js';
 import {MIN_WFP_VERSION} from './create.function.js';
 import {deleteAppDocs} from './delete.function.js';
@@ -61,11 +61,12 @@ export const deploy = (
 export async function runDeployment(
   firestore: Firestore,
   storage: Storage,
-  secrets: Secrets,
+  secretsClient: Secrets,
   appID: string,
   deploymentID: string,
   testScriptHandler?: ScriptHandler, // Overridden in tests.
 ): Promise<void> {
+  const secrets = new SecretsCache(secretsClient);
   const [appDoc, deploymentDoc] = await firestore.runTransaction(
     tx =>
       Promise.all([
@@ -93,6 +94,7 @@ export async function runDeployment(
     cfScriptName,
     scriptRef,
     name: appName,
+    secrets: encryptedSecrets = {},
     teamID,
     teamLabel,
   } = must(appDoc.data());
@@ -152,7 +154,10 @@ export async function runDeployment(
       serverVersion,
     );
 
-    const {secrets: appSecrets, hashes} = await getAppSecrets();
+    const {secrets: appSecrets, hashes} = await getAppSecrets(
+      secrets,
+      encryptedSecrets,
+    );
 
     const newScriptRef = (await migrateToWFP(
       firestore,

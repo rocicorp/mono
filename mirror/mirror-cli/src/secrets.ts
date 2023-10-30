@@ -1,23 +1,33 @@
 import {SecretManagerServiceClient} from '@google-cloud/secret-manager';
 import {GrpcStatus} from 'firebase-admin/firestore';
 
-export async function getSecret(stack: string, id: string): Promise<string> {
-  const secrets = new SecretManagerServiceClient();
-  const name = `projects/reflect-mirror-${stack}/secrets/${id}/versions/latest`;
-  const [{payload}] = await secrets.accessSecretVersion({name});
-  if (!payload || !payload.data) {
+const secrets = new SecretManagerServiceClient();
+
+export async function getSecret(
+  stack: string,
+  id: string,
+): Promise<{payload: string; version: string}> {
+  const resource = `projects/reflect-mirror-${stack}/secrets/${id}/versions/latest`;
+  const [{name: path, payload}] = await secrets.accessSecretVersion({
+    name: resource,
+  });
+  if (!path || !payload || !payload.data) {
     throw new Error(`No data for ${id} secret`);
   }
+  const parts = path.split('/');
   const {data} = payload;
-  return typeof data === 'string' ? data : new TextDecoder().decode(data);
+  return {
+    version: parts[parts.length - 1],
+    payload: typeof data === 'string' ? data : new TextDecoder().decode(data),
+  };
 }
 
 export async function storeSecret(
   stack: string,
   secretId: string,
   val: string,
+  addNextVersion = false,
 ): Promise<void> {
-  const secrets = new SecretManagerServiceClient();
   const parent = `projects/reflect-mirror-${stack}`;
   try {
     await secrets.createSecret({
@@ -50,9 +60,12 @@ export async function storeSecret(
   });
 
   try {
-    const latest = await getSecret(stack, secretId);
+    const {payload: latest, version} = await getSecret(stack, secretId);
     if (latest === val) {
       console.log(`Current version of ${secretId} matches specified value`);
+      return;
+    } else if (!addNextVersion) {
+      console.log(`${secretId} (version: ${version}) already exists`);
       return;
     }
   } catch (e) {

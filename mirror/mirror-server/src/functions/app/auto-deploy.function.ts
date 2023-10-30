@@ -1,25 +1,27 @@
 import {Timestamp, type Firestore} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
-import {HttpsError} from 'firebase-functions/v2/https';
 import {onDocumentUpdated} from 'firebase-functions/v2/firestore';
+import {HttpsError} from 'firebase-functions/v2/https';
+import _ from 'lodash';
+import {App, appDataConverter} from 'mirror-schema/src/app.js';
 import {
   DeploymentSpec,
   DeploymentType,
   deploymentsCollection,
 } from 'mirror-schema/src/deployment.js';
-import {App, appDataConverter} from 'mirror-schema/src/app.js';
-import {DEPLOYMENT_SECRETS_NAMES} from './secrets.js';
-import {computeDeploymentSpec} from './publish.function.js';
-import _ from 'lodash';
+import {SecretsCache, type Secrets} from '../../secrets/index.js';
 import {requestDeployment} from './deploy.function.js';
+import {computeDeploymentSpec} from './publish.function.js';
+import {DEPLOYMENT_SECRETS_NAMES} from './secrets.js';
 
-export const autoDeploy = (firestore: Firestore) =>
+export const autoDeploy = (firestore: Firestore, secretsClient: Secrets) =>
   onDocumentUpdated(
     {
       document: 'apps/{appID}',
       secrets: [...DEPLOYMENT_SECRETS_NAMES],
     },
     async event => {
+      const secrets = new SecretsCache(secretsClient);
       if (!event.data) {
         throw new Error(
           `Missing event.data for ${JSON.stringify(event.params)}`,
@@ -30,6 +32,7 @@ export const autoDeploy = (firestore: Firestore) =>
 
       await checkForAutoDeployment(
         firestore,
+        secrets,
         appID,
         app,
         event.data.after.updateTime,
@@ -42,6 +45,7 @@ export const MAX_AUTO_DEPLOYMENTS_PER_MINUTE = 4;
 
 export async function checkForAutoDeployment(
   firestore: Firestore,
+  secrets: Secrets,
   appID: string,
   app: App,
   lastAppUpdateTime: Timestamp,
@@ -53,6 +57,7 @@ export async function checkForAutoDeployment(
   }
   const desiredSpec = await computeDeploymentSpec(
     firestore,
+    secrets,
     app,
     app.runningDeployment.spec.serverVersionRange,
   );

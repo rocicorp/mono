@@ -1,24 +1,26 @@
 import type {Firestore} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {onDocumentWritten} from 'firebase-functions/v2/firestore';
-import {APP_COLLECTION} from 'mirror-schema/src/deployment.js';
 import {appDataConverter} from 'mirror-schema/src/app.js';
-import {DEPLOYMENT_SECRETS_NAMES} from '../app/secrets.js';
-import {checkForAutoDeployment} from '../app/auto-deploy.function.js';
+import {APP_COLLECTION} from 'mirror-schema/src/deployment.js';
 import {serverSchema} from 'mirror-schema/src/server.js';
 import * as v from 'shared/src/valita.js';
+import {SecretsCache, type Secrets} from '../../secrets/index.js';
+import {checkForAutoDeployment} from '../app/auto-deploy.function.js';
+import {DEPLOYMENT_SECRETS_NAMES} from '../app/secrets.js';
 
 /**
  * `server-autoDeploy` is triggered on all changes to `servers/...` documents,
  * including creation, updating, and deletion.
  */
-export const autoDeploy = (firestore: Firestore) =>
+export const autoDeploy = (firestore: Firestore, secretsClient: Secrets) =>
   onDocumentWritten(
     {
       document: 'servers/{serverVersion}',
       secrets: [...DEPLOYMENT_SECRETS_NAMES],
     },
     async event => {
+      const secrets = new SecretsCache(secretsClient);
       const {serverVersion} = event.params;
       if (!event.data) {
         throw new Error(
@@ -35,7 +37,7 @@ export const autoDeploy = (firestore: Firestore) =>
       logger.info(
         `${serverVersion}: [${before?.channels}] => [${after?.channels}]. Checking apps in [${affectedChannels}]`,
       );
-      await checkAppsInChannels(firestore, [...affectedChannels]);
+      await checkAppsInChannels(firestore, secrets, [...affectedChannels]);
     },
   );
 
@@ -59,6 +61,7 @@ const BATCH_SIZE = 50;
 
 export async function checkAppsInChannels(
   firestore: Firestore,
+  secrets: Secrets,
   channels: string[],
   batchSize = BATCH_SIZE,
 ): Promise<void> {
@@ -79,7 +82,13 @@ export async function checkAppsInChannels(
     logger.info(`Checking ${batch.size} apps`);
     const results = await Promise.allSettled(
       batch.docs.map(doc =>
-        checkForAutoDeployment(firestore, doc.id, doc.data(), doc.updateTime),
+        checkForAutoDeployment(
+          firestore,
+          secrets,
+          doc.id,
+          doc.data(),
+          doc.updateTime,
+        ),
       ),
     );
     for (let i = 0; i < results.length; i++) {

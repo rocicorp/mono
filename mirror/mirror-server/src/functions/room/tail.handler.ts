@@ -11,7 +11,8 @@ import {must} from 'shared/src/must.js';
 import {Queue} from 'shared/src/queue.js';
 import * as valita from 'shared/src/valita.js';
 import WebSocket from 'ws';
-import {REFLECT_AUTH_API_KEY} from '../app/secrets.js';
+import {SecretsCache, type Secrets} from '../../secrets/index.js';
+import {REFLECT_AUTH_API_KEY, getAppSecrets} from '../app/secrets.js';
 import {
   appAuthorization,
   tokenAuthentication,
@@ -23,6 +24,7 @@ import {userAgentVersion} from '../validators/version.js';
 export const tail = (
   firestore: Firestore,
   auth: Auth,
+  secretsClient: Secrets,
   createTail = createTailDefault,
 ) =>
   onRequest(
@@ -32,18 +34,33 @@ export const tail = (
       .validate(userAuthorization())
       .validate(appAuthorization(firestore))
       .handle(async (tailRequest, context) => {
+        const secrets = new SecretsCache(secretsClient);
         const {response, app} = context;
         const {
+          appID,
           roomID,
           requester: {userAgent},
         } = tailRequest;
+
+        const {secrets: appSecrets} = await getAppSecrets(
+          secrets,
+          app.secrets ?? {},
+        );
+
+        const reflectAuthApiKey = appSecrets[REFLECT_AUTH_API_KEY];
+        if (!reflectAuthApiKey) {
+          throw new HttpsError(
+            'internal',
+            `App ${appID} is missing an API key`,
+          );
+        }
 
         let ws: WebSocket;
         try {
           ws = createTail(
             app,
             roomID,
-            REFLECT_AUTH_API_KEY,
+            reflectAuthApiKey,
             `${userAgent.type}/${userAgent.version}`,
           );
         } catch (e) {
@@ -159,6 +176,8 @@ function createTailDefault(
   const websocketUrl = `wss://${hostname}/api/debug/v0/tail?roomID=${encodeURIComponent(
     roomID,
   )}`;
+  // For tail we send the REFLECT_AUTH_API_KEY in the Sec-WebSocket-Protocol
+  // header and it is always required
   return new WebSocket(websocketUrl, reflectAPIToken, {
     headers: {
       'User-Agent': `reflect/${packageVersion}`,
