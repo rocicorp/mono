@@ -1,2 +1,6 @@
 export {usePresence} from './index.js';
-export {useSubscribe} from 'replicache-react';
+export type {
+  SubscribeToPresenceCallback,
+  PresenceSubscribable,
+} from './index.js';
+export * from 'replicache-react';
