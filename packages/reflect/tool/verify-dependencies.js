@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import colors from 'picocolors';
 
 const internalPackages = [
-  ...getGenericDependencies('packages/reflect', 'devDependencies').entries(),
+  ...getGenericDependencies('packages/reflect', 'devDependencies'),
 ].flatMap(([name, version]) => {
   if (version === '0.0.0') {
     for (const packageDir of ['packages', 'mirror']) {
