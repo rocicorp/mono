@@ -35,3 +35,39 @@ export class SecretsClient implements Secrets {
     };
   }
 }
+
+/**
+ * An in-memory cache of secrets that have already been looked up. This is designed
+ * to be a _request-level_ cache and not a global one. In particular, requests for
+ * aliased secrets like "version=latest" may resolve to different actual versions
+ * over time, so caching is only suitable at the request scope.
+ */
+export class SecretsCache implements Secrets {
+  readonly #delegate: Secrets;
+  readonly #cache = new Map<string, Promise<SecretValue>>();
+
+  constructor(delegate: Secrets) {
+    this.#delegate = delegate;
+  }
+
+  #cacheKey(name: string, version: string): string {
+    return `${name}@${version}`;
+  }
+
+  async getSecret(name: string, version = 'latest'): Promise<SecretValue> {
+    const key = this.#cacheKey(name, version);
+    let promise = this.#cache.get(key);
+    if (!promise) {
+      promise = this.#delegate.getSecret(name, version);
+      this.#cache.set(key, promise);
+
+      const {version: canonicalVersion} = await promise;
+      if (canonicalVersion !== version) {
+        // e.g. If the 'latest' version alias resolves version '2', stores
+        // the promise at 'my-secret@2' in addition to 'my-secret@latest'.
+        this.#cache.set(this.#cacheKey(name, canonicalVersion), promise);
+      }
+    }
+    return promise;
+  }
+}
