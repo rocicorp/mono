@@ -144,8 +144,6 @@ A Cloudflare account is needed to run workers and Durable Objects.
 - You will be prompted for the following parameters / secrets:
   - `DATADOG_LOGS_API_KEY`: Create a new one for this stack (e.g. "mirror-sandbox-logs") at https://app.datadoghq.com/organization-settings/api-keys
   - `DATADOG_METRICS_API_KEY`: Create one like you did for logs.
-  - `CLOUDFLARE_API_TOKEN`: Use the API key that you created in the Cloudflare section
-  - `CLOUDFLARE_ACCOUNT_ID`: The account ID of the Cloudflare account
 
 * **Note**: One the first deploy, the deployment of Firestore Triggers usually fails,
   with a message to try again in a couple of minutes. This is normal and expected.
