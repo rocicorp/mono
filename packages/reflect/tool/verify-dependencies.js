@@ -5,12 +5,18 @@ import * as nodePath from 'node:path';
 import {fileURLToPath} from 'node:url';
 import colors from 'picocolors';
 
-const internalPackages = /** @type const */ ([
-  'mirror/reflect-cli',
-  'packages/reflect-client',
-  'packages/reflect-server',
-  'packages/reflect-shared',
-]);
+const internalPackages = [
+  ...getGenericDependencies('packages/reflect', 'devDependencies').entries(),
+].flatMap(([name, version]) => {
+  if (version === '0.0.0') {
+    for (const packageDir of ['packages', 'mirror']) {
+      if (dirExists(path(packageDir, name))) {
+        return [`${packageDir}/${name}`];
+      }
+    }
+  }
+  return [];
+});
 
 /**
  * @param {string[]} args
@@ -28,16 +34,25 @@ function path(...args) {
 
 /**
  * @param {string} p
+ * @param {string} propName
+ * @return {Map<string, string>}
+ */
+function getGenericDependencies(p, propName) {
+  const {[propName]: prop = {}} = JSON.parse(
+    readFileSync(path(p, 'package.json'), 'utf-8'),
+  );
+  return new Map(Object.entries(prop));
+}
+
+/**
+ * @param {string} p
  * @return {Set<string>}
  */
 function getDependencies(p) {
-  const {dependencies = {}} = JSON.parse(
-    readFileSync(path(p, 'package.json'), 'utf-8'),
-  );
-  return new Set(Object.keys(dependencies));
+  return new Set(getGenericDependencies(p, 'dependencies').keys());
 }
 
-function getDepsFromCurrentPackage() {
+function getDependenciesFromCurrentPackage() {
   return getDependencies('packages/reflect');
 }
 
@@ -57,14 +72,11 @@ function dirExists(p) {
  * @param {string} name
  */
 function isInternalPackage(name) {
-  if (name === 'replicache') {
-    return false;
-  }
   return dirExists(path('packages', name)) || dirExists(path('mirror', name));
 }
 
 function main() {
-  const currentDependencies = getDepsFromCurrentPackage();
+  const currentDependencies = getDependenciesFromCurrentPackage();
   for (const ip of internalPackages) {
     const deps = getDependencies(ip);
     for (const dep of deps) {
@@ -83,11 +95,6 @@ function main() {
   }
 
   for (const cd of currentDependencies) {
-    // @rocicorp/reflect directly depends on replicache-react (unlike all the
-    // other dependencies which come in through an internal dependency).
-    if (cd === 'replicache-react') {
-      continue;
-    }
     if (isInternalPackage(cd)) {
       console.error(
         `reflect/package.json should not have an internal dependency. Found ${colors.bold(
