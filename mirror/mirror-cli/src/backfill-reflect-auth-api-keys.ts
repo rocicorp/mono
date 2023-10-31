@@ -1,4 +1,3 @@
-import {randomBytes} from 'crypto';
 import {getFirestore} from 'firebase-admin/firestore';
 import {
   APP_COLLECTION,
@@ -6,6 +5,7 @@ import {
   ENCRYPTION_KEY_SECRET_NAME,
 } from 'mirror-schema/src/app.js';
 import {encryptUtf8} from 'mirror-schema/src/crypto.js';
+import {randomBytes} from 'node:crypto';
 import {getSecret} from './secrets.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 

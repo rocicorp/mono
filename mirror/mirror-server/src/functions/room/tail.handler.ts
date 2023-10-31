@@ -11,7 +11,7 @@ import {must} from 'shared/src/must.js';
 import {Queue} from 'shared/src/queue.js';
 import * as valita from 'shared/src/valita.js';
 import WebSocket from 'ws';
-import {SecretsCache, type Secrets} from '../../secrets/index.js';
+import {SecretsCache, SecretsClient} from '../../secrets/index.js';
 import {REFLECT_AUTH_API_KEY, getAppSecrets} from '../app/secrets.js';
 import {
   appAuthorization,
@@ -24,7 +24,7 @@ import {userAgentVersion} from '../validators/version.js';
 export const tail = (
   firestore: Firestore,
   auth: Auth,
-  secretsClient: Secrets,
+  secretsClient: SecretsClient,
   createTail = createTailDefault,
 ) =>
   onRequest(

@@ -30,7 +30,7 @@ import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {randomBytes} from 'node:crypto';
 import {SemVer, coerce, gt, gte} from 'semver';
 import {newAppID, newAppIDAsNumber, newAppScriptName} from '../../ids.js';
-import {SecretsCache, type Secrets} from '../../secrets/index.js';
+import {SecretsCache, SecretsClient} from '../../secrets/index.js';
 import {userAuthorization} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
@@ -39,7 +39,7 @@ import {REFLECT_AUTH_API_KEY} from './secrets.js';
 
 export const create = (
   firestore: Firestore,
-  secretsClient: Secrets,
+  secretsClient: SecretsClient,
   testDistTags?: DistTags,
 ) =>
   validateSchema(createRequestSchema, createResponseSchema)
