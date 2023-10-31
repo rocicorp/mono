@@ -4,7 +4,7 @@ import {firestoreDataConverter} from './converter.js';
 import {deploymentOptionsSchema, deploymentSchema} from './deployment.js';
 import {DEFAULT_PROVIDER_ID} from './provider.js';
 
-// Name of the SecretManager secret that stores the base64url-encoded 256-bit
+// Name of the SecretManager secret that stores the base64url-encoded
 // key for encrypting app secrets at rest.
 export const ENCRYPTION_KEY_SECRET_NAME = 'APP_SECRETS_ENCRYPTION_KEY';
 

@@ -18,7 +18,11 @@ import * as semver from 'semver';
 import {gtr} from 'semver';
 import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
 import {assertAllModulesHaveUniqueNames} from '../../cloudflare/module-assembler.js';
-import {SecretsCache, type Secrets} from '../../secrets/index.js';
+import {
+  SecretsCache,
+  SecretsClient,
+  type Secrets,
+} from '../../secrets/index.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
@@ -29,7 +33,7 @@ import {getAppSecrets} from './secrets.js';
 
 export const publish = (
   firestore: Firestore,
-  secretsClient: Secrets,
+  secretsClient: SecretsClient,
   storage: Storage,
   bucketName: string,
   testDistTags?: DistTags,

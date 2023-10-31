@@ -5,7 +5,11 @@ import {appDataConverter} from 'mirror-schema/src/app.js';
 import {APP_COLLECTION} from 'mirror-schema/src/deployment.js';
 import {serverSchema} from 'mirror-schema/src/server.js';
 import * as v from 'shared/src/valita.js';
-import {SecretsCache, type Secrets} from '../../secrets/index.js';
+import {
+  SecretsCache,
+  SecretsClient,
+  type Secrets,
+} from '../../secrets/index.js';
 import {checkForAutoDeployment} from '../app/auto-deploy.function.js';
 import {DEPLOYMENT_SECRETS_NAMES} from '../app/secrets.js';
 
@@ -13,7 +17,10 @@ import {DEPLOYMENT_SECRETS_NAMES} from '../app/secrets.js';
  * `server-autoDeploy` is triggered on all changes to `servers/...` documents,
  * including creation, updating, and deletion.
  */
-export const autoDeploy = (firestore: Firestore, secretsClient: Secrets) =>
+export const autoDeploy = (
+  firestore: Firestore,
+  secretsClient: SecretsClient,
+) =>
   onDocumentWritten(
     {
       document: 'servers/{serverVersion}',

@@ -53,13 +53,14 @@ export async function getAppSecrets(
   // Generate the hashes from the datadog keys and from the app secret ciphertexts.
   // It is important that we don't hash the plaintexts as that could leak information
   // about equality between secrets.
+  const decoder = new TextDecoder('utf-8');
   const hashes = hashSecrets({
     ['DATADOG_LOGS_API_KEY']: datadogLogsApiKey.value(),
     ['DATADOG_METRICS_API_KEY']: datadogMetricsApiKey.value(),
     ...Object.fromEntries(
       Object.entries(encrypted).map(([name, val]) => [
         name,
-        new TextDecoder('utf-8').decode(val.ciphertext),
+        decoder.decode(val.ciphertext),
       ]),
     ),
   });

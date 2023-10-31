@@ -16,7 +16,7 @@ import * as roomFunctions from './functions/room/index.js';
 import * as serverFunctions from './functions/server/index.js';
 import * as teamFunctions from './functions/team/index.js';
 import * as userFunctions from './functions/user/index.js';
-import {SecretsClient} from './secrets/index.js';
+import {SecretsClientImpl} from './secrets/index.js';
 
 // Initializes firestore et al. (e.g. for subsequent calls to getFirestore())
 initializeApp(appOptions);
@@ -24,7 +24,7 @@ setGlobalOptions({serviceAccount: serviceAccountId});
 
 // Cache the secrets manager client to amortize connection establishment time.
 // https://cloud.google.com/functions/docs/samples/functions-tips-gcp-apis#functions_tips_gcp_apis-nodejs
-const secrets = new SecretsClient();
+const secrets = new SecretsClientImpl();
 
 // Per https://firebase.google.com/docs/functions/manage-functions
 // functions should be deployed in groups of 10 or fewer
