@@ -1,22 +1,22 @@
 // @ts-check
 
-import {readFileSync, statSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import * as nodePath from 'node:path';
 import {fileURLToPath} from 'node:url';
 import colors from 'picocolors';
+import {
+  internalPackagesMap,
+  isInternalPackage,
+} from '../../shared/src/tool/internal-packages.js';
 
-const internalPackages = [
-  ...getGenericDependencies('packages/reflect', 'devDependencies'),
-].flatMap(([name, version]) => {
-  if (version === '0.0.0') {
-    for (const packageDir of ['packages', 'mirror']) {
-      if (dirExists(path(packageDir, name))) {
-        return [`${packageDir}/${name}`];
-      }
-    }
-  }
-  return [];
-});
+const devDeps = getGenericDependencies('packages/reflect', 'devDependencies');
+
+const internalPackages = [...internalPackagesMap]
+  .filter(
+    ([name, workspacePath]) =>
+      devDeps.has(name) && workspacePath !== 'packages/reflect',
+  )
+  .map(([, workspacePath]) => workspacePath);
 
 /**
  * @param {string[]} args
@@ -33,13 +33,13 @@ function path(...args) {
 }
 
 /**
- * @param {string} p
+ * @param {string} pathName
  * @param {string} propName
  * @return {Map<string, string>}
  */
-function getGenericDependencies(p, propName) {
+function getGenericDependencies(pathName, propName) {
   const {[propName]: prop = {}} = JSON.parse(
-    readFileSync(path(p, 'package.json'), 'utf-8'),
+    readFileSync(path(pathName, 'package.json'), 'utf-8'),
   );
   return new Map(Object.entries(prop));
 }
@@ -54,25 +54,6 @@ function getDependencies(p) {
 
 function getDependenciesFromCurrentPackage() {
   return getDependencies('packages/reflect');
-}
-
-/**
- * @param {string} p
- */
-function dirExists(p) {
-  try {
-    const s = statSync(p);
-    return s.isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-/**
- * @param {string} name
- */
-function isInternalPackage(name) {
-  return dirExists(path('packages', name)) || dirExists(path('mirror', name));
 }
 
 function main() {
