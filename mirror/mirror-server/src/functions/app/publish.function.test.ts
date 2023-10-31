@@ -72,6 +72,7 @@ describe('publish', () => {
         serverReleaseChannel: 'stable',
         teamID: 'fooTeam',
         deploymentOptions: defaultOptions(),
+        secrets: {},
       },
     );
     batch.create(

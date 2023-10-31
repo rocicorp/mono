@@ -118,7 +118,7 @@ export async function computeDeploymentSpec(
     throw new HttpsError('invalid-argument', 'Unsupported desired version');
   }
 
-  const {serverReleaseChannel, secrets: appSecrets = {}} = app;
+  const {serverReleaseChannel, secrets: appSecrets} = app;
   const serverVersion = await findNewestMatchingVersion(
     firestore,
     range,

@@ -114,6 +114,7 @@ describe('server auto-deploy', () => {
             LOG_LEVEL: 'info',
           },
         },
+        secrets: {},
         serverReleaseChannel: i % 2 === 0 ? 'test-stable' : 'test-canary',
 
         runningDeployment: {

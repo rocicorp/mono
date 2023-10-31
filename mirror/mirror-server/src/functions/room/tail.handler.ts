@@ -42,10 +42,7 @@ export const tail = (
           requester: {userAgent},
         } = tailRequest;
 
-        const {secrets: appSecrets} = await getAppSecrets(
-          secrets,
-          app.secrets ?? {},
-        );
+        const {secrets: appSecrets} = await getAppSecrets(secrets, app.secrets);
 
         const reflectAuthApiKey = appSecrets[REFLECT_AUTH_API_KEY];
         if (!reflectAuthApiKey) {

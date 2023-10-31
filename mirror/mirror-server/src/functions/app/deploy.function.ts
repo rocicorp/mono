@@ -94,7 +94,7 @@ export async function runDeployment(
     cfScriptName,
     scriptRef,
     name: appName,
-    secrets: encryptedSecrets = {},
+    secrets: encryptedSecrets,
     teamID,
     teamLabel,
   } = must(appDoc.data());

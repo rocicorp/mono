@@ -65,7 +65,7 @@ export const appSchema = v.object({
   // specified by the app developer, transmitted to the Worker via Cloudflare
   // secrets (using the `REFLECT_VAR_` prefix to distinguish them from internal
   // vars / bindings).
-  secrets: appSecretsSchema.optional(),
+  secrets: appSecretsSchema,
 
   // The App document tracks the running and queued deployments and serves as
   // a coordination point for (1) determining if a new deployment is necessary

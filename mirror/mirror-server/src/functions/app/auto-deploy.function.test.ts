@@ -108,6 +108,7 @@ describe('auto-deploy', () => {
             LOG_LEVEL: 'info',
           },
         },
+        secrets: {},
         serverReleaseChannel: 'stable',
 
         runningDeployment: {
