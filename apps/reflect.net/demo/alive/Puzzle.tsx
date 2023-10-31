@@ -36,7 +36,7 @@ export function Puzzle({
   setBodyClass,
 }: {
   r: Reflect<M>;
-  presentClientIDs: ReadonlySet<string>;
+  presentClientIDs: ReadonlyArray<string>;
   home: Rect;
   stage: Rect;
   setBodyClass: (cls: string, enabled: boolean) => void;

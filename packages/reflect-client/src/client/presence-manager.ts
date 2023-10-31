@@ -4,7 +4,7 @@ import type {ClientID} from 'replicache';
 import {Lock} from '@rocicorp/lock';
 
 export type SubscribeToPresenceCallback = (
-  presentClientIDs: ReadonlySet<ClientID>,
+  presentClientIDs: ReadonlyArray<ClientID>,
 ) => void;
 
 type PresenceSubscription = {
@@ -19,7 +19,7 @@ export class PresenceManager {
   readonly #lock = new Lock();
   #initialRunsScheduled = false;
   #presentClientIDsInitialized = false;
-  #presentClientIDs: Set<ClientID> = new Set();
+  #presentClientIDs: ClientID[] = [];
 
   constructor(
     clientIDPromise: Promise<ClientID>,
@@ -60,9 +60,9 @@ export class PresenceManager {
       }
       updated.add(clientID);
       if (!setEqual(prior, updated)) {
-        this.#presentClientIDs = updated;
+        this.#presentClientIDs = Array.from(updated);
         for (const sub of this.#subscriptions) {
-          callSubscriptionCallback(sub, updated, lc);
+          callSubscriptionCallback(sub, this.#presentClientIDs, lc);
           this.#pendingInitial.delete(sub);
         }
       }
@@ -117,7 +117,7 @@ export class PresenceManager {
 
 function callSubscriptionCallback(
   sub: PresenceSubscription,
-  presentClientIDs: ReadonlySet<ClientID>,
+  presentClientIDs: ReadonlyArray<ClientID>,
   lc: LogContext,
 ) {
   try {
@@ -134,8 +134,8 @@ function callSubscriptionCallback(
   }
 }
 
-function setEqual(a: ReadonlySet<unknown>, b: ReadonlySet<unknown>): boolean {
-  if (a.size !== b.size) {
+function setEqual(a: ReadonlyArray<unknown>, b: ReadonlySet<unknown>): boolean {
+  if (a.length !== b.size) {
     return false;
   }
   for (const el of a) {

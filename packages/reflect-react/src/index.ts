@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 import type {ClientID} from 'reflect-shared';
 
 export type SubscribeToPresenceCallback = (
-  presentClientIDs: ReadonlySet<ClientID>,
+  presentClientIDs: ReadonlyArray<ClientID>,
 ) => void;
 
 export type PresenceSubscribable = {
@@ -11,10 +11,10 @@ export type PresenceSubscribable = {
 
 export function usePresence(
   r: PresenceSubscribable | null | undefined,
-): ReadonlySet<ClientID> {
-  const [presentClientIDs, setPresentClientIDs] = useState(
-    new Set() as ReadonlySet<ClientID>,
-  );
+): ReadonlyArray<ClientID> {
+  const [presentClientIDs, setPresentClientIDs] = useState<
+    ReadonlyArray<ClientID>
+  >([]);
   useEffect(() => {
     if (!r) {
       return;
@@ -25,7 +25,7 @@ export function usePresence(
 
     return () => {
       unsubscribe();
-      setPresentClientIDs(new Set() as ReadonlySet<ClientID>);
+      setPresentClientIDs([]);
     };
   }, [r]);
 

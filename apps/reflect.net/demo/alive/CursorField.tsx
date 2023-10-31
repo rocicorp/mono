@@ -19,7 +19,7 @@ export function CursorField({
   stage: Rect;
   docSize: Size;
   r: Reflect<M>;
-  presentClientIDs: ReadonlySet<string>;
+  presentClientIDs: ReadonlyArray<string>;
   botIDs: string[];
   myClientID: string;
   hideLocalArrow: boolean;
@@ -45,7 +45,7 @@ export function CursorField({
         height: docSize.height,
       }}
     >
-      {[...clientIDs].map(cid => (
+      {clientIDs.map(cid => (
         <Cursor
           key={`c-${cid}`}
           r={r}
@@ -58,7 +58,7 @@ export function CursorField({
           stage={stage}
         />
       ))}
-      {[...botIDs].map(bid => (
+      {botIDs.map(bid => (
         <Cursor
           key={`b-${bid}`}
           r={r}
