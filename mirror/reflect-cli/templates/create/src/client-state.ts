@@ -22,7 +22,6 @@ export {
   putClientState,
   updateClientState,
   listClientStateIDs,
-  clearCursor,
   randUserInfo,
 };
 
@@ -40,10 +39,6 @@ function initClientState(tx: WriteTransaction, userInfo: UserInfo) {
     cursor: null,
     userInfo,
   });
-}
-
-async function clearCursor(tx: WriteTransaction): Promise<void> {
-  await updateClientState(tx, {id: tx.clientID, cursor: null});
 }
 
 function randUserInfo(): UserInfo {

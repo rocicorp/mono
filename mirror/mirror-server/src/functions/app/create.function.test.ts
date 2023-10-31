@@ -4,6 +4,7 @@ import type {DecodedIdToken} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
+import {ENCRYPTION_KEY_SECRET_NAME} from 'mirror-schema/src/app.js';
 import {appPath} from 'mirror-schema/src/deployment.js';
 import {teamMembershipPath} from 'mirror-schema/src/membership.js';
 import {
@@ -25,6 +26,7 @@ import {
 } from 'mirror-schema/src/test-helpers.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {SemVer} from 'semver';
+import {TestSecrets} from '../../secrets/test-utils.js';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import type {DistTags} from '../validators/version.js';
 import {MIN_WFP_VERSION, create} from './create.function.js';
@@ -47,7 +49,17 @@ describe('app-create function', () => {
     serverReleaseChannel?: string,
     testDistTags: DistTags = {},
   ) {
-    const createFunction = https.onCall(create(firestore, testDistTags));
+    const createFunction = https.onCall(
+      create(
+        firestore,
+        new TestSecrets([
+          ENCRYPTION_KEY_SECRET_NAME,
+          'latest',
+          TestSecrets.TEST_KEY,
+        ]),
+        testDistTags,
+      ),
+    );
 
     return createFunction.run({
       data: {
@@ -143,6 +155,14 @@ describe('app-create function', () => {
           /* eslint-enable @typescript-eslint/naming-convention */
         },
       },
+      secrets: {
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        REFLECT_AUTH_API_KEY: {
+          key: {version: TestSecrets.LATEST_ALIAS},
+          iv: expect.any(Uint8Array),
+          ciphertext: expect.any(Uint8Array),
+        },
+      },
     });
     // Not a WFP app.
     expect(app.scriptRef).toBeUndefined;
@@ -188,6 +208,14 @@ describe('app-create function', () => {
               DISABLE_LOG_FILTERING: 'false',
               LOG_LEVEL: 'info',
               /* eslint-enable @typescript-eslint/naming-convention */
+            },
+          },
+          secrets: {
+            // eslint-disable-next-line @typescript-eslint/naming-convention
+            REFLECT_AUTH_API_KEY: {
+              key: {version: TestSecrets.LATEST_ALIAS},
+              iv: expect.any(Uint8Array),
+              ciphertext: expect.any(Uint8Array),
             },
           },
         });

@@ -8,11 +8,11 @@ import {
   teamMembershipPath,
 } from 'mirror-schema/src/membership.js';
 import {
+  appNameIndexDataConverter,
+  appNameIndexPath,
+  sanitizeForLabel,
   teamDataConverter,
   teamPath,
-  appNameIndexPath,
-  appNameIndexDataConverter,
-  sanitizeForLabel,
   type AppNameIndex,
   type Team,
 } from 'mirror-schema/src/team.js';
@@ -24,10 +24,10 @@ import {
 import {must} from 'shared/src/must.js';
 import {DeploymentSecrets, defaultOptions} from './deployment.js';
 import {
+  DEFAULT_PROVIDER_ID,
+  providerDataConverter,
   providerPath,
   type Provider,
-  providerDataConverter,
-  DEFAULT_PROVIDER_ID,
 } from './provider.js';
 
 export function fakeFirestore(): Firestore {
@@ -192,6 +192,7 @@ export async function setApp(
     provider = DEFAULT_PROVIDER_ID,
     cfScriptName = 'cf-script-name',
     serverReleaseChannel = 'stable',
+    secrets = {},
   } = app;
   const newApp: App = {
     name,
@@ -202,6 +203,7 @@ export async function setApp(
     cfScriptName,
     serverReleaseChannel,
     deploymentOptions: defaultOptions(),
+    secrets,
   };
   await firestore
     .doc(appPath(appID))

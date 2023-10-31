@@ -1,5 +1,9 @@
 import {hideBin} from 'yargs/helpers';
 import {addDeploymentsOptionsHandler} from './add-deployment-options.js';
+import {
+  backfillReflectAuthApiKeyHandler,
+  backfillReflectAuthApiKeyOptions,
+} from './backfill-reflect-auth-api-keys.js';
 import {certificatesHandler, certificatesOptions} from './certificates.js';
 import {
   checkProviderHandler,
@@ -21,6 +25,10 @@ import {
 } from './delete-team-subdomains.js';
 import {dnsRecordsHandler, dnsRecordsOptions} from './dns-records.js';
 import {initFirebase} from './firebase.js';
+import {
+  genEncryptionKeyHandler,
+  genEncryptionKeyOptions,
+} from './gen-encryption-key.js';
 import {getWorkerHandler, getWorkerOptions} from './get-worker.js';
 import {grantSuperHandler, grantSuperOptions} from './grant-super.js';
 import {
@@ -144,6 +152,14 @@ function createCLIParser(argv: string[]) {
     checkProviderHandler,
   );
 
+  // gen-encryption-key
+  reflectCLI.command(
+    'gen-encryption-key',
+    'Generates and stores the APP_SECRET_ENCRYPTION_KEY used for encrypting at-rest secrets.',
+    genEncryptionKeyOptions,
+    genEncryptionKeyHandler,
+  );
+
   // wfp
   reflectCLI.command(
     'wfp <appID>',
@@ -214,6 +230,13 @@ function createCLIParser(argv: string[]) {
     'Execute a Worker Analytics SQL Query',
     queryAnalyticsOptions,
     queryAnalyticsHandler,
+  );
+
+  reflectCLI.command(
+    'backfill-reflect-auth-api-key',
+    'Backfills apps with a random, encrypted REFLECT_AUTH_API_KEY secret',
+    backfillReflectAuthApiKeyOptions,
+    backfillReflectAuthApiKeyHandler,
   );
 
   reflectCLI.command(

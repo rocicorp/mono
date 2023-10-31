@@ -3,7 +3,9 @@ README automatically on the package homepage.
 
 # Cutting a Canary Release
 
-Run `node ./packages/reflect/tool/create-canary.js` and follow the directions.
+- Sketch the release notes by copying an earlier version and reviewing history from last tag
+- If necessary choose a new version and commit it to main
+- Run `node ./packages/reflect/tool/create-canary.js` and follow the directions.
 
 # Upload the Canary to Mirror
 
@@ -12,8 +14,6 @@ This is needed so that we can publish apps to Mirror that use this version.
 `cd` into the tempdir you built Reflect from, then:
 
 ```bash
-git checkout reflect/v$NEW_VERSION
-
 cd mirror/mirror-cli
 # adjust channels to taste
 # can also pass --force to overwrite old versions

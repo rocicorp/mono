@@ -11,20 +11,9 @@ import {
 } from 'mirror-schema/src/test-helpers.js';
 import {sleep} from 'shared/src/sleep.js';
 import type WebSocket from 'ws';
-import type {SecretValue, Secrets} from '../../secrets/index.js';
+import {TestSecrets} from '../../secrets/test-utils.js';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {tail} from './tail.handler.js';
-
-class MockSecrets implements Secrets {
-  getSecret(name: string, version = 'latest'): Promise<SecretValue> {
-    expect(name).toBe(`tail-test-provider_api_token`);
-    expect(version).toBe('latest');
-    return Promise.resolve({
-      payload: 'tail-test-provider-api-token',
-      version: '1',
-    });
-  }
-}
 
 export class MockSocket {
   readonly url: string | URL;
@@ -66,7 +55,7 @@ export class MockSocket {
 
 mockFunctionParamsAndSecrets();
 
-describe('test tail', () => {
+describe('app-tail', () => {
   let firestore: Firestore;
   let auth: Auth;
   let wsMock: MockSocket;
@@ -104,7 +93,11 @@ describe('test tail', () => {
     createTailFunction = tail(
       firestore,
       auth,
-      new MockSecrets(),
+      new TestSecrets([
+        'tail-test-provider_api_token',
+        'latest',
+        'tail-test-provider-api-token',
+      ]),
       createCloudflareTailMock,
     );
     await setUser(firestore, 'foo', 'foo@bar.com', 'bob', {fooTeam: 'admin'});

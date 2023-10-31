@@ -10,7 +10,7 @@
     "@inquirer/input": "^1.2.11",
     "@inquirer/password": "^1.1.11",
     "@inquirer/select": "^1.2.11",
-    "@rocicorp/reflect": "0.36.202310172246+95297b",
+    "@rocicorp/reflect": "0.36.202310310758+c5a2c3",
     "esbuild": "^0.19.4",
     "firebase-admin": "^11.10.1",
     "pkg-up": "^4.0.0",

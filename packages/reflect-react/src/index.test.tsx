@@ -53,14 +53,14 @@ test('updating', async () => {
 
   expect(callbacks.length).toEqual(1);
   await act(() => {
-    callbacks[0](new Set(['client1', 'client2']));
+    callbacks[0](['client1', 'client2']);
   });
 
   expect(root?.toJSON()).toEqual('["client1","client2"]');
 
   expect(callbacks.length).toEqual(1);
   await act(() => {
-    callbacks[0](new Set(['client3']));
+    callbacks[0](['client3']);
   });
 
   expect(root?.toJSON()).toEqual('["client3"]');
@@ -99,7 +99,7 @@ test('cleanup', async () => {
   expect(callbacks.length).toEqual(1);
   expect(removeFnCalls).toEqual([0]);
   await act(() => {
-    callbacks[0](new Set(['client1', 'client2']));
+    callbacks[0](['client1', 'client2']);
   });
 
   expect(root?.toJSON()).toEqual('["client1","client2"]');

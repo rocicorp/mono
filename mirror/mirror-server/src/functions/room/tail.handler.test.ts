@@ -4,6 +4,8 @@ import {beforeEach, describe, expect, jest, test} from '@jest/globals';
 import type {Auth} from 'firebase-admin/auth';
 import type {https} from 'firebase-functions/v2';
 import type {TailMessage} from 'mirror-protocol/src/tail-message.js';
+import {ENCRYPTION_KEY_SECRET_NAME} from 'mirror-schema/src/app.js';
+import {encryptUtf8} from 'mirror-schema/src/crypto.js';
 import {
   fakeFirestore,
   setApp,
@@ -12,12 +14,14 @@ import {
 } from 'mirror-schema/src/test-helpers.js';
 import {sleep} from 'shared/src/sleep.js';
 import type WebSocket from 'ws';
+import {TestSecrets} from '../../secrets/test-utils.js';
 import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
+import {REFLECT_AUTH_API_KEY} from '../app/secrets.js';
 import {tail} from './tail.handler.js';
 
 export class MockSocket {
   readonly url: string | URL;
-  protocol: string;
+  readonly protocol: string;
   messages: string[] = [];
   closed = false;
   onUpstream?: (message: string) => void;
@@ -55,7 +59,7 @@ export class MockSocket {
 
 mockFunctionParamsAndSecrets();
 
-describe('test tail', () => {
+describe('room-tail', () => {
   let firestore: Firestore;
   let auth: Auth;
   let wsMock: MockSocket;
@@ -69,7 +73,6 @@ describe('test tail', () => {
 
   beforeEach(async () => {
     firestore = fakeFirestore();
-    wsMock = new MockSocket('wss://example.com');
 
     auth = {
       verifyIdToken: jest
@@ -81,17 +84,35 @@ describe('test tail', () => {
       createTailResolver = resolve;
     });
 
-    const createTailMock = () => {
+    const createTailMock = (
+      _app: unknown,
+      _roomID: string,
+      reflectApiToken: string,
+    ) => {
       setTimeout(createTailResolver, 0);
+      wsMock = new MockSocket('wss://example.com', reflectApiToken);
       return wsMock as unknown as WebSocket;
     };
 
-    createTailFunction = tail(firestore, auth, createTailMock);
+    const testSecrets = new TestSecrets([
+      ENCRYPTION_KEY_SECRET_NAME,
+      '3',
+      TestSecrets.TEST_KEY,
+    ]);
+
+    createTailFunction = tail(firestore, auth, testSecrets, createTailMock);
     await setUser(firestore, 'foo', 'foo@bar.com', 'bob', {fooTeam: 'admin'});
     await setApp(firestore, 'myApp', {
       teamID: 'fooTeam',
       name: 'MyAppName',
       provider: 'tail-test-provider',
+      secrets: {
+        [REFLECT_AUTH_API_KEY]: encryptUtf8(
+          'this-is-the-reflect-auth-api-key-yo',
+          Buffer.from(TestSecrets.TEST_KEY, 'base64url'),
+          {version: '3'},
+        ),
+      },
     });
     await setProvider(firestore, 'tail-test-provider', {});
   });
@@ -122,6 +143,7 @@ describe('test tail', () => {
     wsMock.close();
     await createTailPromise;
     expect(auth.verifyIdToken).toBeCalledWith('this-is-the-encoded-token');
+    expect(wsMock.protocol).toBe('this-is-the-reflect-auth-api-key-yo');
   });
 
   test('handle message', async () => {

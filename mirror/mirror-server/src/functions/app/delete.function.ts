@@ -1,26 +1,25 @@
 import {FieldValue, type Firestore} from 'firebase-admin/firestore';
+import {logger} from 'firebase-functions';
 import {
   deleteAppRequestSchema,
   deleteAppResponseSchema,
 } from 'mirror-protocol/src/app.js';
 import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {
-  teamDataConverter,
-  teamPath,
-  appNameIndexPath,
-} from 'mirror-schema/src/team.js';
-import {appAuthorization, userAuthorization} from '../validators/auth.js';
-import {validateSchema} from '../validators/schema.js';
-import {getDataOrFail} from '../validators/data.js';
-import {
   DeploymentSpec,
   defaultOptions,
   deploymentsCollection,
 } from 'mirror-schema/src/deployment.js';
-import {NULL_SECRETS} from './secrets.js';
-import {requestDeployment} from './deploy.function.js';
-import {logger} from 'firebase-functions';
+import {
+  appNameIndexPath,
+  teamDataConverter,
+  teamPath,
+} from 'mirror-schema/src/team.js';
+import {appAuthorization, userAuthorization} from '../validators/auth.js';
+import {getDataOrFail} from '../validators/data.js';
+import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
+import {requestDeployment} from './deploy.function.js';
 
 const NULL_SPEC: DeploymentSpec = {
   appModules: [],
@@ -28,7 +27,7 @@ const NULL_SPEC: DeploymentSpec = {
   serverVersionRange: '',
   hostname: '',
   options: defaultOptions(),
-  hashesOfSecrets: NULL_SECRETS,
+  hashesOfSecrets: {},
 };
 
 // Note: 'delete' is a reserved word, so we have to call the variable something else.

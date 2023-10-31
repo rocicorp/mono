@@ -1,8 +1,8 @@
-import {describe, test, expect} from '@jest/globals';
-import {defaultOptions, deploymentSchema, varsSchema} from './deployment.js';
+import {Timestamp} from '@google-cloud/firestore';
+import {describe, expect, test} from '@jest/globals';
 import {parse} from 'shared/src/valita.js';
 import {appSchema} from './app.js';
-import {Timestamp} from '@google-cloud/firestore';
+import {defaultOptions, deploymentSchema, varsSchema} from './deployment.js';
 
 describe('deployment', () => {
   /* eslint-disable @typescript-eslint/naming-convention */
@@ -73,6 +73,7 @@ describe('deployment', () => {
       teamID: 'boo',
       teamLabel: 'teamlabel',
       deploymentOptions: {vars: {}},
+      secrets: {},
     });
 
     const parsedDeployment = deploymentSchema.parse(

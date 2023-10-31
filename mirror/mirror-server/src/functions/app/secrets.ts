@@ -1,7 +1,13 @@
 import {defineSecret} from 'firebase-functions/params';
+import {
+  ENCRYPTION_KEY_SECRET_NAME,
+  type AppSecrets,
+} from 'mirror-schema/src/app.js';
+import {decryptUtf8} from 'mirror-schema/src/crypto.js';
 import type {DeploymentSecrets} from 'mirror-schema/src/deployment.js';
 import {assert} from 'shared/src/asserts.js';
 import {sha256OfString} from 'shared/src/sha256.js';
+import type {Secrets} from '../../secrets/index.js';
 
 export function defineSecretSafely(name: string) {
   const secret = defineSecret(name);
@@ -29,29 +35,55 @@ export function defineSecretSafely(name: string) {
 const datadogLogsApiKey = defineSecretSafely('DATADOG_LOGS_API_KEY');
 const datadogMetricsApiKey = defineSecretSafely('DATADOG_METRICS_API_KEY');
 
-// TODO(darick): Replace with a stable per-app secret.
-export const REFLECT_AUTH_API_KEY = 'dummy-api-key';
+// TODO(darick): Find the right place for this constant. Somewhere in packages/reflect* ?
+export const REFLECT_AUTH_API_KEY = 'REFLECT_AUTH_API_KEY';
 
 export const DEPLOYMENT_SECRETS_NAMES = [
   'DATADOG_LOGS_API_KEY',
   'DATADOG_METRICS_API_KEY',
 ] as const;
 
-export async function getAppSecrets() {
-  const secrets: DeploymentSecrets = {
-    ['REFLECT_AUTH_API_KEY']: REFLECT_AUTH_API_KEY,
+export async function getAppSecrets(
+  secrets: Secrets,
+  encrypted: AppSecrets,
+): Promise<{
+  secrets: Record<string, string>;
+  hashes: Record<string, string>;
+}> {
+  // Generate the hashes from the datadog keys and from the app secret ciphertexts.
+  // It is important that we don't hash the plaintexts as that could leak information
+  // about equality between secrets.
+  const hashes = hashSecrets({
     ['DATADOG_LOGS_API_KEY']: datadogLogsApiKey.value(),
     ['DATADOG_METRICS_API_KEY']: datadogMetricsApiKey.value(),
-  };
-  const hashes = await hashSecrets(secrets);
-  return {secrets, hashes};
-}
+    ...Object.fromEntries(
+      Object.entries(encrypted).map(([name, val]) => [
+        name,
+        new TextDecoder('utf-8').decode(val.ciphertext),
+      ]),
+    ),
+  });
 
-export const NULL_SECRETS: DeploymentSecrets = {
-  ['REFLECT_AUTH_API_KEY']: '',
-  ['DATADOG_LOGS_API_KEY']: '',
-  ['DATADOG_METRICS_API_KEY']: '',
-} as const;
+  const decrypted = await Promise.all(
+    Object.entries(encrypted).map(async ([name, val]) => {
+      const {secretName, version} = val.key;
+      const {payload: encryptionKey} = await secrets.getSecret(
+        secretName ?? ENCRYPTION_KEY_SECRET_NAME,
+        version,
+      );
+      return [name, decryptUtf8(val, Buffer.from(encryptionKey, 'base64url'))];
+    }),
+  );
+
+  return {
+    secrets: {
+      ['DATADOG_LOGS_API_KEY']: datadogLogsApiKey.value(),
+      ['DATADOG_METRICS_API_KEY']: datadogMetricsApiKey.value(),
+      ...Object.fromEntries(decrypted),
+    },
+    hashes: await hashes,
+  };
+}
 
 export async function hashSecrets(
   secrets: DeploymentSecrets,

@@ -1,10 +1,5 @@
 import {describe, expect, test} from '@jest/globals';
 import type {Firestore} from 'firebase-admin/firestore';
-import {
-  fakeFirestore,
-  setApp,
-  setUser,
-} from 'mirror-schema/src/test-helpers.js';
 import {https} from 'firebase-functions/v2';
 import {
   FunctionsErrorCode,
@@ -12,17 +7,22 @@ import {
   Request,
 } from 'firebase-functions/v2/https';
 import type {AuthData} from 'firebase-functions/v2/tasks';
-import {validateSchema} from './schema.js';
-import {appAuthorization, userAuthorization} from './auth.js';
 import {baseAppRequestFields} from 'mirror-protocol/src/app.js';
 import {baseResponseFields} from 'mirror-protocol/src/base.js';
-import * as v from 'shared/src/valita.js';
-import type {Callable} from './types.js';
-import type {User} from 'mirror-schema/src/user.js';
 import type {App} from 'mirror-schema/src/app.js';
-import type {Role} from 'mirror-schema/src/membership.js';
 import {defaultOptions} from 'mirror-schema/src/deployment.js';
+import type {Role} from 'mirror-schema/src/membership.js';
 import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
+import {
+  fakeFirestore,
+  setApp,
+  setUser,
+} from 'mirror-schema/src/test-helpers.js';
+import type {User} from 'mirror-schema/src/user.js';
+import * as v from 'shared/src/valita.js';
+import {appAuthorization, userAuthorization} from './auth.js';
+import {validateSchema} from './schema.js';
+import type {Callable} from './types.js';
 
 const testRequestSchema = v.object({
   ...baseAppRequestFields,
@@ -176,6 +176,7 @@ describe('app authorization', () => {
     cfScriptName: 'cfScriptName',
     serverReleaseChannel: 'stable',
     deploymentOptions: defaultOptions(),
+    secrets: {},
   };
   const defaultUser: User = {
     email: 'foo@bar.com',

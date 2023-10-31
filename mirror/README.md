@@ -93,6 +93,15 @@ running admin auth commands from the `mirror-cli`.
   - Role: `Owner`
   - Role: `Service Account Token Creator`
 
+### Encryption Key
+
+Each stack uses an encryption key (stored in the Secret Manager) for encrypting app
+secrets at rest (in Firestore). Run the following `mirror-cli` command to set this up:
+
+```
+$ npm run mirror -- --stack=<stack-name> gen-encryption-key
+```
+
 ### Cloudflare Account
 
 A Cloudflare account is needed to run workers and Durable Objects.

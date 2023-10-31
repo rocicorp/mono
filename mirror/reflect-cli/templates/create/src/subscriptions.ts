@@ -18,10 +18,6 @@ export function useCount(reflect: Reflect<M>, key: string) {
   return useSubscribe(reflect, async tx => (await tx.get<number>(key)) ?? 0, 0);
 }
 
-export function useClientStateIDs(reflect: Reflect<M>) {
-  return useSubscribe(reflect, listClientStateIDs, []);
-}
-
 export function useClientState(r: Reflect<M>, id: string) {
   return useSubscribe(r, tx => getClientState(tx, id), null);
 }

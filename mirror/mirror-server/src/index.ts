@@ -44,17 +44,25 @@ export const error = {
 };
 
 export const app = {
-  create: https.onCall(baseHttpsOptions, appFunctions.create(getFirestore())),
+  create: https.onCall(
+    baseHttpsOptions,
+    appFunctions.create(getFirestore(), secrets),
+  ),
   publish: https.onCall(
     {
       ...baseHttpsOptions,
       secrets: [...DEPLOYMENT_SECRETS_NAMES],
       memory: '512MiB',
     },
-    appFunctions.publish(getFirestore(), getStorage(), modulesBucketName),
+    appFunctions.publish(
+      getFirestore(),
+      secrets,
+      getStorage(),
+      modulesBucketName,
+    ),
   ),
   deploy: appFunctions.deploy(getFirestore(), getStorage(), secrets),
-  autoDeploy: appFunctions.autoDeploy(getFirestore()),
+  autoDeploy: appFunctions.autoDeploy(getFirestore(), secrets),
   rename: https.onCall(baseHttpsOptions, appFunctions.rename(getFirestore())),
   tail: https.onRequest(
     {
@@ -74,12 +82,12 @@ export const room = {
       ...baseHttpsOptions,
       secrets: [...DEPLOYMENT_SECRETS_NAMES],
     },
-    roomFunctions.tail(getFirestore(), getAuth()),
+    roomFunctions.tail(getFirestore(), getAuth(), secrets),
   ),
 };
 
 export const server = {
-  autoDeploy: serverFunctions.autoDeploy(getFirestore()),
+  autoDeploy: serverFunctions.autoDeploy(getFirestore(), secrets),
 };
 
 export const team = {

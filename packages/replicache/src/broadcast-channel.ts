@@ -15,7 +15,7 @@ class NoopBroadcastChannel extends EventTarget implements BroadcastChannel {
   }
 
   close(): void {
-    throw new Error('Method not implemented.');
+    // noop
   }
 
   postMessage(_message: unknown): void {

@@ -46,13 +46,7 @@ export function defaultOptions(): DeploymentOptions {
   return {vars: defaultVars()};
 }
 
-export const deploymentSecretsSchema = v.object({
-  /* eslint-disable @typescript-eslint/naming-convention */
-  REFLECT_AUTH_API_KEY: v.string(),
-  DATADOG_LOGS_API_KEY: v.string(),
-  DATADOG_METRICS_API_KEY: v.string(),
-  /* eslint-enable @typescript-eslint/naming-convention */
-});
+export const deploymentSecretsSchema = v.record(v.string());
 
 export type DeploymentSecrets = v.Infer<typeof deploymentSecretsSchema>;
 
