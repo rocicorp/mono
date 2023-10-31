@@ -15,11 +15,11 @@ test('initial only this client present', async () => {
   );
 
   const {promise: presentPromise, resolve: presentResolve} =
-    resolver<ReadonlySet<ClientID>>();
+    resolver<ReadonlyArray<ClientID>>();
   presenceManager.addSubscription(present => {
     presentResolve(present);
   });
-  expect(await presentPromise).to.deep.equal(new Set(['c1']));
+  expect(await presentPromise).to.have.members(['c1']);
 });
 
 test('addSubscription', async () => {
@@ -37,7 +37,7 @@ test('addSubscription', async () => {
     {op: 'put', key: 'c2', value: 1},
   ]);
 
-  const resolvers1: Resolver<ReadonlySet<ClientID>>[] = [
+  const resolvers1: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),
     resolver(),
   ];
@@ -46,9 +46,9 @@ test('addSubscription', async () => {
     resolvers1[sub1CallCount++].resolve(present);
   });
 
-  expect(await resolvers1[0].promise).to.deep.equal(new Set(['c1', 'c2']));
+  expect(await resolvers1[0].promise).to.have.members(['c1', 'c2']);
 
-  const resolvers2: Resolver<ReadonlySet<ClientID>>[] = [
+  const resolvers2: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),
     resolver(),
   ];
@@ -57,16 +57,12 @@ test('addSubscription', async () => {
     resolvers2[sub2CallCount++].resolve(present);
   });
 
-  expect(await resolvers2[0].promise).to.deep.equal(new Set(['c1', 'c2']));
+  expect(await resolvers2[0].promise).to.have.members(['c1', 'c2']);
 
   await presenceManager.updatePresence([{op: 'put', key: 'c3', value: 1}]);
 
-  expect(await resolvers1[1].promise).to.deep.equal(
-    new Set(['c1', 'c2', 'c3']),
-  );
-  expect(await resolvers2[1].promise).to.deep.equal(
-    new Set(['c1', 'c2', 'c3']),
-  );
+  expect(await resolvers1[1].promise).to.have.members(['c1', 'c2', 'c3']);
+  expect(await resolvers2[1].promise).to.have.members(['c1', 'c2', 'c3']);
 });
 
 test('calling function returned by addSubscription removes subscription', async () => {
@@ -84,7 +80,7 @@ test('calling function returned by addSubscription removes subscription', async 
     {op: 'put', key: 'c2', value: 1},
   ]);
 
-  const resolvers1: Resolver<ReadonlySet<ClientID>>[] = [
+  const resolvers1: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),
     resolver(),
     resolver(),
@@ -97,7 +93,7 @@ test('calling function returned by addSubscription removes subscription', async 
     }
     resolvers1[sub1CallCount++].resolve(present);
   });
-  const resolvers2: Resolver<ReadonlySet<ClientID>>[] = [
+  const resolvers2: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),
     resolver(),
     resolver(),
@@ -106,25 +102,19 @@ test('calling function returned by addSubscription removes subscription', async 
   presenceManager.addSubscription(present => {
     resolvers2[sub2CallCount++].resolve(present);
   });
-  expect(await resolvers1[0].promise).to.deep.equal(new Set(['c1', 'c2']));
-  expect(await resolvers2[0].promise).to.deep.equal(new Set(['c1', 'c2']));
+  expect(await resolvers1[0].promise).to.have.members(['c1', 'c2']);
+  expect(await resolvers2[0].promise).to.have.members(['c1', 'c2']);
 
   await presenceManager.updatePresence([{op: 'put', key: 'c3', value: 1}]);
 
-  expect(await resolvers1[1].promise).to.deep.equal(
-    new Set(['c1', 'c2', 'c3']),
-  );
-  expect(await resolvers2[1].promise).to.deep.equal(
-    new Set(['c1', 'c2', 'c3']),
-  );
+  expect(await resolvers1[1].promise).to.have.members(['c1', 'c2', 'c3']);
+  expect(await resolvers2[1].promise).to.have.members(['c1', 'c2', 'c3']);
 
   removeSub1();
   sub1ErrorIfCalled = true;
   await presenceManager.updatePresence([{op: 'put', key: 'c4', value: 1}]);
 
-  expect(await resolvers2[2].promise).to.deep.equal(
-    new Set(['c1', 'c2', 'c3', 'c4']),
-  );
+  expect(await resolvers2[2].promise).to.have.members(['c1', 'c2', 'c3', 'c4']);
   expect(sub1CallCount).to.equal(2);
   expect(sub2CallCount).to.equal(3);
 });
@@ -144,7 +134,7 @@ test('clearSubscriptions', async () => {
     {op: 'put', key: 'c2', value: 1},
   ]);
 
-  const resolvers1: Resolver<ReadonlySet<ClientID>>[] = [
+  const resolvers1: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),
     resolver(),
     resolver(),
@@ -157,7 +147,7 @@ test('clearSubscriptions', async () => {
     }
     resolvers1[sub1CallCount++].resolve(present);
   });
-  const resolvers2: Resolver<ReadonlySet<ClientID>>[] = [
+  const resolvers2: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),
     resolver(),
     resolver(),
@@ -170,17 +160,13 @@ test('clearSubscriptions', async () => {
     }
     resolvers2[sub2CallCount++].resolve(present);
   });
-  expect(await resolvers1[0].promise).to.deep.equal(new Set(['c1', 'c2']));
-  expect(await resolvers2[0].promise).to.deep.equal(new Set(['c1', 'c2']));
+  expect(await resolvers1[0].promise).to.have.members(['c1', 'c2']);
+  expect(await resolvers2[0].promise).to.have.members(['c1', 'c2']);
 
   await presenceManager.updatePresence([{op: 'put', key: 'c3', value: 1}]);
 
-  expect(await resolvers1[1].promise).to.deep.equal(
-    new Set(['c1', 'c2', 'c3']),
-  );
-  expect(await resolvers2[1].promise).to.deep.equal(
-    new Set(['c1', 'c2', 'c3']),
-  );
+  expect(await resolvers1[1].promise).to.have.members(['c1', 'c2', 'c3']);
+  expect(await resolvers2[1].promise).to.have.members(['c1', 'c2', 'c3']);
 
   presenceManager.clearSubscriptions();
   sub1ErrorIfCalled = true;
@@ -201,7 +187,7 @@ test('updatePresence', async () => {
     logContextPromise,
   );
 
-  const resolvers: Resolver<ReadonlySet<ClientID>>[] = [
+  const resolvers: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),
     resolver(),
     resolver(),
@@ -210,7 +196,7 @@ test('updatePresence', async () => {
   presenceManager.addSubscription(present => {
     resolvers[subCallCount++].resolve(present);
   });
-  expect(await resolvers[0].promise).to.deep.equal(new Set(['c1']));
+  expect(await resolvers[0].promise).to.have.members(['c1']);
 
   await presenceManager.updatePresence([
     {op: 'clear'},
@@ -218,14 +204,14 @@ test('updatePresence', async () => {
     {op: 'put', key: 'c2', value: 1},
   ]);
 
-  expect(await resolvers[1].promise).to.deep.equal(new Set(['c1', 'c2']));
+  expect(await resolvers[1].promise).to.have.members(['c1', 'c2']);
 
   await presenceManager.updatePresence([
     {op: 'del', key: 'c2'},
     {op: 'put', key: 'c3', value: 1},
   ]);
 
-  expect(await resolvers[2].promise).to.deep.equal(new Set(['c1', 'c3']));
+  expect(await resolvers[2].promise).to.have.members(['c1', 'c3']);
 });
 
 test('updatePresence self clientID always included', async () => {
@@ -237,7 +223,7 @@ test('updatePresence self clientID always included', async () => {
     logContextPromise,
   );
 
-  const resolvers: Resolver<ReadonlySet<ClientID>>[] = [
+  const resolvers: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),
     resolver(),
     resolver(),
@@ -246,14 +232,14 @@ test('updatePresence self clientID always included', async () => {
   presenceManager.addSubscription(present => {
     resolvers[subCallCount++].resolve(present);
   });
-  expect(await resolvers[0].promise).to.deep.equal(new Set(['c1']));
+  expect(await resolvers[0].promise).to.have.members(['c1']);
 
   await presenceManager.updatePresence([
     {op: 'clear'},
     {op: 'put', key: 'c2', value: 1},
   ]);
 
-  expect(await resolvers[1].promise).to.deep.equal(new Set(['c1', 'c2']));
+  expect(await resolvers[1].promise).to.have.members(['c1', 'c2']);
 
   await presenceManager.updatePresence([
     {op: 'del', key: 'c1'},
@@ -261,7 +247,7 @@ test('updatePresence self clientID always included', async () => {
     {op: 'put', key: 'c3', value: 1},
   ]);
 
-  expect(await resolvers[2].promise).to.deep.equal(new Set(['c1', 'c3']));
+  expect(await resolvers[2].promise).to.have.members(['c1', 'c3']);
 });
 
 test('updatePresence doesnt fire subscriptions if set is equal', async () => {
@@ -273,7 +259,7 @@ test('updatePresence doesnt fire subscriptions if set is equal', async () => {
     logContextPromise,
   );
 
-  const resolvers: Resolver<ReadonlySet<ClientID>>[] = [
+  const resolvers: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),
     resolver(),
     resolver(),
@@ -282,7 +268,7 @@ test('updatePresence doesnt fire subscriptions if set is equal', async () => {
   presenceManager.addSubscription(present => {
     resolvers[subCallCount++].resolve(present);
   });
-  expect(await resolvers[0].promise).to.deep.equal(new Set(['c1']));
+  expect(await resolvers[0].promise).to.have.members(['c1']);
 
   await presenceManager.updatePresence([
     {op: 'clear'},
@@ -290,7 +276,7 @@ test('updatePresence doesnt fire subscriptions if set is equal', async () => {
     {op: 'put', key: 'c2', value: 1},
   ]);
 
-  expect(await resolvers[1].promise).to.deep.equal(new Set(['c1', 'c2']));
+  expect(await resolvers[1].promise).to.have.members(['c1', 'c2']);
 
   // subscription not called
   await presenceManager.updatePresence([{op: 'put', key: 'c1', value: 1}]);
@@ -301,7 +287,7 @@ test('updatePresence doesnt fire subscriptions if set is equal', async () => {
     {op: 'put', key: 'c3', value: 1},
   ]);
 
-  expect(await resolvers[2].promise).to.deep.equal(new Set(['c1', 'c3']));
+  expect(await resolvers[2].promise).to.have.members(['c1', 'c3']);
 });
 
 test('handleDisconnect', async () => {
@@ -313,7 +299,7 @@ test('handleDisconnect', async () => {
     logContextPromise,
   );
 
-  const resolvers: Resolver<ReadonlySet<ClientID>>[] = [
+  const resolvers: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),
     resolver(),
     resolver(),
@@ -323,18 +309,18 @@ test('handleDisconnect', async () => {
   presenceManager.addSubscription(present => {
     resolvers[subCallCount++].resolve(present);
   });
-  expect(await resolvers[0].promise).to.deep.equal(new Set(['c1']));
+  expect(await resolvers[0].promise).to.have.members(['c1']);
 
   await presenceManager.updatePresence([
     {op: 'clear'},
     {op: 'put', key: 'c2', value: 1},
   ]);
 
-  expect(await resolvers[1].promise).to.deep.equal(new Set(['c1', 'c2']));
+  expect(await resolvers[1].promise).to.have.members(['c1', 'c2']);
 
   await presenceManager.handleDisconnect();
 
-  expect(await resolvers[2].promise).to.deep.equal(new Set(['c1']));
+  expect(await resolvers[2].promise).to.have.members(['c1']);
 
   await presenceManager.updatePresence([
     {op: 'clear'},
@@ -342,5 +328,5 @@ test('handleDisconnect', async () => {
     {op: 'put', key: 'c3', value: 1},
   ]);
 
-  expect(await resolvers[3].promise).to.deep.equal(new Set(['c1', 'c3']));
+  expect(await resolvers[3].promise).to.have.members(['c1', 'c3']);
 });

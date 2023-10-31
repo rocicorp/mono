@@ -369,7 +369,7 @@ export function Demo({
           <div className="online-dot"></div>
           Active Users:&nbsp;
           <span id="active-user-count">
-            {Math.max(presentClientIDs.size + botIDs.length, 1)}
+            {Math.max(presentClientIDs.length + botIDs.length, 1)}
           </span>
         </div>
       </div>
