@@ -21,7 +21,6 @@ export {
   getClientState,
   putClientState,
   updateClientState,
-  listClientStateIDs,
   randUserInfo,
 };
 
@@ -30,7 +29,6 @@ const {
   get: getClientState,
   put: putClientState,
   update: updateClientState,
-  listIDs: listClientStateIDs,
 } = generate<ClientState>('client-state');
 
 function initClientState(tx: WriteTransaction, userInfo: UserInfo) {
