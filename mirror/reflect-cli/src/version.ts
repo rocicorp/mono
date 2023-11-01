@@ -4,10 +4,10 @@ import {
   DistTagMap,
   lookupDistTags,
 } from 'mirror-protocol/src/version.js';
+import {readFileSync} from 'node:fs';
 import color from 'picocolors';
 import {Range, SemVer, gt, gtr} from 'semver';
 import type {ArgumentsCamelCase} from 'yargs';
-import {getVersion} from '../../../packages/reflect-shared/tool/get-version.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 declare const REFLECT_VERSION: string;
@@ -57,7 +57,11 @@ export function findReflectVersion(): string {
   }
 
   // When the reflect-cli is run from source, use the version from `packages/reflect/package.json`.
-  return getVersion();
+  const url = new URL(
+    '../../../packages/reflect/package.json',
+    import.meta.url,
+  );
+  return JSON.parse(readFileSync(url, 'utf-8')).version;
 }
 
 async function checkForCliDeprecation(): Promise<DistTags> {
