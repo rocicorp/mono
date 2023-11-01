@@ -1,6 +1,5 @@
 // @ts-check
 import {readFileSync, writeFileSync} from 'fs';
-import {fileURLToPath} from 'url';
 
 // When deploying to Firebase, Firebase does an `npm install` which tries to
 // install our internal packages. That fails because these packages are not
@@ -20,7 +19,7 @@ import {fileURLToPath} from 'url';
 // caused problems with turbo repo which failed to build things in the right
 // order.
 
-const filename = fileURLToPath(new URL('../package.json', import.meta.url));
+const filename = new URL('../package.json', import.meta.url);
 const packageJson = JSON.parse(readFileSync(filename, 'utf-8'));
 const {bundleDependencies, dependencies, devDependencies} = packageJson;
 

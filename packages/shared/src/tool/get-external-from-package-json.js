@@ -4,7 +4,6 @@
 
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
-import {fileURLToPath} from 'node:url';
 import {pkgUp} from 'pkg-up';
 
 /**
@@ -62,7 +61,7 @@ function isInternalPackage(name) {
  */
 function getRecursiveExternals(name) {
   if (name === 'shared') {
-    return getExternalFromPackageJSON(fileURLToPath(import.meta.url));
+    return getExternalFromPackageJSON(import.meta.url);
   }
 
   const require = createRequire(import.meta.url);

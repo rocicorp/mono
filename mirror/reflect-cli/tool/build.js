@@ -2,7 +2,6 @@
 
 import * as esbuild from 'esbuild';
 import {readFile} from 'node:fs/promises';
-import {fileURLToPath} from 'node:url';
 import {getVersion} from '../../../packages/reflect-shared/tool/get-version.js';
 import {getExternalFromPackageJSON} from '../../../packages/shared/src/tool/get-external-from-package-json.js';
 import {injectRequire} from '../../../packages/shared/src/tool/inject-require.js';
@@ -12,10 +11,7 @@ import {injectRequire} from '../../../packages/shared/src/tool/inject-require.js
  * @param {string | URL} relPath
  */
 async function packageJSON(relPath) {
-  const s = await readFile(
-    fileURLToPath(new URL(relPath, import.meta.url)),
-    'utf-8',
-  );
+  const s = await readFile(new URL(relPath, import.meta.url), 'utf-8');
   return JSON.parse(s);
 }
 
