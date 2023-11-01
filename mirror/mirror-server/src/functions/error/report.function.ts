@@ -24,7 +24,7 @@ export const report = () =>
     const {
       severity,
       action,
-      error: {desc, name},
+      error: {desc, name, stack},
       requester: {userID},
     } = request;
 
@@ -48,7 +48,16 @@ export const report = () =>
 
     // 4xx and 5xx errors have different alerting thresholds.
     // "cancelled" maps to 499 and "unknown" maps to 500
-    throw new HttpsError(errorCode, `action: ${action}, description: ${desc}`);
+    const error = new HttpsError(
+      errorCode,
+      `action: ${action}, description: ${desc}`,
+    );
+    if (stack) {
+      // Inherit the stack from the reported error so that errors are easier to
+      // bucket (both manually and by the Error Reporter).
+      error.stack = `action: ${action}, description: ${stack}`;
+    }
+    throw error;
   });
 
 function shouldBeWarning(action: string, desc: string): boolean {

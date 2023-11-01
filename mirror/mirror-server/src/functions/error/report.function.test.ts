@@ -14,6 +14,8 @@ describe('error-report function', () => {
 
   const errorReportingFunction = https.onCall(report());
 
+  const stack = 'This is the original\n    stack\n    trace';
+
   const request: ErrorReportingRequest = {
     requester: {
       userID: 'foo',
@@ -23,7 +25,7 @@ describe('error-report function', () => {
       desc: 'error-reporting-test',
       name: 'Error',
       message: 'error-reporting-test',
-      stack: 'error-reporting-test',
+      stack,
     },
     severity: 'ERROR',
     agentContext: {
@@ -68,7 +70,7 @@ describe('error-report function', () => {
           desc: 'error-reporting-test',
           name: 'FirebaseError',
           message: 'error-reporting-test',
-          stack: 'error-reporting-test',
+          stack,
         },
       },
       code: 'already-exists',
@@ -79,6 +81,7 @@ describe('error-report function', () => {
         action: 'cmd_dev',
         error: {
           desc: "Error: ENOENT: no such file or directory, open 'reflect/index.ts'",
+          stack,
         },
       },
       code: 'cancelled',
@@ -91,6 +94,7 @@ describe('error-report function', () => {
           desc:
             'MiniflareCoreError [ERR_RUNTIME_FAILURE]: The Workers runtime failed to start. ' +
             'There is likely additional logging output above.',
+          stack,
         },
       },
       code: 'cancelled',
@@ -101,6 +105,7 @@ describe('error-report function', () => {
         action: 'cmd_init',
         error: {
           desc: `Error: Command failed: npm add '@rocicorp/reflect@^0.36.202310172246+95297b'`,
+          stack,
         },
       },
       code: 'cancelled',
@@ -111,6 +116,7 @@ describe('error-report function', () => {
         action: 'cmd_create',
         error: {
           desc: `Error: Command failed: npm init '@rocicorp/reflect@^0.36.202310172246+95297b'`,
+          stack,
         },
       },
       code: 'cancelled',
@@ -123,6 +129,7 @@ describe('error-report function', () => {
           desc:
             `Error: Build failed with 1 error:\n` +
             `dev/testReflectWorker.ts:5:2: ERROR: No matching export in "../../packages/dir/src/model/mutators/testSGWorkerMutators.ts" for import "setEnv"`,
+          stack,
         },
       },
       code: 'cancelled',
@@ -130,18 +137,22 @@ describe('error-report function', () => {
   ];
   for (const c of cases) {
     test(c.name, async () => {
+      const data = {
+        ...request,
+        ...c.request,
+      };
       try {
         const resp = await errorReportingFunction.run({
-          data: {
-            ...request,
-            ...c.request,
-          },
+          data,
           rawRequest: null as unknown as Request,
         });
         console.log(resp);
       } catch (e) {
         expect(e).toBeInstanceOf(HttpsError);
         expect((e as HttpsError).code).toBe(c.code);
+        expect((e as HttpsError).stack).toBe(
+          `action: ${data.action}, description: ${stack}`,
+        );
       }
     });
   }
