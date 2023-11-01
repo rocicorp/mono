@@ -6,7 +6,7 @@ import {
 import {createTailEventSourceURL} from 'mirror-protocol/src/tail.js';
 import assert from 'node:assert';
 import * as valita from 'shared/src/valita.js';
-import {ErrorWrapper} from '../error.js';
+import {ErrorWithSeverity} from '../error.js';
 import {EventSourceEntry, eventSourceStream} from './event-source-stream.js';
 import {lineByLineStream} from './line-by-line-stream.js';
 
@@ -59,8 +59,8 @@ async function* createIter<R extends BaseRequest>(
 
   if (!response.ok) {
     const message = await response.text();
-    throw new ErrorWrapper(
-      new Error(`${message || response.statusText} (HTTP ${response.status})`),
+    throw new ErrorWithSeverity(
+      `${message || response.statusText} (HTTP ${response.status})`,
       response.status < 500 ? 'WARNING' : 'ERROR',
     );
   }
