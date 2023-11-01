@@ -46,17 +46,23 @@ export const DEPLOYMENT_SECRETS_NAMES = [
 export async function getAppSecrets(
   secrets: Secrets,
   encrypted: AppSecrets,
+  includeInternal = true,
 ): Promise<{
   secrets: Record<string, string>;
   hashes: Record<string, string>;
 }> {
+  const internalSecrets = includeInternal
+    ? {
+        ['DATADOG_LOGS_API_KEY']: datadogLogsApiKey.value(),
+        ['DATADOG_METRICS_API_KEY']: datadogMetricsApiKey.value(),
+      }
+    : {};
   // Generate the hashes from the datadog keys and from the app secret ciphertexts.
   // It is important that we don't hash the plaintexts as that could leak information
   // about equality between secrets.
   const decoder = new TextDecoder('utf-8');
   const hashes = hashSecrets({
-    ['DATADOG_LOGS_API_KEY']: datadogLogsApiKey.value(),
-    ['DATADOG_METRICS_API_KEY']: datadogMetricsApiKey.value(),
+    ...internalSecrets,
     ...Object.fromEntries(
       Object.entries(encrypted).map(([name, val]) => [
         name,
@@ -78,8 +84,7 @@ export async function getAppSecrets(
 
   return {
     secrets: {
-      ['DATADOG_LOGS_API_KEY']: datadogLogsApiKey.value(),
-      ['DATADOG_METRICS_API_KEY']: datadogMetricsApiKey.value(),
+      ...internalSecrets,
       ...Object.fromEntries(decrypted),
     },
     hashes: await hashes,

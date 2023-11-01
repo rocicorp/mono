@@ -16,6 +16,7 @@ import * as roomFunctions from './functions/room/index.js';
 import * as serverFunctions from './functions/server/index.js';
 import * as teamFunctions from './functions/team/index.js';
 import * as userFunctions from './functions/user/index.js';
+import * as varsFunctions from './functions/vars/index.js';
 import {SecretsClientImpl} from './secrets/index.js';
 
 // Initializes firestore et al. (e.g. for subsequent calls to getFirestore())
@@ -92,4 +93,16 @@ export const server = {
 
 export const team = {
   ensure: https.onCall(baseHttpsOptions, teamFunctions.ensure(getFirestore())),
+};
+
+export const vars = {
+  delete: https.onCall(baseHttpsOptions, varsFunctions.delete(getFirestore())),
+  list: https.onCall(
+    baseHttpsOptions,
+    varsFunctions.list(getFirestore(), secrets),
+  ),
+  set: https.onCall(
+    baseHttpsOptions,
+    varsFunctions.set(getFirestore(), secrets),
+  ),
 };

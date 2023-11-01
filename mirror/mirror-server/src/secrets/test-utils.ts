@@ -5,6 +5,8 @@ export class TestSecrets implements Secrets, SecretsClient {
   static readonly LATEST_ALIAS = '3';
   // eslint-disable-next-line @typescript-eslint/naming-convention
   static readonly TEST_KEY = 'Pmf1KOQv-bK5b4FFmI7ct3pvRX8X13ZsfogYqONgXPw';
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  static readonly TEST_KEY_2 = 'OyeOXb2LPQt3853CqnvaoA7VfENmyZ6uD6jiknxEAB0';
 
   readonly #expectations: [name: string, version: string, value: string][] = [];
 
