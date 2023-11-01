@@ -1,4 +1,4 @@
-import type {TailMessage} from 'mirror-protocol/src/tail-message.js';
+import type {TailMessage} from 'reflect-protocol/src/tail.js';
 import {originalConsole, setConsole, type Console} from './console.js';
 
 const tailWebSockets = new Set<WebSocket>();
@@ -8,11 +8,6 @@ export function connectTail(ws: WebSocket) {
   ws.send(JSON.stringify({type: 'connected'} satisfies TailMessage));
   tailWebSockets.add(ws);
 }
-
-export type TailErrorKind =
-  | 'Unauthorized'
-  | 'InvalidConnectionRequest'
-  | 'RoomNotFound';
 
 type Level = keyof Console;
 
