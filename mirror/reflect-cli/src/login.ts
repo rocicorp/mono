@@ -3,7 +3,6 @@ import assert from 'node:assert';
 import http from 'node:http';
 import type {Socket} from 'node:net';
 import open from 'open';
-import {confirm} from './inquirer.js';
 import {sleep} from 'shared/src/sleep.js';
 import {parse} from 'shared/src/valita.js';
 import {
@@ -11,11 +10,16 @@ import {
   UserAuthConfig,
   writeAuthConfigFile as writeAuthConfigFileImpl,
 } from './auth-config.js';
+import {ErrorWithSeverity} from './error.js';
+import {confirm} from './inquirer.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 async function timeout(signal: AbortSignal) {
   await sleep(120_000, signal);
-  throw new Error('Login did not complete within 2 minutes');
+  throw new ErrorWithSeverity(
+    'Login did not complete within 2 minutes',
+    'WARNING',
+  );
 }
 
 export async function loginHandler(

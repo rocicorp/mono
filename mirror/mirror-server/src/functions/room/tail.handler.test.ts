@@ -166,7 +166,7 @@ describe('room-tail', () => {
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.send).toHaveBeenCalledWith(
       expect.stringMatching(
-        `App MyAppName is not running. Please run 'npm @rocicorp/reflect publish'`,
+        `App MyAppName is not running. Please run 'npx @rocicorp/reflect publish'`,
       ),
     );
   });

@@ -64,14 +64,10 @@ function createCLIParser(argv: string[]) {
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},
     handleWith(async (yargs: YargvToInterface<CommonYargsArgv>) => {
-      try {
-        await loginHandler(yargs);
-        // authenticate() validates that credentials were written
-        // and outputs the logged in user to the console.
-        await authenticate(yargs);
-      } catch (e) {
-        console.error(e);
-      }
+      await loginHandler(yargs);
+      // authenticate() validates that credentials were written
+      // and outputs the logged in user to the console.
+      await authenticate(yargs);
     }).andCleanup(),
   );
 
