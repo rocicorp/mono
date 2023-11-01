@@ -34,7 +34,11 @@ import {
   ScriptHandler,
 } from '../../cloudflare/script-handler.js';
 import {newDeploymentID} from '../../ids.js';
-import {SecretsCache, type Secrets} from '../../secrets/index.js';
+import {
+  SecretsCache,
+  SecretsClient,
+  apiTokenName,
+} from '../../secrets/index.js';
 import {getDataOrFail} from '../validators/data.js';
 import {MIN_WFP_VERSION} from './create.function.js';
 import {deleteAppDocs} from './delete.function.js';
@@ -43,7 +47,7 @@ import {DEPLOYMENT_SECRETS_NAMES, getAppSecrets} from './secrets.js';
 export const deploy = (
   firestore: Firestore,
   storage: Storage,
-  secrets: Secrets,
+  secrets: SecretsClient,
 ) =>
   onDocumentCreated(
     {
@@ -61,7 +65,7 @@ export const deploy = (
 export async function runDeployment(
   firestore: Firestore,
   storage: Storage,
-  secretsClient: Secrets,
+  secretsClient: SecretsClient,
   appID: string,
   deploymentID: string,
   testScriptHandler?: ScriptHandler, // Overridden in tests.
@@ -106,7 +110,7 @@ export async function runDeployment(
 
   try {
     const [apiToken, providerDoc] = await Promise.all([
-      secrets.getSecret(`${provider}_api_token`).then(value => value.payload),
+      secrets.getSecretPayload(apiTokenName(provider)),
       firestore
         .doc(providerPath(provider))
         .withConverter(providerDataConverter)

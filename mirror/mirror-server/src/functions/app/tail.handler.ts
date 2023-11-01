@@ -16,7 +16,11 @@ import * as v from 'shared/src/valita.js';
 import type WebSocket from 'ws';
 import packageJson from '../../../package.json';
 import {createTail as createTailDefault} from '../../cloudflare/tail/tail.js';
-import type {Secrets} from '../../secrets/index.js';
+import {
+  SecretsCache,
+  apiTokenName,
+  type SecretsClient,
+} from '../../secrets/index.js';
 import {
   appAuthorization,
   tokenAuthentication,
@@ -29,7 +33,7 @@ import {userAgentVersion} from '../validators/version.js';
 export const tail = (
   firestore: Firestore,
   auth: Auth,
-  secrets: Secrets,
+  secretsClient: SecretsClient,
   createTail = createTailDefault,
 ) =>
   onRequest(
@@ -39,6 +43,7 @@ export const tail = (
       .validate(userAuthorization())
       .validate(appAuthorization(firestore))
       .handle(async (tailRequest, context) => {
+        const secrets = new SecretsCache(secretsClient);
         const {response} = context;
         if (response === undefined) {
           throw new https.HttpsError('not-found', 'response is undefined');
@@ -55,8 +60,7 @@ export const tail = (
           );
         }
 
-        const apiToken = (await secrets.getSecret(`${provider}_api_token`))
-          .payload;
+        const apiToken = await secrets.getSecretPayload(apiTokenName(provider));
         const {accountID} = getDataOrFail(
           await firestore
             .doc(providerPath(provider))
