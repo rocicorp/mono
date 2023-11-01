@@ -1,7 +1,6 @@
 // @ts-check
 
 import {opendir, readFile} from 'node:fs/promises';
-import {fileURLToPath} from 'node:url';
 import * as path from 'path';
 import colors from 'picocolors';
 
@@ -12,7 +11,7 @@ const {bold} = colors;
  */
 async function versionFromPackageJSON() {
   const s = await readFile(
-    fileURLToPath(new URL('../package.json', import.meta.url)),
+    new URL('../package.json', import.meta.url),
     'utf-8',
   );
   return JSON.parse(s).version;
