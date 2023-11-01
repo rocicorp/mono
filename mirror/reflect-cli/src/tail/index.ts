@@ -54,13 +54,10 @@ export async function tailHandler(yargs: TailHandlerArgs) {
         console.error(
           'Please update your app dependencies to @rocicorp/reflect@latest.',
         );
-      } else {
-        console.error(e.message);
+        return;
       }
-    } else {
-      console.error(e);
     }
-    process.exit(1);
+    throw e;
   }
 }
 

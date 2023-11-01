@@ -5,6 +5,7 @@
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {pkgUp} from 'pkg-up';
+import {isInternalPackage} from './internal-packages.js';
 
 /**
  * @param {string} basePath
@@ -44,28 +45,6 @@ async function getExternalFromPackageJSONInternal(basePath, visited, result) {
       result.add(dep);
     }
   }
-}
-
-const internalPackages = [
-  'cloudflare-api',
-  'datadog',
-  'mirror-protocol',
-  'mirror-schema',
-  'reflect-client',
-  'reflect-protocol',
-  'reflect-server',
-  'reflect-shared',
-  'reflect-react',
-  'shared',
-  'reflect-cli',
-];
-
-/**
- * @param {string} name
- */
-function isInternalPackage(name) {
-  // A better solution might be to check if the package is in the monorepo
-  return internalPackages.includes(name);
 }
 
 /**

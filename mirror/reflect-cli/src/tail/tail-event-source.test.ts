@@ -19,7 +19,8 @@ test('Error in response should be handled', async () => {
     Promise.resolve({
       ok: false,
       status: 555,
-      statusText: 'Error in test',
+      statusText: 'statusText fallback',
+      text: () => Promise.resolve('Error in test'),
     } as Response),
   );
 
@@ -42,7 +43,7 @@ test('Error in response should be handled', async () => {
     err = e as Error;
   }
   expect(err).toBeInstanceOf(Error);
-  expect(err?.message).toBe('HTTP 555 Error in test');
+  expect(err?.message).toBe('Error in test (HTTP 555)');
 });
 
 test('Streaming data should emit messages', async () => {
