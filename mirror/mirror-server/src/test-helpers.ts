@@ -1,4 +1,6 @@
+import {Timestamp} from '@google-cloud/firestore';
 import {declaredParams} from 'firebase-functions/params';
+import {defaultOptions, type Deployment} from 'mirror-schema/src/deployment.js';
 import assert from 'node:assert';
 
 assert(process.env.NODE_ENV === 'test', 'Only import this file in tests');
@@ -12,4 +14,22 @@ export function mockFunctionParamsAndSecrets() {
         break;
     }
   }
+}
+
+export function dummyDeployment(deploymentID: string): Deployment {
+  return {
+    deploymentID,
+    requesterID: 'SYSTEM',
+    type: 'SERVER_UPDATE',
+    status: 'RUNNING',
+    requestTime: Timestamp.now(),
+    spec: {
+      appModules: [],
+      serverVersion: '0.36.0',
+      serverVersionRange: '^0.36.0',
+      hostname: 'foo.bar',
+      options: defaultOptions(),
+      hashesOfSecrets: {},
+    },
+  };
 }

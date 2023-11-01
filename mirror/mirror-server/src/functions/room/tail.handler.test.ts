@@ -1,21 +1,31 @@
-import type {Firestore} from '@google-cloud/firestore';
 import {getMockReq, getMockRes} from '@jest-mock/express';
-import {beforeEach, describe, expect, jest, test} from '@jest/globals';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  jest,
+  test,
+} from '@jest/globals';
+import {initializeApp} from 'firebase-admin/app';
 import type {Auth} from 'firebase-admin/auth';
+import {FieldValue, getFirestore} from 'firebase-admin/firestore';
 import type {https} from 'firebase-functions/v2';
 import type {TailMessage} from 'mirror-protocol/src/tail-message.js';
-import {ENCRYPTION_KEY_SECRET_NAME} from 'mirror-schema/src/app.js';
-import {encryptUtf8} from 'mirror-schema/src/crypto.js';
 import {
-  fakeFirestore,
-  setApp,
-  setProvider,
-  setUser,
-} from 'mirror-schema/src/test-helpers.js';
+  ENCRYPTION_KEY_SECRET_NAME,
+  appDataConverter,
+  appPath,
+} from 'mirror-schema/src/app.js';
+import {encryptUtf8} from 'mirror-schema/src/crypto.js';
+import {setApp, setProvider, setUser} from 'mirror-schema/src/test-helpers.js';
 import {sleep} from 'shared/src/sleep.js';
 import type WebSocket from 'ws';
 import {TestSecrets} from '../../secrets/test-utils.js';
-import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
+import {
+  dummyDeployment,
+  mockFunctionParamsAndSecrets,
+} from '../../test-helpers.js';
 import {REFLECT_AUTH_API_KEY} from '../app/secrets.js';
 import {tail} from './tail.handler.js';
 
@@ -60,7 +70,8 @@ export class MockSocket {
 mockFunctionParamsAndSecrets();
 
 describe('room-tail', () => {
-  let firestore: Firestore;
+  initializeApp({projectId: 'room-tail-function-test'});
+  const firestore = getFirestore();
   let auth: Auth;
   let wsMock: MockSocket;
   let createTailFunction: (
@@ -72,8 +83,6 @@ describe('room-tail', () => {
   let createTailResolver: () => void;
 
   beforeEach(async () => {
-    firestore = fakeFirestore();
-
     auth = {
       verifyIdToken: jest
         .fn()
@@ -101,20 +110,30 @@ describe('room-tail', () => {
     ]);
 
     createTailFunction = tail(firestore, auth, testSecrets, createTailMock);
-    await setUser(firestore, 'foo', 'foo@bar.com', 'bob', {fooTeam: 'admin'});
-    await setApp(firestore, 'myApp', {
-      teamID: 'fooTeam',
-      name: 'MyAppName',
-      provider: 'tail-test-provider',
-      secrets: {
-        [REFLECT_AUTH_API_KEY]: encryptUtf8(
-          'this-is-the-reflect-auth-api-key-yo',
-          Buffer.from(TestSecrets.TEST_KEY, 'base64url'),
-          {version: '3'},
-        ),
-      },
-    });
-    await setProvider(firestore, 'tail-test-provider', {});
+    await Promise.all([
+      setUser(firestore, 'foo', 'foo@bar.com', 'bob', {fooTeam: 'admin'}),
+      setApp(firestore, 'myApp', {
+        teamID: 'fooTeam',
+        name: 'MyAppName',
+        provider: 'tail-test-provider',
+        secrets: {
+          [REFLECT_AUTH_API_KEY]: encryptUtf8(
+            'this-is-the-reflect-auth-api-key-yo',
+            Buffer.from(TestSecrets.TEST_KEY, 'base64url'),
+            {version: '3'},
+          ),
+        },
+        runningDeployment: dummyDeployment('1234'),
+      }),
+      setProvider(firestore, 'tail-test-provider', {}),
+    ]);
+  });
+
+  afterEach(async () => {
+    const batch = firestore.batch();
+    batch.delete(firestore.doc('users/foo'));
+    batch.delete(firestore.doc('apps/myApp'));
+    await batch.commit();
   });
 
   const getRequestWithHeaders = (): https.Request =>
@@ -132,6 +151,25 @@ describe('room-tail', () => {
         Authorization: 'Bearer this-is-the-encoded-token',
       },
     }) as unknown as https.Request;
+
+  test('no running deployment', async () => {
+    await firestore
+      .doc(appPath('myApp'))
+      .withConverter(appDataConverter)
+      .update({runningDeployment: FieldValue.delete()});
+
+    const req = getRequestWithHeaders();
+
+    const {res} = getMockRes();
+    req.res = res;
+    await createTailFunction(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.stringMatching(
+        `App MyAppName is not running. Please run 'npm @rocicorp/reflect publish'`,
+      ),
+    );
+  });
 
   test('valid auth in header', async () => {
     const req = getRequestWithHeaders();

@@ -42,6 +42,14 @@ export const tail = (
           requester: {userAgent},
         } = tailRequest;
 
+        const {name, runningDeployment} = app;
+        if (!runningDeployment) {
+          throw new HttpsError(
+            'failed-precondition',
+            `App ${name} is not running. Please run 'npm @rocicorp/reflect publish'`,
+          );
+        }
+
         const {secrets: appSecrets} = await getAppSecrets(secrets, app.secrets);
 
         const reflectAuthApiKey = appSecrets[REFLECT_AUTH_API_KEY];

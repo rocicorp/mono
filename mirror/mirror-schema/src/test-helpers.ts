@@ -1,6 +1,6 @@
-import type {Firestore} from '@google-cloud/firestore';
-import {firebaseStub} from 'firestore-jest-mock/mocks/firebase.js';
-import {App, appDataConverter, appPath} from 'mirror-schema/src/app.js';
+import type { Firestore } from '@google-cloud/firestore';
+import { firebaseStub } from 'firestore-jest-mock/mocks/firebase.js';
+import { App, appDataConverter, appPath } from 'mirror-schema/src/app.js';
 import {
   Membership,
   Role,
@@ -21,8 +21,8 @@ import {
   userPath,
   type User,
 } from 'mirror-schema/src/user.js';
-import {must} from 'shared/src/must.js';
-import {DeploymentSecrets, defaultOptions} from './deployment.js';
+import { must } from 'shared/src/must.js';
+import { DeploymentSecrets, defaultOptions } from './deployment.js';
 import {
   DEFAULT_PROVIDER_ID,
   providerDataConverter,
@@ -193,6 +193,7 @@ export async function setApp(
     cfScriptName = 'cf-script-name',
     serverReleaseChannel = 'stable',
     secrets = {},
+    runningDeployment,
   } = app;
   const newApp: App = {
     name,
@@ -205,6 +206,9 @@ export async function setApp(
     deploymentOptions: defaultOptions(),
     secrets,
   };
+  if (runningDeployment) {
+    newApp.runningDeployment = runningDeployment;
+  }
   await firestore
     .doc(appPath(appID))
     .withConverter(appDataConverter)
