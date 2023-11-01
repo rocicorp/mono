@@ -11,27 +11,39 @@ import {pkgUp} from 'pkg-up';
  * @returns {Promise<string[]>}
  */
 export async function getExternalFromPackageJSON(basePath) {
+  const result = new Set();
+  await getExternalFromPackageJSONInternal(basePath, new Set(), result);
+  return [...result];
+}
+
+/**
+ * @param {string} basePath
+ * @param {Set<string>} visited
+ * @param {Set<string>} result
+ * @returns {Promise<void>}
+ */
+async function getExternalFromPackageJSONInternal(basePath, visited, result) {
   const path = await pkgUp({cwd: basePath});
   if (!path) {
     throw new Error('Could not find package.json');
   }
-  const x = await readFile(path, 'utf-8');
-  const pkg = JSON.parse(x);
+  const pkg = JSON.parse(await readFile(path, 'utf-8'));
 
-  const deps = new Set();
+  if (visited.has(pkg.name)) {
+    return;
+  }
+  visited.add(pkg.name);
+
   for (const dep of Object.keys({
     ...pkg.dependencies,
     ...pkg.peerDependencies,
   })) {
     if (isInternalPackage(dep)) {
-      for (const depDep of await getRecursiveExternals(dep)) {
-        deps.add(depDep);
-      }
+      await getRecursiveExternals(dep, visited, result);
     } else {
-      deps.add(dep);
+      result.add(dep);
     }
   }
-  return [...deps];
 }
 
 const internalPackages = [
@@ -58,13 +70,16 @@ function isInternalPackage(name) {
 
 /**
  * @param {string} name
+ * @param {Set<string>} visited
+ * @param {Set<string>} result
  */
-function getRecursiveExternals(name) {
+async function getRecursiveExternals(name, visited, result) {
   if (name === 'shared') {
-    return getExternalFromPackageJSON(import.meta.url);
+    await getExternalFromPackageJSONInternal(import.meta.url, visited, result);
+    return;
   }
 
   const require = createRequire(import.meta.url);
   const depPath = require.resolve(name);
-  return getExternalFromPackageJSON(depPath);
+  await getExternalFromPackageJSONInternal(depPath, visited, result);
 }
