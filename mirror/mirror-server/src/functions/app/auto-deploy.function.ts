@@ -9,12 +9,19 @@ import {
   DeploymentType,
   deploymentsCollection,
 } from 'mirror-schema/src/deployment.js';
-import {SecretsCache, type Secrets} from '../../secrets/index.js';
+import {
+  SecretsCache,
+  type Secrets,
+  type SecretsClient,
+} from '../../secrets/index.js';
 import {requestDeployment} from './deploy.function.js';
 import {computeDeploymentSpec} from './publish.function.js';
 import {DEPLOYMENT_SECRETS_NAMES} from './secrets.js';
 
-export const autoDeploy = (firestore: Firestore, secretsClient: Secrets) =>
+export const autoDeploy = (
+  firestore: Firestore,
+  secretsClient: SecretsClient,
+) =>
   onDocumentUpdated(
     {
       document: 'apps/{appID}',

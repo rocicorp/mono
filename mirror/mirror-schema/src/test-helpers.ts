@@ -193,6 +193,7 @@ export async function setApp(
     cfScriptName = 'cf-script-name',
     serverReleaseChannel = 'stable',
     secrets = {},
+    runningDeployment,
   } = app;
   const newApp: App = {
     name,
@@ -205,6 +206,9 @@ export async function setApp(
     deploymentOptions: defaultOptions(),
     secrets,
   };
+  if (runningDeployment) {
+    newApp.runningDeployment = runningDeployment;
+  }
   await firestore
     .doc(appPath(appID))
     .withConverter(appDataConverter)

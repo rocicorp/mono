@@ -8,6 +8,7 @@ import {
   invalidateForRoomRequestSchema,
   invalidateForUserRequestSchema,
 } from 'reflect-protocol';
+import type {TailErrorKind} from 'reflect-protocol/src/tail.js';
 import type {AuthData} from 'reflect-shared';
 import {version} from 'reflect-shared';
 import {assert} from 'shared/src/asserts.js';
@@ -21,10 +22,12 @@ import {
   SEC_WEBSOCKET_PROTOCOL_HEADER,
   createWSAndCloseWithError,
 } from '../util/socket.js';
+import {AlarmManager, TimeoutID} from './alarms.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
 import type {AuthHandler} from './auth.js';
 import {requireUpgradeHeader, roomNotFoundResponse} from './http-util.js';
+import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
 import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
@@ -59,10 +62,7 @@ import {
   withRoomID,
   withVersion,
 } from './router.js';
-import type {TailErrorKind} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
-import {AlarmManager, TimeoutID} from './alarms.js';
-import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
 
 export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
 

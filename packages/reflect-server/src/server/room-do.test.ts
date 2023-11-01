@@ -7,16 +7,20 @@ import {
   test,
 } from '@jest/globals';
 import {LogContext} from '@rocicorp/logger';
-import type {LogLevel, TailMessage} from 'mirror-protocol/src/tail-message.js';
 import assert from 'node:assert';
+import {subscribe, unsubscribe} from 'node:diagnostics_channel';
+import type {LogLevel, TailMessage} from 'reflect-protocol/src/tail.js';
 import type {WriteTransaction} from 'reflect-shared';
 import {version} from 'reflect-shared';
+import {CONNECTION_SECONDS_CHANNEL_NAME} from 'shared/src/events/connection-seconds.js';
+import {Queue} from 'shared/src/queue.js';
 import {
   newInvalidateAllAuthRequest,
   newInvalidateForRoomAuthRequest,
   newInvalidateForUserAuthRequest,
 } from '../client/auth.js';
 import {newCreateRoomRequest, newDeleteRoomRequest} from '../client/room.js';
+import {REPORTING_INTERVAL_MS} from '../events/connection-seconds.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {getUserValue, putUserValue} from '../types/user-value.js';
 import {getVersion, putVersion} from '../types/version.js';
@@ -26,13 +30,9 @@ import {sleep} from '../util/sleep.js';
 import {TestLogSink} from '../util/test-utils.js';
 import {originalConsole} from './console.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
+import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
 import {TAIL_URL_PATH} from './paths.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
-import {Queue} from 'shared/src/queue.js';
-import {subscribe, unsubscribe} from 'node:diagnostics_channel';
-import {CONNECTION_SECONDS_CHANNEL_NAME} from 'shared/src/events/connection-seconds.js';
-import {REPORTING_INTERVAL_MS} from '../events/connection-seconds.js';
-import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
 
 test('inits storage schema', async () => {
   const testLogSink = new TestLogSink();
