@@ -46,7 +46,7 @@ export const tail = (
         if (!runningDeployment) {
           throw new HttpsError(
             'failed-precondition',
-            `App ${name} is not running. Please run 'npm @rocicorp/reflect publish'`,
+            `App ${name} is not running. Please run 'npx @rocicorp/reflect publish'`,
           );
         }
 
