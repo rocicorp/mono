@@ -60,7 +60,7 @@ async function* createIter<R extends BaseRequest>(
   if (!response.ok) {
     const message = await response.text();
     throw new ErrorWrapper(
-      new Error(`${message} (HTTP ${response.status})`),
+      new Error(`${message || response.statusText} (HTTP ${response.status})`),
       response.status < 500 ? 'WARNING' : 'ERROR',
     );
   }
