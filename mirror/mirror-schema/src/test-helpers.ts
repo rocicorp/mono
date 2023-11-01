@@ -1,6 +1,6 @@
-import type { Firestore } from '@google-cloud/firestore';
-import { firebaseStub } from 'firestore-jest-mock/mocks/firebase.js';
-import { App, appDataConverter, appPath } from 'mirror-schema/src/app.js';
+import type {Firestore} from '@google-cloud/firestore';
+import {firebaseStub} from 'firestore-jest-mock/mocks/firebase.js';
+import {App, appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {
   Membership,
   Role,
@@ -21,8 +21,8 @@ import {
   userPath,
   type User,
 } from 'mirror-schema/src/user.js';
-import { must } from 'shared/src/must.js';
-import { DeploymentSecrets, defaultOptions } from './deployment.js';
+import {must} from 'shared/src/must.js';
+import {DeploymentSecrets, defaultOptions} from './deployment.js';
 import {
   DEFAULT_PROVIDER_ID,
   providerDataConverter,
