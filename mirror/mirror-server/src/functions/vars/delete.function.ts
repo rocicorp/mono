@@ -5,10 +5,11 @@ import {
   deleteVarsResponseSchema,
 } from 'mirror-protocol/src/vars.js';
 import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
+import {SERVER_VARIABLE_PREFIX} from 'mirror-schema/src/vars.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
-import {SERVER_VAR_PREFIX, deploymentAfter} from './shared.js';
+import {deploymentAtOrAfter} from './shared.js';
 
 export const deleteFn = (firestore: Firestore) =>
   validateSchema(deleteVarsRequestSchema, deleteVarsResponseSchema)
@@ -23,7 +24,7 @@ export const deleteFn = (firestore: Firestore) =>
 
       const secretNames: string[] = [];
       for (const name of vars) {
-        const secretName = `${SERVER_VAR_PREFIX}${name}`;
+        const secretName = `${SERVER_VARIABLE_PREFIX}${name}`;
         if (secrets[secretName]) {
           secretNames.push(secretName);
         }
@@ -51,5 +52,5 @@ export const deleteFn = (firestore: Firestore) =>
         // No deployment to re-deploy.
         return {success: true};
       }
-      return deploymentAfter(firestore, appID, result.writeTime);
+      return deploymentAtOrAfter(firestore, appID, result.writeTime);
     });

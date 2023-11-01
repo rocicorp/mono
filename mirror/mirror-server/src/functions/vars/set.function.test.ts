@@ -17,6 +17,7 @@ import {
 } from 'mirror-schema/src/deployment.js';
 import {getApp, setApp, setUser} from 'mirror-schema/src/test-helpers.js';
 import {userPath} from 'mirror-schema/src/user.js';
+import {MAX_SERVER_VARIABLES} from 'mirror-schema/src/vars.js';
 import {watch} from 'mirror-schema/src/watch.js';
 import {SecretsCache} from '../../secrets/index.js';
 import {TestSecrets} from '../../secrets/test-utils.js';
@@ -197,5 +198,31 @@ describe('vars-set', () => {
       success: true,
       deploymentPath: deploymentPath(APP_ID, '2345'),
     });
+  });
+
+  test('set max vars', async () => {
+    expect(
+      await callSet(
+        Object.fromEntries(
+          Array(MAX_SERVER_VARIABLES - 2)
+            .fill(0)
+            .map((_, i) => [`KEY_${i}`, `VAL_${i}`]),
+        ),
+      ),
+    ).toEqual({
+      success: true,
+    });
+  });
+
+  test('rejects more than max vars', async () => {
+    const result = await callSet(
+      Object.fromEntries(
+        Array(MAX_SERVER_VARIABLES - 1)
+          .fill(0)
+          .map((_, i) => [`KEY_${i}`, `VAL_${i}`]),
+      ),
+    ).catch(e => e);
+    expect(result).toBeInstanceOf(HttpsError);
+    expect((result as HttpsError).code).toBe('resource-exhausted');
   });
 });

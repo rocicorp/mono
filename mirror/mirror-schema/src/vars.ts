@@ -1,0 +1,3 @@
+export const SERVER_VARIABLE_PREFIX = 'REFLECT_VAR_';
+export const ALLOWED_SERVER_VARIABLE_CHARS = /^[A-Za-z0-9_]+$/;
+export const MAX_SERVER_VARIABLES = 50;

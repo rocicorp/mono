@@ -12,13 +12,17 @@ import {
 } from 'mirror-schema/src/app.js';
 import type {EncryptedBytes} from 'mirror-schema/src/bytes.js';
 import {encryptUtf8} from 'mirror-schema/src/crypto.js';
+import {
+  ALLOWED_SERVER_VARIABLE_CHARS,
+  MAX_SERVER_VARIABLES,
+  SERVER_VARIABLE_PREFIX,
+} from 'mirror-schema/src/vars.js';
 import {SecretsCache, SecretsClient} from '../../secrets/index.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
+import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
-import {SERVER_VAR_PREFIX, deploymentAfter} from './shared.js';
-
-const ALLOWED_VAR_CHARS = /^[A-Za-z0-9_]+$/;
+import {deploymentAtOrAfter} from './shared.js';
 
 export const set = (firestore: Firestore, secretsClient: SecretsClient) =>
   validateSchema(setVarsRequestSchema, setVarsResponseSchema)
@@ -29,11 +33,11 @@ export const set = (firestore: Firestore, secretsClient: SecretsClient) =>
       const secrets = new SecretsCache(secretsClient);
       const {appID, vars} = request;
       const {
-        app: {runningDeployment},
+        app: {name},
       } = context;
 
       for (const name of Object.keys(vars)) {
-        if (!ALLOWED_VAR_CHARS.test(name)) {
+        if (!ALLOWED_SERVER_VARIABLE_CHARS.test(name)) {
           throw new HttpsError(
             'invalid-argument',
             'Server Variable names can only contain alphanumeric characters and underscores',
@@ -46,7 +50,7 @@ export const set = (firestore: Firestore, secretsClient: SecretsClient) =>
         Object.entries(vars).map(
           ([name, value]) =>
             [
-              `${SERVER_VAR_PREFIX}${name}`,
+              `${SERVER_VARIABLE_PREFIX}${name}`,
               encryptUtf8(
                 value,
                 Buffer.from(encryptionKey.payload, 'base64url'),
@@ -55,16 +59,44 @@ export const set = (firestore: Firestore, secretsClient: SecretsClient) =>
             ] as [string, EncryptedBytes],
         ),
       ) as AppSecrets;
-      const result = await firestore
+
+      const appDoc = firestore
         .doc(appPath(appID))
-        .withConverter(appDataConverter)
-        .set(
-          {secrets: encrypted},
-          {mergeFields: Object.keys(encrypted).map(name => `secrets.${name}`)},
+        .withConverter(appDataConverter);
+
+      const runningDeployment = await firestore.runTransaction(async tx => {
+        const {secrets: currSecrets, runningDeployment} = getDataOrFail(
+          await tx.get(appDoc),
+          'not-found',
+          `App ${name} was deleted`,
         );
+        const mergedSecrets = {
+          ...currSecrets,
+          ...encrypted,
+        };
+        if (
+          Object.keys(mergedSecrets).filter(name =>
+            name.startsWith(SERVER_VARIABLE_PREFIX),
+          ).length > MAX_SERVER_VARIABLES
+        ) {
+          throw new HttpsError(
+            'resource-exhausted',
+            `Up to ${MAX_SERVER_VARIABLES} Server Variables are allowed.\n` +
+              `Use 'npx @rocicorp/reflect vars delete' to remove unused variables.`,
+          );
+        }
+        tx.set(appDoc, {secrets: mergedSecrets}, {merge: true});
+        return runningDeployment;
+      });
       if (!runningDeployment) {
         // No deployment to re-deploy.
         return {success: true};
       }
-      return deploymentAfter(firestore, appID, result.writeTime);
+      // Read the app back to get the write time. Note that the deployment
+      // may have been written to the doc already.
+      const app = await appDoc.get();
+      if (!app.updateTime) {
+        throw new HttpsError('not-found', `App ${name} was deleted`);
+      }
+      return deploymentAtOrAfter(firestore, appID, app.updateTime);
     });

@@ -6,11 +6,9 @@ import {
 } from 'mirror-schema/src/deployment.js';
 import {TimeoutError, watch} from 'mirror-schema/src/watch.js';
 
-export const SERVER_VAR_PREFIX = 'REFLECT_VAR_';
-
 const DEPLOYMENT_WAIT_TIMEOUT = 5000;
 
-export async function deploymentAfter(
+export async function deploymentAtOrAfter(
   firestore: Firestore,
   appID: string,
   updateTime: Timestamp,
@@ -25,7 +23,7 @@ export async function deploymentAfter(
       firestore
         .collection(deploymentsCollection(appID))
         .withConverter(deploymentDataConverter)
-        .where('requestTime', '>', updateTime)
+        .where('requestTime', '>=', updateTime)
         .orderBy('requestTime')
         .limitToLast(1),
       DEPLOYMENT_WAIT_TIMEOUT,
