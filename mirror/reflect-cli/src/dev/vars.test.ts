@@ -59,6 +59,40 @@ describe('dev vars', () => {
     });
   });
 
+  test('set keys with javascript Object method names', async () => {
+    setDevVars({
+      FOO: 'bar',
+      BAR: 'can have spaces',
+      toString: 'this should still work',
+    });
+    expect(await fs.readFile(varsFile, 'utf-8')).toBe(
+      'BAR=can have spaces\nFOO=bar\ntoString=this should still work',
+    );
+    expect(listDevVars()).toEqual({
+      BAR: 'can have spaces',
+      FOO: 'bar',
+      toString: 'this should still work',
+    });
+  });
+
+  test('set values with newlines and equals', async () => {
+    setDevVars({
+      FOO: 'bar',
+      BAR: 'can\nhave\nnewlines',
+      BAZ: 'can\nhave\nnewlines=with\nequals=sign',
+    });
+    expect(await fs.readFile(varsFile, 'utf-8')).toBe(
+      'BAR=can\\nhave\\nnewlines\n' +
+        'BAZ=can\\nhave\\nnewlines\\=with\\nequals\\=sign\n' +
+        'FOO=bar',
+    );
+    expect(listDevVars()).toEqual({
+      BAR: 'can\nhave\nnewlines',
+      BAZ: 'can\nhave\nnewlines=with\nequals=sign',
+      FOO: 'bar',
+    });
+  });
+
   test('set and delete list', async () => {
     setDevVars({
       FOO: 'bar',
@@ -109,9 +143,10 @@ describe('dev vars', () => {
   test('max vars', async () => {
     setDevVars(
       Object.fromEntries(
-        Array(MAX_SERVER_VARIABLES - 1)
-          .fill(0)
-          .map((_, i) => [`${i}`, `${i}_val`]),
+        Array.from({length: MAX_SERVER_VARIABLES - 1}, (_, i) => [
+          `${i}`,
+          `${i}_val`,
+        ]),
       ),
     );
 

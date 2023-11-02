@@ -1,18 +1,19 @@
 import {compareUTF8} from 'compare-utf8';
-import {parse} from 'dotenv';
 import {existsSync, readFileSync, writeFileSync} from 'fs';
 import {
   ALLOWED_SERVER_VARIABLE_CHARS,
   MAX_SERVER_VARIABLES,
 } from 'mirror-schema/src/external/vars.js';
 import path from 'path';
+import {getProperties} from 'properties-file';
+import {escapeKey, escapeValue} from 'properties-file/escape';
 import {mustFindAppConfigRoot} from '../app-config.js';
 import {UserError} from '../error.js';
 
 export function listDevVars(): Record<string, string> {
   const varsFile = varsFilePath();
   if (existsSync(varsFile)) {
-    return validateAndSort(parse(readFileSync(varsFile, 'utf-8')));
+    return validateAndSort(getProperties(readFileSync(varsFile, 'utf-8')));
   }
   return {};
 }
@@ -69,7 +70,7 @@ function validateAndSort(devVars: Record<string, string>) {
 function saveDevVars(devVars: Record<string, string>) {
   const sorted = validateAndSort(devVars);
   const contents = Object.entries(sorted)
-    .map(([key, value]) => `${key}=${value}`)
+    .map(([key, value]) => `${escapeKey(key)}=${escapeValue(value)}`)
     .join('\n');
 
   const varsFile = varsFilePath();

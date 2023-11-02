@@ -32,7 +32,7 @@ export async function setVarsHandler(yargs: SetVarsHandlerArgs): Promise<void> {
       throw new UserError(`Malformed KEY=VALUE pair "${kv}"`);
     }
     const key = eq > 0 ? kv.substring(0, eq) : kv;
-    if (vars[key]) {
+    if (Object.prototype.hasOwnProperty.call(vars, key)) {
       throw new UserError(`Duplicate entries for KEY "${key}"`);
     }
     const value =
