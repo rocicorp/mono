@@ -161,6 +161,7 @@ export async function runDeployment(
     const {secrets: appSecrets, hashes} = await getAppSecrets(
       secrets,
       encryptedSecrets,
+      true,
     );
 
     const newScriptRef = (await migrateToWFP(

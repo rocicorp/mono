@@ -1,12 +1,13 @@
 import type {Firestore, Timestamp} from '@google-cloud/firestore';
 import {logger} from 'firebase-functions';
+import {HttpsError} from 'firebase-functions/v2/https';
 import {
   deploymentDataConverter,
   deploymentsCollection,
 } from 'mirror-schema/src/deployment.js';
 import {TimeoutError, watch} from 'mirror-schema/src/watch.js';
 
-const DEPLOYMENT_WAIT_TIMEOUT = 5000;
+const DEPLOYMENT_WAIT_TIMEOUT = 10000;
 
 export async function deploymentAtOrAfter(
   firestore: Firestore,
@@ -37,6 +38,10 @@ export async function deploymentAtOrAfter(
   } catch (e) {
     if (e instanceof TimeoutError) {
       logger.warn(`Timed out waiting for redeployment of ${appID}`);
+      throw new HttpsError(
+        'deadline-exceeded',
+        'Timed out deploying changes to Server Variables. Please try again later.',
+      );
     } else {
       throw e;
     }

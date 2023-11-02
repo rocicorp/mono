@@ -145,7 +145,11 @@ export async function computeDeploymentSpec(
     defaultZone: {zoneName},
   } = provider;
 
-  const {hashes: hashesOfSecrets} = await getAppSecrets(secrets, appSecrets);
+  const {hashes: hashesOfSecrets} = await getAppSecrets(
+    secrets,
+    appSecrets,
+    true,
+  );
 
   return {
     serverVersionRange,

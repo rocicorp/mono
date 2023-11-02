@@ -46,7 +46,7 @@ export const DEPLOYMENT_SECRETS_NAMES = [
 export async function getAppSecrets(
   secrets: Secrets,
   encrypted: AppSecrets,
-  includeInternal = true,
+  includeInternal: boolean,
 ): Promise<{
   secrets: Record<string, string>;
   hashes: Record<string, string>;

@@ -112,6 +112,7 @@ describe('vars-set', () => {
     'HYPHENS-NOT-ALLOWED',
     'PERIODS.NOT.ALLOWED',
     'SLASHES/NOT/ALLOWED',
+    'DOLLARS$NOT$ALLOWED',
   ]) {
     test(badName, async () => {
       const result = await callSet({
@@ -204,9 +205,11 @@ describe('vars-set', () => {
     expect(
       await callSet(
         Object.fromEntries(
-          Array(MAX_SERVER_VARIABLES - 2)
-            .fill(0)
-            .map((_, i) => [`KEY_${i}`, `VAL_${i}`]),
+          // Add 48 more to the 2 variables set up in beforeEach()
+          Array.from({length: MAX_SERVER_VARIABLES - 2}, (_, i) => [
+            `KEY_${i}`,
+            `VAL_${i}`,
+          ]),
         ),
       ),
     ).toEqual({
@@ -217,9 +220,11 @@ describe('vars-set', () => {
   test('rejects more than max vars', async () => {
     const result = await callSet(
       Object.fromEntries(
-        Array(MAX_SERVER_VARIABLES - 1)
-          .fill(0)
-          .map((_, i) => [`KEY_${i}`, `VAL_${i}`]),
+        // Try to add 49 to the 2 variables set up in beforeEach()
+        Array.from({length: MAX_SERVER_VARIABLES - 1}, (_, i) => [
+          `KEY_${i}`,
+          `VAL_${i}`,
+        ]),
       ),
     ).catch(e => e);
     expect(result).toBeInstanceOf(HttpsError);

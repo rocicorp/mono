@@ -53,7 +53,7 @@ describe('auto-deploy', () => {
     mockFunctionParamsAndSecrets();
 
     const batch = firestore.batch();
-    const {hashes} = await getAppSecrets(testSecrets(), {});
+    const {hashes} = await getAppSecrets(testSecrets(), {}, true);
     batch.create(
       firestore
         .doc(serverPath(SERVER_VERSION_1))

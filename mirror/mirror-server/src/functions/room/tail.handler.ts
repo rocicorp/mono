@@ -50,7 +50,11 @@ export const tail = (
           );
         }
 
-        const {secrets: appSecrets} = await getAppSecrets(secrets, app.secrets);
+        const {secrets: appSecrets} = await getAppSecrets(
+          secrets,
+          app.secrets,
+          false,
+        );
 
         const reflectAuthApiKey = appSecrets[REFLECT_AUTH_API_KEY];
         if (!reflectAuthApiKey) {
