@@ -63,7 +63,7 @@ export function getSizeOfValue(value: unknown): number {
       }
   }
 
-  throw new Error('invalid value');
+  throw new Error(`Invalid value. type: ${typeof value}, value: ${value}`);
 }
 
 function isSmi(value: number): boolean {
