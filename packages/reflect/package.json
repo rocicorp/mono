@@ -51,7 +51,7 @@
     "ws": "^8.13.0",
     "yargs": "^17.4.1",
     "devtools-protocol": "^0.0.1208070",
-    "dotenv": "^16.3.1",
+    "properties-file": "^3.3.6",
     "firebase": "9.23.0",
     "firebase-functions": "^4.4.1",
     "get-port": "^7.0.0",
