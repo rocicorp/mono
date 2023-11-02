@@ -134,6 +134,17 @@ describe('error-report function', () => {
       },
       code: 'cancelled',
     },
+    {
+      name: 'login orphan',
+      request: {
+        action: 'cmd_publish',
+        error: {
+          desc: 'Error: Login did not complete within 2 minutes',
+          stack,
+        },
+      },
+      code: 'cancelled',
+    },
   ];
   for (const c of cases) {
     test(c.name, async () => {

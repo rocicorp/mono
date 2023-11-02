@@ -82,5 +82,9 @@ function shouldBeWarning(action: string, desc: string): boolean {
       return true;
     }
   }
+  if (desc.startsWith('Error: Login did not complete within 2 minutes')) {
+    // Downgraded to warning by cli: https://github.com/rocicorp/mono/pull/1187
+    return true;
+  }
   return false;
 }
