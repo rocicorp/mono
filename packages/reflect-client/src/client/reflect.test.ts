@@ -661,7 +661,7 @@ test('puller with normal non-mutation recovery pull', async () => {
   });
 });
 
-test.only('smokeTest', async () => {
+test('smokeTest', async () => {
   const cases: {
     name: string;
     enableServer: boolean;
