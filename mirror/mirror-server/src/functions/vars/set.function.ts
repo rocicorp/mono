@@ -16,6 +16,7 @@ import {
   ALLOWED_SERVER_VARIABLE_CHARS,
   MAX_SERVER_VARIABLES,
   SERVER_VARIABLE_PREFIX,
+  variableIsWithinSizeLimit,
 } from 'mirror-schema/src/vars.js';
 import {SecretsCache, SecretsClient} from '../../secrets/index.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
@@ -36,11 +37,17 @@ export const set = (firestore: Firestore, secretsClient: SecretsClient) =>
         app: {name},
       } = context;
 
-      for (const name of Object.keys(vars)) {
+      for (const [name, value] of Object.entries(vars)) {
         if (!ALLOWED_SERVER_VARIABLE_CHARS.test(name)) {
           throw new HttpsError(
             'invalid-argument',
-            'Server Variable names can only contain alphanumeric characters and underscores',
+            'Variable names can only contain alphanumeric characters and underscores',
+          );
+        }
+        if (!variableIsWithinSizeLimit(name, value)) {
+          throw new HttpsError(
+            'invalid-argument',
+            'UTF-8 encoded Variables must be within 5 kilobytes',
           );
         }
       }

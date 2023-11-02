@@ -123,6 +123,22 @@ describe('vars-set', () => {
     });
   }
 
+  test('variable size limit', async () => {
+    expect(
+      await callSet({
+        ['NOT_TOO_BIG']: 'a'.repeat(5100),
+      }),
+    ).toEqual({
+      success: true,
+    });
+
+    const result = await callSet({
+      ['TOO_BIG']: 'a'.repeat(5121),
+    }).catch(e => e);
+    expect(result).toBeInstanceOf(HttpsError);
+    expect((result as HttpsError).code).toBe('invalid-argument');
+  });
+
   test('set vars with no running deployment', async () => {
     expect(
       await callSet({

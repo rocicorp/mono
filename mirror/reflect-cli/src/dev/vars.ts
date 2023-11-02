@@ -3,6 +3,7 @@ import {existsSync, readFileSync, writeFileSync} from 'fs';
 import {
   ALLOWED_SERVER_VARIABLE_CHARS,
   MAX_SERVER_VARIABLES,
+  variableIsWithinSizeLimit,
 } from 'mirror-schema/src/external/vars.js';
 import path from 'path';
 import {getProperties} from 'properties-file';
@@ -49,21 +50,26 @@ function varsFilePath() {
 }
 
 function validateAndSort(devVars: Record<string, string>) {
-  const keys = Object.keys(devVars);
-  if (keys.length > MAX_SERVER_VARIABLES) {
+  const entries = Object.entries(devVars);
+  if (entries.length > MAX_SERVER_VARIABLES) {
     throw new UserError(
       `Up to ${MAX_SERVER_VARIABLES} variables are allowed.\n` +
         `Use 'npx @rocicrop vars delete --dev' to remove unused variables.`,
     );
   }
-  keys.forEach(key => {
+  entries.forEach(([key, value]) => {
     if (!ALLOWED_SERVER_VARIABLE_CHARS.test(key)) {
       throw new UserError(
         `Invalid key "${key}". Variables may only contain alphanumeric characters and underscores.`,
       );
     }
+    if (!variableIsWithinSizeLimit(key, value)) {
+      throw new UserError(
+        `Variable "${key}" exceeds the maximum size limit. UTF-8 encoded Variables must not exceed 5 kilobytes.`,
+      );
+    }
   });
-  const sorted = Object.entries(devVars).sort(([a], [b]) => compareUTF8(a, b));
+  const sorted = entries.sort(([a], [b]) => compareUTF8(a, b));
   return Object.fromEntries(sorted);
 }
 

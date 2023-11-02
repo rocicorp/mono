@@ -140,6 +140,26 @@ describe('dev vars', () => {
     });
   });
 
+  test('variable size limit', () => {
+    setDevVars({
+      NOT_TOO_BIG: 'a'.repeat(5100),
+    });
+
+    let err;
+    try {
+      setDevVars({
+        TOO_BIG: 'a'.repeat(5121),
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(UserError);
+
+    expect(listDevVars()).toEqual({
+      NOT_TOO_BIG: 'a'.repeat(5100),
+    });
+  });
+
   test('max vars', async () => {
     setDevVars(
       Object.fromEntries(
