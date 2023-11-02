@@ -1,6 +1,7 @@
 import type {OutputFile} from 'esbuild';
 import getPort from 'get-port';
 import {Miniflare} from 'miniflare';
+import {SERVER_VARIABLE_PREFIX} from 'mirror-schema/src/external/vars.js';
 import {nanoid} from 'nanoid';
 import * as path from 'node:path';
 import {mustFindAppConfigRoot} from '../app-config.js';
@@ -8,6 +9,7 @@ import {buildReflectServerContent} from '../compile.js';
 import {ErrorWrapper} from '../error.js';
 import {getScriptTemplate} from '../get-script-template.js';
 import {inspectorConsoleClient} from './inspector-console-client.js';
+import {listDevVars} from './vars.js';
 
 /**
  * Returns a function that shuts down the dev server.
@@ -22,6 +24,14 @@ export async function startDevServer(
   const appDir = path.dirname(code.path);
   const appConfigRoot = mustFindAppConfigRoot();
   const inspectorPort = await getPort({port: 9229});
+
+  const devVars = listDevVars();
+  const devBindings = Object.fromEntries(
+    Object.entries(devVars).map(([key, value]) => [
+      `${SERVER_VARIABLE_PREFIX}${key}`,
+      value,
+    ]),
+  );
 
   // Create a new Miniflare instance, starting a workerd server
   const mf = new Miniflare({
@@ -54,6 +64,7 @@ export async function startDevServer(
     ],
     bindings: {
       ['REFLECT_AUTH_API_KEY']: nanoid(),
+      ...devBindings,
     },
 
     durableObjects: {roomDO: 'RoomDO', authDO: 'AuthDO', testDO: 'TestDO'},

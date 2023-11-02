@@ -13,6 +13,9 @@ import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
 import {tailHandler, tailOptions} from './tail/index.js';
+import {deleteVarsHandler, deleteVarsOptions} from './vars/delete.js';
+import {listVarsHandler, listVarsOptions} from './vars/list.js';
+import {setVarsHandler, setVarsOptions} from './vars/set.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 async function main(argv: string[]): Promise<void> {
@@ -86,6 +89,35 @@ function createCLIParser(argv: string[]) {
     tailOptions,
     handleWith(tailHandler).andCleanup(),
   );
+
+  // vars
+  reflectCLI.command('vars', '🟰  Manage Server Variables', yargs => {
+    yargs
+      .option('dev', {
+        describe: 'Manage Dev Variables for `npx @rocicorp/reflect dev`',
+        type: 'boolean',
+        default: false,
+      })
+      .command(
+        'list',
+        'List Server Variables',
+        listVarsOptions,
+        handleWith(listVarsHandler).andCleanup(),
+      )
+      .command(
+        'set <keysAndValues..>',
+        'Set one or more Server Variables',
+        setVarsOptions,
+        handleWith(setVarsHandler).andCleanup(),
+      )
+      .command(
+        'delete <keys..>',
+        'Delete one or more Server Variables',
+        deleteVarsOptions,
+        handleWith(deleteVarsHandler).andCleanup(),
+      )
+      .demandCommand(1, 'Available vars commands:\n');
+  });
 
   // delete
   reflectCLI.command(

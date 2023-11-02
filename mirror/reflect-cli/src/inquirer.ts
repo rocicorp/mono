@@ -1,6 +1,7 @@
+import checkboxFn, {Separator} from '@inquirer/checkbox';
 import confirmFn from '@inquirer/confirm';
 import inputFn from '@inquirer/input';
-import checkboxFn, {Separator} from '@inquirer/checkbox';
+import passwordFn from '@inquirer/password';
 
 // Copy types and wrap functions from the @inquirer library to consolidate
 // the places where we ignore ts errors from jest.
@@ -17,6 +18,10 @@ type ConfirmConfig = AsyncPromptConfig & {
 
 type InputConfig = AsyncPromptConfig & {
   default?: string;
+};
+
+type PasswordConfig = AsyncPromptConfig & {
+  mask?: boolean | string;
 };
 
 type Choice<Value> = {
@@ -48,6 +53,11 @@ export function input(config: InputConfig): Promise<string> {
   return inputFn(config);
 }
 
+export function password(config: PasswordConfig): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore type error in jest?!?
+  return passwordFn(config);
+}
 export function checkbox<T>(config: CheckboxConfig<Choice<T>>): Promise<T[]> {
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore type error in jest?!?

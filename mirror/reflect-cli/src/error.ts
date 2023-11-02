@@ -5,17 +5,29 @@ import {getUserParameters} from './metrics/send-ga-event.js';
 import {version} from './version.js';
 import type {CommonYargsOptions} from './yarg-types.js';
 
-export class ErrorWithSeverity extends Error {
-  readonly severity: Severity;
+type ReportSeverity = Severity | 'DO_NOT_REPORT';
 
-  constructor(message: string, severity: Severity, options?: ErrorOptions) {
+export class ErrorWithSeverity extends Error {
+  readonly severity: ReportSeverity;
+
+  constructor(
+    message: string,
+    severity: ReportSeverity,
+    options?: ErrorOptions,
+  ) {
     super(message, options);
     this.severity = severity;
   }
 }
 
+export class UserError extends ErrorWithSeverity {
+  constructor(message: string) {
+    super(message, 'DO_NOT_REPORT');
+  }
+}
+
 export class ErrorWrapper extends ErrorWithSeverity {
-  constructor(e: unknown, severity: Severity) {
+  constructor(e: unknown, severity: ReportSeverity) {
     super(e instanceof Error ? e.message : String(e), severity, {cause: e});
   }
 }
@@ -33,7 +45,14 @@ export async function reportE(
     /* swallow */
   }
 
-  severity ??= e instanceof ErrorWithSeverity ? e.severity : 'ERROR';
+  if (e instanceof ErrorWithSeverity) {
+    if (e.severity === 'DO_NOT_REPORT') {
+      return;
+    }
+    severity ??= e.severity;
+  } else {
+    severity ??= 'ERROR';
+  }
   const error = {
     action: eventName,
     error: createErrorInfo(e),
