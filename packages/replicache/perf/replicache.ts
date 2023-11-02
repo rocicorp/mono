@@ -50,7 +50,7 @@ export function benchmarkPopulate(opts: {
       const rep = (repToClose = makeRepWithPopulate({indexes}));
 
       // Wait for init.
-      await rep.clientID;
+      await rep.clientGroupID;
 
       if (!opts.clean) {
         await rep.mutate.populate({
@@ -739,7 +739,7 @@ function benchmarkTmcw(kind: 'populate' | 'persist'): Benchmark {
       assert(updates);
 
       // Wait for init.
-      await rep.clientID;
+      await rep.clientGroupID;
 
       if (kind === 'populate') {
         bencher.reset();

@@ -142,7 +142,7 @@ test('MetricManager v1 connect metrics', async () => {
     host: 'test-host',
     source: 'test-source',
     reporter,
-    lc: Promise.resolve(new LogContext()),
+    lc: new LogContext(),
   });
 
   type Case = {
@@ -291,7 +291,7 @@ test('MetricManager v2 connect metrics', async () => {
     host: 'test-host',
     source: 'test-source',
     reporter,
-    lc: Promise.resolve(new LogContext()),
+    lc: new LogContext(),
   });
 
   type Case = {
@@ -557,7 +557,7 @@ test('MetricManager.stop', async () => {
     host: 'test-host',
     source: 'test-source',
     reporter,
-    lc: Promise.resolve(new LogContext()),
+    lc: new LogContext(),
   });
 
   mm.timeToConnectMs.set(100);

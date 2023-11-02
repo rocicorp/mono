@@ -38,6 +38,7 @@ import {
   initClientV6,
   setClient,
 } from './clients.js';
+import {uuid} from '../uuid.js';
 
 let clock: SinonFakeTimers;
 setup(() => {
@@ -339,7 +340,9 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
   const formatVersion = FormatVersion.Latest;
   const dagStore = new TestStore();
   clock.tick(4000);
-  const [clientID, client, headHash, clients] = await initClientV6(
+  const clientID = uuid();
+  const [client, headHash, clients] = await initClientV6(
+    clientID,
     new LogContext(),
     dagStore,
     [],
@@ -672,7 +675,9 @@ suite('initClientV6', () => {
     const mutatorNames: string[] = [];
     const indexes: IndexDefinitions = {};
 
-    const [clientID, client, , clientMap] = await initClientV6(
+    const clientID = uuid();
+    const [client, , clientMap] = await initClientV6(
+      clientID,
       lc,
       perdag,
       mutatorNames,
@@ -723,7 +728,9 @@ suite('initClientV6', () => {
       await write.commit();
     });
 
-    const [clientID2, client2, client2HeadHash, clientMap] = await initClientV6(
+    const clientID2 = uuid();
+    const [client2, client2HeadHash, clientMap] = await initClientV6(
+      clientID2,
       lc,
       perdag,
       mutatorNames,
@@ -793,7 +800,9 @@ suite('initClientV6', () => {
       await write.commit();
     });
 
-    const [clientID2, client2, client2HeadHash, clientMap] = await initClientV6(
+    const clientID2 = uuid();
+    const [client2, client2HeadHash, clientMap] = await initClientV6(
+      clientID2,
       lc,
       perdag,
       newMutatorNames,
@@ -882,7 +891,9 @@ suite('initClientV6', () => {
       await write.commit();
     });
 
-    const [clientID2, client2, client2HeadHash, clientMap] = await initClientV6(
+    const clientID2 = uuid();
+    const [client2, client2HeadHash, clientMap] = await initClientV6(
+      clientID2,
       lc,
       perdag,
       newMutatorNames,

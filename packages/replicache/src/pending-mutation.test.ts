@@ -28,7 +28,7 @@ test('pending mutation', async () => {
     },
   });
 
-  const clientID = await rep.clientID;
+  const {clientID} = rep;
 
   expect(await rep.experimentalPendingMutations()).to.deep.equal([]);
 

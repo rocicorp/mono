@@ -42,13 +42,14 @@ export function IncrementClient({
     }) ?? 0;
 
   useEffect(() => {
-    void reflect?.clientID.then(id => {
-      registerClientConsole(id, (log: string) =>
-        clientConsoleDispatch({type: 'APPEND', payload: log}),
-      );
-      setCurrentClientID(id);
-    });
-  }, [clientConsoleDispatch, reflect?.clientID]);
+    if (!reflect) {
+      return;
+    }
+    registerClientConsole(reflect.clientID, (log: string) =>
+      clientConsoleDispatch({type: 'APPEND', payload: log}),
+    );
+    setCurrentClientID(reflect.clientID);
+  }, [clientConsoleDispatch, reflect]);
 
   return (
     <div className={styles.client}>

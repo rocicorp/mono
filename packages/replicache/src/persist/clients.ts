@@ -283,7 +283,6 @@ export async function mustGetClient(
 }
 
 type InitClientV6Result = [
-  clientID: ClientID,
   client: ClientV6,
   hash: Hash,
   clientMap: ClientMap,
@@ -291,6 +290,7 @@ type InitClientV6Result = [
 ];
 
 export function initClientV6(
+  newClientID: ClientID,
   lc: LogContext,
   perdag: Store,
   mutatorNames: string[],
@@ -344,10 +344,9 @@ export function initClientV6(
 
       await dagWrite.commit();
 
-      return [newClientID, newClient, chunk.hash, newClients, true];
+      return [newClient, chunk.hash, newClients, true];
     }
 
-    const newClientID = makeUuid();
     const clients = await getClients(dagWrite);
 
     const res = await findMatchingClient(dagWrite, mutatorNames, indexes);
@@ -366,7 +365,7 @@ export function initClientV6(
       await setClients(newClients, dagWrite);
 
       await dagWrite.commit();
-      return [newClientID, newClient, headHash, newClients, false];
+      return [newClient, headHash, newClients, false];
     }
 
     if (res.type === FIND_MATCHING_CLIENT_TYPE_NEW) {

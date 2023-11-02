@@ -186,8 +186,9 @@ export async function replicacheForTesting<
 
   rep.onClientStateNotFound = onClientStateNotFound;
 
+  const {clientID} = rep;
   // Wait for open to be done.
-  const clientID = await rep.clientID;
+  await rep.clientGroupID;
   fetchMock.post(pullURL, makePullResponseV1(clientID, 0, [], null));
   fetchMock.post(pushURL, 'ok');
   await tickAFewTimes();

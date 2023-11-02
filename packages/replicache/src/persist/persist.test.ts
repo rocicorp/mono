@@ -45,6 +45,7 @@ import {
   setClients,
 } from './clients.js';
 import {persistDD31} from './persist.js';
+import {uuid} from '../uuid.js';
 
 const PERDAG_TEST_SETUP_HEAD_NAME = 'test-setup-head';
 
@@ -891,7 +892,9 @@ async function setupPersistTest() {
 
   let clientGroupID: undefined | ClientGroupID;
   const createClient = async () => {
-    const [cID, c] = await initClientV6(
+    const cID = uuid();
+    const [c] = await initClientV6(
+      cID,
       new LogContext(),
       perdag,
       mutatorNames,

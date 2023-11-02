@@ -686,7 +686,7 @@ test('subscribe pull and index update', async () => {
       expectedQueryCallCount++;
     }
     log.length = 0;
-    const clientID = await rep.clientID;
+    const {clientID} = rep;
     fetchMock.post(
       pullURL,
       makePullResponseV1(clientID, lastMutationID++, opt.patch),

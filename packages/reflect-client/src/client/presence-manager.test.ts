@@ -6,13 +6,10 @@ import type {ClientID} from 'replicache';
 import {sleep} from 'shared/src/sleep.js';
 
 test('initial only this client present', async () => {
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
 
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const presenceManager = new PresenceManager(clientID, logContext);
 
   const {promise: presentPromise, resolve: presentResolve} =
     resolver<ReadonlyArray<ClientID>>();
@@ -23,13 +20,10 @@ test('initial only this client present', async () => {
 });
 
 test('addSubscription', async () => {
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
 
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const presenceManager = new PresenceManager(clientID, logContext);
 
   await presenceManager.updatePresence([
     {op: 'clear'},
@@ -66,13 +60,10 @@ test('addSubscription', async () => {
 });
 
 test('calling function returned by addSubscription removes subscription', async () => {
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
 
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const presenceManager = new PresenceManager(clientID, logContext);
 
   await presenceManager.updatePresence([
     {op: 'clear'},
@@ -120,13 +111,10 @@ test('calling function returned by addSubscription removes subscription', async 
 });
 
 test('clearSubscriptions', async () => {
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
 
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const presenceManager = new PresenceManager(clientID, logContext);
 
   await presenceManager.updatePresence([
     {op: 'clear'},
@@ -179,13 +167,10 @@ test('clearSubscriptions', async () => {
 });
 
 test('updatePresence', async () => {
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
 
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const presenceManager = new PresenceManager(clientID, logContext);
 
   const resolvers: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),
@@ -215,13 +200,10 @@ test('updatePresence', async () => {
 });
 
 test('updatePresence self clientID always included', async () => {
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
 
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const presenceManager = new PresenceManager(clientID, logContext);
 
   const resolvers: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),
@@ -251,13 +233,10 @@ test('updatePresence self clientID always included', async () => {
 });
 
 test('updatePresence doesnt fire subscriptions if set is equal', async () => {
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
 
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const presenceManager = new PresenceManager(clientID, logContext);
 
   const resolvers: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),
@@ -291,13 +270,10 @@ test('updatePresence doesnt fire subscriptions if set is equal', async () => {
 });
 
 test('handleDisconnect', async () => {
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
 
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const presenceManager = new PresenceManager(clientID, logContext);
 
   const resolvers: Resolver<ReadonlyArray<ClientID>>[] = [
     resolver(),

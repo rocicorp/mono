@@ -35,19 +35,16 @@ teardown(() => {
 test('playback all pokes dont have timestamps, all merge and play on first raf', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
+  const presenceManager = new PresenceManager(clientID, logContext);
   const updatePresenceSpy = sinon.spy(presenceManager, 'updatePresence');
   const pokeHandler = new PokeHandler(
     replicachePokeStub,
     presenceManager,
     outOfOrderPokeStub,
-    clientIDPromise,
-    logContextPromise,
+    clientID,
+    logContext,
   );
   expect(rafStub.callCount).to.equal(0);
 
@@ -174,19 +171,16 @@ test('playback all pokes dont have timestamps, all merge and play on first raf',
 test('playback all pokes have timestamps but are for this client so merge and play on first raf', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
+  const presenceManager = new PresenceManager(clientID, logContext);
   const updatePresenceSpy = sinon.spy(presenceManager, 'updatePresence');
   const pokeHandler = new PokeHandler(
     replicachePokeStub,
     presenceManager,
     outOfOrderPokeStub,
-    clientIDPromise,
-    logContextPromise,
+    clientID,
+    logContext,
     new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
@@ -313,19 +307,16 @@ test('playback all pokes have timestamps but are for this client so merge and pl
 test('playback all pokes have timestamps without any merges', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
+  const presenceManager = new PresenceManager(clientID, logContext);
   const updatePresenceSpy = sinon.spy(presenceManager, 'updatePresence');
   const pokeHandler = new PokeHandler(
     replicachePokeStub,
     presenceManager,
     outOfOrderPokeStub,
-    clientIDPromise,
-    logContextPromise,
+    clientID,
+    logContext,
     new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
@@ -518,19 +509,16 @@ test('playback all pokes have timestamps without any merges', async () => {
 test('playback all pokes have timestamps, two pokes merge due to timing', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
+  const presenceManager = new PresenceManager(clientID, logContext);
   const updatePresenceSpy = sinon.spy(presenceManager, 'updatePresence');
   const pokeHandler = new PokeHandler(
     replicachePokeStub,
     presenceManager,
     outOfOrderPokeStub,
-    clientIDPromise,
-    logContextPromise,
+    clientID,
+    logContext,
     new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
@@ -698,19 +686,16 @@ test('playback all pokes have timestamps, two pokes merge due to timing', async 
 test('playback pokes with no timestamp or for this client playback ASAP', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
+  const presenceManager = new PresenceManager(clientID, logContext);
   const updatePresenceSpy = sinon.spy(presenceManager, 'updatePresence');
   const pokeHandler = new PokeHandler(
     replicachePokeStub,
     presenceManager,
     outOfOrderPokeStub,
-    clientIDPromise,
-    logContextPromise,
+    clientID,
+    logContext,
     new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
@@ -851,19 +836,16 @@ test('playback pokes with no timestamp or for this client playback ASAP', async 
 test('playback sequence of poke messages', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
+  const presenceManager = new PresenceManager(clientID, logContext);
   const updatePresenceSpy = sinon.spy(presenceManager, 'updatePresence');
   const pokeHandler = new PokeHandler(
     replicachePokeStub,
     presenceManager,
     outOfOrderPokeStub,
-    clientIDPromise,
-    logContextPromise,
+    clientID,
+    logContext,
     new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
@@ -1092,19 +1074,16 @@ test('playback sequence of poke messages', async () => {
 test(`playback offset is reset for new pokes if timestamp offset delta is > ${RESET_PLAYBACK_OFFSET_THRESHOLD_MS}`, async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
+  const presenceManager = new PresenceManager(clientID, logContext);
   const updatePresenceSpy = sinon.spy(presenceManager, 'updatePresence');
   const pokeHandler = new PokeHandler(
     replicachePokeStub,
     presenceManager,
     outOfOrderPokeStub,
-    clientIDPromise,
-    logContextPromise,
+    clientID,
+    logContext,
     new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
@@ -1420,18 +1399,14 @@ test('playback stats', async () => {
       ],
     ]);
   };
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(logContext);
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const clientID = 'c1';
+  const presenceManager = new PresenceManager(clientID, logContext);
   const pokeHandler = new PokeHandler(
     replicachePokeStub,
     presenceManager,
     outOfOrderPokeStub,
-    clientIDPromise,
-    logContextPromise,
+    clientID,
+    logContext,
     new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
     3 /* maxRecentPokeLatenciesSize */,
   );
@@ -1675,18 +1650,15 @@ test('playback stats', async () => {
 test('onOutOfOrderPoke is called if replicache poke throws an unexpected base cookie error', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
+  const presenceManager = new PresenceManager(clientID, logContext);
   const pokeHandler = new PokeHandler(
     replicachePokeStub,
     presenceManager,
     outOfOrderPokeStub,
-    clientIDPromise,
-    logContextPromise,
+    clientID,
+    logContext,
     new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
@@ -1727,19 +1699,16 @@ test('onOutOfOrderPoke is called if replicache poke throws an unexpected base co
 test('onDisconnect clears pending pokes and playback offset', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
+  const presenceManager = new PresenceManager(clientID, logContext);
   const updatePresenceSpy = sinon.spy(presenceManager, 'updatePresence');
   const pokeHandler = new PokeHandler(
     replicachePokeStub,
     presenceManager,
     outOfOrderPokeStub,
-    clientIDPromise,
-    logContextPromise,
+    clientID,
+    logContext,
     new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   expect(rafStub.callCount).to.equal(0);
@@ -1973,18 +1942,15 @@ test('onDisconnect clears pending pokes and playback offset', async () => {
 test('handlePoke returns the last mutation id change for this client from poke message or undefined if none', async () => {
   const outOfOrderPokeStub = sinon.stub();
   const replicachePokeStub = sinon.stub();
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
+  const presenceManager = new PresenceManager(clientID, logContext);
   const pokeHandler = new PokeHandler(
     replicachePokeStub,
     presenceManager,
     outOfOrderPokeStub,
-    clientIDPromise,
-    logContextPromise,
+    clientID,
+    logContext,
     new BufferSizer(TEST_BUFFER_SIZER_OPTIONS),
   );
   const lastMutationIDChangeForSelf = await pokeHandler.handlePoke({
@@ -2106,18 +2072,15 @@ test('integration with BufferSizer', async () => {
   const bufferSizer = new BufferSizer(TEST_BUFFER_SIZER_OPTIONS);
   const recordMissableSpy = sinon.spy(bufferSizer, 'recordMissable');
   const bufferSizeMsStub = sinon.stub(bufferSizer, 'bufferSizeMs');
-  const clientIDPromise = Promise.resolve('c1');
-  const logContextPromise = Promise.resolve(new LogContext('error'));
-  const presenceManager = new PresenceManager(
-    clientIDPromise,
-    logContextPromise,
-  );
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
+  const presenceManager = new PresenceManager(clientID, logContext);
   const pokeHandler = new PokeHandler(
     replicachePokeStub,
     presenceManager,
     outOfOrderPokeStub,
-    clientIDPromise,
-    logContextPromise,
+    clientID,
+    logContext,
     bufferSizer,
   );
   expect(rafStub.callCount).to.equal(0);

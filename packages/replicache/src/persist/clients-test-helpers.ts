@@ -102,9 +102,9 @@ export async function initClientWithClientID(
   indexes: IndexDefinitions,
   formatVersion: FormatVersion,
 ): Promise<void> {
-  let generatedClientID, client, clientMap;
   if (formatVersion >= FormatVersion.DD31) {
-    [generatedClientID, client, , clientMap] = await initClientV6(
+    await initClientV6(
+      clientID,
       new LogContext(),
       dagStore,
       mutatorNames,
@@ -112,12 +112,12 @@ export async function initClientWithClientID(
       formatVersion,
     );
   } else {
-    [generatedClientID, client, clientMap] = await initClientV4(dagStore);
+    const [generatedClientID, client, clientMap] = await initClientV4(dagStore);
+    const newMap = new Map(clientMap);
+    newMap.delete(generatedClientID);
+    newMap.set(clientID, client);
+    await setClientsForTesting(newMap, dagStore);
   }
-  const newMap = new Map(clientMap);
-  newMap.delete(generatedClientID);
-  newMap.set(clientID, client);
-  await setClientsForTesting(newMap, dagStore);
 }
 
 // We only keep this around for testing purposes.
