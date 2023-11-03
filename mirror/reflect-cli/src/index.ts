@@ -91,32 +91,32 @@ function createCLIParser(argv: string[]) {
   );
 
   // vars
-  reflectCLI.command('vars', '🟰  Manage Server Variables', yargs => {
+  reflectCLI.command('env', '🟰  Manage environment variables', yargs => {
     yargs
       .option('dev', {
-        describe: 'Manage Dev Variables for `npx @rocicorp/reflect dev`',
+        describe: 'Manage local variables for `npx reflect dev`',
         type: 'boolean',
         default: false,
       })
       .command(
         'list',
-        'List Server Variables',
+        'List environment variables',
         listVarsOptions,
         handleWith(listVarsHandler).andCleanup(),
       )
       .command(
         'set <keysAndValues..>',
-        'Set one or more Server Variables',
+        'Set one or more environment variables',
         setVarsOptions,
         handleWith(setVarsHandler).andCleanup(),
       )
       .command(
         'delete <keys..>',
-        'Delete one or more Server Variables',
+        'Delete one or more environment variables',
         deleteVarsOptions,
         handleWith(deleteVarsHandler).andCleanup(),
       )
-      .demandCommand(1, 'Available vars commands:\n');
+      .demandCommand(1, 'Available commands:\n');
   });
 
   // delete
