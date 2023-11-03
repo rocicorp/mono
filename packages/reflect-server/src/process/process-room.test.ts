@@ -1,6 +1,6 @@
 import {describe, expect, test} from '@jest/globals';
 import type {Poke, Version} from 'reflect-protocol';
-import type {ClientID, WriteTransaction} from 'reflect-shared';
+import type {ClientID, Env, WriteTransaction} from 'reflect-shared';
 import {processRoom} from '../process/process-room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {
@@ -9,6 +9,7 @@ import {
   putClientRecord,
 } from '../types/client-record.js';
 import type {ClientMap} from '../types/client-state.js';
+import {putConnectedClients} from '../types/connected-clients.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {UserValue, getUserValue} from '../types/user-value.js';
 import {getVersion, versionKey} from '../types/version.js';
@@ -20,10 +21,10 @@ import {
   mockMathRandom,
   pendingMutation,
 } from '../util/test-utils.js';
-import {putConnectedClients} from '../types/connected-clients.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
+const env: Env = {env: 'dawg'};
 
 mockMathRandom();
 
@@ -644,6 +645,7 @@ describe('processRoom', () => {
 
       const p = processRoom(
         createSilentLogContext(),
+        env,
         c.clients,
         c.pendingMutations,
         c.pendingMutations.length,

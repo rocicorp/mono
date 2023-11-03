@@ -15,6 +15,9 @@ import type {
  */
 export type AuthData = ReadonlyJSONObject & {readonly userID: string};
 
+/** Environment variables. */
+export type Env = {readonly [key: string]: string};
+
 export interface ReadTransaction extends ReplicacheReadTransaction {
   /**
    * When a mutator is run on the server, the `AuthData` for the connection
@@ -24,6 +27,11 @@ export interface ReadTransaction extends ReplicacheReadTransaction {
    * fine-grained server-side authorization of mutations.
    */
   readonly auth?: AuthData | undefined;
+
+  /**
+   * When a mutator is run on the server, `Env` contains environment variables.
+   */
+  readonly env?: Env | undefined;
 }
 
 export interface WriteTransaction extends ReplicacheWriteTransaction {
@@ -35,6 +43,11 @@ export interface WriteTransaction extends ReplicacheWriteTransaction {
    * fine-grained server-side authorization of mutations.
    */
   readonly auth?: AuthData | undefined;
+
+  /**
+   * When a mutator is run on the server, `Env` contains environment variables.
+   */
+  readonly env?: Env | undefined;
 }
 
 export type MutatorDefs = {

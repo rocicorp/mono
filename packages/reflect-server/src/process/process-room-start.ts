@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import type {Env} from 'reflect-shared';
 import type {RoomStartHandler} from '../server/room-start.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {ReplicacheTransaction} from '../storage/replicache-transaction.js';
@@ -10,6 +11,7 @@ import {getVersion, putVersion} from '../types/version.js';
 // to be in an invalid state).
 export async function processRoomStart(
   lc: LogContext,
+  env: Env,
   roomStartHandler: RoomStartHandler,
   storage: Storage,
   roomID: string,
@@ -26,6 +28,7 @@ export async function processRoomStart(
     -1, // mutationID,
     nextVersion,
     undefined,
+    env,
   );
   try {
     await roomStartHandler(tx, roomID);

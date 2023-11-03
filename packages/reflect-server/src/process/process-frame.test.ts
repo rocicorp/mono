@@ -7,7 +7,7 @@ import {
   test,
 } from '@jest/globals';
 import type {Version} from 'reflect-protocol';
-import type {WriteTransaction} from 'reflect-shared';
+import type {Env, WriteTransaction} from 'reflect-shared';
 import {jsonSchema} from 'shared/src/json-schema.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
@@ -38,6 +38,8 @@ import {
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
 const startTime = 1000;
+const env: Env = {env: 'dood'};
+
 beforeEach(() => {
   jest.useFakeTimers();
   jest.setSystemTime(startTime);
@@ -76,9 +78,11 @@ describe('processFrame', () => {
         tx: WriteTransaction,
         {key, value}: {key: string; value: ReadonlyJSONValue},
       ) => {
+        expect(tx.env).toEqual(env);
         await tx.set(key, value);
       },
       del: async (tx: WriteTransaction, {key}: {key: string}) => {
+        expect(tx.env).toEqual(env);
         await tx.del(key);
       },
     }),
@@ -951,6 +955,7 @@ describe('processFrame', () => {
       const disconnectCallClients: ClientID[] = [];
       const result = await processFrame(
         createSilentLogContext(),
+        env,
         c.pendingMutations,
         c.numPendingMutationsToProcess,
         mutators,

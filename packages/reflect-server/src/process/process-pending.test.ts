@@ -1382,9 +1382,12 @@ describe('processPending', () => {
     },
   ];
 
+  const env = {boo: 'far'};
+
   const mutators = new Map(
     Object.entries({
       inc: async (tx: WriteTransaction) => {
+        expect(tx.env).toEqual(env);
         let count = ((await tx.get('count')) as number) ?? 0;
         count++;
         await tx.set('count', count);
@@ -1409,6 +1412,7 @@ describe('processPending', () => {
       fakeBufferSizer.testBufferSizeMs = c.bufferSizeMs ?? 200;
       const p = processPending(
         createSilentLogContext(),
+        env,
         storage,
         c.clients,
         c.pendingMutations,

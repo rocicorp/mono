@@ -52,6 +52,7 @@ export type {
 } from 'replicache';
 export type {
   AuthData,
+  Env,
   MutatorDefs,
   ReadTransaction,
   WriteTransaction,

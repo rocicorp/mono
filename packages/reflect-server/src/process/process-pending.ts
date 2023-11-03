@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {Patch, Poke} from 'reflect-protocol';
+import type {Env} from 'reflect-shared';
 import type {BufferSizer} from 'shared/src/buffer-sizer.js';
 import {must} from 'shared/src/must.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
@@ -19,6 +20,7 @@ import {processRoom} from './process-room.js';
  */
 export async function processPending(
   lc: LogContext,
+  env: Env,
   storage: DurableStorage,
   clients: ClientMap,
   pendingMutations: PendingMutation[],
@@ -117,6 +119,7 @@ export async function processPending(
   );
   const pokesByClientID = await processRoom(
     lc,
+    env,
     clients,
     pendingMutations,
     endIndex,

@@ -50,6 +50,7 @@ test('inits storage schema', async () => {
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+    env: {foo: 'bar'},
   });
 
   await state.concurrencyBlockingCallbacks();
@@ -91,6 +92,7 @@ test('runs roomStartHandler on first fetch', async () => {
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+    env: {foo: 'bar'},
   });
 
   await state.concurrencyBlockingCallbacks();
@@ -164,6 +166,7 @@ test('runs roomStartHandler on next fetch if throws on first fetch', async () =>
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+    env: {foo: 'bar'},
   });
 
   await state.concurrencyBlockingCallbacks();
@@ -221,6 +224,7 @@ test('deleteAllData deletes all data', async () => {
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+    env: {foo: 'bar'},
   });
   const createRoomRequest = addRoomIDHeader(
     newCreateRoomRequest('http://example.com/', 'API KEY', 'testRoomID'),
@@ -255,6 +259,7 @@ test('after deleteAllData the roomDO just 410s', async () => {
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+    env: {foo: 'bar'},
   });
   const createRoomRequest = addRoomIDHeader(
     newCreateRoomRequest('http://example.com/', 'API KEY', 'testRoomID'),
@@ -336,6 +341,7 @@ test('401s if wrong auth api key', async () => {
       logLevel: 'info',
       allowUnconfirmedWrites: true,
       maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+      env: {foo: 'bar'},
     });
 
     const response = await roomDO.fetch(
@@ -357,6 +363,7 @@ test('Logs version during construction', async () => {
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+    env: {foo: 'bar'},
   });
   expect(testLogSink.messages).toEqual(
     expect.arrayContaining([
@@ -382,6 +389,7 @@ test('Avoids queueing many intervals in the lock', async () => {
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+    env: {foo: 'bar'},
   });
 
   const {promise: canFinishCallback, resolve: finishCallback} =
@@ -440,6 +448,7 @@ async function makeBaseRoomDO(state?: DurableObjectState) {
     logLevel: 'info',
     allowUnconfirmedWrites: true,
     maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+    env: {foo: 'bar'},
   });
 }
 
@@ -579,6 +588,7 @@ describe('good, bad, invalid tail requests', () => {
         logLevel: 'info',
         allowUnconfirmedWrites: true,
         maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+        env: {foo: 'bar'},
       });
 
       const response = await roomDO.fetch(

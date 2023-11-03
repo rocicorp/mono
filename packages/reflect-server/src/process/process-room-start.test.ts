@@ -51,9 +51,10 @@ describe('processRoomStart', () => {
       expectedError: 'tossed!',
     },
     {
-      name: 'room start handler is passed roomID',
-      roomStartHandler: (_: WriteTransaction, roomID: string) => {
+      name: 'room start handler is passed roomID and env',
+      roomStartHandler: (tx: WriteTransaction, roomID: string) => {
         expect(roomID).toEqual('testRoomID');
+        expect(tx.env).toEqual({env: 'yo'});
         return Promise.resolve();
       },
       expectFooBar: false,
@@ -74,6 +75,7 @@ describe('processRoomStart', () => {
       try {
         await processRoomStart(
           createSilentLogContext(),
+          {env: 'yo'},
           c.roomStartHandler,
           storage,
           'testRoomID',

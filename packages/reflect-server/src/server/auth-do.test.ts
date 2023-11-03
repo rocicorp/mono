@@ -35,16 +35,16 @@ import {
 } from './auth-do.js';
 import type {AuthHandler} from './auth.js';
 import {
-  AUTH_DATA_HEADER_NAME,
-  ROOM_ID_HEADER_NAME,
-} from './internal-headers.js';
-import {
   TestDurableObjectId,
   TestDurableObjectState,
   TestDurableObjectStub,
   createTestDurableObjectNamespace,
 } from './do-test-utils.js';
 import {upgradeWebsocketResponse} from './http-util.js';
+import {
+  AUTH_DATA_HEADER_NAME,
+  ROOM_ID_HEADER_NAME,
+} from './internal-headers.js';
 import {
   AUTH_CONNECTIONS_PATH,
   CREATE_ROOM_PATH,
@@ -167,6 +167,7 @@ test("createRoom creates a room and doesn't allow it to be re-created", async ()
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   // Create the room for the first time.
@@ -199,6 +200,7 @@ test('createRoom allows slashes in roomIDs', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   const testRequest = newCreateRoomRequest(
@@ -235,6 +237,7 @@ test('createRoom requires roomIDs to not contain weird characters', async () => 
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   const roomIDs = ['', ' ', testRoomID + '!', '$', ' foo ', '🤷'];
@@ -275,6 +278,7 @@ test('createRoom returns 401 if authApiKey is wrong', async () => {
     authApiKey: 'SOME OTHER API KEY',
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   const response = await authDO.fetch(testRequest);
@@ -296,6 +300,7 @@ test('createRoom returns 500 if roomDO createRoom fails', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   // Override the roomDO to return a 500.
@@ -327,6 +332,7 @@ test('createRoom sets jurisdiction if requested', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   let gotJurisdiction = false;
@@ -360,6 +366,7 @@ test('migrate room creates a room record', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   const migrateRoomRequest = newMigrateRoomRequest(
@@ -386,6 +393,7 @@ test('migrate room enforces roomID format', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   const migrateRoomRequest = newMigrateRoomRequest(
@@ -441,6 +449,7 @@ describe('401s if wrong auth api key', () => {
         authApiKey: TEST_AUTH_API_KEY,
         logSink: new TestLogSink(),
         logLevel: 'debug',
+        env: {foo: 'bar'},
       });
       const response = await authDO.fetch(c.request);
       expect(response.status).toEqual(401);
@@ -495,6 +504,7 @@ test('400 bad body requests', async () => {
       authApiKey: TEST_AUTH_API_KEY,
       logSink: new TestLogSink(),
       logLevel: 'debug',
+      env: {foo: 'bar'},
     });
     const response = await authDO.fetch(request);
     expect(response.status).toEqual(400);
@@ -520,6 +530,7 @@ test('closeRoom closes an open room', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, testRoomID);
 
@@ -553,6 +564,7 @@ test('closeRoom 404s on non-existent room', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   // Note: no createRoom.
 
@@ -575,6 +587,7 @@ test('calling closeRoom on closed room is ok', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, testRoomID);
 
@@ -617,6 +630,7 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, testRoomID);
 
@@ -660,6 +674,7 @@ test('deleteRoom requires room to be closed', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, testRoomID);
 
@@ -699,6 +714,7 @@ test('deleteRoom does not delete if auth api key is incorrect', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, testRoomID);
 
@@ -727,6 +743,7 @@ test('forget room forgets an existing room', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, testRoomID);
 
@@ -760,6 +777,7 @@ test('foget room 404s on non-existent room', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   // Note: no createRoom.
 
@@ -783,6 +801,7 @@ test('roomStatusByRoomID returns status for a room that exists', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   const response = await authDO.fetch(testRequest);
@@ -810,6 +829,7 @@ test('roomStatusByRoomID returns unknown for a room that does not exist', async 
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   const statusRequest = newRoomStatusRequest(
@@ -835,6 +855,7 @@ test('roomStatusByRoomID requires authApiKey', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   const path = AUTH_ROUTES.roomStatusByRoomID.replace(':roomID', testRoomID);
@@ -864,6 +885,7 @@ test('roomRecords returns empty array if no rooms exist', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   const roomRecordsRequest = newRoomRecordsRequest();
@@ -896,6 +918,7 @@ test('roomRecords returns rooms that exists', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, '1');
   await createRoom(authDO, '2');
@@ -923,6 +946,7 @@ test('roomRecords requires authApiKey', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, testRoomID);
 
@@ -1072,14 +1096,16 @@ describe("connect will implicitly create a room that doesn't exist", () => {
         roomDO: testRoomDO,
         state,
         // eslint-disable-next-line require-await
-        authHandler: async (auth, roomID) => {
+        authHandler: async (auth, roomID, env) => {
           expect(auth).toEqual(testAuth);
           expect(roomID).toEqual(testRoomID);
+          expect(env).toEqual({foo: 'bar'});
           return {userID: testUserID};
         },
         authApiKey: TEST_AUTH_API_KEY,
         logSink,
         logLevel: 'debug',
+        env: {foo: 'bar'},
       });
 
       await connectAndTestThatRoomGotCreated(
@@ -1114,14 +1140,16 @@ test('connect calls authHandler and sends resolved AuthData in header to Room DO
     roomDO: testRoomDO,
     state,
     // eslint-disable-next-line require-await
-    authHandler: async (auth, roomID) => {
+    authHandler: async (auth, roomID, env) => {
       expect(auth).toEqual(testAuth);
       expect(roomID).toEqual(testRoomID);
+      expect(env).toEqual({bar: 'foo'});
       return {userID: testUserID};
     },
     authApiKey: TEST_AUTH_API_KEY,
     logSink,
     logLevel: 'debug',
+    env: {bar: 'foo'},
   });
 
   await createRoom(authDO, testRoomID);
@@ -1162,6 +1190,7 @@ describe('connect with undefined authHandler sends AuthData with url param userI
         authApiKey: TEST_AUTH_API_KEY,
         logSink,
         logLevel: 'debug',
+        env: {foo: 'bar'},
       });
 
       await createRoom(authDO, testRoomID);
@@ -1199,6 +1228,7 @@ test('connect wont connect to a room that is closed', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink,
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, testRoomID);
 
@@ -1238,14 +1268,16 @@ test('connect percent escapes components of the connection key', async () => {
     roomDO: testRoomDO,
     state,
     // eslint-disable-next-line require-await
-    authHandler: async (auth, roomID) => {
+    authHandler: async (auth, roomID, env) => {
       expect(auth).toEqual(testAuth);
       expect(roomID).toEqual(testRoomID);
+      expect(env).toEqual({boo: 'far'});
       return {userID: testUserID};
     },
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {boo: 'far'},
   });
   await createRoom(authDO, testRoomID);
 
@@ -1303,6 +1335,7 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
         authApiKey: TEST_AUTH_API_KEY,
         logSink: new TestLogSink(),
         logLevel: 'debug',
+        env: {food: 'bard'},
       });
 
       const responseP = authDO.fetch(testRequest);
@@ -1328,9 +1361,10 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
 
   t(
     'authHandler throws',
-    (auth, roomID) => {
+    (auth, roomID, env) => {
       expect(auth).toEqual(testAuth);
       expect(roomID).toEqual(testRoomID);
+      expect(env).toEqual({food: 'bard'});
       throw new Error('Test authHandler reject');
     },
     'authHandler rejected: Error: Test authHandler reject',
@@ -1338,9 +1372,10 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
 
   t(
     'authHandler rejects',
-    (auth, roomID) => {
+    (auth, roomID, env) => {
       expect(auth).toEqual(testAuth);
       expect(roomID).toEqual(testRoomID);
+      expect(env).toEqual({food: 'bard'});
       return Promise.reject(new Error('Test authHandler reject'));
     },
     'authHandler rejected: Error: Test authHandler reject',
@@ -1348,9 +1383,10 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
 
   t(
     'authHandler returns null',
-    (auth, roomID) => {
+    (auth, roomID, env) => {
       expect(auth).toEqual(testAuth);
       expect(roomID).toEqual(testRoomID);
+      expect(env).toEqual({food: 'bard'});
       return null;
     },
     'no authData',
@@ -1358,9 +1394,10 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
 
   t(
     'authHandler returns Promise<null>',
-    (auth, roomID) => {
+    (auth, roomID, env) => {
       expect(auth).toEqual(testAuth);
       expect(roomID).toEqual(testRoomID);
+      expect(env).toEqual({food: 'bard'});
       return Promise.resolve(null);
     },
     'no authData',
@@ -1368,9 +1405,10 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
 
   t(
     'authHandler takes a very long time',
-    async (auth, roomID) => {
+    async (auth, roomID, env) => {
       expect(auth).toEqual(testAuth);
       expect(roomID).toEqual(testRoomID);
+      expect(env).toEqual({food: 'bard'});
       await sleep(30000, setTimeout);
       return {userID: 'bonk'};
     },
@@ -1401,6 +1439,7 @@ describe('connect sends InvalidConnectionRequest over ws without calling Room DO
         authApiKey: TEST_AUTH_API_KEY,
         logSink: new TestLogSink(),
         logLevel: 'debug',
+        env: {foo: 'bar'},
       });
 
       const response = await authDO.fetch(testRequest);
@@ -1451,14 +1490,16 @@ test('connect sends over InvalidConnectionRequest over ws without calling Room D
     roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
     state,
     // eslint-disable-next-line require-await
-    authHandler: async (auth, roomID) => {
+    authHandler: async (auth, roomID, env) => {
       expect(auth).toEqual(testAuth);
       expect(roomID).toEqual(testRoomID);
+      expect(env).toEqual({foo: 'bar'});
       return {userID: ''};
     },
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   const response = await authDO.fetch(testRequest);
@@ -1507,6 +1548,7 @@ describe('connect sends VersionNotSupported error over ws if path is for unsuppo
         authApiKey: TEST_AUTH_API_KEY,
         logSink: new TestLogSink(),
         logLevel: 'debug',
+        env: {foo: 'bar'},
       });
 
       const response = await authDO.fetch(testRequest);
@@ -1580,6 +1622,7 @@ test('authInvalidateForUser when requests to roomDOs are successful', async () =
     authApiKey: TEST_AUTH_API_KEY,
     logSink,
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, 'testRoomID1');
   await createRoom(authDO, 'testRoomID2');
@@ -1657,6 +1700,7 @@ test('authInvalidateForUser when connection ids have chars that need to be perce
     authApiKey: TEST_AUTH_API_KEY,
     logSink,
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, 'testRoomID1');
   await createRoom(authDO, 'testRoomID2');
@@ -1723,6 +1767,7 @@ test('authInvalidateForUser when any request to roomDOs returns error response',
     authApiKey: TEST_AUTH_API_KEY,
     logSink,
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, 'testRoomID1');
   await createRoom(authDO, 'testRoomID2');
@@ -1779,6 +1824,7 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, testRoomID);
 
@@ -1897,6 +1943,7 @@ test('authInvalidateForRoom when request to roomDO returns error response', asyn
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, testRoomID);
 
@@ -1956,6 +2003,7 @@ test('authInvalidateAll when requests to roomDOs are successful', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, 'testRoomID1');
   await createRoom(authDO, 'testRoomID2');
@@ -2032,6 +2080,7 @@ test('authInvalidateAll when any request to roomDOs returns error response', asy
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, 'testRoomID1');
   await createRoom(authDO, 'testRoomID2');
@@ -2112,6 +2161,7 @@ async function createRevalidateConnectionsTestFixture({
     authApiKey: TEST_AUTH_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
   await createRoom(authDO, 'testRoomID1');
   await createRoom(authDO, 'testRoomID2');
@@ -2286,6 +2336,7 @@ describe('tail', () => {
         authApiKey,
         logSink,
         logLevel: 'debug',
+        env: {foo: 'bar'},
       });
 
       if (testRoomID) {
@@ -2356,6 +2407,7 @@ test('tail not a websocket', async () => {
     authApiKey: TEST_AUTH_API_KEY,
     logSink,
     logLevel: 'debug',
+    env: {foo: 'bar'},
   });
 
   await createRoom(authDO, testRoomID);
@@ -2383,6 +2435,7 @@ describe('Alarms', () => {
       authApiKey: testAuth,
       logSink,
       logLevel: 'debug',
+      env: {foo: 'bar'},
     });
 
     await connectAndTestThatRoomGotCreated(

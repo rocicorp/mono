@@ -45,7 +45,9 @@ export type DeepReadonlyObject<T> = {
  */
 export interface ReadTransaction {
   readonly clientID: ClientID;
+  /** @deprecated Use `location` instead. */
   readonly environment: TransactionEnvironment;
+  readonly location: TransactionEnvironment;
 
   /**
    * Get a single value from the database. If the `key` is not present this
@@ -119,9 +121,10 @@ export class ReadTransactionImpl implements ReadTransaction {
   protected readonly _lc: LogContext;
 
   /**
-   * The environment in which this transaction is being used. This is either `client` or `server`.
+   * The location in which this transaction is being used. This is either `client` or `server`.
    */
-  readonly environment: TransactionEnvironment;
+  readonly location: TransactionEnvironment;
+  readonly environment: TransactionEnvironment; // Support the deprecated API.
 
   constructor(
     clientID: ClientID,
@@ -135,6 +138,7 @@ export class ReadTransactionImpl implements ReadTransaction {
       .withContext(rpcName)
       .withContext('txid', transactionIDCounter++);
     this.environment = 'client';
+    this.location = 'client';
   }
 
   get(key: string): Promise<ReadonlyJSONValue | undefined>;
@@ -202,7 +206,11 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
   }
 
   get environment(): TransactionEnvironment {
-    return this.#tx.environment;
+    return this.#tx.location;
+  }
+
+  get location(): TransactionEnvironment {
+    return this.#tx.location;
   }
 
   get clientID(): string {

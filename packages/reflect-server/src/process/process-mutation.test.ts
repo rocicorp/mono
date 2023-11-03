@@ -1,5 +1,5 @@
 import {expect, test} from '@jest/globals';
-import type {AuthData, WriteTransaction} from 'reflect-shared';
+import type {AuthData, Env, WriteTransaction} from 'reflect-shared';
 import {
   MutatorMap,
   processMutation,
@@ -23,6 +23,7 @@ const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
 const version = 2;
 const auth: AuthData = {userID: 'testUser1', foo: 'bar'};
+const env: Env = {env: 'baby'};
 
 test('processMutation', async () => {
   type Case = {
@@ -129,6 +130,7 @@ test('processMutation', async () => {
       'foo',
       async (tx: WriteTransaction) => {
         expect(tx.auth).toEqual(auth);
+        expect(tx.env).toEqual(env);
         await tx.set('foo', 'bar');
       },
     ],
@@ -136,6 +138,7 @@ test('processMutation', async () => {
       'throws',
       async (tx: WriteTransaction) => {
         expect(tx.auth).toEqual(auth);
+        expect(tx.env).toEqual(env);
         await tx.set('foo', 'bar');
         throw new Error('bonk');
       },
@@ -156,6 +159,7 @@ test('processMutation', async () => {
     try {
       await processMutation(
         createSilentLogContext(),
+        env,
         c.pendingMutation,
         mutators,
         storage,

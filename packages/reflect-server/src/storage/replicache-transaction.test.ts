@@ -14,6 +14,7 @@ import {
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
+const env = {var: 'bar'};
 
 test('ReplicacheTransaction', async () => {
   const storage = new DurableStorage(
@@ -21,7 +22,14 @@ test('ReplicacheTransaction', async () => {
   );
 
   const entryCache = new EntryCache(storage);
-  const writeTx = new ReplicacheTransaction(entryCache, 'c1', 1, 1, undefined);
+  const writeTx = new ReplicacheTransaction(
+    entryCache,
+    'c1',
+    1,
+    1,
+    undefined,
+    env,
+  );
 
   expect(!(await writeTx.has('foo')));
   expect(await writeTx.get('foo')).toBeUndefined;
@@ -39,6 +47,7 @@ test('ReplicacheTransaction', async () => {
     2,
     2,
     undefined,
+    env,
   );
   expect(!(await writeTx2.has('foo')));
   expect(await writeTx2.get('foo')).toBeUndefined;
@@ -48,7 +57,14 @@ test('ReplicacheTransaction', async () => {
 
   // Go ahead and flush one
   await entryCache.flush();
-  const writeTx3 = new ReplicacheTransaction(entryCache, 'c1', 3, 3, undefined);
+  const writeTx3 = new ReplicacheTransaction(
+    entryCache,
+    'c1',
+    3,
+    3,
+    undefined,
+    env,
+  );
   expect(await writeTx3.has('foo'));
   expect(await writeTx3.get('foo')).toEqual('bar');
 
@@ -73,7 +89,7 @@ test('ReplicacheTransaction environment and reason', async () => {
   );
 
   const entryCache = new EntryCache(storage);
-  const tx = new ReplicacheTransaction(entryCache, 'c1', 1, 1, undefined);
+  const tx = new ReplicacheTransaction(entryCache, 'c1', 1, 1, undefined, env);
   expect(tx.environment).toEqual('server');
   expect(tx.reason).toEqual('authoritative');
 });
@@ -95,6 +111,7 @@ test('ReplicacheTransaction scan()', async () => {
       mutationID,
       version,
       undefined,
+      env,
     );
     version++;
     mutationID++;
@@ -290,7 +307,14 @@ test('set with non JSON value', async () => {
   );
 
   const entryCache = new EntryCache(storage);
-  const writeTx = new ReplicacheTransaction(entryCache, 'c1', 1, 1, undefined);
+  const writeTx = new ReplicacheTransaction(
+    entryCache,
+    'c1',
+    1,
+    1,
+    undefined,
+    env,
+  );
 
   let err;
   try {
