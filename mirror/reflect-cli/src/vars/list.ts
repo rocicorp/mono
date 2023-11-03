@@ -7,8 +7,8 @@ import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
 
 export function listVarsOptions(yargs: CommonVarsYargsArgv) {
-  return yargs.option('decrypted', {
-    desc: 'Show the decrypted Server Variables',
+  return yargs.option('show', {
+    desc: 'Show the decrypted environment variables',
     type: 'boolean',
     default: false,
   });
@@ -19,33 +19,38 @@ type ListVarsHandlerArgs = YargvToInterface<ReturnType<typeof listVarsOptions>>;
 export async function listVarsHandler(
   yargs: ListVarsHandlerArgs,
 ): Promise<void> {
-  const {decrypted, dev} = yargs;
+  const {
+    show,
+    dev,
+    $0: command,
+    _: [subcommand],
+  } = yargs;
   let vars: Record<string, string>;
   if (dev) {
     vars = listDevVars();
   } else {
     const {userID} = await authenticate(yargs);
     const {appID} = await ensureAppInstantiated(yargs);
-    const data = {requester: makeRequester(userID), appID, decrypted};
+    const data = {requester: makeRequester(userID), appID, decrypted: show};
 
     const response = await listVars(data);
     vars = response.vars;
   }
-  const varType = dev ? 'Dev' : 'Server';
+  const varType = dev ? 'local dev' : 'environment';
   const entries = Object.entries(vars);
   if (entries.length === 0) {
     console.log(
-      `No ${varType} Variables set. Use 'npx @rocicorp/reflect vars set${
+      `No ${varType} variables set. Use '${command} ${subcommand} set${
         dev ? ' --dev' : ''
       }' to add them.`,
     );
   } else if (dev) {
-    console.log(`Dev Variables:\n`);
-  } else if (decrypted) {
-    console.log(`Requested decrypted Server Variables:\n`);
+    console.log(`Local dev variables:\n`);
+  } else if (show) {
+    console.log(`Requested decrypted environment variables:\n`);
   } else {
     console.log(
-      'Server Variables are encrypted at rest. Use --decrypted to see their values.\n',
+      'Environment variables are encrypted at rest. Use --show to see their values.\n',
     );
   }
   entries.forEach(([name, value]) => console.log(`${name}=${value}`));

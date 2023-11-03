@@ -5,7 +5,7 @@ import {tryDeprecationCheck, version} from './version.js';
 
 export class CommandLineArgsError extends Error {}
 
-export const scriptName = `npx @rocicorp/reflect`;
+export const scriptName = `npx reflect`;
 
 export function createCLIParserBase(argv: string[]): Argv<{
   v: boolean | undefined;
