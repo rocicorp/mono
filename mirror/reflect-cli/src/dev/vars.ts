@@ -4,6 +4,7 @@ import {
   ALLOWED_SERVER_VARIABLE_CHARS,
   MAX_SERVER_VARIABLES,
   variableIsWithinSizeLimit,
+  variableNameIsWithinSizeLimit,
 } from 'mirror-schema/src/external/vars.js';
 import path from 'path';
 import {getProperties} from 'properties-file';
@@ -63,9 +64,14 @@ function validateAndSort(devVars: Record<string, string>) {
         `Invalid key "${key}". Variables may only contain alphanumeric characters and underscores.`,
       );
     }
+    if (!variableNameIsWithinSizeLimit(key)) {
+      throw new UserError(
+        `Variable name "${key}" exceeds the maximum size limit. UTF-8 encoded names must not exceed 1 kilobyte.`,
+      );
+    }
     if (!variableIsWithinSizeLimit(key, value)) {
       throw new UserError(
-        `Variable "${key}" exceeds the maximum size limit. UTF-8 encoded Variables must not exceed 5 kilobytes.`,
+        `Variable "${key}" exceeds the maximum size limit. UTF-8 encoded variables (key+value) must not exceed 5 kilobytes.`,
       );
     }
   });

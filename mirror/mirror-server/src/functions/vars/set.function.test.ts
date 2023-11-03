@@ -123,6 +123,22 @@ describe('vars-set', () => {
     });
   }
 
+  test('variable name size limit', async () => {
+    expect(
+      await callSet({
+        ['a'.repeat(1024)]: 'is not too big',
+      }),
+    ).toEqual({
+      success: true,
+    });
+
+    const result = await callSet({
+      ['b'.repeat(1025)]: 'is too big',
+    }).catch(e => e);
+    expect(result).toBeInstanceOf(HttpsError);
+    expect((result as HttpsError).code).toBe('invalid-argument');
+  });
+
   test('variable size limit', async () => {
     expect(
       await callSet({
