@@ -173,7 +173,7 @@ export function How() {
   const [rReflectState, setRReflectState] = useState<DemoReflectState>();
 
   useEffect(() => {
-    const cleanup = async () => {
+    const cleanup = () => {
       const reflects = [
         iReflectState?.reflect1,
         iReflectState?.reflect2,
@@ -185,7 +185,7 @@ export function How() {
 
       for (const reflect of reflects) {
         if (reflect) {
-          await reflect.clientID.then(deregisterClientConsole);
+          deregisterClientConsole(reflect.clientID);
           closeReflect(reflect);
         }
       }

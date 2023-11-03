@@ -52,7 +52,7 @@ import {withRead, withWrite} from './with-transactions.js';
 const MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 10 * 2 ** 20; // 10 MB
 
 interface ReplicacheDelegate {
-  clientID: Promise<ClientID>;
+  clientID: ClientID;
   closed: boolean;
   idbName: string;
   name: string;
@@ -207,7 +207,7 @@ async function recoverMutationsOfClientV4(
     isPushDisabled,
     isPullDisabled,
   } = options;
-  const selfClientID = await delegate.clientID;
+  const selfClientID = delegate.clientID;
   if (selfClientID === clientID) {
     return;
   }

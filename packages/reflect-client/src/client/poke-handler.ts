@@ -36,8 +36,8 @@ export class PokeHandler {
   readonly #replicachePoke: (poke: ReplicachePoke) => Promise<void>;
   readonly #presenceManager: PresenceManager;
   readonly #onOutOfOrderPoke: () => MaybePromise<void>;
-  readonly #clientIDPromise: Promise<ClientID>;
-  readonly #lcPromise: Promise<LogContext>;
+  readonly #clientID: ClientID;
+  readonly #lc: LogContext;
   readonly #pokeBuffer: PendingPoke[] = [];
   readonly #bufferSizer: BufferSizer;
   readonly #maxRecentPokeLatenciesSize: number;
@@ -58,31 +58,28 @@ export class PokeHandler {
     replicachePoke: (poke: ReplicachePoke) => Promise<void>,
     presenceManager: PresenceManager,
     onOutOfOrderPoke: () => MaybePromise<void>,
-    clientIDPromise: Promise<ClientID>,
-    lcPromise: Promise<LogContext>,
+    clientID: ClientID,
+    lc: LogContext,
     bufferSizer = new BufferSizer(BUFFER_SIZER_OPTIONS),
     maxRecentPokeLatenciesSize = MAX_RECENT_POKE_LATENCIES_SIZE,
   ) {
     this.#replicachePoke = replicachePoke;
     this.#presenceManager = presenceManager;
     this.#onOutOfOrderPoke = onOutOfOrderPoke;
-    this.#clientIDPromise = clientIDPromise;
-    this.#lcPromise = lcPromise.then(lc => lc.withContext('PokeHandler'));
+    this.#clientID = clientID;
+    this.#lc = lc.withContext('PokeHandler');
     this.#bufferSizer = bufferSizer;
     this.#maxRecentPokeLatenciesSize = maxRecentPokeLatenciesSize;
   }
 
-  async handlePoke(pokeBody: PokeBody): Promise<number | undefined> {
-    const lc = (await this.#lcPromise).withContext(
-      'requestID',
-      pokeBody.requestID,
-    );
+  handlePoke(pokeBody: PokeBody): number | undefined {
+    const lc = this.#lc.withContext('requestID', pokeBody.requestID);
     lc.debug?.('Applying poke', pokeBody);
     if (pokeBody.debugServerBufferMs) {
       lc.debug?.('server buffer ms', pokeBody.debugServerBufferMs);
     }
     const now = Date.now();
-    const thisClientID = await this.#clientIDPromise;
+    const thisClientID = this.#clientID;
     let lastMutationIDChangeForSelf: number | undefined;
     let bufferNeededMs = undefined;
     for (const poke of pokeBody.pokes) {
@@ -142,10 +139,7 @@ export class PokeHandler {
   }
 
   #rafCallback = async () => {
-    const rafLC = (await this.#lcPromise).withContext(
-      'rafAt',
-      Math.floor(performance.now()),
-    );
+    const rafLC = this.#lc.withContext('rafAt', Math.floor(performance.now()));
     if (this.#pokeBuffer.length === 0) {
       rafLC.debug?.('stopping playback loop');
       this.#pokePlaybackLoopRunning = false;
@@ -167,7 +161,7 @@ export class PokeHandler {
       const now = Date.now();
       lc.debug?.('got poke lock at', now);
       const toMerge: Poke[] = [];
-      const thisClientID = await this.#clientIDPromise;
+      const thisClientID = this.#clientID;
       let maxBufferNeededMs = Number.MIN_SAFE_INTEGER;
       let timedPokeCount = 0;
       let missedTimedPokeCount = 0;
@@ -330,10 +324,8 @@ export class PokeHandler {
     });
   }
 
-  async handleDisconnect(): Promise<void> {
-    (await this.#lcPromise).debug?.(
-      'clearing buffer and playback offset due to disconnect',
-    );
+  handleDisconnect(): void {
+    this.#lc.debug?.('clearing buffer and playback offset due to disconnect');
     this.#pokeBuffer.length = 0;
     this.#playbackOffsetMs = undefined;
     this.#bufferSizer.reset();

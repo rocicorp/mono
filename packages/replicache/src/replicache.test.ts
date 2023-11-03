@@ -472,7 +472,7 @@ test('HTTP status pull', async () => {
     pullURL,
   });
 
-  const clientID = await rep.clientID;
+  const {clientID} = rep;
   let okCalled = false;
   let i = 0;
   fetchMock.post(pullURL, () => {
@@ -1253,7 +1253,7 @@ test('onSync', async () => {
 
   expect(onSync.callCount).to.equal(0);
 
-  const clientID = await rep.clientID;
+  const {clientID} = rep;
   fetchMock.postOnce(pullURL, makePullResponseV1(clientID, 2));
   rep.pull();
   await tickAFewTimes(15);
@@ -1405,7 +1405,7 @@ test('push and pull concurrently', async () => {
 
   const requests: string[] = [];
 
-  const clientID = await rep.clientID;
+  const {clientID} = rep;
   fetchMock.post(pushURL, () => {
     requests.push(pushURL);
     return {};
@@ -1485,17 +1485,17 @@ test('clientID', async () => {
     /^[0-9:A-z]{8}-[0-9:A-z]{4}-4[0-9:A-z]{3}-[0-9:A-z]{4}-[0-9:A-z]{12}$/;
 
   let rep = await replicacheForTesting('clientID');
-  const clientID = await rep.clientID;
+  const {clientID} = rep;
   expect(clientID).to.match(re);
   await rep.close();
 
   const rep2 = await replicacheForTesting('clientID2');
-  const clientID2 = await rep2.clientID;
+  const clientID2 = rep2.clientID;
   expect(clientID2).to.match(re);
   expect(clientID2).to.not.equal(clientID);
 
   rep = await replicacheForTesting('clientID');
-  const clientID3 = await rep.clientID;
+  const clientID3 = rep.clientID;
   expect(clientID3).to.match(re);
   // With SDD we never reuse client IDs.
   expect(clientID3).to.not.equal(clientID);
@@ -1505,7 +1505,7 @@ test('clientID', async () => {
     name: 'clientID4',
     pullInterval: null,
   });
-  const clientID4 = await rep4.clientID;
+  const clientID4 = rep4.clientID;
   expect(clientID4).to.match(re);
   await rep4.close();
 });
@@ -1515,7 +1515,7 @@ test('profileID', async () => {
 
   const rep = await replicacheForTesting('clientID');
   const profileID = await rep.profileID;
-  expect(profileID).to.not.equal(await rep.clientID);
+  expect(profileID).to.not.equal(rep.clientID);
   expect(profileID).to.match(re);
   await rep.close();
 
@@ -1539,7 +1539,7 @@ test('pull and index update', async () => {
     pullURL,
     indexes: {[indexName]: {jsonPointer: '/id'}},
   });
-  const clientID = await rep.clientID;
+  const {clientID} = rep;
 
   let lastMutationID = 0;
   async function testPull(opt: {
@@ -1620,7 +1620,7 @@ async function populateDataUsingPull<
   // eslint-disable-next-line @typescript-eslint/ban-types
   MD extends MutatorDefs = {},
 >(rep: ReplicacheTest<MD>, data: Record<string, ReadonlyJSONValue>) {
-  const clientID = await rep.clientID;
+  const {clientID} = rep;
   fetchMock.postOnce(rep.pullURL, {
     cookie: '',
     lastMutationIDChanges: {[clientID]: 2},
@@ -1654,7 +1654,7 @@ test('pull mutate options', async () => {
     ...disableAllBackgroundProcesses,
     enablePullAndPushInOpen: false,
   });
-  const clientID = await rep.clientID;
+  const {clientID} = rep;
   const log: number[] = [];
 
   fetchMock.post(pullURL, () => {
@@ -2018,14 +2018,14 @@ test('overlapping open/close', async () => {
       name,
       pullInterval,
     });
-    await rep.clientID;
+    await rep.clientGroupID;
     const p = rep.close();
     const rep2 = new Replicache({
       licenseKey: TEST_LICENSE_KEY,
       name,
       pullInterval,
     });
-    await rep2.clientID;
+    await rep2.clientGroupID;
     const p2 = rep2.close();
     await p;
     await p2;
@@ -2164,13 +2164,13 @@ test('client ID is set correctly on transactions', async () => {
     },
   );
 
-  const repClientID = await rep.clientID;
+  const {clientID} = rep;
 
   await rep.query(tx => {
-    expect(tx.clientID).to.equal(repClientID);
+    expect(tx.clientID).to.equal(clientID);
   });
 
-  await rep.mutate.expectClientID(repClientID);
+  await rep.mutate.expectClientID(clientID);
 });
 
 test('mutation timestamps are immutable', async () => {
@@ -2198,7 +2198,7 @@ test('mutation timestamps are immutable', async () => {
   await rep.invokePush();
   expect(pending).deep.equal([
     {
-      clientID: await rep.clientID,
+      clientID: rep.clientID,
       id: 1,
       name: 'foo',
       args: null,
@@ -2211,7 +2211,7 @@ test('mutation timestamps are immutable', async () => {
   pending = [];
   await tickAFewTimes();
 
-  const clientID = await rep.clientID;
+  const {clientID} = rep;
   const poke: Poke = {
     baseCookie: null,
     pullResponse: makePullResponseV1(
@@ -2237,7 +2237,7 @@ test('mutation timestamps are immutable', async () => {
   await rep.invokePush();
   expect(pending).deep.equal([
     {
-      clientID: await rep.clientID,
+      clientID: rep.clientID,
       id: 1,
       name: 'foo',
       args: null,
@@ -2274,7 +2274,7 @@ suite('check for client not found in visibilitychange', () => {
       onClientStateNotFound.called = false;
       rep.onClientStateNotFound = onClientStateNotFound;
 
-      const clientID = await rep.clientID;
+      const {clientID} = rep;
       await deleteClientForTesting(clientID, rep.perdag);
 
       consoleErrorStub.resetHistory();

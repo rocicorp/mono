@@ -8,11 +8,12 @@ import {
 import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from 'shared/src/abort-error.js';
-import {assert} from 'shared/src/asserts.js';
+import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {initBgIntervalProcess} from './bg-interval.js';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
+import {uuid as makeUuid} from './uuid.js';
 import {uuidChunkHasher} from './dag/chunk.js';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
@@ -325,9 +326,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
   }
   #closed = false;
   #online = true;
+  readonly #clientID = makeUuid();
+  #root: Hash | undefined;
   readonly #ready: Promise<void>;
   readonly #profileIDPromise: Promise<string>;
-  readonly #clientIDPromise: Promise<string>;
   readonly #clientGroupIDPromise: Promise<string>;
   readonly #licenseCheckPromise: Promise<boolean>;
 
@@ -337,7 +339,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
    */
   readonly #licenseActivePromise: Promise<boolean>;
   #testLicenseKeyTimeout: ReturnType<typeof setTimeout> | null = null;
-  #root: Promise<Hash | undefined> = Promise.resolve(undefined);
   readonly #mutatorRegistry: MutatorDefs = {};
 
   /**
@@ -606,8 +607,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
     this.#profileIDPromise = profileIDResolver.promise;
     const clientGroupIDResolver = resolver<string>();
     this.#clientGroupIDPromise = clientGroupIDResolver.promise;
-    const clientIDResolver = resolver<string>();
-    this.#clientIDPromise = clientIDResolver.promise;
 
     this.#mutationRecovery = new MutationRecovery({
       delegate: this,
@@ -632,7 +631,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
       indexes,
       profileIDResolver.resolve,
       clientGroupIDResolver.resolve,
-      clientIDResolver.resolve,
       readyResolver.resolve,
       licenseCheckResolver.resolve,
       licenseActiveResolver.resolve,
@@ -643,36 +641,34 @@ export class Replicache<MD extends MutatorDefs = {}> {
     indexes: IndexDefinitions,
     profileIDResolver: (profileID: string) => void,
     resolveClientGroupID: (clientGroupID: ClientGroupID) => void,
-    resolveClientID: (clientID: ClientID) => void,
     resolveReady: () => void,
     resolveLicenseCheck: (valid: boolean) => void,
     resolveLicenseActive: (active: boolean) => void,
   ): Promise<void> {
+    const {clientID} = this;
     // If we are currently closing a Replicache instance with the same name,
     // wait for it to finish closing.
     await closingInstances.get(this.name);
     await this.#idbDatabases.getProfileID().then(profileIDResolver);
     await this.#idbDatabases.putDatabase(this.#idbDatabase);
-    const [clientID, client, headHash, clients, isNewClientGroup] =
-      await initClientV6(
-        this.#lc,
-        this.#perdag,
-        Object.keys(this.#mutatorRegistry),
-        indexes,
-        FormatVersion.Latest,
-      );
+    const [client, headHash, clients, isNewClientGroup] = await initClientV6(
+      clientID,
+      this.#lc,
+      this.#perdag,
+      Object.keys(this.#mutatorRegistry),
+      indexes,
+      FormatVersion.Latest,
+    );
 
     resolveClientGroupID(client.clientGroupID);
-    resolveClientID(clientID);
     await withWrite(this.#memdag, write =>
       write.setHead(DEFAULT_HEAD_NAME, headHash),
     );
 
+    this.#root = await getRoot(this.#memdag, DEFAULT_HEAD_NAME);
+
     // Now we have a profileID, a clientID, a clientGroupID and DB!
     resolveReady();
-
-    this.#root = this.#getRoot();
-    await this.#root;
 
     await this.#licenseCheck(resolveLicenseCheck);
 
@@ -736,7 +732,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
   };
 
   async #checkForClientStateNotFoundAndCallHandler(): Promise<boolean> {
-    const clientID = await this.#clientIDPromise;
+    const {clientID} = this;
     const hasClientState = await withRead(this.#perdag, read =>
       persistHasClientState(clientID, read),
     );
@@ -885,8 +881,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * The client ID for this instance of Replicache. Each instance of Replicache
    * gets a unique client ID.
    */
-  get clientID(): Promise<string> {
-    return this.#clientIDPromise;
+  get clientID(): string {
+    return this.#clientID;
   }
 
   /**
@@ -963,18 +959,11 @@ export class Replicache<MD extends MutatorDefs = {}> {
     resolve();
   }
 
-  async #getRoot(): Promise<Hash | undefined> {
-    if (this.#closed) {
-      return undefined;
-    }
-    await this.#ready;
-    return getRoot(this.#memdag, DEFAULT_HEAD_NAME);
-  }
-
-  async #checkChange(root: Hash | undefined, diffs: DiffsMap): Promise<void> {
-    const currentRoot = await this.#root; // instantaneous except maybe first time
-    if (root !== undefined && root !== currentRoot) {
-      this.#root = Promise.resolve(root);
+  async #checkChange(root: Hash, diffs: DiffsMap): Promise<void> {
+    const currentRoot = this.#root;
+    assertNotUndefined(currentRoot);
+    if (root !== currentRoot) {
+      this.#root = root;
       await this.#subscriptions.fire(diffs);
     }
   }
@@ -986,7 +975,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       }
 
       await this.#ready;
-      const clientID = await this.#clientIDPromise;
+      const {clientID} = this;
       const lc = this.#lc
         .withContext('maybeEndPull')
         .withContext('requestID', requestID);
@@ -1119,7 +1108,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     result: R;
     authFailure: boolean;
   }> {
-    const clientID = await this.clientID;
+    const {clientID} = this;
     let reauthAttempts = 0;
     let lastResult;
     lc = lc.withContext(verb);
@@ -1196,7 +1185,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     await this.#ready;
     const profileID = await this.#profileIDPromise;
-    const clientID = await this.#clientIDPromise;
+    const {clientID} = this;
     const clientGroupID = await this.#clientGroupIDPromise;
     return this.#wrapInOnlineCheck(async () => {
       const {result: pusherResult} = await this.#wrapInReauthRetries(
@@ -1290,8 +1279,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
     // together. Since the direction is now reversed, creating and adding a request ID
     // here is kind of silly. We should consider creating the request ID
     // on the *server* and passing it down in the poke for inclusion here in the log
-    // context.
-    const clientID = await this.#clientIDPromise;
+    // context
+    const {clientID} = this;
     const requestID = newRequestID(clientID);
     const lc = this.#lc
       .withContext('handlePullResponse')
@@ -1338,7 +1327,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     }
     await this.#ready;
     const profileID = await this.profileID;
-    const clientID = await this.#clientIDPromise;
+    const {clientID} = this;
     const clientGroupID = await this.#clientGroupIDPromise;
     const {
       result: {beginPullResponse, requestID},
@@ -1381,7 +1370,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     assert(!this.#persistIsRunning);
     this.#persistIsRunning = true;
     try {
-      const clientID = await this.clientID;
+      const {clientID} = this;
       await this.#ready;
       if (this.#closed) {
         return;
@@ -1409,7 +1398,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this.#persistIsRunning = false;
     }
 
-    const clientID = await this.clientID;
+    const {clientID} = this;
     const clientGroupID = await this.#clientGroupIDPromise;
     assert(clientGroupID);
     this.#onPersist({clientID, clientGroupID});
@@ -1417,7 +1406,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
   async #refresh(): Promise<void> {
     await this.#ready;
-    const clientID = await this.clientID;
+    const {clientID} = this;
     if (this.#closed) {
       return;
     }
@@ -1604,7 +1593,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
   #queryInternal: QueryInternal = async body => {
     await this.#ready;
-    const clientID = await this.#clientIDPromise;
+    const {clientID} = this;
     return withRead(this.#memdag, async dagRead => {
       try {
         const dbRead = await readFromDefaultHead(dagRead, FormatVersion.Latest);
@@ -1663,7 +1652,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     }
 
     await this.#ready;
-    const clientID = await this.#clientIDPromise;
+    const {clientID} = this;
     return withWriteNoImplicitCommit(this.#memdag, async dagWrite => {
       try {
         const headHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite);
@@ -1712,7 +1701,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       ex instanceof ChunkNotFoundError &&
       (await this.#checkForClientStateNotFoundAndCallHandler())
     ) {
-      return new ClientStateNotFoundError(await this.#clientIDPromise);
+      return new ClientStateNotFoundError(this.clientID);
     }
 
     return ex;
@@ -1748,12 +1737,11 @@ export class Replicache<MD extends MutatorDefs = {}> {
         throw new Error('Missing main head');
       }
       const pending = await localMutations(mainHeadHash, dagRead);
-      const clientID = await this.#clientIDPromise;
       return Promise.all(
         pending.map(async p => {
           assertLocalCommitDD31(p);
           return {
-            id: await p.getMutationID(clientID, dagRead),
+            id: await p.getMutationID(this.clientID, dagRead),
             name: p.meta.mutatorName,
             args: p.meta.mutatorArgsJSON,
             clientID: p.meta.clientID,

@@ -1,7 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {Patch} from 'reflect-protocol';
 import type {ClientID} from 'replicache';
-import {Lock} from '@rocicorp/lock';
 
 export type SubscribeToPresenceCallback = (
   presentClientIDs: ReadonlyArray<ClientID>,
@@ -12,61 +11,46 @@ type PresenceSubscription = {
 };
 
 export class PresenceManager {
-  readonly #clientIDPromise: Promise<ClientID>;
-  readonly #lcPromise: Promise<LogContext>;
+  readonly #clientID: ClientID;
+  readonly #lc: LogContext;
   readonly #subscriptions = new Set<PresenceSubscription>();
   readonly #pendingInitial = new Set<PresenceSubscription>();
-  readonly #lock = new Lock();
   #initialRunsScheduled = false;
-  #presentClientIDsInitialized = false;
-  #presentClientIDs: ClientID[] = [];
+  #presentClientIDs: ClientID[];
 
-  constructor(
-    clientIDPromise: Promise<ClientID>,
-    lcPromise: Promise<LogContext>,
-  ) {
-    this.#clientIDPromise = clientIDPromise;
-    this.#lcPromise = lcPromise;
-    void this.#updateToOnlySelfPresent().catch(async e => {
-      (await lcPromise).error?.(
-        'Unexpected error initializing presence manager',
-        e,
-      );
-    });
+  constructor(clientID: ClientID, lc: LogContext) {
+    this.#clientID = clientID;
+    this.#presentClientIDs = [clientID];
+    this.#lc = lc;
   }
 
   updatePresence(patch: Patch) {
-    return this.#lock.withLock(async () => {
-      const clientID = await this.#clientIDPromise;
-      const lc = await this.#lcPromise;
-      if (patch.length === 0) {
-        return;
+    if (patch.length === 0) {
+      return;
+    }
+    const prior = this.#presentClientIDs;
+    const updated = new Set(this.#presentClientIDs);
+    for (const op of patch) {
+      switch (op.op) {
+        case 'clear':
+          updated.clear();
+          break;
+        case 'put':
+          updated.add(op.key);
+          break;
+        case 'del':
+          updated.delete(op.key);
+          break;
       }
-      this.#presentClientIDsInitialized = true;
-      const prior = this.#presentClientIDs;
-      const updated = new Set(this.#presentClientIDs);
-      for (const op of patch) {
-        switch (op.op) {
-          case 'clear':
-            updated.clear();
-            break;
-          case 'put':
-            updated.add(op.key);
-            break;
-          case 'del':
-            updated.delete(op.key);
-            break;
-        }
+    }
+    updated.add(this.#clientID);
+    if (!setEqual(prior, updated)) {
+      this.#presentClientIDs = Array.from(updated);
+      for (const sub of this.#subscriptions) {
+        callSubscriptionCallback(sub, this.#presentClientIDs, this.#lc);
+        this.#pendingInitial.delete(sub);
       }
-      updated.add(clientID);
-      if (!setEqual(prior, updated)) {
-        this.#presentClientIDs = Array.from(updated);
-        for (const sub of this.#subscriptions) {
-          callSubscriptionCallback(sub, this.#presentClientIDs, lc);
-          this.#pendingInitial.delete(sub);
-        }
-      }
-    });
+    }
   }
 
   addSubscription(callback: SubscribeToPresenceCallback): () => void {
@@ -80,17 +64,14 @@ export class PresenceManager {
     };
   }
 
-  #scheduleInitialSubscriptionRun(subscription: PresenceSubscription) {
-    if (!this.#presentClientIDsInitialized) {
-      return;
-    }
+  #scheduleInitialSubscriptionRun(subscription: PresenceSubscription): void {
     this.#pendingInitial.add(subscription);
     if (!this.#initialRunsScheduled) {
       this.#initialRunsScheduled = true;
       // Ensure initial run is always async
       // blog.ometer.com/2011/07/24/callbacks-synchronous-and-asynchronous/
-      queueMicrotask(async () => {
-        const lc = await this.#lcPromise;
+      queueMicrotask(() => {
+        const lc = this.#lc;
         this.#initialRunsScheduled = false;
         for (const sub of this.#pendingInitial) {
           if (this.#subscriptions.has(sub)) {
@@ -106,12 +87,12 @@ export class PresenceManager {
     this.#subscriptions.clear();
   }
 
-  handleDisconnect(): Promise<void> {
-    return this.#updateToOnlySelfPresent();
+  handleDisconnect(): void {
+    this.#updateToOnlySelfPresent();
   }
 
-  #updateToOnlySelfPresent(): Promise<void> {
-    return this.updatePresence([{op: 'clear'}]);
+  #updateToOnlySelfPresent(): void {
+    this.updatePresence([{op: 'clear'}]);
   }
 }
 

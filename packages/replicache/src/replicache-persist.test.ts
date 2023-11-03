@@ -63,8 +63,7 @@ test('basic persist & load', async () => {
   const rep = await replicacheForTesting('persist-test', {
     pullURL,
   });
-  const clientID = await rep.clientID;
-
+  const {clientID} = rep;
   perdag = new StoreImpl(
     new IDBStore(rep.idbName),
     uuidChunkHasher,
@@ -143,7 +142,7 @@ test('basic persist & load', async () => {
     expect(await tx.get('b')).to.equal(2);
   });
 
-  expect(await rep.clientID).to.not.equal(await rep2.clientID);
+  expect(rep.clientID).to.not.equal(rep2.clientID);
 
   await perdag.close();
 });
@@ -159,7 +158,7 @@ suite('onClientStateNotFound', () => {
     await rep.mutate.addData({foo: 'bar'});
     await rep.persist();
 
-    const clientID = await rep.clientID;
+    const {clientID} = rep;
     await deleteClientForTesting(clientID, rep.perdag);
 
     const onClientStateNotFound = sinon.fake();
@@ -190,7 +189,7 @@ suite('onClientStateNotFound', () => {
 
     await rep.mutate.addData({foo: 'bar'});
     await rep.persist();
-    const clientID = await rep.clientID;
+    const {clientID} = rep;
     await deleteClientForTesting(clientID, rep.perdag);
 
     // Need a real timeout here.
@@ -212,7 +211,7 @@ suite('onClientStateNotFound', () => {
       {useUniqueName: false},
     );
 
-    const clientID2 = await rep2.clientID;
+    const {clientID: clientID2} = rep2;
 
     await deleteClientForTesting(clientID2, rep2.perdag);
 
@@ -257,7 +256,7 @@ suite('onClientStateNotFound', () => {
 
     await rep.mutate.addData({foo: 'bar'});
     await rep.persist();
-    const clientID = await rep.clientID;
+    const {clientID} = rep;
     await deleteClientForTesting(clientID, rep.perdag);
     await rep.close();
 
@@ -274,7 +273,7 @@ suite('onClientStateNotFound', () => {
       {useUniqueName: false},
     );
 
-    const clientID2 = await rep2.clientID;
+    const {clientID: clientID2} = rep2;
     await deleteClientForTesting(clientID2, rep2.perdag);
 
     // Cannot simply gcClientGroups because the client group has pending mutations.

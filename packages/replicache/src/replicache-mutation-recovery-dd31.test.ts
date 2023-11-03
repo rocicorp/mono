@@ -1557,7 +1557,7 @@ suite('DD31', () => {
     expect(rep.online).to.equal(false);
     expect(rep.recoverMutationsFake.callCount).to.equal(1);
 
-    const clientID = await rep.clientID;
+    const {clientID} = rep;
     fetchMock.reset();
     fetchMock.post(pullURL, {
       cookie: 'test_cookie',

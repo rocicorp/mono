@@ -67,7 +67,7 @@ export type MetricManagerOptions = {
   host: string;
   source: string;
   reporter: MetricsReporter;
-  lc: Promise<LogContext>;
+  lc: LogContext;
 };
 
 /**
@@ -78,7 +78,7 @@ export class MetricManager {
   #reportIntervalMs: number;
   #host: string;
   #reporter: MetricsReporter;
-  #lc: Promise<LogContext>;
+  #lc: LogContext;
   #timerID: number | null;
 
   constructor(opts: MetricManagerOptions) {
@@ -209,7 +209,7 @@ export class MetricManager {
   // Flushes all metrics to an array of time series (plural), one Series
   // per metric.
   async flush() {
-    const lc = await this.#lc;
+    const lc = this.#lc;
     if (this.#timerID === null) {
       lc.error?.('MetricManager.flush() called but already stopped');
       return;
@@ -238,9 +238,7 @@ export class MetricManager {
 
   stop() {
     if (this.#timerID === null) {
-      void this.#lc.then(
-        l => l.error?.('MetricManager.stop() called but already stopped'),
-      );
+      this.#lc.error?.('MetricManager.stop() called but already stopped');
       return;
     }
     clearInterval(this.#timerID);

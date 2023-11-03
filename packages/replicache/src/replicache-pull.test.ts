@@ -69,7 +69,7 @@ test('pull', async () => {
   await deleteTodo({id: id2});
 
   expect(deleteCount).to.equal(2);
-  const clientID = await rep.clientID;
+  const {clientID} = rep;
   fetchMock.postOnce(
     pullURL,
     makePullResponseV1(clientID, 2, [

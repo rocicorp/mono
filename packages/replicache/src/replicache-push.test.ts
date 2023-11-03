@@ -58,7 +58,7 @@ test('push', async () => {
   });
   await tickAFewTimes();
   const {mutations} = await fetchMock.lastCall().request.json();
-  const clientID = await rep.clientID;
+  const {clientID} = rep;
   expect(mutations).to.deep.equal([
     {
       clientID,

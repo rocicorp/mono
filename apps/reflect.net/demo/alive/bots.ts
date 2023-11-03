@@ -81,13 +81,14 @@ export class Bots {
   readonly #cleanup: () => void;
   #raf = 0;
 
-  #r: Reflect<M>;
-  #clientID: ClientID | undefined = undefined;
+  readonly #r: Reflect<M>;
+  readonly #clientID: ClientID;
   #isBotController = false;
   #pieces: Record<string, PieceInfo> | undefined = undefined;
 
   constructor(r: Reflect<M>, home: Rect, stage: Rect) {
     this.#r = r;
+    this.#clientID = r.clientID;
     this.#home = home;
     this.#stage = stage;
 
@@ -108,9 +109,6 @@ export class Bots {
 
     window.addEventListener('pointermove', handlePointerMove);
     const handleKeyPress = async (e: KeyboardEvent) => {
-      if (!this.#clientID) {
-        return;
-      }
       if (e.key === '`') {
         if (this.#currentRecording) {
           console.log(
@@ -147,7 +145,6 @@ export class Bots {
             }));
             const botID = bot.clientID + i;
             this.#startPlayback(
-              this.#clientID,
               botID,
               transformedMoves,
               'puzzle',
@@ -162,7 +159,7 @@ export class Bots {
     window.addEventListener('keypress', handleKeyPress);
 
     const maybeLaunchBots = async () => {
-      if (this.#clientID && this.#isBotController) {
+      if (this.#isBotController) {
         const currentNumPuzzleBots = [...this.#botPlaybackByID.values()].filter(
           p => p.type === 'puzzle',
         ).length;
@@ -187,13 +184,7 @@ export class Bots {
         }
 
         for (const bot of toPlayback) {
-          this.#startPlayback(
-            this.#clientID,
-            bot.clientID,
-            bot.moves,
-            bot.type,
-            false,
-          );
+          this.#startPlayback(bot.clientID, bot.moves, bot.type, false);
         }
         this.#maybeRaf();
       }
@@ -203,7 +194,6 @@ export class Bots {
     void maybeLaunchBots();
     const interval = setInterval(maybeLaunchBots, 3_000);
 
-    void r.clientID.then(clientID => (this.#clientID = clientID));
     const cleanupSubscribe = r.subscribe(
       async tx => {
         const botController = (await getBotController(tx)) ?? null;
@@ -241,7 +231,6 @@ export class Bots {
   }
 
   #startPlayback(
-    clientID: string,
     botID: string,
     moves: BotMove[],
     type: BotType,
@@ -258,7 +247,7 @@ export class Bots {
         botLocations[Math.floor(Math.random() * botLocations.length)],
       ),
       focused: true,
-      botControllerID: clientID,
+      botControllerID: this.#clientID,
       manuallyTriggeredBot,
     });
     this.#botPlaybackByID.set(botID, {

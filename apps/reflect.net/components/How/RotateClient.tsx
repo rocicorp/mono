@@ -40,13 +40,14 @@ export function RotateClient({
   });
 
   useEffect(() => {
-    void reflect?.clientID.then(id => {
-      setCurrentClientID(id);
-      registerClientConsole(id, (log: string) =>
-        clientConsoleDispatch({type: 'APPEND', payload: log}),
-      );
-    });
-  }, [reflect, clientConsoleDispatch]);
+    if (!reflect) {
+      return;
+    }
+    registerClientConsole(reflect.clientID, (log: string) =>
+      clientConsoleDispatch({type: 'APPEND', payload: log}),
+    );
+    setCurrentClientID(reflect.clientID);
+  }, [clientConsoleDispatch, reflect]);
 
   return (
     <div className={`${styles.client} ${styles.clientExpanded}`}>
