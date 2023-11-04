@@ -105,6 +105,7 @@ export type {
   DeepReadonly,
   DeepReadonlyObject,
   ReadTransaction,
+  TransactionEnvironment,
   TransactionLocation,
   TransactionReason,
   WriteTransaction,

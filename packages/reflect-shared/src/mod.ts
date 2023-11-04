@@ -45,6 +45,7 @@ export type {
   ReadonlyJSONObject,
   ReadonlyJSONValue,
   RequestOptions,
+  TransactionEnvironment,
   TransactionLocation,
   TransactionReason,
   UpdateNeededReason,

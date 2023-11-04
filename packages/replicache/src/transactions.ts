@@ -125,7 +125,8 @@ export class ReadTransactionImpl implements ReadTransaction {
    * The location in which this transaction is being used. This is either `client` or `server`.
    */
   readonly location: TransactionLocation;
-  readonly environment: TransactionLocation; // Support the deprecated API.
+  /** @deprecated Use `location` instead. */
+  readonly environment: TransactionLocation;
 
   constructor(
     clientID: ClientID,
