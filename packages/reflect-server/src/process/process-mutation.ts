@@ -1,12 +1,13 @@
+import type {LogContext} from '@rocicorp/logger';
+import type {Version} from 'reflect-protocol';
+import type {Env} from 'reflect-shared';
+import {timed} from 'shared/src/timed.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {ReplicacheTransaction} from '../storage/replicache-transaction.js';
 import type {Storage} from '../storage/storage.js';
 import {getClientRecord, putClientRecord} from '../types/client-record.js';
-import {putVersion} from '../types/version.js';
-import type {Version} from 'reflect-protocol';
-import type {LogContext} from '@rocicorp/logger';
 import type {PendingMutation} from '../types/mutation.js';
-import {timed} from 'shared/src/timed.js';
+import {putVersion} from '../types/version.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Mutator = (tx: ReplicacheTransaction, args: any) => Promise<void>;
@@ -19,18 +20,20 @@ export type MutatorMap = Map<string, Mutator>;
 // - client record of mutating client will have been updated
 export function processMutation(
   lc: LogContext,
+  env: Env,
   pendingMutation: PendingMutation,
   mutators: MutatorMap,
   storage: Storage,
   version: Version,
 ): Promise<number | undefined> {
   return timed(lc.debug, 'processMutation', () =>
-    processMutationTimed(lc, pendingMutation, mutators, storage, version),
+    processMutationTimed(lc, env, pendingMutation, mutators, storage, version),
   );
 }
 
 async function processMutationTimed(
   lc: LogContext,
+  env: Env,
   pendingMutation: PendingMutation,
   mutators: MutatorMap,
   storage: Storage,
@@ -76,6 +79,7 @@ async function processMutationTimed(
     pendingMutation.id,
     version,
     pendingMutation.auth,
+    env,
   );
   try {
     const mutator = mutators.get(pendingMutation.name);

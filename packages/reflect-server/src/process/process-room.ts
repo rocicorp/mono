@@ -1,6 +1,8 @@
 // Processes zero or more mutations against a room, returning necessary pokes
 
 import type {LogContext} from '@rocicorp/logger';
+import type {Poke} from 'reflect-protocol';
+import type {Env} from 'reflect-shared';
 import {must} from 'shared/src/must.js';
 import {fastForwardRoom} from '../ff/fast-forward.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
@@ -9,19 +11,19 @@ import {EntryCache} from '../storage/entry-cache.js';
 import type {ClientPoke} from '../types/client-poke.js';
 import {getClientRecord, putClientRecord} from '../types/client-record.js';
 import type {ClientID, ClientMap} from '../types/client-state.js';
+import {getConnectedClients} from '../types/connected-clients.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {addPresence} from './add-presence.js';
 import {processFrame} from './process-frame.js';
 import type {MutatorMap} from './process-mutation.js';
-import type {Poke} from 'reflect-protocol';
-import {getConnectedClients} from '../types/connected-clients.js';
 
 export const FRAME_LENGTH_MS = 1000 / 60;
 const FLUSH_SIZE_THRESHOLD_FOR_LOG_FLUSH = 500;
 
 export async function processRoom(
   lc: LogContext,
+  env: Env,
   clients: ClientMap,
   pendingMutations: PendingMutation[],
   numPendingMutationsToProcess: number,
@@ -66,6 +68,7 @@ export async function processRoom(
   clientPokes.push(
     ...(await processFrame(
       lc,
+      env,
       pendingMutations,
       numPendingMutationsToProcess,
       mutators,

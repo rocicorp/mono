@@ -1,5 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {Version} from 'reflect-protocol';
+import type {Env} from 'reflect-shared';
+import type {PendingMutation} from 'replicache';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {ReplicacheTransaction} from '../storage/replicache-transaction.js';
@@ -10,12 +12,12 @@ import {
   putConnectedClients,
 } from '../types/connected-clients.js';
 import {putVersion} from '../types/version.js';
-import type {PendingMutation} from 'replicache';
 
 const NOOP_MUTATION_ID = -1;
 
 export async function processDisconnects(
   lc: LogContext,
+  env: Env,
   disconnectHandler: DisconnectHandler,
   connectedClients: ClientID[],
   pendingMutations: PendingMutation[],
@@ -61,6 +63,7 @@ export async function processDisconnects(
         NOOP_MUTATION_ID,
         nextVersion,
         undefined,
+        env,
       );
       try {
         await disconnectHandler(tx);

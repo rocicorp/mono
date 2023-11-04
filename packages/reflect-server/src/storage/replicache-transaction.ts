@@ -1,9 +1,13 @@
 import type {DelOp, PutOp, Version} from 'reflect-protocol';
-import type {AuthData, WriteTransaction} from 'reflect-shared';
+import type {
+  AuthData,
+  Env,
+  TransactionLocation,
+  WriteTransaction,
+} from 'reflect-shared';
 import {
   ScanNoIndexOptions,
   ScanOptions,
-  TransactionEnvironment,
   TransactionReason,
   isScanIndexOptions,
   makeScanResult,
@@ -27,11 +31,13 @@ export class ReplicacheTransaction implements WriteTransaction {
   readonly clientID: ClientID;
   readonly mutationID: number;
   readonly auth?: AuthData | undefined;
+  readonly env: Env;
   #storage: Storage;
   #version: Version;
 
   readonly reason: TransactionReason = 'authoritative';
-  readonly environment: TransactionEnvironment = 'server';
+  readonly environment: TransactionLocation = 'server';
+  readonly location: TransactionLocation = 'server';
 
   constructor(
     storage: Storage,
@@ -39,12 +45,14 @@ export class ReplicacheTransaction implements WriteTransaction {
     mutationID: number,
     version: Version,
     auth: AuthData | undefined,
+    env: Env,
   ) {
     this.#storage = storage;
     this.clientID = clientID;
     this.#version = version;
     this.mutationID = mutationID;
     this.auth = auth;
+    this.env = env;
   }
 
   /**

@@ -1,4 +1,4 @@
-import type {AuthData} from 'reflect-shared';
+import type {AuthData, Env} from 'reflect-shared';
 import type {MaybePromise} from 'replicache';
 
 /**
@@ -16,4 +16,5 @@ import type {MaybePromise} from 'replicache';
 export type AuthHandler = (
   auth: string,
   roomID: string,
+  env: Env,
 ) => MaybePromise<AuthData | null>;

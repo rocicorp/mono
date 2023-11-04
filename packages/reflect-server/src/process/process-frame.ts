@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {NullableVersion, Patch, Version} from 'reflect-protocol';
+import type {Env} from 'reflect-shared';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
@@ -26,6 +27,7 @@ const EMPTY_PRESENCE: Patch = [];
 // can continue to apply.
 export async function processFrame(
   lc: LogContext,
+  env: Env,
   pendingMutations: PendingMutation[],
   numPendingMutationsToProcess: number,
   mutators: MutatorMap,
@@ -48,6 +50,7 @@ export async function processFrame(
     const mutationCache = new EntryCache(cache);
     const newLastMutationID = await processMutation(
       lc,
+      env,
       pendingMutation,
       mutators,
       mutationCache,
@@ -93,6 +96,7 @@ export async function processFrame(
   const disconnectsCache = new EntryCache(cache);
   await processDisconnects(
     lc,
+    env,
     disconnectHandler,
     clientIDs,
     pendingMutations,

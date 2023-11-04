@@ -9,7 +9,7 @@ import {
   invalidateForUserRequestSchema,
 } from 'reflect-protocol';
 import type {TailErrorKind} from 'reflect-protocol/src/tail.js';
-import type {AuthData} from 'reflect-shared';
+import type {AuthData, Env} from 'reflect-shared';
 import {version} from 'reflect-shared';
 import {assert} from 'shared/src/asserts.js';
 import {timed} from 'shared/src/timed.js';
@@ -73,6 +73,7 @@ export interface AuthDOOptions {
   authApiKey: string;
   logSink: LogSink;
   logLevel: LogLevel;
+  env: Env;
 }
 export type ConnectionKey = {
   userID: string;
@@ -132,6 +133,7 @@ export class BaseAuthDO implements DurableObject {
   readonly #authApiKey: string;
   readonly #lc: LogContext;
   readonly #alarm: AlarmManager;
+  readonly #env: Env;
 
   #revalidateConnectionsTimeoutID: TimeoutID = 0;
 
@@ -148,7 +150,8 @@ export class BaseAuthDO implements DurableObject {
   readonly #authRevalidateConnectionsLock = new Lock();
 
   constructor(options: AuthDOOptions) {
-    const {roomDO, state, authHandler, authApiKey, logSink, logLevel} = options;
+    const {roomDO, state, authHandler, authApiKey, logSink, logLevel, env} =
+      options;
     this.#roomDO = roomDO;
     this.#durableStorage = new DurableStorage(
       state.storage,
@@ -163,6 +166,7 @@ export class BaseAuthDO implements DurableObject {
     registerUnhandledRejectionHandler(lc);
     this.#lc = lc.withContext('doID', state.id.toString());
     this.#alarm = new AlarmManager(state.storage);
+    this.#env = env;
 
     this.#initRoutes();
     this.#lc.info?.('Starting AuthDO. Version:', version);
@@ -578,7 +582,7 @@ export class BaseAuthDO implements DurableObject {
           };
 
           const callHandlerWithTimeout = () =>
-            Promise.race([authHandler(auth, roomID), timeout()]);
+            Promise.race([authHandler(auth, roomID, this.#env), timeout()]);
 
           const [authHandlerAuthData, response] = await timed(
             lc.info,

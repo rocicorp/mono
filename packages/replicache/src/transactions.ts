@@ -20,6 +20,7 @@ import type {ClientID} from './sync/ids.js';
 import {rejectIfClosed, throwIfClosed} from './transaction-closed-error.js';
 
 export type TransactionEnvironment = 'client' | 'server';
+export type TransactionLocation = TransactionEnvironment;
 export type TransactionReason = 'initial' | 'rebase' | 'authoritative';
 
 /**
@@ -45,7 +46,9 @@ export type DeepReadonlyObject<T> = {
  */
 export interface ReadTransaction {
   readonly clientID: ClientID;
-  readonly environment: TransactionEnvironment;
+  /** @deprecated Use `location` instead. */
+  readonly environment: TransactionLocation;
+  readonly location: TransactionLocation;
 
   /**
    * Get a single value from the database. If the `key` is not present this
@@ -119,9 +122,10 @@ export class ReadTransactionImpl implements ReadTransaction {
   protected readonly _lc: LogContext;
 
   /**
-   * The environment in which this transaction is being used. This is either `client` or `server`.
+   * The location in which this transaction is being used. This is either `client` or `server`.
    */
-  readonly environment: TransactionEnvironment;
+  readonly location: TransactionLocation;
+  readonly environment: TransactionLocation; // Support the deprecated API.
 
   constructor(
     clientID: ClientID,
@@ -135,6 +139,7 @@ export class ReadTransactionImpl implements ReadTransaction {
       .withContext(rpcName)
       .withContext('txid', transactionIDCounter++);
     this.environment = 'client';
+    this.location = 'client';
   }
 
   get(key: string): Promise<ReadonlyJSONValue | undefined>;
@@ -201,8 +206,12 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
     this.#tx = tx;
   }
 
-  get environment(): TransactionEnvironment {
-    return this.#tx.environment;
+  get environment(): TransactionLocation {
+    return this.#tx.location;
+  }
+
+  get location(): TransactionLocation {
+    return this.#tx.location;
   }
 
   get clientID(): string {

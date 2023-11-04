@@ -4,10 +4,11 @@ import {
   invalidateForRoomRequestSchema,
   invalidateForUserRequestSchema,
 } from 'reflect-protocol';
-import type {MutatorDefs} from 'reflect-shared';
+import type {Env, MutatorDefs} from 'reflect-shared';
 import {version} from 'reflect-shared';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import * as valita from 'shared/src/valita.js';
+import {ConnectionSecondsReporter} from '../events/connection-seconds.js';
 import type {MutatorMap} from '../process/process-mutation.js';
 import {processPending} from '../process/process-pending.js';
 import {processRoomStart} from '../process/process-room-start.js';
@@ -20,14 +21,17 @@ import {
   type Socket,
 } from '../types/client-state.js';
 import type {PendingMutation} from '../types/mutation.js';
+import {decodeHeaderValue} from '../util/headers.js';
 import {LoggingLock} from '../util/lock.js';
 import {populateLogContextFromRequest} from '../util/log-context-common.js';
 import {randomID} from '../util/rand.js';
+import {AlarmManager} from './alarms.js';
 import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
 import {closeConnections, getConnections} from './connections.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {requireUpgradeHeader, upgradeWebsocketResponse} from './http-util.js';
+import {ROOM_ID_HEADER_NAME} from './internal-headers.js';
 import {handleMessage} from './message.js';
 import {
   AUTH_CONNECTIONS_PATH,
@@ -51,10 +55,6 @@ import {
 } from './router.js';
 import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
-import {AlarmManager} from './alarms.js';
-import {ConnectionSecondsReporter} from '../events/connection-seconds.js';
-import {ROOM_ID_HEADER_NAME} from './internal-headers.js';
-import {decodeHeaderValue} from '../util/headers.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -69,6 +69,7 @@ export interface RoomDOOptions<MD extends MutatorDefs> {
   logLevel: LogLevel;
   allowUnconfirmedWrites: boolean;
   maxMutationsPerTurn: number;
+  env: Env;
 }
 
 export const ROOM_ROUTES = {
@@ -111,6 +112,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
   readonly #alarm: AlarmManager;
   readonly #connectionSecondsReporter: ConnectionSecondsReporter;
+  readonly #env: Env;
 
   constructor(options: RoomDOOptions<MD>) {
     const {
@@ -122,6 +124,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       logSink,
       logLevel,
       maxMutationsPerTurn,
+      env,
     } = options;
 
     this.#mutators = new Map([...Object.entries(mutators)]) as MutatorMap;
@@ -137,6 +140,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     this.#connectionSecondsReporter = new ConnectionSecondsReporter(
       this.#alarm.scheduler,
     );
+    this.#env = env;
     this.#clients = new ConnectionCountTrackingClientMap(
       this.#connectionSecondsReporter,
     );
@@ -213,6 +217,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
           const roomID = decodeHeaderValue(roomIDHeaderValue);
           await processRoomStart(
             lcInLock,
+            this.#env,
             this.#roomStartHandler,
             this.#storage,
             roomID,
@@ -503,6 +508,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     const {maxProcessedMutationTimestamp, nothingToProcess} =
       await processPending(
         lc,
+        this.#env,
         this.#storage,
         this.#clients,
         this.#pendingMutations,

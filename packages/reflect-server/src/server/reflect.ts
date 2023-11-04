@@ -5,6 +5,7 @@ import type {AuthHandler} from './auth.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
 import type {RoomStartHandler} from './room-start.js';
+import {extractVars} from './vars.js';
 import {createWorker} from './worker.js';
 
 export type DatadogMetricsOptions = {
@@ -184,6 +185,7 @@ function createRoomDOClass<
         logLevel,
         allowUnconfirmedWrites,
         maxMutationsPerTurn,
+        env: extractVars(env),
       });
     }
   };
@@ -203,6 +205,7 @@ function createAuthDOClass<
         authApiKey: getAPIKey(env),
         logSink,
         logLevel,
+        env: extractVars(env),
       });
     }
   };
