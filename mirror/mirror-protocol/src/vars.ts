@@ -8,10 +8,17 @@ export const listVarsRequestSchema = v.object({
   decrypted: v.boolean(),
 });
 
+export const envSchema = v.object({
+  name: v.string().optional(),
+  vars: v.record(v.string()),
+});
+
+export type Env = v.Infer<typeof envSchema>;
+
 export const listVarsResponseSchema = v.object({
   ...baseResponseFields,
   decrypted: v.boolean(),
-  vars: v.record(v.string()),
+  envs: v.record(envSchema),
 });
 
 export type ListVarsRequest = v.Infer<typeof listVarsRequestSchema>;
@@ -19,6 +26,7 @@ export type ListVarsResponse = v.Infer<typeof listVarsResponseSchema>;
 
 export const setVarsRequestSchema = v.object({
   ...baseAppRequestFields,
+  // TODO: env: v.string().optional()
   vars: v.record(v.string()),
 });
 
@@ -32,6 +40,7 @@ export type SetVarsResponse = v.Infer<typeof setVarsResponseSchema>;
 
 export const deleteVarsRequestSchema = v.object({
   ...baseAppRequestFields,
+  // TODO: env: v.string().optional()
   vars: v.array(v.string()),
 });
 

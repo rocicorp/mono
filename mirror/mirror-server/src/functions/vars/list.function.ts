@@ -39,7 +39,11 @@ export const list = (firestore: Firestore, secretsClient: SecretsClient) =>
         return {
           success: true,
           decrypted: false,
-          vars: Object.fromEntries(vars.map(([name]) => [name, '*****'])),
+          envs: {
+            ['(default)']: {
+              vars: Object.fromEntries(vars.map(([name]) => [name, '*****'])),
+            },
+          },
         };
       }
       const {secrets: decryptedVars} = await getAppSecrets(
@@ -50,6 +54,10 @@ export const list = (firestore: Firestore, secretsClient: SecretsClient) =>
       return {
         success: true,
         decrypted: true,
-        vars: decryptedVars,
+        envs: {
+          ['(default)']: {
+            vars: decryptedVars,
+          },
+        },
       };
     });

@@ -88,9 +88,13 @@ describe('vars-list', () => {
     expect(await callList(false)).toEqual({
       success: true,
       decrypted: false,
-      vars: {
-        ['DB_PASSWORD']: '*****',
-        ['FOO_HOSTNAME']: '*****',
+      envs: {
+        ['(default)']: {
+          vars: {
+            ['DB_PASSWORD']: '*****',
+            ['FOO_HOSTNAME']: '*****',
+          },
+        },
       },
     });
   });
@@ -99,9 +103,13 @@ describe('vars-list', () => {
     expect(await callList(true)).toEqual({
       success: true,
       decrypted: true,
-      vars: {
-        ['DB_PASSWORD']: 'my password is so secure',
-        ['FOO_HOSTNAME']: 'bar.foo.com',
+      envs: {
+        ['(default)']: {
+          vars: {
+            ['DB_PASSWORD']: 'my password is so secure',
+            ['FOO_HOSTNAME']: 'bar.foo.com',
+          },
+        },
       },
     });
   });
