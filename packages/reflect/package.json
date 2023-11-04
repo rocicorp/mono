@@ -1,7 +1,7 @@
 {
   "name": "@rocicorp/reflect",
   "description": "",
-  "version": "0.36.202310310758+c5a2c3",
+  "version": "0.36.202311040306+73b4ff",
   "license": "SEE LICENSE IN https://roci.dev/terms.html",
   "type": "module",
   "main": "index.js",
