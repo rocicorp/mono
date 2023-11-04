@@ -140,6 +140,26 @@ describe('dev vars', () => {
     });
   });
 
+  test('variable name size limit', () => {
+    setDevVars({
+      ['a'.repeat(1024)]: 'is not too big',
+    });
+
+    let err;
+    try {
+      setDevVars({
+        ['b'.repeat(1025)]: 'is too big',
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(UserError);
+
+    expect(listDevVars()).toEqual({
+      ['a'.repeat(1024)]: 'is not too big',
+    });
+  });
+
   test('variable size limit', () => {
     setDevVars({
       NOT_TOO_BIG: 'a'.repeat(5100),
