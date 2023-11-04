@@ -1,4 +1,4 @@
-import {Env, listVars} from 'mirror-protocol/src/vars.js';
+import {listVars, ListVarsResponse} from 'mirror-protocol/src/vars.js';
 import color from 'picocolors';
 import {ensureAppInstantiated} from '../app-config.js';
 import {authenticate} from '../auth-config.js';
@@ -27,12 +27,16 @@ export async function listVarsHandler(
     $0: command,
     _: [subcommand],
   } = yargs;
-  let envs: Record<string, Env>;
+  let response: ListVarsResponse;
   if (dev) {
-    envs = {
-      dev: {
-        name: 'Local dev',
-        vars: listDevVars(),
+    response = {
+      success: true,
+      decrypted: true,
+      envs: {
+        dev: {
+          name: 'Local dev',
+          vars: listDevVars(),
+        },
       },
     };
   } else {
@@ -40,26 +44,29 @@ export async function listVarsHandler(
     const {appID} = await ensureAppInstantiated(yargs);
     const data = {requester: makeRequester(userID), appID, decrypted: show};
 
-    const response = await listVars(data);
-    envs = response.envs;
+    response = await listVars(data);
   }
-  for (const env of Object.values(envs)) {
+  for (const env of Object.values(response.envs)) {
     const entries = Object.entries(env.vars);
     if (entries.length === 0) {
       console.log(
-        `No variables set. Use '${command} ${subcommand} set${
+        `No environment variables set. Use '${command} ${subcommand} set${
           dev ? ' --dev' : ''
         }' to add them.`,
       );
       continue;
     }
-    const showHelp = dev || show ? '' : ' (use --show to see their values)';
-    if (showHelp) {
+    const name = env.name ?? 'Live';
+    if (!response.decrypted) {
       entries.forEach(entry => {
         entry[1] = color.italic(color.gray('Encrypted'));
       });
+      console.log(
+        `\n${name} environment variables (use --show to see their values):\n`,
+      );
+    } else {
+      console.log(`\n${name} environment variables:\n`);
     }
-    console.log(`\n${env.name ?? 'Live'} environment variables${showHelp}:\n`);
 
     const lines = padColumns([['name', 'value'], ...entries]);
     lines.forEach(([key, value], i) => {
