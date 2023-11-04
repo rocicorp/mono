@@ -2,7 +2,7 @@ import type {DelOp, PutOp, Version} from 'reflect-protocol';
 import type {
   AuthData,
   Env,
-  TransactionEnvironment,
+  TransactionLocation,
   WriteTransaction,
 } from 'reflect-shared';
 import {
@@ -36,8 +36,8 @@ export class ReplicacheTransaction implements WriteTransaction {
   #version: Version;
 
   readonly reason: TransactionReason = 'authoritative';
-  readonly environment: TransactionEnvironment = 'server';
-  readonly location: TransactionEnvironment = 'server';
+  readonly environment: TransactionLocation = 'server';
+  readonly location: TransactionLocation = 'server';
 
   constructor(
     storage: Storage,
