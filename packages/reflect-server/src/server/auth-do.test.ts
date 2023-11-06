@@ -1798,6 +1798,7 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
     },
   );
   const testRequestClone = testRequest.clone();
+  await storeTestConnectionState();
 
   let roomDORequestCount = 0;
   let gotObjectId: DurableObjectId | undefined;
@@ -1836,6 +1837,51 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
   )) as RoomRecord;
   expect(roomID).toEqual(testRoomID);
   expect(roomDORequestCount).toEqual(1);
+  expect(response.status).toEqual(200);
+});
+
+test('authInvalidateForRoom when roomID has no open connections no invalidate request is made to roomDO', async () => {
+  const testRoomID = 'testRoomIDNoConnections';
+  const testRequest = new Request(
+    `https://test.roci.dev/api/auth/v0/invalidateForRoom`,
+    {
+      method: 'post',
+      headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+      body: JSON.stringify({
+        roomID: testRoomID,
+      }),
+    },
+  );
+  await storeTestConnectionState();
+
+  let roomDORequestCount = 0;
+  const testRoomDO: DurableObjectNamespace = {
+    ...createTestDurableObjectNamespace(),
+    get: (id: DurableObjectId) =>
+      // eslint-disable-next-line require-await
+      new TestDurableObjectStub(id, async (request: Request) => {
+        expect(request.headers.get(ROOM_ID_HEADER_NAME)).toEqual(testRoomID);
+        if (isAuthRequest(request)) {
+          roomDORequestCount++;
+        }
+        return new Response('Test Success', {status: 200});
+      }),
+  };
+  const authDO = new TestAuthDO({
+    roomDO: testRoomDO,
+    state,
+    authHandler: () =>
+      Promise.reject(new Error('Unexpected call to authHandler')),
+    authApiKey: TEST_AUTH_API_KEY,
+    logSink: new TestLogSink(),
+    logLevel: 'debug',
+    env: {foo: 'bar'},
+  });
+  await createRoom(authDO, testRoomID);
+
+  const response = await authDO.fetch(testRequest);
+
+  expect(roomDORequestCount).toEqual(0);
   expect(response.status).toEqual(200);
 });
 
@@ -1912,6 +1958,7 @@ test('authInvalidateForRoom when request to roomDO returns error response', asyn
     },
   );
   const testRequestClone = testRequest.clone();
+  await storeTestConnectionState();
 
   let roomDORequestCount = 0;
   let gotObjectId: DurableObjectId | undefined;

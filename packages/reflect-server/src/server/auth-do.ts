@@ -724,6 +724,13 @@ export class BaseAuthDO implements DurableObject {
         lc.debug?.(`authInvalidateForRoom ${roomID} waiting for lock.`);
         return this.#authLock.withWrite(async () => {
           lc.debug?.(`authInvalidateForRoom ${roomID} acquired lock.`);
+          if (!(await roomHasConnections(this.#durableStorage, roomID))) {
+            lc.debug?.(
+              `authInvalidateForRoom ${roomID} no connections to invalidate returning 200.`,
+            );
+            return new Response('Success', {status: 200});
+          }
+
           lc.debug?.(`Sending authInvalidateForRoom request to ${roomID}`);
           // The request to the Room DO must be completed inside the write lock
           // to avoid races with connect requests for this room.
@@ -1085,6 +1092,20 @@ export function connectionKeyFromRoomIndexString(
   }
   return connectionKeyFromString(
     key.substring(indexOfFirstSlashAfterPrefix + 1),
+  );
+}
+
+async function roomHasConnections(
+  storage: DurableStorage,
+  roomID: string,
+): Promise<boolean> {
+  return (
+    (
+      await storage.list(
+        {prefix: getConnectionRoomIndexPrefix(roomID), limit: 1},
+        connectionsByRoomSchema,
+      )
+    ).size > 0
   );
 }
 
