@@ -46,7 +46,7 @@ export type DeepReadonlyObject<T> = {
  */
 export interface ReadTransaction {
   readonly clientID: ClientID;
-  /** @deprecated Use `location` instead. */
+  /** @deprecated Use {@link ReadTransaction.location} instead. */
   readonly environment: TransactionLocation;
   readonly location: TransactionLocation;
 
@@ -125,7 +125,7 @@ export class ReadTransactionImpl implements ReadTransaction {
    * The location in which this transaction is being used. This is either `client` or `server`.
    */
   readonly location: TransactionLocation;
-  /** @deprecated Use `location` instead. */
+  /** @deprecated Use {@link ReadTransaction.location} instead. */
   readonly environment: TransactionLocation;
 
   constructor(
