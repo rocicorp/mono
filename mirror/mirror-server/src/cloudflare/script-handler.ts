@@ -245,7 +245,7 @@ export async function* waitForLiveness(host: string): AsyncGenerator<string> {
   }
 
   const url = `https://${host}/`;
-  yield `Verifying liveness of ${url}/`;
+  yield `Verifying liveness of ${url}`;
   start = Date.now();
   for (let i = 0; ; i++) {
     try {
