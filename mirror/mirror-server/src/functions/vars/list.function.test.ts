@@ -4,10 +4,14 @@ import type {DecodedIdToken} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import type {Request} from 'firebase-functions/v2/https';
-import {ENCRYPTION_KEY_SECRET_NAME} from 'mirror-schema/src/app.js';
 import {encryptUtf8} from 'mirror-schema/src/crypto.js';
 import {appPath} from 'mirror-schema/src/deployment.js';
-import {setApp, setUser} from 'mirror-schema/src/test-helpers.js';
+import {
+  DEFAULT_ENV,
+  ENCRYPTION_KEY_SECRET_NAME,
+  envPath,
+} from 'mirror-schema/src/env.js';
+import {setApp, setEnv, setUser} from 'mirror-schema/src/test-helpers.js';
 import {userPath} from 'mirror-schema/src/user.js';
 import {TestSecrets} from '../../secrets/test-utils.js';
 import {list} from './list.function.js';
@@ -32,6 +36,8 @@ describe('vars-list', () => {
       setApp(firestore, APP_ID, {
         teamID: TEAM_ID,
         name: APP_NAME,
+      }),
+      setEnv(firestore, APP_ID, {
         secrets: {
           ['REFLECT_AUTH_API_KEY']: encryptUtf8(
             'this-is-the-reflect-auth-api-key',
@@ -60,6 +66,7 @@ describe('vars-list', () => {
     // Clean up global emulator data.
     const batch = firestore.batch();
     batch.delete(firestore.doc(appPath(APP_ID)));
+    batch.delete(firestore.doc(envPath(APP_ID, DEFAULT_ENV)));
     batch.delete(firestore.doc(userPath(USER_ID)));
     await batch.commit();
   });

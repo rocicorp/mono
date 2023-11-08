@@ -1,16 +1,8 @@
 import * as v from 'shared/src/valita.js';
-import {encryptedBytesSchema} from './bytes.js';
 import {firestoreDataConverter} from './converter.js';
-import {deploymentOptionsSchema, deploymentSchema} from './deployment.js';
+import {deploymentSchema} from './deployment.js';
 import {DEFAULT_PROVIDER_ID} from './provider.js';
-
-// Name of the SecretManager secret that stores the base64url-encoded
-// key for encrypting app secrets at rest.
-export const ENCRYPTION_KEY_SECRET_NAME = 'APP_SECRETS_ENCRYPTION_KEY';
-
-const appSecretsSchema = v.record(encryptedBytesSchema);
-
-export type AppSecrets = v.Infer<typeof appSecretsSchema>;
+import {timestampSchema} from './timestamp.js';
 
 const scriptRefSchema = v.object({
   namespace: v.string(),
@@ -58,15 +50,6 @@ export const appSchema = v.object({
   // release process.
   serverReleaseChannel: v.string(),
 
-  deploymentOptions: deploymentOptionsSchema,
-
-  // Encrypted payloads of secrets stored on behalf of the app. Some of these are
-  // internal, such as the `REFLECT_AUTH_API_TOKEN`, and some are "Server Variables"
-  // specified by the app developer, transmitted to the Worker via Cloudflare
-  // secrets (using the `REFLECT_VAR_` prefix to distinguish them from internal
-  // vars / bindings).
-  secrets: appSecretsSchema,
-
   // The App document tracks the running and queued deployments and serves as
   // a coordination point for (1) determining if a new deployment is necessary
   // (i.e. if the desired `DeploymentSpec` differs from that which is running)
@@ -74,8 +57,16 @@ export const appSchema = v.object({
   //
   // These fields are transactionally consistent views of the documents in the
   // deployments subcollection.
+  //
+  // TODO: These fields will eventually be moved to an `Instance` doc in an
+  // `instances` subcollection in order to support multiple envs and/or
+  // auto-deployed "preview" instances.
   runningDeployment: deploymentSchema.optional(),
   queuedDeploymentIDs: v.array(v.string()).optional(),
+
+  // The last update time of the Env, which is tracked here to trigger a
+  // redeployment when the Env changes.
+  envUpdateTime: timestampSchema,
 
   // When set to true, forces a redeployment of the App even if the DeploymentSpec
   // has not changed. This is useful for testing deployment-related changes (e.g.

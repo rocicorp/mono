@@ -6,18 +6,20 @@ import {HttpsError, onRequest} from 'firebase-functions/v2/https';
 import {tailMessageSchema} from 'mirror-protocol/src/tail-message.js';
 import {roomTailRequestSchema} from 'mirror-protocol/src/tail.js';
 import type {App} from 'mirror-schema/src/app.js';
+import {DEFAULT_ENV, envDataConverter, envPath} from 'mirror-schema/src/env.js';
 import assert from 'node:assert';
 import {must} from 'shared/src/must.js';
 import {Queue} from 'shared/src/queue.js';
 import * as valita from 'shared/src/valita.js';
 import WebSocket from 'ws';
 import {SecretsCache, SecretsClient} from '../../secrets/index.js';
-import {REFLECT_AUTH_API_KEY, getAppSecrets} from '../app/secrets.js';
+import {REFLECT_AUTH_API_KEY, decryptSecrets} from '../app/secrets.js';
 import {
   appAuthorization,
   tokenAuthentication,
   userAuthorization,
 } from '../validators/auth.js';
+import {getDataOrFail} from '../validators/data.js';
 import {validateRequest} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
 
@@ -50,11 +52,19 @@ export const tail = (
           );
         }
 
-        const {secrets: appSecrets} = await getAppSecrets(
-          secrets,
-          app.secrets,
-          false,
+        const env = await firestore
+          .doc(envPath(appID, DEFAULT_ENV))
+          .withConverter(envDataConverter)
+          .get();
+        const {secrets: envSecrets} = getDataOrFail(
+          env,
+          'internal',
+          `Missing environment for App ${name}`,
         );
+
+        const appSecrets = await decryptSecrets(secrets, {
+          [REFLECT_AUTH_API_KEY]: envSecrets[REFLECT_AUTH_API_KEY],
+        });
 
         const reflectAuthApiKey = appSecrets[REFLECT_AUTH_API_KEY];
         if (!reflectAuthApiKey) {

@@ -1,12 +1,10 @@
 import {defineSecret} from 'firebase-functions/params';
+import {decryptUtf8} from 'mirror-schema/src/crypto.js';
 import {
   ENCRYPTION_KEY_SECRET_NAME,
-  type AppSecrets,
-} from 'mirror-schema/src/app.js';
-import {decryptUtf8} from 'mirror-schema/src/crypto.js';
-import type {DeploymentSecrets} from 'mirror-schema/src/deployment.js';
+  type Secrets as AppSecrets,
+} from 'mirror-schema/src/env.js';
 import {assert} from 'shared/src/asserts.js';
-import {sha256OfString} from 'shared/src/sha256.js';
 import type {Secrets} from '../../secrets/index.js';
 
 export function defineSecretSafely(name: string) {
@@ -43,34 +41,22 @@ export const DEPLOYMENT_SECRETS_NAMES = [
   'DATADOG_METRICS_API_KEY',
 ] as const;
 
-export async function getAppSecrets(
+export async function getAllDeploymentSecrets(
   secrets: Secrets,
   encrypted: AppSecrets,
-  includeInternal: boolean,
-): Promise<{
-  secrets: Record<string, string>;
-  hashes: Record<string, string>;
-}> {
-  const internalSecrets = includeInternal
-    ? {
-        ['DATADOG_LOGS_API_KEY']: datadogLogsApiKey.value(),
-        ['DATADOG_METRICS_API_KEY']: datadogMetricsApiKey.value(),
-      }
-    : {};
-  // Generate the hashes from the datadog keys and from the app secret ciphertexts.
-  // It is important that we don't hash the plaintexts as that could leak information
-  // about equality between secrets.
-  const decoder = new TextDecoder('utf-8');
-  const hashes = hashSecrets({
-    ...internalSecrets,
-    ...Object.fromEntries(
-      Object.entries(encrypted).map(([name, val]) => [
-        name,
-        decoder.decode(val.ciphertext),
-      ]),
-    ),
-  });
+): Promise<Record<string, string>> {
+  const decryptedAppSecrets = await decryptSecrets(secrets, encrypted);
+  return {
+    ['DATADOG_LOGS_API_KEY']: datadogLogsApiKey.value(),
+    ['DATADOG_METRICS_API_KEY']: datadogMetricsApiKey.value(),
+    ...decryptedAppSecrets,
+  };
+}
 
+export async function decryptSecrets(
+  secrets: Secrets,
+  encrypted: AppSecrets,
+): Promise<Record<string, string>> {
   const decrypted = await Promise.all(
     Object.entries(encrypted).map(async ([name, val]) => {
       const {secretName, version} = val.key;
@@ -82,24 +68,5 @@ export async function getAppSecrets(
     }),
   );
 
-  return {
-    secrets: {
-      ...internalSecrets,
-      ...Object.fromEntries(decrypted),
-    },
-    hashes: await hashes,
-  };
-}
-
-export async function hashSecrets(
-  secrets: DeploymentSecrets,
-): Promise<DeploymentSecrets> {
-  const hashes = {...secrets};
-  const hashSecret = async (key: keyof DeploymentSecrets) => {
-    hashes[key] = await sha256OfString(secrets[key]);
-  };
-  await Promise.all(
-    Object.keys(secrets).map(key => hashSecret(key as keyof DeploymentSecrets)),
-  );
-  return hashes;
+  return Object.fromEntries(decrypted);
 }

@@ -9,50 +9,30 @@ import {
   DeploymentType,
   deploymentsCollection,
 } from 'mirror-schema/src/deployment.js';
-import {
-  SecretsCache,
-  type Secrets,
-  type SecretsClient,
-} from '../../secrets/index.js';
 import {requestDeployment} from './deploy.function.js';
 import {computeDeploymentSpec} from './publish.function.js';
-import {DEPLOYMENT_SECRETS_NAMES} from './secrets.js';
 
-export const autoDeploy = (
-  firestore: Firestore,
-  secretsClient: SecretsClient,
-) =>
-  onDocumentUpdated(
-    {
-      document: 'apps/{appID}',
-      secrets: [...DEPLOYMENT_SECRETS_NAMES],
-    },
-    async event => {
-      const secrets = new SecretsCache(secretsClient);
-      if (!event.data) {
-        throw new Error(
-          `Missing event.data for ${JSON.stringify(event.params)}`,
-        );
-      }
-      const {appID} = event.params;
-      const app = appDataConverter.fromFirestore(event.data.after);
+export const autoDeploy = (firestore: Firestore) =>
+  onDocumentUpdated({document: 'apps/{appID}'}, async event => {
+    if (!event.data) {
+      throw new Error(`Missing event.data for ${JSON.stringify(event.params)}`);
+    }
+    const {appID} = event.params;
+    const app = appDataConverter.fromFirestore(event.data.after);
 
-      await checkForAutoDeployment(
-        firestore,
-        secrets,
-        appID,
-        app,
-        event.data.after.updateTime,
-      );
-    },
-  );
+    await checkForAutoDeployment(
+      firestore,
+      appID,
+      app,
+      event.data.after.updateTime,
+    );
+  });
 
 export const MIRROR_SERVER_REQUESTER_ID = 'mirror-server';
 export const MAX_AUTO_DEPLOYMENTS_PER_MINUTE = 4;
 
 export async function checkForAutoDeployment(
   firestore: Firestore,
-  secrets: Secrets,
   appID: string,
   app: App,
   lastAppUpdateTime: Timestamp,
@@ -64,7 +44,6 @@ export async function checkForAutoDeployment(
   }
   const desiredSpec = await computeDeploymentSpec(
     firestore,
-    secrets,
     app,
     app.runningDeployment.spec.serverVersionRange,
   );
@@ -110,24 +89,15 @@ export async function checkForAutoDeployment(
 }
 
 export function getAutoDeploymentType(
-  current: Pick<
-    DeploymentSpec,
-    'serverVersion' | 'options' | 'hashesOfSecrets' | 'hostname'
-  >,
-  desired: Pick<
-    DeploymentSpec,
-    'serverVersion' | 'options' | 'hashesOfSecrets' | 'hostname'
-  >,
+  current: Pick<DeploymentSpec, 'serverVersion' | 'envUpdateTime' | 'hostname'>,
+  desired: Pick<DeploymentSpec, 'serverVersion' | 'envUpdateTime' | 'hostname'>,
   forceRedeployment: boolean | undefined,
 ): DeploymentType | undefined {
   if (current.serverVersion !== desired.serverVersion) {
     return 'SERVER_UPDATE';
   }
-  if (!_.isEqual(current.options, desired.options)) {
-    return 'OPTIONS_UPDATE';
-  }
-  if (!_.isEqual(current.hashesOfSecrets, desired.hashesOfSecrets)) {
-    return 'SECRETS_UPDATE';
+  if (current.envUpdateTime.toMillis() !== desired.envUpdateTime.toMillis()) {
+    return 'ENV_UPDATE';
   }
   if (!_.isEqual(current.hostname, desired.hostname)) {
     return 'HOSTNAME_UPDATE';

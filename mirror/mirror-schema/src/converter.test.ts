@@ -1,11 +1,10 @@
-import {expect, test} from '@jest/globals';
-import {DataConverter} from './converter.js';
-import {DeploymentSpec, deploymentSpecSchema} from './deployment.js';
 import type {
   DocumentData,
   QueryDocumentSnapshot,
 } from '@google-cloud/firestore';
-import {dummySecrets} from './test-helpers.js';
+import {expect, test} from '@jest/globals';
+import {DataConverter} from './converter.js';
+import {Env, envSchema} from './env.js';
 
 // Replicates the internal validation performed in the Firestore libraries
 // that ensure that data confirms to certain expectations:
@@ -34,9 +33,9 @@ function isValidDocumentData(input: object): boolean {
 }
 
 test('converter creates plain objects', () => {
-  const converter = new DataConverter(deploymentSpecSchema);
+  const converter = new DataConverter(envSchema);
 
-  function convert(obj: DocumentData): DeploymentSpec {
+  function convert(obj: DocumentData): Env {
     const snapshot = {
       data: () => obj,
     } as QueryDocumentSnapshot<DocumentData>;
@@ -44,30 +43,22 @@ test('converter creates plain objects', () => {
   }
 
   const parsed = convert({
-    appModules: [],
-    serverVersionRange: 'foo',
-    serverVersion: 'bar',
-    hostname: 'baz',
-    hashesOfSecrets: dummySecrets(),
-    options: {vars: {}},
+    deploymentOptions: {vars: {}},
+    secrets: {},
   });
 
   expect(isValidDocumentData(parsed));
 
   /* eslint-disable @typescript-eslint/naming-convention */
   expect(parsed).toEqual({
-    appModules: [],
-    serverVersionRange: 'foo',
-    serverVersion: 'bar',
-    hostname: 'baz',
-    hashesOfSecrets: dummySecrets(),
-    options: {
+    deploymentOptions: {
       vars: {
         DISABLE: 'false',
         DISABLE_LOG_FILTERING: 'false',
         LOG_LEVEL: 'info',
       },
     },
+    secrets: {},
   });
   /* eslint-enable @typescript-eslint/naming-convention */
 });

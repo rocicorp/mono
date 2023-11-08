@@ -1,4 +1,4 @@
-import type {Firestore} from '@google-cloud/firestore';
+import {Timestamp, type Firestore} from '@google-cloud/firestore';
 import {firebaseStub} from 'firestore-jest-mock/mocks/firebase.js';
 import {App, appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {
@@ -22,7 +22,8 @@ import {
   type User,
 } from 'mirror-schema/src/user.js';
 import {must} from 'shared/src/must.js';
-import {DeploymentSecrets, defaultOptions} from './deployment.js';
+import {defaultOptions} from './deployment.js';
+import {DEFAULT_ENV, envDataConverter, envPath, type Env} from './env.js';
 import {
   DEFAULT_PROVIDER_ID,
   providerDataConverter,
@@ -192,7 +193,7 @@ export async function setApp(
     provider = DEFAULT_PROVIDER_ID,
     cfScriptName = 'cf-script-name',
     serverReleaseChannel = 'stable',
-    secrets = {},
+    envUpdateTime = Timestamp.now(),
     runningDeployment,
   } = app;
   const newApp: App = {
@@ -203,8 +204,7 @@ export async function setApp(
     provider,
     cfScriptName,
     serverReleaseChannel,
-    deploymentOptions: defaultOptions(),
-    secrets,
+    envUpdateTime,
   };
   if (runningDeployment) {
     newApp.runningDeployment = runningDeployment;
@@ -240,12 +240,30 @@ export async function setAppName(
     .set({appID});
 }
 
-export function dummySecrets(): DeploymentSecrets {
-  return {
-    /* eslint-disable @typescript-eslint/naming-convention */
-    REFLECT_AUTH_API_KEY: 'dummy1',
-    DATADOG_LOGS_API_KEY: 'dummy2',
-    DATADOG_METRICS_API_KEY: 'dummy3',
-    /* eslint-enable @typescript-eslint/naming-convention */
+export async function getEnv(
+  firestore: Firestore,
+  appID: string,
+): Promise<Env> {
+  const envDoc = await firestore
+    .doc(envPath(appID, DEFAULT_ENV))
+    .withConverter(envDataConverter)
+    .get();
+  return must(envDoc.data());
+}
+
+export async function setEnv(
+  firestore: Firestore,
+  appID: string,
+  env: Partial<Env>,
+): Promise<Env> {
+  const {deploymentOptions = defaultOptions(), secrets = {}} = env;
+  const newEnv: Env = {
+    deploymentOptions,
+    secrets,
   };
+  await firestore
+    .doc(envPath(appID, DEFAULT_ENV))
+    .withConverter(envDataConverter)
+    .set(newEnv);
+  return newEnv;
 }

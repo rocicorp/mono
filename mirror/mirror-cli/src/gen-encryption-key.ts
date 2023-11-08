@@ -1,4 +1,4 @@
-import {ENCRYPTION_KEY_SECRET_NAME} from 'mirror-schema/src/app.js';
+import {ENCRYPTION_KEY_SECRET_NAME} from 'mirror-schema/src/env.js';
 import crypto from 'node:crypto';
 import {assert} from 'shared/src/asserts.js';
 import {storeSecret} from './secrets.js';

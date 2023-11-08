@@ -10,7 +10,7 @@ import {
   serviceAccountId,
 } from './config/index.js';
 import * as appFunctions from './functions/app/index.js';
-import {DEPLOYMENT_SECRETS_NAMES} from './functions/app/secrets.js';
+import * as envFunctions from './functions/env/index.js';
 import * as errorFunctions from './functions/error/index.js';
 import * as roomFunctions from './functions/room/index.js';
 import * as serverFunctions from './functions/server/index.js';
@@ -52,43 +52,39 @@ export const app = {
   publish: https.onCall(
     {
       ...baseHttpsOptions,
-      secrets: [...DEPLOYMENT_SECRETS_NAMES],
       memory: '512MiB',
     },
-    appFunctions.publish(
-      getFirestore(),
-      secrets,
-      getStorage(),
-      modulesBucketName,
-    ),
+    appFunctions.publish(getFirestore(), getStorage(), modulesBucketName),
   ),
   deploy: appFunctions.deploy(getFirestore(), getStorage(), secrets),
-  autoDeploy: appFunctions.autoDeploy(getFirestore(), secrets),
+  autoDeploy: appFunctions.autoDeploy(getFirestore()),
   rename: https.onCall(baseHttpsOptions, appFunctions.rename(getFirestore())),
   tail: https.onRequest(
     {
-      timeoutSeconds: 3600,
       ...baseHttpsOptions,
-      secrets: [...DEPLOYMENT_SECRETS_NAMES],
+      timeoutSeconds: 3600,
     },
     appFunctions.tail(getFirestore(), getAuth(), secrets),
   ),
   delete: https.onCall(baseHttpsOptions, appFunctions.delete(getFirestore())),
 };
 
+export const env = {
+  autoDeploy: envFunctions.autoDeploy(getFirestore()),
+};
+
 export const room = {
   tail: https.onRequest(
     {
-      timeoutSeconds: 3600,
       ...baseHttpsOptions,
-      secrets: [...DEPLOYMENT_SECRETS_NAMES],
+      timeoutSeconds: 3600,
     },
     roomFunctions.tail(getFirestore(), getAuth(), secrets),
   ),
 };
 
 export const server = {
-  autoDeploy: serverFunctions.autoDeploy(getFirestore(), secrets),
+  autoDeploy: serverFunctions.autoDeploy(getFirestore()),
 };
 
 export const team = {

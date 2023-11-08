@@ -1,27 +1,29 @@
-import {describe, expect, test, beforeEach, afterEach} from '@jest/globals';
-import {
-  setUser,
-  setApp,
-  setTeam,
-  setMembership,
-  getApp,
-} from 'mirror-schema/src/test-helpers.js';
+import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
+import {fail} from 'assert';
+import {initializeApp} from 'firebase-admin/app';
+import {getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
 import type {AuthData} from 'firebase-functions/v2/tasks';
 import type {DeleteAppRequest} from 'mirror-protocol/src/app.js';
-import {teamPath} from 'mirror-schema/src/team.js';
-import {initializeApp} from 'firebase-admin/app';
-import {getFirestore} from 'firebase-admin/firestore';
 import {
   appPath,
   deploymentDataConverter,
   deploymentsCollection,
 } from 'mirror-schema/src/deployment.js';
-import {deleteApp} from './delete.function.js';
-import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
+import {DEFAULT_ENV, envPath} from 'mirror-schema/src/env.js';
 import {teamMembershipPath} from 'mirror-schema/src/membership.js';
-import {fail} from 'assert';
+import {teamPath} from 'mirror-schema/src/team.js';
+import {
+  getApp,
+  setApp,
+  setEnv,
+  setMembership,
+  setTeam,
+  setUser,
+} from 'mirror-schema/src/test-helpers.js';
+import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
+import {deleteApp} from './delete.function.js';
 
 describe('app-delete function', () => {
   initializeApp({projectId: 'delete-function-test'});
@@ -50,6 +52,7 @@ describe('app-delete function', () => {
     await setTeam(firestore, TEAM_ID, {});
     await setMembership(firestore, TEAM_ID, USER_ID, 'foo@bar.com', 'admin');
     await setApp(firestore, APP_ID, {teamID: TEAM_ID});
+    await setEnv(firestore, APP_ID, {});
   });
 
   afterEach(async () => {
@@ -59,6 +62,7 @@ describe('app-delete function', () => {
       .listDocuments();
     deployments.forEach(doc => batch.delete(doc));
     batch.delete(firestore.doc(appPath(APP_ID)));
+    batch.delete(firestore.doc(envPath(APP_ID, DEFAULT_ENV)));
     batch.delete(firestore.doc(userPath(USER_ID)));
     batch.delete(firestore.doc(teamPath(TEAM_ID)));
     batch.delete(firestore.doc(teamMembershipPath(TEAM_ID, USER_ID)));

@@ -1,4 +1,5 @@
-import type {Firestore} from 'firebase-admin/firestore';
+import {FieldValue} from '@google-cloud/firestore';
+import type {Firestore, WithFieldValue} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {
@@ -9,13 +10,19 @@ import type {UserAgent} from 'mirror-protocol/src/user-agent.js';
 import {DistTag} from 'mirror-protocol/src/version.js';
 import {
   App,
-  ENCRYPTION_KEY_SECRET_NAME,
   appDataConverter,
   appPath,
   isValidAppName,
 } from 'mirror-schema/src/app.js';
 import {encryptUtf8} from 'mirror-schema/src/crypto.js';
 import {defaultOptions} from 'mirror-schema/src/deployment.js';
+import {
+  DEFAULT_ENV,
+  ENCRYPTION_KEY_SECRET_NAME,
+  Env,
+  envDataConverter,
+  envPath,
+} from 'mirror-schema/src/env.js';
 import {
   providerDataConverter,
   providerPath,
@@ -141,6 +148,9 @@ export const create = (
         const appNameDocRef = firestore
           .doc(appNameIndexPath(teamID, appName))
           .withConverter(appNameIndexDataConverter);
+        const envDocRef = firestore
+          .doc(envPath(appID, DEFAULT_ENV))
+          .withConverter(envDataConverter);
 
         const {version, payload: secretKey} = await encryptionKey;
         const encryptedApiKey = encryptUtf8(
@@ -149,7 +159,7 @@ export const create = (
           {version},
         );
 
-        const app: App = {
+        const app: WithFieldValue<App> = {
           name: appName,
           teamID,
           teamLabel: team.label,
@@ -158,6 +168,12 @@ export const create = (
           cfID: 'deprecated',
           cfScriptName: scriptName,
           serverReleaseChannel,
+          // This will technically be slightly behind the resulting updateTime:
+          // https://github.com/googleapis/nodejs-firestore/issues/1610
+          // but being behind is okay; timestamps will align at the first deployment.
+          envUpdateTime: FieldValue.serverTimestamp(),
+        };
+        const env: Env = {
           deploymentOptions: defaultOptions(),
           secrets: {[REFLECT_AUTH_API_KEY]: encryptedApiKey},
         };
@@ -171,6 +187,7 @@ export const create = (
         txn.update(teamDocRef, {numApps: team.numApps + 1});
         txn.create(appDocRef, app);
         txn.create(appNameDocRef, {appID});
+        txn.create(envDocRef, env);
         return {appID, success: true};
       });
     });

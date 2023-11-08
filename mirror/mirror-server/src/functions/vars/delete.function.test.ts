@@ -12,7 +12,13 @@ import {
   deploymentPath,
   deploymentsCollection,
 } from 'mirror-schema/src/deployment.js';
-import {getApp, setApp, setUser} from 'mirror-schema/src/test-helpers.js';
+import {DEFAULT_ENV, envDataConverter, envPath} from 'mirror-schema/src/env.js';
+import {
+  getEnv,
+  setApp,
+  setEnv,
+  setUser,
+} from 'mirror-schema/src/test-helpers.js';
 import {userPath} from 'mirror-schema/src/user.js';
 import {watch} from 'mirror-schema/src/watch.js';
 import {TestSecrets} from '../../secrets/test-utils.js';
@@ -32,6 +38,8 @@ describe('vars-delete', () => {
       setApp(firestore, APP_ID, {
         teamID: TEAM_ID,
         name: APP_NAME,
+      }),
+      setEnv(firestore, APP_ID, {
         secrets: {
           ['REFLECT_AUTH_API_KEY']: encryptUtf8(
             'this-is-the-reflect-auth-api-key',
@@ -60,6 +68,7 @@ describe('vars-delete', () => {
     // Clean up global emulator data.
     const batch = firestore.batch();
     batch.delete(firestore.doc(appPath(APP_ID)));
+    batch.delete(firestore.doc(envPath(APP_ID, DEFAULT_ENV)));
     batch.delete(firestore.doc(userPath(USER_ID)));
     const deployments = await firestore
       .collection(deploymentsCollection(APP_ID))
@@ -95,33 +104,28 @@ describe('vars-delete', () => {
       success: true,
     });
 
-    const app = await getApp(firestore, APP_ID);
-    expect(app.secrets).toMatchObject({
-      ['REFLECT_AUTH_API_KEY']: {
-        key: {version: '1'},
-        iv: expect.any(Uint8Array),
-        ciphertext: expect.any(Uint8Array),
-      },
-      ['REFLECT_VAR_FOO_HOSTNAME']: {
-        key: {version: '1'},
-        iv: expect.any(Uint8Array),
-        ciphertext: expect.any(Uint8Array),
-      },
-    });
+    const env = await getEnv(firestore, APP_ID);
+    expect(Object.keys(env.secrets)).toEqual([
+      'REFLECT_AUTH_API_KEY',
+      'REFLECT_VAR_FOO_HOSTNAME',
+    ]);
   });
 
   test('delete vars with running deployment', async () => {
-    const appDoc = firestore
+    await firestore
       .doc(appPath(APP_ID))
-      .withConverter(appDataConverter);
-
-    await appDoc.update({runningDeployment: dummyDeployment('123')});
+      .withConverter(appDataConverter)
+      .update({runningDeployment: dummyDeployment('123')});
 
     // Kick of the function, which will wait for a deployment.
     const response = callDelete('DB_PASSWORD', 'NON_EXISTENT_VAR');
 
-    // Wait for the app to be updated.
-    for await (const snapshot of watch(appDoc, 10000)) {
+    const envDoc = firestore
+      .doc(envPath(APP_ID, DEFAULT_ENV))
+      .withConverter(envDataConverter);
+
+    // Wait for the env to be updated.
+    for await (const snapshot of watch(envDoc, 10000)) {
       if (snapshot.data()?.secrets?.['REFLECT_VAR_DB_PASSWORD'] === undefined) {
         break; // Var has been deleted.
       }

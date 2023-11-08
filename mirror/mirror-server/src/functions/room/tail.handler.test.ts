@@ -12,20 +12,23 @@ import type {Auth} from 'firebase-admin/auth';
 import {FieldValue, getFirestore} from 'firebase-admin/firestore';
 import type {https} from 'firebase-functions/v2';
 import type {TailMessage} from 'mirror-protocol/src/tail-message.js';
-import {
-  ENCRYPTION_KEY_SECRET_NAME,
-  appDataConverter,
-  appPath,
-} from 'mirror-schema/src/app.js';
+import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {encryptUtf8} from 'mirror-schema/src/crypto.js';
-import {setApp, setProvider, setUser} from 'mirror-schema/src/test-helpers.js';
+import {
+  DEFAULT_ENV,
+  ENCRYPTION_KEY_SECRET_NAME,
+  envPath,
+} from 'mirror-schema/src/env.js';
+import {
+  setApp,
+  setEnv,
+  setProvider,
+  setUser,
+} from 'mirror-schema/src/test-helpers.js';
 import {sleep} from 'shared/src/sleep.js';
 import type WebSocket from 'ws';
 import {TestSecrets} from '../../secrets/test-utils.js';
-import {
-  dummyDeployment,
-  mockFunctionParamsAndSecrets,
-} from '../../test-helpers.js';
+import {dummyDeployment} from '../../test-helpers.js';
 import {REFLECT_AUTH_API_KEY} from '../app/secrets.js';
 import {tail} from './tail.handler.js';
 
@@ -66,8 +69,6 @@ export class MockSocket {
     this.onclose?.(closeEvent);
   }
 }
-
-mockFunctionParamsAndSecrets();
 
 describe('room-tail', () => {
   initializeApp({projectId: 'room-tail-function-test'});
@@ -116,6 +117,9 @@ describe('room-tail', () => {
         teamID: 'fooTeam',
         name: 'MyAppName',
         provider: 'tail-test-provider',
+        runningDeployment: dummyDeployment('1234'),
+      }),
+      setEnv(firestore, 'myApp', {
         secrets: {
           [REFLECT_AUTH_API_KEY]: encryptUtf8(
             'this-is-the-reflect-auth-api-key-yo',
@@ -123,7 +127,6 @@ describe('room-tail', () => {
             {version: '3'},
           ),
         },
-        runningDeployment: dummyDeployment('1234'),
       }),
       setProvider(firestore, 'tail-test-provider', {}),
     ]);
@@ -133,6 +136,7 @@ describe('room-tail', () => {
     const batch = firestore.batch();
     batch.delete(firestore.doc('users/foo'));
     batch.delete(firestore.doc('apps/myApp'));
+    batch.delete(firestore.doc(envPath('myApp', DEFAULT_ENV)));
     await batch.commit();
   });
 

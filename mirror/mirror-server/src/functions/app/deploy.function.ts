@@ -10,20 +10,20 @@ import type {Storage} from 'firebase-admin/storage';
 import {logger} from 'firebase-functions';
 import {onDocumentCreated} from 'firebase-functions/v2/firestore';
 import {HttpsError} from 'firebase-functions/v2/https';
-import _ from 'lodash';
 import type {App, ScriptRef} from 'mirror-schema/src/app.js';
 import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {
   Deployment,
-  DeploymentSecrets,
   DeploymentStatus,
   deploymentDataConverter,
   deploymentPath,
 } from 'mirror-schema/src/deployment.js';
+import {DEFAULT_ENV, envDataConverter, envPath} from 'mirror-schema/src/env.js';
 import {
   providerDataConverter,
   providerPath,
 } from 'mirror-schema/src/provider.js';
+import type {Timestamp as SchemaTimestamp} from 'mirror-schema/src/timestamp.js';
 import {watch} from 'mirror-schema/src/watch.js';
 import {coerce, lt} from 'semver';
 import {must} from 'shared/src/must.js';
@@ -42,7 +42,7 @@ import {
 import {getDataOrFail} from '../validators/data.js';
 import {MIN_WFP_VERSION} from './create.function.js';
 import {deleteAppDocs} from './delete.function.js';
-import {DEPLOYMENT_SECRETS_NAMES, getAppSecrets} from './secrets.js';
+import {DEPLOYMENT_SECRETS_NAMES, getAllDeploymentSecrets} from './secrets.js';
 
 export const deploy = (
   firestore: Firestore,
@@ -71,10 +71,15 @@ export async function runDeployment(
   testScriptHandler?: ScriptHandler, // Overridden in tests.
 ): Promise<void> {
   const secrets = new SecretsCache(secretsClient);
-  const [appDoc, deploymentDoc] = await firestore.runTransaction(
+  const [appDoc, envDoc, deploymentDoc] = await firestore.runTransaction(
     tx =>
       Promise.all([
         tx.get(firestore.doc(appPath(appID)).withConverter(appDataConverter)),
+        tx.get(
+          firestore
+            .doc(envPath(appID, DEFAULT_ENV))
+            .withConverter(envDataConverter),
+        ),
         tx.get(
           firestore
             .doc(deploymentPath(appID, deploymentID))
@@ -85,6 +90,9 @@ export async function runDeployment(
   );
   if (!appDoc.exists) {
     throw new HttpsError('not-found', `Missing app doc for ${appID}`);
+  }
+  if (!envDoc.exists) {
+    throw new HttpsError('not-found', `Missing environment doc for ${appID}`);
   }
   if (!deploymentDoc.exists) {
     throw new HttpsError(
@@ -98,14 +106,15 @@ export async function runDeployment(
     cfScriptName,
     scriptRef,
     name: appName,
-    secrets: encryptedSecrets,
     teamID,
     teamLabel,
   } = must(appDoc.data());
+  const {deploymentOptions, secrets: encryptedSecrets} = must(envDoc.data());
+  const envUpdateTime = must(envDoc.updateTime);
   const {
     type: deploymentType,
     status,
-    spec: {serverVersion, hostname, options, appModules},
+    spec: {serverVersion, hostname, appModules},
   } = must(deploymentDoc.data());
 
   try {
@@ -158,11 +167,7 @@ export async function runDeployment(
       serverVersion,
     );
 
-    const {secrets: appSecrets, hashes} = await getAppSecrets(
-      secrets,
-      encryptedSecrets,
-      true,
-    );
+    const appSecrets = await getAllDeploymentSecrets(secrets, encryptedSecrets);
 
     const newScriptRef = (await migrateToWFP(
       firestore,
@@ -187,7 +192,7 @@ export async function runDeployment(
       {id: appID, name: appName},
       {id: teamID, label: teamLabel},
       hostname,
-      options,
+      deploymentOptions,
       appSecrets,
       appModules,
       serverModules,
@@ -204,7 +209,7 @@ export async function runDeployment(
       firestore,
       appID,
       deploymentID,
-      hashes,
+      envUpdateTime,
       newScriptRef,
     );
   } catch (e) {
@@ -373,9 +378,7 @@ async function setDeploymentStatus(
   if (status !== 'DEPLOYING') {
     batch.update(
       firestore.doc(appPath(appID)).withConverter(appDataConverter),
-      {
-        queuedDeploymentIDs: FieldValue.arrayRemove(deploymentID),
-      },
+      {queuedDeploymentIDs: FieldValue.arrayRemove(deploymentID)},
     );
   }
   await batch.commit();
@@ -389,7 +392,7 @@ async function setRunningDeployment(
   firestore: Firestore,
   appID: string,
   newDeploymentID: string,
-  hashesOfSecrets: DeploymentSecrets,
+  envUpdateTime: SchemaTimestamp,
   newScriptRef: ScriptRef | undefined,
 ): Promise<void> {
   const appDocRef = firestore
@@ -414,17 +417,21 @@ async function setRunningDeployment(
       );
     }
     const newDeployment = must(newDeploymentDoc.data());
-    if (!_.isEqual(hashesOfSecrets, newDeployment.spec.hashesOfSecrets)) {
-      logger.warn(
-        `Deployed secrets differ from secrets at request time. This should only happen if secrets concurrently changed.`,
+    if (
+      envUpdateTime.toMillis() !== newDeployment.spec.envUpdateTime.toMillis()
+    ) {
+      logger.debug(
+        `Deployed envUpdateTime differs from that at request time. ` +
+          `This should only happen on the first publish or if the env concurrently changes.`,
       );
-      newDeployment.spec.hashesOfSecrets = hashesOfSecrets;
+      newDeployment.spec.envUpdateTime = envUpdateTime;
     }
     const newRunningDeployment = {
       ...newDeployment,
       ...deploymentUpdate('RUNNING'),
     };
 
+    const app = must(appDoc.data());
     const appUpdate: UpdateData<App> = {
       runningDeployment: newRunningDeployment,
       queuedDeploymentIDs: FieldValue.arrayRemove(newDeploymentID),
@@ -432,11 +439,24 @@ async function setRunningDeployment(
     if (newScriptRef) {
       appUpdate.scriptRef = newScriptRef;
     }
+    if (app.envUpdateTime.toMillis() < envUpdateTime.toMillis()) {
+      // Note that it is possible for the app.envUpdateTime to differ from the deployed
+      // envUpdateTime because deployments and env updates can happen concurrently. However,
+      // a pathological scenario in which the update to app.envUpdateTime permanently
+      // fails would result in an infinite deployment loop with the app.envUpdateTime never
+      // matching the deployed envUpdateTime. To prevent such a scenario from happening,
+      // update the app.envUpdateTime if it is behind. It is always (and only) safe to move
+      // the value forward in time.
+      logger.debug(
+        `App ${appID} envUpdateTime is behind (${app.envUpdateTime.toMillis()} vs ${envUpdateTime.toMillis()}). Updating it with deployment.`,
+      );
+      appUpdate.envUpdateTime = envUpdateTime;
+    }
 
     tx.set(newDeploymentDocRef, newRunningDeployment);
     tx.update(appDocRef, appUpdate);
 
-    const oldDeploymentID = appDoc.data()?.runningDeployment?.deploymentID;
+    const oldDeploymentID = app.runningDeployment?.deploymentID;
     if (oldDeploymentID) {
       const oldDeploymentDoc = firestore
         .doc(deploymentPath(appID, oldDeploymentID))

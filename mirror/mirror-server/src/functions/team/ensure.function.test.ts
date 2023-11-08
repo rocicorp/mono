@@ -1,27 +1,24 @@
-import {describe, expect, test, beforeEach, afterEach} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
+import {initializeApp} from 'firebase-admin/app';
 import type {DecodedIdToken} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import type {Request} from 'firebase-functions/v2/https';
 import {teamMembershipPath} from 'mirror-schema/src/membership.js';
+import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
+import {
+  teamLabelIndexDataConverter,
+  teamLabelIndexPath,
+  teamPath,
+} from 'mirror-schema/src/team.js';
 import {
   getMembership,
   getTeam,
   getUser,
   setUser,
 } from 'mirror-schema/src/test-helpers.js';
-import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
-import {DEFAULT_MAX_APPS, ensure} from './ensure.function.js';
-import {initializeApp} from 'firebase-admin/app';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
-import {
-  teamPath,
-  teamLabelIndexDataConverter,
-  teamLabelIndexPath,
-} from 'mirror-schema/src/team.js';
-import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
-
-mockFunctionParamsAndSecrets();
+import {DEFAULT_MAX_APPS, ensure} from './ensure.function.js';
 
 describe('team-ensure function', () => {
   initializeApp({projectId: 'team-ensure-function-test'});

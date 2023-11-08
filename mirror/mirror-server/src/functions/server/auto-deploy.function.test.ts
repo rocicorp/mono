@@ -15,9 +15,6 @@ import {
 } from 'mirror-schema/src/provider.js';
 import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
 import {must} from 'shared/src/must.js';
-import {TestSecrets} from '../../secrets/test-utils.js';
-import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
-import {getAppSecrets} from '../app/secrets.js';
 import {
   checkAppsInChannels,
   getAffectedChannels,
@@ -43,23 +40,21 @@ test('getAffectedChannels', () => {
   ).toEqual(['stable']);
 });
 
-describe('server auto-deploy', () => {
+describe('server.auto-deploy', () => {
   initializeApp({projectId: 'server-auto-deploy-function-test'});
   const firestore = getFirestore();
   const APP_ID = 'server-auto-deploy-test-app-';
   const SERVER_VERSION_1 = '0.209.1';
   const SERVER_VERSION_2 = '0.209.2';
   const CLOUDFLARE_ACCOUNT_ID = 'cf-abc';
+  const ENV_UPDATE_TIME = Timestamp.now();
 
   const appDocs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(i =>
     firestore.doc(appPath(`${APP_ID}${i}`)).withConverter(appDataConverter),
   );
 
   beforeEach(async () => {
-    mockFunctionParamsAndSecrets();
-
     const batch = firestore.batch();
-    const {hashes} = await getAppSecrets(new TestSecrets(), {}, true);
     batch.create(
       firestore
         .doc(serverPath(SERVER_VERSION_1))
@@ -107,14 +102,6 @@ describe('server auto-deploy', () => {
         teamID: 'baz',
         teamLabel: 'boom',
         name: 'boo',
-        deploymentOptions: {
-          vars: {
-            DISABLE: 'false',
-            DISABLE_LOG_FILTERING: 'false',
-            LOG_LEVEL: 'info',
-          },
-        },
-        secrets: {},
         serverReleaseChannel: i % 2 === 0 ? 'test-stable' : 'test-canary',
 
         runningDeployment: {
@@ -128,16 +115,10 @@ describe('server auto-deploy', () => {
             serverVersionRange: '^0.209.0',
             serverVersion: '0.209.0',
             hostname: 'boo-boom.reflect-o-rama.net',
-            options: {
-              vars: {
-                DISABLE: 'false',
-                DISABLE_LOG_FILTERING: 'false',
-                LOG_LEVEL: 'info',
-              },
-            },
-            hashesOfSecrets: hashes,
+            envUpdateTime: ENV_UPDATE_TIME,
           },
         },
+        envUpdateTime: ENV_UPDATE_TIME,
       });
     });
     await batch.commit();
@@ -212,7 +193,7 @@ describe('server auto-deploy', () => {
 
   for (const c of cases) {
     test(c.name, async () => {
-      await checkAppsInChannels(firestore, new TestSecrets(), c.channels, 3);
+      await checkAppsInChannels(firestore, c.channels, 3);
 
       const apps = await Promise.all(appDocs.map(doc => doc.get()));
       apps.forEach(async (app, i) => {

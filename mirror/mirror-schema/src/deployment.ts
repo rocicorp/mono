@@ -54,8 +54,9 @@ export const deploymentTypeSchema = v.union(
   v.literal('USER_UPLOAD'),
   v.literal('USER_ROLLBACK'),
   v.literal('SERVER_UPDATE'),
-  v.literal('OPTIONS_UPDATE'),
-  v.literal('SECRETS_UPDATE'),
+  v.literal('ENV_UPDATE'),
+  v.literal('OPTIONS_UPDATE'), // Subsumed by ENV_UPDATE, but may be revived at some point
+  v.literal('SECRETS_UPDATE'), // Subsumed by ENV_UPDATE, but may be revived at some point
   v.literal('HOSTNAME_UPDATE'),
   v.literal('MAINTENANCE_UPDATE'), // Triggered by the App.forceDeployment field
   // Although DELETE is not technically a cloudflare "deployment", all cloudflare
@@ -95,10 +96,9 @@ export const deploymentSpecSchema = v.object({
   // The hostname of the worker, which is https://<appName>.reflect-server.net
   // can be a vanity domain in the future.
   hostname: v.string(),
-  // Options with which the app was deployed, used to check for redeployment if options change.
-  options: deploymentOptionsSchema,
-  // SHA-256 hashes of deployed secrets, used to check for redeployment if secrets change.
-  hashesOfSecrets: deploymentSecretsSchema,
+  // UpdateTime of the Env that determines aspects of the deployment such as
+  // vars and secrets.
+  envUpdateTime: timestampSchema,
 });
 
 export type DeploymentSpec = v.Infer<typeof deploymentSpecSchema>;

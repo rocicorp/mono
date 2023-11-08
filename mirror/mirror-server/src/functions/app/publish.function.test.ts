@@ -1,6 +1,6 @@
 import {afterAll, beforeAll, describe, expect, jest, test} from '@jest/globals';
 import {initializeApp} from 'firebase-admin/app';
-import {getFirestore} from 'firebase-admin/firestore';
+import {Timestamp, getFirestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {https} from 'firebase-functions/v2';
 import {
@@ -13,7 +13,6 @@ import type {PublishRequest} from 'mirror-protocol/src/publish.js';
 import {appDataConverter} from 'mirror-schema/src/app.js';
 import {
   appPath,
-  defaultOptions,
   deploymentDataConverter,
 } from 'mirror-schema/src/deployment.js';
 import {
@@ -24,12 +23,8 @@ import {
 import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {SemVer} from 'semver';
-import {TestSecrets} from '../../secrets/test-utils.js';
-import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import type {DistTags} from '../validators/version.js';
 import {publish} from './publish.function.js';
-
-mockFunctionParamsAndSecrets();
 
 describe('publish', () => {
   initializeApp({projectId: 'publish-function-test'});
@@ -37,6 +32,7 @@ describe('publish', () => {
   const USER_ID = 'app-publish-test-user';
   const APP_ID = 'app-publish-test-app';
   const CF_ID = 'cf-abc';
+  const ENV_UPDATE_TIME = Timestamp.now();
 
   beforeAll(async () => {
     const batch = firestore.batch();
@@ -71,8 +67,7 @@ describe('publish', () => {
         cfScriptName: 'foo-bar-script',
         serverReleaseChannel: 'stable',
         teamID: 'fooTeam',
-        deploymentOptions: defaultOptions(),
-        secrets: {},
+        envUpdateTime: ENV_UPDATE_TIME,
       },
     );
     batch.create(
@@ -212,13 +207,7 @@ describe('publish', () => {
         },
       } as unknown as Storage;
       const publishFunction = https.onCall(
-        publish(
-          firestore,
-          new TestSecrets(),
-          storage,
-          'modulez',
-          c.testDistTags ?? {},
-        ),
+        publish(firestore, storage, 'modulez', c.testDistTags ?? {}),
       );
 
       let error: HttpsError | undefined = undefined;
@@ -266,14 +255,7 @@ describe('publish', () => {
             serverVersion: c.expectedServerVersion,
             serverVersionRange: request.serverVersionRange,
             hostname: 'foo-bar-teamblue.reflect-o-rama.net',
-            options: {
-              vars: {
-                /* eslint-disable @typescript-eslint/naming-convention */
-                DISABLE_LOG_FILTERING: 'false',
-                LOG_LEVEL: 'info',
-                /* eslint-enable @typescript-eslint/naming-convention */
-              },
-            },
+            envUpdateTime: ENV_UPDATE_TIME,
           },
           status: 'REQUESTED',
         });

@@ -5,10 +5,12 @@ import {
   listVarsResponseSchema,
 } from 'mirror-protocol/src/vars.js';
 import type {EncryptedBytes} from 'mirror-schema/src/bytes.js';
+import {DEFAULT_ENV, envDataConverter, envPath} from 'mirror-schema/src/env.js';
 import {SERVER_VARIABLE_PREFIX} from 'mirror-schema/src/vars.js';
 import {SecretsCache, SecretsClient} from '../../secrets/index.js';
-import {getAppSecrets} from '../app/secrets.js';
+import {decryptSecrets} from '../app/secrets.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
+import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
 
@@ -17,12 +19,19 @@ export const list = (firestore: Firestore, secretsClient: SecretsClient) =>
     .validate(userAgentVersion())
     .validate(userAuthorization())
     .validate(appAuthorization(firestore))
-    .handle(async (request, context) => {
+    .handle(async request => {
       const secrets = new SecretsCache(secretsClient);
-      const {decrypted} = request;
-      const {
-        app: {secrets: appSecrets},
-      } = context;
+      const {appID, decrypted} = request;
+
+      const env = await firestore
+        .doc(envPath(appID, DEFAULT_ENV))
+        .withConverter(envDataConverter)
+        .get();
+      const {secrets: appSecrets} = getDataOrFail(
+        env,
+        'internal',
+        `Missing environment for App ${appID}`,
+      );
 
       const vars = Object.entries(appSecrets)
         .filter(([name]) => name.startsWith(SERVER_VARIABLE_PREFIX))
@@ -46,10 +55,9 @@ export const list = (firestore: Firestore, secretsClient: SecretsClient) =>
           },
         };
       }
-      const {secrets: decryptedVars} = await getAppSecrets(
+      const decryptedVars = await decryptSecrets(
         secrets,
         Object.fromEntries(vars),
-        false,
       );
       return {
         success: true,

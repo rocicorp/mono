@@ -1,3 +1,4 @@
+import {Timestamp} from '@google-cloud/firestore';
 import {describe, expect, test} from '@jest/globals';
 import type {Firestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
@@ -10,7 +11,6 @@ import type {AuthData} from 'firebase-functions/v2/tasks';
 import {baseAppRequestFields} from 'mirror-protocol/src/app.js';
 import {baseResponseFields} from 'mirror-protocol/src/base.js';
 import type {App} from 'mirror-schema/src/app.js';
-import {defaultOptions} from 'mirror-schema/src/deployment.js';
 import type {Role} from 'mirror-schema/src/membership.js';
 import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
 import {
@@ -175,8 +175,7 @@ describe('app authorization', () => {
     provider: DEFAULT_PROVIDER_ID,
     cfScriptName: 'cfScriptName',
     serverReleaseChannel: 'stable',
-    deploymentOptions: defaultOptions(),
-    secrets: {},
+    envUpdateTime: Timestamp.now(),
   };
   const defaultUser: User = {
     email: 'foo@bar.com',

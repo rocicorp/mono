@@ -1,11 +1,12 @@
+import {Timestamp} from '@google-cloud/firestore';
 import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import {initializeApp} from 'firebase-admin/app';
 import type {DecodedIdToken} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
-import {ENCRYPTION_KEY_SECRET_NAME} from 'mirror-schema/src/app.js';
 import {appPath} from 'mirror-schema/src/deployment.js';
+import {ENCRYPTION_KEY_SECRET_NAME} from 'mirror-schema/src/env.js';
 import {teamMembershipPath} from 'mirror-schema/src/membership.js';
 import {
   providerDataConverter,
@@ -20,6 +21,7 @@ import {
 import {
   getApp,
   getAppName,
+  getEnv,
   getTeam,
   setTeam,
   setUser,
@@ -27,11 +29,8 @@ import {
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {SemVer} from 'semver';
 import {TestSecrets} from '../../secrets/test-utils.js';
-import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import type {DistTags} from '../validators/version.js';
 import {MIN_WFP_VERSION, create} from './create.function.js';
-
-mockFunctionParamsAndSecrets();
 
 describe('app-create function', () => {
   initializeApp({projectId: 'app-create-function-test'});
@@ -147,6 +146,13 @@ describe('app-create function', () => {
       provider: PROVIDER,
       cfScriptName: expect.any(String),
       serverReleaseChannel: 'stable',
+      envUpdateTime: expect.any(Timestamp),
+    });
+    // Not a WFP app.
+    expect(app.scriptRef).toBeUndefined;
+
+    const env = await getEnv(firestore, resp.appID);
+    expect(env).toMatchObject({
       deploymentOptions: {
         vars: {
           /* eslint-disable @typescript-eslint/naming-convention */
@@ -164,8 +170,6 @@ describe('app-create function', () => {
         },
       },
     });
-    // Not a WFP app.
-    expect(app.scriptRef).toBeUndefined;
 
     const team = await getTeam(firestore, TEAM_ID);
     expect(team.numApps).toBe(3); // This was initialized with 2 in beforeEach()
@@ -202,6 +206,11 @@ describe('app-create function', () => {
             name: app.cfScriptName,
           },
           serverReleaseChannel: 'stable',
+          envUpdateTime: expect.any(Timestamp),
+        });
+
+        const env = await getEnv(firestore, resp.appID);
+        expect(env).toMatchObject({
           deploymentOptions: {
             vars: {
               /* eslint-disable @typescript-eslint/naming-convention */
@@ -219,7 +228,6 @@ describe('app-create function', () => {
             },
           },
         });
-
         const team = await getTeam(firestore, TEAM_ID);
         expect(team.numApps).toBe(3); // This was initialized with 2 in beforeEach()
 

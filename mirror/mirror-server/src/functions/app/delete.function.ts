@@ -1,3 +1,4 @@
+import {Timestamp} from '@google-cloud/firestore';
 import {FieldValue, type Firestore} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {
@@ -7,9 +8,9 @@ import {
 import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {
   DeploymentSpec,
-  defaultOptions,
   deploymentsCollection,
 } from 'mirror-schema/src/deployment.js';
+import {envsCollection} from 'mirror-schema/src/env.js';
 import {
   appNameIndexPath,
   teamDataConverter,
@@ -26,8 +27,7 @@ const NULL_SPEC: DeploymentSpec = {
   serverVersion: '',
   serverVersionRange: '',
   hostname: '',
-  options: defaultOptions(),
-  hashesOfSecrets: {},
+  envUpdateTime: Timestamp.fromMillis(0),
 };
 
 // Note: 'delete' is a reserved word, so we have to call the variable something else.
@@ -63,9 +63,10 @@ export async function deleteAppDocs(
       'internal',
       `App ${appID} concurrently deleted?`,
     );
-    const deployments = await txn.get(
-      firestore.collection(deploymentsCollection(appID)).select(),
-    );
+    const [envs, deployments] = await Promise.all([
+      txn.get(firestore.collection(envsCollection(appID)).select()),
+      txn.get(firestore.collection(deploymentsCollection(appID)).select()),
+    ]);
 
     const {teamID, name: appName} = app;
 
@@ -73,12 +74,14 @@ export async function deleteAppDocs(
     //
     // 1. The App doc itself.
     txn.delete(appDocRef);
-    // 2. All of its deployments.
+    // 2. All of its in environments.
+    envs.forEach(doc => txn.delete(doc.ref));
+    // 3. All of its deployments.
     //    TODO(darick): Clean up orphaned modules in GCS.
     deployments.forEach(doc => txn.delete(doc.ref));
-    // 3. The app name index entry for the team.
+    // 4. The app name index entry for the team.
     txn.delete(firestore.doc(appNameIndexPath(teamID, appName)));
-    // 4. Finally, decrement the Team's `numApps` field.
+    // 5. Finally, decrement the Team's `numApps` field.
     //    Note that this is a "blind" update that doesn't require
     //    reading/locking the Team doc in the Transaction.
     txn.update(

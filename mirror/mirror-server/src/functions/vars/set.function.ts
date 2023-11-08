@@ -4,14 +4,16 @@ import {
   setVarsRequestSchema,
   setVarsResponseSchema,
 } from 'mirror-protocol/src/vars.js';
-import {
-  AppSecrets,
-  ENCRYPTION_KEY_SECRET_NAME,
-  appDataConverter,
-  appPath,
-} from 'mirror-schema/src/app.js';
+import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import type {EncryptedBytes} from 'mirror-schema/src/bytes.js';
 import {encryptUtf8} from 'mirror-schema/src/crypto.js';
+import {
+  DEFAULT_ENV,
+  ENCRYPTION_KEY_SECRET_NAME,
+  Secrets,
+  envDataConverter,
+  envPath,
+} from 'mirror-schema/src/env.js';
 import {
   ALLOWED_SERVER_VARIABLE_CHARS,
   MAX_SERVER_VARIABLES,
@@ -54,7 +56,7 @@ export const set = (firestore: Firestore, secretsClient: SecretsClient) =>
         if (!variableIsWithinSizeLimit(name, value)) {
           throw new HttpsError(
             'invalid-argument',
-            'UTF-8 encoded variables (name+value) must not exceed 5 kilobytes',
+            'UTF-8 encoded Variables must be within 5 kilobytes',
           );
         }
       }
@@ -72,17 +74,26 @@ export const set = (firestore: Firestore, secretsClient: SecretsClient) =>
               ),
             ] as [string, EncryptedBytes],
         ),
-      ) as AppSecrets;
+      ) as Secrets;
 
       const appDoc = firestore
         .doc(appPath(appID))
         .withConverter(appDataConverter);
+      const envDoc = firestore
+        .doc(envPath(appID, DEFAULT_ENV))
+        .withConverter(envDataConverter);
 
       const runningDeployment = await firestore.runTransaction(async tx => {
-        const {secrets: currSecrets, runningDeployment} = getDataOrFail(
-          await tx.get(appDoc),
+        const [app, env] = await Promise.all([tx.get(appDoc), tx.get(envDoc)]);
+        const {runningDeployment} = getDataOrFail(
+          app,
           'not-found',
           `App ${name} was deleted`,
+        );
+        const {secrets: currSecrets} = getDataOrFail(
+          env,
+          'not-found',
+          `Missing environment for App ${name}`,
         );
         const mergedSecrets = {
           ...currSecrets,
@@ -99,7 +110,7 @@ export const set = (firestore: Firestore, secretsClient: SecretsClient) =>
               `Use 'npx @rocicorp/reflect vars delete' to remove unused variables.`,
           );
         }
-        tx.set(appDoc, {secrets: mergedSecrets}, {merge: true});
+        tx.set(envDoc, {secrets: mergedSecrets}, {merge: true});
         return runningDeployment;
       });
       if (!runningDeployment) {

@@ -12,22 +12,23 @@ import {resolver} from '@rocicorp/resolver';
 import {initializeApp} from 'firebase-admin/app';
 import {FieldValue, Timestamp, getFirestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
-import {
-  ENCRYPTION_KEY_SECRET_NAME,
-  appDataConverter,
-  type ScriptRef,
-} from 'mirror-schema/src/app.js';
+import {appDataConverter, type ScriptRef} from 'mirror-schema/src/app.js';
 import {encryptUtf8} from 'mirror-schema/src/crypto.js';
 import {
   Deployment,
   DeploymentStatus,
   DeploymentType,
   appPath,
-  defaultOptions,
   deploymentDataConverter,
   deploymentPath,
   deploymentsCollection,
 } from 'mirror-schema/src/deployment.js';
+import {
+  DEFAULT_ENV,
+  ENCRYPTION_KEY_SECRET_NAME,
+  envDataConverter,
+  envPath,
+} from 'mirror-schema/src/env.js';
 import {
   DEFAULT_PROVIDER_ID,
   providerDataConverter,
@@ -36,11 +37,11 @@ import {
 import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
 import {appNameIndexPath, teamPath} from 'mirror-schema/src/team.js';
 import {
-  dummySecrets,
   getApp,
   getTeam,
   setApp,
   setAppName,
+  setEnv,
   setTeam,
 } from 'mirror-schema/src/test-helpers.js';
 import {must} from 'shared/src/must.js';
@@ -70,6 +71,7 @@ describe('deploy', () => {
   const CLOUDFLARE_ACCOUNT_ID = 'foo-cloudflare-account';
   const NAMESPACE = 'prod';
   const SCRIPT_NAME = 'foo-bar-baz';
+  const ENV_UPDATE_TIME = Timestamp.fromDate(new Date(2023, 5, 1));
 
   const noopScriptHandler: ScriptHandler = {
     async *publish(): AsyncGenerator<string> {},
@@ -149,13 +151,16 @@ describe('deploy', () => {
   });
 
   beforeEach(async () => {
-    await setApp(firestore, APP_ID, {
-      teamID: TEAM_ID,
-      name: APP_NAME,
-      cfScriptName: SCRIPT_NAME,
-    });
-    await setTeam(firestore, TEAM_ID, {numApps: 1});
-    await setAppName(firestore, TEAM_ID, APP_ID, APP_NAME);
+    await Promise.all([
+      setApp(firestore, APP_ID, {
+        teamID: TEAM_ID,
+        name: APP_NAME,
+        cfScriptName: SCRIPT_NAME,
+      }),
+      setTeam(firestore, TEAM_ID, {numApps: 1}),
+      setAppName(firestore, TEAM_ID, APP_ID, APP_NAME),
+      setEnv(firestore, APP_ID, {}),
+    ]);
   });
 
   afterEach(async () => {
@@ -171,6 +176,7 @@ describe('deploy', () => {
     batch.delete(firestore.doc(appPath(APP_ID)));
     batch.delete(firestore.doc(teamPath(TEAM_ID)));
     batch.delete(firestore.doc(appNameIndexPath(TEAM_ID, APP_NAME)));
+    batch.delete(firestore.doc(envPath(APP_ID, DEFAULT_ENV)));
     await batch.commit();
   });
 
@@ -187,8 +193,7 @@ describe('deploy', () => {
         hostname: 'boo',
         serverVersion: SERVER_VERSION,
         serverVersionRange: '1',
-        options: defaultOptions(),
-        hashesOfSecrets: dummySecrets(),
+        envUpdateTime: ENV_UPDATE_TIME,
       },
       status,
       requestTime: Timestamp.now(),
@@ -212,8 +217,7 @@ describe('deploy', () => {
         hostname: 'boo',
         serverVersion,
         serverVersionRange: `^${serverVersion}`,
-        options: defaultOptions(),
-        hashesOfSecrets: dummySecrets(),
+        envUpdateTime: ENV_UPDATE_TIME,
       },
     });
     return firestore.doc(deploymentPath).id;
@@ -250,10 +254,12 @@ describe('deploy', () => {
       Buffer.from(TestSecrets.TEST_KEY, 'base64url'),
       {version: '2'},
     );
-    await firestore
-      .doc(appPath(APP_ID))
-      .withConverter(appDataConverter)
-      .update({secrets: {['MY_APP_SECRET']: encryptedSecret}});
+    const envDocRef = firestore
+      .doc(envPath(APP_ID, DEFAULT_ENV))
+      .withConverter(envDataConverter);
+
+    await envDocRef.update({secrets: {['MY_APP_SECRET']: encryptedSecret}});
+    const envUpdateTime = must((await envDocRef.get()).updateTime);
 
     let deployedSecrets;
 
@@ -278,6 +284,10 @@ describe('deploy', () => {
       ['DATADOG_LOGS_API_KEY']: 'default-DATADOG_LOGS_API_KEY',
       ['DATADOG_METRICS_API_KEY']: 'default-DATADOG_METRICS_API_KEY',
     });
+
+    const app = await getApp(firestore, APP_ID);
+    expect(app.runningDeployment?.spec.envUpdateTime).toEqual(envUpdateTime);
+    expect(app.envUpdateTime).toEqual(envUpdateTime);
   });
 
   test('state tracking: success', async () => {
@@ -534,6 +544,7 @@ describe('deploy', () => {
 
     const docs = await firestore.getAll(
       firestore.doc(appPath(APP_ID)),
+      firestore.doc(envPath(APP_ID, DEFAULT_ENV)),
       firestore.doc(deploymentPath(APP_ID, deleteID)),
       firestore.doc(deploymentPath(APP_ID, uploadID)),
       firestore.doc(appNameIndexPath(TEAM_ID, APP_NAME)),

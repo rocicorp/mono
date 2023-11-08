@@ -12,7 +12,6 @@ import {
 import {sleep} from 'shared/src/sleep.js';
 import type WebSocket from 'ws';
 import {TestSecrets} from '../../secrets/test-utils.js';
-import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {tail} from './tail.handler.js';
 
 export class MockSocket {
@@ -52,8 +51,6 @@ export class MockSocket {
     this.onclose?.(closeEvent);
   }
 }
-
-mockFunctionParamsAndSecrets();
 
 describe('app-tail', () => {
   let firestore: Firestore;

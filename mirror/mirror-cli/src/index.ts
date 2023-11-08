@@ -1,9 +1,5 @@
 import {hideBin} from 'yargs/helpers';
 import {addDeploymentsOptionsHandler} from './add-deployment-options.js';
-import {
-  backfillReflectAuthApiKeyHandler,
-  backfillReflectAuthApiKeyOptions,
-} from './backfill-reflect-auth-api-keys.js';
 import {certificatesHandler, certificatesOptions} from './certificates.js';
 import {
   checkProviderHandler,
@@ -43,6 +39,7 @@ import {
   migrateTeamLabelsHandler,
   migrateTeamLabelsOptions,
 } from './migrate-team-labels.js';
+import {migrateToEnvHandler, migrateToEnvOptions} from './migrate-to-env.js';
 import {migrateToWFPHandler, migrateToWFPOptions} from './migrate-to-wfp.js';
 import {
   publishCustomDomainsHandler,
@@ -233,10 +230,10 @@ function createCLIParser(argv: string[]) {
   );
 
   reflectCLI.command(
-    'backfill-reflect-auth-api-key',
-    'Backfills apps with a random, encrypted REFLECT_AUTH_API_KEY secret',
-    backfillReflectAuthApiKeyOptions,
-    backfillReflectAuthApiKeyHandler,
+    'migrate-to-env',
+    'Splits Env data out of the App doc.',
+    migrateToEnvOptions,
+    migrateToEnvHandler,
   );
 
   reflectCLI.command(

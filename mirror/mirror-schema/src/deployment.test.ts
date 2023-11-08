@@ -1,8 +1,7 @@
-import {Timestamp} from '@google-cloud/firestore';
 import {describe, expect, test} from '@jest/globals';
 import {parse} from 'shared/src/valita.js';
-import {appSchema} from './app.js';
-import {defaultOptions, deploymentSchema, varsSchema} from './deployment.js';
+import {defaultOptions, varsSchema} from './deployment.js';
+import {envSchema} from './env.js';
 
 describe('deployment', () => {
   /* eslint-disable @typescript-eslint/naming-convention */
@@ -65,43 +64,24 @@ describe('deployment', () => {
   });
 
   test('vars embedded in docs are normalized on parse', () => {
-    const parsedApp = appSchema.parse({
-      cfID: 'foo',
-      cfScriptName: 'bar',
-      name: 'baz',
-      serverReleaseChannel: 'stable',
-      teamID: 'boo',
-      teamLabel: 'teamlabel',
-      deploymentOptions: {vars: {}},
-      secrets: {},
-    });
-
-    const parsedDeployment = deploymentSchema.parse(
+    const parsedEnv = envSchema.parse(
       {
-        deploymentID: 'boo',
-        requesterID: 'foo',
-        type: 'USER_UPLOAD',
-        spec: {
-          appModules: [],
-          hostname: 'bar',
-          serverVersionRange: 'baz',
-          serverVersion: 'boo',
-          options: {vars: {DISABLE_LOG_FILTERING: 'false'}},
-          hashesOfSecrets: {
-            REFLECT_AUTH_API_KEY: 'aaa',
-            DATADOG_LOGS_API_KEY: 'bbb',
-            DATADOG_METRICS_API_KEY: 'ccc',
-          },
-        },
-        requestTime: Timestamp.now(),
-        status: 'REQUESTED',
+        deploymentOptions: {vars: {}},
+        secrets: {},
       },
       {mode: 'passthrough'},
     );
 
-    expect(parsedApp.deploymentOptions?.vars).toEqual(
-      parsedDeployment.spec.options?.vars,
-    );
+    expect(parsedEnv).toEqual({
+      deploymentOptions: {
+        vars: {
+          DISABLE: 'false',
+          DISABLE_LOG_FILTERING: 'false',
+          LOG_LEVEL: 'info',
+        },
+      },
+      secrets: {},
+    });
   });
   /* eslint-enable @typescript-eslint/naming-convention */
 });

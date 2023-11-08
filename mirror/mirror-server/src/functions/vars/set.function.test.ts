@@ -4,10 +4,7 @@ import type {DecodedIdToken} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
-import {
-  ENCRYPTION_KEY_SECRET_NAME,
-  appDataConverter,
-} from 'mirror-schema/src/app.js';
+import {appDataConverter} from 'mirror-schema/src/app.js';
 import {encryptUtf8} from 'mirror-schema/src/crypto.js';
 import {
   appPath,
@@ -15,14 +12,25 @@ import {
   deploymentPath,
   deploymentsCollection,
 } from 'mirror-schema/src/deployment.js';
-import {getApp, setApp, setUser} from 'mirror-schema/src/test-helpers.js';
+import {
+  DEFAULT_ENV,
+  ENCRYPTION_KEY_SECRET_NAME,
+  envDataConverter,
+  envPath,
+} from 'mirror-schema/src/env.js';
+import {
+  getEnv,
+  setApp,
+  setEnv,
+  setUser,
+} from 'mirror-schema/src/test-helpers.js';
 import {userPath} from 'mirror-schema/src/user.js';
 import {MAX_SERVER_VARIABLES} from 'mirror-schema/src/vars.js';
 import {watch} from 'mirror-schema/src/watch.js';
 import {SecretsCache} from '../../secrets/index.js';
 import {TestSecrets} from '../../secrets/test-utils.js';
 import {dummyDeployment} from '../../test-helpers.js';
-import {getAppSecrets} from '../app/secrets.js';
+import {decryptSecrets} from '../app/secrets.js';
 import {set} from './set.function.js';
 
 describe('vars-set', () => {
@@ -50,6 +58,8 @@ describe('vars-set', () => {
       setApp(firestore, APP_ID, {
         teamID: TEAM_ID,
         name: APP_NAME,
+      }),
+      setEnv(firestore, APP_ID, {
         secrets: {
           ['REFLECT_AUTH_API_KEY']: encryptUtf8(
             'this-is-the-reflect-auth-api-key',
@@ -79,6 +89,7 @@ describe('vars-set', () => {
     const batch = firestore.batch();
     batch.delete(firestore.doc(appPath(APP_ID)));
     batch.delete(firestore.doc(userPath(USER_ID)));
+    batch.delete(firestore.doc(envPath(APP_ID, DEFAULT_ENV)));
     const deployments = await firestore
       .collection(deploymentsCollection(APP_ID))
       .listDocuments();
@@ -165,8 +176,8 @@ describe('vars-set', () => {
       success: true,
     });
 
-    const app = await getApp(firestore, APP_ID);
-    expect(app.secrets).toMatchObject({
+    const env = await getEnv(firestore, APP_ID);
+    expect(env.secrets).toMatchObject({
       ['REFLECT_AUTH_API_KEY']: {
         key: {version: '1'},
         iv: expect.any(Uint8Array),
@@ -189,10 +200,9 @@ describe('vars-set', () => {
       },
     });
 
-    const {secrets: decrypted} = await getAppSecrets(
+    const decrypted = await decryptSecrets(
       new SecretsCache(testSecrets()),
-      app.secrets,
-      false,
+      env.secrets,
     );
     expect(decrypted).toEqual({
       ['REFLECT_AUTH_API_KEY']: 'this-is-the-reflect-auth-api-key',
@@ -203,19 +213,23 @@ describe('vars-set', () => {
   });
 
   test('set vars with running deployment', async () => {
-    const appDoc = firestore
+    await firestore
       .doc(appPath(APP_ID))
-      .withConverter(appDataConverter);
+      .withConverter(appDataConverter)
+      .update({runningDeployment: dummyDeployment('123')});
 
-    await appDoc.update({runningDeployment: dummyDeployment('123')});
     // Kick of the function, which will wait for a deployment.
     const response = callSet({
       ['DB_PASSWORD']: 'new passwordz',
       ['NEW_VAR']: 'https://new-var/',
     });
 
-    // Wait for the app to be updated.
-    for await (const snapshot of watch(appDoc, 10000)) {
+    const envDoc = firestore
+      .doc(envPath(APP_ID, DEFAULT_ENV))
+      .withConverter(envDataConverter);
+
+    // Wait for the env to be updated.
+    for await (const snapshot of watch(envDoc, 10000)) {
       if (snapshot.data()?.secrets?.['REFLECT_VAR_NEW_VAR']) {
         break; // New var was written
       }
