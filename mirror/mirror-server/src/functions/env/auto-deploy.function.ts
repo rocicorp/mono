@@ -19,6 +19,8 @@ export const autoDeploy = (firestore: Firestore) =>
   onDocumentUpdated(
     {
       document: 'apps/{appID}/envs/{envName}',
+      // The logic in this function is pure Firestore with no interaction
+      // with external systems, so retries should be a safe thing to enable.
       retry: true,
     },
     event => {
