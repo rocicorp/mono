@@ -1,7 +1,7 @@
 import * as v from 'shared/src/valita.js';
-import { encryptedBytesSchema } from './bytes.js';
-import { firestoreDataConverter } from './converter.js';
-import { appPath, deploymentOptionsSchema } from './deployment.js';
+import {encryptedBytesSchema} from './bytes.js';
+import {firestoreDataConverter} from './converter.js';
+import {appPath, deploymentOptionsSchema} from './deployment.js';
 import * as path from './path.js';
 
 // Name of the SecretManager secret that stores the base64url-encoded
