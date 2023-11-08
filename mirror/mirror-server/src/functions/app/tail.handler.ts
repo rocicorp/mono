@@ -77,10 +77,7 @@ export const tail = (
         let createTailResult;
         try {
           createTailResult = await createTail(
-            new GlobalScript(
-              {apiToken: await apiToken, accountID},
-              cfWorkerName,
-            ),
+            new GlobalScript({apiToken, accountID}, cfWorkerName),
             filters,
             debug,
             packageVersion,

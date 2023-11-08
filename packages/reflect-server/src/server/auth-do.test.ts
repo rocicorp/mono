@@ -7,6 +7,7 @@ import {
   jest,
   test,
 } from '@jest/globals';
+import type {TailErrorMessage} from 'reflect-protocol/src/tail.js';
 import {assert} from 'shared/src/asserts.js';
 import {newInvalidateAllAuthRequest} from '../client/auth.js';
 import {
@@ -2364,7 +2365,7 @@ describe('tail', () => {
       testApiToken: string | null;
       authApiKey?: string;
       testRoomID: string | null;
-      expectedError?: unknown;
+      expectedError?: TailErrorMessage;
     },
   ) => {
     test(name, async () => {
@@ -2414,26 +2415,38 @@ describe('tail', () => {
   t('without api token', {
     testApiToken: null,
     testRoomID: 'testRoomID1',
-    expectedError: ['error', 'Unauthorized', 'auth required'],
+    expectedError: {
+      type: 'error',
+      kind: 'Unauthorized',
+      message: 'auth required',
+    },
   });
   t('wrong api token', {
     testApiToken: 'wrong',
     testRoomID: 'testRoomID1',
-    expectedError: ['error', 'Unauthorized', 'auth required'],
+    expectedError: {
+      type: 'error',
+      kind: 'Unauthorized',
+      message: 'auth required',
+    },
   });
   t('without api token but with roomID', {
     testApiToken: null,
     testRoomID: 'hello',
-    expectedError: ['error', 'Unauthorized', 'auth required'],
+    expectedError: {
+      type: 'error',
+      kind: 'Unauthorized',
+      message: 'auth required',
+    },
   });
   t('missing room id', {
     testApiToken: TEST_AUTH_API_KEY,
     testRoomID: null,
-    expectedError: [
-      'error',
-      'InvalidConnectionRequest',
-      'roomID parameter required',
-    ],
+    expectedError: {
+      type: 'error',
+      kind: 'InvalidConnectionRequest',
+      message: 'roomID parameter required',
+    },
   });
   t('api token with spaces', {
     testApiToken: 'a b c',

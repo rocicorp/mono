@@ -21,6 +21,7 @@ import {sleep} from '../util/sleep.js';
 import {
   SEC_WEBSOCKET_PROTOCOL_HEADER,
   createWSAndCloseWithError,
+  createWSAndCloseWithTailError,
 } from '../util/socket.js';
 import {AlarmManager, TimeoutID} from './alarms.js';
 import {createAuthAPIHeaders} from './auth-api-headers.js';
@@ -320,7 +321,7 @@ export class BaseAuthDO implements DurableObject {
     // See comment in #connectImpl for more details.
 
     const closeWithErrorLocal = (errorKind: TailErrorKind, msg: string) =>
-      createWSAndCloseWithError(lc, request, errorKind, msg);
+      createWSAndCloseWithTailError(lc, request, errorKind, msg);
 
     // For tail we send the REFLECT_AUTH_API_KEY in the Sec-WebSocket-Protocol
     // header and it is always required
