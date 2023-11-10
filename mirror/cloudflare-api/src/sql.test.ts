@@ -36,14 +36,14 @@ describe('sql', () => {
           appID: 'lm3bjejn',
           elapsed: 75.389,
           interval: 60.001,
-          timestamp: new Date(Date.UTC(2023, 9, 17, 3, 13, 13)).toISOString(),
+          timestamp: '2023-11-01 04:29:19',
         }),
       ).toEqual({
         teamID: '198SeL9eaaF',
         appID: 'lm3bjejn',
         elapsed: 75.389,
         interval: 60.001,
-        timestamp: new Date(Date.UTC(2023, 9, 17, 3, 13, 13)),
+        timestamp: new Date(Date.UTC(2023, 10, 1, 4, 29, 19)),
       });
     });
 
@@ -258,13 +258,13 @@ describe('sql', () => {
           teamID: '198SeL9eaaF',
           appID: 'lm3bjejn',
           averageConnections: 2.1,
-          timestamp: new Date(Date.UTC(2023, 9, 17, 3, 13, 13)).toISOString(),
+          timestamp: '2023-11-01 05:10:41',
         }),
       ).toEqual({
         teamID: '198SeL9eaaF',
         appID: 'lm3bjejn',
         averageConnections: 2.1,
-        timestamp: new Date(Date.UTC(2023, 9, 17, 3, 13, 13)),
+        timestamp: new Date(Date.UTC(2023, 10, 1, 5, 10, 41)),
       });
     });
 

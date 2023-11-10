@@ -16,6 +16,9 @@ type OutputSchema<T extends InputSchema> = T & {timestamp: v.Type<Date>};
 
 export const timestampSchema = v.string().chain(str => {
   try {
+    // Strings from WAE look like: "2023-11-01 05:10:41".
+    // Let the parser know that the Dates are in UTC by appending Z.
+    str = str.endsWith('Z') ? str : `${str}Z`;
     return v.ok(new Date(str));
   } catch (e) {
     return v.err(e instanceof Error ? e : String(e));
