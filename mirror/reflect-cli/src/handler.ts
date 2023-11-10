@@ -22,10 +22,10 @@ export function handleWith<T extends ArgumentsCamelCase<CommonYargsOptions>>(
       // for reasons unknown.
       // https://github.com/rocicorp/mono/issues/1078
       try {
-        // Promise race to handle sendAnalyticsEvent with a 5-second timeout
+        // Promise race to handle sendAnalyticsEvent with a 3-second timeout
         await Promise.race([
           sendAnalyticsEvent(eventName),
-          new Promise(resolve => setTimeout(resolve, 5000)),
+          new Promise(resolve => setTimeout(resolve, 3_000)),
         ]);
       } catch (e) {
         await reportE(args, eventName, e, 'WARNING');
