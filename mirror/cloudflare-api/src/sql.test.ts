@@ -36,14 +36,14 @@ describe('sql', () => {
           appID: 'lm3bjejn',
           elapsed: 75.389,
           interval: 60.001,
-          timestamp: '2023-10-17 03:13:13',
+          timestamp: new Date(Date.UTC(2023, 9, 17, 3, 13, 13)).toISOString(),
         }),
       ).toEqual({
         teamID: '198SeL9eaaF',
         appID: 'lm3bjejn',
         elapsed: 75.389,
         interval: 60.001,
-        timestamp: new Date(2023, 9, 17, 3, 13, 13),
+        timestamp: new Date(Date.UTC(2023, 9, 17, 3, 13, 13)),
       });
     });
 
@@ -100,7 +100,7 @@ describe('sql', () => {
           .where('teamID', '=', 'foo')
           .and('appID', '=', `'quotes' and "double quotes"`)
           .or('elapsed', '>', 20)
-          .or('timestamp', '>', new Date(2023, 9, 10))
+          .or('timestamp', '>', new Date(Date.UTC(2023, 9, 10)))
           .toString(),
       ).toBe(
         `SELECT
@@ -110,7 +110,7 @@ describe('sql', () => {
           double2 AS interval,
           timestamp
           FROM RunningConnectionSeconds
-          WHERE (((teamID = 'foo') AND (appID = '\\'quotes\\' and \\"double quotes\\"')) OR (elapsed > 20)) OR (timestamp > toDateTime(1696921200))
+          WHERE (((teamID = 'foo') AND (appID = '\\'quotes\\' and \\"double quotes\\"')) OR (elapsed > 20)) OR (timestamp > toDateTime(1696896000))
           FORMAT JSON`,
       );
     });
@@ -258,13 +258,13 @@ describe('sql', () => {
           teamID: '198SeL9eaaF',
           appID: 'lm3bjejn',
           averageConnections: 2.1,
-          timestamp: '2023-10-17 03:13:13',
+          timestamp: new Date(Date.UTC(2023, 9, 17, 3, 13, 13)).toISOString(),
         }),
       ).toEqual({
         teamID: '198SeL9eaaF',
         appID: 'lm3bjejn',
         averageConnections: 2.1,
-        timestamp: new Date(2023, 9, 17, 3, 13, 13),
+        timestamp: new Date(Date.UTC(2023, 9, 17, 3, 13, 13)),
       });
     });
 
@@ -301,8 +301,8 @@ describe('sql', () => {
     test('where backing column', () => {
       expect(
         selectAggregation
-          .where('timestamp', '>=', new Date(2023, 5, 1))
-          .and('timestamp', '<', new Date(2023, 6, 1))
+          .where('timestamp', '>=', new Date(Date.UTC(2023, 5, 1)))
+          .and('timestamp', '<', new Date(Date.UTC(2023, 6, 1)))
           .groupBy('teamID', 'appID')
           .toString(),
       ).toBe(
@@ -312,7 +312,7 @@ describe('sql', () => {
           SUM(double1) AS totalElapsed,
           SUM(double2) AS totalInterval
           FROM RunningConnectionSeconds
-          WHERE (timestamp >= toDateTime(1685602800)) AND (timestamp < toDateTime(1688194800))
+          WHERE (timestamp >= toDateTime(1685577600)) AND (timestamp < toDateTime(1688169600))
           GROUP BY teamID, appID
           FORMAT JSON`,
       );
