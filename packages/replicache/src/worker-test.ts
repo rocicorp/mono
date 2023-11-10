@@ -21,7 +21,7 @@ onmessage = async (e: MessageEvent) => {
 
 async function testGetHasScanOnEmptyDB(name: string) {
   const rep = new ReplicacheTest({
-    pushDelay: 60_000, // Large to prevent interferin;,
+    pushDelay: 60_000, // Large to prevent interfering
     name,
     licenseKey: TEST_LICENSE_KEY,
     mutators: {

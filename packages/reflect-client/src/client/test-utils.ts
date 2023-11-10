@@ -207,15 +207,18 @@ export function reflectForTest<MD extends MutatorDefs>(
   testReflectInstances.add(r);
   return r;
 }
-
-teardown(async () => {
-  for (const r of testReflectInstances) {
-    if (!r.closed) {
-      await r.close();
-      testReflectInstances.delete(r);
+// This file is imported in a worker and web-test-runner does not inject the
+// teardown function there.
+if (typeof teardown === 'function') {
+  teardown(async () => {
+    for (const r of testReflectInstances) {
+      if (!r.closed) {
+        await r.close();
+        testReflectInstances.delete(r);
+      }
     }
-  }
-});
+  });
+}
 
 export class TestLogSink implements LogSink {
   messages: [LogLevel, Context | undefined, unknown[]][] = [];

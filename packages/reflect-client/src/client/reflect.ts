@@ -60,13 +60,13 @@ import {
 } from './metrics.js';
 import type {ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
-import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
-import {ServerError, isAuthError, isServerError} from './server-error.js';
-import {getServer} from './server-option.js';
 import {
   PresenceManager,
   type SubscribeToPresenceCallback,
 } from './presence-manager.js';
+import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
+import {ServerError, isAuthError, isServerError} from './server-error.js';
+import {getServer} from './server-option.js';
 
 declare const TESTING: boolean;
 
@@ -367,7 +367,7 @@ export class Reflect<MD extends MutatorDefs> {
       {roomID, clientID: this.#rep.clientID},
       logOptions.logSink,
     );
-    reportReloadReason(this.#l, localStorage);
+    reportReloadReason(this.#l);
 
     this.#metrics = new MetricManager({
       reportIntervalMs: REPORT_INTERVAL_MS,
@@ -647,11 +647,7 @@ export class Reflect<MD extends MutatorDefs> {
       kind === 'InvalidConnectionRequestBaseCookie'
     ) {
       await dropDatabase(this.#rep.idbName);
-      reloadWithReason(
-        this.#reload,
-        localStorage,
-        serverAheadReloadReason(kind),
-      );
+      reloadWithReason(lc, this.#reload, serverAheadReloadReason(kind));
     }
 
     const error = new ServerError(kind, message);

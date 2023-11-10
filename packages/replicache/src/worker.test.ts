@@ -7,23 +7,16 @@ teardown(async () => {
   await deleteAllDatabases();
 });
 
-// This started failing on github only with https://github.com/rocicorp/replicache/pull/479.
-// It works fine locally. Error message is:
-// src/worker.test.ts:
-//
-// ❌ worker test (failed on Chromium)
-// Error: Timed out
-//   at src/worker.test.ts:42:42
-//   at async o.<anonymous> (src/worker.test.ts:17:17)
-//
-// Example failure: https://github.com/rocicorp/replicache/runs/3519251318
-test.skip('worker test', async () => {
+test('worker test', async () => {
   const url = new URL('./worker-test.ts', import.meta.url);
   const w = new Worker(url, {type: 'module'});
   const name = 'worker-test';
   dbsToDrop.add(name);
 
   const data = await send(w, {name});
+  if (data !== undefined) {
+    throw data;
+  }
   expect(data).to.be.undefined;
 });
 
