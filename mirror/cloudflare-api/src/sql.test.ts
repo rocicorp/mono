@@ -277,7 +277,6 @@ describe('sql', () => {
         teamID: 'blob1',
         appID: 'blob2',
         averageConnections: 'double1 / double2',
-        timestamp: '',
       },
     });
 
@@ -402,8 +401,6 @@ describe('sql', () => {
           avgConnections: v.number(),
         }),
         expr: {
-          teamID: '',
-          appID: '',
           avgConnections: 'totalElapsed / totalInterval',
         },
       })

@@ -95,8 +95,6 @@ export async function sumUsageHandler(yargs: SumUsageHandlerArgs) {
           lifetimeSeconds: v.number(),
         }),
         expr: {
-          teamID: '',
-          appID: '',
           lifetimeSeconds: 'SUM(lifetimeMs - afterMs - beforeMs) / 1000',
         },
       })

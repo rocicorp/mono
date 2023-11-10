@@ -40,9 +40,7 @@ export class Dataset<T extends InputSchema> implements Selectable {
 
   readonly #blobs: InputCol<T>[] = [];
   readonly #doubles: InputCol<T>[] = [];
-  readonly #columnAliases: Expressions<OutputSchema<T>> = {} as Expressions<
-    OutputSchema<T>
-  >;
+  readonly #columnAliases: Expressions<OutputSchema<T>> = {};
 
   /**
    * Creates a Dataset for the specified dataset `name` and `schema`.
@@ -76,7 +74,6 @@ export class Dataset<T extends InputSchema> implements Selectable {
         throw new Error(`Invalid column type for ${name}: ${kind.name}`);
       }
     });
-    this.#columnAliases.timestamp = ''; // No alias necessary.
   }
 
   /** Creates a `WorkersAnalyticsEngineDataPoint` from an instance of the Input. */

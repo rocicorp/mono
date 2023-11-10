@@ -10,10 +10,10 @@ import type * as v from 'shared/src/valita.js';
 // Generic Schema to represent SELECT'ed aliases and their types.
 export type SelectSchema = Record<string, v.Type<string | number | Date>>;
 // Maps an alias to its defining expression in a SELECT statement.
-// Selections that are not aliased can be mapped to the same name or to the empty string.
+// Selections that are not aliased can be omitted.
 // https://developers.cloudflare.com/analytics/analytics-engine/sql-reference/#select-clause
 export type Expressions<T extends SelectSchema> = {
-  [Alias in keyof T]: string;
+  [Alias in keyof T]?: string;
 };
 
 export type SelectClause<T extends SelectSchema> = {
@@ -145,13 +145,14 @@ export class SelectBuilder<T extends SelectSchema> implements Where<T> {
     from: string,
     clause: SelectClause<T>,
   ): Where<T> {
-    const {schema, expr: exp} = clause;
+    const {schema, expr} = clause;
     const columns: string[] = [];
-    Object.entries(exp).forEach(([name, def]) => {
-      if (name === def || !def) {
-        columns.push(name);
+    Object.keys(schema.shape).forEach(name => {
+      const expression = expr[name];
+      if (expression) {
+        columns.push(`${expression} AS ${name}`);
       } else {
-        columns.push(`${def} AS ${name}`);
+        columns.push(name);
       }
     });
     const parts: string[] = ['SELECT'];
