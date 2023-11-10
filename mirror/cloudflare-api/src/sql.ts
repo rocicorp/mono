@@ -105,15 +105,15 @@ function where(
 
 // https://developers.cloudflare.com/analytics/analytics-engine/sql-reference/#group-by-clause
 export interface GroupBy<T extends SelectSchema> extends OrderBy<T> {
-  groupBy(...expressions: [string, ...string[]]): OrderBy<T>;
+  groupBy(...expressions: [keyof T, ...(keyof T)[]]): OrderBy<T>;
 }
 
 export type Direction = 'ASC' | 'DESC';
 
 // https://developers.cloudflare.com/analytics/analytics-engine/sql-reference/#order-by-clause
 export interface OrderBy<T extends SelectSchema> extends Limit<T> {
-  orderBy(expression: string): Limit<T>;
-  orderBy(expression: string, dir: Direction): Limit<T>;
+  orderBy(expression: keyof T): Limit<T>;
+  orderBy(expression: keyof T, dir: Direction): Limit<T>;
 }
 
 // https://developers.cloudflare.com/analytics/analytics-engine/sql-reference/#limit-clause
@@ -241,12 +241,12 @@ export class SelectBuilder<T extends SelectSchema> implements Where<T> {
     );
   }
 
-  groupBy(...expressions: [string, ...string[]]): SelectBuilder<T> {
+  groupBy(...expressions: [keyof T, ...(keyof T)[]]): SelectBuilder<T> {
     return this.#with(`GROUP BY ${expressions.join(`, `)}`);
   }
 
-  orderBy(expression: string, dir: Direction = 'ASC'): SelectBuilder<T> {
-    return this.#with(`ORDER BY ${expression} ${dir}`);
+  orderBy(expression: keyof T, dir: Direction = 'ASC'): SelectBuilder<T> {
+    return this.#with(`ORDER BY ${String(expression)} ${dir}`);
   }
 
   limit(n: number | undefined): SelectBuilder<T> {
