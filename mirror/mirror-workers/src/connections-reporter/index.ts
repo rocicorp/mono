@@ -1,9 +1,13 @@
-import * as v from 'shared/src/valita.js';
+import {
+  connectionLifetimes,
+  runningConnectionSeconds,
+} from 'mirror-schema/src/datasets.js';
 import {
   CONNECTION_SECONDS_CHANNEL_NAME,
   connectionSecondsReportSchema as reportSchema,
 } from 'shared/src/events/connection-seconds.js';
-import {type ScriptTags, parseScriptTags} from '../script-tags.js';
+import * as v from 'shared/src/valita.js';
+import {parseScriptTags, type ScriptTags} from '../script-tags.js';
 
 export interface Env {
   // blob1  | blob2 | double1 | double2  | timestamp
@@ -30,10 +34,9 @@ function reportConnectionSeconds(
     );
     return;
   }
-  runningConnectionSecondsDS.writeDataPoint({
-    blobs: [tags.teamID, tags.appID],
-    doubles: [report.elapsed, report.interval],
-  });
+  runningConnectionSecondsDS.writeDataPoint(
+    runningConnectionSeconds.dataPoint({...tags, ...report}),
+  );
   console.info(
     `Reported connection seconds for ${tags.appName}.${tags.teamLabel}`,
     report,
@@ -80,7 +83,7 @@ function reportConnectionLifetimes(
   connectionLifetimesDS: AnalyticsEngineDataset,
 ) {
   const endTime = Date.now();
-  for (const {scriptTags, event, eventTimestamp} of events) {
+  for (const {scriptTags, event, eventTimestamp: startTime} of events) {
     // Test if this is a FetchEvent received by the RoomDO. This is determined by the
     // presence of the "x-reflect-auth-data" header. This effectively filters out the
     // duplicate FetchEvents created by the intervening WorkerRouter and AuthDO, as
@@ -97,17 +100,16 @@ function reportConnectionLifetimes(
       console.error(`Missing expected script tags: ${String(e)}`, scriptTags);
       continue;
     }
-    if (!eventTimestamp) {
+    if (!startTime) {
       console.error(`Missing eventTimestamp in FetchEvent`);
       continue;
     }
-    connectionLifetimesDS.writeDataPoint({
-      blobs: [tags.teamID, tags.appID],
-      doubles: [eventTimestamp, endTime],
-    });
+    connectionLifetimesDS.writeDataPoint(
+      connectionLifetimes.dataPoint({...tags, startTime, endTime}),
+    );
     console.info(
       `Reported connection lifetime for ${tags.appName}.${tags.teamLabel} (${
-        (endTime - eventTimestamp) / 1000
+        (endTime - startTime) / 1000
       } seconds)`,
     );
   }

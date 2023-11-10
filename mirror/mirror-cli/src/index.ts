@@ -64,6 +64,7 @@ import {
   revertReflectServerOptions,
 } from './release-server.js';
 import {runQueryHandler} from './run-query.js';
+import {sumUsageHandler, sumUsageOptions} from './sum-usage.js';
 import {
   uploadReflectServerHandler,
   uploadReflectServerOptions,
@@ -227,6 +228,14 @@ function createCLIParser(argv: string[]) {
     'Execute a Worker Analytics SQL Query',
     queryAnalyticsOptions,
     queryAnalyticsHandler,
+  );
+
+  // sum-usage
+  reflectCLI.command(
+    'sum-usage',
+    'Sums the connection seconds over a period of time.',
+    sumUsageOptions,
+    sumUsageHandler,
   );
 
   reflectCLI.command(

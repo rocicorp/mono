@@ -3,7 +3,8 @@
   "compilerOptions": {
     "declaration": true,
     "declarationDir": "dist",
-    "tsBuildInfoFile": "tsconfig.tsbuildinfo"
+    "tsBuildInfoFile": "tsconfig.tsbuildinfo",
+    "skipDefaultLibCheck": true
   },
   "include": ["src/**/*.ts"]
 }
