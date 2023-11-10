@@ -16,6 +16,21 @@ export function handleWith<T extends ArgumentsCamelCase<CommonYargsOptions>>(
       let success = false;
       const eventName =
         args._ && args._.length ? `cmd_${args._[0]}` : 'cmd_unknown';
+
+      // It is tempting to send analytics in parallel with running
+      // the handler, but that appears to cause problems for some commands
+      // for reasons unknown.
+      // https://github.com/rocicorp/mono/issues/1078
+      try {
+        // Promise race to handle sendAnalyticsEvent with a 3-second timeout
+        await Promise.race([
+          sendAnalyticsEvent(eventName),
+          new Promise(resolve => setTimeout(resolve, 3_000)),
+        ]);
+      } catch (e) {
+        await reportE(args, eventName, e, 'WARNING');
+      }
+
       try {
         await handler(args);
         success = true;
@@ -25,16 +40,6 @@ export function handleWith<T extends ArgumentsCamelCase<CommonYargsOptions>>(
         console.error(`\n${color.red(color.bold('Error'))}: ${message}`);
       } finally {
         await terminate(getFirestore());
-      }
-
-      // It is tempting to send analytics in parallel with running
-      // the handler, but that appears to cause problems for some commands
-      // for reasons unknown.
-      // https://github.com/rocicorp/mono/issues/1078
-      try {
-        await sendAnalyticsEvent(eventName);
-      } catch (e) {
-        await reportE(args, eventName, e, 'WARNING');
       }
 
       if (!success) {
