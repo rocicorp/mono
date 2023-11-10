@@ -60,13 +60,13 @@ import {
 } from './metrics.js';
 import type {ReflectOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
-import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
-import {ServerError, isAuthError, isServerError} from './server-error.js';
-import {getServer} from './server-option.js';
 import {
   PresenceManager,
   type SubscribeToPresenceCallback,
 } from './presence-manager.js';
+import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
+import {ServerError, isAuthError, isServerError} from './server-error.js';
+import {getServer} from './server-option.js';
 
 declare const TESTING: boolean;
 
@@ -174,7 +174,7 @@ export class Reflect<MD extends MutatorDefs> {
 
   // This is a promise because it is waiting for the clientID from the
   // Replicache instance.
-  readonly #l: LogContext;
+  readonly #lc: LogContext;
   readonly #logOptions: LogOptions;
 
   readonly #pokeHandler: PokeHandler;
@@ -362,12 +362,12 @@ export class Reflect<MD extends MutatorDefs> {
     this.roomID = roomID;
     this.userID = userID;
     this.#jurisdiction = jurisdiction;
-    this.#l = new LogContext(
+    this.#lc = new LogContext(
       logOptions.logLevel,
       {roomID, clientID: this.#rep.clientID},
       logOptions.logSink,
     );
-    reportReloadReason(this.#l, localStorage);
+    reportReloadReason(this.#lc);
 
     this.#metrics = new MetricManager({
       reportIntervalMs: REPORT_INTERVAL_MS,
@@ -376,18 +376,18 @@ export class Reflect<MD extends MutatorDefs> {
       reporter: enableAnalytics
         ? allSeries => this.#reportMetrics(allSeries)
         : () => Promise.resolve(),
-      lc: this.#l,
+      lc: this.#lc,
     });
     this.#metrics.tags.push(`version:${this.version}`);
 
-    this.#presenceManager = new PresenceManager(this.#rep.clientID, this.#l);
+    this.#presenceManager = new PresenceManager(this.#rep.clientID, this.#lc);
 
     this.#pokeHandler = new PokeHandler(
       pokeDD31 => this.#rep.poke(pokeDD31),
       this.#presenceManager,
       () => this.#onOutOfOrderPoke(),
       this.#rep.clientID,
-      this.#l,
+      this.#lc,
     );
 
     this.#visibilityWatcher = getDocumentVisibilityWatcher(
@@ -475,7 +475,7 @@ export class Reflect<MD extends MutatorDefs> {
    * When closed all subscriptions end and no more read or writes are allowed.
    */
   close(): Promise<void> {
-    const lc = this.#l;
+    const lc = this.#lc;
     if (this.#connectionState !== ConnectionState.Disconnected) {
       this.#disconnect(lc, {
         client: 'ReflectClosed',
@@ -553,7 +553,7 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   #onMessage = (e: MessageEvent<string>) => {
-    const l = this.#l;
+    const l = this.#lc;
     l.debug?.('received message', e.data);
     if (this.closed) {
       l.debug?.('ignoring message because already closed');
@@ -602,7 +602,7 @@ export class Reflect<MD extends MutatorDefs> {
   #onOpen = (e: Event) => {
     const l = addWebSocketIDFromSocketToLogContext(
       e.target as WebSocket,
-      this.#l,
+      this.#lc,
     );
     if (this.#connectStart === undefined) {
       l.error?.(
@@ -621,7 +621,7 @@ export class Reflect<MD extends MutatorDefs> {
   #onClose = (e: CloseEvent) => {
     const l = addWebSocketIDFromSocketToLogContext(
       e.target as WebSocket,
-      this.#l,
+      this.#lc,
     );
     const {code, reason, wasClean} = e;
     l.info?.('Got socket close event', {code, reason, wasClean});
@@ -647,11 +647,7 @@ export class Reflect<MD extends MutatorDefs> {
       kind === 'InvalidConnectionRequestBaseCookie'
     ) {
       await dropDatabase(this.#rep.idbName);
-      reloadWithReason(
-        this.#reload,
-        localStorage,
-        serverAheadReloadReason(kind),
-      );
+      reloadWithReason(lc, this.#reload, serverAheadReloadReason(kind));
     }
 
     const error = new ServerError(kind, message);
@@ -894,7 +890,7 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   #onOutOfOrderPoke() {
-    const lc = this.#l;
+    const lc = this.#lc;
     lc.info?.('out of order poke, disconnecting');
 
     // It is theoretically possible that we get disconnected during the
@@ -931,8 +927,8 @@ export class Reflect<MD extends MutatorDefs> {
   ): Promise<PusherResult> {
     // If we are connecting we wait until we are connected.
     await this.#connectResolver.promise;
-    const l = this.#l.withContext('requestID', requestID);
-    l.debug?.(`pushing ${req.mutations.length} mutations`);
+    const lc = this.#lc.withContext('requestID', requestID);
+    lc.debug?.(`pushing ${req.mutations.length} mutations`);
 
     // If pushVersion is 0 this is a mutation recovery push for a pre dd31
     // client.  Reflect didn't support mutation recovery pre dd31, so don't
@@ -957,7 +953,7 @@ export class Reflect<MD extends MutatorDefs> {
             m.clientID === this.#lastMutationIDSent.clientID &&
             m.id === this.#lastMutationIDSent.id,
         ) + 1;
-    l.debug?.(
+    lc.debug?.(
       isMutationRecoveryPush ? 'pushing for recovery' : 'pushing',
       req.mutations.length - start,
       'mutations of',
@@ -1013,15 +1009,15 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   async #runLoop() {
-    this.#l.info?.(`Starting Reflect version: ${this.version}`);
+    this.#lc.info?.(`Starting Reflect version: ${this.version}`);
 
     if (this.#server === null) {
-      this.#l.info?.('No socket origin provided, not starting connect loop.');
+      this.#lc.info?.('No socket origin provided, not starting connect loop.');
       return;
     }
 
     let runLoopCounter = 0;
-    const bareLogContext = this.#l;
+    const bareLogContext = this.#lc;
     const getLogContext = () => {
       let lc = bareLogContext;
       if (this.#socket) {
@@ -1212,8 +1208,8 @@ export class Reflect<MD extends MutatorDefs> {
     req: PullRequestV0 | PullRequestV1,
     requestID: string,
   ): Promise<PullerResultV0 | PullerResultV1> {
-    const l = this.#l.withContext('requestID', requestID);
-    l.debug?.('Pull', req);
+    const lc = this.#lc.withContext('requestID', requestID);
+    lc.debug?.('Pull', req);
     // If pullVersion === 0 this is a mutation recovery pull for a pre dd31
     // client.  Reflect didn't support mutation recovery pre dd31, so don't
     // try to recover these, just return no-op response.
@@ -1247,7 +1243,7 @@ export class Reflect<MD extends MutatorDefs> {
     assert(socket);
 
     // Mutation recovery pull.
-    l.debug?.('Pull is for mutation recovery');
+    lc.debug?.('Pull is for mutation recovery');
     const cookie = valita.parse(req.cookie, nullableVersionSchema);
     const pullRequestMessage: PullRequestMessage = [
       'pull',
@@ -1272,10 +1268,10 @@ export class Reflect<MD extends MutatorDefs> {
 
       switch (raceResult) {
         case RaceCases.Timeout:
-          l.debug?.('Mutation recovery pull timed out');
+          lc.debug?.('Mutation recovery pull timed out');
           throw new Error('Pull timed out');
         case RaceCases.Response: {
-          l.debug?.('Returning mutation recovery pull response');
+          lc.debug?.('Returning mutation recovery pull response');
           const response = await pullResponseResolver.promise;
           return {
             response: {
@@ -1357,7 +1353,7 @@ export class Reflect<MD extends MutatorDefs> {
   // returns 200.
   async #reportMetrics(allSeries: Series[]) {
     if (this.#server === null) {
-      this.#l.info?.('Skipping metrics report, socketOrigin is null');
+      this.#lc.info?.('Skipping metrics report, socketOrigin is null');
       return;
     }
     const body = JSON.stringify({series: allSeries});
@@ -1393,11 +1389,11 @@ export class Reflect<MD extends MutatorDefs> {
       await checkConnectivity(
         reason,
         this.#server,
-        this.#l,
+        this.#lc,
         this.#closeAbortController.signal,
       );
     } catch (e) {
-      this.#l.info?.('Error checking connectivity for', reason, e);
+      this.#lc.info?.('Error checking connectivity for', reason, e);
     }
   }
 

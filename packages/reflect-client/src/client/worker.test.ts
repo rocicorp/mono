@@ -1,26 +1,18 @@
 import {expect} from 'chai';
 import {sleep} from 'shared/src/sleep.js';
-import {closeAllReps, dbsToDrop, deleteAllDatabases} from './test-util.js';
-
-teardown(async () => {
-  await closeAllReps();
-  await deleteAllDatabases();
-});
 
 test('worker test', async () => {
   const url = new URL('./worker-test.ts', import.meta.url);
   const w = new Worker(url, {type: 'module'});
-  const name = 'worker-test';
-  dbsToDrop.add(name);
-
-  const data = await send(w, {name});
+  const userID = 'worker-test-user-id';
+  const data = await send(w, {userID});
   if (data !== undefined) {
     throw data;
   }
   expect(data).to.be.undefined;
 });
 
-function send(w: Worker, data: {name: string}): Promise<unknown> {
+function send(w: Worker, data: {userID: string}): Promise<unknown> {
   const p = new Promise((resolve, reject) => {
     w.onmessage = e => resolve(e.data);
     w.onerror = reject;
