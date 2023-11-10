@@ -96,6 +96,24 @@ export class Dataset<T extends InputSchema> implements Selectable {
   }
 
   /**
+   * Selects all of the column aliases with additional expressions based on the aliases.
+   */
+  selectStarPlus<S extends SelectSchema>(
+    more: SelectClause<S>,
+  ): Where<OutputSchema<T> & S> {
+    return this.select({
+      schema: v.object({
+        ...this.output.shape,
+        ...more.schema.shape,
+      }),
+      expr: {
+        ...this.#columnAliases,
+        ...more.expr,
+      },
+    });
+  }
+
+  /**
    * Starts a custom "SELECT" statement with the given SelectSchema and accompanying
    * expressions for each alias.
    */

@@ -74,27 +74,20 @@ export async function sumUsageHandler(yargs: SumUsageHandlerArgs) {
 
   const result2 = await analytics.query(
     connectionLifetimes
-      .select({
+      .selectStarPlus({
         schema: v.object({
-          teamID: v.string(),
-          appID: v.string(),
           lifetimeMs: v.number(),
           afterMs: v.number(),
           beforeMs: v.number(),
         }),
         expr: {
-          teamID: 'blob1',
-          appID: 'blob2',
-          // endTime - startTime
-          lifetimeMs: 'double2 - double1',
-          // IF(endTime > endMs, endTime - endMs, 0.0)
-          afterMs: `IF(double2 > ${endMs}, double2 - ${endMs}, 0.0)`,
-          // IF(startMs > startTime, startMs - startTime, 0.0)
-          beforeMs: `IF(${startMs} > double1, ${startMs} - double1, 0.0)`,
+          lifetimeMs: 'endTime - startTime',
+          afterMs: `IF(endTime > ${endMs}, endTime - ${endMs}, 0.0)`,
+          beforeMs: `IF(${startMs} > startTime, ${startMs} - startTime, 0.0)`,
         },
       })
-      .where('double1', '<', endMs)
-      .and('double2', '>', startMs)
+      .where('startTime', '<', endMs)
+      .and('endTime', '>', startMs)
       .select({
         schema: v.object({
           teamID: v.string(),

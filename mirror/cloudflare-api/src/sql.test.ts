@@ -224,6 +224,47 @@ describe('sql', () => {
     });
   });
 
+  describe('selectStarPlus', () => {
+    const selectStarPlus = runningConnectionSeconds.selectStarPlus({
+      schema: v.object({averageConnections: v.number()}),
+      expr: {averageConnections: 'elapsed / interval'},
+    });
+
+    test('toString', () => {
+      expect(selectStarPlus.toString()).toBe(
+        `SELECT
+          blob1 AS teamID,
+          blob2 AS appID,
+          double1 AS elapsed,
+          double2 AS interval,
+          timestamp,
+          elapsed / interval AS averageConnections
+          FROM RunningConnectionSeconds
+          FORMAT JSON`,
+      );
+    });
+
+    test('where', () => {
+      expect(
+        selectStarPlus
+          .where('teamID', '=', 'foo')
+          .and('averageConnections', '>', 2)
+          .toString(),
+      ).toBe(
+        `SELECT
+          blob1 AS teamID,
+          blob2 AS appID,
+          double1 AS elapsed,
+          double2 AS interval,
+          timestamp,
+          elapsed / interval AS averageConnections
+          FROM RunningConnectionSeconds
+          WHERE (teamID = 'foo') AND (averageConnections > 2)
+          FORMAT JSON`,
+      );
+    });
+  });
+
   describe('custom select', () => {
     const selectCustom = runningConnectionSeconds.select({
       schema: v.object({
