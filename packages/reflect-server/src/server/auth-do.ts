@@ -622,7 +622,7 @@ export class BaseAuthDO implements DurableObject {
             );
             return closeWithErrorLocal(
               'Unauthorized',
-              'userID returned by authHandler does not match userID url parameter',
+              'userID returned by authHandler must match userID specified in Reflect constructor.',
             );
           }
           authData = authHandlerAuthData;
