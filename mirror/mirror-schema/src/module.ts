@@ -1,8 +1,8 @@
-import type {Bucket} from '@google-cloud/storage';
-import type {Storage} from 'firebase-admin/storage';
-import {sha256OfString} from 'shared/src/sha256.js';
+import type { Bucket } from '@google-cloud/storage';
+import type { Storage } from 'firebase-admin/storage';
+import { sha256OfString } from 'shared/src/sha256.js';
 import * as v from 'shared/src/valita.js';
-import {parseCloudStorageURL} from './cloud-storage.js';
+import { parseCloudStorageURL } from './cloud-storage.js';
 
 // Subset of the wrangler `CfModuleType` applicable to Mirror.
 export const moduleTypeSchema = v.union(v.literal('esm'), v.literal('text'));
@@ -36,7 +36,14 @@ export async function storeModule(
   const file = bucket.file(filename);
   const [exists] = await file.exists();
   if (!exists) {
-    await file.save(module.content, {resumable: false});
+    await file.save(
+      module.content, 
+      {
+        contentType: 'text/plain',
+        gzip: true,
+        resumable: false
+      }
+    );
   }
   return {
     name: module.name,
