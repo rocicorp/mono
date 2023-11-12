@@ -12,7 +12,7 @@ export function useCount(
   return useSubscribe(
     reflect,
     async (tx: ReadTransaction) => {
-      const count = (await tx.get(key)) as number | undefined;
+      const count = await tx.get<number>(key);
       // dont want to log if key doesn't exist yet or we are getting  default value from subscribe
       if (count === undefined) {
         return 0;
