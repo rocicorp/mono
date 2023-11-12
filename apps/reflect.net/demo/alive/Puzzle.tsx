@@ -47,7 +47,7 @@ export function Puzzle({
       pieces: await getPieceInfos(tx, presentClientIDs),
       myClient: (await getClient(tx, tx.clientID)) ?? null,
     }),
-    {pieces: {}, myClient: null},
+    {pieces: {} as Record<string, PieceInfo>, myClient: null},
     [presentClientIDs],
   );
 

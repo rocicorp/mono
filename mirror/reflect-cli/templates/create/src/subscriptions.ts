@@ -15,7 +15,7 @@ import {getClientState} from './client-state.js';
 import type {M} from './mutators.js';
 
 export function useCount(reflect: Reflect<M>, key: string) {
-  return useSubscribe(reflect, async tx => (await tx.get<number>(key)) ?? 0, 0);
+  return useSubscribe(reflect, tx => tx.get<number>(key), 0);
 }
 
 export function useClientState(r: Reflect<M>, id: string) {
