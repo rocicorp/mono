@@ -71,7 +71,9 @@ export async function cfFetch<ResponseType = unknown>(
     return json.result;
   }
   if (json.errors?.length) {
-    throw new FetchResultError(json, action);
+    const err = new FetchResultError(json, action);
+    err.stack = insertStack(err.stack ?? '', json.errors);
+    throw err;
   }
   throw new Error(`Error returned for ${action}: ${JSON.stringify(json)}`);
 }
@@ -104,6 +106,10 @@ export class FetchResultError extends Error implements FetchError {
   codes(): number[] {
     return this.error_chain.map(error => error.code);
   }
+
+  messages(): string[] {
+    return this.error_chain.map(error => error.message);
+  }
 }
 
 interface FetchError {
@@ -117,7 +123,7 @@ export interface FetchResult<ResponseType = unknown> {
   success: boolean;
   result: ResponseType;
   errors: FetchError[];
-  messages: string[];
+  messages?: string[];
   // eslint-disable-next-line @typescript-eslint/naming-convention
   result_info?: unknown;
 }
@@ -133,5 +139,27 @@ export enum Errors {
   RecordDoesNotExist = 81044,
   ResourceNotFound = 1551,
   ScriptNotFound = 10007,
+  ScriptContentFailedValidationChecks = 10021,
+  ScriptBodyWasTooLarge = 10027,
   ServiceNotFound = 10090,
+}
+
+function insertStack(orig: string, errors: FetchError[]): string {
+  const [first, rest] = splitFirstLine(orig);
+  let stack = first + '\n';
+  for (const {code, message} of errors) {
+    const [first, rest] = splitFirstLine(message);
+    stack += `  at ${first} (cloudflare:${code})\n`;
+    if (rest) {
+      stack += rest.endsWith('\n') ? rest : `${rest}\n`;
+    }
+  }
+  return stack + rest;
+}
+
+function splitFirstLine(orig: string): [first: string, rest: string] {
+  const newline = orig.indexOf('\n');
+  const first = newline >= 0 ? orig.substring(0, newline) : orig;
+  const rest = newline >= 0 ? orig.substring(newline + 1) : '';
+  return [first, rest];
 }

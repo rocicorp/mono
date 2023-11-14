@@ -9,6 +9,7 @@ import {
   test,
 } from '@jest/globals';
 import {resolver} from '@rocicorp/resolver';
+import {FetchResultError} from 'cloudflare-api/src/fetch.js';
 import {initializeApp} from 'firebase-admin/app';
 import {FieldValue, Timestamp, getFirestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
@@ -374,65 +375,123 @@ describe('deploy', () => {
     expect(app.runningDeployment).toEqual(second);
   });
 
-  test('state tracking: failure', async () => {
-    const {promise: isPublishing, resolve: publishing} = resolver<void>();
-    const {promise: canFinishPublishing, reject: failPublishing} =
-      resolver<void>();
+  describe('state tracking: failure', () => {
+    type Case = {
+      name: string;
+      error: unknown;
+      message: string;
+    };
 
-    // Set a running deployment on the App to make sure it is untouched.
-    const runningDeployment = await writeTestDeployment('1234', 'RUNNING');
-    await firestore
-      .doc(appPath(APP_ID))
-      .withConverter(appDataConverter)
-      .update({runningDeployment});
-
-    const deploymentID = await requestTestDeployment();
-    const deploymentDoc = firestore
-      .doc(deploymentPath(APP_ID, deploymentID))
-      .withConverter(deploymentDataConverter);
-    expect((await deploymentDoc.get()).data()?.status).toBe('REQUESTED');
-    let app = await getApp(firestore, APP_ID);
-    expect(app.queuedDeploymentIDs).toEqual([deploymentID]);
-    expect(app.runningDeployment).toEqual(runningDeployment);
-
-    const deploymentFinished = runDeployment(
-      firestore,
-      null as unknown as Storage,
-      testSecrets(),
-      APP_ID,
-      deploymentID,
+    const cases: Case[] = [
       {
-        // eslint-disable-next-line require-yield
-        async *publish() {
-          publishing();
-          await canFinishPublishing;
-        },
-        async delete() {},
+        name: 'Unknown error',
+        error: 'oh nose',
+        message: 'There was an error deploying the app',
       },
-    );
-    await isPublishing;
+      {
+        name: 'Cloudflare error',
+        error: new FetchResultError(
+          {
+            success: false,
+            result: null,
+            errors: [
+              {
+                code: 10000,
+                message: 'This should not be surfaced to the user',
+              },
+            ],
+          },
+          'action',
+        ),
+        message: 'There was an error deploying the app (error code 10000)',
+      },
+      {
+        name: 'Script validation error',
+        error: new FetchResultError(
+          {
+            success: false,
+            result: null,
+            errors: [
+              {
+                code: 10021, // ScriptContentFailedValidationChecks
+                message:
+                  `Uncaught ReferenceError: window is not defined\n` +
+                  `  at index.js:129:13`,
+              },
+            ],
+          },
+          'action',
+        ),
+        message:
+          `Uncaught ReferenceError: window is not defined\n` +
+          `  at index.js:129:13`,
+      },
+    ];
 
-    expect((await deploymentDoc.get()).data()?.status).toBe('DEPLOYING');
-    app = await getApp(firestore, APP_ID);
-    expect(app.queuedDeploymentIDs).toEqual([deploymentID]);
-    expect(app.runningDeployment).toEqual(runningDeployment);
+    for (const c of cases) {
+      test(c.name, async () => {
+        const {promise: isPublishing, resolve: publishing} = resolver<void>();
+        const {promise: canFinishPublishing, reject: failPublishing} =
+          resolver<void>();
 
-    failPublishing('oh nose');
-    try {
-      await deploymentFinished;
-    } catch (e) {
-      expect(String(e)).toBe('oh nose');
+        // Set a running deployment on the App to make sure it is untouched.
+        const runningDeployment = await writeTestDeployment('1234', 'RUNNING');
+        await firestore
+          .doc(appPath(APP_ID))
+          .withConverter(appDataConverter)
+          .update({runningDeployment});
+
+        const deploymentID = await requestTestDeployment();
+        const deploymentDoc = firestore
+          .doc(deploymentPath(APP_ID, deploymentID))
+          .withConverter(deploymentDataConverter);
+        expect((await deploymentDoc.get()).data()?.status).toBe('REQUESTED');
+        let app = await getApp(firestore, APP_ID);
+        expect(app.queuedDeploymentIDs).toEqual([deploymentID]);
+        expect(app.runningDeployment).toEqual(runningDeployment);
+
+        const deploymentFinished = runDeployment(
+          firestore,
+          null as unknown as Storage,
+          testSecrets(),
+          APP_ID,
+          deploymentID,
+          {
+            // eslint-disable-next-line require-yield
+            async *publish() {
+              publishing();
+              await canFinishPublishing;
+            },
+            async delete() {},
+          },
+        );
+        await isPublishing;
+
+        expect((await deploymentDoc.get()).data()?.status).toBe('DEPLOYING');
+        app = await getApp(firestore, APP_ID);
+        expect(app.queuedDeploymentIDs).toEqual([deploymentID]);
+        expect(app.runningDeployment).toEqual(runningDeployment);
+
+        failPublishing(c.error);
+        try {
+          await deploymentFinished;
+        } catch (e) {
+          expect(e).toBe(c.error);
+        }
+        const deployed = must((await deploymentDoc.get()).data());
+        expect(deployed.status).toBe('FAILED');
+        expect(deployed.statusMessage).toBe(c.message);
+
+        app = await getApp(firestore, APP_ID);
+        expect(app.queuedDeploymentIDs).toEqual([]);
+        expect(app.runningDeployment).toEqual(runningDeployment);
+
+        const stillRunning = await getDeployment(
+          runningDeployment.deploymentID,
+        );
+        expect(stillRunning.status).toBe('RUNNING');
+      });
     }
-    const deployed = must((await deploymentDoc.get()).data());
-    expect(deployed.status).toBe('FAILED');
-    expect(deployed.statusMessage).toBe('There was an error deploying the app');
-
-    app = await getApp(firestore, APP_ID);
-    expect(app.queuedDeploymentIDs).toEqual([]);
-    expect(app.runningDeployment).toEqual(runningDeployment);
-
-    const stillRunning = await getDeployment(runningDeployment.deploymentID);
-    expect(stillRunning.status).toBe('RUNNING');
   });
 
   test('deployment queue', async () => {

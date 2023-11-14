@@ -1,4 +1,4 @@
-import {FetchResultError} from 'cloudflare-api/src/fetch.js';
+import {Errors, FetchResultError} from 'cloudflare-api/src/fetch.js';
 import {
   FieldValue,
   Precondition,
@@ -15,6 +15,7 @@ import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {
   Deployment,
   DeploymentStatus,
+  DeploymentType,
   deploymentDataConverter,
   deploymentPath,
 } from 'mirror-schema/src/deployment.js';
@@ -213,19 +214,34 @@ export async function runDeployment(
       newScriptRef,
     );
   } catch (e) {
-    logger.error(e);
-    const error =
-      `There was an error ${
-        deploymentType === 'DELETE' ? 'deleting' : 'deploying'
-      } the app` +
-      (e instanceof FetchResultError
-        ? ` (error code ${e.code})`
-        : e instanceof HttpsError
-        ? `: ${e.message}`
-        : '');
+    const error = deploymentErrorMessage(deploymentType, e);
     await setDeploymentStatus(firestore, appID, deploymentID, 'FAILED', error);
     throw e;
   }
+}
+
+const userActionableErrorCodes = new Set([
+  Errors.ScriptContentFailedValidationChecks,
+  Errors.ScriptBodyWasTooLarge,
+]);
+
+function deploymentErrorMessage(
+  deploymentType: DeploymentType,
+  e: unknown,
+): string {
+  const error = `There was an error ${
+    deploymentType === 'DELETE' ? 'deleting' : 'deploying'
+  } the app`;
+  if (e instanceof FetchResultError) {
+    if (userActionableErrorCodes.has(e.code)) {
+      return e.messages().join('\n');
+    }
+    return `${error} (error code ${e.code})`;
+  }
+  if (e instanceof HttpsError) {
+    return `${error}: ${e.message}`;
+  }
+  return error;
 }
 
 export function requestDeployment(

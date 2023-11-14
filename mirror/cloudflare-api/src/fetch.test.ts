@@ -8,6 +8,7 @@ import {
 } from '@jest/globals';
 import {FetchMocker} from 'shared/src/fetch-mocker.js';
 import {CustomHostnames} from './custom-hostnames.js';
+import {mockFetch} from './fetch-test-helper.js';
 
 describe('cf fetch', () => {
   beforeEach(() => {
@@ -28,6 +29,46 @@ describe('cf fetch', () => {
       'GET',
       'https://api.cloudflare.com/client/v4/zones/zone-id/custom_hostnames/ch-id',
     ]);
+
+  describe('fetch errors', () => {
+    type Case = {
+      name: string;
+      code: number;
+      message: string;
+      expectedStack: string;
+    };
+    const cases: Case[] = [
+      {
+        name: 'reference error',
+        code: 10021,
+        message:
+          `Uncaught ReferenceError: window is not defined\n` +
+          `  at index.js:169:23\n` +
+          `  at index.js:41:70\n` +
+          `  at index.js:42:7 in node_modules/leaflet/dist/leaflet-src.js\n` +
+          `  at index.js:11:50 in __require\n` +
+          `  at index.js:9701:30\n`,
+        expectedStack: `  at Uncaught ReferenceError: window is not defined (cloudflare:10021)\n`,
+      },
+      {
+        name: 'cloudflare outage',
+        code: 10000,
+        message: 'Internal authentication error: internal server error',
+        expectedStack: `  at Internal authentication error: internal server error (cloudflare:10000)\n`,
+      },
+    ];
+    for (const c of cases) {
+      test(c.name, async () => {
+        mockFetch().error('GET', 'custom_hostnames', c.code, c.message);
+
+        const result = await resource.get('ch-id').catch(err => err);
+        expect(result).toBeInstanceOf(Error);
+        expect(
+          (result as Error).stack?.indexOf(c.expectedStack),
+        ).toBeGreaterThan(0);
+      });
+    }
+  });
 
   test('exponential backoff with recovery', async () => {
     const fetch = new FetchMocker()
