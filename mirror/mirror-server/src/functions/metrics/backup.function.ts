@@ -22,7 +22,7 @@ export const backup = (
   secretsClient: SecretsClient,
 ) =>
   // https://cloud.google.com/appengine/docs/flexible/scheduling-jobs-with-cron-yaml#custom-interval
-  onSchedule('every tuesday 04:00', async event => {
+  onSchedule('every tuesday 11:00', async event => {
     const secrets = new SecretsCache(secretsClient);
     const now = new Date(event.scheduleTime);
 
