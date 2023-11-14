@@ -1,7 +1,7 @@
 import * as v from 'shared/src/valita.js';
-import { cfCall } from './fetch.js';
-import type { AccountAccess } from './resources.js';
-import type { SelectSchema, SelectStatement } from './sql.js';
+import {cfCall} from './fetch.js';
+import type {AccountAccess} from './resources.js';
+import type {SelectSchema, SelectStatement} from './sql.js';
 
 export class Analytics {
   readonly #apiToken: string;
@@ -22,7 +22,7 @@ export class Analytics {
 
   async queryRaw(statement: string): Promise<string> {
     const resp = await this.#query(statement);
-    return await resp.text();
+    return resp.text();
   }
 
   async #query(statement: string) {
