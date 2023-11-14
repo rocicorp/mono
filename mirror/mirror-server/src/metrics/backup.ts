@@ -3,8 +3,8 @@ import type {Analytics} from 'cloudflare-api/src/analytics.js';
 import {logger} from 'firebase-functions';
 import * as v from 'shared/src/valita.js';
 
-// Backs up the previous week's worth of metrics for the given provider namespace
-// (e.g. )
+// Backs up the previous week's worth of metrics to the specified bucket in
+// the file `{cloudflare-account-id}/{table-name}/YYYY-MM-DD~YYYY-MM-DD`
 export async function backupWeekBefore(
   date: Date,
   analytics: Analytics,
