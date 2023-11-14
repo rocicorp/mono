@@ -1,5 +1,9 @@
 import {hideBin} from 'yargs/helpers';
 import {addDeploymentsOptionsHandler} from './add-deployment-options.js';
+import {
+  backupAnalyticsHandler,
+  backupAnalyticsOptions,
+} from './backup-analytics.js';
 import {certificatesHandler, certificatesOptions} from './certificates.js';
 import {
   checkProviderHandler,
@@ -228,6 +232,14 @@ function createCLIParser(argv: string[]) {
     'Execute a Worker Analytics SQL Query',
     queryAnalyticsOptions,
     queryAnalyticsHandler,
+  );
+
+  // backup-analytics
+  reflectCLI.command(
+    'backup-analytics <table>',
+    'Execute a Worker Analytics SQL Query',
+    backupAnalyticsOptions,
+    backupAnalyticsHandler,
   );
 
   // sum-usage

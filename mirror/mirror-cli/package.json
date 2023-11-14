@@ -35,6 +35,7 @@
     "@types/yargs": "^17.0.10",
     "cloudflare-api": "0.0.0",
     "mirror-workers": "0.0.0",
+    "mirror-server": "0.0.1",
     "typescript": "^5.2.2"
   },
   "files": [

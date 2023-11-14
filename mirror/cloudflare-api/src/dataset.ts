@@ -36,7 +36,7 @@ type InputCol<T extends InputSchema> = keyof InputRow<T>;
 
 export class Dataset<T extends InputSchema> implements Selectable {
   readonly output: v.ObjectType<OutputSchema<T>>;
-  readonly #name: string;
+  readonly name: string;
 
   readonly #blobs: InputCol<T>[] = [];
   readonly #doubles: InputCol<T>[] = [];
@@ -53,7 +53,7 @@ export class Dataset<T extends InputSchema> implements Selectable {
    */
   constructor(name: string, input: v.ObjectType<T>) {
     this.output = outputSchema(input);
-    this.#name = name;
+    this.name = name;
 
     let blobNumber = 1;
     let doubleNumber = 1;
@@ -115,6 +115,6 @@ export class Dataset<T extends InputSchema> implements Selectable {
    * expressions for each alias.
    */
   select<S extends SelectSchema>(clause: SelectClause<S>): Where<S> {
-    return SelectBuilder.create(this.#name, clause);
+    return SelectBuilder.create(this.name, clause);
   }
 }

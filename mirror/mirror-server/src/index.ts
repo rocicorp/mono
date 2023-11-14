@@ -12,6 +12,7 @@ import {
 import * as appFunctions from './functions/app/index.js';
 import * as envFunctions from './functions/env/index.js';
 import * as errorFunctions from './functions/error/index.js';
+import * as metricsFunctions from './functions/metrics/index.js';
 import * as roomFunctions from './functions/room/index.js';
 import * as serverFunctions from './functions/server/index.js';
 import * as teamFunctions from './functions/team/index.js';
@@ -71,6 +72,10 @@ export const app = {
 
 export const env = {
   autoDeploy: envFunctions.autoDeploy(getFirestore()),
+};
+
+export const metrics = {
+  backup: metricsFunctions.backup(getFirestore(), getStorage(), secrets),
 };
 
 export const room = {

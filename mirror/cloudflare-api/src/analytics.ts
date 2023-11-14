@@ -1,26 +1,42 @@
 import * as v from 'shared/src/valita.js';
-import {cfCall} from './fetch.js';
-import type {AccountAccess} from './resources.js';
-import type {SelectSchema, SelectStatement} from './sql.js';
+import { cfCall } from './fetch.js';
+import type { AccountAccess } from './resources.js';
+import type { SelectSchema, SelectStatement } from './sql.js';
 
 export class Analytics {
   readonly #apiToken: string;
   readonly #resource: string;
+  readonly accountID: string;
 
   constructor({apiToken, accountID}: AccountAccess) {
     this.#apiToken = apiToken;
+    this.accountID = accountID;
     this.#resource = `/accounts/${accountID}/analytics_engine/sql`;
   }
 
   async query<T extends SelectSchema>(statement: SelectStatement<T>) {
-    const body = statement.toString();
-    console.info(`QUERY: ${body}`);
-    const resp = await cfCall(this.#apiToken, this.#resource, {
-      method: 'POST',
-      body,
-    });
+    const resp = await this.#query(statement.toString());
     const json = await resp.json();
     return v.parse(json, queryResultSchema(statement.schema), 'passthrough');
+  }
+
+  async queryRaw(statement: string): Promise<string> {
+    const resp = await this.#query(statement);
+    return await resp.text();
+  }
+
+  async #query(statement: string) {
+    console.info(`QUERY: ${statement}`);
+    const resp = await cfCall(this.#apiToken, this.#resource, {
+      method: 'POST',
+      body: statement,
+    });
+    if (!resp.ok) {
+      throw new Error(
+        `${this.#resource}: ${resp.status}: ${await resp.text()}`,
+      );
+    }
+    return resp;
   }
 }
 

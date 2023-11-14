@@ -16,7 +16,8 @@ functional version of mirror. A stack consists of:
 - A Firebase / GCP project, comprising
   - A Firestore database
   - Firebase Auth instance
-  - A Google Cloud Storage bucket for storing javascript modules (server and app)
+  - Google Cloud Storage buckets for storing javascript modules (server and app)
+    and archiving data from Workers Analytics Engine Datasets.
   - Cloud Functions that run the Mirror Server logic
   - Secret Manager for storing sensitive data like keys
 - A Cloudflare account for running Workers and Durable Objects
@@ -59,7 +60,8 @@ $ npm run deploy-indexes-sandbox
 ### Google Cloud Storage
 
 - Go to the Cloud Storage GCP dashboard at https://console.cloud.google.com/storage/browser?project=reflect-mirror-{{stackname}}
-- Create a new bucket called `reflect-mirror-{{stackname}}-modules`
+- Create a bucket called `reflect-mirror-{{stackname}}-modules` with the Standard storage class.
+- Create a bucket called `reflect-mirror-{{stackname}}-dataset-archive` with the Coldline storage class.
 
 ### Secret Manager
 

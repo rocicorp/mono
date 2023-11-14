@@ -92,9 +92,11 @@ export async function sumUsageHandler(yargs: SumUsageHandlerArgs) {
         schema: v.object({
           teamID: v.string(),
           appID: v.string(),
+          totalConnections: v.string(), // COUNT() returns a string.  :P
           lifetimeSeconds: v.number(),
         }),
         expr: {
+          totalConnections: 'COUNT()',
           lifetimeSeconds: 'SUM(lifetimeMs - afterMs - beforeMs) / 1000',
         },
       })

@@ -26,3 +26,8 @@ export const connectionLifetimes = new Dataset(
 );
 
 export type ConnectionLifetimesRow = v.Infer<typeof connectionLifetimes.output>;
+
+export const ALL_DATASETS = [
+  runningConnectionSeconds.name,
+  connectionLifetimes.name,
+] as const;
