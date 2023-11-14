@@ -22,6 +22,7 @@ export const backup = (
   secretsClient: SecretsClient,
 ) =>
   // https://cloud.google.com/appengine/docs/flexible/scheduling-jobs-with-cron-yaml#custom-interval
+  // Schedules are interpreted as UTC times, so this actually runs at 3AM or 4AM Pacific time.
   onSchedule('every tuesday 11:00', async event => {
     const secrets = new SecretsCache(secretsClient);
     const now = new Date(event.scheduleTime);
