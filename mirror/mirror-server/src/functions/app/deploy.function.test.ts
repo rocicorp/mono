@@ -380,6 +380,7 @@ describe('deploy', () => {
       name: string;
       error: unknown;
       message: string;
+      expectThrown: boolean;
     };
 
     const cases: Case[] = [
@@ -387,6 +388,7 @@ describe('deploy', () => {
         name: 'Unknown error',
         error: 'oh nose',
         message: 'There was an error deploying the app',
+        expectThrown: true,
       },
       {
         name: 'Cloudflare error',
@@ -404,6 +406,7 @@ describe('deploy', () => {
           'action',
         ),
         message: 'There was an error deploying the app (error code 10000)',
+        expectThrown: true,
       },
       {
         name: 'Script validation error',
@@ -425,6 +428,7 @@ describe('deploy', () => {
         message:
           `Uncaught ReferenceError: window is not defined\n` +
           `  at index.js:129:13`,
+        expectThrown: false,
       },
     ];
 
@@ -473,11 +477,18 @@ describe('deploy', () => {
         expect(app.runningDeployment).toEqual(runningDeployment);
 
         failPublishing(c.error);
+        let err;
         try {
           await deploymentFinished;
         } catch (e) {
-          expect(e).toBe(c.error);
+          err = e;
         }
+        if (c.expectThrown) {
+          expect(err).toBe(c.error);
+        } else {
+          expect(err).toBeUndefined;
+        }
+
         const deployed = must((await deploymentDoc.get()).data());
         expect(deployed.status).toBe('FAILED');
         expect(deployed.statusMessage).toBe(c.message);

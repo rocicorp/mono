@@ -214,9 +214,19 @@ export async function runDeployment(
       newScriptRef,
     );
   } catch (e) {
-    const error = deploymentErrorMessage(deploymentType, e);
-    await setDeploymentStatus(firestore, appID, deploymentID, 'FAILED', error);
-    throw e;
+    const {message, severity} = deploymentErrorMessage(deploymentType, e);
+    await setDeploymentStatus(
+      firestore,
+      appID,
+      deploymentID,
+      'FAILED',
+      message,
+    );
+    if (severity === 'WARNING') {
+      logger.warn(e); // Log warnings but do not throw/report as an error.
+    } else {
+      throw e;
+    }
   }
 }
 
@@ -228,20 +238,19 @@ const userActionableErrorCodes = new Set([
 function deploymentErrorMessage(
   deploymentType: DeploymentType,
   e: unknown,
-): string {
-  const error = `There was an error ${
+): {message: string; severity: 'WARNING' | 'ERROR'} {
+  let message = `There was an error ${
     deploymentType === 'DELETE' ? 'deleting' : 'deploying'
   } the app`;
   if (e instanceof FetchResultError) {
     if (userActionableErrorCodes.has(e.code)) {
-      return e.messages().join('\n');
+      return {message: e.messages().join('\n'), severity: 'WARNING'};
     }
-    return `${error} (error code ${e.code})`;
+    message += ` (error code ${e.code})`;
+  } else if (e instanceof HttpsError) {
+    message += `: ${e.message}`;
   }
-  if (e instanceof HttpsError) {
-    return `${error}: ${e.message}`;
-  }
-  return error;
+  return {message, severity: 'ERROR'};
 }
 
 export function requestDeployment(
