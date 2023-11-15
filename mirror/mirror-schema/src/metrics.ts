@@ -6,12 +6,15 @@ import {teamPath} from './team.js';
 
 /** Connection seconds reported incrementally from within the RoomDO. */
 export const CONNECTION_SECONDS = 'cs';
+/** Seconds that RoomDO's had connections. `cs / rs` is the average number of connections. */
+export const ROOM_SECONDS = 'rs';
 /** Connection seconds computed from completed FetchEvents. */
 export const CONNECTION_LIFETIMES = 'cl';
 
 export const metricSchema = v.union(
   v.literal(CONNECTION_SECONDS),
   v.literal(CONNECTION_LIFETIMES),
+  v.literal(ROOM_SECONDS),
 );
 
 export type Metric = v.Infer<typeof metricSchema>;
@@ -22,6 +25,7 @@ export type Metric = v.Infer<typeof metricSchema>;
 export const metricsSchema = v.object({
   [CONNECTION_SECONDS]: v.number().optional(),
   [CONNECTION_LIFETIMES]: v.number().optional(),
+  [ROOM_SECONDS]: v.number().optional(),
 });
 
 export type Metrics = v.Infer<typeof metricsSchema>;
@@ -118,7 +122,7 @@ export type DayOfMonth =
   | '31';
 
 export function yearMonth(date: Date): number {
-  return date.getFullYear() * 100 + date.getMonth();
+  return date.getUTCFullYear() * 100 + date.getUTCMonth();
 }
 
 // The MonthMetric sparsely tracks a month's worth of metrics for each hour of each day,

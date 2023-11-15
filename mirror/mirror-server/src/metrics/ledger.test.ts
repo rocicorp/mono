@@ -7,6 +7,7 @@ import {
   Metric,
   Month,
   MonthMetrics,
+  ROOM_SECONDS,
   TotalMetrics,
   appMetricsCollection,
   monthMetricsPath,
@@ -44,8 +45,8 @@ describe('metrics ledger', () => {
     teamID: string;
     appID: string;
     hour: Date;
-    metric: Metric;
-    value: number;
+    metrics: [Metric, number][];
+    expectUpdated: boolean;
     expectedTeamMonth?: MonthMetrics;
     expectedTeamTotal?: TotalMetrics;
     expectedAppMonth?: MonthMetrics;
@@ -56,9 +57,53 @@ describe('metrics ledger', () => {
       name: 'no existing ledger docs',
       teamID: TEAM1,
       appID: APP1,
-      hour: new Date(2023, 0, 31, 23),
-      metric: CONNECTION_SECONDS,
-      value: 10.23,
+      hour: new Date(Date.UTC(2023, 0, 31, 23)),
+      metrics: [[CONNECTION_SECONDS, 10.23]],
+      expectUpdated: true,
+      expectedAppMonth: {
+        teamID: TEAM1,
+        appID: APP1,
+        yearMonth: 202300,
+        total: {cs: 10.23},
+        day: {
+          ['31']: {
+            total: {cs: 10.23},
+            hour: {['23']: {cs: 10.23}},
+          },
+        },
+      },
+      expectedTeamMonth: {
+        teamID: TEAM1,
+        appID: null,
+        yearMonth: 202300,
+        total: {cs: 10.23},
+        day: {
+          ['31']: {
+            total: {cs: 10.23},
+            hour: {['23']: {cs: 10.23}},
+          },
+        },
+      },
+      expectedAppTotal: {
+        teamID: TEAM1,
+        appID: APP1,
+        total: {cs: 10.23},
+        year: {['2023']: {cs: 10.23}},
+      },
+      expectedTeamTotal: {
+        teamID: TEAM1,
+        appID: null,
+        total: {cs: 10.23},
+        year: {['2023']: {cs: 10.23}},
+      },
+    },
+    {
+      name: 'redundant update',
+      teamID: TEAM1,
+      appID: APP1,
+      hour: new Date(Date.UTC(2023, 0, 31, 23)),
+      metrics: [[CONNECTION_SECONDS, 10.23]],
+      expectUpdated: false,
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP1,
@@ -100,9 +145,9 @@ describe('metrics ledger', () => {
       name: 'update different app, same team',
       teamID: TEAM1,
       appID: APP2,
-      hour: new Date(2023, 0, 31, 23),
-      metric: CONNECTION_SECONDS,
-      value: 32.46,
+      hour: new Date(Date.UTC(2023, 0, 31, 23)),
+      metrics: [[CONNECTION_SECONDS, 32.46]],
+      expectUpdated: true,
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP2,
@@ -144,9 +189,9 @@ describe('metrics ledger', () => {
       name: 'update different hour',
       teamID: TEAM1,
       appID: APP2,
-      hour: new Date(2023, 0, 31, 20),
-      metric: CONNECTION_SECONDS,
-      value: 24.68,
+      hour: new Date(Date.UTC(2023, 0, 31, 20)),
+      metrics: [[CONNECTION_SECONDS, 24.68]],
+      expectUpdated: true,
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP2,
@@ -194,9 +239,9 @@ describe('metrics ledger', () => {
       name: 'update existing value',
       teamID: TEAM1,
       appID: APP2,
-      hour: new Date(2023, 0, 31, 20),
-      metric: CONNECTION_SECONDS,
-      value: 21.68,
+      hour: new Date(Date.UTC(2023, 0, 31, 20)),
+      metrics: [[CONNECTION_SECONDS, 21.68]],
+      expectUpdated: true,
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP2,
@@ -244,9 +289,9 @@ describe('metrics ledger', () => {
       name: 'update different year',
       teamID: TEAM1,
       appID: APP2,
-      hour: new Date(2022, 11, 3, 15),
-      metric: CONNECTION_SECONDS,
-      value: 10.0,
+      hour: new Date(Date.UTC(2022, 11, 3, 15)),
+      metrics: [[CONNECTION_SECONDS, 10.0]],
+      expectUpdated: true,
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP2,
@@ -294,9 +339,9 @@ describe('metrics ledger', () => {
       name: 'update different metric',
       teamID: TEAM1,
       appID: APP2,
-      hour: new Date(2022, 11, 3, 15),
-      metric: CONNECTION_LIFETIMES,
-      value: 11.1,
+      hour: new Date(Date.UTC(2022, 11, 3, 15)),
+      metrics: [[CONNECTION_LIFETIMES, 11.1]],
+      expectUpdated: true,
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP2,
@@ -378,9 +423,9 @@ describe('metrics ledger', () => {
       name: 'update app in new team',
       teamID: TEAM2,
       appID: APP1,
-      hour: new Date(2023, 1, 1, 0),
-      metric: CONNECTION_SECONDS,
-      value: 23.1,
+      hour: new Date(Date.UTC(2023, 1, 1, 0)),
+      metrics: [[CONNECTION_SECONDS, 23.1]],
+      expectUpdated: true,
       expectedAppMonth: {
         teamID: TEAM2,
         appID: APP1,
@@ -422,9 +467,9 @@ describe('metrics ledger', () => {
       name: 'update different day',
       teamID: TEAM2,
       appID: APP1,
-      hour: new Date(2023, 1, 2, 0),
-      metric: CONNECTION_SECONDS,
-      value: 43.1,
+      hour: new Date(Date.UTC(2023, 1, 2, 0)),
+      metrics: [[CONNECTION_SECONDS, 43.1]],
+      expectUpdated: true,
       expectedAppMonth: {
         teamID: TEAM2,
         appID: APP1,
@@ -470,23 +515,121 @@ describe('metrics ledger', () => {
         year: {['2023']: {cs: 66.2}},
       },
     },
+    {
+      name: 'update multiple metrics',
+      teamID: TEAM1,
+      appID: APP2,
+      hour: new Date(Date.UTC(2022, 11, 3, 15)),
+      metrics: [
+        [ROOM_SECONDS, 5.0],
+        [CONNECTION_SECONDS, 15.0],
+      ],
+      expectUpdated: true,
+      expectedAppMonth: {
+        teamID: TEAM1,
+        appID: APP2,
+        yearMonth: 202211,
+        total: {
+          rs: 5.0,
+          cs: 15.0,
+          cl: 11.1,
+        },
+        day: {
+          ['3']: {
+            total: {
+              rs: 5.0,
+              cs: 15.0,
+              cl: 11.1,
+            },
+            hour: {
+              ['15']: {
+                rs: 5.0,
+                cs: 15.0,
+                cl: 11.1,
+              },
+            },
+          },
+        },
+      },
+      expectedTeamMonth: {
+        teamID: TEAM1,
+        appID: null,
+        yearMonth: 202211,
+        total: {
+          rs: 5.0,
+          cs: 15.0,
+          cl: 11.1,
+        },
+        day: {
+          ['3']: {
+            total: {
+              rs: 5.0,
+              cs: 15.0,
+              cl: 11.1,
+            },
+            hour: {
+              ['15']: {
+                rs: 5.0,
+                cs: 15.0,
+                cl: 11.1,
+              },
+            },
+          },
+        },
+      },
+      expectedAppTotal: {
+        teamID: TEAM1,
+        appID: APP2,
+        total: {
+          rs: 5.0,
+          cs: 69.14,
+          cl: 11.1,
+        },
+        year: {
+          ['2022']: {
+            rs: 5.0,
+            cs: 15.0,
+            cl: 11.1,
+          },
+          ['2023']: {cs: 54.14},
+        },
+      },
+      expectedTeamTotal: {
+        teamID: TEAM1,
+        appID: null,
+        total: {
+          rs: 5.0,
+          cs: 79.37,
+          cl: 11.1,
+        },
+        year: {
+          ['2022']: {
+            rs: 5.0,
+            cs: 15.0,
+            cl: 11.1,
+          },
+          ['2023']: {cs: 64.37},
+        },
+      },
+    },
   ];
   for (const c of cases) {
     test(c.name, async () => {
-      await new Ledger(firestore).set(
-        c.teamID,
-        c.appID,
-        c.hour,
-        c.metric,
-        c.value,
-      );
+      expect(
+        await new Ledger(firestore).set(
+          c.teamID,
+          c.appID,
+          c.hour,
+          new Map(c.metrics),
+        ),
+      ).toBe(c.expectUpdated);
       expect(
         (
           await firestore
             .doc(
               monthMetricsPath(
-                c.hour.getFullYear().toString(),
-                c.hour.getMonth().toString() as Month,
+                c.hour.getUTCFullYear().toString(),
+                c.hour.getUTCMonth().toString() as Month,
                 c.teamID,
                 c.appID,
               ),
@@ -499,8 +642,8 @@ describe('metrics ledger', () => {
           await firestore
             .doc(
               monthMetricsPath(
-                c.hour.getFullYear().toString(),
-                c.hour.getMonth().toString() as Month,
+                c.hour.getUTCFullYear().toString(),
+                c.hour.getUTCMonth().toString() as Month,
                 c.teamID,
               ),
             )

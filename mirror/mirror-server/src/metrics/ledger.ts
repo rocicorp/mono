@@ -1,5 +1,5 @@
-import type {Firestore} from '@google-cloud/firestore';
-import {FieldValue} from '@google-cloud/firestore';
+import {FieldValue, type Firestore} from 'firebase-admin/firestore';
+import {logger} from 'firebase-functions';
 import {
   Hour,
   Metrics,
@@ -29,22 +29,31 @@ export class Ledger {
   }
 
   /**
-   * Sets the value of the given `metric` for the given `hourWindow`. This
-   * replaces any existing value for that window (which means the method is
+   * Sets the values of the `newMetrics` for the given `hourWindow`. This
+   * replaces any existing values for that window (which means the method is
    * idempotent), and updates aggregations accordingly.
+   *
+   * If the values for the `newMetrics` are equivalent to existing values, no writes are
+   * performed. This makes it reasonable to query and update aggregated values
+   * redundantly; only changed values (e.g. new data) will incur writes to
+   * Firestore.
+   *
+   * @return `true` if an update was written, `false` if the operation was a no-op.
    */
   set(
     teamID: string,
     appID: string,
     hourWindow: Date,
-    metric: Metric,
-    newValue: number,
-  ): Promise<void> {
+    newMetrics: Map<Metric, number>,
+  ): Promise<boolean> {
+    const timeDesc = hourWindow.toISOString().split(':')[0];
+    const window = `${teamID}/${appID}/${timeDesc}[${[...newMetrics.keys()]}]`;
+
     return this.#firestore.runTransaction(async tx => {
-      const year = hourWindow.getFullYear().toString();
-      const month = hourWindow.getMonth().toString() as Month;
-      const day = hourWindow.getDate().toString() as DayOfMonth;
-      const hour = hourWindow.getHours().toString() as Hour;
+      const year = hourWindow.getUTCFullYear().toString();
+      const month = hourWindow.getUTCMonth().toString() as Month;
+      const day = hourWindow.getUTCDate().toString() as DayOfMonth;
+      const hour = hourWindow.getUTCHours().toString() as Hour;
 
       const appMonthDoc = this.#firestore
         .doc(monthMetricsPath(year, month, teamID, appID))
@@ -60,9 +69,24 @@ export class Ledger {
         .withConverter(totalMetricsDataConverter);
 
       const appMonth = (await tx.get(appMonthDoc)).data();
-      const currValue = appMonth?.day?.[day]?.hour?.[hour]?.[metric];
-      const delta = newValue - (currValue ?? 0);
-      const update: Metrics = {[metric]: FieldValue.increment(delta)};
+      const update: Metrics = Object.fromEntries(
+        [...newMetrics]
+          .map(([metric, newValue]) => {
+            const currValue = appMonth?.day?.[day]?.hour?.[hour]?.[metric] ?? 0;
+            const delta = newValue - currValue;
+            return [metric, delta] as [Metric, number];
+          })
+          .filter(([_, delta]) => delta !== 0)
+          .map(
+            ([metric, delta]) =>
+              [metric, FieldValue.increment(delta)] as [Metric, FieldValue],
+          ),
+      );
+      if (Object.keys(update).length === 0) {
+        logger.info(`No metrics update for ${window}`);
+        return false;
+      }
+      logger.info(`Updating metrics ${window}`);
 
       const monthUpdate = {
         teamID,
@@ -76,14 +100,13 @@ export class Ledger {
           },
         },
       };
-      const monthFields = [
-        'teamID',
-        'appID',
-        'yearMonth',
-        `total.${metric}`,
-        `day.${day}.total.${metric}`,
-        `day.${day}.hour.${hour}.${metric}`,
-      ];
+      const monthFields = ['teamID', 'appID', 'yearMonth'].concat(
+        Object.keys(update).flatMap(metric => [
+          `total.${metric}`,
+          `day.${day}.total.${metric}`,
+          `day.${day}.hour.${hour}.${metric}`,
+        ]),
+      );
 
       tx.set(appMonthDoc, monthUpdate, {mergeFields: monthFields});
       tx.set(
@@ -98,12 +121,12 @@ export class Ledger {
         total: update,
         year: {[year]: update},
       };
-      const totalFields = [
-        'teamID',
-        'appID',
-        `total.${metric}`,
-        `year.${year}.${metric}`,
-      ];
+      const totalFields = ['teamID', 'appID'].concat(
+        Object.keys(update).flatMap(metric => [
+          `total.${metric}`,
+          `year.${year}.${metric}`,
+        ]),
+      );
 
       tx.set(appTotalDoc, totalUpdate, {mergeFields: totalFields});
       tx.set(
@@ -111,6 +134,7 @@ export class Ledger {
         {...totalUpdate, appID: null},
         {mergeFields: totalFields},
       );
+      return true;
     });
   }
 }
