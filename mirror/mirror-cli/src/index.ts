@@ -1,6 +1,10 @@
 import {hideBin} from 'yargs/helpers';
 import {addDeploymentsOptionsHandler} from './add-deployment-options.js';
 import {
+  backfillMetricsHandler,
+  backfillMetricsOptions,
+} from './backfill-metrics.js';
+import {
   backupAnalyticsHandler,
   backupAnalyticsOptions,
 } from './backup-analytics.js';
@@ -242,6 +246,14 @@ function createCLIParser(argv: string[]) {
     backupAnalyticsHandler,
   );
 
+  // backfill-metrics
+  reflectCLI.command(
+    'backfill-metrics',
+    'Backfills aggregated metrics into Firestore. Also suitable for rerunning aggregations if Cloudflare Analytics data is delayed.',
+    backfillMetricsOptions,
+    backfillMetricsHandler,
+  );
+
   // sum-usage
   reflectCLI.command(
     'sum-usage',
@@ -279,7 +291,7 @@ function createCLIParser(argv: string[]) {
   );
 
   reflectCLI.command(
-    'runQuery',
+    'run-query',
     'Runs a specific query against Firestore to see if an index is necessary (which would appear in an Error message)',
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     () => {},

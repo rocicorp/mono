@@ -75,6 +75,7 @@ export const env = {
 };
 
 export const metrics = {
+  aggregate: metricsFunctions.aggregate(getFirestore(), secrets),
   backup: metricsFunctions.backup(getFirestore(), getStorage(), secrets),
 };
 

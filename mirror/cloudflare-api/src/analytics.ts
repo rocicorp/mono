@@ -26,7 +26,7 @@ export class Analytics {
   }
 
   async #query(statement: string) {
-    console.info(`QUERY: ${statement}`);
+    console.info(`QUERY: ${statement.replace(/\s+/g, ' ')}`);
     const resp = await cfCall(this.#apiToken, this.#resource, {
       method: 'POST',
       body: statement,

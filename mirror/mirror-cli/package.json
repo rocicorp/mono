@@ -12,7 +12,7 @@
     "@inquirer/select": "^1.2.11",
     "@rocicorp/reflect": "0.38.202311130825+d3dbae",
     "esbuild": "^0.19.4",
-    "firebase-admin": "^11.10.1",
+    "mirror-server": "0.0.1",
     "pkg-up": "^4.0.0",
     "reflect-cli": "0.0.0",
     "semver": "^7.5.4",
@@ -35,7 +35,6 @@
     "@types/yargs": "^17.0.10",
     "cloudflare-api": "0.0.0",
     "mirror-workers": "0.0.0",
-    "mirror-server": "0.0.1",
     "typescript": "^5.2.2"
   },
   "files": [
