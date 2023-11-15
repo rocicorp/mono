@@ -8,7 +8,7 @@ const runningConnectionSeconds = new Dataset(
     teamID: v.string(),
     appID: v.string(),
     elapsed: v.number(),
-    interval: v.number(),
+    period: v.number(),
   }),
 );
 
@@ -22,7 +22,7 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           double1 AS elapsed,
-          double2 AS interval,
+          double2 AS period,
           timestamp
           FROM RunningConnectionSeconds
           FORMAT JSON`,
@@ -35,14 +35,14 @@ describe('sql', () => {
           teamID: '198SeL9eaaF',
           appID: 'lm3bjejn',
           elapsed: 75.389,
-          interval: 60.001,
+          period: 60.001,
           timestamp: '2023-11-01 04:29:19',
         }),
       ).toEqual({
         teamID: '198SeL9eaaF',
         appID: 'lm3bjejn',
         elapsed: 75.389,
-        interval: 60.001,
+        period: 60.001,
         timestamp: new Date(Date.UTC(2023, 10, 1, 4, 29, 19)),
       });
     });
@@ -53,7 +53,7 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           double1 AS elapsed,
-          double2 AS interval,
+          double2 AS period,
           timestamp
           FROM RunningConnectionSeconds
           WHERE teamID = 'foo'
@@ -70,7 +70,7 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           double1 AS elapsed,
-          double2 AS interval,
+          double2 AS period,
           timestamp
           FROM RunningConnectionSeconds
           WHERE (teamID = 'foo') AND (appID = '\\'quotes\\' and \\"double quotes\\"')
@@ -88,7 +88,7 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           double1 AS elapsed,
-          double2 AS interval,
+          double2 AS period,
           timestamp
           FROM RunningConnectionSeconds
           WHERE ((teamID = 'foo') AND (appID = '\\'quotes\\' and \\"double quotes\\"')) OR (elapsed > 20)
@@ -107,7 +107,7 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           double1 AS elapsed,
-          double2 AS interval,
+          double2 AS period,
           timestamp
           FROM RunningConnectionSeconds
           WHERE (((teamID = 'foo') AND (appID = '\\'quotes\\' and \\"double quotes\\"')) OR (elapsed > 20)) OR (timestamp > toDateTime(1696896000))
@@ -126,7 +126,7 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           double1 AS elapsed,
-          double2 AS interval,
+          double2 AS period,
           timestamp
           FROM RunningConnectionSeconds
           WHERE teamID = 'foo'
@@ -147,7 +147,7 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           double1 AS elapsed,
-          double2 AS interval,
+          double2 AS period,
           timestamp
           FROM RunningConnectionSeconds
           WHERE teamID = 'foo'
@@ -167,7 +167,7 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           double1 AS elapsed,
-          double2 AS interval,
+          double2 AS period,
           timestamp
           FROM RunningConnectionSeconds
           WHERE appID = 'string with \\'quotes\\' and \\"double quotes\\"'
@@ -190,7 +190,7 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           double1 AS elapsed,
-          double2 AS interval,
+          double2 AS period,
           timestamp
           FROM RunningConnectionSeconds
           WHERE elapsed > 20
@@ -212,7 +212,7 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           double1 AS elapsed,
-          double2 AS interval,
+          double2 AS period,
           timestamp
           FROM RunningConnectionSeconds
           WHERE elapsed > 20
@@ -227,7 +227,7 @@ describe('sql', () => {
   describe('selectStarPlus', () => {
     const selectStarPlus = runningConnectionSeconds.selectStarPlus({
       schema: v.object({averageConnections: v.number()}),
-      expr: {averageConnections: 'elapsed / interval'},
+      expr: {averageConnections: 'elapsed / period'},
     });
 
     test('toString', () => {
@@ -236,9 +236,9 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           double1 AS elapsed,
-          double2 AS interval,
+          double2 AS period,
           timestamp,
-          elapsed / interval AS averageConnections
+          elapsed / period AS averageConnections
           FROM RunningConnectionSeconds
           FORMAT JSON`,
       );
@@ -255,9 +255,9 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           double1 AS elapsed,
-          double2 AS interval,
+          double2 AS period,
           timestamp,
-          elapsed / interval AS averageConnections
+          elapsed / period AS averageConnections
           FROM RunningConnectionSeconds
           WHERE (teamID = 'foo') AND (averageConnections > 2)
           FORMAT JSON`,
@@ -328,13 +328,13 @@ describe('sql', () => {
         teamID: v.string(),
         appID: v.string(),
         totalElapsed: v.number(),
-        totalInterval: v.number(),
+        totalperiod: v.number(),
       }),
       expr: {
         teamID: 'blob1',
         appID: 'blob2',
         totalElapsed: 'SUM(double1)',
-        totalInterval: 'SUM(double2)',
+        totalperiod: 'SUM(double2)',
       },
     });
 
@@ -350,7 +350,7 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           SUM(double1) AS totalElapsed,
-          SUM(double2) AS totalInterval
+          SUM(double2) AS totalperiod
           FROM RunningConnectionSeconds
           WHERE (timestamp >= toDateTime(1685577600)) AND (timestamp < toDateTime(1688169600))
           GROUP BY teamID, appID
@@ -363,13 +363,13 @@ describe('sql', () => {
         selectAggregation.schema.parse({
           appID: 'foo-app',
           teamID: 'bar-team',
-          totalInterval: 60,
+          totalperiod: 60,
           totalElapsed: 45.23,
         }),
       ).toEqual({
         appID: 'foo-app',
         teamID: 'bar-team',
-        totalInterval: 60,
+        totalperiod: 60,
         totalElapsed: 45.23,
       });
     });
@@ -382,13 +382,13 @@ describe('sql', () => {
           teamID: v.string(),
           appID: v.string(),
           totalElapsed: v.number(),
-          totalInterval: v.number(),
+          totalperiod: v.number(),
         }),
         expr: {
           teamID: 'blob1',
           appID: 'blob2',
           totalElapsed: 'SUM(double1)',
-          totalInterval: 'SUM(double2)',
+          totalperiod: 'SUM(double2)',
         },
       })
       .where('totalElapsed', '>', 1000);
@@ -401,7 +401,7 @@ describe('sql', () => {
           avgConnections: v.number(),
         }),
         expr: {
-          avgConnections: 'totalElapsed / totalInterval',
+          avgConnections: 'totalElapsed / totalperiod',
         },
       })
       .where('avgConnections', '>', 3);
@@ -411,13 +411,13 @@ describe('sql', () => {
         `SELECT
           teamID,
           appID,
-          totalElapsed / totalInterval AS avgConnections
+          totalElapsed / totalperiod AS avgConnections
           FROM (
           SELECT
           blob1 AS teamID,
           blob2 AS appID,
           SUM(double1) AS totalElapsed,
-          SUM(double2) AS totalInterval
+          SUM(double2) AS totalperiod
           FROM RunningConnectionSeconds
           WHERE totalElapsed > 1000
           )

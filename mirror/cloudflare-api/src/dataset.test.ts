@@ -8,7 +8,7 @@ const runningConnectionSeconds = new Dataset(
     teamID: v.string(),
     appID: v.string(),
     elapsed: v.number(),
-    interval: v.number(),
+    period: v.number(),
   }),
 );
 
@@ -24,7 +24,7 @@ describe('dataset', () => {
       runningConnectionSeconds.dataPoint({
         appID: 'foo-app',
         teamID: 'bar-team',
-        interval: 60,
+        period: 60,
         elapsed: 45.23,
       }),
     ).toEqual({
@@ -37,7 +37,7 @@ describe('dataset', () => {
       runningConnectionSeconds.dataPoint({
         elapsed: 54.23,
         appID: 'far-app',
-        interval: 59,
+        period: 59,
         teamID: 'boo-team',
       }),
     ).toEqual({
