@@ -122,7 +122,20 @@ export type DayOfMonth =
   | '31';
 
 export function yearMonth(date: Date): number {
-  return date.getUTCFullYear() * 100 + date.getUTCMonth();
+  return date.getUTCFullYear() * 100 + (date.getUTCMonth() + 1);
+}
+
+export function splitDate(
+  date: Date,
+): [year: string, month: Month, dayOfMonth: DayOfMonth, hour: Hour] {
+  const month = (date.getUTCMonth() + 1).toString();
+  const mm = month.length > 1 ? month : '0' + month;
+  return [
+    date.getUTCFullYear().toString(),
+    mm as Month,
+    date.getUTCDate().toString() as DayOfMonth,
+    date.getUTCHours().toString() as Hour,
+  ];
 }
 
 // The MonthMetric sparsely tracks a month's worth of metrics for each hour of each day,
@@ -228,18 +241,18 @@ export function teamMetricsCollection(teamID: string): string {
 }
 
 export type Month =
-  | '0'
-  | '1'
-  | '2'
-  | '3'
-  | '4'
-  | '5'
-  | '6'
-  | '7'
-  | '8'
-  | '9'
+  | '01'
+  | '02'
+  | '03'
+  | '04'
+  | '05'
+  | '06'
+  | '07'
+  | '08'
+  | '09'
   | '10'
-  | '11';
+  | '11'
+  | '12';
 
 export function monthMetricsPath(
   year: string,
@@ -247,8 +260,7 @@ export function monthMetricsPath(
   teamID: string,
   appID?: string,
 ): string {
-  const mm = month.length < 2 ? `0${month}` : month;
-  return metricsDocPath(teamID, appID, `${year}${mm}`);
+  return metricsDocPath(teamID, appID, `${year}${month}`);
 }
 
 export function totalMetricsPath(teamID: string, appID?: string): string {

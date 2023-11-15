@@ -1,16 +1,14 @@
 import {FieldValue, type Firestore} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {
-  Hour,
   Metrics,
   monthMetricsDataConverter,
   monthMetricsPath,
+  splitDate,
   totalMetricsDataConverter,
   totalMetricsPath,
   yearMonth,
-  type DayOfMonth,
   type Metric,
-  type Month,
 } from 'mirror-schema/src/metrics.js';
 
 /**
@@ -50,10 +48,7 @@ export class Ledger {
     const window = `${teamID}/${appID}/${timeDesc}[${[...newMetrics.keys()]}]`;
 
     return this.#firestore.runTransaction(async tx => {
-      const year = hourWindow.getUTCFullYear().toString();
-      const month = hourWindow.getUTCMonth().toString() as Month;
-      const day = hourWindow.getUTCDate().toString() as DayOfMonth;
-      const hour = hourWindow.getUTCHours().toString() as Hour;
+      const [year, month, day, hour] = splitDate(hourWindow);
 
       const appMonthDoc = this.#firestore
         .doc(monthMetricsPath(year, month, teamID, appID))

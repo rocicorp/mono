@@ -5,12 +5,12 @@ import {
   CONNECTION_LIFETIMES,
   CONNECTION_SECONDS,
   Metric,
-  Month,
   MonthMetrics,
   ROOM_SECONDS,
   TotalMetrics,
   appMetricsCollection,
   monthMetricsPath,
+  splitDate,
   teamMetricsCollection,
   totalMetricsPath,
 } from 'mirror-schema/src/metrics.js';
@@ -63,7 +63,7 @@ describe('metrics ledger', () => {
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP1,
-        yearMonth: 202300,
+        yearMonth: 202301,
         total: {cs: 10.23},
         day: {
           ['31']: {
@@ -75,7 +75,7 @@ describe('metrics ledger', () => {
       expectedTeamMonth: {
         teamID: TEAM1,
         appID: null,
-        yearMonth: 202300,
+        yearMonth: 202301,
         total: {cs: 10.23},
         day: {
           ['31']: {
@@ -107,7 +107,7 @@ describe('metrics ledger', () => {
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP1,
-        yearMonth: 202300,
+        yearMonth: 202301,
         total: {cs: 10.23},
         day: {
           ['31']: {
@@ -119,7 +119,7 @@ describe('metrics ledger', () => {
       expectedTeamMonth: {
         teamID: TEAM1,
         appID: null,
-        yearMonth: 202300,
+        yearMonth: 202301,
         total: {cs: 10.23},
         day: {
           ['31']: {
@@ -151,7 +151,7 @@ describe('metrics ledger', () => {
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP2,
-        yearMonth: 202300,
+        yearMonth: 202301,
         total: {cs: 32.46},
         day: {
           ['31']: {
@@ -163,7 +163,7 @@ describe('metrics ledger', () => {
       expectedTeamMonth: {
         teamID: TEAM1,
         appID: null,
-        yearMonth: 202300,
+        yearMonth: 202301,
         total: {cs: 42.69},
         day: {
           ['31']: {
@@ -195,7 +195,7 @@ describe('metrics ledger', () => {
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP2,
-        yearMonth: 202300,
+        yearMonth: 202301,
         total: {cs: 57.14},
         day: {
           ['31']: {
@@ -210,7 +210,7 @@ describe('metrics ledger', () => {
       expectedTeamMonth: {
         teamID: TEAM1,
         appID: null,
-        yearMonth: 202300,
+        yearMonth: 202301,
         total: {cs: 67.37},
         day: {
           ['31']: {
@@ -245,7 +245,7 @@ describe('metrics ledger', () => {
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP2,
-        yearMonth: 202300,
+        yearMonth: 202301,
         total: {cs: 54.14},
         day: {
           ['31']: {
@@ -260,7 +260,7 @@ describe('metrics ledger', () => {
       expectedTeamMonth: {
         teamID: TEAM1,
         appID: null,
-        yearMonth: 202300,
+        yearMonth: 202301,
         total: {cs: 64.37},
         day: {
           ['31']: {
@@ -295,7 +295,7 @@ describe('metrics ledger', () => {
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP2,
-        yearMonth: 202211,
+        yearMonth: 202212,
         total: {cs: 10.0},
         day: {
           ['3']: {
@@ -307,7 +307,7 @@ describe('metrics ledger', () => {
       expectedTeamMonth: {
         teamID: TEAM1,
         appID: null,
-        yearMonth: 202211,
+        yearMonth: 202212,
         total: {cs: 10.0},
         day: {
           ['3']: {
@@ -345,7 +345,7 @@ describe('metrics ledger', () => {
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP2,
-        yearMonth: 202211,
+        yearMonth: 202212,
         total: {
           cs: 10.0,
           cl: 11.1,
@@ -368,7 +368,7 @@ describe('metrics ledger', () => {
       expectedTeamMonth: {
         teamID: TEAM1,
         appID: null,
-        yearMonth: 202211,
+        yearMonth: 202212,
         total: {
           cs: 10.0,
           cl: 11.1,
@@ -429,7 +429,7 @@ describe('metrics ledger', () => {
       expectedAppMonth: {
         teamID: TEAM2,
         appID: APP1,
-        yearMonth: 202301,
+        yearMonth: 202302,
         total: {cs: 23.1},
         day: {
           ['1']: {
@@ -441,7 +441,7 @@ describe('metrics ledger', () => {
       expectedTeamMonth: {
         teamID: TEAM2,
         appID: null,
-        yearMonth: 202301,
+        yearMonth: 202302,
         total: {cs: 23.1},
         day: {
           ['1']: {
@@ -473,7 +473,7 @@ describe('metrics ledger', () => {
       expectedAppMonth: {
         teamID: TEAM2,
         appID: APP1,
-        yearMonth: 202301,
+        yearMonth: 202302,
         total: {cs: 66.2},
         day: {
           ['1']: {
@@ -489,7 +489,7 @@ describe('metrics ledger', () => {
       expectedTeamMonth: {
         teamID: TEAM2,
         appID: null,
-        yearMonth: 202301,
+        yearMonth: 202302,
         total: {cs: 66.2},
         day: {
           ['1']: {
@@ -528,7 +528,7 @@ describe('metrics ledger', () => {
       expectedAppMonth: {
         teamID: TEAM1,
         appID: APP2,
-        yearMonth: 202211,
+        yearMonth: 202212,
         total: {
           rs: 5.0,
           cs: 15.0,
@@ -554,7 +554,7 @@ describe('metrics ledger', () => {
       expectedTeamMonth: {
         teamID: TEAM1,
         appID: null,
-        yearMonth: 202211,
+        yearMonth: 202212,
         total: {
           rs: 5.0,
           cs: 15.0,
@@ -623,31 +623,17 @@ describe('metrics ledger', () => {
           new Map(c.metrics),
         ),
       ).toBe(c.expectUpdated);
+      const [year, month] = splitDate(c.hour);
       expect(
         (
           await firestore
-            .doc(
-              monthMetricsPath(
-                c.hour.getUTCFullYear().toString(),
-                c.hour.getUTCMonth().toString() as Month,
-                c.teamID,
-                c.appID,
-              ),
-            )
+            .doc(monthMetricsPath(year, month, c.teamID, c.appID))
             .get()
         ).data(),
       ).toEqual(c.expectedAppMonth);
       expect(
         (
-          await firestore
-            .doc(
-              monthMetricsPath(
-                c.hour.getUTCFullYear().toString(),
-                c.hour.getUTCMonth().toString() as Month,
-                c.teamID,
-              ),
-            )
-            .get()
+          await firestore.doc(monthMetricsPath(year, month, c.teamID)).get()
         ).data(),
       ).toEqual(c.expectedTeamMonth);
       expect(

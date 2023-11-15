@@ -2,7 +2,9 @@ import {describe, expect, test} from '@jest/globals';
 import sizeof from 'firestore-size';
 import {
   monthMetricsPath,
+  splitDate,
   totalMetricsPath,
+  yearMonth,
   type DayMetrics,
   type DayOfMonth,
   type Hour,
@@ -42,6 +44,33 @@ describe('metrics schema', () => {
     return month;
   }
 
+  test('yearmonth', () => {
+    expect(yearMonth(new Date(Date.UTC(2022, 0, 1)))).toBe(202201);
+    expect(yearMonth(new Date(Date.UTC(2023, 8, 30)))).toBe(202309);
+    expect(yearMonth(new Date(Date.UTC(2023, 11, 31)))).toBe(202312);
+  });
+
+  test('splitDate', () => {
+    expect(splitDate(new Date(Date.UTC(2022, 0, 1, 2)))).toEqual([
+      '2022',
+      '01',
+      '1',
+      '2',
+    ]);
+    expect(splitDate(new Date(Date.UTC(2023, 8, 30, 3)))).toEqual([
+      '2023',
+      '09',
+      '30',
+      '3',
+    ]);
+    expect(splitDate(new Date(Date.UTC(2023, 11, 31, 15)))).toEqual([
+      '2023',
+      '12',
+      '31',
+      '15',
+    ]);
+  });
+
   test('empty document size', () => {
     expect(sizeof(emptyMonth())).toBe(94);
   });
@@ -69,13 +98,13 @@ describe('metrics schema', () => {
   });
 
   test('document paths', () => {
-    expect(monthMetricsPath('2023', '9', TEAM, APP)).toBe(
+    expect(monthMetricsPath('2023', '09', TEAM, APP)).toBe(
       `apps/${APP}/metrics/202309-${TEAM}`,
     );
     expect(monthMetricsPath('2023', '10', TEAM, APP)).toBe(
       `apps/${APP}/metrics/202310-${TEAM}`,
     );
-    expect(monthMetricsPath('2023', '9', TEAM)).toBe(
+    expect(monthMetricsPath('2023', '09', TEAM)).toBe(
       `teams/${TEAM}/metrics/202309`,
     );
     expect(monthMetricsPath('2023', '10', TEAM)).toBe(
