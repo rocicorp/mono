@@ -64,14 +64,15 @@ export class Ledger {
         .withConverter(totalMetricsDataConverter);
 
       const appMonth = (await tx.get(appMonthDoc)).data();
+      const currMetrics = appMonth?.day?.[day]?.hour?.[hour];
       const update: Metrics = Object.fromEntries(
         [...newMetrics]
           .map(([metric, newValue]) => {
-            const currValue = appMonth?.day?.[day]?.hour?.[hour]?.[metric] ?? 0;
+            const currValue = currMetrics?.[metric] ?? 0;
             const delta = newValue - currValue;
             return [metric, delta] as [Metric, number];
           })
-          .filter(([_, delta]) => delta !== 0)
+          .filter(([_, delta]) => Math.abs(delta) > 1e-12) // Ignore insignificant floating point deltas.
           .map(
             ([metric, delta]) =>
               [metric, FieldValue.increment(delta)] as [Metric, FieldValue],
@@ -81,7 +82,7 @@ export class Ledger {
         logger.info(`No metrics update for ${window}`);
         return false;
       }
-      logger.info(`Updating metrics ${window}`);
+      logger.info(`Updating metrics ${window}`, currMetrics, newMetrics);
 
       const monthUpdate = {
         teamID,

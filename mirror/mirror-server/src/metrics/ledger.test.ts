@@ -142,6 +142,50 @@ describe('metrics ledger', () => {
       },
     },
     {
+      name: 'ignore insignificant FP delta',
+      teamID: TEAM1,
+      appID: APP1,
+      hour: new Date(Date.UTC(2023, 0, 31, 23)),
+      metrics: [[CONNECTION_SECONDS, 10.2300000000001]],
+      expectUpdated: false,
+      expectedAppMonth: {
+        teamID: TEAM1,
+        appID: APP1,
+        yearMonth: 202301,
+        total: {cs: 10.23},
+        day: {
+          ['31']: {
+            total: {cs: 10.23},
+            hour: {['23']: {cs: 10.23}},
+          },
+        },
+      },
+      expectedTeamMonth: {
+        teamID: TEAM1,
+        appID: null,
+        yearMonth: 202301,
+        total: {cs: 10.23},
+        day: {
+          ['31']: {
+            total: {cs: 10.23},
+            hour: {['23']: {cs: 10.23}},
+          },
+        },
+      },
+      expectedAppTotal: {
+        teamID: TEAM1,
+        appID: APP1,
+        total: {cs: 10.23},
+        year: {['2023']: {cs: 10.23}},
+      },
+      expectedTeamTotal: {
+        teamID: TEAM1,
+        appID: null,
+        total: {cs: 10.23},
+        year: {['2023']: {cs: 10.23}},
+      },
+    },
+    {
       name: 'update different app, same team',
       teamID: TEAM1,
       appID: APP2,
