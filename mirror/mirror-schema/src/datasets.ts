@@ -7,7 +7,7 @@ export const runningConnectionSeconds = new Dataset(
     teamID: v.string(),
     appID: v.string(),
     elapsed: v.number(),
-    period: v.number(), // "period" is a reserved word in Analytics SQL. Using "period" instead.
+    period: v.number(), // Note: "interval" is a reserved word in Analytics SQL. Using "period" instead.
   }),
 );
 
