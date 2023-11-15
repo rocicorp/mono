@@ -50,6 +50,8 @@ export async function sumUsageHandler(yargs: SumUsageHandlerArgs) {
   const result1 = await analytics.query(
     runningConnectionSeconds
       .selectStar()
+      .where('timestamp', '>=', startDate)
+      .and('timestamp', '<', endDate)
       .select({
         schema: v.object({
           teamID: v.string(),
@@ -62,8 +64,6 @@ export async function sumUsageHandler(yargs: SumUsageHandlerArgs) {
           totalPeriod: 'SUM(period)',
         },
       })
-      .where('timestamp', '>=', startDate)
-      .and('timestamp', '<', endDate)
       .groupBy('teamID', 'appID')
       .orderBy('totalElapsed'),
   );
