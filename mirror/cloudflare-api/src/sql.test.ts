@@ -328,13 +328,13 @@ describe('sql', () => {
         teamID: v.string(),
         appID: v.string(),
         totalElapsed: v.number(),
-        totalperiod: v.number(),
+        totalPeriod: v.number(),
       }),
       expr: {
         teamID: 'blob1',
         appID: 'blob2',
         totalElapsed: 'SUM(double1)',
-        totalperiod: 'SUM(double2)',
+        totalPeriod: 'SUM(double2)',
       },
     });
 
@@ -350,7 +350,7 @@ describe('sql', () => {
           blob1 AS teamID,
           blob2 AS appID,
           SUM(double1) AS totalElapsed,
-          SUM(double2) AS totalperiod
+          SUM(double2) AS totalPeriod
           FROM RunningConnectionSeconds
           WHERE (timestamp >= toDateTime(1685577600)) AND (timestamp < toDateTime(1688169600))
           GROUP BY teamID, appID
@@ -363,13 +363,13 @@ describe('sql', () => {
         selectAggregation.schema.parse({
           appID: 'foo-app',
           teamID: 'bar-team',
-          totalperiod: 60,
+          totalPeriod: 60,
           totalElapsed: 45.23,
         }),
       ).toEqual({
         appID: 'foo-app',
         teamID: 'bar-team',
-        totalperiod: 60,
+        totalPeriod: 60,
         totalElapsed: 45.23,
       });
     });
@@ -382,13 +382,13 @@ describe('sql', () => {
           teamID: v.string(),
           appID: v.string(),
           totalElapsed: v.number(),
-          totalperiod: v.number(),
+          totalPeriod: v.number(),
         }),
         expr: {
           teamID: 'blob1',
           appID: 'blob2',
           totalElapsed: 'SUM(double1)',
-          totalperiod: 'SUM(double2)',
+          totalPeriod: 'SUM(double2)',
         },
       })
       .where('totalElapsed', '>', 1000);
@@ -401,7 +401,7 @@ describe('sql', () => {
           avgConnections: v.number(),
         }),
         expr: {
-          avgConnections: 'totalElapsed / totalperiod',
+          avgConnections: 'totalElapsed / totalPeriod',
         },
       })
       .where('avgConnections', '>', 3);
@@ -411,13 +411,13 @@ describe('sql', () => {
         `SELECT
           teamID,
           appID,
-          totalElapsed / totalperiod AS avgConnections
+          totalElapsed / totalPeriod AS avgConnections
           FROM (
           SELECT
           blob1 AS teamID,
           blob2 AS appID,
           SUM(double1) AS totalElapsed,
-          SUM(double2) AS totalperiod
+          SUM(double2) AS totalPeriod
           FROM RunningConnectionSeconds
           WHERE totalElapsed > 1000
           )
