@@ -49,24 +49,23 @@ export async function sumUsageHandler(yargs: SumUsageHandlerArgs) {
 
   const result1 = await analytics.query(
     runningConnectionSeconds
+      .selectStar()
       .select({
         schema: v.object({
           teamID: v.string(),
           appID: v.string(),
-          connectionSeconds: v.number(),
-          interval: v.number(),
+          totalElapsed: v.number(),
+          totalPeriod: v.number(),
         }),
         expr: {
-          teamID: 'blob1',
-          appID: 'blob2',
-          connectionSeconds: 'SUM(double1)',
-          interval: 'SUM(double2)',
+          totalElapsed: 'SUM(elapsed)',
+          totalPeriod: 'SUM(period)',
         },
       })
       .where('timestamp', '>=', startDate)
       .and('timestamp', '<', endDate)
       .groupBy('teamID', 'appID')
-      .orderBy('connectionSeconds'),
+      .orderBy('totalElapsed'),
   );
 
   const startMs = startDate.getTime();

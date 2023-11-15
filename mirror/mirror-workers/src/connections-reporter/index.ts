@@ -12,7 +12,7 @@ import {parseScriptTags, type ScriptTags} from '../script-tags.js';
 export interface Env {
   // blob1  | blob2 | double1 | double2  | timestamp
   // -----------------------------------------------------------
-  // teamID | appID | elapsed | interval | (report time)
+  // teamID | appID | elapsed | period   | (report time)
   runningConnectionSecondsDS: AnalyticsEngineDataset;
 
   // blob1  | blob2 | double1    | double2  | timestamp
@@ -35,7 +35,11 @@ function reportConnectionSeconds(
     return;
   }
   runningConnectionSecondsDS.writeDataPoint(
-    runningConnectionSeconds.dataPoint({...tags, ...report}),
+    runningConnectionSeconds.dataPoint({
+      ...tags,
+      elapsed: report.elapsed,
+      period: report.interval,
+    }),
   );
   console.info(
     `Reported connection seconds for ${tags.appName}.${tags.teamLabel}`,
