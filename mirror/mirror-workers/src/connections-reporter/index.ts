@@ -4,7 +4,10 @@ import {
 } from 'mirror-schema/src/datasets.js';
 import {
   CONNECTION_SECONDS_CHANNEL_NAME,
+  CONNECTION_SECONDS_V1_CHANNEL_NAME,
   connectionSecondsReportSchema as reportSchema,
+  connectionSecondsReportV1Schema as reportV1Schema,
+  type ConnectionSecondsReport,
 } from 'shared/src/events/connection-seconds.js';
 import * as v from 'shared/src/valita.js';
 import {parseScriptTags, type ScriptTags} from '../script-tags.js';
@@ -24,10 +27,9 @@ export interface Env {
 function reportConnectionSeconds(
   runningConnectionSecondsDS: AnalyticsEngineDataset,
   tags: ScriptTags,
-  diagnosticChannelMessage: unknown,
+  report: ConnectionSecondsReport,
 ) {
-  const report = v.parse(diagnosticChannelMessage, reportSchema); // Note: 'strict'
-  if (report.elapsed <= 0 || report.interval <= 0) {
+  if (report.elapsed <= 0 || report.elapsed <= 0) {
     console.warn(
       `Suspicious ConnectionSecondsReport from ${tags.appID} (${tags.appName}.${tags.teamLabel})`,
       report,
@@ -37,8 +39,7 @@ function reportConnectionSeconds(
   runningConnectionSecondsDS.writeDataPoint(
     runningConnectionSeconds.dataPoint({
       ...tags,
-      elapsed: report.elapsed,
-      period: report.interval,
+      ...report,
     }),
   );
   console.info(
@@ -69,12 +70,25 @@ function reportRunningConnectionElapsedSeconds(
       continue;
     }
     for (const e of diagnosticsChannelEvents) {
-      if (e.channel === CONNECTION_SECONDS_CHANNEL_NAME) {
-        try {
-          reportConnectionSeconds(runningConnectionSecondsDS, tags, e.message);
-        } catch (e) {
-          console.error(`Invalid ConnectionSecondsReport: ${String(e)}`, e);
+      try {
+        switch (e.channel) {
+          case CONNECTION_SECONDS_CHANNEL_NAME: {
+            const report = v.parse(e.message, reportSchema); // Note: 'strict'
+            reportConnectionSeconds(runningConnectionSecondsDS, tags, report);
+            break;
+          }
+          case CONNECTION_SECONDS_V1_CHANNEL_NAME: {
+            const report = v.parse(e.message, reportV1Schema); // Note: 'strict'
+            reportConnectionSeconds(runningConnectionSecondsDS, tags, {
+              elapsed: report.elapsed,
+              period: report.interval,
+              roomID: '',
+            });
+            break;
+          }
         }
+      } catch (e) {
+        console.error(`Invalid ConnectionSecondsReport: ${String(e)}`, e);
       }
     }
   }

@@ -6,6 +6,7 @@ export const runningConnectionSeconds = new Dataset(
   v.object({
     teamID: v.string(),
     appID: v.string(),
+    roomID: v.string(),
     elapsed: v.number(),
     period: v.number(), // Note: "interval" is a reserved word in Analytics SQL. Using "period" instead.
   }),

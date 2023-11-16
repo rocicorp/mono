@@ -501,7 +501,8 @@ describe('connection seconds tracking', () => {
 
     expect(await reports.dequeue()).toEqual({
       elapsed: REPORTING_INTERVAL_MS / 1000,
-      interval: REPORTING_INTERVAL_MS / 1000,
+      period: REPORTING_INTERVAL_MS / 1000,
+      roomID: 'testRoomID',
     });
 
     unsubscribe(CONNECTION_SECONDS_CHANNEL_NAME, onPublish);
