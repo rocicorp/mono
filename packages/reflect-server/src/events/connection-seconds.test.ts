@@ -213,13 +213,10 @@ describe('connection-seconds', () => {
     const flush1 = scheduler.promiseTimeout.mock.calls[0][0] as (
       lc: LogContext,
     ) => Promise<void>;
-    await flush1(createSilentLogContext());
 
-    // expect(await reportQueue.dequeue()).toEqual({
-    //   roomID: 'room-id',
-    //   period: 6.5,
-    //   elapsed: 13.5, // (1*2) + (3*3) + (0.5*5)
-    // });
+    // This flush should be a no-op because the roomID has not yet been
+    // set. The data should continue to be aggregated.
+    await flush1(createSilentLogContext());
 
     // setTimeout should have been rescheduled.
     expect(scheduler.promiseTimeout).toBeCalledTimes(3);
