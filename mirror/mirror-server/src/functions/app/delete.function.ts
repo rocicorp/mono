@@ -1,5 +1,4 @@
-import {Timestamp} from '@google-cloud/firestore';
-import {FieldValue, type Firestore} from 'firebase-admin/firestore';
+import {FieldValue, Timestamp, type Firestore} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {
   deleteAppRequestSchema,

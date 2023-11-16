@@ -1,5 +1,5 @@
-import {FieldValue} from '@google-cloud/firestore';
 import type {Firestore, WithFieldValue} from 'firebase-admin/firestore';
+import {FieldValue} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {

@@ -1,5 +1,5 @@
-import type {Firestore} from '@google-cloud/firestore';
 import {Analytics} from 'cloudflare-api/src/analytics.js';
+import type {Firestore} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {onSchedule} from 'firebase-functions/v2/scheduler';
 import {

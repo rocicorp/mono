@@ -1,7 +1,7 @@
-import type {Firestore} from '@google-cloud/firestore';
 import {getMockReq, getMockRes} from '@jest-mock/express';
 import {beforeEach, describe, expect, jest, test} from '@jest/globals';
 import type {Auth} from 'firebase-admin/auth';
+import type {Firestore} from 'firebase-admin/firestore';
 import type {https} from 'firebase-functions/v2';
 import {
   fakeFirestore,

@@ -1,5 +1,5 @@
-import type {Firestore} from '@google-cloud/firestore';
 import type {Analytics} from 'cloudflare-api/src/analytics.js';
+import type {Firestore} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {runningConnectionSeconds} from 'mirror-schema/src/datasets.js';
 import {CONNECTION_SECONDS, ROOM_SECONDS} from 'mirror-schema/src/metrics.js';

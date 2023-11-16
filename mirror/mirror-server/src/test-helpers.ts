@@ -1,4 +1,4 @@
-import {Timestamp} from '@google-cloud/firestore';
+import {Timestamp} from 'firebase-admin/firestore';
 import {declaredParams} from 'firebase-functions/params';
 import type {Deployment} from 'mirror-schema/src/deployment.js';
 import assert from 'node:assert';

@@ -1,8 +1,7 @@
-import {Timestamp} from '@google-cloud/firestore';
 import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import {initializeApp} from 'firebase-admin/app';
 import type {DecodedIdToken} from 'firebase-admin/auth';
-import {getFirestore} from 'firebase-admin/firestore';
+import {Timestamp, getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
 import {appPath} from 'mirror-schema/src/deployment.js';

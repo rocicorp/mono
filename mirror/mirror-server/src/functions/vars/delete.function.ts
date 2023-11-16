@@ -1,5 +1,5 @@
-import {FieldValue} from '@google-cloud/firestore';
 import type {Firestore} from 'firebase-admin/firestore';
+import {FieldValue} from 'firebase-admin/firestore';
 import {
   deleteVarsRequestSchema,
   deleteVarsResponseSchema,

@@ -1,4 +1,4 @@
-import type {Firestore, Timestamp} from '@google-cloud/firestore';
+import type {Firestore, Timestamp} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {

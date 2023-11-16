@@ -1,6 +1,6 @@
-import {Timestamp} from '@google-cloud/firestore';
 import {describe, expect, test} from '@jest/globals';
 import type {Firestore} from 'firebase-admin/firestore';
+import {Timestamp} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {
   FunctionsErrorCode,
