@@ -22,6 +22,7 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
   #currentCount: number = 0;
   #lastCountChange: number = 0;
   #intervalStartTime: number = 0;
+  #roomID: string | undefined;
 
   constructor(
     scheduler: AlarmScheduler,
@@ -29,6 +30,10 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
   ) {
     this.#channel = channel(diagnosticChannelName);
     this.#scheduler = scheduler;
+  }
+
+  setRoomID(roomID: string) {
+    this.#roomID = roomID;
   }
 
   async onConnectionCountChange(currentCount: number): Promise<void> {
@@ -46,13 +51,19 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
     this.#lastCountChange = now;
 
     if (flush) {
-      const interval = (now - this.#intervalStartTime) / 1000;
-      const elapsed = this.#elapsedMs / 1000;
+      // If the roomID has not yet been set, wait for the next interval to flush.
+      if (this.#roomID !== undefined) {
+        const period = (now - this.#intervalStartTime) / 1000;
+        const elapsed = this.#elapsedMs / 1000;
 
-      const report: ConnectionSecondsReport = {interval, elapsed};
-      this.#channel.publish(report);
-
-      this.#elapsedMs = 0;
+        const report: ConnectionSecondsReport = {
+          period,
+          elapsed,
+          roomID: this.#roomID,
+        };
+        this.#channel.publish(report);
+        this.#elapsedMs = 0;
+      }
       this.#timeoutID = Promise.resolve(0);
     }
 

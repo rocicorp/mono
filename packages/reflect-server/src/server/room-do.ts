@@ -224,6 +224,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
           );
           this.#lc = this.#lc.withContext('roomID', roomID);
           this.#roomIDDependentInitCompleted = true;
+          this.#connectionSecondsReporter.setRoomID(roomID);
           lc.info?.('initialized roomID');
         });
       }
