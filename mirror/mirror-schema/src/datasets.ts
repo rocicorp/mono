@@ -21,6 +21,7 @@ export const connectionLifetimes = new Dataset(
   v.object({
     teamID: v.string(),
     appID: v.string(),
+    roomID: v.string(),
     startTime: v.number(),
     endTime: v.number(),
   }),

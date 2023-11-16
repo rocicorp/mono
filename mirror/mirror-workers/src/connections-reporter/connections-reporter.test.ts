@@ -11,7 +11,7 @@ import {
   CONNECTION_SECONDS_V1_CHANNEL_NAME,
 } from 'shared/src/events/connection-seconds.js';
 import type {Env} from './index.js';
-import reporter, {AUTH_DATA_HEADER_NAME} from './index.js';
+import reporter, {AUTH_DATA_HEADER_NAME, ROOM_ID_HEADER_NAME} from './index.js';
 
 describe('connections reporter', () => {
   const runningConnectionSecondsDS = {
@@ -292,6 +292,7 @@ describe('connections reporter', () => {
             request: {
               headers: {
                 [AUTH_DATA_HEADER_NAME]: 'REDACTED',
+                [ROOM_ID_HEADER_NAME]: 'my-room-yo',
               },
             },
           },
@@ -351,6 +352,7 @@ describe('connections reporter', () => {
             request: {
               headers: {
                 [AUTH_DATA_HEADER_NAME]: 'REDACTED',
+                [ROOM_ID_HEADER_NAME]: 'yo-my-room',
               },
             },
           },
@@ -370,8 +372,8 @@ describe('connections reporter', () => {
     expect(
       connectionLifetimesDS.writeDataPoint.mock.calls.map(call => call[0]),
     ).toEqual([
-      {blobs: ['baz', 'foo'], doubles: [98765, TAIL_EVENT_TIME]},
-      {blobs: ['faz', 'boo'], doubles: [87328, TAIL_EVENT_TIME]},
+      {blobs: ['baz', 'foo', 'my-room-yo'], doubles: [98765, TAIL_EVENT_TIME]},
+      {blobs: ['faz', 'boo', 'yo-my-room'], doubles: [87328, TAIL_EVENT_TIME]},
     ]);
   });
 });

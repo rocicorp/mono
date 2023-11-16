@@ -95,6 +95,7 @@ function reportRunningConnectionElapsedSeconds(
 }
 
 export const AUTH_DATA_HEADER_NAME = 'x-reflect-auth-data';
+export const ROOM_ID_HEADER_NAME = 'x-reflect-room-id';
 
 function reportConnectionLifetimes(
   events: TailItem[],
@@ -111,6 +112,7 @@ function reportConnectionLifetimes(
     if (!authData) {
       continue;
     }
+    const roomID = fetch?.request?.headers?.[ROOM_ID_HEADER_NAME] ?? '';
     let tags: ScriptTags;
     try {
       tags = parseScriptTags(scriptTags ?? []);
@@ -123,7 +125,7 @@ function reportConnectionLifetimes(
       continue;
     }
     connectionLifetimesDS.writeDataPoint(
-      connectionLifetimes.dataPoint({...tags, startTime, endTime}),
+      connectionLifetimes.dataPoint({...tags, roomID, startTime, endTime}),
     );
     console.info(
       `Reported connection lifetime for ${tags.appName}.${tags.teamLabel} (${
