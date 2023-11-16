@@ -85,6 +85,7 @@ describe('aggregateHourBefore', () => {
           SELECT
           blob1 AS teamID,
           blob2 AS appID,
+          blob3 AS roomID,
           double1 AS elapsed,
           double2 AS period,
           timestamp
