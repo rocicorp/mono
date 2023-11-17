@@ -84,6 +84,39 @@
       "fieldPath": "day",
       "ttl": false,
       "indexes": []
+    },
+    {
+      "collectionGroup": "metrics",
+      "fieldPath": "year",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "metrics",
+      "fieldPath": "yearMonth",
+      "ttl": false,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
     }
   ]
 }

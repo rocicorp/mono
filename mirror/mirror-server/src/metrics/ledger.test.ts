@@ -87,14 +87,26 @@ describe('metrics ledger', () => {
       expectedAppTotal: {
         teamID: TEAM1,
         appID: APP1,
+        yearMonth: null,
         total: {cs: 10.23},
-        year: {['2023']: {cs: 10.23}},
+        year: {
+          ['2023']: {
+            total: {cs: 10.23},
+            month: {['1']: {cs: 10.23}},
+          },
+        },
       },
       expectedTeamTotal: {
         teamID: TEAM1,
         appID: null,
+        yearMonth: null,
         total: {cs: 10.23},
-        year: {['2023']: {cs: 10.23}},
+        year: {
+          ['2023']: {
+            total: {cs: 10.23},
+            month: {['1']: {cs: 10.23}},
+          },
+        },
       },
     },
     {
@@ -131,14 +143,26 @@ describe('metrics ledger', () => {
       expectedAppTotal: {
         teamID: TEAM1,
         appID: APP1,
+        yearMonth: null,
         total: {cs: 10.23},
-        year: {['2023']: {cs: 10.23}},
+        year: {
+          ['2023']: {
+            total: {cs: 10.23},
+            month: {['1']: {cs: 10.23}},
+          },
+        },
       },
       expectedTeamTotal: {
         teamID: TEAM1,
         appID: null,
+        yearMonth: null,
         total: {cs: 10.23},
-        year: {['2023']: {cs: 10.23}},
+        year: {
+          ['2023']: {
+            total: {cs: 10.23},
+            month: {['1']: {cs: 10.23}},
+          },
+        },
       },
     },
     {
@@ -175,14 +199,26 @@ describe('metrics ledger', () => {
       expectedAppTotal: {
         teamID: TEAM1,
         appID: APP1,
+        yearMonth: null,
         total: {cs: 10.23},
-        year: {['2023']: {cs: 10.23}},
+        year: {
+          ['2023']: {
+            total: {cs: 10.23},
+            month: {['1']: {cs: 10.23}},
+          },
+        },
       },
       expectedTeamTotal: {
         teamID: TEAM1,
         appID: null,
+        yearMonth: null,
         total: {cs: 10.23},
-        year: {['2023']: {cs: 10.23}},
+        year: {
+          ['2023']: {
+            total: {cs: 10.23},
+            month: {['1']: {cs: 10.23}},
+          },
+        },
       },
     },
     {
@@ -219,14 +255,26 @@ describe('metrics ledger', () => {
       expectedAppTotal: {
         teamID: TEAM1,
         appID: APP2,
+        yearMonth: null,
         total: {cs: 32.46},
-        year: {['2023']: {cs: 32.46}},
+        year: {
+          ['2023']: {
+            total: {cs: 32.46},
+            month: {['1']: {cs: 32.46}},
+          },
+        },
       },
       expectedTeamTotal: {
         teamID: TEAM1,
         appID: null,
+        yearMonth: null,
         total: {cs: 42.69},
-        year: {['2023']: {cs: 42.69}},
+        year: {
+          ['2023']: {
+            total: {cs: 42.69},
+            month: {['1']: {cs: 42.69}},
+          },
+        },
       },
     },
     {
@@ -269,14 +317,26 @@ describe('metrics ledger', () => {
       expectedAppTotal: {
         teamID: TEAM1,
         appID: APP2,
+        yearMonth: null,
         total: {cs: 57.14},
-        year: {['2023']: {cs: 57.14}},
+        year: {
+          ['2023']: {
+            total: {cs: 57.14},
+            month: {['1']: {cs: 57.14}},
+          },
+        },
       },
       expectedTeamTotal: {
         teamID: TEAM1,
         appID: null,
+        yearMonth: null,
         total: {cs: 67.37},
-        year: {['2023']: {cs: 67.37}},
+        year: {
+          ['2023']: {
+            total: {cs: 67.37},
+            month: {['1']: {cs: 67.37}},
+          },
+        },
       },
     },
     {
@@ -319,14 +379,26 @@ describe('metrics ledger', () => {
       expectedAppTotal: {
         teamID: TEAM1,
         appID: APP2,
+        yearMonth: null,
         total: {cs: 54.14},
-        year: {['2023']: {cs: 54.14}},
+        year: {
+          ['2023']: {
+            total: {cs: 54.14},
+            month: {['1']: {cs: 54.14}},
+          },
+        },
       },
       expectedTeamTotal: {
         teamID: TEAM1,
         appID: null,
+        yearMonth: null,
         total: {cs: 64.37},
-        year: {['2023']: {cs: 64.37}},
+        year: {
+          ['2023']: {
+            total: {cs: 64.37},
+            month: {['1']: {cs: 64.37}},
+          },
+        },
       },
     },
     {
@@ -363,19 +435,33 @@ describe('metrics ledger', () => {
       expectedAppTotal: {
         teamID: TEAM1,
         appID: APP2,
+        yearMonth: null,
         total: {cs: 64.14},
         year: {
-          ['2022']: {cs: 10.0},
-          ['2023']: {cs: 54.14},
+          ['2022']: {
+            total: {cs: 10.0},
+            month: {['12']: {cs: 10.0}},
+          },
+          ['2023']: {
+            total: {cs: 54.14},
+            month: {['1']: {cs: 54.14}},
+          },
         },
       },
       expectedTeamTotal: {
         teamID: TEAM1,
         appID: null,
+        yearMonth: null,
         total: {cs: 74.37},
         year: {
-          ['2022']: {cs: 10.0},
-          ['2023']: {cs: 64.37},
+          ['2022']: {
+            total: {cs: 10.0},
+            month: {['12']: {cs: 10.0}},
+          },
+          ['2023']: {
+            total: {cs: 64.37},
+            month: {['1']: {cs: 64.37}},
+          },
         },
       },
     },
@@ -435,31 +521,55 @@ describe('metrics ledger', () => {
       expectedAppTotal: {
         teamID: TEAM1,
         appID: APP2,
+        yearMonth: null,
         total: {
           cs: 64.14,
           cl: 11.1,
         },
         year: {
           ['2022']: {
-            cs: 10.0,
-            cl: 11.1,
+            total: {
+              cs: 10.0,
+              cl: 11.1,
+            },
+            month: {
+              ['12']: {
+                cs: 10.0,
+                cl: 11.1,
+              },
+            },
           },
-          ['2023']: {cs: 54.14},
+          ['2023']: {
+            total: {cs: 54.14},
+            month: {['1']: {cs: 54.14}},
+          },
         },
       },
       expectedTeamTotal: {
         teamID: TEAM1,
         appID: null,
+        yearMonth: null,
         total: {
           cs: 74.37,
           cl: 11.1,
         },
         year: {
           ['2022']: {
-            cs: 10.0,
-            cl: 11.1,
+            total: {
+              cs: 10.0,
+              cl: 11.1,
+            },
+            month: {
+              ['12']: {
+                cs: 10.0,
+                cl: 11.1,
+              },
+            },
           },
-          ['2023']: {cs: 64.37},
+          ['2023']: {
+            total: {cs: 64.37},
+            month: {['1']: {cs: 64.37}},
+          },
         },
       },
     },
@@ -497,14 +607,26 @@ describe('metrics ledger', () => {
       expectedAppTotal: {
         teamID: TEAM2,
         appID: APP1,
+        yearMonth: null,
         total: {cs: 23.1},
-        year: {['2023']: {cs: 23.1}},
+        year: {
+          ['2023']: {
+            total: {cs: 23.1},
+            month: {['2']: {cs: 23.1}},
+          },
+        },
       },
       expectedTeamTotal: {
         teamID: TEAM2,
         appID: null,
+        yearMonth: null,
         total: {cs: 23.1},
-        year: {['2023']: {cs: 23.1}},
+        year: {
+          ['2023']: {
+            total: {cs: 23.1},
+            month: {['2']: {cs: 23.1}},
+          },
+        },
       },
     },
     {
@@ -549,14 +671,26 @@ describe('metrics ledger', () => {
       expectedAppTotal: {
         teamID: TEAM2,
         appID: APP1,
+        yearMonth: null,
         total: {cs: 66.2},
-        year: {['2023']: {cs: 66.2}},
+        year: {
+          ['2023']: {
+            total: {cs: 66.2},
+            month: {['2']: {cs: 66.2}},
+          },
+        },
       },
       expectedTeamTotal: {
         teamID: TEAM2,
         appID: null,
+        yearMonth: null,
         total: {cs: 66.2},
-        year: {['2023']: {cs: 66.2}},
+        year: {
+          ['2023']: {
+            total: {cs: 66.2},
+            month: {['2']: {cs: 66.2}},
+          },
+        },
       },
     },
     {
@@ -624,6 +758,7 @@ describe('metrics ledger', () => {
       expectedAppTotal: {
         teamID: TEAM1,
         appID: APP2,
+        yearMonth: null,
         total: {
           rs: 5.0,
           cs: 69.14,
@@ -631,16 +766,29 @@ describe('metrics ledger', () => {
         },
         year: {
           ['2022']: {
-            rs: 5.0,
-            cs: 15.0,
-            cl: 11.1,
+            total: {
+              rs: 5.0,
+              cs: 15.0,
+              cl: 11.1,
+            },
+            month: {
+              ['12']: {
+                rs: 5.0,
+                cs: 15.0,
+                cl: 11.1,
+              },
+            },
           },
-          ['2023']: {cs: 54.14},
+          ['2023']: {
+            total: {cs: 54.14},
+            month: {['1']: {cs: 54.14}},
+          },
         },
       },
       expectedTeamTotal: {
         teamID: TEAM1,
         appID: null,
+        yearMonth: null,
         total: {
           rs: 5.0,
           cs: 79.37,
@@ -648,11 +796,23 @@ describe('metrics ledger', () => {
         },
         year: {
           ['2022']: {
-            rs: 5.0,
-            cs: 15.0,
-            cl: 11.1,
+            total: {
+              rs: 5.0,
+              cs: 15.0,
+              cl: 11.1,
+            },
+            month: {
+              ['12']: {
+                rs: 5.0,
+                cs: 15.0,
+                cl: 11.1,
+              },
+            },
           },
-          ['2023']: {cs: 64.37},
+          ['2023']: {
+            total: {cs: 64.37},
+            month: {['1']: {cs: 64.37}},
+          },
         },
       },
     },

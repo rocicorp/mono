@@ -50,6 +50,10 @@ import {
 import {migrateToEnvHandler, migrateToEnvOptions} from './migrate-to-env.js';
 import {migrateToWFPHandler, migrateToWFPOptions} from './migrate-to-wfp.js';
 import {
+  migrateTotalMetricsHandler,
+  migrateTotalMetricsOptions,
+} from './migrate-total-metrics.js';
+import {
   publishCustomDomainsHandler,
   publishCustomDomainsOptions,
 } from './publish-custom-domains.js';
@@ -252,6 +256,13 @@ function createCLIParser(argv: string[]) {
     'Backfills aggregated metrics into Firestore. Also suitable for rerunning aggregations if Cloudflare Analytics data is delayed.',
     backfillMetricsOptions,
     backfillMetricsHandler,
+  );
+
+  reflectCLI.command(
+    'migrate-total-metrics',
+    'Migrates to the new total metrics format with monthly totals under each year',
+    migrateTotalMetricsOptions,
+    migrateTotalMetricsHandler,
   );
 
   // sum-usage

@@ -128,11 +128,9 @@ export function yearMonth(date: Date): number {
 export function splitDate(
   date: Date,
 ): [year: string, month: Month, dayOfMonth: DayOfMonth, hour: Hour] {
-  const month = (date.getUTCMonth() + 1).toString();
-  const mm = month.length > 1 ? month : '0' + month;
   return [
     date.getUTCFullYear().toString(),
-    mm as Month,
+    (date.getUTCMonth() + 1).toString() as Month,
     date.getUTCDate().toString() as DayOfMonth,
     date.getUTCHours().toString() as Hour,
   ];
@@ -214,15 +212,50 @@ export type MonthMetrics = v.Infer<typeof monthMetricsSchema>;
 export const monthMetricsDataConverter =
   firestoreDataConverter(monthMetricsSchema);
 
-// TotalMetrics tracks the total and per-year aggregations of all metrics.
-// Similarly to MonthMetrics, these are tracked per team and per app.
+export const yearMetricsSchema = v.object({
+  total: metricsSchema,
+
+  // Note: The `month` field  contains a large subtree of fields that can
+  // consume a lot of storage space for indexing. Since we don't anticipate
+  // needing to sort queries by values in the day/hour range, we exclude
+  // the whole tree from indexes in firestore.indexes.json.
+  month: v.object({
+    ['1']: metricsSchema.optional(),
+    ['2']: metricsSchema.optional(),
+    ['3']: metricsSchema.optional(),
+    ['4']: metricsSchema.optional(),
+    ['5']: metricsSchema.optional(),
+    ['6']: metricsSchema.optional(),
+    ['7']: metricsSchema.optional(),
+    ['8']: metricsSchema.optional(),
+    ['9']: metricsSchema.optional(),
+    ['10']: metricsSchema.optional(),
+    ['11']: metricsSchema.optional(),
+    ['12']: metricsSchema.optional(),
+  }),
+});
+
+export type YearMetrics = v.Infer<typeof yearMetricsSchema>;
+
+// TotalMetrics sparsely tracks all-time totals as well as yearly and monthly breakdowns.
+// Like MonthMetrics, this TotalMetrics schema is used to track both per-app
+// metrics and per-team metrics.
+//
+// Note that this schema is technically unbounded because it holds an arbitrary number
+// of years, but it will be decades before we approach the 1MB limit. In the event that
+// this becomes an issue, the mitigation would be to:
+// - implement a policy of discarding old years, or
+// - archive old years to a different location, or
+// - remove the month data from the totals doc entirely and query month documents instead.
+//   (which is no doubt more cumbersome, but doable).
 export const totalMetricsSchema = v.object({
   teamID: v.string(),
   appID: v.string().nullable(),
+  yearMonth: v.null(),
 
   total: metricsSchema,
   // Keyed by string, e.g. "2023"
-  year: v.record(metricsSchema),
+  year: v.record(yearMetricsSchema),
 });
 
 export type TotalMetrics = v.Infer<typeof totalMetricsSchema>;
@@ -241,15 +274,15 @@ export function teamMetricsCollection(teamID: string): string {
 }
 
 export type Month =
-  | '01'
-  | '02'
-  | '03'
-  | '04'
-  | '05'
-  | '06'
-  | '07'
-  | '08'
-  | '09'
+  | '1'
+  | '2'
+  | '3'
+  | '4'
+  | '5'
+  | '6'
+  | '7'
+  | '8'
+  | '9'
   | '10'
   | '11'
   | '12';
@@ -258,18 +291,22 @@ export function monthMetricsPath(
   year: string,
   month: Month,
   teamID: string,
-  appID?: string,
+  appID?: string | null,
 ): string {
-  return metricsDocPath(teamID, appID, `${year}${month}`);
+  const mm = month.length > 1 ? month : `0${month}`;
+  return metricsDocPath(teamID, appID, `${year}${mm}`);
 }
 
-export function totalMetricsPath(teamID: string, appID?: string): string {
+export function totalMetricsPath(
+  teamID: string,
+  appID?: string | null,
+): string {
   return metricsDocPath(teamID, appID, 'total');
 }
 
 function metricsDocPath(
   teamID: string,
-  appID: string | undefined,
+  appID: string | null | undefined,
   docPrefix: string,
 ) {
   const docSuffix = appID ? `-${teamID}` : '';

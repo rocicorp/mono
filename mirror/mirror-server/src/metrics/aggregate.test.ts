@@ -140,14 +140,23 @@ describe('aggregateHourBefore', () => {
       const expectedTeamTotal = {
         teamID,
         appID: null,
+        yearMonth: null,
         total: {
           cs: totalElapsed,
           rs: totalPeriod,
         },
         year: {
           '2023': {
-            cs: totalElapsed,
-            rs: totalPeriod,
+            total: {
+              cs: totalElapsed,
+              rs: totalPeriod,
+            },
+            month: {
+              ['10']: {
+                cs: totalElapsed,
+                rs: totalPeriod,
+              },
+            },
           },
         },
       };

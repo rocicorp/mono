@@ -114,13 +114,20 @@ export class Ledger {
       const totalUpdate = {
         teamID,
         appID,
+        yearMonth: null,
         total: update,
-        year: {[year]: update},
+        year: {
+          [year]: {
+            total: update,
+            month: {[month]: update},
+          },
+        },
       };
-      const totalFields = ['teamID', 'appID'].concat(
+      const totalFields = ['teamID', 'appID', 'yearMonth'].concat(
         Object.keys(update).flatMap(metric => [
           `total.${metric}`,
-          `year.${year}.${metric}`,
+          `year.${year}.total.${metric}`,
+          `year.${year}.month.${month}.${metric}`,
         ]),
       );
 

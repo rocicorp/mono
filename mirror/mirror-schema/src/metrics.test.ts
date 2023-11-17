@@ -53,13 +53,13 @@ describe('metrics schema', () => {
   test('splitDate', () => {
     expect(splitDate(new Date(Date.UTC(2022, 0, 1, 2)))).toEqual([
       '2022',
-      '01',
+      '1',
       '1',
       '2',
     ]);
     expect(splitDate(new Date(Date.UTC(2023, 8, 30, 3)))).toEqual([
       '2023',
-      '09',
+      '9',
       '30',
       '3',
     ]);
@@ -98,21 +98,28 @@ describe('metrics schema', () => {
   });
 
   test('document paths', () => {
-    expect(monthMetricsPath('2023', '09', TEAM, APP)).toBe(
+    expect(monthMetricsPath('2023', '9', TEAM, APP)).toBe(
       `apps/${APP}/metrics/202309-${TEAM}`,
     );
     expect(monthMetricsPath('2023', '10', TEAM, APP)).toBe(
       `apps/${APP}/metrics/202310-${TEAM}`,
     );
-    expect(monthMetricsPath('2023', '09', TEAM)).toBe(
+    expect(monthMetricsPath('2023', '9', TEAM)).toBe(
       `teams/${TEAM}/metrics/202309`,
     );
     expect(monthMetricsPath('2023', '10', TEAM)).toBe(
+      `teams/${TEAM}/metrics/202310`,
+    );
+    expect(monthMetricsPath('2023', '9', TEAM, null)).toBe(
+      `teams/${TEAM}/metrics/202309`,
+    );
+    expect(monthMetricsPath('2023', '10', TEAM, null)).toBe(
       `teams/${TEAM}/metrics/202310`,
     );
     expect(totalMetricsPath(TEAM, APP)).toBe(
       `apps/${APP}/metrics/total-${TEAM}`,
     );
     expect(totalMetricsPath(TEAM)).toBe(`teams/${TEAM}/metrics/total`);
+    expect(totalMetricsPath(TEAM, null)).toBe(`teams/${TEAM}/metrics/total`);
   });
 });
