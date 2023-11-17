@@ -38,7 +38,7 @@ export async function migrateTotalMetricsHandler(
   const {step} = yargs;
   const firestore = getFirestore();
 
-  // First, migrate the format of the `year` field without adding monthly totals.
+  // Step 1: Migrate the format of the `year` field without adding monthly totals.
   await firestore.runTransaction(async tx => {
     const metrics = await tx.get(
       firestore.collectionGroup(METRICS_COLLECTION_ID),
@@ -71,6 +71,7 @@ export async function migrateTotalMetricsHandler(
     }
   });
 
+  // Step 2: Scan the monthly docs and add their totals to the corresponding total doc.
   await firestore.runTransaction(async tx => {
     const monthMetrics = await tx.get(
       firestore
@@ -99,6 +100,8 @@ export async function migrateTotalMetricsHandler(
       console.log('Step 2 skipped');
     }
   });
+
+  // Step 3: Verify that the new total docs adhere to the current schema.
   if (step === 3) {
     const migrated = await firestore
       .collectionGroup(METRICS_COLLECTION_ID)
