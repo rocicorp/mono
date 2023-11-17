@@ -42,6 +42,7 @@
   },
   "devDependencies": {
     "compare-utf8": "^0.1.1",
+    "chartscii": "^1.3.2",
     "nanoid": "^4.0.2",
     "open": "^9.1.0",
     "picocolors": "^1.0.0",
