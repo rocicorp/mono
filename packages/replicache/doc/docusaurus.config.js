@@ -30,6 +30,12 @@ module.exports = {
       },
     ],
   ].filter(Boolean),
+  scripts: [
+    {
+      src: '/js/supabase-redirect.js',
+      async: false,
+    },
+  ],
   themeConfig: {
     tags: {
       headTags: [
