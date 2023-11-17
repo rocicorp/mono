@@ -30,6 +30,14 @@ export const metricsSchema = v.object({
 
 export type Metrics = v.Infer<typeof metricsSchema>;
 
+export const metricsNode = v.object({total: metricsSchema});
+
+/**
+ * MetricsNode defines the structure common to both intermediate and leaf
+ * nodes of Metrics documents.
+ */
+export type MetricsNode = v.Infer<typeof metricsNode>;
+
 export type Hour =
   | '0'
   | '1'
@@ -57,32 +65,32 @@ export type Hour =
   | '23';
 
 export const dayMetricsSchema = v.object({
-  total: metricsSchema,
+  ...metricsNode.shape,
   hour: v.object({
-    ['0']: metricsSchema.optional(),
-    ['1']: metricsSchema.optional(),
-    ['2']: metricsSchema.optional(),
-    ['3']: metricsSchema.optional(),
-    ['4']: metricsSchema.optional(),
-    ['5']: metricsSchema.optional(),
-    ['6']: metricsSchema.optional(),
-    ['7']: metricsSchema.optional(),
-    ['8']: metricsSchema.optional(),
-    ['9']: metricsSchema.optional(),
-    ['10']: metricsSchema.optional(),
-    ['11']: metricsSchema.optional(),
-    ['12']: metricsSchema.optional(),
-    ['13']: metricsSchema.optional(),
-    ['14']: metricsSchema.optional(),
-    ['15']: metricsSchema.optional(),
-    ['16']: metricsSchema.optional(),
-    ['17']: metricsSchema.optional(),
-    ['18']: metricsSchema.optional(),
-    ['19']: metricsSchema.optional(),
-    ['20']: metricsSchema.optional(),
-    ['21']: metricsSchema.optional(),
-    ['22']: metricsSchema.optional(),
-    ['23']: metricsSchema.optional(),
+    ['0']: metricsNode.optional(),
+    ['1']: metricsNode.optional(),
+    ['2']: metricsNode.optional(),
+    ['3']: metricsNode.optional(),
+    ['4']: metricsNode.optional(),
+    ['5']: metricsNode.optional(),
+    ['6']: metricsNode.optional(),
+    ['7']: metricsNode.optional(),
+    ['8']: metricsNode.optional(),
+    ['9']: metricsNode.optional(),
+    ['10']: metricsNode.optional(),
+    ['11']: metricsNode.optional(),
+    ['12']: metricsNode.optional(),
+    ['13']: metricsNode.optional(),
+    ['14']: metricsNode.optional(),
+    ['15']: metricsNode.optional(),
+    ['16']: metricsNode.optional(),
+    ['17']: metricsNode.optional(),
+    ['18']: metricsNode.optional(),
+    ['19']: metricsNode.optional(),
+    ['20']: metricsNode.optional(),
+    ['21']: metricsNode.optional(),
+    ['22']: metricsNode.optional(),
+    ['23']: metricsNode.optional(),
   }),
 });
 
@@ -166,12 +174,7 @@ export const monthMetricsSchema = v.object({
   appID: v.string().nullable(), // null for Team-level metrics.
   yearMonth: v.number(),
 
-  total: metricsSchema,
-
-  // Note: The `day` field  contains a large subtree of fields that can
-  // consume a lot of storage space for indexing. Since we don't anticipate
-  // needing to sort queries by values in the day/hour range, we exclude
-  // the whole tree from indexes in firestore.indexes.json.
+  ...metricsNode.shape,
   day: v.object({
     ['1']: dayMetricsSchema.optional(),
     ['2']: dayMetricsSchema.optional(),
@@ -213,25 +216,20 @@ export const monthMetricsDataConverter =
   firestoreDataConverter(monthMetricsSchema);
 
 export const yearMetricsSchema = v.object({
-  total: metricsSchema,
-
-  // Note: The `month` field  contains a large subtree of fields that can
-  // consume a lot of storage space for indexing. Since we don't anticipate
-  // needing to sort queries by values in the day/hour range, we exclude
-  // the whole tree from indexes in firestore.indexes.json.
+  ...metricsNode.shape,
   month: v.object({
-    ['1']: metricsSchema.optional(),
-    ['2']: metricsSchema.optional(),
-    ['3']: metricsSchema.optional(),
-    ['4']: metricsSchema.optional(),
-    ['5']: metricsSchema.optional(),
-    ['6']: metricsSchema.optional(),
-    ['7']: metricsSchema.optional(),
-    ['8']: metricsSchema.optional(),
-    ['9']: metricsSchema.optional(),
-    ['10']: metricsSchema.optional(),
-    ['11']: metricsSchema.optional(),
-    ['12']: metricsSchema.optional(),
+    ['1']: metricsNode.optional(),
+    ['2']: metricsNode.optional(),
+    ['3']: metricsNode.optional(),
+    ['4']: metricsNode.optional(),
+    ['5']: metricsNode.optional(),
+    ['6']: metricsNode.optional(),
+    ['7']: metricsNode.optional(),
+    ['8']: metricsNode.optional(),
+    ['9']: metricsNode.optional(),
+    ['10']: metricsNode.optional(),
+    ['11']: metricsNode.optional(),
+    ['12']: metricsNode.optional(),
   }),
 });
 
@@ -253,9 +251,8 @@ export const totalMetricsSchema = v.object({
   appID: v.string().nullable(),
   yearMonth: v.null(),
 
-  total: metricsSchema,
-  // Keyed by string, e.g. "2023"
-  year: v.record(yearMetricsSchema),
+  ...metricsNode.shape,
+  year: v.record(yearMetricsSchema), // Keyed by string, e.g. "2023"
 });
 
 export type TotalMetrics = v.Infer<typeof totalMetricsSchema>;

@@ -110,8 +110,10 @@ describe('aggregateHourBefore', () => {
           '10': {
             hour: {
               '12': {
-                cs: totalElapsed,
-                rs: totalPeriod,
+                total: {
+                  cs: totalElapsed,
+                  rs: totalPeriod,
+                },
               },
             },
             total: {
@@ -153,8 +155,10 @@ describe('aggregateHourBefore', () => {
             },
             month: {
               ['10']: {
-                cs: totalElapsed,
-                rs: totalPeriod,
+                total: {
+                  cs: totalElapsed,
+                  rs: totalPeriod,
+                },
               },
             },
           },
