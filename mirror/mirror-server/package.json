@@ -70,7 +70,22 @@
     "out"
   ],
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config"
+    "extends": "@rocicorp/eslint-config",
+    "rules": {
+      "no-restricted-imports": [
+        "error",
+        {
+          "patterns": [
+            {
+              "group": [
+                "@google-cloud/firestore"
+              ],
+              "message": "Use `firebase-admin/firestore` instead"
+            }
+          ]
+        }
+      ]
+    }
   },
   "prettier": "@rocicorp/prettier-config",
   "type": "module"
