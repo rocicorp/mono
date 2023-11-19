@@ -3,7 +3,11 @@ import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
-import type {MutatorDefs, WriteTransaction} from 'reflect-shared';
+import type {
+  MutatorDefs,
+  ReadonlyJSONValue,
+  WriteTransaction,
+} from 'reflect-shared';
 import {
   ExperimentalCreateKVStore,
   ExperimentalMemKVStore,
@@ -1606,4 +1610,52 @@ test('Reflect close should stop timeout', async () => {
   await r.close();
   await clock.tickAsync(CONNECT_TIMEOUT_MS);
   expectLogMessages(r).not.contain(connectTimeoutMessage);
+});
+
+test('subscribe where body returns non json', async () => {
+  const log: unknown[] = [];
+
+  const reflect = reflectForTest({
+    logLevel: 'debug',
+    mutators: {
+      async addData(tx, x: Record<string, ReadonlyJSONValue>) {
+        for (const [key, value] of Object.entries(x)) {
+          await tx.set(key, value);
+        }
+      },
+    },
+  });
+  const cancel = reflect.subscribe(
+    async tx => {
+      const entries = await tx.scan().entries().toArray();
+      return new Map(entries.map(([k, v]) => [k, BigInt(v as number)]));
+    },
+    {
+      onData(values) {
+        expect(values).instanceof(Map);
+        for (const entry of values) {
+          log.push(entry);
+        }
+      },
+      isEqual(a, b) {
+        if (!(a instanceof Map) || !(b instanceof Map) || a.size !== b.size) {
+          return false;
+        }
+        for (const [k, v] of a) {
+          if (b.get(k) !== v) {
+            return false;
+          }
+        }
+        return true;
+      },
+    },
+  );
+
+  await reflect.mutate.addData({a: 0, b: 1});
+  expect(log).to.deep.equal([
+    ['a', 0n],
+    ['b', 1n],
+  ]);
+
+  cancel();
 });
