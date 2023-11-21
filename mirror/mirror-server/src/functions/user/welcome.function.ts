@@ -1,11 +1,11 @@
 import type {EventContext} from 'firebase-functions';
 import type {UserRecord} from 'firebase-admin/auth';
-import {defineSecretSafely} from './secrets.js';
+import {defineSecretSafely} from '../app/secrets.js';
 import {runWith} from 'firebase-functions';
 
 const loopsApiKey = defineSecretSafely('LOOPS_API_KEY');
 
-export const authOnCreate = runWith({secrets: ['LOOPS_API_KEY']})
+export const welcome = runWith({secrets: ['LOOPS_API_KEY']})
   .auth.user()
   .onCreate(async (user: UserRecord, _context: EventContext) => {
     const options = {

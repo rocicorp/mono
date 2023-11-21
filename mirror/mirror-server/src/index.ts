@@ -39,6 +39,7 @@ export const user = {
     baseHttpsOptions,
     userFunctions.ensure(getFirestore(), getAuth()),
   ),
+  welcome: userFunctions.welcome,
 };
 
 export const error = {
@@ -68,7 +69,6 @@ export const app = {
     appFunctions.tail(getFirestore(), getAuth(), secrets),
   ),
   delete: https.onCall(baseHttpsOptions, appFunctions.delete(getFirestore())),
-  authOnCreate: appFunctions.authOnCreate,
 };
 
 export const env = {
