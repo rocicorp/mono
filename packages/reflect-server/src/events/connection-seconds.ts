@@ -10,18 +10,15 @@ import type {ConnectionCountTracker} from '../types/client-state.js';
 // Normal reporting interval.
 export const REPORTING_INTERVAL_MS = 60 * 1000;
 
-// Shorter flush interval when the number of connections drops.
-export const CONNECTION_CLOSED_FLUSH_INTERVAL_MS = 10 * 1000;
-
 export class ConnectionSecondsReporter implements ConnectionCountTracker {
   readonly #channel: Channel;
   readonly #scheduler: AlarmScheduler;
 
   #timeoutID: Promise<TimeoutID> = Promise.resolve(0);
-  #elapsedMs: number = 0;
+  #connectionMs: number = 0;
+  #roomMs: number = 0;
   #currentCount: number = 0;
   #lastCountChange: number = 0;
-  #intervalStartTime: number = 0;
   #roomID: string | undefined;
 
   constructor(
@@ -46,15 +43,18 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
     const now = Date.now();
 
     const prevCount = this.#currentCount;
-    this.#elapsedMs += this.#currentCount * (now - this.#lastCountChange);
+    this.#connectionMs += this.#currentCount * (now - this.#lastCountChange);
+    if (this.#currentCount > 0) {
+      this.#roomMs += now - this.#lastCountChange;
+    }
     this.#currentCount = currentCount;
     this.#lastCountChange = now;
 
     if (flush) {
       // If the roomID has not yet been set, wait for the next interval to flush.
       if (this.#roomID !== undefined) {
-        const period = (now - this.#intervalStartTime) / 1000;
-        const elapsed = this.#elapsedMs / 1000;
+        const period = this.#roomMs / 1000;
+        const elapsed = this.#connectionMs / 1000;
 
         const report: ConnectionSecondsReport = {
           period,
@@ -62,7 +62,8 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
           roomID: this.#roomID,
         };
         this.#channel.publish(report);
-        this.#elapsedMs = 0;
+        this.#connectionMs = 0;
+        this.#roomMs = 0;
       }
       this.#timeoutID = Promise.resolve(0);
     }
@@ -71,7 +72,7 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
     // Scheduling state is kept consistent by serializing updates on the
     // `#timeoutID` Promise.
     this.#timeoutID = this.#timeoutID.then(timeoutID =>
-      this.#scheduleFlush(timeoutID, prevCount, currentCount, now),
+      this.#scheduleFlush(timeoutID, prevCount, currentCount),
     );
     await this.#timeoutID;
   }
@@ -80,13 +81,10 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
     currTimeoutID: TimeoutID,
     prevCount: number,
     currentCount: number,
-    now: number,
   ): Promise<TimeoutID> {
-    // When a connection closes, schedule an earlier flush so that (1) the FetchEvents
-    // that correspond to the closed websocket are immediately flushed to the tail log
-    // and (2) in the case that there are no longer any connections, we report the connection
-    // times before the DO is shut down.
-    const fastFlush = currentCount < prevCount;
+    // When the last connection closes, schedule an immediate flush so that the
+    // timings are reported before the RoomDO is shutdown.
+    const fastFlush = currentCount < prevCount && currentCount === 0;
     if (!fastFlush) {
       if (
         currTimeoutID !== 0 || // Keep the existing schedule.
@@ -95,12 +93,9 @@ export class ConnectionSecondsReporter implements ConnectionCountTracker {
         return currTimeoutID;
       }
     }
-    if (currTimeoutID === 0) {
-      this.#intervalStartTime = now;
-    }
     const newTimeoutID = await this.#scheduler.promiseTimeout(
       lc => this.#flush(lc),
-      fastFlush ? CONNECTION_CLOSED_FLUSH_INTERVAL_MS : REPORTING_INTERVAL_MS,
+      fastFlush ? 0 : REPORTING_INTERVAL_MS,
     );
     // Optimization: Because rescheduling is always to an earlier timeout,
     // schedule the new (earlier) timeout first before clearing the later one.
