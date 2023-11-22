@@ -218,7 +218,7 @@ describe('handlePush', () => {
         mutation(clientID, 4, 20),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        [clientID, clientRecord(clientGroupID, 1, 2, 1, 50)],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -247,8 +247,8 @@ describe('handlePush', () => {
         }),
       ],
       expectedClientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
-        ['c2', clientRecord(clientGroupID, null, 0, null)],
+        [clientID, clientRecord(clientGroupID, 1, 2, 1, 50)],
+        ['c2', clientRecord(clientGroupID, null, 0, null, 50)],
       ]),
     },
     {

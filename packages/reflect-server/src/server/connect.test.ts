@@ -1,35 +1,34 @@
 import {
-  test,
+  afterEach,
+  beforeEach,
   describe,
   expect,
-  beforeEach,
-  afterEach,
   jest,
+  test,
 } from '@jest/globals';
+import type {ErrorKind, NullableVersion} from 'reflect-protocol';
+import {getEntry, putEntry} from '../db/data.js';
+import {getConnectRequest, handleConnection} from '../server/connect.js';
+import {DurableStorage} from '../storage/durable-storage.js';
 import {
   ClientRecord,
   clientRecordKey,
   clientRecordSchema,
 } from '../types/client-record.js';
-import {getEntry, putEntry} from '../db/data.js';
 import type {
   ClientGroupID,
   ClientID,
   ClientMap,
   Socket,
 } from '../types/client-state.js';
+import {putVersion} from '../types/version.js';
+import {encodeHeaderValue} from '../util/headers.js';
 import {
+  Mocket,
   client,
   clientRecord,
   createSilentLogContext,
-  Mocket,
 } from '../util/test-utils.js';
-import {getConnectRequest, handleConnection} from '../server/connect.js';
-import {encodeHeaderValue} from '../util/headers.js';
-import {DurableStorage} from '../storage/durable-storage.js';
-import {putVersion} from '../types/version.js';
-import type {NullableVersion} from 'reflect-protocol';
-import type {ErrorKind} from 'reflect-protocol';
 import {AUTH_DATA_HEADER_NAME} from './internal-headers.js';
 
 const START_TIME = 1686690000000;
@@ -183,8 +182,8 @@ describe('handleConnection', () => {
       existingClients: new Map(),
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket)]),
-      existingRecord: clientRecord('cg1', null, 0),
-      expectedRecord: clientRecord('cg1', null, 0),
+      existingRecord: clientRecord('cg1', null, 0, undefined, START_TIME - 100),
+      expectedRecord: clientRecord('cg1', null, 0, undefined, START_TIME),
       version: null,
     },
     {
@@ -214,8 +213,8 @@ describe('handleConnection', () => {
       existingClients: new Map(),
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket)]),
-      existingRecord: clientRecord('cg1', 2, 0),
-      expectedRecord: clientRecord('cg1', 1, 0),
+      existingRecord: clientRecord('cg1', 2, 0, undefined, START_TIME - 100),
+      expectedRecord: clientRecord('cg1', 1, 0, undefined, START_TIME),
       version: 2,
     },
     {
@@ -225,8 +224,8 @@ describe('handleConnection', () => {
       existingClients: new Map(),
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket, true)]),
-      existingRecord: clientRecord('cg1', 2, 0),
-      expectedRecord: clientRecord('cg1', 1, 0),
+      existingRecord: clientRecord('cg1', 2, 0, undefined, START_TIME - 100),
+      expectedRecord: clientRecord('cg1', 1, 0, undefined, START_TIME),
       version: 2,
     },
     {
@@ -236,7 +235,7 @@ describe('handleConnection', () => {
       existingClients: new Map([c2]),
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket), c2]),
-      expectedRecord: clientRecord('cg1', null, 0, null),
+      expectedRecord: clientRecord('cg1', null, 0, null, START_TIME),
       version: 1,
     },
     {
@@ -246,8 +245,8 @@ describe('handleConnection', () => {
       existingClients: new Map(),
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket)]),
-      existingRecord: clientRecord('cg1', 4, 0),
-      expectedRecord: clientRecord('cg1', 7, 0),
+      existingRecord: clientRecord('cg1', 4, 0, undefined, START_TIME - 100),
+      expectedRecord: clientRecord('cg1', 7, 0, undefined, START_TIME),
       version: 7,
     },
     {
@@ -257,8 +256,8 @@ describe('handleConnection', () => {
       existingClients: new Map(),
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket)]),
-      existingRecord: clientRecord('cg1', 4, 0),
-      expectedRecord: clientRecord('cg1', 7, 0),
+      existingRecord: clientRecord('cg1', 4, 0, undefined, START_TIME - 100),
+      expectedRecord: clientRecord('cg1', 7, 0, undefined, START_TIME),
       version: 7,
       wsid: '',
     },

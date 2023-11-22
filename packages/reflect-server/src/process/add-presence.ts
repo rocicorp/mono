@@ -1,14 +1,14 @@
 import type {Patch, Poke} from 'reflect-protocol';
-import type {ClientID, ClientMap} from '../types/client-state.js';
-import {EntryCache} from '../storage/entry-cache.js';
 import {must} from 'shared/src/must.js';
-import {getVersion, putVersion} from '../types/version.js';
+import {EntryCache} from '../storage/entry-cache.js';
+import type {Storage} from '../storage/storage.js';
 import {
   ClientRecord,
   getClientRecord,
   putClientRecord,
 } from '../types/client-record.js';
-import type {Storage} from '../storage/storage.js';
+import type {ClientID, ClientMap} from '../types/client-state.js';
+import {getVersion, putVersion} from '../types/version.js';
 
 export async function addPresence(
   clients: ClientMap,
@@ -16,7 +16,7 @@ export async function addPresence(
   storage: Storage,
   previousConnectedClients: Set<string>,
   nextConnectedClients: Set<string>,
-) {
+): Promise<void> {
   let numClientsThatNeedInitialPresence = 0;
   let needPokeForInitialPresence = false;
   for (const [clientID, clientState] of clients) {

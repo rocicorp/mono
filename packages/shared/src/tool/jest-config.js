@@ -37,4 +37,7 @@ export const jestConfig = {
     ['REFLECT_VERSION']: getReflectVersion(),
     ['REFLECT_CLI_NAME']: 'reflect-cli',
   },
+  // Disable prettier for inline snapshots since it is broken
+  // https://github.com/jestjs/jest/issues/14305
+  prettierPath: null,
 };

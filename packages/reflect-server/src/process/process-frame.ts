@@ -3,6 +3,7 @@ import type {NullableVersion, Patch, Version} from 'reflect-protocol';
 import type {Env} from 'reflect-shared';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
+import {GC_MAX_AGE, collectClients} from '../server/client-gc.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {unwrapPatch} from '../storage/replicache-transaction.js';
@@ -93,6 +94,29 @@ export async function processFrame(
 
   lc.debug?.(`processed ${numPendingMutationsToProcess} mutations`);
 
+  const gcCache = new EntryCache(cache);
+  await collectClients(
+    lc,
+    gcCache,
+    new Set(clientIDs),
+    Date.now(),
+    GC_MAX_AGE,
+    nextVersion,
+  );
+
+  // If collectClients updated version it successfully collected clients and
+  // client keys. Create client pokes for the resulting user value changes.
+  [prevVersion, nextVersion] = await addPokesIfUpdated(
+    gcCache,
+    prevVersion,
+    clientPokes,
+    clientIDs,
+    clients,
+    nextVersion,
+  );
+  // Wether or not the version was updated, flush any other changes it made.
+  await gcCache.flush();
+
   const disconnectsCache = new EntryCache(cache);
   await processDisconnects(
     lc,
@@ -107,9 +131,32 @@ export async function processFrame(
   // If processDisconnects updated version it successfully executed
   // disconnectHandler for one or more disconnected clients, create client
   // pokes for the resulting user value changes.
-  if (must(await getVersion(disconnectsCache)) !== prevVersion) {
-    const patch = unwrapPatch(disconnectsCache.pending());
-    await disconnectsCache.flush();
+  await addPokesIfUpdated(
+    disconnectsCache,
+    prevVersion,
+    clientPokes,
+    clientIDs,
+    clients,
+    nextVersion,
+  );
+  // Wether or not the version was updated, flush any other changes it made.
+  await disconnectsCache.flush();
+
+  lc.debug?.('built pokes', clientPokes.length);
+  await cache.flush();
+  return clientPokes;
+}
+
+async function addPokesIfUpdated(
+  cache: EntryCache,
+  prevVersion: number,
+  clientPokes: ClientPoke[],
+  clientIDs: string[],
+  clients: ClientMap,
+  nextVersion: number,
+) {
+  if (must(await getVersion(cache)) !== prevVersion) {
+    const patch = unwrapPatch(cache.pending());
     clientPokes.push(
       ...(await buildClientPokesAndUpdateClientRecords(
         cache,
@@ -122,14 +169,11 @@ export async function processFrame(
         undefined,
       )),
     );
-  } else {
-    // Wether or not processDisconnects updated version, flush any other changes
-    // it made.
-    await disconnectsCache.flush();
+    prevVersion = nextVersion;
+    nextVersion = prevVersion + 1;
   }
-  lc.debug?.('built pokes', clientPokes.length);
-  await cache.flush();
-  return clientPokes;
+
+  return [prevVersion, nextVersion];
 }
 
 function buildClientPokesAndUpdateClientRecords(
@@ -165,7 +209,7 @@ function buildClientPokesAndUpdateClientRecords(
         poke: {
           baseCookie: prevVersion,
           cookie: nextVersion,
-          lastMutationIDChanges: await getLastMutationIDChanges(clientRecord),
+          lastMutationIDChanges: getLastMutationIDChanges(clientRecord),
           presence: EMPTY_PRESENCE,
           patch,
           timestamp: timestamps?.normalizedTimestamp,

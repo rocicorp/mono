@@ -2,9 +2,14 @@ import type {LogContext} from '@rocicorp/logger';
 import type {Version} from 'reflect-protocol';
 import type {Env} from 'reflect-shared';
 import type {PendingMutation} from 'replicache';
+import {equals as setEquals} from 'shared/src/set-utils.js';
+import {updateLastSeen} from '../server/client-gc.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
-import {ReplicacheTransaction} from '../storage/replicache-transaction.js';
+import {
+  NOOP_MUTATION_ID,
+  ReplicacheTransaction,
+} from '../storage/replicache-transaction.js';
 import type {Storage} from '../storage/storage.js';
 import type {ClientID} from '../types/client-state.js';
 import {
@@ -12,8 +17,6 @@ import {
   putConnectedClients,
 } from '../types/connected-clients.js';
 import {putVersion} from '../types/version.js';
-
-const NOOP_MUTATION_ID = -1;
 
 export async function processDisconnects(
   lc: LogContext,
@@ -75,5 +78,16 @@ export async function processDisconnects(
       }
     }
   }
-  await putConnectedClients(newStoredConnectedClients, storage);
+
+  if (!setEquals(storedConnectedClients, newStoredConnectedClients)) {
+    await Promise.all([
+      putConnectedClients(newStoredConnectedClients, storage),
+      updateLastSeen(
+        storedConnectedClients,
+        newStoredConnectedClients,
+        storage,
+        Date.now(),
+      ),
+    ]);
+  }
 }

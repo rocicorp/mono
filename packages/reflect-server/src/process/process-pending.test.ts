@@ -1072,8 +1072,8 @@ describe('processPending', () => {
         ['count', {value: 3, version: 4, deleted: false}],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 4, 3, 4)],
-        ['c2', clientRecord('cg1', 4, 2, 3)],
+        ['c1', clientRecord('cg1', 4, 3, 4, 1000)],
+        ['c2', clientRecord('cg1', 4, 2, 3, 1000)],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -1219,8 +1219,8 @@ describe('processPending', () => {
         ['count', {value: 2, version: 3, deleted: false}],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 3, 2, 2)],
-        ['c2', clientRecord('cg1', 3, 2, 3)],
+        ['c1', clientRecord('cg1', 3, 2, 2, 1000)],
+        ['c2', clientRecord('cg1', 3, 2, 3, 1000)],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -1295,7 +1295,9 @@ describe('processPending', () => {
       expectedUserValues: new Map([
         ['count', {value: 1, version: 2, deleted: false}],
       ]),
-      expectedClientRecords: new Map([['c1', clientRecord('cg1', 2, 2, 2)]]),
+      expectedClientRecords: new Map([
+        ['c1', clientRecord('cg1', 2, 2, 2, 1000)],
+      ]),
       expectedMaxProcessedMutationTimestamp: 800,
       expectedMissableRecords: [
         {
@@ -1370,7 +1372,9 @@ describe('processPending', () => {
       expectedUserValues: new Map([
         ['count', {value: 2, version: 3, deleted: false}],
       ]),
-      expectedClientRecords: new Map([['c1', clientRecord('cg1', 3, 3, 3)]]),
+      expectedClientRecords: new Map([
+        ['c1', clientRecord('cg1', 3, 3, 3, 1000)],
+      ]),
       expectedMaxProcessedMutationTimestamp: 750,
       expectedMissableRecords: [
         {

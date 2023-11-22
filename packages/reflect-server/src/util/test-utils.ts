@@ -136,12 +136,14 @@ export function clientRecord(
   baseCookie: NullableVersion = null,
   lastMutationID = 1,
   lastMutationIDVersion: NullableVersion = 1,
+  lastSeen = 1000,
 ): ClientRecord {
   return {
     clientGroupID,
     baseCookie,
     lastMutationID,
     lastMutationIDVersion,
+    lastSeen,
   };
 }
 
