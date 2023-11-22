@@ -7,7 +7,7 @@ export function GetStarted() {
       <p>Build your first multiplayer app in under a minute:</p>
       <div className={styles.ctaWrap}>
         <Link
-          href="https://hello.reflect.net/scaffold"
+          href="https://hello.reflect.net/start/scaffold"
           className={styles.buttonPrimary}
         >
           Hello, Reflect
