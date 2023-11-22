@@ -8,6 +8,7 @@ import type {Env, MutatorDefs} from 'reflect-shared';
 import {version} from 'reflect-shared';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import * as valita from 'shared/src/valita.js';
+import {ConnectionLifetimeReporter} from '../events/connection-lifetimes.js';
 import {ConnectionSecondsReporter} from '../events/connection-seconds.js';
 import type {MutatorMap} from '../process/process-mutation.js';
 import {processPending} from '../process/process-pending.js';
@@ -112,6 +113,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
   readonly #alarm: AlarmManager;
   readonly #connectionSecondsReporter: ConnectionSecondsReporter;
+  readonly #connectionLifetimeReporter: ConnectionLifetimeReporter;
   readonly #env: Env;
 
   constructor(options: RoomDOOptions<MD>) {
@@ -140,9 +142,13 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     this.#connectionSecondsReporter = new ConnectionSecondsReporter(
       this.#alarm.scheduler,
     );
+    this.#connectionLifetimeReporter = new ConnectionLifetimeReporter(
+      this.#alarm.scheduler,
+    );
     this.#env = env;
     this.#clients = new ConnectionCountTrackingClientMap(
       this.#connectionSecondsReporter,
+      this.#connectionLifetimeReporter,
     );
 
     this.#initRoutes();

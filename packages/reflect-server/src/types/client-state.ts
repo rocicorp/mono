@@ -13,15 +13,17 @@ export class ConnectionCountTrackingClientMap
   extends Map<ClientID, ClientState>
   implements ClientMap
 {
-  #countTracker: ConnectionCountTracker;
+  #countTrackers: readonly ConnectionCountTracker[];
 
-  constructor(countTracker: ConnectionCountTracker) {
+  constructor(...countTrackers: readonly ConnectionCountTracker[]) {
     super();
-    this.#countTracker = countTracker;
+    this.#countTrackers = countTrackers;
   }
 
   #trackCount() {
-    this.#countTracker.onConnectionCountChange(this.size);
+    this.#countTrackers.forEach(tracker =>
+      tracker.onConnectionCountChange(this.size),
+    );
   }
 
   clear(): void {
