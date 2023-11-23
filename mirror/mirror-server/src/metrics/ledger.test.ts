@@ -68,7 +68,7 @@ describe('metrics ledger', () => {
         day: {
           ['31']: {
             total: {cs: 10.23},
-            hour: {['23']: {cs: 10.23}},
+            hour: {['23']: {total: {cs: 10.23}}},
           },
         },
       },
@@ -80,7 +80,7 @@ describe('metrics ledger', () => {
         day: {
           ['31']: {
             total: {cs: 10.23},
-            hour: {['23']: {cs: 10.23}},
+            hour: {['23']: {total: {cs: 10.23}}},
           },
         },
       },
@@ -92,7 +92,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 10.23},
-            month: {['1']: {cs: 10.23}},
+            month: {['1']: {total: {cs: 10.23}}},
           },
         },
       },
@@ -104,7 +104,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 10.23},
-            month: {['1']: {cs: 10.23}},
+            month: {['1']: {total: {cs: 10.23}}},
           },
         },
       },
@@ -124,7 +124,7 @@ describe('metrics ledger', () => {
         day: {
           ['31']: {
             total: {cs: 10.23},
-            hour: {['23']: {cs: 10.23}},
+            hour: {['23']: {total: {cs: 10.23}}},
           },
         },
       },
@@ -136,7 +136,7 @@ describe('metrics ledger', () => {
         day: {
           ['31']: {
             total: {cs: 10.23},
-            hour: {['23']: {cs: 10.23}},
+            hour: {['23']: {total: {cs: 10.23}}},
           },
         },
       },
@@ -148,7 +148,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 10.23},
-            month: {['1']: {cs: 10.23}},
+            month: {['1']: {total: {cs: 10.23}}},
           },
         },
       },
@@ -160,7 +160,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 10.23},
-            month: {['1']: {cs: 10.23}},
+            month: {['1']: {total: {cs: 10.23}}},
           },
         },
       },
@@ -180,7 +180,7 @@ describe('metrics ledger', () => {
         day: {
           ['31']: {
             total: {cs: 10.23},
-            hour: {['23']: {cs: 10.23}},
+            hour: {['23']: {total: {cs: 10.23}}},
           },
         },
       },
@@ -192,7 +192,7 @@ describe('metrics ledger', () => {
         day: {
           ['31']: {
             total: {cs: 10.23},
-            hour: {['23']: {cs: 10.23}},
+            hour: {['23']: {total: {cs: 10.23}}},
           },
         },
       },
@@ -204,7 +204,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 10.23},
-            month: {['1']: {cs: 10.23}},
+            month: {['1']: {total: {cs: 10.23}}},
           },
         },
       },
@@ -216,7 +216,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 10.23},
-            month: {['1']: {cs: 10.23}},
+            month: {['1']: {total: {cs: 10.23}}},
           },
         },
       },
@@ -236,7 +236,7 @@ describe('metrics ledger', () => {
         day: {
           ['31']: {
             total: {cs: 32.46},
-            hour: {['23']: {cs: 32.46}},
+            hour: {['23']: {total: {cs: 32.46}}},
           },
         },
       },
@@ -248,7 +248,7 @@ describe('metrics ledger', () => {
         day: {
           ['31']: {
             total: {cs: 42.69},
-            hour: {['23']: {cs: 42.69}},
+            hour: {['23']: {total: {cs: 42.69}}},
           },
         },
       },
@@ -260,7 +260,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 32.46},
-            month: {['1']: {cs: 32.46}},
+            month: {['1']: {total: {cs: 32.46}}},
           },
         },
       },
@@ -272,7 +272,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 42.69},
-            month: {['1']: {cs: 42.69}},
+            month: {['1']: {total: {cs: 42.69}}},
           },
         },
       },
@@ -293,8 +293,8 @@ describe('metrics ledger', () => {
           ['31']: {
             total: {cs: 57.14},
             hour: {
-              ['20']: {cs: 24.68},
-              ['23']: {cs: 32.46},
+              ['20']: {total: {cs: 24.68}},
+              ['23']: {total: {cs: 32.46}},
             },
           },
         },
@@ -308,8 +308,8 @@ describe('metrics ledger', () => {
           ['31']: {
             total: {cs: 67.37},
             hour: {
-              ['20']: {cs: 24.68},
-              ['23']: {cs: 42.69},
+              ['20']: {total: {cs: 24.68}},
+              ['23']: {total: {cs: 42.69}},
             },
           },
         },
@@ -322,7 +322,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 57.14},
-            month: {['1']: {cs: 57.14}},
+            month: {['1']: {total: {cs: 57.14}}},
           },
         },
       },
@@ -334,7 +334,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 67.37},
-            month: {['1']: {cs: 67.37}},
+            month: {['1']: {total: {cs: 67.37}}},
           },
         },
       },
@@ -355,8 +355,8 @@ describe('metrics ledger', () => {
           ['31']: {
             total: {cs: 54.14},
             hour: {
-              ['20']: {cs: 21.68},
-              ['23']: {cs: 32.46},
+              ['20']: {total: {cs: 21.68}},
+              ['23']: {total: {cs: 32.46}},
             },
           },
         },
@@ -370,8 +370,8 @@ describe('metrics ledger', () => {
           ['31']: {
             total: {cs: 64.37},
             hour: {
-              ['20']: {cs: 21.68},
-              ['23']: {cs: 42.69},
+              ['20']: {total: {cs: 21.68}},
+              ['23']: {total: {cs: 42.69}},
             },
           },
         },
@@ -384,7 +384,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 54.14},
-            month: {['1']: {cs: 54.14}},
+            month: {['1']: {total: {cs: 54.14}}},
           },
         },
       },
@@ -396,7 +396,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 64.37},
-            month: {['1']: {cs: 64.37}},
+            month: {['1']: {total: {cs: 64.37}}},
           },
         },
       },
@@ -416,7 +416,7 @@ describe('metrics ledger', () => {
         day: {
           ['3']: {
             total: {cs: 10.0},
-            hour: {['15']: {cs: 10.0}},
+            hour: {['15']: {total: {cs: 10.0}}},
           },
         },
       },
@@ -428,7 +428,7 @@ describe('metrics ledger', () => {
         day: {
           ['3']: {
             total: {cs: 10.0},
-            hour: {['15']: {cs: 10.0}},
+            hour: {['15']: {total: {cs: 10.0}}},
           },
         },
       },
@@ -440,11 +440,11 @@ describe('metrics ledger', () => {
         year: {
           ['2022']: {
             total: {cs: 10.0},
-            month: {['12']: {cs: 10.0}},
+            month: {['12']: {total: {cs: 10.0}}},
           },
           ['2023']: {
             total: {cs: 54.14},
-            month: {['1']: {cs: 54.14}},
+            month: {['1']: {total: {cs: 54.14}}},
           },
         },
       },
@@ -456,11 +456,11 @@ describe('metrics ledger', () => {
         year: {
           ['2022']: {
             total: {cs: 10.0},
-            month: {['12']: {cs: 10.0}},
+            month: {['12']: {total: {cs: 10.0}}},
           },
           ['2023']: {
             total: {cs: 64.37},
-            month: {['1']: {cs: 64.37}},
+            month: {['1']: {total: {cs: 64.37}}},
           },
         },
       },
@@ -488,8 +488,10 @@ describe('metrics ledger', () => {
             },
             hour: {
               ['15']: {
-                cs: 10.0,
-                cl: 11.1,
+                total: {
+                  cs: 10.0,
+                  cl: 11.1,
+                },
               },
             },
           },
@@ -511,8 +513,10 @@ describe('metrics ledger', () => {
             },
             hour: {
               ['15']: {
-                cs: 10.0,
-                cl: 11.1,
+                total: {
+                  cs: 10.0,
+                  cl: 11.1,
+                },
               },
             },
           },
@@ -534,14 +538,16 @@ describe('metrics ledger', () => {
             },
             month: {
               ['12']: {
-                cs: 10.0,
-                cl: 11.1,
+                total: {
+                  cs: 10.0,
+                  cl: 11.1,
+                },
               },
             },
           },
           ['2023']: {
             total: {cs: 54.14},
-            month: {['1']: {cs: 54.14}},
+            month: {['1']: {total: {cs: 54.14}}},
           },
         },
       },
@@ -561,14 +567,16 @@ describe('metrics ledger', () => {
             },
             month: {
               ['12']: {
-                cs: 10.0,
-                cl: 11.1,
+                total: {
+                  cs: 10.0,
+                  cl: 11.1,
+                },
               },
             },
           },
           ['2023']: {
             total: {cs: 64.37},
-            month: {['1']: {cs: 64.37}},
+            month: {['1']: {total: {cs: 64.37}}},
           },
         },
       },
@@ -588,7 +596,7 @@ describe('metrics ledger', () => {
         day: {
           ['1']: {
             total: {cs: 23.1},
-            hour: {['0']: {cs: 23.1}},
+            hour: {['0']: {total: {cs: 23.1}}},
           },
         },
       },
@@ -600,7 +608,7 @@ describe('metrics ledger', () => {
         day: {
           ['1']: {
             total: {cs: 23.1},
-            hour: {['0']: {cs: 23.1}},
+            hour: {['0']: {total: {cs: 23.1}}},
           },
         },
       },
@@ -612,7 +620,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 23.1},
-            month: {['2']: {cs: 23.1}},
+            month: {['2']: {total: {cs: 23.1}}},
           },
         },
       },
@@ -624,7 +632,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 23.1},
-            month: {['2']: {cs: 23.1}},
+            month: {['2']: {total: {cs: 23.1}}},
           },
         },
       },
@@ -644,11 +652,11 @@ describe('metrics ledger', () => {
         day: {
           ['1']: {
             total: {cs: 23.1},
-            hour: {['0']: {cs: 23.1}},
+            hour: {['0']: {total: {cs: 23.1}}},
           },
           ['2']: {
             total: {cs: 43.1},
-            hour: {['0']: {cs: 43.1}},
+            hour: {['0']: {total: {cs: 43.1}}},
           },
         },
       },
@@ -660,11 +668,11 @@ describe('metrics ledger', () => {
         day: {
           ['1']: {
             total: {cs: 23.1},
-            hour: {['0']: {cs: 23.1}},
+            hour: {['0']: {total: {cs: 23.1}}},
           },
           ['2']: {
             total: {cs: 43.1},
-            hour: {['0']: {cs: 43.1}},
+            hour: {['0']: {total: {cs: 43.1}}},
           },
         },
       },
@@ -676,7 +684,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 66.2},
-            month: {['2']: {cs: 66.2}},
+            month: {['2']: {total: {cs: 66.2}}},
           },
         },
       },
@@ -688,7 +696,7 @@ describe('metrics ledger', () => {
         year: {
           ['2023']: {
             total: {cs: 66.2},
-            month: {['2']: {cs: 66.2}},
+            month: {['2']: {total: {cs: 66.2}}},
           },
         },
       },
@@ -721,9 +729,11 @@ describe('metrics ledger', () => {
             },
             hour: {
               ['15']: {
-                rs: 5.0,
-                cs: 15.0,
-                cl: 11.1,
+                total: {
+                  rs: 5.0,
+                  cs: 15.0,
+                  cl: 11.1,
+                },
               },
             },
           },
@@ -747,9 +757,11 @@ describe('metrics ledger', () => {
             },
             hour: {
               ['15']: {
-                rs: 5.0,
-                cs: 15.0,
-                cl: 11.1,
+                total: {
+                  rs: 5.0,
+                  cs: 15.0,
+                  cl: 11.1,
+                },
               },
             },
           },
@@ -773,15 +785,17 @@ describe('metrics ledger', () => {
             },
             month: {
               ['12']: {
-                rs: 5.0,
-                cs: 15.0,
-                cl: 11.1,
+                total: {
+                  rs: 5.0,
+                  cs: 15.0,
+                  cl: 11.1,
+                },
               },
             },
           },
           ['2023']: {
             total: {cs: 54.14},
-            month: {['1']: {cs: 54.14}},
+            month: {['1']: {total: {cs: 54.14}}},
           },
         },
       },
@@ -803,15 +817,17 @@ describe('metrics ledger', () => {
             },
             month: {
               ['12']: {
-                rs: 5.0,
-                cs: 15.0,
-                cl: 11.1,
+                total: {
+                  rs: 5.0,
+                  cs: 15.0,
+                  cl: 11.1,
+                },
               },
             },
           },
           ['2023']: {
             total: {cs: 64.37},
-            month: {['1']: {cs: 64.37}},
+            month: {['1']: {total: {cs: 64.37}}},
           },
         },
       },

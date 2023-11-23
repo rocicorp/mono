@@ -15,7 +15,7 @@ export const sums = {
   }),
   expr: {
     totalElapsed: 'SUM(elapsed)',
-    totalPeriod: 'SUM(period)',
+    totalPeriod: 'SUM(adjustedPeriod)',
   },
 } as const;
 
@@ -35,7 +35,19 @@ export async function aggregateHourBefore(
   const start = new Date(end.getTime() - 3600 * 1000);
   const results = await analytics.query(
     runningConnectionSeconds
-      .selectStar()
+      .selectStarPlus({
+        schema: v.object({
+          adjustedPeriod: v.number(),
+        }),
+        expr: {
+          // Prior to https://github.com/rocicorp/mono/commit/cb0d845f3720ec647f634c85ec1fc408e35df87f,
+          // older versions of the reflect-server used a semantics for "period" in which time
+          // continued to be counted for 10 seconds after the last connection closed.
+          // This adjustment aggregates `min(period, elapsed)` to make the resulting semantics
+          // of `adjustedPeriod` closer to that of "active room seconds".
+          adjustedPeriod: 'IF(period > elapsed, elapsed, period)',
+        },
+      })
       .where('timestamp', '>=', start)
       .and('timestamp', '<', end)
       .select(sums)

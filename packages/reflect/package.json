@@ -1,7 +1,7 @@
 {
   "name": "@rocicorp/reflect",
   "description": "",
-  "version": "0.38.202311130825+d3dbae",
+  "version": "0.38.202311200859+8c13c9",
   "license": "SEE LICENSE IN https://roci.dev/terms.html",
   "type": "module",
   "main": "index.js",
@@ -42,6 +42,7 @@
   },
   "devDependencies": {
     "compare-utf8": "^0.1.1",
+    "chartscii": "^1.3.2",
     "nanoid": "^4.0.2",
     "open": "^9.1.0",
     "picocolors": "^1.0.0",

@@ -49,7 +49,14 @@ export async function sumUsageHandler(yargs: SumUsageHandlerArgs) {
 
   const result1 = await analytics.query(
     runningConnectionSeconds
-      .selectStar()
+      .selectStarPlus({
+        schema: v.object({
+          adjustedPeriod: v.number(),
+        }),
+        expr: {
+          adjustedPeriod: 'IF(period > elapsed, elapsed, period)',
+        },
+      })
       .where('timestamp', '>=', startDate)
       .and('timestamp', '<', endDate)
       .select({

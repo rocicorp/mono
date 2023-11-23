@@ -1,15 +1,17 @@
 import type * as v from 'shared/src/valita.js';
+import {appSchema} from '../app.js';
 import {firestoreDataConverter} from '../converter.js';
 import {deploymentViewSchema} from './deployment.js';
-import {appSchema} from '../app.js';
 
 // The slice of App fields read by the cli.
 // Having the cli use a constrained schema makes it easier to
 // refactor/rewrite other parts of the schema.
 // Pick more fields as necessary.
-const appViewSchema = appSchema.pick('name', 'runningDeployment').extend({
-  runningDeployment: deploymentViewSchema.optional(),
-});
+const appViewSchema = appSchema
+  .pick('name', 'runningDeployment', 'teamID')
+  .extend({
+    runningDeployment: deploymentViewSchema.optional(),
+  });
 
 export type AppView = v.Infer<typeof appViewSchema>;
 

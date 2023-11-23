@@ -44,15 +44,15 @@ import {
   migrateDnsCommentsToTagsOptions,
 } from './migrate-dns-comments-to-tags.js';
 import {
+  migrateLeafMetricsHandler,
+  migrateLeafMetricsOptions,
+} from './migrate-leaf-metrics.js';
+import {
   migrateTeamLabelsHandler,
   migrateTeamLabelsOptions,
 } from './migrate-team-labels.js';
 import {migrateToEnvHandler, migrateToEnvOptions} from './migrate-to-env.js';
 import {migrateToWFPHandler, migrateToWFPOptions} from './migrate-to-wfp.js';
-import {
-  migrateTotalMetricsHandler,
-  migrateTotalMetricsOptions,
-} from './migrate-total-metrics.js';
 import {
   publishCustomDomainsHandler,
   publishCustomDomainsOptions,
@@ -259,10 +259,10 @@ function createCLIParser(argv: string[]) {
   );
 
   reflectCLI.command(
-    'migrate-total-metrics',
-    'Migrates to the new total metrics format with monthly totals under each year',
-    migrateTotalMetricsOptions,
-    migrateTotalMetricsHandler,
+    'migrate-leaf-metrics',
+    'Migrates to the new leaf metrics format with a `total` field in each leaf',
+    migrateLeafMetricsOptions,
+    migrateLeafMetricsHandler,
   );
 
   // sum-usage

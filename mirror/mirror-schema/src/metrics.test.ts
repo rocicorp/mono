@@ -37,7 +37,7 @@ describe('metrics schema', () => {
       };
       for (let h = 0; h < 24; h++) {
         const hour = h.toString() as Hour;
-        dayMetrics.hour[hour] = values;
+        dayMetrics.hour[hour] = {total: values};
       }
       month.day[day] = dayMetrics;
     }
@@ -81,7 +81,7 @@ describe('metrics schema', () => {
       cl: 10020,
     };
     const month = fillMonth(values);
-    expect(sizeof(month)).toBe(19513);
+    expect(sizeof(month)).toBe(23977);
   });
 
   test('document size with 100 metrics', () => {
@@ -90,7 +90,7 @@ describe('metrics schema', () => {
       values[i < 10 ? `0${i}` : `${i}`] = 10000;
     }
     const month = fillMonth(values as Metrics);
-    expect(sizeof(month)).toBe(856041);
+    expect(sizeof(month)).toBe(860505);
     // 100 metrics is still within the 1MB doc size limit
     expect(
       sizeof(month) + monthMetricsPath('2023', '11', TEAM, APP).length,

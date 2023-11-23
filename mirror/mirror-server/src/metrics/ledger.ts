@@ -64,7 +64,7 @@ export class Ledger {
         .withConverter(totalMetricsDataConverter);
 
       const appMonth = (await tx.get(appMonthDoc)).data();
-      const currMetrics = appMonth?.day?.[day]?.hour?.[hour];
+      const currMetrics = appMonth?.day?.[day]?.hour?.[hour]?.total;
       const update: Metrics = Object.fromEntries(
         [...newMetrics]
           .map(([metric, newValue]) => {
@@ -72,7 +72,7 @@ export class Ledger {
             const delta = newValue - currValue;
             return [metric, delta] as [Metric, number];
           })
-          .filter(([_, delta]) => Math.abs(delta) > 1e-12) // Ignore insignificant floating point deltas.
+          .filter(([_, delta]) => Math.abs(delta) > 1e-11) // Ignore insignificant floating point deltas.
           .map(
             ([metric, delta]) =>
               [metric, FieldValue.increment(delta)] as [Metric, FieldValue],
@@ -92,7 +92,7 @@ export class Ledger {
         day: {
           [day]: {
             total: update,
-            hour: {[hour]: update},
+            hour: {[hour]: {total: update}},
           },
         },
       };
@@ -100,7 +100,7 @@ export class Ledger {
         Object.keys(update).flatMap(metric => [
           `total.${metric}`,
           `day.${day}.total.${metric}`,
-          `day.${day}.hour.${hour}.${metric}`,
+          `day.${day}.hour.${hour}.total.${metric}`,
         ]),
       );
 
@@ -119,7 +119,7 @@ export class Ledger {
         year: {
           [year]: {
             total: update,
-            month: {[month]: update},
+            month: {[month]: {total: update}},
           },
         },
       };
@@ -127,7 +127,7 @@ export class Ledger {
         Object.keys(update).flatMap(metric => [
           `total.${metric}`,
           `year.${year}.total.${metric}`,
-          `year.${year}.month.${month}.${metric}`,
+          `year.${year}.month.${month}.total.${metric}`,
         ]),
       );
 

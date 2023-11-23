@@ -13,6 +13,7 @@ import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
 import {tailHandler, tailOptions} from './tail/index.js';
+import {usageHandler, usageOptions} from './usage.js';
 import {deleteVarsHandler, deleteVarsOptions} from './vars/delete.js';
 import {listVarsHandler, listVarsOptions} from './vars/list.js';
 import {setVarsHandler, setVarsOptions} from './vars/set.js';
@@ -36,7 +37,6 @@ async function main(argv: string[]): Promise<void> {
 function createCLIParser(argv: string[]) {
   const reflectCLI = createCLIParserBase(argv);
 
-  // create
   reflectCLI.command(
     'create <name>',
     '🛠  Create a basic Reflect project',
@@ -44,7 +44,6 @@ function createCLIParser(argv: string[]) {
     handleWith(createHandler).andCleanup(),
   );
 
-  // init
   reflectCLI.command(
     ['init', 'lfg'],
     '🚀 Add Reflect and basic mutators to an existing project',
@@ -52,15 +51,13 @@ function createCLIParser(argv: string[]) {
     handleWith(initHandler).andCleanup(),
   );
 
-  // dev
   reflectCLI.command(
     'dev',
-    '👷 Start a local dev server for your Reflect project',
+    '💻 Start a local dev server for your Reflect project',
     devOptions,
     handleWith(devHandler).andCleanup(),
   );
 
-  // login
   reflectCLI.command(
     'login',
     '🔓 Login to Reflect',
@@ -74,15 +71,21 @@ function createCLIParser(argv: string[]) {
     }).andCleanup(),
   );
 
-  // publish
   reflectCLI.command(
     'publish',
-    '🆙 Publish your Reflect project',
+    '🌏 Publish your Reflect project',
     publishOptions,
     handleWith(publishHandler).andCleanup(),
   );
 
-  // tail
+  reflectCLI.command(
+    'status',
+    '💡 Show the status of current deployed app',
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    () => {},
+    handleWith(statusHandler).andCleanup(),
+  );
+
   reflectCLI.command(
     'tail',
     '🦚 Start a log tailing session',
@@ -90,8 +93,7 @@ function createCLIParser(argv: string[]) {
     handleWith(tailHandler).andCleanup(),
   );
 
-  // vars
-  reflectCLI.command('env', '🟰  Manage environment variables', yargs => {
+  reflectCLI.command('env', '🎛️  Manage environment variables', yargs => {
     yargs
       .option('dev', {
         describe: 'Manage local variables for `npx reflect dev`',
@@ -119,20 +121,18 @@ function createCLIParser(argv: string[]) {
       .demandCommand(1, 'Available commands:\n');
   });
 
-  // delete
+  reflectCLI.command(
+    'usage',
+    '📊 Show usage summary (connection time), with monthly, daily, or hourly breakdowns',
+    usageOptions,
+    handleWith(usageHandler).andCleanup(),
+  );
+
   reflectCLI.command(
     'delete',
     '🗑️  Delete one or more Apps and their associated data. If no flags are specified, defaults to the App of the current directory.',
     deleteOptions,
     handleWith(deleteHandler).andCleanup(),
-  );
-
-  reflectCLI.command(
-    'status',
-    '📊 Show the status of current deployed app',
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    () => {},
-    handleWith(statusHandler).andCleanup(),
   );
 
   return reflectCLI;
