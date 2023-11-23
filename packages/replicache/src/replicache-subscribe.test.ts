@@ -1097,3 +1097,46 @@ test('subscribe using a function', async () => {
 
   cancel();
 });
+
+test('subscribe where body returns non json', async () => {
+  const log: unknown[] = [];
+
+  const rep = await replicacheForTesting('subscribe-non-json-result', {
+    mutators: {
+      addData,
+    },
+  });
+  const cancel = rep.subscribe(
+    async tx => {
+      const entries = await tx.scan().entries().toArray();
+      return new Map(entries.map(([k, v]) => [k, BigInt(v as number)]));
+    },
+    {
+      onData(values) {
+        assert.instanceOf(values, Map);
+        for (const entry of values) {
+          log.push(entry);
+        }
+      },
+      isEqual(a, b) {
+        if (!(a instanceof Map) || !(b instanceof Map) || a.size !== b.size) {
+          return false;
+        }
+        for (const [k, v] of a) {
+          if (b.get(k) !== v) {
+            return false;
+          }
+        }
+        return true;
+      },
+    },
+  );
+
+  await rep.mutate.addData({a: 0, b: 1});
+  expect(log).to.deep.equal([
+    ['a', 0n],
+    ['b', 1n],
+  ]);
+
+  cancel();
+});

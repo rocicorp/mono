@@ -13,7 +13,6 @@ import {must} from 'shared/src/must.js';
 import {initBgIntervalProcess} from './bg-interval.js';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
-import {uuid as makeUuid} from './uuid.js';
 import {uuidChunkHasher} from './dag/chunk.js';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
@@ -100,6 +99,7 @@ import {SYNC_HEAD_NAME} from './sync/sync-head-name.js';
 import {throwIfClosed} from './transaction-closed-error.js';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';
 import {ReadTransactionImpl, WriteTransactionImpl} from './transactions.js';
+import {uuid as makeUuid} from './uuid.js';
 import {version} from './version.js';
 import {
   withRead,
@@ -1525,7 +1525,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * 1. subscribe tracks the keys that `body` accesses each time it runs. `body`
    *    is only re-evaluated when those keys change.
    * 2. subscribe only re-fires `onData` in the case that a result changes by
-   *    way of `deepEquals`.
+   *    way of the `isEqual` option which defaults to doing a deep JSON value
+   *    equality check.
    *
    * Because of (1), `body` must be a pure function of the data in Replicache.
    * `body` must not access anything other than the `tx` parameter passed to it.
@@ -1545,7 +1546,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    *    function it is equivalent to passing it as the `onData` property of an
    *    object.
    */
-  subscribe<R extends ReadonlyJSONValue | undefined>(
+  subscribe<R>(
     body: (tx: ReadTransaction) => Promise<R>,
     options: SubscribeOptions<R> | ((result: R) => void),
   ): () => void {

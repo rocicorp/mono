@@ -13,7 +13,7 @@ import type {
 import type {IndexKey} from './db/index.js';
 import {decodeIndexKey} from './db/index.js';
 import type {ScanOptions} from './db/scan.js';
-import {ReadonlyJSONValue, deepEqual} from './json.js';
+import {deepEqual} from './json.js';
 import type {QueryInternal} from './replicache.js';
 import type {DiffComputationConfig, DiffsMap} from './sync/diff.js';
 import {
@@ -49,29 +49,33 @@ interface Subscription<R> {
 
 const emptySet: ReadonlySet<string> = new Set();
 
-class SubscriptionImpl<R extends ReadonlyJSONValue | undefined>
-  implements Subscription<R>
-{
+const unitializedLastValue = Symbol();
+type UnitializedLastValue = typeof unitializedLastValue;
+
+class SubscriptionImpl<R> implements Subscription<R> {
   readonly #body: (tx: ReadTransaction) => Promise<R>;
   readonly #onData: (result: R) => void;
-  #skipEqualsCheck = true;
-  #lastValue: R | undefined = undefined;
+  #lastValue: R | UnitializedLastValue = unitializedLastValue;
   #keys = emptySet;
   #scans: readonly Readonly<ScanSubscriptionInfo>[] = [];
 
   readonly onError: ((error: unknown) => void) | undefined;
   readonly onDone: (() => void) | undefined;
+  readonly #isEqual: (a: R, b: R) => boolean;
 
   constructor(
     body: (tx: ReadTransaction) => Promise<R>,
     onData: (result: R) => void,
     onError: ((error: unknown) => void) | undefined,
     onDone: (() => void) | undefined,
+    // deepEqual operates on any JSON value but argument might be more specific.
+    isEqual: (a: R, b: R) => boolean = deepEqual as (a: R, b: R) => boolean,
   ) {
     this.#body = body;
     this.#onData = onData;
     this.onError = onError;
     this.onDone = onDone;
+    this.#isEqual = isEqual;
   }
 
   hasIndexSubscription(indexName: string): boolean {
@@ -110,13 +114,17 @@ class SubscriptionImpl<R extends ReadonlyJSONValue | undefined>
   }
 
   onData(result: R): void {
-    if (this.#skipEqualsCheck || !deepEqual(result, this.#lastValue)) {
+    if (
+      this.#lastValue === unitializedLastValue ||
+      !this.#isEqual(this.#lastValue, result)
+    ) {
       this.#lastValue = result;
-      this.#skipEqualsCheck = false;
       this.#onData(result);
     }
   }
 }
+
+export {SubscriptionImpl as SubscriptionImplForTesting};
 
 /**
  * Function that gets passed into {@link Replicache.experimentalWatch} and gets
@@ -329,7 +337,7 @@ function convertDiffValues<Key>(
 /**
  * The options passed to {@link Replicache.subscribe}.
  */
-export interface SubscribeOptions<R extends ReadonlyJSONValue | undefined> {
+export interface SubscribeOptions<R> {
   /**
    * Called when the return value of the body function changes.
    */
@@ -344,6 +352,13 @@ export interface SubscribeOptions<R extends ReadonlyJSONValue | undefined> {
    * If present, called when the subscription is removed/done.
    */
   onDone?: (() => void) | undefined;
+
+  /**
+   * If present this function is used to determine if the value returned by the
+   * body function has changed. If not provided a JSON deep equality check is
+   * used.
+   */
+  isEqual?: (a: R, b: R) => boolean;
 }
 
 type UnknownSubscription = Subscription<unknown>;
@@ -368,15 +383,16 @@ export class SubscriptionsManager implements DiffComputationConfig {
     return () => this.#subscriptions.delete(subscription);
   }
 
-  addSubscription<R extends ReadonlyJSONValue | undefined>(
+  addSubscription<R>(
     body: (tx: ReadTransaction) => Promise<R>,
-    {onData, onError, onDone}: SubscribeOptions<R>,
+    {onData, onError, onDone, isEqual}: SubscribeOptions<R>,
   ): () => void {
     const s = new SubscriptionImpl(
       body,
       onData,
       onError,
       onDone,
+      isEqual,
     ) as unknown as UnknownSubscription;
 
     return this.#add(s);
