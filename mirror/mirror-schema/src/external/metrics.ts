@@ -7,6 +7,7 @@ export {
   totalMetricsPath,
   type DayOfMonth,
   type Hour,
+  type Metric,
   type MetricsNode,
   type Month,
 } from '../metrics.js';
