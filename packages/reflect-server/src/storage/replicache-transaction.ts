@@ -24,6 +24,8 @@ import {
 } from '../types/user-value.js';
 import type {Storage} from './storage.js';
 
+export const NOOP_MUTATION_ID = -1;
+
 /**
  * Implements Replicache's WriteTransaction in terms of EntryCache.
  */

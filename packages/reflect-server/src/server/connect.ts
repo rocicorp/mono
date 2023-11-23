@@ -134,6 +134,7 @@ export async function handleConnection(
     baseCookie: requestBaseCookie,
     lastMutationID: existingLastMutationID,
     lastMutationIDVersion: existingRecordLastMutationIDVersion,
+    lastSeen: Date.now(),
   };
   await putClientRecord(clientID, record, storage);
   lc.debug?.('Put client record', record);

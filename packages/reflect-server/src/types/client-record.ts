@@ -11,6 +11,9 @@ export const clientRecordSchema = valita.object({
   // or null if no mutations have been applied for this client
   // (i.e. lastMutationID is 0).
   lastMutationIDVersion: nullableVersionSchema,
+
+  // Used for garbage collection of old clients.
+  lastSeen: valita.number().optional(),
 });
 
 export type ClientRecord = valita.Infer<typeof clientRecordSchema>;
@@ -58,6 +61,15 @@ export function putClientRecord(
   storage: Storage,
 ): Promise<void> {
   return storage.put(clientRecordKey(clientID), record);
+}
+
+export function delClientRecords(
+  clientIDs: ClientID[],
+  storage: Storage,
+): Promise<void> {
+  return storage.delEntries(
+    clientIDs.map(clientID => clientRecordKey(clientID)),
+  );
 }
 
 function toClientRecordMap(

@@ -2,7 +2,10 @@ import type {LogContext} from '@rocicorp/logger';
 import type {Env} from 'reflect-shared';
 import type {RoomStartHandler} from '../server/room-start.js';
 import {EntryCache} from '../storage/entry-cache.js';
-import {ReplicacheTransaction} from '../storage/replicache-transaction.js';
+import {
+  NOOP_MUTATION_ID,
+  ReplicacheTransaction,
+} from '../storage/replicache-transaction.js';
 import type {Storage} from '../storage/storage.js';
 import {getVersion, putVersion} from '../types/version.js';
 
@@ -25,7 +28,7 @@ export async function processRoomStart(
   const tx = new ReplicacheTransaction(
     cache,
     '', // clientID,
-    -1, // mutationID,
+    NOOP_MUTATION_ID,
     nextVersion,
     undefined,
     env,

@@ -231,6 +231,7 @@ export async function handlePush(
           baseCookie: null,
           lastMutationID: 0,
           lastMutationIDVersion: null,
+          lastSeen: now(),
         },
         storage,
       ),
