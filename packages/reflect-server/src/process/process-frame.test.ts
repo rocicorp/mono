@@ -77,6 +77,7 @@ describe('processFrame', () => {
     expectedDisconnectedClients: ClientID[];
     expectedConnectedClients: ClientID[];
     disconnectHandlerThrows: boolean;
+    shouldGCClients?: boolean;
   };
 
   const mutators = new Map(
@@ -1148,6 +1149,38 @@ describe('processFrame', () => {
       expectedConnectedClients: ['c1'],
       disconnectHandlerThrows: false,
     },
+
+    {
+      name: '0 mutations, 2 clients. No gc because it is turned off',
+      shouldGCClients: false,
+      initialUserValues: {
+        '-/c/c1/a': userValue('aa', startVersion),
+        '-/c/c2/b': userValue('bb', startVersion),
+        '-/c/c2/c': userValue('cc', startVersion, true),
+      },
+      pendingMutations: [],
+      numPendingMutationsToProcess: 0,
+      clients: new Map([client('c1', 'u1', 'cg1')]),
+      clientRecords: new Map([
+        ['c1', clientRecord('cg1', null, 1, 1)],
+        ['c2', clientRecord('cg2', 1, 7, 1, startTime - TWO_WEEKS)],
+      ]),
+      storedConnectedClients: ['c1'],
+      expectedPokes: [],
+      expectedUserValues: new Map([
+        ['-/c/c1/a', userValue('aa', startVersion)],
+        ['-/c/c2/b', userValue('bb', startVersion)],
+        ['-/c/c2/c', userValue('cc', startVersion, true)],
+      ]),
+      expectedClientRecords: new Map([
+        ['c1', clientRecord('cg1', null, 1, 1)],
+        ['c2', clientRecord('cg2', 1, 7, 1, startTime - TWO_WEEKS)],
+      ]),
+      expectedVersion: startVersion,
+      expectedDisconnectedClients: [],
+      expectedConnectedClients: ['c1'],
+      disconnectHandlerThrows: false,
+    },
   ];
 
   for (const c of cases) {
@@ -1185,6 +1218,7 @@ describe('processFrame', () => {
         },
         c.clients,
         storage,
+        () => c.shouldGCClients ?? true,
       );
 
       expect(result).toEqual(c.expectedPokes);

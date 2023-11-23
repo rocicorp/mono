@@ -30,6 +30,7 @@ export async function processRoom(
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
   storage: DurableStorage,
+  shouldGCClients: (now: number) => boolean,
 ): Promise<Map<ClientID, Poke[]>> {
   const cache = new EntryCache(storage);
   const clientIDs = [...clients.keys()];
@@ -75,6 +76,7 @@ export async function processRoom(
       disconnectHandler,
       clients,
       cache,
+      shouldGCClients,
     )),
   );
 

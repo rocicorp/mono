@@ -1425,6 +1425,7 @@ describe('processPending', () => {
         c.maxProcessedMutationTimestamp,
         fakeBufferSizer,
         c.maxMutationsToProcess ?? Number.MAX_SAFE_INTEGER,
+        () => true,
       );
       if (c.expectedError) {
         let expectedE;

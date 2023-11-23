@@ -652,6 +652,7 @@ describe('processRoom', () => {
         mutators,
         () => Promise.resolve(),
         storage,
+        () => true,
       );
       if (c.expectedError) {
         try {
