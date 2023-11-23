@@ -21,15 +21,9 @@ import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function usageOptions(yargs: CommonYargsArgv) {
   return yargs
-    .option('connection-time', {
-      desc: 'Summarizes connection time. This is the default.',
-      type: 'boolean',
-      conflicts: 'room-time',
-    })
     .option('room-time', {
-      desc: 'Summarizes active room time.',
+      desc: 'Summarizes active room time instead of connection time.',
       type: 'boolean',
-      conflicts: 'connection-time',
     })
     .option('year', {
       desc: 'Show summary of a given year, with monthly totals. Defaults to the current year.',
