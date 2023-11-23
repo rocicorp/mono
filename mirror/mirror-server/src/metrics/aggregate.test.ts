@@ -80,7 +80,7 @@ describe('aggregateHourBefore', () => {
           teamID,
           appID,
           SUM(elapsed) AS totalElapsed,
-          SUM(period) AS totalPeriod
+          SUM(adjustedPeriod) AS totalPeriod
           FROM (
           SELECT
           blob1 AS teamID,
@@ -88,7 +88,8 @@ describe('aggregateHourBefore', () => {
           blob3 AS roomID,
           double1 AS elapsed,
           double2 AS period,
-          timestamp
+          timestamp,
+          IF(period > elapsed, elapsed, period) AS adjustedPeriod
           FROM RunningConnectionSeconds
           WHERE (timestamp >= toDateTime(${startTime})) AND (timestamp < toDateTime(${endTime}))
           )
