@@ -41,7 +41,6 @@ import {
   dropDatabase,
 } from 'replicache';
 import {assert} from 'shared/src/asserts.js';
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import * as valita from 'shared/src/valita.js';
 import {nanoid} from '../util/nanoid.js';
@@ -499,7 +498,7 @@ export class Reflect<MD extends MutatorDefs> {
    * If an error occurs in the `body` the `onError` function is called if
    * present. Otherwise, the error is thrown.
    */
-  subscribe<R extends ReadonlyJSONValue | undefined>(
+  subscribe<R>(
     body: (tx: ReadTransaction) => Promise<R>,
     options: SubscribeOptions<R> | ((result: R) => void),
   ): () => void {

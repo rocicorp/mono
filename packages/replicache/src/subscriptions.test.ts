@@ -1,5 +1,8 @@
 import {expect} from 'chai';
-import {scanInfoMatchesKey} from './subscriptions.js';
+import {
+  SubscriptionImplForTesting,
+  scanInfoMatchesKey,
+} from './subscriptions.js';
 
 test('scanInfoMatchesKey', () => {
   expect(scanInfoMatchesKey({options: {}}, '', 'a')).to.be.true;
@@ -531,4 +534,84 @@ test('scanInfoMatchesKey limit optimizations', () => {
       'pab2',
     ),
   ).to.be.false;
+});
+
+test('isEqual', () => {
+  const dataLog: unknown[] = [];
+  const isEqualLog: unknown[] = [];
+  const s1 = new Set([1, 2, 3]);
+  const s2 = new Set([3, 2, 1]);
+  const s3 = new Set([4]);
+  const queryResults = [
+    {a: 1},
+    {b: 2},
+    {c: 3},
+    {c: 3},
+    undefined,
+    undefined,
+    1,
+    2,
+    2,
+    1,
+    s1,
+    s2,
+    s3,
+  ];
+
+  type ElementType<T> = T extends Array<infer ElementType>
+    ? ElementType
+    : never;
+
+  const sub = new SubscriptionImplForTesting(
+    (): Promise<ElementType<typeof queryResults>> =>
+      Promise.reject('should not be called'),
+    v => {
+      dataLog.push(v);
+    },
+    undefined,
+    undefined,
+    (a, b) => {
+      isEqualLog.push([a, b]);
+      if (a === b) {
+        return true;
+      }
+
+      if (a instanceof Set && b instanceof Set) {
+        return a.size === b.size && [...a].every(v => b.has(v));
+      }
+
+      return false;
+    },
+  );
+
+  for (const result of queryResults) {
+    sub.onData(result);
+  }
+  expect(dataLog).to.deep.equal([
+    {a: 1},
+    {b: 2},
+    {c: 3},
+    {c: 3},
+    undefined,
+    1,
+    2,
+    1,
+    s1,
+    // s2 is considered equal to s1
+    s3,
+  ]);
+  expect(isEqualLog).to.deep.equal([
+    [{a: 1}, {b: 2}],
+    [{b: 2}, {c: 3}],
+    [{c: 3}, {c: 3}],
+    [{c: 3}, undefined],
+    [undefined, undefined],
+    [undefined, 1],
+    [1, 2],
+    [2, 2],
+    [2, 1],
+    [1, s1],
+    [s1, s2],
+    [s2, s3],
+  ]);
 });

@@ -9,6 +9,7 @@ import {
   totalMetricsViewDataConverter,
   type DayOfMonth,
   type Hour,
+  type Metric,
   type MetricsNode,
   type Month,
 } from 'mirror-schema/src/external/metrics.js';
@@ -20,6 +21,10 @@ import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function usageOptions(yargs: CommonYargsArgv) {
   return yargs
+    .option('room-time', {
+      desc: 'Summarizes active room time instead of connection time.',
+      type: 'boolean',
+    })
     .option('year', {
       desc: 'Show summary of a given year, with monthly totals. Defaults to the current year.',
       type: 'number',
@@ -71,6 +76,8 @@ export async function usageHandler(yargs: UsageHandlerArgs): Promise<void> {
   );
   const [yyyy, mm, dayOfMonth] = splitDate(date);
 
+  const {roomTime} = yargs;
+  const metric: Metric = roomTime ? 'rs' : 'cs';
   let table: TableData;
   if (yearView) {
     const totalMetrics = (
@@ -81,7 +88,7 @@ export async function usageHandler(yargs: UsageHandlerArgs): Promise<void> {
       )
     ).data();
     const yearMetrics = totalMetrics?.year?.[yyyy];
-    table = tableData(yearMetrics, yearMetrics?.month, monthRows(date));
+    table = tableData(metric, yearMetrics, yearMetrics?.month, monthRows(date));
   } else {
     const monthMetrics = (
       await getDoc(
@@ -91,17 +98,22 @@ export async function usageHandler(yargs: UsageHandlerArgs): Promise<void> {
       )
     ).data();
     if (monthView) {
-      table = tableData(monthMetrics, monthMetrics?.day, dayRows(date));
+      table = tableData(metric, monthMetrics, monthMetrics?.day, dayRows(date));
     } else {
       const dayMetrics = monthMetrics?.day?.[dayOfMonth];
-      table = tableData(dayMetrics, dayMetrics?.hour, hourRows());
+      table = tableData(metric, dayMetrics, dayMetrics?.hour, hourRows());
     }
   }
 
   const chart = new Chartscii(
     table.rows,
     {
-      label: chartTitle(date, {yearView, monthView, dayView}, table.total),
+      label: chartTitle(
+        metric,
+        date,
+        {yearView, monthView, dayView},
+        table.total,
+      ),
       width: 90,
       theme: 'lush',
       colorLabels: true,
@@ -128,6 +140,7 @@ export async function usageHandler(yargs: UsageHandlerArgs): Promise<void> {
 }
 
 function chartTitle(
+  metric: Metric,
   date: Date,
   view: {yearView: boolean; monthView: boolean; dayView: boolean},
   total: MetricsNode | undefined,
@@ -138,8 +151,8 @@ function chartTitle(
     month: yearView ? undefined : 'long',
     day: dayView ? 'numeric' : undefined,
   }).format(date);
-  const duration = durationString(total?.total?.cs ?? 0);
-  return `Connection time ${
+  const duration = durationString(total?.total?.[metric] ?? 0);
+  return `${metric === 'rs' ? 'Room' : 'Connection'} time ${
     dayView ? 'on' : 'in'
   } ${summaryPeriod} (UTC): ${color.pink(color.bold(duration))}`;
 }
@@ -150,6 +163,7 @@ type TableData = {
 };
 
 function tableData<RowKey extends string>(
+  metric: Metric,
   total: MetricsNode | undefined,
   breakdown: {[key in RowKey]?: MetricsNode | undefined} | undefined,
   rowsKeys: RowKeys<RowKey>,
@@ -158,7 +172,7 @@ function tableData<RowKey extends string>(
     total,
     rows: rowsKeys.all.map(key => ({
       label: rowsKeys.label(key),
-      value: breakdown?.[key]?.total?.cs ?? 0,
+      value: breakdown?.[key]?.total?.[metric] ?? 0,
       color: 'pink',
     })),
   };
