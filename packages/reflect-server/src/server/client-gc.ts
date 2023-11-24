@@ -13,6 +13,12 @@ import {
 import {userValueKey, userValueSchema} from '../types/user-value.js';
 import {putVersion} from '../types/version.js';
 
+/**
+ * Thw frequency at which we run the client GC. This is used to not do gc in
+ * every processFrame.
+ */
+export const CLIENT_GC_FREQUENCY = 10 * 1000;
+
 // 2 weeks
 export const GC_MAX_AGE = 2 * 7 * 24 * 60 * 60 * 1000;
 

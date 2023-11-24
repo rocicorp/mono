@@ -29,6 +29,7 @@ export async function processPending(
   maxProcessedMutationTimestamp: number,
   bufferSizer: BufferSizer,
   maxMutationsToProcess: number,
+  shouldGCClients: (now: number) => boolean,
 ): Promise<{maxProcessedMutationTimestamp: number; nothingToProcess: boolean}> {
   const start = Date.now();
   lc = lc.withContext('numClients', clients.size);
@@ -126,6 +127,7 @@ export async function processPending(
     mutators,
     disconnectHandler,
     storage,
+    shouldGCClients,
   );
   sendPokes(lc, pokesByClientID, clients, bufferMs, start);
   lc.debug?.('clearing pending mutations');

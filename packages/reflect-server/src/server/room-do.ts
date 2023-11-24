@@ -27,6 +27,7 @@ import {LoggingLock} from '../util/lock.js';
 import {populateLogContextFromRequest} from '../util/log-context-common.js';
 import {randomID} from '../util/rand.js';
 import {AlarmManager} from './alarms.js';
+import {CLIENT_GC_FREQUENCY} from './client-gc.js';
 import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
 import {closeConnections, getConnections} from './connections.js';
@@ -115,6 +116,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   readonly #connectionSecondsReporter: ConnectionSecondsReporter;
   readonly #connectionLifetimeReporter: ConnectionLifetimeReporter;
   readonly #env: Env;
+  #lastGCClientsTimestamp: undefined | number = undefined;
 
   constructor(options: RoomDOOptions<MD>) {
     const {
@@ -524,12 +526,24 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         this.#maxProcessedMutationTimestamp,
         this.#bufferSizer,
         this.#maxMutationsPerTurn,
+        (now: number) => this.#shouldGCClients(now),
       );
     this.#maxProcessedMutationTimestamp = maxProcessedMutationTimestamp;
     if (nothingToProcess && this.#turnTimerID) {
       clearInterval(this.#turnTimerID);
       this.#turnTimerID = 0;
     }
+  }
+
+  #shouldGCClients(now: number): boolean {
+    if (
+      this.#lastGCClientsTimestamp === undefined ||
+      now - this.#lastGCClientsTimestamp > CLIENT_GC_FREQUENCY
+    ) {
+      this.#lastGCClientsTimestamp = now;
+      return true;
+    }
+    return false;
   }
 
   #handleClose = async (

@@ -35,6 +35,7 @@ export async function processFrame(
   disconnectHandler: DisconnectHandler,
   clients: ClientMap,
   storage: Storage,
+  shouldGCClients: (now: number) => boolean,
 ): Promise<ClientPoke[]> {
   lc.debug?.('processing frame - clients', clients);
   const clientIDs = [...clients.keys()];
@@ -94,28 +95,31 @@ export async function processFrame(
 
   lc.debug?.(`processed ${numPendingMutationsToProcess} mutations`);
 
-  const gcCache = new EntryCache(cache);
-  await collectClients(
-    lc,
-    gcCache,
-    new Set(clientIDs),
-    Date.now(),
-    GC_MAX_AGE,
-    nextVersion,
-  );
+  const now = Date.now();
+  if (shouldGCClients(now)) {
+    const gcCache = new EntryCache(cache);
+    await collectClients(
+      lc,
+      gcCache,
+      new Set(clientIDs),
+      now,
+      GC_MAX_AGE,
+      nextVersion,
+    );
 
-  // If collectClients updated version it successfully collected clients and
-  // client keys. Create client pokes for the resulting user value changes.
-  [prevVersion, nextVersion] = await addPokesIfUpdated(
-    gcCache,
-    prevVersion,
-    clientPokes,
-    clientIDs,
-    clients,
-    nextVersion,
-  );
-  // Wether or not the version was updated, flush any other changes it made.
-  await gcCache.flush();
+    // If collectClients updated version it successfully collected clients and
+    // client keys. Create client pokes for the resulting user value changes.
+    [prevVersion, nextVersion] = await addPokesIfUpdated(
+      gcCache,
+      prevVersion,
+      clientPokes,
+      clientIDs,
+      clients,
+      nextVersion,
+    );
+    // Wether or not the version was updated, flush any other changes it made.
+    await gcCache.flush();
+  }
 
   const disconnectsCache = new EntryCache(cache);
   await processDisconnects(
