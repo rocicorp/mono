@@ -674,7 +674,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     if (this.#enablePullAndPushInOpen) {
       this.pull();
-      this.#push();
+      this.push();
     }
 
     const {signal} = this.#closeAbortController;
@@ -1247,20 +1247,28 @@ export class Replicache<MD extends MutatorDefs = {}> {
   /**
    * Push pushes pending changes to the {@link pushURL}.
    *
-   * You do not usually need to manually call push. If {@link pushDelay} is non-zero
-   * (which it is by default) pushes happen automatically shortly after
+   * You do not usually need to manually call push. If {@link pushDelay} is
+   * non-zero (which it is by default) pushes happen automatically shortly after
    * mutations.
+   *
+   * @param [now=false] If true, push will happen immediately and ignore
+   *   {@link pushDelay}, {@link RequestOptions.minDelayMs} as well as the
+   *   exponential backoff in case of errors.
    */
-  #push(): void {
-    this.#pushConnectionLoop.send();
+  push(now = false): void {
+    this.#pushConnectionLoop.send(now);
   }
 
   /**
-   * Pull pulls changes from the {@link pullURL}. If there are any changes
-   * local changes will get replayed on top of the new server state.
+   * Pull pulls changes from the {@link pullURL}. If there are any changes local
+   * changes will get replayed on top of the new server state.
+   *
+   * @param [now=false] If true, pull will happen immediately and ignore
+   *   {@link RequestOptions.minDelayMs} as well as the exponential backoff in
+   *   case of errors.
    */
-  pull(): void {
-    this.#pullConnectionLoop.send();
+  pull(now = false): void {
+    this.#pullConnectionLoop.send(now);
   }
 
   /**
@@ -1683,7 +1691,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           DEFAULT_HEAD_NAME,
           this.#subscriptions,
         );
-        this.#pushConnectionLoop.send();
+        this.#pushConnectionLoop.send(false);
         await this.#checkChange(ref, diffs);
         void this.#schedulePersist();
         return {result, ref};

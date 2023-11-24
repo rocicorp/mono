@@ -25,11 +25,11 @@ let loop: ConnectionLoop | undefined;
 
 const ps = new Set();
 
-function send() {
+function send(now = false) {
   if (!loop) {
     throw new Error();
   }
-  const p = loop.send();
+  const p = loop.send(now);
   ps.add(p);
   return p;
 }
@@ -89,16 +89,16 @@ test('basic sequential by awaiting', async () => {
   const debounceDelay = 3;
   loop = createLoop({requestTime, debounceDelay});
 
-  loop.send();
+  loop.send(false);
   await clock.runAllAsync();
   expect(Date.now()).to.equal(requestTime + debounceDelay);
 
   expect(log).to.deep.equal(['send:0:3', 'true:0:203']);
 
-  loop.send();
+  loop.send(false);
   await clock.runAllAsync();
 
-  loop.send();
+  loop.send(false);
   await clock.runAllAsync();
 
   expect(log).to.deep.equal([
@@ -652,5 +652,79 @@ test('mutate minDelayMs', async () => {
   expect(log).to.deep.equal([
     0, 50, 100, 150, 200, 250, 750, 1250, 1750, 2250, 2270, 2290, 2310, 2330,
     2350, 2370, 2390,
+  ]);
+});
+
+test('Send now', async () => {
+  const log: number[] = [];
+  let nextInvokeSendResult: boolean = true;
+  loop = new ConnectionLoop({
+    invokeSend() {
+      log.push(Date.now());
+      return Promise.resolve(nextInvokeSendResult);
+    },
+    debounceDelay: 50,
+    minDelayMs: 200,
+    maxDelayMs: 1_000,
+    maxConnections: 1,
+    watchdogTimer: null,
+  });
+
+  // Do not send before debounceDelay
+  send();
+  while (Date.now() < 50) {
+    await clock.tickAsync(50);
+  }
+  expect(log).to.deep.equal([50]);
+
+  // Take minDelayMs into account
+  send();
+  while (Date.now() < 250) {
+    await clock.tickAsync(50);
+  }
+  expect(log).to.deep.equal([50, 250]);
+
+  // send now should ignore both minDelayMs and debounceDelay
+  send(true);
+  while (Date.now() < 450) {
+    await clock.tickAsync(50);
+  }
+  expect(log).to.deep.equal([50, 250, 250]);
+
+  nextInvokeSendResult = false;
+  send();
+  while (Date.now() < 500) {
+    await clock.tickAsync(50);
+  }
+  expect(log).to.deep.equal([50, 250, 250, 500]);
+
+  while (Date.now() < 1900) {
+    await clock.tickAsync(50);
+  }
+  expect(log).to.deep.equal([50, 250, 250, 500, 700, 1100, 1900]);
+
+  // Keep trying with exponential backoff, hitting maxDelayMs
+  while (Date.now() < 2900) {
+    await clock.tickAsync(50);
+  }
+  expect(log).to.deep.equal([50, 250, 250, 500, 700, 1100, 1900, 2900]);
+
+  // Even when there are errors and we have exponential backoff, send now should
+  // send immediately.
+  send(true);
+  while (Date.now() < 3900) {
+    await clock.tickAsync(50);
+  }
+  expect(log).to.deep.equal([
+    50, 250, 250, 500, 700, 1100, 1900, 2900, 2900, 3900,
+  ]);
+
+  nextInvokeSendResult = true;
+  send(true);
+  while (Date.now() < 10_000) {
+    await clock.tickAsync(50);
+  }
+  expect(log).to.deep.equal([
+    50, 250, 250, 500, 700, 1100, 1900, 2900, 2900, 3900, 3900,
   ]);
 });
