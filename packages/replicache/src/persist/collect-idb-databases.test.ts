@@ -1,5 +1,6 @@
 import {expect} from 'chai';
 import {assertNotUndefined} from 'shared/src/asserts.js';
+import * as sinon from 'sinon';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Store} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
@@ -7,7 +8,7 @@ import {FormatVersion} from '../format-version.js';
 import {fakeHash} from '../hash.js';
 import {IDBStore} from '../kv/idb-store.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
-import {withWriteNoImplicitCommit} from '../with-transactions.js';
+import {withWrite} from '../with-transactions.js';
 import {ClientGroupMap, setClientGroups} from './client-groups.js';
 import {makeClientGroupMap} from './client-groups.test.js';
 import {
@@ -63,13 +64,21 @@ suite('collectIDBDatabases', () => {
   const NO_LEGACY = [false];
   const INCLUDE_LEGACY = [false, true];
 
-  const t = (
-    name: string,
-    entries: Entries,
-    now: number,
-    expectedDatabases: string[],
+  const t = ({
+    name,
+    entries,
+    now,
+    expectedDatabases,
     legacyValues = INCLUDE_LEGACY,
-  ) => {
+    expectedOnClientRemoved = [],
+  }: {
+    name: string;
+    entries: Entries;
+    now: number;
+    expectedDatabases: string[];
+    legacyValues?: boolean[];
+    expectedOnClientRemoved?: string[];
+  }) => {
     for (const legacy of legacyValues) {
       test(name + ' > time ' + now + (legacy ? ' > legacy' : ''), async () => {
         const store = new IDBDatabasesStore(_ => new TestMemStore());
@@ -87,10 +96,7 @@ suite('collectIDBDatabases', () => {
 
           await setClientsForTesting(clients, dagStore);
           if (clientGroups) {
-            await withWriteNoImplicitCommit(dagStore, async tx => {
-              await setClientGroups(clientGroups, tx);
-              await tx.commit();
-            });
+            await withWrite(dagStore, tx => setClientGroups(clientGroups, tx));
           }
         }
 
@@ -102,7 +108,29 @@ suite('collectIDBDatabases', () => {
 
         const maxAge = 1000;
 
-        await collectIDBDatabases(store, now, maxAge, maxAge, newDagStore);
+        const onClientsRemoved = sinon.fake();
+
+        await collectIDBDatabases(
+          store,
+          onClientsRemoved,
+          now,
+          maxAge,
+          maxAge,
+          newDagStore,
+        );
+
+        if (legacy) {
+          expect(onClientsRemoved.callCount).equal(0);
+        } else {
+          if (expectedOnClientRemoved.length === 0) {
+            expect(onClientsRemoved.callCount).equal(0);
+          } else {
+            expect(onClientsRemoved.callCount).equal(1);
+            expect(onClientsRemoved.lastCall.args[0]).to.have.keys(
+              ...expectedOnClientRemoved,
+            );
+          }
+        }
 
         expect(Object.keys(await store.getDatabases())).to.deep.equal(
           expectedDatabases,
@@ -111,7 +139,7 @@ suite('collectIDBDatabases', () => {
     }
   };
 
-  t('empty', [], 0, []);
+  t({name: 'empty', entries: [], now: 0, expectedDatabases: []});
 
   {
     const entries: Entries = [
@@ -126,9 +154,21 @@ suite('collectIDBDatabases', () => {
       ],
     ];
 
-    t('one idb, one client', entries, 0, ['a']);
-    t('one idb, one client', entries, 1000, []);
-    t('one idb, one client', entries, 2000, []);
+    t({name: 'one idb, one client', entries, now: 0, expectedDatabases: ['a']});
+    t({
+      name: 'one idb, one client',
+      entries,
+      now: 1000,
+      expectedDatabases: [],
+      expectedOnClientRemoved: ['clientA1'],
+    });
+    t({
+      name: 'one idb, one client',
+      entries,
+      now: 2000,
+      expectedDatabases: [],
+      expectedOnClientRemoved: ['clientA1'],
+    });
   }
 
   {
@@ -152,9 +192,21 @@ suite('collectIDBDatabases', () => {
         }),
       ],
     ];
-    t('x', entries, 0, ['a', 'b']);
-    t('x', entries, 1000, ['b']);
-    t('x', entries, 2000, []);
+    t({name: 'x', entries, now: 0, expectedDatabases: ['a', 'b']});
+    t({
+      name: 'x',
+      entries,
+      now: 1000,
+      expectedDatabases: ['b'],
+      expectedOnClientRemoved: ['clientA1'],
+    });
+    t({
+      name: 'x',
+      entries,
+      now: 2000,
+      expectedDatabases: [],
+      expectedOnClientRemoved: ['clientA1', 'clientB1'],
+    });
   }
 
   {
@@ -182,10 +234,32 @@ suite('collectIDBDatabases', () => {
         }),
       ],
     ];
-    t('two idb, three clients', entries, 0, ['a', 'b']);
-    t('two idb, three clients', entries, 1000, ['a', 'b']);
-    t('two idb, three clients', entries, 2000, ['a']);
-    t('two idb, three clients', entries, 3000, []);
+    t({
+      name: 'two idb, three clients',
+      entries,
+      now: 0,
+      expectedDatabases: ['a', 'b'],
+    });
+    t({
+      name: 'two idb, three clients',
+      entries,
+      now: 1000,
+      expectedDatabases: ['a', 'b'],
+    });
+    t({
+      name: 'two idb, three clients',
+      entries,
+      now: 2000,
+      expectedDatabases: ['a'],
+      expectedOnClientRemoved: ['clientB1'],
+    });
+    t({
+      name: 'two idb, three clients',
+      entries,
+      now: 3000,
+      expectedDatabases: [],
+      expectedOnClientRemoved: ['clientA1', 'clientA2', 'clientB1'],
+    });
   }
 
   {
@@ -217,11 +291,38 @@ suite('collectIDBDatabases', () => {
         }),
       ],
     ];
-    t('two idb, four clients', entries, 1000, ['a', 'b']);
-    t('two idb, four clients', entries, 2000, ['a', 'b']);
-    t('two idb, four clients', entries, 3000, ['a', 'b']);
-    t('two idb, four clients', entries, 4000, ['b']);
-    t('two idb, four clients', entries, 5000, []);
+    t({
+      name: 'two idb, four clients',
+      entries,
+      now: 1000,
+      expectedDatabases: ['a', 'b'],
+    });
+    t({
+      name: 'two idb, four clients',
+      entries,
+      now: 2000,
+      expectedDatabases: ['a', 'b'],
+    });
+    t({
+      name: 'two idb, four clients',
+      entries,
+      now: 3000,
+      expectedDatabases: ['a', 'b'],
+    });
+    t({
+      name: 'two idb, four clients',
+      entries,
+      now: 4000,
+      expectedDatabases: ['b'],
+      expectedOnClientRemoved: ['clientA1', 'clientA2'],
+    });
+    t({
+      name: 'two idb, four clients',
+      entries,
+      now: 5000,
+      expectedDatabases: [],
+      expectedOnClientRemoved: ['clientA1', 'clientA2', 'clientB1', 'clientB2'],
+    });
   }
 
   {
@@ -240,9 +341,24 @@ suite('collectIDBDatabases', () => {
         }),
       ],
     ];
-    t('one idb, one client, format version too new', entries, 0, ['a']);
-    t('one idb, one client, format version too new', entries, 1000, ['a']);
-    t('one idb, one client, format version too new', entries, 2000, ['a']);
+    t({
+      name: 'one idb, one client, format version too new',
+      entries,
+      now: 0,
+      expectedDatabases: ['a'],
+    });
+    t({
+      name: 'one idb, one client, format version too new',
+      entries,
+      now: 1000,
+      expectedDatabases: ['a'],
+    });
+    t({
+      name: 'one idb, one client, format version too new',
+      entries,
+      now: 2000,
+      expectedDatabases: ['a'],
+    });
   }
 
   {
@@ -261,8 +377,18 @@ suite('collectIDBDatabases', () => {
         }),
       ],
     ];
-    t('one idb, one client, old format version', entries, 0, ['a']);
-    t('one idb, one client, old format version', entries, 1000, []);
+    t({
+      name: 'one idb, one client, old format version',
+      entries,
+      now: 0,
+      expectedDatabases: ['a'],
+    });
+    t({
+      name: 'one idb, one client, old format version',
+      entries,
+      now: 1000,
+      expectedDatabases: [],
+    });
   }
 
   {
@@ -293,34 +419,34 @@ suite('collectIDBDatabases', () => {
         }),
       ],
     ];
-    t(
-      'one idb, one client, with pending mutations',
+    t({
+      name: 'one idb, one client, with pending mutations',
       entries,
-      0,
-      ['a'],
-      NO_LEGACY,
-    );
-    t(
-      'one idb, one client, with pending mutations',
+      now: 0,
+      expectedDatabases: ['a'],
+      legacyValues: NO_LEGACY,
+    });
+    t({
+      name: 'one idb, one client, with pending mutations',
       entries,
-      1000,
-      ['a'],
-      NO_LEGACY,
-    );
-    t(
-      'one idb, one client, with pending mutations',
+      now: 1000,
+      expectedDatabases: ['a'],
+      legacyValues: NO_LEGACY,
+    });
+    t({
+      name: 'one idb, one client, with pending mutations',
       entries,
-      2000,
-      ['a'],
-      NO_LEGACY,
-    );
-    t(
-      'one idb, one client, with pending mutations',
+      now: 2000,
+      expectedDatabases: ['a'],
+      legacyValues: NO_LEGACY,
+    });
+    t({
+      name: 'one idb, one client, with pending mutations',
       entries,
-      5000,
-      ['a'],
-      NO_LEGACY,
-    );
+      now: 5000,
+      expectedDatabases: ['a'],
+      legacyValues: NO_LEGACY,
+    });
   }
 });
 

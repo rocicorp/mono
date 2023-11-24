@@ -10,12 +10,13 @@ import {newIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
 import {IDBStore} from '../kv/idb-store.js';
 import {dropStore} from '../kv/idb-util.js';
 import type {CreateStore} from '../kv/store.js';
+import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import {withRead} from '../with-transactions.js';
 import {
   clientGroupHasPendingMutations,
   getClientGroups,
 } from './client-groups.js';
-import {ClientMap, getClients} from './clients.js';
+import {ClientMap, getClients, isClientV4} from './clients.js';
 import type {IndexedDBDatabase} from './idb-databases-store.js';
 import {IDBDatabasesStore} from './idb-databases-store.js';
 
@@ -34,6 +35,7 @@ const COLLECT_DELAY = 5 * 60 * 1000; // 5 minutes
 
 export function initCollectIDBDatabases(
   idbDatabasesStore: IDBDatabasesStore,
+  onClientsRemoved: (clientID: Set<ClientID>) => void,
   lc: LogContext,
   signal: AbortSignal,
 ): void {
@@ -43,6 +45,7 @@ export function initCollectIDBDatabases(
     async () => {
       await collectIDBDatabases(
         idbDatabasesStore,
+        onClientsRemoved,
         Date.now(),
         MAX_AGE,
         DD31_MAX_AGE,
@@ -62,6 +65,7 @@ export function initCollectIDBDatabases(
 
 export async function collectIDBDatabases(
   idbDatabasesStore: IDBDatabasesStore,
+  onClientsRemoved: (clientIDs: Set<ClientID>) => void,
   now: number,
   maxAge: number,
   dd31MaxAge: number,
@@ -69,13 +73,21 @@ export async function collectIDBDatabases(
 ): Promise<void> {
   const databases = await idbDatabasesStore.getDatabases();
 
+  const clientIDsToRemove = new Set<ClientID>();
   const dbs = Object.values(databases) as IndexedDBDatabase[];
   const canCollectResults = await Promise.all(
     dbs.map(
       async db =>
         [
           db.name,
-          await canCollectDatabase(db, now, maxAge, dd31MaxAge, newDagStore),
+          await canCollectDatabase(
+            db,
+            now,
+            maxAge,
+            dd31MaxAge,
+            newDagStore,
+            clientIDsToRemove,
+          ),
         ] as const,
     ),
   );
@@ -87,6 +99,10 @@ export async function collectIDBDatabases(
   const {errors} = await dropDatabases(idbDatabasesStore, namesToRemove);
   if (errors.length) {
     throw errors[0];
+  }
+
+  if (clientIDsToRemove.size > 0) {
+    onClientsRemoved(clientIDsToRemove);
   }
 }
 
@@ -135,6 +151,7 @@ async function canCollectDatabase(
   maxAge: number,
   dd31MaxAge: number,
   newDagStore: typeof defaultNewDagStore,
+  clientIDsToRemove: Set<ClientID>,
 ): Promise<boolean> {
   if (db.replicacheFormatVersion > FormatVersion.Latest) {
     return false;
@@ -152,6 +169,7 @@ async function canCollectDatabase(
     }
 
     if (!isDD31) {
+      // Pre DD31 we do not care about the removed clients.
       return true;
     }
 
@@ -162,7 +180,10 @@ async function canCollectDatabase(
         db.replicacheFormatVersion === FormatVersion.V6 ||
         db.replicacheFormatVersion === FormatVersion.V7,
     );
-    return !(await anyPendingMutationsInClientGroups(newDagStore(db.name)));
+    return !(await anyPendingMutationsInClientGroups(
+      newDagStore(db.name),
+      clientIDsToRemove,
+    ));
   }
 
   // For legacy databases we do not have a lastOpenedTimestampMS so we check the
@@ -235,11 +256,26 @@ export function deleteAllReplicacheData(createKVStore?: CreateStore) {
 
 async function anyPendingMutationsInClientGroups(
   perdag: Store,
+  clientIDsToRemove: Set<ClientID>,
 ): Promise<boolean> {
-  const clientGroups = await withRead(perdag, getClientGroups);
-  for (const clientGroup of clientGroups.values()) {
+  const [clients, clientGroups] = await withRead(perdag, tx =>
+    Promise.all([getClients(tx), getClientGroups(tx)]),
+  );
+  const clientGroupIDsToRemove = new Set<ClientGroupID>();
+  for (const [clientGroupID, clientGroup] of clientGroups) {
     if (clientGroupHasPendingMutations(clientGroup)) {
       return true;
+    }
+    clientGroupIDsToRemove.add(clientGroupID);
+  }
+
+  for (const [clientID, client] of clients) {
+    if (
+      !isClientV4(client) &&
+      (clientGroupIDsToRemove.has(client.clientGroupID) ||
+        !clientGroups.has(client.clientGroupID))
+    ) {
+      clientIDsToRemove.add(clientID);
     }
   }
   return false;

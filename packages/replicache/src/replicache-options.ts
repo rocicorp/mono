@@ -4,6 +4,7 @@ import type {CreateStore} from './kv/store.js';
 import type {Puller} from './puller.js';
 import type {Pusher} from './pusher.js';
 import type {MutatorDefs, RequestOptions} from './replicache.js';
+import type {ClientID} from './sync/ids.js';
 
 /**
  * The options passed to {@link Replicache}.
@@ -253,6 +254,12 @@ export type ReplicacheInternalOptions = {
    * thing have been minified and with the npm package.
    */
   exposeInternalAPI?: (api: ReplicacheInternalAPI) => void;
+
+  /**
+   * Called when clients are removed from the database. This is used to tell the
+   * server about clientIDs that have been removed.
+   */
+  onClientsRemoved?: (clientIDs: Set<ClientID>) => void;
 };
 
 export interface ReplicacheInternalAPI {

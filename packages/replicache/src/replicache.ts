@@ -391,6 +391,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
   readonly #enableScheduledPersist: boolean;
   readonly #enableScheduledRefresh: boolean;
   readonly #enablePullAndPushInOpen: boolean;
+  readonly #onClientsRemoved: (clientIDs: Set<string>) => void;
   #persistScheduler = new ProcessScheduler(
     () => this.#persist(),
     PERSIST_IDLE_TIMEOUT_MS,
@@ -512,6 +513,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       internalOptions.enableScheduledRefresh ?? true;
     this.#enablePullAndPushInOpen =
       internalOptions.enablePullAndPushInOpen ?? true;
+    this.#onClientsRemoved = internalOptions.onClientsRemoved ?? noop;
 
     if (internalOptions.exposeInternalAPI) {
       internalOptions.exposeInternalAPI({
@@ -688,8 +690,16 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this.#lc,
       signal,
     );
-    initClientGC(clientID, this.#perdag, this.#lc, signal);
-    initCollectIDBDatabases(this.#idbDatabases, this.#lc, signal);
+
+    const onClientsRemoved = (ids: Set<ClientID>) =>
+      this.#onClientsRemoved(ids);
+    initClientGC(clientID, this.#perdag, onClientsRemoved, this.#lc, signal);
+    initCollectIDBDatabases(
+      this.#idbDatabases,
+      onClientsRemoved,
+      this.#lc,
+      signal,
+    );
     initClientGroupGC(this.#perdag, this.#lc, signal);
     initNewClientChannel(
       this.name,

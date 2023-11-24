@@ -12,17 +12,17 @@ let latestGCUpdate: Promise<ClientMap> | undefined;
 export function getLatestGCUpdate(): Promise<ClientMap> | undefined {
   return latestGCUpdate;
 }
-
 export function initClientGC(
   clientID: ClientID,
   dagStore: Store,
+  onClientsRemoved: (clientIDs: Set<ClientID>) => void,
   lc: LogContext,
   signal: AbortSignal,
 ): void {
   initBgIntervalProcess(
     'ClientGC',
     () => {
-      latestGCUpdate = gcClients(clientID, dagStore);
+      latestGCUpdate = gcClients(clientID, dagStore, onClientsRemoved);
       return latestGCUpdate;
     },
     () => GC_INTERVAL_MS,
@@ -31,19 +31,35 @@ export function initClientGC(
   );
 }
 
-function gcClients(clientID: ClientID, dagStore: Store): Promise<ClientMap> {
+type Writable<M> = M extends ReadonlyMap<infer K, infer V> ? Map<K, V> : never;
+
+function gcClients(
+  clientID: ClientID,
+  dagStore: Store,
+  onClientsRemoved: (clientIDs: Set<ClientID>) => void,
+): Promise<ClientMap> {
   return withWrite(dagStore, async dagWrite => {
     const now = Date.now();
-    const clients = await getClients(dagWrite);
-    const clientsAfterGC = Array.from(clients).filter(
-      ([id, client]) =>
-        id === clientID /* never collect ourself */ ||
-        now - client.heartbeatTimestampMs <= CLIENT_MAX_INACTIVE_IN_MS,
-    );
-    if (clientsAfterGC.length === clients.size) {
-      return clients;
+    const oldClients = await getClients(dagWrite);
+    const newClients: Writable<ClientMap> = new Map();
+    const removedClientIDs: Set<ClientID> = new Set();
+    for (const [id, client] of oldClients) {
+      // never collect ourself
+      if (
+        id === clientID ||
+        now - client.heartbeatTimestampMs <= CLIENT_MAX_INACTIVE_IN_MS
+      ) {
+        newClients.set(id, client);
+      } else {
+        removedClientIDs.add(id);
+      }
     }
-    const newClients = new Map(clientsAfterGC);
+    if (newClients.size === oldClients.size) {
+      return oldClients;
+    }
+    if (removedClientIDs.size > 0) {
+      onClientsRemoved(removedClientIDs);
+    }
     await setClients(newClients, dagWrite);
     return newClients;
   });

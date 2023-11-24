@@ -1,6 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {assertNotUndefined} from 'shared/src/asserts.js';
+import * as sinon from 'sinon';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
@@ -59,8 +60,18 @@ test('initClientGC starts 5 min interval that collects clients that have been in
 
   await setClientsForTesting(clientMap, dagStore);
 
+  const onClientsRemoved = sinon.fake();
+
   const controller = new AbortController();
-  initClientGC('client1', dagStore, new LogContext(), controller.signal);
+  initClientGC(
+    'client1',
+    dagStore,
+    onClientsRemoved,
+    new LogContext(),
+    controller.signal,
+  );
+
+  expect(onClientsRemoved.callCount).to.equal(0);
 
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
@@ -70,6 +81,9 @@ test('initClientGC starts 5 min interval that collects clients that have been in
   clock.tick(SEVEN_DAYS_IN_MS);
   await clock.tickAsync(FIVE_MINS_IN_MS);
   await awaitLatestGCUpdate();
+
+  expect(onClientsRemoved.callCount).to.equal(1);
+  expect([...onClientsRemoved.lastCall.args[0]]).deep.equal(['client2']);
 
   // client1 is not collected because it is the current client (despite being old enough to collect)
   // client2 is collected because it is > 7 days inactive
