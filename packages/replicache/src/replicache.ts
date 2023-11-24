@@ -492,8 +492,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
     this.auth = auth ?? '';
     this.pullURL = pullURL;
     this.pushURL = pushURL;
-    if (name === undefined || name === '') {
-      throw new Error('name is required and must be non-empty');
+    if (typeof name !== 'string' || !name) {
+      throw new TypeError('name is required and must be non-empty');
     }
     this.name = name;
     this.schemaVersion = schemaVersion;
