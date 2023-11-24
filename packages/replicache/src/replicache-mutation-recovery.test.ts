@@ -1105,7 +1105,7 @@ suite('SDD', () => {
       throws: new Error('Simulate fetch error in push'),
     }));
 
-    rep.pull();
+    void rep.pull();
 
     await tickAFewTimes();
     expect(rep.online).to.equal(false);
@@ -1119,7 +1119,7 @@ suite('SDD', () => {
       patch: [],
     });
 
-    rep.pull();
+    void rep.pull();
     expect(rep.recoverMutationsFake.callCount).to.equal(1);
     while (!rep.online) {
       await tickAFewTimes();

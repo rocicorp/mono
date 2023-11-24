@@ -63,10 +63,6 @@ export class ReplicacheTest<
     return getTestInstance(this).maybeEndPull(syncHead, requestID);
   }
 
-  invokePush(): Promise<boolean> {
-    return getTestInstance(this).invokePush();
-  }
-
   persist() {
     return this.#internalAPI.persist();
   }
