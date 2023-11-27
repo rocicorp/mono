@@ -47,7 +47,7 @@ type Range<
   : Range<Length, [...Result, Result['length']]>;
 
 /** Creates a union type from `Start` to `End`. */
-export type InclusiveRange<Start extends number, End extends number> =
+type InclusiveRange<Start extends number, End extends number> =
   | Exclude<Range<End>, Range<Start>>
   | End;
 
