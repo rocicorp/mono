@@ -48,6 +48,7 @@
     "picocolors": "^1.0.0",
     "pkg-up": "^4.0.0",
     "semver": "^7.5.4",
+    "styl3": "^1.4.0",
     "validate-npm-package-name": "^5.0.0",
     "ws": "^8.13.0",
     "yargs": "^17.4.1",

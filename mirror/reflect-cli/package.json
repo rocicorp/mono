@@ -49,6 +49,7 @@
     "reflect-shared": "0.0.0",
     "semver": "^7.5.4",
     "shared": "0.0.0",
+    "styl3": "^1.4.0",
     "ts-jest": "^29.1.0",
     "typescript": "^5.2.2",
     "validate-npm-package-name": "^5.0.0",
