@@ -2473,3 +2473,24 @@ test('concurrent puts and gets', async () => {
   const v2 = await rep.query(tx => tx.get('a'));
   expect(v2).to.equal(4);
 });
+
+test('Invalid name', () => {
+  expect(
+    () => new ReplicacheTest({name: '', licenseKey: TEST_LICENSE_KEY}),
+  ).to.throw('name is required and must be non-empty');
+  expect(
+    () =>
+      new Replicache({
+        name: 1 as unknown as string,
+        licenseKey: TEST_LICENSE_KEY,
+      }),
+  ).to.throw('name is required and must be non-empty');
+
+  expect(
+    () =>
+      new ReplicacheTest({
+        name: true as unknown as string,
+        licenseKey: TEST_LICENSE_KEY,
+      }),
+  ).to.throw(TypeError);
+});
