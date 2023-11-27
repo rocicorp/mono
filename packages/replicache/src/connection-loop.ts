@@ -91,8 +91,8 @@ export class ConnectionLoop {
 
     debug?.('Starting connection loop');
 
-    const sleepMaybeSkip: typeof sleep = (ms, signal) =>
-      Promise.race([this.#skipSleepsResolver.promise, sleep(ms, signal)]);
+    const sleepMaybeSkip: typeof sleep = ms =>
+      Promise.race([this.#skipSleepsResolver.promise, sleep(ms)]);
 
     while (!this.#closed) {
       debug?.(
