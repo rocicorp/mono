@@ -14,7 +14,7 @@ import {
   DEFAULT_HEAD_NAME,
   LocalMeta,
   LocalMetaSDD,
-  localMutations as localMutations_1,
+  localMutations,
   Meta,
   snapshotMetaParts,
 } from '../db/commit.js';
@@ -49,7 +49,11 @@ import type {
   PullResponseV1,
 } from '../puller.js';
 import {toError} from '../to-error.js';
-import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
+import {
+  withRead,
+  withWrite,
+  withWriteNoImplicitCommit,
+} from '../with-transactions.js';
 import {addDiffsForIndexes, DiffComputationConfig, DiffsMap} from './diff.js';
 import type {ClientGroupID, ClientID} from './ids.js';
 import * as patch from './patch.js';
@@ -563,7 +567,7 @@ export function maybeEndPull<M extends LocalMeta>(
   replayMutations: Commit<M>[];
   diffs: DiffsMap;
 }> {
-  return withWriteNoImplicitCommit(store, async dagWrite => {
+  return withWrite(store, async dagWrite => {
     const dagRead = dagWrite;
     // Ensure sync head is what the caller thinks it is.
     const syncHeadHash = await dagRead.getHead(SYNC_HEAD_NAME);
@@ -603,12 +607,9 @@ export function maybeEndPull<M extends LocalMeta>(
     // of them if any need to be replayed.
     const syncHead = await commitFromHash(syncHeadHash, dagRead);
     const pending: Commit<M>[] = [];
-    const localMutations = await localMutations_1(mainHeadHash, dagRead);
-    for (const commit of localMutations) {
-      let cid = clientID;
-      if (commitIsLocalDD31(commit)) {
-        cid = commit.meta.clientID;
-      }
+    const lms = await localMutations(mainHeadHash, dagRead);
+    for (const commit of lms) {
+      const cid = commitIsLocalDD31(commit) ? commit.meta.clientID : clientID;
       if (
         (await commit.getMutationID(cid, dagRead)) >
         (await syncHead.getMutationID(cid, dagRead))
@@ -670,7 +671,6 @@ export function maybeEndPull<M extends LocalMeta>(
       dagWrite.setHead(DEFAULT_HEAD_NAME, syncHeadHash),
       dagWrite.removeHead(SYNC_HEAD_NAME),
     ]);
-    await dagWrite.commit();
 
     if (lc.debug) {
       const [oldLastMutationID, oldCookie] = snapshotMetaParts(

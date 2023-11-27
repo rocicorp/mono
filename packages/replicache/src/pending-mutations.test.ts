@@ -1,6 +1,7 @@
 import {expect} from 'chai';
 import type {JSONValue} from './json.js';
 import {
+  disableAllBackgroundProcesses,
   initReplicacheTesting,
   makePullResponseV1,
   replicacheForTesting,
@@ -11,7 +12,9 @@ import type {WriteTransaction} from './transactions.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import {mustGetHeadHash} from './dag/store.js';
 import {TestStore} from './dag/test-store.js';
+import {DEFAULT_HEAD_NAME} from './db/commit.js';
 import {ChainBuilder} from './db/test-helpers.js';
 import {pendingMutationsForAPI} from './pending-mutations.js';
 import {withRead} from './with-transactions.js';
@@ -80,7 +83,8 @@ test('Test at a lower level', async () => {
   await b.addLocal(clientID);
 
   await withRead(store, async dagRead => {
-    expect(await pendingMutationsForAPI(dagRead)).to.deep.equal([
+    const hash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagRead);
+    expect(await pendingMutationsForAPI(dagRead, hash)).to.deep.equal([
       {id: 11, name: 'mutator_name_2', args: [2], clientID},
       {id: 12, name: 'mutator_name_3', args: [3], clientID},
       {id: 13, name: 'mutator_name_4', args: [4], clientID},
@@ -105,11 +109,59 @@ test('multiple clients', async () => {
   await b.addLocal(clientID2);
 
   await withRead(store, async dagRead => {
-    expect(await pendingMutationsForAPI(dagRead)).to.deep.equal([
+    const hash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagRead);
+    expect(await pendingMutationsForAPI(dagRead, hash)).to.deep.equal([
       {id: 11, name: 'mutator_name_2', args: [2], clientID: clientID1},
       {id: 21, name: 'mutator_name_3', args: [3], clientID: clientID2},
       {id: 12, name: 'mutator_name_4', args: [4], clientID: clientID1},
       {id: 22, name: 'mutator_name_5', args: [5], clientID: clientID2},
     ]);
   });
+});
+
+test('pending mutations at open', async () => {
+  function makeRep() {
+    return replicacheForTesting(
+      'pending-mutation-at-open',
+      {
+        ...disableAllBackgroundProcesses,
+        enablePullAndPushInOpen: false,
+        mutators: {
+          addData,
+        },
+      },
+      {
+        useUniqueName: false,
+      },
+    );
+  }
+
+  const rep1 = await makeRep();
+
+  await rep1.mutate.addData({a: 1, b: 2});
+  await rep1.mutate.addData({c: 3});
+
+  expect(await rep1.experimentalPendingMutations()).to.deep.equal([
+    {id: 1, name: 'addData', args: {a: 1, b: 2}, clientID: rep1.clientID},
+    {id: 2, name: 'addData', args: {c: 3}, clientID: rep1.clientID},
+  ]);
+
+  await rep1.persist();
+
+  const rep2 = await makeRep();
+
+  expect(await rep2.experimentalPendingMutations()).to.deep.equal([
+    {id: 1, name: 'addData', args: {a: 1, b: 2}, clientID: rep1.clientID},
+    {id: 2, name: 'addData', args: {c: 3}, clientID: rep1.clientID},
+  ]);
+
+  await rep2.mutate.addData({d: 4});
+  expect(await rep2.experimentalPendingMutations()).to.deep.equal([
+    {id: 1, name: 'addData', args: {a: 1, b: 2}, clientID: rep1.clientID},
+    {id: 2, name: 'addData', args: {c: 3}, clientID: rep1.clientID},
+    {id: 1, name: 'addData', args: {d: 4}, clientID: rep2.clientID},
+  ]);
+
+  await rep1.close();
+  await rep2.close();
 });

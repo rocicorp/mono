@@ -20,7 +20,6 @@ import {ChunkNotFoundError, mustGetHeadHash, Store} from './dag/store.js';
 import {DEFAULT_HEAD_NAME, isLocalMetaDD31, LocalMeta} from './db/commit.js';
 import {readFromDefaultHead} from './db/read.js';
 import {rebaseMutationAndCommit} from './db/rebase.js';
-import {getRoot} from './db/root.js';
 import {newWriteLocal} from './db/write.js';
 import {
   isClientStateNotFoundResponse,
@@ -44,7 +43,11 @@ import {
   OnPersist,
   PersistInfo,
 } from './on-persist-channel.js';
-import {PendingMutation, pendingMutationsForAPI} from './pending-mutations.js';
+import {
+  convertLocalMetaCommitsToPendingMutationsAPI,
+  PendingMutation,
+  pendingMutationsForAPI,
+} from './pending-mutations.js';
 import {initClientGC} from './persist/client-gc.js';
 import {initClientGroupGC} from './persist/client-group-gc.js';
 import {disableClientGroup} from './persist/client-groups.js';
@@ -291,6 +294,12 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * IDBStore(name)`.
    */
   readonly #createStore: CreateStore;
+
+  /**
+   * We keep the pending mutations in memory so that we can return them
+   * synchronously on "unload" in the future.
+   */
+  #pendingMutations: readonly PendingMutation[] = [];
 
   /**
    * This is the name Replicache uses for the IndexedDB database where data is
@@ -650,8 +659,11 @@ export class Replicache<MD extends MutatorDefs = {}> {
     await withWrite(this.#memdag, write =>
       write.setHead(DEFAULT_HEAD_NAME, headHash),
     );
+    this.#root = headHash;
 
-    this.#root = await getRoot(this.#memdag, DEFAULT_HEAD_NAME);
+    this.#pendingMutations = await withRead(this.#memdag, dagRead =>
+      pendingMutationsForAPI(dagRead, headHash),
+    );
 
     // Now we have a profileID, a clientID, a clientGroupID and DB!
     resolveReady();
@@ -974,10 +986,11 @@ export class Replicache<MD extends MutatorDefs = {}> {
         FormatVersion.Latest,
       );
 
-      if (!replayMutations || replayMutations.length === 0) {
+      if (replayMutations.length === 0) {
         // All done.
         await this.#checkChange(syncHead, diffs);
         void this.#schedulePersist();
+        this.#pendingMutations = [];
         return;
       }
 
@@ -1003,6 +1016,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
           ),
         );
       }
+
+      this.#pendingMutations =
+        convertLocalMetaCommitsToPendingMutationsAPI(replayMutations);
     }
   }
 
@@ -1416,9 +1432,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
     if (this.#closed) {
       return;
     }
-    let result;
     try {
-      result = await refresh(
+      const result = await refresh(
         this.#lc,
         this.#memdag,
         this.#perdag,
@@ -1428,6 +1443,12 @@ export class Replicache<MD extends MutatorDefs = {}> {
         () => this.closed,
         FormatVersion.Latest,
       );
+
+      if (result !== undefined) {
+        const [hash, diffs, pendingMutations] = result;
+        this.#pendingMutations = pendingMutations;
+        await this.#checkChange(hash, diffs);
+      }
     } catch (e) {
       if (e instanceof ClientStateNotFoundError) {
         this.#clientStateNotFoundOnClient(clientID);
@@ -1436,9 +1457,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
       } else {
         throw e;
       }
-    }
-    if (result !== undefined) {
-      await this.#checkChange(result[0], result[1]);
     }
   }
 
@@ -1691,6 +1709,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
         );
         this.#pushConnectionLoop.send(false).catch(noop);
         await this.#checkChange(ref, diffs);
+
+        this.#pendingMutations = await pendingMutationsForAPI(dagWrite, ref);
+
         void this.#schedulePersist();
         return {result, ref};
       } catch (ex) {
@@ -1738,7 +1759,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * @experimental This method is experimental and may change in the future.
    */
   experimentalPendingMutations(): Promise<readonly PendingMutation[]> {
-    return withRead(this.#memdag, pendingMutationsForAPI);
+    // We use a withRead here to ensure that any in progress write transaction
+    // is finished
+    return withRead(this.#memdag, () => this.#pendingMutations);
   }
 }
 

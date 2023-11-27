@@ -18,6 +18,8 @@ import {
 import {rebaseMutationAndPutCommit} from '../db/rebase.js';
 import type {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
+import type {PendingMutation} from '../pending-mutations.js';
+import {convertLocalMetaCommitsToPendingMutationsAPI} from '../pending-mutations.js';
 import type {MutatorDefs} from '../replicache.js';
 import {DiffComputationConfig, DiffsMap, diffCommits} from '../sync/diff.js';
 import type {ClientID} from '../sync/ids.js';
@@ -48,6 +50,7 @@ type RefreshResult =
       newMemdagHeadHash: Hash;
       diffs: DiffsMap;
       newPerdagClientHeadHash: Hash;
+      pendingMutations: readonly PendingMutation[];
     };
 
 /**
@@ -63,7 +66,7 @@ export async function refresh(
   diffConfig: DiffComputationConfig,
   closed: () => boolean,
   formatVersion: FormatVersion,
-): Promise<[Hash, DiffsMap] | undefined> {
+): Promise<[Hash, DiffsMap, readonly PendingMutation[]] | undefined> {
   if (closed()) {
     return;
   }
@@ -252,6 +255,8 @@ export async function refresh(
           newMemdagHeadHash,
           diffs,
           newPerdagClientHeadHash: perdagClientGroupHeadHash,
+          pendingMutations:
+            convertLocalMetaCommitsToPendingMutationsAPI(newMemdagMutations),
         };
       });
     });
@@ -280,7 +285,7 @@ export async function refresh(
     return undefined;
   }
   await setRefreshHashes([result.newPerdagClientHeadHash]);
-  return [result.newMemdagHeadHash, result.diffs];
+  return [result.newMemdagHeadHash, result.diffs, result.pendingMutations];
 }
 
 function shouldAbortRefresh(
