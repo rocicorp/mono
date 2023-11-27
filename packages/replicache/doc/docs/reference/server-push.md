@@ -9,7 +9,7 @@ For more information, see [How Replicache Works — Push](/concepts/how-it-works
 
 ## Configuration
 
-Specify the URL with the [`pushURL`](api/interfaces/ReplicacheOptions#pushURL)
+Specify the URL with the [`pushURL`](/api/interfaces/ReplicacheOptions#pushURL)
 constructor option:
 
 ```js
@@ -45,7 +45,7 @@ Always `application/json`.
 
 This is a string that should be used to authorize the user. It is prudent to also verify that the `clientID` passed in the `PushRequest` in fact belongs to that user. If not, and users' `clientID`s are somehow visible, a user could push mutations on behalf of another user.
 
-The auth token is set by defining [`auth`](api/interfaces/ReplicacheOptions#auth).
+The auth token is set by defining [`auth`](/api/interfaces/ReplicacheOptions#auth).
 
 ### `X-Replicache-RequestID`
 
@@ -86,7 +86,7 @@ Version of the type Replicache uses for the request body. The current version is
 
 ### `clientGroupID`
 
-The [`clientGroupID`](api/classes/Replicache#clientGroupID) of the requesting Replicache
+The [`clientGroupID`](/api/classes/Replicache#clientGroupID) of the requesting Replicache
 client group.
 
 ### `mutations`
@@ -95,13 +95,13 @@ An array of mutations to be applied to the server, each having:
 
 - `clientID`: The ID of the client within the group that created the mutation.
 - `id`: A sequential per-client unsigned integer. Each mutation will have an ID exactly one greater than the previous one in the list.
-- `name`: The name of the mutator that was invoked (e.g., from [Replicache.mutate](api/classes/Replicache#mutate)).
+- `name`: The name of the mutator that was invoked (e.g., from [Replicache.mutate](/api/classes/Replicache#mutate)).
 - `args`: The arguments that were passed to the mutator.
 - `timestamp`: The [`DOMHighResTimeStamp`](https://developer.mozilla.org/en-US/docs/Web/API/DOMHighResTimeStamp) from the source client when the mutation was initially run. This field is not currently used by the protocol.
 
 ### `profileID`
 
-The [`profileID`](api/classes/Replicache#profileid) of the requesting Replicache instance. All clients within a browser profile share the same `profileID`.
+The [`profileID`](/api/classes/Replicache#profileid) of the requesting Replicache instance. All clients within a browser profile share the same `profileID`.
 
 ### `schemaVersion`
 
@@ -109,9 +109,9 @@ This is something that you control and should identify the schema of your client
 view. This ensures that you are sending data of the correct type so that the
 client can correctly handle the data.
 
-The [`schemaVersion`](api/interfaces/ReplicacheOptions#schemaVersion) can be set
-in the [`ReplicacheOptions`](api/interfaces/ReplicacheOptions) when creating
-your instance of [`Replicache`](api/classes/Replicache).
+The [`schemaVersion`](/api/interfaces/ReplicacheOptions#schemaVersion) can be set
+in the [`ReplicacheOptions`](/api/interfaces/ReplicacheOptions) when creating
+your instance of [`Replicache`](/api/classes/Replicache).
 
 ## HTTP Response
 
@@ -119,7 +119,7 @@ your instance of [`Replicache`](api/classes/Replicache).
 
 - `200` for success
 - `401` for auth error — Replicache will reauthenticate using
-  [`getAuth`](api/classes/Replicache#getAuth) if available
+  [`getAuth`](/api/classes/Replicache#getAuth) if available
 - All other status codes are considered to be errors
 
 Replicache will exponentially back off sending pushes in the case of both
@@ -160,7 +160,7 @@ Said another way, if the `PullResponse` indicates that mutation `42` has been pr
 
 ### Applying Mutations in Batches
 
-The simplest way to process mutations is to run and commit each mutation and its `lastMutationID` update in its own transaction. However, for efficiency, you can apply a batch of mutations together and then update the database with their effects and the new `lastMutationID` in a single transaction. The [Example Todo app](https://github.com/rocicorp/replicache-todo) contains an example of this pattern in [replicache-transaction.ts](https://github.com/rocicorp/replicache-nextjs/blob/main/src/backend/replicache-transaction.ts).
+The simplest way to process mutations is to run and commit each mutation and its `lastMutationID` update in its own transaction. However, for efficiency, you can apply a batch of mutations together and then update the database with their effects and the new `lastMutationID` in a single transaction. The [todo-nextjs](https://github.com/rocicorp/todo-nextjs) sample contains an example of this pattern in [push.ts](https://github.com/rocicorp/todo-nextjs/blob/main/pages/api/replicache/push.ts#L67).
 
 ### Error Handling
 
