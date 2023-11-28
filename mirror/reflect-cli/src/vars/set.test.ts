@@ -10,7 +10,7 @@ import {existsSync} from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {listDevVars, setFileOverriddeForTests} from '../dev/vars.js';
+import {listDevVars, setFileOverrideForTests} from '../dev/vars.js';
 import {UserError} from '../error.js';
 import {setVarsHandler} from './set.js';
 
@@ -22,7 +22,7 @@ describe('set vars', () => {
       path.join(os.tmpdir(), 'reflect-dev-vars-test-'),
     );
     varsFile = path.join(dir, 'dev-vars.env');
-    setFileOverriddeForTests(varsFile);
+    setFileOverrideForTests({dir, file: varsFile});
   });
 
   afterEach(async () => {
@@ -32,7 +32,7 @@ describe('set vars', () => {
   });
 
   afterAll(() => {
-    setFileOverriddeForTests(undefined);
+    setFileOverrideForTests(undefined);
   });
 
   const ignoredYargs = {

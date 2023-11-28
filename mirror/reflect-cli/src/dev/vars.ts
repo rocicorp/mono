@@ -1,5 +1,5 @@
 import {compareUTF8} from 'compare-utf8';
-import {existsSync, readFileSync, writeFileSync} from 'fs';
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'fs';
 import {
   ALLOWED_SERVER_VARIABLE_CHARS,
   MAX_SERVER_VARIABLES,
@@ -13,7 +13,7 @@ import {mustFindAppConfigRoot} from '../app-config.js';
 import {UserError} from '../error.js';
 
 export function listDevVars(): Record<string, string> {
-  const varsFile = varsFilePath();
+  const {file: varsFile} = varsFilePaths();
   if (existsSync(varsFile)) {
     return validateAndSort(getProperties(readFileSync(varsFile, 'utf-8')));
   }
@@ -36,18 +36,21 @@ export function deleteDevVars(vars: string[]) {
   saveDevVars(devVars);
 }
 
-let fileOverrideForTests: string | undefined;
+let fileOverrideForTests: {dir: string; file: string} | undefined;
 
-export function setFileOverriddeForTests(path: string | undefined) {
-  fileOverrideForTests = path;
+export function setFileOverrideForTests(
+  override: {dir: string; file: string} | undefined,
+) {
+  fileOverrideForTests = override;
 }
 
-function varsFilePath() {
+function varsFilePaths(): {dir: string; file: string} {
   if (fileOverrideForTests) {
     return fileOverrideForTests;
   }
   const appConfigRoot = mustFindAppConfigRoot();
-  return path.join(appConfigRoot, '.reflect', 'dev-vars.env');
+  const dir = path.join(appConfigRoot, '.reflect');
+  return {dir, file: path.join(dir, 'dev-vars.env')};
 }
 
 function validateAndSort(devVars: Record<string, string>) {
@@ -85,6 +88,7 @@ function saveDevVars(devVars: Record<string, string>) {
     .map(([key, value]) => `${escapeKey(key)}=${escapeValue(value)}`)
     .join('\n');
 
-  const varsFile = varsFilePath();
+  const {dir, file: varsFile} = varsFilePaths();
+  mkdirSync(dir, {recursive: true});
   writeFileSync(varsFile, contents, 'utf-8');
 }

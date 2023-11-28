@@ -16,7 +16,7 @@ import {
   deleteDevVars,
   listDevVars,
   setDevVars,
-  setFileOverriddeForTests,
+  setFileOverrideForTests,
 } from './vars.js';
 
 describe('dev vars', () => {
@@ -27,7 +27,7 @@ describe('dev vars', () => {
       path.join(os.tmpdir(), 'reflect-dev-vars-test-'),
     );
     varsFile = path.join(dir, 'dev-vars.env');
-    setFileOverriddeForTests(varsFile);
+    setFileOverrideForTests({dir, file: varsFile});
   });
 
   afterEach(async () => {
@@ -37,7 +37,7 @@ describe('dev vars', () => {
   });
 
   afterAll(() => {
-    setFileOverriddeForTests(undefined);
+    setFileOverrideForTests(undefined);
   });
 
   test('empty list', () => {
