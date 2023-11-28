@@ -51,6 +51,11 @@ export class ConnectionLoop {
   // state.
   #pendingResolver = resolver<void>();
 
+  /**
+   * This resolver is used to allow us to skip sleeps when we do send(true)
+   */
+  #skipSleepsResolver = resolver<void>();
+
   readonly #delegate: ConnectionLoopDelegate;
   #closed = false;
 
@@ -64,8 +69,11 @@ export class ConnectionLoop {
     this.#closed = true;
   }
 
-  send(): void {
-    this.#delegate.debug?.('send');
+  send(now: boolean): void {
+    this.#delegate.debug?.('send', now);
+    if (now) {
+      this.#skipSleepsResolver.resolve();
+    }
     this.#pendingResolver.resolve();
   }
 
@@ -82,6 +90,9 @@ export class ConnectionLoop {
     let delay = 0;
 
     debug?.('Starting connection loop');
+
+    const sleepMaybeSkip: typeof sleep = ms =>
+      Promise.race([this.#skipSleepsResolver.promise, sleep(ms)]);
 
     while (!this.#closed) {
       debug?.(
@@ -100,7 +111,7 @@ export class ConnectionLoop {
       if (this.#closed) break;
 
       debug?.('Waiting for debounce');
-      await sleep(delegate.debounceDelay);
+      await sleepMaybeSkip(delegate.debounceDelay);
       if (this.#closed) break;
       debug?.('debounced');
 
@@ -143,7 +154,7 @@ export class ConnectionLoop {
         const timeSinceLastSend = Date.now() - lastSendTime;
         if (clampedDelay > timeSinceLastSend) {
           await Promise.race([
-            sleep(clampedDelay - timeSinceLastSend),
+            sleepMaybeSkip(clampedDelay - timeSinceLastSend),
             recoverResolver.promise,
           ]);
           if (this.#closed) break;
@@ -158,6 +169,7 @@ export class ConnectionLoop {
         try {
           lastSendTime = start;
           debug?.('Sending request');
+          this.#skipSleepsResolver = resolver();
           ok = await delegate.invokeSend();
           debug?.('Send returned', ok);
         } catch (e) {
