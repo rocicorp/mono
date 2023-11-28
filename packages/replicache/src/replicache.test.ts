@@ -490,7 +490,7 @@ test('HTTP status pull', async () => {
 
   const consoleErrorStub = sinon.stub(console, 'error');
 
-  rep.pull();
+  void rep.pull(true);
 
   await tickAFewTimes(20, 10);
 
@@ -1255,7 +1255,7 @@ test('onSync', async () => {
 
   const {clientID} = rep;
   fetchMock.postOnce(pullURL, makePullResponseV1(clientID, 2));
-  rep.pull();
+  await rep.pull();
   await tickAFewTimes(15);
 
   expect(onSync.callCount).to.equal(2);
@@ -1419,7 +1419,7 @@ test('push and pull concurrently', async () => {
   resetSpies();
 
   await add({b: 1});
-  rep.pull();
+  await rep.pull();
 
   await clock.tickAsync(10);
 
@@ -1452,7 +1452,7 @@ test('schemaVersion pull', async () => {
     schemaVersion,
   });
 
-  rep.pull();
+  await rep.pull();
   await tickAFewTimes();
 
   const req = await fetchMock.lastCall().request.json();
@@ -1552,7 +1552,7 @@ test('pull and index update', async () => {
       return makePullResponseV1(clientID, lastMutationID++, opt.patch);
     });
 
-    rep.pull();
+    await rep.pull();
 
     await tickUntil(() => pullDone);
     await tickAFewTimes();
@@ -1631,7 +1631,7 @@ async function populateDataUsingPull<
     })),
   });
 
-  rep.pull();
+  await rep.pull();
 
   // Allow pull to finish (larger than PERSIST_TIMEOUT)
   await clock.tickAsync(22 * 1000);
@@ -1665,21 +1665,21 @@ test('pull mutate options', async () => {
   await tickUntilTimeIs(1000);
 
   while (Date.now() < 1150) {
-    rep.pull();
+    void rep.pull();
     await clock.tickAsync(10);
   }
 
   rep.requestOptions.minDelayMs = 500;
 
   while (Date.now() < 2000) {
-    rep.pull();
+    void rep.pull();
     await clock.tickAsync(100);
   }
 
   rep.requestOptions.minDelayMs = 25;
 
   while (Date.now() < 2500) {
-    rep.pull();
+    void rep.pull();
     await clock.tickAsync(5);
   }
 
@@ -2195,7 +2195,7 @@ test('mutation timestamps are immutable', async () => {
 
   // Create a mutation and verify it has been assigned current time.
   await rep.mutate.foo(null);
-  await rep.invokePush();
+  await rep.push(true);
   expect(pending).deep.equal([
     {
       clientID: rep.clientID,
@@ -2234,7 +2234,7 @@ test('mutation timestamps are immutable', async () => {
   expect(val).equal('dog');
 
   // Check that mutation timestamp did not change
-  await rep.invokePush();
+  await rep.push(true);
   expect(pending).deep.equal([
     {
       clientID: rep.clientID,

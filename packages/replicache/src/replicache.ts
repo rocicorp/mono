@@ -114,7 +114,6 @@ export interface TestingReplicacheWithTesting extends Replicache {
 
 type TestingInstance = {
   beginPull: () => Promise<BeginPullResult>;
-  invokePush: () => Promise<boolean>;
   isClientGroupDisabled: () => boolean;
   licenseActivePromise: Promise<boolean>;
   licenseCheckPromise: Promise<boolean>;
@@ -573,7 +572,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
         maybeEndPull: (syncHead, requestID) =>
           this.#maybeEndPull(syncHead, requestID),
         onPushInvoked: () => undefined,
-        invokePush: () => this.#invokePush(),
         onBeginPull: () => undefined,
         beginPull: () => this.#beginPull(),
         onRecoverMutations: r => r,
@@ -673,8 +671,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
     await this.#licenseCheck(resolveLicenseCheck);
 
     if (this.#enablePullAndPushInOpen) {
-      this.pull();
-      this.push();
+      this.pull().catch(noop);
+      this.push().catch(noop);
     }
 
     const {signal} = this.#closeAbortController;
@@ -1251,24 +1249,36 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * non-zero (which it is by default) pushes happen automatically shortly after
    * mutations.
    *
+   * If the server endpoint fails push will be continuously retried with an
+   * exponential backoff.
+   *
    * @param [now=false] If true, push will happen immediately and ignore
    *   {@link pushDelay}, {@link RequestOptions.minDelayMs} as well as the
    *   exponential backoff in case of errors.
+   * @returns A promise that resolves when the next push completes. In case of
+   * errors the first error will reject the returned promise. Subsequent errors
+   * will not be reflected in the promise.
    */
-  push(now = false): void {
-    this.#pushConnectionLoop.send(now);
+  push(now = false): Promise<void> {
+    return this.#pushConnectionLoop.send(now);
   }
 
   /**
    * Pull pulls changes from the {@link pullURL}. If there are any changes local
    * changes will get replayed on top of the new server state.
    *
+   * If the server endpoint fails pull will be continuously retried with an
+   * exponential backoff.
+   *
    * @param [now=false] If true, pull will happen immediately and ignore
    *   {@link RequestOptions.minDelayMs} as well as the exponential backoff in
    *   case of errors.
+   * @returns A promise that resolves when the next pull completes. In case of
+   * errors the first error will reject the returned promise. Subsequent errors
+   * will not be reflected in the promise.
    */
-  pull(now = false): void {
-    this.#pullConnectionLoop.send(now);
+  pull(now = false): Promise<void> {
+    return this.#pullConnectionLoop.send(now);
   }
 
   /**
@@ -1691,7 +1701,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
           DEFAULT_HEAD_NAME,
           this.#subscriptions,
         );
-        this.#pushConnectionLoop.send(false);
+        this.#pushConnectionLoop.send(false).catch(noop);
         await this.#checkChange(ref, diffs);
         void this.#schedulePersist();
         return {result, ref};

@@ -56,25 +56,28 @@ export class ConnectionLoop {
    */
   #skipSleepsResolver = resolver<void>();
 
+  /** Resolver for the next send */
+  #sendResolver = resolver<void>();
+
   readonly #delegate: ConnectionLoopDelegate;
   #closed = false;
 
   constructor(delegate: ConnectionLoopDelegate) {
     this.#delegate = delegate;
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    this.run();
+    void this.run();
   }
 
   close(): void {
     this.#closed = true;
   }
 
-  send(now: boolean): void {
+  send(now: boolean): Promise<void> {
     this.#delegate.debug?.('send', now);
     if (now) {
       this.#skipSleepsResolver.resolve();
     }
     this.#pendingResolver.resolve();
+    return this.#sendResolver.promise;
   }
 
   async run(): Promise<void> {
@@ -166,6 +169,7 @@ export class ConnectionLoop {
       (async () => {
         const start = Date.now();
         let ok: boolean;
+        let error: unknown;
         try {
           lastSendTime = start;
           debug?.('Sending request');
@@ -174,6 +178,7 @@ export class ConnectionLoop {
           debug?.('Send returned', ok);
         } catch (e) {
           debug?.('Send failed', e);
+          error = e;
           ok = false;
         }
         if (this.#closed) {
@@ -188,7 +193,16 @@ export class ConnectionLoop {
         }
         counter--;
         this.#connectionAvailable();
-        if (!ok) {
+        const sendResolver = this.#sendResolver;
+        this.#sendResolver = resolver();
+        this.#sendResolver.promise.catch(() => {
+          // We do not want this promise to be treated as unhandled.
+        });
+        if (ok) {
+          sendResolver.resolve();
+        } else {
+          sendResolver.reject(error ?? new Error('Send failed'));
+
           // Keep trying
           this.#pendingResolver.resolve();
         }
@@ -217,7 +231,7 @@ export class ConnectionLoop {
 const CONNECTION_MEMORY_COUNT = 9;
 
 // Computes a new delay based on the previous requests. We use the median of the
-// previous successfull request divided by `maxConnections`. When we get errors
+// previous successful request divided by `maxConnections`. When we get errors
 // we do exponential backoff. As soon as we recover from an error we reset back
 // to delegate.minDelayMs.
 function computeDelayAndUpdateDurations(
