@@ -1,5 +1,5 @@
 {
-  "name": "replicache",
+  "name": "@rocicorp/replicache",
   "description": "Realtime sync for any backend stack",
   "version": "12.2.1",
   "repository": "github:rocicorp/replicache",
@@ -73,7 +73,9 @@
     "out/cli.js",
     "out/replicache.d.ts",
     "out/replicache.cjs",
-    "out/replicache.js"
+    "out/replicache.cjs.map",
+    "out/replicache.js",
+    "out/replicache.js.map"
   ],
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
