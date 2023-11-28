@@ -9,7 +9,7 @@ For more information, see [How Replicache Works — Pull](/concepts/how-it-works
 
 ## Configuration
 
-Specify the URL with the [`pullURL`](api/interfaces/ReplicacheOptions#pullURL) constructor option:
+Specify the URL with the [`pullURL`](/api/interfaces/ReplicacheOptions#pullURL) constructor option:
 
 ```js
 const rep = new Replicache({
@@ -44,7 +44,7 @@ Always `application/json`.
 
 This is a string that should be used to authorize a user. It is prudent to also verify that the `clientID` passed in the `PushRequest` in fact belongs to that user. If not, and users' `clientID`s are somehow visible, a user could pull another user's Client View.
 
-The auth token is set by defining [`auth`](api/interfaces/ReplicacheOptions#auth).
+The auth token is set by defining [`auth`](/api/interfaces/ReplicacheOptions#auth).
 
 ### `X-Replicache-RequestID`
 
@@ -77,7 +77,7 @@ Version of the type Replicache uses for the response JSON. The current version i
 
 ### `clientGroupID`
 
-The [`clientGroupID`](api/classes/Replicache#clientGroupID) of the requesting Replicache
+The [`clientGroupID`](/api/classes/Replicache#clientGroupID) of the requesting Replicache
 client group.
 
 ### `cookie`
@@ -86,7 +86,7 @@ The cookie that was received last time a pull was done. `null` if this is the fi
 
 ### `profileID`
 
-The [`profileID`](api/classes/Replicache#profileid) of the requesting Replicache instance. All clients within a browser profile share the same `profileID`. It can be used for windowing the Client View, which one typically wants to do per-browser-profile, not per-client.
+The [`profileID`](/api/classes/Replicache#profileid) of the requesting Replicache instance. All clients within a browser profile share the same `profileID`. It can be used for windowing the Client View, which one typically wants to do per-browser-profile, not per-client.
 
 ### `schemaVersion`
 
@@ -94,16 +94,16 @@ This is something that you control and should identify the schema of your client
 view. This ensures that you are sending data of the correct type so that the
 client can correctly handle the data.
 
-The [`schemaVersion`](api/interfaces/ReplicacheOptions#schemaVersion) can be set
-in the [`ReplicacheOptions`](api/interfaces/ReplicacheOptions) when creating
-your instance of [`Replicache`](api/classes/Replicache).
+The [`schemaVersion`](/api/interfaces/ReplicacheOptions#schemaVersion) can be set
+in the [`ReplicacheOptions`](/api/interfaces/ReplicacheOptions) when creating
+your instance of [`Replicache`](/api/classes/Replicache).
 
 ## HTTP Response
 
 ### HTTP Response Status
 
 - `200` for success
-- `401` for auth error — Replicache will reauthenticate using [`getAuth`](api/classes/Replicache#getAuth) if available
+- `401` for auth error — Replicache will reauthenticate using [`getAuth`](/api/classes/Replicache#getAuth) if available
 - All other status codes considered errors
 
 Replicache will exponentially back off sending pushes in the case of both network level and HTTP level errors.
@@ -216,7 +216,7 @@ See [Dynamic Pull](../byob/dynamic-pull) for an example implementation.
 
 - Check the [Launch to Production HOWTO](/howto/launch#all-endpoints) for the checklist
   that is common for both push and pull.
-- Ensure that the [`lastMutationID`](#lastmutationid-1) returned in the response
+- Ensure that the `lastMutationID` returned in the response
   is read in the same transaction as the client view data (ie, is consistent
   with it).
 - If there is a problem with the `cookie` (e.g., it is unusable) return all

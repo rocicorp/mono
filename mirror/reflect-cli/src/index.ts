@@ -123,7 +123,7 @@ function createCLIParser(argv: string[]) {
 
   reflectCLI.command(
     'usage',
-    '📊 Show usage summary (connection time), with monthly, daily, or hourly breakdowns',
+    '📊 Show usage summary (room time), with monthly, daily, or hourly breakdowns',
     usageOptions,
     handleWith(usageHandler).andCleanup(),
   );
