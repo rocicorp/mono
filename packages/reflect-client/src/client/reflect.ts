@@ -1396,10 +1396,10 @@ export class Reflect<MD extends MutatorDefs> {
     }
   }
 
-  // Total hack to get base cookie, see _puller for how the promise is resolved.
-  #getBaseCookie(): Promise<NullableVersion> {
+  // Total hack to get base cookie, see #puller for how the promise is resolved.
+  async #getBaseCookie(): Promise<NullableVersion> {
     this.#baseCookieResolver ??= resolver();
-    this.#rep.pull();
+    await this.#rep.pull();
     return this.#baseCookieResolver.promise;
   }
 }
