@@ -1397,9 +1397,9 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   // Total hack to get base cookie, see #puller for how the promise is resolved.
-  async #getBaseCookie(): Promise<NullableVersion> {
+  #getBaseCookie(): Promise<NullableVersion> {
     this.#baseCookieResolver ??= resolver();
-    await this.#rep.pull();
+    void this.#rep.pull();
     return this.#baseCookieResolver.promise;
   }
 }
