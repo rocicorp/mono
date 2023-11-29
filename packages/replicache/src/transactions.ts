@@ -99,10 +99,6 @@ export interface ReadTransaction {
   scan<V extends ReadonlyJSONValue>(
     options?: ScanOptions,
   ): ScanResult<IndexKey | string, DeepReadonly<V>>;
-
-  scan<V extends ReadonlyJSONValue>(
-    options?: ScanOptions,
-  ): ScanResult<IndexKey | string, DeepReadonly<V>>;
 }
 
 let transactionIDCounter = 0;
@@ -243,7 +239,6 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
   scan<V extends ReadonlyJSONValue>(
     options?: ScanNoIndexOptions,
   ): ScanResult<string, DeepReadonly<V>>;
-
   scan<V extends ReadonlyJSONValue>(
     options?: ScanOptions,
   ): ScanResult<IndexKey | string, DeepReadonly<V>>;
