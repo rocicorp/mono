@@ -39,6 +39,7 @@ export const user = {
     baseHttpsOptions,
     userFunctions.ensure(getFirestore(), getAuth()),
   ),
+  welcome: userFunctions.welcome,
 };
 
 export const error = {

@@ -15,6 +15,12 @@ setup(() => {
   clock = useFakeTimers(0);
 });
 
+async function tickUntilTimeIs(t: number) {
+  while (Date.now() < t) {
+    await clock.tickAsync(50);
+  }
+}
+
 teardown(() => {
   clock.restore();
   loop?.close();
@@ -23,20 +29,13 @@ teardown(() => {
 
 let loop: ConnectionLoop | undefined;
 
-const ps = new Set();
-
-function send() {
+function send(now = false) {
   if (!loop) {
     throw new Error();
   }
-  const p = loop.send();
-  ps.add(p);
-  return p;
-}
-
-async function waitForAll() {
-  await Promise.allSettled(ps);
-  ps.clear();
+  loop.send(now).catch(() => {
+    // ignore
+  });
 }
 
 let counter = 0;
@@ -89,16 +88,16 @@ test('basic sequential by awaiting', async () => {
   const debounceDelay = 3;
   loop = createLoop({requestTime, debounceDelay});
 
-  loop.send();
+  send();
   await clock.runAllAsync();
   expect(Date.now()).to.equal(requestTime + debounceDelay);
 
   expect(log).to.deep.equal(['send:0:3', 'true:0:203']);
 
-  loop.send();
+  send();
   await clock.runAllAsync();
 
-  loop.send();
+  send();
   await clock.runAllAsync();
 
   expect(log).to.deep.equal([
@@ -144,8 +143,6 @@ test('debounce', async () => {
     'send:1:110',
     'true:1:160',
   ]);
-
-  await waitForAll();
 });
 
 test('sync calls collapsed', async () => {
@@ -172,8 +169,6 @@ test('sync calls collapsed', async () => {
   expect(Date.now()).to.equal(debounceDelay + requestTime);
 
   expect(log).to.deep.equal(['send:0:5', 'true:0:55']);
-
-  await waitForAll();
 });
 
 test('concurrent connections', async () => {
@@ -259,9 +254,6 @@ test('concurrent connections', async () => {
     'true:2:155',
     'true:3:185',
   ]);
-
-  await clock.runAllAsync();
-  await waitForAll();
 });
 
 test('maxConnections 1', async () => {
@@ -306,9 +298,6 @@ test('maxConnections 1', async () => {
     'send:2:185',
     'true:2:275',
   ]);
-
-  await clock.runAllAsync();
-  await waitForAll();
 });
 
 test('Adjust delay', async () => {
@@ -383,7 +372,6 @@ test('Adjust delay', async () => {
     'true:5:388',
     'true:4:405',
   ]);
-  await waitForAll();
 });
 
 for (const errorKind of [false, 'throw'] as const) {
@@ -653,4 +641,97 @@ test('mutate minDelayMs', async () => {
     0, 50, 100, 150, 200, 250, 750, 1250, 1750, 2250, 2270, 2290, 2310, 2330,
     2350, 2370, 2390,
   ]);
+});
+
+test('Send now', async () => {
+  const log: number[] = [];
+  let nextInvokeSendResult: boolean = true;
+  loop = new ConnectionLoop({
+    invokeSend() {
+      log.push(Date.now());
+      return Promise.resolve(nextInvokeSendResult);
+    },
+    debounceDelay: 50,
+    minDelayMs: 200,
+    maxDelayMs: 1_000,
+    maxConnections: 1,
+    watchdogTimer: null,
+  });
+
+  // Do not send before debounceDelay
+  send();
+  await tickUntilTimeIs(50);
+
+  expect(log).to.deep.equal([50]);
+
+  // Take minDelayMs into account
+  send();
+  await tickUntilTimeIs(250);
+  expect(log).to.deep.equal([50, 250]);
+
+  // send now should ignore both minDelayMs and debounceDelay
+  send(true);
+  await tickUntilTimeIs(450);
+  expect(log).to.deep.equal([50, 250, 250]);
+
+  nextInvokeSendResult = false;
+  send();
+  await tickUntilTimeIs(500);
+  expect(log).to.deep.equal([50, 250, 250, 500]);
+
+  await tickUntilTimeIs(1900);
+  expect(log).to.deep.equal([50, 250, 250, 500, 700, 1100, 1900]);
+
+  // Keep trying with exponential backoff, hitting maxDelayMs
+  await tickUntilTimeIs(2900);
+  expect(log).to.deep.equal([50, 250, 250, 500, 700, 1100, 1900, 2900]);
+
+  // Even when there are errors and we have exponential backoff, send now should
+  // send immediately.
+  send(true);
+  await tickUntilTimeIs(3900);
+  expect(log).to.deep.equal([
+    50, 250, 250, 500, 700, 1100, 1900, 2900, 2900, 3900,
+  ]);
+
+  nextInvokeSendResult = true;
+  send(true);
+  await tickUntilTimeIs(10_000);
+  expect(log).to.deep.equal([
+    50, 250, 250, 500, 700, 1100, 1900, 2900, 2900, 3900, 3900,
+  ]);
+});
+
+test('Send promise', async () => {
+  let nextInvokeSendResult: boolean | Error = true;
+  loop = new ConnectionLoop({
+    // eslint-disable-next-line require-await
+    async invokeSend() {
+      if (nextInvokeSendResult instanceof Error) {
+        throw nextInvokeSendResult;
+      }
+      return nextInvokeSendResult;
+    },
+    debounceDelay: 50,
+    minDelayMs: 200,
+    maxDelayMs: 1_000,
+    maxConnections: 1,
+    watchdogTimer: null,
+  });
+
+  const p1 = loop.send(false);
+  await tickUntilTimeIs(50);
+  expect(await p1).to.be.undefined;
+
+  const expectedError = new Error('xxx');
+  nextInvokeSendResult = expectedError;
+  const p2 = loop.send(false);
+  await tickUntilTimeIs(250);
+  let err;
+  try {
+    await p2;
+  } catch (e) {
+    err = e;
+  }
+  expect(err).to.equal(expectedError);
 });

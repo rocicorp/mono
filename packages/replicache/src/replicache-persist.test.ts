@@ -97,7 +97,7 @@ test('basic persist & load', async () => {
     ]),
   );
 
-  rep.pull();
+  await rep.pull();
 
   // maxWaitAttempts * waitMs should be at least PERSIST_TIMEOUT
   // plus some buffer for the persist process to complete

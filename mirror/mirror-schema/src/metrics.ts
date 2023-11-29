@@ -38,31 +38,20 @@ export const metricsNode = v.object({total: metricsSchema});
  */
 export type MetricsNode = v.Infer<typeof metricsNode>;
 
-export type Hour =
-  | '0'
-  | '1'
-  | '2'
-  | '3'
-  | '4'
-  | '5'
-  | '6'
-  | '7'
-  | '8'
-  | '9'
-  | '10'
-  | '11'
-  | '12'
-  | '13'
-  | '14'
-  | '15'
-  | '16'
-  | '17'
-  | '18'
-  | '19'
-  | '20'
-  | '21'
-  | '22'
-  | '23';
+/** Creates a union type from `0` to `Length - 1`. */
+type Range<
+  Length extends number,
+  Result extends number[] = [],
+> = Result['length'] extends Length
+  ? Result[number]
+  : Range<Length, [...Result, Result['length']]>;
+
+/** Creates a union type from `Start` to `End`. */
+type InclusiveRange<Start extends number, End extends number> =
+  | Exclude<Range<End>, Range<Start>>
+  | End;
+
+export type Hour = `${Range<24>}`;
 
 export const dayMetricsSchema = v.object({
   ...metricsNode.shape,
@@ -96,38 +85,7 @@ export const dayMetricsSchema = v.object({
 
 export type DayMetrics = v.Infer<typeof dayMetricsSchema>;
 
-export type DayOfMonth =
-  | '1'
-  | '2'
-  | '3'
-  | '4'
-  | '5'
-  | '6'
-  | '7'
-  | '8'
-  | '9'
-  | '10'
-  | '11'
-  | '12'
-  | '13'
-  | '14'
-  | '15'
-  | '16'
-  | '17'
-  | '18'
-  | '19'
-  | '20'
-  | '21'
-  | '22'
-  | '23'
-  | '24'
-  | '25'
-  | '26'
-  | '27'
-  | '28'
-  | '29'
-  | '30'
-  | '31';
+export type DayOfMonth = `${InclusiveRange<1, 31>}`;
 
 export function yearMonth(date: Date): number {
   return date.getUTCFullYear() * 100 + (date.getUTCMonth() + 1);
@@ -270,19 +228,7 @@ export function teamMetricsCollection(teamID: string): string {
   return path.append(teamPath(teamID), METRICS_COLLECTION_ID);
 }
 
-export type Month =
-  | '1'
-  | '2'
-  | '3'
-  | '4'
-  | '5'
-  | '6'
-  | '7'
-  | '8'
-  | '9'
-  | '10'
-  | '11'
-  | '12';
+export type Month = `${InclusiveRange<1, 12>}`;
 
 export function monthMetricsPath(
   year: string,

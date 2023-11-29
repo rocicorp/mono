@@ -23,29 +23,35 @@ export const backup = (
 ) =>
   // https://cloud.google.com/appengine/docs/flexible/scheduling-jobs-with-cron-yaml#custom-interval
   // Schedules are interpreted as UTC times, so this actually runs at 3AM or 4AM Pacific time.
-  onSchedule('every tuesday 11:00', async event => {
-    const secrets = new SecretsCache(secretsClient);
-    const now = new Date(event.scheduleTime);
+  onSchedule(
+    {
+      schedule: 'every tuesday 11:00',
+      memory: '4GiB',
+    },
+    async event => {
+      const secrets = new SecretsCache(secretsClient);
+      const now = new Date(event.scheduleTime);
 
-    const providers = await firestore
-      .collection(PROVIDER_COLLECTION)
-      .withConverter(providerDataConverter)
-      .get();
-    for (const doc of providers.docs) {
-      const provider = doc.id;
-      const {accountID} = doc.data();
-      const apiToken = await secrets.getSecretPayload(apiTokenName(provider));
-      const analytics = new Analytics({apiToken, accountID});
-      const bucket = storage.bucket(datasetArchiveBucketName);
+      const providers = await firestore
+        .collection(PROVIDER_COLLECTION)
+        .withConverter(providerDataConverter)
+        .get();
+      for (const doc of providers.docs) {
+        const provider = doc.id;
+        const {accountID} = doc.data();
+        const apiToken = await secrets.getSecretPayload(apiTokenName(provider));
+        const analytics = new Analytics({apiToken, accountID});
+        const bucket = storage.bucket(datasetArchiveBucketName);
 
-      for (const dataset of ALL_DATASETS) {
-        logger.info(`Backing up ${accountID}/${dataset}`);
-        try {
-          await backupWeekBefore(now, analytics, dataset, bucket);
-        } catch (e) {
-          // Let the errorReporter surface the problem but process the remaining datasets.
-          logger.error(`Error backing up ${accountID}/${dataset}`, e);
+        for (const dataset of ALL_DATASETS) {
+          logger.info(`Backing up ${accountID}/${dataset}`);
+          try {
+            await backupWeekBefore(now, analytics, dataset, bucket);
+          } catch (e) {
+            // Let the errorReporter surface the problem but process the remaining datasets.
+            logger.error(`Error backing up ${accountID}/${dataset}`, e);
+          }
         }
       }
-    }
-  });
+    },
+  );

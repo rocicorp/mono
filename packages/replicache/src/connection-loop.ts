@@ -51,22 +51,33 @@ export class ConnectionLoop {
   // state.
   #pendingResolver = resolver<void>();
 
+  /**
+   * This resolver is used to allow us to skip sleeps when we do send(true)
+   */
+  #skipSleepsResolver = resolver<void>();
+
+  /** Resolver for the next send */
+  #sendResolver = resolver<void>();
+
   readonly #delegate: ConnectionLoopDelegate;
   #closed = false;
 
   constructor(delegate: ConnectionLoopDelegate) {
     this.#delegate = delegate;
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    this.run();
+    void this.run();
   }
 
   close(): void {
     this.#closed = true;
   }
 
-  send(): void {
-    this.#delegate.debug?.('send');
+  send(now: boolean): Promise<void> {
+    this.#delegate.debug?.('send', now);
+    if (now) {
+      this.#skipSleepsResolver.resolve();
+    }
     this.#pendingResolver.resolve();
+    return this.#sendResolver.promise;
   }
 
   async run(): Promise<void> {
@@ -82,6 +93,9 @@ export class ConnectionLoop {
     let delay = 0;
 
     debug?.('Starting connection loop');
+
+    const sleepMaybeSkip: typeof sleep = ms =>
+      Promise.race([this.#skipSleepsResolver.promise, sleep(ms)]);
 
     while (!this.#closed) {
       debug?.(
@@ -100,7 +114,7 @@ export class ConnectionLoop {
       if (this.#closed) break;
 
       debug?.('Waiting for debounce');
-      await sleep(delegate.debounceDelay);
+      await sleepMaybeSkip(delegate.debounceDelay);
       if (this.#closed) break;
       debug?.('debounced');
 
@@ -143,7 +157,7 @@ export class ConnectionLoop {
         const timeSinceLastSend = Date.now() - lastSendTime;
         if (clampedDelay > timeSinceLastSend) {
           await Promise.race([
-            sleep(clampedDelay - timeSinceLastSend),
+            sleepMaybeSkip(clampedDelay - timeSinceLastSend),
             recoverResolver.promise,
           ]);
           if (this.#closed) break;
@@ -155,13 +169,16 @@ export class ConnectionLoop {
       (async () => {
         const start = Date.now();
         let ok: boolean;
+        let error: unknown;
         try {
           lastSendTime = start;
           debug?.('Sending request');
+          this.#skipSleepsResolver = resolver();
           ok = await delegate.invokeSend();
           debug?.('Send returned', ok);
         } catch (e) {
           debug?.('Send failed', e);
+          error = e;
           ok = false;
         }
         if (this.#closed) {
@@ -176,7 +193,16 @@ export class ConnectionLoop {
         }
         counter--;
         this.#connectionAvailable();
-        if (!ok) {
+        const sendResolver = this.#sendResolver;
+        this.#sendResolver = resolver();
+        this.#sendResolver.promise.catch(() => {
+          // We do not want this promise to be treated as unhandled.
+        });
+        if (ok) {
+          sendResolver.resolve();
+        } else {
+          sendResolver.reject(error ?? new Error('Send failed'));
+
           // Keep trying
           this.#pendingResolver.resolve();
         }
@@ -205,7 +231,7 @@ export class ConnectionLoop {
 const CONNECTION_MEMORY_COUNT = 9;
 
 // Computes a new delay based on the previous requests. We use the median of the
-// previous successfull request divided by `maxConnections`. When we get errors
+// previous successful request divided by `maxConnections`. When we get errors
 // we do exponential backoff. As soon as we recover from an error we reset back
 // to delegate.minDelayMs.
 function computeDelayAndUpdateDurations(

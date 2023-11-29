@@ -16,6 +16,7 @@ import {must} from 'shared/src/must.js';
 import {randInt} from 'shared/src/rand.js';
 import * as v from 'shared/src/valita.js';
 import {authenticate} from './auth-config.js';
+import {ErrorWrapper} from './error.js';
 import {confirm, input} from './inquirer.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
@@ -118,8 +119,14 @@ export function readAppConfig(
   }
   const configFilePath = getConfigFilePath(configDirPath);
   if (fs.existsSync(configFilePath)) {
-    const json = JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
-    return v.parse(json, appConfigSchema, 'passthrough');
+    try {
+      const json = JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
+      return v.parse(json, appConfigSchema, 'passthrough');
+    } catch (e) {
+      // reflect.config.json is sometimes modified by users. Classify parse/syntax
+      // errors as WARNINGS so that we are only alerted if they happen at a higher threshold.
+      throw new ErrorWrapper(e, 'WARNING');
+    }
   }
 
   return undefined;

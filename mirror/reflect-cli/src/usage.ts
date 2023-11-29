@@ -21,8 +21,8 @@ import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function usageOptions(yargs: CommonYargsArgv) {
   return yargs
-    .option('room-time', {
-      desc: 'Summarizes active room time instead of connection time.',
+    .option('connection-time', {
+      desc: 'Summarizes connection time instead of room time.',
       type: 'boolean',
     })
     .option('year', {
@@ -76,8 +76,8 @@ export async function usageHandler(yargs: UsageHandlerArgs): Promise<void> {
   );
   const [yyyy, mm, dayOfMonth] = splitDate(date);
 
-  const {roomTime} = yargs;
-  const metric: Metric = roomTime ? 'rs' : 'cs';
+  const {connectionTime} = yargs;
+  const metric: Metric = connectionTime ? 'cs' : 'rs';
   let table: TableData;
   if (yearView) {
     const totalMetrics = (
