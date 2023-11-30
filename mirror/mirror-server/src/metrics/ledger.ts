@@ -72,7 +72,7 @@ export class Ledger {
             const delta = newValue - currValue;
             return [metric, delta] as [Metric, number];
           })
-          .filter(([_, delta]) => Math.abs(delta) > 1e-11) // Ignore insignificant floating point deltas.
+          .filter(([_, delta]) => Math.abs(delta) > 1e-9) // Nanosecond granularity: ignore insignificant floating point deltas.
           .map(
             ([metric, delta]) =>
               [metric, FieldValue.increment(delta)] as [Metric, FieldValue],

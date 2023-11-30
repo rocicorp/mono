@@ -170,7 +170,7 @@ describe('metrics ledger', () => {
       teamID: TEAM1,
       appID: APP1,
       hour: new Date(Date.UTC(2023, 0, 31, 23)),
-      metrics: [[CONNECTION_SECONDS, 10.2300000000001]],
+      metrics: [[CONNECTION_SECONDS, 10.2300000001]],
       expectUpdated: false,
       expectedAppMonth: {
         teamID: TEAM1,
