@@ -5,9 +5,13 @@ import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import type {IndexKey} from './db/index.js';
 import {Replicache} from './replicache.js';
-import type {WriteTransaction} from './transactions.js';
+import type {DeepReadonly, WriteTransaction} from './transactions.js';
 
 function use(..._args: unknown[]) {
+  // do nothing
+}
+
+function expectType<T>(_: T) {
   // do nothing
 }
 
@@ -491,46 +495,85 @@ test.skip('Parameterized get deep read only object/array [type checking only]', 
 
 test.skip('Parameterized scan.values [type checking only]', async () => {
   type V = {x: number};
+  type DeepV = DeepReadonly<V>;
   const rep = new Replicache({
     name: 'test-types',
     licenseKey: TEST_LICENSE_KEY,
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const v of tx.scan<V>()) {
-          const v2: {x: number} = v;
-          use(v2);
+          expectType<DeepV>(v);
         }
 
         for await (const v of tx.scan<V>().values()) {
-          const v2: {x: number} = v;
-          use(v2);
+          expectType<DeepV>(v);
         }
 
-        const vs: V[] = await tx.scan<V>().values().toArray();
-        use(vs);
+        const vs = await tx.scan<V>().values().toArray();
+        expectType<DeepV[]>(vs);
 
-        const vs2: V[] = await tx.scan<V>().toArray();
-        use(vs2);
+        const vs2 = await tx.scan<V>().toArray();
+        expectType<DeepV[]>(vs2);
       },
     },
   });
 
   await rep.query(async tx => {
     for await (const v of tx.scan<V>()) {
-      const v2: {x: number} = v;
-      use(v2);
+      expectType<DeepV>(v);
     }
 
     for await (const v of tx.scan<V>().values()) {
-      const v2: {x: number} = v;
-      use(v2);
+      expectType<DeepV>(v);
     }
 
     const vs: V[] = await tx.scan<V>().values().toArray();
-    use(vs);
+    expectType<DeepV[]>(vs);
 
     const vs2: V[] = await tx.scan<V>().toArray();
-    use(vs2);
+    expectType<DeepV[]>(vs2);
+  });
+});
+
+test.skip('Parameterized index scan.values [type checking only]', async () => {
+  type V = {x: number};
+  type DeepV = DeepReadonly<V>;
+  const rep = new Replicache({
+    name: 'test-types',
+    licenseKey: TEST_LICENSE_KEY,
+    mutators: {
+      mut: async (tx: WriteTransaction) => {
+        for await (const v of tx.scan<V>({indexName: 'x'})) {
+          expectType<DeepV>(v);
+        }
+
+        for await (const v of tx.scan<V>({indexName: 'x'}).values()) {
+          expectType<DeepV>(v);
+        }
+
+        const vs = await tx.scan<V>({indexName: 'x'}).values().toArray();
+        expectType<DeepV[]>(vs);
+
+        const vs2 = await tx.scan<V>({indexName: 'x'}).toArray();
+        expectType<DeepV[]>(vs2);
+      },
+    },
+  });
+
+  await rep.query(async tx => {
+    for await (const v of tx.scan<V>()) {
+      expectType<DeepV>(v);
+    }
+
+    for await (const v of tx.scan<V>().values()) {
+      expectType<DeepV>(v);
+    }
+
+    const vs: V[] = await tx.scan<V>().values().toArray();
+    expectType<DeepV[]>(vs);
+
+    const vs2: V[] = await tx.scan<V>().toArray();
+    expectType<DeepV[]>(vs2);
   });
 });
 
@@ -684,6 +727,34 @@ test.skip('Parameterized scan.entries [type checking only]', async () => {
       .entries()
       .toArray();
     use(es);
+  });
+});
+
+test.skip('Parameterized index scan.entries [type checking only]', async () => {
+  type V = {x: number};
+  type EntryDeepV = readonly [IndexKey, DeepReadonly<{x: number}>];
+  const rep = new Replicache({
+    name: 'test-types',
+    licenseKey: TEST_LICENSE_KEY,
+    mutators: {
+      mut: async (tx: WriteTransaction) => {
+        for await (const e of tx.scan<V>({indexName: 'x'}).entries()) {
+          expectType<EntryDeepV>(e);
+        }
+
+        const es = await tx.scan<V>({indexName: 'x'}).entries().toArray();
+        expectType<EntryDeepV[]>(es);
+      },
+    },
+  });
+
+  await rep.query(async tx => {
+    for await (const v of tx.scan<V>({indexName: 'x'}).entries()) {
+      expectType<EntryDeepV>(v);
+    }
+
+    const es = await tx.scan<V>({indexName: 'x'}).entries().toArray();
+    expectType<EntryDeepV[]>(es);
   });
 });
 

@@ -6,8 +6,12 @@ import type {
   WriteTransaction,
 } from 'reflect-shared';
 import {
+  DeepReadonly,
+  IndexKey,
+  ScanIndexOptions,
   ScanNoIndexOptions,
   ScanOptions,
+  ScanResult,
   TransactionReason,
   isScanIndexOptions,
   makeScanResult,
@@ -108,7 +112,23 @@ export class ReplicacheTransaction implements WriteTransaction {
     return !!done;
   }
 
-  scan(options: ScanOptions = {}) {
+  scan(options: ScanIndexOptions): ScanResult<IndexKey, ReadonlyJSONValue>;
+  scan(options?: ScanNoIndexOptions): ScanResult<string, ReadonlyJSONValue>;
+  scan(options?: ScanOptions): ScanResult<IndexKey | string, ReadonlyJSONValue>;
+
+  scan<V extends ReadonlyJSONValue>(
+    options: ScanIndexOptions,
+  ): ScanResult<IndexKey, DeepReadonly<V>>;
+  scan<V extends ReadonlyJSONValue>(
+    options?: ScanNoIndexOptions,
+  ): ScanResult<string, DeepReadonly<V>>;
+  scan<V extends ReadonlyJSONValue>(
+    options?: ScanOptions,
+  ): ScanResult<IndexKey | string, DeepReadonly<V>>;
+
+  scan(
+    options: ScanOptions = {},
+  ): ScanResult<IndexKey | string, ReadonlyJSONValue> {
     if (isScanIndexOptions(options)) {
       throw new Error('not implemented');
     }

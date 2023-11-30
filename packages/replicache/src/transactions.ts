@@ -86,32 +86,19 @@ export interface ReadTransaction {
    * for performance reasons. If you mutate the return value you will get
    * undefined behavior.
    */
-  scan(): ScanResult<string, ReadonlyJSONValue>;
-  scan<V extends JSONValue>(): ScanResult<string, DeepReadonly<V>>;
+  scan(options: ScanIndexOptions): ScanResult<IndexKey, ReadonlyJSONValue>;
+  scan(options?: ScanNoIndexOptions): ScanResult<string, ReadonlyJSONValue>;
+  scan(options?: ScanOptions): ScanResult<IndexKey | string, ReadonlyJSONValue>;
 
-  /**
-   * Gets many values from the database. This returns a {@link ScanResult} which
-   * implements `AsyncIterable`. It also has methods to iterate over the
-   * {@link ScanResult.keys | keys} and {@link ScanResult.entries | entries}.
-   *
-   * If `options` has an `indexName`, then this does a scan over an index with
-   * that name. A scan over an index uses a tuple for the key consisting of
-   * `[secondary: string, primary: string]`.
-   *
-   * If the {@link ScanResult} is used after the `ReadTransaction` has been closed
-   * it will throw a {@link TransactionClosedError}.
-   *
-   * Important: The returned JSON is readonly and should not be modified. This
-   * is only enforced statically by TypeScript and there are no runtime checks
-   * for performance reasons. If you mutate the return value you will get
-   * undefined behavior.
-   */
-  scan<Options extends ScanOptions>(
-    options?: Options,
-  ): ScanResult<KeyTypeForScanOptions<Options>, ReadonlyJSONValue>;
-  scan<Options extends ScanOptions, V extends JSONValue>(
-    options?: Options,
-  ): ScanResult<KeyTypeForScanOptions<Options>, DeepReadonly<V>>;
+  scan<V extends ReadonlyJSONValue>(
+    options: ScanIndexOptions,
+  ): ScanResult<IndexKey, DeepReadonly<V>>;
+  scan<V extends ReadonlyJSONValue>(
+    options?: ScanNoIndexOptions,
+  ): ScanResult<string, DeepReadonly<V>>;
+  scan<V extends ReadonlyJSONValue>(
+    options?: ScanOptions,
+  ): ScanResult<IndexKey | string, DeepReadonly<V>>;
 }
 
 let transactionIDCounter = 0;
@@ -163,17 +150,23 @@ export class ReadTransactionImpl implements ReadTransaction {
     return this.dbtx.isEmpty();
   }
 
-  scan(): ScanResult<string, ReadonlyJSONValue>;
-  scan<V extends JSONValue>(): ScanResult<string, DeepReadonly<V>>;
-  scan<Options extends ScanOptions>(
-    options?: Options,
-  ): ScanResult<KeyTypeForScanOptions<Options>, ReadonlyJSONValue>;
-  scan<Options extends ScanOptions, V extends JSONValue>(
-    options?: Options,
-  ): ScanResult<KeyTypeForScanOptions<Options>, DeepReadonly<V>>;
-  scan<Options extends ScanOptions, V extends JSONValue>(
-    options?: Options,
-  ): ScanResult<KeyTypeForScanOptions<Options>, V> {
+  scan(options: ScanIndexOptions): ScanResult<IndexKey, ReadonlyJSONValue>;
+  scan(options?: ScanNoIndexOptions): ScanResult<string, ReadonlyJSONValue>;
+  scan(options?: ScanOptions): ScanResult<IndexKey | string, ReadonlyJSONValue>;
+
+  scan<V extends ReadonlyJSONValue>(
+    options: ScanIndexOptions,
+  ): ScanResult<IndexKey, DeepReadonly<V>>;
+  scan<V extends ReadonlyJSONValue>(
+    options?: ScanNoIndexOptions,
+  ): ScanResult<string, DeepReadonly<V>>;
+  scan<V extends ReadonlyJSONValue>(
+    options?: ScanOptions,
+  ): ScanResult<IndexKey | string, DeepReadonly<V>>;
+
+  scan(
+    options?: ScanOptions,
+  ): ScanResult<IndexKey | string, ReadonlyJSONValue> {
     return scan(options, this.dbtx, noop);
   }
 }
@@ -236,17 +229,23 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
     return this.#tx.has(key);
   }
 
-  scan(): ScanResult<string, ReadonlyJSONValue>;
-  scan<V extends JSONValue>(): ScanResult<string, DeepReadonly<V>>;
-  scan<Options extends ScanOptions>(
-    options?: Options,
-  ): ScanResult<KeyTypeForScanOptions<Options>, ReadonlyJSONValue>;
-  scan<Options extends ScanOptions, V extends JSONValue>(
-    options?: Options,
-  ): ScanResult<KeyTypeForScanOptions<Options>, V>;
-  scan<Options extends ScanOptions>(
-    options?: Options,
-  ): ScanResult<KeyTypeForScanOptions<Options>, ReadonlyJSONValue> {
+  scan(options: ScanIndexOptions): ScanResult<IndexKey, ReadonlyJSONValue>;
+  scan(options?: ScanNoIndexOptions): ScanResult<string, ReadonlyJSONValue>;
+  scan(options?: ScanOptions): ScanResult<IndexKey | string, ReadonlyJSONValue>;
+
+  scan<V extends ReadonlyJSONValue>(
+    options: ScanIndexOptions,
+  ): ScanResult<IndexKey, DeepReadonly<V>>;
+  scan<V extends ReadonlyJSONValue>(
+    options?: ScanNoIndexOptions,
+  ): ScanResult<string, DeepReadonly<V>>;
+  scan<V extends ReadonlyJSONValue>(
+    options?: ScanOptions,
+  ): ScanResult<IndexKey | string, DeepReadonly<V>>;
+
+  scan(
+    options?: ScanOptions,
+  ): ScanResult<IndexKey | string, ReadonlyJSONValue> {
     const scanInfo: ScanSubscriptionInfo = {
       options: toDbScanOptions(options),
       inclusiveLimitKey: undefined,
