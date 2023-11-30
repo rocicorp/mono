@@ -7,7 +7,7 @@ import {
 } from 'mirror-schema/src/deployment.js';
 import {TimeoutError, watch} from 'mirror-schema/src/watch.js';
 
-const DEPLOYMENT_WAIT_TIMEOUT = 10000;
+const DEPLOYMENT_WAIT_TIMEOUT = 30000;
 
 export async function deploymentAtOrAfter(
   firestore: Firestore,

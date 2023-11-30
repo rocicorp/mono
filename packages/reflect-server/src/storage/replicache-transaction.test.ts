@@ -1,6 +1,6 @@
 import {expect, test} from '@jest/globals';
 import {compareUTF8} from 'compare-utf8';
-import type {ScanOptions} from 'replicache';
+import type {ScanNoIndexOptions} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
@@ -124,7 +124,7 @@ test('ReplicacheTransaction scan()', async () => {
 
   async function expectScan(
     tx: ReplicacheTransaction,
-    opts: ScanOptions,
+    opts: ScanNoIndexOptions,
     expected: [string, string][],
   ) {
     const actual = await tx.scan(opts).entries().toArray();
