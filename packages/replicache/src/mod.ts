@@ -37,6 +37,7 @@ export type {
 } from './kv/store.js';
 export {mergeAsyncIterables} from './merge-async-iterables.js';
 export type {PatchOperation} from './patch-operation.js';
+export type {PendingMutation} from './pending-mutations.js';
 export {
   deleteAllReplicacheData,
   dropAllDatabases,
@@ -60,7 +61,6 @@ export type {
   MaybePromise,
   MutatorDefs,
   MutatorReturn,
-  PendingMutation,
   Poke,
   RequestOptions,
   UpdateNeededReason,

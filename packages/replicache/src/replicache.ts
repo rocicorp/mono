@@ -17,13 +17,7 @@ import {uuidChunkHasher} from './dag/chunk.js';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
 import {ChunkNotFoundError, mustGetHeadHash, Store} from './dag/store.js';
-import {
-  assertLocalCommitDD31,
-  DEFAULT_HEAD_NAME,
-  isLocalMetaDD31,
-  LocalMeta,
-  localMutations,
-} from './db/commit.js';
+import {DEFAULT_HEAD_NAME, isLocalMetaDD31, LocalMeta} from './db/commit.js';
 import {readFromDefaultHead} from './db/read.js';
 import {rebaseMutationAndCommit} from './db/rebase.js';
 import {getRoot} from './db/root.js';
@@ -50,6 +44,7 @@ import {
   OnPersist,
   PersistInfo,
 } from './on-persist-channel.js';
+import {PendingMutation, pendingMutationsForAPI} from './pending-mutations.js';
 import {initClientGC} from './persist/client-gc.js';
 import {initClientGroupGC} from './persist/client-group-gc.js';
 import {disableClientGroup} from './persist/client-groups.js';
@@ -267,13 +262,6 @@ const updateNeededReasonNewClientGroup: UpdateNeededReason = {
 export type QueryInternal = <R>(
   body: (tx: ReadTransactionImpl) => MaybePromise<R>,
 ) => Promise<R>;
-
-export type PendingMutation = {
-  readonly name: string;
-  readonly id: number;
-  readonly args: ReadonlyJSONValue;
-  readonly clientID: ClientID;
-};
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 export class Replicache<MD extends MutatorDefs = {}> {
@@ -1742,32 +1730,15 @@ export class Replicache<MD extends MutatorDefs = {}> {
   }
 
   /**
-   * List of pending mutations.
+   * List of pending mutations. The order of this is from oldest to newest.
    *
-   * Gives a list of local mutations that have
-   * mutationID > syncHead.mutationID that exists on the main client group.
+   * Gives a list of local mutations that have `mutationID` >
+   * `syncHead.mutationID` that exists on the main client group.
    *
    * @experimental This method is experimental and may change in the future.
    */
   experimentalPendingMutations(): Promise<readonly PendingMutation[]> {
-    return withRead(this.#memdag, async dagRead => {
-      const mainHeadHash = await dagRead.getHead(DEFAULT_HEAD_NAME);
-      if (mainHeadHash === undefined) {
-        throw new Error('Missing main head');
-      }
-      const pending = await localMutations(mainHeadHash, dagRead);
-      return Promise.all(
-        pending.map(async p => {
-          assertLocalCommitDD31(p);
-          return {
-            id: await p.getMutationID(this.clientID, dagRead),
-            name: p.meta.mutatorName,
-            args: p.meta.mutatorArgsJSON,
-            clientID: p.meta.clientID,
-          };
-        }),
-      );
-    });
+    return withRead(this.#memdag, pendingMutationsForAPI);
   }
 }
 
