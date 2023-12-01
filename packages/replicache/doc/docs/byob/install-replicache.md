@@ -17,7 +17,7 @@ cd chat
 Install Replicache and a few other utilities we'll use for this sample:
 
 ```bash
-npm install replicache@13.0.0 replicache-react nanoid pg pg-mem pg-promise pusher pusher-js
+npm install replicache replicache-react nanoid pg pg-mem pg-promise pusher pusher-js
 ```
 
 ## Next
