@@ -29,7 +29,7 @@ import {sleep} from 'shared/src/sleep.js';
 import type WebSocket from 'ws';
 import {TestSecrets} from '../../secrets/test-utils.js';
 import {dummyDeployment} from '../../test-helpers.js';
-import {REFLECT_AUTH_API_KEY} from '../app/secrets.js';
+import {REFLECT_API_KEY} from '../app/secrets.js';
 import {tail} from './tail.handler.js';
 
 export class MockSocket {
@@ -121,7 +121,7 @@ describe('room-tail', () => {
       }),
       setEnv(firestore, 'myApp', {
         secrets: {
-          [REFLECT_AUTH_API_KEY]: encryptUtf8(
+          [REFLECT_API_KEY]: encryptUtf8(
             'this-is-the-reflect-auth-api-key-yo',
             Buffer.from(TestSecrets.TEST_KEY, 'base64url'),
             {version: '3'},

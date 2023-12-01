@@ -42,7 +42,7 @@ import {userAuthorization} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
 import {DistTags, userAgentVersion} from '../validators/version.js';
-import {REFLECT_AUTH_API_KEY} from './secrets.js';
+import {REFLECT_API_KEY} from './secrets.js';
 
 export const create = (
   firestore: Firestore,
@@ -175,7 +175,7 @@ export const create = (
         };
         const env: Env = {
           deploymentOptions: defaultOptions(),
-          secrets: {[REFLECT_AUTH_API_KEY]: encryptedApiKey},
+          secrets: {[REFLECT_API_KEY]: encryptedApiKey},
         };
 
         if (supportsWorkersForPlatforms(userAgent)) {

@@ -13,7 +13,7 @@ import {Queue} from 'shared/src/queue.js';
 import * as valita from 'shared/src/valita.js';
 import WebSocket from 'ws';
 import {SecretsCache, SecretsClient} from '../../secrets/index.js';
-import {REFLECT_AUTH_API_KEY, decryptSecrets} from '../app/secrets.js';
+import {REFLECT_API_KEY, decryptSecrets} from '../app/secrets.js';
 import {
   appAuthorization,
   tokenAuthentication,
@@ -63,10 +63,10 @@ export const tail = (
         );
 
         const appSecrets = await decryptSecrets(secrets, {
-          [REFLECT_AUTH_API_KEY]: envSecrets[REFLECT_AUTH_API_KEY],
+          [REFLECT_API_KEY]: envSecrets[REFLECT_API_KEY],
         });
 
-        const reflectAuthApiKey = appSecrets[REFLECT_AUTH_API_KEY];
+        const reflectAuthApiKey = appSecrets[REFLECT_API_KEY];
         if (!reflectAuthApiKey) {
           throw new HttpsError(
             'internal',
@@ -195,7 +195,7 @@ function createTailDefault(
   const websocketUrl = `wss://${hostname}/api/debug/v0/tail?roomID=${encodeURIComponent(
     roomID,
   )}`;
-  // For tail we send the REFLECT_AUTH_API_KEY in the Sec-WebSocket-Protocol
+  // For tail we send the REFLECT_API_KEY in the Sec-WebSocket-Protocol
   // header and it is always required
   return new WebSocket(websocketUrl, reflectAPIToken, {
     headers: {

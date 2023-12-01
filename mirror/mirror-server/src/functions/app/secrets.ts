@@ -34,7 +34,8 @@ const datadogLogsApiKey = defineSecretSafely('DATADOG_LOGS_API_KEY');
 const datadogMetricsApiKey = defineSecretSafely('DATADOG_METRICS_API_KEY');
 
 // TODO(darick): Find the right place for this constant. Somewhere in packages/reflect* ?
-export const REFLECT_AUTH_API_KEY = 'REFLECT_AUTH_API_KEY';
+export const REFLECT_API_KEY = 'REFLECT_API_KEY';
+export const LEGACY_REFLECT_API_KEY = 'REFLECT_AUTH_API_KEY';
 
 export const DEPLOYMENT_SECRETS_NAMES = [
   'DATADOG_LOGS_API_KEY',
@@ -68,5 +69,16 @@ export async function decryptSecrets(
     }),
   );
 
-  return Object.fromEntries(decrypted);
+  const decryptedSecrets = Object.fromEntries(decrypted);
+
+  // Until all Apps are updated to a version using the new REFLECT_API_KEY,
+  // also set the LEGACY_REFLECT_API_KEY secret for backwards compatibility.
+  if (decryptedSecrets[REFLECT_API_KEY]) {
+    decryptedSecrets[LEGACY_REFLECT_API_KEY] =
+      decryptedSecrets[REFLECT_API_KEY];
+  } else if (decryptedSecrets[LEGACY_REFLECT_API_KEY]) {
+    decryptedSecrets[REFLECT_API_KEY] =
+      decryptedSecrets[LEGACY_REFLECT_API_KEY];
+  }
+  return decryptedSecrets;
 }

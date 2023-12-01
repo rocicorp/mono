@@ -41,7 +41,7 @@ describe('vars-delete', () => {
       }),
       setEnv(firestore, APP_ID, {
         secrets: {
-          ['REFLECT_AUTH_API_KEY']: encryptUtf8(
+          ['REFLECT_API_KEY']: encryptUtf8(
             'this-is-the-reflect-auth-api-key',
             Buffer.from(TestSecrets.TEST_KEY, 'base64url'),
             {version: '1'},
@@ -106,7 +106,7 @@ describe('vars-delete', () => {
 
     const env = await getEnv(firestore, APP_ID);
     expect(Object.keys(env.secrets)).toEqual([
-      'REFLECT_AUTH_API_KEY',
+      'REFLECT_API_KEY',
       'REFLECT_VAR_FOO_HOSTNAME',
     ]);
   });

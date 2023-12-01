@@ -61,7 +61,7 @@ describe('vars-set', () => {
       }),
       setEnv(firestore, APP_ID, {
         secrets: {
-          ['REFLECT_AUTH_API_KEY']: encryptUtf8(
+          ['REFLECT_API_KEY']: encryptUtf8(
             'this-is-the-reflect-auth-api-key',
             Buffer.from(TestSecrets.TEST_KEY, 'base64url'),
             {version: '1'},
@@ -178,7 +178,7 @@ describe('vars-set', () => {
 
     const env = await getEnv(firestore, APP_ID);
     expect(env.secrets).toMatchObject({
-      ['REFLECT_AUTH_API_KEY']: {
+      ['REFLECT_API_KEY']: {
         key: {version: '1'},
         iv: expect.any(Uint8Array),
         ciphertext: expect.any(Uint8Array),
@@ -205,6 +205,7 @@ describe('vars-set', () => {
       env.secrets,
     );
     expect(decrypted).toEqual({
+      ['REFLECT_API_KEY']: 'this-is-the-reflect-auth-api-key',
       ['REFLECT_AUTH_API_KEY']: 'this-is-the-reflect-auth-api-key',
       ['REFLECT_VAR_FOO_HOSTNAME']: 'bar.foo.com',
       ['REFLECT_VAR_DB_PASSWORD']: 'new passwordz',

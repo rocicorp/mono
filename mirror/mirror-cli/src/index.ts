@@ -51,7 +51,6 @@ import {
   migrateTeamLabelsHandler,
   migrateTeamLabelsOptions,
 } from './migrate-team-labels.js';
-import {migrateToEnvHandler, migrateToEnvOptions} from './migrate-to-env.js';
 import {migrateToWFPHandler, migrateToWFPOptions} from './migrate-to-wfp.js';
 import {
   publishCustomDomainsHandler,
@@ -75,6 +74,10 @@ import {
   revertReflectServerHandler,
   revertReflectServerOptions,
 } from './release-server.js';
+import {
+  renameReflectApiKeySecretHandler,
+  renameReflectApiKeySecretOptions,
+} from './rename-reflect-api-key-secret.js';
 import {runQueryHandler} from './run-query.js';
 import {sumUsageHandler, sumUsageOptions} from './sum-usage.js';
 import {
@@ -274,10 +277,10 @@ function createCLIParser(argv: string[]) {
   );
 
   reflectCLI.command(
-    'migrate-to-env',
-    'Splits Env data out of the App doc.',
-    migrateToEnvOptions,
-    migrateToEnvHandler,
+    'rename-reflect-api-key-secret',
+    'Renames the REFLECT_AUTH_API_KEY secret to REFLECT_API_KEY.',
+    renameReflectApiKeySecretOptions,
+    renameReflectApiKeySecretHandler,
   );
 
   reflectCLI.command(

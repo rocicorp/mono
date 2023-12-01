@@ -39,7 +39,7 @@ describe('vars-list', () => {
       }),
       setEnv(firestore, APP_ID, {
         secrets: {
-          ['REFLECT_AUTH_API_KEY']: encryptUtf8(
+          ['REFLECT_API_KEY']: encryptUtf8(
             'this-is-the-reflect-auth-api-key',
             Buffer.from(TestSecrets.TEST_KEY, 'base64url'),
             {version: '1'},

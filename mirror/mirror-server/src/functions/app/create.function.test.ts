@@ -162,7 +162,7 @@ describe('app-create function', () => {
       },
       secrets: {
         // eslint-disable-next-line @typescript-eslint/naming-convention
-        REFLECT_AUTH_API_KEY: {
+        REFLECT_API_KEY: {
           key: {version: TestSecrets.LATEST_ALIAS},
           iv: expect.any(Uint8Array),
           ciphertext: expect.any(Uint8Array),
@@ -220,7 +220,7 @@ describe('app-create function', () => {
           },
           secrets: {
             // eslint-disable-next-line @typescript-eslint/naming-convention
-            REFLECT_AUTH_API_KEY: {
+            REFLECT_API_KEY: {
               key: {version: TestSecrets.LATEST_ALIAS},
               iv: expect.any(Uint8Array),
               ciphertext: expect.any(Uint8Array),
