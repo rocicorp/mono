@@ -300,7 +300,7 @@ export function benchmarkRebase(opts: {
       bencher.reset();
 
       // pull will rebase.
-      rep.pull();
+      void rep.pull();
       await promise;
 
       bencher.stop();
