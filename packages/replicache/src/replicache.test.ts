@@ -490,7 +490,7 @@ test('HTTP status pull', async () => {
 
   const consoleErrorStub = sinon.stub(console, 'error');
 
-  void rep.pull(true);
+  void rep.pull({now: true});
 
   await tickAFewTimes(20, 10);
 
@@ -2195,7 +2195,7 @@ test('mutation timestamps are immutable', async () => {
 
   // Create a mutation and verify it has been assigned current time.
   await rep.mutate.foo(null);
-  await rep.push(true);
+  await rep.push({now: true});
   expect(pending).deep.equal([
     {
       clientID: rep.clientID,
@@ -2234,7 +2234,7 @@ test('mutation timestamps are immutable', async () => {
   expect(val).equal('dog');
 
   // Check that mutation timestamp did not change
-  await rep.push(true);
+  await rep.push({now: true});
   expect(pending).deep.equal([
     {
       clientID: rep.clientID,
