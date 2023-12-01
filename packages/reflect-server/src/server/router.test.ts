@@ -219,10 +219,26 @@ describe('checkAuthAPIKey', () => {
       expectedError: {result: {text: 'Unauthorized', status: 401}},
     },
     {
+      name: 'wrong legacy api key sent',
+      required: 'foo',
+      headers: {
+        ['x-reflect-auth-api-key']: 'bar',
+      },
+      expectedError: {result: {text: 'Unauthorized', status: 401}},
+    },
+    {
       name: 'correct api key sent',
       required: 'foo',
       headers: {
         ['x-reflect-api-key']: 'foo',
+      },
+      expectedError: undefined,
+    },
+    {
+      name: 'legacy api key sent',
+      required: 'foo',
+      headers: {
+        ['x-reflect-auth-api-key']: 'foo',
       },
       expectedError: undefined,
     },

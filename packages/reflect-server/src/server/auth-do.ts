@@ -24,7 +24,7 @@ import {
   createWSAndCloseWithTailError,
 } from '../util/socket.js';
 import {AlarmManager, TimeoutID} from './alarms.js';
-import {createAuthAPIHeaders} from './auth-api-headers.js';
+import {createAPIHeaders} from './api-headers.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
 import type {AuthHandler} from './auth.js';
 import {requireUpgradeHeader, roomNotFoundResponse} from './http-util.js';
@@ -872,7 +872,7 @@ export class BaseAuthDO implements DurableObject {
             `https://unused-reflect-room-do.dev${ROOM_ROUTES.authConnections}`,
             {
               method: 'POST',
-              headers: createAuthAPIHeaders(this.#authApiKey),
+              headers: createAPIHeaders(this.#authApiKey),
             },
           );
           const response = await roomDOFetch(

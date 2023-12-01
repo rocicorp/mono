@@ -22,7 +22,7 @@ import {DurableStorage} from '../storage/durable-storage.js';
 import {encodeHeaderValue} from '../util/headers.js';
 import {sleep} from '../util/sleep.js';
 import {Mocket, TestLogSink, mockWebSocketPair} from '../util/test-utils.js';
-import {API_KEY_HEADER_NAME, createAuthAPIHeaders} from './auth-api-headers.js';
+import {API_KEY_HEADER_NAME, createAPIHeaders} from './api-headers.js';
 import {TestAuthDO} from './auth-do-test-util.js';
 import {
   ALARM_INTERVAL,
@@ -513,7 +513,7 @@ function createBadBodyRequest(path: string, body: BodyInit | null): Request {
   const url = new URL(path, 'https://roci.dev');
   return new Request(url.toString(), {
     method: 'post',
-    headers: createAuthAPIHeaders(TEST_API_KEY),
+    headers: createAPIHeaders(TEST_API_KEY),
     body,
   });
 }
@@ -869,7 +869,7 @@ test('roomStatusByRoomID requires authApiKey', async () => {
 function newRoomRecordsRequest() {
   return new Request(`https://test.roci.dev${AUTH_ROUTES.roomRecords}`, {
     method: 'get',
-    headers: createAuthAPIHeaders(TEST_API_KEY),
+    headers: createAPIHeaders(TEST_API_KEY),
   });
 }
 
@@ -1577,7 +1577,7 @@ test('authInvalidateForUser when requests to roomDOs are successful', async () =
     `https://test.roci.dev/api/auth/v0/invalidateForUser`,
     {
       method: 'post',
-      headers: createAuthAPIHeaders(TEST_API_KEY),
+      headers: createAPIHeaders(TEST_API_KEY),
       body: JSON.stringify({
         userID: testUserID,
       }),
@@ -1641,7 +1641,7 @@ test('authInvalidateForUser when connection ids have chars that need to be perce
     `https://test.roci.dev/api/auth/v0/invalidateForUser`,
     {
       method: 'post',
-      headers: createAuthAPIHeaders(TEST_API_KEY),
+      headers: createAPIHeaders(TEST_API_KEY),
       body: JSON.stringify({
         userID: testUserID,
       }),
@@ -1717,7 +1717,7 @@ test('authInvalidateForUser when any request to roomDOs returns error response',
     `https://test.roci.dev/api/auth/v0/invalidateForUser`,
     {
       method: 'post',
-      headers: createAuthAPIHeaders(TEST_API_KEY),
+      headers: createAPIHeaders(TEST_API_KEY),
       body: JSON.stringify({
         userID: testUserID,
       }),
@@ -1789,7 +1789,7 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
     `https://test.roci.dev/api/auth/v0/invalidateForRoom`,
     {
       method: 'post',
-      headers: createAuthAPIHeaders(TEST_API_KEY),
+      headers: createAPIHeaders(TEST_API_KEY),
       body: JSON.stringify({
         roomID: testRoomID,
       }),
@@ -1844,7 +1844,7 @@ test('authInvalidateForRoom when roomID has no open connections no invalidate re
     `https://test.roci.dev/api/auth/v0/invalidateForRoom`,
     {
       method: 'post',
-      headers: createAuthAPIHeaders(TEST_API_KEY),
+      headers: createAPIHeaders(TEST_API_KEY),
       body: JSON.stringify({
         roomID: testRoomID,
       }),
@@ -1949,7 +1949,7 @@ test('authInvalidateForRoom when request to roomDO returns error response', asyn
     `https://test.roci.dev/api/auth/v0/invalidateForRoom`,
     {
       method: 'post',
-      headers: createAuthAPIHeaders(TEST_API_KEY),
+      headers: createAPIHeaders(TEST_API_KEY),
       body: JSON.stringify({
         roomID: testRoomID,
       }),
@@ -2010,7 +2010,7 @@ test('authInvalidateAll when requests to roomDOs are successful', async () => {
   const testRequest = new Request(
     `https://test.roci.dev/api/auth/v0/invalidateAll`,
     {
-      headers: createAuthAPIHeaders(TEST_API_KEY),
+      headers: createAPIHeaders(TEST_API_KEY),
       method: 'post',
       body: '',
     },
@@ -2082,7 +2082,7 @@ test('authInvalidateAll when any request to roomDOs returns error response', asy
   const testRequest = new Request(
     `https://test.roci.dev/api/auth/v0/invalidateAll`,
     {
-      headers: createAuthAPIHeaders(TEST_API_KEY),
+      headers: createAPIHeaders(TEST_API_KEY),
       method: 'post',
       body: '',
     },

@@ -4,7 +4,7 @@ import {version} from 'reflect-shared';
 import {assertString} from 'shared/src/asserts.js';
 import type {Series} from '../types/report-metrics.js';
 import {Mocket, TestLogSink, fail} from '../util/test-utils.js';
-import {createAuthAPIHeaders} from './auth-api-headers.js';
+import {createAPIHeaders} from './api-headers.js';
 import {AUTH_ROUTES} from './auth-do.js';
 import {
   TestDurableObjectId,
@@ -257,14 +257,14 @@ test('worker forwards authDO api requests to authDO', async () => {
     await testForwardedToAuthDO(
       new Request(tc.path, {
         method: tc.method,
-        headers: createAuthAPIHeaders(TEST_API_KEY),
+        headers: createAPIHeaders(TEST_API_KEY),
         body: tc.body ? JSON.stringify(tc.body) : null,
       }),
     );
     await testDisabled(
       new Request(tc.path, {
         method: tc.method,
-        headers: createAuthAPIHeaders(TEST_API_KEY),
+        headers: createAPIHeaders(TEST_API_KEY),
         body: tc.body ? JSON.stringify(tc.body) : null,
       }),
     );
