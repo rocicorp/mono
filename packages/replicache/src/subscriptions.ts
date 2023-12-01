@@ -358,7 +358,7 @@ export interface SubscribeOptions<R> {
    * body function has changed. If not provided a JSON deep equality check is
    * used.
    */
-  isEqual?: (a: R, b: R) => boolean;
+  isEqual?: ((a: R, b: R) => boolean) | undefined;
 }
 
 type UnknownSubscription = Subscription<unknown>;
