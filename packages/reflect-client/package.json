@@ -34,7 +34,7 @@
     "esbuild": "^0.19.4",
     "reflect-protocol": "0.0.0",
     "reflect-shared": "0.0.0",
-    "replicache": "14.0.1",
+    "replicache": "14.0.2",
     "playwright": "^1.39.0",
     "rollup": "^3.24.0",
     "shared": "0.0.0",
