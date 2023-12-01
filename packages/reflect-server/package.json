@@ -30,7 +30,7 @@
     "esbuild": "^0.19.4",
     "esbuild-plugin-polyfill-node": "^0.3.0",
     "jest-environment-miniflare": "^2.11.0",
-    "miniflare": "^3.20230717.0",
+    "miniflare": "^3.20231030.2",
     "reflect-protocol": "0.0.0",
     "reflect-shared": "0.0.0",
     "replicache": "14.0.2",
