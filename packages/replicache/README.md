@@ -1,21 +1,5 @@
 # Cutting a release
 
-## Build the code
-
-First make double-check the current build has passed tests on GitHub.
-
-Then:
-
-```bash
-git checkout main
-git pull
-git branch -D release
-git checkout -b release HEAD
-npm install
-npm run build
-npm run test
-```
-
 ## Decide what the new version should be
 
 First look for API changes. Download the last release and compare the .d.ts files:
@@ -44,60 +28,34 @@ Build a list of all changes that affect Replicache. This will become the release
 - If there are any new (non-breaking) features, then this needs to be a new minor version.
 - Otherwise, if there are only non-breaking bugfixes, it's a patch.
 
-Finally update the version:
+## Get a clean checkout
 
 ```bash
-cd packages/replicache
-npm version major # or minor or patch v12.0.0-beta.0
-cd -
+rm -rf /tmp/release
+mkdir /tmp/release
+cd /tmp/release
+git clone --depth=1 git@github.com:rocicorp/mono.git
+cd mono
+npm install
+```
+
+## Bump the version
+
+```bash
+vim packages/replicache/package.json
+# Must be done in root of mono checkout
+npm install
 npx syncpack fix-mismatches
-# Ensure all fixed, else fix manually
-npx syncpack
-# make sure package-lock.json is also up to date
 npm install
 git commit -a -m 'chore(replicache): Bump version to v$NEW_VERSION'
 ```
 
-## Manual Testing
-
-To test that a release works before creating the release we use a tarball dependency.
+## Publish a canary
 
 ```bash
 cd packages/replicache
-npm pack
+npm publish --tag=canary
 ```
-
-### npx replicache get-license
-
-Test that the `get-license` script still works:
-
-```bash
-mv replicache-<version>.tgz /tmp/
-cd /tmp/
-npx replicache-<version>.tgz get-license
-```
-
-Go through the flow and ensure you get a license.
-
-### Todo Samples
-
-Check out each of the [todo samples](https://trunk.doc.replicache.dev/examples/todo). Manually add the tarball:
-
-```bash
-npm add /tmp/replicache-<version>.tgz
-```
-
-Then run the app and ensure it works properly.
-
-### Repliear Sample
-
-Check out [rocicorp/repliear](https://github.com/rocicorp/repliear)
-
-Same as todo.
-
-### BYOB Guide
-
-Walk through [the integration guide](https://trunk.doc.replicache.dev/byob/intro) and make sure things still work.
 
 ## Tag the Release
 
@@ -105,12 +63,58 @@ We tag the release _on the branch_. This is important because we only want to
 tag the code we just tested above, not any other code that may have landed on
 main in the meantime.
 
-```
-cd <mono-root>
-# Make sure you're still on the release branch
+```bash
+# From temp dir we published from above
 git tag replicache/v$NEW_VERSION
 git push origin --tags
 ```
+
+## Merge the Release
+
+```bash
+# From your main checkout (not temp dir)
+git fetch -t
+git merge replicache/v$NEW_VERSION
+git push origin main
+```
+
+## Manual Testing
+
+### npx replicache get-license
+
+Test that the `get-license` script still works:
+
+```bash
+npx replicache@canary get-license
+```
+
+Go through the flow and ensure you get a license.
+
+### Todo Samples
+
+Check out each of the [todo samples](https://trunk.doc.replicache.dev/examples/todo). Install the canary version:
+
+```bash
+npm add replicache@canary
+```
+
+Then run the app and ensure it works properly.
+
+Push a PR (but don't land yet) that update to new version.
+
+### Repliear Sample
+
+Check out [rocicorp/repliear](https://github.com/rocicorp/repliear)
+
+Same as todo.
+
+### Hello Replicache
+
+Go through https://doc.replicache.dev/tutorial and test still works / make any updates necessary
+
+### BYOB Guide
+
+Walk through [the integration guide](https://trunk.doc.replicache.dev/byob/intro) and make sure things still work.
 
 ## Update the peer libraries for compat with the new Replicache
 
@@ -118,8 +122,15 @@ If the major version changed, then update the following packages that have peerD
 
 - `replicache-nextjs`
 - `rails`
+- `replicache-transaction`
 
-## Publish the Release
+## Finish Release Notes
+
+Finalize the release notes you started earlier
+
+## Push and test all the sample apps
+
+## Switch the Release to Latest
 
 ```
 # note: this will publish the release to the "latest" tag, which means it's what
@@ -150,23 +161,6 @@ git push origin rocicorp-replicache
 npm publish
 ```
 
-## Merge release to main
-
-```bash
-git checkout main
-git pull
-git branch -D release
-git checkout -b release main
-git merge replicache/v$NEW_VERSION
-git commit -a -m 'Merge replicache/$NEW_VERSION'
-git push origin release
-```
-
-If there were no changes on main while the release was happening,
-this will be a fast-forward. Otherwise it will be a true merge.
-
-Send a PR for this and land as normal.
-
 ## Release docs
 
 The docs are built from the `docs` branch so we need to rebase that to get it
@@ -184,18 +178,6 @@ git push origin docs
 **Note:** It's likely that when you `git push origin docs` above, you'll get a conflict error. This is expected if there have been any cherry-picks onto this branch as would happen if somebody "spruced" (below). Check that all the new commits on this docs branch since the last release are present in `origin/main`. To do this, for each such commit, there should be a message `Cherry-picked from <original-hash>` in the commit message. This message is added by the "spruce" procedure. Look for each such `<original-hash>` in `origin/main`. If all such commits on `docs` are present in `origin/main` then you can force the push with `git push origin docs --force`. If there is a commit on this branch which is missing from `origin/main` then somebody edited directly on this branch and it should be investigated.
 
 **TODO:** We should write a script `release-docs.sh` to automate the above.
-
-## Push updates to the sample apps that update their dependency on Replicache
-
-- replicache-todo
-- repliear
-- replidraw{-do}
-
-## Write Release Notes
-
-Our release notes are now blog posts.
-
-TODO: Document how to do this.
 
 ---
 

@@ -46,14 +46,14 @@ export default function Home() {
   const messages = useSubscribe(
     rep,
     async tx => {
-      const list = (await tx
-        .scan({prefix: 'message/'})
+      const list = await tx
+        .scan<Message>({prefix: 'message/'})
         .entries()
-        .toArray()) as [string, Message][];
+        .toArray();
       list.sort(([, {order: a}], [, {order: b}]) => a - b);
       return list;
     },
-    [],
+    {default: []},
   );
 
   const usernameRef = useRef<HTMLInputElement>();
@@ -75,7 +75,7 @@ export default function Home() {
   );
 }
 
-function MessageList({messages}) {
+function MessageList({messages}: {messages: (readonly [string, Message])[]}) {
   return messages.map(([k, v]) => {
     return (
       <div key={k}>
