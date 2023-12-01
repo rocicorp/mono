@@ -7,7 +7,7 @@ describe('vars', () => {
       extractVars({
         roomDO: {},
         authDO: {},
-        ['REFLECT_AUTH_API_KEY']: 'ignore me',
+        ['REFLECT_API_KEY']: 'ignore me',
         ['REFLECT_VAR_FOO']: 'bar',
         ['REFLECT_VAR_BAR']: 'boom',
       }),
@@ -21,7 +21,7 @@ describe('vars', () => {
     const vars = extractVars({
       roomDO: {},
       authDO: {},
-      ['REFLECT_AUTH_API_KEY']: 'ignore me',
+      ['REFLECT_API_KEY']: 'ignore me',
       ['REFLECT_VAR_foo']: 'bar',
       ['REFLECT_VAR_bar']: 'boom',
     });
@@ -50,7 +50,7 @@ describe('vars', () => {
       extractVars({
         roomDO: {},
         authDO: {},
-        ['REFLECT_AUTH_API_KEY']: 'ignore me',
+        ['REFLECT_API_KEY']: 'ignore me',
         ['REFLECT_VAR_FOO']: 'bar',
         ['REFLECT_VAR_BAR']: 2,
       });

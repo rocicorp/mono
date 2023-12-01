@@ -63,7 +63,7 @@ export async function startDevServer(
       },
     ],
     bindings: {
-      ['REFLECT_AUTH_API_KEY']: nanoid(),
+      ['REFLECT_API_KEY']: nanoid(),
       ...devBindings,
     },
 

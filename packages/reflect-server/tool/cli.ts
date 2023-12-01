@@ -212,7 +212,7 @@ async function jsonFetchWithAuthApiKey(url: string, apiToken: string) {
   const resp = await fetch(url, {
     headers: {
       // eslint-disable-next-line @typescript-eslint/naming-convention
-      'x-reflect-auth-api-key': `${apiToken}`,
+      'x-reflect-api-key': `${apiToken}`,
     },
   });
   if (!resp.ok) {

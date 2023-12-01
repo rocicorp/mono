@@ -15,7 +15,7 @@ import {
 import {LOG_LOGS_PATH, REPORT_METRICS_PATH} from './paths.js';
 import {BaseWorkerEnv, createWorker} from './worker.js';
 
-const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
+const TEST_API_KEY = 'TEST_REFLECT_API_KEY_TEST';
 
 function createTestFixture(
   options: {
@@ -50,7 +50,7 @@ function createTestFixture(
     },
   };
   if (authApiKeyDefined) {
-    testEnv.REFLECT_AUTH_API_KEY = TEST_AUTH_API_KEY;
+    testEnv.REFLECT_API_KEY = TEST_API_KEY;
   }
   if (disable !== undefined) {
     testEnv.DISABLE = disable;
@@ -257,14 +257,14 @@ test('worker forwards authDO api requests to authDO', async () => {
     await testForwardedToAuthDO(
       new Request(tc.path, {
         method: tc.method,
-        headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+        headers: createAuthAPIHeaders(TEST_API_KEY),
         body: tc.body ? JSON.stringify(tc.body) : null,
       }),
     );
     await testDisabled(
       new Request(tc.path, {
         method: tc.method,
-        headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+        headers: createAuthAPIHeaders(TEST_API_KEY),
         body: tc.body ? JSON.stringify(tc.body) : null,
       }),
     );

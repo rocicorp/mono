@@ -2,7 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import type {MaybePromise} from 'replicache';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
-import {AUTH_API_KEY_HEADER_NAME} from './auth-api-headers.js';
+import {API_KEY_HEADER_NAME} from './auth-api-headers.js';
 import {createUnauthorizedResponse} from './create-unauthorized-response.js';
 
 /**
@@ -122,7 +122,7 @@ export function checkAuthAPIKey(
     throw new Error('Internal error: expected auth api key cannot be empty');
   }
 
-  const authHeader = request.headers.get(AUTH_API_KEY_HEADER_NAME);
+  const authHeader = request.headers.get(API_KEY_HEADER_NAME);
   if (authHeader !== required) {
     return createUnauthorizedResponse();
   }

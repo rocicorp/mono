@@ -323,7 +323,7 @@ export class BaseAuthDO implements DurableObject {
     const closeWithErrorLocal = (errorKind: TailErrorKind, msg: string) =>
       createWSAndCloseWithTailError(lc, request, errorKind, msg);
 
-    // For tail we send the REFLECT_AUTH_API_KEY in the Sec-WebSocket-Protocol
+    // For tail we send the REFLECT_API_KEY in the Sec-WebSocket-Protocol
     // header and it is always required
     const authApiKey = request.headers.get(SEC_WEBSOCKET_PROTOCOL_HEADER);
     if (authApiKey !== this.#authApiKey) {

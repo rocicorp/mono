@@ -22,10 +22,7 @@ import {DurableStorage} from '../storage/durable-storage.js';
 import {encodeHeaderValue} from '../util/headers.js';
 import {sleep} from '../util/sleep.js';
 import {Mocket, TestLogSink, mockWebSocketPair} from '../util/test-utils.js';
-import {
-  AUTH_API_KEY_HEADER_NAME,
-  createAuthAPIHeaders,
-} from './auth-api-headers.js';
+import {API_KEY_HEADER_NAME, createAuthAPIHeaders} from './auth-api-headers.js';
 import {TestAuthDO} from './auth-do-test-util.js';
 import {
   ALARM_INTERVAL,
@@ -59,7 +56,7 @@ import {
   type RoomRecord,
 } from './rooms.js';
 
-const TEST_AUTH_API_KEY = 'TEST_REFLECT_AUTH_API_KEY_TEST';
+const TEST_API_KEY = 'TEST_REFLECT_API_KEY_TEST';
 const {authDO} = getMiniflareBindings();
 const authDOID = authDO.idFromName('auth');
 let storage: DurableObjectStorage;
@@ -113,7 +110,7 @@ function createCreateRoomTestFixture({
 }: {testRoomID?: string | undefined} = {}) {
   const testRequest = newCreateRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
 
@@ -165,7 +162,7 @@ test("createRoom creates a room and doesn't allow it to be re-created", async ()
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -198,7 +195,7 @@ test('createRoom allows slashes in roomIDs', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -206,7 +203,7 @@ test('createRoom allows slashes in roomIDs', async () => {
 
   const testRequest = newCreateRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   let response = await authDO.fetch(testRequest);
@@ -223,7 +220,7 @@ test('createRoom allows slashes in roomIDs', async () => {
   ]);
 
   response = await authDO.fetch(
-    newRoomStatusRequest('https://teset.roci.dev/', TEST_AUTH_API_KEY, '/'),
+    newRoomStatusRequest('https://teset.roci.dev/', TEST_API_KEY, '/'),
   );
   expect(await response.json()).toEqual({status: 'open'});
 });
@@ -235,7 +232,7 @@ test('createRoom requires roomIDs to not contain weird characters', async () => 
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -245,7 +242,7 @@ test('createRoom requires roomIDs to not contain weird characters', async () => 
   for (const roomID of roomIDs) {
     const testRequest = newCreateRoomRequest(
       'https://test.roci.dev',
-      TEST_AUTH_API_KEY,
+      TEST_API_KEY,
       roomID,
     );
     const response = await authDO.fetch(testRequest);
@@ -298,7 +295,7 @@ test('createRoom returns 500 if roomDO createRoom fails', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -321,7 +318,7 @@ test('createRoom sets jurisdiction if requested', async () => {
 
   const testRequest = newCreateRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
     'eu',
   );
@@ -330,7 +327,7 @@ test('createRoom sets jurisdiction if requested', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -364,7 +361,7 @@ test('migrate room creates a room record', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -372,7 +369,7 @@ test('migrate room creates a room record', async () => {
 
   const migrateRoomRequest = newMigrateRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const response = await authDO.fetch(migrateRoomRequest);
@@ -391,7 +388,7 @@ test('migrate room enforces roomID format', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -399,7 +396,7 @@ test('migrate room enforces roomID format', async () => {
 
   const migrateRoomRequest = newMigrateRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     'not allowed! ',
   );
   const response = await authDO.fetch(migrateRoomRequest);
@@ -447,7 +444,7 @@ describe('401s if wrong auth api key', () => {
         roomDO: testRoomDO,
         state,
         authHandler: () => Promise.reject('should not be called'),
-        authApiKey: TEST_AUTH_API_KEY,
+        authApiKey: TEST_API_KEY,
         logSink: new TestLogSink(),
         logLevel: 'debug',
         env: {foo: 'bar'},
@@ -502,7 +499,7 @@ test('400 bad body requests', async () => {
       roomDO: testRoomDO,
       state,
       authHandler: () => Promise.reject('should not be called'),
-      authApiKey: TEST_AUTH_API_KEY,
+      authApiKey: TEST_API_KEY,
       logSink: new TestLogSink(),
       logLevel: 'debug',
       env: {foo: 'bar'},
@@ -516,7 +513,7 @@ function createBadBodyRequest(path: string, body: BodyInit | null): Request {
   const url = new URL(path, 'https://roci.dev');
   return new Request(url.toString(), {
     method: 'post',
-    headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+    headers: createAuthAPIHeaders(TEST_API_KEY),
     body,
   });
 }
@@ -528,7 +525,7 @@ test('closeRoom closes an open room', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -537,7 +534,7 @@ test('closeRoom closes an open room', async () => {
 
   const closeRoomRequest = newCloseRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const closeRoomResponse = await authDO.fetch(closeRoomRequest);
@@ -545,7 +542,7 @@ test('closeRoom closes an open room', async () => {
 
   const statusRequest = newRoomStatusRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const statusResponse = await authDO.fetch(statusRequest);
@@ -562,7 +559,7 @@ test('closeRoom 404s on non-existent room', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -571,7 +568,7 @@ test('closeRoom 404s on non-existent room', async () => {
 
   const closeRoomRequest = newCloseRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const closeRoomResponse = await authDO.fetch(closeRoomRequest);
@@ -585,7 +582,7 @@ test('calling closeRoom on closed room is ok', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -594,7 +591,7 @@ test('calling closeRoom on closed room is ok', async () => {
 
   const closeRoomRequest = newCloseRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const closeRoomResponse = await authDO.fetch(closeRoomRequest);
@@ -628,7 +625,7 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -637,7 +634,7 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
 
   const closeRoomRequest = newCloseRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const closeRoomResponse = await authDO.fetch(closeRoomRequest);
@@ -645,7 +642,7 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
 
   const deleteRoomRequest = newDeleteRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const deleteRoomResponse = await authDO.fetch(deleteRoomRequest);
@@ -655,7 +652,7 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
 
   const statusRequest = newRoomStatusRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const statusResponse = await authDO.fetch(statusRequest);
@@ -672,7 +669,7 @@ test('deleteRoom requires room to be closed', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -681,7 +678,7 @@ test('deleteRoom requires room to be closed', async () => {
 
   const deleteRoomRequest = newDeleteRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const deleteRoomResponse = await authDO.fetch(deleteRoomRequest);
@@ -689,7 +686,7 @@ test('deleteRoom requires room to be closed', async () => {
 
   const statusRequest = newRoomStatusRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const statusResponse = await authDO.fetch(statusRequest);
@@ -712,7 +709,7 @@ test('deleteRoom does not delete if auth api key is incorrect', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -724,7 +721,7 @@ test('deleteRoom does not delete if auth api key is incorrect', async () => {
 
   const statusRequest = newRoomStatusRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const statusResponse = await authDO.fetch(statusRequest);
@@ -741,7 +738,7 @@ test('forget room forgets an existing room', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -750,7 +747,7 @@ test('forget room forgets an existing room', async () => {
 
   const forgetRoomRequest = newForgetRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const forgetRoomResponse = await authDO.fetch(forgetRoomRequest);
@@ -758,7 +755,7 @@ test('forget room forgets an existing room', async () => {
 
   const statusRequest = newRoomStatusRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const statusResponse = await authDO.fetch(statusRequest);
@@ -775,7 +772,7 @@ test('foget room 404s on non-existent room', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -784,7 +781,7 @@ test('foget room 404s on non-existent room', async () => {
 
   const forgetRoomRequest = newForgetRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const forgetRoomResponse = await authDO.fetch(forgetRoomRequest);
@@ -799,7 +796,7 @@ test('roomStatusByRoomID returns status for a room that exists', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -810,7 +807,7 @@ test('roomStatusByRoomID returns status for a room that exists', async () => {
 
   const statusRequest = newRoomStatusRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const statusResponse = await authDO.fetch(statusRequest);
@@ -827,7 +824,7 @@ test('roomStatusByRoomID returns unknown for a room that does not exist', async 
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -835,7 +832,7 @@ test('roomStatusByRoomID returns unknown for a room that does not exist', async 
 
   const statusRequest = newRoomStatusRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     'no-such-room',
   );
   const statusResponse = await authDO.fetch(statusRequest);
@@ -853,7 +850,7 @@ test('roomStatusByRoomID requires authApiKey', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -872,7 +869,7 @@ test('roomStatusByRoomID requires authApiKey', async () => {
 function newRoomRecordsRequest() {
   return new Request(`https://test.roci.dev${AUTH_ROUTES.roomRecords}`, {
     method: 'get',
-    headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+    headers: createAuthAPIHeaders(TEST_API_KEY),
   });
 }
 
@@ -883,7 +880,7 @@ test('roomRecords returns empty array if no rooms exist', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -916,7 +913,7 @@ test('roomRecords returns rooms that exists', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -944,7 +941,7 @@ test('roomRecords requires authApiKey', async () => {
     roomDO: testRoomDO,
     state,
     authHandler: () => Promise.reject('should not be called'),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -1103,7 +1100,7 @@ describe("connect will implicitly create a room that doesn't exist", () => {
           expect(env).toEqual({foo: 'bar'});
           return {userID: testUserID};
         },
-        authApiKey: TEST_AUTH_API_KEY,
+        authApiKey: TEST_API_KEY,
         logSink,
         logLevel: 'debug',
         env: {foo: 'bar'},
@@ -1147,7 +1144,7 @@ test('connect calls authHandler and sends resolved AuthData in header to Room DO
       expect(env).toEqual({bar: 'foo'});
       return {userID: testUserID};
     },
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink,
     logLevel: 'debug',
     env: {bar: 'foo'},
@@ -1188,7 +1185,7 @@ describe('connect with undefined authHandler sends AuthData with url param userI
         roomDO: testRoomDO,
         state,
         authHandler: undefined,
-        authApiKey: TEST_AUTH_API_KEY,
+        authApiKey: TEST_API_KEY,
         logSink,
         logLevel: 'debug',
         env: {foo: 'bar'},
@@ -1226,7 +1223,7 @@ test('connect wont connect to a room that is closed', async () => {
     state,
     // eslint-disable-next-line require-await
     authHandler: async () => ({userID: testUserID}),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink,
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -1235,7 +1232,7 @@ test('connect wont connect to a room that is closed', async () => {
 
   const closeRoomRequest = newCloseRoomRequest(
     'https://test.roci.dev',
-    TEST_AUTH_API_KEY,
+    TEST_API_KEY,
     testRoomID,
   );
   const closeRoomResponse = await authDO.fetch(closeRoomRequest);
@@ -1275,7 +1272,7 @@ test('connect percent escapes components of the connection key', async () => {
       expect(env).toEqual({boo: 'far'});
       return {userID: testUserID};
     },
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {boo: 'far'},
@@ -1333,7 +1330,7 @@ describe('connect pipes 401 over ws without calling Room DO if', () => {
         roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
         state,
         authHandler,
-        authApiKey: TEST_AUTH_API_KEY,
+        authApiKey: TEST_API_KEY,
         logSink: new TestLogSink(),
         logLevel: 'debug',
         env: {food: 'bard'},
@@ -1437,7 +1434,7 @@ describe('connect sends InvalidConnectionRequest over ws without calling Room DO
         // eslint-disable-next-line require-await
         authHandler: () =>
           Promise.reject(new Error('Unexpected call to authHandler')),
-        authApiKey: TEST_AUTH_API_KEY,
+        authApiKey: TEST_API_KEY,
         logSink: new TestLogSink(),
         logLevel: 'debug',
         env: {foo: 'bar'},
@@ -1497,7 +1494,7 @@ test('connect sends over InvalidConnectionRequest over ws without calling Room D
       expect(env).toEqual({foo: 'bar'});
       return {userID: ''};
     },
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -1546,7 +1543,7 @@ describe('connect sends VersionNotSupported error over ws if path is for unsuppo
         // eslint-disable-next-line require-await
         authHandler: () =>
           Promise.reject(new Error('Unexpected call to authHandler')),
-        authApiKey: TEST_AUTH_API_KEY,
+        authApiKey: TEST_API_KEY,
         logSink: new TestLogSink(),
         logLevel: 'debug',
         env: {foo: 'bar'},
@@ -1580,7 +1577,7 @@ test('authInvalidateForUser when requests to roomDOs are successful', async () =
     `https://test.roci.dev/api/auth/v0/invalidateForUser`,
     {
       method: 'post',
-      headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+      headers: createAuthAPIHeaders(TEST_API_KEY),
       body: JSON.stringify({
         userID: testUserID,
       }),
@@ -1620,7 +1617,7 @@ test('authInvalidateForUser when requests to roomDOs are successful', async () =
     state,
     authHandler: () =>
       Promise.reject(new Error('Unexpected call to authHandler')),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink,
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -1644,7 +1641,7 @@ test('authInvalidateForUser when connection ids have chars that need to be perce
     `https://test.roci.dev/api/auth/v0/invalidateForUser`,
     {
       method: 'post',
-      headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+      headers: createAuthAPIHeaders(TEST_API_KEY),
       body: JSON.stringify({
         userID: testUserID,
       }),
@@ -1698,7 +1695,7 @@ test('authInvalidateForUser when connection ids have chars that need to be perce
     // eslint-disable-next-line require-await
     authHandler: () =>
       Promise.reject(new Error('Unexpected call to authHandler')),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink,
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -1720,7 +1717,7 @@ test('authInvalidateForUser when any request to roomDOs returns error response',
     `https://test.roci.dev/api/auth/v0/invalidateForUser`,
     {
       method: 'post',
-      headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+      headers: createAuthAPIHeaders(TEST_API_KEY),
       body: JSON.stringify({
         userID: testUserID,
       }),
@@ -1765,7 +1762,7 @@ test('authInvalidateForUser when any request to roomDOs returns error response',
     state,
     authHandler: () =>
       Promise.reject(new Error('Unexpected call to authHandler')),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink,
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -1792,7 +1789,7 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
     `https://test.roci.dev/api/auth/v0/invalidateForRoom`,
     {
       method: 'post',
-      headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+      headers: createAuthAPIHeaders(TEST_API_KEY),
       body: JSON.stringify({
         roomID: testRoomID,
       }),
@@ -1823,7 +1820,7 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
     state,
     authHandler: () =>
       Promise.reject(new Error('Unexpected call to authHandler')),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -1847,7 +1844,7 @@ test('authInvalidateForRoom when roomID has no open connections no invalidate re
     `https://test.roci.dev/api/auth/v0/invalidateForRoom`,
     {
       method: 'post',
-      headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+      headers: createAuthAPIHeaders(TEST_API_KEY),
       body: JSON.stringify({
         roomID: testRoomID,
       }),
@@ -1873,7 +1870,7 @@ test('authInvalidateForRoom when roomID has no open connections no invalidate re
     state,
     authHandler: () =>
       Promise.reject(new Error('Unexpected call to authHandler')),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -1935,7 +1932,7 @@ async function connectAndTestThatRoomGotCreated(
 async function createRoom(
   authDO: BaseAuthDO,
   roomID: string,
-  authApiKey = TEST_AUTH_API_KEY,
+  authApiKey = TEST_API_KEY,
 ) {
   const createRoomRequest = newCreateRoomRequest(
     'https://test.roci.dev/',
@@ -1952,7 +1949,7 @@ test('authInvalidateForRoom when request to roomDO returns error response', asyn
     `https://test.roci.dev/api/auth/v0/invalidateForRoom`,
     {
       method: 'post',
-      headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+      headers: createAuthAPIHeaders(TEST_API_KEY),
       body: JSON.stringify({
         roomID: testRoomID,
       }),
@@ -1988,7 +1985,7 @@ test('authInvalidateForRoom when request to roomDO returns error response', asyn
     state,
     authHandler: () =>
       Promise.reject(new Error('Unexpected call to authHandler')),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -2013,7 +2010,7 @@ test('authInvalidateAll when requests to roomDOs are successful', async () => {
   const testRequest = new Request(
     `https://test.roci.dev/api/auth/v0/invalidateAll`,
     {
-      headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+      headers: createAuthAPIHeaders(TEST_API_KEY),
       method: 'post',
       body: '',
     },
@@ -2048,7 +2045,7 @@ test('authInvalidateAll when requests to roomDOs are successful', async () => {
     state,
     authHandler: () =>
       Promise.reject(new Error('Unexpected call to authHandler')),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -2072,8 +2069,8 @@ async function expectForwardedAuthInvalidateRequest(
 ) {
   expect(forwardedRequest.url).toEqual(originalRequest.url);
   expect(forwardedRequest.method).toEqual(originalRequest.method);
-  expect(forwardedRequest.headers.get(AUTH_API_KEY_HEADER_NAME)).toEqual(
-    originalRequest.headers.get(AUTH_API_KEY_HEADER_NAME),
+  expect(forwardedRequest.headers.get(API_KEY_HEADER_NAME)).toEqual(
+    originalRequest.headers.get(API_KEY_HEADER_NAME),
   );
   expect(await forwardedRequest.text()).toEqual(
     await originalRequest.clone().text(),
@@ -2085,7 +2082,7 @@ test('authInvalidateAll when any request to roomDOs returns error response', asy
   const testRequest = new Request(
     `https://test.roci.dev/api/auth/v0/invalidateAll`,
     {
-      headers: createAuthAPIHeaders(TEST_AUTH_API_KEY),
+      headers: createAuthAPIHeaders(TEST_API_KEY),
       method: 'post',
       body: '',
     },
@@ -2125,7 +2122,7 @@ test('authInvalidateAll when any request to roomDOs returns error response', asy
     state,
     authHandler: () =>
       Promise.reject(new Error('Unexpected call to authHandler')),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -2206,7 +2203,7 @@ async function createRevalidateConnectionsTestFixture({
     state,
     authHandler: () =>
       Promise.reject(new Error('Unexpected call to authHandler')),
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink: new TestLogSink(),
     logLevel: 'debug',
     env: {foo: 'bar'},
@@ -2372,11 +2369,7 @@ describe('tail', () => {
       const [, server] = mockWebSocketPair();
       const {testRoomID, testRequest, testRoomDO, socketFromRoomDO} =
         createTailTestFixture(options);
-      const {
-        testApiToken,
-        expectedError,
-        authApiKey = TEST_AUTH_API_KEY,
-      } = options;
+      const {testApiToken, expectedError, authApiKey = TEST_API_KEY} = options;
       const logSink = new TestLogSink();
       const authDO = new TestAuthDO({
         roomDO: testRoomDO,
@@ -2411,7 +2404,7 @@ describe('tail', () => {
     });
   };
 
-  t('basic', {testApiToken: TEST_AUTH_API_KEY, testRoomID: 'testRoomID1'});
+  t('basic', {testApiToken: TEST_API_KEY, testRoomID: 'testRoomID1'});
   t('without api token', {
     testApiToken: null,
     testRoomID: 'testRoomID1',
@@ -2440,7 +2433,7 @@ describe('tail', () => {
     },
   });
   t('missing room id', {
-    testApiToken: TEST_AUTH_API_KEY,
+    testApiToken: TEST_API_KEY,
     testRoomID: null,
     expectedError: {
       type: 'error',
@@ -2464,7 +2457,7 @@ test('tail not a websocket', async () => {
   const authDO = new TestAuthDO({
     roomDO: testRoomDO,
     state,
-    authApiKey: TEST_AUTH_API_KEY,
+    authApiKey: TEST_API_KEY,
     logSink,
     logLevel: 'debug',
     env: {foo: 'bar'},

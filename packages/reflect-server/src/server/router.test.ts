@@ -180,7 +180,7 @@ describe('checkAuthAPIKey', () => {
       name: 'required key cannot be empty even if actual is the same empty key',
       required: '',
       headers: {
-        ['x-reflect-auth-api-key']: '',
+        ['x-reflect-api-key']: '',
       },
       expectedError: {
         error: 'Error: Internal error: expected auth api key cannot be empty',
@@ -190,7 +190,7 @@ describe('checkAuthAPIKey', () => {
       name: 'required key cannot be empty, even if actual key is provided',
       required: '',
       headers: {
-        ['x-reflect-auth-api-key']: 'foo',
+        ['x-reflect-api-key']: 'foo',
       },
       expectedError: {
         error: 'Error: Internal error: expected auth api key cannot be empty',
@@ -206,7 +206,7 @@ describe('checkAuthAPIKey', () => {
       name: 'empty api key sent',
       required: 'foo',
       headers: {
-        ['x-reflect-auth-api-key']: '',
+        ['x-reflect-api-key']: '',
       },
       expectedError: {result: {text: 'Unauthorized', status: 401}},
     },
@@ -214,7 +214,7 @@ describe('checkAuthAPIKey', () => {
       name: 'wrong api key sent',
       required: 'foo',
       headers: {
-        ['x-reflect-auth-api-key']: 'bar',
+        ['x-reflect-api-key']: 'bar',
       },
       expectedError: {result: {text: 'Unauthorized', status: 401}},
     },
@@ -222,7 +222,7 @@ describe('checkAuthAPIKey', () => {
       name: 'correct api key sent',
       required: 'foo',
       headers: {
-        ['x-reflect-auth-api-key']: 'foo',
+        ['x-reflect-api-key']: 'foo',
       },
       expectedError: undefined,
     },
@@ -311,7 +311,7 @@ test('requireAuthAPIKey', async () => {
   for (const c of cases) {
     const headers: Record<string, string> = {};
     if (c.actual !== null) {
-      headers['x-reflect-auth-api-key'] = c.actual;
+      headers['x-reflect-api-key'] = c.actual;
     }
 
     let result: Case['expected'] | undefined = undefined;

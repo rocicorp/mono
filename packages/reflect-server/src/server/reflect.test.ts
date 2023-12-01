@@ -31,7 +31,7 @@ test('Make sure makeOptions is called every time DO is constructed or worker fet
   expect(envs.length).toEqual(0);
 
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  const env1 = {REFLECT_AUTH_API_KEY: '1'} as ReflectServerBaseEnv;
+  const env1 = {REFLECT_API_KEY: '1'} as ReflectServerBaseEnv;
   const authDOID = authDO.idFromName('auth');
   new AuthDO(
     new TestDurableObjectState(
@@ -92,7 +92,7 @@ test('Make sure makeOptions is called every time DO is constructed or worker fet
   expect(envs[5]).toBe(env1);
 
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  const env2 = {REFLECT_AUTH_API_KEY: '2'} as ReflectServerBaseEnv;
+  const env2 = {REFLECT_API_KEY: '2'} as ReflectServerBaseEnv;
   new AuthDO(
     new TestDurableObjectState(
       authDOID,
