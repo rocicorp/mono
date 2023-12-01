@@ -24,19 +24,19 @@ To create a subscription, use the `useSubscribe()` React hook. You can do multip
 Let's use a subscription to implement our chat UI. Replace `index.tsx` with the below code:
 
 ```tsx
-import React, { FormEvent, useRef } from "react";
-import { Replicache, TEST_LICENSE_KEY, WriteTransaction } from "replicache";
-import { useSubscribe } from "replicache-react";
-import { nanoid } from "nanoid";
-import Pusher from "pusher-js";
-import { Message, MessageWithID } from "../types";
+import React, {FormEvent, useRef} from 'react';
+import {Replicache, TEST_LICENSE_KEY, WriteTransaction} from 'replicache';
+import {useSubscribe} from 'replicache-react';
+import {nanoid} from 'nanoid';
+import Pusher from 'pusher-js';
+import {Message, MessageWithID} from '../types';
 
 const rep = process.browser
   ? new Replicache({
-      name: "chat-user-id",
+      name: 'chat-user-id',
       licenseKey: TEST_LICENSE_KEY,
-      pushURL: "/api/replicache-push",
-      pullURL: "/api/replicache-pull",
+      pushURL: '/api/replicache-push',
+      pullURL: '/api/replicache-pull',
     })
   : null;
 
@@ -45,21 +45,21 @@ listen();
 export default function Home() {
   const messages = useSubscribe(
     rep,
-    async (tx) => {
+    async tx => {
       const list = await tx
-        .scan<Message>({ prefix: "message/" })
+        .scan<Message>({prefix: 'message/'})
         .entries()
         .toArray();
-      list.sort(([, { order: a }], [, { order: b }]) => a - b);
+      list.sort(([, {order: a}], [, {order: b}]) => a - b);
       return list;
     },
-    { default: [] }
+    {default: []},
   );
 
   const usernameRef = useRef<HTMLInputElement>();
   const contentRef = useRef<HTMLInputElement>();
 
-  const onSubmit = (e) => {
+  const onSubmit = e => {
     e.preventDefault();
     // TODO: Create message
   };
@@ -67,7 +67,7 @@ export default function Home() {
   return (
     <div>
       <form onSubmit={onSubmit}>
-        <input ref={usernameRef} required /> says:{" "}
+        <input ref={usernameRef} required /> says:{' '}
         <input ref={contentRef} required /> <input type="submit" />
       </form>
       <MessageList messages={messages} />
@@ -75,11 +75,7 @@ export default function Home() {
   );
 }
 
-function MessageList({
-  messages,
-}: {
-  messages: (readonly [string, Message])[];
-}) {
+function MessageList({messages}: {messages: (readonly [string, Message])[]}) {
   return messages.map(([k, v]) => {
     return (
       <div key={k}>
