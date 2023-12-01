@@ -22,7 +22,10 @@ import {SecretsClientImpl} from './secrets/index.js';
 
 // Initializes firestore et al. (e.g. for subsequent calls to getFirestore())
 initializeApp(appOptions);
-setGlobalOptions({serviceAccount: serviceAccountId});
+setGlobalOptions({
+  serviceAccount: serviceAccountId,
+  concurrency: 32, // https://github.com/rocicorp/mono/issues/1280
+});
 
 // Cache the secrets manager client to amortize connection establishment time.
 // https://cloud.google.com/functions/docs/samples/functions-tips-gcp-apis#functions_tips_gcp_apis-nodejs
