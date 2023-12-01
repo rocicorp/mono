@@ -63,7 +63,7 @@
     "buffer": "^5.7.1",
     "classnames": "^2.3.2",
     "eslint-config-next": "^13.5.4",
-    "miniflare": "^3.20230717.0",
+    "miniflare": "^3.20231030.2",
     "mirror-protocol": "0.0.0",
     "mobx": "^6.9.0",
     "mobx-react": "^7.6.0",
