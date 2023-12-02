@@ -114,13 +114,39 @@ try {
   execute(`git checkout main`);
   execute(`git pull`);
   execute(`git merge ${branchName}`);
-  console.log(`please do the following:`);
-  console.log(`1. cd ${tempDir}`);
-  console.log(
-    '2. Review the head commit with `git show HEAD`. Note: If work has happened on main since this release began, HEAD will be a merge commit. Otherwise it will be a normal commit.',
+  execute(`git push origin main`);
+
+  process.chdir('mirror/mirror-cli');
+  execute(
+    `npm run mirror uploadServer -- --version=${nextCanaryVersion} --channels=canary`,
   );
-  console.log(`3. git push origin main`);
-  console.log(`4. cd -`);
+  execute(
+    `npm run mirror uploadServer -- --version=${nextCanaryVersion} --channels=canary --stack=sandbox`,
+  );
+
+  console.log(``);
+  console.log(``);
+  console.log(`🎉 Success!`);
+  console.log(``);
+  console.log(
+    `* Published @rocicorp/reflect@${nextCanaryVersion} to npm with tag '@canary'.`,
+  );
+  console.log(
+    `* Published @rocicorp/reflect@${nextCanaryVersion} to Mirror with tag '@canary'.`,
+  );
+  console.log(`* Pushed Git tag ${tagName} to origin and merged with main.`);
+  console.log(``);
+  console.log(``);
+  console.log(`Next steps:`);
+  console.log(``);
+  console.log('* Run `git pull` in your checkout to pull the tag.');
+  console.log(
+    '* Test apps by installing @canary npm release. To publish to Mirror, use --reflect-channel=canary.',
+  );
+  console.log(
+    '* When ready, use `npm dist-tags` and `npm run mirror releaseServer` to switch release to main.',
+  );
+  console.log(``);
 } catch (error) {
   console.error(`Error during execution: ${error}`);
   process.exit(1);

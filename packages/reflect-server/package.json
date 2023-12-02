@@ -33,7 +33,7 @@
     "miniflare": "^3.20231030.2",
     "reflect-protocol": "0.0.0",
     "reflect-shared": "0.0.0",
-    "replicache": "14.0.2",
+    "replicache": "14.0.3",
     "rollup": "^3.24.0",
     "shared": "0.0.0",
     "ts-jest": "^29.1.0",

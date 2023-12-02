@@ -1247,7 +1247,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * errors the first error will reject the returned promise. Subsequent errors
    * will not be reflected in the promise.
    */
-  push(now = false): Promise<void> {
+  push({now = false} = {}): Promise<void> {
     return this.#pushConnectionLoop.send(now);
   }
 
@@ -1265,7 +1265,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * errors the first error will reject the returned promise. Subsequent errors
    * will not be reflected in the promise.
    */
-  pull(now = false): Promise<void> {
+  pull({now = false} = {}): Promise<void> {
     return this.#pullConnectionLoop.send(now);
   }
 
