@@ -51,7 +51,7 @@ export interface BaseWorkerEnv {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   DISABLE?: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  REFLECT_AUTH_API_KEY?: string;
+  REFLECT_API_KEY?: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   DATADOG_LOGS_API_KEY?: string;
 }
@@ -208,7 +208,7 @@ const canaryGet = get<WorkerContext, Response>(
 
 function requireAPIKeyMatchesEnv(next: Handler<WorkerContext, Response>) {
   return (ctx: WorkerContext, req: Request) => {
-    const resp = checkAuthAPIKey(ctx.env.REFLECT_AUTH_API_KEY, req);
+    const resp = checkAuthAPIKey(ctx.env.REFLECT_API_KEY, req);
     if (resp) {
       return resp;
     }

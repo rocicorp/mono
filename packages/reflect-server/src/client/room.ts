@@ -1,5 +1,5 @@
 import type {CreateRoomRequest} from 'reflect-protocol';
-import {createAuthAPIHeaders} from '../server/auth-api-headers.js';
+import {createAPIHeaders} from '../server/api-headers.js';
 import {AUTH_ROUTES} from '../server/auth-do.js';
 import {CREATE_ROOM_PATH} from '../server/paths.js';
 import type {RoomStatus} from '../server/rooms.js';
@@ -106,7 +106,7 @@ export function newRoomStatusRequest(
   const url = new URL(path, reflectServerURL);
   return new Request(url.toString(), {
     method: 'get',
-    headers: createAuthAPIHeaders(authApiKey),
+    headers: createAPIHeaders(authApiKey),
   });
 }
 

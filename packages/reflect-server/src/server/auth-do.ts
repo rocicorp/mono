@@ -24,7 +24,7 @@ import {
   createWSAndCloseWithTailError,
 } from '../util/socket.js';
 import {AlarmManager, TimeoutID} from './alarms.js';
-import {createAuthAPIHeaders} from './auth-api-headers.js';
+import {createAPIHeaders} from './api-headers.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
 import type {AuthHandler} from './auth.js';
 import {requireUpgradeHeader, roomNotFoundResponse} from './http-util.js';
@@ -323,7 +323,7 @@ export class BaseAuthDO implements DurableObject {
     const closeWithErrorLocal = (errorKind: TailErrorKind, msg: string) =>
       createWSAndCloseWithTailError(lc, request, errorKind, msg);
 
-    // For tail we send the REFLECT_AUTH_API_KEY in the Sec-WebSocket-Protocol
+    // For tail we send the REFLECT_API_KEY in the Sec-WebSocket-Protocol
     // header and it is always required
     const authApiKey = request.headers.get(SEC_WEBSOCKET_PROTOCOL_HEADER);
     if (authApiKey !== this.#authApiKey) {
@@ -872,7 +872,7 @@ export class BaseAuthDO implements DurableObject {
             `https://unused-reflect-room-do.dev${ROOM_ROUTES.authConnections}`,
             {
               method: 'POST',
-              headers: createAuthAPIHeaders(this.#authApiKey),
+              headers: createAPIHeaders(this.#authApiKey),
             },
           );
           const response = await roomDOFetch(

@@ -1,2 +1,2 @@
 # https://github.com/cloudflare/cloudflare-docs/issues/4770
-REFLECT_AUTH_API_KEY=define-your-api-key
+REFLECT_API_KEY=define-your-api-key
