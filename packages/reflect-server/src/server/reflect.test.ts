@@ -8,6 +8,41 @@ import {
   type ReflectServerBaseEnv,
 } from './reflect.js';
 
+test('Make sure makeOptions only see the env added using reflect env', async () => {
+  type Env = unknown;
+  const envs: Env[] = [];
+  const options = (env: Env): ReflectServerOptions<Record<never, never>> => {
+    envs.push(env);
+    return {
+      mutators: {},
+    };
+  };
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  const {AuthDO} = createReflectServer(options);
+
+  const {authDO, roomDO} = getMiniflareBindings();
+
+  expect(envs.length).toEqual(0);
+
+  const env = {
+    ['REFLECT_API_KEY']: '1',
+    authDO,
+    roomDO,
+    ['REFLECT_VAR_RU']: 'here',
+    ['RANDOM_FOO']: 'bar',
+  };
+  const authDOID = authDO.idFromName('auth');
+  new AuthDO(
+    new TestDurableObjectState(
+      authDOID,
+      await getMiniflareDurableObjectStorage(authDOID),
+    ),
+    env,
+  );
+  expect(envs.length).toEqual(1);
+  expect(envs[0]).toEqual({['RU']: 'here'});
+});
+
 test('Make sure makeOptions is called every time DO is constructed or worker fetch is called', async () => {
   const testLogSink = new TestLogSink();
   type Env = unknown;
@@ -41,7 +76,7 @@ test('Make sure makeOptions is called every time DO is constructed or worker fet
     env1,
   );
   expect(envs.length).toEqual(1);
-  expect(envs[0]).toBe(env1);
+  expect(envs[0]).toEqual({});
   new AuthDO(
     new TestDurableObjectState(
       authDOID,
@@ -50,7 +85,7 @@ test('Make sure makeOptions is called every time DO is constructed or worker fet
     env1,
   );
   expect(envs.length).toEqual(2);
-  expect(envs[1]).toBe(env1);
+  expect(envs[1]).toEqual({});
 
   const roomDOID1 = roomDO.idFromName('room1');
   new RoomDO(
@@ -61,7 +96,7 @@ test('Make sure makeOptions is called every time DO is constructed or worker fet
     env1,
   );
   expect(envs.length).toEqual(3);
-  expect(envs[2]).toBe(env1);
+  expect(envs[2]).toEqual({});
 
   const roomDOID2 = roomDO.idFromName('room2');
   new RoomDO(
@@ -72,7 +107,7 @@ test('Make sure makeOptions is called every time DO is constructed or worker fet
     env1,
   );
   expect(envs.length).toEqual(4);
-  expect(envs[3]).toBe(env1);
+  expect(envs[3]).toEqual({});
 
   assert(worker.fetch);
   await worker.fetch(
@@ -81,7 +116,7 @@ test('Make sure makeOptions is called every time DO is constructed or worker fet
     new TestExecutionContext(),
   );
   expect(envs.length).toEqual(5);
-  expect(envs[4]).toBe(env1);
+  expect(envs[4]).toEqual({});
 
   await worker.fetch(
     new Request('https://reflect.app/unknown'),
@@ -89,10 +124,14 @@ test('Make sure makeOptions is called every time DO is constructed or worker fet
     new TestExecutionContext(),
   );
   expect(envs.length).toEqual(6);
-  expect(envs[5]).toBe(env1);
+  expect(envs[5]).toEqual({});
 
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  const env2 = {REFLECT_API_KEY: '2'} as ReflectServerBaseEnv;
+  const env2 = {
+    ['REFLECT_API_KEY']: '2',
+    ['REFLECT_VAR_x']: 'was here!',
+    roomDO,
+    authDO,
+  };
   new AuthDO(
     new TestDurableObjectState(
       authDOID,
@@ -101,7 +140,7 @@ test('Make sure makeOptions is called every time DO is constructed or worker fet
     env2,
   );
   expect(envs.length).toEqual(7);
-  expect(envs[6]).toBe(env2);
+  expect(envs[6]).toEqual({x: 'was here!'});
 
   new RoomDO(
     new TestDurableObjectState(
@@ -111,7 +150,7 @@ test('Make sure makeOptions is called every time DO is constructed or worker fet
     env2,
   );
   expect(envs.length).toEqual(8);
-  expect(envs[7]).toBe(env2);
+  expect(envs[7]).toEqual({x: 'was here!'});
 
   await worker.fetch(
     new Request('https://reflect.app/unknown'),
@@ -119,5 +158,5 @@ test('Make sure makeOptions is called every time DO is constructed or worker fet
     new TestExecutionContext(),
   );
   expect(envs.length).toEqual(9);
-  expect(envs[8]).toBe(env2);
+  expect(envs[8]).toEqual({x: 'was here!'});
 });

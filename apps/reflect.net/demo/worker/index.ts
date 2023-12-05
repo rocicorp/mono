@@ -1,16 +1,15 @@
 import {
   createReflectServer,
-  ReflectServerBaseEnv,
-  newOptionsBuilder,
   datadogLogging,
   datadogMetrics,
-  logLevel,
   defaultConsoleLogSink,
+  logLevel,
+  newOptionsBuilder,
 } from '@rocicorp/reflect/server';
 import {ensureNotBotController} from '../alive/client-model';
 import {mutators} from '../shared/mutators';
 
-import {version} from '@rocicorp/reflect';
+import {Env, version} from '@rocicorp/reflect';
 console.log(version);
 
 type ReflectNetServerEnv = {
@@ -26,7 +25,7 @@ type ReflectNetServerEnv = {
   DATADOG_SERVICE_LABEL?: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   LOG_LEVEL?: string; // should be 'error', 'debug', or 'info'
-} & ReflectServerBaseEnv;
+};
 
 const DEFAULT_LOG_LEVEL = 'info';
 const DEFAULT_DATADOG_SERVICE_LABEL = 'reflect.net';
@@ -38,7 +37,7 @@ const {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   AuthDO,
 } = createReflectServer(
-  newOptionsBuilder((_: ReflectNetServerEnv) => ({
+  newOptionsBuilder((_: Env) => ({
     mutators,
     disconnectHandler: async tx => {
       console.log('deleting old client', tx.clientID);
@@ -59,5 +58,4 @@ class RoomDO extends SuperRoomDO {
   }
 }
 
-export {RoomDO, AuthDO};
-export {worker as default};
+export {AuthDO, RoomDO, worker as default};

@@ -1,5 +1,5 @@
 import {consoleLogSink, LogLevel, LogSink, TeeLogSink} from '@rocicorp/logger';
-import type {MutatorDefs} from 'reflect-shared';
+import type {Env, MutatorDefs} from 'reflect-shared';
 import {BaseAuthDO} from './auth-do.js';
 import type {AuthHandler} from './auth.js';
 import type {DisconnectHandler} from './disconnect.js';
@@ -100,21 +100,21 @@ export type DurableObjectCtor<Env> = new (
  *     TODO: Add reference to CF bug.
  */
 export function createReflectServer<
-  Env extends ReflectServerBaseEnv,
+  RawEnv extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
 >(
   makeOptions: (env: Env) => ReflectServerOptions<MD>,
 ): {
-  worker: ExportedHandler<Env>;
+  worker: ExportedHandler<RawEnv>;
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  RoomDO: DurableObjectCtor<Env>;
+  RoomDO: DurableObjectCtor<RawEnv>;
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  AuthDO: DurableObjectCtor<Env>;
+  AuthDO: DurableObjectCtor<RawEnv>;
 } {
   const normalizedOptionsGetter = makeNormalizedOptionsGetter(makeOptions);
   const roomDOClass = createRoomDOClass(normalizedOptionsGetter);
   const authDOClass = createAuthDOClass(normalizedOptionsGetter);
-  const worker = createWorker<Env>(normalizedOptionsGetter);
+  const worker = createWorker<RawEnv>(normalizedOptionsGetter);
 
   // eslint-disable-next-line @typescript-eslint/naming-convention
   return {worker, RoomDO: roomDOClass, AuthDO: authDOClass};
@@ -126,12 +126,13 @@ type GetNormalizedOptions<
 > = (env: Env) => NormalizedOptions<MD>;
 
 function makeNormalizedOptionsGetter<
-  Env extends ReflectServerBaseEnv,
+  RawEnv extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
 >(
   makeOptions: (env: Env) => ReflectServerOptions<MD>,
-): (env: Env) => NormalizedOptions<MD> {
-  return (env: Env) => {
+): (env: RawEnv) => NormalizedOptions<MD> {
+  return (env: RawEnv) => {
+    const filteredEnv = extractVars(env);
     const {
       mutators,
       authHandler,
@@ -142,7 +143,7 @@ function makeNormalizedOptionsGetter<
       allowUnconfirmedWrites = false,
       datadogMetricsOptions = undefined,
       maxMutationsPerTurn,
-    } = makeOptions(env);
+    } = makeOptions(filteredEnv);
     const logSink = logSinks ? combineLogSinks(logSinks) : consoleLogSink;
     return {
       mutators,
