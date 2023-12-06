@@ -135,6 +135,17 @@ describe('error-report function', () => {
       code: 'cancelled',
     },
     {
+      name: 'publish template error',
+      request: {
+        action: 'cmd_publish',
+        error: {
+          desc: `Error: ENOENT: no such file or directory, open '/Users/foo/Projects/Bar/Baz/.env.template'`,
+          stack,
+        },
+      },
+      code: 'cancelled',
+    },
+    {
       name: 'login orphan',
       request: {
         action: 'cmd_publish',

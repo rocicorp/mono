@@ -81,6 +81,10 @@ function shouldBeWarning(action: string, desc: string): boolean {
     if (desc.startsWith('Error: Build failed')) {
       return true;
     }
+    // https://github.com/rocicorp/mono/issues/1294
+    if (desc.startsWith('Error: ENOENT: no such file or directory')) {
+      return true;
+    }
   }
   if (desc.startsWith('Error: Login did not complete within 2 minutes')) {
     // Downgraded to warning by cli: https://github.com/rocicorp/mono/pull/1187
