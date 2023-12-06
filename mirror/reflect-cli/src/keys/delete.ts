@@ -33,7 +33,7 @@ export async function deleteAppKeysHandler(
     console.warn(
       `No app keys with the specified names (${asList(
         names,
-      )})) were found. They may have already been deleted.`,
+      )}) were found. They may have already been deleted.`,
     );
   } else {
     console.log(`Deleted ${asList(deleted)}.`);

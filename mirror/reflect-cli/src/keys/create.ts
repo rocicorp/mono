@@ -51,7 +51,7 @@ export async function createAppKeyHandler(
     allPerms.length <= 1
       ? allPerms
       : await checkbox({
-          message: `Select permissions for the ${name} key:`,
+          message: `Select permissions for the "${color.bold(name)}" key:`,
           choices: allPerms.map(perm => ({name: perm, value: perm})),
           pageSize: 1000,
         });
@@ -67,5 +67,5 @@ export async function createAppKeyHandler(
     name,
     permissions: Object.fromEntries(perms.map(perm => [perm, true])),
   });
-  console.log(`Created app key ${color.bold(name)}: ${value}`);
+  console.log(`Created app key "${color.bold(name)}": ${value}`);
 }

@@ -39,7 +39,7 @@ export async function editAppKeyHandler(
     process.exit(-1);
   }
   const perms = await checkbox({
-    message: `Select permissions for the ${name} key:`,
+    message: `Select permissions for the "${color.bold(name)}" key:`,
     choices: Object.keys(defaultPermissions).map(perm => ({
       name: perm,
       value: perm,
@@ -59,5 +59,5 @@ export async function editAppKeyHandler(
     name,
     permissions: Object.fromEntries(perms.map(perm => [perm, true])),
   });
-  console.log(`Permissions set for app key ${color.bold(name)}.`);
+  console.log(`Permissions set for app key "${color.bold(name)}".`);
 }
