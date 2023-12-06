@@ -38,7 +38,10 @@ export const edit = (firestore: Firestore) =>
       await firestore.runTransaction(async tx => {
         const doc = await tx.get(keyDoc);
         if (!doc.exists) {
-          throw new HttpsError('not-found', `Key named ${name} was not found.`);
+          throw new HttpsError(
+            'not-found',
+            `Key named "${name}" was not found.`,
+          );
         }
         tx.update(keyDoc, {permissions: validatedPermissions});
       });

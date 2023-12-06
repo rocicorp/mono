@@ -61,7 +61,7 @@ export const create = (firestore: Firestore) =>
         if (doc.exists) {
           throw new HttpsError(
             'already-exists',
-            `A key named ${name} already exists.`,
+            `A key named "${name}" already exists.`,
           );
         }
         tx.create(keyDoc, {
