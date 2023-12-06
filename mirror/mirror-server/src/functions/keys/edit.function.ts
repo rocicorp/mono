@@ -1,19 +1,14 @@
 import type {Firestore} from 'firebase-admin/firestore';
-import {logger} from 'firebase-functions';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {
   editAppKeyRequestSchema,
   editAppKeyResponseSchema,
 } from 'mirror-protocol/src/app-keys.js';
-import {
-  appKeyDataConverter,
-  appKeyPath,
-  normalizePermissions,
-  type Permissions,
-} from 'mirror-schema/src/app-key.js';
+import {appKeyDataConverter, appKeyPath} from 'mirror-schema/src/app-key.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
+import {validatePermissions} from './create.function.js';
 
 export const edit = (firestore: Firestore) =>
   validateSchema(editAppKeyRequestSchema, editAppKeyResponseSchema)
@@ -23,14 +18,7 @@ export const edit = (firestore: Firestore) =>
     .handle(async request => {
       const {appID, name, permissions} = request;
 
-      let validatedPermissions: Permissions;
-      try {
-        validatedPermissions = normalizePermissions(permissions);
-      } catch (e) {
-        logger.warn(`Rejecting permissions: ${String(e)}`, permissions);
-        throw new HttpsError('invalid-argument', 'Invalid permissions');
-      }
-
+      const validatedPermissions = validatePermissions(name, permissions);
       const keyDoc = firestore
         .doc(appKeyPath(appID, name))
         .withConverter(appKeyDataConverter);

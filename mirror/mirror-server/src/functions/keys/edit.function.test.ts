@@ -106,7 +106,21 @@ describe('appKeys-edit', () => {
     });
   });
 
-  test('non-existent key permissions', async () => {
+  test('invalid permissions', async () => {
+    const resp = await callEdit('existing-key', {
+      'invalid:permissions': true,
+    }).catch(e => e);
+    expect(resp).toBeInstanceOf(HttpsError);
+    expect((resp as HttpsError).code).toBe('invalid-argument');
+  });
+
+  test('invalid permissions', async () => {
+    const resp = await callEdit('existing-key', {}).catch(e => e);
+    expect(resp).toBeInstanceOf(HttpsError);
+    expect((resp as HttpsError).code).toBe('invalid-argument');
+  });
+
+  test('non-existent key', async () => {
     const resp = await callEdit('non-existing-key', {
       'app:publish': true,
     }).catch(e => e);

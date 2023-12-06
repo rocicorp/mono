@@ -117,6 +117,12 @@ describe('appKeys-create', () => {
     });
   }
 
+  test('no permissions', async () => {
+    const resp = await callCreate('key-needs-permissions', {}).catch(e => e);
+    expect(resp).toBeInstanceOf(HttpsError);
+    expect((resp as HttpsError).code).toBe('invalid-argument');
+  });
+
   test('invalid permissions', async () => {
     const resp = await callCreate('valid-name-but', {
       'invalid:permission': true,

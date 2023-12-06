@@ -53,13 +53,10 @@ export async function createAppKeyHandler(
       : await checkbox({
           message: `Select permissions for the "${color.bold(name)}" key:`,
           choices: allPerms.map(perm => ({name: perm, value: perm})),
+          instructions: false,
           pageSize: 1000,
+          required: true,
         });
-  if (perms.length === 0) {
-    // TODO: Update version of @inquirer/checkbox that includes validation.
-    console.error(color.yellow('You must select at least one permission.'));
-    process.exit(-1);
-  }
 
   const {value} = await createAppKey({
     requester,

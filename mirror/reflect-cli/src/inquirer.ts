@@ -32,13 +32,21 @@ type Choice<Value> = {
   type?: never;
 };
 
-type CheckboxConfig<T> = {
+type Item<Value> = Separator | Choice<Value>;
+
+type CheckboxConfig<Value> = {
   message: string | Promise<string> | (() => Promise<string>);
   prefix?: string | undefined;
   pageSize?: number | undefined;
   instructions?: string | boolean | undefined;
-  choices: readonly (Separator | T)[];
+  choices: readonly Item<Value>[];
   loop?: boolean | undefined;
+  required?: boolean | undefined;
+  validate?:
+    | ((
+        items: readonly Item<Value>[],
+      ) => string | boolean | Promise<string | boolean>)
+    | undefined;
 };
 
 export function confirm(config: ConfirmConfig): Promise<boolean> {
@@ -58,7 +66,7 @@ export function password(config: PasswordConfig): Promise<string> {
   // @ts-ignore type error in jest?!?
   return passwordFn(config);
 }
-export function checkbox<T>(config: CheckboxConfig<Choice<T>>): Promise<T[]> {
+export function checkbox<T>(config: CheckboxConfig<T>): Promise<T[]> {
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore type error in jest?!?
   return checkboxFn(config);

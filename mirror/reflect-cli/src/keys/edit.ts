@@ -46,12 +46,9 @@ export async function editAppKeyHandler(
       checked: key.permissions[perm],
     })),
     pageSize: 1000,
+    instructions: false,
+    required: true,
   });
-  if (perms.length === 0) {
-    // TODO: Update version of @inquirer/checkbox that includes validation.
-    console.error(color.yellow('You must select at least one permission.'));
-    process.exit(-1);
-  }
 
   await editAppKey({
     requester,

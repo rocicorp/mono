@@ -20,6 +20,24 @@ import {userAgentVersion} from '../validators/version.js';
 
 export const MAX_KEYS = 100;
 
+export function validatePermissions(
+  keyName: string,
+  permissions: Record<string, boolean>,
+): Permissions {
+  if (Object.keys(permissions).length === 0) {
+    throw new HttpsError(
+      'invalid-argument',
+      `No permissions specified for key named "${keyName}"`,
+    );
+  }
+  try {
+    return normalizePermissions(permissions);
+  } catch (e) {
+    logger.warn(`Rejecting permissions: ${String(e)}`, permissions);
+    throw new HttpsError('invalid-argument', 'Invalid permissions');
+  }
+}
+
 export const create = (firestore: Firestore) =>
   validateSchema(createAppKeyRequestSchema, createAppKeyResponseSchema)
     .validate(userAgentVersion())
@@ -34,13 +52,7 @@ export const create = (firestore: Firestore) =>
           `Invalid name "${name}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
         );
       }
-      let validatedPermissions: Permissions;
-      try {
-        validatedPermissions = normalizePermissions(permissions);
-      } catch (e) {
-        logger.warn(`Rejecting permissions: ${String(e)}`, permissions);
-        throw new HttpsError('invalid-argument', 'Invalid permissions');
-      }
+      const validatedPermissions = validatePermissions(name, permissions);
 
       const keyDoc = firestore
         .doc(appKeyPath(appID, name))
