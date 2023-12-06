@@ -282,15 +282,24 @@ function copyAndEditFile(
   edit: (content: string) => string,
   logConsole: boolean,
 ) {
-  const srcPath = path.resolve(dir, src);
-  const dstPath = path.resolve(dir, dst);
-  const content = fs.readFileSync(srcPath, 'utf-8');
-  const edited = edit(content);
-  if (fs.existsSync(dstPath) && fs.readFileSync(dstPath, 'utf-8') === edited) {
-    return;
-  }
-  fs.writeFileSync(dstPath, edited, 'utf-8');
-  if (logConsole) {
-    console.log(`Updated ${dst} from ${src}`);
+  try {
+    const srcPath = path.resolve(dir, src);
+    const dstPath = path.resolve(dir, dst);
+    const content = fs.readFileSync(srcPath, 'utf-8');
+    const edited = edit(content);
+    if (
+      fs.existsSync(dstPath) &&
+      fs.readFileSync(dstPath, 'utf-8') === edited
+    ) {
+      return;
+    }
+    fs.writeFileSync(dstPath, edited, 'utf-8');
+    if (logConsole) {
+      console.log(`Updated ${dst} from ${src}`);
+    }
+  } catch (e) {
+    // In case the user has deleted the template source file, classify this as a
+    // warning instead.
+    throw new ErrorWrapper(e, 'WARNING');
   }
 }
