@@ -52,7 +52,6 @@
     "validate-npm-package-name": "^5.0.0",
     "ws": "^8.13.0",
     "yargs": "^17.4.1",
-    "devtools-protocol": "^0.0.1208070",
     "properties-file": "^3.3.6",
     "firebase": "9.23.0",
     "firebase-functions": "^4.4.1",
