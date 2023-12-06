@@ -66,7 +66,7 @@ export async function startDevServer(
       ...devBindings,
     },
 
-    durableObjects: {roomDO: 'RoomDO', authDO: 'AuthDO', testDO: 'TestDO'},
+    durableObjects: {roomDO: 'RoomDO', authDO: 'AuthDO'},
 
     durableObjectsPersist: path.join(appConfigRoot, '.reflect', 'data'),
 
