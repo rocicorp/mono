@@ -8,7 +8,6 @@ import {mustFindAppConfigRoot} from '../app-config.js';
 import {buildReflectServerContent} from '../compile.js';
 import {ErrorWrapper} from '../error.js';
 import {getScriptTemplate} from '../get-script-template.js';
-import {inspectorConsoleClient} from './inspector-console-client.js';
 import {listDevVars} from './vars.js';
 
 /**
@@ -88,8 +87,6 @@ export async function startDevServer(
     // with our code.
     throw new ErrorWrapper(e, 'WARNING');
   }
-
-  await inspectorConsoleClient(url, inspectorPort, signal);
 
   signal.addEventListener(
     'abort',
