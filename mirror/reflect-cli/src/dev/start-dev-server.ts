@@ -1,3 +1,4 @@
+import type {LogLevel} from '@rocicorp/logger';
 import type {OutputFile} from 'esbuild';
 import getPort from 'get-port';
 import {Miniflare} from 'miniflare';
@@ -18,6 +19,7 @@ export async function startDevServer(
   sourcemap: OutputFile,
   port: number,
   mode: 'production' | 'development',
+  logLevel: LogLevel,
   signal: AbortSignal,
 ): Promise<URL> {
   const appDir = path.dirname(code.path);
@@ -63,6 +65,7 @@ export async function startDevServer(
     ],
     bindings: {
       ['REFLECT_API_KEY']: nanoid(),
+      ['LOG_LEVEL']: logLevel,
       ...devBindings,
     },
 

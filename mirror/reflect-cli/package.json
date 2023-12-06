@@ -17,6 +17,7 @@
   "dependencies": {
     "@badrap/valita": "^0.3.0",
     "@rocicorp/resolver": "^1.0.1",
+    "@rocicorp/logger": "^5.2.1",
     "esbuild": "^0.19.4",
     "miniflare": "^3.20231030.2"
   },
