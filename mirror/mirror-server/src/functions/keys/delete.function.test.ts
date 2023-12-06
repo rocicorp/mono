@@ -110,7 +110,7 @@ describe('appKeys-delete', () => {
     );
     expect(resp).toEqual({
       success: true,
-      names: ['key-8', 'key-2', 'key-5'],
+      deleted: ['key-8', 'key-2', 'key-5'],
     });
 
     expect(

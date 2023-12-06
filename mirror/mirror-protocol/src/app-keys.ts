@@ -77,8 +77,7 @@ export const deleteAppKeysRequestSchema = v.object({
 export const deleteAppKeysResponseSchema = v.object({
   ...baseResponseFields,
 
-  // Names of the app keys deleted.
-  names: v.array(v.string()),
+  deleted: v.array(v.string()),
 });
 
 export type DeleteAppKeysRequest = v.Infer<typeof deleteAppKeysRequestSchema>;

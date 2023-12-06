@@ -24,7 +24,7 @@ export async function deleteAppKeysHandler(
   const {userID} = await authenticate(yargs);
   const {appID} = await ensureAppInstantiated(yargs);
 
-  const {names: deleted} = await deleteAppKeys({
+  const {deleted} = await deleteAppKeys({
     requester: makeRequester(userID),
     appID,
     names,

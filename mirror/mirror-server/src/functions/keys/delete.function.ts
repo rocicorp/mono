@@ -29,5 +29,5 @@ export const deleteFn = (firestore: Firestore) =>
         });
         return exists;
       });
-      return {success: true, names: deleted};
+      return {success: true, deleted};
     });
