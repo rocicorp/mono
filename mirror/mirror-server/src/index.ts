@@ -12,6 +12,7 @@ import {
 import * as appFunctions from './functions/app/index.js';
 import * as envFunctions from './functions/env/index.js';
 import * as errorFunctions from './functions/error/index.js';
+import * as appKeyFunctions from './functions/keys/index.js';
 import * as metricsFunctions from './functions/metrics/index.js';
 import * as roomFunctions from './functions/room/index.js';
 import * as serverFunctions from './functions/server/index.js';
@@ -72,6 +73,19 @@ export const app = {
     appFunctions.tail(getFirestore(), getAuth(), secrets),
   ),
   delete: https.onCall(baseHttpsOptions, appFunctions.delete(getFirestore())),
+};
+
+export const appKeys = {
+  list: https.onCall(baseHttpsOptions, appKeyFunctions.list(getFirestore())),
+  create: https.onCall(
+    baseHttpsOptions,
+    appKeyFunctions.create(getFirestore()),
+  ),
+  edit: https.onCall(baseHttpsOptions, appKeyFunctions.edit(getFirestore())),
+  delete: https.onCall(
+    baseHttpsOptions,
+    appKeyFunctions.delete(getFirestore()),
+  ),
 };
 
 export const env = {

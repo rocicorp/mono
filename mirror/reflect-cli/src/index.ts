@@ -9,6 +9,10 @@ import {deleteHandler, deleteOptions} from './delete.js';
 import {devHandler, devOptions} from './dev.js';
 import {handleWith} from './handler.js';
 import {initHandler, initOptions} from './init.js';
+import {createAppKeyHandler, createAppKeyOptions} from './keys/create.js';
+import {deleteAppKeysHandler, deleteAppKeysOptions} from './keys/delete.js';
+import {editAppKeyHandler, editAppKeyOptions} from './keys/edit.js';
+import {listAppKeysHandler, listAppKeysOptions} from './keys/list.js';
 import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
 import {statusHandler} from './status.js';
@@ -120,6 +124,39 @@ function createCLIParser(argv: string[]) {
       )
       .demandCommand(1, 'Available commands:\n');
   });
+
+  reflectCLI.command(
+    'keys',
+    false, // TODO: Unhide this when ready:  '🔑  Manage app keys',
+    yargs => {
+      yargs
+        .command(
+          'list',
+          'List app keys',
+          listAppKeysOptions,
+          handleWith(listAppKeysHandler).andCleanup(),
+        )
+        .command(
+          'create <name>',
+          'Create an app key',
+          createAppKeyOptions,
+          handleWith(createAppKeyHandler).andCleanup(),
+        )
+        .command(
+          'edit <name>',
+          'Edit an app key',
+          editAppKeyOptions,
+          handleWith(editAppKeyHandler).andCleanup(),
+        )
+        .command(
+          'delete <names..>',
+          'Delete one or more app keys',
+          deleteAppKeysOptions,
+          handleWith(deleteAppKeysHandler).andCleanup(),
+        )
+        .demandCommand(1, 'Available commands:\n');
+    },
+  );
 
   reflectCLI.command(
     'usage',

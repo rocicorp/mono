@@ -37,7 +37,7 @@ service cloud.firestore {
       
       function isRestricted(coll) {
         // apps/.../subcollections that are not externally visible 
-      	return coll in ['envs'];
+      	return coll in ['envs', 'keys'];
       }
       
       match /{subcollection}/{document=**} {
