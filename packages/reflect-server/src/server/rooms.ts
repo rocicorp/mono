@@ -2,8 +2,8 @@ import type {LogContext} from '@rocicorp/logger';
 import type {CreateRoomRequest} from 'reflect-protocol';
 import * as valita from 'shared/src/valita.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
-import {INTERNAL_CREATE_ROOM_PATH} from './paths.js';
 import {roomDOFetch} from './auth-do.js';
+import {INTERNAL_CREATE_ROOM_PATH} from './paths.js';
 
 // RoomRecord keeps information about the room, for example the Durable
 // Object ID of the DO instance that has the room.
@@ -48,7 +48,7 @@ export enum RoomStatus {
 // instead of inferring the type from a schema, because frankly I like reading
 // type definitions in the type definition language (ts) and want to keep goop
 // (valita) from polluting the main ideas.
-const roomStatusSchema = valita.union(
+export const roomStatusSchema = valita.union(
   valita.literal(RoomStatus.Open),
   valita.literal(RoomStatus.Closed),
   valita.literal(RoomStatus.Deleted),

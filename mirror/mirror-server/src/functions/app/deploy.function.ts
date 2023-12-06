@@ -314,7 +314,7 @@ export async function earlierDeployments(
   setTimeoutFn = setTimeout,
 ): Promise<void> {
   const appDoc = firestore.doc(appPath(appID)).withConverter(appDataConverter);
-  let failureTimeout: NodeJS.Timer | undefined;
+  let failureTimeout;
 
   for await (const appSnapshot of watch(appDoc)) {
     clearTimeout(failureTimeout);

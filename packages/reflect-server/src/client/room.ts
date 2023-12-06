@@ -1,8 +1,9 @@
 import type {CreateRoomRequest} from 'reflect-protocol';
+import * as v from 'shared/src/valita.js';
 import {createAPIHeaders} from '../server/api-headers.js';
 import {AUTH_ROUTES} from '../server/auth-do.js';
 import {CREATE_ROOM_PATH} from '../server/paths.js';
-import type {RoomStatus} from '../server/rooms.js';
+import {roomStatusSchema, type RoomStatus} from '../server/rooms.js';
 import {newAuthedPostRequest} from './authedpost.js';
 
 /**
@@ -82,7 +83,8 @@ export async function roomStatus(
       `Failed to get room status: ${resp.status} ${resp.statusText}`,
     );
   }
-  return resp.json();
+  const value = await resp.json();
+  return v.parse(value, roomStatusSchema);
 }
 
 /**

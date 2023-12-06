@@ -426,6 +426,17 @@ async function testPreflightRequest({
   );
 }
 
+function fetchSpyWithResponse(response: Response | string) {
+  const r = typeof response === 'string' ? new Response(response) : response;
+  return (
+    jest
+      .spyOn(globalThis, 'fetch')
+      // undici / worker-types conflict
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .mockReturnValue(Promise.resolve(r as any))
+  );
+}
+
 describe('reportMetrics', () => {
   const reportMetricsURL = new URL(
     REPORT_METRICS_PATH,
@@ -527,9 +538,7 @@ describe('reportMetrics', () => {
   }
 
   async function testReportMetrics(tc: TestCase) {
-    const fetchSpy = jest
-      .spyOn(globalThis, 'fetch')
-      .mockReturnValue(Promise.resolve(new Response('{}')));
+    const fetchSpy = fetchSpyWithResponse('{}');
 
     const testEnv: BaseWorkerEnv = {
       authDO: {
@@ -654,8 +663,8 @@ describe('log logs', () => {
     }
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const fetchedRequest = fetchSpy.mock.calls[0][0];
-    if (typeof fetchedRequest === 'string') {
-      throw new Error('Expected request not string fetched');
+    if (!(fetchedRequest instanceof Request)) {
+      throw new Error('Expected fetch to be called with a Request object');
     }
     expect(fetchedRequest.url).toEqual(
       'https://http-intake.logs.datadoghq.com/api/v2/logs?service=test-service&ddtags=version%3A0.35.0&host=test.host.com&foo=bar&dd-api-key=test-dd-logs-api-key&ddsource=client',
@@ -667,16 +676,14 @@ describe('log logs', () => {
   }
 
   test('success', async () => {
-    const fetchSpy = jest
-      .spyOn(globalThis, 'fetch')
-      .mockReturnValue(Promise.resolve(new Response('{}')));
+    const fetchSpy = fetchSpyWithResponse('{}');
     await testLogLogs(fetchSpy, 200);
   });
 
   test('error response', async () => {
-    const fetchSpy = jest
-      .spyOn(globalThis, 'fetch')
-      .mockReturnValue(Promise.resolve(new Response('failed', {status: 403})));
+    const fetchSpy = fetchSpyWithResponse(
+      new Response('failed', {status: 403}),
+    );
     await testLogLogs(fetchSpy, 403);
   });
 
@@ -688,9 +695,7 @@ describe('log logs', () => {
   });
 
   test('no api key in env', async () => {
-    const fetchSpy = jest
-      .spyOn(globalThis, 'fetch')
-      .mockReturnValue(Promise.resolve(new Response('{}')));
+    const fetchSpy = fetchSpyWithResponse('{}');
     await testLogLogs(fetchSpy, 200, false);
   });
 });
