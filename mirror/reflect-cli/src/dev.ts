@@ -1,3 +1,4 @@
+import type {LogLevel} from '@rocicorp/logger';
 import isPortReachable from 'is-port-reachable';
 import assert from 'node:assert';
 import * as fs from 'node:fs/promises';
@@ -26,6 +27,13 @@ export function devOptions(yargs: CommonYargsArgv) {
         type: 'boolean',
         default: false,
       })
+      .option('log-level', {
+        describe: 'Log level to use for internal Reflect logging',
+        type: 'string',
+        choices: ['debug', 'info', 'error'],
+        default: 'error',
+        requiresArg: true,
+      })
   );
 }
 
@@ -48,7 +56,7 @@ export async function devHandler(yargs: DevHandlerArgs) {
     logErrorAndExit(`File not found: ${absPath}`);
   }
 
-  const {port, silenceStartupMessage} = yargs;
+  const {port, silenceStartupMessage, logLevel} = yargs;
   if (await isPortReachable(port, {host: '0.0.0.0'})) {
     logErrorAndExit(`Port ${port} is already in use`);
   }
@@ -79,6 +87,7 @@ export async function devHandler(yargs: DevHandlerArgs) {
         sourcemap,
         port,
         mode,
+        logLevel as LogLevel,
         mfAc.signal,
       );
       process.stdout.write(` Done in ${Date.now() - start}ms.\n`);

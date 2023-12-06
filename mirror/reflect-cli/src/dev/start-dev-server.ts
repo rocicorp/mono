@@ -1,3 +1,4 @@
+import type {LogLevel} from '@rocicorp/logger';
 import type {OutputFile} from 'esbuild';
 import getPort from 'get-port';
 import {Miniflare} from 'miniflare';
@@ -8,7 +9,6 @@ import {mustFindAppConfigRoot} from '../app-config.js';
 import {buildReflectServerContent} from '../compile.js';
 import {ErrorWrapper} from '../error.js';
 import {getScriptTemplate} from '../get-script-template.js';
-import {inspectorConsoleClient} from './inspector-console-client.js';
 import {listDevVars} from './vars.js';
 
 /**
@@ -19,6 +19,7 @@ export async function startDevServer(
   sourcemap: OutputFile,
   port: number,
   mode: 'production' | 'development',
+  logLevel: LogLevel,
   signal: AbortSignal,
 ): Promise<URL> {
   const appDir = path.dirname(code.path);
@@ -64,10 +65,11 @@ export async function startDevServer(
     ],
     bindings: {
       ['REFLECT_API_KEY']: nanoid(),
+      ['LOG_LEVEL']: logLevel,
       ...devBindings,
     },
 
-    durableObjects: {roomDO: 'RoomDO', authDO: 'AuthDO', testDO: 'TestDO'},
+    durableObjects: {roomDO: 'RoomDO', authDO: 'AuthDO'},
 
     durableObjectsPersist: path.join(appConfigRoot, '.reflect', 'data'),
 
@@ -88,8 +90,6 @@ export async function startDevServer(
     // with our code.
     throw new ErrorWrapper(e, 'WARNING');
   }
-
-  await inspectorConsoleClient(url, inspectorPort, signal);
 
   signal.addEventListener(
     'abort',
