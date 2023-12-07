@@ -6,7 +6,9 @@ import {authenticate} from '../auth-config.js';
 import {checkbox} from '../inquirer.js';
 import {makeRequester} from '../requester.js';
 
+import {padColumns} from '../table.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
+import {stripDescFromValidatedChoices} from './create.js';
 
 export function editAppKeyOptions(yargs: CommonYargsArgv) {
   return yargs.positional('name', {
@@ -28,7 +30,7 @@ export async function editAppKeyHandler(
   const {appID} = await ensureAppInstantiated(yargs);
   const requester = makeRequester(userID);
 
-  const {keys, defaultPermissions} = await listAppKeys({
+  const {keys, allPermissions} = await listAppKeys({
     requester,
     appID,
     show: false,
@@ -38,16 +40,18 @@ export async function editAppKeyHandler(
     console.warn(color.yellow(`Key named "${name}" was not found.`));
     process.exit(-1);
   }
+  const desc = padColumns(Object.entries(allPermissions));
   const perms = await checkbox({
     message: `Select permissions for the "${color.bold(name)}" key:`,
-    choices: Object.keys(defaultPermissions).map(perm => ({
-      name: perm,
+    choices: Object.keys(allPermissions).map((perm, i) => ({
+      name: `${desc[i][0]}     ${color.gray(desc[i][1])}`,
       value: perm,
       checked: key.permissions[perm],
     })),
     pageSize: 1000,
     instructions: false,
     required: true,
+    validate: stripDescFromValidatedChoices,
   });
 
   await editAppKey({

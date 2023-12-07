@@ -24,7 +24,7 @@ type PasswordConfig = AsyncPromptConfig & {
   mask?: boolean | string;
 };
 
-type Choice<Value> = {
+export type Choice<Value> = {
   name?: string;
   value: Value;
   disabled?: boolean | string;
@@ -32,7 +32,7 @@ type Choice<Value> = {
   type?: never;
 };
 
-type Item<Value> = Separator | Choice<Value>;
+export type Item<Value> = Separator | Choice<Value>;
 
 type CheckboxConfig<Value> = {
   message: string | Promise<string> | (() => Promise<string>);

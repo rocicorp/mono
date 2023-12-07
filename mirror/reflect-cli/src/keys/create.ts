@@ -7,9 +7,10 @@ import {
 } from 'mirror-protocol/src/app-keys.js';
 import {ensureAppInstantiated} from '../app-config.js';
 import {authenticate} from '../auth-config.js';
-import {checkbox} from '../inquirer.js';
+import {Item, checkbox, type Choice} from '../inquirer.js';
 import {makeRequester} from '../requester.js';
 
+import {padColumns} from '../table.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 
 export function createAppKeyOptions(yargs: CommonYargsArgv) {
@@ -41,21 +42,26 @@ export async function createAppKeyHandler(
   const {appID} = await ensureAppInstantiated(yargs);
   const requester = makeRequester(userID);
 
-  const {defaultPermissions} = await listAppKeys({
+  const {allPermissions} = await listAppKeys({
     requester,
     appID,
     show: false,
   });
-  const allPerms = Object.keys(defaultPermissions);
+  const allPerms = Object.keys(allPermissions);
+  const desc = padColumns(Object.entries(allPermissions));
   const perms =
     allPerms.length <= 1
       ? allPerms
       : await checkbox({
           message: `Select permissions for the "${color.bold(name)}" key:`,
-          choices: allPerms.map(perm => ({name: perm, value: perm})),
+          choices: allPerms.map((perm, i) => ({
+            name: `${desc[i][0]}     ${color.gray(desc[i][1])}`,
+            value: perm,
+          })),
           instructions: false,
           pageSize: 1000,
           required: true,
+          validate: stripDescFromValidatedChoices,
         });
 
   const {value} = await createAppKey({
@@ -65,4 +71,17 @@ export async function createAppKeyHandler(
     permissions: Object.fromEntries(perms.map(perm => [perm, true])),
   });
   console.log(`Created app key "${color.bold(name)}": ${value}`);
+}
+
+export function stripDescFromValidatedChoices(
+  items: readonly Item<string>[],
+): boolean {
+  const choices = items as Choice<string>[]; // We don't use Separators
+  if (!choices.some(choice => choice.checked)) {
+    return false; // `required` will ask the user to pick at least one choice.
+  }
+  // Before proceeding, delete the `name` fields ('permission    description') so that
+  // the resulting output lists the `value` fields ('permission' only).
+  choices.forEach(choice => delete choice.name);
+  return true;
 }

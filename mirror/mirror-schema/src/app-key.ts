@@ -20,6 +20,15 @@ export const permissionsSchema = v.object({
 
 export type Permissions = v.Infer<typeof permissionsSchema>;
 
+export const ALL_PERMISSIONS: {[perm in keyof Permissions]: string} = {
+  'app:publish': 'authorizes `npx reflect publish`',
+  'rooms:read': 'REST API coming soon',
+  'rooms:create': 'REST API coming soon',
+  'rooms:close': 'REST API coming soon',
+  'rooms:delete': 'REST API coming soon',
+  'connections:invalidate': 'REST API coming soon',
+} as const;
+
 export function defaultPermissions(): Permissions {
   return v.parse({}, permissionsSchema);
 }

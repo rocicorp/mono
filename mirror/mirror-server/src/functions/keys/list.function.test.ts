@@ -5,6 +5,7 @@ import {Timestamp, getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import type {Request} from 'firebase-functions/v2/https';
 import {
+  ALL_PERMISSIONS,
   appKeyDataConverter,
   appKeyPath,
   appKeysCollection,
@@ -70,14 +71,7 @@ describe('appKeys-list', () => {
     expect(await callList(false)).toEqual({
       success: true,
       keys: [],
-      defaultPermissions: {
-        'app:publish': false,
-        'rooms:read': false,
-        'rooms:create': false,
-        'rooms:close': false,
-        'rooms:delete': false,
-        'connections:invalidate': false,
-      },
+      allPermissions: ALL_PERMISSIONS,
     });
   });
 
@@ -134,7 +128,7 @@ describe('appKeys-list', () => {
             lastUseTime: null,
           },
         ],
-        defaultPermissions: defaultPermissions(),
+        allPermissions: ALL_PERMISSIONS,
       });
     });
 
@@ -157,7 +151,7 @@ describe('appKeys-list', () => {
             lastUseTime: null,
           },
         ],
-        defaultPermissions: defaultPermissions(),
+        allPermissions: ALL_PERMISSIONS,
       });
     });
   });

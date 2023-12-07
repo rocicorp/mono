@@ -29,9 +29,8 @@ export const listAppKeysResponseSchema = v.object({
 
   keys: v.array(appKeySchema),
 
-  // A record of all current permission scopes, mapped to their default value.
-  // This is used when creating a new key.
-  defaultPermissions: permissionsSchema,
+  // Ordered mapping of all permissions to an optional description.
+  allPermissions: v.record(v.string()),
 });
 
 export type ListAppKeysRequest = v.Infer<typeof listAppKeysRequestSchema>;

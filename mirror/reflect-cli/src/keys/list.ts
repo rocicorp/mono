@@ -25,7 +25,7 @@ export async function listAppKeysHandler(
   const {userID} = await authenticate(yargs);
   const {appID} = await ensureAppInstantiated(yargs);
 
-  const {keys, defaultPermissions} = await listAppKeys({
+  const {keys, allPermissions} = await listAppKeys({
     requester: makeRequester(userID),
     appID,
     show,
@@ -37,7 +37,7 @@ export async function listAppKeysHandler(
       color.bold(key.name),
       key.value === null ? color.italic(color.gray('Hidden')) : key.value,
       key.lastUseTime === null ? '' : timeAgo(key.lastUseTime, now),
-      Object.keys(defaultPermissions)
+      Object.keys(allPermissions)
         .filter(perm => key.permissions[perm])
         .join(','),
     ]),
