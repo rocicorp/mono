@@ -8,7 +8,7 @@ import {makeRequester} from '../requester.js';
 
 import {padColumns} from '../table.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
-import {stripDescFromValidatedChoices} from './create.js';
+import {stripDescriptionsIfValid} from './create.js';
 
 export function editAppKeyOptions(yargs: CommonYargsArgv) {
   return yargs.positional('name', {
@@ -51,7 +51,7 @@ export async function editAppKeyHandler(
     pageSize: 1000,
     instructions: false,
     required: true,
-    validate: stripDescFromValidatedChoices,
+    validate: stripDescriptionsIfValid,
   });
 
   await editAppKey({

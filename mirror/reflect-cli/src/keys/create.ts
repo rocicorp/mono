@@ -7,7 +7,7 @@ import {
 } from 'mirror-protocol/src/app-keys.js';
 import {ensureAppInstantiated} from '../app-config.js';
 import {authenticate} from '../auth-config.js';
-import {Item, checkbox, type Choice} from '../inquirer.js';
+import {checkbox, type Choice, type Item} from '../inquirer.js';
 import {makeRequester} from '../requester.js';
 
 import {padColumns} from '../table.js';
@@ -61,7 +61,7 @@ export async function createAppKeyHandler(
           instructions: false,
           pageSize: 1000,
           required: true,
-          validate: stripDescFromValidatedChoices,
+          validate: stripDescriptionsIfValid,
         });
 
   const {value} = await createAppKey({
@@ -73,7 +73,7 @@ export async function createAppKeyHandler(
   console.log(`Created app key "${color.bold(name)}": ${value}`);
 }
 
-export function stripDescFromValidatedChoices(
+export function stripDescriptionsIfValid(
   items: readonly Item<string>[],
 ): boolean {
   const choices = items as Choice<string>[]; // We don't use Separators
