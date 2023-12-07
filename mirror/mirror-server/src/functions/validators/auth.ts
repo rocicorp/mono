@@ -154,7 +154,7 @@ export function appOrKeyAuthorization<
   keyPermission: RequiredPermission,
   allowedRoles: Role[] = ['admin', 'member'],
 ): RequestContextValidator<Request, Context, Context & AppAuthorization> {
-  const userAppAuthorization = appAuthorization<Request, Context>(
+  const nonKeyAppAuthorization = appAuthorization<Request, Context>(
     firestore,
     allowedRoles,
   );
@@ -162,7 +162,7 @@ export function appOrKeyAuthorization<
   return async (request: Request, context: Context) => {
     const {isKeyAuth} = context;
     if (!isKeyAuth) {
-      return userAppAuthorization(request, context);
+      return nonKeyAppAuthorization(request, context);
     }
     const {userID: keyPath} = context;
     const appKeyDocRef = firestore
