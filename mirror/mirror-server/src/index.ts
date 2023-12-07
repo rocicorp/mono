@@ -17,6 +17,7 @@ import * as metricsFunctions from './functions/metrics/index.js';
 import * as roomFunctions from './functions/room/index.js';
 import * as serverFunctions from './functions/server/index.js';
 import * as teamFunctions from './functions/team/index.js';
+import * as tokenFunctions from './functions/token/index.js';
 import * as userFunctions from './functions/user/index.js';
 import * as varsFunctions from './functions/vars/index.js';
 import {SecretsClientImpl} from './secrets/index.js';
@@ -113,6 +114,13 @@ export const server = {
 
 export const team = {
   ensure: https.onCall(baseHttpsOptions, teamFunctions.ensure(getFirestore())),
+};
+
+export const token = {
+  create: https.onCall(
+    baseHttpsOptions,
+    tokenFunctions.create(getFirestore(), getAuth()),
+  ),
 };
 
 export const vars = {

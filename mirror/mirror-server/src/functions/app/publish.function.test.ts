@@ -1,6 +1,6 @@
 import {afterAll, beforeAll, describe, expect, jest, test} from '@jest/globals';
 import {initializeApp} from 'firebase-admin/app';
-import {Timestamp, getFirestore} from 'firebase-admin/firestore';
+import {FieldValue, Timestamp, getFirestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {https} from 'firebase-functions/v2';
 import {
@@ -10,6 +10,11 @@ import {
 } from 'firebase-functions/v2/https';
 import type {AuthData} from 'firebase-functions/v2/tasks';
 import type {PublishRequest} from 'mirror-protocol/src/publish.js';
+import {
+  appKeyDataConverter,
+  appKeyPath,
+  type Permissions,
+} from 'mirror-schema/src/app-key.js';
 import {appDataConverter} from 'mirror-schema/src/app.js';
 import {
   appPath,
@@ -31,6 +36,8 @@ describe('publish', () => {
   const firestore = getFirestore();
   const USER_ID = 'app-publish-test-user';
   const APP_ID = 'app-publish-test-app';
+  const APP_KEY_WITH_PERMS = 'publish-app-key';
+  const APP_KEY_WITHOUT_PERMS = 'rooms-app-key';
   const CF_ID = 'cf-abc';
   const ENV_UPDATE_TIME = Timestamp.now();
 
@@ -68,6 +75,28 @@ describe('publish', () => {
         serverReleaseChannel: 'stable',
         teamID: 'fooTeam',
         envUpdateTime: ENV_UPDATE_TIME,
+      },
+    );
+    batch.create(
+      firestore
+        .doc(appKeyPath(APP_ID, APP_KEY_WITH_PERMS))
+        .withConverter(appKeyDataConverter),
+      {
+        value: 'foo-value',
+        permissions: {'app:publish': true} as Permissions,
+        created: FieldValue.serverTimestamp(),
+        lastUsed: null,
+      },
+    );
+    batch.create(
+      firestore
+        .doc(appKeyPath(APP_ID, APP_KEY_WITHOUT_PERMS))
+        .withConverter(appKeyDataConverter),
+      {
+        value: 'bar-value',
+        permissions: {'rooms:read': true} as Permissions,
+        created: FieldValue.serverTimestamp(),
+        lastUsed: null,
       },
     );
     batch.create(
@@ -109,6 +138,8 @@ describe('publish', () => {
     for (const path of [
       userPath(USER_ID),
       appPath(APP_ID),
+      appKeyPath(APP_ID, APP_KEY_WITH_PERMS),
+      appKeyPath(APP_ID, APP_KEY_WITHOUT_PERMS),
       providerPath(DEFAULT_PROVIDER_ID),
       serverPath('0.28.0'),
       serverPath('0.28.1'),
@@ -119,26 +150,10 @@ describe('publish', () => {
     await batch.commit();
   });
 
-  const request: PublishRequest = {
-    requester: {
-      userID: USER_ID,
-      userAgent: {type: 'reflect-cli', version: '0.0.1'},
-    },
-    appID: APP_ID,
-    source: {
-      name: 'index.js',
-      content: 'console.log("hello world")',
-    },
-    sourcemap: {
-      name: 'index.js.map',
-      content: 'foo=bar',
-    },
-    serverVersionRange: '^0.28.0',
-  };
-
   type Case = {
     name: string;
     serverReleaseChannel: string;
+    uid?: string;
     newServerReleaseChannel?: string;
     expectedServerVersion?: string;
     requestAdditions?: Partial<PublishRequest>;
@@ -161,6 +176,18 @@ describe('publish', () => {
       serverReleaseChannel: 'stable',
       newServerReleaseChannel: 'canary',
       expectedServerVersion: '0.28.1',
+    },
+    {
+      name: 'app key with permissions',
+      uid: `apps/${APP_ID}/keys/${APP_KEY_WITH_PERMS}`,
+      serverReleaseChannel: 'stable',
+      expectedServerVersion: '0.28.0',
+    },
+    {
+      name: 'app key without permissions',
+      uid: `apps/${APP_ID}/keys/${APP_KEY_WITHOUT_PERMS}`,
+      serverReleaseChannel: 'stable',
+      errorCode: 'permission-denied',
     },
     {
       name: 'deprecated server version',
@@ -210,10 +237,28 @@ describe('publish', () => {
         publish(firestore, storage, 'modulez', c.testDistTags ?? {}),
       );
 
+      const requesterID = c.uid ?? USER_ID;
+      const request: PublishRequest = {
+        requester: {
+          userID: requesterID,
+          userAgent: {type: 'reflect-cli', version: '0.0.1'},
+        },
+        appID: APP_ID,
+        source: {
+          name: 'index.js',
+          content: 'console.log("hello world")',
+        },
+        sourcemap: {
+          name: 'index.js.map',
+          content: 'foo=bar',
+        },
+        serverVersionRange: '^0.28.0',
+      };
+
       let error: HttpsError | undefined = undefined;
       try {
         await publishFunction.run({
-          auth: {uid: USER_ID} as AuthData,
+          auth: {uid: requesterID} as AuthData,
           data: {
             ...request,
             serverReleaseChannel: c.newServerReleaseChannel,
@@ -237,7 +282,7 @@ describe('publish', () => {
         expect(deployments.size).toBe(1);
         const deployment = deployments.docs[0].data();
         expect(deployment).toMatchObject({
-          requesterID: USER_ID,
+          requesterID,
           type: 'USER_UPLOAD',
           spec: {
             appModules: [

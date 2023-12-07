@@ -1,17 +1,18 @@
 import {logger} from 'firebase-functions';
 import {HttpsError, type CallableRequest} from 'firebase-functions/v2/https';
 import type {App} from 'mirror-schema/src/app.js';
-import type {Role} from 'mirror-schema/src/membership.js';
-import type {User} from 'mirror-schema/src/user.js';
 
 export type UserAuthorization = {
   userID: string;
 };
 
+export type UserOrKeyAuthorization = {
+  userID: string;
+  isKeyAuth: boolean;
+};
+
 export type AppAuthorization = {
   app: App;
-  user: User;
-  role: Role;
 };
 
 export type MaybePromise<T> = T | Promise<T>;

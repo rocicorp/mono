@@ -1,21 +1,26 @@
-import {HttpsError} from 'firebase-functions/v2/https';
 import type {Auth} from 'firebase-admin/auth';
+import {FieldValue, type Firestore} from 'firebase-admin/firestore';
+import {logger} from 'firebase-functions';
+import {HttpsError} from 'firebase-functions/v2/https';
 import type {AuthData} from 'firebase-functions/v2/tasks';
-import type {BaseRequest} from 'mirror-protocol/src/base.js';
 import type {BaseAppRequest} from 'mirror-protocol/src/app.js';
+import type {BaseRequest} from 'mirror-protocol/src/base.js';
+import {
+  appKeyDataConverter,
+  type RequiredPermission,
+} from 'mirror-schema/src/app-key.js';
+import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
+import type {Role} from 'mirror-schema/src/membership.js';
+import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
+import {assert} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.js';
+import type {HttpsRequestContext} from './https.js';
 import type {
+  AppAuthorization,
   RequestContextValidator,
   UserAuthorization,
-  AppAuthorization,
+  UserOrKeyAuthorization,
 } from './types.js';
-import type {Firestore} from 'firebase-admin/firestore';
-import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
-import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
-import {must} from 'shared/src/must.js';
-import {logger} from 'firebase-functions';
-import type {Role} from 'mirror-schema/src/membership.js';
-import {assert} from 'shared/src/asserts.js';
-import type {HttpsRequestContext} from './https.js';
 
 // The subset of CallableRequest fields applicable to `userAuthorization`.
 interface AuthContext {
@@ -56,6 +61,25 @@ export function tokenAuthentication<
 
 /**
  * Validator that checks the original authentication against the
+ * requester userID and initializes a {@link UserOrKeyAuthorization} context.
+ */
+export function userOrKeyAuthorization<
+  Request extends BaseRequest,
+  Context extends AuthContext,
+>(): RequestContextValidator<
+  Request,
+  Context,
+  // Remove the 'auth' field from the OutputContext to prevent
+  // downstream code from erroneously referencing the authenticated
+  // user (i.e. context.auth.uid); subsequent logic should be based
+  // on the requester.userID.
+  Omit<Context, 'auth'> & UserOrKeyAuthorization
+> {
+  return userAuthorizationImpl(true);
+}
+
+/**
+ * Validator that checks the original authentication against the
  * requester userID and initializes a {@link UserAuthorization} context.
  */
 export function userAuthorization<
@@ -70,9 +94,35 @@ export function userAuthorization<
   // on the requester.userID.
   Omit<Context, 'auth'> & UserAuthorization
 > {
+  return userAuthorizationImpl(false);
+}
+
+/**
+ * Internal implementation for `userOrKeyAuthorization` and `userAuthorization`.
+ * The two are exported as separate methods to facilitate type-safety of the
+ * OutputContext. (Namely, the type system requires that `appOrKeyAuthorization`
+ * be preceded with `userOrKeyAuthorization` because it requires a
+ * `UserOrKeyAuthorization` InputContext.)
+ */
+function userAuthorizationImpl<
+  Request extends BaseRequest,
+  Context extends AuthContext,
+>(
+  allowKeys: boolean,
+): RequestContextValidator<
+  Request,
+  Context,
+  Omit<Context, 'auth'> & UserOrKeyAuthorization
+> {
   return (request, context) => {
     if (context.auth?.uid === undefined) {
       throw new HttpsError('unauthenticated', 'missing authentication');
+    }
+    if (!allowKeys && context.auth.uid.includes('/')) {
+      throw new HttpsError(
+        'permission-denied',
+        'Keys are not authorized for this action',
+      );
     }
     if (context.auth.uid !== request.requester.userID) {
       // Check custom claims for temporary super powers.
@@ -88,7 +138,82 @@ export function userAuthorization<
         );
       }
     }
-    return {...context, userID: request.requester.userID};
+    return {
+      ...context,
+      userID: request.requester.userID,
+      isKeyAuth: context.auth.uid.includes('/'),
+    };
+  };
+}
+
+export function appOrKeyAuthorization<
+  Request extends BaseAppRequest,
+  Context extends UserOrKeyAuthorization,
+>(
+  firestore: Firestore,
+  keyPermission: RequiredPermission,
+  allowedRoles: Role[] = ['admin', 'member'],
+): RequestContextValidator<Request, Context, Context & AppAuthorization> {
+  const userAppAuthorization = appAuthorization<Request, Context>(
+    firestore,
+    allowedRoles,
+  );
+
+  return async (request: Request, context: Context) => {
+    const {isKeyAuth} = context;
+    if (!isKeyAuth) {
+      return userAppAuthorization(request, context);
+    }
+    const {userID: keyPath} = context;
+    const appKeyDocRef = firestore
+      .doc(keyPath)
+      .withConverter(appKeyDataConverter);
+    const {appID} = request;
+    const appDocRef = firestore
+      .doc(appPath(appID))
+      .withConverter(appDataConverter);
+
+    if (appKeyDocRef.parent?.parent?.path !== appDocRef.path) {
+      throw new HttpsError(
+        'permission-denied',
+        `Key "${appKeyDocRef.id}" is not authorized for app ${appID}`,
+      );
+    }
+
+    const authorization: AppAuthorization = await firestore.runTransaction(
+      async txn => {
+        const [appKeyDoc, appDoc] = await Promise.all([
+          txn.get(appKeyDocRef),
+          txn.get(appDocRef),
+        ]);
+        if (!appKeyDoc.exists) {
+          throw new HttpsError(
+            'permission-denied',
+            `Key "${appKeyDoc.id}" has been deleted`,
+          );
+        }
+        if (!appDoc.exists) {
+          throw new HttpsError('not-found', `App ${appID} does not exist`);
+        }
+        const appKey = must(appKeyDoc.data());
+        const app = must(appDoc.data());
+        if (!appKey.permissions[keyPermission]) {
+          throw new HttpsError(
+            'permission-denied',
+            `Key "${appKeyDoc.id}" has not been granted "${keyPermission}" permission`,
+          );
+        }
+        logger.info(
+          `Key "${keyPath}" authorized with ${keyPermission} permission`,
+        );
+        txn.update(appKeyDocRef, {lastUsed: FieldValue.serverTimestamp()});
+        return {app};
+      },
+      // TODO(darick): Add a mechanism for initiating writes (like the `lastUsed` timestamp update)
+      // in the background so as not to delay request processing. Then this Transaction can be readOnly.
+      // {readOnly: true},
+    );
+    return {...context, ...authorization};
   };
 }
 
@@ -99,7 +224,10 @@ export function userAuthorization<
 export function appAuthorization<
   Request extends BaseAppRequest,
   Context extends UserAuthorization,
->(firestore: Firestore, allowedRoles: Role[] = ['admin', 'member']) {
+>(
+  firestore: Firestore,
+  allowedRoles: Role[] = ['admin', 'member'],
+): RequestContextValidator<Request, Context, Context & AppAuthorization> {
   assert(allowedRoles.length > 0, 'allowedRoles must be non-empty');
   return async (request: Request, context: Context) => {
     const {userID} = context;
@@ -139,7 +267,7 @@ export function appAuthorization<
         logger.info(
           `User ${userID} has role ${role} in team ${teamID} of app ${appID}`,
         );
-        return {app, user, role};
+        return {app};
       },
       {readOnly: true},
     );

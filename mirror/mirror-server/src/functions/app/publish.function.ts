@@ -18,7 +18,10 @@ import * as semver from 'semver';
 import {gtr} from 'semver';
 import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
 import {assertAllModulesHaveUniqueNames} from '../../cloudflare/module-assembler.js';
-import {appAuthorization, userAuthorization} from '../validators/auth.js';
+import {
+  appOrKeyAuthorization,
+  userOrKeyAuthorization,
+} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
 import {DistTags, userAgentVersion} from '../validators/version.js';
@@ -33,8 +36,8 @@ export const publish = (
 ) =>
   validateSchema(publishRequestSchema, publishResponseSchema)
     .validate(userAgentVersion(testDistTags))
-    .validate(userAuthorization())
-    .validate(appAuthorization(firestore))
+    .validate(userOrKeyAuthorization())
+    .validate(appOrKeyAuthorization(firestore, 'app:publish'))
     .handle(async (publishRequest, context) => {
       const {
         serverVersionRange,
