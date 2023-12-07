@@ -1,22 +1,26 @@
-import fs, {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import * as v from 'shared/src/valita.js';
-import color from 'picocolors';
-import {parse} from 'shared/src/valita.js';
-import {scriptName} from './create-cli-parser.js';
 import {
+  AdditionalUserInfo,
   AuthCredential,
   EmailAuthCredential,
-  getAdditionalUserInfo,
-  getAuth,
   OAuthCredential,
   PhoneAuthCredential,
   SignInMethod,
+  UserCredential,
+  getAdditionalUserInfo,
+  getAuth,
   signInWithCredential,
-  AdditionalUserInfo,
+  signInWithCustomToken,
 } from 'firebase/auth';
+import {createToken} from 'mirror-protocol/src/token.js';
+import fs, {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import color from 'picocolors';
+import * as v from 'shared/src/valita.js';
+import {parse} from 'shared/src/valita.js';
+import {scriptName} from './create-cli-parser.js';
 import {loginHandler} from './login.js';
+
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 function getUserAuthConfigFile(
@@ -129,37 +133,67 @@ async function authenticateImpl(
   output = true,
   promptLogin = true,
 ): Promise<AuthenticatedUser> {
+  const {runAs, authKeyFromEnv} = yargs;
   if (authConfigForTesting) {
     return {
-      userID: yargs.runAs ?? 'fake-uid',
+      userID: runAs ?? 'fake-uid',
       additionalUserInfo: null,
     } as unknown as AuthenticatedUser;
   }
-  const authConfigFilePath = getUserAuthConfigFile(yargs);
-  if (fs.statSync(authConfigFilePath, {throwIfNoEntry: false}) === undefined) {
-    if (!promptLogin) {
-      throw new Error(`No auth config file found.`);
+  let userCredentials: UserCredential;
+
+  if (authKeyFromEnv) {
+    const key = process.env[authKeyFromEnv];
+    if (!key) {
+      console.error(
+        `${color.red(
+          color.bold('Error'),
+        )}: No key found in ${authKeyFromEnv} env variable`,
+      );
+      process.exit(-1);
     }
-    console.info('Login required');
-    await loginHandler(yargs);
+    const resp = await createToken({key});
+    userCredentials = await signInWithCustomToken(getAuth(), resp.token);
+  } else {
+    const authConfigFilePath = getUserAuthConfigFile(yargs);
+    if (
+      fs.statSync(authConfigFilePath, {throwIfNoEntry: false}) === undefined
+    ) {
+      if (!promptLogin) {
+        throw new Error(`No auth config file found.`);
+      }
+      console.info('Login required');
+      await loginHandler(yargs);
+    }
+    const config = mustReadAuthConfigFile(authConfigFilePath);
+    const authCredential = parseAuthCredential(config.authCredential);
+    if (!authCredential) {
+      throw new Error(
+        `Invalid credentials. Please run \`${scriptName} login\` again.`,
+      );
+    }
+    userCredentials = await signInWithCredential(getAuth(), authCredential);
   }
-  const config = mustReadAuthConfigFile(authConfigFilePath);
-  const authCredential = parseAuthCredential(config.authCredential);
-  if (!authCredential) {
-    throw new Error(
-      `Invalid credentials. Please run \`${scriptName} login\` again.`,
-    );
-  }
-  const userCredentials = await signInWithCredential(getAuth(), authCredential);
   const additionalUserInfo = getAdditionalUserInfo(userCredentials);
+  const {
+    user: {email, uid},
+  } = userCredentials;
+
   if (output) {
-    console.info(`Logged in as ${userCredentials.user.email}`);
+    if (email) {
+      console.info(`Logged in as ${email}`);
+    } else {
+      console.info(
+        // For UIDs such as "apps/ln3ddtrj/keys/abc-key", just show "abc-key".
+        `Authenticated with ${uid.substring(uid.lastIndexOf('/') + 1)}`,
+      );
+    }
   }
-  if (yargs.runAs) {
-    console.info(color.yellow(`Running as ${yargs.runAs}`));
+  if (runAs) {
+    console.info(color.yellow(`Running as ${runAs}`));
   }
   return {
-    userID: yargs.runAs ?? userCredentials.user.uid,
+    userID: runAs ?? uid,
     getIdToken: forceRefresh => userCredentials.user.getIdToken(forceRefresh),
     additionalUserInfo,
   };

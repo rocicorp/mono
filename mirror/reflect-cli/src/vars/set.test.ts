@@ -38,6 +38,8 @@ describe('set vars', () => {
   const ignoredYargs = {
     stack: 'sandbox',
     v: undefined,
+    authKeyFromEnv: undefined,
+    ['auth-key-from-env']: undefined,
     runAs: undefined,
     local: false,
     // eslint-disable-next-line @typescript-eslint/naming-convention

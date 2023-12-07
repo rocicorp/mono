@@ -5,6 +5,7 @@ import type {ArgumentsCamelCase, Argv} from 'yargs';
  */
 export interface CommonYargsOptions {
   v: boolean | undefined;
+  ['auth-key-from-env']: string | undefined;
   stack: string;
   local: boolean;
   runAs: string | undefined;

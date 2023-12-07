@@ -9,6 +9,7 @@ export const scriptName = `npx reflect`;
 
 export function createCLIParserBase(argv: string[]): Argv<{
   v: boolean | undefined;
+  ['auth-key-from-env']: string | undefined;
   stack: string;
   local: boolean;
   runAs: string | undefined;
@@ -31,6 +32,11 @@ export function createCLIParserBase(argv: string[]): Argv<{
       describe: 'Show version number',
       alias: 'version',
       type: 'boolean',
+    })
+    .option('auth-key-from-env', {
+      describe:
+        'Authenticate with a value created with `npx reflect keys`, set in the specified environment variable',
+      type: 'string',
     })
     .option('stack', {
       alias: 's',
