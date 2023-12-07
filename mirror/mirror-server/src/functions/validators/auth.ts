@@ -100,8 +100,8 @@ export function userAuthorization<
 /**
  * Internal implementation for `userOrKeyAuthorization` and `userAuthorization`.
  * The two are exported as separate methods to facilitate type-safety of the
- * OutputContext. (Namely, the type system requires that `appOrKeyAuthorization`
- * be preceded with `userOrKeyAuthorization` because it requires a
+ * OutputContext. (Namely, the type system requires that `appOrKeyAuthorization()`
+ * be preceded by `userOrKeyAuthorization()` because it requires a
  * `UserOrKeyAuthorization` InputContext.)
  */
 function userAuthorizationImpl<
