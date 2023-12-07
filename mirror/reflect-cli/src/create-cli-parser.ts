@@ -37,6 +37,7 @@ export function createCLIParserBase(argv: string[]): Argv<{
       describe:
         'Authenticate with a value created with `npx reflect keys`, set in the specified environment variable',
       type: 'string',
+      requiresArg: true,
     })
     .option('stack', {
       alias: 's',
