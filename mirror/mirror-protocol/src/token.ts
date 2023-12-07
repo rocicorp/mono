@@ -1,6 +1,6 @@
 import * as v from 'shared/src/valita.js';
-import { baseResponseFields } from './base.js';
-import { createCall } from './call.js';
+import {baseResponseFields} from './base.js';
+import {createCall} from './call.js';
 
 export const createTokenRequestSchema = v.object({
   key: v.string(),
