@@ -5,17 +5,17 @@ import {appPath} from './deployment.js';
 import * as path from './path.js';
 import {timestampSchema} from './timestamp.js';
 
-function defaultFalse() {
-  return v.boolean().default(false);
-}
+// All permissions must be a default=false boolean.
+// This makes any instance forward compatible with new permissions.
+const permissionValue = v.boolean().default(false);
 
 export const permissionsSchema = v.object({
-  'app:publish': defaultFalse(),
-  'rooms:read': defaultFalse(),
-  'rooms:create': defaultFalse(),
-  'rooms:close': defaultFalse(),
-  'rooms:delete': defaultFalse(),
-  'connections:invalidate': defaultFalse(),
+  'app:publish': permissionValue,
+  'rooms:read': permissionValue,
+  'rooms:create': permissionValue,
+  'rooms:close': permissionValue,
+  'rooms:delete': permissionValue,
+  'connections:invalidate': permissionValue,
 });
 
 export type Permissions = v.Infer<typeof permissionsSchema>;
