@@ -152,8 +152,8 @@ async function authenticateImpl(
       );
       process.exit(-1);
     }
-    const resp = await createToken({key});
-    userCredentials = await signInWithCustomToken(getAuth(), resp.token);
+    const {token} = await createToken({key});
+    userCredentials = await signInWithCustomToken(getAuth(), token);
   } else {
     const authConfigFilePath = getUserAuthConfigFile(yargs);
     if (
@@ -165,14 +165,14 @@ async function authenticateImpl(
       console.info('Login required');
       await loginHandler(yargs);
     }
-    const config = mustReadAuthConfigFile(authConfigFilePath);
-    const authCredential = parseAuthCredential(config.authCredential);
-    if (!authCredential) {
+    const {authCredential} = mustReadAuthConfigFile(authConfigFilePath);
+    const parsedCredential = parseAuthCredential(authCredential);
+    if (!parsedCredential) {
       throw new Error(
         `Invalid credentials. Please run \`${scriptName} login\` again.`,
       );
     }
-    userCredentials = await signInWithCredential(getAuth(), authCredential);
+    userCredentials = await signInWithCredential(getAuth(), parsedCredential);
   }
   const additionalUserInfo = getAdditionalUserInfo(userCredentials);
   const {
