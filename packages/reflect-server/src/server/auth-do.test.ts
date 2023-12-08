@@ -8,6 +8,7 @@ import {
   test,
 } from '@jest/globals';
 import type {TailErrorMessage} from 'reflect-protocol/src/tail.js';
+import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
 import {assert} from 'shared/src/asserts.js';
 import {newInvalidateAllAuthRequest} from '../client/auth.js';
 import {
@@ -72,6 +73,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   jest.restoreAllMocks();
+  resetAllConfig();
 });
 
 function isAuthRequest(request: Request) {
@@ -2585,5 +2587,218 @@ describe('Alarms', () => {
       "No more timeouts scheduled",
     ]
     `);
+  });
+});
+
+describe('client disconnect', () => {
+  function createDisconnectTestFixture(
+    options: {
+      testUserID?: string;
+      testRoomID?: string;
+      testClientID?: string;
+      encodedTestAuth?: string | undefined;
+      testAuth?: string | undefined;
+      connectedClients?: {clientID: string; userID: string}[] | undefined;
+    } = {},
+  ) {
+    const optionsWithDefault = {
+      testUserID: 'testUserID1',
+      testRoomID: 'testRoomID1',
+      testClientID: 'testClientID1',
+      encodedTestAuth: 'test%20auth%20token%20value%20%25%20encoded',
+      testAuth: 'test auth token value % encoded',
+      ...options,
+    };
+    const {
+      testUserID,
+      testRoomID,
+      testClientID,
+      encodedTestAuth,
+      testAuth,
+      connectedClients,
+    } = optionsWithDefault;
+
+    const headers = new Headers();
+    if (encodedTestAuth !== undefined) {
+      headers.set('Authorization', 'Bearer ' + encodedTestAuth);
+    }
+    const url = `http://test.roci.dev/api/sync/v1/disconnect?roomID=${testRoomID}&clientID=${testClientID}&userID=${testUserID}`;
+
+    const testRequest = new Request(url, {
+      method: 'POST',
+      headers,
+    });
+
+    let numRooms = 0;
+    const testRoomDO: DurableObjectNamespace = {
+      ...createTestDurableObjectNamespace(),
+      idFromName() {
+        throw 'should not be called';
+      },
+      newUniqueId() {
+        return new TestDurableObjectId('room-do-' + numRooms++, undefined);
+      },
+      get(id: DurableObjectId) {
+        expect(id.toString()).toEqual('room-do-0');
+        // eslint-disable-next-line require-await
+        return new TestDurableObjectStub(id, async (request: Request) => {
+          expect(request.headers.get(ROOM_ID_HEADER_NAME)).toEqual(testRoomID);
+          const url = new URL(request.url);
+          if (
+            url.pathname === INTERNAL_CREATE_ROOM_PATH ||
+            url.pathname === CREATE_ROOM_PATH
+          ) {
+            return new Response();
+          }
+
+          if (url.pathname === AUTH_CONNECTIONS_PATH) {
+            return new Response(
+              JSON.stringify(
+                connectedClients ?? [
+                  {userID: testUserID, clientID: testClientID},
+                ],
+              ),
+            );
+          }
+
+          expect(request.url).toEqual(testRequest.url);
+          expect(request.headers.get(AUTH_DATA_HEADER_NAME)).toEqual(
+            encodeHeaderValue(JSON.stringify({userID: testUserID})),
+          );
+          if (encodedTestAuth !== undefined) {
+            expect(request.headers.get('Authorization')).toEqual(
+              'Bearer ' + encodedTestAuth,
+            );
+          }
+
+          return new Response('test ok', {status: 200});
+        });
+      },
+    };
+
+    return {
+      testAuth,
+      testUserID,
+      testRoomID,
+      testClientID,
+      testRequest,
+      testRoomDO,
+      encodedTestAuth,
+    };
+  }
+
+  beforeEach(() => {
+    setConfig('disconnectBeacon', true);
+  });
+
+  afterEach(() => {
+    resetAllConfig();
+  });
+
+  test("disconnect will not create a room that doesn't exist", async () => {
+    const {testAuth, testUserID, testRoomID, testRequest, testRoomDO} =
+      createDisconnectTestFixture({});
+    const logSink = new TestLogSink();
+    const authDO = new TestAuthDO({
+      roomDO: testRoomDO,
+      state,
+      // eslint-disable-next-line require-await
+      authHandler: async (auth, roomID, env) => {
+        expect(auth).toEqual(testAuth);
+        expect(roomID).toEqual(testRoomID);
+        expect(env).toEqual({foo: 'bar'});
+        return {userID: testUserID};
+      },
+      authApiKey: TEST_API_KEY,
+      logSink,
+      logLevel: 'debug',
+      env: {foo: 'bar'},
+    });
+
+    const testTime = 1010101;
+    jest.setSystemTime(testTime);
+    const response = await authDO.fetch(testRequest);
+
+    expect(response.status).toEqual(404);
+
+    expect((await storage.list({prefix: 'conn/'})).size).toEqual(0);
+  });
+
+  test('disconnect will get forwarded to room do if room exists and authenticated', async () => {
+    const {testAuth, testUserID, testRoomID, testRequest, testRoomDO} =
+      createDisconnectTestFixture({});
+    const logSink = new TestLogSink();
+    const authDO = new TestAuthDO({
+      roomDO: testRoomDO,
+      state,
+      authHandler: (auth, roomID, env) => {
+        expect(auth).toEqual(testAuth);
+        expect(roomID).toEqual(testRoomID);
+        expect(env).toEqual({foo: 'bar'});
+        return {userID: testUserID};
+      },
+      authApiKey: TEST_API_KEY,
+      logSink,
+      logLevel: 'debug',
+      env: {foo: 'bar'},
+    });
+
+    await createRoom(authDO, testRoomID);
+
+    const testTime = 1010101;
+    jest.setSystemTime(testTime);
+    const response = await authDO.fetch(testRequest);
+
+    expect(response.status).toEqual(200);
+    expect(await response.text()).toEqual('test ok');
+  });
+
+  test('disconnect will get forwarded to room do if room exists and no authHandler', async () => {
+    const {testRoomID, testRequest, testRoomDO} = createDisconnectTestFixture(
+      {},
+    );
+    const logSink = new TestLogSink();
+    const authDO = new TestAuthDO({
+      roomDO: testRoomDO,
+      state,
+      authApiKey: TEST_API_KEY,
+      logSink,
+      logLevel: 'debug',
+      env: {foo: 'bar'},
+    });
+
+    await createRoom(authDO, testRoomID);
+
+    const testTime = 1010101;
+    jest.setSystemTime(testTime);
+    const response = await authDO.fetch(testRequest);
+
+    expect(response.status).toEqual(200);
+    expect(await response.text()).toEqual('test ok');
+  });
+
+  test('disconnect authentication fail', async () => {
+    const {testRoomID, testRequest, testRoomDO} = createDisconnectTestFixture({
+      encodedTestAuth: 'abc',
+    });
+    const logSink = new TestLogSink();
+    const authDO = new TestAuthDO({
+      roomDO: testRoomDO,
+      state,
+      authHandler: () => null,
+      authApiKey: TEST_API_KEY,
+      logSink,
+      logLevel: 'debug',
+      env: {foo: 'bar'},
+    });
+
+    await createRoom(authDO, testRoomID);
+
+    const testTime = 1010101;
+    jest.setSystemTime(testTime);
+    const response = await authDO.fetch(testRequest);
+
+    expect(response.status).toEqual(403);
+    expect(await response.text()).toEqual('Unauthorized');
   });
 });

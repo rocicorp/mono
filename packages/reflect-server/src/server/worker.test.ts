@@ -161,7 +161,16 @@ async function testForwardedToAuthDO(
   expect(response.headers.get('Access-Control-Allow-Origin')).toEqual('*');
 }
 
-test('worker forwards connect requests to authDO', async () => {
+test('worker forwards disconnect requests to authDO', async () => {
+  await testForwardedToAuthDO(
+    new Request('http://test.roci.dev/api/sync/v1/disconnect'),
+    new Response(null, {
+      status: 200,
+    }),
+  );
+});
+
+test('worker forwards legacy connect requests to authDO', async () => {
   await testForwardedToAuthDO(
     new Request('ws://test.roci.dev/connect'),
     new Response(null, {
@@ -170,9 +179,28 @@ test('worker forwards connect requests to authDO', async () => {
     }),
   );
 });
+test('worker forwards connect requests to authDO', async () => {
+  await testForwardedToAuthDO(
+    new Request('ws://test.roci.dev/api/sync/v1/connect'),
+    new Response(null, {
+      status: 101,
+      webSocket: new Mocket(),
+    }),
+  );
+});
+
+test('worker does not forward disconnect requests to authDO when DISABLE is true', async () => {
+  await testDisabled(
+    new Request('http://test.roci.dev/api/sync/v1/disconnect'),
+  );
+});
+
+test('worker does not forward legacy connect requests to authDO when DISABLE is true', async () => {
+  await testDisabled(new Request('ws://test.roci.dev/connect'));
+});
 
 test('worker does not forward connect requests to authDO when DISABLE is true', async () => {
-  await testDisabled(new Request('ws://test.roci.dev/connect'));
+  await testDisabled(new Request('ws://test.roci.dev/api/sync/v1/connect'));
 });
 
 test('worker forwards authDO api requests to authDO', async () => {

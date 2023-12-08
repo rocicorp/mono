@@ -11,11 +11,12 @@ import {
 import type {TailErrorKind} from 'reflect-protocol/src/tail.js';
 import type {AuthData, Env} from 'reflect-shared';
 import {version} from 'reflect-shared';
+import {getConfig} from 'reflect-shared/src/config.js';
 import {assert} from 'shared/src/asserts.js';
 import {timed} from 'shared/src/timed.js';
 import * as valita from 'shared/src/valita.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {encodeHeaderValue} from '../util/headers.js';
+import {decodeHeaderValue, encodeHeaderValue} from '../util/headers.js';
 import {populateLogContextFromRequest} from '../util/log-context-common.js';
 import {sleep} from '../util/sleep.js';
 import {
@@ -27,11 +28,13 @@ import {AlarmManager, TimeoutID} from './alarms.js';
 import {createAPIHeaders} from './api-headers.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
 import type {AuthHandler} from './auth.js';
+import {getRequiredSearchParams} from './get-required-search-params.js';
 import {requireUpgradeHeader, roomNotFoundResponse} from './http-util.js';
 import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
 import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
+  DISCONNECT_BEACON_PATH,
   LEGACY_CONNECT_PATH,
   LEGACY_CREATE_ROOM_PATH,
   TAIL_URL_PATH,
@@ -107,6 +110,7 @@ export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
 export const AUTH_ROUTES_CUSTOM_AUTH = {
   legacyConnect: LEGACY_CONNECT_PATH,
   connect: CONNECT_URL_PATTERN,
+  disconnectBeacon: DISCONNECT_BEACON_PATH,
   tail: TAIL_URL_PATH,
 } as const;
 
@@ -354,6 +358,114 @@ export class BaseAuthDO implements DurableObject {
     return roomDOFetch(requestToDO, 'tail', stub, roomID, lc);
   });
 
+  #disconnectBeacon = post(async (ctx: BaseContext, request) => {
+    const {lc} = ctx;
+    lc.info?.('authDO received disconnect beacon request:', request.url);
+
+    // TODO(arv): This code is pretty similar to the code in #connectImpl. Consider refactoring.
+
+    const {searchParams} = new URL(request.url);
+    const {
+      values: [roomID, userID],
+      errorResponse,
+    } = getRequiredSearchParams(
+      ['roomID', 'userID'],
+      searchParams,
+      msg => new Response(msg, {status: 400}),
+    );
+    if (errorResponse) {
+      return errorResponse;
+    }
+
+    let authData: AuthData = {
+      userID,
+    };
+
+    const authHandler = this.#authHandler;
+    if (authHandler) {
+      const authHeader = request.headers.get('Authorization');
+      if (!authHeader) {
+        return new Response('Missing Authorization header', {status: 401});
+      }
+
+      if (!authHeader.startsWith('Bearer ')) {
+        return new Response('Invalid Authorization header', {status: 401});
+      }
+      const encodedAuth = authHeader.slice('Bearer '.length);
+      const auth = decodeHeaderValue(encodedAuth);
+
+      const timeout = async () => {
+        await sleep(AUTH_HANDLER_TIMEOUT_MS);
+        throw new Error('authHandler timed out');
+      };
+
+      const callHandlerWithTimeout = () =>
+        Promise.race([authHandler(auth, roomID, this.#env), timeout()]);
+
+      const [authHandlerAuthData, response] = await timed(
+        lc.info,
+        'calling authHandler',
+        async () => {
+          try {
+            return [await callHandlerWithTimeout(), undefined] as const;
+          } catch (e) {
+            return [
+              undefined,
+              new Response(`authHandler rejected: ${String(e)}`, {status: 403}),
+            ] as const;
+          }
+        },
+      );
+      if (response !== undefined) {
+        return response;
+      }
+
+      if (!authHandlerAuthData || !authHandlerAuthData.userID) {
+        if (!authHandlerAuthData) {
+          lc.info?.('authData returned by authHandler is not an object.');
+        } else if (!authHandlerAuthData.userID) {
+          lc.info?.('authData returned by authHandler has no userID.');
+        }
+        return new Response('Unauthorized', {status: 403});
+      }
+      if (authHandlerAuthData.userID !== userID) {
+        lc.info?.(
+          'authData returned by authHandler has a different userID.',
+          authHandlerAuthData.userID,
+          userID,
+        );
+        return new Response('Unauthorized', {status: 403});
+      }
+      authData = authHandlerAuthData;
+    }
+
+    const roomRecord = await timed(lc.debug, 'looking up roomRecord', () =>
+      this.#roomRecordLock.withRead(
+        // Check if room already exists.
+        () => roomRecordByRoomID(this.#durableStorage, roomID),
+      ),
+    );
+
+    if (!roomRecord) {
+      return new Response('Room not found', {status: 404});
+    }
+
+    if (roomRecord.status !== RoomStatus.Open) {
+      return new Response('Room closed', {status: 410 /* Gone */});
+    }
+
+    const roomObjectID = this.#roomDO.idFromString(roomRecord.objectIDString);
+
+    // Forward the request to the Room Durable Object...
+    const stub = this.#roomDO.get(roomObjectID);
+    const requestToDO = new Request(request);
+    requestToDO.headers.set(
+      AUTH_DATA_HEADER_NAME,
+      encodeHeaderValue(JSON.stringify(authData)),
+    );
+    return roomDOFetch(requestToDO, 'disconnect beacon', stub, roomID, lc);
+  });
+
   #initRoutes() {
     this.#router.register(
       AUTH_ROUTES.roomStatusByRoomID,
@@ -382,8 +494,13 @@ export class BaseAuthDO implements DurableObject {
     this.#router.register(AUTH_ROUTES.legacyConnect, this.#legacyConnect);
     this.#router.register(AUTH_ROUTES.connect, this.#connect);
     this.#router.register(AUTH_ROUTES.canaryWebSocket, this.#canaryWebSocket);
-
     this.#router.register(AUTH_ROUTES.tail, this.#tail);
+    if (getConfig('disconnectBeacon')) {
+      this.#router.register(
+        AUTH_ROUTES.disconnectBeacon,
+        this.#disconnectBeacon,
+      );
+    }
   }
 
   #canaryWebSocket = get((ctx: BaseContext, request) => {
@@ -478,9 +595,11 @@ export class BaseAuthDO implements DurableObject {
     const {url} = request;
     lc.info?.('authDO received websocket connection request:', url);
 
-    const errorResponse = requireUpgradeHeader(request, lc);
-    if (errorResponse) {
-      return errorResponse;
+    {
+      const errorResponse = requireUpgradeHeader(request, lc);
+      if (errorResponse) {
+        return errorResponse;
+      }
     }
 
     // From this point forward we want to return errors over the websocket so
@@ -519,30 +638,20 @@ export class BaseAuthDO implements DurableObject {
       );
       return closeWithErrorLocal('VersionNotSupported', 'unsupported version');
     }
-    const {searchParams} = new URL(url);
     // TODO apparently many of these checks are not tested :(
-    const clientID = searchParams.get('clientID');
-    if (!clientID) {
-      return closeWithErrorLocal(
-        'InvalidConnectionRequest',
-        'clientID parameter required',
-      );
-    }
 
-    const roomID = searchParams.get('roomID');
-    if (!roomID) {
-      return closeWithErrorLocal(
-        'InvalidConnectionRequest',
-        'roomID parameter required',
-      );
-    }
+    const {searchParams} = new URL(url);
 
-    const userID = searchParams.get('userID');
-    if (!userID) {
-      return closeWithErrorLocal(
-        'InvalidConnectionRequest',
-        'userID parameter required',
-      );
+    const {
+      values: [clientID, roomID, userID],
+      errorResponse,
+    } = getRequiredSearchParams(
+      ['clientID', 'roomID', 'userID'],
+      searchParams,
+      msg => closeWithErrorLocal('InvalidConnectionRequest', msg),
+    );
+    if (errorResponse) {
+      return errorResponse;
     }
 
     const jurisdiction = searchParams.get('jurisdiction') ?? undefined;

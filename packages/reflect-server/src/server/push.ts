@@ -49,7 +49,7 @@ export async function handlePush(
   body: PushBody,
   now: Now,
   processUntilDone: ProcessUntilDone,
-) {
+): Promise<void> {
   lc = lc.withContext('requestID', body.requestID);
   lc.debug?.('handling push');
 
