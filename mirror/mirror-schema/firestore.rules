@@ -8,8 +8,8 @@ service cloud.firestore {
 
     // authenticatedWithAppKey does not require any get()s. Try this first.
     function authenticatedWithAppKey(appID) {
-      return request.auth != null
-        && string(request.auth.uid).matches('^apps/' + appID + '/keys/.*');
+      let uidPath = request.auth != null ? string(request.auth.uid).split('/') : [];
+      return uidPath.size() > 3 && uidPath[0:3] == ['apps', appID, 'keys'];
     }
     // userIs{Role}OfApp() requires two get()s, one on the app doc and one on the user doc.
     function userIsMemberOfApp(appID) {
