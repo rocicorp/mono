@@ -12,6 +12,34 @@ export function encodeHeaderValue(value: string): string {
 }
 
 export function decodeHeaderValue(encoded: string): string {
-  encoded;
   return decodeURIComponent(encoded);
+}
+
+export function getBearerToken(
+  headers: Headers,
+):
+  | [decodedAuth: string, errorResponse: undefined]
+  | [decodedAuth: undefined, errorResponse: Response] {
+  const err = (msg: string, status: number): [undefined, Response] => [
+    undefined,
+    new Response(msg, {status}),
+  ];
+
+  const authHeader = headers.get('Authorization');
+  if (!authHeader) {
+    return [
+      undefined,
+      new Response('Missing Authorization header', {status: 401}),
+    ];
+  }
+
+  if (!authHeader.startsWith('Bearer ')) {
+    return err('Invalid Authorization header', 401);
+  }
+  const encodedAuth = authHeader.slice('Bearer '.length);
+  try {
+    return [decodeHeaderValue(encodedAuth), undefined];
+  } catch {
+    return err('Malformed Authorization header', 401);
+  }
 }

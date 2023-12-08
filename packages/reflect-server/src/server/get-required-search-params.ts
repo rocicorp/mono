@@ -3,18 +3,9 @@ export function getRequiredSearchParams(
   searchParams: URLSearchParams,
   makeErrorResponse: (message: string) => Response,
 ):
-  | {
-      values: string[];
-      errorResponse: undefined;
-    }
-  | {
-      values: never[];
-      errorResponse: Response;
-    } {
-  const err = (s: string) => ({
-    values: [],
-    errorResponse: makeErrorResponse(s),
-  });
+  | [values: string[], errorResponse: undefined]
+  | [values: never[], errorResponse: Response] {
+  const err = (s: string): [never[], Response] => [[], makeErrorResponse(s)];
 
   const values: string[] = [];
   for (const key of keys) {
@@ -24,5 +15,5 @@ export function getRequiredSearchParams(
     }
     values.push(value);
   }
-  return {values, errorResponse: undefined};
+  return [values, undefined];
 }

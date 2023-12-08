@@ -345,10 +345,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   #disconnectBeacon = post(async (ctx, request) => {
     const {lc} = ctx;
     const {searchParams} = new URL(request.url);
-    const {
-      values: [clientID, roomID, userID],
-      errorResponse,
-    } = getRequiredSearchParams(
+    const [[clientID, roomID, userID], errorResponse] = getRequiredSearchParams(
       ['clientID', 'roomID', 'userID'],
       searchParams,
       (message: string) => new Response(message, {status: 400}),

@@ -2799,6 +2799,6 @@ describe('client disconnect', () => {
     const response = await authDO.fetch(testRequest);
 
     expect(response.status).toEqual(403);
-    expect(await response.text()).toEqual('Unauthorized');
+    expect(await response.text()).toEqual('no authData');
   });
 });
