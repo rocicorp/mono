@@ -13,10 +13,11 @@ import type {AuthData, Env} from 'reflect-shared';
 import {version} from 'reflect-shared';
 import {getConfig} from 'reflect-shared/src/config.js';
 import {assert} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.js';
 import {timed} from 'shared/src/timed.js';
 import * as valita from 'shared/src/valita.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {decodeHeaderValue, encodeHeaderValue} from '../util/headers.js';
+import {encodeHeaderValue} from '../util/headers.js';
 import {populateLogContextFromRequest} from '../util/log-context-common.js';
 import {sleep} from '../util/sleep.js';
 import {
@@ -358,7 +359,7 @@ export class BaseAuthDO implements DurableObject {
     return roomDOFetch(requestToDO, 'tail', stub, roomID, lc);
   });
 
-  #disconnectBeacon = post(async (ctx: BaseContext, request) => {
+  #disconnectBeacon = post((ctx: BaseContext, request) => {
     const {lc} = ctx;
     lc.info?.('authDO received disconnect beacon request:', request.url);
 
@@ -377,93 +378,108 @@ export class BaseAuthDO implements DurableObject {
       return errorResponse;
     }
 
-    let authData: AuthData = {
-      userID,
-    };
-
-    const authHandler = this.#authHandler;
-    if (authHandler) {
-      const authHeader = request.headers.get('Authorization');
-      if (!authHeader) {
-        return new Response('Missing Authorization header', {status: 401});
-      }
-
-      if (!authHeader.startsWith('Bearer ')) {
-        return new Response('Invalid Authorization header', {status: 401});
-      }
-      const encodedAuth = authHeader.slice('Bearer '.length);
-      const auth = decodeHeaderValue(encodedAuth);
-
-      const timeout = async () => {
-        await sleep(AUTH_HANDLER_TIMEOUT_MS);
-        throw new Error('authHandler timed out');
-      };
-
-      const callHandlerWithTimeout = () =>
-        Promise.race([authHandler(auth, roomID, this.#env), timeout()]);
-
-      const [authHandlerAuthData, response] = await timed(
-        lc.info,
-        'calling authHandler',
-        async () => {
-          try {
-            return [await callHandlerWithTimeout(), undefined] as const;
-          } catch (e) {
-            return [
-              undefined,
-              new Response(`authHandler rejected: ${String(e)}`, {status: 403}),
-            ] as const;
-          }
-        },
-      );
-      if (response !== undefined) {
-        return response;
-      }
-
-      if (!authHandlerAuthData || !authHandlerAuthData.userID) {
-        if (!authHandlerAuthData) {
-          lc.info?.('authData returned by authHandler is not an object.');
-        } else if (!authHandlerAuthData.userID) {
-          lc.info?.('authData returned by authHandler has no userID.');
-        }
-        return new Response('Unauthorized', {status: 403});
-      }
-      if (authHandlerAuthData.userID !== userID) {
-        lc.info?.(
-          'authData returned by authHandler has a different userID.',
-          authHandlerAuthData.userID,
+    return timed(lc.debug, 'inside authLock', () =>
+      this.#authLock.withRead(async () => {
+        let authData: AuthData = {
           userID,
+        };
+
+        const authHeader = request.headers.get('Authorization');
+        if (!authHeader) {
+          return new Response('Missing Authorization header', {status: 401});
+        }
+
+        if (!authHeader.startsWith('Bearer ')) {
+          return new Response('Invalid Authorization header', {status: 401});
+        }
+        const encodedAuth = authHeader.slice('Bearer '.length);
+        let decodedAuth: string | undefined;
+        try {
+          decodedAuth = decodeURIComponent(encodedAuth);
+        } catch {
+          return new Response('Malformed Authorization header', {status: 401});
+        }
+
+        const makeErrorResponse = (msg: string) =>
+          new Response(msg, {status: 403});
+        const authHandler = this.#authHandler;
+        if (authHandler) {
+          const auth = must(decodedAuth);
+
+          const timeout = async () => {
+            await sleep(AUTH_HANDLER_TIMEOUT_MS);
+            throw new Error('authHandler timed out');
+          };
+
+          const callHandlerWithTimeout = () =>
+            Promise.race([authHandler(auth, roomID, this.#env), timeout()]);
+
+          const [authHandlerAuthData, response] = await timed(
+            lc.info,
+            'calling authHandler',
+            async () => {
+              try {
+                return [await callHandlerWithTimeout(), undefined] as const;
+              } catch (e) {
+                return [
+                  undefined,
+                  makeErrorResponse(`authHandler rejected: ${String(e)}`),
+                ] as const;
+              }
+            },
+          );
+          if (response !== undefined) {
+            return response;
+          }
+
+          if (!authHandlerAuthData || !authHandlerAuthData.userID) {
+            if (!authHandlerAuthData) {
+              lc.info?.('authData returned by authHandler is not an object.');
+            } else if (!authHandlerAuthData.userID) {
+              lc.info?.('authData returned by authHandler has no userID.');
+            }
+            return new Response('Unauthorized', {status: 403});
+          }
+          if (authHandlerAuthData.userID !== userID) {
+            lc.info?.(
+              'authData returned by authHandler has a different userID.',
+              authHandlerAuthData.userID,
+              userID,
+            );
+            return new Response('Unauthorized', {status: 403});
+          }
+          authData = authHandlerAuthData;
+        }
+
+        const roomRecord = await timed(lc.debug, 'looking up roomRecord', () =>
+          this.#roomRecordLock.withRead(
+            // Check if room already exists.
+            () => roomRecordByRoomID(this.#durableStorage, roomID),
+          ),
         );
-        return new Response('Unauthorized', {status: 403});
-      }
-      authData = authHandlerAuthData;
-    }
 
-    const roomRecord = await timed(lc.debug, 'looking up roomRecord', () =>
-      this.#roomRecordLock.withRead(
-        // Check if room already exists.
-        () => roomRecordByRoomID(this.#durableStorage, roomID),
-      ),
+        if (!roomRecord) {
+          return new Response('Room not found', {status: 404});
+        }
+
+        if (roomRecord.status !== RoomStatus.Open) {
+          return new Response('Room closed', {status: 410 /* Gone */});
+        }
+
+        const roomObjectID = this.#roomDO.idFromString(
+          roomRecord.objectIDString,
+        );
+
+        // Forward the request to the Room Durable Object...
+        const stub = this.#roomDO.get(roomObjectID);
+        const requestToDO = new Request(request);
+        requestToDO.headers.set(
+          AUTH_DATA_HEADER_NAME,
+          encodeHeaderValue(JSON.stringify(authData)),
+        );
+        return roomDOFetch(requestToDO, 'disconnect beacon', stub, roomID, lc);
+      }),
     );
-
-    if (!roomRecord) {
-      return new Response('Room not found', {status: 404});
-    }
-
-    if (roomRecord.status !== RoomStatus.Open) {
-      return new Response('Room closed', {status: 410 /* Gone */});
-    }
-
-    const roomObjectID = this.#roomDO.idFromString(roomRecord.objectIDString);
-
-    // Forward the request to the Room Durable Object...
-    const stub = this.#roomDO.get(roomObjectID);
-    const requestToDO = new Request(request);
-    requestToDO.headers.set(
-      AUTH_DATA_HEADER_NAME,
-      encodeHeaderValue(JSON.stringify(authData)),
-    );
-    return roomDOFetch(requestToDO, 'disconnect beacon', stub, roomID, lc);
   });
 
   #initRoutes() {
@@ -641,7 +657,6 @@ export class BaseAuthDO implements DurableObject {
     // TODO apparently many of these checks are not tested :(
 
     const {searchParams} = new URL(url);
-
     const {
       values: [clientID, roomID, userID],
       errorResponse,
@@ -667,7 +682,7 @@ export class BaseAuthDO implements DurableObject {
     if (encodedAuth) {
       try {
         decodedAuth = decodeURIComponent(encodedAuth);
-      } catch (e) {
+      } catch {
         return closeWithErrorLocal(
           'InvalidConnectionRequest',
           'malformed auth',
@@ -681,10 +696,11 @@ export class BaseAuthDO implements DurableObject {
           userID,
         };
 
-        if (this.#authHandler) {
-          const auth = decodedAuth;
-          assert(auth);
-          const authHandler = this.#authHandler;
+        const makeUnauthorizedResponse = (msg: string) =>
+          closeWithErrorLocal('Unauthorized', msg);
+        const authHandler = this.#authHandler;
+        if (authHandler) {
+          const auth = must(decodedAuth);
 
           const timeout = async () => {
             await sleep(AUTH_HANDLER_TIMEOUT_MS);
@@ -703,8 +719,7 @@ export class BaseAuthDO implements DurableObject {
               } catch (e) {
                 return [
                   undefined,
-                  closeWithErrorLocal(
-                    'Unauthorized',
+                  makeUnauthorizedResponse(
                     `authHandler rejected: ${String(e)}`,
                   ),
                 ] as const;
@@ -721,7 +736,7 @@ export class BaseAuthDO implements DurableObject {
             } else if (!authHandlerAuthData.userID) {
               lc.info?.('authData returned by authHandler has no userID.');
             }
-            return closeWithErrorLocal('Unauthorized', 'no authData');
+            return makeUnauthorizedResponse('no authData');
           }
           if (authHandlerAuthData.userID !== userID) {
             lc.info?.(
@@ -729,8 +744,7 @@ export class BaseAuthDO implements DurableObject {
               authHandlerAuthData.userID,
               userID,
             );
-            return closeWithErrorLocal(
-              'Unauthorized',
+            return makeUnauthorizedResponse(
               'userID returned by authHandler must match userID specified in Reflect constructor.',
             );
           }
