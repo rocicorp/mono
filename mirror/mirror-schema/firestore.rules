@@ -11,8 +11,6 @@ service cloud.firestore {
       let uidPath = request.auth != null ? string(request.auth.uid).split('/') : [];
       return uidPath.size() > 3 && uidPath[0:3] == ['apps', appID, 'keys'];
     }
-
-    }
     // userIs{Role}OfApp() requires two get()s, one on the app doc and one on the user doc.
     function userIsMemberOfApp(appID) {
       let app = get(/databases/$(database)/documents/apps/$(appID)).data;
