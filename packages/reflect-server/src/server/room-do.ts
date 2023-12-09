@@ -4,8 +4,10 @@ import {
   invalidateForRoomRequestSchema,
   invalidateForUserRequestSchema,
 } from 'reflect-protocol';
+import {disconnectSchema} from 'reflect-protocol/src/disconnect.js';
 import type {Env, MutatorDefs} from 'reflect-shared';
 import {version} from 'reflect-shared';
+import {getConfig} from 'reflect-shared/src/config.js';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import * as valita from 'shared/src/valita.js';
 import {ConnectionLifetimeReporter} from '../events/connection-lifetimes.js';
@@ -32,6 +34,7 @@ import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
 import {closeConnections, getConnections} from './connections.js';
 import type {DisconnectHandler} from './disconnect.js';
+import {getRequiredSearchParams} from './get-required-search-params.js';
 import {requireUpgradeHeader, upgradeWebsocketResponse} from './http-util.js';
 import {ROOM_ID_HEADER_NAME} from './internal-headers.js';
 import {handleMessage} from './message.js';
@@ -39,6 +42,7 @@ import {
   AUTH_CONNECTIONS_PATH,
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
+  DISCONNECT_BEACON_PATH,
   INTERNAL_CREATE_ROOM_PATH,
   LEGACY_CONNECT_PATH,
   LEGACY_CREATE_ROOM_PATH,
@@ -85,6 +89,7 @@ export const ROOM_ROUTES = {
   internalCreateRoom: INTERNAL_CREATE_ROOM_PATH,
   legacyConnect: LEGACY_CONNECT_PATH,
   connect: CONNECT_URL_PATTERN,
+  disconnectBeacon: DISCONNECT_BEACON_PATH,
   tail: TAIL_URL_PATH,
 } as const;
 
@@ -198,6 +203,12 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     this.#router.register(ROOM_ROUTES.legacyConnect, this.#connect);
 
     this.#router.register(ROOM_ROUTES.tail, this.#tail);
+    if (getConfig('disconnectBeacon')) {
+      this.#router.register(
+        ROOM_ROUTES.disconnectBeacon,
+        this.#disconnectBeacon,
+      );
+    }
   }
 
   #requireAPIKey = <Context extends BaseContext, Resp>(
@@ -329,6 +340,33 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       });
 
     return upgradeWebsocketResponse(clientWS, request.headers);
+  });
+
+  #disconnectBeacon = post(async (ctx, request) => {
+    const {lc} = ctx;
+    const {searchParams} = new URL(request.url);
+    const [[clientID, roomID, userID], errorResponse] = getRequiredSearchParams(
+      ['clientID', 'roomID', 'userID'],
+      searchParams,
+      (message: string) => new Response(message, {status: 400}),
+    );
+
+    if (errorResponse) {
+      lc.debug?.('Failed to get roomID and userID');
+      return errorResponse;
+    }
+
+    lc.debug?.('disconnect client beacon request', roomID, userID);
+
+    const bodyJSON = await request.json();
+    const pushBody = valita.parse(bodyJSON, disconnectSchema);
+    lc.debug?.('client disconnect request', clientID, pushBody);
+
+    // TODO(arv): Apply the mutations if any.
+    // TODO(arv): Delete the client record.
+    // TODO(arv): Collect the presence state.
+
+    return new Response('ok');
   });
 
   #tail = get((ctx, request) => {
