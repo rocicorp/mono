@@ -39,6 +39,7 @@ import {
   listDeployedAppsHandler,
   listDeployedAppsOptions,
 } from './list-deployed-apps.js';
+import {lookupAuthHandler, lookupAuthOptions} from './lookup-auth.js';
 import {
   migrateDnsCommentsToTagsHandler,
   migrateDnsCommentsToTagsOptions,
@@ -131,6 +132,13 @@ function createCLIParser(argv: string[]) {
     'Removes a server version from a set of server channels. The resulting highest server version will be re-deployed to apps in those channels.',
     revertReflectServerOptions,
     revertReflectServerHandler,
+  );
+
+  reflectCLI.command(
+    'lookup-auth <email|uid>',
+    'Looks up a user in Firebase Auth',
+    lookupAuthOptions,
+    lookupAuthHandler,
   );
 
   // grant-super
