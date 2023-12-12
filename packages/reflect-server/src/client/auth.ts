@@ -1,15 +1,16 @@
-import type {
-  InvalidateForRoomRequest,
-  InvalidateForUserRequest,
-} from 'reflect-protocol';
-import {AUTH_ROUTES} from '../server/auth-do.js';
+import {
+  INVALIDATE_ALL_CONNECTIONS_PATH,
+  INVALIDATE_ROOM_CONNECTIONS_PATH,
+  INVALIDATE_USER_CONNECTIONS_PATH,
+  fmtPath,
+} from '../server/paths.js';
 import {newAuthedPostRequest} from './authedpost.js';
 
 export function newInvalidateAllAuthRequest(
   reflectServerURL: string,
   authApiKey: string,
 ) {
-  const path = AUTH_ROUTES.authInvalidateAll;
+  const path = fmtPath(INVALIDATE_ALL_CONNECTIONS_PATH);
   const url = new URL(path, reflectServerURL);
   return newAuthedPostRequest(url, authApiKey);
 }
@@ -19,10 +20,9 @@ export function newInvalidateForUserAuthRequest(
   authApiKey: string,
   userID: string,
 ) {
-  const path = AUTH_ROUTES.authInvalidateForUser;
+  const path = fmtPath(INVALIDATE_USER_CONNECTIONS_PATH, {userID});
   const url = new URL(path, reflectServerURL);
-  const req: InvalidateForUserRequest = {userID};
-  return newAuthedPostRequest(url, authApiKey, req);
+  return newAuthedPostRequest(url, authApiKey);
 }
 
 export function newInvalidateForRoomAuthRequest(
@@ -30,8 +30,7 @@ export function newInvalidateForRoomAuthRequest(
   authApiKey: string,
   roomID: string,
 ) {
-  const path = AUTH_ROUTES.authInvalidateForRoom;
+  const path = fmtPath(INVALIDATE_ROOM_CONNECTIONS_PATH, {roomID});
   const url = new URL(path, reflectServerURL);
-  const req: InvalidateForRoomRequest = {roomID};
-  return newAuthedPostRequest(url, authApiKey, req);
+  return newAuthedPostRequest(url, authApiKey);
 }

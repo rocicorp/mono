@@ -2,7 +2,12 @@ import type {CreateRoomRequest} from 'reflect-protocol';
 import * as v from 'shared/src/valita.js';
 import {createAPIHeaders} from '../server/api-headers.js';
 import {AUTH_ROUTES} from '../server/auth-do.js';
-import {CREATE_ROOM_PATH} from '../server/paths.js';
+import {
+  CLOSE_ROOM_PATH,
+  CREATE_ROOM_PATH,
+  DELETE_ROOM_PATH,
+  fmtPath,
+} from '../server/paths.js';
 import {roomStatusSchema, type RoomStatus} from '../server/rooms.js';
 import {newAuthedPostRequest} from './authedpost.js';
 
@@ -129,8 +134,8 @@ export function newCreateRoomRequest(
   roomID: string,
   jurisdiction?: 'eu',
 ) {
-  const url = new URL(CREATE_ROOM_PATH, reflectServerURL);
-  const req: CreateRoomRequest = {roomID, jurisdiction};
+  const url = new URL(fmtPath(CREATE_ROOM_PATH, {roomID}), reflectServerURL);
+  const req: CreateRoomRequest = {jurisdiction};
   return newAuthedPostRequest(url, authApiKey, req);
 }
 
@@ -139,8 +144,7 @@ export function newCloseRoomRequest(
   authApiKey: string,
   roomID: string,
 ) {
-  const path = AUTH_ROUTES.closeRoom.replace(':roomID', roomID);
-  const url = new URL(path, reflectServerURL);
+  const url = new URL(fmtPath(CLOSE_ROOM_PATH, {roomID}), reflectServerURL);
   return newAuthedPostRequest(url, authApiKey);
 }
 
@@ -149,26 +153,6 @@ export function newDeleteRoomRequest(
   authApiKey: string,
   roomID: string,
 ) {
-  const path = AUTH_ROUTES.deleteRoom.replace(':roomID', roomID);
-  const url = new URL(path, reflectServerURL);
-  return newAuthedPostRequest(url, authApiKey);
-}
-export function newForgetRoomRequest(
-  reflectServerURL: string,
-  authApiKey: string,
-  roomID: string,
-) {
-  const path = AUTH_ROUTES.forgetRoom.replace(':roomID', roomID);
-  const url = new URL(path, reflectServerURL);
-  return newAuthedPostRequest(url, authApiKey);
-}
-
-export function newMigrateRoomRequest(
-  reflectServerURL: string,
-  authApiKey: string,
-  roomID: string,
-) {
-  const path = AUTH_ROUTES.migrateRoom.replace(':roomID', roomID);
-  const url = new URL(path, reflectServerURL);
+  const url = new URL(fmtPath(DELETE_ROOM_PATH, {roomID}), reflectServerURL);
   return newAuthedPostRequest(url, authApiKey);
 }
