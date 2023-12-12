@@ -110,7 +110,7 @@ function isFileNotFoundError(err: unknown): boolean {
   );
 }
 
-type AuthenticatedUser = {
+export type AuthenticatedUser = {
   userID: string;
   getIdToken: (forceRefresh?: boolean | undefined) => Promise<string>;
   additionalUserInfo: AdditionalUserInfo | null;

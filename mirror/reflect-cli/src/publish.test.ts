@@ -17,6 +17,7 @@ import {ErrorWrapper} from './error.js';
 import {initFirebase} from './firebase.js';
 import {publishHandler, type PublishCaller} from './publish.js';
 import {reflectVersionMatcher, useFakeAuthConfig} from './test-helpers.js';
+import {authContext} from './login.test.helper.js';
 
 type Args = Parameters<typeof publishHandler>[0];
 
@@ -80,7 +81,7 @@ async function writeTempFiles(
 
 test('it should throw warning if the source has syntax errors', async () => {
   await writeTempFiles('const x =');
-  await expect(publishHandler({} as Args)).rejects.toEqual(
+  await expect(publishHandler({} as Args, authContext)).rejects.toEqual(
     expect.objectContaining({
       constructor: ErrorWrapper,
       message: expect.stringMatching(/Unexpected end of file/),
@@ -91,7 +92,7 @@ test('it should throw warning if the source has syntax errors', async () => {
 
 test('it should throw warning if invalid version', async () => {
   await writeTempFiles('const x = 42;', 'test.ts', '1.0.0');
-  await expect(publishHandler({} as Args)).rejects.toEqual(
+  await expect(publishHandler({} as Args, authContext)).rejects.toEqual(
     expect.objectContaining({
       constructor: ErrorWrapper,
       message: expect.stringMatching(
@@ -148,6 +149,7 @@ async function testPublishedCode(source: string, expectedOutputs: string[]) {
 
   await publishHandler(
     {} as Args,
+    authContext,
     publishMock as unknown as PublishCaller,
     firestore,
   );

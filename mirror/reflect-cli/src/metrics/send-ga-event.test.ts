@@ -6,6 +6,8 @@ const fetch = new FetchMocker().result(
   [],
 );
 import {sendGAEvent} from './send-ga-event.js';
+import {authContext} from '../login.test.helper.js';
+import type {AuthenticatedUser} from '../auth-config.js';
 
 afterEach(() => {
   jest.restoreAllMocks();
@@ -13,7 +15,10 @@ afterEach(() => {
 
 test('send-ga-event', async () => {
   try {
-    await sendGAEvent([{en: 'event-name'}]);
+    await sendGAEvent(
+      [{en: 'event-name'}],
+      authContext?.user as AuthenticatedUser,
+    );
   } catch (e) {
     console.log(e);
   }

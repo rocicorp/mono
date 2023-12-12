@@ -3,10 +3,10 @@ import {randomUUID} from 'crypto';
 import {version} from '../version.js';
 import {stringify} from 'querystring';
 import {
-  deviceFingerprint,
   UserParameters,
   UserCustomDimension,
 } from 'mirror-protocol/src/reporting.js';
+import type {AuthenticatedUser} from '../auth-config.js';
 
 const TRACKING_ID = 'G-69B1QV88XF';
 
@@ -30,21 +30,27 @@ export enum RequestParameter {
   Dimension2 = 'cd2',
 }
 
-export async function sendAnalyticsEvent(eventName: string): Promise<void> {
-  const userParameters = getUserParameters(version);
-  await sendGAEvent([
-    {
-      ...userParameters,
-      en: eventName,
-    },
-  ]);
+export async function sendAnalyticsEvent(
+  eventName: string,
+  user: AuthenticatedUser,
+): Promise<void> {
+  const userParameters = getUserParameters(version, user);
+  await sendGAEvent(
+    [
+      {
+        ...userParameters,
+        en: eventName,
+      },
+    ],
+    user,
+  );
 }
 
-function getRequestParameters(): string {
+function getRequestParameters(user: AuthenticatedUser): string {
   const params = {
     [RequestParameter.ProtocolVersion]: 2,
-    [RequestParameter.ClientId]: deviceFingerprint,
-    [RequestParameter.UserId]: deviceFingerprint,
+    [RequestParameter.ClientId]: user.userID,
+    [RequestParameter.UserId]: user.userID,
     [RequestParameter.TrackingId]: TRACKING_ID,
     [RequestParameter.AppVersion]: version,
     [RequestParameter.Dimension1]: process.version,
@@ -60,18 +66,24 @@ function getRequestParameters(): string {
   return stringify(params);
 }
 
-export function getUserParameters(version: string): UserParameters {
+export function getUserParameters(
+  version: string,
+  user: AuthenticatedUser,
+): UserParameters {
   return {
     [UserCustomDimension.OsArchitecture]: arch(),
     [UserCustomDimension.NodeVersion]: process.version,
     [UserCustomDimension.ReflectCLIVersion]: version,
-    [UserCustomDimension.DeviceFingerprint]: deviceFingerprint,
+    [UserCustomDimension.DeviceFingerprint]: user.userID,
   };
 }
 
-export function sendGAEvent(data: Record<string, string>[]): Promise<void> {
+export function sendGAEvent(
+  data: Record<string, string>[],
+  user: AuthenticatedUser,
+): Promise<void> {
   const baseUrl = 'https://www.google-analytics.com/g/collect?';
-  const queryString = getRequestParameters();
+  const queryString = getRequestParameters(user);
   const fullUrl = baseUrl + queryString;
 
   const postBody = data.map(p => stringify(p)).join('\n');

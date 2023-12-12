@@ -1,7 +1,5 @@
 import {doc, getDoc, getFirestore} from 'firebase/firestore';
 import {ensureUser} from 'mirror-protocol/src/user.js';
-import {authenticate} from './auth-config.js';
-import {makeRequester} from './requester.js';
 import color from 'picocolors';
 import {
   appPath,
@@ -11,13 +9,17 @@ import {
 import type {DeploymentView} from 'mirror-schema/src/external/deployment.js';
 import {readAppConfig} from './app-config.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import type {AuthContext} from './handler.js';
 
 export async function statusHandler(
-  yargs: YargvToInterface<CommonYargsArgv>,
+  _yargs: YargvToInterface<CommonYargsArgv>,
+  authContext: AuthContext,
 ): Promise<void> {
-  const {userID} = await authenticate(yargs);
-  const data = {requester: makeRequester(userID)};
-  await ensureUser(data);
+  if (!authContext) {
+    throw new Error('AuthContext is required for statusHandler');
+  }
+
+  await ensureUser({requester: authContext.requester});
 
   const firestore = getFirestore();
   const config = readAppConfig();

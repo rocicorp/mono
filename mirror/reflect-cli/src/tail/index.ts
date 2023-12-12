@@ -6,10 +6,9 @@ import {
 import type {RoomTailRequest} from 'mirror-protocol/src/tail.js';
 import * as valita from 'shared/src/valita.js';
 import {ensureAppInstantiated} from '../app-config.js';
-import {authenticate} from '../auth-config.js';
-import {makeRequester} from '../requester.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 import {createTailEventSource} from './tail-event-source.js';
+import type {AuthContext} from '../handler.js';
 
 export function tailOptions(yargs: CommonYargsArgv) {
   return yargs.option('room', {
@@ -22,14 +21,19 @@ export function tailOptions(yargs: CommonYargsArgv) {
 
 type TailHandlerArgs = YargvToInterface<ReturnType<typeof tailOptions>>;
 
-export async function tailHandler(yargs: TailHandlerArgs) {
+export async function tailHandler(
+  yargs: TailHandlerArgs,
+  authContext: AuthContext,
+) {
+  if (!authContext) {
+    throw new Error('AuthContext is required for tailHandler');
+  }
   const {appID} = await ensureAppInstantiated(yargs);
-  const {userID, getIdToken} = await authenticate(yargs);
-  const idToken = await getIdToken();
+  const idToken = await authContext.user.getIdToken();
   const {room: roomID} = yargs;
 
   const data: RoomTailRequest = {
-    requester: makeRequester(userID),
+    requester: authContext.requester,
     appID,
     roomID,
   };

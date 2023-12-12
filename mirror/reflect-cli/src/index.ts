@@ -72,7 +72,7 @@ function createCLIParser(argv: string[]) {
       // authenticate() validates that credentials were written
       // and outputs the logged in user to the console.
       await authenticate(yargs);
-    }).andCleanup(),
+    }, false).andCleanup(),
   );
 
   reflectCLI.command(

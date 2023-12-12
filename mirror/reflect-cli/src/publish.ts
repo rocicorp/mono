@@ -8,15 +8,14 @@ import assert from 'node:assert';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {ensureAppInstantiated} from './app-config.js';
-import {authenticate} from './auth-config.js';
 import {CompileResult, compile} from './compile.js';
 import {ErrorWrapper} from './error.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
-import {makeRequester} from './requester.js';
 import {checkForServerDeprecation} from './version.js';
 import {watchDeployment} from './watch-deployment.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import type {AuthContext} from './handler.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -48,9 +47,13 @@ export type PublishCaller = typeof publishCaller;
 
 export async function publishHandler(
   yargs: PublishHandlerArgs,
+  authContext: AuthContext,
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
+  if (!authContext) {
+    throw new Error('AuthContext is required for publishHandler');
+  }
   const {reflectChannel} = yargs;
   const {appID, server: script} = await ensureAppInstantiated(yargs);
 
@@ -76,10 +79,8 @@ export async function publishHandler(
   );
   assert(sourcemap);
 
-  const {userID} = await authenticate(yargs);
-
   const data: PublishRequest = {
-    requester: makeRequester(userID),
+    requester: authContext.requester,
     source: {
       content: code.text,
       name: path.basename(code.path),

@@ -1,5 +1,6 @@
 import {jest, beforeEach} from '@jest/globals';
 import http from 'node:http';
+import type {AuthContext} from './handler.js';
 
 /**
  * Setup a mock HTTP server that can be triggered directly without interacting with any network.
@@ -45,3 +46,18 @@ export function mockHttpServer() {
     return resp;
   };
 }
+
+export const authContext: AuthContext = {
+  user: {
+    userID: 'fake-uid',
+    getIdToken: () => new Promise(() => 'fake-token'),
+    additionalUserInfo: null,
+  },
+  requester: {
+    userID: 'fake-uid',
+    userAgent: {
+      type: 'reflect-cli',
+      version: '0.28.0',
+    },
+  },
+};
