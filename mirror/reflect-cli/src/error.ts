@@ -1,10 +1,9 @@
 import {ErrorInfo, Severity, reportError} from 'mirror-protocol/src/error.js';
 import type {ArgumentsCamelCase} from 'yargs';
-import {AuthenticatedUser, getAuthentication} from './auth-config.js';
+import {getAuthentication} from './auth-config.js';
 import {getUserParameters} from './metrics/send-ga-event.js';
 import {version} from './version.js';
 import type {CommonYargsOptions} from './yarg-types.js';
-import {authContext} from './login.test.helper.js';
 
 type ReportSeverity = Severity | 'DO_NOT_REPORT';
 
@@ -62,10 +61,7 @@ export async function reportE(
       userID,
       userAgent: {type: 'reflect-cli', version},
     },
-    agentContext: getUserParameters(
-      version,
-      authContext?.user as AuthenticatedUser,
-    ),
+    agentContext: getUserParameters(version, userID),
   };
   // console.debug(error); // For testing
   await reportError(error).catch(_err => {

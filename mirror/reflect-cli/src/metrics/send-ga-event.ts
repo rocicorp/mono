@@ -34,7 +34,7 @@ export async function sendAnalyticsEvent(
   eventName: string,
   user: AuthenticatedUser,
 ): Promise<void> {
-  const userParameters = getUserParameters(version, user);
+  const userParameters = getUserParameters(version, user.userID);
   await sendGAEvent(
     [
       {
@@ -68,13 +68,13 @@ function getRequestParameters(user: AuthenticatedUser): string {
 
 export function getUserParameters(
   version: string,
-  user: AuthenticatedUser,
+  userID: string,
 ): UserParameters {
   return {
     [UserCustomDimension.OsArchitecture]: arch(),
     [UserCustomDimension.NodeVersion]: process.version,
     [UserCustomDimension.ReflectCLIVersion]: version,
-    [UserCustomDimension.DeviceFingerprint]: user.userID,
+    [UserCustomDimension.DeviceFingerprint]: userID,
   };
 }
 
