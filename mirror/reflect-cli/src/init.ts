@@ -6,7 +6,6 @@ import {logErrorAndExit, noFormat} from './log-error-and-exit.js';
 import {copyTemplate} from './scaffold.js';
 import {findReflectVersion} from './version.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import type {AuthContext} from './handler.js';
 
 export function initOptions(yargs: CommonYargsArgv) {
   return yargs;
@@ -14,7 +13,7 @@ export function initOptions(yargs: CommonYargsArgv) {
 
 type InitHandlerArgs = YargvToInterface<ReturnType<typeof initOptions>>;
 
-export function initHandler(_: InitHandlerArgs, _context: AuthContext) {
+export function initHandler(_: InitHandlerArgs) {
   if (configFileExists('./')) {
     logErrorAndExit(
       `Cannot initialize. There is already a ${color.white(

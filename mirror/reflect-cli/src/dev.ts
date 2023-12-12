@@ -9,7 +9,6 @@ import {startDevServer} from './dev/start-dev-server.js';
 import {ErrorWrapper} from './error.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import type {AuthContext} from './handler.js';
 
 export function devOptions(yargs: CommonYargsArgv) {
   return (
@@ -49,7 +48,7 @@ async function exists(path: string) {
 
 type DevHandlerArgs = YargvToInterface<ReturnType<typeof devOptions>>;
 
-export async function devHandler(yargs: DevHandlerArgs, _context: AuthContext) {
+export async function devHandler(yargs: DevHandlerArgs) {
   const {server: script} = mustReadAppConfig();
 
   const absPath = path.resolve(script);

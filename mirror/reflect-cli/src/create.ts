@@ -6,7 +6,6 @@ import {execOrReportWarning} from './exec.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {scaffold} from './scaffold.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import type {AuthContext} from './handler.js';
 
 export function createOptions(yargs: CommonYargsArgv) {
   return yargs.option('name', {
@@ -18,10 +17,7 @@ export function createOptions(yargs: CommonYargsArgv) {
 
 type CreatedHandlerArgs = YargvToInterface<ReturnType<typeof createOptions>>;
 
-export async function createHandler(
-  createYargs: CreatedHandlerArgs,
-  _context: AuthContext,
-) {
+export async function createHandler(createYargs: CreatedHandlerArgs) {
   const {name} = createYargs;
 
   const invalidPackageNameReason = isValidPackageName(name);

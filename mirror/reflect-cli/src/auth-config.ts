@@ -162,7 +162,7 @@ async function authenticateImpl(
       if (!promptLogin) {
         throw new Error(`No auth config file found.`);
       }
-      console.info('Login required');
+      console.info('Welcome to Reflect! Please login.');
       await loginHandler(yargs);
     }
     const {authCredential} = mustReadAuthConfigFile(authConfigFilePath);
