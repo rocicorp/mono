@@ -8,14 +8,14 @@ import {
   BaseContext,
   Handler,
   Router,
-  asJSON,
+  body,
   checkAuthAPIKey,
   get,
   post,
-  requireAuthAPIKey,
-  withBody,
-  withRoomID,
-  withVersion,
+  requiredAuthAPIKey,
+  roomID,
+  urlVersion,
+  userID,
 } from './router.js';
 
 test('Router', async () => {
@@ -97,8 +97,10 @@ test('Router', async () => {
 });
 
 test('requireMethod', async () => {
-  const getHandler = get((_, req) => new Response(`${req.url}`, {status: 300}));
-  const postHandler = post(
+  const getHandler = get().handle(
+    (_, req) => new Response(`${req.url}`, {status: 300}),
+  );
+  const postHandler = post().handle(
     async (_, req) =>
       new Response(`${req.url}:${await req.text()}`, {status: 301}),
   );
@@ -332,10 +334,9 @@ test('requireAuthAPIKey', async () => {
 
     let result: Case['expected'] | undefined = undefined;
 
-    const handler = requireAuthAPIKey(
-      () => c.required,
-      async (_, req) => new Response(await req.text(), {status: 200}),
-    );
+    const handler = post()
+      .with(requiredAuthAPIKey(() => c.required))
+      .handle(async (_, req) => new Response(await req.text(), {status: 200}));
 
     const req = new Request('https://roci.dev/', {
       method: 'POST',
@@ -367,7 +368,7 @@ test('requireAuthAPIKey', async () => {
 test('withRoomID', async () => {
   type Case = {
     parsedURL: URLPatternURLPatternResult;
-    expected: {result: {text: string; status: number}} | {error: string};
+    expected: {result: {text: string; status: number}};
   };
 
   const cases: Case[] = [
@@ -402,14 +403,14 @@ test('withRoomID', async () => {
         ),
       ),
       expected: {
-        error: 'Error: Internal error: roomID not found by withRoomID',
+        result: {text: 'Internal error: roomID not found', status: 500},
       },
     },
   ];
 
-  const handler = withRoomID(
-    ctx => new Response(`roomID:${ctx.roomID}`, {status: 200}),
-  );
+  const handler = get()
+    .with(roomID())
+    .handle(ctx => new Response(`roomID:${ctx.roomID}`, {status: 200}));
 
   for (const c of cases) {
     const url = `https://roci.dev/`;
@@ -419,13 +420,74 @@ test('withRoomID', async () => {
       lc: createSilentLogContext(),
     };
 
-    let result: Case['expected'] | undefined = undefined;
-    try {
-      const response = await handler(ctx, request);
-      result = {result: {status: response.status, text: await response.text()}};
-    } catch (e) {
-      result = {error: String(e)};
-    }
+    const response = await handler(ctx, request);
+    const result = {
+      result: {status: response.status, text: await response.text()},
+    };
+
+    expect(result).toEqual(c.expected);
+  }
+});
+
+test('withUserID', async () => {
+  type Case = {
+    parsedURL: URLPatternURLPatternResult;
+    expected: {result: {text: string; status: number}};
+  };
+
+  const cases: Case[] = [
+    {
+      parsedURL: must(
+        new URLPattern({pathname: '/users/:userID'}).exec(
+          'https://roci.dev/users/monkey',
+        ),
+      ),
+      expected: {result: {text: 'userID:monkey', status: 200}},
+    },
+    {
+      parsedURL: must(
+        new URLPattern({pathname: '/users/:userID'}).exec(
+          'https://roci.dev/users/%24',
+        ),
+      ),
+      expected: {result: {text: 'userID:$', status: 200}},
+    },
+    {
+      parsedURL: must(
+        new URLPattern({pathname: '/users/:userID/x'}).exec(
+          'https://roci.dev/users/a%2Fb/x',
+        ),
+      ),
+      expected: {result: {text: 'userID:a/b', status: 200}},
+    },
+    {
+      parsedURL: must(
+        new URLPattern({pathname: '/users/:otherThing'}).exec(
+          'https://roci.dev/users/monkey',
+        ),
+      ),
+      expected: {
+        result: {text: 'Internal error: userID not found', status: 500},
+      },
+    },
+  ];
+
+  const handler = get()
+    .with(userID())
+    .handle(ctx => new Response(`userID:${ctx.userID}`, {status: 200}));
+
+  for (const c of cases) {
+    const url = `https://roci.dev/`;
+    const request = new Request(url);
+    const ctx = {
+      parsedURL: c.parsedURL,
+      lc: createSilentLogContext(),
+    };
+
+    const response = await handler(ctx, request);
+    const result = {
+      result: {status: response.status, text: await response.text()},
+    };
 
     expect(result).toEqual(c.expected);
   }
@@ -434,7 +496,7 @@ test('withRoomID', async () => {
 test('withBody', async () => {
   type Case = {
     body: JSONObject | undefined | string;
-    expected: {text: string; status: number} | {error: string};
+    expected: {text: string; status: number};
   };
 
   const cases: Case[] = [
@@ -473,11 +535,13 @@ test('withBody', async () => {
   ];
 
   const userIdSchema = valita.object({userID: valita.string()});
-  const handler = withBody(userIdSchema, ctx => {
-    const {body} = ctx;
-    const {userID} = body;
-    return new Response(`userID:${userID}`, {status: 200});
-  });
+  const handler = post()
+    .with(body(userIdSchema))
+    .handle(ctx => {
+      const {body} = ctx;
+      const {userID} = body;
+      return new Response(`userID:${userID}`, {status: 200});
+    });
 
   for (const c of cases) {
     const url = `https://roci.dev/`;
@@ -491,13 +555,8 @@ test('withBody', async () => {
       parsedURL: new URLPattern().exec()!,
     };
 
-    let result: Case['expected'] | undefined = undefined;
-    try {
-      const response = await handler(ctx, request);
-      result = {status: response.status, text: await response.text()};
-    } catch (e) {
-      result = {error: String(e)};
-    }
+    const response = await handler(ctx, request);
+    const result = {status: response.status, text: await response.text()};
 
     expect(result).toEqual(c.expected);
   }
@@ -525,7 +584,7 @@ test('asJSON', async () => {
   ];
 
   for (const c of cases) {
-    const handler = asJSON(async (_, req) => ({
+    const handler = post().handleAsJSON(async (_, req) => ({
       foo: await req.text(),
     }));
     const request = new Request('http://roci.dev/', {
@@ -543,10 +602,7 @@ test('asJSON', async () => {
 });
 
 test('withVersion', async () => {
-  const t = async (
-    path: string,
-    exp: {text: string; status: number} | {error: string},
-  ) => {
+  const t = async (path: string, exp: {text: string; status: number}) => {
     const url = `https://roci.dev`;
     const request = new Request(url);
     const parsedURL = new URLPattern({
@@ -558,17 +614,15 @@ test('withVersion', async () => {
       lc: createSilentLogContext(),
     };
 
-    const handler = withVersion(
-      ctx => new Response(`version:${ctx.version}`, {status: 200}),
-    );
+    const handler = get()
+      .with(urlVersion())
+      .handle(ctx => new Response(`version:${ctx.version}`, {status: 200}));
 
-    let result: typeof exp;
-    try {
-      const response = await handler(ctx, request);
-      result = {status: response.status, text: await response.text()} as const;
-    } catch (e) {
-      result = {error: String(e)} as const;
-    }
+    const response = await handler(ctx, request);
+    const result = {
+      status: response.status,
+      text: await response.text(),
+    } as const;
 
     expect(result).toEqual(exp);
   };
@@ -579,15 +633,19 @@ test('withVersion', async () => {
   await t('/version/v01/monkey', {text: 'version:1', status: 200});
 
   await t('/version/1/monkey', {
-    error: 'Error: invalid version found by withVersion, 1',
+    text: 'invalid version found by withVersion, 1',
+    status: 500,
   });
   await t('/version/123/monkey', {
-    error: 'Error: invalid version found by withVersion, 123',
+    text: 'invalid version found by withVersion, 123',
+    status: 500,
   });
   await t('/version/123v/monkey', {
-    error: 'Error: invalid version found by withVersion, 123v',
+    text: 'invalid version found by withVersion, 123v',
+    status: 500,
   });
   await t('/version/bananas/monkey', {
-    error: 'Error: invalid version found by withVersion, bananas',
+    text: 'invalid version found by withVersion, bananas',
+    status: 500,
   });
 });

@@ -12,7 +12,15 @@ import {
   TestExecutionContext,
   createTestDurableObjectNamespace,
 } from './do-test-utils.js';
-import {LOG_LOGS_PATH, REPORT_METRICS_PATH} from './paths.js';
+import {
+  CLOSE_ROOM_PATH,
+  DELETE_ROOM_PATH,
+  INVALIDATE_ROOM_CONNECTIONS_PATH,
+  INVALIDATE_USER_CONNECTIONS_PATH,
+  LOG_LOGS_PATH,
+  REPORT_METRICS_PATH,
+  fmtPath,
+} from './paths.js';
 import {BaseWorkerEnv, createWorker} from './worker.js';
 
 const TEST_API_KEY = 'TEST_REFLECT_API_KEY_TEST';
@@ -170,15 +178,6 @@ test('worker forwards disconnect requests to authDO', async () => {
   );
 });
 
-test('worker forwards legacy connect requests to authDO', async () => {
-  await testForwardedToAuthDO(
-    new Request('ws://test.roci.dev/connect'),
-    new Response(null, {
-      status: 101,
-      webSocket: new Mocket(),
-    }),
-  );
-});
 test('worker forwards connect requests to authDO', async () => {
   await testForwardedToAuthDO(
     new Request('ws://test.roci.dev/api/sync/v1/connect'),
@@ -195,10 +194,6 @@ test('worker does not forward disconnect requests to authDO when DISABLE is true
   );
 });
 
-test('worker does not forward legacy connect requests to authDO when DISABLE is true', async () => {
-  await testDisabled(new Request('ws://test.roci.dev/connect'));
-});
-
 test('worker does not forward connect requests to authDO when DISABLE is true', async () => {
   await testDisabled(new Request('ws://test.roci.dev/api/sync/v1/connect'));
 });
@@ -211,36 +206,28 @@ test('worker forwards authDO api requests to authDO', async () => {
     method: string;
     body: undefined | Record<string, unknown>;
   };
-  const closeRoomPathWithRoomID = AUTH_ROUTES.closeRoom.replace(
-    ':roomID',
-    'ae4565',
-  );
-  const deleteRoomPathWithRoomID = AUTH_ROUTES.roomRecords.replace(
-    ':roomID',
-    'ae4565',
-  );
-  const forgetRoomPathWithRoomID = AUTH_ROUTES.forgetRoom.replace(
-    ':roomID',
-    'ae4565',
-  );
-  const migrateRoomPathWithRoomID = AUTH_ROUTES.migrateRoom.replace(
-    ':roomID',
-    'ae4565',
-  );
+  const closeRoomPathWithRoomID = fmtPath(CLOSE_ROOM_PATH, {roomID: 'ae4565'});
+  const deleteRoomPathWithRoomID = fmtPath(DELETE_ROOM_PATH, {
+    roomID: 'ae4656',
+  });
   const testCases: TestCase[] = [
     // Auth API calls.
     {
-      path: 'https://test.roci.dev/api/auth/v0/invalidateForUser',
+      path: `https://test.roci.dev${fmtPath(INVALIDATE_USER_CONNECTIONS_PATH, {
+        userID: 'userID1',
+      })}`,
       method: 'post',
-      body: {userID: 'userID1'},
+      body: undefined,
     },
     {
-      path: 'https://test.roci.dev/api/auth/v0/invalidateForRoom',
+      path: `https://test.roci.dev${fmtPath(INVALIDATE_ROOM_CONNECTIONS_PATH, {
+        roomID: 'roomID1',
+      })}`,
       method: 'post',
-      body: {roomID: 'roomID1'},
+      body: undefined,
     },
     {
-      path: 'https://test.roci.dev/api/auth/v0/invalidateAll',
+      path: 'https://test.roci.dev/api/v1/connections:invalidate',
       method: 'post',
       body: undefined,
     },
@@ -263,16 +250,6 @@ test('worker forwards authDO api requests to authDO', async () => {
     },
     {
       path: `https://test.roci.dev${deleteRoomPathWithRoomID}`,
-      method: 'post',
-      body: undefined,
-    },
-    {
-      path: `https://test.roci.dev${forgetRoomPathWithRoomID}`,
-      method: 'post',
-      body: undefined,
-    },
-    {
-      path: `https://test.roci.dev${migrateRoomPathWithRoomID}`,
       method: 'post',
       body: undefined,
     },

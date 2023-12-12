@@ -3,7 +3,7 @@ import type {CreateRoomRequest} from 'reflect-protocol';
 import * as valita from 'shared/src/valita.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {roomDOFetch} from './auth-do.js';
-import {INTERNAL_CREATE_ROOM_PATH} from './paths.js';
+import {CREATE_ROOM_PATH, fmtPath} from './paths.js';
 
 // RoomRecord keeps information about the room, for example the Durable
 // Object ID of the DO instance that has the room.
@@ -74,8 +74,10 @@ export function internalCreateRoom(
   roomID: string,
   jurisdiction: 'eu' | undefined,
 ) {
-  const url = `https://unused-reflect-room-do.dev${INTERNAL_CREATE_ROOM_PATH}`;
-  const req: CreateRoomRequest = {roomID, jurisdiction};
+  const url = `https://unused-reflect-room-do.dev${fmtPath(CREATE_ROOM_PATH, {
+    roomID,
+  })}`;
+  const req: CreateRoomRequest = {jurisdiction};
   const request = new Request(url, {
     method: 'POST',
     // no auth headers, because this is an internal call

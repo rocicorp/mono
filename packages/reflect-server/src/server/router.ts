@@ -17,7 +17,10 @@ import {createUnauthorizedResponse} from './create-unauthorized-response.js';
 export type Handler<Context, Resp> = (
   context: Context,
   request: Request,
-) => MaybePromise<Resp>;
+) =>
+  | MaybePromise<Resp>
+  | MaybePromise<Response>
+  | MaybePromise<Resp | Response>;
 
 export type WithLogContext = {
   lc: LogContext;
@@ -77,40 +80,29 @@ export class Router<InitialContext extends BaseContext = BaseContext> {
   }
 }
 
-function requireMethod<Context extends BaseContext, Resp extends Response>(
-  method: string,
-  next: Handler<Context, Resp>,
-) {
-  return (context: Context, request: Request) => {
+function requireMethod<Context extends BaseContext>(method: string) {
+  return (ctx: Context, request: Request) => {
     if (request.method !== method) {
-      return new Response('unsupported method', {status: 405});
+      return {error: new Response('unsupported method', {status: 405})};
     }
-    return next(context, request);
+    return {ctx};
   };
 }
 
-export function get<Context extends BaseContext, Resp extends Response>(
-  next: Handler<Context, Resp>,
-) {
-  return requireMethod('GET', next);
+export function get<Context extends BaseContext = BaseContext>() {
+  return new ValidatorChainer<Context, Context>(requireMethod('GET'));
 }
 
-export function post<Context extends BaseContext, Resp extends Response>(
-  next: Handler<Context, Resp>,
-) {
-  return requireMethod('POST', next);
+export function post<Context extends BaseContext = BaseContext>() {
+  return new ValidatorChainer<Context, Context>(requireMethod('POST'));
 }
 
-export function requireAuthAPIKey<Context extends BaseContext, Resp>(
+export function requiredAuthAPIKey<Context extends BaseContext>(
   required: (context: Context) => string,
-  next: Handler<Context, Resp>,
 ) {
-  return (context: Context, req: Request) => {
-    const resp = checkAuthAPIKey(required(context), req);
-    if (resp) {
-      return resp;
-    }
-    return next(context, req);
+  return (ctx: Context, req: Request) => {
+    const error = checkAuthAPIKey(required(ctx), req);
+    return error ? {error} : {ctx};
   };
 }
 
@@ -133,55 +125,64 @@ export function checkAuthAPIKey(
   return undefined;
 }
 
-export type WithRoomID = {roomID: string};
-
-export function withRoomID<Context extends BaseContext, Resp>(
-  next: Handler<Context & WithRoomID, Resp>,
-) {
-  return (ctx: Context, req: Request) => {
+export function roomID<Context extends BaseContext>() {
+  return (ctx: Context) => {
     const {roomID} = ctx.parsedURL.pathname.groups;
     if (roomID === undefined) {
-      throw new Error('Internal error: roomID not found by withRoomID');
+      return {
+        error: new Response('Internal error: roomID not found', {
+          status: 500,
+        }),
+      };
     }
     const decoded = decodeURIComponent(roomID);
-    return next({...ctx, roomID: decoded}, req);
+    return {ctx: {...ctx, roomID: decoded}};
   };
 }
 
-export type WithVersion = {version: number};
-export function withVersion<Context extends BaseContext, Resp>(
-  next: Handler<Context & WithVersion, Resp>,
-) {
+export function userID<Context extends BaseContext>() {
+  return (ctx: Context) => {
+    const {userID} = ctx.parsedURL.pathname.groups;
+    if (userID === undefined) {
+      return {
+        error: new Response('Internal error: userID not found', {
+          status: 500,
+        }),
+      };
+    }
+    const decoded = decodeURIComponent(userID);
+    return {ctx: {...ctx, userID: decoded}};
+  };
+}
+
+export function urlVersion<Context extends BaseContext>() {
   return (ctx: Context, req: Request) => {
     const {version: versionString} = ctx.parsedURL.pathname.groups;
     if (versionString === undefined) {
-      throw new Error('version not found by withVersion url: ' + req.url);
+      return {
+        error: new Response(
+          'version not found by withVersion url: ' + req.url,
+          {status: 500},
+        ),
+      };
     }
     if (!/^v\d+$/.test(versionString)) {
-      throw new Error(`invalid version found by withVersion, ${versionString}`);
+      return {
+        error: new Response(
+          `invalid version found by withVersion, ${versionString}`,
+          {status: 500},
+        ),
+      };
     }
     const version = Number(versionString.slice(1));
-    return next({...ctx, version}, req);
+    return {ctx: {...ctx, version}};
   };
 }
 
-export function asJSON<Context extends BaseContext>(
-  next: Handler<Context, ReadonlyJSONValue>,
-) {
-  return async (ctx: Context, req: Request) =>
-    new Response(JSON.stringify(await next(ctx, req)));
-}
-
-export function withBody<T, Context extends BaseContext, Resp>(
-  schema: valita.Type<T>,
-  next: Handler<Context & {body: T}, Resp>,
-) {
+export function body<T, Context extends BaseContext>(schema: valita.Type<T>) {
   return async (ctx: Context, req: Request) => {
-    const {value, errorResponse} = await validateBody(req, schema);
-    if (errorResponse) {
-      return errorResponse;
-    }
-    return next({...ctx, body: value}, req);
+    const {value, errorResponse: error} = await validateBody(req, schema);
+    return error ? {error} : {ctx: {...ctx, body: value}};
   };
 }
 
@@ -224,4 +225,53 @@ async function validateBody<T>(
     value: validateResult.value,
     errorResponse: undefined,
   };
+}
+
+type RequestValidator<
+  Input extends BaseContext,
+  Output extends BaseContext = Input,
+> = (
+  ctx: Input,
+  req: Request,
+) => MaybePromise<
+  {ctx: Output; error?: never} | {ctx?: never; error: Response}
+>;
+
+class ValidatorChainer<Input extends BaseContext, Output extends BaseContext> {
+  readonly #requestValidator: RequestValidator<Input, Output>;
+
+  constructor(requestValidator: RequestValidator<Input, Output>) {
+    this.#requestValidator = requestValidator;
+  }
+
+  /**
+   * Used to chain ContextValidators that convert / augment
+   * the final context passed to the handler.
+   */
+  with<Next extends BaseContext>(
+    nextValidator: RequestValidator<Output, Next>,
+  ): ValidatorChainer<Input, Next> {
+    return new ValidatorChainer(async (prev, req) => {
+      const result = await this.#requestValidator(prev, req);
+      return result.error ? result : nextValidator(result.ctx, req);
+    });
+  }
+
+  handle<Resp>(handler: Handler<Output, Resp>): Handler<Input, Resp> {
+    return async (origCtx: Input, request: Request) => {
+      const result = await this.#requestValidator(origCtx, request);
+      return result.error ? result.error : handler(result.ctx, request);
+    };
+  }
+
+  handleAsJSON(
+    handler: Handler<Output, ReadonlyJSONValue>,
+  ): Handler<Input, Response> {
+    return async (origCtx: Input, request: Request) => {
+      const result = await this.handle(handler)(origCtx, request);
+      return result instanceof Response
+        ? result
+        : new Response(JSON.stringify(result));
+    };
+  }
 }

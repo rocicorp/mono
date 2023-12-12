@@ -16,17 +16,11 @@ import {version} from 'reflect-shared';
 import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
 import {CONNECTION_SECONDS_CHANNEL_NAME} from 'shared/src/events/connection-seconds.js';
 import {Queue} from 'shared/src/queue.js';
-import {
-  newInvalidateAllAuthRequest,
-  newInvalidateForRoomAuthRequest,
-  newInvalidateForUserAuthRequest,
-} from '../client/auth.js';
 import {newCreateRoomRequest, newDeleteRoomRequest} from '../client/room.js';
 import {REPORTING_INTERVAL_MS} from '../events/connection-seconds.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {getUserValue, putUserValue} from '../types/user-value.js';
 import {getVersion, putVersion} from '../types/version.js';
-import {newAuthConnectionsRequest} from '../util/auth-test-util.js';
 import {resolver} from '../util/resolver.js';
 import {sleep} from '../util/sleep.js';
 import {TestLogSink} from '../util/test-utils.js';
@@ -61,7 +55,6 @@ test('inits storage schema', async () => {
     roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
     state,
-    authApiKey: 'API KEY',
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
@@ -103,7 +96,6 @@ test('runs roomStartHandler on first fetch', async () => {
     },
     disconnectHandler: () => Promise.resolve(),
     state,
-    authApiKey: 'API KEY',
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
@@ -167,7 +159,7 @@ test('runs roomStartHandler on next fetch if throws on first fetch', async () =>
     },
     disconnectHandler: () => Promise.resolve(),
     state,
-    authApiKey: 'API KEY',
+
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
@@ -215,7 +207,7 @@ test('deleteAllData deletes all data', async () => {
     roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
     state,
-    authApiKey: 'API KEY',
+
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
@@ -246,7 +238,6 @@ test('after deleteAllData the roomDO just 410s', async () => {
     roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
     state: await createTestDurableObjectState('test-do-id'),
-    authApiKey: 'API KEY',
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
@@ -269,74 +260,6 @@ test('after deleteAllData the roomDO just 410s', async () => {
   expect(response4.status).toBe(410);
 });
 
-test('401s if wrong auth api key', async () => {
-  const wrongApiKey = 'WRONG KEY';
-  const deleteRequest = newDeleteRoomRequest(
-    'http://example.com/',
-    wrongApiKey,
-    'testRoomID',
-  );
-
-  const invalidateAllRequest = newInvalidateAllAuthRequest(
-    'http://example.com/',
-    wrongApiKey,
-  );
-
-  const authConnectionsRequest = newAuthConnectionsRequest(
-    'http://example.com/',
-    wrongApiKey,
-  );
-
-  const invalidateForUserRequest = newInvalidateForUserAuthRequest(
-    'http://example.com/',
-    wrongApiKey,
-    'testUserID',
-  );
-
-  const invalidateForRoomRequest = newInvalidateForRoomAuthRequest(
-    'http://example.com/',
-    wrongApiKey,
-    'testRoomID',
-  );
-
-  const createRoomRequest = newCreateRoomRequest(
-    'http://example.com/',
-    wrongApiKey,
-    'testRoomID',
-  );
-
-  const testRequests = [
-    deleteRequest,
-    invalidateAllRequest,
-    invalidateForUserRequest,
-    invalidateForRoomRequest,
-    authConnectionsRequest,
-    createRoomRequest,
-  ];
-
-  for (const testRequest of testRequests) {
-    const testLogSink = new TestLogSink();
-
-    const roomDO = new BaseRoomDO({
-      mutators: {},
-      roomStartHandler: () => Promise.resolve(),
-      disconnectHandler: () => Promise.resolve(),
-      state: await createTestDurableObjectState('test-do-id'),
-      authApiKey: 'API KEY',
-      logSink: testLogSink,
-      logLevel: 'info',
-      allowUnconfirmedWrites: true,
-      maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
-      env: {foo: 'bar'},
-    });
-
-    const response = await roomDO.fetch(
-      addRoomIDHeader(testRequest, 'testRoomID'),
-    );
-    expect(response.status).toBe(401);
-  }
-});
-
 test('Logs version during construction', async () => {
   const testLogSink = new TestLogSink();
   new BaseRoomDO({
@@ -344,7 +267,6 @@ test('Logs version during construction', async () => {
     roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
     state: await createTestDurableObjectState('test-do-id'),
-    authApiKey: 'foo',
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
@@ -370,7 +292,6 @@ test('Avoids queueing many intervals in the lock', async () => {
     roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
     state: await createTestDurableObjectState('test-do-id'),
-    authApiKey: 'foo',
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
@@ -429,7 +350,6 @@ async function makeBaseRoomDO(state?: DurableObjectState) {
     roomStartHandler: () => Promise.resolve(),
     disconnectHandler: () => Promise.resolve(),
     state: state ?? (await createTestDurableObjectState('test-do-id')),
-    authApiKey: 'API KEY',
     logSink: testLogSink,
     logLevel: 'info',
     allowUnconfirmedWrites: true,
@@ -462,7 +382,7 @@ describe('connection seconds tracking', () => {
     const roomID = 'testRoomID';
     const request = addRoomIDHeader(
       new Request(
-        `ws://test.roci.dev/connect?clientID=cid1&clientGroupID=cg1&ts=123&lmid=0&wsid=wsidx1&roomID=${roomID}`,
+        `ws://test.roci.dev/api/sync/v1/connect?clientID=cid1&clientGroupID=cg1&ts=123&lmid=0&wsid=wsidx1&roomID=${roomID}`,
         {
           headers: {
             [AUTH_DATA_HEADER_NAME]: '{"userID":"u1","more":"data"}',
@@ -496,7 +416,7 @@ describe('connection seconds tracking', () => {
 });
 
 test('good, bad, invalid connect requests', async () => {
-  const goodRequest = new Request('ws://test.roci.dev/connect');
+  const goodRequest = new Request('ws://test.roci.dev/api/sync/v1/connect');
   goodRequest.headers.set('Upgrade', 'websocket');
   const goodTest = {
     request: goodRequest,
@@ -505,13 +425,15 @@ test('good, bad, invalid connect requests', async () => {
   };
 
   const nonWebSocketTest = {
-    request: new Request('ws://test.roci.dev/connect'),
+    request: new Request('ws://test.roci.dev/api/sync/v1/connect'),
     expectedStatus: 400,
     expectedText: 'expected websocket',
   };
 
   const badRequestTest = {
-    request: new Request('ws://test.roci.dev/connect', {method: 'POST'}),
+    request: new Request('ws://test.roci.dev/api/sync/v1/connect', {
+      method: 'POST',
+    }),
     expectedStatus: 405,
     expectedText: 'unsupported method',
   };
@@ -570,7 +492,6 @@ describe('good, bad, invalid tail requests', () => {
         roomStartHandler: () => Promise.resolve(),
         disconnectHandler: () => Promise.resolve(),
         state,
-        authApiKey: 'API KEY',
         logSink: testLogSink,
         logLevel: 'info',
         allowUnconfirmedWrites: true,
