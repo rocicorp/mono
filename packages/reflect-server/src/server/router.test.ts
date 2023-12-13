@@ -239,7 +239,7 @@ describe('checkAuthAPIKey', () => {
   ];
 
   for (const c of cases) {
-    test(c.name, async () => {
+    test(c.name, () => {
       const {headers} = c;
       try {
         checkAuthAPIKey(
