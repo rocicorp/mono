@@ -67,6 +67,9 @@ export async function deleteHandler(yargs: DeleteHandlerArgs) {
       return;
     }
     selectedApps = apps;
+  } else if (apps.length === 0) {
+    console.info('No apps to delete.');
+    return;
   } else {
     selectedApps = await checkbox({
       message: `Select the apps and associated data to delete:`,
