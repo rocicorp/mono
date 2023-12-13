@@ -25,10 +25,7 @@ export async function tailHandler(
   yargs: TailHandlerArgs,
   authContext: AuthContext,
 ) {
-  if (!authContext) {
-    throw new Error('AuthContext is required for tailHandler');
-  }
-  const {appID} = await ensureAppInstantiated(yargs);
+  const {appID} = await ensureAppInstantiated(authContext);
   const idToken = await authContext.user.getIdToken();
   const {room: roomID} = yargs;
 

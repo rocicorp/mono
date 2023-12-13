@@ -2,13 +2,13 @@ import color from 'picocolors';
 
 import {editAppKey, listAppKeys} from 'mirror-protocol/src/app-keys.js';
 import {ensureAppInstantiated} from '../app-config.js';
-import {authenticate} from '../auth-config.js';
 import {checkbox} from '../inquirer.js';
 import {makeRequester} from '../requester.js';
 
 import {padColumns} from '../table.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 import {stripDescriptionsIfValid} from './create.js';
+import type {AuthContext} from '../handler.js';
 
 export function editAppKeyOptions(yargs: CommonYargsArgv) {
   return yargs.positional('name', {
@@ -24,10 +24,11 @@ type EditAppKeyHandlerArgs = YargvToInterface<
 
 export async function editAppKeyHandler(
   yargs: EditAppKeyHandlerArgs,
+  authContext: AuthContext,
 ): Promise<void> {
   const {name} = yargs;
-  const {userID} = await authenticate(yargs);
-  const {appID} = await ensureAppInstantiated(yargs);
+  const {userID} = authContext.user;
+  const {appID} = await ensureAppInstantiated(authContext);
   const requester = makeRequester(userID);
 
   const {keys, allPermissions} = await listAppKeys({

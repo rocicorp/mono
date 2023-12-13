@@ -1,7 +1,6 @@
 import {getFirestore} from 'firebase/firestore';
 import {setVars} from 'mirror-protocol/src/vars.js';
 import {ensureAppInstantiated} from '../app-config.js';
-import {authenticate} from '../auth-config.js';
 import {setDevVars} from '../dev/vars.js';
 import {UserError} from '../error.js';
 import {password} from '../inquirer.js';
@@ -9,6 +8,7 @@ import {makeRequester} from '../requester.js';
 import {watchDeployment} from '../watch-deployment.js';
 import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
+import type {AuthContext} from '../handler.js';
 
 export function setVarsOptions(yargs: CommonVarsYargsArgv) {
   return yargs.positional('keysAndValues', {
@@ -22,7 +22,10 @@ export function setVarsOptions(yargs: CommonVarsYargsArgv) {
 
 type SetVarsHandlerArgs = YargvToInterface<ReturnType<typeof setVarsOptions>>;
 
-export async function setVarsHandler(yargs: SetVarsHandlerArgs): Promise<void> {
+export async function setVarsHandler(
+  yargs: SetVarsHandlerArgs,
+  authContext: AuthContext,
+): Promise<void> {
   const {keysAndValues, dev} = yargs;
 
   const vars: Record<string, string> = {};
@@ -50,8 +53,8 @@ export async function setVarsHandler(yargs: SetVarsHandlerArgs): Promise<void> {
     return;
   }
 
-  const {userID} = await authenticate(yargs);
-  const {appID} = await ensureAppInstantiated(yargs);
+  const {userID} = authContext.user;
+  const {appID} = await ensureAppInstantiated(authContext);
   const data = {requester: makeRequester(userID), appID, vars};
   const {deploymentPath} = await setVars(data);
   if (!deploymentPath) {

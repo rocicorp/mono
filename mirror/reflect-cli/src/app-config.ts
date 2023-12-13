@@ -15,12 +15,11 @@ import {pkgUp, pkgUpSync} from 'pkg-up';
 import {must} from 'shared/src/must.js';
 import {randInt} from 'shared/src/rand.js';
 import * as v from 'shared/src/valita.js';
-import {authenticate} from './auth-config.js';
 import {ErrorWrapper} from './error.js';
 import {confirm, input} from './inquirer.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
-import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import type {AuthContext} from './handler.js';
 
 // { srcFile: destFile }
 const templateFiles = v.record(v.string());
@@ -145,7 +144,7 @@ export function mustReadAppConfig(
 }
 
 export async function ensureAppInstantiated(
-  yargs: YargvToInterface<CommonYargsArgv>,
+  authContext: AuthContext,
   instance = 'default',
 ): Promise<LocalConfig & AppInstance> {
   const config = mustReadAppConfig();
@@ -155,7 +154,7 @@ export async function ensureAppInstantiated(
       ...config.apps?.[instance],
     };
   }
-  const {userID, additionalUserInfo} = await authenticate(yargs, false);
+  const {userID, additionalUserInfo} = authContext.user;
   const defaultTeamName = additionalUserInfo?.username;
   if (!defaultTeamName) {
     throw new Error('Could not determine GitHub username from OAuth');

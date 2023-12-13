@@ -6,12 +6,12 @@ import {
   listAppKeys,
 } from 'mirror-protocol/src/app-keys.js';
 import {ensureAppInstantiated} from '../app-config.js';
-import {authenticate} from '../auth-config.js';
 import {checkbox, type Choice, type Item} from '../inquirer.js';
 import {makeRequester} from '../requester.js';
 
 import {padColumns} from '../table.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
+import type {AuthContext} from '../handler.js';
 
 export function createAppKeyOptions(yargs: CommonYargsArgv) {
   return yargs.positional('name', {
@@ -28,6 +28,7 @@ type CreateAppKeyHandlerArgs = YargvToInterface<
 
 export async function createAppKeyHandler(
   yargs: CreateAppKeyHandlerArgs,
+  authContext: AuthContext,
 ): Promise<void> {
   const {name} = yargs;
   if (!isValidAppKeyName(name)) {
@@ -38,8 +39,8 @@ export async function createAppKeyHandler(
     process.exit(-1);
   }
 
-  const {userID} = await authenticate(yargs);
-  const {appID} = await ensureAppInstantiated(yargs);
+  const {userID} = authContext.user;
+  const {appID} = await ensureAppInstantiated(authContext);
   const requester = makeRequester(userID);
 
   const {allPermissions} = await listAppKeys({

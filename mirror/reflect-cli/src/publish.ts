@@ -51,11 +51,8 @@ export async function publishHandler(
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
-  if (!authContext) {
-    throw new Error('AuthContext is required for publishHandler');
-  }
   const {reflectChannel} = yargs;
-  const {appID, server: script} = await ensureAppInstantiated(yargs);
+  const {appID, server: script} = await ensureAppInstantiated(authContext);
 
   const absPath = path.resolve(script);
   if (!(await exists(absPath))) {

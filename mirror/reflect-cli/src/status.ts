@@ -15,10 +15,6 @@ export async function statusHandler(
   _yargs: YargvToInterface<CommonYargsArgv>,
   authContext: AuthContext,
 ): Promise<void> {
-  if (!authContext) {
-    throw new Error('AuthContext is required for statusHandler');
-  }
-
   await ensureUser({requester: authContext.requester});
 
   const firestore = getFirestore();
