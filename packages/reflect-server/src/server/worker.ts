@@ -16,6 +16,7 @@ import {
   AUTH_WEBSOCKET_ROUTES_AUTHED_BY_API_KEY,
 } from './auth-do.js';
 import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
+import {makeErrorResponse} from './errors.js';
 import {
   CANARY_GET,
   HELLO,
@@ -220,9 +221,10 @@ const canaryGet = get<WorkerContext>().handle(
 
 function requireAPIKeyMatchesEnv(next: Handler<WorkerContext, Response>) {
   return (ctx: WorkerContext, req: Request) => {
-    const resp = checkAuthAPIKey(ctx.env.REFLECT_API_KEY, req);
-    if (resp) {
-      return resp;
+    try {
+      checkAuthAPIKey(ctx.env.REFLECT_API_KEY, req);
+    } catch (e) {
+      return makeErrorResponse(e);
     }
     return next(ctx, req);
   };

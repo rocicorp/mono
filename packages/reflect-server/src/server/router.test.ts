@@ -163,10 +163,7 @@ describe('checkAuthAPIKey', () => {
     name: string;
     required: string;
     headers: Record<string, string>;
-    expectedError:
-      | {error: string}
-      | {result: {text: string; status: number}}
-      | undefined;
+    expectedError?: string;
   };
 
   const cases: Case[] = [
@@ -174,9 +171,8 @@ describe('checkAuthAPIKey', () => {
       name: 'required key cannot be empty even if actual key is not sent in the headers',
       required: '',
       headers: {},
-      expectedError: {
-        error: 'Error: Internal error: expected auth api key cannot be empty',
-      },
+      expectedError:
+        'Error: Internal error: expected auth api key cannot be empty',
     },
     {
       name: 'required key cannot be empty even if actual is the same empty key',
@@ -184,9 +180,8 @@ describe('checkAuthAPIKey', () => {
       headers: {
         ['x-reflect-api-key']: '',
       },
-      expectedError: {
-        error: 'Error: Internal error: expected auth api key cannot be empty',
-      },
+      expectedError:
+        'Error: Internal error: expected auth api key cannot be empty',
     },
     {
       name: 'required key cannot be empty, even if actual key is provided',
@@ -194,15 +189,14 @@ describe('checkAuthAPIKey', () => {
       headers: {
         ['x-reflect-api-key']: 'foo',
       },
-      expectedError: {
-        error: 'Error: Internal error: expected auth api key cannot be empty',
-      },
+      expectedError:
+        'Error: Internal error: expected auth api key cannot be empty',
     },
     {
       name: 'no api key sent',
       required: 'foo',
       headers: {},
-      expectedError: {result: {text: 'Unauthorized', status: 401}},
+      expectedError: 'Error: Unauthorized',
     },
     {
       name: 'empty api key sent',
@@ -210,7 +204,7 @@ describe('checkAuthAPIKey', () => {
       headers: {
         ['x-reflect-api-key']: '',
       },
-      expectedError: {result: {text: 'Unauthorized', status: 401}},
+      expectedError: 'Error: Unauthorized',
     },
     {
       name: 'wrong api key sent',
@@ -218,7 +212,7 @@ describe('checkAuthAPIKey', () => {
       headers: {
         ['x-reflect-api-key']: 'bar',
       },
-      expectedError: {result: {text: 'Unauthorized', status: 401}},
+      expectedError: 'Error: Unauthorized',
     },
     {
       name: 'wrong legacy api key sent',
@@ -226,7 +220,7 @@ describe('checkAuthAPIKey', () => {
       headers: {
         ['x-reflect-auth-api-key']: 'bar',
       },
-      expectedError: {result: {text: 'Unauthorized', status: 401}},
+      expectedError: 'Error: Unauthorized',
     },
     {
       name: 'correct api key sent',
@@ -234,7 +228,6 @@ describe('checkAuthAPIKey', () => {
       headers: {
         ['x-reflect-api-key']: 'foo',
       },
-      expectedError: undefined,
     },
     {
       name: 'legacy api key sent',
@@ -242,35 +235,23 @@ describe('checkAuthAPIKey', () => {
       headers: {
         ['x-reflect-auth-api-key']: 'foo',
       },
-      expectedError: undefined,
     },
   ];
 
   for (const c of cases) {
     test(c.name, async () => {
       const {headers} = c;
-
-      let result: Case['expectedError'];
-
       try {
-        const response = checkAuthAPIKey(
+        checkAuthAPIKey(
           c.required,
           new Request('https://roci.dev/', {
             headers,
           }),
         );
-        if (response === undefined) {
-          result = response;
-        } else {
-          result = {
-            result: {status: response.status, text: await response.text()},
-          };
-        }
+        expect(c.expectedError).toBeUndefined;
       } catch (e) {
-        result = {error: String(e)};
+        expect(String(e)).toEqual(c.expectedError);
       }
-
-      expect(result).toEqual(c.expectedError);
     });
   }
 });
@@ -279,50 +260,52 @@ test('requireAuthAPIKey', async () => {
   type Case = {
     required: string;
     actual: string | null;
-    expected: {error: string} | {result: {text: string; status: number}};
+    text: string;
+    status?: number;
   };
 
   const cases: Case[] = [
     {
       required: '',
       actual: null,
-      expected: {
-        error: 'Error: Internal error: expected auth api key cannot be empty',
-      },
+      text: 'Internal error: expected auth api key cannot be empty',
+      status: 500,
     },
     {
       required: '',
       actual: '',
-      expected: {
-        error: 'Error: Internal error: expected auth api key cannot be empty',
-      },
+      text: 'Internal error: expected auth api key cannot be empty',
+      status: 500,
     },
     {
       required: '',
       actual: 'foo',
-      expected: {
-        error: 'Error: Internal error: expected auth api key cannot be empty',
-      },
+      text: 'Internal error: expected auth api key cannot be empty',
+      status: 500,
     },
     {
       required: 'foo',
       actual: null,
-      expected: {result: {text: 'Unauthorized', status: 401}},
+      text: 'Unauthorized',
+      status: 401,
     },
     {
       required: 'foo',
       actual: '',
-      expected: {result: {text: 'Unauthorized', status: 401}},
+      text: 'Unauthorized',
+      status: 401,
     },
     {
       required: 'foo',
       actual: 'bar',
-      expected: {result: {text: 'Unauthorized', status: 401}},
+      text: 'Unauthorized',
+      status: 401,
     },
     {
       required: 'foo',
       actual: 'foo',
-      expected: {result: {text: 'ok', status: 200}},
+      text: 'ok',
+      status: 200,
     },
   ];
 
@@ -331,9 +314,6 @@ test('requireAuthAPIKey', async () => {
     if (c.actual !== null) {
       headers['x-reflect-api-key'] = c.actual;
     }
-
-    let result: Case['expected'] | undefined = undefined;
-
     const handler = post()
       .with(requiredAuthAPIKey(() => c.required))
       .handle(async (_, req) => new Response(await req.text(), {status: 200}));
@@ -348,20 +328,9 @@ test('requireAuthAPIKey', async () => {
       parsedURL: new URLPattern().exec()!,
       lc: createSilentLogContext(),
     };
-    try {
-      const response = await handler(ctx, req);
-      if (response === undefined) {
-        result = response;
-      } else {
-        result = {
-          result: {status: response.status, text: await response.text()},
-        };
-      }
-    } catch (e) {
-      result = {error: String(e)};
-    }
-
-    expect(result).toEqual(c.expected);
+    const response = await handler(ctx, req);
+    expect(await response.text()).toBe(c.text);
+    expect(response.status).toBe(c.status ?? 200);
   }
 });
 
