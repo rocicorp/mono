@@ -1,37 +1,38 @@
 import {
+  Firestore,
   collection,
   doc,
   getDoc,
   getDocs,
   getFirestore,
-  Firestore,
   query,
   where,
 } from 'firebase/firestore';
 import {deleteApp} from 'mirror-protocol/src/app.js';
 import {
   APP_COLLECTION,
-  appViewDataConverter,
   appPath,
+  appViewDataConverter,
 } from 'mirror-schema/src/external/app.js';
 import {deploymentViewDataConverter} from 'mirror-schema/src/external/deployment.js';
 import {
-  userViewDataConverter,
   userPath,
+  userViewDataConverter,
 } from 'mirror-schema/src/external/user.js';
 import {watchDoc} from 'mirror-schema/src/external/watch.js';
 import {must} from 'shared/src/must.js';
 import {readAppConfig, writeAppConfig} from './app-config.js';
 import {authenticate} from './auth-config.js';
-import {checkbox} from './inquirer.js';
+import {checkbox, confirm} from './inquirer.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function deleteOptions(yargs: CommonYargsArgv) {
   return yargs
-    .option('name', {
-      describe: 'Name of the app to delete',
+    .positional('name', {
+      describe:
+        'Delete the specified app rather than the one for the current directory.',
       type: 'string',
       conflicts: ['appID', 'all'],
     })
@@ -42,16 +43,9 @@ export function deleteOptions(yargs: CommonYargsArgv) {
       hidden: true,
     })
     .option('all', {
-      describe:
-        'Delete all of your apps, confirming for each one (unless --force is specified)',
+      describe: 'Choose which apps to delete.',
       type: 'boolean',
       conflicts: ['name', 'appID'],
-    })
-    .option('force', {
-      describe: 'Suppress the confirmation prompt',
-      type: 'boolean',
-      alias: 'f',
-      default: false,
     });
 }
 
@@ -60,15 +54,25 @@ type DeleteHandlerArgs = YargvToInterface<ReturnType<typeof deleteOptions>>;
 export async function deleteHandler(yargs: DeleteHandlerArgs) {
   const firestore = getFirestore();
   const {userID} = await authenticate(yargs);
+  const {all} = yargs;
   const apps = await getAppsToDelete(firestore, userID, yargs);
   let selectedApps = [];
-  if (apps.length > 1) {
+  if (apps.length === 1 && !all) {
+    if (
+      !(await confirm({
+        message: `Delete "${apps[0].name}" and associated data?`,
+        default: false,
+      }))
+    ) {
+      return;
+    }
+    selectedApps = apps;
+  } else {
     selectedApps = await checkbox({
       message: `Select the apps and associated data to delete:`,
+      instructions: false,
       choices: apps.map(app => ({name: app.name, value: app})),
     });
-  } else {
-    selectedApps = apps;
   }
   for (const app of selectedApps) {
     console.info(`Requesting delete of "${app.name}"`);

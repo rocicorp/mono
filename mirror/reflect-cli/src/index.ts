@@ -162,8 +162,8 @@ function createCLIParser(argv: string[]) {
   );
 
   reflectCLI.command(
-    'delete',
-    '🗑️  Delete one or more Apps and their associated data. If no flags are specified, defaults to the App of the current directory.',
+    'delete [name]',
+    '🗑️  Delete one or more Apps. Defaults to the App of the current directory.',
     deleteOptions,
     handleWith(deleteHandler).andCleanup(),
   );
