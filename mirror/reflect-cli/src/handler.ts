@@ -45,16 +45,16 @@ export function authenticateAndHandleWith<
 }
 
 export function handleWith<T extends ArgumentsCamelCase<CommonYargsOptions>>(
-  handler: (args: T, context: AuthContext) => void | Promise<void>,
+  handler: (args: T) => void | Promise<void>,
 ) {
   return {
-    andCleanup: () => async (args: T, context: AuthContext) => {
+    andCleanup: () => async (args: T) => {
       let success = false;
       const eventName =
         args._ && args._.length ? `cmd_${args._[0]}` : 'cmd_unknown';
       // Execute the handler and handle any errors
       try {
-        await handler(args, context);
+        await handler(args);
         success = true;
       } catch (e) {
         await reportE(args, eventName, e);
