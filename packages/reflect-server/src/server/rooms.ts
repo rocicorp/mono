@@ -1,34 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {CreateRoomRequest} from 'reflect-protocol';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
+import type {ListOptions} from '../storage/storage.js';
 import {roomDOFetch} from './auth-do.js';
 import {CREATE_ROOM_PATH, fmtPath} from './paths.js';
-
-// RoomRecord keeps information about the room, for example the Durable
-// Object ID of the DO instance that has the room.
-export type RoomRecord = {
-  // roomID is the name of the room. It is externally visible, e.g.,
-  // present in URLs.
-  roomID: string;
-
-  // objectIDString is the stringified Durable Object ID, the unique
-  // identifier of the Durable Object instance that has this room.
-  // It is not externally visible.
-  //
-  // In the past we derived the objectID from the roomID via idFromName, so
-  // we didn't need to store the objectID. However in order to specify that
-  // a DO should exist only in the EU for GDPR, we have to create objectIDs
-  // via newUniqueId(). The unique ID is not derived from the roomID, so we
-  // need to keep track of them eg when we receive connect() we need to
-  // look the objectID up by roomID.
-  objectIDString: string;
-
-  // Indicates whether the room is pinned in the EU.
-  jurisdiction: '' | 'eu';
-
-  status: RoomStatus;
-};
 
 export enum RoomStatus {
   // An Open room can be used by users. We will accept connect()s to it.
@@ -38,8 +15,6 @@ export enum RoomStatus {
   Closed = 'closed',
   // A Deleted room is a Closed room that has had all its data deleted.
   Deleted = 'deleted',
-
-  Unknown = 'unknown',
 }
 
 // The DurableStorage interface adds type-awareness to the DO Storage API. It
@@ -52,20 +27,57 @@ export const roomStatusSchema = valita.union(
   valita.literal(RoomStatus.Open),
   valita.literal(RoomStatus.Closed),
   valita.literal(RoomStatus.Deleted),
-  valita.literal(RoomStatus.Unknown),
 );
 
 const jurisdictionSchema = valita.union(
   valita.literal(''),
   valita.literal('eu'),
 );
-// The type annotation here that RoomRecord and roomRecordSchema stay in sync.
-const roomRecordSchema: valita.Type<RoomRecord> = valita.object({
+
+const roomRecordSchema = valita.object({
+  // roomID is the name of the room. It is externally visible, e.g.,
+  // present in URLs.
   roomID: valita.string(),
+
+  // objectIDString is the stringified Durable Object ID, the unique
+  // identifier of the Durable Object instance that has this room.
+  // It is not externally visible.
+  //
+  // In the past we derived the objectID from the roomID via idFromName, so
+  // we didn't need to store the objectID. However in order to specify that
+  // a DO should exist only in the EU for GDPR, we have to create objectIDs
+  // via newUniqueId(). The unique ID is not derived from the roomID, so we
+  // need to keep track of them eg when we receive connect() we need to
+  // look the objectID up by roomID.
   objectIDString: valita.string(),
+
+  // Indicates whether the room is pinned in the EU.
   jurisdiction: jurisdictionSchema,
+
   status: roomStatusSchema,
 });
+
+// RoomRecord keeps information about the room, for example the Durable
+// Object ID of the DO instance that has the room.
+export type RoomRecord = valita.Infer<typeof roomRecordSchema>;
+
+// Public subset of RoomRecord that can be listed via the REST API
+// (i.e. everything but the objectIDString).
+//
+// The schema is constructed by chaining the `roomRecordSchema` (as opposed to
+// using `roomRecordSchema.pick(...)`) so that it can be passed into
+// storage.listEntries(...) to validate the returned data with the
+// full schema and from there construct the desired view.
+export const roomPropertiesSchema = roomRecordSchema.chain(record =>
+  valita.ok({
+    roomID: record.roomID,
+    jurisdiction: record.jurisdiction,
+    // objectIDString is excluded since it's an internal CF detail.
+    status: record.status,
+  }),
+);
+
+export type RoomProperties = valita.Infer<typeof roomPropertiesSchema>;
 
 export function internalCreateRoom(
   lc: LogContext,
@@ -230,66 +242,6 @@ export async function deleteRoom(
   return new Response('ok');
 }
 
-// Deletes the RoomRecord without any concern for the room's status.
-// Customers probably won't want/need to call this but it is useful for
-// developing.
-//
-// Caller must enforce no other concurrent calls to this and other
-// functions that create or modify the room record.
-export async function deleteRoomRecord(
-  lc: LogContext,
-  storage: DurableStorage,
-  roomID: string,
-): Promise<Response> {
-  const roomRecord = await roomRecordByRoomID(storage, roomID);
-  if (roomRecord === undefined) {
-    return new Response('no such room', {
-      status: 404,
-    });
-  }
-
-  lc.debug?.(`DANGER: deleting room record ${JSON.stringify(roomRecord)}`);
-  const roomRecordKey = roomKeyToString(roomRecord);
-  await storage.del(roomRecordKey);
-  lc.debug?.(`deleted RoomRecord ${JSON.stringify(roomRecord)}`);
-
-  return new Response('ok');
-}
-
-// Creates a RoomRecord for a roomID that already exists whose objectID
-// was derived from the roomID. It overwrites any record that already
-// exists for the roomID.
-//
-// Caller must enforce no other concurrent calls to this and other
-// room-modifying functions.
-export async function createRoomRecordForLegacyRoom(
-  lc: LogContext,
-  roomDO: DurableObjectNamespace,
-  storage: DurableStorage,
-  roomID: string,
-): Promise<Response> {
-  const invalidResponse = validateRoomID(roomID);
-  if (invalidResponse) {
-    return invalidResponse;
-  }
-
-  const objectID = await roomDO.idFromName(roomID);
-
-  const roomRecord: RoomRecord = {
-    roomID,
-    objectIDString: objectID.toString(),
-    jurisdiction: '',
-    status: RoomStatus.Open,
-  };
-  const roomRecordKey = roomKeyToString(roomRecord);
-  await storage.put(roomRecordKey, roomRecord);
-  lc.debug?.(
-    `migrated created roomID ${roomID}; record: ${JSON.stringify(roomRecord)}`,
-  );
-
-  return new Response('ok');
-}
-
 const roomIDRegex = /^[A-Za-z0-9_\-/]+$/;
 
 function validateRoomID(roomID: string) {
@@ -318,8 +270,25 @@ export async function objectIDByRoomID(
 // Caller must enforce no other concurrent calls to
 // functions that create or modify the room record.
 export function roomRecordByRoomID(storage: DurableStorage, roomID: string) {
+  return roomDataByRoomID(storage, roomID, roomRecordSchema);
+}
+
+// Caller must enforce no other concurrent calls to
+// functions that create or modify the room record.
+export function roomPropertiesByRoomID(
+  storage: DurableStorage,
+  roomID: string,
+) {
+  return roomDataByRoomID(storage, roomID, roomPropertiesSchema);
+}
+
+function roomDataByRoomID<T extends ReadonlyJSONValue>(
+  storage: DurableStorage,
+  roomID: string,
+  schema: valita.Type<T>,
+) {
   const roomRecordKey = roomKeyToString({roomID});
-  return storage.get(roomRecordKey, roomRecordSchema);
+  return storage.get(roomRecordKey, schema);
 }
 
 export async function roomRecordByObjectIDForTest(
@@ -340,8 +309,12 @@ export async function roomRecordByObjectIDForTest(
   return undefined;
 }
 
-export async function roomRecords(storage: DurableStorage) {
-  const map = await storage.list({prefix: ROOM_KEY_PREFIX}, roomRecordSchema);
+export async function roomProperties(
+  storage: DurableStorage,
+  opts: ListOptions,
+) {
+  const options = convertListOptionKeysToRoomKeys(opts);
+  const map = await storage.list(options, roomPropertiesSchema);
   return map.values();
 }
 
@@ -356,4 +329,22 @@ type RoomKey = {
 
 function roomKeyToString(key: RoomKey): string {
   return `${ROOM_KEY_PREFIX}${encodeURIComponent(key.roomID)}/`;
+}
+
+export function convertListOptionKeysToRoomKeys(
+  opts: ListOptions,
+): ListOptions {
+  const prefix = ROOM_KEY_PREFIX + (opts.prefix ?? '');
+  const options = {...opts, prefix};
+  if (opts.start) {
+    options.start = {
+      ...opts.start,
+      // Encoding the empty key with roomKeyToString() would result in the start key being "room//",
+      // which is lexicographically larger than "room/-.*/". Instead, leave the empty string as-is
+      // so that it preserves the semantics of "before the first valid key".
+      key:
+        opts.start.key === '' ? '' : roomKeyToString({roomID: opts.start.key}),
+    };
+  }
+  return options;
 }

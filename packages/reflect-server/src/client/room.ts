@@ -1,11 +1,11 @@
 import type {CreateRoomRequest} from 'reflect-protocol';
 import * as v from 'shared/src/valita.js';
 import {createAPIHeaders} from '../server/api-headers.js';
-import {AUTH_ROUTES} from '../server/auth-do.js';
 import {
   CLOSE_ROOM_PATH,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
+  GET_ROOM_PATH,
   fmtPath,
 } from '../server/paths.js';
 import {roomStatusSchema, type RoomStatus} from '../server/rooms.js';
@@ -81,7 +81,7 @@ export async function roomStatus(
   roomID: string,
 ): Promise<RoomStatus> {
   const resp = await fetch(
-    newRoomStatusRequest(reflectServerURL, authApiKey, roomID),
+    newGetRoomRequest(reflectServerURL, authApiKey, roomID),
   );
   if (!resp.ok) {
     throw new Error(
@@ -101,15 +101,12 @@ export async function roomStatus(
  * @param {string} roomID - The ID of the room to return status of.
  * @returns {Request} - The Request to get room status.
  */
-export function newRoomStatusRequest(
+export function newGetRoomRequest(
   reflectServerURL: string,
   authApiKey: string,
   roomID: string,
 ) {
-  const path = AUTH_ROUTES.roomStatusByRoomID.replace(
-    ':roomID',
-    encodeURIComponent(roomID),
-  );
+  const path = fmtPath(GET_ROOM_PATH, {roomID});
   const url = new URL(path, reflectServerURL);
   return new Request(url.toString(), {
     method: 'get',

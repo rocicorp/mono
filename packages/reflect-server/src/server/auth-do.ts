@@ -23,8 +23,10 @@ import {
   createWSAndCloseWithTailError,
 } from '../util/socket.js';
 import {AlarmManager, TimeoutID} from './alarms.js';
+import {APIError} from './api-response.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
 import type {AuthHandler} from './auth.js';
+import {makeErrorResponse} from './errors.js';
 import {getRequiredSearchParams} from './get-required-search-params.js';
 import {requireUpgradeHeader, roomNotFoundResponse} from './http-util.js';
 import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
@@ -34,9 +36,11 @@ import {
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
   DISCONNECT_BEACON_PATH,
+  GET_ROOM_PATH,
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
+  LIST_ROOMS_PATH,
   TAIL_URL_PATH,
 } from './paths.js';
 import {ROOM_ROUTES} from './room-do.js';
@@ -48,14 +52,16 @@ import {
   deleteRoom,
   internalCreateRoom,
   objectIDByRoomID,
+  roomProperties,
+  roomPropertiesByRoomID,
   roomRecordByRoomID,
-  roomRecords,
 } from './rooms.js';
 import {
   BaseContext,
   Router,
   body,
   get,
+  listControl,
   post,
   roomID,
   urlVersion,
@@ -88,8 +94,8 @@ const connectionsByRoomSchema = valita.object({});
 export type ConnectionRecord = valita.Infer<typeof connectionRecordSchema>;
 
 export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
-  roomStatusByRoomID: '/api/room/v0/room/:roomID/status',
-  roomRecords: '/api/room/v0/rooms',
+  listRoomProperties: LIST_ROOMS_PATH,
+  getRoomProperties: GET_ROOM_PATH,
   closeRoom: CLOSE_ROOM_PATH,
   deleteRoom: DELETE_ROOM_PATH,
   authInvalidateAll: INVALIDATE_ALL_CONNECTIONS_PATH,
@@ -180,31 +186,32 @@ export class BaseAuthDO implements DurableObject {
       return resp;
     } catch (e) {
       lc.error?.('Unhandled exception in fetch', e);
-      return new Response(
-        e instanceof Error ? e.message : 'Unexpected error.',
-        {status: 500},
-      );
+      return makeErrorResponse(e);
     }
   }
 
-  #roomStatusByRoomID = get()
+  #getRoomProperties = get()
     .with(roomID())
-    .handleAsJSON(async ctx => {
-      const roomRecord = await this.#roomRecordLock.withRead(() =>
-        roomRecordByRoomID(this.#durableStorage, ctx.roomID),
+    .handleAPIResult(async ctx => {
+      const {roomID} = ctx;
+      const roomProperties = await this.#roomRecordLock.withRead(() =>
+        roomPropertiesByRoomID(this.#durableStorage, ctx.roomID),
       );
-      if (roomRecord === undefined) {
-        return {status: RoomStatus.Unknown};
+      if (roomProperties === undefined) {
+        throw new APIError(404, 'rooms', `Room "${roomID}" not found`);
       }
-      return {status: roomRecord.status};
+      return roomProperties;
     });
 
-  #allRoomRecords = get().handleAsJSON(async () => {
-    const roomIDToRecords = await this.#roomRecordLock.withRead(() =>
-      roomRecords(this.#durableStorage),
-    );
-    return Array.from(roomIDToRecords);
-  });
+  #listRoomProperties = get()
+    .with(listControl(1000))
+    .handleAPIResult(async ctx => {
+      const {listControl} = ctx;
+      const roomIDToProperties = await this.#roomRecordLock.withRead(() =>
+        roomProperties(this.#durableStorage, listControl.getOptions()),
+      );
+      return listControl.makeListResults(roomIDToProperties);
+    });
 
   #createRoom = post()
     .with(roomID())
@@ -369,10 +376,13 @@ export class BaseAuthDO implements DurableObject {
 
   #initRoutes() {
     this.#router.register(
-      AUTH_ROUTES.roomStatusByRoomID,
-      this.#roomStatusByRoomID,
+      AUTH_ROUTES.listRoomProperties,
+      this.#listRoomProperties,
     );
-    this.#router.register(AUTH_ROUTES.roomRecords, this.#allRoomRecords);
+    this.#router.register(
+      AUTH_ROUTES.getRoomProperties,
+      this.#getRoomProperties,
+    );
     this.#router.register(AUTH_ROUTES.closeRoom, this.#closeRoom);
     this.#router.register(AUTH_ROUTES.createRoom, this.#createRoom);
     this.#router.register(AUTH_ROUTES.deleteRoom, this.#deleteRoom);

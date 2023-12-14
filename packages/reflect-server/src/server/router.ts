@@ -3,7 +3,9 @@ import type {MaybePromise} from 'replicache';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import {API_KEY_HEADER_NAME} from './api-headers.js';
+import {makeAPIResponse} from './api-response.js';
 import {HttpError, makeErrorResponse} from './errors.js';
+import {makeListControl} from './list.js';
 
 /**
  * Handles a request dispatched by router. Handlers are meant to be nested
@@ -17,10 +19,7 @@ import {HttpError, makeErrorResponse} from './errors.js';
 export type Handler<Context, Resp> = (
   context: Context,
   request: Request,
-) =>
-  | MaybePromise<Resp>
-  | MaybePromise<Response>
-  | MaybePromise<Resp | Response>;
+) => MaybePromise<Resp>;
 
 export type WithLogContext = {
   lc: LogContext;
@@ -127,6 +126,16 @@ export function checkAuthAPIKey(
   }
 }
 
+export function listControl<Context extends BaseContext>(
+  maxMaxResults: number,
+) {
+  return (ctx: Context) => {
+    const {parsedURL} = ctx;
+    const listControl = makeListControl(parsedURL.search.input, maxMaxResults);
+    return {...ctx, listControl};
+  };
+}
+
 export function roomID<Context extends BaseContext>() {
   return (ctx: Context) => {
     const {roomID} = ctx.parsedURL.pathname.groups;
@@ -224,25 +233,37 @@ class ValidatorChainer<Input extends BaseContext, Output extends BaseContext> {
     });
   }
 
-  handle<Resp>(handler: Handler<Output, Resp>): Handler<Input, Resp> {
+  #validateAndHandle(
+    handler: Handler<Output, Response>,
+  ): Handler<Input, Response> {
     return async (origCtx: Input, request: Request) => {
       try {
         const ctx = await this.#requestValidator(origCtx, request);
-        return handler(ctx, request);
+        return await handler(ctx, request);
       } catch (e) {
         return makeErrorResponse(e);
       }
     };
   }
 
-  handleAsJSON(
+  handle(handler: Handler<Output, Response>): Handler<Input, Response> {
+    return this.#validateAndHandle(handler);
+  }
+
+  handleJSON(
     handler: Handler<Output, ReadonlyJSONValue>,
   ): Handler<Input, Response> {
-    return async (origCtx: Input, request: Request) => {
-      const result = await this.handle(handler)(origCtx, request);
-      return result instanceof Response
-        ? result
-        : new Response(JSON.stringify(result));
-    };
+    return this.handle(
+      async (ctx: Output, request: Request) =>
+        new Response(JSON.stringify(await handler(ctx, request))),
+    );
+  }
+
+  handleAPIResult(
+    handler: Handler<Output, ReadonlyJSONValue>,
+  ): Handler<Input, Response> {
+    return this.handleJSON(async (ctx: Output, request: Request) =>
+      makeAPIResponse(await handler(ctx, request)),
+    );
   }
 }

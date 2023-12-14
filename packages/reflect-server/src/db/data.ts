@@ -1,8 +1,7 @@
 import {compareUTF8} from 'compare-utf8';
+import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
-import {assertMapValues as valitaAssertMapValues} from '../util/valita.js';
-import {assert} from 'shared/src/asserts.js';
 
 export async function getEntry<T extends ReadonlyJSONValue>(
   durable: DurableObjectStorage,
@@ -51,8 +50,9 @@ export async function listEntries<T extends ReadonlyJSONValue>(
     result = new Map(entries);
   }
 
-  valitaAssertMapValues(result, schema);
-  return result;
+  return new Map(
+    [...result].map(([key, value]) => [key, valita.parse(value, schema)]),
+  );
 }
 
 export function putEntry<T extends ReadonlyJSONValue>(
