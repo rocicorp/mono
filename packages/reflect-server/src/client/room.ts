@@ -1,6 +1,6 @@
 import type {CreateRoomRequest} from 'reflect-protocol';
+import {createAPIHeaders} from 'shared/src/api/headers.js';
 import * as v from 'shared/src/valita.js';
-import {createAPIHeaders} from '../server/api-headers.js';
 import {
   CLOSE_ROOM_PATH,
   CREATE_ROOM_PATH,

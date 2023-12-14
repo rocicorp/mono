@@ -9,6 +9,7 @@ import {
 } from '@jest/globals';
 import type {TailErrorMessage} from 'reflect-protocol/src/tail.js';
 import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
+import {API_KEY_HEADER_NAME, createAPIHeaders} from 'shared/src/api/headers.js';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
@@ -22,7 +23,6 @@ import {DurableStorage} from '../storage/durable-storage.js';
 import {encodeHeaderValue} from '../util/headers.js';
 import {sleep} from '../util/sleep.js';
 import {Mocket, TestLogSink, mockWebSocketPair} from '../util/test-utils.js';
-import {API_KEY_HEADER_NAME, createAPIHeaders} from './api-headers.js';
 import type {APIErrorInfo} from './api-response.js';
 import {TestAuthDO} from './auth-do-test-util.js';
 import {

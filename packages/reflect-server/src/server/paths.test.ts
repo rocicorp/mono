@@ -40,7 +40,7 @@ describe('paths', () => {
       {
         name: 'no groups',
         pattern: INVALIDATE_ALL_CONNECTIONS_PATH,
-        result: '/api/v1/connections:invalidate',
+        result: '/api/v1/connections/all:invalidate',
       },
       {
         name: 'get room',

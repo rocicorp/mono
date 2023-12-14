@@ -1,10 +1,10 @@
 import {describe, expect, jest, test} from '@jest/globals';
 import type {LogLevel} from '@rocicorp/logger';
 import {version} from 'reflect-shared';
+import {createAPIHeaders} from 'shared/src/api/headers.js';
 import {assertString} from 'shared/src/asserts.js';
 import type {Series} from '../types/report-metrics.js';
 import {Mocket, TestLogSink, fail} from '../util/test-utils.js';
-import {createAPIHeaders} from './api-headers.js';
 import {
   TestDurableObjectId,
   TestDurableObjectStub,
@@ -229,7 +229,7 @@ test('worker forwards authDO api requests to authDO', async () => {
       body: undefined,
     },
     {
-      path: 'https://test.roci.dev/api/v1/connections:invalidate',
+      path: 'https://test.roci.dev/api/v1/connections/all:invalidate',
       method: 'post',
       body: undefined,
     },
