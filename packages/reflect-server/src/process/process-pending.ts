@@ -35,6 +35,7 @@ export async function processPending(
   lc = lc.withContext('numClients', clients.size);
   lc.debug?.('process pending');
   const storedConnectedClients = await getConnectedClients(storage);
+  lc.debug?.(`Got ${storedConnectedClients.size} connected clients`);
   let hasConnectsOrDisconnectsToProcess =
     storedConnectedClients.size !== clients.size;
   if (!hasConnectsOrDisconnectsToProcess) {
@@ -54,10 +55,10 @@ export async function processPending(
     }
   }
   if (pendingMutations.length === 0 && !hasConnectsOrDisconnectsToProcess) {
-    return {maxProcessedMutationTimestamp, nothingToProcess: true};
     lc.debug?.(
       'No pending mutations, connects or disconnects to process, exiting',
     );
+    return {maxProcessedMutationTimestamp, nothingToProcess: true};
   }
 
   const bufferMs = bufferSizer.bufferSizeMs;
