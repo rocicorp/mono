@@ -30,7 +30,7 @@ export class APIError extends ErrorWithResponse {
   readonly #info: APIErrorInfo;
 
   constructor(code: APIErrorCode, resource: string, message: string) {
-    super(`${code}: ${message}${resource ? '( ' + resource + ')' : ''}`);
+    super(`${code}: ${message}${resource ? ' (' + resource + ')' : ''}`);
     this.#info = {code, resource, message};
   }
 
