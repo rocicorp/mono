@@ -20,7 +20,7 @@ export const CLOSE_ROOM_PATH = `/api/v1/rooms/:roomID(${ID_REGEX})\\:close`;
 export const DELETE_ROOM_PATH = `/api/v1/rooms/:roomID(${ID_REGEX})\\:delete`;
 
 export const INVALIDATE_ALL_CONNECTIONS_PATH =
-  '/api/v1/connections\\:invalidate';
+  '/api/v1/connections/all\\:invalidate';
 export const INVALIDATE_ROOM_CONNECTIONS_PATH = `/api/v1/connections/rooms/:roomID(${ID_REGEX})\\:invalidate`;
 export const INVALIDATE_USER_CONNECTIONS_PATH = `/api/v1/connections/users/:userID(${ID_REGEX})\\:invalidate`;
 
