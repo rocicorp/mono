@@ -1,32 +1,4 @@
 import * as v from 'shared/src/valita.js';
-import {networkInterfaces} from 'os';
-import {createHash} from 'crypto';
-
-export const deviceFingerprint = computeFingerprint();
-
-function getAllMacAddresses(): string[] {
-  const allMACAddresses: string[] = [];
-  const ifaces = networkInterfaces();
-  for (const addresses of Object.values(ifaces)) {
-    if (addresses) {
-      for (const address of addresses) {
-        if (
-          !address.internal &&
-          address.mac &&
-          address.mac !== '00:00:00:00:00:00' &&
-          !allMACAddresses.includes(address.mac)
-        ) {
-          allMACAddresses.push(address.mac);
-        }
-      }
-    }
-  }
-  return allMACAddresses.sort((a, b) => a.localeCompare(b));
-}
-
-function computeFingerprint(): string {
-  return createHash('md5').update(getAllMacAddresses().join(',')).digest('hex');
-}
 
 export enum UserCustomDimension {
   OsArchitecture = 'up.reflect_os_architecture',

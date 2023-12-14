@@ -66,7 +66,6 @@ function createCLIParser(argv: string[]) {
     'login',
     '🔓 Login to Reflect',
     // eslint-disable-next-line @typescript-eslint/no-empty-function
-
     () => {},
     handleWith(async (yargs: YargvToInterface<CommonYargsArgv>) => {
       await loginHandler(yargs);
