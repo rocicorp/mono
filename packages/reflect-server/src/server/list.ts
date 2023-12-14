@@ -1,6 +1,6 @@
 import * as v from 'shared/src/valita.js';
 import type {ListOptions} from '../storage/storage.js';
-import {HttpError} from './errors.js';
+import {APIError} from './api-response.js';
 
 const numericString = v.string().chain(str => {
   try {
@@ -32,7 +32,7 @@ function queryStringToObj<T>(queryString: string, schema: v.Type<T>): T {
   try {
     return v.parse(queryObj, schema, 'passthrough');
   } catch (e) {
-    throw new HttpError(400, (e as Error).message);
+    throw new APIError(400, 'request', (e as Error).message);
   }
 }
 

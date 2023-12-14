@@ -1,9 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {MaybePromise} from 'replicache';
+import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import {API_KEY_HEADER_NAME} from './api-headers.js';
-import {makeAPIResponse} from './api-response.js';
+import {APIError, makeAPIResponse} from './api-response.js';
 import {HttpError, makeErrorResponse} from './errors.js';
 import {makeListControl} from './list.js';
 
@@ -75,14 +76,14 @@ export class Router<InitialContext extends BaseContext = BaseContext> {
 
     const {lc} = context;
     lc.debug?.(`no matching route for ${request.url}`);
-    return new Response('not found', {status: 404});
+    return new APIError(404, 'request', 'Unknown or invalid URL').response();
   }
 }
 
 function requireMethod<Context extends BaseContext>(method: string) {
   return (ctx: Context, request: Request) => {
     if (request.method !== method) {
-      throw new HttpError(405, 'unsupported method');
+      throw new APIError(405, 'request', 'unsupported method');
     }
     return ctx;
   };
@@ -139,9 +140,7 @@ export function listControl<Context extends BaseContext>(
 export function roomID<Context extends BaseContext>() {
   return (ctx: Context) => {
     const {roomID} = ctx.parsedURL.pathname.groups;
-    if (roomID === undefined) {
-      throw new HttpError(500, 'Internal error: roomID not found');
-    }
+    assert(roomID, 'roomID() configured for URL without :roomID group');
     const decoded = decodeURIComponent(roomID);
     return {...ctx, roomID: decoded};
   };
@@ -150,9 +149,7 @@ export function roomID<Context extends BaseContext>() {
 export function userID<Context extends BaseContext>() {
   return (ctx: Context) => {
     const {userID} = ctx.parsedURL.pathname.groups;
-    if (userID === undefined) {
-      throw new HttpError(500, 'Internal error: userID not found');
-    }
+    assert(userID, 'userID() configured for URL without :userID group');
     const decoded = decodeURIComponent(userID);
     return {...ctx, userID: decoded};
   };
@@ -199,11 +196,15 @@ async function validateBody<T>(
     // again will result in an error "TypeError: body used already for <snip>".
     json = await request.json();
   } catch (e) {
-    throw new HttpError(400, 'Body must be valid json.');
+    throw new APIError(400, 'request', 'Body must be valid json.');
   }
   const validateResult = valita.test(json, schema);
   if (!validateResult.ok) {
-    throw new HttpError(400, 'Body schema error. ' + validateResult.error);
+    throw new APIError(
+      400,
+      'request',
+      'Body schema error. ' + validateResult.error,
+    );
   }
   return validateResult.value;
 }
@@ -259,11 +260,11 @@ class ValidatorChainer<Input extends BaseContext, Output extends BaseContext> {
     );
   }
 
-  handleAPIResult(
-    handler: Handler<Output, ReadonlyJSONValue>,
+  handleAPIResult<Result extends ReadonlyJSONValue | void>(
+    handler: Handler<Output, Result>,
   ): Handler<Input, Response> {
     return this.handleJSON(async (ctx: Output, request: Request) =>
-      makeAPIResponse(await handler(ctx, request)),
+      makeAPIResponse((await handler(ctx, request)) ?? {}),
     );
   }
 }

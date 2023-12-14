@@ -6,6 +6,19 @@ export abstract class ErrorWithResponse extends Error {
   abstract response(): Response;
 }
 
+export class ErrorWithForwardedResponse extends ErrorWithResponse {
+  readonly #response: Response;
+
+  constructor(response: Response) {
+    super(`Forwarded response for ${response.url}: ${response.status}`);
+    this.#response = response;
+  }
+
+  response() {
+    return this.#response;
+  }
+}
+
 export class HttpError extends ErrorWithResponse {
   readonly #status: number;
 

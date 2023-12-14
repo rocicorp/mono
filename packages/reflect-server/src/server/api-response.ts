@@ -1,8 +1,8 @@
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {ErrorWithResponse} from './errors.js';
 
-export type APIErrorCode = 404; // Add more as necessary.
-export type APIResource = 'rooms'; // Add more as necessary.
+export type APIErrorCode = 400 | 404 | 405 | 409; // Add more as necessary.
+export type APIResource = 'request' | 'rooms'; // Add more as necessary.
 
 export type APIErrorInfo = {
   code: APIErrorCode;
@@ -39,6 +39,10 @@ export class APIError extends ErrorWithResponse {
       result: null,
       error: this.#info,
     };
-    return new Response(JSON.stringify(apiResponse));
+    return new Response(JSON.stringify(apiResponse), {status: this.#info.code});
   }
+}
+
+export function roomNotFoundAPIError(roomID: string): APIError {
+  return new APIError(404, 'rooms', `Room "${roomID}" not found`);
 }

@@ -4,7 +4,9 @@ import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import type {ListOptions} from '../storage/storage.js';
+import {APIError, roomNotFoundAPIError} from './api-response.js';
 import {roomDOFetch} from './auth-do.js';
+import {ErrorWithForwardedResponse} from './errors.js';
 import {CREATE_ROOM_PATH, fmtPath} from './paths.js';
 
 export enum RoomStatus {
@@ -85,7 +87,7 @@ export function internalCreateRoom(
   storage: DurableStorage,
   roomID: string,
   jurisdiction: 'eu' | undefined,
-) {
+): Promise<void> {
   const url = `https://unused-reflect-room-do.dev${fmtPath(CREATE_ROOM_PATH, {
     roomID,
   })}`;
@@ -107,20 +109,19 @@ export async function createRoom(
   request: Request,
   roomID: string,
   jurisdiction: 'eu' | undefined,
-): Promise<Response> {
+): Promise<void> {
   // Note: this call was authenticated by dispatch, so no need to check for
   // authApiKey here.
 
-  const invalidResponse = validateRoomID(roomID);
-  if (invalidResponse) {
-    return invalidResponse;
-  }
+  validateRoomID(roomID);
 
   // Check if the room already exists.
   if ((await roomRecordByRoomID(storage, roomID)) !== undefined) {
-    return new Response('room already exists', {
-      status: 409 /* Conflict */,
-    });
+    throw new APIError(
+      409 /* Conflict */,
+      'rooms',
+      `Room "${roomID}" already exists`,
+    );
   }
 
   const options = jurisdiction ? {jurisdiction} : undefined;
@@ -142,7 +143,7 @@ export async function createRoom(
         response.status
       } ${await response.clone().text()}`,
     );
-    return response;
+    throw new ErrorWithForwardedResponse(response);
   }
 
   // Write the record for the room only after it has been successfully
@@ -156,8 +157,6 @@ export async function createRoom(
   const roomRecordKey = roomKeyToString(roomRecord);
   await storage.put(roomRecordKey, roomRecord);
   lc.debug?.(`created room ${JSON.stringify(roomRecord)}`);
-
-  return new Response('ok');
 }
 
 // Caller must enforce no other concurrent calls to this and other
@@ -169,28 +168,26 @@ export async function closeRoom(
   lc: LogContext,
   storage: DurableStorage,
   roomID: string,
-): Promise<Response> {
+): Promise<void> {
   const roomRecord = await roomRecordByRoomID(storage, roomID);
   if (roomRecord === undefined) {
-    return new Response('no such room', {
-      status: 404,
-    });
+    throw roomNotFoundAPIError(roomID);
   }
 
   if (roomRecord.status === RoomStatus.Closed) {
-    return new Response('ok (room already closed)');
+    return; // OK: Already closed
   } else if (roomRecord.status !== RoomStatus.Open) {
-    return new Response('room is not open', {
-      status: 409 /* Conflict */,
-    });
+    throw new APIError(
+      409 /* Conflict */,
+      'rooms',
+      `Room "${roomID}" is ${roomRecord.status}`,
+    );
   }
 
   roomRecord.status = RoomStatus.Closed;
   const roomRecordKey = roomKeyToString(roomRecord);
   await storage.put(roomRecordKey, roomRecord);
   lc.debug?.(`closed room ${JSON.stringify(roomRecord)}`);
-
-  return new Response('ok');
 }
 
 // Caller must enforce no other concurrent calls to this and other
@@ -201,20 +198,20 @@ export async function deleteRoom(
   storage: DurableStorage,
   roomID: string,
   request: Request,
-): Promise<Response> {
+): Promise<void> {
   const roomRecord = await roomRecordByRoomID(storage, roomID);
   if (roomRecord === undefined) {
-    return new Response('no such room', {
-      status: 404,
-    });
+    throw roomNotFoundAPIError(roomID);
   }
 
   if (roomRecord.status === RoomStatus.Deleted) {
-    return new Response('ok (room already deleted)');
+    return; // OK: Already deleted.
   } else if (roomRecord.status !== RoomStatus.Closed) {
-    return new Response('room must first be closed', {
-      status: 409 /* Conflict */,
-    });
+    throw new APIError(
+      409 /* Conflict */,
+      'rooms',
+      `Room "${roomID}" must first be closed`,
+    );
   }
 
   const objectID = roomDO.idFromString(roomRecord.objectIDString);
@@ -232,25 +229,25 @@ export async function deleteRoom(
         response.status
       } ${await response.clone().text()}`,
     );
-    return response;
+    throw new ErrorWithForwardedResponse(response);
   }
 
   roomRecord.status = RoomStatus.Deleted;
   const roomRecordKey = roomKeyToString(roomRecord);
   await storage.put(roomRecordKey, roomRecord);
   lc.debug?.(`deleted room ${JSON.stringify(roomRecord)}`);
-  return new Response('ok');
 }
 
 const roomIDRegex = /^[A-Za-z0-9_\-/]+$/;
 
 function validateRoomID(roomID: string) {
   if (!roomIDRegex.test(roomID)) {
-    return new Response(`Invalid roomID (must match ${roomIDRegex})`, {
-      status: 400,
-    });
+    throw new APIError(
+      400,
+      'rooms',
+      `Invalid roomID "${roomID}" (must match ${roomIDRegex})`,
+    );
   }
-  return undefined;
 }
 
 // Caller must enforce no other concurrent calls to
