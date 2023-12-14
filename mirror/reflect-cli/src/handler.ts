@@ -39,7 +39,7 @@ export function authenticateAndHandleWith<
         await reportE(args, eventName, e, 'WARNING');
       }
 
-      handleWith(() => handler(args, context)).andCleanup();
+      await handleWith<T>(args1 => handler(args1, context)).andCleanup()(args);
     },
   };
 }
