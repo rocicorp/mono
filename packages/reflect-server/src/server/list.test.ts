@@ -63,13 +63,15 @@ describe('parse ListOptions', () => {
       name: 'disallow both startKey and startAfterKey',
       queryString: 'maxResults=200&startKey=foo&startAfterKey=bar',
       maxMaxResults: 100,
-      error: 'Cannot specify both startKey and startAfterKey. Got object',
+      error:
+        '400: Cannot specify both startKey and startAfterKey. Got object (request)',
     },
     {
       name: 'bad maxResults',
       queryString: 'maxResults=not-a-number',
       maxMaxResults: 100,
-      error: 'Expected valid number at maxResults. Got "not-a-number"',
+      error:
+        '400: Expected valid number at maxResults. Got "not-a-number" (request)',
     },
   ];
 

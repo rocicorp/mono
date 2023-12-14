@@ -23,12 +23,12 @@ import {
   createWSAndCloseWithTailError,
 } from '../util/socket.js';
 import {AlarmManager, TimeoutID} from './alarms.js';
-import {APIError} from './api-response.js';
+import {roomNotFoundAPIError} from './api-response.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
 import type {AuthHandler} from './auth.js';
-import {makeErrorResponse} from './errors.js';
+import {ErrorWithForwardedResponse, makeErrorResponse} from './errors.js';
 import {getRequiredSearchParams} from './get-required-search-params.js';
-import {requireUpgradeHeader, roomNotFoundResponse} from './http-util.js';
+import {requireUpgradeHeader} from './http-util.js';
 import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
 import {
   CLOSE_ROOM_PATH,
@@ -198,7 +198,7 @@ export class BaseAuthDO implements DurableObject {
         roomPropertiesByRoomID(this.#durableStorage, ctx.roomID),
       );
       if (roomProperties === undefined) {
-        throw new APIError(404, 'rooms', `Room "${roomID}" not found`);
+        throw roomNotFoundAPIError(roomID);
       }
       return roomProperties;
     });
@@ -216,7 +216,7 @@ export class BaseAuthDO implements DurableObject {
   #createRoom = post()
     .with(roomID())
     .with(body(createRoomRequestSchema))
-    .handle((ctx, req) => {
+    .handleAPIResult((ctx, req) => {
       const {lc, body, roomID} = ctx;
       const {jurisdiction} = body;
       return this.#roomRecordLock.withWrite(() =>
@@ -236,7 +236,7 @@ export class BaseAuthDO implements DurableObject {
   // to ensure users are logged out.
   #closeRoom = post()
     .with(roomID())
-    .handle(ctx =>
+    .handleAPIResult(ctx =>
       this.#roomRecordLock.withWrite(() =>
         closeRoom(ctx.lc, this.#durableStorage, ctx.roomID),
       ),
@@ -246,7 +246,7 @@ export class BaseAuthDO implements DurableObject {
   // will return 410 Gone for all requests.
   #deleteRoom = post()
     .with(roomID())
-    .handle((ctx, req) =>
+    .handleAPIResult((ctx, req) =>
       this.#roomRecordLock.withWrite(() =>
         deleteRoom(ctx.lc, this.#roomDO, this.#durableStorage, ctx.roomID, req),
       ),
@@ -608,14 +608,16 @@ export class BaseAuthDO implements DurableObject {
               }
               lc.debug?.('room not found, trying to create it');
 
-              const resp = await internalCreateRoom(
-                lc,
-                this.#roomDO,
-                this.#durableStorage,
-                roomID,
-                jurisdiction,
-              );
-              if (!resp.ok) {
+              try {
+                await internalCreateRoom(
+                  lc,
+                  this.#roomDO,
+                  this.#durableStorage,
+                  roomID,
+                  jurisdiction,
+                );
+              } catch (e) {
+                // Errors are thrown as APIErrors.
                 return undefined;
               }
               return roomRecordByRoomID(this.#durableStorage, roomID);
@@ -736,7 +738,7 @@ export class BaseAuthDO implements DurableObject {
 
   #authInvalidateForRoom = post()
     .with(roomID())
-    .handle((ctx, req) => {
+    .handleAPIResult((ctx, req) => {
       const {lc, roomID} = ctx;
       lc.debug?.(`authInvalidateForRoom ${roomID} waiting for lock.`);
       return this.#authLock.withWrite(async () => {
@@ -745,7 +747,7 @@ export class BaseAuthDO implements DurableObject {
           lc.debug?.(
             `authInvalidateForRoom ${roomID} no connections to invalidate returning 200.`,
           );
-          return new Response('Success', {status: 200});
+          return;
         }
 
         lc.debug?.(`Sending authInvalidateForRoom request to ${roomID}`);
@@ -755,7 +757,7 @@ export class BaseAuthDO implements DurableObject {
           objectIDByRoomID(this.#durableStorage, this.#roomDO, roomID),
         );
         if (roomObjectID === undefined) {
-          return roomNotFoundResponse();
+          throw roomNotFoundAPIError(roomID);
         }
         const stub = this.#roomDO.get(roomObjectID);
         const response = await roomDOFetch(
@@ -771,14 +773,14 @@ export class BaseAuthDO implements DurableObject {
               response.status
             } ${await response.clone().text()}`,
           );
+          throw new ErrorWithForwardedResponse(response);
         }
-        return response;
       });
     });
 
   #authInvalidateForUser = post()
     .with(userID())
-    .handle((ctx, req) => {
+    .handleAPIResult((ctx, req) => {
       const {lc, userID} = ctx;
       lc.debug?.(`authInvalidateForUser waiting for lock.`);
       return this.#authLock.withWrite(async () => {
@@ -791,24 +793,27 @@ export class BaseAuthDO implements DurableObject {
         );
         // The requests to the Room DOs must be completed inside the write lock
         // to avoid races with new connect requests for this user.
-        return this.#forwardInvalidateRequest(
+        const response = await this.#forwardInvalidateRequest(
           lc,
           'authInvalidateForUser',
           req,
           '',
           connections,
         );
+        if (!response.ok) {
+          throw new ErrorWithForwardedResponse(response);
+        }
       });
     });
 
-  #authInvalidateAll = post().handle((ctx, req) => {
+  #authInvalidateAll = post().handleAPIResult((ctx, req) => {
     const {lc} = ctx;
     lc.debug?.(`authInvalidateAll waiting for lock.`);
-    return this.#authLock.withWrite(() => {
+    return this.#authLock.withWrite(async () => {
       lc.debug?.(`authInvalidateAll acquired lock.`);
       // The request to the Room DOs must be completed inside the write lock
       // to avoid races with connect requests.
-      return this.#forwardInvalidateRequest(
+      const response = await this.#forwardInvalidateRequest(
         lc,
         'authInvalidateAll',
         req,
@@ -817,6 +822,9 @@ export class BaseAuthDO implements DurableObject {
         // may exceed the DO's memory limits.
         getConnections(this.#durableStorage),
       );
+      if (!response.ok) {
+        throw new ErrorWithForwardedResponse(response);
+      }
     });
   });
 

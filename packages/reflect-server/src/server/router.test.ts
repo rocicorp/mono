@@ -5,6 +5,7 @@ import {must} from 'shared/src/must.js';
 import * as valita from 'shared/src/valita.js';
 import type {ListOptions} from '../storage/storage.js';
 import {createSilentLogContext} from '../util/test-utils.js';
+import type {APIErrorInfo} from './api-response.js';
 import {HttpError} from './errors.js';
 import {
   BaseContext,
@@ -47,55 +48,52 @@ test('Router', async () => {
 
   type Case = {
     path: string;
-    expectedError?: string | undefined;
     expectedResponseCode: number | undefined;
-    expectedResponseText: string | undefined;
+    expectedResponseText?: string;
+    expectedResponseJSON?: ReadonlyJSONValue;
   };
 
   const cases: Case[] = [
     {
       path: '/foo/42',
-      expectedError: undefined,
       expectedResponseCode: 200,
       expectedResponseText: 'foo:42',
     },
     {
       path: '/bar/44',
-      expectedError: undefined,
       expectedResponseCode: 400,
       expectedResponseText: 'bar:44',
     },
     {
       path: '/bar',
-      expectedError: undefined,
       expectedResponseCode: 500,
       expectedResponseText: 'bar',
     },
     {
       path: '/monkey/nuts',
-      expectedError: undefined,
       expectedResponseCode: 404,
-      expectedResponseText: 'not found',
+      expectedResponseJSON: {
+        result: null,
+        error: {
+          code: 404,
+          resource: 'request',
+          message: 'Unknown or invalid URL',
+        },
+      },
     },
   ];
   for (const c of cases) {
-    let error: unknown;
-    let resp: Response | undefined;
-    try {
-      resp = await router.dispatch(
-        new Request(`https://test.roci.dev${c.path}`),
-        {lc: createSilentLogContext()},
-      );
-    } catch (e) {
-      error = e;
-    }
-    if (c.expectedError === undefined) {
-      expect(error).toBeUndefined();
-    } else {
-      expect(String(error)).toMatch(c.expectedError);
-    }
+    const resp = await router.dispatch(
+      new Request(`https://test.roci.dev${c.path}`),
+      {lc: createSilentLogContext()},
+    );
+
     expect(resp?.status).toEqual(c.expectedResponseCode);
-    expect(await resp?.text()).toEqual(c.expectedResponseText);
+    if (c.expectedResponseText) {
+      expect(await resp?.text()).toEqual(c.expectedResponseText);
+    } else if (c.expectedResponseJSON) {
+      expect(await resp?.json()).toEqual(c.expectedResponseJSON);
+    }
   }
 });
 
@@ -117,7 +115,8 @@ test('requireMethod', async () => {
     handler: Handler<BaseContext, Response>;
     method: string;
     expectedStatus: number;
-    expectedText: string;
+    expectedText?: string;
+    expectedJSON?: ReadonlyJSONValue;
   };
 
   const cases: Case[] = [
@@ -131,7 +130,14 @@ test('requireMethod', async () => {
       handler: getHandler,
       method: 'POST',
       expectedStatus: 405,
-      expectedText: 'unsupported method',
+      expectedJSON: {
+        result: null,
+        error: {
+          code: 405,
+          resource: 'request',
+          message: 'unsupported method',
+        },
+      },
     },
     {
       handler: postHandler,
@@ -143,7 +149,14 @@ test('requireMethod', async () => {
       handler: postHandler,
       method: 'GET',
       expectedStatus: 405,
-      expectedText: 'unsupported method',
+      expectedJSON: {
+        result: null,
+        error: {
+          code: 405,
+          resource: 'request',
+          message: 'unsupported method',
+        },
+      },
     },
   ];
 
@@ -157,7 +170,11 @@ test('requireMethod', async () => {
 
     const resp = await c.handler({lc, parsedURL}, req);
     expect(resp.status).toBe(c.expectedStatus);
-    expect(await resp.text()).toBe(c.expectedText);
+    if (c.expectedText) {
+      expect(await resp.text()).toBe(c.expectedText);
+    } else if (c.expectedJSON) {
+      expect(await resp.json()).toEqual(c.expectedJSON);
+    }
   }
 });
 
@@ -375,7 +392,10 @@ test('withRoomID', async () => {
         ),
       ),
       expected: {
-        result: {text: 'Internal error: roomID not found', status: 500},
+        result: {
+          text: 'roomID() configured for URL without :roomID group',
+          status: 500,
+        },
       },
     },
   ];
@@ -404,7 +424,7 @@ test('withRoomID', async () => {
 test('withUserID', async () => {
   type Case = {
     parsedURL: URLPatternURLPatternResult;
-    expected: {result: {text: string; status: number}};
+    expected?: {result: {text: string; status: number}};
   };
 
   const cases: Case[] = [
@@ -439,7 +459,10 @@ test('withUserID', async () => {
         ),
       ),
       expected: {
-        result: {text: 'Internal error: userID not found', status: 500},
+        result: {
+          text: 'userID() configured for URL without :userID group',
+          status: 500,
+        },
       },
     },
   ];
@@ -468,7 +491,8 @@ test('withUserID', async () => {
 test('withBody', async () => {
   type Case = {
     body: JSONObject | undefined | string;
-    expected: {text: string; status: number};
+    expected?: {text: string; status: number};
+    error?: APIErrorInfo;
   };
 
   const cases: Case[] = [
@@ -478,30 +502,34 @@ test('withBody', async () => {
     },
     {
       body: {badUserId: 'bar'},
-      expected: {
-        status: 400,
-        text: 'Body schema error. Missing property userID',
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Body schema error. Missing property userID',
       },
     },
     {
       body: {userID: 'foo', badUserId: 'bar'},
-      expected: {
-        status: 400,
-        text: 'Body schema error. Unexpected property badUserId',
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Body schema error. Unexpected property badUserId',
       },
     },
     {
       body: undefined,
-      expected: {
-        status: 400,
-        text: 'Body must be valid json.',
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Body must be valid json.',
       },
     },
     {
       body: 'foo',
-      expected: {
-        status: 400,
-        text: 'Body schema error. Expected object. Got "foo"',
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Body schema error. Expected object. Got "foo"',
       },
     },
   ];
@@ -528,9 +556,17 @@ test('withBody', async () => {
     };
 
     const response = await handler(ctx, request);
-    const result = {status: response.status, text: await response.text()};
-
-    expect(result).toEqual(c.expected);
+    if (response.status === 200) {
+      expect({status: response.status, text: await response.text()}).toEqual(
+        c.expected,
+      );
+    } else {
+      expect(response.status).toBe(c.error?.code);
+      expect(await response.json()).toEqual({
+        result: null,
+        error: c.error,
+      });
+    }
   }
 });
 
@@ -538,7 +574,7 @@ describe('withListControl', () => {
   type Case = {
     queryString: string;
     listOptions?: ListOptions;
-    error?: {text: string; status: number};
+    error?: APIErrorInfo;
   };
 
   const cases: Case[] = [
@@ -573,15 +609,17 @@ describe('withListControl', () => {
     {
       queryString: 'maxResults=not-a-number',
       error: {
-        status: 400,
-        text: 'Expected valid number at maxResults. Got "not-a-number"',
+        code: 400,
+        resource: 'request',
+        message: 'Expected valid number at maxResults. Got "not-a-number"',
       },
     },
     {
       queryString: 'startKey=and&startAfterKey=not-allowed',
       error: {
-        status: 400,
-        text: 'Cannot specify both startKey and startAfterKey. Got object',
+        code: 400,
+        resource: 'request',
+        message: 'Cannot specify both startKey and startAfterKey. Got object',
       },
     },
   ];
@@ -607,9 +645,11 @@ describe('withListControl', () => {
       if (response.status === 200) {
         expect(await response.json()).toEqual(c.listOptions);
       } else {
-        expect({text: await response.text(), status: response.status}).toEqual(
-          c.error,
-        );
+        expect(response.status).toBe(c.error?.code);
+        expect(await response.json()).toEqual({
+          error: c.error,
+          result: null,
+        });
       }
     });
   }

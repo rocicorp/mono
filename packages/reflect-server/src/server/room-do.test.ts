@@ -15,6 +15,7 @@ import type {MutatorDefs, WriteTransaction} from 'reflect-shared';
 import {version} from 'reflect-shared';
 import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
 import {CONNECTION_SECONDS_CHANNEL_NAME} from 'shared/src/events/connection-seconds.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {Queue} from 'shared/src/queue.js';
 import {newCreateRoomRequest, newDeleteRoomRequest} from '../client/room.js';
 import {REPORTING_INTERVAL_MS} from '../events/connection-seconds.js';
@@ -422,12 +423,14 @@ test('good, bad, invalid connect requests', async () => {
     request: goodRequest,
     expectedStatus: 101,
     expectedText: '',
+    expectedJSON: null,
   };
 
   const nonWebSocketTest = {
     request: new Request('ws://test.roci.dev/api/sync/v1/connect'),
     expectedStatus: 400,
     expectedText: 'expected websocket',
+    expectedJSON: null,
   };
 
   const badRequestTest = {
@@ -435,7 +438,15 @@ test('good, bad, invalid connect requests', async () => {
       method: 'POST',
     }),
     expectedStatus: 405,
-    expectedText: 'unsupported method',
+    expectedText: null,
+    expectedJSON: {
+      result: null,
+      error: {
+        code: 405,
+        resource: 'request',
+        message: 'unsupported method',
+      },
+    },
   };
 
   const roomDO = await makeBaseRoomDO();
@@ -443,7 +454,11 @@ test('good, bad, invalid connect requests', async () => {
     const response = await roomDO.fetch(
       addRoomIDHeader(test.request, 'testRoomID'),
     );
-    expect(await response.text()).toEqual(test.expectedText);
+    if (test.expectedText) {
+      expect(await response.text()).toEqual(test.expectedText);
+    } else if (test.expectedJSON) {
+      expect(await response.json()).toEqual(test.expectedJSON);
+    }
     expect(response.status).toBe(test.expectedStatus);
   }
 });
@@ -460,7 +475,8 @@ describe('good, bad, invalid tail requests', () => {
     name: string;
     request: Request;
     expectedStatus: number;
-    expectedText: string;
+    expectedText?: string;
+    expectedJSON?: ReadonlyJSONValue;
   };
 
   const cases: Case[] = [
@@ -480,7 +496,14 @@ describe('good, bad, invalid tail requests', () => {
       name: 'badRequest',
       request: makeRequest({method: 'POST'}),
       expectedStatus: 405,
-      expectedText: 'unsupported method',
+      expectedJSON: {
+        result: null,
+        error: {
+          code: 405,
+          resource: 'request',
+          message: 'unsupported method',
+        },
+      },
     },
   ];
   for (const c of cases) {
@@ -502,7 +525,11 @@ describe('good, bad, invalid tail requests', () => {
       const response = await roomDO.fetch(
         addRoomIDHeader(c.request, 'testRoomID'),
       );
-      expect(await response.text()).toEqual(c.expectedText);
+      if (c.expectedText) {
+        expect(await response.text()).toEqual(c.expectedText);
+      } else if (c.expectedJSON) {
+        expect(await response.json()).toEqual(c.expectedJSON);
+      }
       expect(response.status).toBe(c.expectedStatus);
       if (c.expectedStatus === 101) {
         expect(response.ok).toBe(true);

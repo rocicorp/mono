@@ -10,6 +10,7 @@ import {
 import type {TailErrorMessage} from 'reflect-protocol/src/tail.js';
 import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
 import {assert} from 'shared/src/asserts.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
 import {
   newCloseRoomRequest,
@@ -22,6 +23,7 @@ import {encodeHeaderValue} from '../util/headers.js';
 import {sleep} from '../util/sleep.js';
 import {Mocket, TestLogSink, mockWebSocketPair} from '../util/test-utils.js';
 import {API_KEY_HEADER_NAME, createAPIHeaders} from './api-headers.js';
+import type {APIErrorInfo} from './api-response.js';
 import {TestAuthDO} from './auth-do-test-util.js';
 import {
   ALARM_INTERVAL,
@@ -115,6 +117,25 @@ async function storeTestConnectionState() {
   await recordConnectionHelper('testUserID3', 'testRoomID3', 'testClientID6');
 }
 
+async function expectSuccessfulAPIResponse(
+  response: Response,
+  result: ReadonlyJSONValue = {},
+) {
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    result,
+    error: null,
+  });
+}
+
+async function expectAPIErrorResponse(response: Response, error: APIErrorInfo) {
+  expect(response.status).toBe(error.code);
+  expect(await response.json()).toEqual({
+    result: null,
+    error,
+  });
+}
+
 function createCreateRoomTestFixture({
   testRoomID = 'testRoomID1',
 }: {testRoomID?: string | undefined} = {}) {
@@ -185,11 +206,15 @@ test("createRoom creates a room and doesn't allow it to be re-created", async ()
   const roomRecord = rr as RoomRecord;
   expect(roomRecord.objectIDString).toEqual('unique-room-do-0');
   expect(roomDOcreateRoomCounts.get(roomRecord.objectIDString)).toEqual(1);
-  expect(response.status).toEqual(200);
+  await expectSuccessfulAPIResponse(response);
 
   // Attempt to create the room again.
   const response2 = await authDO.fetch(testRequest2);
-  expect(response2.status).toEqual(409);
+  await expectAPIErrorResponse(response2, {
+    code: 409,
+    resource: 'rooms',
+    message: 'Room "testRoomID1" already exists',
+  });
   expect(roomDOcreateRoomCounts.size).toEqual(1);
 });
 
@@ -214,7 +239,7 @@ test('createRoom allows slashes in roomIDs', async () => {
     testRoomID,
   );
   let response = await authDO.fetch(testRequest);
-  expect(response.status).toEqual(200);
+  await expectSuccessfulAPIResponse(response);
 
   response = await authDO.fetch(newRoomRecordsRequest());
   expect(await response.json()).toEqual({
@@ -265,7 +290,19 @@ test('createRoom requires roomIDs to not contain weird characters', async () => 
       roomID,
     );
     const response = await authDO.fetch(testRequest);
-    expect(response.status).toEqual(roomID.length ? 400 : 404);
+    if (roomID.length === 0) {
+      await expectAPIErrorResponse(response, {
+        code: 404,
+        resource: 'request',
+        message: `Unknown or invalid URL`,
+      });
+    } else {
+      await expectAPIErrorResponse(response, {
+        code: 400,
+        resource: 'rooms',
+        message: `Invalid roomID "${roomID}" (must match /^[A-Za-z0-9_\\-/]+$/)`,
+      });
+    }
   }
 });
 
@@ -339,7 +376,7 @@ test('createRoom sets jurisdiction if requested', async () => {
   };
 
   const response = await authDO.fetch(testRequest);
-  expect(response.status).toEqual(200);
+  await expectSuccessfulAPIResponse(response);
   expect(gotJurisdiction).toEqual(true);
   const rr = await getRoomRecord(state.storage, testRoomID);
   expect(rr?.jurisdiction).toEqual('eu');
@@ -396,7 +433,7 @@ test('closeRoom closes an open room', async () => {
     testRoomID,
   );
   const closeRoomResponse = await authDO.fetch(closeRoomRequest);
-  expect(closeRoomResponse.status).toEqual(200);
+  await expectSuccessfulAPIResponse(closeRoomResponse);
 
   const getRoomRequest = newGetRoomRequest(
     'https://test.roci.dev',
@@ -404,14 +441,10 @@ test('closeRoom closes an open room', async () => {
     testRoomID,
   );
   const getRoomResponse = await authDO.fetch(getRoomRequest);
-  expect(getRoomResponse.status).toEqual(200);
-  expect(await getRoomResponse.json()).toEqual({
-    error: null,
-    result: {
-      roomID: testRoomID,
-      jurisdiction: '',
-      status: RoomStatus.Closed,
-    },
+  await expectSuccessfulAPIResponse(getRoomResponse, {
+    roomID: testRoomID,
+    jurisdiction: '',
+    status: RoomStatus.Closed,
   });
 });
 
@@ -434,7 +467,11 @@ test('closeRoom 404s on non-existent room', async () => {
     testRoomID,
   );
   const closeRoomResponse = await authDO.fetch(closeRoomRequest);
-  expect(closeRoomResponse.status).toEqual(404);
+  await expectAPIErrorResponse(closeRoomResponse, {
+    code: 404,
+    resource: 'rooms',
+    message: 'Room "testRoomID1" not found',
+  });
 });
 
 test('calling closeRoom on closed room is ok', async () => {
@@ -456,10 +493,10 @@ test('calling closeRoom on closed room is ok', async () => {
     testRoomID,
   );
   const closeRoomResponse = await authDO.fetch(closeRoomRequest);
-  expect(closeRoomResponse.status).toEqual(200);
+  await expectSuccessfulAPIResponse(closeRoomResponse);
 
-  const closeRoomRequest2 = await authDO.fetch(closeRoomRequest);
-  expect(closeRoomRequest2.status).toEqual(200);
+  const closeRoomResponse2 = await authDO.fetch(closeRoomRequest);
+  await expectSuccessfulAPIResponse(closeRoomResponse2);
 });
 
 test('deleteRoom calls into roomDO and marks room deleted', async () => {
@@ -497,7 +534,7 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
     testRoomID,
   );
   const closeRoomResponse = await authDO.fetch(closeRoomRequest);
-  expect(closeRoomResponse.status).toEqual(200);
+  await expectSuccessfulAPIResponse(closeRoomResponse);
 
   const deleteRoomRequest = newDeleteRoomRequest(
     'https://test.roci.dev',
@@ -505,7 +542,7 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
     testRoomID,
   );
   const deleteRoomResponse = await authDO.fetch(deleteRoomRequest);
-  expect(deleteRoomResponse.status).toEqual(200);
+  await expectSuccessfulAPIResponse(deleteRoomResponse);
   expect(gotDeleteForObjectIDString).not.toBeUndefined();
   expect(gotDeleteForObjectIDString).toEqual('unique-room-do-0');
 
@@ -515,14 +552,10 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
     testRoomID,
   );
   const getRoomResponse = await authDO.fetch(getRoomRequest);
-  expect(getRoomResponse.status).toEqual(200);
-  expect(await getRoomResponse.json()).toEqual({
-    error: null,
-    result: {
-      roomID: testRoomID,
-      jurisdiction: '',
-      status: RoomStatus.Deleted,
-    },
+  await expectSuccessfulAPIResponse(getRoomResponse, {
+    roomID: testRoomID,
+    jurisdiction: '',
+    status: RoomStatus.Deleted,
   });
 });
 
@@ -545,7 +578,11 @@ test('deleteRoom requires room to be closed', async () => {
     testRoomID,
   );
   const deleteRoomResponse = await authDO.fetch(deleteRoomRequest);
-  expect(deleteRoomResponse.status).toEqual(409);
+  await expectAPIErrorResponse(deleteRoomResponse, {
+    code: 409,
+    resource: 'rooms',
+    message: 'Room "testRoomID1" must first be closed',
+  });
 
   const getRoomRequest = newGetRoomRequest(
     'https://test.roci.dev',
@@ -553,14 +590,10 @@ test('deleteRoom requires room to be closed', async () => {
     testRoomID,
   );
   const getRoomResponse = await authDO.fetch(getRoomRequest);
-  expect(getRoomResponse.status).toEqual(200);
-  expect(await getRoomResponse.json()).toEqual({
-    error: null,
-    result: {
-      roomID: testRoomID,
-      jurisdiction: '',
-      status: RoomStatus.Open,
-    },
+  await expectSuccessfulAPIResponse(getRoomResponse, {
+    roomID: testRoomID,
+    jurisdiction: '',
+    status: RoomStatus.Open,
   });
 });
 
@@ -578,7 +611,7 @@ test('get room that exists', async () => {
   });
 
   const response = await authDO.fetch(testRequest);
-  expect(response.status).toEqual(200);
+  await expectSuccessfulAPIResponse(response);
 
   const getRoomRequest = newGetRoomRequest(
     'https://test.roci.dev',
@@ -586,14 +619,10 @@ test('get room that exists', async () => {
     testRoomID,
   );
   const getRoomResponse = await authDO.fetch(getRoomRequest);
-  expect(getRoomResponse.status).toEqual(200);
-  expect(await getRoomResponse.json()).toEqual({
-    error: null,
-    result: {
-      roomID: testRoomID,
-      jurisdiction: '',
-      status: RoomStatus.Open,
-    },
+  await expectSuccessfulAPIResponse(getRoomResponse, {
+    roomID: testRoomID,
+    jurisdiction: '',
+    status: RoomStatus.Open,
   });
 });
 
@@ -615,14 +644,10 @@ test('get room that does not exist', async () => {
     'no-such-room',
   );
   const getRoomResponse = await authDO.fetch(getRoomRequest);
-  expect(getRoomResponse.status).toEqual(200);
-  expect(await getRoomResponse.json()).toMatchObject({
-    error: {
-      code: 404,
-      resource: 'rooms',
-      message: 'Room "no-such-room" not found',
-    },
-    result: null,
+  await expectAPIErrorResponse(getRoomResponse, {
+    code: 404,
+    resource: 'rooms',
+    message: 'Room "no-such-room" not found',
   });
 });
 
@@ -656,10 +681,11 @@ test('roomRecords returns HTTP error for malformed request', async () => {
     startAfterKey: 'foo',
   });
   const roomRecordsResponse = await authDO.fetch(roomRecordsRequest);
-  expect(roomRecordsResponse.status).toBe(400);
-  expect(await roomRecordsResponse.text()).toBe(
-    'Cannot specify both startKey and startAfterKey. Got object',
-  );
+  await expectAPIErrorResponse(roomRecordsResponse, {
+    code: 400,
+    resource: 'request',
+    message: 'Cannot specify both startKey and startAfterKey. Got object',
+  });
 });
 
 test('roomRecords returns empty array if no rooms exist', async () => {
@@ -676,15 +702,10 @@ test('roomRecords returns empty array if no rooms exist', async () => {
 
   const roomRecordsRequest = newRoomRecordsRequest();
   const roomRecordsResponse = await authDO.fetch(roomRecordsRequest);
-  expect(roomRecordsResponse.status).toBe(200);
-  const gotRecords = await roomRecordsResponse.json();
-  expect(gotRecords).toEqual({
-    error: null,
-    result: {
-      results: [],
-      numResults: 0,
-      more: false,
-    },
+  await expectSuccessfulAPIResponse(roomRecordsResponse, {
+    results: [],
+    numResults: 0,
+    more: false,
   });
 });
 
@@ -724,48 +745,35 @@ test('roomRecords returns rooms that exists', async () => {
 
   const roomRecordsRequest = newRoomRecordsRequest();
   const roomRecordsResponse = await authDO.fetch(roomRecordsRequest);
-  expect(roomRecordsResponse.status).toBe(200);
-  const gotRecords = await roomRecordsResponse.json();
-  expect(gotRecords).toEqual({
-    error: null,
-    result: {
-      results: [
-        {roomID: '-', jurisdiction: '', status: 'open'},
-        {roomID: '1', jurisdiction: '', status: 'open'},
-        {roomID: '2', jurisdiction: '', status: 'open'},
-        {roomID: '3', jurisdiction: '', status: 'open'},
-      ],
-      numResults: 4,
-      more: false,
-    },
+  await expectSuccessfulAPIResponse(roomRecordsResponse, {
+    results: [
+      {roomID: '-', jurisdiction: '', status: 'open'},
+      {roomID: '1', jurisdiction: '', status: 'open'},
+      {roomID: '2', jurisdiction: '', status: 'open'},
+      {roomID: '3', jurisdiction: '', status: 'open'},
+    ],
+    numResults: 4,
+    more: false,
   });
 
   let limitedRequest = newRoomRecordsRequest({maxResults: '3', startKey: ''});
   let limitedResponse = await authDO.fetch(limitedRequest);
-  expect(limitedResponse.status).toBe(200);
-  expect(await limitedResponse.json()).toEqual({
-    error: null,
-    result: {
-      results: [
-        {roomID: '-', jurisdiction: '', status: 'open'},
-        {roomID: '1', jurisdiction: '', status: 'open'},
-        {roomID: '2', jurisdiction: '', status: 'open'},
-      ],
-      numResults: 3,
-      more: true,
-    },
+  await expectSuccessfulAPIResponse(limitedResponse, {
+    results: [
+      {roomID: '-', jurisdiction: '', status: 'open'},
+      {roomID: '1', jurisdiction: '', status: 'open'},
+      {roomID: '2', jurisdiction: '', status: 'open'},
+    ],
+    numResults: 3,
+    more: true,
   });
 
   limitedRequest = newRoomRecordsRequest({maxResults: '3', startAfterKey: '2'});
   limitedResponse = await authDO.fetch(limitedRequest);
-  expect(limitedResponse.status).toBe(200);
-  expect(await limitedResponse.json()).toEqual({
-    error: null,
-    result: {
-      results: [{roomID: '3', jurisdiction: '', status: 'open'}],
-      numResults: 1,
-      more: false,
-    },
+  await expectSuccessfulAPIResponse(limitedResponse, {
+    results: [{roomID: '3', jurisdiction: '', status: 'open'}],
+    numResults: 1,
+    more: false,
   });
 });
 
@@ -1039,7 +1047,7 @@ test('connect wont connect to a room that is closed', async () => {
     testRoomID,
   );
   const closeRoomResponse = await authDO.fetch(closeRoomRequest);
-  expect(closeRoomResponse.status).toEqual(200);
+  await expectSuccessfulAPIResponse(closeRoomResponse);
 
   const response = await authDO.fetch(testRequest);
 
@@ -1427,7 +1435,7 @@ test('authInvalidateForUser when requests to roomDOs are successful', async () =
   expect(roomDORequestCountsByRoomID.get('testRoomID1')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(undefined);
-  expect(response.status).toEqual(200);
+  await expectSuccessfulAPIResponse(response);
 });
 
 test('authInvalidateForUser when connection ids have chars that need to be percent escaped', async () => {
@@ -1501,7 +1509,7 @@ test('authInvalidateForUser when connection ids have chars that need to be perce
   expect(roomDORequestCountsByRoomID.size).toEqual(2);
   expect(roomDORequestCountsByRoomID.get('testRoomID1')).toEqual(1);
   expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
-  expect(response.status).toEqual(200);
+  await expectSuccessfulAPIResponse(response);
 });
 
 test('authInvalidateForUser when any request to roomDOs returns error response', async () => {
@@ -1627,7 +1635,7 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
   )) as RoomRecord;
   expect(roomID).toEqual(testRoomID);
   expect(roomDORequestCount).toEqual(1);
-  expect(response.status).toEqual(200);
+  await expectSuccessfulAPIResponse(response);
 });
 
 test('authInvalidateForRoom when roomID has no open connections no invalidate request is made to roomDO', async () => {
@@ -1673,7 +1681,7 @@ test('authInvalidateForRoom when roomID has no open connections no invalidate re
   const response = await authDO.fetch(testRequest);
 
   expect(roomDORequestCount).toEqual(0);
-  expect(response.status).toEqual(200);
+  await expectSuccessfulAPIResponse(response);
 });
 
 async function connectAndTestThatRoomGotCreated(
@@ -1733,7 +1741,7 @@ async function createRoom(
     roomID,
   );
   const resp = await authDO.fetch(createRoomRequest);
-  expect(resp.status).toEqual(200);
+  await expectSuccessfulAPIResponse(resp);
 }
 
 test('authInvalidateForRoom when request to roomDO returns error response', async () => {
@@ -1848,7 +1856,7 @@ test('authInvalidateAll when requests to roomDOs are successful', async () => {
   await createRoom(authDO, 'testRoomID3');
 
   const response = await authDO.fetch(testRequest);
-  expect(response.status).toEqual(200);
+  await expectSuccessfulAPIResponse(response);
 
   expect(roomDORequestCountsByRoomID.size).toEqual(3);
   expect(roomDORequestCountsByRoomID.get('testRoomID1')).toEqual(1);
