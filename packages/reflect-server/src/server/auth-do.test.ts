@@ -15,7 +15,7 @@ import {
   newCloseRoomRequest,
   newCreateRoomRequest,
   newDeleteRoomRequest,
-  newRoomStatusRequest,
+  newGetRoomRequest,
 } from '../client/room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {encodeHeaderValue} from '../util/headers.js';
@@ -26,7 +26,6 @@ import {TestAuthDO} from './auth-do-test-util.js';
 import {
   ALARM_INTERVAL,
   AUTH_HANDLER_TIMEOUT_MS,
-  AUTH_ROUTES,
   BaseAuthDO,
   recordConnection,
 } from './auth-do.js';
@@ -50,6 +49,7 @@ import {
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
+  LIST_ROOMS_PATH,
   TAIL_URL_PATH,
   fmtPath,
 } from './paths.js';
@@ -217,19 +217,32 @@ test('createRoom allows slashes in roomIDs', async () => {
   expect(response.status).toEqual(200);
 
   response = await authDO.fetch(newRoomRecordsRequest());
-  expect(await response.json()).toEqual([
-    {
-      jurisdiction: '',
-      objectIDString: 'unique-room-do-0',
-      roomID: testRoomID,
-      status: 'open',
+  expect(await response.json()).toEqual({
+    error: null,
+    result: {
+      results: [
+        {
+          jurisdiction: '',
+          roomID: testRoomID,
+          status: 'open',
+        },
+      ],
+      numResults: 1,
+      more: false,
     },
-  ]);
+  });
 
   response = await authDO.fetch(
-    newRoomStatusRequest('https://teset.roci.dev/', TEST_API_KEY, '/'),
+    newGetRoomRequest('https://teset.roci.dev/', TEST_API_KEY, '/'),
   );
-  expect(await response.json()).toEqual({status: 'open'});
+  expect(await response.json()).toEqual({
+    error: null,
+    result: {
+      roomID: '/',
+      jurisdiction: '',
+      status: 'open',
+    },
+  });
 });
 
 test('createRoom requires roomIDs to not contain weird characters', async () => {
@@ -385,15 +398,20 @@ test('closeRoom closes an open room', async () => {
   const closeRoomResponse = await authDO.fetch(closeRoomRequest);
   expect(closeRoomResponse.status).toEqual(200);
 
-  const statusRequest = newRoomStatusRequest(
+  const getRoomRequest = newGetRoomRequest(
     'https://test.roci.dev',
     TEST_API_KEY,
     testRoomID,
   );
-  const statusResponse = await authDO.fetch(statusRequest);
-  expect(statusResponse.status).toEqual(200);
-  expect(await statusResponse.json()).toMatchObject({
-    status: RoomStatus.Closed,
+  const getRoomResponse = await authDO.fetch(getRoomRequest);
+  expect(getRoomResponse.status).toEqual(200);
+  expect(await getRoomResponse.json()).toEqual({
+    error: null,
+    result: {
+      roomID: testRoomID,
+      jurisdiction: '',
+      status: RoomStatus.Closed,
+    },
   });
 });
 
@@ -491,15 +509,20 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
   expect(gotDeleteForObjectIDString).not.toBeUndefined();
   expect(gotDeleteForObjectIDString).toEqual('unique-room-do-0');
 
-  const statusRequest = newRoomStatusRequest(
+  const getRoomRequest = newGetRoomRequest(
     'https://test.roci.dev',
     TEST_API_KEY,
     testRoomID,
   );
-  const statusResponse = await authDO.fetch(statusRequest);
-  expect(statusResponse.status).toEqual(200);
-  expect(await statusResponse.json()).toMatchObject({
-    status: RoomStatus.Deleted,
+  const getRoomResponse = await authDO.fetch(getRoomRequest);
+  expect(getRoomResponse.status).toEqual(200);
+  expect(await getRoomResponse.json()).toEqual({
+    error: null,
+    result: {
+      roomID: testRoomID,
+      jurisdiction: '',
+      status: RoomStatus.Deleted,
+    },
   });
 });
 
@@ -524,19 +547,24 @@ test('deleteRoom requires room to be closed', async () => {
   const deleteRoomResponse = await authDO.fetch(deleteRoomRequest);
   expect(deleteRoomResponse.status).toEqual(409);
 
-  const statusRequest = newRoomStatusRequest(
+  const getRoomRequest = newGetRoomRequest(
     'https://test.roci.dev',
     TEST_API_KEY,
     testRoomID,
   );
-  const statusResponse = await authDO.fetch(statusRequest);
-  expect(statusResponse.status).toEqual(200);
-  expect(await statusResponse.json()).toMatchObject({
-    status: RoomStatus.Open,
+  const getRoomResponse = await authDO.fetch(getRoomRequest);
+  expect(getRoomResponse.status).toEqual(200);
+  expect(await getRoomResponse.json()).toEqual({
+    error: null,
+    result: {
+      roomID: testRoomID,
+      jurisdiction: '',
+      status: RoomStatus.Open,
+    },
   });
 });
 
-test('roomStatusByRoomID returns status for a room that exists', async () => {
+test('get room that exists', async () => {
   const {testRoomID, testRequest, testRoomDO, state} =
     createCreateRoomTestFixture();
 
@@ -552,19 +580,24 @@ test('roomStatusByRoomID returns status for a room that exists', async () => {
   const response = await authDO.fetch(testRequest);
   expect(response.status).toEqual(200);
 
-  const statusRequest = newRoomStatusRequest(
+  const getRoomRequest = newGetRoomRequest(
     'https://test.roci.dev',
     TEST_API_KEY,
     testRoomID,
   );
-  const statusResponse = await authDO.fetch(statusRequest);
-  expect(statusResponse.status).toEqual(200);
-  expect(await statusResponse.json()).toMatchObject({
-    status: RoomStatus.Open,
+  const getRoomResponse = await authDO.fetch(getRoomRequest);
+  expect(getRoomResponse.status).toEqual(200);
+  expect(await getRoomResponse.json()).toEqual({
+    error: null,
+    result: {
+      roomID: testRoomID,
+      jurisdiction: '',
+      status: RoomStatus.Open,
+    },
   });
 });
 
-test('roomStatusByRoomID returns unknown for a room that does not exist', async () => {
+test('get room that does not exist', async () => {
   const {testRoomDO, state} = createCreateRoomTestFixture();
 
   const authDO = new TestAuthDO({
@@ -576,24 +609,58 @@ test('roomStatusByRoomID returns unknown for a room that does not exist', async 
     env: {foo: 'bar'},
   });
 
-  const statusRequest = newRoomStatusRequest(
+  const getRoomRequest = newGetRoomRequest(
     'https://test.roci.dev',
     TEST_API_KEY,
     'no-such-room',
   );
-  const statusResponse = await authDO.fetch(statusRequest);
-  expect(statusResponse.status).toEqual(200);
-  expect(await statusResponse.json()).toMatchObject({
-    status: RoomStatus.Unknown,
+  const getRoomResponse = await authDO.fetch(getRoomRequest);
+  expect(getRoomResponse.status).toEqual(200);
+  expect(await getRoomResponse.json()).toMatchObject({
+    error: {
+      code: 404,
+      resource: 'rooms',
+      message: 'Room "no-such-room" not found',
+    },
+    result: null,
   });
 });
 
-function newRoomRecordsRequest() {
-  return new Request(`https://test.roci.dev${AUTH_ROUTES.roomRecords}`, {
-    method: 'get',
-    headers: createAPIHeaders(TEST_API_KEY),
-  });
+function newRoomRecordsRequest(queryParams?: Record<string, string>) {
+  const query = queryParams
+    ? `?${new URLSearchParams(queryParams).toString()}`
+    : '';
+  return new Request(
+    `https://test.roci.dev${fmtPath(LIST_ROOMS_PATH)}${query}`,
+    {
+      method: 'get',
+      headers: createAPIHeaders(TEST_API_KEY),
+    },
+  );
 }
+
+test('roomRecords returns HTTP error for malformed request', async () => {
+  const {testRoomDO, state} = createCreateRoomTestFixture();
+
+  const authDO = new TestAuthDO({
+    roomDO: testRoomDO,
+    state,
+    authHandler: () => Promise.reject('should not be called'),
+    logSink: new TestLogSink(),
+    logLevel: 'debug',
+    env: {foo: 'bar'},
+  });
+
+  const roomRecordsRequest = newRoomRecordsRequest({
+    startKey: 'foo',
+    startAfterKey: 'foo',
+  });
+  const roomRecordsResponse = await authDO.fetch(roomRecordsRequest);
+  expect(roomRecordsResponse.status).toBe(400);
+  expect(await roomRecordsResponse.text()).toBe(
+    'Cannot specify both startKey and startAfterKey. Got object',
+  );
+});
 
 test('roomRecords returns empty array if no rooms exist', async () => {
   const {testRoomDO, state} = createCreateRoomTestFixture();
@@ -609,9 +676,16 @@ test('roomRecords returns empty array if no rooms exist', async () => {
 
   const roomRecordsRequest = newRoomRecordsRequest();
   const roomRecordsResponse = await authDO.fetch(roomRecordsRequest);
-  expect(roomRecordsResponse.status).toEqual(200);
+  expect(roomRecordsResponse.status).toBe(200);
   const gotRecords = await roomRecordsResponse.json();
-  expect(gotRecords).toEqual([]);
+  expect(gotRecords).toEqual({
+    error: null,
+    result: {
+      results: [],
+      numResults: 0,
+      more: false,
+    },
+  });
 });
 
 test('roomRecords returns rooms that exists', async () => {
@@ -638,19 +712,61 @@ test('roomRecords returns rooms that exists', async () => {
     logLevel: 'debug',
     env: {foo: 'bar'},
   });
+  // Specifically test roomID="-" to verify a fence-post condition:
+  // Because "-" is lexicographically before "/", the storage key "room/-/"
+  // is lexicographically before "room//". An easy mistake to make would be
+  // to assume that the lexicographically earliest room key is "room//",
+  // but that would be AFTER "room/-.*/".
+  await createRoom(authDO, '-');
   await createRoom(authDO, '1');
   await createRoom(authDO, '2');
   await createRoom(authDO, '3');
 
   const roomRecordsRequest = newRoomRecordsRequest();
   const roomRecordsResponse = await authDO.fetch(roomRecordsRequest);
-  expect(roomRecordsResponse.status).toEqual(200);
+  expect(roomRecordsResponse.status).toBe(200);
   const gotRecords = await roomRecordsResponse.json();
-  expect(gotRecords).toMatchObject([
-    {roomID: '1'},
-    {roomID: '2'},
-    {roomID: '3'},
-  ]);
+  expect(gotRecords).toEqual({
+    error: null,
+    result: {
+      results: [
+        {roomID: '-', jurisdiction: '', status: 'open'},
+        {roomID: '1', jurisdiction: '', status: 'open'},
+        {roomID: '2', jurisdiction: '', status: 'open'},
+        {roomID: '3', jurisdiction: '', status: 'open'},
+      ],
+      numResults: 4,
+      more: false,
+    },
+  });
+
+  let limitedRequest = newRoomRecordsRequest({maxResults: '3', startKey: ''});
+  let limitedResponse = await authDO.fetch(limitedRequest);
+  expect(limitedResponse.status).toBe(200);
+  expect(await limitedResponse.json()).toEqual({
+    error: null,
+    result: {
+      results: [
+        {roomID: '-', jurisdiction: '', status: 'open'},
+        {roomID: '1', jurisdiction: '', status: 'open'},
+        {roomID: '2', jurisdiction: '', status: 'open'},
+      ],
+      numResults: 3,
+      more: true,
+    },
+  });
+
+  limitedRequest = newRoomRecordsRequest({maxResults: '3', startAfterKey: '2'});
+  limitedResponse = await authDO.fetch(limitedRequest);
+  expect(limitedResponse.status).toBe(200);
+  expect(await limitedResponse.json()).toEqual({
+    error: null,
+    result: {
+      results: [{roomID: '3', jurisdiction: '', status: 'open'}],
+      numResults: 1,
+      more: false,
+    },
+  });
 });
 
 function createConnectTestFixture(

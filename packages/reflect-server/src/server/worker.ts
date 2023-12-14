@@ -203,7 +203,7 @@ const logLogs = post<WorkerContext>().handle(
   },
 );
 
-const hello = get<WorkerContext>().handleAsJSON(() => ({
+const hello = get<WorkerContext>().handleJSON(() => ({
   reflectServerVersion: version,
 }));
 

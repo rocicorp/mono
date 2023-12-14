@@ -5,7 +5,6 @@ import {assertString} from 'shared/src/asserts.js';
 import type {Series} from '../types/report-metrics.js';
 import {Mocket, TestLogSink, fail} from '../util/test-utils.js';
 import {createAPIHeaders} from './api-headers.js';
-import {AUTH_ROUTES} from './auth-do.js';
 import {
   TestDurableObjectId,
   TestDurableObjectStub,
@@ -15,8 +14,10 @@ import {
 import {
   CLOSE_ROOM_PATH,
   DELETE_ROOM_PATH,
+  GET_ROOM_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
+  LIST_ROOMS_PATH,
   LOG_LOGS_PATH,
   REPORT_METRICS_PATH,
   fmtPath,
@@ -199,8 +200,9 @@ test('worker does not forward connect requests to authDO when DISABLE is true', 
 });
 
 test('worker forwards authDO api requests to authDO', async () => {
-  const roomStatusByRoomIDPathWithRoomID =
-    AUTH_ROUTES.roomStatusByRoomID.replace(':roomID', 'ae4565');
+  const roomStatusByRoomIDPathWithRoomID = fmtPath(GET_ROOM_PATH, {
+    roomID: 'ae4565',
+  });
   type TestCase = {
     path: string;
     method: string;
@@ -239,7 +241,7 @@ test('worker forwards authDO api requests to authDO', async () => {
       body: undefined,
     },
     {
-      path: `https://test.roci.dev${AUTH_ROUTES.roomRecords}`,
+      path: `https://test.roci.dev${fmtPath(LIST_ROOMS_PATH)}`,
       method: 'get',
       body: undefined,
     },

@@ -6,8 +6,6 @@ import {
   listDOInstances,
   listDONamespaces,
 } from '../src/cloudflare/api.js';
-import {AUTH_ROUTES} from '../src/server/auth-do.js';
-import type {RoomRecord} from '../src/server/rooms.js';
 
 // FYI argv[0] is node.
 if (process.argv.length < 3) {
@@ -165,37 +163,6 @@ async function runValidateRooms(argv: string[]) {
   console.log(
     `CF has ${instancesResult.length} DO room instances. Validating...`,
   );
-
-  const roomRecords = (await jsonFetchWithAuthApiKey(
-    `${reflectURL}${AUTH_ROUTES.roomRecords}`,
-    reflectAuthApiToken,
-  )) as Array<RoomRecord>;
-  const roomRecordsByOjbectID = new Map(
-    roomRecords.map(rr => [rr.objectIDString, rr]),
-  );
-  const missingRoomRecords = new Set<string>();
-  for (const instance of instancesResult) {
-    if (!roomRecordsByOjbectID.has(instance.id)) {
-      missingRoomRecords.add(instance.id);
-    }
-  }
-  console.log(
-    `${missingRoomRecords.size} CF RoomDO instances are missing room records:`,
-  );
-  console.log(missingRoomRecords);
-  const extraRoomRecords = new Set<string>();
-  for (const roomRecord of roomRecords) {
-    if (!instancesResult.some(i => i.id === roomRecord.objectIDString)) {
-      extraRoomRecords.add(roomRecord.objectIDString);
-    }
-  }
-  console.log(
-    `${extraRoomRecords.size} reflect room records have no CF RoomDO instance:`,
-  );
-  console.log(extraRoomRecords);
-  if (missingRoomRecords.size === 0 || extraRoomRecords.size === 0) {
-    console.log('Validation successful');
-  }
 }
 
 // Note: brittle!
@@ -206,18 +173,4 @@ function parseNextFlag(arg: string, flag: string): string | undefined {
     process.exit(1);
   }
   return match[1];
-}
-
-async function jsonFetchWithAuthApiKey(url: string, apiToken: string) {
-  const resp = await fetch(url, {
-    headers: {
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      'x-reflect-api-key': `${apiToken}`,
-    },
-  });
-  if (!resp.ok) {
-    console.error(`Error fetching ${url}: ${resp.status} ${resp.statusText}`);
-    process.exit(1);
-  }
-  return resp.json();
 }

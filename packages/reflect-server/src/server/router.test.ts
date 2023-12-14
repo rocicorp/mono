@@ -3,7 +3,9 @@ import {assert} from 'shared/src/asserts.js';
 import type {JSONObject, ReadonlyJSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
 import * as valita from 'shared/src/valita.js';
+import type {ListOptions} from '../storage/storage.js';
 import {createSilentLogContext} from '../util/test-utils.js';
+import {HttpError} from './errors.js';
 import {
   BaseContext,
   Handler,
@@ -11,6 +13,7 @@ import {
   body,
   checkAuthAPIKey,
   get,
+  listControl,
   post,
   requiredAuthAPIKey,
   roomID,
@@ -531,7 +534,88 @@ test('withBody', async () => {
   }
 });
 
-test('asJSON', async () => {
+describe('withListControl', () => {
+  type Case = {
+    queryString: string;
+    listOptions?: ListOptions;
+    error?: {text: string; status: number};
+  };
+
+  const cases: Case[] = [
+    {
+      queryString: '',
+      listOptions: {start: {key: '', exclusive: false}, limit: 101},
+    },
+    {
+      queryString: 'startKey=foo',
+      listOptions: {start: {key: 'foo', exclusive: false}, limit: 101},
+    },
+    {
+      queryString: 'startAfterKey=bar',
+      listOptions: {start: {key: 'bar', exclusive: true}, limit: 101},
+    },
+    {
+      queryString: 'maxResults=10',
+      listOptions: {start: {key: '', exclusive: false}, limit: 11},
+    },
+    {
+      queryString: 'maxResults=90',
+      listOptions: {start: {key: '', exclusive: false}, limit: 91},
+    },
+    {
+      queryString: 'maxResults=200',
+      listOptions: {start: {key: '', exclusive: false}, limit: 101},
+    },
+    {
+      queryString: 'maxResults=90&startKey=bonk',
+      listOptions: {start: {key: 'bonk', exclusive: false}, limit: 91},
+    },
+    {
+      queryString: 'maxResults=not-a-number',
+      error: {
+        status: 400,
+        text: 'Expected valid number at maxResults. Got "not-a-number"',
+      },
+    },
+    {
+      queryString: 'startKey=and&startAfterKey=not-allowed',
+      error: {
+        status: 400,
+        text: 'Cannot specify both startKey and startAfterKey. Got object',
+      },
+    },
+  ];
+
+  const handler = get()
+    .with(listControl(100))
+    .handleJSON(ctx => {
+      const {listControl} = ctx;
+      return listControl.getOptions();
+    });
+
+  for (const c of cases) {
+    test(c.queryString, async () => {
+      const url = `https://roci.dev/?${c.queryString}`;
+      const request = new Request(url);
+      const ctx = {
+        lc: createSilentLogContext(),
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        parsedURL: new URLPattern().exec(url)!,
+      };
+
+      const response = await handler(ctx, request);
+      if (response.status === 200) {
+        expect(await response.json()).toEqual(c.listOptions);
+      } else {
+        expect({text: await response.text(), status: response.status}).toEqual(
+          c.error,
+        );
+      }
+    });
+  }
+});
+
+test('handleJSON', async () => {
   type Case = {
     input: string;
     expected: ReadonlyJSONValue;
@@ -553,7 +637,7 @@ test('asJSON', async () => {
   ];
 
   for (const c of cases) {
-    const handler = post().handleAsJSON(async (_, req) => ({
+    const handler = post().handleJSON(async (_, req) => ({
       foo: await req.text(),
     }));
     const request = new Request('http://roci.dev/', {
@@ -567,6 +651,48 @@ test('asJSON', async () => {
     };
     const response = await handler(ctx, request);
     expect(await response.json()).toEqual(c.expected);
+  }
+});
+
+test('handleAPIResult', async () => {
+  type Case = {
+    input: string;
+    expected: ReadonlyJSONValue;
+  };
+
+  const cases: Case[] = [
+    {
+      input: 'bar',
+      expected: {
+        foo: 'bar',
+      },
+    },
+    {
+      input: 'monkey',
+      expected: {
+        foo: 'monkey',
+      },
+    },
+  ];
+
+  for (const c of cases) {
+    const handler = post().handleAPIResult(async (_, req) => ({
+      foo: await req.text(),
+    }));
+    const request = new Request('http://roci.dev/', {
+      method: 'POST',
+      body: c.input,
+    });
+    const ctx = {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      parsedURL: new URLPattern().exec('https://roci.dev/')!,
+      lc: createSilentLogContext(),
+    };
+    const response = await handler(ctx, request);
+    expect(await response.json()).toEqual({
+      result: c.expected,
+      error: null,
+    });
   }
 });
 
@@ -617,4 +743,33 @@ test('withVersion', async () => {
     text: 'invalid version found by withVersion, bananas',
     status: 500,
   });
+});
+
+test('handleErrors', async () => {
+  const ctx = {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    parsedURL: new URLPattern().exec('https://roci.dev/')!,
+    lc: createSilentLogContext(),
+  };
+
+  const handler = get().handle(() => {
+    throw new HttpError(401, 'foo');
+  });
+  let response = await handler(ctx, new Request('https://roci.dev/'));
+  expect(response.status).toBe(401);
+  expect(await response.text()).toBe('foo');
+
+  const jsonHandler = get().handleJSON(() => {
+    throw new HttpError(402, 'bar');
+  });
+  response = await jsonHandler(ctx, new Request('https://roci.dev/'));
+  expect(response.status).toBe(402);
+  expect(await response.text()).toBe('bar');
+
+  const apiHandler = get().handleAPIResult(() => {
+    throw new HttpError(403, 'bonk');
+  });
+  response = await apiHandler(ctx, new Request('https://roci.dev/'));
+  expect(response.status).toBe(403);
+  expect(await response.text()).toBe('bonk');
 });
