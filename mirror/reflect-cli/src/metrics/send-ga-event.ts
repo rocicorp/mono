@@ -3,11 +3,11 @@ import {randomUUID} from 'crypto';
 import {version} from '../version.js';
 import {stringify} from 'querystring';
 import {
+  deviceFingerprint,
   UserParameters,
   UserCustomDimension,
 } from 'mirror-protocol/src/reporting.js';
 import type {AuthenticatedUser} from '../auth-config.js';
-
 const TRACKING_ID = 'G-69B1QV88XF';
 
 /**
@@ -34,7 +34,7 @@ export async function sendAnalyticsEvent(
   eventName: string,
   user: AuthenticatedUser,
 ): Promise<void> {
-  const userParameters = getUserParameters(version, user.userID);
+  const userParameters = getUserParameters(version);
   await sendGAEvent(
     [
       {
@@ -66,15 +66,12 @@ function getRequestParameters(user: AuthenticatedUser): string {
   return stringify(params);
 }
 
-export function getUserParameters(
-  version: string,
-  userID: string,
-): UserParameters {
+export function getUserParameters(version: string): UserParameters {
   return {
     [UserCustomDimension.OsArchitecture]: arch(),
     [UserCustomDimension.NodeVersion]: process.version,
     [UserCustomDimension.ReflectCLIVersion]: version,
-    [UserCustomDimension.DeviceFingerprint]: userID,
+    [UserCustomDimension.DeviceFingerprint]: deviceFingerprint,
   };
 }
 
