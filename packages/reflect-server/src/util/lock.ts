@@ -10,7 +10,7 @@ export class LoggingLock {
   readonly #waiters: string[] = [];
   #holder: string | undefined;
 
-  // By default, logs timings over 0 ms.
+  // By default, logs all timings.
   constructor(loggingMinThresholdMs = 0) {
     this.#minThresholdMs = loggingMinThresholdMs;
   }
@@ -38,7 +38,7 @@ export class LoggingLock {
     lc: LogContext,
     name: string,
     fn: (lc: LogContext) => MaybePromise<void>,
-    flushLogsIfLockHeldForMs = 0,
+    flushLogsIfLockHeldForMs = 100,
   ): Promise<void> {
     // Note: It is important that there are no `await`s before the lock
     // acquisition is attempted (i.e. withLock()), as the calling logic relies
