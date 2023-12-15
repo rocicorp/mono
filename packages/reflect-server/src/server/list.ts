@@ -1,6 +1,6 @@
 import * as v from 'shared/src/valita.js';
 import type {ListOptions} from '../storage/storage.js';
-import {APIError} from './api-response.js';
+import {APIError} from './api-errors.js';
 
 const numericString = v.string().chain(str => {
   try {

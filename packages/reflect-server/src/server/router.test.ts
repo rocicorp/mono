@@ -1,11 +1,11 @@
 import {describe, expect, test} from '@jest/globals';
+import type {APIErrorInfo} from 'shared/src/api/responses.js';
 import {assert} from 'shared/src/asserts.js';
 import type {JSONObject, ReadonlyJSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
 import * as valita from 'shared/src/valita.js';
 import type {ListOptions} from '../storage/storage.js';
 import {createSilentLogContext} from '../util/test-utils.js';
-import type {APIErrorInfo} from './api-response.js';
 import {HttpError} from './errors.js';
 import {
   BaseContext,
