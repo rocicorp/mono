@@ -23,7 +23,7 @@ import {
   createWSAndCloseWithTailError,
 } from '../util/socket.js';
 import {AlarmManager, TimeoutID} from './alarms.js';
-import {roomNotFoundAPIError} from './api-response.js';
+import {roomNotFoundAPIError} from './api-errors.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
 import type {AuthHandler} from './auth.js';
 import {ErrorWithForwardedResponse, makeErrorResponse} from './errors.js';
