@@ -23,7 +23,7 @@ export const CLIENT_GC_FREQUENCY = 10 * 1000;
 export const GC_MAX_AGE = 2 * 7 * 24 * 60 * 60 * 1000;
 
 function clientGCSpaceUserKey(clientID: string): string {
-  return `-/c/${clientID}`;
+  return `-/p/${clientID}`;
 }
 
 async function updateLastSeenForClient(
@@ -134,7 +134,7 @@ export async function collectOldUserSpaceClientKeys(
   clientsToCollect: string[],
   nextVersion: number,
 ): Promise<void> {
-  // Delete all the keys starting with '-/c/${clientID}' for all old clients.
+  // Delete all the keys starting with '-/p/${clientID}' for all old clients.
   const ps: Promise<unknown>[] = [];
   for (const clientID of clientsToCollect) {
     for await (const [key, {value, deleted}] of storage.scan(

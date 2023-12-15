@@ -64,18 +64,18 @@ describe('collectOldUserSpaceClientKeys', () => {
 
     //  This test does not care about the lastSeen or the version
     await setUserEntries(cache, version, {
-      '-/c/client-a': 1,
-      '-/c/client-a/': 2,
-      '-/c/client-a/more': 3,
-      '-/c/client-b': 4,
-      '-/c/client-b/': 5,
-      '-/c/client-b/more': 6,
-      '-/c/client-c': 7,
-      '-/c/client-c/': 8,
-      '-/c/client-c/more': 9,
-      '-/c/client-d': 10,
-      '-/c/client-d/': 11,
-      '-/c/client-d/more': 12,
+      '-/p/client-a': 1,
+      '-/p/client-a/': 2,
+      '-/p/client-a/more': 3,
+      '-/p/client-b': 4,
+      '-/p/client-b/': 5,
+      '-/p/client-b/more': 6,
+      '-/p/client-c': 7,
+      '-/p/client-c/': 8,
+      '-/p/client-c/more': 9,
+      '-/p/client-d': 10,
+      '-/p/client-d/': 11,
+      '-/p/client-d/more': 12,
     });
     await cache.flush();
 
@@ -91,62 +91,62 @@ describe('collectOldUserSpaceClientKeys', () => {
     const allEntries = await storage.list({}, jsonSchema);
     expect(allEntries).toMatchInlineSnapshot(`
 Map {
-  "user/-/c/client-a" => {
+  "user/-/p/client-a" => {
     "deleted": true,
     "value": 1,
     "version": 2,
   },
-  "user/-/c/client-a/" => {
+  "user/-/p/client-a/" => {
     "deleted": true,
     "value": 2,
     "version": 2,
   },
-  "user/-/c/client-a/more" => {
+  "user/-/p/client-a/more" => {
     "deleted": true,
     "value": 3,
     "version": 2,
   },
-  "user/-/c/client-b" => {
+  "user/-/p/client-b" => {
     "deleted": false,
     "value": 4,
     "version": 1,
   },
-  "user/-/c/client-b/" => {
+  "user/-/p/client-b/" => {
     "deleted": false,
     "value": 5,
     "version": 1,
   },
-  "user/-/c/client-b/more" => {
+  "user/-/p/client-b/more" => {
     "deleted": false,
     "value": 6,
     "version": 1,
   },
-  "user/-/c/client-c" => {
+  "user/-/p/client-c" => {
     "deleted": true,
     "value": 7,
     "version": 2,
   },
-  "user/-/c/client-c/" => {
+  "user/-/p/client-c/" => {
     "deleted": true,
     "value": 8,
     "version": 2,
   },
-  "user/-/c/client-c/more" => {
+  "user/-/p/client-c/more" => {
     "deleted": true,
     "value": 9,
     "version": 2,
   },
-  "user/-/c/client-d" => {
+  "user/-/p/client-d" => {
     "deleted": false,
     "value": 10,
     "version": 1,
   },
-  "user/-/c/client-d/" => {
+  "user/-/p/client-d/" => {
     "deleted": false,
     "value": 11,
     "version": 1,
   },
-  "user/-/c/client-d/more" => {
+  "user/-/p/client-d/more" => {
     "deleted": false,
     "value": 12,
     "version": 1,
@@ -166,12 +166,12 @@ Map {
 
     //  This test does not care about the lastSeen or the version
     await setUserEntries(cache, version, {
-      '-/c/client-a': 1,
-      '-/c/client-b': 2,
-      '-/c/client-c': 3,
+      '-/p/client-a': 1,
+      '-/p/client-b': 2,
+      '-/p/client-c': 3,
     });
     await putUserValue(
-      '-/c/client-a',
+      '-/p/client-a',
       {
         deleted: true,
         value: 1,
@@ -184,17 +184,17 @@ Map {
       const allEntries = await storage.list({}, jsonSchema);
       expect(allEntries).toMatchInlineSnapshot(`
 Map {
-  "user/-/c/client-a" => {
+  "user/-/p/client-a" => {
     "deleted": true,
     "value": 1,
     "version": 2,
   },
-  "user/-/c/client-b" => {
+  "user/-/p/client-b" => {
     "deleted": false,
     "value": 2,
     "version": 2,
   },
-  "user/-/c/client-c" => {
+  "user/-/p/client-c" => {
     "deleted": false,
     "value": 3,
     "version": 2,
@@ -215,17 +215,17 @@ Map {
     const allEntries = await storage.list({}, jsonSchema);
     expect(allEntries).toMatchInlineSnapshot(`
 Map {
-  "user/-/c/client-a" => {
+  "user/-/p/client-a" => {
     "deleted": true,
     "value": 1,
     "version": 2,
   },
-  "user/-/c/client-b" => {
+  "user/-/p/client-b" => {
     "deleted": false,
     "value": 2,
     "version": 2,
   },
-  "user/-/c/client-c" => {
+  "user/-/p/client-c" => {
     "deleted": true,
     "value": 3,
     "version": 3,
@@ -276,14 +276,14 @@ Map {
 
     await putVersion(version, storage);
     await setUserEntries(storage, version, {
-      '-/c/client-a': 1,
-      '-/c/client-a/more': 2,
-      '-/c/client-b': 3,
-      '-/c/client-b/more': 4,
-      '-/c/client-c': 5,
-      '-/c/client-c/more': 6,
-      '-/c/client-d': 7,
-      '-/c/client-d/more': 8,
+      '-/p/client-a': 1,
+      '-/p/client-a/more': 2,
+      '-/p/client-b': 3,
+      '-/p/client-b/more': 4,
+      '-/p/client-c': 5,
+      '-/p/client-c/more': 6,
+      '-/p/client-d': 7,
+      '-/p/client-d/more': 8,
     });
     await setLastSeenEntries(storage, {
       'client-a': 1000,
@@ -331,42 +331,42 @@ Map {
     "client-a",
     "client-c",
   ],
-  "user/-/c/client-a" => {
+  "user/-/p/client-a" => {
     "deleted": false,
     "value": 1,
     "version": 1,
   },
-  "user/-/c/client-a/more" => {
+  "user/-/p/client-a/more" => {
     "deleted": false,
     "value": 2,
     "version": 1,
   },
-  "user/-/c/client-b" => {
+  "user/-/p/client-b" => {
     "deleted": true,
     "value": 3,
     "version": 2,
   },
-  "user/-/c/client-b/more" => {
+  "user/-/p/client-b/more" => {
     "deleted": true,
     "value": 4,
     "version": 2,
   },
-  "user/-/c/client-c" => {
+  "user/-/p/client-c" => {
     "deleted": false,
     "value": 5,
     "version": 1,
   },
-  "user/-/c/client-c/more" => {
+  "user/-/p/client-c/more" => {
     "deleted": false,
     "value": 6,
     "version": 1,
   },
-  "user/-/c/client-d" => {
+  "user/-/p/client-d" => {
     "deleted": false,
     "value": 7,
     "version": 1,
   },
-  "user/-/c/client-d/more" => {
+  "user/-/p/client-d/more" => {
     "deleted": false,
     "value": 8,
     "version": 1,
@@ -455,14 +455,14 @@ Map {
       'client-d': 1500, // different from previous test, so it gets collected
     });
     await setUserEntries(storage, version, {
-      '-/c/client-a': 1,
-      '-/c/client-a/more': 2,
-      '-/c/client-b': 3,
-      '-/c/client-b/more': 4,
-      '-/c/client-c': 5,
-      '-/c/client-c/more': 6,
-      '-/c/client-d': 7,
-      '-/c/client-d/more': 8,
+      '-/p/client-a': 1,
+      '-/p/client-a/more': 2,
+      '-/p/client-b': 3,
+      '-/p/client-b/more': 4,
+      '-/p/client-c': 5,
+      '-/p/client-c/more': 6,
+      '-/p/client-d': 7,
+      '-/p/client-d/more': 8,
     });
     await putConnectedClients(connectedClients, storage);
     await storage.flush();
@@ -515,42 +515,42 @@ Map {
     "client-a",
     "client-c",
   ],
-  "user/-/c/client-a" => {
+  "user/-/p/client-a" => {
     "deleted": false,
     "value": 1,
     "version": 1,
   },
-  "user/-/c/client-a/more" => {
+  "user/-/p/client-a/more" => {
     "deleted": false,
     "value": 2,
     "version": 1,
   },
-  "user/-/c/client-b" => {
+  "user/-/p/client-b" => {
     "deleted": false,
     "value": 3,
     "version": 1,
   },
-  "user/-/c/client-b/more" => {
+  "user/-/p/client-b/more" => {
     "deleted": false,
     "value": 4,
     "version": 1,
   },
-  "user/-/c/client-c" => {
+  "user/-/p/client-c" => {
     "deleted": false,
     "value": 5,
     "version": 1,
   },
-  "user/-/c/client-c/more" => {
+  "user/-/p/client-c/more" => {
     "deleted": false,
     "value": 6,
     "version": 1,
   },
-  "user/-/c/client-d" => {
+  "user/-/p/client-d" => {
     "deleted": true,
     "value": 7,
     "version": 2,
   },
-  "user/-/c/client-d/more" => {
+  "user/-/p/client-d/more" => {
     "deleted": true,
     "value": 8,
     "version": 2,

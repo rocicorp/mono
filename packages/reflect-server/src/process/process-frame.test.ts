@@ -949,9 +949,9 @@ describe('processFrame', () => {
     {
       name: '1 mutation, 2 clients. 1 client should be garbage collected',
       initialUserValues: {
-        '-/c/c1/a': userValue('aa', startVersion),
-        '-/c/c2/b': userValue('bb', startVersion),
-        '-/c/c2/c': userValue('cc', startVersion, true),
+        '-/p/c1/a': userValue('aa', startVersion),
+        '-/p/c2/b': userValue('bb', startVersion),
+        '-/p/c2/c': userValue('cc', startVersion, true),
       },
       pendingMutations: [
         pendingMutation({
@@ -995,17 +995,17 @@ describe('processFrame', () => {
             cookie: startVersion + 2,
             lastMutationIDChanges: {},
             presence: [],
-            patch: [{op: 'del', key: '-/c/c2/b'}],
+            patch: [{op: 'del', key: '-/p/c2/b'}],
             timestamp: undefined,
           },
         },
       ],
       expectedUserValues: new Map([
         ['foo', userValue('bar', startVersion + 1)],
-        ['-/c/c1/a', userValue('aa', startVersion)],
-        ['-/c/c2/b', userValue('bb', startVersion + 2, true)],
+        ['-/p/c1/a', userValue('aa', startVersion)],
+        ['-/p/c2/b', userValue('bb', startVersion + 2, true)],
         // The next one was already deleted so no update to startVersion
-        ['-/c/c2/c', userValue('cc', startVersion, true)],
+        ['-/p/c2/c', userValue('cc', startVersion, true)],
       ]),
       expectedClientRecords: new Map([
         ['c1', clientRecord('cg1', startVersion + 2, 2, startVersion + 1)],
@@ -1018,10 +1018,10 @@ describe('processFrame', () => {
     {
       name: '1 mutation, 3 clients. 1 client should be garbage collected. 1 got disconnected',
       initialUserValues: {
-        '-/c/c1/a': userValue('aa', startVersion),
-        '-/c/c2/b': userValue('bb', startVersion),
-        '-/c/c2/c': userValue('cc', startVersion, true),
-        '-/c/c3/d': userValue('dd', startVersion),
+        '-/p/c1/a': userValue('aa', startVersion),
+        '-/p/c2/b': userValue('bb', startVersion),
+        '-/p/c2/c': userValue('cc', startVersion, true),
+        '-/p/c3/d': userValue('dd', startVersion),
       },
       pendingMutations: [
         pendingMutation({
@@ -1066,7 +1066,7 @@ describe('processFrame', () => {
             cookie: startVersion + 2,
             lastMutationIDChanges: {},
             presence: [],
-            patch: [{op: 'del', key: '-/c/c2/b'}],
+            patch: [{op: 'del', key: '-/p/c2/b'}],
             timestamp: undefined,
           },
         },
@@ -1090,11 +1090,11 @@ describe('processFrame', () => {
       ],
       expectedUserValues: new Map([
         ['foo', userValue('bar', startVersion + 1)],
-        ['-/c/c1/a', userValue('aa', startVersion)],
-        ['-/c/c2/b', userValue('bb', startVersion + 2, true)],
+        ['-/p/c1/a', userValue('aa', startVersion)],
+        ['-/p/c2/b', userValue('bb', startVersion + 2, true)],
         // The next one was already deleted so no update to startVersion
-        ['-/c/c2/c', userValue('cc', startVersion, true)],
-        ['-/c/c3/d', userValue('dd', startVersion)],
+        ['-/p/c2/c', userValue('cc', startVersion, true)],
+        ['-/p/c3/d', userValue('dd', startVersion)],
         ['test-disconnected-c3', userValue(true, startVersion + 3)],
       ]),
       expectedClientRecords: new Map([
@@ -1110,9 +1110,9 @@ describe('processFrame', () => {
     {
       name: '0 mutations, 2 clients. 1 client should be garbage collected',
       initialUserValues: {
-        '-/c/c1/a': userValue('aa', startVersion),
-        '-/c/c2/b': userValue('bb', startVersion),
-        '-/c/c2/c': userValue('cc', startVersion, true),
+        '-/p/c1/a': userValue('aa', startVersion),
+        '-/p/c2/b': userValue('bb', startVersion),
+        '-/p/c2/c': userValue('cc', startVersion, true),
       },
       pendingMutations: [],
       numPendingMutationsToProcess: 0,
@@ -1130,16 +1130,16 @@ describe('processFrame', () => {
             cookie: startVersion + 1,
             lastMutationIDChanges: {},
             presence: [],
-            patch: [{op: 'del', key: '-/c/c2/b'}],
+            patch: [{op: 'del', key: '-/p/c2/b'}],
             timestamp: undefined,
           },
         },
       ],
       expectedUserValues: new Map([
-        ['-/c/c1/a', userValue('aa', startVersion)],
-        ['-/c/c2/b', userValue('bb', startVersion + 1, true)],
+        ['-/p/c1/a', userValue('aa', startVersion)],
+        ['-/p/c2/b', userValue('bb', startVersion + 1, true)],
         // The next one was already deleted so no update to startVersion
-        ['-/c/c2/c', userValue('cc', startVersion, true)],
+        ['-/p/c2/c', userValue('cc', startVersion, true)],
       ]),
       expectedClientRecords: new Map([
         ['c1', clientRecord('cg1', startVersion + 1, 1, startVersion)],
@@ -1154,9 +1154,9 @@ describe('processFrame', () => {
       name: '0 mutations, 2 clients. No gc because it is turned off',
       shouldGCClients: false,
       initialUserValues: {
-        '-/c/c1/a': userValue('aa', startVersion),
-        '-/c/c2/b': userValue('bb', startVersion),
-        '-/c/c2/c': userValue('cc', startVersion, true),
+        '-/p/c1/a': userValue('aa', startVersion),
+        '-/p/c2/b': userValue('bb', startVersion),
+        '-/p/c2/c': userValue('cc', startVersion, true),
       },
       pendingMutations: [],
       numPendingMutationsToProcess: 0,
@@ -1168,9 +1168,9 @@ describe('processFrame', () => {
       storedConnectedClients: ['c1'],
       expectedPokes: [],
       expectedUserValues: new Map([
-        ['-/c/c1/a', userValue('aa', startVersion)],
-        ['-/c/c2/b', userValue('bb', startVersion)],
-        ['-/c/c2/c', userValue('cc', startVersion, true)],
+        ['-/p/c1/a', userValue('aa', startVersion)],
+        ['-/p/c2/b', userValue('bb', startVersion)],
+        ['-/p/c2/c', userValue('cc', startVersion, true)],
       ]),
       expectedClientRecords: new Map([
         ['c1', clientRecord('cg1', null, 1, 1)],
