@@ -1,11 +1,15 @@
-import type {Auth} from 'firebase-admin/auth';
-import {FieldValue, type Firestore} from 'firebase-admin/firestore';
+import type {Auth, DecodedIdToken} from 'firebase-admin/auth';
+import {
+  FieldValue,
+  QueryDocumentSnapshot,
+  type Firestore,
+} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {HttpsError} from 'firebase-functions/v2/https';
-import type {AuthData} from 'firebase-functions/v2/tasks';
 import type {BaseAppRequest} from 'mirror-protocol/src/app.js';
 import type {BaseRequest} from 'mirror-protocol/src/base.js';
 import {
+  AppKey,
   appKeyDataConverter,
   type RequiredPermission,
 } from 'mirror-schema/src/app-key.js';
@@ -14,6 +18,7 @@ import type {Role} from 'mirror-schema/src/membership.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
+import {verifyKey} from '../keys/verify.js';
 import type {HttpsRequestContext} from './https.js';
 import type {
   AppAuthorization,
@@ -24,20 +29,23 @@ import type {
 
 // The subset of CallableRequest fields applicable to `userAuthorization`.
 interface AuthContext {
-  auth?: AuthData;
+  auth?: {
+    uid: string;
+    token?: DecodedIdToken;
+  };
+  appKeyDoc?: QueryDocumentSnapshot<AppKey>;
 }
-
-const BEARER_PREFIX = 'bearer ';
 
 /**
  * Creates an `AuthContext` from an `onRequest()` HttpsRequestContext by parsing
- * and verifying the `Authorization: Bearer` request header. This bridges the
+ * and verifying the `Authorization: <Bearer|Basic>` request header. This bridges the
  * API for https requests to callable requests.
  */
-export function tokenAuthentication<
+export function authorizationHeader<
   Request,
   Context extends HttpsRequestContext,
 >(
+  firestore: Firestore,
   auth: Auth,
 ): RequestContextValidator<Request, Context, Context & AuthContext> {
   return async (_, context) => {
@@ -47,15 +55,31 @@ export function tokenAuthentication<
     if (typeof authorization !== 'string') {
       throw new HttpsError('unauthenticated', 'Invalid Authorization header');
     }
-    if (!authorization.toLowerCase().startsWith(BEARER_PREFIX)) {
-      throw new HttpsError(
-        'unimplemented',
-        'Only Bearer Authorization is supported',
-      );
+    const parts = authorization.split(/\s+/);
+    if (parts.length !== 2) {
+      throw new HttpsError('unauthenticated', 'Invalid Authorization header');
     }
-    const token = authorization.substring(BEARER_PREFIX.length);
-    const decodedIdToken = await auth.verifyIdToken(token);
-    return {...context, auth: {uid: decodedIdToken.uid, token: decodedIdToken}};
+    const authScheme = parts[0].toLowerCase();
+    const creds = parts[1];
+    switch (authScheme) {
+      case 'bearer': {
+        const decodedIdToken = await auth.verifyIdToken(creds);
+        return {
+          ...context,
+          auth: {uid: decodedIdToken.uid, token: decodedIdToken},
+        };
+      }
+      case 'basic': {
+        const keyDoc = await verifyKey(firestore, creds);
+        const keyPath = keyDoc.ref.path;
+        return {
+          ...context,
+          auth: {uid: keyPath},
+          appKeyDoc: keyDoc,
+        };
+      }
+    }
+    throw new HttpsError('unauthenticated', 'Unsupported Authorization scheme');
   };
 }
 
@@ -129,7 +153,7 @@ function userAuthorizationImpl<
       const superUntil = context.auth.token?.superUntil;
       if (typeof superUntil === 'number' && superUntil >= Date.now()) {
         logger.info(
-          `${context.auth.uid} (${context.auth.token.email}) impersonating ${request.requester.userID}`,
+          `${context.auth.uid} (${context.auth.token?.email}) impersonating ${request.requester.userID}`,
         );
       } else {
         throw new HttpsError(
@@ -148,7 +172,7 @@ function userAuthorizationImpl<
 
 export function appOrKeyAuthorization<
   Request extends BaseAppRequest,
-  Context extends UserOrKeyAuthorization,
+  Context extends UserOrKeyAuthorization & AuthContext,
 >(
   firestore: Firestore,
   keyPermission: RequiredPermission,
@@ -160,7 +184,7 @@ export function appOrKeyAuthorization<
   );
 
   return async (request: Request, context: Context) => {
-    const {isKeyAuth} = context;
+    const {isKeyAuth, appKeyDoc: appKeyFromBasicAuth} = context;
     if (!isKeyAuth) {
       return nonKeyAppAuthorization(request, context);
     }
@@ -183,7 +207,8 @@ export function appOrKeyAuthorization<
     const authorization: AppAuthorization = await firestore.runTransaction(
       async txn => {
         const [appKeyDoc, appDoc] = await Promise.all([
-          txn.get(appKeyDocRef),
+          // No need to lookup up the AppKey again if it was queried when verifying the Authorization header.
+          appKeyFromBasicAuth ? appKeyFromBasicAuth : txn.get(appKeyDocRef),
           txn.get(appDocRef),
         ]);
         if (!appKeyDoc.exists) {

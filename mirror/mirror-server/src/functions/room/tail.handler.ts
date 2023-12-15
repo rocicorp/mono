@@ -16,7 +16,7 @@ import {SecretsCache, SecretsClient} from '../../secrets/index.js';
 import {REFLECT_API_KEY, decryptSecrets} from '../app/secrets.js';
 import {
   appAuthorization,
-  tokenAuthentication,
+  authorizationHeader,
   userAuthorization,
 } from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
@@ -31,7 +31,7 @@ export const tail = (
 ) =>
   onRequest(
     validateRequest(roomTailRequestSchema)
-      .validate(tokenAuthentication(auth))
+      .validate(authorizationHeader(firestore, auth))
       .validate(userAgentVersion())
       .validate(userAuthorization())
       .validate(appAuthorization(firestore))

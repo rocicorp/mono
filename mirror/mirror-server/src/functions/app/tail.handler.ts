@@ -23,7 +23,7 @@ import {
 } from '../../secrets/index.js';
 import {
   appAuthorization,
-  tokenAuthentication,
+  authorizationHeader,
   userAuthorization,
 } from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
@@ -38,7 +38,7 @@ export const tail = (
 ) =>
   onRequest(
     validateRequest(tailRequestSchema)
-      .validate(tokenAuthentication(auth))
+      .validate(authorizationHeader(firestore, auth))
       .validate(userAgentVersion())
       .validate(userAuthorization())
       .validate(appAuthorization(firestore))
