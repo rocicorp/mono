@@ -36,7 +36,8 @@ export const clientModelSchema = entitySchema.extend({
 
 export type ClientModel = z.infer<typeof clientModelSchema>;
 export type ClientModelUpdate = Update<ClientModel>;
-const clientGenerateResult = generate('client', clientModelSchema);
+// TODO(arv): Use new presence state rails functionality.
+const clientGenerateResult = generate('-/p', clientModelSchema);
 
 export const {
   get: getClient,
