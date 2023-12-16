@@ -691,6 +691,7 @@ test('handleJSON', async () => {
     };
     const response = await handler(ctx, request);
     expect(await response.json()).toEqual(c.expected);
+    expect(response.headers.get('content-type')).toBe('application/json');
   }
 });
 
