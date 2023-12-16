@@ -126,6 +126,7 @@ async function expectSuccessfulAPIResponse(
     result,
     error: null,
   });
+  expect(response.headers.get('content-type')).toBe('application/json');
 }
 
 async function expectAPIErrorResponse(response: Response, error: APIErrorInfo) {
@@ -134,6 +135,7 @@ async function expectAPIErrorResponse(response: Response, error: APIErrorInfo) {
     result: null,
     error,
   });
+  expect(response.headers.get('content-type')).toBe('application/json');
 }
 
 function createCreateRoomTestFixture({
