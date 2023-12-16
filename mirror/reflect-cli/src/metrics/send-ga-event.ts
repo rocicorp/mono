@@ -49,7 +49,7 @@ export async function sendAnalyticsEvent(
 function getRequestParameters(user: AuthenticatedUser): string {
   const params = {
     [RequestParameter.ProtocolVersion]: 2,
-    [RequestParameter.ClientId]: user.userID,
+    [RequestParameter.ClientId]: deviceFingerprint,
     [RequestParameter.UserId]: user.userID,
     [RequestParameter.TrackingId]: TRACKING_ID,
     [RequestParameter.AppVersion]: version,
