@@ -77,6 +77,10 @@ export class OnRequestBuilder<Request, Context> {
   }
 }
 
+/**
+ * A variant of the onRequestBuilder used by the API gateway to
+ * reuse the auth validation logic used by the other functions.
+ */
 class ContextValidator<Request, InputContext, OutputContext> {
   readonly #request: Request;
   readonly #input: InputContext;
@@ -100,10 +104,6 @@ class ContextValidator<Request, InputContext, OutputContext> {
     this.#requestValidator = requestValidator;
   }
 
-  /**
-   * Used to chain RequestContextValidators that convert / augment
-   * the final context passed to the handler.
-   */
   validate<NewContext>(
     nextValidator: RequestContextValidator<Request, OutputContext, NewContext>,
   ): ContextValidator<Request, InputContext, NewContext> {
@@ -117,11 +117,6 @@ class ContextValidator<Request, InputContext, OutputContext> {
     );
   }
 
-  /**
-   * Only used by the API request handler, which uses a synthetic request payload
-   * to exercise the shared validation logic but otherwise does its own thing with
-   * the original request body.
-   */
   process(): MaybePromise<OutputContext> {
     return this.#requestValidator(this.#request, this.#input);
   }
