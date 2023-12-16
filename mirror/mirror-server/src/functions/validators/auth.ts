@@ -84,6 +84,26 @@ export function authorizationHeader<
 }
 
 /**
+ * Validator for API requests that do not contain a `requester` field, but
+ * rather relies solely on the AuthContext.
+ */
+export function authenticatedAsRequester<
+  Request,
+  Context extends AuthContext,
+>() {
+  return (_: Request, context: Context) =>
+    userAuthorizationImpl(true)(
+      {
+        requester: {
+          userID: context.auth?.uid ?? 'unauthenticated', // Will fail.
+          userAgent: {type: 'internal', version: 'none'},
+        },
+      },
+      context,
+    );
+}
+
+/**
  * Validator that checks the original authentication against the
  * requester userID and initializes a {@link UserOrKeyAuthorization} context.
  */
@@ -171,8 +191,8 @@ function userAuthorizationImpl<
 }
 
 export function appOrKeyAuthorization<
-  Request extends BaseAppRequest,
-  Context extends UserOrKeyAuthorization & AuthContext,
+  Request extends Pick<BaseAppRequest, 'appID'>,
+  Context extends UserOrKeyAuthorization & Pick<AuthContext, 'appKeyDoc'>,
 >(
   firestore: Firestore,
   keyPermission: RequiredPermission,
@@ -247,7 +267,7 @@ export function appOrKeyAuthorization<
  * app associated with the request.
  */
 export function appAuthorization<
-  Request extends BaseAppRequest,
+  Request extends Pick<BaseAppRequest, 'appID'>,
   Context extends UserAuthorization,
 >(
   firestore: Firestore,

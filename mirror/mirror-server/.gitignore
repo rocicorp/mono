@@ -3,5 +3,8 @@ node_modules
 lib
 *.log
 
+# Hosting
+.firebase/
+
 # Local env files
 .env.*
