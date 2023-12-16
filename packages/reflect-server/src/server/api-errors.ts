@@ -15,7 +15,10 @@ export class APIError extends ErrorWithResponse {
 
   response(): Response {
     const apiResponse = makeAPIError(this.#info);
-    return new Response(JSON.stringify(apiResponse), {status: this.#info.code});
+    return new Response(JSON.stringify(apiResponse), {
+      status: this.#info.code,
+      headers: {'Content-Type': 'application/json'},
+    });
   }
 }
 

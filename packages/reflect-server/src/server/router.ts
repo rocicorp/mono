@@ -257,7 +257,9 @@ class ValidatorChainer<Input extends BaseContext, Output extends BaseContext> {
   ): Handler<Input, Response> {
     return this.handle(
       async (ctx: Output, request: Request) =>
-        new Response(JSON.stringify(await handler(ctx, request))),
+        new Response(JSON.stringify(await handler(ctx, request)), {
+          headers: {'Content-Type': 'application/json'},
+        }),
     );
   }
 
