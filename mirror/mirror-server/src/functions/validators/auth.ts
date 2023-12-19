@@ -165,7 +165,7 @@ function userAuthorizationImpl<
     if (!allowKeys && context.auth.uid.includes('/')) {
       throw new HttpsError(
         'permission-denied',
-        'Keys are not authorized for this action',
+        'This action does not support key-based authorization',
       );
     }
     if (context.auth.uid !== request.requester.userID) {
