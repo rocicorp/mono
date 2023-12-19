@@ -180,7 +180,7 @@ export function bodyOnly<T, Context extends BaseContext>(
 
 const arbitraryQueryParamsSchema = valita.record(valita.string());
 
-// For reportMetrics the client sends common query parameters that server ignores.
+// For reportMetrics the client sends common query parameters that the server ignores.
 export function bodyAndArbitraryQueryParams<T, Context extends BaseContext>(
   schema: valita.Type<T>,
 ) {
