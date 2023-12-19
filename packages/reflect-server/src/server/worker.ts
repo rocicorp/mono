@@ -29,7 +29,7 @@ import {
   Handler,
   Router,
   WithLogContext,
-  body,
+  bodyAndArbitraryQueryParams,
   checkAuthAPIKey,
   get,
   post,
@@ -114,7 +114,7 @@ function registerRoutes(router: WorkerRouter) {
 //    handler: we want to be able to report metrics for a logged
 //    out user as well)
 const reportMetrics = post<WorkerContext>()
-  .with(body(reportMetricsSchema))
+  .with(bodyAndArbitraryQueryParams(reportMetricsSchema))
   .handle(async ctx => {
     const {lc, body, datadogMetricsOptions} = ctx;
 
