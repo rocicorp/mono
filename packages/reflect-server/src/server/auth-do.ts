@@ -60,7 +60,7 @@ import {
 import {
   BaseContext,
   Router,
-  body,
+  bodyOnly,
   get,
   noInputParams,
   post,
@@ -219,7 +219,7 @@ export class BaseAuthDO implements DurableObject {
 
   #createRoom = post()
     .with(roomID())
-    .with(body(createRoomRequestSchema))
+    .with(bodyOnly(createRoomRequestSchema))
     .handleAPIResult((ctx, req) => {
       const {lc, body, roomID} = ctx;
       const {jurisdiction} = body;

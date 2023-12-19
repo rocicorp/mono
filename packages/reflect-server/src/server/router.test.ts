@@ -10,7 +10,7 @@ import {
   BaseContext,
   Handler,
   Router,
-  body,
+  bodyOnly,
   checkAuthAPIKey,
   get,
   post,
@@ -626,7 +626,7 @@ test('withBody', async () => {
 
   const userIdSchema = valita.object({userID: valita.string()});
   const handler = post()
-    .with(body(userIdSchema))
+    .with(bodyOnly(userIdSchema))
     .handle(ctx => {
       const {body} = ctx;
       const {userID} = body;
@@ -707,7 +707,7 @@ describe('withNoBody', () => {
   ];
 
   const handler = post()
-    .with(body(valita.null()))
+    .with(bodyOnly(valita.null()))
     .handle(ctx => {
       const {body} = ctx;
       expect(body).toBe(null);

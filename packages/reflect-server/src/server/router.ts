@@ -165,16 +165,16 @@ export function urlVersion<Context extends BaseContext>() {
   };
 }
 
-// Note: queryParams(), body(), and noInputParams() are mutually exclusive.
-// (Currently, no endpoints read both they query string and the request body, but
-//  if there need arises, inputParams() can be exported).
+// Note: queryParams(), bodyOnly(), and noInputParams() are mutually exclusive.
 export function queryParams<T, Context extends BaseContext>(
   schema: valita.Type<T>,
 ) {
   return inputParams<T, null, Context>(schema, valita.null());
 }
 
-export function body<T, Context extends BaseContext>(schema: valita.Type<T>) {
+export function bodyOnly<T, Context extends BaseContext>(
+  schema: valita.Type<T>,
+) {
   return inputParams<null, T, Context>(valita.null(), schema);
 }
 
@@ -191,6 +191,16 @@ function inputParams<Q, B, Context extends BaseContext>(
     const query = validateQuery(parsedURL, querySchema);
     const body = await validateBody(req, bodySchema);
     return {...ctx, query, body};
+  };
+}
+
+// TODO: Understand why reportMetrics needs both body and query params.
+export function bodyAndArbitraryQueryParams<T, Context extends BaseContext>(
+  schema: valita.Type<T>,
+) {
+  return async (ctx: Context, req: Request) => {
+    const body = await validateBody(req, schema);
+    return {...ctx, body};
   };
 }
 
