@@ -581,6 +581,7 @@ test('withQueryParams', async () => {
 test('withBody', async () => {
   type Case = {
     body: JSONObject | undefined | string;
+    queryString?: string;
     expected?: {text: string; status: number};
     error?: APIErrorInfo;
   };
@@ -589,6 +590,15 @@ test('withBody', async () => {
     {
       body: {userID: 'foo'},
       expected: {text: 'userID:foo', status: 200},
+    },
+    {
+      body: {userID: 'foo'},
+      queryString: '?not=expected',
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Unexpected query parameters',
+      },
     },
     {
       body: {badUserId: 'bar'},
@@ -634,7 +644,7 @@ test('withBody', async () => {
     });
 
   for (const c of cases) {
-    const url = `https://roci.dev/`;
+    const url = `https://roci.dev/${c.queryString ?? ''}`;
     const request = new Request(url, {
       method: 'post',
       body: JSON.stringify(c.body),
@@ -642,7 +652,7 @@ test('withBody', async () => {
     const ctx = {
       lc: createSilentLogContext(),
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      parsedURL: new URLPattern().exec()!,
+      parsedURL: new URLPattern().exec(url)!,
     };
 
     const response = await handler(ctx, request);
