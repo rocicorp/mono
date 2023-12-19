@@ -1,6 +1,5 @@
 import * as v from 'shared/src/valita.js';
 import type {ListOptions} from '../storage/storage.js';
-import {APIError} from './api-errors.js';
 
 const numericString = v.string().chain(str => {
   try {
@@ -14,7 +13,7 @@ const numericString = v.string().chain(str => {
   }
 });
 
-const listParamsSchema = v
+export const listParamsSchema = v
   .object({
     startKey: v.string().optional(),
     startAfterKey: v.string().optional(),
@@ -25,16 +24,7 @@ const listParamsSchema = v
     'Cannot specify both startKey and startAfterKey',
   );
 
-function queryStringToObj<T>(queryString: string, schema: v.Type<T>): T {
-  const queryObj = Object.fromEntries(
-    new URLSearchParams(queryString).entries(),
-  );
-  try {
-    return v.parse(queryObj, schema, 'passthrough');
-  } catch (e) {
-    throw new APIError(400, 'request', (e as Error).message);
-  }
-}
+export type ListParams = v.Infer<typeof listParamsSchema>;
 
 export type ListResults<T> = {
   results: T[];
@@ -48,14 +38,14 @@ export interface ListControl {
 }
 
 export function makeListControl(
-  queryString: string,
+  listParams: ListParams,
   maxMaxResults: number,
 ): ListControl {
   const {
     maxResults: requestedMaxResults = maxMaxResults,
     startKey = '',
     startAfterKey,
-  } = queryStringToObj(queryString, listParamsSchema);
+  } = listParams;
   const maxResults = Math.min(requestedMaxResults, maxMaxResults);
 
   return {
