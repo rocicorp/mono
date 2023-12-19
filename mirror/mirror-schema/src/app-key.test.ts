@@ -5,7 +5,7 @@ describe('app-key', () => {
   test('default permissions', () => {
     expect(defaultPermissions()).toEqual({
       'app:publish': false,
-      'env:update': false,
+      'env:modify': false,
       'rooms:read': false,
       'rooms:create': false,
       'rooms:close': false,
@@ -17,7 +17,7 @@ describe('app-key', () => {
   test('normalize permissions', () => {
     expect(normalizePermissions({'app:publish': true})).toEqual({
       'app:publish': true,
-      'env:update': false,
+      'env:modify': false,
       'rooms:read': false,
       'rooms:create': false,
       'rooms:close': false,

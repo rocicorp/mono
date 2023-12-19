@@ -35,7 +35,7 @@ export const set = (firestore: Firestore, secretsClient: SecretsClient) =>
   validateSchema(setVarsRequestSchema, setVarsResponseSchema)
     .validate(userAgentVersion())
     .validate(userOrKeyAuthorization())
-    .validate(appOrKeyAuthorization(firestore, 'env:update'))
+    .validate(appOrKeyAuthorization(firestore, 'env:modify'))
     .handle(async (request, context) => {
       const secrets = new SecretsCache(secretsClient);
       const {appID, vars} = request;
@@ -109,7 +109,7 @@ export const set = (firestore: Firestore, secretsClient: SecretsClient) =>
         ) {
           throw new HttpsError(
             'resource-exhausted',
-            `Up to ${MAX_SERVER_VARIABLES} Server Variables are allowed.\n` +
+            `Up to ${MAX_SERVER_VARIABLES} environment variables are allowed.\n` +
               `Use 'npx @rocicorp/reflect vars delete' to remove unused variables.`,
           );
         }

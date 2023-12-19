@@ -19,7 +19,7 @@ export const deleteFn = (firestore: Firestore) =>
   validateSchema(deleteVarsRequestSchema, deleteVarsResponseSchema)
     .validate(userAgentVersion())
     .validate(userOrKeyAuthorization())
-    .validate(appOrKeyAuthorization(firestore, 'env:update'))
+    .validate(appOrKeyAuthorization(firestore, 'env:modify'))
     .handle(async (request, context) => {
       const {appID, vars} = request;
       const {
