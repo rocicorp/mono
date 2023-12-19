@@ -178,6 +178,18 @@ export function bodyOnly<T, Context extends BaseContext>(
   return inputParams<null, T, Context>(valita.null(), schema);
 }
 
+const arbitraryQueryParamsSchema = valita.record(valita.string());
+
+// For reportMetrics the client sends common query parameters that the server ignores.
+export function bodyAndArbitraryQueryParams<T, Context extends BaseContext>(
+  schema: valita.Type<T>,
+) {
+  return inputParams<Record<string, string>, T, Context>(
+    arbitraryQueryParamsSchema,
+    schema,
+  );
+}
+
 export function noInputParams<Context extends BaseContext>() {
   return inputParams<null, null, Context>(valita.null(), valita.null());
 }
@@ -191,16 +203,6 @@ function inputParams<Q, B, Context extends BaseContext>(
     const query = validateQuery(parsedURL, querySchema);
     const body = await validateBody(req, bodySchema);
     return {...ctx, query, body};
-  };
-}
-
-// TODO: Understand why reportMetrics needs both body and query params.
-export function bodyAndArbitraryQueryParams<T, Context extends BaseContext>(
-  schema: valita.Type<T>,
-) {
-  return async (ctx: Context, req: Request) => {
-    const body = await validateBody(req, schema);
-    return {...ctx, body};
   };
 }
 
