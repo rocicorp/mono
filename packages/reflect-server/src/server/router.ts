@@ -7,7 +7,6 @@ import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import {APIError} from './api-errors.js';
 import {HttpError, makeErrorResponse} from './errors.js';
-import {makeListControl} from './list.js';
 
 /**
  * Handles a request dispatched by router. Handlers are meant to be nested
@@ -128,16 +127,6 @@ export function checkAuthAPIKey(
   }
 }
 
-export function listControl<Context extends BaseContext>(
-  maxMaxResults: number,
-) {
-  return (ctx: Context) => {
-    const {parsedURL} = ctx;
-    const listControl = makeListControl(parsedURL.search.input, maxMaxResults);
-    return {...ctx, listControl};
-  };
-}
-
 export function roomID<Context extends BaseContext>() {
   return (ctx: Context) => {
     const {roomID} = ctx.parsedURL.pathname.groups;
@@ -176,38 +165,92 @@ export function urlVersion<Context extends BaseContext>() {
   };
 }
 
+// Note: queryParams(), body(), and noInputParams() are mutually exclusive.
+// (Currently, no endpoints read both they query string and the request body, but
+//  if there need arises, inputParams() can be exported).
+export function queryParams<T, Context extends BaseContext>(
+  schema: valita.Type<T>,
+) {
+  return inputParams<T, null, Context>(schema, valita.null());
+}
+
 export function body<T, Context extends BaseContext>(schema: valita.Type<T>) {
+  return inputParams<null, T, Context>(valita.null(), schema);
+}
+
+export function noInputParams<Context extends BaseContext>() {
+  return inputParams<null, null, Context>(valita.null(), valita.null());
+}
+
+function inputParams<Q, B, Context extends BaseContext>(
+  querySchema: valita.Type<Q>,
+  bodySchema: valita.Type<B>,
+) {
   return async (ctx: Context, req: Request) => {
-    const body = await validateBody(req, schema);
-    return {...ctx, body};
+    const {parsedURL} = ctx;
+    const query = validateQuery(parsedURL, querySchema);
+    const body = await validateBody(req, bodySchema);
+    return {...ctx, query, body};
   };
+}
+
+function validateQuery<T>(
+  parsedURL: URLPatternURLPatternResult,
+  schema: valita.Type<T>,
+): T {
+  const queryString = parsedURL.search.input;
+  const queryObj = Object.fromEntries(
+    new URLSearchParams(queryString).entries(),
+  );
+  if (schema.name === 'null') {
+    if (Object.keys(queryObj).length > 0) {
+      throw new APIError(400, 'request', 'Unexpected query parameters');
+    }
+    return valita.parse(null, schema);
+  }
+  try {
+    return valita.parse(queryObj, schema);
+  } catch (e) {
+    throw new APIError(
+      400,
+      'request',
+      'Query string error. ' + (e as Error).message,
+    );
+  }
 }
 
 async function validateBody<T>(
   request: Request,
   schema: valita.Type<T>,
 ): Promise<T> {
+  // Note: we don't clone the request here, because if we did clone and the
+  // original request body is not consumed CF complains in the console, "Your
+  // worker called response.clone(), but did not read the body of both
+  // clones. <snip>". Routes that use validateBody, should use
+  // the result and not try to read the body, as reading the body
+  // again will result in an error "TypeError: body used already for <snip>".
+  const text = await request.text();
+  if (schema.name === 'null') {
+    if (text.length > 0) {
+      throw new APIError(400, 'request', 'Unexpected request body.');
+    }
+    return valita.parse(null, schema);
+  }
   let json;
   try {
-    // Note: we don't clone the request here, because if we did clone and the
-    // original request body is not consumed CF complains in the console, "Your
-    // worker called response.clone(), but did not read the body of both
-    // clones. <snip>". Routes that use validateBody, should use
-    // the ValidateResult and not try to read the body, as reading the body
-    // again will result in an error "TypeError: body used already for <snip>".
-    json = await request.json();
+    json = JSON.parse(text);
   } catch (e) {
     throw new APIError(400, 'request', 'Body must be valid json.');
   }
-  const validateResult = valita.test(json, schema);
-  if (!validateResult.ok) {
+  try {
+    return valita.parse(json, schema);
+  } catch (e) {
     throw new APIError(
       400,
       'request',
-      'Body schema error. ' + validateResult.error,
+      'Body schema error. ' + (e as Error).message,
     );
   }
-  return validateResult.value;
 }
 
 type RequestValidator<

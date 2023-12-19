@@ -46,8 +46,10 @@ import {
 } from './internal-headers.js';
 import {
   AUTH_CONNECTIONS_PATH,
+  CLOSE_ROOM_PATH,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
+  GET_ROOM_PATH,
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
@@ -686,7 +688,8 @@ test('roomRecords returns HTTP error for malformed request', async () => {
   await expectAPIErrorResponse(roomRecordsResponse, {
     code: 400,
     resource: 'request',
-    message: 'Cannot specify both startKey and startAfterKey. Got object',
+    message:
+      'Query string error. Cannot specify both startKey and startAfterKey. Got object',
   });
 });
 
@@ -1523,9 +1526,6 @@ test('authInvalidateForUser when any request to roomDOs returns error response',
     {
       method: 'post',
       headers: createAPIHeaders(TEST_API_KEY),
-      body: JSON.stringify({
-        userID: testUserID,
-      }),
     },
   );
   const testRequestClone = testRequest.clone();
@@ -1649,9 +1649,6 @@ test('authInvalidateForRoom when roomID has no open connections no invalidate re
     {
       method: 'post',
       headers: createAPIHeaders(TEST_API_KEY),
-      body: JSON.stringify({
-        roomID: testRoomID,
-      }),
     },
   );
   await storeTestConnectionState();
@@ -1755,9 +1752,6 @@ test('authInvalidateForRoom when request to roomDO returns error response', asyn
     {
       method: 'post',
       headers: createAPIHeaders(TEST_API_KEY),
-      body: JSON.stringify({
-        roomID: testRoomID,
-      }),
     },
   );
   const testRequestClone = testRequest.clone();
@@ -1939,6 +1933,109 @@ test('authInvalidateAll when any request to roomDOs returns error response', asy
   expect(await response.text()).toEqual(
     'Test authInvalidateAll Internal Server Error Msg',
   );
+});
+
+describe('test unexpected query params or body rejected', () => {
+  const roomID = 'testRoomID1';
+  const URL_PREFIX = `https://roci.dev`;
+  let authDO: TestAuthDO;
+
+  beforeEach(async () => {
+    storage = await getMiniflareDurableObjectStorage(authDOID);
+    await storage.deleteAll();
+    state = new TestDurableObjectState(authDOID, storage);
+
+    const {testRoomID, testRoomDO} = createCreateRoomTestFixture({
+      testRoomID: roomID,
+    });
+
+    authDO = new TestAuthDO({
+      roomDO: testRoomDO,
+      state,
+      authHandler: () => Promise.reject('should not be called'),
+      logSink: new TestLogSink(),
+      logLevel: 'debug',
+      env: {foo: 'bar'},
+    });
+    await createRoom(authDO, testRoomID);
+  });
+
+  type Case = {
+    method: 'GET' | 'POST';
+    url: string;
+    acceptsQueryString?: boolean;
+    expectedSuccessStatus?: number;
+  };
+  const cases: Case[] = [
+    {
+      method: 'GET',
+      url: `${URL_PREFIX}${fmtPath(LIST_ROOMS_PATH)}`,
+      acceptsQueryString: true,
+    },
+    {method: 'GET', url: `${URL_PREFIX}${fmtPath(GET_ROOM_PATH, {roomID})}`},
+    {
+      method: 'POST',
+      url: `${URL_PREFIX}${fmtPath(INVALIDATE_ROOM_CONNECTIONS_PATH, {
+        roomID,
+      })}`,
+    },
+    {
+      method: 'POST',
+      url: `${URL_PREFIX}${fmtPath(INVALIDATE_USER_CONNECTIONS_PATH, {
+        userID: 'foo',
+      })}`,
+    },
+    {
+      method: 'POST',
+      url: `${URL_PREFIX}${fmtPath(INVALIDATE_ALL_CONNECTIONS_PATH)}`,
+    },
+    {method: 'POST', url: `${URL_PREFIX}${fmtPath(CLOSE_ROOM_PATH, {roomID})}`},
+    {
+      method: 'POST',
+      url: `${URL_PREFIX}${fmtPath(DELETE_ROOM_PATH, {roomID})}`,
+      expectedSuccessStatus: 409, // Can't delete without close
+    },
+  ];
+
+  for (const c of cases) {
+    test(c.url, async () => {
+      const unexpectedQuery = new Request(`${c.url}?foobar=bonk`, {
+        method: c.method,
+        headers: createAPIHeaders(TEST_API_KEY),
+      });
+
+      const resp1 = await authDO.fetch(unexpectedQuery);
+      await expectAPIErrorResponse(resp1, {
+        code: 400,
+        resource: 'request',
+        message: c.acceptsQueryString
+          ? 'Query string error. Unexpected property foobar'
+          : 'Unexpected query parameters',
+      });
+
+      if (c.method !== 'GET') {
+        const unexpectedBody = new Request(c.url, {
+          method: c.method,
+          headers: createAPIHeaders(TEST_API_KEY),
+          body: '{"foo":"bar"}',
+        });
+        const resp2 = await authDO.fetch(unexpectedBody);
+        await expectAPIErrorResponse(resp2, {
+          code: 400,
+          resource: 'request',
+          message: 'Unexpected request body.',
+        });
+      }
+
+      // Finally, sanity check that the request itself is accepted.
+      const validRequest = new Request(c.url, {
+        method: c.method,
+        headers: createAPIHeaders(TEST_API_KEY),
+      });
+      const resp3 = await authDO.fetch(validRequest);
+      expect(resp3.status).toBe(c.expectedSuccessStatus ?? 200);
+    });
+  }
 });
 
 async function createRevalidateConnectionsTestFixture({

@@ -30,6 +30,7 @@ import {ErrorWithForwardedResponse, makeErrorResponse} from './errors.js';
 import {getRequiredSearchParams} from './get-required-search-params.js';
 import {requireUpgradeHeader} from './http-util.js';
 import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
+import {listParamsSchema, makeListControl} from './list.js';
 import {
   CLOSE_ROOM_PATH,
   CONNECT_URL_PATTERN,
@@ -61,8 +62,9 @@ import {
   Router,
   body,
   get,
-  listControl,
+  noInputParams,
   post,
+  queryParams,
   roomID,
   urlVersion,
   userID,
@@ -192,6 +194,7 @@ export class BaseAuthDO implements DurableObject {
 
   #getRoomProperties = get()
     .with(roomID())
+    .with(noInputParams())
     .handleAPIResult(async ctx => {
       const {roomID} = ctx;
       const roomProperties = await this.#roomRecordLock.withRead(() =>
@@ -204,9 +207,10 @@ export class BaseAuthDO implements DurableObject {
     });
 
   #listRoomProperties = get()
-    .with(listControl(1000))
+    .with(queryParams(listParamsSchema))
     .handleAPIResult(async ctx => {
-      const {listControl} = ctx;
+      const {query: listParams} = ctx;
+      const listControl = makeListControl(listParams, 1000);
       const roomIDToProperties = await this.#roomRecordLock.withRead(() =>
         roomProperties(this.#durableStorage, listControl.getOptions()),
       );
@@ -236,6 +240,7 @@ export class BaseAuthDO implements DurableObject {
   // to ensure users are logged out.
   #closeRoom = post()
     .with(roomID())
+    .with(noInputParams())
     .handleAPIResult(ctx =>
       this.#roomRecordLock.withWrite(() =>
         closeRoom(ctx.lc, this.#durableStorage, ctx.roomID),
@@ -246,6 +251,7 @@ export class BaseAuthDO implements DurableObject {
   // will return 410 Gone for all requests.
   #deleteRoom = post()
     .with(roomID())
+    .with(noInputParams())
     .handleAPIResult((ctx, req) =>
       this.#roomRecordLock.withWrite(() =>
         deleteRoom(ctx.lc, this.#roomDO, this.#durableStorage, ctx.roomID, req),
@@ -738,6 +744,7 @@ export class BaseAuthDO implements DurableObject {
 
   #authInvalidateForRoom = post()
     .with(roomID())
+    .with(noInputParams())
     .handleAPIResult((ctx, req) => {
       const {lc, roomID} = ctx;
       lc.debug?.(`authInvalidateForRoom ${roomID} waiting for lock.`);
@@ -780,6 +787,7 @@ export class BaseAuthDO implements DurableObject {
 
   #authInvalidateForUser = post()
     .with(userID())
+    .with(noInputParams())
     .handleAPIResult((ctx, req) => {
       const {lc, userID} = ctx;
       lc.debug?.(`authInvalidateForUser waiting for lock.`);
@@ -806,27 +814,29 @@ export class BaseAuthDO implements DurableObject {
       });
     });
 
-  #authInvalidateAll = post().handleAPIResult((ctx, req) => {
-    const {lc} = ctx;
-    lc.debug?.(`authInvalidateAll waiting for lock.`);
-    return this.#authLock.withWrite(async () => {
-      lc.debug?.(`authInvalidateAll acquired lock.`);
-      // The request to the Room DOs must be completed inside the write lock
-      // to avoid races with connect requests.
-      const response = await this.#forwardInvalidateRequest(
-        lc,
-        'authInvalidateAll',
-        req,
-        '',
-        // Use async generator because the full list of connections
-        // may exceed the DO's memory limits.
-        getConnections(this.#durableStorage),
-      );
-      if (!response.ok) {
-        throw new ErrorWithForwardedResponse(response);
-      }
+  #authInvalidateAll = post()
+    .with(noInputParams())
+    .handleAPIResult((ctx, req) => {
+      const {lc} = ctx;
+      lc.debug?.(`authInvalidateAll waiting for lock.`);
+      return this.#authLock.withWrite(async () => {
+        lc.debug?.(`authInvalidateAll acquired lock.`);
+        // The request to the Room DOs must be completed inside the write lock
+        // to avoid races with connect requests.
+        const response = await this.#forwardInvalidateRequest(
+          lc,
+          'authInvalidateAll',
+          req,
+          '',
+          // Use async generator because the full list of connections
+          // may exceed the DO's memory limits.
+          getConnections(this.#durableStorage),
+        );
+        if (!response.ok) {
+          throw new ErrorWithForwardedResponse(response);
+        }
+      });
     });
-  });
 
   async alarm(): Promise<void> {
     const lc = this.#lc.withContext('handler', 'alarm');
