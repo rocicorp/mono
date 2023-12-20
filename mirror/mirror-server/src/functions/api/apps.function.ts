@@ -4,10 +4,16 @@ import type {Firestore} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
 import type {RequiredPermission} from 'mirror-schema/src/app-key.js';
+import type {App} from 'mirror-schema/src/app.js';
 import {DEFAULT_ENV, envDataConverter, envPath} from 'mirror-schema/src/env.js';
+import {SemVer, lt} from 'semver';
 import {API_KEY_HEADER_NAME} from 'shared/src/api/headers.js';
 import {APIErrorCode, makeAPIError} from 'shared/src/api/responses.js';
-import {SecretsCache, type SecretsClient} from '../../secrets/index.js';
+import {
+  Secrets,
+  SecretsCache,
+  type SecretsClient,
+} from '../../secrets/index.js';
 import {REFLECT_API_KEY, decryptSecrets} from '../app/secrets.js';
 import {
   appOrKeyAuthorization,
@@ -17,6 +23,8 @@ import {
 import {getDataOrFail} from '../validators/data.js';
 import {contextValidator} from '../validators/https.js';
 import {makeWorkerPath, parseReadParams, parseWriteParams} from './paths.js';
+
+const MIN_VERSION = new SemVer('0.38.202312200000');
 
 export const apps =
   (firestore: Firestore, auth: Auth, secretsClient: SecretsClient) =>
@@ -37,25 +45,14 @@ export const apps =
         .validate(appOrKeyAuthorization(firestore, permission))
         .process();
 
-      const hostname = app.runningDeployment?.spec.hostname;
-      if (!hostname) {
-        throw new HttpsError(
-          'failed-precondition',
-          `App "${app.name}" is not running`,
-        );
-      }
-      const env = await firestore
-        .doc(envPath(appID, DEFAULT_ENV))
-        .withConverter(envDataConverter)
-        .get();
-      const {secrets: envSecrets} = getDataOrFail(
-        env,
-        'internal',
-        `Missing environment for App ${app.name}`,
+      const hostname = checkDeployment(app);
+
+      const reflectAPIKey = await getReflectAPIKey(
+        firestore,
+        secrets,
+        appID,
+        app,
       );
-      const appSecrets = await decryptSecrets(secrets, {
-        [REFLECT_API_KEY]: envSecrets[REFLECT_API_KEY],
-      });
 
       const queryStart = request.originalUrl.indexOf('?');
       const query =
@@ -65,10 +62,10 @@ export const apps =
       logger.info(`Proxying request: ${request.method} ${workerURL}`);
       const resp = await fetch(`https://${hostname}${workerPath}`, {
         method: request.method,
-        headers: {[API_KEY_HEADER_NAME]: appSecrets[REFLECT_API_KEY]},
+        headers: {[API_KEY_HEADER_NAME]: reflectAPIKey},
         body: request.rawBody,
       });
-      // TODO: There's probably a stream/pipe the response bytes back.
+      // TODO: There's probably a way to stream/pipe the response bytes back.
       const body = await resp.text();
       logger.debug(`Response ${resp.status} (${body.length} bytes)`, body);
       response
@@ -126,4 +123,45 @@ function parsePath(
   // There's no FunctionsErrorCode for 405: Unsupported Method, so we hack it.
   error.httpErrorCode.status = 405;
   throw error;
+}
+
+function checkDeployment(app: App): string {
+  const {name, runningDeployment} = app;
+  if (!runningDeployment) {
+    throw new HttpsError('failed-precondition', `App "${name}" is not running`);
+  }
+  const {
+    spec: {hostname, serverVersion},
+  } = runningDeployment;
+
+  const version = new SemVer(serverVersion);
+  if (lt(version, MIN_VERSION)) {
+    throw new HttpsError(
+      'failed-precondition',
+      `App "${name}" is at server version ${serverVersion} which does not support the REST API.\n` +
+        'Update the app to @rocicorp/reflect@latest and re-publish.',
+    );
+  }
+  return hostname;
+}
+
+async function getReflectAPIKey(
+  firestore: Firestore,
+  secrets: Secrets,
+  appID: string,
+  app: App,
+): Promise<string> {
+  const env = await firestore
+    .doc(envPath(appID, DEFAULT_ENV))
+    .withConverter(envDataConverter)
+    .get();
+  const {secrets: envSecrets} = getDataOrFail(
+    env,
+    'internal',
+    `Missing environment for App ${app.name}`,
+  );
+  const appSecrets = await decryptSecrets(secrets, {
+    [REFLECT_API_KEY]: envSecrets[REFLECT_API_KEY],
+  });
+  return appSecrets[REFLECT_API_KEY];
 }

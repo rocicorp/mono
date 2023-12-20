@@ -88,6 +88,7 @@ describe('api-apps', () => {
   beforeAll(async () => {
     const runningDeployment = dummyDeployment('1234');
     runningDeployment.spec.hostname = 'my-app-team.reflect-server.bonk';
+    runningDeployment.spec.serverVersion = '0.38.202312200000';
     await Promise.all([
       setApp(firestore, APP_ID, {name: 'za app', runningDeployment}),
       firestore
@@ -230,6 +231,30 @@ describe('api-apps', () => {
       },
     },
     {
+      name: 'app version does not support REST API',
+      method: 'GET',
+      path: `/v1/apps/${APP_ID}/rooms/yo`,
+      token: APP_KEY_VALUE,
+      result: {
+        error: {
+          code: 400,
+          resource: 'request',
+          message:
+            'App "za app" is at server version 0.38.202312190000 which does not support the REST API.\n' +
+            'Update the app to @rocicorp/reflect@latest and re-publish.',
+        },
+        result: null,
+      },
+      pretest: async () => {
+        await firestore
+          .doc(appPath(APP_ID))
+          .set(
+            {runningDeployment: {spec: {serverVersion: '0.38.202312190000'}}},
+            {mergeFields: ['runningDeployment.spec.serverVersion']},
+          );
+      },
+    },
+    {
       name: 'app not published yet',
       method: 'GET',
       path: `/v1/apps/${APP_ID}/rooms/yo`,
@@ -296,6 +321,7 @@ describe('api-apps', () => {
         ]);
         expect(fetchMocker.bodys()).toEqual([Buffer.from('buffer body ^_^')]);
       } else {
+        expect(res.json).toBeCalled;
         expect(res.json).toBeCalledWith(c.result);
       }
     }),
