@@ -563,10 +563,15 @@ describe('reportMetrics', () => {
       },
     }));
 
-    const testRequest = new Request(reportMetricsURL.toString(), {
-      method: tc.method,
-      body: tc.method === 'post' && tc.body ? JSON.stringify(tc.body) : null,
-    });
+    const testRequest = new Request(
+      // The client appends common query parameters to the URL (which are ignored on the server)
+      reportMetricsURL.toString() +
+        '?clientID=foo&clientGroupID=bar&roomID=bax&userID=bonk&requestID=12345',
+      {
+        method: tc.method,
+        body: tc.method === 'post' && tc.body ? JSON.stringify(tc.body) : null,
+      },
+    );
     if (worker.fetch === undefined) {
       throw new Error('Expect fetch to be defined');
     }

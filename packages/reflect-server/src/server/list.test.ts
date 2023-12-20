@@ -1,6 +1,9 @@
 import {describe, expect, test} from '@jest/globals';
+import {must} from 'shared/src/must.js';
 import type {ListOptions} from '../storage/storage.js';
-import {makeListControl, makeListResults} from './list.js';
+import {createSilentLogContext} from '../util/test-utils.js';
+import {listParamsSchema, makeListControl, makeListResults} from './list.js';
+import {queryParams} from './router.js';
 
 describe('parse ListOptions', () => {
   type Case = {
@@ -64,22 +67,30 @@ describe('parse ListOptions', () => {
       queryString: 'maxResults=200&startKey=foo&startAfterKey=bar',
       maxMaxResults: 100,
       error:
-        '400: Cannot specify both startKey and startAfterKey. Got object (request)',
+        '400: Query string error. Cannot specify both startKey and startAfterKey. Got object (request)',
     },
     {
       name: 'bad maxResults',
       queryString: 'maxResults=not-a-number',
       maxMaxResults: 100,
       error:
-        '400: Expected valid number at maxResults. Got "not-a-number" (request)',
+        '400: Query string error. Expected valid number at maxResults. Got "not-a-number" (request)',
     },
   ];
 
   cases.forEach(c => {
-    test(c.name, () => {
-      let listControl;
+    test(c.name, async () => {
       try {
-        listControl = makeListControl(c.queryString, c.maxMaxResults);
+        const url = `https://roci.dev/room/monkey?${c.queryString}`;
+        const ctx = {
+          parsedURL: must(new URLPattern().exec(url)),
+          lc: createSilentLogContext(),
+        };
+        const {query: listParams} = await queryParams(listParamsSchema)(
+          ctx,
+          new Request(url),
+        );
+        const listControl = makeListControl(listParams, c.maxMaxResults);
         expect(c.listOptions).not.toBeUndefined;
         expect(listControl.getOptions()).toEqual(c.listOptions);
       } catch (e) {

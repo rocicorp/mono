@@ -6,7 +6,10 @@ import {
 } from 'mirror-protocol/src/vars.js';
 import {DEFAULT_ENV, envDataConverter, envPath} from 'mirror-schema/src/env.js';
 import {SERVER_VARIABLE_PREFIX} from 'mirror-schema/src/vars.js';
-import {appAuthorization, userAuthorization} from '../validators/auth.js';
+import {
+  appOrKeyAuthorization,
+  userOrKeyAuthorization,
+} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
@@ -15,8 +18,8 @@ import {deploymentAtOrAfter} from './shared.js';
 export const deleteFn = (firestore: Firestore) =>
   validateSchema(deleteVarsRequestSchema, deleteVarsResponseSchema)
     .validate(userAgentVersion())
-    .validate(userAuthorization())
-    .validate(appAuthorization(firestore))
+    .validate(userOrKeyAuthorization())
+    .validate(appOrKeyAuthorization(firestore, 'env:modify'))
     .handle(async (request, context) => {
       const {appID, vars} = request;
       const {

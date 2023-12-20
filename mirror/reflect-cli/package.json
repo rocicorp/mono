@@ -19,7 +19,7 @@
     "@rocicorp/resolver": "^1.0.1",
     "@rocicorp/logger": "^5.2.1",
     "esbuild": "^0.19.4",
-    "miniflare": "^3.20231030.2"
+    "miniflare": "^3.20231030.4"
   },
   "devDependencies": {
     "@google-cloud/firestore": "^6.6.1",

@@ -11,6 +11,7 @@ const permissionValue = v.boolean().default(false);
 
 export const permissionsSchema = v.object({
   'app:publish': permissionValue,
+  'env:modify': permissionValue,
   'rooms:read': permissionValue,
   'rooms:create': permissionValue,
   'rooms:close': permissionValue,
@@ -22,6 +23,7 @@ export type Permissions = v.Infer<typeof permissionsSchema>;
 
 export const ALL_PERMISSIONS: {[perm in keyof Permissions]: string} = {
   'app:publish': 'authorizes `npx reflect publish`',
+  'env:modify': 'authorizes `npx reflect env set|delete`',
   'rooms:read': 'REST API coming soon',
   'rooms:create': 'REST API coming soon',
   'rooms:close': 'REST API coming soon',
