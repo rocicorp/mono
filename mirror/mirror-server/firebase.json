@@ -17,7 +17,7 @@
     "redirects": [
       {
         "source": "*",
-        "destination": "https://hello.reflect.net/",
+        "destination": "https://hello.reflect.net/rest/overview",
         "type": 302
       }
     ],
