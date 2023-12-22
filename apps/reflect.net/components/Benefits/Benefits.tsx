@@ -87,13 +87,17 @@ export function Benefits() {
           <p className={styles.benefitDescription}>
             Reflect offers{' '}
             <a href="https://hello.reflect.net/how/text">first-class support</a>{' '}
-            for the industry standard Yjs text editing library. All popular
-            editors including TipTap, Monaco, and ProseMirror are supported out
-            of the box. And when run on Reflect, Yjs gets superpowers like{' '}
-            <a href="https://x.com/aboodman/status/1737201350939955430?s=20">
+            for text via the industry standard Yjs text editing library. All
+            popular editors including TipTap, Monaco, and ProseMirror are
+            supported out of the box.
+          </p>
+          <p className={styles.benefitDescription}>
+            And with server-authority, Yjs gains a superpower:{' '}
+            <a href="https://x.com/aboodman/status/1737201350939955430">
               server-side validation
             </a>{' '}
-            and automatic client-side persistence.
+            that allows you to easily implement length limits, content
+            filtering, and more.
           </p>
         </div>
       </div>
