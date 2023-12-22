@@ -13,6 +13,8 @@ import * as apiFunctions from './functions/api/index.js';
 import * as appFunctions from './functions/app/index.js';
 import * as envFunctions from './functions/env/index.js';
 import * as errorFunctions from './functions/error/index.js';
+import {INTERNAL_FUNCTION_SECRET_NAME} from './functions/internal/auth.js';
+import {InternalFunctionCallerFactory} from './functions/internal/caller.js';
 import * as appKeyFunctions from './functions/keys/index.js';
 import * as metricsFunctions from './functions/metrics/index.js';
 import * as roomFunctions from './functions/room/index.js';
@@ -21,6 +23,10 @@ import * as teamFunctions from './functions/team/index.js';
 import * as tokenFunctions from './functions/token/index.js';
 import * as userFunctions from './functions/user/index.js';
 import * as varsFunctions from './functions/vars/index.js';
+import {
+  updateKeyRequestSchema,
+  updateKeyResponseSchema,
+} from './keys/updates.js';
 import {SecretsClientImpl} from './secrets/index.js';
 
 // Initializes firestore et al. (e.g. for subsequent calls to getFirestore())
@@ -33,6 +39,14 @@ setGlobalOptions({
 // Cache the secrets manager client to amortize connection establishment time.
 // https://cloud.google.com/functions/docs/samples/functions-tips-gcp-apis#functions_tips_gcp_apis-nodejs
 const secrets = new SecretsClientImpl();
+
+const internalFunctions = new InternalFunctionCallerFactory();
+
+const keyUpdater = internalFunctions.createCaller(
+  'appKeys-update',
+  updateKeyRequestSchema,
+  updateKeyResponseSchema,
+);
 
 // Per https://firebase.google.com/docs/functions/manage-functions
 // functions should be deployed in groups of 10 or fewer
@@ -54,8 +68,8 @@ export const error = {
 
 export const api = {
   apps: https.onRequest(
-    baseHttpsOptions,
-    apiFunctions.apps(getFirestore(), getAuth(), secrets),
+    {...baseHttpsOptions, secrets: [INTERNAL_FUNCTION_SECRET_NAME]},
+    apiFunctions.apps(getFirestore(), getAuth(), secrets, keyUpdater),
   ),
 };
 
@@ -68,8 +82,14 @@ export const app = {
     {
       ...baseHttpsOptions,
       memory: '512MiB',
+      secrets: [INTERNAL_FUNCTION_SECRET_NAME],
     },
-    appFunctions.publish(getFirestore(), getStorage(), modulesBucketName),
+    appFunctions.publish(
+      getFirestore(),
+      getStorage(),
+      keyUpdater,
+      modulesBucketName,
+    ),
   ),
   deploy: appFunctions.deploy(getFirestore(), getStorage(), secrets),
   autoDeploy: appFunctions.autoDeploy(getFirestore()),
@@ -94,6 +114,14 @@ export const appKeys = {
   delete: https.onCall(
     baseHttpsOptions,
     appKeyFunctions.delete(getFirestore()),
+  ),
+  update: https.onCall(
+    {
+      ...baseHttpsOptions,
+      secrets: [INTERNAL_FUNCTION_SECRET_NAME],
+      concurrency: 128,
+    },
+    appKeyFunctions.update(getFirestore()),
   ),
 };
 
@@ -132,13 +160,16 @@ export const token = {
 };
 
 export const vars = {
-  delete: https.onCall(baseHttpsOptions, varsFunctions.delete(getFirestore())),
+  delete: https.onCall(
+    {...baseHttpsOptions, secrets: [INTERNAL_FUNCTION_SECRET_NAME]},
+    varsFunctions.delete(getFirestore(), keyUpdater),
+  ),
   list: https.onCall(
     baseHttpsOptions,
     varsFunctions.list(getFirestore(), secrets),
   ),
   set: https.onCall(
-    baseHttpsOptions,
-    varsFunctions.set(getFirestore(), secrets),
+    {...baseHttpsOptions, secrets: [INTERNAL_FUNCTION_SECRET_NAME]},
+    varsFunctions.set(getFirestore(), secrets, keyUpdater),
   ),
 };

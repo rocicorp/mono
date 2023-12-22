@@ -1,4 +1,4 @@
-import {afterEach, describe, expect, test} from '@jest/globals';
+import {afterEach, describe, expect, jest, test} from '@jest/globals';
 import {initializeApp} from 'firebase-admin/app';
 import {Timestamp, getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
@@ -23,6 +23,8 @@ import {setApp, setUser} from 'mirror-schema/src/test-helpers.js';
 import type {User} from 'mirror-schema/src/user.js';
 import {userPath} from 'mirror-schema/src/user.js';
 import * as v from 'shared/src/valita.js';
+import {mockKeyUpdater} from '../../keys/test-helpers.js';
+import type {UpdateKeyCaller} from '../../keys/updates.js';
 import {
   appAuthorization,
   appOrKeyAuthorization,
@@ -53,12 +55,15 @@ describe('auth-validators', () => {
   const APP_ID = 'auth-app-id';
   const APP_KEY_NAME = 'auth-app-key';
 
+  const keyUpdater = mockKeyUpdater();
+
   afterEach(async () => {
     const batch = firestore.batch();
     batch.delete(firestore.doc(userPath(USER_ID)));
     batch.delete(firestore.doc(appPath(APP_ID)));
     batch.delete(firestore.doc(appKeyPath(APP_ID, APP_KEY_NAME)));
     await batch.commit();
+    jest.clearAllMocks();
   });
 
   function testFunction(
@@ -82,7 +87,13 @@ describe('auth-validators', () => {
   ): Callable<TestRequest, TestResponse> {
     return validateSchema(testRequestSchema, testResponseSchema)
       .validate(userOrKeyAuthorization())
-      .validate(appOrKeyAuthorization(firestore, keyPermission))
+      .validate(
+        appOrKeyAuthorization(
+          firestore,
+          keyUpdater as UpdateKeyCaller,
+          keyPermission,
+        ),
+      )
       .handle(
         // eslint-disable-next-line require-await
         async (testRequest, context) => ({
@@ -411,10 +422,7 @@ describe('auth-validators', () => {
       expect(response).toEqual(c.response);
 
       if (c.response) {
-        const key = await firestore
-          .doc(`apps/${APP_ID}/keys/${APP_KEY_NAME}`)
-          .get();
-        expect(key?.data()?.lastUsed).toBeInstanceOf(Timestamp);
+        expect(keyUpdater.call).toHaveBeenCalledTimes(1);
       }
     });
   }

@@ -1,11 +1,7 @@
 import type {Auth, DecodedIdToken} from 'firebase-admin/auth';
-import {
-  FieldValue,
-  QueryDocumentSnapshot,
-  type Firestore,
-} from 'firebase-admin/firestore';
+import type {Firestore, QueryDocumentSnapshot} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
-import {HttpsError} from 'firebase-functions/v2/https';
+import {CallableRequest, HttpsError} from 'firebase-functions/v2/https';
 import type {BaseAppRequest} from 'mirror-protocol/src/app.js';
 import type {BaseRequest} from 'mirror-protocol/src/base.js';
 import {
@@ -18,6 +14,11 @@ import type {Role} from 'mirror-schema/src/membership.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
+import type {UpdateKeyCaller} from '../../keys/updates.js';
+import {
+  INTERNAL_FUNCTION_HEADER,
+  INTERNAL_FUNCTION_SECRET,
+} from '../internal/auth.js';
 import {verifyKey} from '../keys/verify.js';
 import type {HttpsRequestContext} from './https.js';
 import type {
@@ -50,8 +51,8 @@ export function authorizationHeader<
 ): RequestContextValidator<Request, Context, Context & AuthContext> {
   return async (_, context) => {
     const authorization =
-      context.request.headers['Authorization'] ??
-      context.request.headers['authorization'];
+      context.request.headers['authorization'] ??
+      context.request.headers['Authorization'];
     if (typeof authorization !== 'string') {
       throw new HttpsError('unauthenticated', 'Invalid Authorization header');
     }
@@ -80,6 +81,21 @@ export function authorizationHeader<
       }
     }
     throw new HttpsError('unauthenticated', 'Unsupported Authorization scheme');
+  };
+}
+
+export function internalFunctionHeader<
+  Request,
+  Context extends CallableRequest,
+>() {
+  return (_: Request, ctx: Context) => {
+    const secretValue =
+      ctx.rawRequest.headers[INTERNAL_FUNCTION_HEADER.toLowerCase()] ??
+      ctx.rawRequest.headers[INTERNAL_FUNCTION_HEADER];
+    if (secretValue !== INTERNAL_FUNCTION_SECRET.value()) {
+      throw new HttpsError('permission-denied', 'Unauthorized caller');
+    }
+    return ctx;
   };
 }
 
@@ -195,6 +211,7 @@ export function appOrKeyAuthorization<
   Context extends UserOrKeyAuthorization & Pick<AuthContext, 'appKeyDoc'>,
 >(
   firestore: Firestore,
+  keyUpdater: UpdateKeyCaller,
   keyPermission: RequiredPermission,
   allowedRoles: Role[] = ['admin', 'member'],
 ): RequestContextValidator<Request, Context, Context & AppAuthorization> {
@@ -251,13 +268,22 @@ export function appOrKeyAuthorization<
         logger.info(
           `Key "${keyPath}" authorized with ${keyPermission} permission`,
         );
-        txn.update(appKeyDocRef, {lastUsed: FieldValue.serverTimestamp()});
         return {app};
       },
-      // TODO(darick): Add a mechanism for initiating writes (like the `lastUsed` timestamp update)
-      // in the background so as not to delay request processing. Then this Transaction can be readOnly.
-      // {readOnly: true},
+      {readOnly: true},
     );
+    // Fire-and-forget a call to `appKeys-update`, which is an internal function that
+    // uses delayed batching to coalesce writes to the same key, and moves the Firestore
+    // write transaction out of the critical path.
+    void keyUpdater
+      .call({
+        appID,
+        keyName: appKeyDocRef.id,
+        lastUsed: Date.now(),
+      })
+      .catch(e =>
+        logger.error(`Error sending update for ${appKeyDocRef.path}`, e),
+      );
     return {...context, ...authorization};
   };
 }

@@ -21,6 +21,8 @@ import {
 } from 'mirror-schema/src/test-helpers.js';
 import {userPath} from 'mirror-schema/src/user.js';
 import {watch} from 'mirror-schema/src/watch.js';
+import {mockKeyUpdater} from '../../keys/test-helpers.js';
+import type {UpdateKeyCaller} from '../../keys/updates.js';
 import {TestSecrets} from '../../secrets/test-utils.js';
 import {dummyDeployment} from '../../test-helpers.js';
 import {deleteFn} from './delete.function.js';
@@ -80,7 +82,9 @@ describe('vars-delete', () => {
   });
 
   function callDelete(...vars: string[]) {
-    const deleteFunction = https.onCall(deleteFn(firestore));
+    const deleteFunction = https.onCall(
+      deleteFn(firestore, mockKeyUpdater() as UpdateKeyCaller),
+    );
     return deleteFunction.run({
       data: {
         requester: {

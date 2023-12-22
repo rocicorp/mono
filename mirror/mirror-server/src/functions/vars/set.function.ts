@@ -21,6 +21,7 @@ import {
   variableIsWithinSizeLimit,
   variableNameIsWithinSizeLimit,
 } from 'mirror-schema/src/vars.js';
+import type {UpdateKeyCaller} from '../../keys/updates.js';
 import {SecretsCache, SecretsClient} from '../../secrets/index.js';
 import {
   appOrKeyAuthorization,
@@ -31,11 +32,15 @@ import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
 import {deploymentAtOrAfter} from './shared.js';
 
-export const set = (firestore: Firestore, secretsClient: SecretsClient) =>
+export const set = (
+  firestore: Firestore,
+  secretsClient: SecretsClient,
+  keyUpdater: UpdateKeyCaller,
+) =>
   validateSchema(setVarsRequestSchema, setVarsResponseSchema)
     .validate(userAgentVersion())
     .validate(userOrKeyAuthorization())
-    .validate(appOrKeyAuthorization(firestore, 'env:modify'))
+    .validate(appOrKeyAuthorization(firestore, keyUpdater, 'env:modify'))
     .handle(async (request, context) => {
       const secrets = new SecretsCache(secretsClient);
       const {appID, vars} = request;

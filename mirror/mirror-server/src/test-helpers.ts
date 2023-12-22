@@ -2,6 +2,7 @@ import {Timestamp} from 'firebase-admin/firestore';
 import {declaredParams} from 'firebase-functions/params';
 import type {Deployment} from 'mirror-schema/src/deployment.js';
 import assert from 'node:assert';
+import {INTERNAL_FUNCTION_SECRET_NAME} from './functions/internal/auth.js';
 
 assert(process.env.NODE_ENV === 'test', 'Only import this file in tests');
 
@@ -10,6 +11,7 @@ export function mockFunctionParamsAndSecrets() {
     switch (p.name) {
       case 'DATADOG_LOGS_API_KEY':
       case 'DATADOG_METRICS_API_KEY':
+      case INTERNAL_FUNCTION_SECRET_NAME:
         process.env[p.name] = `default-${p.name}`;
         break;
     }

@@ -28,6 +28,8 @@ import {
 import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {SemVer} from 'semver';
+import {mockKeyUpdater} from '../../keys/test-helpers.js';
+import type {UpdateKeyCaller} from '../../keys/updates.js';
 import type {DistTags} from '../validators/version.js';
 import {publish} from './publish.function.js';
 
@@ -234,7 +236,13 @@ describe('publish', () => {
         },
       } as unknown as Storage;
       const publishFunction = https.onCall(
-        publish(firestore, storage, 'modulez', c.testDistTags ?? {}),
+        publish(
+          firestore,
+          storage,
+          mockKeyUpdater() as UpdateKeyCaller,
+          'modulez',
+          c.testDistTags ?? {},
+        ),
       );
 
       const requesterID = c.uid ?? USER_ID;

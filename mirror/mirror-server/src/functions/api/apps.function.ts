@@ -9,6 +9,7 @@ import {DEFAULT_ENV, envDataConverter, envPath} from 'mirror-schema/src/env.js';
 import {SemVer, lt} from 'semver';
 import {API_KEY_HEADER_NAME} from 'shared/src/api/headers.js';
 import {APIErrorCode, makeAPIError} from 'shared/src/api/responses.js';
+import type {UpdateKeyCaller} from '../../keys/updates.js';
 import {
   Secrets,
   SecretsCache,
@@ -27,7 +28,12 @@ import {makeWorkerPath, parseReadParams, parseWriteParams} from './paths.js';
 const MIN_VERSION = new SemVer('0.38.202312200000');
 
 export const apps =
-  (firestore: Firestore, auth: Auth, secretsClient: SecretsClient) =>
+  (
+    firestore: Firestore,
+    auth: Auth,
+    secretsClient: SecretsClient,
+    keyUpdater: UpdateKeyCaller,
+  ) =>
   async (request: Request, response: Response) => {
     try {
       const secrets = new SecretsCache(secretsClient);
@@ -42,7 +48,7 @@ export const apps =
       const {app} = await contextValidator({appID}, {request})
         .validate(authorizationHeader(firestore, auth))
         .validate(authenticatedAsRequester())
-        .validate(appOrKeyAuthorization(firestore, permission))
+        .validate(appOrKeyAuthorization(firestore, keyUpdater, permission))
         .process();
 
       const hostname = checkDeployment(app);

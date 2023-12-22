@@ -20,3 +20,7 @@ export const baseHttpsOptions: HttpsOptions = {
   // TODO(darick): Convert to a limited list.
   cors: true,
 };
+
+export function cloudFunctionURL(functionName: string): string {
+  return `https://us-central1-${projectId}.cloudfunctions.net/${functionName}`;
+}
