@@ -22,13 +22,13 @@ export const permissionsSchema = v.object({
 export type Permissions = v.Infer<typeof permissionsSchema>;
 
 export const ALL_PERMISSIONS: {[perm in keyof Permissions]: string} = {
-  'app:publish': 'authorizes `npx reflect publish`',
-  'env:modify': 'authorizes `npx reflect env set|delete`',
-  'rooms:read': 'REST API coming soon',
-  'rooms:create': 'REST API coming soon',
-  'rooms:close': 'REST API coming soon',
-  'rooms:delete': 'REST API coming soon',
-  'connections:invalidate': 'REST API coming soon',
+  'app:publish': '`npx reflect publish`',
+  'env:modify': '`npx reflect env set|delete`',
+  'rooms:read': 'https://hello.reflect.net/rest/rooms',
+  'rooms:create': 'https://hello.reflect.net/rest/rooms#create-room',
+  'rooms:close': 'https://hello.reflect.net/rest/rooms#close-room',
+  'rooms:delete': 'https://hello.reflect.net/rest/rooms#delete-room',
+  'connections:invalidate': 'https://hello.reflect.net/rest/connections',
 } as const;
 
 export function defaultPermissions(): Permissions {
