@@ -300,7 +300,9 @@ describe('api-apps', () => {
       const url = `https://api.reflect-server.net${c.path}${c.query ?? ''}`;
       const request = {
         method: c.method,
-        path: c.path,
+        path: c.path.includes('?')
+          ? c.path.substring(0, c.path.indexOf('?'))
+          : c.path,
         url,
         originalUrl: url,
         headers: {authorization: `Basic ${c.token}`},

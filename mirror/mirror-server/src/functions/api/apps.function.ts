@@ -60,7 +60,7 @@ export const apps =
       const workerURL = `https://${hostname}${workerPath}${query}`;
 
       logger.info(`Proxying request: ${request.method} ${workerURL}`);
-      const resp = await fetch(`https://${hostname}${workerPath}`, {
+      const resp = await fetch(workerURL, {
         method: request.method,
         headers: {[API_KEY_HEADER_NAME]: reflectAPIKey},
         body: request.rawBody,
