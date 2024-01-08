@@ -30,18 +30,21 @@ export function assertDeepFrozen<V>(v: V): asserts v is Readonly<V> {
  *
  * This is controlled by `skipFreeze` which is true in release mode.
  */
-export function deepFreeze(v: undefined): undefined;
 export function deepFreeze(v: Cookie): FrozenCookie;
 export function deepFreeze(v: ReadonlyJSONValue): FrozenJSONValue;
-export function deepFreeze(
-  v: ReadonlyJSONValue | undefined,
-): FrozenJSONValue | undefined;
-export function deepFreeze(
-  v: ReadonlyJSONValue | undefined,
-): FrozenJSONValue | undefined {
+export function deepFreeze(v: ReadonlyJSONValue): FrozenJSONValue {
   if (skipFreeze) {
-    return v as FrozenJSONValue | undefined;
+    return v as FrozenJSONValue;
   }
 
   return frozenJSON.deepFreeze(v);
+}
+
+type P = Parameters<typeof deepFreeze>[0];
+type R = ReturnType<typeof deepFreeze>;
+export function deepFreezeAllowUndefined(v: P | undefined): R | undefined {
+  if (v === undefined) {
+    return undefined;
+  }
+  return deepFreeze(v);
 }

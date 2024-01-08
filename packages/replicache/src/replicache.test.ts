@@ -2494,3 +2494,41 @@ test('Invalid name', () => {
       }),
   ).to.throw(TypeError);
 });
+
+test('set with undefined key', async () => {
+  let error;
+  let value: unknown;
+  const rep = await replicacheForTesting('set-with-undefined-key', {
+    mutators: {
+      async set(tx: WriteTransaction) {
+        try {
+          // @ts-expect-error unknown is not a valid key
+          await tx.set('key', value);
+        } catch (e) {
+          error = e;
+        }
+      },
+    },
+  });
+
+  // undefined is a bit special. We allow it as an argument to mutators
+  expect(error).undefined;
+  value = undefined;
+  await rep.mutate.set();
+  expect(error).instanceOf(TypeError);
+
+  error = undefined;
+  value = {a: undefined};
+  await rep.mutate.set();
+  expect(error).undefined;
+
+  value = [1, undefined, 2];
+  await rep.mutate.set();
+  expect(error).instanceOf(TypeError);
+
+  error = undefined;
+  // eslint-disable-next-line no-sparse-arrays
+  value = [1, , 2];
+  await rep.mutate.set();
+  expect(error).instanceOf(TypeError);
+});
