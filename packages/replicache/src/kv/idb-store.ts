@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import {assertNotNull} from 'shared/src/asserts.js';
-import {deepFreeze, FrozenJSONValue} from '../json.js';
+import {deepFreezeAllowUndefined, FrozenJSONValue} from '../json.js';
 import {promiseVoid} from '../resolved-promises.js';
 import type {Read, Store, Write} from './store.js';
 import {deleteSentinel, WriteImplBase} from './write-impl-base.js';
@@ -112,7 +112,7 @@ class ReadImpl implements Read {
   get(key: string): Promise<FrozenJSONValue | undefined> {
     return new Promise((resolve, reject) => {
       const req = objectStore(this.#tx).get(key);
-      req.onsuccess = () => resolve(deepFreeze(req.result));
+      req.onsuccess = () => resolve(deepFreezeAllowUndefined(req.result));
       req.onerror = () => reject(req.error);
     });
   }

@@ -34,24 +34,20 @@ const deepFrozenObjects = new WeakSet<object>();
  *
  * This is controlled by `skipFreeze` which is true in release mode.
  */
-export function deepFreeze(v: undefined): undefined;
 export function deepFreeze(v: ReadonlyJSONValue): FrozenJSONValue;
-export function deepFreeze(
-  v: ReadonlyJSONValue | undefined,
-): FrozenJSONValue | undefined;
-export function deepFreeze(
-  v: ReadonlyJSONValue | undefined,
-): FrozenJSONValue | undefined {
-  if (v === undefined) {
-    return undefined;
-  }
-
+export function deepFreeze(v: ReadonlyJSONValue): FrozenJSONValue;
+export function deepFreeze(v: ReadonlyJSONValue): FrozenJSONValue {
   deepFreezeInternal(v, []);
   return v as FrozenJSONValue;
 }
 
-function deepFreezeInternal(v: ReadonlyJSONValue, seen: object[]): void {
+function deepFreezeInternal(
+  v: ReadonlyJSONValue | undefined,
+  seen: object[],
+): void {
   switch (typeof v) {
+    case 'undefined':
+      throw new TypeError('Unexpected value undefined');
     case 'boolean':
     case 'number':
     case 'string':

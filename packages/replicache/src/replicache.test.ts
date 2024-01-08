@@ -2494,3 +2494,38 @@ test('Invalid name', () => {
       }),
   ).to.throw(TypeError);
 });
+
+test('set with undefined key', async () => {
+  // We use a local variable instead of a mutator argument because the args gets
+  // frozen and we do not want to test the freezing of the args but the behavior
+  // of undefined passed into set.
+  let value: unknown;
+  const rep = await replicacheForTesting('set-with-undefined-key', {
+    mutators: {
+      async set(tx: WriteTransaction) {
+        // @ts-expect-error unknown is not a valid key
+        await tx.set('key', value);
+      },
+    },
+  });
+
+  const set = async (v: unknown) => {
+    try {
+      value = v;
+      await rep.mutate.set();
+    } catch (e) {
+      return e;
+    }
+    return undefined;
+  };
+
+  expect(await set(undefined)).instanceOf(TypeError);
+
+  // no error
+  expect(await set({a: undefined})).equal(undefined);
+
+  expect(await set([1, undefined, 2])).instanceOf(TypeError);
+
+  // eslint-disable-next-line no-sparse-arrays
+  expect(await set([1, , 2])).instanceOf(TypeError);
+});
