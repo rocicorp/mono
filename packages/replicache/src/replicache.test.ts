@@ -2496,39 +2496,36 @@ test('Invalid name', () => {
 });
 
 test('set with undefined key', async () => {
-  let error;
+  // We use a local variable instead of a mutator argument because the args gets
+  // frozen and we do not want to test the freezing of the args but the behavior
+  // of undefined passed into set.
   let value: unknown;
   const rep = await replicacheForTesting('set-with-undefined-key', {
     mutators: {
       async set(tx: WriteTransaction) {
-        try {
-          // @ts-expect-error unknown is not a valid key
-          await tx.set('key', value);
-        } catch (e) {
-          error = e;
-        }
+        // @ts-expect-error unknown is not a valid key
+        await tx.set('key', value);
       },
     },
   });
 
-  // undefined is a bit special. We allow it as an argument to mutators
-  expect(error).undefined;
-  value = undefined;
-  await rep.mutate.set();
-  expect(error).instanceOf(TypeError);
+  const set = async (v: unknown) => {
+    try {
+      value = v;
+      await rep.mutate.set();
+    } catch (e) {
+      return e;
+    }
+    return undefined;
+  };
 
-  error = undefined;
-  value = {a: undefined};
-  await rep.mutate.set();
-  expect(error).undefined;
+  expect(await set(undefined)).instanceOf(TypeError);
 
-  value = [1, undefined, 2];
-  await rep.mutate.set();
-  expect(error).instanceOf(TypeError);
+  // no error
+  expect(await set({a: undefined})).equal(undefined);
 
-  error = undefined;
+  expect(await set([1, undefined, 2])).instanceOf(TypeError);
+
   // eslint-disable-next-line no-sparse-arrays
-  value = [1, , 2];
-  await rep.mutate.set();
-  expect(error).instanceOf(TypeError);
+  expect(await set([1, , 2])).instanceOf(TypeError);
 });

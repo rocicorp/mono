@@ -38,7 +38,6 @@ export function getSizeOfValue(value: unknown): number {
       }
       return SIZE_TAG + SIZE_DOUBLE;
     case 'boolean':
-    case 'undefined':
       return SIZE_TAG;
     case 'object':
       if (value === null) {
