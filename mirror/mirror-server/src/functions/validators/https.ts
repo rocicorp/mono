@@ -1,7 +1,7 @@
 import type {Response} from 'express';
+import {logger} from 'firebase-functions';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
 import type {MaybePromise, RequestContextValidator} from './types.js';
-import {logger} from 'firebase-functions';
 
 type OnRequest = (request: Request, response: Response) => MaybePromise<void>;
 
@@ -75,4 +75,53 @@ export class OnRequestBuilder<Request, Context> {
       }
     };
   }
+}
+
+/**
+ * A variant of the onRequestBuilder used by the API gateway to
+ * reuse the auth validation logic used by the other functions.
+ */
+class ContextValidator<Request, InputContext, OutputContext> {
+  readonly #request: Request;
+  readonly #input: InputContext;
+  readonly #requestValidator: RequestContextValidator<
+    Request,
+    InputContext,
+    OutputContext
+  >;
+
+  constructor(
+    request: Request,
+    input: InputContext,
+    requestValidator: RequestContextValidator<
+      Request,
+      InputContext,
+      OutputContext
+    >,
+  ) {
+    this.#request = request;
+    this.#input = input;
+    this.#requestValidator = requestValidator;
+  }
+
+  validate<NewContext>(
+    nextValidator: RequestContextValidator<Request, OutputContext, NewContext>,
+  ): ContextValidator<Request, InputContext, NewContext> {
+    return new ContextValidator(
+      this.#request,
+      this.#input,
+      async (request, ctx) => {
+        const context = await this.#requestValidator(request, ctx);
+        return nextValidator(request, context);
+      },
+    );
+  }
+
+  process(): MaybePromise<OutputContext> {
+    return this.#requestValidator(this.#request, this.#input);
+  }
+}
+
+export function contextValidator<Request, Context>(req: Request, ctx: Context) {
+  return new ContextValidator(req, ctx, (_, ctx) => ctx);
 }

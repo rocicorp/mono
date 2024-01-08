@@ -1,21 +1,20 @@
 import {describe, expect, test} from '@jest/globals';
+import type {APIErrorInfo} from 'shared/src/api/responses.js';
 import {assert} from 'shared/src/asserts.js';
 import type {JSONObject, ReadonlyJSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
 import * as valita from 'shared/src/valita.js';
-import type {ListOptions} from '../storage/storage.js';
 import {createSilentLogContext} from '../util/test-utils.js';
-import type {APIErrorInfo} from './api-response.js';
 import {HttpError} from './errors.js';
 import {
   BaseContext,
   Handler,
   Router,
-  body,
+  bodyOnly,
   checkAuthAPIKey,
   get,
-  listControl,
   post,
+  queryParams,
   requiredAuthAPIKey,
   roomID,
   urlVersion,
@@ -488,9 +487,101 @@ test('withUserID', async () => {
   }
 });
 
+test('withQueryParams', async () => {
+  type Case = {
+    schema: valita.Type<unknown>;
+    parsedURL: URLPatternURLPatternResult;
+    expected?: {result: {text: string; status: number}};
+    error?: APIErrorInfo;
+  };
+
+  const fooSchema = valita.object({foo: valita.string()});
+
+  const cases: Case[] = [
+    {
+      schema: valita.null(),
+      parsedURL: must(new URLPattern().exec('https://roci.dev/room/monkey')),
+      expected: {result: {text: 'query: null', status: 200}},
+    },
+    {
+      schema: valita.null(),
+      parsedURL: must(new URLPattern().exec('https://roci.dev/room/monkey?')),
+      expected: {result: {text: 'query: null', status: 200}},
+    },
+    {
+      schema: valita.null(),
+      parsedURL: must(
+        new URLPattern().exec('https://roci.dev/room/monkey?foo'),
+      ),
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Unexpected query parameters',
+      },
+    },
+    {
+      schema: fooSchema,
+      parsedURL: must(new URLPattern().exec('https://roci.dev/room/monkey?')),
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Query string error. Missing property foo',
+      },
+    },
+    {
+      schema: fooSchema,
+      parsedURL: must(
+        new URLPattern().exec('https://roci.dev/room/monkey?foo=bar'),
+      ),
+      expected: {result: {text: 'query: {"foo":"bar"}', status: 200}},
+    },
+    {
+      schema: fooSchema,
+      parsedURL: must(
+        new URLPattern().exec('https://roci.dev/room/monkey?foo=bar&baz=bonk'),
+      ),
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Query string error. Unexpected property baz',
+      },
+    },
+  ];
+
+  for (const c of cases) {
+    const handler = get()
+      .with(queryParams(c.schema))
+      .handle(
+        ctx =>
+          new Response(`query: ${JSON.stringify(ctx.query)}`, {status: 200}),
+      );
+    const url = `https://roci.dev/`;
+    const request = new Request(url);
+    const ctx = {
+      parsedURL: c.parsedURL,
+      lc: createSilentLogContext(),
+    };
+
+    const response = await handler(ctx, request);
+    if (response.status === 200) {
+      const result = {
+        result: {status: response.status, text: await response.text()},
+      };
+      expect(result).toEqual(c.expected);
+    } else {
+      expect(response.status).toBe(c.error?.code);
+      expect(await response.json()).toEqual({
+        result: null,
+        error: c.error,
+      });
+    }
+  }
+});
+
 test('withBody', async () => {
   type Case = {
     body: JSONObject | undefined | string;
+    queryString?: string;
     expected?: {text: string; status: number};
     error?: APIErrorInfo;
   };
@@ -499,6 +590,15 @@ test('withBody', async () => {
     {
       body: {userID: 'foo'},
       expected: {text: 'userID:foo', status: 200},
+    },
+    {
+      body: {userID: 'foo'},
+      queryString: '?not=expected',
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Unexpected query parameters',
+      },
     },
     {
       body: {badUserId: 'bar'},
@@ -536,7 +636,7 @@ test('withBody', async () => {
 
   const userIdSchema = valita.object({userID: valita.string()});
   const handler = post()
-    .with(body(userIdSchema))
+    .with(bodyOnly(userIdSchema))
     .handle(ctx => {
       const {body} = ctx;
       const {userID} = body;
@@ -544,7 +644,7 @@ test('withBody', async () => {
     });
 
   for (const c of cases) {
-    const url = `https://roci.dev/`;
+    const url = `https://roci.dev/${c.queryString ?? ''}`;
     const request = new Request(url, {
       method: 'post',
       body: JSON.stringify(c.body),
@@ -552,7 +652,7 @@ test('withBody', async () => {
     const ctx = {
       lc: createSilentLogContext(),
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      parsedURL: new URLPattern().exec()!,
+      parsedURL: new URLPattern().exec(url)!,
     };
 
     const response = await handler(ctx, request);
@@ -570,85 +670,83 @@ test('withBody', async () => {
   }
 });
 
-describe('withListControl', () => {
+describe('withNoBody', () => {
   type Case = {
-    queryString: string;
-    listOptions?: ListOptions;
+    body: string | null | undefined;
+    expected?: {text: string; status: number};
     error?: APIErrorInfo;
   };
 
   const cases: Case[] = [
     {
-      queryString: '',
-      listOptions: {start: {key: '', exclusive: false}, limit: 101},
+      body: undefined,
+      expected: {text: 'ok', status: 200},
     },
     {
-      queryString: 'startKey=foo',
-      listOptions: {start: {key: 'foo', exclusive: false}, limit: 101},
+      body: null,
+      expected: {text: 'ok', status: 200},
     },
     {
-      queryString: 'startAfterKey=bar',
-      listOptions: {start: {key: 'bar', exclusive: true}, limit: 101},
+      body: '', // As per the fetch spec, an empty body string is equivalent to no body.
+      expected: {text: 'ok', status: 200},
     },
     {
-      queryString: 'maxResults=10',
-      listOptions: {start: {key: '', exclusive: false}, limit: 11},
-    },
-    {
-      queryString: 'maxResults=90',
-      listOptions: {start: {key: '', exclusive: false}, limit: 91},
-    },
-    {
-      queryString: 'maxResults=200',
-      listOptions: {start: {key: '', exclusive: false}, limit: 101},
-    },
-    {
-      queryString: 'maxResults=90&startKey=bonk',
-      listOptions: {start: {key: 'bonk', exclusive: false}, limit: 91},
-    },
-    {
-      queryString: 'maxResults=not-a-number',
+      body: ' ',
       error: {
         code: 400,
         resource: 'request',
-        message: 'Expected valid number at maxResults. Got "not-a-number"',
+        message: 'Unexpected request body.',
       },
     },
     {
-      queryString: 'startKey=and&startAfterKey=not-allowed',
+      body: '{}',
       error: {
         code: 400,
         resource: 'request',
-        message: 'Cannot specify both startKey and startAfterKey. Got object',
+        message: 'Unexpected request body.',
+      },
+    },
+    {
+      body: '{"newParam":"should be rejected"}',
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Unexpected request body.',
       },
     },
   ];
 
-  const handler = get()
-    .with(listControl(100))
-    .handleJSON(ctx => {
-      const {listControl} = ctx;
-      return listControl.getOptions();
+  const handler = post()
+    .with(bodyOnly(valita.null()))
+    .handle(ctx => {
+      const {body} = ctx;
+      expect(body).toBe(null);
+      return new Response(`ok`, {status: 200});
     });
 
   for (const c of cases) {
-    test(c.queryString, async () => {
-      const url = `https://roci.dev/?${c.queryString}`;
-      const request = new Request(url);
+    test(`"${String(c.body)}"`, async () => {
+      const url = `https://roci.dev/`;
+      const request = new Request(url, {
+        method: 'post',
+        body: c.body ?? null,
+      });
       const ctx = {
         lc: createSilentLogContext(),
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        parsedURL: new URLPattern().exec(url)!,
+        parsedURL: new URLPattern().exec()!,
       };
 
       const response = await handler(ctx, request);
       if (response.status === 200) {
-        expect(await response.json()).toEqual(c.listOptions);
+        expect({status: response.status, text: await response.text()}).toEqual(
+          c.expected,
+        );
       } else {
         expect(response.status).toBe(c.error?.code);
         expect(await response.json()).toEqual({
-          error: c.error,
           result: null,
+          error: c.error,
         });
       }
     });
@@ -691,6 +789,7 @@ test('handleJSON', async () => {
     };
     const response = await handler(ctx, request);
     expect(await response.json()).toEqual(c.expected);
+    expect(response.headers.get('content-type')).toBe('application/json');
   }
 });
 

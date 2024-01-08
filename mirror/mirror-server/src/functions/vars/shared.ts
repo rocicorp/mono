@@ -40,7 +40,7 @@ export async function deploymentAtOrAfter(
       logger.warn(`Timed out waiting for redeployment of ${appID}`);
       throw new HttpsError(
         'deadline-exceeded',
-        'Timed out deploying changes to Server Variables. Please try again later.',
+        'Timed out deploying changes to environment variables. Please try again later.',
       );
     } else {
       throw e;

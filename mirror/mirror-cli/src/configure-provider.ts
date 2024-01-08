@@ -1,18 +1,18 @@
-import {confirm, password, select} from './inquirer.js';
-import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {Accounts} from 'cloudflare-api/src/accounts.js';
 import {CustomHostnames} from 'cloudflare-api/src/custom-hostnames.js';
 import {DNSRecords} from 'cloudflare-api/src/dns-records.js';
-import {Zones, Zone} from 'cloudflare-api/src/zones.js';
+import {Zone, Zones} from 'cloudflare-api/src/zones.js';
+import {getFirestore} from 'firebase-admin/firestore';
 import {
-  providerPath,
   providerDataConverter,
+  providerPath,
   type Provider,
 } from 'mirror-schema/src/provider.js';
 import {assert} from 'shared/src/asserts.js';
-import {storeSecret} from './secrets.js';
-import {getFirestore} from 'firebase-admin/firestore';
 import {getProviderConfig} from './cf.js';
+import {confirm, password, select} from './inquirer.js';
+import {storeSecret} from './secrets.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function configureProviderOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -61,11 +61,6 @@ export async function configureProviderHandler(
     new CustomHostnames({apiToken, zoneID}),
     new DNSRecords({apiToken, zoneID}),
   );
-
-  // TODO: Verify that the account can perform the necessary functions
-  // by creating (and cleaning up) temporary records, hostnames, etc.
-  // - Creating a Custom Hostname with metadata
-  // - Creating a DNS Record with tags
 
   const provider: Provider = {
     accountID: account.id,

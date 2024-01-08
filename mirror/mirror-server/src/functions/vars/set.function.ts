@@ -22,7 +22,10 @@ import {
   variableNameIsWithinSizeLimit,
 } from 'mirror-schema/src/vars.js';
 import {SecretsCache, SecretsClient} from '../../secrets/index.js';
-import {appAuthorization, userAuthorization} from '../validators/auth.js';
+import {
+  appOrKeyAuthorization,
+  userOrKeyAuthorization,
+} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
@@ -31,8 +34,8 @@ import {deploymentAtOrAfter} from './shared.js';
 export const set = (firestore: Firestore, secretsClient: SecretsClient) =>
   validateSchema(setVarsRequestSchema, setVarsResponseSchema)
     .validate(userAgentVersion())
-    .validate(userAuthorization())
-    .validate(appAuthorization(firestore))
+    .validate(userOrKeyAuthorization())
+    .validate(appOrKeyAuthorization(firestore, 'env:modify'))
     .handle(async (request, context) => {
       const secrets = new SecretsCache(secretsClient);
       const {appID, vars} = request;
@@ -106,7 +109,7 @@ export const set = (firestore: Firestore, secretsClient: SecretsClient) =>
         ) {
           throw new HttpsError(
             'resource-exhausted',
-            `Up to ${MAX_SERVER_VARIABLES} Server Variables are allowed.\n` +
+            `Up to ${MAX_SERVER_VARIABLES} environment variables are allowed.\n` +
               `Use 'npx @rocicorp/reflect vars delete' to remove unused variables.`,
           );
         }

@@ -9,6 +9,7 @@ import {
   modulesBucketName,
   serviceAccountId,
 } from './config/index.js';
+import * as apiFunctions from './functions/api/index.js';
 import * as appFunctions from './functions/app/index.js';
 import * as envFunctions from './functions/env/index.js';
 import * as errorFunctions from './functions/error/index.js';
@@ -49,6 +50,13 @@ export const user = {
 
 export const error = {
   report: https.onCall(baseHttpsOptions, errorFunctions.report()),
+};
+
+export const api = {
+  apps: https.onRequest(
+    baseHttpsOptions,
+    apiFunctions.apps(getFirestore(), getAuth(), secrets),
+  ),
 };
 
 export const app = {

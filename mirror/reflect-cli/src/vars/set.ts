@@ -3,12 +3,12 @@ import {setVars} from 'mirror-protocol/src/vars.js';
 import {ensureAppInstantiated} from '../app-config.js';
 import {setDevVars} from '../dev/vars.js';
 import {UserError} from '../error.js';
+import type {AuthContext} from '../handler.js';
 import {password} from '../inquirer.js';
 import {makeRequester} from '../requester.js';
 import {watchDeployment} from '../watch-deployment.js';
 import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
-import type {AuthContext} from '../handler.js';
 
 export function setVarsOptions(yargs: CommonVarsYargsArgv) {
   return yargs.positional('keysAndValues', {
@@ -49,7 +49,7 @@ export async function setVarsHandler(
 
   if (dev) {
     setDevVars(vars);
-    console.log('Set Dev Variables');
+    console.log('Set dev variables');
     return;
   }
 
@@ -58,9 +58,9 @@ export async function setVarsHandler(
   const data = {requester: makeRequester(userID), appID, vars};
   const {deploymentPath} = await setVars(data);
   if (!deploymentPath) {
-    console.log('Stored encrypted Server Variables');
+    console.log('Stored encrypted environment variables');
   } else {
-    console.log('Deploying updated Server Variables');
+    console.log('Deploying updated environment variables');
     await watchDeployment(getFirestore(), deploymentPath, 'Deployed');
   }
 }

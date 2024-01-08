@@ -11,6 +11,25 @@
       "ui-debug.log"
     ]
   },
+  "hosting": {
+    "public": "hosting",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "redirects": [
+      {
+        "source": "*",
+        "destination": "https://hello.reflect.net/rest/overview",
+        "type": 302
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/v1/apps/**",
+        "function": {
+          "functionId": "api-apps"
+        }
+      }
+    ]
+  },
   "emulators": {
     "hub": {
       "port": 4400

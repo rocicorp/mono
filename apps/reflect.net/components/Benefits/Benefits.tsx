@@ -58,7 +58,7 @@ export function Benefits() {
           </p>
           <p className={styles.benefitDescription}>
             Reflect uses a more powerful technique known as{' '}
-            <a href="https://en.wikipedia.org/wiki/Client-side_prediction">
+            <a href="https://rocicorp.dev/blog/ready-player-two">
               Server Reconciliation
             </a>
             . <strong>Your mutation code runs server-side</strong> and is
@@ -83,12 +83,21 @@ export function Benefits() {
           />
         </div>
         <div className={styles.benefitInfoContainer}>
-          <h3 className={styles.benefitTitle}>
-            First-Class Text (coming soon!)
-          </h3>
+          <h3 className={styles.benefitTitle}>First-Class Text</h3>
           <p className={styles.benefitDescription}>
-            Your may have heard that multiplayer text is hard. No worries.
-            Reflect has built-in, high-quality text support.
+            Reflect offers{' '}
+            <a href="https://hello.reflect.net/how/text">first-class support</a>{' '}
+            for text via the industry standard Yjs text editing library. All
+            popular editors including TipTap, Monaco, and ProseMirror are
+            supported out of the box.
+          </p>
+          <p className={styles.benefitDescription}>
+            And with server-authority, Yjs gains a superpower:{' '}
+            <a href="https://x.com/aboodman/status/1737201350939955430">
+              server-side validation
+            </a>{' '}
+            that allows you to easily implement length limits, content
+            filtering, and more.
           </p>
         </div>
       </div>
@@ -126,7 +135,7 @@ export function Benefits() {
         <div className={styles.benefitInfoContainer}>
           <h3 className={styles.benefitTitle}>Local-First</h3>
           <p className={styles.benefitDescription}>
-            Set <code className="inline">clientPersistence: true</code>
+            Set <code className="inline">kvStore: &apos;idb&apos;</code>
             &nbsp; and data is also stored on the client, providing instant
             (“local-first”) startup, navigation, and offline support.
           </p>
