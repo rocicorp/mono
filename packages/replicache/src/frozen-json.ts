@@ -1,5 +1,8 @@
 import {throwInvalidType} from 'shared/src/asserts.js';
+import {skipAssertJSONValue} from 'shared/src/config.js';
 import {hasOwn} from 'shared/src/has-own.js';
+import {skipFreeze, skipFrozenAsserts} from './config.js';
+import type {Cookie, FrozenCookie} from './cookies.js';
 import type {ReadonlyJSONObject, ReadonlyJSONValue} from './json.js';
 
 declare const frozenJSONTag: unique symbol;
@@ -34,9 +37,13 @@ const deepFrozenObjects = new WeakSet<object>();
  *
  * This is controlled by `skipFreeze` which is true in release mode.
  */
-export function deepFreeze(v: ReadonlyJSONValue): FrozenJSONValue;
+export function deepFreeze(v: Cookie): FrozenCookie;
 export function deepFreeze(v: ReadonlyJSONValue): FrozenJSONValue;
 export function deepFreeze(v: ReadonlyJSONValue): FrozenJSONValue {
+  if (skipFreeze) {
+    return v as FrozenJSONValue;
+  }
+
   deepFreezeInternal(v, []);
   return v as FrozenJSONValue;
 }
@@ -104,6 +111,10 @@ function deepFreezeObject(v: ReadonlyJSONObject, seen: object[]): void {
 export function assertFrozenJSONValue(
   v: unknown,
 ): asserts v is FrozenJSONValue {
+  if (skipFrozenAsserts || skipAssertJSONValue) {
+    return;
+  }
+
   switch (typeof v) {
     case 'boolean':
     case 'number':
@@ -122,6 +133,10 @@ export function assertFrozenJSONValue(
 }
 
 export function assertDeepFrozen<V>(v: V): asserts v is Readonly<V> {
+  if (skipFrozenAsserts) {
+    return;
+  }
+
   if (!isDeepFrozen(v, [])) {
     throw new Error('Expected frozen object');
   }
@@ -184,4 +199,13 @@ export function isDeepFrozen(v: unknown, seen: object[]): boolean {
     default:
       throwInvalidType(v, 'JSON value');
   }
+}
+
+export type P = Parameters<typeof deepFreeze>[0];
+export type R = ReturnType<typeof deepFreeze>;
+export function deepFreezeAllowUndefined(v: P | undefined): R | undefined {
+  if (v === undefined) {
+    return undefined;
+  }
+  return deepFreeze(v) as R;
 }

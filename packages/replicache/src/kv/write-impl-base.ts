@@ -1,9 +1,5 @@
-import {
-  FrozenJSONValue,
-  ReadonlyJSONValue,
-  deepFreeze,
-  deepFreezeAllowUndefined,
-} from '../json.js';
+import {deepFreezeAllowUndefined} from '../frozen-json.js';
+import {FrozenJSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
 import {promiseFalse, promiseTrue, promiseVoid} from '../resolved-promises.js';
 import type {Read} from './store.js';
 
