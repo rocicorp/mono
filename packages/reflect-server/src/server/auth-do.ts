@@ -198,7 +198,7 @@ export class BaseAuthDO implements DurableObject {
     .handleAPIResult(async ctx => {
       const {roomID} = ctx;
       const roomProperties = await this.#roomRecordLock.withRead(() =>
-        roomPropertiesByRoomID(this.#durableStorage, ctx.roomID),
+        roomPropertiesByRoomID(this.#durableStorage, roomID),
       );
       if (roomProperties === undefined) {
         throw roomNotFoundAPIError(roomID);
@@ -597,11 +597,14 @@ export class BaseAuthDO implements DurableObject {
         // Find the room's objectID so we can connect to it. Do this BEFORE
         // writing the connection record, in case it doesn't exist or is
         // closed/deleted.
-        let roomRecord = await timed(lc.debug, 'looking up roomRecord', () =>
-          this.#roomRecordLock.withRead(
-            // Check if room already exists.
-            () => roomRecordByRoomID(this.#durableStorage, roomID),
-          ),
+        let roomRecord: RoomRecord | Error | undefined = await timed(
+          lc.debug,
+          'looking up roomRecord',
+          () =>
+            this.#roomRecordLock.withRead(
+              // Check if room already exists.
+              () => roomRecordByRoomID(this.#durableStorage, roomID),
+            ),
         );
 
         if (!roomRecord) {
@@ -623,8 +626,7 @@ export class BaseAuthDO implements DurableObject {
                   jurisdiction,
                 );
               } catch (e) {
-                // Errors are thrown as APIErrors.
-                return undefined;
+                return e instanceof Error ? e : new Error(String(e));
               }
               return roomRecordByRoomID(this.#durableStorage, roomID);
             }),
@@ -638,8 +640,17 @@ export class BaseAuthDO implements DurableObject {
         // message to the client, then close the connection. We trust it will be
         // logged by onSocketError in the client.
 
-        if (roomRecord === undefined || roomRecord.status !== RoomStatus.Open) {
-          const kind = roomRecord ? 'RoomClosed' : 'RoomNotFound';
+        if (
+          roomRecord === undefined ||
+          roomRecord instanceof Error ||
+          roomRecord.status !== RoomStatus.Open
+        ) {
+          // Note: We currently treat all Errors as "RoomClosed", which is not always correct;
+          // an Error may have arisen due to a concurrent room creation, resulting in
+          // a 409 conflict, or due to a runtime error while connecting to the room DO.
+          //
+          // TODO: Update the ErrorKind to better represent these scenarios.
+          const kind = roomRecord === undefined ? 'RoomNotFound' : 'RoomClosed';
           return createWSAndCloseWithError(lc, request, kind, roomID);
         }
 

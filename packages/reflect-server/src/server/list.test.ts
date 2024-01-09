@@ -9,7 +9,7 @@ describe('parse ListOptions', () => {
   type Case = {
     name: string;
     queryString: string;
-    maxMaxResults: number;
+    maxResultsLimit: number;
     listOptions?: ListOptions;
     error?: string;
   };
@@ -17,7 +17,7 @@ describe('parse ListOptions', () => {
     {
       name: 'default options (no query)',
       queryString: '',
-      maxMaxResults: 100,
+      maxResultsLimit: 100,
       listOptions: {
         start: {
           key: '',
@@ -29,7 +29,7 @@ describe('parse ListOptions', () => {
     {
       name: 'start key',
       queryString: 'startKey=foo',
-      maxMaxResults: 100,
+      maxResultsLimit: 100,
       listOptions: {
         start: {
           key: 'foo',
@@ -41,7 +41,7 @@ describe('parse ListOptions', () => {
     {
       name: 'start after key, max results',
       queryString: 'maxResults=90&startAfterKey=bar',
-      maxMaxResults: 100,
+      maxResultsLimit: 100,
       listOptions: {
         start: {
           key: 'bar',
@@ -53,7 +53,7 @@ describe('parse ListOptions', () => {
     {
       name: 'limit max results',
       queryString: 'maxResults=200',
-      maxMaxResults: 100,
+      maxResultsLimit: 100,
       listOptions: {
         start: {
           key: '',
@@ -63,16 +63,28 @@ describe('parse ListOptions', () => {
       },
     },
     {
+      name: 'maxResults non-integer',
+      queryString: 'maxResults=10.2',
+      maxResultsLimit: 100,
+      listOptions: {
+        start: {
+          key: '',
+          exclusive: false,
+        },
+        limit: 11,
+      },
+    },
+    {
       name: 'disallow both startKey and startAfterKey',
       queryString: 'maxResults=200&startKey=foo&startAfterKey=bar',
-      maxMaxResults: 100,
+      maxResultsLimit: 100,
       error:
         '400: Query string error. Cannot specify both startKey and startAfterKey. Got object (request)',
     },
     {
       name: 'bad maxResults',
       queryString: 'maxResults=not-a-number',
-      maxMaxResults: 100,
+      maxResultsLimit: 100,
       error:
         '400: Query string error. Expected valid number at maxResults. Got "not-a-number" (request)',
     },
@@ -90,7 +102,7 @@ describe('parse ListOptions', () => {
           ctx,
           new Request(url),
         );
-        const listControl = makeListControl(listParams, c.maxMaxResults);
+        const listControl = makeListControl(listParams, c.maxResultsLimit);
         expect(c.listOptions).not.toBeUndefined;
         expect(listControl.getOptions()).toEqual(c.listOptions);
       } catch (e) {

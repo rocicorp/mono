@@ -2297,7 +2297,6 @@ describe('tail', () => {
         ),
       );
 
-      // const response = await authDO.fetch(testRequest);
       expect(response.status).toEqual(101);
       expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
         testApiToken,
