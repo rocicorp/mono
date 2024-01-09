@@ -1,4 +1,4 @@
-import {deepEqual, ReadonlyJSONValue} from '../json.js';
+import {deepEqual, ReadonlyJSONValue} from 'shared/src/json.js';
 
 export type Splice = [at: number, removed: number, added: number, from: number];
 

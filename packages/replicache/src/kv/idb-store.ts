@@ -1,7 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import {assertNotNull} from 'shared/src/asserts.js';
-import {deepFreezeAllowUndefined} from '../frozen-json.js';
-import type {FrozenJSONValue} from '../json.js';
+import {FrozenJSONValue, deepFreezeAllowUndefined} from '../frozen-json.js';
 import {promiseVoid} from '../resolved-promises.js';
 import type {Read, Store, Write} from './store.js';
 import {WriteImplBase, deleteSentinel} from './write-impl-base.js';

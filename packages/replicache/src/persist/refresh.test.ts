@@ -1,6 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
+import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
 import type {Entry} from '../btree/node.js';
 import {BTreeWrite} from '../btree/write.js';
 import type {Cookie} from '../cookies.js';
@@ -19,8 +20,8 @@ import {
 } from '../db/commit.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
+import {deepFreeze} from '../frozen-json.js';
 import {Hash, assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
-import {JSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
 import {
   ClientGroupMap,
   setClientGroup,
