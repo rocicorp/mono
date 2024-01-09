@@ -238,15 +238,19 @@ export async function deleteRoom(
   lc.debug?.(`deleted room ${JSON.stringify(roomRecord)}`);
 }
 
-const roomIDRegex = /^[A-Za-z0-9_\-/]+$/;
+const roomIDRegex = /^[A-Za-z0-9_/-]+$/;
+
+export function isValidRoomID(roomID: string) {
+  return roomIDRegex.test(roomID);
+}
+
+export function makeInvalidRoomIDMessage(roomID: string) {
+  return `Invalid roomID "${roomID}" (must match ${roomIDRegex})`;
+}
 
 function validateRoomID(roomID: string) {
-  if (!roomIDRegex.test(roomID)) {
-    throw new APIError(
-      400,
-      'rooms',
-      `Invalid roomID "${roomID}" (must match ${roomIDRegex})`,
-    );
+  if (!isValidRoomID(roomID)) {
+    throw new APIError(400, 'rooms', makeInvalidRoomIDMessage(roomID));
   }
 }
 
