@@ -14,12 +14,16 @@ export class APIError extends ErrorWithResponse {
   }
 
   response(): Response {
-    const apiResponse = makeAPIError(this.#info);
-    return new Response(JSON.stringify(apiResponse), {
-      status: this.#info.code,
-      headers: {'Content-Type': 'application/json'},
-    });
+    return makeAPIErrorResponse(this.#info);
   }
+}
+
+export function makeAPIErrorResponse(info: APIErrorInfo): Response {
+  const apiResponse = makeAPIError(info);
+  return new Response(JSON.stringify(apiResponse), {
+    status: info.code,
+    headers: {'Content-Type': 'application/json'},
+  });
 }
 
 export function roomNotFoundAPIError(roomID: string): APIError {

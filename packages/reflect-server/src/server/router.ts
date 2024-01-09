@@ -5,7 +5,7 @@ import {makeAPIResponse} from 'shared/src/api/responses.js';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
-import {APIError} from './api-errors.js';
+import {APIError, makeAPIErrorResponse} from './api-errors.js';
 import {HttpError, makeErrorResponse} from './errors.js';
 
 /**
@@ -76,11 +76,17 @@ export class Router<InitialContext extends BaseContext = BaseContext> {
 
     const {lc} = context;
     lc.debug?.(`no matching route for ${request.url}`);
-    return new APIError(404, 'request', 'Unknown or invalid URL').response();
+    return makeAPIErrorResponse({
+      code: 404,
+      resource: 'request',
+      message: 'Unknown or invalid URL',
+    });
   }
 }
 
-function requireMethod<Context extends BaseContext>(method: string) {
+function requireMethod<Context extends BaseContext>(
+  method: string,
+): RequestValidator<Context> {
   return (ctx: Context, request: Request) => {
     if (request.method !== method) {
       throw new APIError(405, 'request', 'unsupported method');
@@ -99,7 +105,7 @@ export function post<Context extends BaseContext = BaseContext>() {
 
 export function requiredAuthAPIKey<Context extends BaseContext>(
   required: (context: Context) => string,
-) {
+): RequestValidator<Context> {
   return (ctx: Context, req: Request) => {
     checkAuthAPIKey(required(ctx), req);
     return ctx;
@@ -127,7 +133,10 @@ export function checkAuthAPIKey(
   }
 }
 
-export function roomID<Context extends BaseContext>() {
+export function roomID<Context extends BaseContext>(): RequestValidator<
+  Context,
+  Context & {roomID: string}
+> {
   return (ctx: Context) => {
     const {roomID} = ctx.parsedURL.pathname.groups;
     assert(roomID, 'roomID() configured for URL without :roomID group');
@@ -136,7 +145,10 @@ export function roomID<Context extends BaseContext>() {
   };
 }
 
-export function userID<Context extends BaseContext>() {
+export function userID<Context extends BaseContext>(): RequestValidator<
+  Context,
+  Context & {userID: string}
+> {
   return (ctx: Context) => {
     const {userID} = ctx.parsedURL.pathname.groups;
     assert(userID, 'userID() configured for URL without :userID group');
@@ -145,7 +157,10 @@ export function userID<Context extends BaseContext>() {
   };
 }
 
-export function urlVersion<Context extends BaseContext>() {
+export function urlVersion<Context extends BaseContext>(): RequestValidator<
+  Context,
+  Context & {version: number}
+> {
   return (ctx: Context, req: Request) => {
     const {version: versionString} = ctx.parsedURL.pathname.groups;
     if (versionString === undefined) {
@@ -168,13 +183,13 @@ export function urlVersion<Context extends BaseContext>() {
 // Note: queryParams(), bodyOnly(), and noInputParams() are mutually exclusive.
 export function queryParams<T, Context extends BaseContext>(
   schema: valita.Type<T>,
-) {
+): RequestValidator<Context, Context & {query: T; body: null}> {
   return inputParams<T, null, Context>(schema, valita.null());
 }
 
 export function bodyOnly<T, Context extends BaseContext>(
   schema: valita.Type<T>,
-) {
+): RequestValidator<Context, Context & {body: T; query: null}> {
   return inputParams<null, T, Context>(valita.null(), schema);
 }
 
@@ -183,21 +198,27 @@ const arbitraryQueryParamsSchema = valita.record(valita.string());
 // For reportMetrics the client sends common query parameters that the server ignores.
 export function bodyAndArbitraryQueryParams<T, Context extends BaseContext>(
   schema: valita.Type<T>,
-) {
+): RequestValidator<
+  Context,
+  Context & {body: T; query: Record<string, string>}
+> {
   return inputParams<Record<string, string>, T, Context>(
     arbitraryQueryParamsSchema,
     schema,
   );
 }
 
-export function noInputParams<Context extends BaseContext>() {
+export function noInputParams<Context extends BaseContext>(): RequestValidator<
+  Context,
+  Context & {body: null; query: null}
+> {
   return inputParams<null, null, Context>(valita.null(), valita.null());
 }
 
 function inputParams<Q, B, Context extends BaseContext>(
   querySchema: valita.Type<Q>,
   bodySchema: valita.Type<B>,
-) {
+): RequestValidator<Context, Context & {query: Q; body: B}> {
   return async (ctx: Context, req: Request) => {
     const {parsedURL} = ctx;
     const query = validateQuery(parsedURL, querySchema);
