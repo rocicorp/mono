@@ -103,7 +103,9 @@ function deepFreezeObject(v: ReadonlyJSONObject, seen: object[]): void {
   for (const k in v) {
     if (hasOwn(v, k)) {
       const value = v[k];
-      value !== undefined && deepFreezeInternal(value, seen);
+      if (value !== undefined) {
+        deepFreezeInternal(value, seen);
+      }
     }
   }
 }
