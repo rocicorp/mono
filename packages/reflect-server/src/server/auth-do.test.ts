@@ -816,11 +816,15 @@ function createConnectTestFixture(
     headers.set('Sec-WebSocket-Protocol', encodedTestAuth);
   }
   headers.set('Upgrade', 'websocket');
-  let url = `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}&userID=${testUserID}`;
+  const url = new URL('ws://test.roci.dev/api/sync/v1/connect');
+  url.searchParams.set('roomID', testRoomID);
+  url.searchParams.set('clientID', testClientID);
+  url.searchParams.set('userID', testUserID);
+
   if (jurisdiction) {
-    url += `&jurisdiction=${jurisdiction}`;
+    url.searchParams.set('jurisdiction', jurisdiction);
   }
-  const testRequest = new Request(url, {
+  const testRequest = new Request(url.toString(), {
     headers,
   });
 
@@ -844,12 +848,11 @@ function createConnectTestFixture(
       // eslint-disable-next-line require-await
       return new TestDurableObjectStub(id, async (request: Request) => {
         expect(request.headers.get(ROOM_ID_HEADER_NAME)).toEqual(testRoomID);
-        const url = new URL(request.url);
         if (new URLPattern({pathname: CREATE_ROOM_PATH}).test(request.url)) {
           return new Response();
         }
 
-        if (url.pathname === AUTH_CONNECTIONS_PATH) {
+        if (new URL(request.url).pathname === AUTH_CONNECTIONS_PATH) {
           return new Response(
             JSON.stringify(
               connectedClients ?? [
@@ -898,17 +901,16 @@ function createRoomDOThatThrowsIfFetchIsCalled(): DurableObjectNamespace {
 }
 
 describe("connect will implicitly create a room that doesn't exist", () => {
-  const t = (jurisdiction: string | undefined) => {
-    test(`jurisdiction=${jurisdiction}:`, async () => {
+  const t = (jurisdiction: string | undefined, testRoomID: string) => {
+    test(`jurisdiction=${jurisdiction}&roomID=${testRoomID}`, async () => {
       const {
         testAuth,
         testUserID,
-        testRoomID,
         testRequest,
         testRoomDO,
         mocket,
         encodedTestAuth,
-      } = createConnectTestFixture({jurisdiction});
+      } = createConnectTestFixture({jurisdiction, testRoomID});
       const logSink = new TestLogSink();
       const authDO = new TestAuthDO({
         roomDO: testRoomDO,
@@ -931,15 +933,18 @@ describe("connect will implicitly create a room that doesn't exist", () => {
         mocket,
         encodedTestAuth,
         testUserID,
+        testRoomID,
         storage,
         jurisdiction,
       );
     });
   };
 
-  t(undefined);
-  t('eu');
-  t('invalid');
+  t(undefined, 'testRoomID');
+  t(undefined, 'testRoomID/with/slashes');
+  t('eu', 'testRoomID');
+  t('eu', 'testRoomID/with/slashes');
+  t('invalid', 'testRoomID');
 });
 
 test('connect calls authHandler and sends resolved AuthData in header to Room DO', async () => {
@@ -976,6 +981,7 @@ test('connect calls authHandler and sends resolved AuthData in header to Room DO
     mocket,
     encodedTestAuth,
     testUserID,
+    testRoomID,
     storage,
     undefined,
   );
@@ -1016,6 +1022,7 @@ describe('connect with undefined authHandler sends AuthData with url param userI
         mocket,
         encodedTestAuth,
         testUserID,
+        testRoomID,
         storage,
         undefined,
       );
@@ -1106,7 +1113,7 @@ test('connect percent escapes components of the connection key', async () => {
   expect(await storage.list({prefix: 'conn/'})).toEqual(
     new Map([
       [
-        'conn/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F/',
+        'conn/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F%26/',
         {connectTimestamp: testTime},
       ],
     ]),
@@ -1114,7 +1121,7 @@ test('connect percent escapes components of the connection key', async () => {
   expect(await storage.list({prefix: 'conns_by_room/'})).toEqual(
     new Map([
       [
-        'conns_by_room/testRoomID/conn/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F/',
+        'conns_by_room/testRoomID/conn/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F%26/',
         {},
       ],
     ]),
@@ -1781,6 +1788,7 @@ async function connectAndTestThatRoomGotCreated(
   mocket: Mocket,
   encodedTestAuth: string | undefined,
   testUserID: string,
+  testRoomID: string,
   storage: DurableObjectStorage,
   jurisdiction: string | undefined,
 ) {
@@ -1795,18 +1803,21 @@ async function connectAndTestThatRoomGotCreated(
     );
   }
 
+  const encodedTestUserID = encodeURIComponent(testUserID);
+  const encodedTestRoomID = encodeURIComponent(testRoomID);
+
   if (jurisdiction !== 'invalid') {
     expect(response.webSocket).toBe(mocket);
     expect((await storage.list({prefix: 'conn/'})).size).toEqual(1);
     const connectionRecord = (await storage.get(
-      `conn/${testUserID}/testRoomID1/testClientID1/`,
+      `conn/${encodedTestUserID}/${encodedTestRoomID}/testClientID1/`,
     )) as Record<string, unknown> | undefined;
     assert(connectionRecord);
     expect(connectionRecord.connectTimestamp).toEqual(testTime);
     expect(await storage.list({prefix: 'conns_by_room/'})).toEqual(
       new Map([
         [
-          `conns_by_room/testRoomID1/conn/${testUserID}/testRoomID1/testClientID1/`,
+          `conns_by_room/${encodedTestRoomID}/conn/${encodedTestUserID}/${encodedTestRoomID}/testClientID1/`,
           {},
         ],
       ]),
@@ -1814,7 +1825,7 @@ async function connectAndTestThatRoomGotCreated(
   } else {
     expect((await storage.list({prefix: 'conn/'})).size).toEqual(0);
     const connectionRecord = await storage.get(
-      `conn/${testUserID}/testRoomID1/testClientID1/`,
+      `conn/${encodedTestUserID}/${encodedTestRoomID}/testClientID1/`,
     );
     expect(connectionRecord).toBeUndefined();
     expect((await storage.list({prefix: 'conns_by_room/'})).size).toEqual(0);
@@ -2494,12 +2505,18 @@ describe('Alarms', () => {
     connectedClients?: {clientID: string; userID: string}[],
   ) {
     const jurisdiction = undefined;
-    const {testUserID, testRequest, testRoomDO, mocket, encodedTestAuth} =
-      createConnectTestFixture({
-        testAuth,
-        encodedTestAuth: testAuth,
-        connectedClients,
-      });
+    const {
+      testRoomID,
+      testUserID,
+      testRequest,
+      testRoomDO,
+      mocket,
+      encodedTestAuth,
+    } = createConnectTestFixture({
+      testAuth,
+      encodedTestAuth: testAuth,
+      connectedClients,
+    });
     const logSink = new TestLogSink();
     const authDO = new TestAuthDO({
       roomDO: testRoomDO,
@@ -2515,6 +2532,7 @@ describe('Alarms', () => {
       mocket,
       encodedTestAuth,
       testUserID,
+      testRoomID,
       storage,
       jurisdiction,
     );
