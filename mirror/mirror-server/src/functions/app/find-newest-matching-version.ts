@@ -1,4 +1,5 @@
 import type {Firestore} from 'firebase-admin/firestore';
+import {logger} from 'firebase-functions';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {
   SERVER_COLLECTION,
@@ -11,6 +12,7 @@ export async function findNewestMatchingVersion(
   serverVersionRange: Range,
   serverReleaseChannel: string,
 ): Promise<string> {
+  logger.debug(`Querying server versions for ${serverReleaseChannel} channel`);
   const versions = await firestore
     .collection(SERVER_COLLECTION)
     .withConverter(serverDataConverter)
@@ -24,6 +26,9 @@ export async function findNewestMatchingVersion(
   for (const doc of versions.docs) {
     const version = doc.id;
     if (serverVersionRange.test(version)) {
+      logger.log(
+        `Found matching version for ${serverVersionRange}: ${version}`,
+      );
       return version;
     }
   }
