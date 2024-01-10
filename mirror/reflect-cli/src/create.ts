@@ -43,6 +43,7 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
   });
 
   console.log(color.green(`\nYou're all set! 🎉`));
+  console.log(color.cyan(`\nCome chat with us: discord.reflect.net`));
   console.log(color.blue(`\nRun Reflect dev server and UI:`));
   console.log(color.reset(`\ncd ${name} && npm run watch\n`));
 }

@@ -8,7 +8,6 @@ import {createHandler, createOptions} from './create.js';
 import {deleteHandler, deleteOptions} from './delete.js';
 import {devHandler, devOptions} from './dev.js';
 import {authenticateAndHandleWith, handleWith} from './handler.js';
-import {initHandler, initOptions} from './init.js';
 import {createAppKeyHandler, createAppKeyOptions} from './keys/create.js';
 import {deleteAppKeysHandler, deleteAppKeysOptions} from './keys/delete.js';
 import {editAppKeyHandler, editAppKeyOptions} from './keys/edit.js';
@@ -46,13 +45,6 @@ function createCLIParser(argv: string[]) {
     '🛠  Create a basic Reflect project',
     createOptions,
     authenticateAndHandleWith(createHandler).andCleanup(),
-  );
-
-  reflectCLI.command(
-    ['init', 'lfg'],
-    '🚀 Add Reflect and basic mutators to an existing project',
-    initOptions,
-    authenticateAndHandleWith(initHandler).andCleanup(),
   );
 
   reflectCLI.command(
