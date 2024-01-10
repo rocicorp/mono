@@ -5,7 +5,11 @@ import {delEntry, getEntries, getEntry, listEntries, putEntry} from './data.js';
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
 
-const numberToString = valita.number().chain(n => valita.ok(String(n)));
+// Schema that sometimes produces a normalized value.
+const numberToString = valita.union(
+  valita.string(),
+  valita.number().chain(n => valita.ok(String(n))),
+);
 
 test('getEntry', async () => {
   type Case = {
@@ -53,7 +57,9 @@ test('getEntry', async () => {
       expect(error).toBeUndefined();
     } else if (!c.validSchema) {
       expect(result).toBeUndefined();
-      expect(String(error)).toMatch('TypeError: Expected number. Got object');
+      expect(String(error)).toMatch(
+        'TypeError: Expected string or number. Got object',
+      );
     } else {
       expect(result).toEqual('42');
       expect(error).toBeUndefined();
@@ -119,7 +125,7 @@ test('getEntries schema chaining', async () => {
   const storage = await getMiniflareDurableObjectStorage(id);
 
   await putEntry(storage, 'a', 1, {});
-  await putEntry(storage, 'b', 2, {});
+  await putEntry(storage, 'b', '2', {});
   await putEntry(storage, 'c', 3, {});
 
   const entries = await getEntries(
@@ -167,7 +173,7 @@ test('listEntries', async () => {
     await storage.delete('foos/1');
     await storage.delete('foos/2');
     if (c.exists) {
-      await storage.put('foos/1', c.validSchema ? 11 : {});
+      await storage.put('foos/1', c.validSchema ? '11' : {});
       await storage.put('foos/2', c.validSchema ? 22 : {});
     }
 
@@ -187,7 +193,9 @@ test('listEntries', async () => {
       expect(result.size).toEqual(0);
     } else if (!c.validSchema) {
       expect(result).toBeUndefined();
-      expect(String(error)).toMatch('TypeError: Expected number. Got object');
+      expect(String(error)).toMatch(
+        'TypeError: Expected string or number. Got object',
+      );
     } else {
       expect(result).toBeDefined();
       if (result === undefined) {
