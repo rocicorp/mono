@@ -10,21 +10,15 @@ export type APIErrorInfo = {
 };
 
 export type APIResponse<T extends ReadonlyJSONValue> =
-  | {
-      result: T;
-      error: null;
-    }
-  | {
-      result: null;
-      error: APIErrorInfo;
-    };
+  | {result: T}
+  | {error: APIErrorInfo};
 
 export function makeAPIResponse<T extends ReadonlyJSONValue>(
   result: T,
 ): APIResponse<T> {
-  return {result, error: null};
+  return {result};
 }
 
 export function makeAPIError(error: APIErrorInfo): APIResponse<null> {
-  return {result: null, error};
+  return {error};
 }
