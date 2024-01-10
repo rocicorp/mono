@@ -1,13 +1,23 @@
 import {describe, expect, test} from '@jest/globals';
+import type {HttpsError} from 'firebase-functions/v2/https';
 import {makeWorkerPath, parseReadParams, parseWriteParams} from './paths.js';
 
 describe('api-paths', () => {
   type Case = {
     path: string;
-    params: Record<string, string>;
-    workerPath: string;
+    params?: Record<string, string>;
+    workerPath?: string;
+    expectedStatusCode?: number;
   };
   const readCases: Case[] = [
+    {
+      path: '/v1/apps/lm3idfw/rooms/foo:create',
+      expectedStatusCode: 405,
+    },
+    {
+      path: '/v1/apps/lm3idfw',
+      expectedStatusCode: 404,
+    },
     {
       path: '/v1/apps/lm3idfw/rooms',
       params: {
@@ -48,18 +58,34 @@ describe('api-paths', () => {
   readCases.forEach(c => {
     test(`GET ${c.path}`, () => {
       // Sanity check the test data.
-      expect(
-        c.path.indexOf(c.workerPath.substring('/api/v1'.length)),
-      ).toBeGreaterThan(0);
+      if (c.workerPath) {
+        expect(
+          c.path.indexOf(c.workerPath.substring('/api/v1'.length)),
+        ).toBeGreaterThan(0);
+      }
 
-      const params = parseReadParams(c.path);
-      expect(params).toEqual(c.params);
+      try {
+        const params = parseReadParams(c.path);
+        expect(params).toEqual(c.params);
 
-      expect(makeWorkerPath(params)).toBe(c.workerPath);
+        expect(makeWorkerPath(params)).toBe(c.workerPath);
+      } catch (e) {
+        expect((e as HttpsError).httpErrorCode.status).toBe(
+          c.expectedStatusCode,
+        );
+      }
     });
   });
 
   const writeCases: Case[] = [
+    {
+      path: '/v1/apps/lm3idfw',
+      expectedStatusCode: 404,
+    },
+    {
+      path: '/v1/apps/lm3idfw/rooms',
+      expectedStatusCode: 405,
+    },
     {
       path: '/v1/apps/lm3idfw/rooms:foo',
       params: {
@@ -123,14 +149,22 @@ describe('api-paths', () => {
   writeCases.forEach(c => {
     test(`POST ${c.path}`, () => {
       // Sanity check for test data.
-      expect(
-        c.path.indexOf(c.workerPath.substring('/api/v1'.length)),
-      ).toBeGreaterThan(0);
+      if (c.workerPath) {
+        expect(
+          c.path.indexOf(c.workerPath.substring('/api/v1'.length)),
+        ).toBeGreaterThan(0);
+      }
 
-      const params = parseWriteParams(c.path);
-      expect(params).toEqual(c.params);
+      try {
+        const params = parseWriteParams(c.path);
+        expect(params).toEqual(c.params);
 
-      expect(makeWorkerPath(params)).toBe(c.workerPath);
+        expect(makeWorkerPath(params)).toBe(c.workerPath);
+      } catch (e) {
+        expect((e as HttpsError).httpErrorCode.status).toBe(
+          c.expectedStatusCode,
+        );
+      }
     });
   });
 });

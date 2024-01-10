@@ -21,6 +21,10 @@ import {
   userID,
 } from './router.js';
 
+function expectBodyNotUsed(req: Request) {
+  expect(req.bodyUsed).toBe(false);
+}
+
 test('Router', async () => {
   const router = new Router();
   router.register(
@@ -97,13 +101,14 @@ test('Router', async () => {
 });
 
 test('requireMethod', async () => {
-  const getHandler = get().handle(
-    (_, req) => new Response(`${req.url}`, {status: 300}),
-  );
-  const postHandler = post().handle(
-    async (_, req) =>
-      new Response(`${req.url}:${await req.text()}`, {status: 301}),
-  );
+  const getHandler = get().handle((_, req) => {
+    expectBodyNotUsed(req);
+    return new Response(`${req.url}`, {status: 300});
+  });
+  const postHandler = post().handle(async (_, req) => {
+    expectBodyNotUsed(req);
+    return new Response(`${req.url}:${await req.text()}`, {status: 301});
+  });
 
   const pattern = new URLPattern();
   const url = 'https://test.roci.dev/';
@@ -335,7 +340,10 @@ test('requireAuthAPIKey', async () => {
     }
     const handler = post()
       .with(requiredAuthAPIKey(() => c.required))
-      .handle(async (_, req) => new Response(await req.text(), {status: 200}));
+      .handle(async (_, req) => {
+        expectBodyNotUsed(req);
+        return new Response(await req.text(), {status: 200});
+      });
 
     const req = new Request('https://roci.dev/', {
       method: 'POST',
@@ -401,7 +409,10 @@ test('withRoomID', async () => {
 
   const handler = get()
     .with(roomID())
-    .handle(ctx => new Response(`roomID:${ctx.roomID}`, {status: 200}));
+    .handle((ctx, req) => {
+      expectBodyNotUsed(req);
+      return new Response(`roomID:${ctx.roomID}`, {status: 200});
+    });
 
   for (const c of cases) {
     const url = `https://roci.dev/`;
@@ -468,7 +479,10 @@ test('withUserID', async () => {
 
   const handler = get()
     .with(userID())
-    .handle(ctx => new Response(`userID:${ctx.userID}`, {status: 200}));
+    .handle((ctx, req) => {
+      expectBodyNotUsed(req);
+      return new Response(`userID:${ctx.userID}`, {status: 200});
+    });
 
   for (const c of cases) {
     const url = `https://roci.dev/`;
@@ -551,10 +565,12 @@ test('withQueryParams', async () => {
   for (const c of cases) {
     const handler = get()
       .with(queryParams(c.schema))
-      .handle(
-        ctx =>
-          new Response(`query: ${JSON.stringify(ctx.query)}`, {status: 200}),
-      );
+      .handle((ctx, req) => {
+        expectBodyNotUsed(req);
+        return new Response(`query: ${JSON.stringify(ctx.query)}`, {
+          status: 200,
+        });
+      });
     const url = `https://roci.dev/`;
     const request = new Request(url);
     const ctx = {
@@ -637,9 +653,10 @@ test('withBody', async () => {
   const userIdSchema = valita.object({userID: valita.string()});
   const handler = post()
     .with(bodyOnly(userIdSchema))
-    .handle(ctx => {
+    .handle((ctx, req) => {
       const {body} = ctx;
       const {userID} = body;
+      expectBodyNotUsed(req);
       return new Response(`userID:${userID}`, {status: 200});
     });
 
@@ -718,9 +735,10 @@ describe('withNoBody', () => {
 
   const handler = post()
     .with(bodyOnly(valita.null()))
-    .handle(ctx => {
+    .handle((ctx, req) => {
       const {body} = ctx;
       expect(body).toBe(null);
+      expectBodyNotUsed(req);
       return new Response(`ok`, {status: 200});
     });
 
@@ -775,9 +793,10 @@ test('handleJSON', async () => {
   ];
 
   for (const c of cases) {
-    const handler = post().handleJSON(async (_, req) => ({
-      foo: await req.text(),
-    }));
+    const handler = post().handleJSON(async (_, req) => {
+      expectBodyNotUsed(req);
+      return {foo: await req.text()};
+    });
     const request = new Request('http://roci.dev/', {
       method: 'POST',
       body: c.input,
@@ -815,9 +834,10 @@ test('handleAPIResult', async () => {
   ];
 
   for (const c of cases) {
-    const handler = post().handleAPIResult(async (_, req) => ({
-      foo: await req.text(),
-    }));
+    const handler = post().handleAPIResult(async (_, req) => {
+      expectBodyNotUsed(req);
+      return {foo: await req.text()};
+    });
     const request = new Request('http://roci.dev/', {
       method: 'POST',
       body: c.input,
@@ -850,7 +870,10 @@ test('withVersion', async () => {
 
     const handler = get()
       .with(urlVersion())
-      .handle(ctx => new Response(`version:${ctx.version}`, {status: 200}));
+      .handle((ctx, req) => {
+        expectBodyNotUsed(req);
+        return new Response(`version:${ctx.version}`, {status: 200});
+      });
 
     const response = await handler(ctx, request);
     const result = {

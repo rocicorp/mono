@@ -8,17 +8,6 @@ import {
 import {DatadogLogSink, DatadogLogSinkOptions} from 'datadog';
 import {version} from 'reflect-shared';
 
-// https://www.oreilly.com/library/view/regular-expressions-cookbook/9780596802837/ch07s16.html
-const IPV4_ADDRESS_REGEX =
-  /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-// This doesn't ensure a valid ipv6, but any ipv6 hostname will
-// match this regex, and no domain based hostnames will.
-const IPV6_ADDRESS_HOSTNAME_REGEX = /^\[[a-fA-F0-9:]*:[a-fA-F0-9:]*\]$/;
-
-export const IP_ADDRESS_HOSTNAME_REGEX = new RegExp(
-  `(${IPV4_ADDRESS_REGEX.source}|${IPV6_ADDRESS_HOSTNAME_REGEX.source})`,
-);
-
 class LevelFilterLogSink implements LogSink {
   readonly #wrappedLogSink: LogSink;
   readonly #level: LogLevel;
@@ -62,25 +51,16 @@ export function createLogOptions(
   ) => new DatadogLogSink(options),
 ): LogOptions {
   const {consoleLogLevel, server, enableAnalytics} = options;
-  const serverURL = server === null ? null : new URL(server);
-  const socketHostname = serverURL?.hostname;
 
-  // If the hostname is undefined, localhost, or an ip address, then
-  // this is most likely a test or local development, in which case we
-  // do not want to send logs to datadog, instead only log to console.
-  if (
-    server === null ||
-    socketHostname === undefined ||
-    socketHostname === 'localhost' ||
-    IP_ADDRESS_HOSTNAME_REGEX.test(socketHostname) ||
-    !enableAnalytics
-  ) {
+  if (!enableAnalytics || server === null) {
     return {
       logLevel: consoleLogLevel,
       logSink: consoleLogSink,
     };
   }
 
+  const serverURL = new URL(server);
+  const socketHostname = serverURL.hostname;
   const datadogServiceLabel = socketHostname.endsWith(REFLECT_SAAS_DOMAIN)
     ? socketHostname
         .substring(0, socketHostname.length - REFLECT_SAAS_DOMAIN.length)

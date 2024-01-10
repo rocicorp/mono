@@ -88,7 +88,7 @@ describe('api-apps', () => {
   beforeAll(async () => {
     const runningDeployment = dummyDeployment('1234');
     runningDeployment.spec.hostname = 'my-app-team.reflect-server.bonk';
-    runningDeployment.spec.serverVersion = '0.38.202312200000';
+    runningDeployment.spec.serverVersion = '0.38.202401100000';
     await Promise.all([
       setApp(firestore, APP_ID, {name: 'za app', runningDeployment}),
       firestore
@@ -160,6 +160,34 @@ describe('api-apps', () => {
       },
     },
     {
+      name: 'Wrong method for read command',
+      method: 'POST',
+      path: `/v1/apps/${APP_ID}/rooms`,
+      token: APP_KEY_VALUE,
+      result: {
+        error: {
+          code: 405,
+          resource: 'request',
+          message: 'Unsupported method',
+        },
+        result: null,
+      },
+    },
+    {
+      name: 'Wrong method for write command',
+      method: 'GET',
+      path: `/v1/apps/${APP_ID}/connections/all:invalidate`,
+      token: APP_KEY_VALUE,
+      result: {
+        error: {
+          code: 405,
+          resource: 'request',
+          message: 'Unsupported method',
+        },
+        result: null,
+      },
+    },
+    {
       name: 'unsupported method',
       method: 'PUT',
       path: `/v1/apps/${APP_ID}/connections/all:invalidate`,
@@ -202,16 +230,44 @@ describe('api-apps', () => {
       },
     },
     {
-      name: 'missing permission',
+      name: 'unknown read permission',
       method: 'GET',
       path: `/v1/apps/${APP_ID}/connections/yo`,
+      token: APP_KEY_VALUE,
+      result: {
+        error: {
+          code: 404,
+          resource: 'request',
+          message: 'Unknown or unreadable resource "connections"',
+        },
+        result: null,
+      },
+    },
+    {
+      name: 'unknown write permission',
+      method: 'POST',
+      path: `/v1/apps/${APP_ID}/connections/yo:severe`,
+      token: APP_KEY_VALUE,
+      result: {
+        error: {
+          code: 404,
+          resource: 'request',
+          message: 'Invalid resource or command "connections:severe"',
+        },
+        result: null,
+      },
+    },
+    {
+      name: 'insufficient permission',
+      method: 'POST',
+      path: `/v1/apps/${APP_ID}/rooms/foo:delete`,
       token: APP_KEY_VALUE,
       result: {
         error: {
           code: 403 as APIErrorCode,
           resource: 'request',
           message:
-            'Key "my-app-key" has not been granted "connections:read" permission',
+            'Key "my-app-key" has not been granted "rooms:delete" permission',
         },
         result: null,
       },
@@ -240,7 +296,7 @@ describe('api-apps', () => {
           code: 400,
           resource: 'request',
           message:
-            'App "za app" is at server version 0.38.202312190000 which does not support the REST API.\n' +
+            'App "za app" is at server version 0.38.202401080000 which does not support the REST API.\n' +
             'Update the app to @rocicorp/reflect@latest and re-publish.',
         },
         result: null,
@@ -249,7 +305,7 @@ describe('api-apps', () => {
         await firestore
           .doc(appPath(APP_ID))
           .set(
-            {runningDeployment: {spec: {serverVersion: '0.38.202312190000'}}},
+            {runningDeployment: {spec: {serverVersion: '0.38.202401080000'}}},
             {mergeFields: ['runningDeployment.spec.serverVersion']},
           );
       },
