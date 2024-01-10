@@ -228,8 +228,7 @@ export class BaseAuthDO implements DurableObject {
           lc,
           this.#roomDO,
           this.#durableStorage,
-          // Note: we need to copy the request here because we read the body.
-          new Request(req, {body: JSON.stringify(body)}),
+          req,
           roomID,
           jurisdiction,
         ),
