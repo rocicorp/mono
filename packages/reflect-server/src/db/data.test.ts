@@ -124,9 +124,11 @@ test('getEntries', async () => {
 test('getEntries schema chaining', async () => {
   const storage = await getMiniflareDurableObjectStorage(id);
 
-  await putEntry(storage, 'a', 1, {});
-  await putEntry(storage, 'b', '2', {});
-  await putEntry(storage, 'c', 3, {});
+  await putEntry(storage, 'a', '1', {});
+  // Make normalization apparent midway through the Map to verify
+  // that the result still follows iteration order.
+  await putEntry(storage, 'b', 2, {});
+  await putEntry(storage, 'c', '3', {});
 
   const entries = await getEntries(
     storage,
@@ -172,9 +174,13 @@ test('listEntries', async () => {
   for (const c of cases) {
     await storage.delete('foos/1');
     await storage.delete('foos/2');
+    await storage.delete('foos/3');
     if (c.exists) {
       await storage.put('foos/1', c.validSchema ? '11' : {});
+      // Make normalization apparent midway through the Map to verify
+      // that the result still follows iteration order.
       await storage.put('foos/2', c.validSchema ? 22 : {});
+      await storage.put('foos/3', c.validSchema ? '33' : {});
     }
 
     let result: Map<string, string> | undefined = undefined;
@@ -201,9 +207,12 @@ test('listEntries', async () => {
       if (result === undefined) {
         throw new Error('result should be defined');
       }
-      expect(result.size).toEqual(2);
-      expect(result.get('foos/1')).toEqual('11');
-      expect(result.get('foos/2')).toEqual('22');
+      // Note: Also verifies that iteration order is sorted in UTF-8.
+      expect([...result]).toEqual([
+        ['foos/1', '11'],
+        ['foos/2', '22'],
+        ['foos/3', '33'],
+      ]);
     }
   }
 });
