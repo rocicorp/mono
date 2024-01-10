@@ -440,7 +440,6 @@ test('good, bad, invalid connect requests', async () => {
     expectedStatus: 405,
     expectedText: null,
     expectedJSON: {
-      result: null,
       error: {
         code: 405,
         resource: 'request',
@@ -497,7 +496,6 @@ describe('good, bad, invalid tail requests', () => {
       request: makeRequest({method: 'POST'}),
       expectedStatus: 405,
       expectedJSON: {
-        result: null,
         error: {
           code: 405,
           resource: 'request',

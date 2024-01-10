@@ -124,19 +124,13 @@ async function expectSuccessfulAPIResponse(
   result: ReadonlyJSONValue = {},
 ) {
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({
-    result,
-    error: null,
-  });
+  expect(await response.json()).toEqual({result});
   expect(response.headers.get('content-type')).toBe('application/json');
 }
 
 async function expectAPIErrorResponse(response: Response, error: APIErrorInfo) {
   expect(response.status).toBe(error.code);
-  expect(await response.json()).toEqual({
-    result: null,
-    error,
-  });
+  expect(await response.json()).toEqual({error});
   expect(response.headers.get('content-type')).toBe('application/json');
 }
 
@@ -247,7 +241,6 @@ test('createRoom allows slashes in roomIDs', async () => {
 
   response = await authDO.fetch(newRoomRecordsRequest());
   expect(await response.json()).toEqual({
-    error: null,
     result: {
       results: [
         {
@@ -265,7 +258,6 @@ test('createRoom allows slashes in roomIDs', async () => {
     newGetRoomRequest('https://teset.roci.dev/', TEST_API_KEY, '/'),
   );
   expect(await response.json()).toEqual({
-    error: null,
     result: {
       roomID: '/',
       jurisdiction: '',

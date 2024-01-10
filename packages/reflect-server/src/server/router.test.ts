@@ -76,7 +76,6 @@ test('Router', async () => {
       path: '/monkey/nuts',
       expectedResponseCode: 404,
       expectedResponseJSON: {
-        result: null,
         error: {
           code: 404,
           resource: 'request',
@@ -135,7 +134,6 @@ test('requireMethod', async () => {
       method: 'POST',
       expectedStatus: 405,
       expectedJSON: {
-        result: null,
         error: {
           code: 405,
           resource: 'request',
@@ -154,7 +152,6 @@ test('requireMethod', async () => {
       method: 'GET',
       expectedStatus: 405,
       expectedJSON: {
-        result: null,
         error: {
           code: 405,
           resource: 'request',
@@ -586,10 +583,7 @@ test('withQueryParams', async () => {
       expect(result).toEqual(c.expected);
     } else {
       expect(response.status).toBe(c.error?.code);
-      expect(await response.json()).toEqual({
-        result: null,
-        error: c.error,
-      });
+      expect(await response.json()).toEqual({error: c.error});
     }
   }
 });
@@ -679,10 +673,7 @@ test('withBody', async () => {
       );
     } else {
       expect(response.status).toBe(c.error?.code);
-      expect(await response.json()).toEqual({
-        result: null,
-        error: c.error,
-      });
+      expect(await response.json()).toEqual({error: c.error});
     }
   }
 });
@@ -762,10 +753,7 @@ describe('withNoBody', () => {
         );
       } else {
         expect(response.status).toBe(c.error?.code);
-        expect(await response.json()).toEqual({
-          result: null,
-          error: c.error,
-        });
+        expect(await response.json()).toEqual({error: c.error});
       }
     });
   }
@@ -848,10 +836,7 @@ test('handleAPIResult', async () => {
       lc: createSilentLogContext(),
     };
     const response = await handler(ctx, request);
-    expect(await response.json()).toEqual({
-      result: c.expected,
-      error: null,
-    });
+    expect(await response.json()).toEqual({result: c.expected});
   }
 });
 
