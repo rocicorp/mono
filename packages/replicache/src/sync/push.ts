@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
 import {jsonSchema} from 'shared/src/json-schema.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import type {Store} from '../dag/store.js';
 import {
@@ -11,7 +12,7 @@ import {
   commitIsLocalSDD,
   localMutations,
 } from '../db/commit.js';
-import type {FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
+import type {FrozenJSONValue} from '../frozen-json.js';
 import {
   PushError,
   Pusher,

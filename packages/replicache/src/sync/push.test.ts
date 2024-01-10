@@ -5,7 +5,7 @@ import {DEFAULT_HEAD_NAME} from '../db/commit.js';
 import {readFromDefaultHead} from '../db/read.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
-import {deepFreeze} from '../json.js';
+import {deepFreeze} from '../frozen-json.js';
 import type {Pusher, PusherResult} from '../pusher.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import type {ClientGroupID} from './ids.js';

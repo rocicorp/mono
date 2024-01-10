@@ -1,6 +1,6 @@
 import {assert, assertString} from 'shared/src/asserts.js';
+import {assertDeepFrozen} from '../frozen-json.js';
 import {Hash, newUUIDHash} from '../hash.js';
-import {assertDeepFrozen} from '../json.js';
 
 type Refs = readonly Hash[];
 

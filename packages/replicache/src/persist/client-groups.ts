@@ -1,9 +1,9 @@
 import {assert, assertObject} from 'shared/src/asserts.js';
 import * as valita from 'shared/src/valita.js';
 import type {Read, Write} from '../dag/store.js';
+import {deepFreeze, type FrozenJSONValue} from '../frozen-json.js';
 import {Hash, hashSchema} from '../hash.js';
 import {indexDefinitionsEqual, indexDefinitionsSchema} from '../index-defs.js';
-import {FrozenJSONValue, deepFreeze} from '../json.js';
 import type {ClientGroupID} from '../sync/ids.js';
 
 export type ClientGroupMap = ReadonlyMap<ClientGroupID, ClientGroup>;

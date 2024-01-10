@@ -1,13 +1,13 @@
-import type {HTTPRequestInfo} from './http-request-info.js';
-import type {ClientID} from './sync/ids.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import type {Cookie} from './cookies.js';
 import type {
   ClientStateNotFoundResponse,
   VersionNotSupportedResponse,
 } from './error-responses.js';
-import type {Cookie} from './cookies.js';
-import type {PullRequest} from './sync/pull.js';
+import type {HTTPRequestInfo} from './http-request-info.js';
 import type {PatchOperation} from './patch-operation.js';
-import type {ReadonlyJSONValue} from './json.js';
+import type {ClientID} from './sync/ids.js';
+import type {PullRequest} from './sync/pull.js';
 
 export type PullerResultV0 = {
   response?: PullResponseV0 | undefined;
