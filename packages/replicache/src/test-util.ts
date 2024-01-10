@@ -55,6 +55,10 @@ export class ReplicacheTest<
     this.#internalAPI = internalAPI;
   }
 
+  pullIgnorePromise(opts?: Parameters<Replicache['pull']>[0]): void {
+    void this.pull(opts).catch(e => e);
+  }
+
   beginPull(): Promise<BeginPullResult> {
     return getTestInstance(this).beginPull();
   }

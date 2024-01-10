@@ -692,7 +692,7 @@ test('subscribe pull and index update', async () => {
       makePullResponseV1(clientID, lastMutationID++, opt.patch),
     );
 
-    void rep.pull();
+    rep.pullIgnorePromise();
     await tickUntil(() => log.length >= opt.expectedLog.length);
     expect(queryCallCount).to.equal(expectedQueryCallCount);
     expect(log).to.deep.equal(opt.expectedLog);

@@ -62,6 +62,14 @@ export class ConnectionLoop {
   readonly #delegate: ConnectionLoopDelegate;
   #closed = false;
 
+  /**
+   * Number of pending send calls.
+   *
+   * We keep track of this because if close happens while we are waiting for the
+   * send to resolve we should reject the send promise.
+   */
+  #sendCounter = 0;
+
   constructor(delegate: ConnectionLoopDelegate) {
     this.#delegate = delegate;
     void this.run();
@@ -69,15 +77,23 @@ export class ConnectionLoop {
 
   close(): void {
     this.#closed = true;
+    if (this.#sendCounter > 0) {
+      this.#sendResolver.reject(closeError());
+    }
   }
 
-  send(now: boolean): Promise<void> {
+  async send(now: boolean): Promise<void> {
+    if (this.#closed) {
+      throw closeError();
+    }
+    this.#sendCounter++;
     this.#delegate.debug?.('send', now);
     if (now) {
       this.#skipSleepsResolver.resolve();
     }
     this.#pendingResolver.resolve();
-    return this.#sendResolver.promise;
+    await this.#sendResolver.promise;
+    this.#sendCounter--;
   }
 
   async run(): Promise<void> {
@@ -229,6 +245,10 @@ export class ConnectionLoop {
 
 // Number of connections to remember when computing the new delay.
 const CONNECTION_MEMORY_COUNT = 9;
+
+function closeError() {
+  return new Error('Closed');
+}
 
 // Computes a new delay based on the previous requests. We use the median of the
 // previous successful request divided by `maxConnections`. When we get errors
