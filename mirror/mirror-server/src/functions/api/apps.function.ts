@@ -24,7 +24,7 @@ import {getDataOrFail} from '../validators/data.js';
 import {contextValidator} from '../validators/https.js';
 import {makeWorkerPath, parseReadParams, parseWriteParams} from './paths.js';
 
-const MIN_VERSION = new SemVer('0.38.202312200000');
+const MIN_VERSION = new SemVer('0.38.202401090000');
 
 export const apps =
   (firestore: Firestore, auth: Auth, secretsClient: SecretsClient) =>

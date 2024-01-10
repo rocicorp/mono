@@ -88,7 +88,7 @@ describe('api-apps', () => {
   beforeAll(async () => {
     const runningDeployment = dummyDeployment('1234');
     runningDeployment.spec.hostname = 'my-app-team.reflect-server.bonk';
-    runningDeployment.spec.serverVersion = '0.38.202312200000';
+    runningDeployment.spec.serverVersion = '0.38.202401100000';
     await Promise.all([
       setApp(firestore, APP_ID, {name: 'za app', runningDeployment}),
       firestore
@@ -240,7 +240,7 @@ describe('api-apps', () => {
           code: 400,
           resource: 'request',
           message:
-            'App "za app" is at server version 0.38.202312190000 which does not support the REST API.\n' +
+            'App "za app" is at server version 0.38.202401080000 which does not support the REST API.\n' +
             'Update the app to @rocicorp/reflect@latest and re-publish.',
         },
         result: null,
@@ -249,7 +249,7 @@ describe('api-apps', () => {
         await firestore
           .doc(appPath(APP_ID))
           .set(
-            {runningDeployment: {spec: {serverVersion: '0.38.202312190000'}}},
+            {runningDeployment: {spec: {serverVersion: '0.38.202401080000'}}},
             {mergeFields: ['runningDeployment.spec.serverVersion']},
           );
       },
