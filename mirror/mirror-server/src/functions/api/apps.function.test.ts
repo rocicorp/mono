@@ -160,6 +160,34 @@ describe('api-apps', () => {
       },
     },
     {
+      name: 'Wrong method for read command',
+      method: 'POST',
+      path: `/v1/apps/${APP_ID}/rooms`,
+      token: APP_KEY_VALUE,
+      result: {
+        error: {
+          code: 405,
+          resource: 'request',
+          message: 'Unsupported method',
+        },
+        result: null,
+      },
+    },
+    {
+      name: 'Wrong method for write command',
+      method: 'GET',
+      path: `/v1/apps/${APP_ID}/connections/all:invalidate`,
+      token: APP_KEY_VALUE,
+      result: {
+        error: {
+          code: 405,
+          resource: 'request',
+          message: 'Unsupported method',
+        },
+        result: null,
+      },
+    },
+    {
       name: 'unsupported method',
       method: 'PUT',
       path: `/v1/apps/${APP_ID}/connections/all:invalidate`,
@@ -202,16 +230,44 @@ describe('api-apps', () => {
       },
     },
     {
-      name: 'missing permission',
+      name: 'unknown read permission',
       method: 'GET',
       path: `/v1/apps/${APP_ID}/connections/yo`,
+      token: APP_KEY_VALUE,
+      result: {
+        error: {
+          code: 404,
+          resource: 'request',
+          message: 'Unknown or unreadable resource "connections"',
+        },
+        result: null,
+      },
+    },
+    {
+      name: 'unknown write permission',
+      method: 'POST',
+      path: `/v1/apps/${APP_ID}/connections/yo:severe`,
+      token: APP_KEY_VALUE,
+      result: {
+        error: {
+          code: 404,
+          resource: 'request',
+          message: 'Invalid resource or command "connections:severe"',
+        },
+        result: null,
+      },
+    },
+    {
+      name: 'insufficient permission',
+      method: 'POST',
+      path: `/v1/apps/${APP_ID}/rooms/foo:delete`,
       token: APP_KEY_VALUE,
       result: {
         error: {
           code: 403 as APIErrorCode,
           resource: 'request',
           message:
-            'Key "my-app-key" has not been granted "connections:read" permission',
+            'Key "my-app-key" has not been granted "rooms:delete" permission',
         },
         result: null,
       },

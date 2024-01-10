@@ -3,7 +3,10 @@ import type {Auth} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
-import type {RequiredPermission} from 'mirror-schema/src/app-key.js';
+import {
+  ALL_PERMISSIONS,
+  type RequiredPermission,
+} from 'mirror-schema/src/app-key.js';
 import type {App} from 'mirror-schema/src/app.js';
 import {DEFAULT_ENV, envDataConverter, envPath} from 'mirror-schema/src/env.js';
 import {SemVer, lt} from 'semver';
@@ -22,6 +25,7 @@ import {
 } from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {contextValidator} from '../validators/https.js';
+import {unsupportedMethodError} from './errors.js';
 import {makeWorkerPath, parseReadParams, parseWriteParams} from './paths.js';
 
 const MIN_VERSION = new SemVer('0.38.202401090000');
@@ -99,7 +103,7 @@ function parsePath(
 ): {appID: string; permission: RequiredPermission; workerPath: string} {
   if (method.toLowerCase() === 'get') {
     const params = parseReadParams(path);
-    const permission = `${params.resource}:read` as RequiredPermission;
+    const permission = validatePermission(params.resource, 'read');
     return {
       appID: params.appID,
       permission,
@@ -108,21 +112,31 @@ function parsePath(
   }
   if (method.toLowerCase() === 'post') {
     const params = parseWriteParams(path);
-    const permission =
-      `${params.resource}:${params.command}` as RequiredPermission;
+    const permission = validatePermission(params.resource, params.command);
     return {
       appID: params.appID,
       permission,
       workerPath: makeWorkerPath(params),
     };
   }
-  const error = new HttpsError(
-    'invalid-argument',
-    `Unsupported method "${method}"`,
-  );
-  // There's no FunctionsErrorCode for 405: Unsupported Method, so we hack it.
-  error.httpErrorCode.status = 405;
-  throw error;
+  throw unsupportedMethodError(`Unsupported method "${method}"`);
+}
+
+function validatePermission(
+  resource: string,
+  command: string,
+): RequiredPermission {
+  const perm = `${resource}:${command}`;
+  if (perm in ALL_PERMISSIONS) {
+    return perm as RequiredPermission;
+  }
+  if (command === 'read') {
+    throw new HttpsError(
+      'not-found',
+      `Unknown or unreadable resource "${resource}"`,
+    );
+  }
+  throw new HttpsError('not-found', `Invalid resource or command "${perm}"`);
 }
 
 function checkDeployment(app: App): string {
