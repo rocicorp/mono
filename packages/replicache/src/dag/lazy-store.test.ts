@@ -1,6 +1,6 @@
 import {expect} from 'chai';
+import {deepFreeze} from '../frozen-json.js';
 import {assertHash, fakeHash, Hash, makeNewFakeHashFunction} from '../hash.js';
-import {deepFreeze} from '../json.js';
 import {
   withRead,
   withWrite,

@@ -1,9 +1,9 @@
 import {resolver} from '@rocicorp/resolver';
 import {assertNotNull} from 'shared/src/asserts.js';
-import {deepFreezeAllowUndefined, FrozenJSONValue} from '../json.js';
+import {FrozenJSONValue, deepFreezeAllowUndefined} from '../frozen-json.js';
 import {promiseVoid} from '../resolved-promises.js';
 import type {Read, Store, Write} from './store.js';
-import {deleteSentinel, WriteImplBase} from './write-impl-base.js';
+import {WriteImplBase, deleteSentinel} from './write-impl-base.js';
 
 const RELAXED = {durability: 'relaxed'} as const;
 const OBJECT_STORE = 'chunks';

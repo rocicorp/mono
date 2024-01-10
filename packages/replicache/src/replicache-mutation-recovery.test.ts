@@ -1,10 +1,10 @@
 import {expect} from 'chai';
 import {assertNotUndefined} from 'shared/src/asserts.js';
+import {JSONObject, assertJSONObject} from 'shared/src/json.js';
 import sinon from 'sinon';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
 import {FormatVersion} from './format-version.js';
-import {JSONObject, assertJSONObject} from './json.js';
 import {
   createAndPersistClientWithPendingLocalSDD,
   createPerdag,

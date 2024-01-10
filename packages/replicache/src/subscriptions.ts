@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {compareUTF8, greaterThan, lessThan, lessThanEq} from 'compare-utf8';
 import {assert} from 'shared/src/asserts.js';
+import {deepEqual} from 'shared/src/json.js';
 import {binarySearch} from './binary-search.js';
 import type {
   Diff,
@@ -13,7 +14,6 @@ import type {
 import type {IndexKey} from './db/index.js';
 import {decodeIndexKey} from './db/index.js';
 import type {ScanOptions} from './db/scan.js';
-import {deepEqual} from './json.js';
 import type {QueryInternal} from './replicache.js';
 import type {DiffComputationConfig, DiffsMap} from './sync/diff.js';
 import {

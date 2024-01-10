@@ -1,5 +1,5 @@
 import {RWLock} from '@rocicorp/lock';
-import type {FrozenJSONValue} from '../json.js';
+import type {FrozenJSONValue} from '../frozen-json.js';
 import {promiseVoid} from '../resolved-promises.js';
 import {stringCompare} from '../string-compare.js';
 import {ReadImpl} from './read-impl.js';

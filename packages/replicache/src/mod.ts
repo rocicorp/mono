@@ -2,6 +2,12 @@ export {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
 export {consoleLogSink} from '@rocicorp/logger';
 export type {LogLevel, LogSink} from '@rocicorp/logger';
 export type {
+  JSONObject,
+  JSONValue,
+  ReadonlyJSONObject,
+  ReadonlyJSONValue,
+} from 'shared/src/json.js';
+export type {
   Diff as ExperimentalDiff,
   DiffOperation as ExperimentalDiffOperation,
   DiffOperationAdd as ExperimentalDiffOperationAdd,
@@ -21,12 +27,6 @@ export {getDefaultPuller} from './get-default-puller.js';
 export type {HTTPRequestInfo} from './http-request-info.js';
 export type {IndexDefinition, IndexDefinitions} from './index-defs.js';
 export type {IterableUnion} from './iterable-union.js';
-export type {
-  JSONObject,
-  JSONValue,
-  ReadonlyJSONObject,
-  ReadonlyJSONValue,
-} from './json.js';
 export {IDBNotFoundError} from './kv/idb-store.js';
 export {MemStore as ExperimentalMemKVStore} from './kv/mem-store.js';
 export type {

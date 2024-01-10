@@ -15,10 +15,11 @@ import {
 } from '../db/commit.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
+import {deepFreeze} from '../frozen-json.js';
 import {assertHash, fakeHash, newUUIDHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';
-import {deepFreeze} from '../json.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
+import {uuid} from '../uuid.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
 import {makeClientV6, setClientsForTesting} from './clients-test-helpers.js';
@@ -38,7 +39,6 @@ import {
   initClientV6,
   setClient,
 } from './clients.js';
-import {uuid} from '../uuid.js';
 
 let clock: SinonFakeTimers;
 setup(() => {

@@ -1,4 +1,5 @@
 import {assertNumber, assertObject, assertString} from 'shared/src/asserts.js';
+import {assertJSONValue} from 'shared/src/json.js';
 import {callDefaultFetch} from './call-default-fetch.js';
 import {assertCookie} from './cookies.js';
 import {
@@ -6,7 +7,6 @@ import {
   isVersionNotSupportedResponse,
 } from './error-responses.js';
 import {assertHTTPRequestInfo} from './http-request-info.js';
-import {assertJSONValue} from './json.js';
 import {assertPatchOperations} from './patch-operation.js';
 import type {
   PullResponseOKV0,

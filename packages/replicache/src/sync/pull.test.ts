@@ -1,6 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {assertObject, assertString} from 'shared/src/asserts.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import {BTreeRead} from '../btree/read.js';
 import type {Cookie, FrozenCookie} from '../cookies.js';
@@ -28,6 +29,7 @@ import {
   isVersionNotSupportedResponse,
 } from '../error-responses.js';
 import {FormatVersion} from '../format-version.js';
+import {FrozenJSONValue, deepFreeze} from '../frozen-json.js';
 import {
   assertPullResponseV0,
   assertPullResponseV1,
@@ -35,7 +37,6 @@ import {
 import {assertHash, emptyHash} from '../hash.js';
 import type {HTTPRequestInfo} from '../http-request-info.js';
 import type {IndexDefinitions} from '../index-defs.js';
-import {FrozenJSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
 import type {PatchOperation} from '../patch-operation.js';
 import type {
   PullResponseOKV1,

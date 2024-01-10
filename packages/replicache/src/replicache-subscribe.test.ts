@@ -1,10 +1,10 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert, expect} from 'chai';
+import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
 import {sleep} from 'shared/src/sleep.js';
 import * as sinon from 'sinon';
 import type {IndexKey} from './db/index.js';
 import type {IndexDefinitions} from './index-defs.js';
-import type {JSONValue, ReadonlyJSONValue} from './json.js';
 import type {PatchOperation} from './patch-operation.js';
 import type {ScanOptions} from './scan-options.js';
 import {

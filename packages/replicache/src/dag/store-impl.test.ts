@@ -1,7 +1,8 @@
 import {expect} from 'chai';
 import {assert} from 'shared/src/asserts.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import {deepFreeze} from '../frozen-json.js';
 import {Hash, assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
-import {ReadonlyJSONValue, deepFreeze} from '../json.js';
 import type {Read, Store} from '../kv/store.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
 import {

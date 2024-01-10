@@ -1,8 +1,8 @@
 import {greaterThan} from 'compare-utf8';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import {IndexKey, encodeIndexScanKey} from './db/index.js';
 import type {IterableUnion} from './iterable-union.js';
-import type {ReadonlyJSONValue} from './json.js';
 import {
   KeyTypeForScanOptions,
   ScanIndexOptions,

@@ -1,5 +1,6 @@
 import {expect} from 'chai';
-import type {FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import type {FrozenJSONValue} from '../frozen-json.js';
 import {
   withRead,
   withWrite,

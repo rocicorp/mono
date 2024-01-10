@@ -7,19 +7,19 @@ import {
   assertString,
   unreachable,
 } from 'shared/src/asserts.js';
+import {assertJSONValue} from 'shared/src/json.js';
 import {skipCommitDataAsserts} from '../config.js';
 import {FrozenCookie, compareCookies} from '../cookies.js';
 import type {Chunk, CreateChunk} from '../dag/chunk.js';
 import {MustGetChunk, Read, mustGetHeadHash} from '../dag/store.js';
-import {Hash, assertHash} from '../hash.js';
-import type {IndexDefinition} from '../index-defs.js';
 import {
-  FrozenJSONValue,
   FrozenTag,
   assertDeepFrozen,
-  assertJSONValue,
   deepFreeze,
-} from '../json.js';
+  type FrozenJSONValue,
+} from '../frozen-json.js';
+import {Hash, assertHash} from '../hash.js';
+import type {IndexDefinition} from '../index-defs.js';
 import type {ClientID} from '../sync/ids.js';
 
 export const DEFAULT_HEAD_NAME = 'main';

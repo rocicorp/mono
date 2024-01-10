@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
+import {deepEqual, ReadonlyJSONValue} from 'shared/src/json.js';
 import {diff} from '../btree/diff.js';
 import {BTreeRead} from '../btree/read.js';
 import {compareCookies, Cookie} from '../cookies.js';
@@ -26,18 +27,13 @@ import {
 } from '../db/write.js';
 import {isErrorResponse} from '../error-responses.js';
 import {FormatVersion} from '../format-version.js';
+import {deepFreeze, FrozenJSONValue} from '../frozen-json.js';
 import {
   assertPullerResultV0,
   assertPullerResultV1,
 } from '../get-default-puller.js';
 import {emptyHash, Hash} from '../hash.js';
 import type {HTTPRequestInfo} from '../http-request-info.js';
-import {
-  deepEqual,
-  deepFreeze,
-  FrozenJSONValue,
-  ReadonlyJSONValue,
-} from '../json.js';
 import type {
   Puller,
   PullerResult,

@@ -2,8 +2,8 @@ import {expect} from 'chai';
 import {Chunk} from '../dag/chunk.js';
 import {TestStore} from '../dag/test-store.js';
 import {FormatVersion} from '../format-version.js';
+import {deepFreeze} from '../frozen-json.js';
 import {Hash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
-import {deepFreeze} from '../json.js';
 import {withRead} from '../with-transactions.js';
 import {
   ChunkIndexDefinition,

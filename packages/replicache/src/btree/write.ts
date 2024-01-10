@@ -1,10 +1,11 @@
 import {Lock} from '@rocicorp/lock';
 import {assert} from 'shared/src/asserts.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import type {Chunk, CreateChunk} from '../dag/chunk.js';
 import type {Write} from '../dag/store.js';
 import type {FormatVersion} from '../format-version.js';
+import type {FrozenJSONValue} from '../frozen-json.js';
 import {Hash, emptyHash, newUUIDHash} from '../hash.js';
-import type {FrozenJSONValue, ReadonlyJSONValue} from '../json.js';
 import {getSizeOfEntry} from '../size-of-value.js';
 import {
   DataNodeImpl,
