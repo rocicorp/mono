@@ -81,7 +81,7 @@ test('pull', async () => {
       },
     ]),
   );
-  void rep.pull();
+  rep.pullIgnorePromise();
   await tickAFewTimes();
   expect(deleteCount).to.equal(2);
 
@@ -140,7 +140,7 @@ test('pull', async () => {
     pullURL,
     makePullResponseV1(clientID, 6, [{op: 'del', key: '/todo/14323534'}], ''),
   );
-  void rep.pull();
+  rep.pullIgnorePromise();
   await tickAFewTimes();
 
   expect(deleteCount).to.equal(4);
@@ -212,7 +212,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
   fetchMock.reset();
   fetchMock.postAny({});
 
-  void rep.pull();
+  rep.pullIgnorePromise();
   await tickAFewTimes();
 
   expect(fetchMock.calls()).to.have.length(0);
@@ -223,7 +223,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
   rep.pullURL = 'https://diff.com/pull';
   fetchMock.post(rep.pullURL, {lastMutationID: 0, patch: []});
 
-  void rep.pull();
+  rep.pullIgnorePromise();
   await tickAFewTimes();
   expect(fetchMock.calls()).to.have.length.greaterThan(0);
 
@@ -233,7 +233,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
 
   rep.pullURL = '';
 
-  void rep.pull();
+  rep.pullIgnorePromise();
   await tickAFewTimes();
   expect(fetchMock.calls()).to.have.length(0);
 
@@ -255,7 +255,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
     });
   };
 
-  void rep.pull();
+  rep.pullIgnorePromise();
   await tickAFewTimes();
 
   expect(fetchMock.calls()).to.have.length(0);
@@ -276,7 +276,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
 
   rep.puller = getDefaultPuller(rep);
 
-  void rep.pull();
+  rep.pullIgnorePromise();
   await tickAFewTimes();
 
   expect(fetchMock.calls()).to.have.length(0);
@@ -304,7 +304,7 @@ test('Client Group not found on server', async () => {
   expect(rep.isClientGroupDisabled).false;
 
   rep.puller = puller;
-  void rep.pull();
+  rep.pullIgnorePromise();
 
   await waitForSync(rep);
 
@@ -338,7 +338,7 @@ test('Version not supported on server', async () => {
     });
 
     rep.puller = puller;
-    void rep.pull();
+    rep.pullIgnorePromise();
 
     await promise;
 

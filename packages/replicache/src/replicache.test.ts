@@ -490,7 +490,7 @@ test('HTTP status pull', async () => {
 
   const consoleErrorStub = sinon.stub(console, 'error');
 
-  void rep.pull({now: true});
+  rep.pullIgnorePromise({now: true});
 
   await tickAFewTimes(20, 10);
 
@@ -1665,21 +1665,21 @@ test('pull mutate options', async () => {
   await tickUntilTimeIs(1000);
 
   while (Date.now() < 1150) {
-    void rep.pull();
+    rep.pullIgnorePromise();
     await clock.tickAsync(10);
   }
 
   rep.requestOptions.minDelayMs = 500;
 
   while (Date.now() < 2000) {
-    void rep.pull();
+    rep.pullIgnorePromise();
     await clock.tickAsync(100);
   }
 
   rep.requestOptions.minDelayMs = 25;
 
   while (Date.now() < 2500) {
-    void rep.pull();
+    rep.pullIgnorePromise();
     await clock.tickAsync(5);
   }
 

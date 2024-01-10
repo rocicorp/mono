@@ -1551,7 +1551,7 @@ suite('DD31', () => {
       throws: new Error('Simulate fetch error in push'),
     }));
 
-    void rep.pull();
+    rep.pullIgnorePromise();
 
     await tickAFewTimes();
     expect(rep.online).to.equal(false);
@@ -1565,7 +1565,7 @@ suite('DD31', () => {
       patch: [],
     });
 
-    void rep.pull();
+    rep.pullIgnorePromise();
     expect(rep.recoverMutationsFake.callCount).to.equal(1);
     while (!rep.online) {
       await tickAFewTimes();
