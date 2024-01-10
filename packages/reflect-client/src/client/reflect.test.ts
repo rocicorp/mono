@@ -1249,6 +1249,21 @@ test('Constructing Reflect with a negative hiddenTabDisconnectDelay option throw
     );
 });
 
+test('Constructing Reflect with an invalid roomID option throws an error', () => {
+  let expected;
+  try {
+    reflectForTest({roomID: 'invalid^RoomID'});
+  } catch (e) {
+    expected = e;
+  }
+  expect(expected)
+    .instanceOf(Error)
+    .property(
+      'message',
+      'ReflectOptions.roomID must match /^[A-Za-z0-9_/-]+$/.',
+    );
+});
+
 suite('Disconnect on hide', () => {
   type Case = {
     name: string;

@@ -52,8 +52,6 @@ import {
   createRoom,
   deleteRoom,
   internalCreateRoom,
-  isValidRoomID,
-  makeInvalidRoomIDMessage,
   objectIDByRoomID,
   roomProperties,
   roomPropertiesByRoomID,
@@ -72,6 +70,7 @@ import {
   userID,
 } from './router.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import {isValidRoomID, makeInvalidRoomIDMessage} from 'reflect-shared';
 
 export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
 
