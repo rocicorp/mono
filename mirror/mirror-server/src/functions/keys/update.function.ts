@@ -15,7 +15,7 @@ import {validateSchema} from '../validators/schema.js';
 
 export const FLUSH_UPDATES_TIMEOUT = 5_000;
 
-/** Coordinates the flushing of a buffered updates. */
+/** Coordinates the flushing of buffered updates. */
 export class UpdateCoordinator {
   readonly #lock: Lock = new Lock();
   #buffer: UpdateBuffer = new UpdateBuffer();
