@@ -6,7 +6,10 @@ function createAppOptions(): AppOptions {
   const options = JSON.parse(process.env.FIREBASE_CONFIG || '{}') as AppOptions;
   options.projectId ??= 'unknown-project';
   options.serviceAccountId = `functions@${options.projectId}.iam.gserviceaccount.com`;
-  logger.info('Initializing Firebase with', options);
+  logger.debug(
+    `Initializing Firebase from ${process.env.FIREBASE_CONFIG}`,
+    options,
+  );
   return options;
 }
 
@@ -22,5 +25,7 @@ export const baseHttpsOptions: HttpsOptions = {
 };
 
 export function cloudFunctionURL(functionName: string): string {
-  return `https://us-central1-${projectId}.cloudfunctions.net/${functionName}`;
+  return projectId === 'unknown-project'
+    ? `http://127.0.0.1:5001/${functionName}` // Assume emulator
+    : `https://us-central1-${projectId}.cloudfunctions.net/${functionName}`;
 }

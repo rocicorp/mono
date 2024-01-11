@@ -36,8 +36,6 @@ import {
 } from 'shared/src/api/responses.js';
 import {FetchMocker} from 'shared/src/fetch-mocker.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
-import {mockKeyUpdater} from '../../keys/test-helpers.js';
-import type {UpdateKeyCaller} from '../../keys/updates.js';
 import {TestSecrets} from '../../secrets/test-utils.js';
 import {dummyDeployment} from '../../test-helpers.js';
 import {apps} from './apps.function.js';
@@ -356,12 +354,7 @@ describe('api-apps', () => {
       const {res} = getMockRes();
 
       const appsFunction = https.onRequest(
-        apps(
-          firestore,
-          auth as unknown as Auth,
-          testSecrets(),
-          mockKeyUpdater() as UpdateKeyCaller,
-        ),
+        apps(firestore, auth as unknown as Auth, testSecrets()),
       );
       await appsFunction(request, res);
 

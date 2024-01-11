@@ -14,7 +14,7 @@ import type {Role} from 'mirror-schema/src/membership.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
-import type {UpdateKeyCaller} from '../../keys/updates.js';
+import {updateKey} from '../../keys/updates.js';
 import {
   INTERNAL_FUNCTION_HEADER,
   INTERNAL_FUNCTION_SECRET,
@@ -211,7 +211,6 @@ export function appOrKeyAuthorization<
   Context extends UserOrKeyAuthorization & Pick<AuthContext, 'appKeyDoc'>,
 >(
   firestore: Firestore,
-  keyUpdater: UpdateKeyCaller,
   keyPermission: RequiredPermission,
   allowedRoles: Role[] = ['admin', 'member'],
 ): RequestContextValidator<Request, Context, Context & AppAuthorization> {
@@ -275,15 +274,13 @@ export function appOrKeyAuthorization<
     // Fire-and-forget a call to `appKeys-update`, which is an internal function that
     // uses delayed batching to coalesce writes to the same key, and moves the Firestore
     // write transaction out of the critical path.
-    void keyUpdater
-      .call({
-        appID,
-        keyName: appKeyDocRef.id,
-        lastUsed: Date.now(),
-      })
-      .catch(e =>
-        logger.error(`Error sending update for ${appKeyDocRef.path}`, e),
-      );
+    void updateKey({
+      appID,
+      keyName: appKeyDocRef.id,
+      lastUsed: Date.now(),
+    }).catch(e =>
+      logger.error(`Error sending update for ${appKeyDocRef.path}`, e),
+    );
     return {...context, ...authorization};
   };
 }

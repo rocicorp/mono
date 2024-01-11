@@ -1,5 +1,5 @@
 import * as v from 'shared/src/valita.js';
-import type {FunctionCaller} from '../functions/internal/caller.js';
+import {createCall} from '../functions/internal/call.js';
 
 export const updateKeyRequestSchema = v.object({
   appID: v.string(),
@@ -20,7 +20,8 @@ export type UpdateBatch = v.Infer<typeof updateBatchSchema>;
 export type UpdateKeyRequest = v.Infer<typeof updateKeyRequestSchema>;
 export type UpdateKeyResponse = v.Infer<typeof updateKeyResponseSchema>;
 
-export type UpdateKeyCaller = FunctionCaller<
-  UpdateKeyRequest,
-  UpdateKeyResponse
->;
+export const updateKey = createCall(
+  'appKeys-update',
+  updateKeyRequestSchema,
+  updateKeyResponseSchema,
+);

@@ -17,7 +17,6 @@ import * as semver from 'semver';
 import {gtr} from 'semver';
 import {isSupportedSemverRange} from 'shared/src/mirror/is-supported-semver-range.js';
 import {assertAllModulesHaveUniqueNames} from '../../cloudflare/module-assembler.js';
-import type {UpdateKeyCaller} from '../../keys/updates.js';
 import {
   appOrKeyAuthorization,
   userOrKeyAuthorization,
@@ -31,14 +30,13 @@ import {findNewestMatchingVersion} from './find-newest-matching-version.js';
 export const publish = (
   firestore: Firestore,
   storage: Storage,
-  keyUpdater: UpdateKeyCaller,
   bucketName: string,
   testDistTags?: DistTags,
 ) =>
   validateSchema(publishRequestSchema, publishResponseSchema)
     .validate(userAgentVersion(testDistTags))
     .validate(userOrKeyAuthorization())
-    .validate(appOrKeyAuthorization(firestore, keyUpdater, 'app:publish'))
+    .validate(appOrKeyAuthorization(firestore, 'app:publish'))
     .handle(async (publishRequest, context) => {
       const {
         serverVersionRange,

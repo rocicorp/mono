@@ -1,4 +1,11 @@
-import {afterEach, describe, expect, jest, test} from '@jest/globals';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  jest,
+  test,
+} from '@jest/globals';
 import {initializeApp} from 'firebase-admin/app';
 import {Timestamp, getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
@@ -22,9 +29,9 @@ import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
 import {setApp, setUser} from 'mirror-schema/src/test-helpers.js';
 import type {User} from 'mirror-schema/src/user.js';
 import {userPath} from 'mirror-schema/src/user.js';
+import {FetchMocker} from 'shared/src/fetch-mocker.js';
 import * as v from 'shared/src/valita.js';
-import {mockKeyUpdater} from '../../keys/test-helpers.js';
-import type {UpdateKeyCaller} from '../../keys/updates.js';
+import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {
   appAuthorization,
   appOrKeyAuthorization,
@@ -55,7 +62,13 @@ describe('auth-validators', () => {
   const APP_ID = 'auth-app-id';
   const APP_KEY_NAME = 'auth-app-key';
 
-  const keyUpdater = mockKeyUpdater();
+  let fetchMocker: FetchMocker;
+
+  mockFunctionParamsAndSecrets();
+
+  beforeEach(() => {
+    fetchMocker = new FetchMocker().result('POST', '/appKeys-update', {});
+  });
 
   afterEach(async () => {
     const batch = firestore.batch();
@@ -87,13 +100,7 @@ describe('auth-validators', () => {
   ): Callable<TestRequest, TestResponse> {
     return validateSchema(testRequestSchema, testResponseSchema)
       .validate(userOrKeyAuthorization())
-      .validate(
-        appOrKeyAuthorization(
-          firestore,
-          keyUpdater as UpdateKeyCaller,
-          keyPermission,
-        ),
-      )
+      .validate(appOrKeyAuthorization(firestore, keyPermission))
       .handle(
         // eslint-disable-next-line require-await
         async (testRequest, context) => ({
@@ -422,7 +429,23 @@ describe('auth-validators', () => {
       expect(response).toEqual(c.response);
 
       if (c.response) {
-        expect(keyUpdater.call).toHaveBeenCalledTimes(1);
+        expect(fetchMocker.requests()).toEqual([
+          ['POST', 'http://127.0.0.1:5001/appKeys-update'],
+        ]);
+        expect(fetchMocker.headers()).toEqual([
+          {
+            'Content-Type': 'application/json',
+            'X-Mirror-Internal-Function': 'default-INTERNAL_FUNCTION_SECRET',
+          },
+        ]);
+        const body = JSON.parse(String(fetchMocker.bodys()[0]));
+        expect(body).toMatchObject({
+          data: {
+            appID: APP_ID,
+            keyName: APP_KEY_NAME,
+            lastUsed: expect.any(Number),
+          },
+        });
       }
     });
   }

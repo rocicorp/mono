@@ -27,8 +27,6 @@ import {
 import {userPath} from 'mirror-schema/src/user.js';
 import {MAX_SERVER_VARIABLES} from 'mirror-schema/src/vars.js';
 import {watch} from 'mirror-schema/src/watch.js';
-import {mockKeyUpdater} from '../../keys/test-helpers.js';
-import type {UpdateKeyCaller} from '../../keys/updates.js';
 import {SecretsCache} from '../../secrets/index.js';
 import {TestSecrets} from '../../secrets/test-utils.js';
 import {dummyDeployment} from '../../test-helpers.js';
@@ -102,9 +100,7 @@ describe('vars-set', () => {
   });
 
   function callSet(vars: Record<string, string>) {
-    const setFunction = https.onCall(
-      set(firestore, testSecrets(), mockKeyUpdater() as UpdateKeyCaller),
-    );
+    const setFunction = https.onCall(set(firestore, testSecrets()));
     return setFunction.run({
       data: {
         requester: {

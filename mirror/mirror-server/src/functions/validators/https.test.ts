@@ -15,8 +15,6 @@ import {appPath} from 'mirror-schema/src/deployment.js';
 import {setApp, setUser} from 'mirror-schema/src/test-helpers.js';
 import {userPath} from 'mirror-schema/src/user.js';
 import * as v from 'shared/src/valita.js';
-import {mockKeyUpdater} from '../../keys/test-helpers.js';
-import type {UpdateKeyCaller} from '../../keys/updates.js';
 import {
   appAuthorization,
   appOrKeyAuthorization,
@@ -108,13 +106,7 @@ describe('validators/https', () => {
     const handler = validateRequest(testRequestSchema)
       .validate(authorizationHeader(firestore, auth as unknown as Auth))
       .validate(userOrKeyAuthorization())
-      .validate(
-        appOrKeyAuthorization(
-          firestore,
-          mockKeyUpdater() as UpdateKeyCaller,
-          'app:publish',
-        ),
-      )
+      .validate(appOrKeyAuthorization(firestore, 'app:publish'))
       .handle((req, ctx) => {
         const {response} = ctx;
         response.json({userID: req.requester.userID, appName: ctx.app.name});
