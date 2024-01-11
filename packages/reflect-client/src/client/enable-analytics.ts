@@ -9,11 +9,10 @@ export const IP_ADDRESS_HOSTNAME_REGEX = new RegExp(
   `(${IPV4_ADDRESS_REGEX.source}|${IPV6_ADDRESS_HOSTNAME_REGEX.source})`,
 );
 
-export function shouldEnableAnalytics(options: {
-  server: string | null;
-  enableAnalytics: boolean | undefined;
-}): boolean {
-  const {server, enableAnalytics = true} = options;
+export function shouldEnableAnalytics(
+  server: string | null,
+  enableAnalytics = true,
+): boolean {
   if (!enableAnalytics) {
     return false;
   }

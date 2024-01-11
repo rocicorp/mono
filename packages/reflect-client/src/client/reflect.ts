@@ -314,10 +314,10 @@ export class Reflect<MD extends MutatorDefs> {
       );
     }
     const server = getServer(options.server, options.socketOrigin);
-    this.#enableAnalytics = shouldEnableAnalytics({
-      enableAnalytics: options.enableAnalytics,
+    this.#enableAnalytics = shouldEnableAnalytics(
       server,
-    });
+      options.enableAnalytics,
+    );
 
     console.log('enableAnalytics', this.#enableAnalytics);
 
