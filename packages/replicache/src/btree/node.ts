@@ -5,21 +5,23 @@ import {
   assertNumber,
   assertString,
 } from 'shared/src/asserts.js';
+import {
+  JSONValue,
+  ReadonlyJSONValue,
+  assertJSONValue,
+} from 'shared/src/json.js';
 import {binarySearch as binarySearchWithFunc} from '../binary-search.js';
 import {skipBTreeNodeAsserts} from '../config.js';
 import type {IndexKey} from '../db/index.js';
 import {FormatVersion} from '../format-version.js';
+import {
+  assertDeepFrozen,
+  deepFreeze,
+  type FrozenJSONValue,
+  type FrozenTag,
+} from '../frozen-json.js';
 import {Hash, emptyHash, newUUIDHash} from '../hash.js';
 import {joinIterables} from '../iterables.js';
-import {
-  FrozenJSONValue,
-  FrozenTag,
-  JSONValue,
-  ReadonlyJSONValue,
-  assertDeepFrozen,
-  assertJSONValue,
-  deepFreeze,
-} from '../json.js';
 import type {BTreeRead} from './read.js';
 import type {BTreeWrite} from './write.js';
 

@@ -1,6 +1,5 @@
 import type {Firestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
-import {logger} from 'firebase-functions';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {
   publishRequestSchema,
@@ -96,8 +95,6 @@ export const publish = (
         },
         serverReleaseChannel,
       );
-
-      logger.log(`Requested ${deploymentPath}`);
       return {deploymentPath, success: true};
     });
 
@@ -120,9 +117,6 @@ export async function computeDeploymentSpec(
     firestore,
     range,
     serverReleaseChannel,
-  );
-  logger.log(
-    `Found matching version for ${serverVersionRange}: ${serverVersion}`,
   );
 
   const {provider: providerID, name: appName, teamLabel} = app;

@@ -1,4 +1,4 @@
-import type {FrozenJSONValue} from '../json.js';
+import type {FrozenJSONValue} from '../frozen-json.js';
 import type {Read} from './store.js';
 
 export class ReadImpl implements Read {

@@ -735,3 +735,32 @@ test('Send promise', async () => {
   }
   expect(err).to.equal(expectedError);
 });
+
+suite('Send when closed should reject', () => {
+  for (const now of [true, false] as const) {
+    test(`now = ${now}`, async () => {
+      loop = new ConnectionLoop({
+        invokeSend: () => Promise.resolve(true),
+        debounceDelay: 100,
+        minDelayMs: 200,
+        maxDelayMs: 1_000,
+        maxConnections: 1,
+        watchdogTimer: 100,
+      });
+
+      if (now) {
+        loop.close();
+      }
+
+      const sendP = loop.send(now);
+      if (!now) {
+        await tickUntilTimeIs(50);
+        loop.close();
+      }
+
+      const err = await sendP.catch(e => e);
+      expect(err).instanceOf(Error);
+      expect((err as Error).message).equal('Closed');
+    });
+  }
+});

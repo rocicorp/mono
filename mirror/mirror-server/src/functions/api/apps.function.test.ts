@@ -88,7 +88,7 @@ describe('api-apps', () => {
   beforeAll(async () => {
     const runningDeployment = dummyDeployment('1234');
     runningDeployment.spec.hostname = 'my-app-team.reflect-server.bonk';
-    runningDeployment.spec.serverVersion = '0.38.202312200000';
+    runningDeployment.spec.serverVersion = '0.38.202401100000';
     await Promise.all([
       setApp(firestore, APP_ID, {name: 'za app', runningDeployment}),
       firestore
@@ -135,7 +135,7 @@ describe('api-apps', () => {
     query?: string;
     token: string;
     workerUrl?: string;
-    result: APIResponse<ReadonlyJSONValue>;
+    response: APIResponse<ReadonlyJSONValue>;
     pretest?: () => Promise<void>;
   };
   const cases: Case[] = [
@@ -144,9 +144,8 @@ describe('api-apps', () => {
       path: `/v1/apps/${APP_ID}/rooms/yo?dont=forgets&the=query`,
       token: APP_KEY_VALUE,
       workerUrl: `https://my-app-team.reflect-server.bonk/api/v1/rooms/yo?dont=forgets&the=query`,
-      result: {
+      response: {
         result: {room: 'yo'},
-        error: null,
       },
     },
     {
@@ -154,9 +153,34 @@ describe('api-apps', () => {
       path: `/v1/apps/${APP_ID}/connections/all:invalidate`,
       token: APP_KEY_VALUE,
       workerUrl: `https://my-app-team.reflect-server.bonk/api/v1/connections/all:invalidate`,
-      result: {
+      response: {
         result: {},
-        error: null,
+      },
+    },
+    {
+      name: 'Wrong method for read command',
+      method: 'POST',
+      path: `/v1/apps/${APP_ID}/rooms`,
+      token: APP_KEY_VALUE,
+      response: {
+        error: {
+          code: 405,
+          resource: 'request',
+          message: 'Unsupported method',
+        },
+      },
+    },
+    {
+      name: 'Wrong method for write command',
+      method: 'GET',
+      path: `/v1/apps/${APP_ID}/connections/all:invalidate`,
+      token: APP_KEY_VALUE,
+      response: {
+        error: {
+          code: 405,
+          resource: 'request',
+          message: 'Unsupported method',
+        },
       },
     },
     {
@@ -164,13 +188,12 @@ describe('api-apps', () => {
       method: 'PUT',
       path: `/v1/apps/${APP_ID}/connections/all:invalidate`,
       token: APP_KEY_VALUE,
-      result: {
+      response: {
         error: {
           code: 405,
           resource: 'request',
           message: 'Unsupported method "PUT"',
         },
-        result: null,
       },
     },
     {
@@ -178,13 +201,12 @@ describe('api-apps', () => {
       method: 'GET',
       path: `/v1/apps/${APP_ID}/rooms/yo`,
       token: 'bad header with lots of spaces',
-      result: {
+      response: {
         error: {
           code: 401 as APIErrorCode,
           resource: 'request',
           message: 'Invalid Authorization header',
         },
-        result: null,
       },
     },
     {
@@ -192,28 +214,52 @@ describe('api-apps', () => {
       method: 'GET',
       path: `/v1/apps/${APP_ID}/rooms/yo`,
       token: 'bad-token',
-      result: {
+      response: {
         error: {
           code: 403 as APIErrorCode,
           resource: 'request',
           message: 'Invalid key',
         },
-        result: null,
       },
     },
     {
-      name: 'missing permission',
+      name: 'unknown read permission',
       method: 'GET',
       path: `/v1/apps/${APP_ID}/connections/yo`,
       token: APP_KEY_VALUE,
-      result: {
+      response: {
+        error: {
+          code: 404,
+          resource: 'request',
+          message: 'Unknown or unreadable resource "connections"',
+        },
+      },
+    },
+    {
+      name: 'unknown write permission',
+      method: 'POST',
+      path: `/v1/apps/${APP_ID}/connections/yo:severe`,
+      token: APP_KEY_VALUE,
+      response: {
+        error: {
+          code: 404,
+          resource: 'request',
+          message: 'Invalid resource or command "connections:severe"',
+        },
+      },
+    },
+    {
+      name: 'insufficient permission',
+      method: 'POST',
+      path: `/v1/apps/${APP_ID}/rooms/foo:delete`,
+      token: APP_KEY_VALUE,
+      response: {
         error: {
           code: 403 as APIErrorCode,
           resource: 'request',
           message:
-            'Key "my-app-key" has not been granted "connections:read" permission',
+            'Key "my-app-key" has not been granted "rooms:delete" permission',
         },
-        result: null,
       },
     },
     {
@@ -221,13 +267,12 @@ describe('api-apps', () => {
       method: 'GET',
       path: `/v1/apps/wrong-app/rooms/yo`,
       token: APP_KEY_VALUE,
-      result: {
+      response: {
         error: {
           code: 403 as APIErrorCode,
           resource: 'request',
           message: 'Key "my-app-key" is not authorized for app wrong-app',
         },
-        result: null,
       },
     },
     {
@@ -235,21 +280,20 @@ describe('api-apps', () => {
       method: 'GET',
       path: `/v1/apps/${APP_ID}/rooms/yo`,
       token: APP_KEY_VALUE,
-      result: {
+      response: {
         error: {
           code: 400,
           resource: 'request',
           message:
-            'App "za app" is at server version 0.38.202312190000 which does not support the REST API.\n' +
+            'App "za app" is at server version 0.38.202401080000 which does not support the REST API.\n' +
             'Update the app to @rocicorp/reflect@latest and re-publish.',
         },
-        result: null,
       },
       pretest: async () => {
         await firestore
           .doc(appPath(APP_ID))
           .set(
-            {runningDeployment: {spec: {serverVersion: '0.38.202312190000'}}},
+            {runningDeployment: {spec: {serverVersion: '0.38.202401080000'}}},
             {mergeFields: ['runningDeployment.spec.serverVersion']},
           );
       },
@@ -259,13 +303,12 @@ describe('api-apps', () => {
       method: 'GET',
       path: `/v1/apps/${APP_ID}/rooms/yo`,
       token: APP_KEY_VALUE,
-      result: {
+      response: {
         error: {
           code: 400,
           resource: 'request',
           message: 'App "za app" is not running',
         },
-        result: null,
       },
       pretest: async () => {
         await firestore
@@ -316,7 +359,7 @@ describe('api-apps', () => {
       await appsFunction(request, res);
 
       if (c.workerUrl) {
-        expect(res.send).toBeCalledWith(JSON.stringify(c.result));
+        expect(res.send).toBeCalledWith(JSON.stringify(c.response));
         expect(fetchMocker.requests()).toEqual([[c.method, c.workerUrl]]);
         expect(fetchMocker.headers()).toEqual([
           {'x-reflect-api-key': 'the-reflect-api-key'},
@@ -324,7 +367,7 @@ describe('api-apps', () => {
         expect(fetchMocker.bodys()).toEqual([Buffer.from('buffer body ^_^')]);
       } else {
         expect(res.json).toBeCalled;
-        expect(res.json).toBeCalledWith(c.result);
+        expect(res.json).toBeCalledWith(c.response);
       }
     }),
   );

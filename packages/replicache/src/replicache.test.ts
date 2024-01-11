@@ -11,11 +11,11 @@ import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {assert as chaiAssert, expect} from 'chai';
 import {assert} from 'shared/src/asserts.js';
+import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
 import {sleep} from 'shared/src/sleep.js';
 import * as sinon from 'sinon';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import {Write} from './db/write.js';
-import type {JSONValue, ReadonlyJSONValue} from './json.js';
 import {TestMemStore} from './kv/test-mem-store.js';
 import type {PatchOperation} from './patch-operation.js';
 import {deleteClientForTesting} from './persist/clients-test-helpers.js';
@@ -490,7 +490,7 @@ test('HTTP status pull', async () => {
 
   const consoleErrorStub = sinon.stub(console, 'error');
 
-  void rep.pull({now: true});
+  rep.pullIgnorePromise({now: true});
 
   await tickAFewTimes(20, 10);
 
@@ -1665,21 +1665,21 @@ test('pull mutate options', async () => {
   await tickUntilTimeIs(1000);
 
   while (Date.now() < 1150) {
-    void rep.pull();
+    rep.pullIgnorePromise();
     await clock.tickAsync(10);
   }
 
   rep.requestOptions.minDelayMs = 500;
 
   while (Date.now() < 2000) {
-    void rep.pull();
+    rep.pullIgnorePromise();
     await clock.tickAsync(100);
   }
 
   rep.requestOptions.minDelayMs = 25;
 
   while (Date.now() < 2500) {
-    void rep.pull();
+    rep.pullIgnorePromise();
     await clock.tickAsync(5);
   }
 

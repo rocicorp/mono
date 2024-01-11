@@ -1,6 +1,10 @@
 import {expect} from 'chai';
-import {deepFreeze, isDeepFrozen} from './frozen-json.js';
-import {deepFreezeAllowUndefined, type ReadonlyJSONValue} from './json.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import {
+  deepFreeze,
+  deepFreezeAllowUndefined,
+  isDeepFrozen,
+} from './frozen-json.js';
 
 test('deepFreeze', () => {
   expect(deepFreeze(null)).equal(null);

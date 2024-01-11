@@ -1,6 +1,7 @@
 import {expect} from 'chai';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import {deepFreeze} from '../frozen-json.js';
 import {Hash, fakeHash, makeNewFakeHashFunction, parse} from '../hash.js';
-import {ReadonlyJSONValue, deepFreeze} from '../json.js';
 import {Chunk, createChunk} from './chunk.js';
 
 test('round trip', () => {

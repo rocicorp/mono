@@ -9,6 +9,7 @@ import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from 'shared/src/abort-error.js';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
+import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
 import {initBgIntervalProcess} from './bg-interval.js';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
@@ -28,13 +29,12 @@ import {
   VersionNotSupportedResponse,
 } from './error-responses.js';
 import {FormatVersion} from './format-version.js';
+import {deepFreeze} from './frozen-json.js';
 import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
 import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.js';
 import {assertHash, emptyHash, Hash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {IndexDefinitions} from './index-defs.js';
-import type {JSONValue} from './json.js';
-import {deepFreeze, ReadonlyJSONValue} from './json.js';
 import {newIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
 import type {CreateStore} from './kv/store.js';
 import {MutationRecovery} from './mutation-recovery.js';

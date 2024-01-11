@@ -98,10 +98,9 @@ describe('parse ListOptions', () => {
           parsedURL: must(new URLPattern().exec(url)),
           lc: createSilentLogContext(),
         };
-        const {query: listParams} = await queryParams(listParamsSchema)(
-          ctx,
-          new Request(url),
-        );
+        const {
+          ctx: {query: listParams},
+        } = await queryParams(listParamsSchema)(ctx, new Request(url));
         const listControl = makeListControl(listParams, c.maxResultsLimit);
         expect(c.listOptions).not.toBeUndefined;
         expect(listControl.getOptions()).toEqual(c.listOptions);

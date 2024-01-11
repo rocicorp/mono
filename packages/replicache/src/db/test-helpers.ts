@@ -1,6 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
+import type {JSONValue} from 'shared/src/json.js';
 import {emptyDataNode} from '../btree/node.js';
 import type {BTreeRead} from '../btree/read.js';
 import {BTreeWrite} from '../btree/write.js';
@@ -9,9 +10,9 @@ import type {Chunk} from '../dag/chunk.js';
 import {Write as DagWrite, Store, mustGetHeadHash} from '../dag/store.js';
 import {Visitor} from '../dag/visitor.js';
 import {FormatVersion} from '../format-version.js';
+import {deepFreeze} from '../frozen-json.js';
 import {Hash, emptyHash} from '../hash.js';
 import type {IndexDefinition, IndexDefinitions} from '../index-defs.js';
-import {JSONValue, deepFreeze} from '../json.js';
 import type {ClientID} from '../sync/ids.js';
 import {addSyncSnapshot} from '../sync/test-helpers.js';
 import {

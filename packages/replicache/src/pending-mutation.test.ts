@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import type {JSONValue} from './json.js';
+import type {JSONValue} from 'shared/src/json.js';
 import {
   initReplicacheTesting,
   makePullResponseV1,
@@ -51,7 +51,7 @@ test('pending mutation', async () => {
 
   rep.pullURL = 'https://diff.com/pull';
   fetchMock.post(rep.pullURL, makePullResponseV1(clientID, 2));
-  void rep.pull();
+  rep.pullIgnorePromise();
   await tickAFewTimes(100);
   await rep.mutate.addData({a: 3});
   const addAMutation = {id: 3, name: 'addData', args: {a: 3}, clientID};
@@ -61,7 +61,7 @@ test('pending mutation', async () => {
 
   fetchMock.reset();
   fetchMock.post(rep.pullURL, makePullResponseV1(clientID, 3));
-  void rep.pull();
+  rep.pullIgnorePromise();
   await tickAFewTimes(100);
   expect(await rep.experimentalPendingMutations()).to.deep.equal([]);
 });

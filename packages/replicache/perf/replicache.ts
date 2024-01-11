@@ -1,5 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert} from 'shared/src/asserts.js';
+import {deepEqual} from 'shared/src/json.js';
 import {
   IndexDefinitions,
   JSONValue,
@@ -12,7 +13,6 @@ import {
   UpdateNeededReason,
   WriteTransaction,
 } from '../out/replicache.js';
-import {deepEqual} from '../src/json.js';
 import {dropStore as dropIDBStore} from '../src/kv/idb-util.js';
 import type {ReplicacheInternalAPI} from '../src/replicache-options.js';
 import {uuid} from '../src/uuid.js';

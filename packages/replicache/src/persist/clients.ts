@@ -20,9 +20,9 @@ import {
 } from '../db/commit.js';
 import {createIndexBTree} from '../db/write.js';
 import type {FormatVersion} from '../format-version.js';
+import {FrozenJSONValue, deepFreeze} from '../frozen-json.js';
 import {Hash, hashSchema} from '../hash.js';
 import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
-import {FrozenJSONValue, deepFreeze} from '../json.js';
 import {
   clientGroupIDSchema,
   type ClientGroupID,
