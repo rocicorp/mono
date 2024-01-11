@@ -1,11 +1,4 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  jest,
-  test,
-} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import {initializeApp} from 'firebase-admin/app';
 import {Timestamp, getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
@@ -76,7 +69,6 @@ describe('auth-validators', () => {
     batch.delete(firestore.doc(appPath(APP_ID)));
     batch.delete(firestore.doc(appKeyPath(APP_ID, APP_KEY_NAME)));
     await batch.commit();
-    jest.clearAllMocks();
   });
 
   function testFunction(
