@@ -64,8 +64,19 @@ export class UpdateBuffer {
   }
 }
 
+/**
+ * Global buffer of updates that are shared across invocations of a function
+ * instance. The `appKeys-update` functions is configured with a high
+ * "concurrency" value so that a single instance can service many invocations.
+ */
 const globalUpdateCoordinator = new UpdateCoordinator();
 
+/**
+ * The function implementation is such that the last function to add an update
+ * to the UpdateCoordinator is the one responsible for waiting for the flush
+ * timeout to fire. All previous function invocations return early when a new
+ * function is invoked and "takes the baton" for eventually flushing the buffer.
+ */
 export const update = (firestore: Firestore) =>
   validateSchema(updateKeyRequestSchema, updateKeyResponseSchema)
     .validate(internalFunctionHeader())

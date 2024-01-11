@@ -102,6 +102,9 @@ export const appKeys = {
     {
       ...baseHttpsOptions,
       secrets: [INTERNAL_FUNCTION_SECRET_NAME],
+      // Configure with a high concurrency so that a single instance
+      // can service a burst of many invocations. Only the last invocation
+      // actually waits for the buffer timeout to fire.
       concurrency: 128,
     },
     appKeyFunctions.update(getFirestore()),
