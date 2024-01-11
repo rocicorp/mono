@@ -1,18 +1,22 @@
 import {expect} from 'chai';
-import {deepFreeze, isDeepFrozen} from './frozen-json.js';
-import type {ReadonlyJSONValue} from './json.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import {
+  deepFreeze,
+  deepFreezeAllowUndefined,
+  isDeepFrozen,
+} from './frozen-json.js';
 
-test('toDeepFrozen', () => {
-  expect(deepFreeze(null)).to.equal(null);
-  expect(deepFreeze(true)).to.equal(true);
-  expect(deepFreeze(false)).to.equal(false);
-  expect(deepFreeze(1)).to.equal(1);
-  expect(deepFreeze(123.456)).to.equal(123.456);
-  expect(deepFreeze('')).to.equal('');
-  expect(deepFreeze('abc')).to.equal('abc');
+test('deepFreeze', () => {
+  expect(deepFreeze(null)).equal(null);
+  expect(deepFreeze(true)).equal(true);
+  expect(deepFreeze(false)).equal(false);
+  expect(deepFreeze(1)).equal(1);
+  expect(deepFreeze(123.456)).equal(123.456);
+  expect(deepFreeze('')).equal('');
+  expect(deepFreeze('abc')).equal('abc');
 
   const expectSameObject = (v: ReadonlyJSONValue) => {
-    expect(deepFreeze(v)).to.equal(v);
+    expect(deepFreeze(v)).equal(v);
   };
 
   const expectFrozen = (v: ReadonlyJSONValue) => {
@@ -41,6 +45,8 @@ test('toDeepFrozen', () => {
     expect(o2).equal(o);
     expect(o2).frozen;
   }
+
+  expectFrozen({a: undefined});
 });
 
 test('isDeepFrozen', () => {
@@ -96,4 +102,29 @@ test('isDeepFrozen', () => {
     Object.freeze(o);
     expect(isDeepFrozen(o, [])).to.be.true;
   }
+});
+
+test('deepFreeze with undefined throws', () => {
+  // @ts-expect-error undefined is not allowed
+  expect(() => deepFreeze(undefined)).throw(TypeError);
+
+  // @ts-expect-error undefined is not allowed
+  expect(() => deepFreeze([undefined])).throw(TypeError);
+
+  // @ts-expect-error undefined is not allowed
+  // eslint-disable-next-line no-sparse-arrays
+  expect(() => deepFreeze([1, , 2])).throw(TypeError);
+});
+
+test('deepFreezeAllowUndefined', () => {
+  expect(deepFreezeAllowUndefined(undefined)).equal(undefined);
+
+  // Holes/undefined array elements are still not allowed.
+
+  // @ts-expect-error undefined is not allowed
+  expect(() => deepFreezeAllowUndefined([undefined])).throw(TypeError);
+
+  // @ts-expect-error undefined is not allowed
+  // eslint-disable-next-line no-sparse-arrays
+  expect(() => deepFreezeAllowUndefined([1, , 2])).throw(TypeError);
 });

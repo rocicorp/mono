@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
+import type {JSONValue} from 'shared/src/json.js';
 import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {
@@ -8,7 +9,6 @@ import {
   readIndexesForWrite,
 } from '../db/write.js';
 import {FormatVersion} from '../format-version.js';
-import type {JSONValue} from '../json.js';
 import {assertPatchOperations} from '../patch-operation.js';
 import {withWriteNoImplicitCommit} from '../with-transactions.js';
 import {apply} from './patch.js';

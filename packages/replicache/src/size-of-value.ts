@@ -1,10 +1,11 @@
 import {hasOwn} from 'shared/src/has-own.js';
-import type {ReadonlyJSONObject} from './json.js';
+import type {ReadonlyJSONObject} from 'shared/src/json.js';
 
 const SIZE_TAG = 1;
 const SIZE_INT32 = 4;
 const SIZE_SMI = 5;
 const SIZE_DOUBLE = 8;
+
 /**
  * Gives a size of a value. The size is modelled after the size used by
  * Chromium/V8's structuredClone algorithm. It does not match exactly so the
@@ -19,7 +20,7 @@ const SIZE_DOUBLE = 8;
  * And JSC:
  * https://github.com/WebKit/WebKit/blob/main/Source/WebCore/bindings/js/SerializedScriptValue.cpp#L356
  * - Use 1 byte tag
- * - Numbers are either stored as Int32 or Float6
+ * - Numbers are either stored as Int32 or Float64
  */
 export function getSizeOfValue(value: unknown): number {
   switch (typeof value) {
@@ -56,7 +57,13 @@ export function getSizeOfValue(value: unknown): number {
         let sum: number = 2 * SIZE_TAG + SIZE_INT32;
         for (const k in val) {
           if (hasOwn(val, k)) {
-            sum += getSizeOfValue(k) + getSizeOfValue(val[k]);
+            // Skip undefined values. undefined values in an object gets
+            // stripped if we round trip through JSON.stringif which is what we
+            // use when syncing.
+            const propertyValue = val[k];
+            if (propertyValue !== undefined) {
+              sum += getSizeOfValue(k) + getSizeOfValue(propertyValue);
+            }
           }
         }
         return sum;

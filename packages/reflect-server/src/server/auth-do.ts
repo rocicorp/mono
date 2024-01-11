@@ -70,6 +70,7 @@ import {
   userID,
 } from './router.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import {isValidRoomID, makeInvalidRoomIDMessage} from 'reflect-shared';
 
 export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
 
@@ -198,7 +199,7 @@ export class BaseAuthDO implements DurableObject {
     .handleAPIResult(async ctx => {
       const {roomID} = ctx;
       const roomProperties = await this.#roomRecordLock.withRead(() =>
-        roomPropertiesByRoomID(this.#durableStorage, ctx.roomID),
+        roomPropertiesByRoomID(this.#durableStorage, roomID),
       );
       if (roomProperties === undefined) {
         throw roomNotFoundAPIError(roomID);
@@ -228,8 +229,7 @@ export class BaseAuthDO implements DurableObject {
           lc,
           this.#roomDO,
           this.#durableStorage,
-          // Note: we need to copy the request here because we read the body.
-          new Request(req, {body: JSON.stringify(body)}),
+          req,
           roomID,
           jurisdiction,
         ),
@@ -262,9 +262,9 @@ export class BaseAuthDO implements DurableObject {
     const {lc} = ctx;
     lc.info?.('authDO received websocket tail request:', request.url);
 
-    const errorResponse = requireUpgradeHeader(request, lc);
-    if (errorResponse) {
-      return errorResponse;
+    const upgradeHeaderErrorResponse = requireUpgradeHeader(request, lc);
+    if (upgradeHeaderErrorResponse) {
+      return upgradeHeaderErrorResponse;
     }
 
     // From this point forward we want to return errors over the websocket so
@@ -276,11 +276,18 @@ export class BaseAuthDO implements DurableObject {
       createWSAndCloseWithTailError(lc, request, errorKind, msg);
 
     const url = new URL(request.url);
-    const roomID = url.searchParams.get('roomID');
-    if (!roomID) {
+    const [[roomID], errorResponse] = getRequiredSearchParams(
+      ['roomID'],
+      url.searchParams,
+      msg => closeWithErrorLocal('InvalidConnectionRequest', msg),
+    );
+    if (errorResponse) {
+      return errorResponse;
+    }
+    if (!isValidRoomID(roomID)) {
       return closeWithErrorLocal(
         'InvalidConnectionRequest',
-        'roomID parameter required',
+        makeInvalidRoomIDMessage(roomID),
       );
     }
 
@@ -557,6 +564,12 @@ export class BaseAuthDO implements DurableObject {
     if (errorResponse) {
       return errorResponse;
     }
+    if (!isValidRoomID(roomID)) {
+      return closeWithErrorLocal(
+        'InvalidConnectionRequest',
+        makeInvalidRoomIDMessage(roomID),
+      );
+    }
 
     const jurisdiction = searchParams.get('jurisdiction') ?? undefined;
     if (jurisdiction && jurisdiction !== 'eu') {
@@ -597,11 +610,14 @@ export class BaseAuthDO implements DurableObject {
         // Find the room's objectID so we can connect to it. Do this BEFORE
         // writing the connection record, in case it doesn't exist or is
         // closed/deleted.
-        let roomRecord = await timed(lc.debug, 'looking up roomRecord', () =>
-          this.#roomRecordLock.withRead(
-            // Check if room already exists.
-            () => roomRecordByRoomID(this.#durableStorage, roomID),
-          ),
+        let roomRecord: RoomRecord | Error | undefined = await timed(
+          lc.debug,
+          'looking up roomRecord',
+          () =>
+            this.#roomRecordLock.withRead(
+              // Check if room already exists.
+              () => roomRecordByRoomID(this.#durableStorage, roomID),
+            ),
         );
 
         if (!roomRecord) {
@@ -623,8 +639,7 @@ export class BaseAuthDO implements DurableObject {
                   jurisdiction,
                 );
               } catch (e) {
-                // Errors are thrown as APIErrors.
-                return undefined;
+                return e instanceof Error ? e : new Error(String(e));
               }
               return roomRecordByRoomID(this.#durableStorage, roomID);
             }),
@@ -638,8 +653,17 @@ export class BaseAuthDO implements DurableObject {
         // message to the client, then close the connection. We trust it will be
         // logged by onSocketError in the client.
 
-        if (roomRecord === undefined || roomRecord.status !== RoomStatus.Open) {
-          const kind = roomRecord ? 'RoomClosed' : 'RoomNotFound';
+        if (
+          roomRecord === undefined ||
+          roomRecord instanceof Error ||
+          roomRecord.status !== RoomStatus.Open
+        ) {
+          // Note: We currently treat all Errors as "RoomClosed", which is not always correct;
+          // an Error may have arisen due to a concurrent room creation, resulting in
+          // a 409 conflict, or due to a runtime error while connecting to the room DO.
+          //
+          // TODO: Update the ErrorKind to better represent these scenarios.
+          const kind = roomRecord === undefined ? 'RoomNotFound' : 'RoomClosed';
           return createWSAndCloseWithError(lc, request, kind, roomID);
         }
 

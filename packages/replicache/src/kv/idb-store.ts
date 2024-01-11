@@ -1,9 +1,9 @@
 import {resolver} from '@rocicorp/resolver';
 import {assertNotNull} from 'shared/src/asserts.js';
-import {deepFreeze, FrozenJSONValue} from '../json.js';
+import {FrozenJSONValue, deepFreezeAllowUndefined} from '../frozen-json.js';
 import {promiseVoid} from '../resolved-promises.js';
 import type {Read, Store, Write} from './store.js';
-import {deleteSentinel, WriteImplBase} from './write-impl-base.js';
+import {WriteImplBase, deleteSentinel} from './write-impl-base.js';
 
 const RELAXED = {durability: 'relaxed'} as const;
 const OBJECT_STORE = 'chunks';
@@ -112,7 +112,7 @@ class ReadImpl implements Read {
   get(key: string): Promise<FrozenJSONValue | undefined> {
     return new Promise((resolve, reject) => {
       const req = objectStore(this.#tx).get(key);
-      req.onsuccess = () => resolve(deepFreeze(req.result));
+      req.onsuccess = () => resolve(deepFreezeAllowUndefined(req.result));
       req.onerror = () => reject(req.error);
     });
   }

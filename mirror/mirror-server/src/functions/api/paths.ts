@@ -1,4 +1,6 @@
+import {HttpsError} from 'firebase-functions/v2/https';
 import {match} from 'path-to-regexp';
+import {unsupportedMethodError} from './errors.js';
 
 export type ReadParams = {
   appID: string;
@@ -21,7 +23,7 @@ export type PathParams = {
 };
 
 const matchReadParams = match<ReadParams>(
-  '/v1/apps/:appID/:resource{/:subpath(.*)}?',
+  '/v1/apps/:appID/:resource{/:subpath([^:]*)}?',
 );
 
 const matchWriteParams = match<WriteParams>(
@@ -31,7 +33,10 @@ const matchWriteParams = match<WriteParams>(
 export function parseReadParams(path: string): ReadParams {
   const matched = matchReadParams(path);
   if (!matched) {
-    throw new Error();
+    if (matchWriteParams(path)) {
+      throw unsupportedMethodError();
+    }
+    throw new HttpsError('not-found', 'Unknown or malformed url');
   }
   return matched.params;
 }
@@ -39,7 +44,10 @@ export function parseReadParams(path: string): ReadParams {
 export function parseWriteParams(path: string): WriteParams {
   const matched = matchWriteParams(path);
   if (!matched) {
-    throw new Error();
+    if (matchReadParams(path)) {
+      throw unsupportedMethodError();
+    }
+    throw new HttpsError('not-found', 'Unknown or malformed url');
   }
   return matched.params;
 }

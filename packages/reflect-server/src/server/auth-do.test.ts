@@ -124,19 +124,13 @@ async function expectSuccessfulAPIResponse(
   result: ReadonlyJSONValue = {},
 ) {
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({
-    result,
-    error: null,
-  });
+  expect(await response.json()).toEqual({result});
   expect(response.headers.get('content-type')).toBe('application/json');
 }
 
 async function expectAPIErrorResponse(response: Response, error: APIErrorInfo) {
   expect(response.status).toBe(error.code);
-  expect(await response.json()).toEqual({
-    result: null,
-    error,
-  });
+  expect(await response.json()).toEqual({error});
   expect(response.headers.get('content-type')).toBe('application/json');
 }
 
@@ -247,7 +241,6 @@ test('createRoom allows slashes in roomIDs', async () => {
 
   response = await authDO.fetch(newRoomRecordsRequest());
   expect(await response.json()).toEqual({
-    error: null,
     result: {
       results: [
         {
@@ -265,7 +258,6 @@ test('createRoom allows slashes in roomIDs', async () => {
     newGetRoomRequest('https://teset.roci.dev/', TEST_API_KEY, '/'),
   );
   expect(await response.json()).toEqual({
-    error: null,
     result: {
       roomID: '/',
       jurisdiction: '',
@@ -304,7 +296,7 @@ test('createRoom requires roomIDs to not contain weird characters', async () => 
       await expectAPIErrorResponse(response, {
         code: 400,
         resource: 'rooms',
-        message: `Invalid roomID "${roomID}" (must match /^[A-Za-z0-9_\\-/]+$/)`,
+        message: `Invalid roomID "${roomID}" (must match /^[A-Za-z0-9_/-]+$/)`,
       });
     }
   }
@@ -816,11 +808,15 @@ function createConnectTestFixture(
     headers.set('Sec-WebSocket-Protocol', encodedTestAuth);
   }
   headers.set('Upgrade', 'websocket');
-  let url = `ws://test.roci.dev/api/sync/v1/connect?roomID=${testRoomID}&clientID=${testClientID}&userID=${testUserID}`;
+  const url = new URL('ws://test.roci.dev/api/sync/v1/connect');
+  url.searchParams.set('roomID', testRoomID);
+  url.searchParams.set('clientID', testClientID);
+  url.searchParams.set('userID', testUserID);
+
   if (jurisdiction) {
-    url += `&jurisdiction=${jurisdiction}`;
+    url.searchParams.set('jurisdiction', jurisdiction);
   }
-  const testRequest = new Request(url, {
+  const testRequest = new Request(url.toString(), {
     headers,
   });
 
@@ -844,12 +840,11 @@ function createConnectTestFixture(
       // eslint-disable-next-line require-await
       return new TestDurableObjectStub(id, async (request: Request) => {
         expect(request.headers.get(ROOM_ID_HEADER_NAME)).toEqual(testRoomID);
-        const url = new URL(request.url);
         if (new URLPattern({pathname: CREATE_ROOM_PATH}).test(request.url)) {
           return new Response();
         }
 
-        if (url.pathname === AUTH_CONNECTIONS_PATH) {
+        if (new URL(request.url).pathname === AUTH_CONNECTIONS_PATH) {
           return new Response(
             JSON.stringify(
               connectedClients ?? [
@@ -898,17 +893,16 @@ function createRoomDOThatThrowsIfFetchIsCalled(): DurableObjectNamespace {
 }
 
 describe("connect will implicitly create a room that doesn't exist", () => {
-  const t = (jurisdiction: string | undefined) => {
-    test(`jurisdiction=${jurisdiction}:`, async () => {
+  const t = (jurisdiction: string | undefined, testRoomID: string) => {
+    test(`jurisdiction=${jurisdiction}&roomID=${testRoomID}`, async () => {
       const {
         testAuth,
         testUserID,
-        testRoomID,
         testRequest,
         testRoomDO,
         mocket,
         encodedTestAuth,
-      } = createConnectTestFixture({jurisdiction});
+      } = createConnectTestFixture({jurisdiction, testRoomID});
       const logSink = new TestLogSink();
       const authDO = new TestAuthDO({
         roomDO: testRoomDO,
@@ -931,15 +925,18 @@ describe("connect will implicitly create a room that doesn't exist", () => {
         mocket,
         encodedTestAuth,
         testUserID,
+        testRoomID,
         storage,
         jurisdiction,
       );
     });
   };
 
-  t(undefined);
-  t('eu');
-  t('invalid');
+  t(undefined, 'testRoomID');
+  t(undefined, 'testRoomID/with/slashes');
+  t('eu', 'testRoomID');
+  t('eu', 'testRoomID/with/slashes');
+  t('invalid', 'testRoomID');
 });
 
 test('connect calls authHandler and sends resolved AuthData in header to Room DO', async () => {
@@ -976,6 +973,7 @@ test('connect calls authHandler and sends resolved AuthData in header to Room DO
     mocket,
     encodedTestAuth,
     testUserID,
+    testRoomID,
     storage,
     undefined,
   );
@@ -1016,6 +1014,7 @@ describe('connect with undefined authHandler sends AuthData with url param userI
         mocket,
         encodedTestAuth,
         testUserID,
+        testRoomID,
         storage,
         undefined,
       );
@@ -1106,7 +1105,7 @@ test('connect percent escapes components of the connection key', async () => {
   expect(await storage.list({prefix: 'conn/'})).toEqual(
     new Map([
       [
-        'conn/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F/',
+        'conn/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F%26/',
         {connectTimestamp: testTime},
       ],
     ]),
@@ -1114,7 +1113,7 @@ test('connect percent escapes components of the connection key', async () => {
   expect(await storage.list({prefix: 'conns_by_room/'})).toEqual(
     new Map([
       [
-        'conns_by_room/testRoomID/conn/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F/',
+        'conns_by_room/testRoomID/conn/%2FtestUserID%2F%3F/testRoomID/%2FtestClientID%2F%26/',
         {},
       ],
     ]),
@@ -1301,11 +1300,8 @@ test('connect sends over InvalidConnectionRequest over ws without calling Room D
     roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
     state,
     // eslint-disable-next-line require-await
-    authHandler: async (auth, roomID, env) => {
-      expect(auth).toEqual(testAuth);
-      expect(roomID).toEqual(testRoomID);
-      expect(env).toEqual({foo: 'bar'});
-      return {userID: ''};
+    authHandler: async () => {
+      throw new Error('Unexpected call to authHandler');
     },
     logSink: new TestLogSink(),
     logLevel: 'debug',
@@ -1324,6 +1320,101 @@ test('connect sends over InvalidConnectionRequest over ws without calling Room D
         'error',
         'InvalidConnectionRequest',
         'userID parameter required',
+      ]),
+    ],
+    ['close'],
+  ]);
+});
+
+test('connect sends over InvalidConnectionRequest over ws without calling Room DO if roomID is not present', async () => {
+  const testUserID = 'testUserID1';
+  const testClientID = 'testClientID1';
+  const testAuth = 'testAuthTokenValue';
+
+  const headers = new Headers();
+  headers.set('Sec-WebSocket-Protocol', testAuth);
+  headers.set('Upgrade', 'websocket');
+
+  const testRequest = new Request(
+    `ws://test.roci.dev/api/sync/v1/connect?userID=${testUserID}&clientID=${testClientID}`,
+    {
+      headers,
+    },
+  );
+  const [clientWS, serverWS] = mockWebSocketPair();
+
+  const authDO = new TestAuthDO({
+    roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
+    state,
+    // eslint-disable-next-line require-await
+    authHandler: async () => {
+      throw new Error('Unexpected call to authHandler');
+    },
+    logSink: new TestLogSink(),
+    logLevel: 'debug',
+    env: {foo: 'bar'},
+  });
+
+  const response = await authDO.fetch(testRequest);
+
+  expect(response.status).toEqual(101);
+  expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(testAuth);
+  expect(response.webSocket).toBe(clientWS);
+  expect(serverWS.log).toEqual([
+    [
+      'send',
+      JSON.stringify([
+        'error',
+        'InvalidConnectionRequest',
+        'roomID parameter required',
+      ]),
+    ],
+    ['close'],
+  ]);
+});
+
+test('connect sends over InvalidConnectionRequest over ws without calling Room DO if roomID is invalid', async () => {
+  const testUserID = 'testUserID1';
+  const invalidRoomID = 'invalid^RoomID';
+  const testClientID = 'testClientID1';
+  const testAuth = 'testAuthTokenValue';
+
+  const headers = new Headers();
+  headers.set('Sec-WebSocket-Protocol', testAuth);
+  headers.set('Upgrade', 'websocket');
+
+  const testRequest = new Request(
+    `ws://test.roci.dev/api/sync/v1/connect?userID=${testUserID}&roomID=${invalidRoomID}&clientID=${testClientID}`,
+    {
+      headers,
+    },
+  );
+  const [clientWS, serverWS] = mockWebSocketPair();
+
+  const authDO = new TestAuthDO({
+    roomDO: createRoomDOThatThrowsIfFetchIsCalled(),
+    state,
+    // eslint-disable-next-line require-await
+    authHandler: async () => {
+      throw new Error('Unexpected call to authHandler');
+    },
+    logSink: new TestLogSink(),
+    logLevel: 'debug',
+    env: {foo: 'bar'},
+  });
+
+  const response = await authDO.fetch(testRequest);
+
+  expect(response.status).toEqual(101);
+  expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(testAuth);
+  expect(response.webSocket).toBe(clientWS);
+  expect(serverWS.log).toEqual([
+    [
+      'send',
+      JSON.stringify([
+        'error',
+        'InvalidConnectionRequest',
+        'Invalid roomID "invalid^RoomID" (must match /^[A-Za-z0-9_/-]+$/)',
       ]),
     ],
     ['close'],
@@ -1689,6 +1780,7 @@ async function connectAndTestThatRoomGotCreated(
   mocket: Mocket,
   encodedTestAuth: string | undefined,
   testUserID: string,
+  testRoomID: string,
   storage: DurableObjectStorage,
   jurisdiction: string | undefined,
 ) {
@@ -1703,18 +1795,21 @@ async function connectAndTestThatRoomGotCreated(
     );
   }
 
+  const encodedTestUserID = encodeURIComponent(testUserID);
+  const encodedTestRoomID = encodeURIComponent(testRoomID);
+
   if (jurisdiction !== 'invalid') {
     expect(response.webSocket).toBe(mocket);
     expect((await storage.list({prefix: 'conn/'})).size).toEqual(1);
     const connectionRecord = (await storage.get(
-      `conn/${testUserID}/testRoomID1/testClientID1/`,
+      `conn/${encodedTestUserID}/${encodedTestRoomID}/testClientID1/`,
     )) as Record<string, unknown> | undefined;
     assert(connectionRecord);
     expect(connectionRecord.connectTimestamp).toEqual(testTime);
     expect(await storage.list({prefix: 'conns_by_room/'})).toEqual(
       new Map([
         [
-          `conns_by_room/testRoomID1/conn/${testUserID}/testRoomID1/testClientID1/`,
+          `conns_by_room/${encodedTestRoomID}/conn/${encodedTestUserID}/${encodedTestRoomID}/testClientID1/`,
           {},
         ],
       ]),
@@ -1722,7 +1817,7 @@ async function connectAndTestThatRoomGotCreated(
   } else {
     expect((await storage.list({prefix: 'conn/'})).size).toEqual(0);
     const connectionRecord = await storage.get(
-      `conn/${testUserID}/testRoomID1/testClientID1/`,
+      `conn/${encodedTestUserID}/${encodedTestRoomID}/testClientID1/`,
     );
     expect(connectionRecord).toBeUndefined();
     expect((await storage.list({prefix: 'conns_by_room/'})).size).toEqual(0);
@@ -2257,13 +2352,19 @@ describe('tail', () => {
       authApiKey?: string;
       testRoomID: string | null;
       expectedError?: TailErrorMessage;
+      shouldCreateRoom?: boolean; // default true
     },
   ) => {
     test(name, async () => {
       const [, server] = mockWebSocketPair();
       const {testRoomID, testRequest, testRoomDO, socketFromRoomDO} =
         createTailTestFixture(options);
-      const {testApiToken, expectedError, authApiKey = TEST_API_KEY} = options;
+      const {
+        testApiToken,
+        expectedError,
+        authApiKey = TEST_API_KEY,
+        shouldCreateRoom = true,
+      } = options;
       const logSink = new TestLogSink();
       const authDO = new TestAuthDO({
         roomDO: testRoomDO,
@@ -2273,7 +2374,7 @@ describe('tail', () => {
         env: {foo: 'bar'},
       });
 
-      if (testRoomID) {
+      if (testRoomID && shouldCreateRoom) {
         await createRoom(authDO, testRoomID, authApiKey);
       }
 
@@ -2297,7 +2398,6 @@ describe('tail', () => {
         ),
       );
 
-      // const response = await authDO.fetch(testRequest);
       expect(response.status).toEqual(101);
       expect(response.headers.get('Sec-WebSocket-Protocol')).toEqual(
         testApiToken,
@@ -2353,6 +2453,17 @@ describe('tail', () => {
       message: 'roomID parameter required',
     },
   });
+  t('invalid room id', {
+    testApiToken: TEST_API_KEY,
+    testRoomID: 'invalid^RoomID',
+    shouldCreateRoom: false,
+    expectedError: {
+      type: 'error',
+      kind: 'InvalidConnectionRequest',
+      message:
+        'Invalid roomID "invalid^RoomID" (must match /^[A-Za-z0-9_/-]+$/)',
+    },
+  });
   t('api token with spaces', {
     testApiToken: 'a b c',
     authApiKey: 'a b c',
@@ -2386,12 +2497,18 @@ describe('Alarms', () => {
     connectedClients?: {clientID: string; userID: string}[],
   ) {
     const jurisdiction = undefined;
-    const {testUserID, testRequest, testRoomDO, mocket, encodedTestAuth} =
-      createConnectTestFixture({
-        testAuth,
-        encodedTestAuth: testAuth,
-        connectedClients,
-      });
+    const {
+      testRoomID,
+      testUserID,
+      testRequest,
+      testRoomDO,
+      mocket,
+      encodedTestAuth,
+    } = createConnectTestFixture({
+      testAuth,
+      encodedTestAuth: testAuth,
+      connectedClients,
+    });
     const logSink = new TestLogSink();
     const authDO = new TestAuthDO({
       roomDO: testRoomDO,
@@ -2407,6 +2524,7 @@ describe('Alarms', () => {
       mocket,
       encodedTestAuth,
       testUserID,
+      testRoomID,
       storage,
       jurisdiction,
     );

@@ -1,6 +1,6 @@
 import {expect} from 'chai';
+import type {JSONValue} from 'shared/src/json.js';
 import * as sinon from 'sinon';
-import type {JSONValue} from './json.js';
 import {
   disableAllBackgroundProcesses,
   initReplicacheTesting,

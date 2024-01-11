@@ -29,6 +29,20 @@
       ]
     },
     {
+      "collectionGroup": "metrics",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "yearMonth",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "appID",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "servers",
       "queryScope": "COLLECTION",
       "fields": [

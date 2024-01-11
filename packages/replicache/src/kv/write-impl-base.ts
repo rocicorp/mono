@@ -1,4 +1,9 @@
-import {FrozenJSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import {
+  FrozenJSONValue,
+  deepFreeze,
+  deepFreezeAllowUndefined,
+} from '../frozen-json.js';
 import {promiseFalse, promiseTrue, promiseVoid} from '../resolved-promises.js';
 import type {Read} from './store.js';
 
@@ -32,7 +37,7 @@ export class WriteImplBase {
         return undefined;
       case undefined: {
         const v = await this.#read.get(key);
-        return deepFreeze(v);
+        return deepFreezeAllowUndefined(v);
       }
       default:
         return v;

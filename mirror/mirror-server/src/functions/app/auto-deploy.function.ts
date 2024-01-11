@@ -1,5 +1,4 @@
 import {Timestamp, type Firestore} from 'firebase-admin/firestore';
-import {logger} from 'firebase-functions';
 import {onDocumentUpdated} from 'firebase-functions/v2/firestore';
 import {HttpsError} from 'firebase-functions/v2/https';
 import _ from 'lodash';
@@ -71,7 +70,6 @@ export async function checkForAutoDeployment(
     );
   }
 
-  logger.info(`Requesting ${autoDeploymentType}`, desiredSpec);
   await requestDeployment(
     firestore,
     appID,

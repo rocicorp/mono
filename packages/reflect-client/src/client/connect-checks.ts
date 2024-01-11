@@ -19,6 +19,7 @@ export async function checkConnectivity(
   server: HTTPString,
   lc: LogContext,
   signal: AbortSignal,
+  enableAnalytics: boolean,
 ): Promise<void> {
   const id = nanoid();
   lc = lc.withContext('connectCheckID', id).withContext('checkReason', reason);
@@ -26,16 +27,26 @@ export async function checkConnectivity(
     navigatorOnline: navigator.onLine,
   });
   const socketOrigin = toWSString(server);
-  const checks: Checks = {
+  const cfChecks: Checks = {
     cfGet: _ => checkCfGet(id, server, signal),
     cfWebSocket: l => checkCfSocket(id, socketOrigin, false, l, signal),
     cfWebSocketWSecWebSocketProtocolHeader: l =>
       checkCfSocket(id, socketOrigin, true, l, signal),
+  };
+  const renderChecks: Checks = {
     renderGet: _ => checkRenderGet(id, signal),
     renderWebSocket: l => checkRenderSocket(id, false, l, signal),
     renderWebSocketWSecWebSocketProtocolHeader: l =>
       checkRenderSocket(id, true, l, signal),
   };
+  // When analytics are disabled don't make requests to external web
+  // service hosted on render for checking connectivity.
+  const checks: Checks = enableAnalytics
+    ? {
+        ...cfChecks,
+        ...renderChecks,
+      }
+    : cfChecks;
 
   const resultPs: Promise<CheckResult>[] = [];
   for (const [checkName, check] of Object.entries(checks)) {

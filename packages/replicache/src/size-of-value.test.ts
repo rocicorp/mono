@@ -48,6 +48,9 @@ test('getSizeOfValue', () => {
 
   expect(getSizeOfValue({})).to.equal(1 + 4 + 1);
   expect(getSizeOfValue({abc: 'def'})).to.equal(1 + 4 + 8 + 8 + 1);
+
+  // Object with undefined property values.
+  expect(getSizeOfValue({a: undefined, b: 1})).to.equal(getSizeOfValue({b: 1}));
 });
 
 test('getSizeOfEntry', () => {

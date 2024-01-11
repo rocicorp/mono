@@ -844,6 +844,26 @@ test('Metrics not reported when enableAnalytics is false', async () => {
     ),
   ).to.be.false;
 });
+suite;
+test('Metrics not reported when server indicates local development', async () => {
+  const fetchStub = sinon.stub(window, 'fetch');
+
+  const r = reflectForTest({server: 'http://localhost:8000'});
+  await r.waitForConnectionState(ConnectionState.Connecting);
+  await r.triggerConnected();
+  await r.waitForConnectionState(ConnectionState.Connected);
+
+  for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
+    await clock.tickAsync(PING_INTERVAL_MS);
+    await r.triggerPong();
+  }
+
+  expect(
+    fetchStub.calledWithMatch(
+      sinon.match(new RegExp('^https://example.com/api/metrics/v0/report?.*')),
+    ),
+  ).to.be.false;
+});
 
 test('Authentication', async () => {
   const log: number[] = [];
@@ -1246,6 +1266,21 @@ test('Constructing Reflect with a negative hiddenTabDisconnectDelay option throw
     .property(
       'message',
       'ReflectOptions.hiddenTabDisconnectDelay must not be negative.',
+    );
+});
+
+test('Constructing Reflect with an invalid roomID option throws an error', () => {
+  let expected;
+  try {
+    reflectForTest({roomID: 'invalid^RoomID'});
+  } catch (e) {
+    expected = e;
+  }
+  expect(expected)
+    .instanceOf(Error)
+    .property(
+      'message',
+      'ReflectOptions.roomID must match /^[A-Za-z0-9_/-]+$/.',
     );
 });
 

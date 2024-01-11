@@ -8,6 +8,7 @@ import {APIError, roomNotFoundAPIError} from './api-errors.js';
 import {roomDOFetch} from './auth-do.js';
 import {ErrorWithForwardedResponse} from './errors.js';
 import {CREATE_ROOM_PATH, fmtPath} from './paths.js';
+import {isValidRoomID, makeInvalidRoomIDMessage} from 'reflect-shared';
 
 export enum RoomStatus {
   // An Open room can be used by users. We will accept connect()s to it.
@@ -238,15 +239,9 @@ export async function deleteRoom(
   lc.debug?.(`deleted room ${JSON.stringify(roomRecord)}`);
 }
 
-const roomIDRegex = /^[A-Za-z0-9_\-/]+$/;
-
 function validateRoomID(roomID: string) {
-  if (!roomIDRegex.test(roomID)) {
-    throw new APIError(
-      400,
-      'rooms',
-      `Invalid roomID "${roomID}" (must match ${roomIDRegex})`,
-    );
+  if (!isValidRoomID(roomID)) {
+    throw new APIError(400, 'rooms', makeInvalidRoomIDMessage(roomID));
   }
 }
 

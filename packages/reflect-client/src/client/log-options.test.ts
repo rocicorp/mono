@@ -38,33 +38,6 @@ function testEnableAnalyticsFalse(server: string | null) {
   });
 }
 
-suite('when server indicates testing or local dev', () => {
-  const cases: (string | null)[] = [
-    null,
-    'http://localhost',
-    'http://localhost:8000',
-    'http://127.0.0.1',
-    'http://127.0.0.1:1900',
-    'https://[2001:db8:3333:4444:5555:6666:7777:8888]:9000',
-  ];
-  for (const c of cases) {
-    test(c + '', () => {
-      const {logLevel, logSink} = createLogOptions(
-        {
-          consoleLogLevel: 'info',
-          server: c,
-          enableAnalytics: true,
-        },
-        fakeCreateDatadogLogSink,
-      );
-      expect(fakeCreateDatadogLogSink.callCount).to.equal(0);
-      expect(logLevel).to.equal('info');
-      expect(logSink).to.equal(consoleLogSink);
-    });
-    testEnableAnalyticsFalse(c);
-  }
-});
-
 function testLogLevels(
   server: string,
   expectedServiceLabel: string,
@@ -238,5 +211,23 @@ suite('when server is not a subdomain of .reflect-server.net', () => {
     'foobar.fuzzywuzzy.com',
     'https://foobar.fuzzywuzzy.com/api/logs/v0/log',
   );
+  testEnableAnalyticsFalse(server);
+});
+
+suite('when server is null', () => {
+  const server = null;
+  test('datadog logging is disabled', () => {
+    const {logLevel, logSink} = createLogOptions(
+      {
+        consoleLogLevel: 'info',
+        server,
+        enableAnalytics: true,
+      },
+      fakeCreateDatadogLogSink,
+    );
+    expect(fakeCreateDatadogLogSink.callCount).to.equal(0);
+    expect(logLevel).to.equal('info');
+    expect(logSink).to.equal(consoleLogSink);
+  });
   testEnableAnalyticsFalse(server);
 });

@@ -16,6 +16,7 @@ import {
 } from 'reflect-protocol';
 import type {MutatorDefs, ReadTransaction} from 'reflect-shared';
 import {version} from 'reflect-shared';
+import {isValidRoomID, ROOM_ID_REGEX} from 'reflect-shared';
 import {
   ClientGroupID,
   ClientID,
@@ -66,6 +67,7 @@ import {
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
+import {shouldEnableAnalytics} from './enable-analytics.js';
 
 declare const TESTING: boolean;
 
@@ -171,10 +173,9 @@ export class Reflect<MD extends MutatorDefs> {
   readonly userID: string;
   readonly roomID: string;
 
-  // This is a promise because it is waiting for the clientID from the
-  // Replicache instance.
   readonly #lc: LogContext;
   readonly #logOptions: LogOptions;
+  readonly #enableAnalytics: boolean;
 
   readonly #pokeHandler: PokeHandler;
   readonly #presenceManager: PresenceManager;
@@ -303,13 +304,22 @@ export class Reflect<MD extends MutatorDefs> {
       onOnlineChange,
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-      enableAnalytics = true,
     } = options;
     if (!userID) {
       throw new Error('ReflectOptions.userID must not be empty.');
     }
-
+    if (!isValidRoomID(roomID)) {
+      throw new Error(
+        `ReflectOptions.roomID must match ${ROOM_ID_REGEX.toString()}.`,
+      );
+    }
     const server = getServer(options.server, options.socketOrigin);
+    this.#enableAnalytics = shouldEnableAnalytics({
+      enableAnalytics: options.enableAnalytics,
+      server,
+    });
+
+    console.log('enableAnalytics', this.#enableAnalytics);
 
     if (jurisdiction !== undefined && jurisdiction !== 'eu') {
       throw new Error('ReflectOptions.jurisdiction must be "eu" if present.');
@@ -326,7 +336,7 @@ export class Reflect<MD extends MutatorDefs> {
     this.#logOptions = this.#createLogOptions({
       consoleLogLevel: options.logLevel ?? 'error',
       server,
-      enableAnalytics,
+      enableAnalytics: this.#enableAnalytics,
     });
     const logOptions = this.#logOptions;
 
@@ -372,7 +382,7 @@ export class Reflect<MD extends MutatorDefs> {
       reportIntervalMs: REPORT_INTERVAL_MS,
       host: location.host,
       source: 'client',
-      reporter: enableAnalytics
+      reporter: this.#enableAnalytics
         ? allSeries => this.#reportMetrics(allSeries)
         : () => Promise.resolve(),
       lc: this.#lc,
@@ -1390,6 +1400,7 @@ export class Reflect<MD extends MutatorDefs> {
         this.#server,
         this.#lc,
         this.#closeAbortController.signal,
+        this.#enableAnalytics,
       );
     } catch (e) {
       this.#lc.info?.('Error checking connectivity for', reason, e);

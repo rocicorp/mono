@@ -1,11 +1,12 @@
 import {expect} from 'chai';
 import {assert} from 'shared/src/asserts.js';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import type {Read, Store, Write} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
+import {FrozenJSONValue, deepFreeze} from '../frozen-json.js';
 import {Hash, emptyHash, makeNewFakeHashFunction} from '../hash.js';
-import {FrozenJSONValue, ReadonlyJSONValue, deepFreeze} from '../json.js';
 import {getSizeOfEntry, getSizeOfValue} from '../size-of-value.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {

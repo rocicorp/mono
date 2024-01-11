@@ -39,14 +39,14 @@ export interface ListControl {
 
 export function makeListControl(
   listParams: ListParams,
-  maxMaxResults: number,
+  maxResultsLimit: number,
 ): ListControl {
   const {
-    maxResults: requestedMaxResults = maxMaxResults,
+    maxResults: requestedMaxResults = maxResultsLimit,
     startKey = '',
     startAfterKey,
   } = listParams;
-  const maxResults = Math.min(requestedMaxResults, maxMaxResults);
+  const maxResults = Math.min(requestedMaxResults, maxResultsLimit);
 
   return {
     getOptions: () => ({

@@ -2,12 +2,12 @@ import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
 import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
+import type {JSONValue} from 'shared/src/json.js';
 import * as sinon from 'sinon';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Cookie} from './cookies.js';
 import type {Store} from './dag/store.js';
 import type {Hash} from './hash.js';
-import type {JSONValue} from './json.js';
 import {dropStore as dropIDBStore} from './kv/idb-util.js';
 import {MemStore} from './kv/mem-store.js';
 import type {Store as KVStore} from './kv/store.js';
@@ -53,6 +53,10 @@ export class ReplicacheTest<
       },
     } as ReplicacheOptions<MD>);
     this.#internalAPI = internalAPI;
+  }
+
+  pullIgnorePromise(opts?: Parameters<Replicache['pull']>[0]): void {
+    void this.pull(opts).catch(e => e);
   }
 
   beginPull(): Promise<BeginPullResult> {

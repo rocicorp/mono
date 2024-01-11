@@ -34,6 +34,7 @@ initializeApp(appOptions);
 setGlobalOptions({
   serviceAccount: serviceAccountId,
   concurrency: 32, // https://github.com/rocicorp/mono/issues/1280
+  timeoutSeconds: 120,
 });
 
 // Cache the secrets manager client to amortize connection establishment time.

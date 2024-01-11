@@ -11,11 +11,11 @@ import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {assert as chaiAssert, expect} from 'chai';
 import {assert} from 'shared/src/asserts.js';
+import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
 import {sleep} from 'shared/src/sleep.js';
 import * as sinon from 'sinon';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import {Write} from './db/write.js';
-import type {JSONValue, ReadonlyJSONValue} from './json.js';
 import {TestMemStore} from './kv/test-mem-store.js';
 import type {PatchOperation} from './patch-operation.js';
 import {deleteClientForTesting} from './persist/clients-test-helpers.js';
@@ -490,7 +490,7 @@ test('HTTP status pull', async () => {
 
   const consoleErrorStub = sinon.stub(console, 'error');
 
-  void rep.pull({now: true});
+  rep.pullIgnorePromise({now: true});
 
   await tickAFewTimes(20, 10);
 
@@ -1665,21 +1665,21 @@ test('pull mutate options', async () => {
   await tickUntilTimeIs(1000);
 
   while (Date.now() < 1150) {
-    void rep.pull();
+    rep.pullIgnorePromise();
     await clock.tickAsync(10);
   }
 
   rep.requestOptions.minDelayMs = 500;
 
   while (Date.now() < 2000) {
-    void rep.pull();
+    rep.pullIgnorePromise();
     await clock.tickAsync(100);
   }
 
   rep.requestOptions.minDelayMs = 25;
 
   while (Date.now() < 2500) {
-    void rep.pull();
+    rep.pullIgnorePromise();
     await clock.tickAsync(5);
   }
 
@@ -2493,4 +2493,39 @@ test('Invalid name', () => {
         licenseKey: TEST_LICENSE_KEY,
       }),
   ).to.throw(TypeError);
+});
+
+test('set with undefined key', async () => {
+  // We use a local variable instead of a mutator argument because the args gets
+  // frozen and we do not want to test the freezing of the args but the behavior
+  // of undefined passed into set.
+  let value: unknown;
+  const rep = await replicacheForTesting('set-with-undefined-key', {
+    mutators: {
+      async set(tx: WriteTransaction) {
+        // @ts-expect-error unknown is not a valid key
+        await tx.set('key', value);
+      },
+    },
+  });
+
+  const set = async (v: unknown) => {
+    try {
+      value = v;
+      await rep.mutate.set();
+    } catch (e) {
+      return e;
+    }
+    return undefined;
+  };
+
+  expect(await set(undefined)).instanceOf(TypeError);
+
+  // no error
+  expect(await set({a: undefined})).equal(undefined);
+
+  expect(await set([1, undefined, 2])).instanceOf(TypeError);
+
+  // eslint-disable-next-line no-sparse-arrays
+  expect(await set([1, , 2])).instanceOf(TypeError);
 });
