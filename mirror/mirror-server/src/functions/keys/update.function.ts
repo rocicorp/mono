@@ -15,12 +15,27 @@ import {validateSchema} from '../validators/schema.js';
 
 export const FLUSH_UPDATES_TIMEOUT = 5_000;
 
+/** Coordinates the flushing of a buffered updates. */
 export class UpdateCoordinator {
   readonly #lock: Lock = new Lock();
   #buffer: UpdateBuffer = new UpdateBuffer();
   #timerID: ReturnType<typeof setTimeout> | null = null;
   #baton: Resolver<UpdateBuffer | null> = resolver();
 
+  /**
+   * Adds an update to be flushed.
+   *
+   * The returned Promise will resolve to the `UpdateBuffer` if the flush
+   * timeout fires, in which case the caller is responsible for flushing
+   * the buffer.
+   *
+   * If another caller adds another update before the flush timeout fires,
+   * the first Promise will resolve to `null`, relinquishing the previous caller
+   * of the responsibility of flushing.
+   *
+   * It follows that only a single caller (the last one) is responsible for
+   * flushing the buffer.
+   */
   async add(keyPath: string, timestamp: number): Promise<UpdateBuffer | null> {
     const baton = await this.#lock.withLock(() => {
       this.#buffer.add(keyPath, timestamp);

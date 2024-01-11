@@ -2,6 +2,11 @@ import * as v from 'shared/src/valita.js';
 import {cloudFunctionURL} from '../../config/index.js';
 import {INTERNAL_FUNCTION_HEADER, INTERNAL_FUNCTION_SECRET} from './auth.js';
 
+/**
+ * Creates a call to invoke another cloud function. In order to invoke the
+ * call, the calling function must be configured with the INTERNAL_FUNCTION_SECRET,
+ * which is how it authenticates itself to the callee.
+ */
 export function createCall<Req extends v.ObjectType, Res extends v.ObjectType>(
   functionName: string,
   reqSchema: Req,
