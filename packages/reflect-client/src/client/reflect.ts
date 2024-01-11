@@ -16,6 +16,7 @@ import {
 } from 'reflect-protocol';
 import type {MutatorDefs, ReadTransaction} from 'reflect-shared';
 import {version} from 'reflect-shared';
+import {isValidRoomID, ROOM_ID_REGEX} from 'reflect-shared';
 import {
   ClientGroupID,
   ClientID,
@@ -307,7 +308,11 @@ export class Reflect<MD extends MutatorDefs> {
     if (!userID) {
       throw new Error('ReflectOptions.userID must not be empty.');
     }
-
+    if (!isValidRoomID(roomID)) {
+      throw new Error(
+        `ReflectOptions.roomID must match ${ROOM_ID_REGEX.toString()}.`,
+      );
+    }
     const server = getServer(options.server, options.socketOrigin);
     this.#enableAnalytics = shouldEnableAnalytics({
       enableAnalytics: options.enableAnalytics,

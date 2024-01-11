@@ -70,6 +70,7 @@ import {
   userID,
 } from './router.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import {isValidRoomID, makeInvalidRoomIDMessage} from 'reflect-shared';
 
 export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
 
@@ -261,9 +262,9 @@ export class BaseAuthDO implements DurableObject {
     const {lc} = ctx;
     lc.info?.('authDO received websocket tail request:', request.url);
 
-    const errorResponse = requireUpgradeHeader(request, lc);
-    if (errorResponse) {
-      return errorResponse;
+    const upgradeHeaderErrorResponse = requireUpgradeHeader(request, lc);
+    if (upgradeHeaderErrorResponse) {
+      return upgradeHeaderErrorResponse;
     }
 
     // From this point forward we want to return errors over the websocket so
@@ -275,11 +276,18 @@ export class BaseAuthDO implements DurableObject {
       createWSAndCloseWithTailError(lc, request, errorKind, msg);
 
     const url = new URL(request.url);
-    const roomID = url.searchParams.get('roomID');
-    if (!roomID) {
+    const [[roomID], errorResponse] = getRequiredSearchParams(
+      ['roomID'],
+      url.searchParams,
+      msg => closeWithErrorLocal('InvalidConnectionRequest', msg),
+    );
+    if (errorResponse) {
+      return errorResponse;
+    }
+    if (!isValidRoomID(roomID)) {
       return closeWithErrorLocal(
         'InvalidConnectionRequest',
-        'roomID parameter required',
+        makeInvalidRoomIDMessage(roomID),
       );
     }
 
@@ -555,6 +563,12 @@ export class BaseAuthDO implements DurableObject {
     );
     if (errorResponse) {
       return errorResponse;
+    }
+    if (!isValidRoomID(roomID)) {
+      return closeWithErrorLocal(
+        'InvalidConnectionRequest',
+        makeInvalidRoomIDMessage(roomID),
+      );
     }
 
     const jurisdiction = searchParams.get('jurisdiction') ?? undefined;

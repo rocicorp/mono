@@ -58,4 +58,9 @@ export type {
   ReadTransaction,
   WriteTransaction,
 } from './types.js';
+export {
+  isValidRoomID,
+  makeInvalidRoomIDMessage,
+  ROOM_ID_REGEX,
+} from './room-id.js';
 export {version} from './version.js';

@@ -49,6 +49,9 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   /**
    * A unique identifier for the room.
    *
+   * Must be non-empty and must only contain characters from the character set
+   * `[A-Za-z0-9_/-]`.
+   *
    * For efficiency, a new Reflect instance will initialize its state from
    * the persisted state of an existing Reflect instance with the same
    * `userID`, `roomID`, domain and browser profile.
