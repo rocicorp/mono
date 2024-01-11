@@ -844,7 +844,7 @@ test('Metrics not reported when enableAnalytics is false', async () => {
     ),
   ).to.be.false;
 });
-suite;
+
 test('Metrics not reported when server indicates local development', async () => {
   const fetchStub = sinon.stub(window, 'fetch');
 

@@ -12,42 +12,18 @@ suite('when server indicates testing or local dev', () => {
   ];
   for (const c of cases) {
     test(c + '', () => {
-      expect(
-        shouldEnableAnalytics({
-          server: c,
-          enableAnalytics: true,
-        }),
-      ).false;
-      expect(
-        shouldEnableAnalytics({
-          server: c,
-          enableAnalytics: false,
-        }),
-      ).false;
-      expect(
-        shouldEnableAnalytics({
-          server: c,
-          enableAnalytics: undefined,
-        }),
-      ).false;
+      expect(shouldEnableAnalytics(c, true)).false;
+      expect(shouldEnableAnalytics(c, false)).false;
+      expect(shouldEnableAnalytics(c)).false;
     });
   }
 });
 
 test('enableAnalytics true and server does not indicate testing or local dev', () => {
-  expect(
-    shouldEnableAnalytics({
-      server: 'https://subdomain.domain.net',
-      enableAnalytics: true,
-    }),
-  ).true;
+  expect(shouldEnableAnalytics('https://subdomain.domain.net', true)).true;
 });
 
 test('enableAnalytics undefined and server does not indicate testing or local dev', () => {
-  expect(
-    shouldEnableAnalytics({
-      server: 'https://subdomain.domain.net',
-      enableAnalytics: undefined,
-    }),
-  ).true;
+  expect(shouldEnableAnalytics('https://subdomain.domain.net', undefined)).true;
+  expect(shouldEnableAnalytics('https://subdomain.domain.net')).true;
 });
