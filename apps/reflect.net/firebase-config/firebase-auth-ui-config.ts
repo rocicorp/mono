@@ -1,9 +1,9 @@
-import {GithubAuthProvider, getAuth} from 'firebase/auth';
 import type {AuthCredential, User as FirebaseUser} from 'firebase/auth';
+import {GithubAuthProvider, getAuth} from 'firebase/auth';
 import type {auth as firebaseUiAuth} from 'firebaseui';
 import {ensureUser} from 'mirror-protocol/src/user.js';
-import {initFirebaseApp} from './firebase.config';
 import * as v from 'shared/src/valita.js';
+import {initFirebaseApp} from './firebase.config';
 /**
  * https://github.com/firebase/firebaseui-web/blob/de8a5b0f26cf87b1637c6a5f40c45278aba2945e/javascript/widgets/config.js#L922
  */
@@ -13,6 +13,9 @@ export type AuthResult = {
 };
 
 initFirebaseApp();
+
+// Ping the `user-ensure` function to avoid a cold-start when the user actually logs in.
+ensureUser.warm();
 
 const githubAuthProvider = new GithubAuthProvider();
 
@@ -36,7 +39,7 @@ export const createCallbackUrl = (
 
 const handleAuth = async (authResult: AuthResult) => {
   const userID = authResult.user.uid;
-  await ensureUser({
+  await ensureUser.call({
     requester: {
       userID,
       userAgent: {
