@@ -42,3 +42,9 @@
   background-size: 16px;
   background-position: 1.25rem center;
 }
+
+.returnToCLI {
+  margin: 2rem auto 0;
+  width: fit-content;
+  text-align: center;
+}

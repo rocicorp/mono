@@ -15,6 +15,9 @@ export default function ReflectAuthWelcome() {
       <div className={styles.authSuccess}>
         <span>Reflect OAuth consent granted.</span>
       </div>
+      <p className={styles.returnToCLI}>
+        Please return to the CLI to continue.
+      </p>
     </div>
   );
 }
