@@ -1,10 +1,10 @@
 import {listAppKeys} from 'mirror-protocol/src/app-keys.js';
 import color from 'picocolors';
 import {ensureAppInstantiated} from '../app-config.js';
+import type {AuthContext} from '../handler.js';
 import {makeRequester} from '../requester.js';
 import {padColumns} from '../table.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
-import type {AuthContext} from '../handler.js';
 
 export function listAppKeysOptions(yargs: CommonYargsArgv) {
   return yargs.option('show', {
@@ -27,7 +27,7 @@ export async function listAppKeysHandler(
   const {userID} = authContext.user;
   const {appID} = await ensureAppInstantiated(authContext);
 
-  const {keys, allPermissions} = await listAppKeys({
+  const {keys, allPermissions} = await listAppKeys.call({
     requester: makeRequester(userID),
     appID,
     show,

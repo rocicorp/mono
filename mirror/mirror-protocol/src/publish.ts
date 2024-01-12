@@ -1,7 +1,7 @@
 import * as v from 'shared/src/valita.js';
-import {baseResponseFields} from './base.js';
 import {baseAppRequestFields} from './app.js';
-import {createCall} from './call.js';
+import {baseResponseFields} from './base.js';
+import {createCaller} from './call.js';
 
 const fileSchema = v.object({
   content: v.string(),
@@ -26,7 +26,7 @@ export const publishResponseSchema = v.object({
 });
 export type PublishResponse = v.Infer<typeof publishResponseSchema>;
 
-export const publish = createCall(
+export const publish = createCaller(
   'app-publish',
   publishRequestSchema,
   publishResponseSchema,

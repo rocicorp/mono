@@ -79,7 +79,7 @@ export async function deleteHandler(yargs: DeleteHandlerArgs) {
   }
   for (const app of selectedApps) {
     console.info(`Requesting delete of "${app.name}"`);
-    const {deploymentPath} = await deleteApp({
+    const {deploymentPath} = await deleteApp.call({
       requester: makeRequester(userID),
       appID: app.id,
     });

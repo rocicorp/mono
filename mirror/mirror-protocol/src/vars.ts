@@ -1,7 +1,7 @@
 import * as v from 'shared/src/valita.js';
 import {baseAppRequestFields} from './app.js';
 import {baseResponseFields} from './base.js';
-import {createCall} from './call.js';
+import {createCaller} from './call.js';
 
 export const listVarsRequestSchema = v.object({
   ...baseAppRequestFields,
@@ -52,19 +52,19 @@ export const deleteVarsResponseSchema = v.object({
 export type DeleteVarsRequest = v.Infer<typeof deleteVarsRequestSchema>;
 export type DeleteVarsResponse = v.Infer<typeof deleteVarsResponseSchema>;
 
-export const listVars = createCall(
+export const listVars = createCaller(
   'vars-list',
   listVarsRequestSchema,
   listVarsResponseSchema,
 );
 
-export const setVars = createCall(
+export const setVars = createCaller(
   'vars-set',
   setVarsRequestSchema,
   setVarsResponseSchema,
 );
 
-export const deleteVars = createCall(
+export const deleteVars = createCaller(
   'vars-delete',
   deleteVarsRequestSchema,
   deleteVarsResponseSchema,

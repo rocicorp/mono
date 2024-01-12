@@ -1,5 +1,6 @@
 import {logger} from 'firebase-functions';
 import {HttpsError, type CallableRequest} from 'firebase-functions/v2/https';
+import {WARMUP_RESPONSE, type WarmupRequest} from 'mirror-protocol/src/call.js';
 import type {App} from 'mirror-schema/src/app.js';
 
 export type UserAuthorization = {
@@ -73,6 +74,10 @@ export class ValidatorChainer<Request, Context, Response> {
   ): Callable<Request, Response> {
     return async originalContext => {
       const request = originalContext.data;
+      if ((request as WarmupRequest)._warm_) {
+        logger.debug('Serviced warmup request');
+        return WARMUP_RESPONSE as Response;
+      }
       try {
         const context = await this.#requestValidator(request, originalContext);
         const response = await handler(request, context);

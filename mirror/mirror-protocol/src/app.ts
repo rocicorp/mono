@@ -1,7 +1,7 @@
 import {standardReleaseChannelSchema} from 'mirror-schema/src/server.js';
 import * as v from 'shared/src/valita.js';
 import {baseRequestFields, baseResponseFields} from './base.js';
-import {createCall} from './call.js';
+import {createCaller} from './call.js';
 
 export const createRequestSchema = v.object({
   ...baseRequestFields,
@@ -20,7 +20,7 @@ export const createResponseSchema = v.object({
 });
 export type CreateResponse = v.Infer<typeof createResponseSchema>;
 
-export const createApp = createCall(
+export const createApp = createCaller(
   'app-create',
   createRequestSchema,
   createResponseSchema,
@@ -46,7 +46,7 @@ export const renameAppResponseSchema = v.object({
 });
 export type RenameAppResponse = v.Infer<typeof renameAppResponseSchema>;
 
-export const renameApp = createCall(
+export const renameApp = createCaller(
   'app-rename',
   renameAppRequestSchema,
   renameAppResponseSchema,
@@ -65,7 +65,7 @@ export const deleteAppResponseSchema = v.object({
 
 export type DeleteAppResponse = v.Infer<typeof deleteAppResponseSchema>;
 
-export const deleteApp = createCall(
+export const deleteApp = createCaller(
   'app-delete',
   deleteAppRequestSchema,
   deleteAppResponseSchema,

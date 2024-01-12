@@ -1,6 +1,6 @@
 import * as v from 'shared/src/valita.js';
 import {baseRequestFields, baseResponseFields} from './base.js';
-import {createCall} from './call.js';
+import {createCaller} from './call.js';
 
 export const ensureTeamRequestSchema = v.object({
   ...baseRequestFields,
@@ -18,7 +18,7 @@ export type EnsureTeamResponse = v.Infer<typeof ensureTeamResponseSchema>;
 // initializing one with the given name if necessary. The name should default
 // to the user's github username, which is available on the client credentials
 // via the github oauth login.
-export const ensureTeam = createCall(
+export const ensureTeam = createCaller(
   'team-ensure',
   ensureTeamRequestSchema,
   ensureTeamResponseSchema,

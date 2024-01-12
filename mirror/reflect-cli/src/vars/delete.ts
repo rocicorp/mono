@@ -35,7 +35,7 @@ export async function deleteVarsHandler(
   const {appID} = await ensureAppInstantiated(authContext);
 
   const data = {requester: makeRequester(userID), appID, vars};
-  const {deploymentPath} = await deleteVars(data);
+  const {deploymentPath} = await deleteVars.call(data);
   if (!deploymentPath) {
     console.log('Deleted specified environment variables');
   } else {

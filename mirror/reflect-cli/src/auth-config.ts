@@ -152,7 +152,7 @@ async function authenticateImpl(
       );
       process.exit(-1);
     }
-    const {token} = await createToken({key});
+    const {token} = await createToken.call({key});
     userCredentials = await signInWithCustomToken(getAuth(), token);
   } else {
     const authConfigFilePath = getUserAuthConfigFile(yargs);

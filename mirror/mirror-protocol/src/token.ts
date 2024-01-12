@@ -1,6 +1,6 @@
 import * as v from 'shared/src/valita.js';
 import {baseResponseFields} from './base.js';
-import {createCall} from './call.js';
+import {createCaller} from './call.js';
 
 export const createTokenRequestSchema = v.object({
   key: v.string(),
@@ -14,7 +14,7 @@ export const createTokenResponseSchema = v.object({
 export type CreateTokenRequest = v.Infer<typeof createTokenRequestSchema>;
 export type CreateTokenResponse = v.Infer<typeof createTokenResponseSchema>;
 
-export const createToken = createCall(
+export const createToken = createCaller(
   'token-create',
   createTokenRequestSchema,
   createTokenResponseSchema,

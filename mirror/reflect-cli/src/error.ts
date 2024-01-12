@@ -64,7 +64,7 @@ export async function reportE(
     agentContext: getUserParameters(version),
   };
   // console.debug(error); // For testing
-  await reportError(error).catch(_err => {
+  await reportError.call(error).catch(_err => {
     /* swallow */
   });
 }

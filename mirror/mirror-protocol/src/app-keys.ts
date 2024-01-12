@@ -1,7 +1,7 @@
 import * as v from 'shared/src/valita.js';
 import {baseAppRequestFields} from './app.js';
 import {baseResponseFields} from './base.js';
-import {createCall} from './call.js';
+import {createCaller} from './call.js';
 export {isValidAppKeyName} from 'mirror-schema/src/app-key.js';
 
 // Unlike the Permissions type in `mirror-schema`, the type used in the network protocol
@@ -82,25 +82,25 @@ export const deleteAppKeysResponseSchema = v.object({
 export type DeleteAppKeysRequest = v.Infer<typeof deleteAppKeysRequestSchema>;
 export type DeleteAppKeysResponse = v.Infer<typeof deleteAppKeysResponseSchema>;
 
-export const listAppKeys = createCall(
+export const listAppKeys = createCaller(
   'appKeys-list',
   listAppKeysRequestSchema,
   listAppKeysResponseSchema,
 );
 
-export const createAppKey = createCall(
+export const createAppKey = createCaller(
   'appKeys-create',
   createAppKeyRequestSchema,
   createAppKeyResponseSchema,
 );
 
-export const editAppKey = createCall(
+export const editAppKey = createCaller(
   'appKeys-edit',
   editAppKeyRequestSchema,
   editAppKeyResponseSchema,
 );
 
-export const deleteAppKeys = createCall(
+export const deleteAppKeys = createCaller(
   'appKeys-delete',
   deleteAppKeysRequestSchema,
   deleteAppKeysResponseSchema,

@@ -5,10 +5,10 @@ import {ensureAppInstantiated} from '../app-config.js';
 import {checkbox} from '../inquirer.js';
 import {makeRequester} from '../requester.js';
 
+import type {AuthContext} from '../handler.js';
 import {padColumns} from '../table.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 import {stripDescriptionsIfValid} from './create.js';
-import type {AuthContext} from '../handler.js';
 
 export function editAppKeyOptions(yargs: CommonYargsArgv) {
   return yargs.positional('name', {
@@ -31,7 +31,7 @@ export async function editAppKeyHandler(
   const {appID} = await ensureAppInstantiated(authContext);
   const requester = makeRequester(userID);
 
-  const {keys, allPermissions} = await listAppKeys({
+  const {keys, allPermissions} = await listAppKeys.call({
     requester,
     appID,
     show: false,
@@ -55,7 +55,7 @@ export async function editAppKeyHandler(
     validate: stripDescriptionsIfValid,
   });
 
-  await editAppKey({
+  await editAppKey.call({
     requester,
     appID,
     name,

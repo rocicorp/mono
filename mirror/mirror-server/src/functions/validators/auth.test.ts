@@ -103,6 +103,19 @@ describe('auth-validators', () => {
       );
   }
 
+  test('warmup request', async () => {
+    const authenticatedFunction = https.onCall(testFunction());
+
+    const resp = await authenticatedFunction.run({
+      auth: {} as AuthData,
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      data: {_warm_: true} as unknown as TestRequest,
+      rawRequest: null as unknown as Request,
+    });
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    expect(resp).toEqual({_warmed_: true});
+  });
+
   const goodRequest = {
     requester: {
       userID: USER_ID,

@@ -16,10 +16,10 @@ import {must} from 'shared/src/must.js';
 import {randInt} from 'shared/src/rand.js';
 import * as v from 'shared/src/valita.js';
 import {ErrorWrapper} from './error.js';
+import type {AuthContext} from './handler.js';
 import {confirm, input} from './inquirer.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
-import type {AuthContext} from './handler.js';
 
 // { srcFile: destFile }
 const templateFiles = v.record(v.string());
@@ -160,7 +160,7 @@ export async function ensureAppInstantiated(
     throw new Error('Could not determine GitHub username from OAuth');
   }
   const requester = makeRequester(userID);
-  const {teamID} = await ensureTeam({
+  const {teamID} = await ensureTeam.call({
     requester,
     name: defaultTeamName,
   });
@@ -169,7 +169,7 @@ export async function ensureAppInstantiated(
     app.id !== undefined
       ? app.id
       : (
-          await createApp({
+          await createApp.call({
             requester,
             teamID,
             name: app.name,

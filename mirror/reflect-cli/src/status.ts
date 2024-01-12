@@ -1,22 +1,17 @@
 import {doc, getDoc, getFirestore} from 'firebase/firestore';
-import {ensureUser} from 'mirror-protocol/src/user.js';
-import color from 'picocolors';
 import {
-  appPath,
   AppView,
+  appPath,
   appViewDataConverter,
 } from 'mirror-schema/src/external/app.js';
 import type {DeploymentView} from 'mirror-schema/src/external/deployment.js';
+import color from 'picocolors';
 import {readAppConfig} from './app-config.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import type {AuthContext} from './handler.js';
 
 export async function statusHandler(
   _yargs: YargvToInterface<CommonYargsArgv>,
-  authContext: AuthContext,
 ): Promise<void> {
-  await ensureUser({requester: authContext.requester});
-
   const firestore = getFirestore();
   const config = readAppConfig();
   const appID = config?.apps?.default?.appID;

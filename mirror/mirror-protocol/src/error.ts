@@ -1,6 +1,6 @@
 import * as v from 'shared/src/valita.js';
 import {baseRequestFields, baseResponseFields} from './base.js';
-import {createCall} from './call.js';
+import {createCaller} from './call.js';
 
 export type ErrorInfo = {
   desc: string;
@@ -44,7 +44,7 @@ export type ErrorReportingResponse = v.Infer<
   typeof errorReportingResponseSchema
 >;
 
-export const reportError = createCall(
+export const reportError = createCaller(
   'error-report',
   errorReportingRequestSchema,
   errorReportingResponseSchema,

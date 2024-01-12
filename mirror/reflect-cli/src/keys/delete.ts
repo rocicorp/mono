@@ -1,8 +1,8 @@
 import {deleteAppKeys} from 'mirror-protocol/src/app-keys.js';
 import {ensureAppInstantiated} from '../app-config.js';
+import type {AuthContext} from '../handler.js';
 import {makeRequester} from '../requester.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
-import type {AuthContext} from '../handler.js';
 
 export function deleteAppKeysOptions(yargs: CommonYargsArgv) {
   return yargs.positional('names', {
@@ -25,7 +25,7 @@ export async function deleteAppKeysHandler(
   const {userID} = authContext.user;
   const {appID} = await ensureAppInstantiated(authContext);
 
-  const {deleted} = await deleteAppKeys({
+  const {deleted} = await deleteAppKeys.call({
     requester: makeRequester(userID),
     appID,
     names,

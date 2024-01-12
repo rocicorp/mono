@@ -7,6 +7,7 @@ import {
   test,
 } from '@jest/globals';
 import {doc, getFirestore, setDoc} from 'firebase/firestore';
+import type {PublishRequest, publish} from 'mirror-protocol/src/publish.js';
 import {deploymentViewDataConverter} from 'mirror-schema/src/external/deployment.js';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -15,9 +16,9 @@ import {fileURLToPath} from 'node:url';
 import {setAppConfigForTesting} from './app-config.js';
 import {ErrorWrapper} from './error.js';
 import {initFirebase} from './firebase.js';
+import {authContext} from './login.test.helper.js';
 import {publishHandler, type PublishCaller} from './publish.js';
 import {reflectVersionMatcher, useFakeAuthConfig} from './test-helpers.js';
-import {authContext} from './login.test.helper.js';
 
 type Args = Parameters<typeof publishHandler>[0];
 
@@ -104,31 +105,34 @@ test('it should throw warning if invalid version', async () => {
 });
 
 async function testPublishedCode(source: string, expectedOutputs: string[]) {
-  const publishMock = jest.fn<PublishCaller>();
-  publishMock.mockImplementationOnce(body => {
-    expect(body).toMatchObject({
-      requester: {
-        userAgent: {
-          type: 'reflect-cli',
-          version: reflectVersionMatcher,
-        },
-        userID: 'fake-uid',
-      },
-      source: {
-        content: expect.any(String),
-        name: 'test.js',
-      },
-      sourcemap: {content: expect.any(String), name: 'test.js.map'},
-    });
+  const publishMock = {
+    call: jest
+      .fn<typeof publish.call>()
+      .mockImplementationOnce((body: PublishRequest) => {
+        expect(body).toMatchObject({
+          requester: {
+            userAgent: {
+              type: 'reflect-cli',
+              version: reflectVersionMatcher,
+            },
+            userID: 'fake-uid',
+          },
+          source: {
+            content: expect.any(String),
+            name: 'test.js',
+          },
+          sourcemap: {content: expect.any(String), name: 'test.js.map'},
+        });
 
-    for (const expectedOutput of expectedOutputs) {
-      expect(body.source.content).toContain(expectedOutput);
-    }
-    return Promise.resolve({
-      success: true,
-      deploymentPath: 'apps/foo/deployments/bar',
-    });
-  });
+        for (const expectedOutput of expectedOutputs) {
+          expect(body.source.content).toContain(expectedOutput);
+        }
+        return Promise.resolve({
+          success: true,
+          deploymentPath: 'apps/foo/deployments/bar',
+        });
+      }),
+  };
 
   await writeTempFiles(source, 'test.ts');
 
@@ -154,7 +158,7 @@ async function testPublishedCode(source: string, expectedOutputs: string[]) {
     firestore,
   );
 
-  expect(publishMock).toHaveBeenCalledTimes(1);
+  expect(publishMock.call).toHaveBeenCalledTimes(1);
 }
 
 test('it should compile typescript', async () => {

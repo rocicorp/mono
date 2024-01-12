@@ -11,11 +11,11 @@ import {ensureAppInstantiated} from './app-config.js';
 import {CompileResult, compile} from './compile.js';
 import {ErrorWrapper} from './error.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
+import type {AuthContext} from './handler.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {checkForServerDeprecation} from './version.js';
 import {watchDeployment} from './watch-deployment.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import type {AuthContext} from './handler.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -94,7 +94,7 @@ export async function publishHandler(
   }
 
   console.log('Requesting deployment');
-  const {deploymentPath} = await publish(data);
+  const {deploymentPath} = await publish.call(data);
 
   await watchDeployment(firestore, deploymentPath, 'Published');
 }

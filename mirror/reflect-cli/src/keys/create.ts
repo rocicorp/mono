@@ -9,9 +9,9 @@ import {ensureAppInstantiated} from '../app-config.js';
 import {checkbox, type Choice, type Item} from '../inquirer.js';
 import {makeRequester} from '../requester.js';
 
+import type {AuthContext} from '../handler.js';
 import {padColumns} from '../table.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
-import type {AuthContext} from '../handler.js';
 
 export function createAppKeyOptions(yargs: CommonYargsArgv) {
   return yargs.positional('name', {
@@ -43,7 +43,7 @@ export async function createAppKeyHandler(
   const {appID} = await ensureAppInstantiated(authContext);
   const requester = makeRequester(userID);
 
-  const {allPermissions} = await listAppKeys({
+  const {allPermissions} = await listAppKeys.call({
     requester,
     appID,
     show: false,
@@ -65,7 +65,7 @@ export async function createAppKeyHandler(
           validate: stripDescriptionsIfValid,
         });
 
-  const {value} = await createAppKey({
+  const {value} = await createAppKey.call({
     requester,
     appID,
     name,

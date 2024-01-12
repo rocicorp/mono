@@ -2,11 +2,11 @@ import {listVars, ListVarsResponse} from 'mirror-protocol/src/vars.js';
 import color from 'picocolors';
 import {ensureAppInstantiated} from '../app-config.js';
 import {listDevVars} from '../dev/vars.js';
+import type {AuthContext} from '../handler.js';
 import {makeRequester} from '../requester.js';
 import {padColumns} from '../table.js';
 import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
-import type {AuthContext} from '../handler.js';
 
 export function listVarsOptions(yargs: CommonVarsYargsArgv) {
   return yargs.option('show', {
@@ -45,7 +45,7 @@ export async function listVarsHandler(
     const {appID} = await ensureAppInstantiated(authContext);
     const data = {requester: makeRequester(userID), appID, decrypted: show};
 
-    response = await listVars(data);
+    response = await listVars.call(data);
   }
   for (const env of Object.values(response.envs)) {
     const entries = Object.entries(env.vars);

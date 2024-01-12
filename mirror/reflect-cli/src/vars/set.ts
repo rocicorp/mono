@@ -56,7 +56,7 @@ export async function setVarsHandler(
   const {userID} = authContext.user;
   const {appID} = await ensureAppInstantiated(authContext);
   const data = {requester: makeRequester(userID), appID, vars};
-  const {deploymentPath} = await setVars(data);
+  const {deploymentPath} = await setVars.call(data);
   if (!deploymentPath) {
     console.log('Stored encrypted environment variables');
   } else {
