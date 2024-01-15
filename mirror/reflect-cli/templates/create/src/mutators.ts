@@ -16,14 +16,14 @@
 // thing. The Reflect sync protocol ensures that the server-side result takes
 // precedence over the client-side optimistic result.
 
-import type {WriteTransaction} from '@rocicorp/reflect';
+import type {MutatorDefs, WriteTransaction} from '@rocicorp/reflect';
 import {initClientState, updateClientState} from './client-state.js';
 
 export const mutators = {
   setCursor,
   initClientState,
   increment,
-};
+} satisfies MutatorDefs;
 
 export type M = typeof mutators;
 

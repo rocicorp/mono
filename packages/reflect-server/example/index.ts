@@ -1,4 +1,8 @@
-import type {ReadonlyJSONValue, WriteTransaction} from 'reflect-shared';
+import type {
+  MutatorDefs,
+  ReadonlyJSONValue,
+  WriteTransaction,
+} from 'reflect-shared';
 import {createReflectServer} from '../src/mod.js';
 
 const mutators = {
@@ -10,7 +14,7 @@ const mutators = {
       await tx.set(key, value);
     }
   },
-};
+} satisfies MutatorDefs;
 
 // eslint-disable-next-line require-await
 const authHandler = async (auth: string, _roomID: string) => {
