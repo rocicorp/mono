@@ -1,7 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import {notImplemented} from 'shared/src/asserts.js';
-
 class NoopBroadcastChannel implements BroadcastChannel {
   readonly name: string;
 
@@ -17,20 +15,20 @@ class NoopBroadcastChannel implements BroadcastChannel {
   }
 
   addEventListener(): void {
-    notImplemented();
+    // noop
   }
   removeEventListener(): void {
-    notImplemented();
+    // noop
   }
   dispatchEvent(): boolean {
-    notImplemented();
+    return false;
   }
 
   close(): void {
     // noop
   }
 
-  postMessage(_message: any): void {
+  postMessage(): void {
     // noop
   }
 }
