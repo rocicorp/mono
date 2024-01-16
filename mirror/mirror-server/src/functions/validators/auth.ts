@@ -50,7 +50,7 @@ export function authorizationHeader<
   auth: Auth,
 ): RequestContextValidator<Request, Context, Context & AuthContext> {
   return async (_, context) => {
-    const authorization = context.request.get('authorization');
+    const authorization = context.request.header('authorization');
     if (typeof authorization !== 'string') {
       throw new HttpsError('unauthenticated', 'Invalid Authorization header');
     }
@@ -87,7 +87,7 @@ export function internalFunctionHeader<
   Context extends CallableRequest,
 >() {
   return (_: Request, ctx: Context) => {
-    const secretValue = ctx.rawRequest.get(INTERNAL_FUNCTION_HEADER);
+    const secretValue = ctx.rawRequest.header(INTERNAL_FUNCTION_HEADER);
     if (secretValue !== INTERNAL_FUNCTION_SECRET.value()) {
       throw new HttpsError('permission-denied', 'Unauthorized caller');
     }
