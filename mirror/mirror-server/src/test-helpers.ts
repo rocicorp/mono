@@ -1,5 +1,6 @@
 import {getMockReq as jestGetMockReq} from '@jest-mock/express';
-import type {MockRequest} from '@jest-mock/express/src/request/index.js';
+import type {MockRequest} from '@jest-mock/express/dist/src/request/index.js';
+import {jest} from '@jest/globals';
 import {Timestamp} from 'firebase-admin/firestore';
 import {declaredParams} from 'firebase-functions/params';
 import type {Request} from 'firebase-functions/v2/https';
@@ -46,7 +47,9 @@ export function getMockReq(values: MockRequest): Request {
       value,
     ]),
   );
-  const header = (name: string) => headers[name.toLowerCase()];
+  const header = jest
+    .fn()
+    .mockImplementation(name => headers[String(name).toLowerCase()]);
   return jestGetMockReq<Request>({
     ...values,
     get: values.get ?? header,
