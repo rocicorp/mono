@@ -68,17 +68,17 @@ function getRequestParameters(user: AuthenticatedUser): string {
 
 export function getUserParameters(
   version: string,
-  user: AuthenticatedUser,
+  user: AuthenticatedUser | undefined,
 ): UserParameters {
   return {
     [UserCustomDimension.OsArchitecture]: arch(),
     [UserCustomDimension.NodeVersion]: process.version,
     [UserCustomDimension.ReflectCLIVersion]: version,
     [UserCustomDimension.DeviceFingerprint]: deviceFingerprint,
-    [UserCustomDimension.Email]: user.email ?? 'unknown',
+    [UserCustomDimension.Email]: user?.email ?? 'unknown',
     //current default teamname is username from github
     [UserCustomDimension.TeamName]:
-      user.additionalUserInfo?.username ?? 'unknown',
+      user?.additionalUserInfo?.username ?? 'unknown',
   };
 }
 
