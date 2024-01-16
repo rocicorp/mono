@@ -1,4 +1,4 @@
-import {getMockReq, getMockRes} from '@jest-mock/express';
+import {getMockRes} from '@jest-mock/express';
 import {
   afterEach,
   beforeEach,
@@ -28,7 +28,7 @@ import {
 import {sleep} from 'shared/src/sleep.js';
 import type WebSocket from 'ws';
 import {TestSecrets} from '../../secrets/test-utils.js';
-import {dummyDeployment} from '../../test-helpers.js';
+import {dummyDeployment, getMockReq} from '../../test-helpers.js';
 import {REFLECT_API_KEY} from '../app/secrets.js';
 import {tail} from './tail.handler.js';
 

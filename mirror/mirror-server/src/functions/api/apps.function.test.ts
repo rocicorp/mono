@@ -13,7 +13,6 @@ import {initializeApp} from 'firebase-admin/app';
 import type {Auth} from 'firebase-admin/auth';
 import {FieldValue, Timestamp, getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
-import type {Request} from 'firebase-functions/v2/https';
 import {
   Permissions,
   appKeyDataConverter,
@@ -37,7 +36,7 @@ import {
 import {FetchMocker} from 'shared/src/fetch-mocker.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {TestSecrets} from '../../secrets/test-utils.js';
-import {dummyDeployment} from '../../test-helpers.js';
+import {dummyDeployment, getMockReq} from '../../test-helpers.js';
 import {apps} from './apps.function.js';
 
 describe('api-apps', () => {
@@ -341,7 +340,7 @@ describe('api-apps', () => {
         await c.pretest();
       }
       const url = `https://api.reflect-server.net${c.path}${c.query ?? ''}`;
-      const request = {
+      const request = getMockReq({
         method: c.method,
         path: c.path.includes('?')
           ? c.path.substring(0, c.path.indexOf('?'))
@@ -350,7 +349,7 @@ describe('api-apps', () => {
         originalUrl: url,
         headers: {authorization: `Basic ${c.token}`},
         rawBody: Buffer.from('buffer body ^_^'),
-      } as unknown as Request;
+      });
       const {res} = getMockRes();
 
       const appsFunction = https.onRequest(

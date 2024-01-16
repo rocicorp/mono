@@ -1,4 +1,4 @@
-import {getMockReq, getMockRes} from '@jest-mock/express';
+import {getMockRes} from '@jest-mock/express';
 import {afterAll, beforeAll, describe, expect, jest, test} from '@jest/globals';
 import {initializeApp} from 'firebase-admin/app';
 import type {Auth} from 'firebase-admin/auth';
@@ -15,6 +15,7 @@ import {appPath} from 'mirror-schema/src/deployment.js';
 import {setApp, setUser} from 'mirror-schema/src/test-helpers.js';
 import {userPath} from 'mirror-schema/src/user.js';
 import * as v from 'shared/src/valita.js';
+import {getMockReq} from '../../test-helpers.js';
 import {
   appAuthorization,
   appOrKeyAuthorization,

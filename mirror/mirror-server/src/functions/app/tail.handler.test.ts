@@ -1,4 +1,4 @@
-import {getMockReq, getMockRes} from '@jest-mock/express';
+import {getMockRes} from '@jest-mock/express';
 import {beforeEach, describe, expect, jest, test} from '@jest/globals';
 import type {Auth} from 'firebase-admin/auth';
 import type {Firestore} from 'firebase-admin/firestore';
@@ -12,6 +12,7 @@ import {
 import {sleep} from 'shared/src/sleep.js';
 import type WebSocket from 'ws';
 import {TestSecrets} from '../../secrets/test-utils.js';
+import {getMockReq} from '../../test-helpers.js';
 import {tail} from './tail.handler.js';
 
 export class MockSocket {

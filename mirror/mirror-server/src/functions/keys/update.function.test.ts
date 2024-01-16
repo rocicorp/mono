@@ -9,7 +9,6 @@ import {
 import type {DecodedIdToken} from 'firebase-admin/auth';
 import {FieldValue, Timestamp} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
-import type {Request} from 'firebase-functions/v2/https';
 import {
   appKeyDataConverter,
   appKeyPath,
@@ -18,7 +17,7 @@ import {
 import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
 import {Queue} from 'shared/src/queue.js';
 import type {UpdateKeyRequest, UpdateKeyResponse} from '../../keys/updates.js';
-import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
+import {getMockReq, mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {
   INTERNAL_FUNCTION_HEADER,
   INTERNAL_FUNCTION_SECRET_NAME,
@@ -135,11 +134,11 @@ describe('keys-update', () => {
         uid: 'ignored',
         token: {email: 'foo@bar.com'} as DecodedIdToken,
       },
-      rawRequest: {
+      rawRequest: getMockReq({
         headers: {
           [INTERNAL_FUNCTION_HEADER]: `default-${INTERNAL_FUNCTION_SECRET_NAME}`,
         },
-      } as unknown as Request,
+      }),
     });
   }
 

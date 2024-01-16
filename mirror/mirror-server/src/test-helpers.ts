@@ -1,5 +1,8 @@
+import {getMockReq as jestGetMockReq} from '@jest-mock/express';
+import type {MockRequest} from '@jest-mock/express/src/request/index.js';
 import {Timestamp} from 'firebase-admin/firestore';
 import {declaredParams} from 'firebase-functions/params';
+import type {Request} from 'firebase-functions/v2/https';
 import type {Deployment} from 'mirror-schema/src/deployment.js';
 import assert from 'node:assert';
 import {INTERNAL_FUNCTION_SECRET_NAME} from './functions/internal/auth.js';
@@ -33,4 +36,20 @@ export function dummyDeployment(deploymentID: string): Deployment {
       envUpdateTime: Timestamp.now(),
     },
   };
+}
+
+export function getMockReq(values: MockRequest): Request {
+  // Replicate express's get() and header() behavior.
+  const headers = Object.fromEntries(
+    Object.entries(values.headers ?? {}).map(([key, value]) => [
+      key.toLowerCase(),
+      value,
+    ]),
+  );
+  const header = (name: string) => headers[name.toLowerCase()];
+  return jestGetMockReq<Request>({
+    ...values,
+    get: values.get ?? header,
+    header: values.header ?? header,
+  });
 }
