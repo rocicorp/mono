@@ -1,5 +1,8 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import {disconnectBeaconSchema} from 'reflect-protocol/src/disconnect-beacon.js';
+import {
+  disconnectBeaconQueryParamsSchema,
+  disconnectBeaconSchema,
+} from 'reflect-protocol/src/disconnect-beacon.js';
 import type {Env, MutatorDefs} from 'reflect-shared';
 import {version} from 'reflect-shared';
 import {getConfig} from 'reflect-shared/src/config.js';
@@ -28,7 +31,6 @@ import {CLIENT_GC_FREQUENCY} from './client-gc.js';
 import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
 import {closeConnections, getConnections} from './connections.js';
-import {disconnectBeaconQueryParamsSchema} from './disconnect-beacon.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {requireUpgradeHeader, upgradeWebsocketResponse} from './http-util.js';
 import {ROOM_ID_HEADER_NAME} from './internal-headers.js';

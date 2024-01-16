@@ -6,6 +6,7 @@ import {
   connectionsResponseSchema,
   createRoomRequestSchema,
 } from 'reflect-protocol';
+import {disconnectBeaconQueryParamsSchema} from 'reflect-protocol/src/disconnect-beacon.js';
 import type {TailErrorKind} from 'reflect-protocol/src/tail.js';
 import type {AuthData, Env} from 'reflect-shared';
 import {isValidRoomID, makeInvalidRoomIDMessage, version} from 'reflect-shared';
@@ -26,7 +27,6 @@ import {AlarmManager, TimeoutID} from './alarms.js';
 import {roomNotFoundAPIError} from './api-errors.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
 import type {AuthHandler} from './auth.js';
-import {disconnectBeaconQueryParamsSchema} from './disconnect-beacon.js';
 import {ErrorWithForwardedResponse, makeErrorResponse} from './errors.js';
 import {getRequiredSearchParams} from './get-required-search-params.js';
 import {requireUpgradeHeader} from './http-util.js';
