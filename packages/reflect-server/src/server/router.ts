@@ -244,7 +244,7 @@ export function noInputParams<Context extends BaseContext>(): RequestValidator<
   return inputParams<null, null, Context>(valita.null(), valita.null());
 }
 
-function inputParams<Q, B, Context extends BaseContext>(
+export function inputParams<Q, B, Context extends BaseContext>(
   querySchema: valita.Type<Q>,
   bodySchema: valita.Type<B>,
 ): RequestValidator<Context, Context & {query: Q; body: B}> {

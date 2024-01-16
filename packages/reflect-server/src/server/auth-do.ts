@@ -8,7 +8,7 @@ import {
 } from 'reflect-protocol';
 import type {TailErrorKind} from 'reflect-protocol/src/tail.js';
 import type {AuthData, Env} from 'reflect-shared';
-import {version} from 'reflect-shared';
+import {isValidRoomID, makeInvalidRoomIDMessage, version} from 'reflect-shared';
 import {getConfig} from 'reflect-shared/src/config.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
@@ -26,6 +26,7 @@ import {AlarmManager, TimeoutID} from './alarms.js';
 import {roomNotFoundAPIError} from './api-errors.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
 import type {AuthHandler} from './auth.js';
+import {disconnectBeaconQueryParamsSchema} from './disconnect-beacon.js';
 import {ErrorWithForwardedResponse, makeErrorResponse} from './errors.js';
 import {getRequiredSearchParams} from './get-required-search-params.js';
 import {requireUpgradeHeader} from './http-util.js';
@@ -71,7 +72,6 @@ import {
   userID,
 } from './router.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
-import {isValidRoomID, makeInvalidRoomIDMessage} from 'reflect-shared';
 
 export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
 
@@ -96,12 +96,6 @@ const connectionRecordSchema = valita.object({
 const connectionsByRoomSchema = valita.object({});
 
 export type ConnectionRecord = valita.Infer<typeof connectionRecordSchema>;
-
-const disconnectBeaconQueryParamsSchema = valita.object({
-  roomID: valita.string(),
-  userID: valita.string(),
-  clientID: valita.string(),
-});
 
 export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
   listRoomProperties: LIST_ROOMS_PATH,

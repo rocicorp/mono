@@ -9,7 +9,7 @@ import {
 import {LogContext} from '@rocicorp/logger';
 import assert from 'node:assert';
 import {subscribe, unsubscribe} from 'node:diagnostics_channel';
-import type {Disconnect} from 'reflect-protocol/src/disconnect.js';
+import type {DisconnectBeacon} from 'reflect-protocol/src/disconnect-beacon.js';
 import type {LogLevel, TailMessage} from 'reflect-protocol/src/tail.js';
 import type {MutatorDefs, WriteTransaction} from 'reflect-shared';
 import {version} from 'reflect-shared';
@@ -775,7 +775,7 @@ describe('Client disconnect beacon', () => {
     resetAllConfig();
   });
 
-  const body: Disconnect = {
+  const body: DisconnectBeacon = {
     clientGroupID: 'testClientGroupID',
     mutations: [],
     pushVersion: 0,
