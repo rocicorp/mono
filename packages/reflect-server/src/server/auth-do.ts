@@ -15,7 +15,7 @@ import {must} from 'shared/src/must.js';
 import {timed} from 'shared/src/timed.js';
 import * as valita from 'shared/src/valita.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {encodeHeaderValue, getBearerToken} from '../util/headers.js';
+import {encodeHeaderValue} from '../util/headers.js';
 import {populateLogContextFromRequest} from '../util/log-context-common.js';
 import {sleep} from '../util/sleep.js';
 import {
@@ -60,6 +60,7 @@ import {
 import {
   BaseContext,
   Router,
+  bearerToken,
   bodyOnly,
   get,
   noInputParams,
@@ -95,6 +96,12 @@ const connectionRecordSchema = valita.object({
 const connectionsByRoomSchema = valita.object({});
 
 export type ConnectionRecord = valita.Infer<typeof connectionRecordSchema>;
+
+const disconnectBeaconQueryParamsSchema = valita.object({
+  roomID: valita.string(),
+  userID: valita.string(),
+  clientID: valita.string(),
+});
 
 export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
   listRoomProperties: LIST_ROOMS_PATH,
@@ -306,67 +313,61 @@ export class BaseAuthDO implements DurableObject {
     return roomDOFetch(requestToDO, 'tail', stub, roomID, lc);
   });
 
-  #disconnectBeacon = post().handle((ctx: BaseContext, request) => {
-    const {lc} = ctx;
-    lc.info?.('authDO received disconnect beacon request:', request.url);
+  #disconnectBeacon = post()
+    .with(queryParams(disconnectBeaconQueryParamsSchema))
+    .with(bearerToken())
+    .handle((ctx, request) => {
+      const lc = ctx.lc.withContext('handler', 'disconnectBeacon');
+      lc.info?.('authDO received disconnect beacon request:', request.url);
 
-    // TODO(arv): This code is pretty similar to the code in #connectImpl. Consider refactoring.
+      const {
+        bearerToken,
+        query: {roomID, userID},
+      } = ctx;
 
-    const {searchParams} = new URL(request.url);
-    const [[roomID, userID], errorResponse] = getRequiredSearchParams(
-      ['roomID', 'userID'],
-      searchParams,
-      msg => new Response(msg, {status: 400}),
-    );
-    if (errorResponse) {
-      return errorResponse;
-    }
+      return timed(lc.debug, 'inside authLock', () =>
+        this.#authLock.withRead(async () => {
+          const makeUnauthorizedResponse = (msg: string) =>
+            new Response(msg, {status: 403});
+          const [authData, errorResponse] = await this.callAuthHandlerIfDefined(
+            userID,
+            bearerToken,
+            roomID,
+            lc,
+            makeUnauthorizedResponse,
+          );
+          if (errorResponse) {
+            return errorResponse;
+          }
 
-    const [decodedAuth, errorResponse2] = getBearerToken(request.headers);
-    if (errorResponse2) {
-      return errorResponse2;
-    }
+          const roomRecord = await timed(
+            lc.debug,
+            'looking up roomRecord',
+            () =>
+              this.#roomRecordLock.withRead(
+                // Check if room already exists.
+                () => roomRecordByRoomID(this.#durableStorage, roomID),
+              ),
+          );
 
-    return timed(lc.debug, 'inside authLock', () =>
-      this.#authLock.withRead(async () => {
-        const makeUnauthorizedResponse = (msg: string) =>
-          new Response(msg, {status: 403});
-        const [authData, errorResponse] = await this.callAuthHandlerIfDefined(
-          userID,
-          decodedAuth,
-          roomID,
-          lc,
-          makeUnauthorizedResponse,
-        );
-        if (errorResponse) {
-          return errorResponse;
-        }
+          if (!roomRecord) {
+            return new Response('Room not found', {status: 404});
+          }
 
-        const roomRecord = await timed(lc.debug, 'looking up roomRecord', () =>
-          this.#roomRecordLock.withRead(
-            // Check if room already exists.
-            () => roomRecordByRoomID(this.#durableStorage, roomID),
-          ),
-        );
+          if (roomRecord.status !== RoomStatus.Open) {
+            return new Response('Room closed', {status: 410 /* Gone */});
+          }
 
-        if (!roomRecord) {
-          return new Response('Room not found', {status: 404});
-        }
-
-        if (roomRecord.status !== RoomStatus.Open) {
-          return new Response('Room closed', {status: 410 /* Gone */});
-        }
-
-        return this.#forwardRequestToRoomDO(
-          roomRecord,
-          request,
-          authData,
-          roomID,
-          lc,
-        );
-      }),
-    );
-  });
+          return this.#forwardRequestToRoomDO(
+            roomRecord,
+            request,
+            authData,
+            roomID,
+            lc,
+          );
+        }),
+      );
+    });
 
   #forwardRequestToRoomDO(
     roomRecord: RoomRecord,
