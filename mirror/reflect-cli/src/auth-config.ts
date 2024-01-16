@@ -111,6 +111,7 @@ function isFileNotFoundError(err: unknown): boolean {
 }
 
 export type AuthenticatedUser = {
+  email?: string | undefined;
   userID: string;
   getIdToken: (forceRefresh?: boolean | undefined) => Promise<string>;
   additionalUserInfo: AdditionalUserInfo | null;
@@ -193,6 +194,7 @@ async function authenticateImpl(
     console.info(color.yellow(`Running as ${runAs}`));
   }
   return {
+    email: email ?? undefined,
     userID: runAs ?? uid,
     getIdToken: forceRefresh => userCredentials.user.getIdToken(forceRefresh),
     additionalUserInfo,
