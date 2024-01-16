@@ -1,5 +1,8 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import {disconnectSchema} from 'reflect-protocol/src/disconnect.js';
+import {
+  disconnectBeaconQueryParamsSchema,
+  disconnectBeaconSchema,
+} from 'reflect-protocol/src/disconnect-beacon.js';
 import type {Env, MutatorDefs} from 'reflect-shared';
 import {version} from 'reflect-shared';
 import {getConfig} from 'reflect-shared/src/config.js';
@@ -29,7 +32,6 @@ import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
 import {closeConnections, getConnections} from './connections.js';
 import type {DisconnectHandler} from './disconnect.js';
-import {getRequiredSearchParams} from './get-required-search-params.js';
 import {requireUpgradeHeader, upgradeWebsocketResponse} from './http-util.js';
 import {ROOM_ID_HEADER_NAME} from './internal-headers.js';
 import {handleMessage} from './message.js';
@@ -46,7 +48,7 @@ import {
 } from './paths.js';
 import {initRoomSchema} from './room-schema.js';
 import type {RoomStartHandler} from './room-start.js';
-import {Router, get, post, roomID, userID} from './router.js';
+import {Router, get, inputParams, post, roomID, userID} from './router.js';
 import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 
@@ -308,32 +310,32 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     return upgradeWebsocketResponse(clientWS, request.headers);
   });
 
-  #disconnectBeacon = post().handle(async (ctx, request) => {
-    const {lc} = ctx;
-    const {searchParams} = new URL(request.url);
-    const [[clientID, roomID, userID], errorResponse] = getRequiredSearchParams(
-      ['clientID', 'roomID', 'userID'],
-      searchParams,
-      (message: string) => new Response(message, {status: 400}),
-    );
+  #disconnectBeacon = post()
+    // not checking authorization header again.
+    .with(
+      inputParams(disconnectBeaconQueryParamsSchema, disconnectBeaconSchema),
+    )
+    .handle(ctx => {
+      const lc = ctx.lc.withContext('handler', 'disconnectBeacon');
+      const {
+        body,
+        query: {clientID, roomID, userID},
+      } = ctx;
 
-    if (errorResponse) {
-      lc.debug?.('Failed to get roomID and userID');
-      return errorResponse;
-    }
+      lc.debug?.(
+        'disconnect client beacon request',
+        roomID,
+        userID,
+        clientID,
+        body,
+      );
 
-    lc.debug?.('disconnect client beacon request', roomID, userID);
+      // TODO(arv): Apply the mutations if any.
+      // TODO(arv): Delete the client record.
+      // TODO(arv): Collect the presence state.
 
-    const bodyJSON = await request.json();
-    const pushBody = valita.parse(bodyJSON, disconnectSchema);
-    lc.debug?.('client disconnect request', clientID, pushBody);
-
-    // TODO(arv): Apply the mutations if any.
-    // TODO(arv): Delete the client record.
-    // TODO(arv): Collect the presence state.
-
-    return new Response('ok');
-  });
+      return new Response('ok');
+    });
 
   #tail = get().handle((ctx, request) => {
     const {lc} = ctx;

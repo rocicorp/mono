@@ -5,6 +5,7 @@ import {makeAPIResponse} from 'shared/src/api/responses.js';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
+import {decodeHeaderValue} from '../util/headers.js';
 import {APIError, makeAPIErrorResponse} from './api-errors.js';
 import {HttpError, makeErrorResponse} from './errors.js';
 
@@ -189,6 +190,38 @@ export function bodyOnly<T, Context extends BaseContext>(
   return inputParams<null, T, Context>(valita.null(), schema);
 }
 
+export function bearerToken<Context extends BaseContext>(): RequestValidator<
+  Context,
+  Context & {bearerToken: string}
+> {
+  function throwError(kind: string): never {
+    throw new APIError(401, 'request', `${kind} Authorization header`);
+  }
+  return (ctx: Context, req: Request) => {
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throwError('Missing');
+    }
+    const parts = authHeader.split(/\s+/);
+    if (parts.length !== 2) {
+      throwError('Invalid');
+    }
+    const authScheme = parts[0].toLowerCase();
+    const token = parts[1];
+    if (authScheme !== 'bearer') {
+      throwError('Invalid');
+    }
+    try {
+      const decoded = decodeHeaderValue(token);
+      return {
+        ctx: {...ctx, bearerToken: decoded},
+      };
+    } catch {
+      throwError('Malformed');
+    }
+  };
+}
+
 const arbitraryQueryParamsSchema = valita.record(valita.string());
 
 // For reportMetrics the client sends common query parameters that the server ignores.
@@ -211,7 +244,7 @@ export function noInputParams<Context extends BaseContext>(): RequestValidator<
   return inputParams<null, null, Context>(valita.null(), valita.null());
 }
 
-function inputParams<Q, B, Context extends BaseContext>(
+export function inputParams<Q, B, Context extends BaseContext>(
   querySchema: valita.Type<Q>,
   bodySchema: valita.Type<B>,
 ): RequestValidator<Context, Context & {query: Q; body: B}> {

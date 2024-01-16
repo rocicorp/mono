@@ -1,6 +1,6 @@
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 
-export type APIErrorCode = 400 | 404 | 405 | 409; // Add more as necessary.
+export type APIErrorCode = 400 | 401 | 404 | 405 | 409; // Add more as necessary.
 export type APIResource = 'request' | 'rooms'; // Add more as necessary.
 
 export type APIErrorInfo = {
