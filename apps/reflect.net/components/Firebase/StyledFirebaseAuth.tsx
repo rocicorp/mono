@@ -75,6 +75,9 @@ export function StyledFirebaseAuth({
       <div hidden={authStateChanged} className={styles.signinOptions}>
         <div className={className} ref={elementRef} />
       </div>
+      <div hidden={!authStateChanged} className={styles.signingIn}>
+        <p>Signing in...</p>
+      </div>
     </>
   );
 }
