@@ -13,6 +13,7 @@
     "deploy-rules-sandbox": "npx firebase-tools --project sandbox deploy --only firestore:rules",
     "deploy-rules-prod": "npx firebase-tools --project prod deploy --only firestore:rules",
     "update-indexes-from-sandbox": "npx firebase-tools --project sandbox firestore:indexes > firestore.indexes.json",
+    "update-indexes-from-prod": "npx firebase-tools --project prod firestore:indexes > firestore.indexes.json",
     "deploy-indexes-sandbox": "npx firebase-tools --project sandbox deploy --only firestore:indexes",
     "deploy-indexes-prod": "npx firebase-tools --project prod deploy --only firestore:indexes"
   },
