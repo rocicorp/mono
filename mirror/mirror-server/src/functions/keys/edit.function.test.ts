@@ -12,9 +12,9 @@ import {FieldValue, Timestamp, getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
 import {
-  appKeyDataConverter,
-  appKeyPath,
-  appKeysCollection,
+  apiKeyDataConverter,
+  apiKeyPath,
+  apiKeysCollection,
   defaultPermissions,
   type Permissions,
 } from 'mirror-schema/src/api-key.js';
@@ -43,8 +43,8 @@ describe('appKeys-edit', () => {
         [TEAM_ID]: 'admin',
       }),
       firestore
-        .doc(appKeyPath(APP_ID, 'existing-key'))
-        .withConverter(appKeyDataConverter)
+        .doc(apiKeyPath(APP_ID, 'existing-key'))
+        .withConverter(apiKeyDataConverter)
         .create({
           value: 'foo-bar-baz',
           permissions: {'rooms:read': true} as Permissions,
@@ -57,7 +57,7 @@ describe('appKeys-edit', () => {
   afterEach(async () => {
     const batch = firestore.batch();
     const keys = await firestore
-      .collection(appKeysCollection(APP_ID))
+      .collection(apiKeysCollection(APP_ID))
       .listDocuments();
     keys.forEach(key => batch.delete(key));
     await batch.commit();
@@ -97,7 +97,7 @@ describe('appKeys-edit', () => {
     expect(resp).toEqual({success: true});
 
     expect(
-      (await firestore.doc(appKeyPath(APP_ID, 'existing-key')).get()).data(),
+      (await firestore.doc(apiKeyPath(APP_ID, 'existing-key')).get()).data(),
     ).toMatchObject({
       value: 'foo-bar-baz',
       permissions: mergeWithDefaults({'app:publish': true}),

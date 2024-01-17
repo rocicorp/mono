@@ -6,9 +6,9 @@ import {https} from 'firebase-functions/v2';
 import type {Request} from 'firebase-functions/v2/https';
 import {
   ALL_PERMISSIONS,
-  appKeyDataConverter,
-  appKeyPath,
-  appKeysCollection,
+  apiKeyDataConverter,
+  apiKeyPath,
+  apiKeysCollection,
   defaultPermissions,
   type Permissions,
 } from 'mirror-schema/src/api-key.js';
@@ -79,8 +79,8 @@ describe('appKeys-list', () => {
     beforeAll(async () => {
       await Promise.all([
         firestore
-          .doc(appKeyPath(APP_ID, 'my-publish-key'))
-          .withConverter(appKeyDataConverter)
+          .doc(apiKeyPath(APP_ID, 'my-publish-key'))
+          .withConverter(apiKeyDataConverter)
           .create({
             value: '12345678',
             permissions: {'app:publish': true} as Permissions,
@@ -88,8 +88,8 @@ describe('appKeys-list', () => {
             lastUsed: null,
           }),
         firestore
-          .doc(appKeyPath(APP_ID, 'my-reflect-api-key'))
-          .withConverter(appKeyDataConverter)
+          .doc(apiKeyPath(APP_ID, 'my-reflect-api-key'))
+          .withConverter(apiKeyDataConverter)
           .create({
             value: 'abcdefg',
             permissions: {'rooms:read': true} as Permissions,
@@ -103,7 +103,7 @@ describe('appKeys-list', () => {
       // Clean up global emulator data.
       const batch = firestore.batch();
       const keys = await firestore
-        .collection(appKeysCollection(APP_ID))
+        .collection(apiKeysCollection(APP_ID))
         .listDocuments();
       keys.forEach(key => batch.delete(key));
       await batch.commit();

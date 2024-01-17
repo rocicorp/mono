@@ -34,7 +34,7 @@ export async function sendAnalyticsEvent(
   eventName: string,
   user: AuthenticatedUser,
 ): Promise<void> {
-  const userParameters = getUserParameters(version);
+  const userParameters = getUserParameters(version, user);
   await sendGAEvent(
     [
       {
@@ -66,12 +66,19 @@ function getRequestParameters(user: AuthenticatedUser): string {
   return stringify(params);
 }
 
-export function getUserParameters(version: string): UserParameters {
+export function getUserParameters(
+  version: string,
+  user: AuthenticatedUser | undefined,
+): UserParameters {
   return {
     [UserCustomDimension.OsArchitecture]: arch(),
     [UserCustomDimension.NodeVersion]: process.version,
     [UserCustomDimension.ReflectCLIVersion]: version,
     [UserCustomDimension.DeviceFingerprint]: deviceFingerprint,
+    [UserCustomDimension.Email]: user?.email ?? 'unknown',
+    //current default teamname is username from github
+    [UserCustomDimension.TeamName]:
+      user?.additionalUserInfo?.username ?? 'unknown',
   };
 }
 

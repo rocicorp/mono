@@ -1,6 +1,6 @@
 import {ErrorInfo, Severity, reportError} from 'mirror-protocol/src/error.js';
 import type {ArgumentsCamelCase} from 'yargs';
-import {getAuthentication} from './auth-config.js';
+import {AuthenticatedUser, getAuthentication} from './auth-config.js';
 import {getUserParameters} from './metrics/send-ga-event.js';
 import {version} from './version.js';
 import type {CommonYargsOptions} from './yarg-types.js';
@@ -38,9 +38,9 @@ export async function reportE(
   e: unknown,
   severity?: Severity,
 ) {
-  let userID = '';
+  let user: AuthenticatedUser | undefined;
   try {
-    ({userID} = await getAuthentication(args));
+    user = await getAuthentication(args);
   } catch (e) {
     /* swallow */
   }
@@ -58,10 +58,10 @@ export async function reportE(
     error: createErrorInfo(e),
     severity,
     requester: {
-      userID,
+      userID: user?.userID ?? '',
       userAgent: {type: 'reflect-cli', version},
     },
-    agentContext: getUserParameters(version),
+    agentContext: getUserParameters(version, user),
   };
   // console.debug(error); // For testing
   await reportError.call(error).catch(_err => {

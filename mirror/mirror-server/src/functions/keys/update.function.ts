@@ -2,7 +2,7 @@ import {Lock} from '@rocicorp/lock';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {Timestamp, type Firestore} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
-import {appKeyDataConverter, appKeyPath} from 'mirror-schema/src/api-key.js';
+import {apiKeyDataConverter, apiKeyPath} from 'mirror-schema/src/api-key.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {
@@ -101,7 +101,7 @@ export const update = (firestore: Firestore) =>
       // Add the update to the global buffer, and wait for either the buffering
       // timeout to fire, or for the baton to be passed to another updater.
       const buffer = await globalUpdateCoordinator.add(
-        appKeyPath(appID, keyName),
+        apiKeyPath(appID, keyName),
         lastUsed,
       );
 
@@ -114,7 +114,7 @@ export const update = (firestore: Firestore) =>
       return firestore.runTransaction(async tx => {
         const keyDocs = await tx.getAll(
           ...Object.keys(buffer.timestamps).map(path =>
-            firestore.doc(path).withConverter(appKeyDataConverter),
+            firestore.doc(path).withConverter(apiKeyDataConverter),
           ),
         );
         const updateBatch: UpdateBatch = {

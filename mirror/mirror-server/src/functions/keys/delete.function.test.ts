@@ -13,9 +13,9 @@ import {FieldValue, getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import type {Request} from 'firebase-functions/v2/https';
 import {
-  appKeyDataConverter,
-  appKeyPath,
-  appKeysCollection,
+  apiKeyDataConverter,
+  apiKeyPath,
+  apiKeysCollection,
   type Permissions,
 } from 'mirror-schema/src/api-key.js';
 import {appPath} from 'mirror-schema/src/deployment.js';
@@ -50,8 +50,8 @@ describe('appKeys-delete', () => {
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].forEach(i => {
       batch.create(
         firestore
-          .doc(appKeyPath(APP_ID, `key-${i}`))
-          .withConverter(appKeyDataConverter),
+          .doc(apiKeyPath(APP_ID, `key-${i}`))
+          .withConverter(apiKeyDataConverter),
         {
           value: `foo-bar-baz-${i}`,
           permissions: {'rooms:read': true} as Permissions,
@@ -66,7 +66,7 @@ describe('appKeys-delete', () => {
   afterEach(async () => {
     const batch = firestore.batch();
     const keys = await firestore
-      .collection(appKeysCollection(APP_ID))
+      .collection(apiKeysCollection(APP_ID))
       .listDocuments();
     keys.forEach(key => batch.delete(key));
     await batch.commit();
@@ -115,7 +115,7 @@ describe('appKeys-delete', () => {
 
     expect(
       (
-        await firestore.collection(appKeysCollection(APP_ID)).listDocuments()
+        await firestore.collection(apiKeysCollection(APP_ID)).listDocuments()
       ).map(doc => doc.id),
     ).toEqual(['key-0', 'key-1', 'key-3', 'key-4', 'key-6', 'key-7', 'key-9']);
   });

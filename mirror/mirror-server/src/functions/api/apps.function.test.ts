@@ -15,8 +15,8 @@ import {FieldValue, Timestamp, getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {
   Permissions,
-  appKeyDataConverter,
-  appKeyPath,
+  apiKeyDataConverter,
+  apiKeyPath,
 } from 'mirror-schema/src/api-key.js';
 import {encryptUtf8} from 'mirror-schema/src/crypto.js';
 import {appPath, defaultOptions} from 'mirror-schema/src/deployment.js';
@@ -45,8 +45,8 @@ describe('api-apps', () => {
   initializeApp({projectId: 'api-apps-test'});
   const firestore = getFirestore();
   const APP_ID = 'api-app-id';
-  const APP_KEY_NAME = 'my-app-key';
-  const APP_KEY_VALUE = 'rHm_ELVQvsuj0GfZIF62A1BGUQE6NA8kZHwu8mF_UVo';
+  const API_KEY_NAME = 'my-api-key';
+  const API_KEY_VALUE = 'rHm_ELVQvsuj0GfZIF62A1BGUQE6NA8kZHwu8mF_UVo';
 
   function apiSuccessResponse<T>(result: T): Response {
     return {
@@ -91,10 +91,10 @@ describe('api-apps', () => {
     await Promise.all([
       setApp(firestore, APP_ID, {name: 'za app', runningDeployment}),
       firestore
-        .doc(appKeyPath(APP_ID, APP_KEY_NAME))
-        .withConverter(appKeyDataConverter)
+        .doc(apiKeyPath(APP_ID, API_KEY_NAME))
+        .withConverter(apiKeyDataConverter)
         .create({
-          value: APP_KEY_VALUE,
+          value: API_KEY_VALUE,
           permissions: {
             'rooms:read': true,
             'connections:invalidate': true,
@@ -122,7 +122,7 @@ describe('api-apps', () => {
     // Clean up global emulator data.
     const batch = firestore.batch();
     batch.delete(firestore.doc(appPath(APP_ID)));
-    batch.delete(firestore.doc(appKeyPath(APP_ID, APP_KEY_NAME)));
+    batch.delete(firestore.doc(apiKeyPath(APP_ID, API_KEY_NAME)));
     batch.delete(firestore.doc(envPath(APP_ID, DEFAULT_ENV)));
     await batch.commit();
   });
@@ -141,7 +141,7 @@ describe('api-apps', () => {
     {
       method: 'GET',
       path: `/v1/apps/${APP_ID}/rooms/yo?dont=forgets&the=query`,
-      token: APP_KEY_VALUE,
+      token: API_KEY_VALUE,
       workerUrl: `https://my-app-team.reflect-server.bonk/api/v1/rooms/yo?dont=forgets&the=query`,
       response: {
         result: {room: 'yo'},
@@ -150,7 +150,7 @@ describe('api-apps', () => {
     {
       method: 'POST',
       path: `/v1/apps/${APP_ID}/connections/all:invalidate`,
-      token: APP_KEY_VALUE,
+      token: API_KEY_VALUE,
       workerUrl: `https://my-app-team.reflect-server.bonk/api/v1/connections/all:invalidate`,
       response: {
         result: {},
@@ -160,7 +160,7 @@ describe('api-apps', () => {
       name: 'Wrong method for read command',
       method: 'POST',
       path: `/v1/apps/${APP_ID}/rooms`,
-      token: APP_KEY_VALUE,
+      token: API_KEY_VALUE,
       response: {
         error: {
           code: 405,
@@ -173,7 +173,7 @@ describe('api-apps', () => {
       name: 'Wrong method for write command',
       method: 'GET',
       path: `/v1/apps/${APP_ID}/connections/all:invalidate`,
-      token: APP_KEY_VALUE,
+      token: API_KEY_VALUE,
       response: {
         error: {
           code: 405,
@@ -186,7 +186,7 @@ describe('api-apps', () => {
       name: 'unsupported method',
       method: 'PUT',
       path: `/v1/apps/${APP_ID}/connections/all:invalidate`,
-      token: APP_KEY_VALUE,
+      token: API_KEY_VALUE,
       response: {
         error: {
           code: 405,
@@ -225,7 +225,7 @@ describe('api-apps', () => {
       name: 'unknown read permission',
       method: 'GET',
       path: `/v1/apps/${APP_ID}/connections/yo`,
-      token: APP_KEY_VALUE,
+      token: API_KEY_VALUE,
       response: {
         error: {
           code: 404,
@@ -238,7 +238,7 @@ describe('api-apps', () => {
       name: 'unknown write permission',
       method: 'POST',
       path: `/v1/apps/${APP_ID}/connections/yo:severe`,
-      token: APP_KEY_VALUE,
+      token: API_KEY_VALUE,
       response: {
         error: {
           code: 404,
@@ -251,13 +251,13 @@ describe('api-apps', () => {
       name: 'insufficient permission',
       method: 'POST',
       path: `/v1/apps/${APP_ID}/rooms/foo:delete`,
-      token: APP_KEY_VALUE,
+      token: API_KEY_VALUE,
       response: {
         error: {
           code: 403 as APIErrorCode,
           resource: 'request',
           message:
-            'Key "my-app-key" has not been granted "rooms:delete" permission',
+            'Key "my-api-key" has not been granted "rooms:delete" permission',
         },
       },
     },
@@ -265,12 +265,12 @@ describe('api-apps', () => {
       name: 'key for wrong app',
       method: 'GET',
       path: `/v1/apps/wrong-app/rooms/yo`,
-      token: APP_KEY_VALUE,
+      token: API_KEY_VALUE,
       response: {
         error: {
           code: 403 as APIErrorCode,
           resource: 'request',
-          message: 'Key "my-app-key" is not authorized for app wrong-app',
+          message: 'Key "my-api-key" is not authorized for app wrong-app',
         },
       },
     },
@@ -278,7 +278,7 @@ describe('api-apps', () => {
       name: 'app version does not support REST API',
       method: 'GET',
       path: `/v1/apps/${APP_ID}/rooms/yo`,
-      token: APP_KEY_VALUE,
+      token: API_KEY_VALUE,
       response: {
         error: {
           code: 400,
@@ -301,7 +301,7 @@ describe('api-apps', () => {
       name: 'app not published yet',
       method: 'GET',
       path: `/v1/apps/${APP_ID}/rooms/yo`,
-      token: APP_KEY_VALUE,
+      token: API_KEY_VALUE,
       response: {
         error: {
           code: 400,

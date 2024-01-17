@@ -3,7 +3,7 @@ import {
   deleteAppKeysRequestSchema,
   deleteAppKeysResponseSchema,
 } from 'mirror-protocol/src/app-keys.js';
-import {appKeyPath} from 'mirror-schema/src/api-key.js';
+import {apiKeyPath} from 'mirror-schema/src/api-key.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
@@ -18,7 +18,7 @@ export const deleteFn = (firestore: Firestore) =>
 
       const deleted = await firestore.runTransaction(async tx => {
         const docs = await tx.getAll(
-          ...names.map(name => firestore.doc(appKeyPath(appID, name))),
+          ...names.map(name => firestore.doc(apiKeyPath(appID, name))),
         );
         const exists: string[] = [];
         docs.forEach(doc => {

@@ -11,8 +11,8 @@ import {
 import type {AuthData} from 'firebase-functions/v2/tasks';
 import type {PublishRequest} from 'mirror-protocol/src/publish.js';
 import {
-  appKeyDataConverter,
-  appKeyPath,
+  apiKeyDataConverter,
+  apiKeyPath,
   type Permissions,
 } from 'mirror-schema/src/api-key.js';
 import {appDataConverter} from 'mirror-schema/src/app.js';
@@ -36,8 +36,8 @@ describe('publish', () => {
   const firestore = getFirestore();
   const USER_ID = 'app-publish-test-user';
   const APP_ID = 'app-publish-test-app';
-  const APP_KEY_WITH_PERMS = 'publish-app-key';
-  const APP_KEY_WITHOUT_PERMS = 'rooms-app-key';
+  const API_KEY_WITH_PERMS = 'publish-api-key';
+  const API_KEY_WITHOUT_PERMS = 'rooms-api-key';
   const CF_ID = 'cf-abc';
   const ENV_UPDATE_TIME = Timestamp.now();
 
@@ -79,8 +79,8 @@ describe('publish', () => {
     );
     batch.create(
       firestore
-        .doc(appKeyPath(APP_ID, APP_KEY_WITH_PERMS))
-        .withConverter(appKeyDataConverter),
+        .doc(apiKeyPath(APP_ID, API_KEY_WITH_PERMS))
+        .withConverter(apiKeyDataConverter),
       {
         value: 'foo-value',
         permissions: {'app:publish': true} as Permissions,
@@ -90,8 +90,8 @@ describe('publish', () => {
     );
     batch.create(
       firestore
-        .doc(appKeyPath(APP_ID, APP_KEY_WITHOUT_PERMS))
-        .withConverter(appKeyDataConverter),
+        .doc(apiKeyPath(APP_ID, API_KEY_WITHOUT_PERMS))
+        .withConverter(apiKeyDataConverter),
       {
         value: 'bar-value',
         permissions: {'rooms:read': true} as Permissions,
@@ -138,8 +138,8 @@ describe('publish', () => {
     for (const path of [
       userPath(USER_ID),
       appPath(APP_ID),
-      appKeyPath(APP_ID, APP_KEY_WITH_PERMS),
-      appKeyPath(APP_ID, APP_KEY_WITHOUT_PERMS),
+      apiKeyPath(APP_ID, API_KEY_WITH_PERMS),
+      apiKeyPath(APP_ID, API_KEY_WITHOUT_PERMS),
       providerPath(DEFAULT_PROVIDER_ID),
       serverPath('0.28.0'),
       serverPath('0.28.1'),
@@ -179,13 +179,13 @@ describe('publish', () => {
     },
     {
       name: 'app key with permissions',
-      uid: `apps/${APP_ID}/keys/${APP_KEY_WITH_PERMS}`,
+      uid: `apps/${APP_ID}/keys/${API_KEY_WITH_PERMS}`,
       serverReleaseChannel: 'stable',
       expectedServerVersion: '0.28.0',
     },
     {
       name: 'app key without permissions',
-      uid: `apps/${APP_ID}/keys/${APP_KEY_WITHOUT_PERMS}`,
+      uid: `apps/${APP_ID}/keys/${API_KEY_WITHOUT_PERMS}`,
       serverReleaseChannel: 'stable',
       errorCode: 'permission-denied',
     },

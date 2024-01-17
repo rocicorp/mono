@@ -11,11 +11,11 @@ import type {AuthData} from 'firebase-functions/v2/tasks';
 import {baseAppRequestFields} from 'mirror-protocol/src/app.js';
 import {baseResponseFields} from 'mirror-protocol/src/base.js';
 import type {
-  AppKey,
+  ApiKey,
   Permissions,
   RequiredPermission,
 } from 'mirror-schema/src/api-key.js';
-import {appKeyPath} from 'mirror-schema/src/api-key.js';
+import {apiKeyPath} from 'mirror-schema/src/api-key.js';
 import {appPath, type App} from 'mirror-schema/src/app.js';
 import type {Role} from 'mirror-schema/src/membership.js';
 import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
@@ -53,21 +53,21 @@ describe('auth-validators', () => {
   const firestore = getFirestore();
   const USER_ID = 'auth-user-id';
   const APP_ID = 'auth-app-id';
-  const APP_KEY_NAME = 'auth-app-key';
+  const API_KEY_NAME = 'auth-api-key';
 
   let fetchMocker: FetchMocker;
 
   mockFunctionParamsAndSecrets();
 
   beforeEach(() => {
-    fetchMocker = new FetchMocker().result('POST', '/appKeys-update', {});
+    fetchMocker = new FetchMocker().result('POST', '/apiKeys-update', {});
   });
 
   afterEach(async () => {
     const batch = firestore.batch();
     batch.delete(firestore.doc(userPath(USER_ID)));
     batch.delete(firestore.doc(appPath(APP_ID)));
-    batch.delete(firestore.doc(appKeyPath(APP_ID, APP_KEY_NAME)));
+    batch.delete(firestore.doc(apiKeyPath(APP_ID, API_KEY_NAME)));
     await batch.commit();
   });
 
@@ -234,9 +234,9 @@ describe('auth-validators', () => {
     appID: APP_ID,
   };
 
-  const appKeyReq = {
+  const apiKeyReq = {
     requester: {
-      userID: `apps/${APP_ID}/keys/${APP_KEY_NAME}`,
+      userID: `apps/${APP_ID}/keys/${API_KEY_NAME}`,
       userAgent: {type: 'reflect-cli', version: '0.0.1'},
     },
     foo: 'boo',
@@ -307,7 +307,7 @@ describe('auth-validators', () => {
     },
     {
       name: 'app key not authorized',
-      request: appKeyReq,
+      request: apiKeyReq,
       appDoc: defaultApp,
       errorCode: 'permission-denied',
     },
@@ -344,46 +344,46 @@ describe('auth-validators', () => {
     });
   }
 
-  const defaultAppKey: AppKey = {
-    value: 'app-key-value',
+  const defaultApiKey: ApiKey = {
+    value: 'api-key-value',
     permissions: {'app:publish': true} as Permissions,
     created: Timestamp.now(),
     lastUsed: null,
   };
 
-  type AppKeyCase = {
+  type ApiKeyCase = {
     name: string;
     request?: TestRequest;
     uid?: string;
     appID?: string;
     appDoc?: App;
-    appKeyDoc?: AppKey;
+    apiKeyDoc?: ApiKey;
     permission?: RequiredPermission;
     errorCode?: FunctionsErrorCode;
     response?: TestResponse;
   };
-  const appKeyCases: AppKeyCase[] = [
+  const apiKeyCases: ApiKeyCase[] = [
     {
       name: 'with required permission',
       appDoc: defaultApp,
-      appKeyDoc: defaultAppKey,
+      apiKeyDoc: defaultApiKey,
       response: {
         appName: defaultApp.name,
-        bar: appKeyReq.foo,
+        bar: apiKeyReq.foo,
         success: true,
       },
     },
     {
       name: 'without required permission',
       appDoc: defaultApp,
-      appKeyDoc: defaultAppKey,
+      apiKeyDoc: defaultApiKey,
       permission: 'rooms:create',
       errorCode: 'permission-denied',
     },
     {
       name: 'for wrong app',
       appDoc: defaultApp,
-      appKeyDoc: defaultAppKey,
+      apiKeyDoc: defaultApiKey,
       appID: 'different-app',
       errorCode: 'permission-denied',
     },
@@ -391,7 +391,7 @@ describe('auth-validators', () => {
       name: 'does not match requester',
       uid: 'some-user-id',
       appDoc: defaultApp,
-      appKeyDoc: defaultAppKey,
+      apiKeyDoc: defaultApiKey,
       errorCode: 'permission-denied',
     },
     {
@@ -401,20 +401,20 @@ describe('auth-validators', () => {
     },
   ];
 
-  for (const c of appKeyCases) {
+  for (const c of apiKeyCases) {
     test(`app key authorization / ${c.name}`, async () => {
       const authenticatedFunction = https.onCall(
         testFunctionWithKeys(c.permission ?? 'app:publish'),
       );
-      const req = c.request ?? appKeyReq;
+      const req = c.request ?? apiKeyReq;
 
       if (c.appDoc) {
         await firestore.doc(`apps/${APP_ID}`).set(c.appDoc);
       }
-      if (c.appKeyDoc) {
+      if (c.apiKeyDoc) {
         await firestore
-          .doc(`apps/${APP_ID}/keys/${APP_KEY_NAME}`)
-          .set(c.appKeyDoc);
+          .doc(`apps/${APP_ID}/keys/${API_KEY_NAME}`)
+          .set(c.apiKeyDoc);
       }
 
       let response: TestResponse | undefined;
@@ -447,7 +447,7 @@ describe('auth-validators', () => {
         expect(body).toMatchObject({
           data: {
             appID: APP_ID,
-            keyName: APP_KEY_NAME,
+            keyName: API_KEY_NAME,
             lastUsed: expect.any(Number),
           },
         });

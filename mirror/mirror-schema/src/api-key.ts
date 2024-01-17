@@ -42,29 +42,29 @@ export function normalizePermissions(perms: unknown): Permissions {
 /** Type used by runtime actions to declare the permission required to execute the action. */
 export type RequiredPermission = keyof Permissions;
 
-export const appKeySchema = v.object({
+export const apiKeySchema = v.object({
   value: v.string(),
   permissions: permissionsSchema,
   created: timestampSchema,
   lastUsed: timestampSchema.nullable(),
 });
 
-export type AppKey = v.Infer<typeof appKeySchema>;
+export type ApiKey = v.Infer<typeof apiKeySchema>;
 
-export const appKeyDataConverter = firestoreDataConverter(appKeySchema);
+export const apiKeyDataConverter = firestoreDataConverter(apiKeySchema);
 
-export const APP_KEY_COLLECTION_ID = 'keys';
+export const API_KEY_COLLECTION_ID = 'keys';
 
-export function appKeysCollection(appID: string): string {
-  return path.append(appPath(appID), APP_KEY_COLLECTION_ID);
+export function apiKeysCollection(appID: string): string {
+  return path.append(appPath(appID), API_KEY_COLLECTION_ID);
 }
 
-export function appKeyPath(appID: string, name: string): string {
-  return path.append(appKeysCollection(appID), name);
+export function apiKeyPath(appID: string, name: string): string {
+  return path.append(apiKeysCollection(appID), name);
 }
 
 // Key names are used in Firestore paths. Use the same constraints for
 // app names as we do for key names. This makes things consistent and understandable,
 // and avoids illegal document names.
 // https://firebase.google.com/docs/firestore/quotas#collections_documents_and_fields
-export const isValidAppKeyName = isValidAppName;
+export const isValidApiKeyName = isValidAppName;

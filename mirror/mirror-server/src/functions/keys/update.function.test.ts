@@ -10,8 +10,8 @@ import type {DecodedIdToken} from 'firebase-admin/auth';
 import {FieldValue, Timestamp} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {
-  appKeyDataConverter,
-  appKeyPath,
+  apiKeyDataConverter,
+  apiKeyPath,
   type Permissions,
 } from 'mirror-schema/src/api-key.js';
 import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
@@ -93,22 +93,22 @@ describe('keys-update', () => {
 
   const APP_ID_1 = 'keys-update-test-app-id-1';
   const APP_ID_2 = 'keys-update-test-app-id-2';
-  const APP_KEY_NAME_1 = 'app-key-1';
-  const APP_KEY_NAME_2 = 'app-key-2';
+  const API_KEY_NAME_1 = 'api-key-1';
+  const API_KEY_NAME_2 = 'api-key-2';
 
-  const appKeyPaths: [string, number | null][] = [
-    [appKeyPath(APP_ID_1, APP_KEY_NAME_1), null],
-    [appKeyPath(APP_ID_1, APP_KEY_NAME_2), null],
-    [appKeyPath(APP_ID_2, APP_KEY_NAME_1), 99999],
-    [appKeyPath(APP_ID_2, APP_KEY_NAME_2), null],
+  const apiKeyPaths: [string, number | null][] = [
+    [apiKeyPath(APP_ID_1, API_KEY_NAME_1), null],
+    [apiKeyPath(APP_ID_1, API_KEY_NAME_2), null],
+    [apiKeyPath(APP_ID_2, API_KEY_NAME_1), 99999],
+    [apiKeyPath(APP_ID_2, API_KEY_NAME_2), null],
   ];
 
   beforeEach(async () => {
     await Promise.all(
-      appKeyPaths.map(([path, lastUsed]) =>
+      apiKeyPaths.map(([path, lastUsed]) =>
         firestore
           .doc(path)
-          .withConverter(appKeyDataConverter)
+          .withConverter(apiKeyDataConverter)
           .set({
             value: 'ignored',
             permissions: {'app:publish': true} as Permissions,
@@ -123,7 +123,7 @@ describe('keys-update', () => {
   afterEach(async () => {
     // Clean up global emulator data.
     const batch = firestore.batch();
-    appKeyPaths.forEach(([path]) => batch.delete(firestore.doc(path)));
+    apiKeyPaths.forEach(([path]) => batch.delete(firestore.doc(path)));
     await batch.commit();
   });
 
@@ -146,18 +146,18 @@ describe('keys-update', () => {
     const responses = new Queue<UpdateKeyResponse | Error>();
 
     const requests: UpdateKeyRequest[] = [
-      {appID: APP_ID_1, keyName: APP_KEY_NAME_1, lastUsed: 1234},
-      {appID: APP_ID_1, keyName: APP_KEY_NAME_2, lastUsed: 2345},
-      {appID: APP_ID_2, keyName: APP_KEY_NAME_1, lastUsed: 12340},
-      {appID: APP_ID_2, keyName: APP_KEY_NAME_2, lastUsed: 23450},
-      {appID: APP_ID_1, keyName: APP_KEY_NAME_1, lastUsed: 1245},
-      {appID: APP_ID_1, keyName: APP_KEY_NAME_2, lastUsed: 2300},
-      {appID: APP_ID_2, keyName: APP_KEY_NAME_1, lastUsed: 12356},
-      {appID: APP_ID_2, keyName: APP_KEY_NAME_2, lastUsed: 23498},
-      {appID: APP_ID_1, keyName: APP_KEY_NAME_1, lastUsed: 1200},
-      {appID: APP_ID_1, keyName: APP_KEY_NAME_2, lastUsed: 2387},
-      {appID: APP_ID_2, keyName: APP_KEY_NAME_1, lastUsed: 12323},
-      {appID: APP_ID_2, keyName: APP_KEY_NAME_2, lastUsed: 23499},
+      {appID: APP_ID_1, keyName: API_KEY_NAME_1, lastUsed: 1234},
+      {appID: APP_ID_1, keyName: API_KEY_NAME_2, lastUsed: 2345},
+      {appID: APP_ID_2, keyName: API_KEY_NAME_1, lastUsed: 12340},
+      {appID: APP_ID_2, keyName: API_KEY_NAME_2, lastUsed: 23450},
+      {appID: APP_ID_1, keyName: API_KEY_NAME_1, lastUsed: 1245},
+      {appID: APP_ID_1, keyName: API_KEY_NAME_2, lastUsed: 2300},
+      {appID: APP_ID_2, keyName: API_KEY_NAME_1, lastUsed: 12356},
+      {appID: APP_ID_2, keyName: API_KEY_NAME_2, lastUsed: 23498},
+      {appID: APP_ID_1, keyName: API_KEY_NAME_1, lastUsed: 1200},
+      {appID: APP_ID_1, keyName: API_KEY_NAME_2, lastUsed: 2387},
+      {appID: APP_ID_2, keyName: API_KEY_NAME_1, lastUsed: 12323},
+      {appID: APP_ID_2, keyName: API_KEY_NAME_2, lastUsed: 23499},
     ];
 
     for (const req of requests) {
@@ -175,9 +175,9 @@ describe('keys-update', () => {
     expect(await responses.dequeue()).toEqual({
       flushed: {
         updates: {
-          [appKeyPath(APP_ID_1, APP_KEY_NAME_1)]: 1245,
-          [appKeyPath(APP_ID_1, APP_KEY_NAME_2)]: 2387,
-          [appKeyPath(APP_ID_2, APP_KEY_NAME_2)]: 23499,
+          [apiKeyPath(APP_ID_1, API_KEY_NAME_1)]: 1245,
+          [apiKeyPath(APP_ID_1, API_KEY_NAME_2)]: 2387,
+          [apiKeyPath(APP_ID_2, API_KEY_NAME_2)]: 23499,
         },
         coalesced: 8,
       },
@@ -185,7 +185,7 @@ describe('keys-update', () => {
     const expectedTimestamps = [1245, 2387, 99999, 23499];
     for (let i = 0; i < expectedTimestamps.length; i++) {
       const lastUsed = expectedTimestamps[i];
-      const keyDoc = await firestore.doc(appKeyPaths[i][0]).get();
+      const keyDoc = await firestore.doc(apiKeyPaths[i][0]).get();
       expect(keyDoc.data()?.lastUsed.toMillis()).toBe(lastUsed);
     }
   });

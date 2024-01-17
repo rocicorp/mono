@@ -5,8 +5,8 @@ import {CallableRequest, HttpsError} from 'firebase-functions/v2/https';
 import type {BaseAppRequest} from 'mirror-protocol/src/app.js';
 import type {BaseRequest} from 'mirror-protocol/src/base.js';
 import {
-  AppKey,
-  appKeyDataConverter,
+  ApiKey,
+  apiKeyDataConverter,
   type RequiredPermission,
 } from 'mirror-schema/src/api-key.js';
 import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
@@ -34,7 +34,7 @@ interface AuthContext {
     uid: string;
     token?: DecodedIdToken;
   };
-  appKeyDoc?: QueryDocumentSnapshot<AppKey>;
+  apiKeyDoc?: QueryDocumentSnapshot<ApiKey>;
 }
 
 /**
@@ -74,7 +74,7 @@ export function authorizationHeader<
         return {
           ...context,
           auth: {uid: keyPath},
-          appKeyDoc: keyDoc,
+          apiKeyDoc: keyDoc,
         };
       }
     }
@@ -204,7 +204,7 @@ function userAuthorizationImpl<
 
 export function appOrKeyAuthorization<
   Request extends Pick<BaseAppRequest, 'appID'>,
-  Context extends UserOrKeyAuthorization & Pick<AuthContext, 'appKeyDoc'>,
+  Context extends UserOrKeyAuthorization & Pick<AuthContext, 'apiKeyDoc'>,
 >(
   firestore: Firestore,
   keyPermission: RequiredPermission,
@@ -216,48 +216,48 @@ export function appOrKeyAuthorization<
   );
 
   return async (request: Request, context: Context) => {
-    const {isKeyAuth, appKeyDoc: appKeyFromBasicAuth} = context;
+    const {isKeyAuth, apiKeyDoc: apiKeyFromBasicAuth} = context;
     if (!isKeyAuth) {
       return nonKeyAppAuthorization(request, context);
     }
     const {userID: keyPath} = context;
-    const appKeyDocRef = firestore
+    const apiKeyDocRef = firestore
       .doc(keyPath)
-      .withConverter(appKeyDataConverter);
+      .withConverter(apiKeyDataConverter);
     const {appID} = request;
     const appDocRef = firestore
       .doc(appPath(appID))
       .withConverter(appDataConverter);
 
-    if (appKeyDocRef.parent?.parent?.path !== appDocRef.path) {
+    if (apiKeyDocRef.parent?.parent?.path !== appDocRef.path) {
       throw new HttpsError(
         'permission-denied',
-        `Key "${appKeyDocRef.id}" is not authorized for app ${appID}`,
+        `Key "${apiKeyDocRef.id}" is not authorized for app ${appID}`,
       );
     }
 
     const authorization: AppAuthorization = await firestore.runTransaction(
       async txn => {
-        const [appKeyDoc, appDoc] = await Promise.all([
-          // No need to lookup up the AppKey again if it was queried when verifying the Authorization header.
-          appKeyFromBasicAuth ? appKeyFromBasicAuth : txn.get(appKeyDocRef),
+        const [apiKeyDoc, appDoc] = await Promise.all([
+          // No need to lookup up the ApiKey again if it was queried when verifying the Authorization header.
+          apiKeyFromBasicAuth ? apiKeyFromBasicAuth : txn.get(apiKeyDocRef),
           txn.get(appDocRef),
         ]);
-        if (!appKeyDoc.exists) {
+        if (!apiKeyDoc.exists) {
           throw new HttpsError(
             'permission-denied',
-            `Key "${appKeyDoc.id}" has been deleted`,
+            `Key "${apiKeyDoc.id}" has been deleted`,
           );
         }
         if (!appDoc.exists) {
           throw new HttpsError('not-found', `App ${appID} does not exist`);
         }
-        const appKey = must(appKeyDoc.data());
+        const apiKey = must(apiKeyDoc.data());
         const app = must(appDoc.data());
-        if (!appKey.permissions[keyPermission]) {
+        if (!apiKey.permissions[keyPermission]) {
           throw new HttpsError(
             'permission-denied',
-            `Key "${appKeyDoc.id}" has not been granted "${keyPermission}" permission`,
+            `Key "${apiKeyDoc.id}" has not been granted "${keyPermission}" permission`,
           );
         }
         logger.info(
@@ -267,15 +267,15 @@ export function appOrKeyAuthorization<
       },
       {readOnly: true},
     );
-    // Fire-and-forget a call to `appKeys-update`, which is an internal function that
+    // Fire-and-forget a call to `apiKeys-update`, which is an internal function that
     // uses delayed batching to coalesce writes to the same key, and moves the Firestore
     // write transaction out of the critical path.
     void updateKey({
       appID,
-      keyName: appKeyDocRef.id,
+      keyName: apiKeyDocRef.id,
       lastUsed: Date.now(),
     }).catch(e =>
-      logger.error(`Error sending update for ${appKeyDocRef.path}`, e),
+      logger.error(`Error sending update for ${apiKeyDocRef.path}`, e),
     );
     return {...context, ...authorization};
   };

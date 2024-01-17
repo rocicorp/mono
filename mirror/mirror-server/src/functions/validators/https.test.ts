@@ -8,8 +8,8 @@ import type {Request} from 'firebase-functions/v2/https';
 import {baseAppRequestFields} from 'mirror-protocol/src/app.js';
 import {
   Permissions,
-  appKeyDataConverter,
-  appKeyPath,
+  apiKeyDataConverter,
+  apiKeyPath,
 } from 'mirror-schema/src/api-key.js';
 import {appPath} from 'mirror-schema/src/deployment.js';
 import {setApp, setUser} from 'mirror-schema/src/test-helpers.js';
@@ -35,15 +35,15 @@ describe('validators/https', () => {
   const firestore = getFirestore();
   const USER_ID = 'foo';
   const APP_ID = 'myApp';
-  const APP_KEY_NAME = 'bar-key';
+  const API_KEY_NAME = 'bar-key';
 
   beforeAll(async () => {
     await Promise.all([
       setUser(firestore, USER_ID, 'foo@bar.com', 'bob', {fooTeam: 'admin'}),
       setApp(firestore, APP_ID, {teamID: 'fooTeam', name: 'MyAppName'}),
       firestore
-        .doc(appKeyPath(APP_ID, APP_KEY_NAME))
-        .withConverter(appKeyDataConverter)
+        .doc(apiKeyPath(APP_ID, API_KEY_NAME))
+        .withConverter(apiKeyDataConverter)
         .set({
           value: 'super-secret-key-value',
           permissions: {'app:publish': true} as Permissions,
@@ -57,7 +57,7 @@ describe('validators/https', () => {
     const batch = firestore.batch();
     batch.delete(firestore.doc(userPath(USER_ID)));
     batch.delete(firestore.doc(appPath(APP_ID)));
-    batch.delete(firestore.doc(appKeyPath(APP_ID, APP_KEY_NAME)));
+    batch.delete(firestore.doc(apiKeyPath(APP_ID, API_KEY_NAME)));
     await batch.commit();
   });
 
@@ -117,7 +117,7 @@ describe('validators/https', () => {
     const req = getMockReq({
       body: {
         requester: {
-          userID: `apps/${APP_ID}/keys/${APP_KEY_NAME}`,
+          userID: `apps/${APP_ID}/keys/${API_KEY_NAME}`,
           userAgent: {type: 'reflect-cli', version: '0.0.1'},
         },
         foo: 'boo',
@@ -133,7 +133,7 @@ describe('validators/https', () => {
     await authenticatedFunction(req, res);
     expect(auth.verifyIdToken).not.toBeCalled;
     expect(res.json).toBeCalledWith({
-      userID: `apps/${APP_ID}/keys/${APP_KEY_NAME}`,
+      userID: `apps/${APP_ID}/keys/${API_KEY_NAME}`,
       appName: 'MyAppName',
     });
   });

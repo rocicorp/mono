@@ -2,7 +2,7 @@ import color from 'picocolors';
 
 import {
   createAppKey,
-  isValidAppKeyName,
+  isValidApiKeyName,
   listAppKeys,
 } from 'mirror-protocol/src/app-keys.js';
 import {ensureAppInstantiated} from '../app-config.js';
@@ -31,7 +31,7 @@ export async function createAppKeyHandler(
   authContext: AuthContext,
 ): Promise<void> {
   const {name} = yargs;
-  if (!isValidAppKeyName(name)) {
+  if (!isValidApiKeyName(name)) {
     console.error(
       color.yellow(`Invalid name "${name}"\n`) +
         'Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.',

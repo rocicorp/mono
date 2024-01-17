@@ -5,8 +5,8 @@ import {
 } from 'mirror-protocol/src/app-keys.js';
 import {
   ALL_PERMISSIONS,
-  appKeyDataConverter,
-  appKeysCollection,
+  apiKeyDataConverter,
+  apiKeysCollection,
 } from 'mirror-schema/src/api-key.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
@@ -21,9 +21,9 @@ export const list = (firestore: Firestore) =>
       const {appID, show} = request;
 
       const keys = await firestore
-        .collection(appKeysCollection(appID))
+        .collection(apiKeysCollection(appID))
         .orderBy('lastUsed', 'desc')
-        .withConverter(appKeyDataConverter)
+        .withConverter(apiKeyDataConverter)
         .get();
 
       return {

@@ -33,6 +33,8 @@ export enum UserCustomDimension {
   NodeVersion = 'up.reflect_node_version',
   ReflectCLIVersion = 'up.reflect_cli_version',
   DeviceFingerprint = 'up.reflect_device_fingerprint',
+  TeamName = 'up.reflect_team_name',
+  Email = 'up.reflect_email',
 }
 
 export const userParameterSchema = v.object({
@@ -40,6 +42,8 @@ export const userParameterSchema = v.object({
   [UserCustomDimension.NodeVersion]: v.string(),
   [UserCustomDimension.ReflectCLIVersion]: v.string(),
   [UserCustomDimension.DeviceFingerprint]: v.string(),
+  [UserCustomDimension.TeamName]: v.string(),
+  [UserCustomDimension.Email]: v.string(),
 });
 
 export type UserParameters = v.Infer<typeof userParameterSchema>;

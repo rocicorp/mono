@@ -1,18 +1,18 @@
 import type {Firestore, QueryDocumentSnapshot} from 'firebase-admin/firestore';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {
-  APP_KEY_COLLECTION_ID,
-  appKeyDataConverter,
-  type AppKey,
+  API_KEY_COLLECTION_ID,
+  apiKeyDataConverter,
+  type ApiKey,
 } from 'mirror-schema/src/api-key.js';
 
 export async function verifyKey(
   firestore: Firestore,
   key: string,
-): Promise<QueryDocumentSnapshot<AppKey>> {
+): Promise<QueryDocumentSnapshot<ApiKey>> {
   const query = await firestore
-    .collectionGroup(APP_KEY_COLLECTION_ID)
-    .withConverter(appKeyDataConverter)
+    .collectionGroup(API_KEY_COLLECTION_ID)
+    .withConverter(apiKeyDataConverter)
     .where('value', '==', key)
     .get();
   if (query.size === 0) {

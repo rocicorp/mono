@@ -6,10 +6,10 @@ import {
   createAppKeyResponseSchema,
 } from 'mirror-protocol/src/app-keys.js';
 import {
-  appKeyDataConverter,
-  appKeyPath,
-  appKeysCollection,
-  isValidAppKeyName,
+  apiKeyDataConverter,
+  apiKeyPath,
+  apiKeysCollection,
+  isValidApiKeyName,
   normalizePermissions,
   type Permissions,
 } from 'mirror-schema/src/api-key.js';
@@ -46,7 +46,7 @@ export const create = (firestore: Firestore) =>
     .handle(async request => {
       const {appID, name, permissions} = request;
 
-      if (!isValidAppKeyName(name)) {
+      if (!isValidApiKeyName(name)) {
         throw new HttpsError(
           'invalid-argument',
           `Invalid name "${name}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
@@ -55,13 +55,13 @@ export const create = (firestore: Firestore) =>
       const validatedPermissions = validatePermissions(name, permissions);
 
       const keyDoc = firestore
-        .doc(appKeyPath(appID, name))
-        .withConverter(appKeyDataConverter);
+        .doc(apiKeyPath(appID, name))
+        .withConverter(apiKeyDataConverter);
 
       const value = randomBytes(32).toString('base64url');
       await firestore.runTransaction(async tx => {
         const keys = await tx.get(
-          firestore.collection(appKeysCollection(appID)).count(),
+          firestore.collection(apiKeysCollection(appID)).count(),
         );
         if (keys.data().count >= MAX_KEYS) {
           throw new HttpsError(

@@ -12,7 +12,7 @@ import type {Auth} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
-import {appKeyPath} from 'mirror-schema/src/api-key.js';
+import {apiKeyPath} from 'mirror-schema/src/api-key.js';
 import {create} from './create.function.js';
 
 describe('token-create', () => {
@@ -21,8 +21,8 @@ describe('token-create', () => {
   initializeApp({projectId: 'token-create-test'});
   const firestore = getFirestore();
   const APP_ID = 'token-app-id';
-  const APP_KEY_NAME = 'my-app-key';
-  const APP_KEY_VALUE = 'rHm_ELVQvsuj0GfZIF62A1BGUQE6NA8kZHwu8mF_UVo';
+  const API_KEY_NAME = 'my-api-key';
+  const API_KEY_VALUE = 'rHm_ELVQvsuj0GfZIF62A1BGUQE6NA8kZHwu8mF_UVo';
 
   const auth = {
     createCustomToken: jest
@@ -35,8 +35,8 @@ describe('token-create', () => {
 
   beforeAll(async () => {
     await Promise.all([
-      firestore.doc(appKeyPath(APP_ID, APP_KEY_NAME)).create({
-        value: APP_KEY_VALUE,
+      firestore.doc(apiKeyPath(APP_ID, API_KEY_NAME)).create({
+        value: API_KEY_VALUE,
       }),
     ]);
   });
@@ -44,7 +44,7 @@ describe('token-create', () => {
   afterAll(async () => {
     // Clean up global emulator data.
     const batch = firestore.batch();
-    batch.delete(firestore.doc(appKeyPath(APP_ID, APP_KEY_NAME)));
+    batch.delete(firestore.doc(apiKeyPath(APP_ID, API_KEY_NAME)));
     await batch.commit();
   });
 
@@ -64,14 +64,14 @@ describe('token-create', () => {
   });
 
   test('valid keys', async () => {
-    const resp = await callCreate(APP_KEY_VALUE);
+    const resp = await callCreate(API_KEY_VALUE);
     expect(resp).toEqual({
       success: true,
       token: 'custom-token',
     });
     expect(auth.createCustomToken).toBeCalledTimes(1);
     expect(auth.createCustomToken.mock.calls[0][0]).toBe(
-      appKeyPath(APP_ID, APP_KEY_NAME),
+      apiKeyPath(APP_ID, API_KEY_NAME),
     );
   });
 });
