@@ -14,7 +14,7 @@ import {
   appKeyDataConverter,
   appKeyPath,
   type Permissions,
-} from 'mirror-schema/src/app-key.js';
+} from 'mirror-schema/src/api-key.js';
 import {appDataConverter} from 'mirror-schema/src/app.js';
 import {
   appPath,

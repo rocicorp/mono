@@ -12,7 +12,7 @@ import type {Auth} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
-import {appKeyPath} from 'mirror-schema/src/app-key.js';
+import {appKeyPath} from 'mirror-schema/src/api-key.js';
 import {create} from './create.function.js';
 
 describe('token-create', () => {

@@ -17,7 +17,7 @@ import {
   appKeyPath,
   appKeysCollection,
   type Permissions,
-} from 'mirror-schema/src/app-key.js';
+} from 'mirror-schema/src/api-key.js';
 import {appPath} from 'mirror-schema/src/deployment.js';
 import {setApp, setUser} from 'mirror-schema/src/test-helpers.js';
 import {userPath} from 'mirror-schema/src/user.js';

@@ -4,7 +4,7 @@ import {
   editAppKeyRequestSchema,
   editAppKeyResponseSchema,
 } from 'mirror-protocol/src/app-keys.js';
-import {appKeyDataConverter, appKeyPath} from 'mirror-schema/src/app-key.js';
+import {appKeyDataConverter, appKeyPath} from 'mirror-schema/src/api-key.js';
 import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';

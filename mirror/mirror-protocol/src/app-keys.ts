@@ -2,7 +2,7 @@ import * as v from 'shared/src/valita.js';
 import {baseAppRequestFields} from './app.js';
 import {baseResponseFields} from './base.js';
 import {createCaller} from './call.js';
-export {isValidAppKeyName} from 'mirror-schema/src/app-key.js';
+export {isValidAppKeyName} from 'mirror-schema/src/api-key.js';
 
 // Unlike the Permissions type in `mirror-schema`, the type used in the network protocol
 // only declares the "shape" of the permissions object without specifying the keys.

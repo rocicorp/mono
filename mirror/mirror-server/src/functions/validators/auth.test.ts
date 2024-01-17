@@ -14,8 +14,8 @@ import type {
   AppKey,
   Permissions,
   RequiredPermission,
-} from 'mirror-schema/src/app-key.js';
-import {appKeyPath} from 'mirror-schema/src/app-key.js';
+} from 'mirror-schema/src/api-key.js';
+import {appKeyPath} from 'mirror-schema/src/api-key.js';
 import {appPath, type App} from 'mirror-schema/src/app.js';
 import type {Role} from 'mirror-schema/src/membership.js';
 import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';

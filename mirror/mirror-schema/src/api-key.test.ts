@@ -1,5 +1,5 @@
 import {describe, expect, test} from '@jest/globals';
-import {defaultPermissions, normalizePermissions} from './app-key.js';
+import {defaultPermissions, normalizePermissions} from './api-key.js';
 
 describe('app-key', () => {
   test('default permissions', () => {

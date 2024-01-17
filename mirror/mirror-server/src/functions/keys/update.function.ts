@@ -2,7 +2,7 @@ import {Lock} from '@rocicorp/lock';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {Timestamp, type Firestore} from 'firebase-admin/firestore';
 import {logger} from 'firebase-functions';
-import {appKeyDataConverter, appKeyPath} from 'mirror-schema/src/app-key.js';
+import {appKeyDataConverter, appKeyPath} from 'mirror-schema/src/api-key.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {

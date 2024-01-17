@@ -17,7 +17,7 @@ import {
   Permissions,
   appKeyDataConverter,
   appKeyPath,
-} from 'mirror-schema/src/app-key.js';
+} from 'mirror-schema/src/api-key.js';
 import {encryptUtf8} from 'mirror-schema/src/crypto.js';
 import {appPath, defaultOptions} from 'mirror-schema/src/deployment.js';
 import {

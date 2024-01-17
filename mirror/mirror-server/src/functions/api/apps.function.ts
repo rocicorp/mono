@@ -6,7 +6,7 @@ import {HttpsError, type Request} from 'firebase-functions/v2/https';
 import {
   ALL_PERMISSIONS,
   type RequiredPermission,
-} from 'mirror-schema/src/app-key.js';
+} from 'mirror-schema/src/api-key.js';
 import type {App} from 'mirror-schema/src/app.js';
 import {DEFAULT_ENV, envDataConverter, envPath} from 'mirror-schema/src/env.js';
 import {SemVer, lt} from 'semver';

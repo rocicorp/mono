@@ -8,7 +8,7 @@ import {
   AppKey,
   appKeyDataConverter,
   type RequiredPermission,
-} from 'mirror-schema/src/app-key.js';
+} from 'mirror-schema/src/api-key.js';
 import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import type {Role} from 'mirror-schema/src/membership.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';

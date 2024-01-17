@@ -4,7 +4,7 @@ import {
   APP_KEY_COLLECTION_ID,
   appKeyDataConverter,
   type AppKey,
-} from 'mirror-schema/src/app-key.js';
+} from 'mirror-schema/src/api-key.js';
 
 export async function verifyKey(
   firestore: Firestore,

@@ -13,7 +13,7 @@ import {
   appKeyDataConverter,
   appKeyPath,
   type Permissions,
-} from 'mirror-schema/src/app-key.js';
+} from 'mirror-schema/src/api-key.js';
 import {fakeFirestore} from 'mirror-schema/src/test-helpers.js';
 import {Queue} from 'shared/src/queue.js';
 import type {UpdateKeyRequest, UpdateKeyResponse} from '../../keys/updates.js';
