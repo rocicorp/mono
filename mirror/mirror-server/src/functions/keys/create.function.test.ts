@@ -12,9 +12,9 @@ import {FieldValue, Timestamp, getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
 import {
-  appKeyDataConverter,
-  appKeyPath,
-  appKeysCollection,
+  apiKeyDataConverter,
+  apiKeyPath,
+  apiKeysCollection,
   defaultPermissions,
   type Permissions,
 } from 'mirror-schema/src/api-key.js';
@@ -48,7 +48,7 @@ describe('appKeys-create', () => {
   afterEach(async () => {
     const batch = firestore.batch();
     const keys = await firestore
-      .collection(appKeysCollection(APP_ID))
+      .collection(apiKeysCollection(APP_ID))
       .listDocuments();
     keys.forEach(key => batch.delete(key));
     await batch.commit();
@@ -91,7 +91,7 @@ describe('appKeys-create', () => {
     });
 
     expect(
-      (await firestore.doc(appKeyPath(APP_ID, 'valid-key-name')).get()).data(),
+      (await firestore.doc(apiKeyPath(APP_ID, 'valid-key-name')).get()).data(),
     ).toMatchObject({
       value: resp.value,
       permissions: mergeWithDefaults({'app:publish': true}),
@@ -136,8 +136,8 @@ describe('appKeys-create', () => {
     for (let i = 0; i < MAX_KEYS; i++) {
       batch.create(
         firestore
-          .doc(appKeyPath(APP_ID, `key-${i}`))
-          .withConverter(appKeyDataConverter),
+          .doc(apiKeyPath(APP_ID, `key-${i}`))
+          .withConverter(apiKeyDataConverter),
         {
           value: `value_${i}`,
           permissions: defaultPermissions(),
