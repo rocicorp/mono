@@ -1,6 +1,38 @@
 {
   "indexes": [
     {
+      "collectionGroup": "apps",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "runningDeployment.type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "runningDeployment.startTime",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deployments",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requestTime",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "deployments",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
