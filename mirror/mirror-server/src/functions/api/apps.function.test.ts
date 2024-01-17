@@ -45,7 +45,7 @@ describe('api-apps', () => {
   initializeApp({projectId: 'api-apps-test'});
   const firestore = getFirestore();
   const APP_ID = 'api-app-id';
-  const API_KEY_NAME = 'my-app-key';
+  const API_KEY_NAME = 'my-api-key';
   const API_KEY_VALUE = 'rHm_ELVQvsuj0GfZIF62A1BGUQE6NA8kZHwu8mF_UVo';
 
   function apiSuccessResponse<T>(result: T): Response {
@@ -257,7 +257,7 @@ describe('api-apps', () => {
           code: 403 as APIErrorCode,
           resource: 'request',
           message:
-            'Key "my-app-key" has not been granted "rooms:delete" permission',
+            'Key "my-api-key" has not been granted "rooms:delete" permission',
         },
       },
     },
@@ -270,7 +270,7 @@ describe('api-apps', () => {
         error: {
           code: 403 as APIErrorCode,
           resource: 'request',
-          message: 'Key "my-app-key" is not authorized for app wrong-app',
+          message: 'Key "my-api-key" is not authorized for app wrong-app',
         },
       },
     },

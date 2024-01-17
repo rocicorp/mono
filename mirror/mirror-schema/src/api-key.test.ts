@@ -1,7 +1,7 @@
 import {describe, expect, test} from '@jest/globals';
 import {defaultPermissions, normalizePermissions} from './api-key.js';
 
-describe('app-key', () => {
+describe('api-key', () => {
   test('default permissions', () => {
     expect(defaultPermissions()).toEqual({
       'app:publish': false,

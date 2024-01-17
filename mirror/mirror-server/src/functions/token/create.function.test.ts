@@ -21,7 +21,7 @@ describe('token-create', () => {
   initializeApp({projectId: 'token-create-test'});
   const firestore = getFirestore();
   const APP_ID = 'token-app-id';
-  const API_KEY_NAME = 'my-app-key';
+  const API_KEY_NAME = 'my-api-key';
   const API_KEY_VALUE = 'rHm_ELVQvsuj0GfZIF62A1BGUQE6NA8kZHwu8mF_UVo';
 
   const auth = {

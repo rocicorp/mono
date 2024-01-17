@@ -36,8 +36,8 @@ describe('publish', () => {
   const firestore = getFirestore();
   const USER_ID = 'app-publish-test-user';
   const APP_ID = 'app-publish-test-app';
-  const API_KEY_WITH_PERMS = 'publish-app-key';
-  const API_KEY_WITHOUT_PERMS = 'rooms-app-key';
+  const API_KEY_WITH_PERMS = 'publish-api-key';
+  const API_KEY_WITHOUT_PERMS = 'rooms-api-key';
   const CF_ID = 'cf-abc';
   const ENV_UPDATE_TIME = Timestamp.now();
 

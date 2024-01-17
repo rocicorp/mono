@@ -93,8 +93,8 @@ describe('keys-update', () => {
 
   const APP_ID_1 = 'keys-update-test-app-id-1';
   const APP_ID_2 = 'keys-update-test-app-id-2';
-  const API_KEY_NAME_1 = 'app-key-1';
-  const API_KEY_NAME_2 = 'app-key-2';
+  const API_KEY_NAME_1 = 'api-key-1';
+  const API_KEY_NAME_2 = 'api-key-2';
 
   const apiKeyPaths: [string, number | null][] = [
     [apiKeyPath(APP_ID_1, API_KEY_NAME_1), null],

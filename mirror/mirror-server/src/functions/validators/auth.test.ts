@@ -345,7 +345,7 @@ describe('auth-validators', () => {
   }
 
   const defaultApiKey: ApiKey = {
-    value: 'app-key-value',
+    value: 'api-key-value',
     permissions: {'app:publish': true} as Permissions,
     created: Timestamp.now(),
     lastUsed: null,
