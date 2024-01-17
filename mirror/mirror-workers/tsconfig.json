@@ -5,7 +5,9 @@
     "types": ["@cloudflare/workers-types/2023-07-01"],
     "module": "Node16",
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
   },
   "include": ["**/*.ts"],
   "exclude": ["dist", "node_modules", "out"]
