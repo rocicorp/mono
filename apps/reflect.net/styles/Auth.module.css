@@ -21,6 +21,22 @@
   background: rgba(252, 32, 138, 0.05);
 }
 
+.signingIn {
+  border: 1px solid #fc208a;
+  padding: 0;
+  text-align: center;
+  line-height: 107px;
+  width: 267px;
+  height: 107px;
+  margin: 0 auto;
+  border-radius: 0.5rem;
+  background: rgba(252, 32, 138, 0.05);
+}
+
+.signingIn p {
+  margin: 0;
+}
+
 .authSuccess {
   border: 1px solid #00ffa3;
   padding: 1rem 1rem 1rem 2.75rem;
