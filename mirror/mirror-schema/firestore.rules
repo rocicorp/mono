@@ -6,10 +6,11 @@ service cloud.firestore {
         && request.auth.token.get('superUntil', 0) >= request.time.toMillis();
     }
 
-    // authenticatedWithAppKey does not require any get()s. Try this first.
-    function authenticatedWithAppKey(appID) {
+    // authenticatedWithApiKey requires a get() on the ApiKey path.
+    function authenticatedWithApiKey(appID) {
       let uidPath = request.auth != null ? string(request.auth.uid).split('/') : [];
-      return uidPath.size() > 3 && uidPath[0:3] == ['apps', appID, 'keys'];
+      return uidPath.size() == 4 && uidPath[0] == 'teams' && uidPath[2] == 'keys'
+        && appID in get(/databases/$(database)/documents/teams/$(uidPath[1])/keys/$(uidPath[3])).data.apps;
     }
     // userIs{Role}OfApp() requires two get()s, one on the app doc and one on the user doc.
     function userIsMemberOfApp(appID) {
@@ -39,8 +40,8 @@ service cloud.firestore {
     // Team members have read access to all documents rooted at /apps/{appID}
     match /apps/{appID} {
       // Optimization: References the teamID directly.
-      allow read: if authenticatedWithAppKey(appID)
-        || userIsMemberOfTeam(resource.data.teamID);
+      allow read: if userIsMemberOfTeam(resource.data.teamID)
+        || authenticatedWithApiKey(appID);
       
       function isRestricted(coll) {
         // apps/.../subcollections that are not externally visible 
@@ -50,7 +51,7 @@ service cloud.firestore {
       match /{subcollection}/{document=**} {
         // For docs in subcollections, the app doc is consulted to determine the teamID.
         allow read: if !isRestricted(subcollection)
-          && (authenticatedWithAppKey(appID) || userIsMemberOfApp(appID));
+          && (userIsMemberOfApp(appID) || authenticatedWithApiKey(appID));
       }
     }
     // Team members have read access to all documents rooted at /teams/{teamID}
