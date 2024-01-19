@@ -44,7 +44,7 @@ export async function migrateAppKeysHandler(yargs: MigrateAppKeysHandlerArgs) {
       for (const keyDoc of appKeys.docs) {
         appKeyDocs.push(keyDoc.ref);
         const key = keyDoc.data();
-        // Hack to handle the one key that has the same name in by two different apps.
+        // One-off to handle the key that has the same name in by two different apps.
         const keyName =
           keyDoc.id === 'publish-key-20231217'
             ? `${name}-${keyDoc.id}`
