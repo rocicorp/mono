@@ -72,7 +72,11 @@ export async function migrateAppKeysHandler(yargs: MigrateAppKeysHandlerArgs) {
       txn.delete(doc);
     }
     if (yargs.dryRun) {
-      throw new Error('Aborted. Set --dry-run=false to commit.');
+      throw new Error(
+        `Aborted migration of ${teamKeys.size} API keys. Set --dry-run=false to commit.`,
+      );
+    } else {
+      console.info(`Migrated ${teamKeys.size} API keys`);
     }
   });
 }
