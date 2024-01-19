@@ -51,7 +51,7 @@ export async function disconnectBeacon(
 
   const cache = new EntryCache(storage);
   const startVersion = must(await getVersion(cache));
-  const nextVersion = (startVersion ?? 0) + 1;
+  const nextVersion = startVersion + 1;
 
   await delClientRecords([clientID], cache);
   await collectOldUserSpaceClientKeys(lc, cache, [clientID], nextVersion);
