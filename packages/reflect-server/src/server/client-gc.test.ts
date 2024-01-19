@@ -1,15 +1,14 @@
 import {describe, expect, test} from '@jest/globals';
 import {jsonSchema} from 'shared/src/json-schema.js';
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import type {Storage} from '../storage/storage.js';
 import {getClientRecord, putClientRecord} from '../types/client-record.js';
 import type {ClientID} from '../types/client-state.js';
 import {putConnectedClients} from '../types/connected-clients.js';
-import {putUserValue, userValueKey} from '../types/user-value.js';
+import {putUserValue} from '../types/user-value.js';
 import {putVersion} from '../types/version.js';
-import {createSilentLogContext} from '../util/test-utils.js';
+import {createSilentLogContext, setUserEntries} from '../util/test-utils.js';
 import {
   collectClients,
   collectOldUserSpaceClientKeys,
@@ -18,20 +17,6 @@ import {
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
-
-async function setUserEntries(
-  cache: Storage,
-  version: number,
-  entries: Record<string, ReadonlyJSONValue>,
-) {
-  for (const [k, value] of Object.entries(entries)) {
-    await cache.put(userValueKey(k), {
-      value,
-      deleted: false,
-      version,
-    });
-  }
-}
 
 async function setLastSeenEntries(
   cache: Storage,

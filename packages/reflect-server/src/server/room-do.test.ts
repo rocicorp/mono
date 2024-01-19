@@ -9,10 +9,7 @@ import {
 import {LogContext} from '@rocicorp/logger';
 import assert from 'node:assert';
 import {subscribe, unsubscribe} from 'node:diagnostics_channel';
-import type {DisconnectBeacon} from 'reflect-protocol/src/disconnect-beacon.js';
 import type {LogLevel, TailMessage} from 'reflect-protocol/src/tail.js';
-import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
-import {DISCONNECT_BEACON_PATH} from 'reflect-shared/src/paths.js';
 import type {MutatorDefs, WriteTransaction} from 'reflect-shared/src/types.js';
 import {version} from 'reflect-shared/src/version.js';
 import {CONNECTION_SECONDS_CHANNEL_NAME} from 'shared/src/events/connection-seconds.js';
@@ -764,66 +761,5 @@ describe('tail', () => {
 
     expect(log).toEqual([]);
     expect(originalConsoleErrorSpy).toBeCalledTimes(0);
-  });
-});
-
-describe('Client disconnect beacon', () => {
-  beforeEach(() => {
-    setConfig('disconnectBeacon', true);
-  });
-
-  afterEach(() => {
-    resetAllConfig();
-  });
-
-  const body: DisconnectBeacon = {
-    lastMutationID: 123,
-  };
-
-  const roomID = 'testRoomID';
-  const clientID = 'testClientID';
-  const userID = 'testUserID';
-
-  describe('enabled', () => {
-    for (const enabled of [true, false]) {
-      test(`${enabled}`, async () => {
-        setConfig('disconnectBeacon', enabled);
-
-        const roomDO = await makeBaseRoomDO();
-
-        await createRoom(roomDO, roomID, undefined);
-
-        const url = `http://test.roci.dev${DISCONNECT_BEACON_PATH}?roomID=${roomID}&clientID=${clientID}&userID=${userID}`;
-        const request = addRoomIDHeader(
-          new Request(url, {method: 'POST', body: JSON.stringify(body)}),
-          roomID,
-        );
-        const response = await roomDO.fetch(request);
-
-        expect(response.status).toBe(enabled ? 200 : 404);
-      });
-    }
-  });
-
-  describe('Missing search params', () => {
-    for (const url of [
-      `http://test.roci.dev${DISCONNECT_BEACON_PATH}?clientID=${clientID}&userID=${userID}`,
-      `http://test.roci.dev${DISCONNECT_BEACON_PATH}?clientID=${clientID}&roomID=${roomID}`,
-      `http://test.roci.dev${DISCONNECT_BEACON_PATH}?userID=${userID}&roomID=${roomID}`,
-    ]) {
-      test(`url: ${url}`, async () => {
-        const roomDO = await makeBaseRoomDO();
-
-        await createRoom(roomDO, roomID, undefined);
-
-        const request = addRoomIDHeader(
-          new Request(url, {method: 'POST', body: JSON.stringify(body)}),
-          roomID,
-        );
-        const response = await roomDO.fetch(request);
-
-        expect(response.status).toBe(400);
-      });
-    }
   });
 });
