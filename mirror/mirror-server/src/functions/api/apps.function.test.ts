@@ -45,6 +45,7 @@ describe('api-apps', () => {
   initializeApp({projectId: 'api-apps-test'});
   const firestore = getFirestore();
   const APP_ID = 'api-app-id';
+  const TEAM_ID = 'api-team-id';
   const API_KEY_NAME = 'my-api-key';
   const API_KEY_VALUE = 'rHm_ELVQvsuj0GfZIF62A1BGUQE6NA8kZHwu8mF_UVo';
 
@@ -89,9 +90,13 @@ describe('api-apps', () => {
     runningDeployment.spec.hostname = 'my-app-team.reflect-server.bonk';
     runningDeployment.spec.serverVersion = '0.38.202401100000';
     await Promise.all([
-      setApp(firestore, APP_ID, {name: 'za app', runningDeployment}),
+      setApp(firestore, APP_ID, {
+        teamID: TEAM_ID,
+        name: 'za app',
+        runningDeployment,
+      }),
       firestore
-        .doc(apiKeyPath(APP_ID, API_KEY_NAME))
+        .doc(apiKeyPath(TEAM_ID, API_KEY_NAME))
         .withConverter(apiKeyDataConverter)
         .create({
           value: API_KEY_VALUE,
@@ -101,6 +106,7 @@ describe('api-apps', () => {
           } as Permissions,
           created: Timestamp.now(),
           lastUsed: null,
+          apps: [APP_ID],
         }),
       firestore
         .doc(envPath(APP_ID, DEFAULT_ENV))
@@ -122,7 +128,7 @@ describe('api-apps', () => {
     // Clean up global emulator data.
     const batch = firestore.batch();
     batch.delete(firestore.doc(appPath(APP_ID)));
-    batch.delete(firestore.doc(apiKeyPath(APP_ID, API_KEY_NAME)));
+    batch.delete(firestore.doc(apiKeyPath(TEAM_ID, API_KEY_NAME)));
     batch.delete(firestore.doc(envPath(APP_ID, DEFAULT_ENV)));
     await batch.commit();
   });

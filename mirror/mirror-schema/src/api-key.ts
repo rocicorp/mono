@@ -1,8 +1,8 @@
 import * as v from 'shared/src/valita.js';
 import {isValidAppName} from './app.js';
 import {firestoreDataConverter} from './converter.js';
-import {appPath} from './deployment.js';
 import * as path from './path.js';
+import {teamPath} from './team.js';
 import {timestampSchema} from './timestamp.js';
 
 // All permissions must be a default=false boolean.
@@ -47,6 +47,7 @@ export const apiKeySchema = v.object({
   permissions: permissionsSchema,
   created: timestampSchema,
   lastUsed: timestampSchema.nullable(),
+  apps: v.array(v.string()),
 });
 
 export type ApiKey = v.Infer<typeof apiKeySchema>;
@@ -55,12 +56,12 @@ export const apiKeyDataConverter = firestoreDataConverter(apiKeySchema);
 
 export const API_KEY_COLLECTION_ID = 'keys';
 
-export function apiKeysCollection(appID: string): string {
-  return path.append(appPath(appID), API_KEY_COLLECTION_ID);
+export function apiKeysCollection(teamID: string): string {
+  return path.append(teamPath(teamID), API_KEY_COLLECTION_ID);
 }
 
-export function apiKeyPath(appID: string, name: string): string {
-  return path.append(apiKeysCollection(appID), name);
+export function apiKeyPath(teamID: string, name: string): string {
+  return path.append(apiKeysCollection(teamID), name);
 }
 
 // Key names are used in Firestore paths. Use the same constraints for

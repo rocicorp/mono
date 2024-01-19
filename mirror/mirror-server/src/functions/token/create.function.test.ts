@@ -20,7 +20,7 @@ describe('token-create', () => {
   // capital letters in the projectId, so don't capitalize anything there.
   initializeApp({projectId: 'token-create-test'});
   const firestore = getFirestore();
-  const APP_ID = 'token-app-id';
+  const TEAM_ID = 'token-team-id';
   const API_KEY_NAME = 'my-api-key';
   const API_KEY_VALUE = 'rHm_ELVQvsuj0GfZIF62A1BGUQE6NA8kZHwu8mF_UVo';
 
@@ -35,7 +35,7 @@ describe('token-create', () => {
 
   beforeAll(async () => {
     await Promise.all([
-      firestore.doc(apiKeyPath(APP_ID, API_KEY_NAME)).create({
+      firestore.doc(apiKeyPath(TEAM_ID, API_KEY_NAME)).create({
         value: API_KEY_VALUE,
       }),
     ]);
@@ -44,7 +44,7 @@ describe('token-create', () => {
   afterAll(async () => {
     // Clean up global emulator data.
     const batch = firestore.batch();
-    batch.delete(firestore.doc(apiKeyPath(APP_ID, API_KEY_NAME)));
+    batch.delete(firestore.doc(apiKeyPath(TEAM_ID, API_KEY_NAME)));
     await batch.commit();
   });
 
@@ -71,7 +71,7 @@ describe('token-create', () => {
     });
     expect(auth.createCustomToken).toBeCalledTimes(1);
     expect(auth.createCustomToken.mock.calls[0][0]).toBe(
-      apiKeyPath(APP_ID, API_KEY_NAME),
+      apiKeyPath(TEAM_ID, API_KEY_NAME),
     );
   });
 });

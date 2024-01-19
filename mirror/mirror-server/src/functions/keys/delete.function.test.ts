@@ -50,13 +50,14 @@ describe('appKeys-delete', () => {
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].forEach(i => {
       batch.create(
         firestore
-          .doc(apiKeyPath(APP_ID, `key-${i}`))
+          .doc(apiKeyPath(TEAM_ID, `key-${i}`))
           .withConverter(apiKeyDataConverter),
         {
           value: `foo-bar-baz-${i}`,
           permissions: {'rooms:read': true} as Permissions,
           created: FieldValue.serverTimestamp(),
           lastUsed: null,
+          apps: [APP_ID],
         },
       );
     });
@@ -66,7 +67,7 @@ describe('appKeys-delete', () => {
   afterEach(async () => {
     const batch = firestore.batch();
     const keys = await firestore
-      .collection(apiKeysCollection(APP_ID))
+      .collection(apiKeysCollection(TEAM_ID))
       .listDocuments();
     keys.forEach(key => batch.delete(key));
     await batch.commit();
@@ -115,7 +116,7 @@ describe('appKeys-delete', () => {
 
     expect(
       (
-        await firestore.collection(apiKeysCollection(APP_ID)).listDocuments()
+        await firestore.collection(apiKeysCollection(TEAM_ID)).listDocuments()
       ).map(doc => doc.id),
     ).toEqual(['key-0', 'key-1', 'key-3', 'key-4', 'key-6', 'key-7', 'key-9']);
   });

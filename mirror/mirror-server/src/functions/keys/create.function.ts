@@ -18,6 +18,7 @@ import {appAuthorization, userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
 
+// TODO: Revisit this limit since it is now per team instead of per app.
 export const MAX_KEYS = 100;
 
 export function validatePermissions(
@@ -43,8 +44,11 @@ export const create = (firestore: Firestore) =>
     .validate(userAgentVersion())
     .validate(userAuthorization())
     .validate(appAuthorization(firestore, ['admin']))
-    .handle(async request => {
+    .handle(async (request, context) => {
       const {appID, name, permissions} = request;
+      const {
+        app: {teamID},
+      } = context;
 
       if (!isValidApiKeyName(name)) {
         throw new HttpsError(
@@ -55,13 +59,13 @@ export const create = (firestore: Firestore) =>
       const validatedPermissions = validatePermissions(name, permissions);
 
       const keyDoc = firestore
-        .doc(apiKeyPath(appID, name))
+        .doc(apiKeyPath(teamID, name))
         .withConverter(apiKeyDataConverter);
 
       const value = randomBytes(32).toString('base64url');
       await firestore.runTransaction(async tx => {
         const keys = await tx.get(
-          firestore.collection(apiKeysCollection(appID)).count(),
+          firestore.collection(apiKeysCollection(teamID)).count(),
         );
         if (keys.data().count >= MAX_KEYS) {
           throw new HttpsError(
@@ -81,6 +85,7 @@ export const create = (firestore: Firestore) =>
           permissions: validatedPermissions,
           created: FieldValue.serverTimestamp(),
           lastUsed: null,
+          apps: [appID],
         });
       });
 

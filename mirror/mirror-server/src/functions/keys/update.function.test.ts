@@ -91,16 +91,16 @@ describe('keys-update', () => {
   const firestore = fakeFirestore();
   const updateFunction = https.onCall(update(firestore));
 
-  const APP_ID_1 = 'keys-update-test-app-id-1';
-  const APP_ID_2 = 'keys-update-test-app-id-2';
+  const TEAM_ID_1 = 'keys-update-test-team-id-1';
+  const TEAM_ID_2 = 'keys-update-test-team-id-2';
   const API_KEY_NAME_1 = 'api-key-1';
   const API_KEY_NAME_2 = 'api-key-2';
 
   const apiKeyPaths: [string, number | null][] = [
-    [apiKeyPath(APP_ID_1, API_KEY_NAME_1), null],
-    [apiKeyPath(APP_ID_1, API_KEY_NAME_2), null],
-    [apiKeyPath(APP_ID_2, API_KEY_NAME_1), 99999],
-    [apiKeyPath(APP_ID_2, API_KEY_NAME_2), null],
+    [apiKeyPath(TEAM_ID_1, API_KEY_NAME_1), null],
+    [apiKeyPath(TEAM_ID_1, API_KEY_NAME_2), null],
+    [apiKeyPath(TEAM_ID_2, API_KEY_NAME_1), 99999],
+    [apiKeyPath(TEAM_ID_2, API_KEY_NAME_2), null],
   ];
 
   beforeEach(async () => {
@@ -114,6 +114,7 @@ describe('keys-update', () => {
             permissions: {'app:publish': true} as Permissions,
             created: FieldValue.serverTimestamp(),
             lastUsed: lastUsed ? Timestamp.fromMillis(lastUsed) : null,
+            apps: ['ignore'],
           }),
       ),
     );
@@ -146,18 +147,18 @@ describe('keys-update', () => {
     const responses = new Queue<UpdateKeyResponse | Error>();
 
     const requests: UpdateKeyRequest[] = [
-      {appID: APP_ID_1, keyName: API_KEY_NAME_1, lastUsed: 1234},
-      {appID: APP_ID_1, keyName: API_KEY_NAME_2, lastUsed: 2345},
-      {appID: APP_ID_2, keyName: API_KEY_NAME_1, lastUsed: 12340},
-      {appID: APP_ID_2, keyName: API_KEY_NAME_2, lastUsed: 23450},
-      {appID: APP_ID_1, keyName: API_KEY_NAME_1, lastUsed: 1245},
-      {appID: APP_ID_1, keyName: API_KEY_NAME_2, lastUsed: 2300},
-      {appID: APP_ID_2, keyName: API_KEY_NAME_1, lastUsed: 12356},
-      {appID: APP_ID_2, keyName: API_KEY_NAME_2, lastUsed: 23498},
-      {appID: APP_ID_1, keyName: API_KEY_NAME_1, lastUsed: 1200},
-      {appID: APP_ID_1, keyName: API_KEY_NAME_2, lastUsed: 2387},
-      {appID: APP_ID_2, keyName: API_KEY_NAME_1, lastUsed: 12323},
-      {appID: APP_ID_2, keyName: API_KEY_NAME_2, lastUsed: 23499},
+      {teamID: TEAM_ID_1, keyName: API_KEY_NAME_1, lastUsed: 1234},
+      {teamID: TEAM_ID_1, keyName: API_KEY_NAME_2, lastUsed: 2345},
+      {teamID: TEAM_ID_2, keyName: API_KEY_NAME_1, lastUsed: 12340},
+      {teamID: TEAM_ID_2, keyName: API_KEY_NAME_2, lastUsed: 23450},
+      {teamID: TEAM_ID_1, keyName: API_KEY_NAME_1, lastUsed: 1245},
+      {teamID: TEAM_ID_1, keyName: API_KEY_NAME_2, lastUsed: 2300},
+      {teamID: TEAM_ID_2, keyName: API_KEY_NAME_1, lastUsed: 12356},
+      {teamID: TEAM_ID_2, keyName: API_KEY_NAME_2, lastUsed: 23498},
+      {teamID: TEAM_ID_1, keyName: API_KEY_NAME_1, lastUsed: 1200},
+      {teamID: TEAM_ID_1, keyName: API_KEY_NAME_2, lastUsed: 2387},
+      {teamID: TEAM_ID_2, keyName: API_KEY_NAME_1, lastUsed: 12323},
+      {teamID: TEAM_ID_2, keyName: API_KEY_NAME_2, lastUsed: 23499},
     ];
 
     for (const req of requests) {
@@ -175,9 +176,9 @@ describe('keys-update', () => {
     expect(await responses.dequeue()).toEqual({
       flushed: {
         updates: {
-          [apiKeyPath(APP_ID_1, API_KEY_NAME_1)]: 1245,
-          [apiKeyPath(APP_ID_1, API_KEY_NAME_2)]: 2387,
-          [apiKeyPath(APP_ID_2, API_KEY_NAME_2)]: 23499,
+          [apiKeyPath(TEAM_ID_1, API_KEY_NAME_1)]: 1245,
+          [apiKeyPath(TEAM_ID_1, API_KEY_NAME_2)]: 2387,
+          [apiKeyPath(TEAM_ID_2, API_KEY_NAME_2)]: 23499,
         },
         coalesced: 8,
       },

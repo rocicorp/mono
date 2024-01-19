@@ -2,7 +2,7 @@ import * as v from 'shared/src/valita.js';
 import {createCall} from '../functions/internal/call.js';
 
 export const updateKeyRequestSchema = v.object({
-  appID: v.string(),
+  teamID: v.string(),
   keyName: v.string(),
   lastUsed: v.number(),
 });
@@ -21,7 +21,7 @@ export type UpdateKeyRequest = v.Infer<typeof updateKeyRequestSchema>;
 export type UpdateKeyResponse = v.Infer<typeof updateKeyResponseSchema>;
 
 export const updateKey = createCall(
-  'appKeys-update',
+  'apiKeys-update',
   updateKeyRequestSchema,
   updateKeyResponseSchema,
 );

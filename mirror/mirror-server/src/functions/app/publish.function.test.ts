@@ -36,6 +36,7 @@ describe('publish', () => {
   const firestore = getFirestore();
   const USER_ID = 'app-publish-test-user';
   const APP_ID = 'app-publish-test-app';
+  const TEAM_ID = 'app-publish-test-team';
   const API_KEY_WITH_PERMS = 'publish-api-key';
   const API_KEY_WITHOUT_PERMS = 'rooms-api-key';
   const CF_ID = 'cf-abc';
@@ -47,7 +48,7 @@ describe('publish', () => {
       firestore.doc(userPath(USER_ID)).withConverter(userDataConverter),
       {
         email: 'foo@bar.com',
-        roles: {fooTeam: 'admin'},
+        roles: {[TEAM_ID]: 'admin'},
       },
     );
     batch.create(
@@ -73,30 +74,32 @@ describe('publish', () => {
         cfID: 'deprecated',
         cfScriptName: 'foo-bar-script',
         serverReleaseChannel: 'stable',
-        teamID: 'fooTeam',
+        teamID: TEAM_ID,
         envUpdateTime: ENV_UPDATE_TIME,
       },
     );
     batch.create(
       firestore
-        .doc(apiKeyPath(APP_ID, API_KEY_WITH_PERMS))
+        .doc(apiKeyPath(TEAM_ID, API_KEY_WITH_PERMS))
         .withConverter(apiKeyDataConverter),
       {
         value: 'foo-value',
         permissions: {'app:publish': true} as Permissions,
         created: FieldValue.serverTimestamp(),
         lastUsed: null,
+        apps: [APP_ID],
       },
     );
     batch.create(
       firestore
-        .doc(apiKeyPath(APP_ID, API_KEY_WITHOUT_PERMS))
+        .doc(apiKeyPath(TEAM_ID, API_KEY_WITHOUT_PERMS))
         .withConverter(apiKeyDataConverter),
       {
         value: 'bar-value',
         permissions: {'rooms:read': true} as Permissions,
         created: FieldValue.serverTimestamp(),
         lastUsed: null,
+        apps: [APP_ID],
       },
     );
     batch.create(
@@ -138,8 +141,8 @@ describe('publish', () => {
     for (const path of [
       userPath(USER_ID),
       appPath(APP_ID),
-      apiKeyPath(APP_ID, API_KEY_WITH_PERMS),
-      apiKeyPath(APP_ID, API_KEY_WITHOUT_PERMS),
+      apiKeyPath(TEAM_ID, API_KEY_WITH_PERMS),
+      apiKeyPath(TEAM_ID, API_KEY_WITHOUT_PERMS),
       providerPath(DEFAULT_PROVIDER_ID),
       serverPath('0.28.0'),
       serverPath('0.28.1'),
@@ -179,13 +182,13 @@ describe('publish', () => {
     },
     {
       name: 'app key with permissions',
-      uid: `apps/${APP_ID}/keys/${API_KEY_WITH_PERMS}`,
+      uid: `teams/${TEAM_ID}/keys/${API_KEY_WITH_PERMS}`,
       serverReleaseChannel: 'stable',
       expectedServerVersion: '0.28.0',
     },
     {
       name: 'app key without permissions',
-      uid: `apps/${APP_ID}/keys/${API_KEY_WITHOUT_PERMS}`,
+      uid: `teams/${TEAM_ID}/keys/${API_KEY_WITHOUT_PERMS}`,
       serverReleaseChannel: 'stable',
       errorCode: 'permission-denied',
     },

@@ -23,6 +23,7 @@ describe('appKeys-list', () => {
   initializeApp({projectId: 'app-keys-list-function-test'});
   const firestore = getFirestore();
   const APP_ID = 'appKeys-list-test-app-id';
+  const OTHER_APP_ID = 'appKeys-list-test-other-app-id';
   const APP_NAME = 'my-app';
   const TEAM_ID = 'my-team';
   const USER_ID = 'foo';
@@ -79,22 +80,34 @@ describe('appKeys-list', () => {
     beforeAll(async () => {
       await Promise.all([
         firestore
-          .doc(apiKeyPath(APP_ID, 'my-publish-key'))
+          .doc(apiKeyPath(TEAM_ID, 'my-publish-key'))
           .withConverter(apiKeyDataConverter)
           .create({
             value: '12345678',
             permissions: {'app:publish': true} as Permissions,
             created: Timestamp.fromMillis(Date.UTC(2023, 11, 0)),
             lastUsed: null,
+            apps: [APP_ID],
           }),
         firestore
-          .doc(apiKeyPath(APP_ID, 'my-reflect-api-key'))
+          .doc(apiKeyPath(TEAM_ID, 'my-reflect-api-key'))
           .withConverter(apiKeyDataConverter)
           .create({
             value: 'abcdefg',
             permissions: {'rooms:read': true} as Permissions,
             created: Timestamp.fromMillis(Date.UTC(2023, 10, 0)),
             lastUsed: Timestamp.fromMillis(Date.UTC(2023, 11, 1)),
+            apps: [APP_ID, OTHER_APP_ID],
+          }),
+        firestore
+          .doc(apiKeyPath(TEAM_ID, 'my-other-api-key'))
+          .withConverter(apiKeyDataConverter)
+          .create({
+            value: '!@#$%^',
+            permissions: {'rooms:read': true} as Permissions,
+            created: Timestamp.fromMillis(Date.UTC(2023, 10, 0)),
+            lastUsed: Timestamp.fromMillis(Date.UTC(2023, 11, 1)),
+            apps: [OTHER_APP_ID],
           }),
       ]);
     });
@@ -103,7 +116,7 @@ describe('appKeys-list', () => {
       // Clean up global emulator data.
       const batch = firestore.batch();
       const keys = await firestore
-        .collection(apiKeysCollection(APP_ID))
+        .collection(apiKeysCollection(TEAM_ID))
         .listDocuments();
       keys.forEach(key => batch.delete(key));
       await batch.commit();

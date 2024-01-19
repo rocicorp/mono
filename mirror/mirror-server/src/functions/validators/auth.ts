@@ -229,13 +229,6 @@ export function appOrKeyAuthorization<
       .doc(appPath(appID))
       .withConverter(appDataConverter);
 
-    if (apiKeyDocRef.parent?.parent?.path !== appDocRef.path) {
-      throw new HttpsError(
-        'permission-denied',
-        `Key "${apiKeyDocRef.id}" is not authorized for app ${appID}`,
-      );
-    }
-
     const authorization: AppAuthorization = await firestore.runTransaction(
       async txn => {
         const [apiKeyDoc, appDoc] = await Promise.all([
@@ -249,11 +242,13 @@ export function appOrKeyAuthorization<
             `Key "${apiKeyDoc.id}" has been deleted`,
           );
         }
-        if (!appDoc.exists) {
-          throw new HttpsError('not-found', `App ${appID} does not exist`);
-        }
         const apiKey = must(apiKeyDoc.data());
-        const app = must(appDoc.data());
+        if (!apiKey.apps.includes(appID)) {
+          throw new HttpsError(
+            'permission-denied',
+            `Key "${apiKeyDocRef.id}" is not authorized for app ${appID}`,
+          );
+        }
         if (!apiKey.permissions[keyPermission]) {
           throw new HttpsError(
             'permission-denied',
@@ -263,6 +258,20 @@ export function appOrKeyAuthorization<
         logger.info(
           `Key "${keyPath}" authorized with ${keyPermission} permission`,
         );
+        // Note: The existence check for the appID is done _after_ verifying that the
+        // key is authorized to act upon the App, eliminating the ability to scrape appIDs.
+        if (!appDoc.exists) {
+          throw new HttpsError('not-found', `App ${appID} does not exist`);
+        }
+        const app = must(appDoc.data());
+        // Sanity check that the app still belongs to the team. (We should remove them from team
+        // keys if/when we allow moving apps to different teams).
+        if (apiKeyDoc.ref.parent?.parent?.id !== app.teamID) {
+          throw new HttpsError(
+            'internal',
+            `Invalid ApiKey ${keyPath} for App ${appID} in team ${app.teamID}`,
+          );
+        }
         return {app};
       },
       {readOnly: true},
@@ -271,7 +280,7 @@ export function appOrKeyAuthorization<
     // uses delayed batching to coalesce writes to the same key, and moves the Firestore
     // write transaction out of the critical path.
     void updateKey({
-      appID,
+      teamID: authorization.app.teamID,
       keyName: apiKeyDocRef.id,
       lastUsed: Date.now(),
     }).catch(e =>

@@ -48,7 +48,7 @@ describe('appKeys-create', () => {
   afterEach(async () => {
     const batch = firestore.batch();
     const keys = await firestore
-      .collection(apiKeysCollection(APP_ID))
+      .collection(apiKeysCollection(TEAM_ID))
       .listDocuments();
     keys.forEach(key => batch.delete(key));
     await batch.commit();
@@ -91,7 +91,7 @@ describe('appKeys-create', () => {
     });
 
     expect(
-      (await firestore.doc(apiKeyPath(APP_ID, 'valid-key-name')).get()).data(),
+      (await firestore.doc(apiKeyPath(TEAM_ID, 'valid-key-name')).get()).data(),
     ).toMatchObject({
       value: resp.value,
       permissions: mergeWithDefaults({'app:publish': true}),
@@ -136,13 +136,14 @@ describe('appKeys-create', () => {
     for (let i = 0; i < MAX_KEYS; i++) {
       batch.create(
         firestore
-          .doc(apiKeyPath(APP_ID, `key-${i}`))
+          .doc(apiKeyPath(TEAM_ID, `key-${i}`))
           .withConverter(apiKeyDataConverter),
         {
           value: `value_${i}`,
           permissions: defaultPermissions(),
           created: FieldValue.serverTimestamp(),
           lastUsed: null,
+          apps: [APP_ID],
         },
       );
     }

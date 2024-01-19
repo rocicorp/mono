@@ -34,21 +34,23 @@ describe('validators/https', () => {
   initializeApp({projectId: 'https-validator-test'});
   const firestore = getFirestore();
   const USER_ID = 'foo';
+  const TEAM_ID = 'fooTeam';
   const APP_ID = 'myApp';
   const API_KEY_NAME = 'bar-key';
 
   beforeAll(async () => {
     await Promise.all([
       setUser(firestore, USER_ID, 'foo@bar.com', 'bob', {fooTeam: 'admin'}),
-      setApp(firestore, APP_ID, {teamID: 'fooTeam', name: 'MyAppName'}),
+      setApp(firestore, APP_ID, {teamID: TEAM_ID, name: 'MyAppName'}),
       firestore
-        .doc(apiKeyPath(APP_ID, API_KEY_NAME))
+        .doc(apiKeyPath(TEAM_ID, API_KEY_NAME))
         .withConverter(apiKeyDataConverter)
         .set({
           value: 'super-secret-key-value',
           permissions: {'app:publish': true} as Permissions,
           created: Timestamp.now(),
           lastUsed: null,
+          apps: [APP_ID],
         }),
     ]);
   });
@@ -57,7 +59,7 @@ describe('validators/https', () => {
     const batch = firestore.batch();
     batch.delete(firestore.doc(userPath(USER_ID)));
     batch.delete(firestore.doc(appPath(APP_ID)));
-    batch.delete(firestore.doc(apiKeyPath(APP_ID, API_KEY_NAME)));
+    batch.delete(firestore.doc(apiKeyPath(TEAM_ID, API_KEY_NAME)));
     await batch.commit();
   });
 
@@ -117,7 +119,7 @@ describe('validators/https', () => {
     const req = getMockReq({
       body: {
         requester: {
-          userID: `apps/${APP_ID}/keys/${API_KEY_NAME}`,
+          userID: `teams/${TEAM_ID}/keys/${API_KEY_NAME}`,
           userAgent: {type: 'reflect-cli', version: '0.0.1'},
         },
         foo: 'boo',
@@ -133,7 +135,7 @@ describe('validators/https', () => {
     await authenticatedFunction(req, res);
     expect(auth.verifyIdToken).not.toBeCalled;
     expect(res.json).toBeCalledWith({
-      userID: `apps/${APP_ID}/keys/${API_KEY_NAME}`,
+      userID: `teams/${TEAM_ID}/keys/${API_KEY_NAME}`,
       appName: 'MyAppName',
     });
   });

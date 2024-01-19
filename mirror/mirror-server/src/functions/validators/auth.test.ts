@@ -53,6 +53,7 @@ describe('auth-validators', () => {
   const firestore = getFirestore();
   const USER_ID = 'auth-user-id';
   const APP_ID = 'auth-app-id';
+  const TEAM_ID = 'auth-user-team';
   const API_KEY_NAME = 'auth-api-key';
 
   let fetchMocker: FetchMocker;
@@ -67,7 +68,7 @@ describe('auth-validators', () => {
     const batch = firestore.batch();
     batch.delete(firestore.doc(userPath(USER_ID)));
     batch.delete(firestore.doc(appPath(APP_ID)));
-    batch.delete(firestore.doc(apiKeyPath(APP_ID, API_KEY_NAME)));
+    batch.delete(firestore.doc(apiKeyPath(TEAM_ID, API_KEY_NAME)));
     await batch.commit();
   });
 
@@ -211,7 +212,7 @@ describe('auth-validators', () => {
   }
 
   const defaultApp: App = {
-    teamID: 'myTeam',
+    teamID: TEAM_ID,
     teamLabel: 'teamlabel',
     name: 'My App',
     cfID: 'deprecated',
@@ -236,7 +237,7 @@ describe('auth-validators', () => {
 
   const apiKeyReq = {
     requester: {
-      userID: `apps/${APP_ID}/keys/${API_KEY_NAME}`,
+      userID: `teams/${TEAM_ID}/keys/${API_KEY_NAME}`,
       userAgent: {type: 'reflect-cli', version: '0.0.1'},
     },
     foo: 'boo',
@@ -349,6 +350,7 @@ describe('auth-validators', () => {
     permissions: {'app:publish': true} as Permissions,
     created: Timestamp.now(),
     lastUsed: null,
+    apps: [APP_ID],
   };
 
   type ApiKeyCase = {
@@ -410,10 +412,13 @@ describe('auth-validators', () => {
 
       if (c.appDoc) {
         await firestore.doc(`apps/${APP_ID}`).set(c.appDoc);
+        if (c.appID) {
+          await firestore.doc(`apps/${c.appID}`).set(c.appDoc);
+        }
       }
       if (c.apiKeyDoc) {
         await firestore
-          .doc(`apps/${APP_ID}/keys/${API_KEY_NAME}`)
+          .doc(`teams/${TEAM_ID}/keys/${API_KEY_NAME}`)
           .set(c.apiKeyDoc);
       }
 
@@ -435,7 +440,7 @@ describe('auth-validators', () => {
 
       if (c.response) {
         expect(fetchMocker.requests()).toEqual([
-          ['POST', 'http://127.0.0.1:5001/appKeys-update'],
+          ['POST', 'http://127.0.0.1:5001/apiKeys-update'],
         ]);
         expect(fetchMocker.headers()).toEqual([
           {
@@ -446,7 +451,7 @@ describe('auth-validators', () => {
         const body = JSON.parse(String(fetchMocker.bodys()[0]));
         expect(body).toMatchObject({
           data: {
-            appID: APP_ID,
+            teamID: TEAM_ID,
             keyName: API_KEY_NAME,
             lastUsed: expect.any(Number),
           },

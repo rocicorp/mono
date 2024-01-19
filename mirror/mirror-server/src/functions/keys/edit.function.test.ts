@@ -43,13 +43,14 @@ describe('appKeys-edit', () => {
         [TEAM_ID]: 'admin',
       }),
       firestore
-        .doc(apiKeyPath(APP_ID, 'existing-key'))
+        .doc(apiKeyPath(TEAM_ID, 'existing-key'))
         .withConverter(apiKeyDataConverter)
         .create({
           value: 'foo-bar-baz',
           permissions: {'rooms:read': true} as Permissions,
           created: FieldValue.serverTimestamp(),
           lastUsed: null,
+          apps: [APP_ID],
         }),
     ]);
   });
@@ -57,7 +58,7 @@ describe('appKeys-edit', () => {
   afterEach(async () => {
     const batch = firestore.batch();
     const keys = await firestore
-      .collection(apiKeysCollection(APP_ID))
+      .collection(apiKeysCollection(TEAM_ID))
       .listDocuments();
     keys.forEach(key => batch.delete(key));
     await batch.commit();
@@ -97,7 +98,7 @@ describe('appKeys-edit', () => {
     expect(resp).toEqual({success: true});
 
     expect(
-      (await firestore.doc(apiKeyPath(APP_ID, 'existing-key')).get()).data(),
+      (await firestore.doc(apiKeyPath(TEAM_ID, 'existing-key')).get()).data(),
     ).toMatchObject({
       value: 'foo-bar-baz',
       permissions: mergeWithDefaults({'app:publish': true}),

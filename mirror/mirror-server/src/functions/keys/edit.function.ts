@@ -15,12 +15,15 @@ export const edit = (firestore: Firestore) =>
     .validate(userAgentVersion())
     .validate(userAuthorization())
     .validate(appAuthorization(firestore, ['admin']))
-    .handle(async request => {
-      const {appID, name, permissions} = request;
+    .handle(async (request, context) => {
+      const {name, permissions} = request;
+      const {
+        app: {teamID},
+      } = context;
 
       const validatedPermissions = validatePermissions(name, permissions);
       const keyDoc = firestore
-        .doc(apiKeyPath(appID, name))
+        .doc(apiKeyPath(teamID, name))
         .withConverter(apiKeyDataConverter);
 
       await firestore.runTransaction(async tx => {

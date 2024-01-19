@@ -17,18 +17,26 @@ export const list = (firestore: Firestore) =>
     .validate(userAgentVersion())
     .validate(userAuthorization())
     .validate(appAuthorization(firestore, ['admin']))
-    .handle(async request => {
+    .handle(async (request, context) => {
       const {appID, show} = request;
+      const {
+        app: {teamID},
+      } = context;
 
       const keys = await firestore
-        .collection(apiKeysCollection(appID))
+        .collection(apiKeysCollection(teamID))
         .orderBy('lastUsed', 'desc')
         .withConverter(apiKeyDataConverter)
         .get();
 
+      // For backwards compatibility, only list the keys for the specified `appID`.
+      const appKeyDocs = keys.docs.filter(doc =>
+        doc.data().apps.includes(appID),
+      );
+
       return {
         success: true,
-        keys: keys.docs.map(doc => {
+        keys: appKeyDocs.map(doc => {
           const key = doc.data();
           return {
             name: doc.id,
