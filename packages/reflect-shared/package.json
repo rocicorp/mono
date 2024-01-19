@@ -24,7 +24,8 @@
   },
   "exports": {
     ".": "./src/mod.ts",
-    "./src/": "./src/",
+    "./src/config.js": "./src/config.ts",
+    "./src/paths.js": "./src/paths.ts",
     "./tool/get-version.js": "./tool/get-version.js"
   },
   "eslintConfig": {

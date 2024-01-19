@@ -8,6 +8,7 @@ import type {
   ReadonlyJSONValue,
   WriteTransaction,
 } from 'reflect-shared';
+import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
 import {
   ExperimentalCreateKVStore,
   ExperimentalMemKVStore,
@@ -46,6 +47,11 @@ import {
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
 
+let fetchStub: sinon.SinonStub<
+  Parameters<typeof fetch>,
+  ReturnType<typeof fetch>
+>;
+
 setup(() => {
   clock = sinon.useFakeTimers();
   clock.setSystemTime(startTime);
@@ -54,10 +60,14 @@ setup(() => {
     'WebSocket',
     MockSocket as unknown as typeof WebSocket,
   );
+  fetchStub = sinon
+    .stub(window, 'fetch')
+    .returns(Promise.resolve(new Response()));
 });
 
 teardown(() => {
   sinon.restore();
+  resetAllConfig();
 });
 
 test('onOnlineChange callback', async () => {
@@ -645,7 +655,6 @@ test('puller with mutation recovery pull, response timeout', async () => {
 });
 
 test('puller with normal non-mutation recovery pull', async () => {
-  const fetchStub = sinon.stub(window, 'fetch');
   const r = reflectForTest();
   const pullReq: PullRequestV1 = {
     profileID: 'test-profile-id',
@@ -802,8 +811,6 @@ test('poke log context includes requestID', async () => {
 });
 
 test('Metrics', async () => {
-  const fetchStub = sinon.stub(window, 'fetch');
-
   // This is just a smoke test -- it ensures that we send metrics once at startup.
   // Ideally we would run Reflect and put it into different error conditions and see
   // that the metrics are reported appropriately.
@@ -826,8 +833,6 @@ test('Metrics', async () => {
 });
 
 test('Metrics not reported when enableAnalytics is false', async () => {
-  const fetchStub = sinon.stub(window, 'fetch');
-
   const r = reflectForTest({enableAnalytics: false});
   await r.waitForConnectionState(ConnectionState.Connecting);
   await r.triggerConnected();
@@ -846,8 +851,6 @@ test('Metrics not reported when enableAnalytics is false', async () => {
 });
 
 test('Metrics not reported when server indicates local development', async () => {
-  const fetchStub = sinon.stub(window, 'fetch');
-
   const r = reflectForTest({server: 'http://localhost:8000'});
   await r.waitForConnectionState(ConnectionState.Connecting);
   await r.triggerConnected();
@@ -1693,4 +1696,24 @@ test('subscribe where body returns non json', async () => {
   ]);
 
   cancel();
+});
+
+test('Reflect close should call disconnect beacon', async () => {
+  setConfig('disconnectBeacon', true);
+  const r = reflectForTest();
+
+  await r.close();
+
+  expect(fetchStub.calledOnce).equal(true);
+  expect(fetchStub.firstCall.args[0].toString()).equal(
+    `https://example.com/api/sync/v1/disconnect?roomID=${r.roomID}&userID=${r.userID}&clientID=${r.clientID}`,
+  );
+  expect(fetchStub.firstCall.args[1]).deep.equal({
+    body: '{"lastMutationID":0}',
+    headers: {
+      'content-type': 'application/json',
+    },
+    keepalive: true,
+    method: 'POST',
+  });
 });

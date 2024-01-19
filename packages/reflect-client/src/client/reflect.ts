@@ -15,8 +15,7 @@ import {
   type ErrorMessage,
 } from 'reflect-protocol';
 import type {MutatorDefs, ReadTransaction} from 'reflect-shared';
-import {version} from 'reflect-shared';
-import {isValidRoomID, ROOM_ID_REGEX} from 'reflect-shared';
+import {ROOM_ID_REGEX, isValidRoomID, version} from 'reflect-shared';
 import {
   ClientGroupID,
   ClientID,
@@ -47,7 +46,12 @@ import * as valita from 'shared/src/valita.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {checkConnectivity} from './connect-checks.js';
+import {
+  initDisconnectBeaconForPageHide,
+  sendDisconnectBeacon,
+} from './disconnect-beacon.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
+import {shouldEnableAnalytics} from './enable-analytics.js';
 import {toWSString, type HTTPString, type WSString} from './http-string.js';
 import {LogOptions, createLogOptions} from './log-options.js';
 import {
@@ -67,7 +71,6 @@ import {
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
-import {shouldEnableAnalytics} from './enable-analytics.js';
 
 declare const TESTING: boolean;
 
@@ -165,6 +168,11 @@ const enum PingResult {
   Success = 1,
 }
 
+// Keep in sync with packages/replicache/src/replicache-options.ts
+export interface ReplicacheInternalAPI {
+  lastMutationID(): number;
+}
+
 export class Reflect<MD extends MutatorDefs> {
   readonly version = version;
 
@@ -208,6 +216,8 @@ export class Reflect<MD extends MutatorDefs> {
   #abortPingTimeout = () => {
     // intentionally empty
   };
+
+  #internalAPI: ReplicacheInternalAPI;
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -357,14 +367,19 @@ export class Reflect<MD extends MutatorDefs> {
       licenseKey: 'reflect-client-static-key',
       experimentalCreateKVStore: getCreateKVStore(options),
     };
+    let internalAPI: ReplicacheInternalAPI;
     const replicacheInternalOptions = {
       enableLicensing: false,
+      exposeInternalAPI: (api: ReplicacheInternalAPI) => {
+        internalAPI = api;
+      },
     };
 
     this.#rep = new Replicache({
       ...replicacheOptions,
       ...replicacheInternalOptions,
     });
+    this.#internalAPI = internalAPI!;
     this.#rep.getAuth = this.#getAuthToken;
     this.#onUpdateNeeded = this.#rep.onUpdateNeeded; // defaults to reload.
     this.#server = server;
@@ -403,6 +418,18 @@ export class Reflect<MD extends MutatorDefs> {
       getDocument(),
       hiddenTabDisconnectDelay,
       this.#closeAbortController.signal,
+    );
+
+    initDisconnectBeaconForPageHide(
+      this.#lc,
+      getWindow(),
+      this.#closeAbortController.signal,
+      server,
+      roomID,
+      userID,
+      this.clientID,
+      () => this.#rep.auth,
+      () => this.#internalAPI.lastMutationID(),
     );
 
     void this.#runLoop();
@@ -484,7 +511,19 @@ export class Reflect<MD extends MutatorDefs> {
    * When closed all subscriptions end and no more read or writes are allowed.
    */
   close(): Promise<void> {
-    const lc = this.#lc;
+    const lc = this.#lc.withContext('close');
+    const lastMutationID = this.#internalAPI.lastMutationID();
+    sendDisconnectBeacon(
+      lc,
+      this.#server,
+      this.roomID,
+      this.userID,
+      this.#rep.clientID,
+      this.#rep.auth,
+      lastMutationID,
+      'ReflectClosed',
+    );
+
     if (this.#connectionState !== ConnectionState.Disconnected) {
       this.#disconnect(lc, {
         client: 'ReflectClosed',
@@ -1475,6 +1514,15 @@ function addWebSocketIDFromSocketToLogContext(
 
 function addWebSocketIDToLogContext(wsid: string, lc: LogContext): LogContext {
   return lc.withContext('wsid', wsid);
+}
+
+/**
+ * Returns the window object. This is wrapped in a function because Reflect
+ * runs in environments that do not have a window (such as Web Workers, Deno
+ * etc)
+ */
+function getWindow(): Window | undefined {
+  return typeof window !== 'undefined' ? window : undefined;
 }
 
 /**

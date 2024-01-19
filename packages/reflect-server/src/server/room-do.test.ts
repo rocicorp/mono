@@ -14,6 +14,7 @@ import type {LogLevel, TailMessage} from 'reflect-protocol/src/tail.js';
 import type {MutatorDefs, WriteTransaction} from 'reflect-shared';
 import {version} from 'reflect-shared';
 import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
+import {DISCONNECT_BEACON_PATH} from 'reflect-shared/src/paths.js';
 import {CONNECTION_SECONDS_CHANNEL_NAME} from 'shared/src/events/connection-seconds.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {Queue} from 'shared/src/queue.js';
@@ -28,7 +29,7 @@ import {TestLogSink} from '../util/test-utils.js';
 import {originalConsole} from './console.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
 import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
-import {DISCONNECT_BEACON_PATH, TAIL_URL_PATH} from './paths.js';
+import {TAIL_URL_PATH} from './paths.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
 
 async function createRoom<MD extends MutatorDefs>(
@@ -776,12 +777,7 @@ describe('Client disconnect beacon', () => {
   });
 
   const body: DisconnectBeacon = {
-    clientGroupID: 'testClientGroupID',
-    mutations: [],
-    pushVersion: 0,
-    schemaVersion: 's1',
-    requestID: 'r1',
-    timestamp: 123,
+    lastMutationID: 123,
   };
 
   const roomID = 'testRoomID';
