@@ -25,7 +25,7 @@ export async function disconnectBeacon(
   // Get the last mutationID for the client.
   const existingRecord = await getClientRecord(clientID, storage);
   if (!existingRecord) {
-    console.log('client record not found', clientID);
+    lc.debug?.('Client record not found');
     return new Response('client record not found', {status: 404});
   }
 
