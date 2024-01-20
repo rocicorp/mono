@@ -13,6 +13,12 @@ import {FetchResultError} from 'cloudflare-api/src/fetch.js';
 import {initializeApp} from 'firebase-admin/app';
 import {FieldValue, Timestamp, getFirestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
+import {
+  Permissions,
+  apiKeyDataConverter,
+  apiKeyPath,
+  defaultPermissions,
+} from 'mirror-schema/src/api-key.js';
 import {appDataConverter, type ScriptRef} from 'mirror-schema/src/app.js';
 import {encryptUtf8} from 'mirror-schema/src/crypto.js';
 import {
@@ -66,6 +72,9 @@ describe('deploy', () => {
   const APP_ID = 'deploy-test-app-id';
   const APP_NAME = 'my-app';
   const TEAM_ID = 'my-team';
+  const API_KEY_NAME = 'my-app-key';
+  const OTHER_APP_ID = 'deploy-test-other-app-id';
+  const OTHER_API_KEY_NAME = 'my-other-app-key';
   const SERVER_VERSION = '0.35.0';
   const WFP_SERVER_VERSION = MIN_WFP_VERSION.raw;
   const WFP_SERVER_VERSION_PRE_RELEASE_TAG = `${WFP_SERVER_VERSION}-canary.0`;
@@ -161,6 +170,26 @@ describe('deploy', () => {
       setTeam(firestore, TEAM_ID, {numApps: 1}),
       setAppName(firestore, TEAM_ID, APP_ID, APP_NAME),
       setEnv(firestore, APP_ID, {}),
+      firestore
+        .doc(apiKeyPath(TEAM_ID, API_KEY_NAME))
+        .withConverter(apiKeyDataConverter)
+        .create({
+          value: 'secret',
+          permissions: {'app:publish': true} as Permissions,
+          created: Timestamp.fromMillis(Date.UTC(2024, 1, 1)),
+          lastUsed: null,
+          appIDs: [APP_ID],
+        }),
+      firestore
+        .doc(apiKeyPath(TEAM_ID, OTHER_API_KEY_NAME))
+        .withConverter(apiKeyDataConverter)
+        .create({
+          value: 'secretus',
+          permissions: {'app:publish': true} as Permissions,
+          created: Timestamp.fromMillis(Date.UTC(2024, 1, 2)),
+          lastUsed: null,
+          appIDs: [APP_ID, OTHER_APP_ID],
+        }),
     ]);
   });
 
@@ -178,6 +207,8 @@ describe('deploy', () => {
     batch.delete(firestore.doc(teamPath(TEAM_ID)));
     batch.delete(firestore.doc(appNameIndexPath(TEAM_ID, APP_NAME)));
     batch.delete(firestore.doc(envPath(APP_ID, DEFAULT_ENV)));
+    batch.delete(firestore.doc(apiKeyPath(TEAM_ID, API_KEY_NAME)));
+    batch.delete(firestore.doc(apiKeyPath(TEAM_ID, OTHER_API_KEY_NAME)));
     await batch.commit();
   });
 
@@ -618,11 +649,24 @@ describe('deploy', () => {
       firestore.doc(deploymentPath(APP_ID, deleteID)),
       firestore.doc(deploymentPath(APP_ID, uploadID)),
       firestore.doc(appNameIndexPath(TEAM_ID, APP_NAME)),
+      firestore.doc(apiKeyPath(TEAM_ID, API_KEY_NAME)),
     );
     docs.forEach(doc => expect(doc.exists).toBe(false));
 
     const team = await getTeam(firestore, TEAM_ID);
     expect(team.numApps).toBe(0);
+
+    const otherKey = await firestore
+      .doc(apiKeyPath(TEAM_ID, OTHER_API_KEY_NAME))
+      .withConverter(apiKeyDataConverter)
+      .get();
+    expect(otherKey.data()).toEqual({
+      value: 'secretus',
+      permissions: mergeWithDefaults({'app:publish': true}),
+      created: Timestamp.fromMillis(Date.UTC(2024, 1, 2)),
+      lastUsed: null,
+      appIDs: [OTHER_APP_ID],
+    });
   });
 
   describe('WFP migration', () => {
@@ -701,3 +745,10 @@ describe('deploy', () => {
     }
   });
 });
+
+function mergeWithDefaults(perms: Partial<Permissions>): Permissions {
+  return {
+    ...defaultPermissions(),
+    ...perms,
+  };
+}
