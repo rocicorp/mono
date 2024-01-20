@@ -47,7 +47,7 @@ export const apiKeySchema = v.object({
   permissions: permissionsSchema,
   created: timestampSchema,
   lastUsed: timestampSchema.nullable(),
-  apps: v.array(v.string()),
+  appIDs: v.array(v.string()),
 });
 
 export type ApiKey = v.Infer<typeof apiKeySchema>;

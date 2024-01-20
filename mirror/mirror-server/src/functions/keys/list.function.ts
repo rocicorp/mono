@@ -31,7 +31,7 @@ export const list = (firestore: Firestore) =>
 
       // For backwards compatibility, only list the keys for the specified `appID`.
       const appKeyDocs = keys.docs.filter(doc =>
-        doc.data().apps.includes(appID),
+        doc.data().appIDs.includes(appID),
       );
 
       return {

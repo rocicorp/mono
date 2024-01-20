@@ -114,7 +114,7 @@ describe('keys-update', () => {
             permissions: {'app:publish': true} as Permissions,
             created: FieldValue.serverTimestamp(),
             lastUsed: lastUsed ? Timestamp.fromMillis(lastUsed) : null,
-            apps: ['ignore'],
+            appIDs: ['ignore'],
           }),
       ),
     );

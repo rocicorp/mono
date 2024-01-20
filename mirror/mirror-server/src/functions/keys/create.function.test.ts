@@ -143,7 +143,7 @@ describe('appKeys-create', () => {
           permissions: defaultPermissions(),
           created: FieldValue.serverTimestamp(),
           lastUsed: null,
-          apps: [APP_ID],
+          appIDs: [APP_ID],
         },
       );
     }

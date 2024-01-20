@@ -350,7 +350,7 @@ describe('auth-validators', () => {
     permissions: {'app:publish': true} as Permissions,
     created: Timestamp.now(),
     lastUsed: null,
-    apps: [APP_ID],
+    appIDs: [APP_ID],
   };
 
   type ApiKeyCase = {

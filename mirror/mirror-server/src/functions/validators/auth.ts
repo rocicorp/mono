@@ -243,7 +243,7 @@ export function appOrKeyAuthorization<
           );
         }
         const apiKey = must(apiKeyDoc.data());
-        if (!apiKey.apps.includes(appID)) {
+        if (!apiKey.appIDs.includes(appID)) {
           throw new HttpsError(
             'permission-denied',
             `Key "${apiKeyDocRef.id}" is not authorized for app ${appID}`,

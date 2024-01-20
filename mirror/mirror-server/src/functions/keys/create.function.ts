@@ -85,7 +85,7 @@ export const create = (firestore: Firestore) =>
           permissions: validatedPermissions,
           created: FieldValue.serverTimestamp(),
           lastUsed: null,
-          apps: [appID],
+          appIDs: [appID],
         });
       });
 

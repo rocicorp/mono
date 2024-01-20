@@ -106,7 +106,7 @@ describe('api-apps', () => {
           } as Permissions,
           created: Timestamp.now(),
           lastUsed: null,
-          apps: [APP_ID],
+          appIDs: [APP_ID],
         }),
       firestore
         .doc(envPath(APP_ID, DEFAULT_ENV))
