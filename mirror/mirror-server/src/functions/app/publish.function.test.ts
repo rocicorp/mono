@@ -87,7 +87,7 @@ describe('publish', () => {
         permissions: {'app:publish': true} as Permissions,
         created: FieldValue.serverTimestamp(),
         lastUsed: null,
-        apps: [APP_ID],
+        appIDs: [APP_ID],
       },
     );
     batch.create(
@@ -99,7 +99,7 @@ describe('publish', () => {
         permissions: {'rooms:read': true} as Permissions,
         created: FieldValue.serverTimestamp(),
         lastUsed: null,
-        apps: [APP_ID],
+        appIDs: [APP_ID],
       },
     );
     batch.create(

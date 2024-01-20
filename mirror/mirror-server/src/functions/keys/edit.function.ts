@@ -59,10 +59,10 @@ async function editKeys(
     }
     tx.update(keyDoc, {permissions: validatedPermissions});
     if (appIDs.add.length) {
-      tx.update(keyDoc, {apps: FieldValue.arrayUnion(...appIDs.add)});
+      tx.update(keyDoc, {appIDs: FieldValue.arrayUnion(...appIDs.add)});
     }
     if (appIDs.remove.length) {
-      tx.update(keyDoc, {apps: FieldValue.arrayRemove(...appIDs.remove)});
+      tx.update(keyDoc, {appIDs: FieldValue.arrayRemove(...appIDs.remove)});
     }
   });
 

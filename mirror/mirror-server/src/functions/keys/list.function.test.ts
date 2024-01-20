@@ -93,7 +93,7 @@ describe('apiKeys-list', () => {
             permissions: {'app:publish': true} as Permissions,
             created: Timestamp.fromMillis(Date.UTC(2023, 11, 0)),
             lastUsed: null,
-            apps: [APP_ID],
+            appIDs: [APP_ID],
           }),
         firestore
           .doc(apiKeyPath(TEAM_ID, 'my-reflect-api-key'))
@@ -103,7 +103,7 @@ describe('apiKeys-list', () => {
             permissions: {'rooms:read': true} as Permissions,
             created: Timestamp.fromMillis(Date.UTC(2023, 10, 0)),
             lastUsed: Timestamp.fromMillis(Date.UTC(2023, 11, 1)),
-            apps: [APP_ID, OTHER_APP_ID],
+            appIDs: [APP_ID, OTHER_APP_ID],
           }),
         firestore
           .doc(apiKeyPath(TEAM_ID, 'my-other-api-key'))
@@ -113,7 +113,7 @@ describe('apiKeys-list', () => {
             permissions: {'connections:invalidate': true} as Permissions,
             created: Timestamp.fromMillis(Date.UTC(2023, 10, 0)),
             lastUsed: Timestamp.fromMillis(Date.UTC(2023, 10, 2)),
-            apps: [OTHER_APP_ID],
+            appIDs: [OTHER_APP_ID],
           }),
       ]);
     });
@@ -270,7 +270,7 @@ describe('appKeys-list', () => {
             permissions: {'app:publish': true} as Permissions,
             created: Timestamp.fromMillis(Date.UTC(2023, 11, 0)),
             lastUsed: null,
-            apps: [APP_ID],
+            appIDs: [APP_ID],
           }),
         firestore
           .doc(apiKeyPath(TEAM_ID, 'my-reflect-api-key'))
@@ -280,7 +280,7 @@ describe('appKeys-list', () => {
             permissions: {'rooms:read': true} as Permissions,
             created: Timestamp.fromMillis(Date.UTC(2023, 10, 0)),
             lastUsed: Timestamp.fromMillis(Date.UTC(2023, 11, 1)),
-            apps: [APP_ID, OTHER_APP_ID],
+            appIDs: [APP_ID, OTHER_APP_ID],
           }),
         firestore
           .doc(apiKeyPath(TEAM_ID, 'my-other-api-key'))
@@ -290,7 +290,7 @@ describe('appKeys-list', () => {
             permissions: {'rooms:read': true} as Permissions,
             created: Timestamp.fromMillis(Date.UTC(2023, 10, 0)),
             lastUsed: Timestamp.fromMillis(Date.UTC(2023, 11, 1)),
-            apps: [OTHER_APP_ID],
+            appIDs: [OTHER_APP_ID],
           }),
       ]);
     });

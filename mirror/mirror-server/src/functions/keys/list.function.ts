@@ -42,7 +42,7 @@ export const list = (firestore: Firestore) =>
       // Lookup the "name" field of all referenced appIDs, and create a map from appID to name.
       const appIDs = new Set<string>();
       keys.docs.forEach(doc =>
-        doc.data().apps.forEach(appID => appIDs.add(appID)),
+        doc.data().appIDs.forEach(appID => appIDs.add(appID)),
       );
       const apps = await firestore.getAll(
         ...[...appIDs].map(appID => firestore.doc(appPath(appID))),
@@ -73,7 +73,7 @@ export const list = (firestore: Firestore) =>
             createTime: key.created.toMillis(),
             lastUseTime: key.lastUsed?.toMillis() ?? null,
             apps: Object.fromEntries(
-              key.apps.map(appID => [appID, must(appNames.get(appID))]),
+              key.appIDs.map(appID => [appID, must(appNames.get(appID))]),
             ),
           };
         }),
@@ -101,7 +101,7 @@ export const listForApp = (firestore: Firestore) =>
 
       // For backwards compatibility, only list the keys for the specified `appID`.
       const appKeyDocs = keys.docs.filter(doc =>
-        doc.data().apps.includes(appID),
+        doc.data().appIDs.includes(appID),
       );
 
       return {

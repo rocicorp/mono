@@ -52,7 +52,7 @@ describe('apiKeys-edit', () => {
           permissions: {'rooms:read': true} as Permissions,
           created: FieldValue.serverTimestamp(),
           lastUsed: null,
-          apps: [APP_ID],
+          appIDs: [APP_ID],
         }),
     ]);
   });
@@ -110,7 +110,7 @@ describe('apiKeys-edit', () => {
       permissions: mergeWithDefaults({'app:publish': true}),
       created: expect.any(Timestamp),
       lastUsed: null,
-      apps: [APP_ID],
+      appIDs: [APP_ID],
     });
   });
 
@@ -127,7 +127,7 @@ describe('apiKeys-edit', () => {
       permissions: mergeWithDefaults({'app:publish': true}),
       created: expect.any(Timestamp),
       lastUsed: null,
-      apps: [APP_ID, OTHER_APP_ID],
+      appIDs: [APP_ID, OTHER_APP_ID],
     });
   });
 
@@ -147,7 +147,7 @@ describe('apiKeys-edit', () => {
       permissions: mergeWithDefaults({'app:publish': true}),
       created: expect.any(Timestamp),
       lastUsed: null,
-      apps: [],
+      appIDs: [],
     });
   });
 
@@ -167,7 +167,7 @@ describe('apiKeys-edit', () => {
       permissions: mergeWithDefaults({'app:publish': true}),
       created: expect.any(Timestamp),
       lastUsed: null,
-      apps: [OTHER_APP_ID],
+      appIDs: [OTHER_APP_ID],
     });
   });
 
@@ -230,7 +230,7 @@ describe('appKeys-edit', () => {
           permissions: {'rooms:read': true} as Permissions,
           created: FieldValue.serverTimestamp(),
           lastUsed: null,
-          apps: [APP_ID],
+          appIDs: [APP_ID],
         }),
     ]);
   });

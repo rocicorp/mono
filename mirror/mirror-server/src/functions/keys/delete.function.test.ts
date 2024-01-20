@@ -57,7 +57,7 @@ describe('apiKeys-delete', () => {
           permissions: {'rooms:read': true} as Permissions,
           created: FieldValue.serverTimestamp(),
           lastUsed: null,
-          apps: [APP_ID],
+          appIDs: [APP_ID],
         },
       );
     });
@@ -154,7 +154,7 @@ describe('appKeys-delete', () => {
           permissions: {'rooms:read': true} as Permissions,
           created: FieldValue.serverTimestamp(),
           lastUsed: null,
-          apps: [APP_ID],
+          appIDs: [APP_ID],
         },
       );
     });

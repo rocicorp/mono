@@ -101,7 +101,7 @@ async function createKey(
       permissions: validatedPermissions,
       created: FieldValue.serverTimestamp(),
       lastUsed: null,
-      apps: appIDs,
+      appIDs,
     });
   });
 

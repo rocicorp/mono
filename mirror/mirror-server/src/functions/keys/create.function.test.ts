@@ -104,7 +104,7 @@ describe('apiKeys-create', () => {
       permissions: mergeWithDefaults({'app:publish': true}),
       created: expect.any(Timestamp),
       lastUsed: null,
-      apps: [APP_ID, OTHER_APP_ID],
+      appIDs: [APP_ID, OTHER_APP_ID],
     });
   });
 
@@ -151,7 +151,7 @@ describe('apiKeys-create', () => {
           permissions: defaultPermissions(),
           created: FieldValue.serverTimestamp(),
           lastUsed: null,
-          apps: [APP_ID],
+          appIDs: [APP_ID],
         },
       );
     }
@@ -283,7 +283,7 @@ describe('appKeys-create', () => {
           permissions: defaultPermissions(),
           created: FieldValue.serverTimestamp(),
           lastUsed: null,
-          apps: [APP_ID],
+          appIDs: [APP_ID],
         },
       );
     }

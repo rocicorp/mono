@@ -41,9 +41,9 @@ import {
 } from './list-deployed-apps.js';
 import {lookupAuthHandler, lookupAuthOptions} from './lookup-auth.js';
 import {
-  migrateAppKeysHandler,
-  migrateAppKeysOptions,
-} from './migrate-app-keys.js';
+  migrateApiKeysHandler,
+  migrateApiKeysOptions,
+} from './migrate-api-keys.js';
 import {
   migrateDnsCommentsToTagsHandler,
   migrateDnsCommentsToTagsOptions,
@@ -274,10 +274,10 @@ function createCLIParser(argv: string[]) {
   );
 
   reflectCLI.command(
-    'migrate-app-keys',
-    'Migrates app keys to team-scoped api keys',
-    migrateAppKeysOptions,
-    migrateAppKeysHandler,
+    'migrate-api-keys',
+    'Migrates the field in api keys from "apps" to "appIDs',
+    migrateApiKeysOptions,
+    migrateApiKeysHandler,
   );
 
   reflectCLI.command(
