@@ -37,9 +37,9 @@ export async function migrateApiKeysHandler(yargs: MigrateApiKeysHandlerArgs) {
     for (const doc of keys.docs) {
       const {apps, appIDs} = doc.data();
       if (appIDs !== undefined) {
-        console.info(`Key ${doc.id} is already migrated.`);
+        console.info(`Key ${doc.ref.path} is already migrated.`);
       } else if (apps === undefined) {
-        throw new Error(`Key ${doc.id} has no "apps" or "appIDs" field`);
+        throw new Error(`Key ${doc.ref.path} has no "apps" or "appIDs" field`);
       } else {
         num++;
         console.info(`Migrating key ${doc.id}`);
