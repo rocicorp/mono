@@ -71,5 +71,10 @@ module.exports = {
         'howto/launch',
       ],
     },
+    {
+      type: 'link',
+      label: 'Releases',
+      href: 'https://replicache.notion.site/Replicache-Releases-f86ffef7f72f46ca9b597d5081e05b88',
+    },
   ],
 };
