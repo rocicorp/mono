@@ -59,6 +59,21 @@ export const create = (firestore: Firestore) =>
       return createKey(firestore, teamID, name, permissions, appIDs);
     });
 
+// TODO: Decommission and replace with an error to update @rocicorp/reflect
+export const createForApp = (firestore: Firestore) =>
+  validateSchema(createAppKeyRequestSchema, createAppKeyResponseSchema)
+    .validate(userAgentVersion())
+    .validate(userAuthorization())
+    .validate(appAuthorization(firestore, ['admin']))
+    .handle(async (request, context) => {
+      const {appID, name, permissions} = request;
+      const {
+        app: {teamID},
+      } = context;
+
+      return createKey(firestore, teamID, name, permissions, [appID]);
+    });
+
 async function createKey(
   firestore: Firestore,
   teamID: string,
@@ -110,18 +125,3 @@ async function createKey(
     value,
   };
 }
-
-// TODO: Decommission and replace with an error to update @rocicorp/reflect
-export const createForApp = (firestore: Firestore) =>
-  validateSchema(createAppKeyRequestSchema, createAppKeyResponseSchema)
-    .validate(userAgentVersion())
-    .validate(userAuthorization())
-    .validate(appAuthorization(firestore, ['admin']))
-    .handle(async (request, context) => {
-      const {appID, name, permissions} = request;
-      const {
-        app: {teamID},
-      } = context;
-
-      return createKey(firestore, teamID, name, permissions, [appID]);
-    });

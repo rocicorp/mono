@@ -29,6 +29,23 @@ export const edit = (firestore: Firestore) =>
       return editKeys(firestore, teamID, name, permissions, appIDs);
     });
 
+// TODO: Decommission
+export const editForApp = (firestore: Firestore) =>
+  validateSchema(editAppKeyRequestSchema, editAppKeyResponseSchema)
+    .validate(userAgentVersion())
+    .validate(userAuthorization())
+    .validate(appAuthorization(firestore, ['admin']))
+    .handle(async (request, context) => {
+      const {name, permissions} = request;
+      const {
+        app: {teamID},
+      } = context;
+      return editKeys(firestore, teamID, name, permissions, {
+        add: [],
+        remove: [],
+      });
+    });
+
 async function editKeys(
   firestore: Firestore,
   teamID: string,
@@ -68,20 +85,3 @@ async function editKeys(
 
   return {success: true};
 }
-
-// TODO: Decommission
-export const editForApp = (firestore: Firestore) =>
-  validateSchema(editAppKeyRequestSchema, editAppKeyResponseSchema)
-    .validate(userAgentVersion())
-    .validate(userAuthorization())
-    .validate(appAuthorization(firestore, ['admin']))
-    .handle(async (request, context) => {
-      const {name, permissions} = request;
-      const {
-        app: {teamID},
-      } = context;
-      return editKeys(firestore, teamID, name, permissions, {
-        add: [],
-        remove: [],
-      });
-    });

@@ -27,6 +27,21 @@ export const deleteFn = (firestore: Firestore) =>
       return deleteKeys(firestore, teamID, names);
     });
 
+// TODO: Decommission and replace with an error to update @rocicorp/reflect
+export const deleteForApp = (firestore: Firestore) =>
+  validateSchema(deleteAppKeysRequestSchema, deleteAppKeysResponseSchema)
+    .validate(userAgentVersion())
+    .validate(userAuthorization())
+    .validate(appAuthorization(firestore, ['admin']))
+    .handle(async (request, context) => {
+      const {names} = request;
+      const {
+        app: {teamID},
+      } = context;
+
+      return deleteKeys(firestore, teamID, names);
+    });
+
 async function deleteKeys(
   firestore: Firestore,
   teamID: string,
@@ -47,18 +62,3 @@ async function deleteKeys(
   });
   return {success: true, deleted};
 }
-
-// TODO: Decommission and replace with an error to update @rocicorp/reflect
-export const deleteForApp = (firestore: Firestore) =>
-  validateSchema(deleteAppKeysRequestSchema, deleteAppKeysResponseSchema)
-    .validate(userAgentVersion())
-    .validate(userAuthorization())
-    .validate(appAuthorization(firestore, ['admin']))
-    .handle(async (request, context) => {
-      const {names} = request;
-      const {
-        app: {teamID},
-      } = context;
-
-      return deleteKeys(firestore, teamID, names);
-    });
