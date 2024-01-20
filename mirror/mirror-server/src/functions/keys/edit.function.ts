@@ -29,7 +29,7 @@ export const edit = (firestore: Firestore) =>
       return editKeys(firestore, teamID, name, permissions, appIDs);
     });
 
-// TODO: Decommission
+// TODO: Decommission and replace with an error to update @rocicorp/reflect
 export const editForApp = (firestore: Firestore) =>
   validateSchema(editAppKeyRequestSchema, editAppKeyResponseSchema)
     .validate(userAgentVersion())

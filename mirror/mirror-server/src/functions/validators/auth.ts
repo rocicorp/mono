@@ -206,10 +206,7 @@ function userAuthorizationImpl<
 }
 
 /**
- * Validator that the authenticated user has the specified role in
- * a team. For now, this is the user's (singular) team, but in the future
- * the request messages will be extended to specify an optional `teamID`
- * when users can be part of multiple teams.
+ * Validates that the authenticated user has one of the specified roles in a team.
  */
 export function teamAuthorization<
   Request extends BaseTeamRequest,

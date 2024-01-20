@@ -40,10 +40,7 @@ export const list = (firestore: Firestore) =>
         .get();
 
       // Lookup the "name" field of all referenced appIDs, and create a map from appID to name.
-      const appIDs = new Set<string>();
-      keys.docs.forEach(doc =>
-        doc.data().appIDs.forEach(appID => appIDs.add(appID)),
-      );
+      const appIDs = new Set(keys.docs.map(doc => doc.data().appIDs).flat());
       const apps = await firestore.getAll(
         ...[...appIDs].map(appID => firestore.doc(appPath(appID))),
         {fieldMask: ['name']},
