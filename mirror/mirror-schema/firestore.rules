@@ -10,7 +10,7 @@ service cloud.firestore {
     function authenticatedWithApiKey(appID) {
       let uidPath = request.auth != null ? string(request.auth.uid).split('/') : [];
       return uidPath.size() == 4 && uidPath[0] == 'teams' && uidPath[2] == 'keys'
-        && appID in get(/databases/$(database)/documents/teams/$(uidPath[1])/keys/$(uidPath[3])).data.apps;
+        && appID in get(/databases/$(database)/documents/teams/$(uidPath[1])/keys/$(uidPath[3])).data.appIDs;
     }
     // userIs{Role}OfApp() requires two get()s, one on the app doc and one on the user doc.
     function userIsMemberOfApp(appID) {
