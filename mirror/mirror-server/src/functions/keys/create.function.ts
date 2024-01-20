@@ -53,7 +53,7 @@ export const create = (firestore: Firestore) =>
     .validate(userAgentVersion())
     .validate(userAuthorization())
     .validate(teamAuthorization(firestore, ['admin']))
-    .handle(async request => {
+    .handle(request => {
       const {teamID, name, permissions, appIDs} = request;
 
       return createKey(firestore, teamID, name, permissions, appIDs);
@@ -65,7 +65,7 @@ export const createForApp = (firestore: Firestore) =>
     .validate(userAgentVersion())
     .validate(userAuthorization())
     .validate(appAuthorization(firestore, ['admin']))
-    .handle(async (request, context) => {
+    .handle((request, context) => {
       const {appID, name, permissions} = request;
       const {
         app: {teamID},

@@ -24,7 +24,7 @@ export const edit = (firestore: Firestore) =>
     .validate(userAgentVersion())
     .validate(userAuthorization())
     .validate(teamAuthorization(firestore, ['admin']))
-    .handle(async request => {
+    .handle(request => {
       const {teamID, name, permissions, appIDs} = request;
       return editKeys(firestore, teamID, name, permissions, appIDs);
     });
@@ -35,7 +35,7 @@ export const editForApp = (firestore: Firestore) =>
     .validate(userAgentVersion())
     .validate(userAuthorization())
     .validate(appAuthorization(firestore, ['admin']))
-    .handle(async (request, context) => {
+    .handle((request, context) => {
       const {name, permissions} = request;
       const {
         app: {teamID},

@@ -22,7 +22,7 @@ export const deleteFn = (firestore: Firestore) =>
     .validate(userAgentVersion())
     .validate(userAuthorization())
     .validate(teamAuthorization(firestore, ['admin']))
-    .handle(async request => {
+    .handle(request => {
       const {teamID, names} = request;
       return deleteKeys(firestore, teamID, names);
     });
@@ -33,7 +33,7 @@ export const deleteForApp = (firestore: Firestore) =>
     .validate(userAgentVersion())
     .validate(userAuthorization())
     .validate(appAuthorization(firestore, ['admin']))
-    .handle(async (request, context) => {
+    .handle((request, context) => {
       const {names} = request;
       const {
         app: {teamID},
