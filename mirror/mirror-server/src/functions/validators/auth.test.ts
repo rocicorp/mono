@@ -19,7 +19,7 @@ import {apiKeyPath} from 'mirror-schema/src/api-key.js';
 import {appPath, type App} from 'mirror-schema/src/app.js';
 import type {Role} from 'mirror-schema/src/membership.js';
 import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
-import {setApp, setUser} from 'mirror-schema/src/test-helpers.js';
+import {setUser} from 'mirror-schema/src/test-helpers.js';
 import type {User} from 'mirror-schema/src/user.js';
 import {userPath} from 'mirror-schema/src/user.js';
 import {FetchMocker} from 'shared/src/fetch-mocker.js';
@@ -28,6 +28,7 @@ import {mockFunctionParamsAndSecrets} from '../../test-helpers.js';
 import {
   appAuthorization,
   appOrKeyAuthorization,
+  teamAuthorization,
   userAuthorization,
   userOrKeyAuthorization,
 } from './auth.js';
@@ -36,19 +37,20 @@ import type {Callable} from './types.js';
 
 const testRequestSchema = v.object({
   ...baseAppRequestFields,
+  teamID: v.string(),
   foo: v.string(),
 });
 
 const testResponseSchema = v.object({
   ...baseResponseFields,
-  appName: v.string(),
+  authorizedFor: v.string(),
   bar: v.string(),
 });
 
 type TestRequest = v.Infer<typeof testRequestSchema>;
 type TestResponse = v.Infer<typeof testResponseSchema>;
 
-describe('auth-validators', () => {
+describe('auth-team-validators', () => {
   initializeApp({projectId: 'auth-validator-test'});
   const firestore = getFirestore();
   const USER_ID = 'auth-user-id';
@@ -72,7 +74,23 @@ describe('auth-validators', () => {
     await batch.commit();
   });
 
-  function testFunction(
+  function testTeamFunction(
+    allowedRoles: Role[] = ['admin', 'member'],
+  ): Callable<TestRequest, TestResponse> {
+    return validateSchema(testRequestSchema, testResponseSchema)
+      .validate(userAuthorization())
+      .validate(teamAuthorization(firestore, allowedRoles))
+      .handle(
+        // eslint-disable-next-line require-await
+        async (testRequest, context) => ({
+          authorizedFor: context.teamID,
+          bar: testRequest.foo,
+          success: true,
+        }),
+      );
+  }
+
+  function testAppFunction(
     allowedRoles: Role[] = ['admin', 'member'],
   ): Callable<TestRequest, TestResponse> {
     return validateSchema(testRequestSchema, testResponseSchema)
@@ -81,14 +99,14 @@ describe('auth-validators', () => {
       .handle(
         // eslint-disable-next-line require-await
         async (testRequest, context) => ({
-          appName: context.app.name,
+          authorizedFor: context.app.name,
           bar: testRequest.foo,
           success: true,
         }),
       );
   }
 
-  function testFunctionWithKeys(
+  function testAppFunctionWithKeys(
     keyPermission: RequiredPermission,
   ): Callable<TestRequest, TestResponse> {
     return validateSchema(testRequestSchema, testResponseSchema)
@@ -97,7 +115,7 @@ describe('auth-validators', () => {
       .handle(
         // eslint-disable-next-line require-await
         async (testRequest, context) => ({
-          appName: context.app.name,
+          authorizedFor: context.app.name,
           bar: testRequest.foo,
           success: true,
         }),
@@ -105,7 +123,7 @@ describe('auth-validators', () => {
   }
 
   test('warmup request', async () => {
-    const authenticatedFunction = https.onCall(testFunction());
+    const authenticatedFunction = https.onCall(testAppFunction());
 
     const resp = await authenticatedFunction.run({
       auth: {} as AuthData,
@@ -123,6 +141,7 @@ describe('auth-validators', () => {
       userAgent: {type: 'reflect-cli', version: '0.0.1'},
     },
     foo: 'boo',
+    teamID: TEAM_ID,
     appID: APP_ID,
   };
 
@@ -130,6 +149,8 @@ describe('auth-validators', () => {
     name: string;
     request: TestRequest;
     authData: AuthData;
+    allowedRoles?: Role[];
+    userRole?: Role;
     errorCode?: FunctionsErrorCode;
   };
   const userCases: UserCase[] = [
@@ -137,6 +158,14 @@ describe('auth-validators', () => {
       name: 'successful authentication',
       authData: {uid: USER_ID} as AuthData,
       request: goodRequest,
+    },
+    {
+      name: 'insufficient team privileges',
+      authData: {uid: USER_ID} as AuthData,
+      request: goodRequest,
+      allowedRoles: ['admin'],
+      userRole: 'member',
+      errorCode: 'permission-denied',
     },
     {
       name: 'missing authentication',
@@ -176,16 +205,14 @@ describe('auth-validators', () => {
   ];
 
   for (const c of userCases) {
-    test(`user authentication / ${c.name}`, async () => {
+    test(`user/team authentication: ${c.name}`, async () => {
       await setUser(firestore, USER_ID, 'foo@bar.com', USER_ID, {
-        ['appTeam']: 'admin',
-      });
-      await setApp(firestore, APP_ID, {
-        teamID: 'appTeam',
-        name: 'My App Name',
+        [TEAM_ID]: c.userRole ?? 'admin',
       });
 
-      const authenticatedFunction = https.onCall(testFunction());
+      const authenticatedFunction = https.onCall(
+        testTeamFunction(c.allowedRoles ?? ['admin', 'member']),
+      );
 
       let error: HttpsError | undefined;
       let resp: TestResponse | undefined;
@@ -203,7 +230,7 @@ describe('auth-validators', () => {
       expect(error?.code).toBe(c.errorCode);
       if (!c.errorCode) {
         expect(resp).toEqual({
-          appName: 'My App Name',
+          authorizedFor: TEAM_ID,
           bar: 'boo',
           success: true,
         });
@@ -232,6 +259,7 @@ describe('auth-validators', () => {
       userAgent: {type: 'reflect-cli', version: '0.0.1'},
     },
     foo: 'boo',
+    teamID: TEAM_ID,
     appID: APP_ID,
   };
 
@@ -241,6 +269,7 @@ describe('auth-validators', () => {
       userAgent: {type: 'reflect-cli', version: '0.0.1'},
     },
     foo: 'boo',
+    teamID: TEAM_ID,
     appID: APP_ID,
   };
 
@@ -259,7 +288,7 @@ describe('auth-validators', () => {
       userDoc: defaultUser,
       appDoc: defaultApp,
       response: {
-        appName: defaultApp.name,
+        authorizedFor: defaultApp.name,
         bar: appReq.foo,
         success: true,
       },
@@ -272,7 +301,7 @@ describe('auth-validators', () => {
       },
       appDoc: defaultApp,
       response: {
-        appName: defaultApp.name,
+        authorizedFor: defaultApp.name,
         bar: appReq.foo,
         success: true,
       },
@@ -317,7 +346,7 @@ describe('auth-validators', () => {
   for (const c of appCases) {
     test(`app authorization / ${c.name}`, async () => {
       const authenticatedFunction = https.onCall(
-        testFunction(c.allowedRoles ?? ['admin', 'member']),
+        testAppFunction(c.allowedRoles ?? ['admin', 'member']),
       );
       const req = c.request ?? appReq;
       if (c.userDoc) {
@@ -370,7 +399,7 @@ describe('auth-validators', () => {
       appDoc: defaultApp,
       apiKeyDoc: defaultApiKey,
       response: {
-        appName: defaultApp.name,
+        authorizedFor: defaultApp.name,
         bar: apiKeyReq.foo,
         success: true,
       },
@@ -406,15 +435,12 @@ describe('auth-validators', () => {
   for (const c of apiKeyCases) {
     test(`app key authorization / ${c.name}`, async () => {
       const authenticatedFunction = https.onCall(
-        testFunctionWithKeys(c.permission ?? 'app:publish'),
+        testAppFunctionWithKeys(c.permission ?? 'app:publish'),
       );
       const req = c.request ?? apiKeyReq;
 
       if (c.appDoc) {
         await firestore.doc(`apps/${APP_ID}`).set(c.appDoc);
-        if (c.appID) {
-          await firestore.doc(`apps/${c.appID}`).set(c.appDoc);
-        }
       }
       if (c.apiKeyDoc) {
         await firestore

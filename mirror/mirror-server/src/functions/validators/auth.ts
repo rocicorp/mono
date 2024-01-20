@@ -4,6 +4,7 @@ import {logger} from 'firebase-functions';
 import {CallableRequest, HttpsError} from 'firebase-functions/v2/https';
 import type {BaseAppRequest} from 'mirror-protocol/src/app.js';
 import type {BaseRequest} from 'mirror-protocol/src/base.js';
+import type {BaseTeamRequest} from 'mirror-protocol/src/team.js';
 import {
   ApiKey,
   apiKeyDataConverter,
@@ -20,10 +21,12 @@ import {
   INTERNAL_FUNCTION_SECRET,
 } from '../internal/auth.js';
 import {verifyKey} from '../keys/verify.js';
+import {getDataOrFail} from './data.js';
 import type {HttpsRequestContext} from './https.js';
 import type {
   AppAuthorization,
   RequestContextValidator,
+  TeamAuthorization,
   UserAuthorization,
   UserOrKeyAuthorization,
 } from './types.js';
@@ -199,6 +202,43 @@ function userAuthorizationImpl<
       userID: request.requester.userID,
       isKeyAuth: context.auth.uid.includes('/'),
     };
+  };
+}
+
+/**
+ * Validator that the authenticated user has the specified role in
+ * a team. For now, this is the user's (singular) team, but in the future
+ * the request messages will be extended to specify an optional `teamID`
+ * when users can be part of multiple teams.
+ */
+export function teamAuthorization<
+  Request extends BaseTeamRequest,
+  Context extends UserAuthorization,
+>(
+  firestore: Firestore,
+  allowedRoles: Role[] = ['admin', 'member'],
+): RequestContextValidator<Request, Context, Context & TeamAuthorization> {
+  return async (request: Request, context: Context) => {
+    const {teamID} = request;
+    const {userID} = context;
+    const userDoc = await firestore
+      .doc(userPath(userID))
+      .withConverter(userDataConverter)
+      .get();
+    const {roles} = getDataOrFail(
+      userDoc,
+      'failed-precondition',
+      `User ${userID} has not been initialized`,
+    );
+    const role = roles[teamID];
+    if (!allowedRoles.includes(role)) {
+      throw new HttpsError(
+        'permission-denied',
+        `User has insufficient permissions (${role}) for team ${teamID}`,
+      );
+    }
+    logger.debug(`User is authorized as ${role} of ${teamID}`);
+    return {...context, teamID};
   };
 }
 

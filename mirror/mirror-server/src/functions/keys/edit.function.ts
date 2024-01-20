@@ -1,16 +1,76 @@
-import type {Firestore} from 'firebase-admin/firestore';
+import {FieldValue, type Firestore} from 'firebase-admin/firestore';
 import {HttpsError} from 'firebase-functions/v2/https';
+import {
+  editApiKeyRequestSchema,
+  editApiKeyResponseSchema,
+  type EditApiKeyResponse,
+} from 'mirror-protocol/src/api-keys.js';
 import {
   editAppKeyRequestSchema,
   editAppKeyResponseSchema,
 } from 'mirror-protocol/src/app-keys.js';
 import {apiKeyDataConverter, apiKeyPath} from 'mirror-schema/src/api-key.js';
-import {appAuthorization, userAuthorization} from '../validators/auth.js';
+import {
+  appAuthorization,
+  teamAuthorization,
+  userAuthorization,
+} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
 import {userAgentVersion} from '../validators/version.js';
 import {validatePermissions} from './create.function.js';
 
 export const edit = (firestore: Firestore) =>
+  validateSchema(editApiKeyRequestSchema, editApiKeyResponseSchema)
+    .validate(userAgentVersion())
+    .validate(userAuthorization())
+    .validate(teamAuthorization(firestore, ['admin']))
+    .handle(async request => {
+      const {teamID, name, permissions, appIDs} = request;
+      return editKeys(firestore, teamID, name, permissions, appIDs);
+    });
+
+async function editKeys(
+  firestore: Firestore,
+  teamID: string,
+  name: string,
+  permissions: Record<string, boolean>,
+  appIDs: {add: string[]; remove: string[]},
+): Promise<EditApiKeyResponse> {
+  // Sanity check arguments
+  const validatedPermissions = validatePermissions(name, permissions);
+  const add = new Set(appIDs.add);
+  appIDs.remove.forEach(id => {
+    if (add.has(id)) {
+      throw new HttpsError(
+        'invalid-argument',
+        `AppID ${id} cannot be both added and removed`,
+      );
+    }
+  });
+
+  const keyDoc = firestore
+    .doc(apiKeyPath(teamID, name))
+    .withConverter(apiKeyDataConverter);
+
+  await firestore.runTransaction(async tx => {
+    const doc = await tx.get(keyDoc);
+    if (!doc.exists) {
+      throw new HttpsError('not-found', `Key named "${name}" was not found.`);
+    }
+    tx.update(keyDoc, {permissions: validatedPermissions});
+    if (appIDs.add.length) {
+      tx.update(keyDoc, {apps: FieldValue.arrayUnion(...appIDs.add)});
+    }
+    if (appIDs.remove.length) {
+      tx.update(keyDoc, {apps: FieldValue.arrayRemove(...appIDs.remove)});
+    }
+  });
+
+  return {success: true};
+}
+
+// TODO: Decommission
+export const editForApp = (firestore: Firestore) =>
   validateSchema(editAppKeyRequestSchema, editAppKeyResponseSchema)
     .validate(userAgentVersion())
     .validate(userAuthorization())
@@ -20,22 +80,8 @@ export const edit = (firestore: Firestore) =>
       const {
         app: {teamID},
       } = context;
-
-      const validatedPermissions = validatePermissions(name, permissions);
-      const keyDoc = firestore
-        .doc(apiKeyPath(teamID, name))
-        .withConverter(apiKeyDataConverter);
-
-      await firestore.runTransaction(async tx => {
-        const doc = await tx.get(keyDoc);
-        if (!doc.exists) {
-          throw new HttpsError(
-            'not-found',
-            `Key named "${name}" was not found.`,
-          );
-        }
-        tx.update(keyDoc, {permissions: validatedPermissions});
+      return editKeys(firestore, teamID, name, permissions, {
+        add: [],
+        remove: [],
       });
-
-      return {success: true};
     });

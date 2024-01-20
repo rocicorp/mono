@@ -1,22 +1,13 @@
 import * as v from 'shared/src/valita.js';
+import {apiKeySchema, permissionsSchema} from './api-keys.js';
 import {baseAppRequestFields} from './app.js';
 import {baseResponseFields} from './base.js';
 import {createCaller} from './call.js';
 export {isValidApiKeyName} from 'mirror-schema/src/api-key.js';
 
-// Unlike the Permissions type in `mirror-schema`, the type used in the network protocol
-// only declares the "shape" of the permissions object without specifying the keys.
-// This allows the client to be agnostic to the actual set of permissions (in other words,
-// forwards compatible with new permissions).
-export const permissionsSchema = v.record(v.boolean());
-
-export const appKeySchema = v.object({
-  name: v.string(),
-  value: v.string().nullable(), // Null if `show` was not requested (required admin privileges)
-  permissions: permissionsSchema,
-  createTime: v.number(),
-  lastUseTime: v.number().nullable(),
-});
+// Documents the fact that the new ApiKey schema is simply the legacy one with
+// an additional `apps` field.
+export const appKeySchema = apiKeySchema.omit('apps');
 
 export const listAppKeysRequestSchema = v.object({
   ...baseAppRequestFields,

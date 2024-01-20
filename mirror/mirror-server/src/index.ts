@@ -88,6 +88,25 @@ export const app = {
 };
 
 export const appKeys = {
+  list: https.onCall(
+    baseHttpsOptions,
+    apiKeyFunctions.listForApp(getFirestore()),
+  ),
+  create: https.onCall(
+    baseHttpsOptions,
+    apiKeyFunctions.createForApp(getFirestore()),
+  ),
+  edit: https.onCall(
+    baseHttpsOptions,
+    apiKeyFunctions.editForApp(getFirestore()),
+  ),
+  delete: https.onCall(
+    baseHttpsOptions,
+    apiKeyFunctions.deleteForApp(getFirestore()),
+  ),
+};
+
+export const apiKeys = {
   list: https.onCall(baseHttpsOptions, apiKeyFunctions.list(getFirestore())),
   create: https.onCall(
     baseHttpsOptions,
@@ -98,9 +117,6 @@ export const appKeys = {
     baseHttpsOptions,
     apiKeyFunctions.delete(getFirestore()),
   ),
-};
-
-export const apiKeys = {
   update: https.onCall(
     {
       ...baseHttpsOptions,

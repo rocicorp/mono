@@ -2,6 +2,14 @@ import * as v from 'shared/src/valita.js';
 import {baseRequestFields, baseResponseFields} from './base.js';
 import {createCaller} from './call.js';
 
+export const baseTeamRequestFields = {
+  ...baseRequestFields,
+  teamID: v.string(),
+};
+
+export const baseTeamRequestSchema = v.object(baseTeamRequestFields);
+export type BaseTeamRequest = v.Infer<typeof baseTeamRequestSchema>;
+
 export const ensureTeamRequestSchema = v.object({
   ...baseRequestFields,
   name: v.string(),

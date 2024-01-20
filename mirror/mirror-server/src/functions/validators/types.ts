@@ -12,6 +12,10 @@ export type UserOrKeyAuthorization = {
   isKeyAuth: boolean;
 };
 
+export type TeamAuthorization = {
+  teamID: string;
+};
+
 export type AppAuthorization = {
   app: App;
 };
