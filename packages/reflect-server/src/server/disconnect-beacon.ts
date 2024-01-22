@@ -54,9 +54,17 @@ export async function disconnectBeacon(
   const nextVersion = startVersion + 1;
 
   await delClientRecords([clientID], cache);
-  await collectOldUserSpaceClientKeys(lc, cache, [clientID], nextVersion);
 
-  await putVersion(nextVersion, cache);
+  // Use a second cache so that we only update the version if we actually
+  // deleted any presence keys.
+  const innerCache = new EntryCache(cache);
+  await collectOldUserSpaceClientKeys(lc, innerCache, [clientID], nextVersion);
+
+  if (innerCache.isDirty()) {
+    await putVersion(nextVersion, innerCache);
+    await innerCache.flush();
+  }
+
   await cache.flush();
 
   return new Response('ok');
