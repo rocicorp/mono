@@ -1,7 +1,8 @@
 import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
-import type {ClientID, MutatorDefs} from 'reflect-shared';
 import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
+import type {ClientID} from 'reflect-shared/src/mod.js';
 import {DISCONNECT_BEACON_PATH} from 'reflect-shared/src/paths.js';
+import type {MutatorDefs} from 'reflect-shared/src/types.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {newCreateRoomRequest} from '../client/room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
