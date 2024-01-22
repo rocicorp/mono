@@ -14,8 +14,9 @@ import {
   nullableVersionSchema,
   type ErrorMessage,
 } from 'reflect-protocol';
-import type {MutatorDefs, ReadTransaction} from 'reflect-shared';
-import {ROOM_ID_REGEX, isValidRoomID, version} from 'reflect-shared';
+import {ROOM_ID_REGEX, isValidRoomID} from 'reflect-shared/src/room-id.js';
+import type {MutatorDefs, ReadTransaction} from 'reflect-shared/src/types.js';
+import {version} from 'reflect-shared/src/version.js';
 import {
   ClientGroupID,
   ClientID,
@@ -418,7 +419,6 @@ export class Reflect<MD extends MutatorDefs> {
       this.#closeAbortController.signal,
     );
 
-    this.#server;
     this.#disconnectBeaconManager = new DisconnectBeaconManager(
       this,
       this.#lc,

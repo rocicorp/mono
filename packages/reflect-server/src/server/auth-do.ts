@@ -8,10 +8,14 @@ import {
 } from 'reflect-protocol';
 import {disconnectBeaconQueryParamsSchema} from 'reflect-protocol/src/disconnect-beacon.js';
 import type {TailErrorKind} from 'reflect-protocol/src/tail.js';
-import type {AuthData, Env} from 'reflect-shared';
-import {isValidRoomID, makeInvalidRoomIDMessage, version} from 'reflect-shared';
 import {getConfig} from 'reflect-shared/src/config.js';
 import {DISCONNECT_BEACON_PATH} from 'reflect-shared/src/paths.js';
+import {
+  isValidRoomID,
+  makeInvalidRoomIDMessage,
+} from 'reflect-shared/src/room-id.js';
+import type {AuthData, Env} from 'reflect-shared/src/types.js';
+import {version} from 'reflect-shared/src/version.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {timed} from 'shared/src/timed.js';

@@ -1,1 +1,1 @@
-export * from 'reflect-shared';
+export * from 'reflect-shared/src/mod.js';

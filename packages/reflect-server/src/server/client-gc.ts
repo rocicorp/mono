@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {ClientID} from 'reflect-shared';
+import type {ClientID} from 'reflect-shared/src/mod.js';
 import {assert} from 'shared/src/asserts.js';
 import {difference} from 'shared/src/set-utils.js';
 import type {Storage} from '../storage/storage.js';

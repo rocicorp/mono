@@ -6,7 +6,7 @@ import {
   type LogSink,
 } from '@rocicorp/logger';
 import {DatadogLogSink, DatadogLogSinkOptions} from 'datadog';
-import {version} from 'reflect-shared';
+import {version} from 'reflect-shared/src/version.js';
 
 class LevelFilterLogSink implements LogSink {
   readonly #wrappedLogSink: LogSink;

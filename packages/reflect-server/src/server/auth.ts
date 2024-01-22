@@ -1,4 +1,4 @@
-import type {AuthData, Env} from 'reflect-shared';
+import type {AuthData, Env} from 'reflect-shared/src/types.js';
 import type {MaybePromise} from 'replicache';
 
 /**

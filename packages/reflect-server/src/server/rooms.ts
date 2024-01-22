@@ -1,5 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {CreateRoomRequest} from 'reflect-protocol';
+import {
+  isValidRoomID,
+  makeInvalidRoomIDMessage,
+} from 'reflect-shared/src/room-id.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
@@ -8,7 +12,6 @@ import {APIError, roomNotFoundAPIError} from './api-errors.js';
 import {roomDOFetch} from './auth-do.js';
 import {ErrorWithForwardedResponse} from './errors.js';
 import {CREATE_ROOM_PATH, fmtPath} from './paths.js';
-import {isValidRoomID, makeInvalidRoomIDMessage} from 'reflect-shared';
 
 export enum RoomStatus {
   // An Open room can be used by users. We will accept connect()s to it.

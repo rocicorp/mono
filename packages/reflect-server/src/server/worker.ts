@@ -1,5 +1,5 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import {version} from 'reflect-shared';
+import {version} from 'reflect-shared/src/version.js';
 import type {MaybePromise} from 'replicache';
 import {timed} from 'shared/src/timed.js';
 import {Series, reportMetricsSchema} from '../types/report-metrics.js';

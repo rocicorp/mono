@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {Version} from 'reflect-protocol';
-import type {Env} from 'reflect-shared';
+import type {Env} from 'reflect-shared/src/types.js';
 import type {PendingMutation} from 'replicache';
 import {equals as setEquals} from 'shared/src/set-utils.js';
 import {updateLastSeen} from '../server/client-gc.js';

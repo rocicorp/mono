@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {NullableVersion, Patch, Version} from 'reflect-protocol';
-import type {Env} from 'reflect-shared';
+import type {Env} from 'reflect-shared/src/types.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {GC_MAX_AGE, collectClients} from '../server/client-gc.js';
