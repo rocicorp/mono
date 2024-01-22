@@ -83,6 +83,7 @@ export async function processDisconnects(
     await Promise.all([
       putConnectedClients(newStoredConnectedClients, storage),
       updateLastSeen(
+        lc,
         storedConnectedClients,
         newStoredConnectedClients,
         storage,

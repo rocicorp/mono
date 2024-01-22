@@ -71,6 +71,7 @@ import {
   noInputParams,
   post,
   queryParams,
+  queryParamsIgnoreBody,
   roomID,
   urlVersion,
   userID,
@@ -312,7 +313,7 @@ export class BaseAuthDO implements DurableObject {
   });
 
   #disconnectBeacon = post()
-    .with(queryParams(disconnectBeaconQueryParamsSchema))
+    .with(queryParamsIgnoreBody(disconnectBeaconQueryParamsSchema))
     .with(bearerToken())
     .handle((ctx, request) => {
       const lc = ctx.lc.withContext('handler', 'disconnectBeacon');

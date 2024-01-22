@@ -551,6 +551,7 @@ test('touchClients', async () => {
   await durable.deleteAll();
   const storage = new DurableStorage(durable);
   const landed = 1969;
+  const lc = createSilentLogContext();
 
   for (const c of 'abcd') {
     await putClientRecord(
@@ -566,6 +567,7 @@ test('touchClients', async () => {
   }
 
   await updateLastSeen(
+    lc,
     new Set(['client-a', 'client-b']),
     new Set(['client-b', 'client-c']),
     storage,

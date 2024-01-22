@@ -261,6 +261,18 @@ export function inputParams<Q, B, Context extends BaseContext>(
   };
 }
 
+export function queryParamsIgnoreBody<Q, Context extends BaseContext>(
+  querySchema: valita.Type<Q>,
+): RequestValidator<Context, Context & {query: Q}> {
+  return (ctx: Context) => {
+    const {parsedURL} = ctx;
+    const query = validateQuery(parsedURL, querySchema);
+    return {
+      ctx: {...ctx, query},
+    };
+  };
+}
+
 function validateQuery<T>(
   parsedURL: URLPatternURLPatternResult,
   schema: valita.Type<T>,
