@@ -1,6 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {ClientID} from 'reflect-shared/src/mod.js';
-import {assert} from 'shared/src/asserts.js';
 import {difference} from 'shared/src/set-utils.js';
 import type {Storage} from '../storage/storage.js';
 import {
@@ -26,13 +25,17 @@ function clientGCSpaceUserKey(clientID: string): string {
   return `-/p/${clientID}`;
 }
 
-async function updateLastSeenForClient(
+export async function updateLastSeenForClient(
+  lc: LogContext,
   clientID: ClientID,
   storage: Storage,
   now: number,
 ): Promise<void> {
   const clientRecord = await getClientRecord(clientID, storage);
-  assert(clientRecord);
+  if (!clientRecord) {
+    lc.debug?.(`Not updating lastSeen for removed client ${clientID}`);
+    return;
+  }
   await putClientRecord(
     clientID,
     {
@@ -44,6 +47,7 @@ async function updateLastSeenForClient(
 }
 
 export function updateLastSeen(
+  lc: LogContext,
   oldClients: Set<ClientID>,
   newClients: Set<ClientID>,
   storage: Storage,
@@ -54,7 +58,7 @@ export function updateLastSeen(
   // We update the lastSeen for all disconnected clients.
   const ps: Promise<unknown>[] = [];
   for (const clientID of difference(oldClients, newClients)) {
-    ps.push(updateLastSeenForClient(clientID, storage, now));
+    ps.push(updateLastSeenForClient(lc, clientID, storage, now));
   }
   return Promise.all(ps);
 }

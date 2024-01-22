@@ -32,6 +32,7 @@ import {CLIENT_GC_FREQUENCY} from './client-gc.js';
 import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
 import {closeConnections, getConnections} from './connections.js';
+import {disconnectBeacon} from './disconnect-beacon.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {requireUpgradeHeader, upgradeWebsocketResponse} from './http-util.js';
 import {ROOM_ID_HEADER_NAME} from './internal-headers.js';
@@ -316,25 +317,19 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       inputParams(disconnectBeaconQueryParamsSchema, disconnectBeaconSchema),
     )
     .handle(ctx => {
-      const lc = ctx.lc.withContext('handler', 'disconnectBeacon');
       const {
-        body,
+        body: {lastMutationID},
         query: {clientID, roomID, userID},
       } = ctx;
 
-      lc.debug?.(
-        'disconnect client beacon request',
+      return disconnectBeacon(
+        ctx.lc.withContext('handler', 'disconnectBeacon'),
+        clientID,
         roomID,
         userID,
-        clientID,
-        body,
+        lastMutationID,
+        this.#storage,
       );
-
-      // TODO(arv): Apply the mutations if any.
-      // TODO(arv): Delete the client record.
-      // TODO(arv): Collect the presence state.
-
-      return new Response('ok');
     });
 
   #tail = get().handle((ctx, request) => {
