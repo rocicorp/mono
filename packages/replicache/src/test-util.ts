@@ -98,6 +98,10 @@ export class ReplicacheTest<
   get memdag(): Store {
     return getTestInstance(this).memdag;
   }
+
+  get lastMutationID(): number {
+    return getTestInstance(this).lastMutationID();
+  }
 }
 
 export const reps: Set<ReplicacheTest> = new Set();

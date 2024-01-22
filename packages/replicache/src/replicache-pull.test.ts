@@ -115,10 +115,15 @@ test('pull', async () => {
   expect(syncHead).to.not.be.undefined;
   expect(syncHead).to.not.equal(emptyHash);
 
+  expect(rep.lastMutationID).to.equal(3);
+
   await createTodo({
     id: id2,
     text: 'Test 2',
   });
+
+  expect(rep.lastMutationID).to.equal(4);
+
   expect(createCount).to.equal(2);
   expect(
     ((await rep.query(tx => tx.get(`/todo/${id2}`))) as {text: string}).text,
@@ -128,6 +133,8 @@ test('pull', async () => {
   await rep.maybeEndPull(syncHead, beginPullResult.requestID);
 
   expect(createCount).to.equal(3);
+
+  expect(rep.lastMutationID).to.equal(4);
 
   // Clean up
   await deleteTodo({id: id1});
@@ -142,6 +149,8 @@ test('pull', async () => {
   );
   rep.pullIgnorePromise();
   await tickAFewTimes();
+
+  expect(rep.lastMutationID).to.equal(6);
 
   expect(deleteCount).to.equal(4);
   expect(createCount).to.equal(3);

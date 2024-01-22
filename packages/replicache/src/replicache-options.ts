@@ -258,4 +258,5 @@ export type ReplicacheInternalOptions = {
 export interface ReplicacheInternalAPI {
   persist(): Promise<void>;
   refresh(): Promise<void>;
+  lastMutationID(): number;
 }

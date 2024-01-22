@@ -119,6 +119,7 @@ type TestingInstance = {
   onRecoverMutations: <T>(r: T) => T;
   perdag: Store;
   recoverMutations: () => Promise<boolean>;
+  lastMutationID: () => number;
 };
 
 const exposedToTestingMap = new WeakMap<object, TestingInstance>();
@@ -291,6 +292,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * IDBStore(name)`.
    */
   readonly #createStore: CreateStore;
+
+  #lastMutationID: number = 0;
 
   /**
    * This is the name Replicache uses for the IndexedDB database where data is
@@ -502,8 +505,12 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
     if (internalOptions.exposeInternalAPI) {
       internalOptions.exposeInternalAPI({
+        // Needed by perf test
         persist: () => this.#persist(),
+        // Needed by perf test
         refresh: () => this.#refresh(),
+        // Needed by reflect
+        lastMutationID: () => this.#lastMutationID,
       });
     }
 
@@ -564,6 +571,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         beginPull: () => this.#beginPull(),
         onRecoverMutations: r => r,
         recoverMutations: () => this.#recoverMutations(),
+        lastMutationID: () => this.#lastMutationID,
       });
     }
 
@@ -981,6 +989,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
         return;
       }
 
+      let lastMutationID = -1;
+
       // Replay.
       for (const mutation of replayMutations) {
         // TODO(greg): I'm not sure why this was in Replicache#_mutate...
@@ -1002,6 +1012,13 @@ export class Replicache<MD extends MutatorDefs = {}> {
             FormatVersion.Latest,
           ),
         );
+        if (isLocalMetaDD31(meta) && meta.clientID === clientID) {
+          lastMutationID = meta.mutationID;
+        }
+      }
+
+      if (lastMutationID !== -1) {
+        this.#lastMutationID = lastMutationID;
       }
     }
   }
@@ -1438,6 +1455,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
       }
     }
     if (result !== undefined) {
+      if (result[2] !== undefined) {
+        this.#lastMutationID = result[2];
+      }
       await this.#checkChange(result[0], result[1]);
     }
   }
@@ -1685,10 +1705,15 @@ export class Replicache<MD extends MutatorDefs = {}> {
         );
         const result: R = await mutatorImpl(tx, args);
         throwIfClosed(dbWrite);
+        const lastMutationID = await dbWrite.getMutationID();
         const [ref, diffs] = await dbWrite.commitWithDiffs(
           DEFAULT_HEAD_NAME,
           this.#subscriptions,
         );
+
+        // Update this after the commit in case the commit fails.
+        this.#lastMutationID = lastMutationID;
+
         this.#pushConnectionLoop.send(false).catch(noop);
         await this.#checkChange(ref, diffs);
         void this.#schedulePersist();

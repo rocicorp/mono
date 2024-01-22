@@ -11,6 +11,7 @@ import type {TailErrorKind} from 'reflect-protocol/src/tail.js';
 import type {AuthData, Env} from 'reflect-shared';
 import {isValidRoomID, makeInvalidRoomIDMessage, version} from 'reflect-shared';
 import {getConfig} from 'reflect-shared/src/config.js';
+import {DISCONNECT_BEACON_PATH} from 'reflect-shared/src/paths.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {timed} from 'shared/src/timed.js';
@@ -37,7 +38,6 @@ import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
-  DISCONNECT_BEACON_PATH,
   GET_ROOM_PATH,
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,

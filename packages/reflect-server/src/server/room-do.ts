@@ -6,6 +6,7 @@ import {
 import type {Env, MutatorDefs} from 'reflect-shared';
 import {version} from 'reflect-shared';
 import {getConfig} from 'reflect-shared/src/config.js';
+import {DISCONNECT_BEACON_PATH} from 'reflect-shared/src/paths.js';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import * as valita from 'shared/src/valita.js';
 import {ConnectionLifetimeReporter} from '../events/connection-lifetimes.js';
@@ -40,7 +41,6 @@ import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
-  DISCONNECT_BEACON_PATH,
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,

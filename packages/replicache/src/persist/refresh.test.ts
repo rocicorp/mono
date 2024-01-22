@@ -6,7 +6,7 @@ import type {Entry} from '../btree/node.js';
 import {BTreeWrite} from '../btree/write.js';
 import type {Cookie} from '../cookies.js';
 import {LazyStore} from '../dag/lazy-store.js';
-import type {Store} from '../dag/store.js';
+import {mustGetHeadHash, type Store} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {
   Commit,
@@ -15,6 +15,7 @@ import {
   LocalMetaDD31,
   SnapshotMetaDD31,
   baseSnapshotHashFromHash,
+  localMutationsDD31,
   newLocalDD31,
   newSnapshotDD31,
 } from '../db/commit.js';
@@ -191,6 +192,7 @@ suite('refresh', () => {
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     );
     expect(Object.fromEntries(result[1])).to.deep.equal({});
+    expect(result[2]).equal(undefined, 'The lastMutationID did not change');
 
     await assertRefreshHashes(perdag, clientID, [result[0]]);
   });
@@ -241,6 +243,7 @@ suite('refresh', () => {
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     );
     expect(Object.fromEntries(result[1])).to.deep.equal({});
+    expect(result[2]).equal(undefined, 'The lastMutationID did not change');
 
     await assertRefreshHashes(perdag, clientID, [result[0]]);
   });
@@ -284,6 +287,7 @@ suite('refresh', () => {
         },
       ],
     });
+    await expectLastMutationID(result[2], 3, clientID, memdag);
 
     await assertRefreshHashes(perdag, clientID, [
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
@@ -310,7 +314,7 @@ suite('refresh', () => {
     // Memdag has one more LM than perdag.
     await memdagChainBuilder.addLocal(clientID, []);
 
-    const diffs = await refresh(
+    const result = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -320,7 +324,7 @@ suite('refresh', () => {
       () => false,
       formatVersion,
     );
-    expect(diffs).undefined;
+    expect(result).undefined;
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
   });
 
@@ -340,7 +344,7 @@ suite('refresh', () => {
     // LM so we abort the refresh
     await makeMemdagChain(memdag, clientID, 1);
 
-    const diffs = await refresh(
+    const result = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -350,7 +354,7 @@ suite('refresh', () => {
       () => false,
       formatVersion,
     );
-    expect(diffs).undefined;
+    expect(result).undefined;
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
   });
 
@@ -399,6 +403,7 @@ suite('refresh', () => {
         },
       ],
     });
+    await expectLastMutationID(result[2], 4, clientID, memdag);
     await assertRefreshHashes(perdag, clientID, [
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
     ]);
@@ -460,10 +465,39 @@ suite('refresh', () => {
         },
       ],
     });
+    await expectLastMutationID(result[2], 2, clientID1, memdag);
     await assertRefreshHashes(perdag, clientID1, [
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
     ]);
   });
+
+  async function expectLastMutationID(
+    actual: number | undefined,
+    expected: number | undefined,
+    clientID: ClientID,
+    memdag: Store,
+  ) {
+    expect(actual).equal(expected);
+    // sanity check
+    expect(actual).equal(await getLastMutationID(memdag, clientID));
+  }
+
+  function getLastMutationID(
+    store: Store,
+    clientID: ClientID,
+  ): Promise<number | undefined> {
+    return withRead(store, async dagRead => {
+      const mainHeadHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagRead);
+      const pending = await localMutationsDD31(mainHeadHash, dagRead);
+      let id = -Infinity;
+      for (const {meta} of pending) {
+        if (meta.clientID === clientID) {
+          id = Math.max(id, meta.mutationID);
+        }
+      }
+      return id;
+    });
+  }
 
   test('new snapshot during refresh', async () => {
     const {perdag, memdag} = makeStores();
@@ -505,7 +539,7 @@ suite('refresh', () => {
       return write.call(perdag);
     };
 
-    const diffs = await refresh(
+    const result = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -515,7 +549,7 @@ suite('refresh', () => {
       () => false,
       formatVersion,
     );
-    expect(diffs).undefined;
+    expect(result).undefined;
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
   });
 
@@ -571,7 +605,10 @@ suite('refresh', () => {
     } catch (e) {
       expectedE = e;
     }
-    expect(expectedE).to.not.be.undefined;
+    expect(expectedE).instanceOf(Error);
+    expect((expectedE as Error).message).equal(
+      'Test error in second perdag write',
+    );
     await assertRefreshHashes(perdag, clientID, [
       ...client.refreshHashes,
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
@@ -827,6 +864,7 @@ suite('refresh', () => {
     expect(Object.fromEntries(result[1])).to.deep.equal({
       '': [{key: 'c', newValue: 3, op: 'add'}],
     });
+    await expectLastMutationID(result[2], 5, clientID1, memdag);
 
     await assertRefreshHashes(perdag, clientID1, [l2.chunk.hash]);
   });
