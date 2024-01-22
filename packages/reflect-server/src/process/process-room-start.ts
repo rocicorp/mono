@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Env} from 'reflect-shared';
+import type {Env} from 'reflect-shared/src/types.js';
 import type {RoomStartHandler} from '../server/room-start.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {

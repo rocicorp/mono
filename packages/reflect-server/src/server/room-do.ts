@@ -3,10 +3,10 @@ import {
   disconnectBeaconQueryParamsSchema,
   disconnectBeaconSchema,
 } from 'reflect-protocol/src/disconnect-beacon.js';
-import type {Env, MutatorDefs} from 'reflect-shared';
-import {version} from 'reflect-shared';
 import {getConfig} from 'reflect-shared/src/config.js';
 import {DISCONNECT_BEACON_PATH} from 'reflect-shared/src/paths.js';
+import type {Env, MutatorDefs} from 'reflect-shared/src/types.js';
+import {version} from 'reflect-shared/src/version.js';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import * as valita from 'shared/src/valita.js';
 import {ConnectionLifetimeReporter} from '../events/connection-lifetimes.js';

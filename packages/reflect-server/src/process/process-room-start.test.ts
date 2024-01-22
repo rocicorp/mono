@@ -1,5 +1,5 @@
 import {describe, expect, test} from '@jest/globals';
-import type {WriteTransaction} from 'reflect-shared';
+import type {WriteTransaction} from 'reflect-shared/src/types.js';
 import type {RoomStartHandler} from '../server/room-start.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {getUserValue} from '../types/user-value.js';

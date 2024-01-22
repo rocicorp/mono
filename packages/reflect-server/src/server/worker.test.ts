@@ -1,6 +1,6 @@
 import {describe, expect, jest, test} from '@jest/globals';
 import type {LogLevel} from '@rocicorp/logger';
-import {version} from 'reflect-shared';
+import {version} from 'reflect-shared/src/version.js';
 import {createAPIHeaders} from 'shared/src/api/headers.js';
 import {assertString} from 'shared/src/asserts.js';
 import type {Series} from '../types/report-metrics.js';

@@ -1,4 +1,4 @@
-import type {AuthData} from 'reflect-shared';
+import type {AuthData} from 'reflect-shared/src/types.js';
 import type {ClientGroupID} from 'replicache';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import type {ClientID} from './client-state.js';

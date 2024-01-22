@@ -2,7 +2,7 @@
 
 import type {LogContext} from '@rocicorp/logger';
 import type {Poke} from 'reflect-protocol';
-import type {Env} from 'reflect-shared';
+import type {Env} from 'reflect-shared/src/types.js';
 import {must} from 'shared/src/must.js';
 import {fastForwardRoom} from '../ff/fast-forward.js';
 import type {DisconnectHandler} from '../server/disconnect.js';

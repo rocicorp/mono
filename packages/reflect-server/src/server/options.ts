@@ -4,7 +4,8 @@ import {
   type LogLevel,
   type LogSink,
 } from '@rocicorp/logger';
-import {version, type MutatorDefs} from 'reflect-shared';
+import type {MutatorDefs} from 'reflect-shared/src/types.js';
+import {version} from 'reflect-shared/src/version.js';
 import {isTrueEnvValue} from '../util/env.js';
 import {createWorkerDatadogLogSink} from './create-worker-datadog-log-sink.js';
 import type {ReflectServerOptions} from './reflect.js';
