@@ -46,10 +46,7 @@ import * as valita from 'shared/src/valita.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {checkConnectivity} from './connect-checks.js';
-import {
-  initDisconnectBeaconForPageHide,
-  sendDisconnectBeacon,
-} from './disconnect-beacon.js';
+import {DisconnectBeaconManager} from './disconnect-beacon.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 import {shouldEnableAnalytics} from './enable-analytics.js';
 import {toWSString, type HTTPString, type WSString} from './http-string.js';
@@ -218,6 +215,7 @@ export class Reflect<MD extends MutatorDefs> {
   };
 
   #internalAPI: ReplicacheInternalAPI;
+  readonly #disconnectBeaconManager: DisconnectBeaconManager;
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -420,16 +418,15 @@ export class Reflect<MD extends MutatorDefs> {
       this.#closeAbortController.signal,
     );
 
-    initDisconnectBeaconForPageHide(
+    this.#server;
+    this.#disconnectBeaconManager = new DisconnectBeaconManager(
+      this,
       this.#lc,
-      getWindow(),
-      this.#closeAbortController.signal,
       server,
-      roomID,
-      userID,
-      this.clientID,
       () => this.#rep.auth,
       () => this.#internalAPI.lastMutationID(),
+      this.#closeAbortController.signal,
+      getWindow(),
     );
 
     void this.#runLoop();
@@ -512,23 +509,13 @@ export class Reflect<MD extends MutatorDefs> {
    */
   close(): Promise<void> {
     const lc = this.#lc.withContext('close');
-    const lastMutationID = this.#internalAPI.lastMutationID();
-    sendDisconnectBeacon(
-      lc,
-      this.#server,
-      this.roomID,
-      this.userID,
-      this.#rep.clientID,
-      this.#rep.auth,
-      lastMutationID,
-      'ReflectClosed',
-    );
 
     if (this.#connectionState !== ConnectionState.Disconnected) {
       this.#disconnect(lc, {
         client: 'ReflectClosed',
       });
     }
+    this.#disconnectBeaconManager.send('ReflectClosed');
     lc.debug?.('Aborting closeAbortController due to close()');
     this.#closeAbortController.abort();
     this.#metrics.stop();

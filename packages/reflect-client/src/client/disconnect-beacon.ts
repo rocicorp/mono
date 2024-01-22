@@ -6,88 +6,105 @@ import type {
 import {getConfig} from 'reflect-shared/src/config.js';
 import {DISCONNECT_BEACON_PATH} from 'reflect-shared/src/paths.js';
 
-export function sendDisconnectBeacon(
-  lc: LogContext,
-  server: string | null,
-  roomID: string,
-  userID: string,
-  clientID: string,
-  auth: string | undefined,
-  lastMutationID: number,
-  reason: 'Pagehide' | 'ReflectClosed',
-): void {
-  if (!getConfig('disconnectBeacon')) {
-    return;
+type ReflectLike = {
+  roomID: string;
+  clientID: string;
+  userID: string;
+};
+
+export class DisconnectBeaconManager {
+  readonly #lc: LogContext;
+  readonly #server: string | null;
+  readonly #reflect: ReflectLike;
+  readonly #auth: () => string | undefined;
+  readonly #lastMutationID: () => number;
+  readonly #signal: AbortSignal;
+  #sent = false;
+
+  constructor(
+    reflect: ReflectLike,
+    lc: LogContext,
+    server: string | null,
+    auth: () => string | undefined,
+    lastMutationID: () => number,
+    signal: AbortSignal,
+    window: Window | undefined,
+  ) {
+    this.#reflect = reflect;
+    this.#lc = lc;
+    this.#server = server;
+    this.#auth = auth;
+    this.#lastMutationID = lastMutationID;
+    this.#signal = signal;
+
+    this.#initForPageHide(window);
   }
 
-  if (server === null) {
-    lc.debug?.(
-      `Not sending disconnect beacon for ${reason} because server is null`,
-    );
-    return;
+  #initForPageHide(window: Window | undefined) {
+    if (getConfig('disconnectBeacon')) {
+      window?.addEventListener(
+        'pagehide',
+        e => {
+          // When store in BFCache we don't want to send a disconnect beacon.
+          if (e.persisted) {
+            return;
+          }
+          this.send('Pagehide');
+        },
+        {signal: this.#signal},
+      );
+    }
   }
 
-  lc = lc.withContext('disconnect-beacon', reason);
-  lc.debug?.('Sending disconnect beacon', {server, clientID, lastMutationID});
+  send(reason: 'Pagehide' | 'ReflectClosed'): void {
+    if (!getConfig('disconnectBeacon')) {
+      return;
+    }
 
-  const url = new URL(DISCONNECT_BEACON_PATH, server);
-  const params: DisconnectBeaconQueryParams = {
-    roomID,
-    userID,
-    clientID,
-  };
-  url.search = new URLSearchParams(params).toString();
-  const body: DisconnectBeacon = {
-    lastMutationID,
-  };
+    const lc = this.#lc.withContext('disconnect-beacon', reason);
 
-  const headers: Record<string, string> = {
-    'content-type': 'application/json',
-  };
-  if (auth) {
-    headers['authorization'] = `Bearer ${auth}`;
-  }
-  fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    keepalive: true,
-  }).catch(e => {
-    lc.info?.('Failed to send disconnect beacon', e);
-  });
-}
+    if (this.#sent) {
+      lc.debug?.('Not sending disconnect beacon because already sent');
+      return;
+    }
+    this.#sent = true;
 
-export function initDisconnectBeaconForPageHide(
-  lc: LogContext,
-  window: Window | undefined,
-  signal: AbortSignal,
-  server: string | null,
-  roomID: string,
-  userID: string,
-  clientID: string,
-  auth: () => string | undefined,
-  lastMutationID: () => number,
-): void {
-  if (getConfig('disconnectBeacon')) {
-    window?.addEventListener(
-      'pagehide',
-      e => {
-        // When store in BFCache we don't want to send a disconnect beacon.
-        if (e.persisted) {
-          return;
-        }
-        sendDisconnectBeacon(
-          lc,
-          server,
-          roomID,
-          userID,
-          clientID,
-          auth(),
-          lastMutationID(),
-          'Pagehide',
-        );
-      },
-      {signal},
-    );
+    if (this.#server === null) {
+      this.#lc.debug?.(
+        `Not sending disconnect beacon for ${reason} because server is null`,
+      );
+      return;
+    }
+
+    const lastMutationID = this.#lastMutationID();
+    const auth = this.#auth();
+
+    const url = new URL(DISCONNECT_BEACON_PATH, this.#server);
+    const params: DisconnectBeaconQueryParams = {
+      roomID: this.#reflect.roomID,
+      userID: this.#reflect.userID,
+      clientID: this.#reflect.clientID,
+    };
+    url.search = new URLSearchParams(params).toString();
+    const body: DisconnectBeacon = {
+      lastMutationID,
+    };
+
+    lc.debug?.('Sending disconnect beacon', params, body);
+
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+    };
+    if (auth) {
+      headers['authorization'] = `Bearer ${auth}`;
+    }
+    fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      keepalive: true,
+    }).catch(e => {
+      lc.info?.('Failed to send disconnect beacon', e);
+    });
   }
 }

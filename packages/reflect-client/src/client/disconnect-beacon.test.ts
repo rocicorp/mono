@@ -2,10 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
 import * as sinon from 'sinon';
-import {
-  initDisconnectBeaconForPageHide,
-  sendDisconnectBeacon,
-} from './disconnect-beacon.js';
+import {DisconnectBeaconManager} from './disconnect-beacon.js';
 import {TestLogSink} from './test-utils.js';
 
 setup(() => {
@@ -30,16 +27,16 @@ test('sendDisconnectBeacon', () => {
   const auth = () => 'auth1';
   const lastMutationID = () => 1;
 
-  sendDisconnectBeacon(
+  const m = new DisconnectBeaconManager(
+    {roomID, userID, clientID},
     lc,
     server,
-    roomID,
-    userID,
-    clientID,
-    auth(),
-    lastMutationID(),
-    'Pagehide',
+    auth,
+    lastMutationID,
+    new AbortController().signal,
+    undefined,
   );
+  m.send('Pagehide');
 
   expect(fetchStub.calledOnce).equal(true);
   expect(fetchStub.firstCall.args[0].toString()).equal(
@@ -71,16 +68,16 @@ suite('sendDisconnectBeacon no auth', () => {
       const localAuth = () => auth;
       const lastMutationID = () => 2;
 
-      sendDisconnectBeacon(
+      const m = new DisconnectBeaconManager(
+        {roomID, userID, clientID},
         lc,
         server,
-        roomID,
-        userID,
-        clientID,
-        localAuth(),
-        lastMutationID(),
-        'Pagehide',
+        localAuth,
+        lastMutationID,
+        new AbortController().signal,
+        undefined,
       );
+      m.send('Pagehide');
 
       expect(fetchStub.calledOnce).equal(true);
       expect(fetchStub.firstCall.args[0].toString()).equal(
@@ -111,65 +108,18 @@ test('sendDisconnectBeacon no server is a noop', () => {
   const auth = () => undefined;
   const lastMutationID = () => 3;
 
-  sendDisconnectBeacon(
+  const m = new DisconnectBeaconManager(
+    {roomID, userID, clientID},
     lc,
     server,
-    roomID,
-    userID,
-    clientID,
-    auth(),
-    lastMutationID(),
-    'Pagehide',
-  );
-
-  expect(fetchStub.called).equal(false);
-});
-
-test('initDisconnectBeaconForPageHide', () => {
-  const fetchStub = sinon
-    .stub(window, 'fetch')
-    .returns(Promise.resolve(new Response()));
-  const sink = new TestLogSink();
-  const lc = new LogContext('debug', {}, sink);
-  const server = 'http://localhost:8080';
-  const roomID = 'roomID4';
-  const userID = 'userID4';
-  const clientID = 'clientID4';
-  const auth = () => 'auth4';
-  const lastMutationID = () => 4;
-  const ac = new AbortController();
-  const {signal} = ac;
-
-  const fakeWindow = new EventTarget();
-
-  initDisconnectBeaconForPageHide(
-    lc,
-    fakeWindow as Window,
-    signal,
-    server,
-    roomID,
-    userID,
-    clientID,
     auth,
     lastMutationID,
+    new AbortController().signal,
+    undefined,
   );
+  m.send('Pagehide');
 
-  const e = new PageTransitionEvent('pagehide', {persisted: false});
-  fakeWindow.dispatchEvent(e);
-
-  expect(fetchStub.calledOnce).equal(true);
-  expect(fetchStub.firstCall.args[0].toString()).equal(
-    'http://localhost:8080/api/sync/v1/disconnect?roomID=roomID4&userID=userID4&clientID=clientID4',
-  );
-  expect(fetchStub.firstCall.args[1]).deep.equal({
-    body: '{"lastMutationID":4}',
-    headers: {
-      'authorization': 'Bearer auth4',
-      'content-type': 'application/json',
-    },
-    keepalive: true,
-    method: 'POST',
-  });
+  expect(fetchStub.called).equal(false);
 });
 
 suite('initDisconnectBeaconForPageHide', () => {
@@ -197,6 +147,7 @@ suite('initDisconnectBeaconForPageHide', () => {
       const fetchStub = sinon
         .stub(window, 'fetch')
         .returns(Promise.resolve(new Response()));
+
       const sink = new TestLogSink();
       const lc = new LogContext('debug', {}, sink);
       const server = 'http://localhost:8080';
@@ -210,16 +161,14 @@ suite('initDisconnectBeaconForPageHide', () => {
 
       const fakeWindow = new EventTarget();
 
-      initDisconnectBeaconForPageHide(
+      new DisconnectBeaconManager(
+        {roomID, userID, clientID},
         lc,
-        fakeWindow as Window,
-        signal,
         server,
-        roomID,
-        userID,
-        clientID,
         auth,
         lastMutationID,
+        signal,
+        fakeWindow as Window,
       );
 
       const e = new PageTransitionEvent('pagehide', {persisted: c.persisted});
