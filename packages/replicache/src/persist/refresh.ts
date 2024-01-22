@@ -64,7 +64,14 @@ export async function refresh(
   diffConfig: DiffComputationConfig,
   closed: () => boolean,
   formatVersion: FormatVersion,
-): Promise<[Hash, DiffsMap, lastMutationID: number | undefined] | undefined> {
+): Promise<
+  | [
+      newMemdagHeadHash: Hash,
+      diffs: DiffsMap,
+      lastMutationID: number | undefined,
+    ]
+  | undefined
+> {
   if (closed()) {
     return;
   }
