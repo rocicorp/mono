@@ -4,6 +4,10 @@ import {
   deleteAppRequestSchema,
   deleteAppResponseSchema,
 } from 'mirror-protocol/src/app.js';
+import {
+  apiKeyDataConverter,
+  apiKeysCollection,
+} from 'mirror-schema/src/api-key.js';
 import {appDataConverter, appPath} from 'mirror-schema/src/app.js';
 import {
   DeploymentSpec,
@@ -62,12 +66,20 @@ export async function deleteAppDocs(
       'internal',
       `App ${appID} concurrently deleted?`,
     );
-    const [envs, deployments] = await Promise.all([
-      txn.get(firestore.collection(envsCollection(appID)).select()),
-      txn.get(firestore.collection(deploymentsCollection(appID)).select()),
-    ]);
 
     const {teamID, name: appName} = app;
+
+    const [envs, deployments, keys] = await Promise.all([
+      txn.get(firestore.collection(envsCollection(appID)).select()),
+      txn.get(firestore.collection(deploymentsCollection(appID)).select()),
+      txn.get(
+        firestore
+          .collection(apiKeysCollection(teamID))
+          .withConverter(apiKeyDataConverter)
+          .where('appIDs', 'array-contains', appID),
+      ),
+      // Note: We keep the metricsCollection for billing / usage purposes.
+    ]);
 
     // Delete all documents associated with the App.
     //
@@ -80,7 +92,17 @@ export async function deleteAppDocs(
     deployments.forEach(doc => txn.delete(doc.ref));
     // 4. The app name index entry for the team.
     txn.delete(firestore.doc(appNameIndexPath(teamID, appName)));
-    // 5. Finally, decrement the Team's `numApps` field.
+    // 5. Remove the appID from API keys, and delete the API key that only has the appID.
+    keys.docs.forEach(doc => {
+      const {appIDs} = doc.data();
+      if (appIDs.length === 1) {
+        // TODO: Don't delete if the key has the forthcoming "apps:create" permission.
+        txn.delete(doc.ref);
+      } else {
+        txn.update(doc.ref, {appIDs: FieldValue.arrayRemove(appID)});
+      }
+    });
+    // 6. Finally, decrement the Team's `numApps` field.
     //    Note that this is a "blind" update that doesn't require
     //    reading/locking the Team doc in the Transaction.
     txn.update(

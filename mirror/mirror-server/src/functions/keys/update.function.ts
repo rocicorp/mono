@@ -96,12 +96,12 @@ export const update = (firestore: Firestore) =>
   validateSchema(updateKeyRequestSchema, updateKeyResponseSchema)
     .validate(internalFunctionHeader())
     .handle(async req => {
-      const {appID, keyName, lastUsed} = req;
+      const {teamID, keyName, lastUsed} = req;
 
       // Add the update to the global buffer, and wait for either the buffering
       // timeout to fire, or for the baton to be passed to another updater.
       const buffer = await globalUpdateCoordinator.add(
-        apiKeyPath(appID, keyName),
+        apiKeyPath(teamID, keyName),
         lastUsed,
       );
 

@@ -13,34 +13,25 @@ README automatically on the package homepage.
 
 Follow the instructions at https://hello.reflect.net/scaffold and https://hello.reflect.net/add-to-existing except use @$NEW_VERSION instead of @latest.
 
-## Replidraw-do
+## Examples
 
-Check out [rocicorp/replidraw-do](https://github.com/rocicorp/replidraw-do)
+Checkout each of the examples at https://hello.reflect.net/start/examples.
 
 Install the new version from npm:
 
 ```
-npm install @rocicorp/reflect@$NEW_VERSION
+npm install @rocicorp/reflect@canary
 ```
 
 Follow instructions in repo to finish setting up app, and run to make sure it works.
 
 For canary releases you may need to make changes to the app to allow it work, or to adopt newer features. Publish these to a WIP PR which we can update until release.
 
-## Todo Sample
-
-Check out [rocicorp/reflect-todo](https://github.com/rocicorp/reflect-todo)
-
-Same as Replidraw-do test.
-
 # Release an Official Build
 
 TODO, but this will be something like checking out the good canary, changing the version, publishing again, then updating all the apps.
 
 ## Release a Server to more channels
-
-If a server was only uploaded to, say `--channels=canary` and you wish to roll it
-out to `stable`:
 
 ```bash
 cd mirror/mirror-cli

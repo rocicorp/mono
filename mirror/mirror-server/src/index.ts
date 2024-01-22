@@ -14,7 +14,7 @@ import * as appFunctions from './functions/app/index.js';
 import * as envFunctions from './functions/env/index.js';
 import * as errorFunctions from './functions/error/index.js';
 import {INTERNAL_FUNCTION_SECRET_NAME} from './functions/internal/auth.js';
-import * as appKeyFunctions from './functions/keys/index.js';
+import * as apiKeyFunctions from './functions/keys/index.js';
 import * as metricsFunctions from './functions/metrics/index.js';
 import * as roomFunctions from './functions/room/index.js';
 import * as serverFunctions from './functions/server/index.js';
@@ -88,16 +88,19 @@ export const app = {
 };
 
 export const appKeys = {
-  list: https.onCall(baseHttpsOptions, appKeyFunctions.list(getFirestore())),
+  list: https.onCall(baseHttpsOptions, apiKeyFunctions.list(getFirestore())),
   create: https.onCall(
     baseHttpsOptions,
-    appKeyFunctions.create(getFirestore()),
+    apiKeyFunctions.create(getFirestore()),
   ),
-  edit: https.onCall(baseHttpsOptions, appKeyFunctions.edit(getFirestore())),
+  edit: https.onCall(baseHttpsOptions, apiKeyFunctions.edit(getFirestore())),
   delete: https.onCall(
     baseHttpsOptions,
-    appKeyFunctions.delete(getFirestore()),
+    apiKeyFunctions.delete(getFirestore()),
   ),
+};
+
+export const apiKeys = {
   update: https.onCall(
     {
       ...baseHttpsOptions,
@@ -107,7 +110,7 @@ export const appKeys = {
       // actually waits for the buffer timeout to fire.
       concurrency: 128,
     },
-    appKeyFunctions.update(getFirestore()),
+    apiKeyFunctions.update(getFirestore()),
   ),
 };
 

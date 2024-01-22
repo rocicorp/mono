@@ -13,12 +13,15 @@ export const deleteFn = (firestore: Firestore) =>
     .validate(userAgentVersion())
     .validate(userAuthorization())
     .validate(appAuthorization(firestore, ['admin']))
-    .handle(async request => {
-      const {appID, names} = request;
+    .handle(async (request, context) => {
+      const {names} = request;
+      const {
+        app: {teamID},
+      } = context;
 
       const deleted = await firestore.runTransaction(async tx => {
         const docs = await tx.getAll(
-          ...names.map(name => firestore.doc(apiKeyPath(appID, name))),
+          ...names.map(name => firestore.doc(apiKeyPath(teamID, name))),
         );
         const exists: string[] = [];
         docs.forEach(doc => {

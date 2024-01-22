@@ -41,6 +41,10 @@ import {
 } from './list-deployed-apps.js';
 import {lookupAuthHandler, lookupAuthOptions} from './lookup-auth.js';
 import {
+  migrateApiKeysHandler,
+  migrateApiKeysOptions,
+} from './migrate-api-keys.js';
+import {
   migrateDnsCommentsToTagsHandler,
   migrateDnsCommentsToTagsOptions,
 } from './migrate-dns-comments-to-tags.js';
@@ -267,6 +271,13 @@ function createCLIParser(argv: string[]) {
     'Backfills aggregated metrics into Firestore. Also suitable for rerunning aggregations if Cloudflare Analytics data is delayed.',
     backfillMetricsOptions,
     backfillMetricsHandler,
+  );
+
+  reflectCLI.command(
+    'migrate-api-keys',
+    'Migrates the field in api keys from "apps" to "appIDs',
+    migrateApiKeysOptions,
+    migrateApiKeysHandler,
   );
 
   reflectCLI.command(
