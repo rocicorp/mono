@@ -4,7 +4,7 @@ import type {
   Env,
   TransactionLocation,
   WriteTransaction,
-} from 'reflect-shared';
+} from 'reflect-shared/src/mod.js';
 import {
   DeepReadonly,
   IndexKey,

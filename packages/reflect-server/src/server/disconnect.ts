@@ -1,4 +1,4 @@
-import type {WriteTransaction} from 'reflect-shared';
+import type {WriteTransaction} from 'reflect-shared/src/types.js';
 
 /**
  * A `DisconnectHandler` can modify room state in response to a client

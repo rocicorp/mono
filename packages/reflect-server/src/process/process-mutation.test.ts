@@ -1,5 +1,9 @@
 import {expect, test} from '@jest/globals';
-import type {AuthData, Env, WriteTransaction} from 'reflect-shared';
+import type {
+  AuthData,
+  Env,
+  WriteTransaction,
+} from 'reflect-shared/src/types.js';
 import {
   MutatorMap,
   processMutation,

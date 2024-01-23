@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {Patch, Poke} from 'reflect-protocol';
-import type {Env} from 'reflect-shared';
+import type {Env} from 'reflect-shared/src/types.js';
 import type {BufferSizer} from 'shared/src/buffer-sizer.js';
 import {must} from 'shared/src/must.js';
 import type {DisconnectHandler} from '../server/disconnect.js';

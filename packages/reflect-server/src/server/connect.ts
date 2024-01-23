@@ -5,7 +5,7 @@ import type {
   NullableVersion,
   Version,
 } from 'reflect-protocol';
-import type {AuthData} from 'reflect-shared';
+import type {AuthData} from 'reflect-shared/src/types.js';
 import {assert} from 'shared/src/asserts.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {

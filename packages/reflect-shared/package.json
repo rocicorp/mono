@@ -22,11 +22,6 @@
     "ts-jest": "^29.1.0",
     "typescript": "^5.2.2"
   },
-  "exports": {
-    ".": "./src/mod.ts",
-    "./src/": "./src/",
-    "./tool/get-version.js": "./tool/get-version.js"
-  },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },

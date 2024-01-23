@@ -3,9 +3,10 @@ import {
   disconnectBeaconQueryParamsSchema,
   disconnectBeaconSchema,
 } from 'reflect-protocol/src/disconnect-beacon.js';
-import type {Env, MutatorDefs} from 'reflect-shared';
-import {version} from 'reflect-shared';
 import {getConfig} from 'reflect-shared/src/config.js';
+import {DISCONNECT_BEACON_PATH} from 'reflect-shared/src/paths.js';
+import type {Env, MutatorDefs} from 'reflect-shared/src/types.js';
+import {version} from 'reflect-shared/src/version.js';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import * as valita from 'shared/src/valita.js';
 import {ConnectionLifetimeReporter} from '../events/connection-lifetimes.js';
@@ -31,6 +32,7 @@ import {CLIENT_GC_FREQUENCY} from './client-gc.js';
 import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
 import {closeConnections, getConnections} from './connections.js';
+import {disconnectBeacon} from './disconnect-beacon.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {requireUpgradeHeader, upgradeWebsocketResponse} from './http-util.js';
 import {ROOM_ID_HEADER_NAME} from './internal-headers.js';
@@ -40,7 +42,6 @@ import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
-  DISCONNECT_BEACON_PATH,
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
@@ -316,25 +317,19 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       inputParams(disconnectBeaconQueryParamsSchema, disconnectBeaconSchema),
     )
     .handle(ctx => {
-      const lc = ctx.lc.withContext('handler', 'disconnectBeacon');
       const {
-        body,
+        body: {lastMutationID},
         query: {clientID, roomID, userID},
       } = ctx;
 
-      lc.debug?.(
-        'disconnect client beacon request',
+      return disconnectBeacon(
+        ctx.lc.withContext('handler', 'disconnectBeacon'),
+        clientID,
         roomID,
         userID,
-        clientID,
-        body,
+        lastMutationID,
+        this.#storage,
       );
-
-      // TODO(arv): Apply the mutations if any.
-      // TODO(arv): Delete the client record.
-      // TODO(arv): Collect the presence state.
-
-      return new Response('ok');
     });
 
   #tail = get().handle((ctx, request) => {

@@ -1,7 +1,7 @@
 import {afterEach, beforeEach, jest} from '@jest/globals';
 import {Context, LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import type {Mutation, NullableVersion} from 'reflect-protocol';
-import type {AuthData} from 'reflect-shared';
+import type {AuthData} from 'reflect-shared/src/types.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import type {ClientRecord} from '../../src/types/client-record.js';
 import type {
@@ -10,7 +10,9 @@ import type {
   ClientState,
   Socket,
 } from '../../src/types/client-state.js';
+import type {Storage} from '../storage/storage.js';
 import type {PendingMutation} from '../types/mutation.js';
+import {userValueKey} from '../types/user-value.js';
 
 afterEach(() => {
   jest.restoreAllMocks();
@@ -207,4 +209,17 @@ export function mockWebSocketPair(): [Mocket, Mocket] {
     .mockReturnValue({0: client, 1: server});
 
   return [client, server];
+}
+export async function setUserEntries(
+  cache: Storage,
+  version: number,
+  entries: Record<string, ReadonlyJSONValue>,
+) {
+  for (const [k, value] of Object.entries(entries)) {
+    await cache.put(userValueKey(k), {
+      value,
+      deleted: false,
+      version,
+    });
+  }
 }

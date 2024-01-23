@@ -1,5 +1,5 @@
 import type {LogLevel} from '@rocicorp/logger';
-import type {MutatorDefs} from 'reflect-shared';
+import type {MutatorDefs} from 'reflect-shared/src/types.js';
 import type {
   ExperimentalCreateKVStore as CreateKVStore,
   MaybePromise,

@@ -16,6 +16,7 @@ import {
   get,
   post,
   queryParams,
+  queryParamsIgnoreBody,
   requiredAuthAPIKey,
   roomID,
   urlVersion,
@@ -503,6 +504,7 @@ test('withQueryParams', async () => {
   type Case = {
     schema: valita.Type<unknown>;
     parsedURL: URLPatternURLPatternResult;
+    body?: string;
     expected?: {result: {text: string; status: number}};
     error?: APIErrorInfo;
   };
@@ -558,10 +560,22 @@ test('withQueryParams', async () => {
         message: 'Query string error. Unexpected property baz',
       },
     },
+    {
+      schema: fooSchema,
+      parsedURL: must(
+        new URLPattern().exec('https://roci.dev/room/monkey?foo=bar'),
+      ),
+      body: 'abc',
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Unexpected request body.',
+      },
+    },
   ];
 
   for (const c of cases) {
-    const handler = get()
+    const handler = post()
       .with(queryParams(c.schema))
       .handle((ctx, req) => {
         expectBodyNotUsed(req);
@@ -570,7 +584,7 @@ test('withQueryParams', async () => {
         });
       });
     const url = `https://roci.dev/`;
-    const request = new Request(url);
+    const request = new Request(url, {method: 'post', body: c.body ?? null});
     const ctx = {
       parsedURL: c.parsedURL,
       lc: createSilentLogContext(),
@@ -1027,5 +1041,104 @@ describe('with bearerToken', () => {
         });
       }
     });
+  }
+});
+
+test('withQueryParamsIgnoreBody', async () => {
+  type Case = {
+    schema: valita.Type<unknown>;
+    parsedURL: URLPatternURLPatternResult;
+    body?: string;
+    expected?: {result: {text: string; status: number}};
+    error?: APIErrorInfo;
+  };
+
+  const fooSchema = valita.object({foo: valita.string()});
+
+  const cases: Case[] = [
+    {
+      schema: valita.null(),
+      parsedURL: must(new URLPattern().exec('https://roci.dev/room/monkey')),
+      expected: {result: {text: 'query: null', status: 200}},
+    },
+    {
+      schema: valita.null(),
+      parsedURL: must(new URLPattern().exec('https://roci.dev/room/monkey?')),
+      expected: {result: {text: 'query: null', status: 200}},
+    },
+    {
+      schema: valita.null(),
+      parsedURL: must(
+        new URLPattern().exec('https://roci.dev/room/monkey?foo'),
+      ),
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Unexpected query parameters',
+      },
+    },
+    {
+      schema: fooSchema,
+      parsedURL: must(new URLPattern().exec('https://roci.dev/room/monkey?')),
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Query string error. Missing property foo',
+      },
+    },
+    {
+      schema: fooSchema,
+      parsedURL: must(
+        new URLPattern().exec('https://roci.dev/room/monkey?foo=bar'),
+      ),
+      expected: {result: {text: 'query: {"foo":"bar"}', status: 200}},
+    },
+    {
+      schema: fooSchema,
+      parsedURL: must(
+        new URLPattern().exec('https://roci.dev/room/monkey?foo=bar'),
+      ),
+      body: 'abc',
+      expected: {result: {text: 'query: {"foo":"bar"}', status: 200}},
+    },
+    {
+      schema: fooSchema,
+      parsedURL: must(
+        new URLPattern().exec('https://roci.dev/room/monkey?foo=bar&baz=bonk'),
+      ),
+      error: {
+        code: 400,
+        resource: 'request',
+        message: 'Query string error. Unexpected property baz',
+      },
+    },
+  ];
+
+  for (const c of cases) {
+    const handler = post()
+      .with(queryParamsIgnoreBody(c.schema))
+      .handle((ctx, req) => {
+        expectBodyNotUsed(req);
+        return new Response(`query: ${JSON.stringify(ctx.query)}`, {
+          status: 200,
+        });
+      });
+    const url = `https://roci.dev/`;
+    const request = new Request(url, {method: 'POST', body: c.body ?? null});
+    const ctx = {
+      parsedURL: c.parsedURL,
+      lc: createSilentLogContext(),
+    };
+
+    const response = await handler(ctx, request);
+    if (response.status === 200) {
+      const result = {
+        result: {status: response.status, text: await response.text()},
+      };
+      expect(result).toEqual(c.expected);
+    } else {
+      expect(response.status).toBe(c.error?.code);
+      expect(await response.json()).toEqual({error: c.error});
+    }
   }
 });
