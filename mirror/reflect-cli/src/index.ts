@@ -23,7 +23,7 @@ import {editAppKeyHandler, editAppKeyOptions} from './keys/edit.js';
 import {listAppKeysHandler, listAppKeysOptions} from './keys/list.js';
 import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
-import {statusHandler} from './status.js';
+import {appListHandler} from './apps.js';
 import {tailHandler, tailOptions} from './tail/index.js';
 import {usageHandler, usageOptions} from './usage.js';
 import {deleteVarsHandler, deleteVarsOptions} from './vars/delete.js';
@@ -48,6 +48,26 @@ async function main(argv: string[]): Promise<void> {
 
 function createCLIParser(argv: string[]) {
   const reflectCLI = createCLIParserBase(argv);
+
+  reflectCLI.command('apps', '📱 Manage Reflect apps', yargs => {
+    yargs
+      .command(
+        'list',
+        'List apps',
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        () => {},
+        authenticateAndHandleWith(appListHandler).andCleanup(),
+      )
+      .command(
+        'delete [name]',
+        '🗑️  Delete one or more Apps. Defaults to the App of the current directory.',
+        deleteOptions,
+        authenticateAndHandleWith(deleteHandler)
+          .withWarmup(deleteApp)
+          .andCleanup(),
+      )
+      .demandCommand(1, 'Available commands:\n');
+  });
 
   reflectCLI.command(
     'create <name>',
@@ -81,14 +101,6 @@ function createCLIParser(argv: string[]) {
     '🌏 Publish your Reflect project',
     publishOptions,
     authenticateAndHandleWith(publishHandler).withWarmup(publish).andCleanup(),
-  );
-
-  reflectCLI.command(
-    'status',
-    '💡 Show the status of current deployed app',
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    () => {},
-    authenticateAndHandleWith(statusHandler).andCleanup(),
   );
 
   reflectCLI.command(
@@ -174,13 +186,6 @@ function createCLIParser(argv: string[]) {
     '📊 Show usage summary (room time), with monthly, daily, or hourly breakdowns',
     usageOptions,
     authenticateAndHandleWith(usageHandler).andCleanup(),
-  );
-
-  reflectCLI.command(
-    'delete [name]',
-    '🗑️  Delete one or more Apps. Defaults to the App of the current directory.',
-    deleteOptions,
-    authenticateAndHandleWith(deleteHandler).withWarmup(deleteApp).andCleanup(),
   );
 
   return reflectCLI;

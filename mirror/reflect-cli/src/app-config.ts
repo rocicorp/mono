@@ -136,9 +136,7 @@ export function mustReadAppConfig(
 ): AppConfig {
   const config = readAppConfig(configDirPath);
   if (!config) {
-    logErrorAndExit(
-      `Could not find ${configFileName}. Please run \`reflect init\` to create one.`,
-    );
+    logErrorAndExit(`Could not find ${configFileName}.`);
   }
   return config;
 }
