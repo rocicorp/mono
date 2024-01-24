@@ -989,8 +989,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
         return;
       }
 
-      let lastMutationID = -1;
-
       // Replay.
       for (const mutation of replayMutations) {
         // TODO(greg): I'm not sure why this was in Replicache#_mutate...
@@ -1012,13 +1010,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
             FormatVersion.Latest,
           ),
         );
-        if (isLocalMetaDD31(meta) && meta.clientID === clientID) {
-          lastMutationID = meta.mutationID;
-        }
-      }
-
-      if (lastMutationID !== -1) {
-        this.#lastMutationID = lastMutationID;
       }
     }
   }
@@ -1455,9 +1446,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
       }
     }
     if (result !== undefined) {
-      if (result[2] !== undefined) {
-        this.#lastMutationID = result[2];
-      }
       await this.#checkChange(result[0], result[1]);
     }
   }

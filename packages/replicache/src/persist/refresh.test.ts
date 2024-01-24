@@ -192,7 +192,6 @@ suite('refresh', () => {
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     );
     expect(Object.fromEntries(result[1])).to.deep.equal({});
-    expect(result[2]).equal(undefined, 'The lastMutationID did not change');
 
     await assertRefreshHashes(perdag, clientID, [result[0]]);
   });
@@ -243,7 +242,6 @@ suite('refresh', () => {
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     );
     expect(Object.fromEntries(result[1])).to.deep.equal({});
-    expect(result[2]).equal(undefined, 'The lastMutationID did not change');
 
     await assertRefreshHashes(perdag, clientID, [result[0]]);
   });
@@ -287,7 +285,7 @@ suite('refresh', () => {
         },
       ],
     });
-    await expectLastMutationID(result[2], 3, clientID, memdag);
+    await expectLastMutationID(3, clientID, memdag);
 
     await assertRefreshHashes(perdag, clientID, [
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
@@ -403,7 +401,7 @@ suite('refresh', () => {
         },
       ],
     });
-    await expectLastMutationID(result[2], 4, clientID, memdag);
+    await expectLastMutationID(4, clientID, memdag);
     await assertRefreshHashes(perdag, clientID, [
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
     ]);
@@ -465,21 +463,19 @@ suite('refresh', () => {
         },
       ],
     });
-    await expectLastMutationID(result[2], 2, clientID1, memdag);
+    await expectLastMutationID(2, clientID1, memdag);
     await assertRefreshHashes(perdag, clientID1, [
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
     ]);
   });
 
   async function expectLastMutationID(
-    actual: number | undefined,
     expected: number | undefined,
     clientID: ClientID,
     memdag: Store,
   ) {
-    expect(actual).equal(expected);
     // sanity check
-    expect(actual).equal(await getLastMutationID(memdag, clientID));
+    expect(expected).equal(await getLastMutationID(memdag, clientID));
   }
 
   function getLastMutationID(
@@ -864,7 +860,7 @@ suite('refresh', () => {
     expect(Object.fromEntries(result[1])).to.deep.equal({
       '': [{key: 'c', newValue: 3, op: 'add'}],
     });
-    await expectLastMutationID(result[2], 5, clientID1, memdag);
+    await expectLastMutationID(5, clientID1, memdag);
 
     await assertRefreshHashes(perdag, clientID1, [l2.chunk.hash]);
   });
