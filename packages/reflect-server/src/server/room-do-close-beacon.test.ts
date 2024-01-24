@@ -1,7 +1,7 @@
 import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
 import type {ClientID} from 'reflect-shared/src/mod.js';
-import {DISCONNECT_BEACON_PATH} from 'reflect-shared/src/paths.js';
+import {CLOSE_BEACON_PATH} from 'reflect-shared/src/paths.js';
 import type {MutatorDefs} from 'reflect-shared/src/types.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {newCreateRoomRequest} from '../client/room.js';
@@ -48,14 +48,14 @@ async function makeBaseRoomDO(state?: DurableObjectState) {
 }
 
 beforeEach(() => {
-  setConfig('disconnectBeacon', true);
+  setConfig('closeBeacon', true);
 });
 
 afterEach(() => {
   resetAllConfig();
 });
 
-describe('Disconnect beacon behavior', () => {
+describe('Close beacon behavior', () => {
   const roomID = 'testRoomID';
   const clientID = 'testClientID';
   const userID = 'testUserID';
@@ -146,7 +146,7 @@ describe('Disconnect beacon behavior', () => {
         expectedEntries = entries,
       } = c;
       const version = 100;
-      setConfig('disconnectBeacon', enabled);
+      setConfig('closeBeacon', enabled);
 
       const state = await createTestDurableObjectState('test-do-id');
       const storage = new DurableStorage(state.storage);
@@ -179,7 +179,7 @@ describe('Disconnect beacon behavior', () => {
       };
       await putClientRecord(clientID, clientRecord, storage);
 
-      const url = `http://test.roci.dev${DISCONNECT_BEACON_PATH}?roomID=${roomID}&clientID=${clientID}&userID=${userID}`;
+      const url = `http://test.roci.dev${CLOSE_BEACON_PATH}?roomID=${roomID}&clientID=${clientID}&userID=${userID}`;
       const request = addRoomIDHeader(
         new Request(url, {method: 'POST', body: JSON.stringify(body)}),
         roomID,
@@ -203,9 +203,9 @@ describe('Missing search params', () => {
   const clientID = 'testClientID';
   const userID = 'testUserID';
   for (const url of [
-    `http://test.roci.dev${DISCONNECT_BEACON_PATH}?clientID=${clientID}&userID=${userID}`,
-    `http://test.roci.dev${DISCONNECT_BEACON_PATH}?clientID=${clientID}&roomID=${roomID}`,
-    `http://test.roci.dev${DISCONNECT_BEACON_PATH}?userID=${userID}&roomID=${roomID}`,
+    `http://test.roci.dev${CLOSE_BEACON_PATH}?clientID=${clientID}&userID=${userID}`,
+    `http://test.roci.dev${CLOSE_BEACON_PATH}?clientID=${clientID}&roomID=${roomID}`,
+    `http://test.roci.dev${CLOSE_BEACON_PATH}?userID=${userID}&roomID=${roomID}`,
   ]) {
     test(`url: ${url}`, async () => {
       const roomDO = await makeBaseRoomDO();

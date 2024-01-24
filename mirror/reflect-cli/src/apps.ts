@@ -1,36 +1,51 @@
-import {doc, getDoc, getFirestore} from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  getFirestore,
+  query,
+  where,
+} from 'firebase/firestore';
 import {
   AppView,
-  appPath,
   appViewDataConverter,
+  APP_COLLECTION,
 } from 'mirror-schema/src/external/app.js';
+
 import type {DeploymentView} from 'mirror-schema/src/external/deployment.js';
 import color from 'picocolors';
-import {readAppConfig} from './app-config.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import type {AuthContext} from './handler.js';
+import {getSingleTeam} from './teams.js';
 
-export async function statusHandler(
+export async function appListHandler(
   _yargs: YargvToInterface<CommonYargsArgv>,
+  authContext: AuthContext,
 ): Promise<void> {
   const firestore = getFirestore();
-  const config = readAppConfig();
-  const appID = config?.apps?.default?.appID;
+  const teamID = await getSingleTeam(
+    firestore,
+    authContext.user.userID,
+    'admin',
+  );
+  const q = query(
+    collection(firestore, APP_COLLECTION).withConverter(appViewDataConverter),
+    where('teamID', '==', teamID),
+  );
 
-  if (!appID) {
-    return displayStatus();
+  const apps = await getDocs(q);
+  if (apps.size === 0) {
+    console.log('No apps found.');
+    return;
   }
 
-  const appView = (
-    await getDoc(
-      doc(firestore, appPath(appID)).withConverter(appViewDataConverter),
-    )
-  ).data();
-
-  displayStatus(appID, appView);
+  for (const doc of apps.docs) {
+    const appView = doc.data();
+    displayApp(doc.id, appView);
+  }
 }
 
-function displayStatus(appID?: string, appView?: AppView): void {
-  const getStatusText = (label: string, value: string | undefined): string =>
+function displayApp(appID?: string, appView?: AppView): void {
+  const getAppText = (label: string, value: string | undefined): string =>
     color.green(`${label}: `) +
     color.reset(value ? value : color.red('Unknown'));
 
@@ -49,7 +64,7 @@ function displayStatus(appID?: string, appView?: AppView): void {
   const pad = ' ';
   for (const [label, value] of lines) {
     console.log(
-      getStatusText(label + pad.repeat(maxLabelLen - label.length), value),
+      getAppText(label + pad.repeat(maxLabelLen - label.length), value),
     );
   }
   console.log(`-------------------------------------------------`);

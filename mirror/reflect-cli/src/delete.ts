@@ -10,20 +10,20 @@ import {
 } from 'firebase/firestore';
 import {deleteApp} from 'mirror-protocol/src/app.js';
 import {
-  APP_COLLECTION,
   appPath,
+  APP_COLLECTION,
   appViewDataConverter,
 } from 'mirror-schema/src/external/app.js';
 import {deploymentViewDataConverter} from 'mirror-schema/src/external/deployment.js';
 import {watchDoc} from 'mirror-schema/src/external/watch.js';
 import {must} from 'shared/src/must.js';
 import {readAppConfig, writeAppConfig} from './app-config.js';
-import {authenticate} from './auth-config.js';
 import {checkbox, confirm} from './inquirer.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
 import {getSingleTeam} from './teams.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import type {AuthContext} from './handler.js';
 
 export function deleteOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -48,10 +48,13 @@ export function deleteOptions(yargs: CommonYargsArgv) {
 
 type DeleteHandlerArgs = YargvToInterface<ReturnType<typeof deleteOptions>>;
 
-export async function deleteHandler(yargs: DeleteHandlerArgs) {
+export async function deleteHandler(
+  yargs: DeleteHandlerArgs,
+  authContext: AuthContext,
+): Promise<void> {
   const firestore = getFirestore();
-  const {userID} = await authenticate(yargs);
   const {all} = yargs;
+  const {userID} = authContext.user;
   const apps = await getAppsToDelete(firestore, userID, yargs);
   let selectedApps = [];
   if (apps.length === 1 && !all) {

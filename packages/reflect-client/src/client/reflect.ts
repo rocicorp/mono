@@ -46,8 +46,8 @@ import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import * as valita from 'shared/src/valita.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
+import {CloseBeaconManager} from './close-beacon.js';
 import {checkConnectivity} from './connect-checks.js';
-import {DisconnectBeaconManager} from './disconnect-beacon.js';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 import {shouldEnableAnalytics} from './enable-analytics.js';
 import {toWSString, type HTTPString, type WSString} from './http-string.js';
@@ -216,7 +216,7 @@ export class Reflect<MD extends MutatorDefs> {
   };
 
   #internalAPI: ReplicacheInternalAPI;
-  readonly #disconnectBeaconManager: DisconnectBeaconManager;
+  readonly #closeBeaconManager: CloseBeaconManager;
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -419,7 +419,7 @@ export class Reflect<MD extends MutatorDefs> {
       this.#closeAbortController.signal,
     );
 
-    this.#disconnectBeaconManager = new DisconnectBeaconManager(
+    this.#closeBeaconManager = new CloseBeaconManager(
       this,
       this.#lc,
       server,
@@ -515,7 +515,7 @@ export class Reflect<MD extends MutatorDefs> {
         client: 'ReflectClosed',
       });
     }
-    this.#disconnectBeaconManager.send('ReflectClosed');
+    this.#closeBeaconManager.send('ReflectClosed');
     lc.debug?.('Aborting closeAbortController due to close()');
     this.#closeAbortController.abort();
     this.#metrics.stop();

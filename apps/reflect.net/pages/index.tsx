@@ -32,7 +32,7 @@ export default function Home() {
   return (
     <div className={styles.container}>
       <Head>
-        <title>Reflect: High-performance sync for multiplayer web apps</title>
+        <title>Reflect - High-performance sync for multiplayer web apps</title>
         <meta
           name="description"
           content="60FPS sync, automatic persistence, server authority, optional offline, fine-grained auth, and more..."

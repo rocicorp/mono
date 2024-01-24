@@ -2617,7 +2617,7 @@ describe('Alarms', () => {
 });
 
 describe('client disconnect', () => {
-  function createDisconnectTestFixture(
+  function createCloseBeaconTestFixture(
     options: {
       testUserID?: string;
       testRoomID?: string;
@@ -2648,7 +2648,7 @@ describe('client disconnect', () => {
     if (encodedTestAuth !== undefined) {
       headers.set('Authorization', 'Bearer ' + encodedTestAuth);
     }
-    const url = `http://test.roci.dev/api/sync/v1/disconnect?roomID=${testRoomID}&clientID=${testClientID}&userID=${testUserID}`;
+    const url = `http://test.roci.dev/api/sync/v1/close?roomID=${testRoomID}&clientID=${testClientID}&userID=${testUserID}`;
 
     const testRequest = new Request(url, {
       method: 'POST',
@@ -2711,7 +2711,7 @@ describe('client disconnect', () => {
   }
 
   beforeEach(() => {
-    setConfig('disconnectBeacon', true);
+    setConfig('closeBeacon', true);
   });
 
   afterEach(() => {
@@ -2720,7 +2720,7 @@ describe('client disconnect', () => {
 
   test("disconnect will not create a room that doesn't exist", async () => {
     const {testAuth, testUserID, testRoomID, testRequest, testRoomDO} =
-      createDisconnectTestFixture({});
+      createCloseBeaconTestFixture({});
     const logSink = new TestLogSink();
     const authDO = new TestAuthDO({
       roomDO: testRoomDO,
@@ -2748,7 +2748,7 @@ describe('client disconnect', () => {
 
   test('disconnect will get forwarded to room do if room exists and authenticated', async () => {
     const {testAuth, testUserID, testRoomID, testRequest, testRoomDO} =
-      createDisconnectTestFixture({});
+      createCloseBeaconTestFixture({});
     const logSink = new TestLogSink();
     const authDO = new TestAuthDO({
       roomDO: testRoomDO,
@@ -2775,7 +2775,7 @@ describe('client disconnect', () => {
   });
 
   test('disconnect will get forwarded to room do if room exists and no authHandler', async () => {
-    const {testRoomID, testRequest, testRoomDO} = createDisconnectTestFixture(
+    const {testRoomID, testRequest, testRoomDO} = createCloseBeaconTestFixture(
       {},
     );
     const logSink = new TestLogSink();
@@ -2798,7 +2798,7 @@ describe('client disconnect', () => {
   });
 
   test('disconnect authentication fail', async () => {
-    const {testRoomID, testRequest, testRoomDO} = createDisconnectTestFixture({
+    const {testRoomID, testRequest, testRoomDO} = createCloseBeaconTestFixture({
       encodedTestAuth: 'abc',
     });
     const logSink = new TestLogSink();

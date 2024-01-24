@@ -1,10 +1,10 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {
-  disconnectBeaconQueryParamsSchema,
-  disconnectBeaconSchema,
-} from 'reflect-protocol/src/disconnect-beacon.js';
+  closeBeaconQueryParamsSchema,
+  closeBeaconSchema,
+} from 'reflect-protocol/src/close-beacon.js';
 import {getConfig} from 'reflect-shared/src/config.js';
-import {DISCONNECT_BEACON_PATH} from 'reflect-shared/src/paths.js';
+import {CLOSE_BEACON_PATH} from 'reflect-shared/src/paths.js';
 import type {Env, MutatorDefs} from 'reflect-shared/src/types.js';
 import {version} from 'reflect-shared/src/version.js';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
@@ -29,10 +29,10 @@ import {populateLogContextFromRequest} from '../util/log-context-common.js';
 import {randomID} from '../util/rand.js';
 import {AlarmManager} from './alarms.js';
 import {CLIENT_GC_FREQUENCY} from './client-gc.js';
+import {closeBeacon} from './close-beacon.js';
 import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
 import {closeConnections, getConnections} from './connections.js';
-import {disconnectBeacon} from './disconnect-beacon.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {requireUpgradeHeader, upgradeWebsocketResponse} from './http-util.js';
 import {ROOM_ID_HEADER_NAME} from './internal-headers.js';
@@ -76,7 +76,7 @@ export const ROOM_ROUTES = {
   authConnections: AUTH_CONNECTIONS_PATH,
   createRoom: CREATE_ROOM_PATH,
   connect: CONNECT_URL_PATTERN,
-  disconnectBeacon: DISCONNECT_BEACON_PATH,
+  closeBeacon: CLOSE_BEACON_PATH,
   tail: TAIL_URL_PATH,
 } as const;
 
@@ -178,11 +178,8 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     this.#router.register(ROOM_ROUTES.createRoom, this.#createRoom);
     this.#router.register(ROOM_ROUTES.connect, this.#connect);
     this.#router.register(ROOM_ROUTES.tail, this.#tail);
-    if (getConfig('disconnectBeacon')) {
-      this.#router.register(
-        ROOM_ROUTES.disconnectBeacon,
-        this.#disconnectBeacon,
-      );
+    if (getConfig('closeBeacon')) {
+      this.#router.register(ROOM_ROUTES.closeBeacon, this.#closeBeacon);
     }
   }
 
@@ -311,19 +308,17 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     return upgradeWebsocketResponse(clientWS, request.headers);
   });
 
-  #disconnectBeacon = post()
+  #closeBeacon = post()
     // not checking authorization header again.
-    .with(
-      inputParams(disconnectBeaconQueryParamsSchema, disconnectBeaconSchema),
-    )
+    .with(inputParams(closeBeaconQueryParamsSchema, closeBeaconSchema))
     .handle(ctx => {
       const {
         body: {lastMutationID},
         query: {clientID, roomID, userID},
       } = ctx;
 
-      return disconnectBeacon(
-        ctx.lc.withContext('handler', 'disconnectBeacon'),
+      return closeBeacon(
+        ctx.lc.withContext('handler', 'closeBeacon'),
         clientID,
         roomID,
         userID,
