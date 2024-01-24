@@ -109,12 +109,7 @@ export function configFileExists(configDirPath: string): boolean {
 
 export function getDefaultServerPath() {
   const config = readAppConfig();
-  if (config) {
-    if (config.server) {
-      return config.server;
-    }
-  }
-  return undefined;
+  return config?.server;
 }
 /**
  * Reads reflect.config.json in the "project root".

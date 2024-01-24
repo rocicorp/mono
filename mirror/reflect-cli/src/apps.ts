@@ -1,7 +1,5 @@
 import {
   collection,
-  doc,
-  getDoc,
   getDocs,
   getFirestore,
   query,
@@ -9,7 +7,6 @@ import {
 } from 'firebase/firestore';
 import {
   AppView,
-  appPath,
   appViewDataConverter,
   APP_COLLECTION,
 } from 'mirror-schema/src/external/app.js';
@@ -35,25 +32,19 @@ export async function appListHandler(
     where('teamID', '==', teamID),
   );
 
-  const apps = await (
-    await getDocs(q)
-  ).docs.map(doc => ({id: doc.id, name: doc.data().name}));
-  if (apps.length === 0) {
+  const apps = await getDocs(q);
+  if (apps.size === 0) {
     console.log('No apps found.');
     return;
   }
 
-  for (const app of apps) {
-    const appView = (
-      await getDoc(
-        doc(firestore, appPath(app.id)).withConverter(appViewDataConverter),
-      )
-    ).data();
-    await displayApps(app.id, appView);
+  for (const doc of apps.docs) {
+    const appView = doc.data();
+    displayApp(doc.id, appView);
   }
 }
 
-function displayApps(appID?: string, appView?: AppView): void {
+function displayApp(appID?: string, appView?: AppView): void {
   const getAppText = (label: string, value: string | undefined): string =>
     color.green(`${label}: `) +
     color.reset(value ? value : color.red('Unknown'));
