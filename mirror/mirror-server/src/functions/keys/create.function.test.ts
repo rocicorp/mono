@@ -68,7 +68,11 @@ describe('apiKeys-create', () => {
     await batch.commit();
   });
 
-  function callCreate(name: string, permissions: Record<string, boolean>) {
+  function callCreate(
+    name: string,
+    permissions: Record<string, boolean>,
+    appIDs: string[] = [APP_ID, OTHER_APP_ID],
+  ) {
     const createFunction = https.onCall(create(firestore));
     return createFunction.run({
       data: {
@@ -79,7 +83,7 @@ describe('apiKeys-create', () => {
         teamID: TEAM_ID,
         name,
         permissions,
-        appIDs: [APP_ID, OTHER_APP_ID],
+        appIDs,
       },
 
       auth: {
@@ -108,6 +112,30 @@ describe('apiKeys-create', () => {
     });
   });
 
+  test('app:create with no appIDs', async () => {
+    const resp = await callCreate(
+      'key-with-app-create',
+      {'app:create': true},
+      [],
+    );
+    expect(resp).toMatchObject({
+      success: true,
+      value: expect.stringMatching(/[A-Za-z0-9_-]{40,}/),
+    });
+
+    expect(
+      (
+        await firestore.doc(apiKeyPath(TEAM_ID, 'key-with-app-create')).get()
+      ).data(),
+    ).toMatchObject({
+      value: resp.value,
+      permissions: mergeWithDefaults({'app:create': true}),
+      created: expect.any(Timestamp),
+      lastUsed: null,
+      appIDs: [],
+    });
+  });
+
   for (const badName of [
     'slashes/not/allowed',
     'spaces not allowed',
@@ -127,6 +155,16 @@ describe('apiKeys-create', () => {
 
   test('no permissions', async () => {
     const resp = await callCreate('key-needs-permissions', {}).catch(e => e);
+    expect(resp).toBeInstanceOf(HttpsError);
+    expect((resp as HttpsError).code).toBe('invalid-argument');
+  });
+
+  test('missing appIDs', async () => {
+    const resp = await callCreate(
+      'key-needs-appIDs',
+      {'app:publish': true},
+      [],
+    ).catch(e => e);
     expect(resp).toBeInstanceOf(HttpsError);
     expect((resp as HttpsError).code).toBe('invalid-argument');
   });

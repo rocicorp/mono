@@ -8,6 +8,7 @@ import {
 } from 'mirror-protocol/src/app.js';
 import type {UserAgent} from 'mirror-protocol/src/user-agent.js';
 import {DistTag} from 'mirror-protocol/src/version.js';
+import {apiKeyDataConverter} from 'mirror-schema/src/api-key.js';
 import {
   App,
   appDataConverter,
@@ -33,12 +34,14 @@ import {
   teamDataConverter,
   teamPath,
 } from 'mirror-schema/src/team.js';
-import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {randomBytes} from 'node:crypto';
 import {SemVer, coerce, gt, gte} from 'semver';
 import {newAppID, newAppIDAsNumber, newAppScriptName} from '../../ids.js';
 import {SecretsCache, SecretsClient} from '../../secrets/index.js';
-import {userAuthorization} from '../validators/auth.js';
+import {
+  teamOrKeyAuthorization,
+  userOrKeyAuthorization,
+} from '../validators/auth.js';
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
 import {DistTags, userAgentVersion} from '../validators/version.js';
@@ -51,23 +54,17 @@ export const create = (
 ) =>
   validateSchema(createRequestSchema, createResponseSchema)
     .validate(userAgentVersion(testDistTags))
-    .validate(userAuthorization())
+    .validate(userOrKeyAuthorization())
+    .validate(teamOrKeyAuthorization(firestore, 'app:create', ['admin']))
     .handle((request, context) => {
       const secrets = new SecretsCache(secretsClient);
-      const {userID, distTags} = context;
+      const {userID: keyPath, distTags, isKeyAuth} = context;
       const {
         requester: {userAgent},
         teamID,
         serverReleaseChannel,
         name: appName,
       } = request;
-
-      if (!teamID || !appName) {
-        throw new HttpsError(
-          'invalid-argument',
-          'Please update to the latest release of @rocicorp/reflect',
-        );
-      }
 
       const minNonDeprecated = distTags[DistTag.MinNonDeprecated];
       if (
@@ -91,28 +88,11 @@ export const create = (
       const encryptionKey = secrets.getSecret(ENCRYPTION_KEY_SECRET_NAME);
       const reflectAuthApiKey = randomBytes(32).toString('base64url');
 
-      const userDocRef = firestore
-        .doc(userPath(userID))
-        .withConverter(userDataConverter);
       const teamDocRef = firestore
         .doc(teamPath(teamID))
         .withConverter(teamDataConverter);
 
       return firestore.runTransaction(async txn => {
-        const user = getDataOrFail(
-          await txn.get(userDocRef),
-          'not-found',
-          `User ${userID} does not exist`,
-        );
-
-        const role = user.roles[teamID];
-        if (role !== 'admin') {
-          throw new HttpsError(
-            'permission-denied',
-            `User ${userID} does not have permission to create new apps for team ${teamID}`,
-          );
-        }
-
         // Check app limits
         const team = getDataOrFail(
           await txn.get(teamDocRef),
@@ -188,6 +168,14 @@ export const create = (
         txn.create(appDocRef, app);
         txn.create(appNameDocRef, {appID});
         txn.create(envDocRef, env);
+
+        if (isKeyAuth) {
+          // Add the appID to the key used to authorize the request.
+          const keyDoc = firestore
+            .doc(keyPath)
+            .withConverter(apiKeyDataConverter);
+          txn.update(keyDoc, {appIDs: FieldValue.arrayUnion(appID)});
+        }
         return {appID, success: true};
       });
     });

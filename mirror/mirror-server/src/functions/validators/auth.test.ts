@@ -1,4 +1,11 @@
-import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  jest,
+  test,
+} from '@jest/globals';
 import {initializeApp} from 'firebase-admin/app';
 import {Timestamp, getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
@@ -29,6 +36,7 @@ import {
   appAuthorization,
   appOrKeyAuthorization,
   teamAuthorization,
+  teamOrKeyAuthorization,
   userAuthorization,
   userOrKeyAuthorization,
 } from './auth.js';
@@ -72,6 +80,8 @@ describe('auth-team-validators', () => {
     batch.delete(firestore.doc(appPath(APP_ID)));
     batch.delete(firestore.doc(apiKeyPath(TEAM_ID, API_KEY_NAME)));
     await batch.commit();
+
+    jest.clearAllMocks();
   });
 
   function testTeamFunction(
@@ -80,6 +90,22 @@ describe('auth-team-validators', () => {
     return validateSchema(testRequestSchema, testResponseSchema)
       .validate(userAuthorization())
       .validate(teamAuthorization(firestore, allowedRoles))
+      .handle(
+        // eslint-disable-next-line require-await
+        async (testRequest, context) => ({
+          authorizedFor: context.teamID,
+          bar: testRequest.foo,
+          success: true,
+        }),
+      );
+  }
+
+  function testTeamFunctionWithKeys(
+    keyPermission: RequiredPermission,
+  ): Callable<TestRequest, TestResponse> {
+    return validateSchema(testRequestSchema, testResponseSchema)
+      .validate(userOrKeyAuthorization())
+      .validate(teamOrKeyAuthorization(firestore, keyPermission))
       .handle(
         // eslint-disable-next-line require-await
         async (testRequest, context) => ({
@@ -135,7 +161,7 @@ describe('auth-team-validators', () => {
     expect(resp).toEqual({_warmed_: true});
   });
 
-  const goodRequest = {
+  const teamRequest = {
     requester: {
       userID: USER_ID,
       userAgent: {type: 'reflect-cli', version: '0.0.1'},
@@ -157,12 +183,12 @@ describe('auth-team-validators', () => {
     {
       name: 'successful authentication',
       authData: {uid: USER_ID} as AuthData,
-      request: goodRequest,
+      request: teamRequest,
     },
     {
       name: 'insufficient team privileges',
       authData: {uid: USER_ID} as AuthData,
-      request: goodRequest,
+      request: teamRequest,
       allowedRoles: ['admin'],
       userRole: 'member',
       errorCode: 'permission-denied',
@@ -170,13 +196,13 @@ describe('auth-team-validators', () => {
     {
       name: 'missing authentication',
       authData: {} as AuthData,
-      request: goodRequest,
+      request: teamRequest,
       errorCode: 'unauthenticated',
     },
     {
       name: 'wrong authenticated user',
       authData: {uid: 'bar'} as AuthData,
-      request: goodRequest,
+      request: teamRequest,
       errorCode: 'permission-denied',
     },
     {
@@ -185,7 +211,7 @@ describe('auth-team-validators', () => {
         uid: 'bar',
         token: {superUntil: Date.now() + 10000},
       } as unknown as AuthData,
-      request: goodRequest,
+      request: teamRequest,
     },
     {
       name: 'user with expired super powers',
@@ -193,7 +219,7 @@ describe('auth-team-validators', () => {
         uid: 'bar',
         token: {superUntil: Date.now() - 10000},
       } as unknown as AuthData,
-      request: goodRequest,
+      request: teamRequest,
       errorCode: 'permission-denied',
     },
     {
@@ -238,6 +264,118 @@ describe('auth-team-validators', () => {
     });
   }
 
+  const defaultApiKey: ApiKey = {
+    value: 'api-key-value',
+    permissions: {'app:publish': true} as Permissions,
+    created: Timestamp.now(),
+    lastUsed: null,
+    appIDs: [APP_ID],
+  };
+
+  const apiKeyTeamRequest = {
+    requester: {
+      userID: `teams/${TEAM_ID}/keys/${API_KEY_NAME}`,
+      userAgent: {type: 'reflect-cli', version: '0.0.1'},
+    },
+    foo: 'boo',
+    teamID: TEAM_ID,
+    appID: APP_ID,
+  };
+
+  type ApiKeyTeamCase = {
+    name: string;
+    uid?: string;
+    teamID?: string;
+    apiKeyDoc?: ApiKey;
+    permission?: RequiredPermission;
+    errorCode?: FunctionsErrorCode;
+    response?: TestResponse;
+  };
+
+  const apiKeyTeamCases: ApiKeyTeamCase[] = [
+    {
+      name: 'with required permission',
+      apiKeyDoc: defaultApiKey,
+      response: {
+        authorizedFor: TEAM_ID,
+        bar: apiKeyTeamRequest.foo,
+        success: true,
+      },
+    },
+    {
+      name: 'without required permission',
+      apiKeyDoc: defaultApiKey,
+      permission: 'rooms:create',
+      errorCode: 'permission-denied',
+    },
+    {
+      name: 'for wrong team',
+      teamID: 'wrong-team',
+      errorCode: 'permission-denied',
+    },
+    {
+      name: 'does not match requester',
+      uid: 'some-user-id',
+      apiKeyDoc: defaultApiKey,
+      errorCode: 'permission-denied',
+    },
+    {
+      name: 'deleted team key',
+      errorCode: 'permission-denied',
+    },
+  ];
+
+  for (const c of apiKeyTeamCases) {
+    test(`team key authorization / ${c.name}`, async () => {
+      const authenticatedFunction = https.onCall(
+        testTeamFunctionWithKeys(c.permission ?? 'app:publish'),
+      );
+
+      const req = apiKeyTeamRequest;
+      if (c.apiKeyDoc) {
+        await firestore
+          .doc(`teams/${TEAM_ID}/keys/${API_KEY_NAME}`)
+          .set(c.apiKeyDoc);
+      }
+
+      let response: TestResponse | undefined;
+      let error: HttpsError | undefined;
+      try {
+        response = await authenticatedFunction.run({
+          auth: {uid: c.uid ?? req.requester.userID} as AuthData,
+          data: {...req, teamID: c.teamID ?? req.teamID},
+          rawRequest: null as unknown as Request,
+        });
+      } catch (e) {
+        expect(e).toBeInstanceOf(HttpsError);
+        error = e as HttpsError;
+      }
+
+      expect(error?.code).toBe(c.errorCode);
+      expect(response).toEqual(c.response);
+
+      if (c.response) {
+        expect(fetchMocker.requests()).toEqual([
+          ['POST', 'http://127.0.0.1:5001/apiKeys-update'],
+        ]);
+        expect(fetchMocker.headers()).toEqual([
+          {
+            'Content-Type': 'application/json',
+            'X-Mirror-Internal-Function': 'default-INTERNAL_FUNCTION_SECRET',
+          },
+        ]);
+        const body = JSON.parse(String(fetchMocker.bodys()[0]));
+        expect(body).toMatchObject({
+          data: {
+            teamID: TEAM_ID,
+            keyName: API_KEY_NAME,
+            lastUsed: expect.any(Number),
+          },
+        });
+      }
+    });
+  }
+
   const defaultApp: App = {
     teamID: TEAM_ID,
     teamLabel: 'teamlabel',
@@ -263,7 +401,7 @@ describe('auth-team-validators', () => {
     appID: APP_ID,
   };
 
-  const apiKeyReq = {
+  const apiKeyAppReq = {
     requester: {
       userID: `teams/${TEAM_ID}/keys/${API_KEY_NAME}`,
       userAgent: {type: 'reflect-cli', version: '0.0.1'},
@@ -337,7 +475,7 @@ describe('auth-team-validators', () => {
     },
     {
       name: 'app key not authorized',
-      request: apiKeyReq,
+      request: apiKeyAppReq,
       appDoc: defaultApp,
       errorCode: 'permission-denied',
     },
@@ -374,15 +512,7 @@ describe('auth-team-validators', () => {
     });
   }
 
-  const defaultApiKey: ApiKey = {
-    value: 'api-key-value',
-    permissions: {'app:publish': true} as Permissions,
-    created: Timestamp.now(),
-    lastUsed: null,
-    appIDs: [APP_ID],
-  };
-
-  type ApiKeyCase = {
+  type ApiKeyAppCase = {
     name: string;
     request?: TestRequest;
     uid?: string;
@@ -393,14 +523,14 @@ describe('auth-team-validators', () => {
     errorCode?: FunctionsErrorCode;
     response?: TestResponse;
   };
-  const apiKeyCases: ApiKeyCase[] = [
+  const apiKeyAppCases: ApiKeyAppCase[] = [
     {
       name: 'with required permission',
       appDoc: defaultApp,
       apiKeyDoc: defaultApiKey,
       response: {
         authorizedFor: defaultApp.name,
-        bar: apiKeyReq.foo,
+        bar: apiKeyAppReq.foo,
         success: true,
       },
     },
@@ -432,12 +562,12 @@ describe('auth-team-validators', () => {
     },
   ];
 
-  for (const c of apiKeyCases) {
+  for (const c of apiKeyAppCases) {
     test(`app key authorization / ${c.name}`, async () => {
       const authenticatedFunction = https.onCall(
         testAppFunctionWithKeys(c.permission ?? 'app:publish'),
       );
-      const req = c.request ?? apiKeyReq;
+      const req = c.request ?? apiKeyAppReq;
 
       if (c.appDoc) {
         await firestore.doc(`apps/${APP_ID}`).set(c.appDoc);

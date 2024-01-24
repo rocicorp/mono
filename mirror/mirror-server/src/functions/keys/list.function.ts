@@ -10,6 +10,7 @@ import {
 } from 'mirror-protocol/src/app-keys.js';
 import {
   ALL_PERMISSIONS,
+  APP_CREATE_PERMISSION,
   apiKeyDataConverter,
   apiKeysCollection,
 } from 'mirror-schema/src/api-key.js';
@@ -101,6 +102,10 @@ export const listForApp = (firestore: Firestore) =>
         doc.data().appIDs.includes(appID),
       );
 
+      // Omit "app:create" from cli versions that don't know how to handle it.
+      const legacyPermissions: Record<string, string> = {...ALL_PERMISSIONS};
+      delete legacyPermissions[APP_CREATE_PERMISSION];
+
       return {
         success: true,
         keys: appKeyDocs.map(doc => {
@@ -113,6 +118,6 @@ export const listForApp = (firestore: Firestore) =>
             lastUseTime: key.lastUsed?.toMillis() ?? null,
           };
         }),
-        allPermissions: ALL_PERMISSIONS,
+        allPermissions: legacyPermissions,
       };
     });

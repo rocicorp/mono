@@ -2,13 +2,12 @@ import {standardReleaseChannelSchema} from 'mirror-schema/src/server.js';
 import * as v from 'shared/src/valita.js';
 import {baseRequestFields, baseResponseFields} from './base.js';
 import {createCaller} from './call.js';
+import {baseTeamRequestFields} from './team.js';
 
 export const createRequestSchema = v.object({
-  ...baseRequestFields,
+  ...baseTeamRequestFields,
 
-  // TODO(darick): Make these required once TT's have updated their reflect-cli.
-  teamID: v.string().optional(),
-  name: v.string().optional(),
+  name: v.string(),
   serverReleaseChannel: standardReleaseChannelSchema,
 });
 

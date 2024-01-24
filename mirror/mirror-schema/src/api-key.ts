@@ -9,7 +9,11 @@ import {timestampSchema} from './timestamp.js';
 // This makes any instance forward compatible with new permissions.
 const permissionValue = v.boolean().default(false);
 
+// This permission has special handling with respect to an API key's `appIDs` field.
+export const APP_CREATE_PERMISSION = 'app:create';
+
 export const permissionsSchema = v.object({
+  [APP_CREATE_PERMISSION]: permissionValue,
   'app:publish': permissionValue,
   'env:modify': permissionValue,
   'rooms:read': permissionValue,
@@ -22,6 +26,7 @@ export const permissionsSchema = v.object({
 export type Permissions = v.Infer<typeof permissionsSchema>;
 
 export const ALL_PERMISSIONS: {[perm in keyof Permissions]: string} = {
+  [APP_CREATE_PERMISSION]: 'authorizes creating a new app',
   'app:publish': 'authorizes publishing a new server version',
   'env:modify': 'authorizes modifying environment variables',
   'rooms:read': 'authorizes reading room status',

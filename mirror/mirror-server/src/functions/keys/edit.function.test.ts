@@ -2,6 +2,7 @@ import {
   afterAll,
   afterEach,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   test,
@@ -31,11 +32,12 @@ describe('apiKeys-edit', () => {
   const firestore = getFirestore();
   const APP_ID = 'apiKeys-edit-test-app-id';
   const OTHER_APP_ID = 'apiKeys-edit-test-other-app-id';
+  const OTHER_OTHER_APP_ID = 'apiKeys-edit-test-other-other-app-id';
   const APP_NAME = 'my-app';
   const TEAM_ID = 'my-team';
   const USER_ID = 'foo';
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     await Promise.all([
       setApp(firestore, APP_ID, {
         teamID: TEAM_ID,
@@ -52,12 +54,12 @@ describe('apiKeys-edit', () => {
           permissions: {'rooms:read': true} as Permissions,
           created: FieldValue.serverTimestamp(),
           lastUsed: null,
-          appIDs: [APP_ID],
+          appIDs: [APP_ID, OTHER_APP_ID],
         }),
     ]);
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     // Clean up global emulator data.
     const batch = firestore.batch();
     batch.delete(firestore.doc(appPath(APP_ID)));
@@ -110,13 +112,14 @@ describe('apiKeys-edit', () => {
       permissions: mergeWithDefaults({'app:publish': true}),
       created: expect.any(Timestamp),
       lastUsed: null,
-      appIDs: [APP_ID],
+      appIDs: [APP_ID, OTHER_APP_ID],
     });
   });
 
   test('add apps', async () => {
     const resp = await callEdit('existing-key', {'app:publish': true}, [
       OTHER_APP_ID,
+      OTHER_OTHER_APP_ID,
     ]);
     expect(resp).toEqual({success: true});
 
@@ -127,7 +130,7 @@ describe('apiKeys-edit', () => {
       permissions: mergeWithDefaults({'app:publish': true}),
       created: expect.any(Timestamp),
       lastUsed: null,
-      appIDs: [APP_ID, OTHER_APP_ID],
+      appIDs: [APP_ID, OTHER_APP_ID, OTHER_OTHER_APP_ID],
     });
   });
 
@@ -135,6 +138,46 @@ describe('apiKeys-edit', () => {
     const resp = await callEdit(
       'existing-key',
       {'app:publish': true},
+      [],
+      [OTHER_APP_ID, OTHER_OTHER_APP_ID],
+    );
+    expect(resp).toEqual({success: true});
+
+    expect(
+      (await firestore.doc(apiKeyPath(TEAM_ID, 'existing-key')).get()).data(),
+    ).toMatchObject({
+      value: 'foo-bar-baz',
+      permissions: mergeWithDefaults({'app:publish': true}),
+      created: expect.any(Timestamp),
+      lastUsed: null,
+      appIDs: [APP_ID],
+    });
+  });
+
+  test('add and remove apps', async () => {
+    const resp = await callEdit(
+      'existing-key',
+      {'app:publish': true},
+      [OTHER_OTHER_APP_ID],
+      [APP_ID],
+    );
+    expect(resp).toEqual({success: true});
+
+    expect(
+      (await firestore.doc(apiKeyPath(TEAM_ID, 'existing-key')).get()).data(),
+    ).toMatchObject({
+      value: 'foo-bar-baz',
+      permissions: mergeWithDefaults({'app:publish': true}),
+      created: expect.any(Timestamp),
+      lastUsed: null,
+      appIDs: [OTHER_APP_ID, OTHER_OTHER_APP_ID],
+    });
+  });
+
+  test('remove all apps with app:create', async () => {
+    const resp = await callEdit(
+      'existing-key',
+      {'app:create': true},
       [],
       [APP_ID, OTHER_APP_ID],
     );
@@ -144,39 +187,30 @@ describe('apiKeys-edit', () => {
       (await firestore.doc(apiKeyPath(TEAM_ID, 'existing-key')).get()).data(),
     ).toMatchObject({
       value: 'foo-bar-baz',
-      permissions: mergeWithDefaults({'app:publish': true}),
+      permissions: mergeWithDefaults({'app:create': true}),
       created: expect.any(Timestamp),
       lastUsed: null,
       appIDs: [],
     });
   });
 
-  test('add and remove apps', async () => {
+  test('cannot add and remove same app', async () => {
     const resp = await callEdit(
       'existing-key',
       {'app:publish': true},
-      [OTHER_APP_ID],
       [APP_ID],
-    );
-    expect(resp).toEqual({success: true});
-
-    expect(
-      (await firestore.doc(apiKeyPath(TEAM_ID, 'existing-key')).get()).data(),
-    ).toMatchObject({
-      value: 'foo-bar-baz',
-      permissions: mergeWithDefaults({'app:publish': true}),
-      created: expect.any(Timestamp),
-      lastUsed: null,
-      appIDs: [OTHER_APP_ID],
-    });
+      [APP_ID],
+    ).catch(e => e);
+    expect(resp).toBeInstanceOf(HttpsError);
+    expect((resp as HttpsError).code).toBe('invalid-argument');
   });
 
-  test('add and remove same app', async () => {
+  test('cannot remove all apps', async () => {
     const resp = await callEdit(
       'existing-key',
       {'app:publish': true},
-      [APP_ID],
-      [APP_ID],
+      [],
+      [APP_ID, OTHER_APP_ID],
     ).catch(e => e);
     expect(resp).toBeInstanceOf(HttpsError);
     expect((resp as HttpsError).code).toBe('invalid-argument');

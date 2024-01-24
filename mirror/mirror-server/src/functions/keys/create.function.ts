@@ -11,6 +11,7 @@ import {
   createAppKeyResponseSchema,
 } from 'mirror-protocol/src/app-keys.js';
 import {
+  APP_CREATE_PERMISSION,
   apiKeyDataConverter,
   apiKeyPath,
   apiKeysCollection,
@@ -88,6 +89,10 @@ async function createKey(
     );
   }
   const validatedPermissions = validatePermissions(name, permissions);
+
+  if (!permissions[APP_CREATE_PERMISSION] && appIDs.length === 0) {
+    throw new HttpsError('invalid-argument', 'No authorized apps specified');
+  }
 
   const keyDoc = firestore
     .doc(apiKeyPath(teamID, name))

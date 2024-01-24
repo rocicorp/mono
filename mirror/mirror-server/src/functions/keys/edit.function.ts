@@ -9,7 +9,12 @@ import {
   editAppKeyRequestSchema,
   editAppKeyResponseSchema,
 } from 'mirror-protocol/src/app-keys.js';
-import {apiKeyDataConverter, apiKeyPath} from 'mirror-schema/src/api-key.js';
+import {
+  APP_CREATE_PERMISSION,
+  apiKeyDataConverter,
+  apiKeyPath,
+} from 'mirror-schema/src/api-key.js';
+import {must} from 'shared/src/must.js';
 import {
   appAuthorization,
   teamAuthorization,
@@ -55,9 +60,9 @@ async function editKeys(
 ): Promise<EditApiKeyResponse> {
   // Sanity check arguments
   const validatedPermissions = validatePermissions(name, permissions);
-  const add = new Set(appIDs.add);
-  appIDs.remove.forEach(id => {
-    if (add.has(id)) {
+  const remove = new Set(appIDs.remove);
+  appIDs.add.forEach(id => {
+    if (remove.has(id)) {
       throw new HttpsError(
         'invalid-argument',
         `AppID ${id} cannot be both added and removed`,
@@ -74,6 +79,15 @@ async function editKeys(
     if (!doc.exists) {
       throw new HttpsError('not-found', `Key named "${name}" was not found.`);
     }
+    const key = must(doc.data());
+    if (
+      !permissions[APP_CREATE_PERMISSION] &&
+      appIDs.add.length === 0 &&
+      !key.appIDs.some(id => !remove.has(id))
+    ) {
+      throw new HttpsError('invalid-argument', 'No authorized apps specified');
+    }
+
     tx.update(keyDoc, {permissions: validatedPermissions});
     if (appIDs.add.length) {
       tx.update(keyDoc, {appIDs: FieldValue.arrayUnion(...appIDs.add)});

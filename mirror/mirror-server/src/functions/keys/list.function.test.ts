@@ -6,6 +6,7 @@ import {https} from 'firebase-functions/v2';
 import type {Request} from 'firebase-functions/v2/https';
 import {
   ALL_PERMISSIONS,
+  APP_CREATE_PERMISSION,
   apiKeyDataConverter,
   apiKeyPath,
   apiKeysCollection,
@@ -204,12 +205,19 @@ describe('apiKeys-list', () => {
 
 // TODO: Delete when appKeys-list is decommissioned
 describe('appKeys-list', () => {
+  function allLegacyPermissions(): Record<string, string> {
+    const legacyPermissions: Record<string, string> = {...ALL_PERMISSIONS};
+    delete legacyPermissions[APP_CREATE_PERMISSION];
+    return legacyPermissions;
+  }
+
   const firestore = getFirestore();
   const APP_ID = 'appKeys-list-test-app-id';
   const OTHER_APP_ID = 'appKeys-list-test-other-app-id';
   const APP_NAME = 'my-app';
   const TEAM_ID = 'my-team';
   const USER_ID = 'foo';
+  const LEGACY_PERMISSIONS = allLegacyPermissions();
 
   beforeAll(async () => {
     await Promise.all([
@@ -255,7 +263,7 @@ describe('appKeys-list', () => {
     expect(await callList(false)).toEqual({
       success: true,
       keys: [],
-      allPermissions: ALL_PERMISSIONS,
+      allPermissions: LEGACY_PERMISSIONS,
     });
   });
 
@@ -324,7 +332,7 @@ describe('appKeys-list', () => {
             lastUseTime: null,
           },
         ],
-        allPermissions: ALL_PERMISSIONS,
+        allPermissions: LEGACY_PERMISSIONS,
       });
     });
 
@@ -347,7 +355,7 @@ describe('appKeys-list', () => {
             lastUseTime: null,
           },
         ],
-        allPermissions: ALL_PERMISSIONS,
+        allPermissions: LEGACY_PERMISSIONS,
       });
     });
   });
