@@ -1,10 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {
-  DisconnectBeacon,
-  DisconnectBeaconQueryParams,
-} from 'reflect-protocol/src/disconnect-beacon.js';
+  CloseBeacon,
+  CloseBeaconQueryParams,
+} from 'reflect-protocol/src/close-beacon.js';
 import {getConfig} from 'reflect-shared/src/config.js';
-import {DISCONNECT_BEACON_PATH} from 'reflect-shared/src/paths.js';
+import {CLOSE_BEACON_PATH} from 'reflect-shared/src/paths.js';
 
 type ReflectLike = {
   roomID: string;
@@ -12,7 +12,7 @@ type ReflectLike = {
   userID: string;
 };
 
-export class DisconnectBeaconManager {
+export class CloseBeaconManager {
   readonly #lc: LogContext;
   readonly #server: string | null;
   readonly #reflect: ReflectLike;
@@ -41,11 +41,14 @@ export class DisconnectBeaconManager {
   }
 
   #initForPageHide(window: Window | undefined) {
-    if (getConfig('disconnectBeacon')) {
+    if (getConfig('closeBeacon')) {
       window?.addEventListener(
         'pagehide',
         e => {
-          // When store in BFCache we don't want to send a disconnect beacon.
+          // When pagehide fires and persisted is true it means the page is
+          // going into the BFCache. If that happens the page might get restored
+          // and this client will be operational again. If that happens we do
+          // not want to remove the client from the server.
           if (e.persisted) {
             return;
           }
@@ -57,21 +60,21 @@ export class DisconnectBeaconManager {
   }
 
   send(reason: 'Pagehide' | 'ReflectClosed'): void {
-    if (!getConfig('disconnectBeacon')) {
+    if (!getConfig('closeBeacon')) {
       return;
     }
 
-    const lc = this.#lc.withContext('disconnect-beacon', reason);
+    const lc = this.#lc.withContext('close-beacon', reason);
 
     if (this.#sent) {
-      lc.debug?.('Not sending disconnect beacon because already sent');
+      lc.debug?.('Not sending close beacon because already sent');
       return;
     }
     this.#sent = true;
 
     if (this.#server === null) {
       this.#lc.debug?.(
-        `Not sending disconnect beacon for ${reason} because server is null`,
+        `Not sending close beacon for ${reason} because server is null`,
       );
       return;
     }
@@ -79,18 +82,18 @@ export class DisconnectBeaconManager {
     const lastMutationID = this.#lastMutationID();
     const auth = this.#auth();
 
-    const url = new URL(DISCONNECT_BEACON_PATH, this.#server);
-    const params: DisconnectBeaconQueryParams = {
+    const url = new URL(CLOSE_BEACON_PATH, this.#server);
+    const params: CloseBeaconQueryParams = {
       roomID: this.#reflect.roomID,
       userID: this.#reflect.userID,
       clientID: this.#reflect.clientID,
     };
     url.search = new URLSearchParams(params).toString();
-    const body: DisconnectBeacon = {
+    const body: CloseBeacon = {
       lastMutationID,
     };
 
-    lc.debug?.('Sending disconnect beacon', params, body);
+    lc.debug?.('Sending close beacon', params, body);
 
     const headers: Record<string, string> = {
       'content-type': 'application/json',
@@ -104,7 +107,7 @@ export class DisconnectBeaconManager {
       body: JSON.stringify(body),
       keepalive: true,
     }).catch(e => {
-      lc.info?.('Failed to send disconnect beacon', e);
+      lc.info?.('Failed to send close beacon', e);
     });
   }
 }

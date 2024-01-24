@@ -1,1 +1,1 @@
-export const DISCONNECT_BEACON_PATH = '/api/sync/v1/disconnect';
+export const CLOSE_BEACON_PATH = '/api/sync/v1/close';
