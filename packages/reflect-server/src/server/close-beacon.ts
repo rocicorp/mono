@@ -6,7 +6,7 @@ import {delClientRecords, getClientRecord} from '../types/client-record.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {collectOldUserSpaceClientKeys} from './client-gc.js';
 
-export async function disconnectBeacon(
+export async function closeBeacon(
   lc: LogContext,
   clientID: string,
   roomID: string,
@@ -15,7 +15,7 @@ export async function disconnectBeacon(
   storage: Storage,
 ): Promise<Response> {
   lc.debug?.(
-    'disconnect client beacon request',
+    'close client beacon request',
     roomID,
     userID,
     clientID,

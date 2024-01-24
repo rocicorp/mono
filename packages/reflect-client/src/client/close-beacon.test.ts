@@ -2,11 +2,11 @@ import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
 import * as sinon from 'sinon';
-import {DisconnectBeaconManager} from './disconnect-beacon.js';
+import {CloseBeaconManager} from './close-beacon.js';
 import {TestLogSink} from './test-utils.js';
 
 setup(() => {
-  setConfig('disconnectBeacon', true);
+  setConfig('closeBeacon', true);
 });
 
 teardown(() => {
@@ -14,7 +14,7 @@ teardown(() => {
   resetAllConfig();
 });
 
-test('sendDisconnectBeacon', () => {
+test('sendCloseBeacon', () => {
   const fetchStub = sinon
     .stub(window, 'fetch')
     .returns(Promise.resolve(new Response()));
@@ -27,7 +27,7 @@ test('sendDisconnectBeacon', () => {
   const auth = () => 'auth1';
   const lastMutationID = () => 1;
 
-  const m = new DisconnectBeaconManager(
+  const m = new CloseBeaconManager(
     {roomID, userID, clientID},
     lc,
     server,
@@ -40,7 +40,7 @@ test('sendDisconnectBeacon', () => {
 
   expect(fetchStub.calledOnce).equal(true);
   expect(fetchStub.firstCall.args[0].toString()).equal(
-    'http://localhost:8080/api/sync/v1/disconnect?roomID=roomID1&userID=userID1&clientID=clientID1',
+    'http://localhost:8080/api/sync/v1/close?roomID=roomID1&userID=userID1&clientID=clientID1',
   );
   expect(fetchStub.firstCall.args[1]).deep.equal({
     body: '{"lastMutationID":1}',
@@ -53,7 +53,7 @@ test('sendDisconnectBeacon', () => {
   });
 });
 
-suite('sendDisconnectBeacon no auth', () => {
+suite('sendCloseBeacon no auth', () => {
   for (const auth of [undefined, ''] as const) {
     test(typeof auth, () => {
       const fetchStub = sinon
@@ -68,7 +68,7 @@ suite('sendDisconnectBeacon no auth', () => {
       const localAuth = () => auth;
       const lastMutationID = () => 2;
 
-      const m = new DisconnectBeaconManager(
+      const m = new CloseBeaconManager(
         {roomID, userID, clientID},
         lc,
         server,
@@ -81,7 +81,7 @@ suite('sendDisconnectBeacon no auth', () => {
 
       expect(fetchStub.calledOnce).equal(true);
       expect(fetchStub.firstCall.args[0].toString()).equal(
-        'http://localhost:8080/api/sync/v1/disconnect?roomID=roomID2&userID=userID2&clientID=clientID2',
+        'http://localhost:8080/api/sync/v1/close?roomID=roomID2&userID=userID2&clientID=clientID2',
       );
       expect(fetchStub.firstCall.args[1]).deep.equal({
         body: '{"lastMutationID":2}',
@@ -95,7 +95,7 @@ suite('sendDisconnectBeacon no auth', () => {
   }
 });
 
-test('sendDisconnectBeacon no server is a noop', () => {
+test('sendCloseBeacon no server is a noop', () => {
   const fetchStub = sinon
     .stub(window, 'fetch')
     .returns(Promise.resolve(new Response()));
@@ -108,7 +108,7 @@ test('sendDisconnectBeacon no server is a noop', () => {
   const auth = () => undefined;
   const lastMutationID = () => 3;
 
-  const m = new DisconnectBeaconManager(
+  const m = new CloseBeaconManager(
     {roomID, userID, clientID},
     lc,
     server,
@@ -122,14 +122,14 @@ test('sendDisconnectBeacon no server is a noop', () => {
   expect(fetchStub.called).equal(false);
 });
 
-suite('initDisconnectBeaconForPageHide', () => {
+suite('initCloseBeaconForPageHide', () => {
   const cases = [
     {persisted: true, expectedCalledOnce: false},
     {
       persisted: false,
       expectedCalledOnce: true,
       expectedURL:
-        'http://localhost:8080/api/sync/v1/disconnect?roomID=roomID4&userID=userID4&clientID=clientID4',
+        'http://localhost:8080/api/sync/v1/close?roomID=roomID4&userID=userID4&clientID=clientID4',
       expectedRequestInit: {
         body: '{"lastMutationID":4}',
         headers: {
@@ -161,7 +161,7 @@ suite('initDisconnectBeaconForPageHide', () => {
 
       const fakeWindow = new EventTarget();
 
-      new DisconnectBeaconManager(
+      new CloseBeaconManager(
         {roomID, userID, clientID},
         lc,
         server,

@@ -1698,15 +1698,15 @@ test('subscribe where body returns non json', async () => {
   cancel();
 });
 
-test('Reflect close should call disconnect beacon', async () => {
-  setConfig('disconnectBeacon', true);
+test('Reflect close should call close beacon', async () => {
+  setConfig('closeBeacon', true);
   const r = reflectForTest();
 
   await r.close();
 
   expect(fetchStub.calledOnce).equal(true);
   expect(fetchStub.firstCall.args[0].toString()).equal(
-    `https://example.com/api/sync/v1/disconnect?roomID=${r.roomID}&userID=${r.userID}&clientID=${r.clientID}`,
+    `https://example.com/api/sync/v1/close?roomID=${r.roomID}&userID=${r.userID}&clientID=${r.clientID}`,
   );
   expect(fetchStub.firstCall.args[1]).deep.equal({
     body: '{"lastMutationID":0}',
