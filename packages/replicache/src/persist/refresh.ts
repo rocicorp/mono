@@ -48,7 +48,6 @@ type RefreshResult =
       newMemdagHeadHash: Hash;
       diffs: DiffsMap;
       newPerdagClientHeadHash: Hash;
-      lastMutationID: number | undefined;
     };
 
 /**
@@ -64,14 +63,7 @@ export async function refresh(
   diffConfig: DiffComputationConfig,
   closed: () => boolean,
   formatVersion: FormatVersion,
-): Promise<
-  | [
-      newMemdagHeadHash: Hash,
-      diffs: DiffsMap,
-      lastMutationID: number | undefined,
-    ]
-  | undefined
-> {
+): Promise<[newMemdagHeadHash: Hash, diffs: DiffsMap] | undefined> {
   if (closed()) {
     return;
   }
@@ -231,7 +223,6 @@ export async function refresh(
         }
         await Promise.all(ps);
 
-        let lastMutationID: number | undefined;
         let newMemdagHeadHash = perdagClientGroupHeadHash;
         for (let i = newMemdagMutations.length - 1; i >= 0; i--) {
           newMemdagHeadHash = (
@@ -245,9 +236,6 @@ export async function refresh(
               formatVersion,
             )
           ).chunk.hash;
-          if (newMemdagMutations[i].meta.clientID === clientID) {
-            lastMutationID = newMemdagMutations[i].meta.mutationID;
-          }
         }
 
         const newMemdagHeadCommit = await commitFromHash(
@@ -268,7 +256,6 @@ export async function refresh(
           newMemdagHeadHash,
           diffs,
           newPerdagClientHeadHash: perdagClientGroupHeadHash,
-          lastMutationID,
         };
       });
     });
@@ -297,7 +284,7 @@ export async function refresh(
     return undefined;
   }
   await setRefreshHashes([result.newPerdagClientHeadHash]);
-  return [result.newMemdagHeadHash, result.diffs, result.lastMutationID];
+  return [result.newMemdagHeadHash, result.diffs];
 }
 
 function shouldAbortRefresh(
