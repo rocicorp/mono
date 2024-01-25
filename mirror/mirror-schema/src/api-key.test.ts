@@ -4,6 +4,7 @@ import {defaultPermissions, normalizePermissions} from './api-key.js';
 describe('api-key', () => {
   test('default permissions', () => {
     expect(defaultPermissions()).toEqual({
+      'app:create': false,
       'app:publish': false,
       'env:modify': false,
       'rooms:read': false,
@@ -16,6 +17,7 @@ describe('api-key', () => {
 
   test('normalize permissions', () => {
     expect(normalizePermissions({'app:publish': true})).toEqual({
+      'app:create': false,
       'app:publish': true,
       'env:modify': false,
       'rooms:read': false,
