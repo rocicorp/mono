@@ -142,6 +142,10 @@ and publish them to the web.
 Finalize the release notes based on the list of relevant changes you gathered
 earlier.
 
+### Post Release Notes to Discord
+
+Also copy the release notes to Discord. If the release notes are long summarize it.
+
 ## Push and test all the sample apps
 
 ## Switch the Release to Latest
