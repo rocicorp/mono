@@ -135,7 +135,12 @@ If the major version changed, then update the following packages that have peerD
 
 ## Finish Release Notes
 
-Finalize the release notes you started earlier
+We write the [release notes in
+Notion](https://www.notion.so/replicache/Replicache-Releases-f86ffef7f72f46ca9b597d5081e05b88)
+and publish them to the web.
+
+Finalize the release notes based on the list of relevant changes you gathered
+earlier.
 
 ## Push and test all the sample apps
 
