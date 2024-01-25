@@ -3,6 +3,7 @@ import {firestoreDataConverter} from './converter.js';
 import {appPath} from './deployment.js';
 import * as path from './path.js';
 import {teamPath} from './team.js';
+import {timestampSchema} from './timestamp.js';
 
 /** Connection seconds reported incrementally from within the RoomDO. */
 export const CONNECTION_SECONDS = 'cs';
@@ -258,4 +259,21 @@ function metricsDocPath(
     METRICS_COLLECTION_ID,
     `${docPrefix}${docSuffix}`,
   );
+}
+
+// Records when aggregations are attempted so that they can be retried later
+// in the case of prolonged Cloudflare analytics outages.
+export const aggregationSchema = v.object({
+  lastAttempt: timestampSchema,
+});
+
+export type Aggregation = v.Infer<typeof aggregationSchema>;
+
+export const aggregationDataConverter =
+  firestoreDataConverter(aggregationSchema);
+
+export const AGGREGATIONS = 'outstandingAggregations';
+
+export function aggregationPath(endTime: Date): string {
+  return path.join(AGGREGATIONS, endTime.toISOString());
 }
