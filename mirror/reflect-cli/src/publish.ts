@@ -8,9 +8,11 @@ import assert from 'node:assert';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {
-  checkAppName,
-  createNewAppName,
-  ensureAppExists,
+  createFirestoreApp,
+  lookupAndCreateAppName,
+  ensureTeamID,
+  getApp,
+  getAppIDfromConfig,
   getDefaultApp,
   getDefaultServerPath,
 } from './app-config.js';
@@ -71,20 +73,25 @@ export async function publishHandler(
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
-  const {reflectChannel, serverPath, app} = yargs;
-  const teamID = authContext.user.additionalUserInfo?.username;
-  if (!teamID) {
-    logErrorAndExit(
-      'Could not determine team id for current user: ' + authContext.user.email,
-    );
+  const {reflectChannel, serverPath} = yargs;
+  let {app} = yargs;
+  const teamID = await ensureTeamID(authContext);
+  let skipInput = false;
+  if (app.startsWith('App with ID: ')) {
+    const appID = getAppIDfromConfig();
+    if (!appID) logErrorAndExit('No app ID found in config file');
+    const fApp = await getApp(appID);
+    if (!fApp) logErrorAndExit(`No app found with ID ${appID}`);
+    skipInput = true;
+    app = fApp.name;
   }
-  if (app) {
-    if (!(await checkAppName(teamID, app))) {
-      await createNewAppName(teamID, app);
-      await ensureAppExists(authContext, app);
-    }
+  const appInfo = await lookupAndCreateAppName(teamID, app, skipInput);
+  const appName = appInfo.name;
+  let appID = appInfo.id;
+  app = appName;
+  if (!appID) {
+    appID = await createFirestoreApp(authContext, app, teamID);
   }
-
   if (!serverPath || !(await exists(serverPath))) {
     logErrorAndExit(`File not found: ${serverPath}`);
   }

@@ -1,8 +1,12 @@
 import {doc, getDoc, getFirestore} from 'firebase/firestore';
-import {readFile} from 'fs/promises';
+import {readFileSync} from 'fs';
 import {createApp} from 'mirror-protocol/src/app.js';
 import {ensureTeam} from 'mirror-protocol/src/team.js';
-import {isValidAppName} from 'mirror-schema/src/external/app.js';
+import {
+  isValidAppName,
+  appPath,
+  appViewDataConverter,
+} from 'mirror-schema/src/external/app.js';
 import {
   appNameIndexDataConverter,
   appNameIndexPath,
@@ -11,7 +15,7 @@ import {
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {basename, resolve} from 'node:path';
-import {pkgUp, pkgUpSync} from 'pkg-up';
+import {pkgUpSync} from 'pkg-up';
 import {must} from 'shared/src/must.js';
 import {randInt} from 'shared/src/rand.js';
 import * as v from 'shared/src/valita.js';
@@ -112,9 +116,17 @@ export function getDefaultServerPath() {
   return config?.server;
 }
 
-export function getDefaultApp() {
+export function getAppIDfromConfig(instance = 'default') {
   const config = readAppConfig();
-  return config?.apps?.default?.appID;
+  return config?.apps?.[instance]?.appID;
+}
+
+export function getDefaultApp() {
+  const configAppId = getAppIDfromConfig();
+  if (configAppId) {
+    return 'App with ID: ' + configAppId + ' from config file';
+  }
+  return getDefaultAppName();
 }
 /**
  * Reads reflect.config.json in the "project root".
@@ -150,41 +162,25 @@ export function mustReadAppConfig(
   return config;
 }
 
-export async function ensureAppExists(
-  authContext: AuthContext,
-  instance = 'default',
-): Promise<LocalConfig & AppInstance> {
-  const config = mustReadAppConfig();
-  if (config.apps?.[instance]) {
-    return {
-      ...config,
-      ...config.apps?.[instance],
-    };
-  }
+export async function ensureTeamID(authContext: AuthContext): Promise<string> {
   const {userID, additionalUserInfo} = authContext.user;
-  const defaultTeamName = additionalUserInfo?.username;
-  if (!defaultTeamName) {
-    throw new Error('Could not determine GitHub username from OAuth');
-  }
   const requester = makeRequester(userID);
-  const {teamID} = await ensureTeam.call({
-    requester,
-    name: defaultTeamName,
-  });
-  const app = await getNewAppNameOrExistingID(teamID);
-  const appID =
-    app.id !== undefined
-      ? app.id
-      : (
-          await createApp.call({
-            requester,
-            teamID,
-            name: app.name,
-            serverReleaseChannel: 'stable',
-          })
-        ).appID;
-  writeAppConfig({...config, apps: {[instance]: {appID}}});
-  return {...config, appID};
+  let teamID: string;
+  if (userID.startsWith('team/')) {
+    // API key authentication is already associated with a team.
+    teamID = userID.split('/')[1];
+  } else {
+    const defaultTeamName = additionalUserInfo?.username;
+    if (!defaultTeamName) {
+      throw new Error('Could not determine GitHub username from OAuth');
+    }
+    const ensured = await ensureTeam.call({
+      requester,
+      name: defaultTeamName,
+    });
+    teamID = ensured.teamID;
+  }
+  return teamID;
 }
 
 export async function ensureAppInstantiated(
@@ -239,32 +235,47 @@ export function writeAppConfig(
   fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
 }
 
-export async function checkAppName(teamID: string, appName: string) {
+export async function getApp(appID: string) {
   const firestore = getFirestore();
-  if (isValidAppName(appName)) {
-    const nameEntry = await getDoc(
-      doc(firestore, appNameIndexPath(teamID, appName)).withConverter(
-        appNameIndexDataConverter,
-      ),
-    );
-    if (!nameEntry.exists()) {
-      return {name: appName};
-    }
-  }
-  return null;
+  const appDoc = await getDoc(
+    doc(firestore, appPath(appID)).withConverter(appViewDataConverter),
+  );
+  return appDoc.exists() ? appDoc.data() : null;
 }
 
-export async function createNewAppName(
+export async function createFirestoreApp(
+  authorizationContext: AuthContext,
+  name: string,
+  teamID: string,
+): Promise<string> {
+  const requester = makeRequester(authorizationContext.user.userID);
+  const {appID} = await createApp.call({
+      requester,
+      teamID,
+      name,
+      serverReleaseChannel: 'stable',
+    });
+  return appID;
+}
+
+export async function lookupAndCreateAppName(
   teamID: string,
   appName: string,
+  skipInput = false,
 ): Promise<{name: string; id?: string | undefined}> {
   const firestore = getFirestore();
   for (let appNameSuffix = ''; ; appNameSuffix = `-${randInt(1000, 9999)}`) {
-    const name = await input({
-      message: 'Name of your App:',
-      default: `${appName}${appNameSuffix}`,
-      validate: isValidAppName,
-    });
+    let name = `${appName}${appNameSuffix}`;
+    if (!skipInput) {
+      name = await input({
+        message: 'Name of your App:',
+        default: name,
+        validate: isValidAppName,
+      });
+    }
+    if(!isValidAppName(name)) { 
+      throw new Error(`Invalid app name: ${name}`);
+    }
     const nameEntry = await getDoc(
       doc(firestore, appNameIndexPath(teamID, name)).withConverter(
         appNameIndexDataConverter,
@@ -275,13 +286,15 @@ export async function createNewAppName(
     }
     const {appID: id} = must(nameEntry.data());
     if (
-      await confirm({
+      !skipInput &&
+      (await confirm({
         message: `There is an existing App named "${name}". Do you want to use it?`,
         default: false,
-      })
+      }))
     ) {
       return {name, id};
     }
+    return {name, id};
   }
 }
 
@@ -289,19 +302,13 @@ async function getNewAppNameOrExistingID(
   teamID: string,
 ): Promise<{name: string; id?: string | undefined}> {
   const defaultAppName = await getDefaultAppName();
-  const defaultCheckResult = await checkAppName(teamID, defaultAppName);
-
-  if (defaultCheckResult !== null) {
-    return defaultCheckResult;
-  }
-
-  return createNewAppName(teamID, defaultAppName);
+  return lookupAndCreateAppName(teamID, defaultAppName);
 }
 
-async function getDefaultAppName(): Promise<string> {
-  const pkg = await pkgUp();
+function getDefaultAppName(): string {
+  const pkg = pkgUpSync();
   if (pkg) {
-    const {name} = JSON.parse(await readFile(pkg, 'utf-8'));
+    const {name} = JSON.parse(readFileSync(pkg, 'utf-8'));
     if (name) {
       return String(name);
     }
