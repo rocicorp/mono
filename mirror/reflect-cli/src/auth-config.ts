@@ -185,7 +185,7 @@ async function authenticateImpl(
       console.info(`Logged in as ${email}`);
     } else {
       console.info(
-        // For UIDs such as "apps/ln3ddtrj/keys/abc-key", just show "abc-key".
+        // For UIDs such as "teams/ln3ddtrj/keys/abc-key", just show "abc-key".
         `Authenticated with ${uid.substring(uid.lastIndexOf('/') + 1)}`,
       );
     }

@@ -1,13 +1,14 @@
 import {
-  createAppKey,
-  deleteAppKeys,
-  editAppKey,
-  listAppKeys,
-} from 'mirror-protocol/src/app-keys.js';
+  createApiKey,
+  deleteApiKeys,
+  editApiKey,
+  listApiKeys,
+} from 'mirror-protocol/src/api-keys.js';
 import {deleteApp} from 'mirror-protocol/src/app.js';
 import {publish} from 'mirror-protocol/src/publish.js';
 import {deleteVars, listVars, setVars} from 'mirror-protocol/src/vars.js';
 import {hideBin} from 'yargs/helpers';
+import {appListHandler} from './apps.js';
 import {authenticate} from './auth-config.js';
 import {
   CommandLineArgsError,
@@ -17,13 +18,12 @@ import {createHandler, createOptions} from './create.js';
 import {deleteHandler, deleteOptions} from './delete.js';
 import {devHandler, devOptions} from './dev.js';
 import {authenticateAndHandleWith, handleWith} from './handler.js';
-import {createAppKeyHandler, createAppKeyOptions} from './keys/create.js';
-import {deleteAppKeysHandler, deleteAppKeysOptions} from './keys/delete.js';
-import {editAppKeyHandler, editAppKeyOptions} from './keys/edit.js';
-import {listAppKeysHandler, listAppKeysOptions} from './keys/list.js';
+import {createKeyHandler, createKeyOptions} from './keys/create.js';
+import {deleteKeysHandler, deleteKeysOptions} from './keys/delete.js';
+import {editKeyHandler, editKeyOptions} from './keys/edit.js';
+import {listKeysHandler, listKeysOptions} from './keys/list.js';
 import {loginHandler} from './login.js';
 import {publishHandler, publishOptions} from './publish.js';
-import {appListHandler} from './apps.js';
 import {tailHandler, tailOptions} from './tail/index.js';
 import {usageHandler, usageOptions} from './usage.js';
 import {deleteVarsHandler, deleteVarsOptions} from './vars/delete.js';
@@ -144,42 +144,46 @@ function createCLIParser(argv: string[]) {
       .demandCommand(1, 'Available commands:\n');
   });
 
-  reflectCLI.command('keys', '🔑 Manage app keys', yargs => {
-    yargs
-      .command(
-        'list',
-        'List app keys',
-        listAppKeysOptions,
-        authenticateAndHandleWith(listAppKeysHandler)
-          .withWarmup(listAppKeys)
-          .andCleanup(),
-      )
-      .command(
-        'create <name>',
-        'Create an app key',
-        createAppKeyOptions,
-        authenticateAndHandleWith(createAppKeyHandler)
-          .withWarmup(listAppKeys, createAppKey)
-          .andCleanup(),
-      )
-      .command(
-        'edit <name>',
-        'Edit an app key',
-        editAppKeyOptions,
-        authenticateAndHandleWith(editAppKeyHandler)
-          .withWarmup(listAppKeys, editAppKey)
-          .andCleanup(),
-      )
-      .command(
-        'delete <names..>',
-        'Delete one or more app keys',
-        deleteAppKeysOptions,
-        authenticateAndHandleWith(deleteAppKeysHandler)
-          .withWarmup(deleteAppKeys)
-          .andCleanup(),
-      )
-      .demandCommand(1, 'Available commands:\n');
-  });
+  reflectCLI.command(
+    'keys',
+    '🔑 Create and manage keys for automated tasks',
+    yargs => {
+      yargs
+        .command(
+          'list',
+          'List keys',
+          listKeysOptions,
+          authenticateAndHandleWith(listKeysHandler)
+            .withWarmup(listApiKeys)
+            .andCleanup(),
+        )
+        .command(
+          'create <name>',
+          'Create a key',
+          createKeyOptions,
+          authenticateAndHandleWith(createKeyHandler)
+            .withWarmup(listApiKeys, createApiKey)
+            .andCleanup(),
+        )
+        .command(
+          'edit <name>',
+          'Edit a key',
+          editKeyOptions,
+          authenticateAndHandleWith(editKeyHandler)
+            .withWarmup(listApiKeys, editApiKey)
+            .andCleanup(),
+        )
+        .command(
+          'delete <names..>',
+          'Delete one or more keys',
+          deleteKeysOptions,
+          authenticateAndHandleWith(deleteKeysHandler)
+            .withWarmup(deleteApiKeys)
+            .andCleanup(),
+        )
+        .demandCommand(1, 'Available commands:\n');
+    },
+  );
 
   reflectCLI.command(
     'usage',

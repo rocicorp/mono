@@ -32,6 +32,7 @@ export type Choice<Value> = {
   type?: never;
 };
 
+export {Separator} from '@inquirer/checkbox';
 export type Item<Value> = Separator | Choice<Value>;
 
 type CheckboxConfig<Value> = {

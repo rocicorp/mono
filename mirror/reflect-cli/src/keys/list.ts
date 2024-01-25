@@ -1,12 +1,14 @@
-import {listAppKeys} from 'mirror-protocol/src/app-keys.js';
+import {getFirestore} from 'firebase/firestore';
+import {listApiKeys} from 'mirror-protocol/src/api-keys.js';
+import {APP_CREATE_PERMISSION} from 'mirror-schema/src/external/api-key.js';
 import color from 'picocolors';
-import {ensureAppInstantiated} from '../app-config.js';
 import type {AuthContext} from '../handler.js';
 import {makeRequester} from '../requester.js';
 import {padColumns} from '../table.js';
+import {getSingleTeam} from '../teams.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 
-export function listAppKeysOptions(yargs: CommonYargsArgv) {
+export function listKeysOptions(yargs: CommonYargsArgv) {
   return yargs.option('show', {
     desc: 'Show the values of the keys',
     type: 'boolean',
@@ -14,35 +16,46 @@ export function listAppKeysOptions(yargs: CommonYargsArgv) {
   });
 }
 
-type ListAppKeysHandlerArgs = YargvToInterface<
-  ReturnType<typeof listAppKeysOptions>
->;
+type ListKeysHandlerArgs = YargvToInterface<ReturnType<typeof listKeysOptions>>;
 
-export async function listAppKeysHandler(
-  yargs: ListAppKeysHandlerArgs,
+export const CREATED_APPS = '(created apps)';
+
+export async function listKeysHandler(
+  yargs: ListKeysHandlerArgs,
   authContext: AuthContext,
 ): Promise<void> {
   const {show} = yargs;
 
   const {userID} = authContext.user;
-  const {appID} = await ensureAppInstantiated(authContext);
+  const firestore = getFirestore();
+  const teamID = await getSingleTeam(firestore, userID, 'admin');
 
-  const {keys, allPermissions} = await listAppKeys.call({
+  const {keys, allPermissions} = await listApiKeys.call({
     requester: makeRequester(userID),
-    appID,
+    teamID,
     show,
   });
   const now = Date.now();
   const table = [
-    ['name', 'value', 'last used', 'permissions'],
-    ...keys.map(key => [
-      color.bold(key.name),
-      key.value === null ? color.italic(color.gray('Hidden')) : key.value,
-      key.lastUseTime === null ? '' : timeAgo(key.lastUseTime, now),
-      Object.keys(allPermissions)
-        .filter(perm => key.permissions[perm])
-        .join(','),
-    ]),
+    ['name', 'value', 'last used', 'apps', 'permissions'],
+    ...keys.map(key => {
+      // The "app:create" permission is handled specially, shown as a
+      // "(created apps)" option in the apps column.
+      const apps = Object.values(key.apps);
+      if (key.permissions[APP_CREATE_PERMISSION]) {
+        apps.unshift(CREATED_APPS);
+        delete key.permissions[APP_CREATE_PERMISSION];
+      }
+      return [
+        color.bold(key.name),
+        key.value === null ? color.italic(color.gray('Hidden')) : key.value,
+        key.lastUseTime === null ? '' : timeAgo(key.lastUseTime, now),
+        apps.join(','),
+        Object.keys(allPermissions)
+          .filter(perm => key.permissions[perm])
+          .join(','),
+      ];
+    }),
   ];
 
   padColumns(table).forEach((row, i) => {

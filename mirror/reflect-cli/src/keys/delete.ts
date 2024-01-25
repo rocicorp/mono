@@ -1,10 +1,11 @@
-import {deleteAppKeys} from 'mirror-protocol/src/app-keys.js';
-import {ensureAppInstantiated} from '../app-config.js';
+import {getFirestore} from 'firebase/firestore';
+import {deleteApiKeys} from 'mirror-protocol/src/api-keys.js';
 import type {AuthContext} from '../handler.js';
 import {makeRequester} from '../requester.js';
+import {getSingleTeam} from '../teams.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 
-export function deleteAppKeysOptions(yargs: CommonYargsArgv) {
+export function deleteKeysOptions(yargs: CommonYargsArgv) {
   return yargs.positional('names', {
     describe: 'Space-separated names of keys to delete',
     type: 'string',
@@ -13,26 +14,27 @@ export function deleteAppKeysOptions(yargs: CommonYargsArgv) {
   });
 }
 
-type DeleteAppKeysHandlerArgs = YargvToInterface<
-  ReturnType<typeof deleteAppKeysOptions>
+type DeleteKeysHandlerArgs = YargvToInterface<
+  ReturnType<typeof deleteKeysOptions>
 >;
 
-export async function deleteAppKeysHandler(
-  yargs: DeleteAppKeysHandlerArgs,
+export async function deleteKeysHandler(
+  yargs: DeleteKeysHandlerArgs,
   authContext: AuthContext,
 ): Promise<void> {
   const {names} = yargs;
   const {userID} = authContext.user;
-  const {appID} = await ensureAppInstantiated(authContext);
+  const firestore = getFirestore();
+  const teamID = await getSingleTeam(firestore, userID, 'admin');
 
-  const {deleted} = await deleteAppKeys.call({
+  const {deleted} = await deleteApiKeys.call({
     requester: makeRequester(userID),
-    appID,
+    teamID,
     names,
   });
   if (deleted.length === 0) {
     console.warn(
-      `No app keys with the specified names (${asList(
+      `No keys with the specified names (${asList(
         names,
       )}) were found. They may have already been deleted.`,
     );

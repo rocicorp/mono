@@ -157,15 +157,22 @@ export async function ensureAppInstantiated(
     };
   }
   const {userID, additionalUserInfo} = authContext.user;
-  const defaultTeamName = additionalUserInfo?.username;
-  if (!defaultTeamName) {
-    throw new Error('Could not determine GitHub username from OAuth');
-  }
   const requester = makeRequester(userID);
-  const {teamID} = await ensureTeam.call({
-    requester,
-    name: defaultTeamName,
-  });
+  let teamID: string;
+  if (userID.startsWith('team/')) {
+    // API key authentication is already associated with a team.
+    teamID = userID.split('/')[1];
+  } else {
+    const defaultTeamName = additionalUserInfo?.username;
+    if (!defaultTeamName) {
+      throw new Error('Could not determine GitHub username from OAuth');
+    }
+    const ensured = await ensureTeam.call({
+      requester,
+      name: defaultTeamName,
+    });
+    teamID = ensured.teamID;
+  }
   const app = await getNewAppNameOrExistingID(teamID);
   const appID =
     app.id !== undefined
