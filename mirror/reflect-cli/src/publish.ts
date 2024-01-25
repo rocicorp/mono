@@ -7,7 +7,13 @@ import {
 import assert from 'node:assert';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {ensureAppInstantiated} from './app-config.js';
+import {
+  checkAppName,
+  createNewAppName,
+  ensureAppExists,
+  getDefaultApp,
+  getDefaultServerPath,
+} from './app-config.js';
 import {CompileResult, compile} from './compile.js';
 import {ErrorWrapper} from './error.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
@@ -29,6 +35,20 @@ export function publishOptions(yargs: CommonYargsArgv) {
       type: 'string',
       requiresArg: true,
       hidden: true,
+    })
+    .option('server-path', {
+      describe: 'Path to the server configuration file',
+      type: 'string',
+      requiresArg: true,
+      default: getDefaultServerPath(),
+      required: !getDefaultServerPath(),
+    })
+    .option('app', {
+      describe: 'Specific app to publish to',
+      type: 'string',
+      requiresArg: true,
+      default: getDefaultApp(),
+      required: !getDefaultApp(),
     });
 }
 
@@ -51,26 +71,36 @@ export async function publishHandler(
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
-  const {reflectChannel} = yargs;
-  const {appID, server: script} = await ensureAppInstantiated(authContext);
+  const {reflectChannel, serverPath, app} = yargs;
+  const teamID = authContext.user.additionalUserInfo?.username;
+  if (!teamID) {
+    logErrorAndExit(
+      'Could not determine team id for current user: ' + authContext.user.email,
+    );
+  }
+  if (app) {
+    if (!(await checkAppName(teamID, app))) {
+      await createNewAppName(teamID, app);
+      await ensureAppExists(authContext, app);
+    }
+  }
 
-  const absPath = path.resolve(script);
-  if (!(await exists(absPath))) {
-    logErrorAndExit(`File not found: ${absPath}`);
+  if (!serverPath || !(await exists(serverPath))) {
+    logErrorAndExit(`File not found: ${serverPath}`);
   }
 
   let serverVersionRange;
   if (yargs.forceVersionRange) {
     serverVersionRange = yargs.forceVersionRange;
   } else {
-    const range = await findServerVersionRange(absPath);
+    const range = await findServerVersionRange(serverPath);
     await checkForServerDeprecation(yargs, range);
     serverVersionRange = yargs.forceVersionRange ?? range.raw;
   }
 
-  console.log(`Compiling ${script}`);
+  console.log(`Compiling ${serverPath}`);
   const {code, sourcemap} = await compileOrReportWarning(
-    absPath,
+    serverPath,
     'linked',
     'production',
   );
