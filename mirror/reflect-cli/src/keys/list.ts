@@ -39,8 +39,7 @@ export async function listKeysHandler(
   const table = [
     ['name', 'value', 'last used', 'apps', 'permissions'],
     ...keys.map(key => {
-      // The "app:create" permission is handled specially, shown as a
-      // "(created apps)" option in the apps column.
+      // The "app:create" permission is handled specially, shown as "(created apps)" in the apps column.
       const apps = Object.values(key.apps);
       if (key.permissions[APP_CREATE_PERMISSION]) {
         apps.unshift(CREATED_APPS);
