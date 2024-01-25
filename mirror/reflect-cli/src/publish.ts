@@ -67,6 +67,31 @@ type PublishHandlerArgs = YargvToInterface<ReturnType<typeof publishOptions>>;
 
 export type PublishCaller = typeof publishCaller;
 
+async function resolveAppNameAndID(
+  app: string,
+  teamID: string,
+): Promise<{appName: string; appID?: string | undefined}> {
+  let skipInput = false;
+  let appID;
+  if (app.startsWith('App with ID: ')) {
+    appID = getAppIDfromConfig();
+    if (!appID) {
+      logErrorAndExit(
+        'No app ID found in config file even tho app ID was specified from default config file',
+      );
+    }
+    const foundApp = await getApp(appID);
+    if (!foundApp) {
+      throw new Error(`No app found with ID ${appID}`);
+    }
+    app = foundApp.name;
+    skipInput = true;
+  }
+
+  const appInfo = await lookupAndCreateAppName(teamID, app, skipInput);
+  return {appName: appInfo.name, appID: appID || appInfo.id};
+}
+
 export async function publishHandler(
   yargs: PublishHandlerArgs,
   authContext: AuthContext,
@@ -75,31 +100,18 @@ export async function publishHandler(
 ) {
   const {reflectChannel, serverPath} = yargs;
   let {app} = yargs;
+  if (!serverPath) logErrorAndExit('No server path found');
   const teamID = await ensureTeamID(authContext);
-  let skipInput = false;
-  if (app.startsWith('App with ID: ')) {
-    const appID = getAppIDfromConfig();
-    if (!appID) logErrorAndExit('No app ID found in config file');
-    const fApp = await getApp(appID);
-    if (!fApp) logErrorAndExit(`No app found with ID ${appID}`);
-    skipInput = true;
-    app = fApp.name;
-  }
-  const appInfo = await lookupAndCreateAppName(teamID, app, skipInput);
-  const appName = appInfo.name;
-  let appID = appInfo.id;
-  app = appName;
+  const appNameAndID = await resolveAppNameAndID(app, teamID);
+  let {appID} = appNameAndID;
+  app = appNameAndID.appName;
   if (!appID) {
     appID = await createFirestoreApp(authContext, app, teamID);
-  }
-  if (!serverPath) {
-    logErrorAndExit('No server path found');
   }
   const absPath = path.resolve(serverPath);
   if (!absPath || !(await exists(serverPath))) {
     logErrorAndExit(`File not found: ${absPath}`);
   }
-
   let serverVersionRange;
   if (yargs.forceVersionRange) {
     serverVersionRange = yargs.forceVersionRange;

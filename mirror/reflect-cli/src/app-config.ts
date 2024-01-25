@@ -255,6 +255,7 @@ export async function createFirestoreApp(
     name,
     serverReleaseChannel: 'stable',
   });
+
   return appID;
 }
 
@@ -332,21 +333,23 @@ export function writeTemplatedFilePlaceholders(
   dir = './',
   logConsole = true,
 ) {
-  const appConfig = mustReadAppConfig(dir);
-  Object.entries(appConfig.templates ?? {}).forEach(([src, dst]) => {
-    copyAndEditFile(
-      dir,
-      src,
-      dst,
-      content => {
-        for (const [key, value] of Object.entries(placeholders)) {
-          content = content.replaceAll(`{{${key}}}`, value);
-        }
-        return content;
-      },
-      logConsole,
-    );
-  });
+  const appConfig = readAppConfig(dir);
+  if (appConfig) {
+    Object.entries(appConfig.templates ?? {}).forEach(([src, dst]) => {
+      copyAndEditFile(
+        dir,
+        src,
+        dst,
+        content => {
+          for (const [key, value] of Object.entries(placeholders)) {
+            content = content.replaceAll(`{{${key}}}`, value);
+          }
+          return content;
+        },
+        logConsole,
+      );
+    });
+  }
 }
 
 function copyAndEditFile(
