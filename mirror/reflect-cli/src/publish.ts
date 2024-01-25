@@ -92,8 +92,12 @@ export async function publishHandler(
   if (!appID) {
     appID = await createFirestoreApp(authContext, app, teamID);
   }
-  if (!serverPath || !(await exists(serverPath))) {
-    logErrorAndExit(`File not found: ${serverPath}`);
+  if (!serverPath) {
+    logErrorAndExit('No server path found');
+  }
+  const absPath = path.resolve(serverPath);
+  if (!absPath || !(await exists(serverPath))) {
+    logErrorAndExit(`File not found: ${absPath}`);
   }
 
   let serverVersionRange;
@@ -105,9 +109,9 @@ export async function publishHandler(
     serverVersionRange = yargs.forceVersionRange ?? range.raw;
   }
 
-  console.log(`Compiling ${serverPath}`);
+  console.log(`Compiling ${absPath}`);
   const {code, sourcemap} = await compileOrReportWarning(
-    serverPath,
+    absPath,
     'linked',
     'production',
   );

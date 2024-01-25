@@ -250,11 +250,11 @@ export async function createFirestoreApp(
 ): Promise<string> {
   const requester = makeRequester(authorizationContext.user.userID);
   const {appID} = await createApp.call({
-      requester,
-      teamID,
-      name,
-      serverReleaseChannel: 'stable',
-    });
+    requester,
+    teamID,
+    name,
+    serverReleaseChannel: 'stable',
+  });
   return appID;
 }
 
@@ -273,7 +273,7 @@ export async function lookupAndCreateAppName(
         validate: isValidAppName,
       });
     }
-    if(!isValidAppName(name)) { 
+    if (!isValidAppName(name)) {
       throw new Error(`Invalid app name: ${name}`);
     }
     const nameEntry = await getDoc(
