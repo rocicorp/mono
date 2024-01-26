@@ -24,6 +24,7 @@ import {logErrorAndExit} from './log-error-and-exit.js';
 import {checkForServerDeprecation} from './version.js';
 import {watchDeployment} from './watch-deployment.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import {confirm} from './inquirer.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -38,8 +39,14 @@ export function publishOptions(yargs: CommonYargsArgv) {
       requiresArg: true,
       hidden: true,
     })
+    .option('disable-prompt', {
+      describe: 'Disable all prompts for confirmation',
+      type: 'boolean',
+      default: false,
+      requiresArg: false,
+    })
     .option('server-path', {
-      describe: 'Path to the server configuration file',
+      describe: 'Path to the Reflect server entry file',
       type: 'string',
       requiresArg: true,
       default: getDefaultServerPath(),
@@ -70,14 +77,13 @@ export type PublishCaller = typeof publishCaller;
 async function resolveAppNameAndID(
   app: string,
   teamID: string,
+  disablePrompt: boolean,
 ): Promise<{appName: string; appID?: string | undefined}> {
-  let skipInput = false;
-  let appID;
   if (app.startsWith('App with ID: ')) {
-    appID = getAppIDfromConfig();
+    const appID = getAppIDfromConfig();
     if (!appID) {
       logErrorAndExit(
-        'No app ID found in config file even tho app ID was specified from default config file',
+        'No app ID found in config file even though app ID was specified from default config file',
       );
     }
     const foundApp = await getApp(appID);
@@ -85,11 +91,20 @@ async function resolveAppNameAndID(
       throw new Error(`No app found with ID ${appID}`);
     }
     app = foundApp.name;
-    skipInput = true;
+    if (!disablePrompt) {
+      const publishApp = await confirm({
+        message: `Publish to app with name ${app} and id ${appID}?`,
+        default: true,
+      });
+      if (!publishApp) {
+        logErrorAndExit('Publish cancelled');
+      }
+    }
+    return {appName: app, appID};
   }
 
-  const appInfo = await lookupAndCreateAppName(teamID, app, skipInput);
-  return {appName: appInfo.name, appID: appID || appInfo.id};
+  const appInfo = await lookupAndCreateAppName(teamID, app, disablePrompt);
+  return {appName: appInfo.name, appID: appInfo.id};
 }
 
 export async function publishHandler(
@@ -98,11 +113,11 @@ export async function publishHandler(
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
-  const {reflectChannel, serverPath} = yargs;
+  const {reflectChannel, serverPath, disablePrompt} = yargs;
   let {app} = yargs;
   if (!serverPath) logErrorAndExit('No server path found');
   const teamID = await ensureTeamID(authContext);
-  const appNameAndID = await resolveAppNameAndID(app, teamID);
+  const appNameAndID = await resolveAppNameAndID(app, teamID, disablePrompt);
   let {appID} = appNameAndID;
   app = appNameAndID.appName;
   if (!appID) {
@@ -116,7 +131,7 @@ export async function publishHandler(
   if (yargs.forceVersionRange) {
     serverVersionRange = yargs.forceVersionRange;
   } else {
-    const range = await findServerVersionRange(serverPath);
+    const range = await findServerVersionRange(absPath);
     await checkForServerDeprecation(yargs, range);
     serverVersionRange = yargs.forceVersionRange ?? range.raw;
   }

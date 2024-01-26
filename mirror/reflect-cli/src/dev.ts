@@ -34,7 +34,7 @@ export function devOptions(yargs: CommonYargsArgv) {
         requiresArg: true,
       })
       .option('server-path', {
-        describe: 'Path to the server configuration file',
+        describe: 'Path to the reflect server entry file',
         type: 'string',
         requiresArg: true,
         default: getDefaultServerPath(),

@@ -262,12 +262,12 @@ export async function createFirestoreApp(
 export async function lookupAndCreateAppName(
   teamID: string,
   appName: string,
-  skipInput = false,
+  disablePrompt = false,
 ): Promise<{name: string; id?: string | undefined}> {
   const firestore = getFirestore();
   for (let appNameSuffix = ''; ; appNameSuffix = `-${randInt(1000, 9999)}`) {
     let name = `${appName}${appNameSuffix}`;
-    if (!skipInput) {
+    if (!disablePrompt) {
       name = await input({
         message: 'Name of your App:',
         default: name,
@@ -287,7 +287,7 @@ export async function lookupAndCreateAppName(
     }
     const {appID: id} = must(nameEntry.data());
     if (
-      !skipInput &&
+      !disablePrompt &&
       (await confirm({
         message: `There is an existing App named "${name}". Do you want to use it?`,
         default: false,
@@ -302,7 +302,20 @@ export async function lookupAndCreateAppName(
 async function getNewAppNameOrExistingID(
   teamID: string,
 ): Promise<{name: string; id?: string | undefined}> {
+  const firestore = getFirestore();
   const defaultAppName = await getDefaultAppName();
+  if (isValidAppName(defaultAppName)) {
+    const nameEntry = await getDoc(
+      doc(firestore, appNameIndexPath(teamID, defaultAppName)).withConverter(
+        appNameIndexDataConverter,
+      ),
+    );
+    if (!nameEntry.exists()) {
+      // Common case. The name in package.json is not taken. Create an app with it.
+      return {name: defaultAppName};
+    }
+  }
+
   return lookupAndCreateAppName(teamID, defaultAppName);
 }
 
