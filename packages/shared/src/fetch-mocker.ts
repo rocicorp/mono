@@ -22,6 +22,7 @@ function defaultErrorResponse(code: number, message?: string): Response {
     ok: false,
     status: code,
     statusText: message ?? '',
+    text: () => Promise.resolve(''),
   } as unknown as Response;
 }
 
@@ -43,6 +44,7 @@ export class FetchMocker {
   #defaultResponse: Response = {
     ok: false,
     status: 404,
+    text: () => Promise.resolve('not found'),
   } as unknown as Response;
 
   #handle(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
