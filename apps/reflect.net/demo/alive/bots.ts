@@ -237,7 +237,7 @@ export class Bots {
     manuallyTriggeredBot: boolean,
     timeShift = 0,
   ) {
-    this.#r.mutate.putBot({
+    this.#r.mutate.setBot({
       x: moves[0]?.coordX ?? 0,
       y: moves[0]?.coordY ?? 0,
       id: botID,

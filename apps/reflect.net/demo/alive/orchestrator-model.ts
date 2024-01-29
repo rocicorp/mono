@@ -1,6 +1,7 @@
-import {entitySchema, generate} from '@rocicorp/rails';
+import {generate} from '@rocicorp/rails';
 import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect';
-import {z} from 'zod';
+import * as z from 'zod';
+import {entitySchema} from './entity-schema.js';
 
 // Start new rooms every hour to prevent garbage from building up.
 const ROOMS_VERSION = Math.floor(
@@ -38,15 +39,17 @@ type ClientRoomAssignmentMetaModel = z.infer<
   typeof clientRoomAssignmentMetaSchema
 >;
 
-const {get: getRoom, put: putRoom} = generate('room', roomModelSchema);
+const {get: getRoom, set: setRoom} = generate('room', v =>
+  roomModelSchema.parse(v),
+);
 
 const {
   get: getClientRoomAssignmentInternal,
-  put: putClientRoomAssignment,
+  set: setClientRoomAssignment,
   update: updateClientRoomAssignment,
   delete: deleteClientRoomAssignment,
   list: listClientRoomAssignments,
-} = generate('clientToRoom', clientRoomAssignmentSchema);
+} = generate('clientToRoom', v => clientRoomAssignmentSchema.parse(v));
 
 export const getClientRoomAssignment = getClientRoomAssignmentInternal;
 
@@ -75,7 +78,7 @@ async function updateRoomClientCount(
 ) {
   const room = await getRoom(tx, roomID);
   if (room !== undefined) {
-    await putRoom(tx, {
+    await setRoom(tx, {
       id: room.id,
       clientCount: Math.max(room.clientCount + change, 0),
     });
@@ -84,7 +87,7 @@ async function updateRoomClientCount(
 
 // Mutators
 export async function alive(tx: WriteTransaction) {
-  if (tx.environment !== 'server') {
+  if (tx.location !== 'server') {
     return;
   }
   const now = Date.now();
@@ -136,14 +139,14 @@ export async function alive(tx: WriteTransaction) {
     const clientCount = room?.clientCount ?? 0;
     if (clientCount < MAX_CLIENTS_PER_ROOM) {
       if (room === undefined) {
-        await putRoom(tx, {
+        await setRoom(tx, {
           id: roomID,
           clientCount: 1,
         });
       } else {
         await updateRoomClientCount(tx, roomID, 1);
       }
-      await putClientRoomAssignment(tx, {
+      await setClientRoomAssignment(tx, {
         id: tx.clientID,
         roomID,
         aliveTimestamp: now,
@@ -155,7 +158,7 @@ export async function alive(tx: WriteTransaction) {
 }
 
 export async function unload(tx: WriteTransaction) {
-  if (tx.environment !== 'server') {
+  if (tx.location !== 'server') {
     return;
   }
   const assignment = await getClientRoomAssignment(tx, tx.clientID);
