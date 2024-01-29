@@ -22,14 +22,14 @@ export async function getPieceInfos(
   }
   const presentClients = [];
   for (const presentClientID of presentClientIDs) {
-    const presentClient = await getClient(tx, presentClientID);
+    const presentClient = await getClient(tx, {clientID: presentClientID});
     if (presentClient) {
       presentClients.push(presentClient);
     }
   }
   for (const presentClient of presentClients) {
     if (presentClient.selectedPieceID) {
-      mp[presentClient.selectedPieceID].selector = presentClient.id;
+      mp[presentClient.selectedPieceID].selector = presentClient.clientID;
     }
   }
   return mp;

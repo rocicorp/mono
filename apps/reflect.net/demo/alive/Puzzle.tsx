@@ -45,7 +45,7 @@ export function Puzzle({
     r,
     async tx => ({
       pieces: await getPieceInfos(tx, presentClientIDs),
-      myClient: (await getClient(tx, tx.clientID)) ?? null,
+      myClient: (await getClient(tx)) ?? null,
     }),
     {pieces: {} as Record<string, PieceInfo>, myClient: null},
     [presentClientIDs],
@@ -96,7 +96,7 @@ export function Puzzle({
     if (!myClient) {
       return;
     }
-    return sharedSelectIfAvailable(myClient.id, 'client', model, r);
+    return sharedSelectIfAvailable(myClient.clientID, 'client', model, r);
   };
 
   const handlePiecePointerDown = (

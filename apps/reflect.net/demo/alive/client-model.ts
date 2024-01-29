@@ -1,8 +1,12 @@
-import {generate, Update} from '@rocicorp/rails';
+import {
+  generate,
+  generatePresence,
+  PresenceUpdate,
+  Update,
+} from '@rocicorp/rails';
 import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect';
 import * as z from 'zod';
 import {colorToString, idToColor} from './colors';
-import {entitySchema} from './entity-schema.js';
 
 const DEAD_BOT_CONTROLLER_THRESHOLD_MS = 5_000;
 
@@ -26,7 +30,8 @@ const setBotController = (tx: WriteTransaction, value: BotControllerModel) =>
 
 const deleteBotController = (tx: WriteTransaction) => tx.del(botControllerKey);
 
-export const clientModelSchema = entitySchema.extend({
+export const clientModelSchema = z.object({
+  clientID: z.string(),
   selectedPieceID: z.string(),
   x: z.number(),
   y: z.number(),
@@ -36,9 +41,10 @@ export const clientModelSchema = entitySchema.extend({
 });
 
 export type ClientModel = z.infer<typeof clientModelSchema>;
-export type ClientModelUpdate = Update<ClientModel>;
-// TODO(arv): Use new presence state rails functionality.
-const clientGenerateResult = generate('-/p', v => clientModelSchema.parse(v));
+export type ClientModelUpdate = PresenceUpdate<ClientModel>;
+const clientGenerateResult = generatePresence('client', v =>
+  clientModelSchema.parse(v),
+);
 
 export const {
   get: getClient,
@@ -46,7 +52,8 @@ export const {
   list: listClients,
 } = clientGenerateResult;
 
-export const botModelSchema = clientModelSchema.extend({
+export const botModelSchema = clientModelSchema.omit({clientID: true}).extend({
+  id: z.string(),
   // If non-empty, this client is a bot controlled
   // by the client with this id.
   botControllerID: z.string(),
@@ -77,7 +84,7 @@ export const ensureNotBotController = async (
       const clients = await listClients(tx);
       let potentialNewBotControllerClient = undefined;
       for (const client of clients) {
-        if (client.id !== clientID) {
+        if (client.clientID !== clientID) {
           potentialNewBotControllerClient = client;
         }
       }
@@ -87,10 +94,10 @@ export const ensureNotBotController = async (
           'Bot controller unassigned',
           clientID,
           'assigning',
-          potentialNewBotControllerClient.id,
+          potentialNewBotControllerClient.clientID,
         );
         await setBotController(tx, {
-          clientID: potentialNewBotControllerClient.id,
+          clientID: potentialNewBotControllerClient.clientID,
           aliveTimestamp: Date.now(),
         });
       } else {
@@ -154,11 +161,11 @@ async function ensureAliveBotController(tx: WriteTransaction) {
 
 export const updateClient = async (
   tx: WriteTransaction,
-  update: Omit<ClientModelUpdate, 'id'>,
+  update: Omit<ClientModelUpdate, 'clientID'>,
 ) => {
   await ensureAliveBotController(tx);
   await clientGenerateResult.update(tx, {
-    id: tx.clientID,
+    clientID: tx.clientID,
     ...update,
   });
 };
