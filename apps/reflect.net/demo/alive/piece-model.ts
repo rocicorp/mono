@@ -1,6 +1,7 @@
-import {entitySchema, generate, Update} from '@rocicorp/rails';
+import {generate, Update} from '@rocicorp/rails';
 import type {WriteTransaction} from '@rocicorp/reflect';
-import {z} from 'zod';
+import * as z from 'zod';
+import {entitySchema} from './entity-schema.js';
 
 // Note, we use the stringified index inside PIECE_DEFINITIONS (aka the "piece num") as the ID.
 export const pieceModelSchema = entitySchema.extend({
@@ -15,10 +16,10 @@ export const pieceModelSchema = entitySchema.extend({
 export type PieceModel = z.infer<typeof pieceModelSchema>;
 export type PieceModelUpdate = Update<PieceModel>;
 
-const pieceRailsMethod = generate('piece', pieceModelSchema);
+const pieceRailsMethod = generate('piece', v => pieceModelSchema.parse(v));
 
 export const {
-  put: putPiece,
+  set: setPiece,
   get: getPiece,
   list: listPieces,
 } = pieceRailsMethod;

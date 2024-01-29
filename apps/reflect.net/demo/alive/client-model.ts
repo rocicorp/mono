@@ -1,9 +1,10 @@
-import {entitySchema, generate, Update} from '@rocicorp/rails';
+import {generate, Update} from '@rocicorp/rails';
 import type {ReadTransaction, WriteTransaction} from '@rocicorp/reflect';
-import {z} from 'zod';
+import * as z from 'zod';
 import {colorToString, idToColor} from './colors';
+import {entitySchema} from './entity-schema.js';
 
-const DEAD_BOT_CONTROLLER_THRESHHOLD_MS = 5_000;
+const DEAD_BOT_CONTROLLER_THRESHOLD_MS = 5_000;
 
 const botControllerKey = 'botControllerKey';
 const botControllerSchema = z.object({
@@ -37,7 +38,7 @@ export const clientModelSchema = entitySchema.extend({
 export type ClientModel = z.infer<typeof clientModelSchema>;
 export type ClientModelUpdate = Update<ClientModel>;
 // TODO(arv): Use new presence state rails functionality.
-const clientGenerateResult = generate('-/p', clientModelSchema);
+const clientGenerateResult = generate('-/p', v => clientModelSchema.parse(v));
 
 export const {
   get: getClient,
@@ -57,7 +58,7 @@ export const botModelSchema = clientModelSchema.extend({
 
 export type BotModel = z.infer<typeof botModelSchema>;
 export type BotModelUpdate = Update<BotModel>;
-const botGenerateResult = generate('bot', botModelSchema);
+const botGenerateResult = generate('bot', v => botModelSchema.parse(v));
 
 export const {
   get: getBot,
@@ -69,7 +70,7 @@ export const ensureNotBotController = async (
   tx: WriteTransaction,
   clientID: string,
 ) => {
-  if (tx.environment === 'server') {
+  if (tx.location === 'server') {
     const botController = await getBotController(tx);
     await deleteBotsControlledBy(tx, clientID);
     if (botController?.clientID === clientID) {
@@ -120,7 +121,7 @@ function canModifyBot(
 
 async function ensureAliveBotController(tx: WriteTransaction) {
   let botController = await getBotController(tx);
-  if (tx.environment === 'server') {
+  if (tx.location === 'server') {
     if (!botController) {
       console.log('No bot controller, assigning', tx.clientID);
       botController = {
@@ -132,7 +133,7 @@ async function ensureAliveBotController(tx: WriteTransaction) {
       botController.clientID !== tx.clientID &&
       (!botController.aliveTimestamp ||
         Date.now() - botController.aliveTimestamp >
-          DEAD_BOT_CONTROLLER_THRESHHOLD_MS)
+          DEAD_BOT_CONTROLLER_THRESHOLD_MS)
     ) {
       console.log(
         'Dead bot controller',
@@ -182,7 +183,7 @@ export const initClient = async (
     manuallyTriggeredBot: false,
   };
   await ensureAliveBotController(tx);
-  await clientGenerateResult.put(tx, client);
+  await clientGenerateResult.set(tx, client);
 };
 
 /**
@@ -202,7 +203,7 @@ export const updateBot = async (
   if (!canModifyBot(tx, bot, botController)) {
     return false;
   }
-  if (tx.environment === 'server' && !bot.manuallyTriggeredBot) {
+  if (tx.location === 'server' && !bot.manuallyTriggeredBot) {
     await setBotController(tx, {
       clientID: tx.clientID,
       aliveTimestamp: Date.now(),
@@ -212,12 +213,12 @@ export const updateBot = async (
   return true;
 };
 
-export const putBot = async (tx: WriteTransaction, value: BotModel) => {
+export const setBot = async (tx: WriteTransaction, value: BotModel) => {
   const botController = await ensureAliveBotController(tx);
   if (!canModifyBot(tx, value, botController)) {
     return;
   }
-  await botGenerateResult.put(tx, value);
+  await botGenerateResult.set(tx, value);
 };
 
 async function deleteBotsControlledBy(tx: WriteTransaction, clientID: string) {

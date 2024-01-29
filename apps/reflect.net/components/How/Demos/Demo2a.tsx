@@ -5,7 +5,7 @@ export function Demo2a() {
   const codeString = `export default {
     async setDegree(tx, degree: number) {
       console.log(\`Running mutation \${tx.clientID}@\${tx.mutationID} \` +
-                  \`on \${tx.environment}: \${degree}\`);
+                  \`on \${tx.location}: \${degree}\`);
       await tx.set("degree", degree);
     },
   }`;

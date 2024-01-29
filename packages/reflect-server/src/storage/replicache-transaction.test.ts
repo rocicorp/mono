@@ -83,14 +83,14 @@ test('ReplicacheTransaction', async () => {
   expect(!(await writeTx3.del('bar')));
 });
 
-test('ReplicacheTransaction environment and reason', async () => {
+test('ReplicacheTransaction location and reason', async () => {
   const storage = new DurableStorage(
     await getMiniflareDurableObjectStorage(id),
   );
 
   const entryCache = new EntryCache(storage);
   const tx = new ReplicacheTransaction(entryCache, 'c1', 1, 1, undefined, env);
-  expect(tx.environment).toEqual('server');
+  expect(tx.location).toEqual('server');
   expect(tx.reason).toEqual('authoritative');
 });
 

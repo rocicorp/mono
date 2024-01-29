@@ -4,7 +4,7 @@ import * as v from 'shared/src/valita.js';
 import {
   deleteBot,
   initClient,
-  putBot,
+  setBot,
   updateBot,
   updateClient,
 } from '../alive/client-model';
@@ -13,7 +13,7 @@ import {PIECE_DEFINITIONS} from '../alive/piece-definitions';
 import {
   PieceModel,
   listPieces,
-  putPiece,
+  setPiece,
   updatePiece,
 } from '../alive/piece-model';
 
@@ -85,7 +85,7 @@ export const mutators = {
       console.debug('puzzle already exists, skipping non-force initialization');
       return;
     }
-    if (tx.environment === 'server') {
+    if (tx.location === 'server') {
       //only reset on server and only when completed
       //removes potential race when multiple clients are trying to reset
       if (
@@ -93,7 +93,7 @@ export const mutators = {
         (await listPieces(tx)).findIndex(piece => !piece.placed) === -1
       ) {
         for (const piece of pieces) {
-          await putPiece(tx, piece);
+          await setPiece(tx, piece);
         }
         await tx.set('puzzle-exists', true);
       }
@@ -103,7 +103,7 @@ export const mutators = {
   initClient,
   updateClient: wrapToFilterBadLocation(updateClient),
   updatePiece,
-  putBot: wrapToFilterBadLocation(putBot),
+  setBot: wrapToFilterBadLocation(setBot),
   updateBot: wrapToFilterBadLocation(updateBot),
   deleteBot,
 
@@ -119,9 +119,9 @@ export const mutators = {
 
     const prevStr = prev % 1 === 0 ? prev.toString() : prev.toFixed(2);
     const nextStr = next % 1 === 0 ? next.toString() : next.toFixed(2);
-    const msg = `Running mutation ${tx.clientID}@${tx.mutationID} on ${tx.environment}: ${prevStr} → ${nextStr}`;
+    const msg = `Running mutation ${tx.clientID}@${tx.mutationID} on ${tx.location}: ${prevStr} → ${nextStr}`;
 
-    if (tx.environment === 'client') {
+    if (tx.location === 'client') {
       if (tx.reason !== 'rebase') {
         clientConsoleMap.get(tx.clientID)?.(msg);
       }
@@ -134,9 +134,9 @@ export const mutators = {
     {key, deg}: {key: string; deg: number},
   ) => {
     await tx.set(key, deg);
-    const msg = `Running mutation ${tx.clientID}@${tx.mutationID} on ${tx.environment}: ${deg}`;
+    const msg = `Running mutation ${tx.clientID}@${tx.mutationID} on ${tx.location}: ${deg}`;
 
-    if (tx.environment === 'client') {
+    if (tx.location === 'client') {
       if (tx.reason !== 'rebase') {
         clientConsoleMap.get(tx.clientID)?.(msg);
       }
