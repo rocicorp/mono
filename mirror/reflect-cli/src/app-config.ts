@@ -2,11 +2,7 @@ import {doc, getDoc, getFirestore} from 'firebase/firestore';
 import {readFileSync} from 'fs';
 import {createApp} from 'mirror-protocol/src/app.js';
 import {ensureTeam} from 'mirror-protocol/src/team.js';
-import {
-  isValidAppName,
-  appPath,
-  appViewDataConverter,
-} from 'mirror-schema/src/external/app.js';
+import {appPath, appViewDataConverter} from 'mirror-schema/src/external/app.js';
 import {
   appNameIndexDataConverter,
   appNameIndexPath,
@@ -16,12 +12,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {basename, resolve} from 'node:path';
 import {pkgUpSync} from 'pkg-up';
-import {must} from 'shared/src/must.js';
-import {randInt} from 'shared/src/rand.js';
+
 import * as v from 'shared/src/valita.js';
 import {ErrorWrapper} from './error.js';
 import type {AuthContext} from './handler.js';
-import {confirm, input} from './inquirer.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
 
@@ -190,39 +184,7 @@ async function getAppIDfromAppName(
       appNameIndexDataConverter,
     ),
   );
-  if (!nameEntry.exists()) {
-    return undefined;
-  }
   return nameEntry.data()?.appID;
-}
-
-async function ensureAppId(appID: string): Promise<string> {
-  const firestore = getFirestore();
-  const appEntry = await getDoc(
-    doc(firestore, appPath(appID)).withConverter(appViewDataConverter),
-  );
-  if (!appEntry.exists()) {
-    throw new Error(`No app found with ID ${appID}`);
-  }
-  return appID;
-}
-
-async function lookupAppID(
-  teamID: string,
-  app: string,
-): Promise<string | undefined> {
-  if (app.startsWith('id:')) {
-    const appID = getAppIDfromConfig();
-    if (!appID) {
-      logErrorAndExit(
-        'No app ID found in config file even though app ID was specified from default config file',
-      );
-    }
-    await ensureAppId(appID);
-    return appID;
-  }
-  const foundAppID = await getAppIDfromAppName(teamID, app);
-  return foundAppID;
 }
 
 export async function getAppID(
@@ -236,7 +198,7 @@ export async function getAppID(
   }
   // Otherwise it's a name.
   const teamID = await ensureTeamID(authContext);
-  const appID = await lookupAppID(teamID, app); // From the index in Firestore
+  const appID = await getAppIDfromAppName(teamID, app); // From the index in Firestore
   if (appID) {
     return appID;
   }
@@ -272,62 +234,6 @@ export async function getApp(appID: string) {
     doc(firestore, appPath(appID)).withConverter(appViewDataConverter),
   );
   return appDoc.data();
-}
-
-export async function createFirestoreApp(
-  authorizationContext: AuthContext,
-  name: string,
-  teamID: string,
-): Promise<string> {
-  const requester = makeRequester(authorizationContext.user.userID);
-  const {appID} = await createApp.call({
-    requester,
-    teamID,
-    name,
-    serverReleaseChannel: 'stable',
-  });
-
-  return appID;
-}
-
-export async function lookupAndCreateAppName(
-  teamID: string,
-  appName: string,
-  disablePrompt = false,
-): Promise<{name: string; id?: string | undefined}> {
-  const firestore = getFirestore();
-  for (let appNameSuffix = ''; ; appNameSuffix = `-${randInt(1000, 9999)}`) {
-    let name = `${appName}${appNameSuffix}`;
-    if (!disablePrompt) {
-      name = await input({
-        message: 'Name of your App:',
-        default: name,
-        validate: isValidAppName,
-      });
-    }
-    if (!isValidAppName(name)) {
-      throw new Error(`Invalid app name: ${name}`);
-    }
-    const nameEntry = await getDoc(
-      doc(firestore, appNameIndexPath(teamID, name)).withConverter(
-        appNameIndexDataConverter,
-      ),
-    );
-    if (!nameEntry.exists()) {
-      return {name, id: nameEntry.data()?.appID};
-    }
-    const {appID: id} = must(nameEntry.data());
-    if (
-      !disablePrompt &&
-      (await confirm({
-        message: `There is an existing App named "${name}". Do you want to use it?`,
-        default: false,
-      }))
-    ) {
-      return {name, id};
-    }
-    return {name, id};
-  }
 }
 
 function getDefaultAppName(): string {
