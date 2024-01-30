@@ -17,12 +17,7 @@ import {
 import {deploymentViewDataConverter} from 'mirror-schema/src/external/deployment.js';
 import {watchDoc} from 'mirror-schema/src/external/watch.js';
 import {must} from 'shared/src/must.js';
-import {
-  getDefaultApp,
-  readAppConfig,
-  writeAppConfig,
-  getAppID,
-} from './app-config.js';
+import {readAppConfig, writeAppConfig, getAppID} from './app-config.js';
 import {checkbox, confirm} from './inquirer.js';
 import {makeRequester} from './requester.js';
 import {getSingleTeam} from './teams.js';
@@ -30,19 +25,11 @@ import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import type {AuthContext} from './handler.js';
 
 export function deleteOptions(yargs: CommonYargsArgv) {
-  return yargs
-    .positional('app', {
-      describe: 'The name of the App, or "id:<app-id>"',
-      type: 'string',
-      requiresArg: true,
-      default: getDefaultApp(),
-      required: !getDefaultApp(),
-    })
-    .option('all', {
-      describe: 'Choose which apps to delete.',
-      type: 'boolean',
-      conflicts: ['name', 'appID'],
-    });
+  return yargs.option('app', {
+    describe: 'The name of the App, or "id:<app-id>"',
+    type: 'string',
+    requiresArg: true,
+  });
 }
 
 type DeleteHandlerArgs = YargvToInterface<ReturnType<typeof deleteOptions>>;
@@ -52,11 +39,10 @@ export async function deleteHandler(
   authContext: AuthContext,
 ): Promise<void> {
   const firestore = getFirestore();
-  const {all} = yargs;
   const {userID} = authContext.user;
   const apps = await getAppsToDelete(firestore, userID, yargs, authContext);
   let selectedApps = [];
-  if (apps.length === 1 && !all) {
+  if (apps.length === 1) {
     if (
       !(await confirm({
         message: `Delete "${apps[0].name}" and associated data?`,
@@ -137,18 +123,18 @@ async function getAppsToDelete(
   yargs: DeleteHandlerArgs,
   authContext: AuthContext,
 ): Promise<AppInfo[]> {
-  const {all} = yargs;
-  if (all) {
-    const teamID = await getSingleTeam(firestore, userID, 'admin');
-    const q = query(
-      collection(firestore, APP_COLLECTION).withConverter(appViewDataConverter),
-      where('teamID', '==', teamID),
-    );
-    const apps = await getDocs(q);
-    return apps.docs.map(doc => ({id: doc.id, name: doc.data().name}));
+  const {app} = yargs;
+  if (app) {
+    const appID = await getAppID(authContext, app);
+    return getApp(firestore, appID, true);
   }
-  const appID = await getAppID(authContext, yargs);
-  return getApp(firestore, appID, true);
+  const teamID = await getSingleTeam(firestore, userID, 'admin');
+  const q = query(
+    collection(firestore, APP_COLLECTION).withConverter(appViewDataConverter),
+    where('teamID', '==', teamID),
+  );
+  const apps = await getDocs(q);
+  return apps.docs.map(doc => ({id: doc.id, name: doc.data().name}));
 }
 
 async function getApp(

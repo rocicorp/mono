@@ -60,7 +60,8 @@ export async function usageHandler(
   authContext: AuthContext,
 ): Promise<void> {
   const firestore = getFirestore();
-  const appID = await getAppID(authContext, yargs);
+  const {app} = yargs;
+  const appID = await getAppID(authContext, app);
   const appDoc = await getDoc(
     doc(firestore, appPath(appID)).withConverter(appViewDataConverter),
   );

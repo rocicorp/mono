@@ -33,14 +33,14 @@ export async function deleteVarsHandler(
   yargs: DeleteVarsHandlerArgs,
   authContext: AuthContext,
 ): Promise<void> {
-  const {keys: vars, dev} = yargs;
+  const {keys: vars, dev, app} = yargs;
   if (dev) {
     deleteDevVars(vars);
     console.log('Deleted specified Dev Variables');
     return;
   }
   const {userID} = authContext.user;
-  const appID = await getAppID(authContext, yargs, false);
+  const appID = await getAppID(authContext, app, false);
 
   const data = {requester: makeRequester(userID), appID, vars};
   const {deploymentPath} = await deleteVars.call(data);

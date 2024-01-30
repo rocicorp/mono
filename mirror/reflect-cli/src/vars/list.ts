@@ -49,8 +49,9 @@ export async function listVarsHandler(
       },
     };
   } else {
+    const {app} = yargs;
     const {userID} = authContext.user;
-    const appID = await getAppID(authContext, yargs, false);
+    const appID = await getAppID(authContext, app, false);
     const data = {requester: makeRequester(userID), appID, decrypted: show};
 
     response = await listVars.call(data);

@@ -33,7 +33,8 @@ export async function tailHandler(
   yargs: TailHandlerArgs,
   authContext: AuthContext,
 ) {
-  const appID = await getAppID(authContext, yargs, false);
+  const {app} = yargs;
+  const appID = await getAppID(authContext, app, false);
   const idToken = await authContext.user.getIdToken();
   const {room: roomID} = yargs;
 

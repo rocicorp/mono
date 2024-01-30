@@ -65,7 +65,7 @@ export async function publishHandler(
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
-  const {reflectChannel, serverPath} = yargs;
+  const {reflectChannel, serverPath, app} = yargs;
   if (!serverPath) logErrorAndExit('No server path found');
   const absPath = path.resolve(serverPath);
   if (!absPath || !(await exists(absPath))) {
@@ -88,7 +88,7 @@ export async function publishHandler(
   );
   assert(sourcemap);
 
-  const appID = await getAppID(authContext, yargs, true);
+  const appID = await getAppID(authContext, app, true);
 
   const data: PublishRequest = {
     requester: authContext.requester,

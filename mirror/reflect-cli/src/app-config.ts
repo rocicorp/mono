@@ -188,10 +188,9 @@ async function getAppIDfromAppName(
 
 export async function getAppID(
   authContext: AuthContext,
-  yargs: {app: string},
+  app: string,
   create = false,
 ): Promise<string> {
-  const {app} = yargs;
   if (app.startsWith('id:')) {
     return app.split(':')[1]; // already have an appID
   }

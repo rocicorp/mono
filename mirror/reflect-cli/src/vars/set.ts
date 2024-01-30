@@ -34,7 +34,7 @@ export async function setVarsHandler(
   yargs: SetVarsHandlerArgs,
   authContext: AuthContext,
 ): Promise<void> {
-  const {keysAndValues, dev} = yargs;
+  const {keysAndValues, dev, app} = yargs;
 
   const vars: Record<string, string> = {};
   for (const kv of keysAndValues) {
@@ -62,7 +62,7 @@ export async function setVarsHandler(
   }
 
   const {userID} = authContext.user;
-  const appID = await getAppID(authContext, yargs, false);
+  const appID = await getAppID(authContext, app, false);
   const data = {requester: makeRequester(userID), appID, vars};
   const {deploymentPath} = await setVars.call(data);
   if (!deploymentPath) {
