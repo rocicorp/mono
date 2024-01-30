@@ -19,7 +19,7 @@ export function tailOptions(yargs: CommonYargsArgv) {
       demandOption: true,
     })
     .option('app', {
-      describe: 'The name of the App, or "id:<app-id>" to tail',
+      describe: 'The name of the App, or "id:<app-id>"',
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),

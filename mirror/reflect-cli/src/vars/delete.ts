@@ -17,7 +17,7 @@ export function deleteVarsOptions(yargs: CommonVarsYargsArgv) {
       demandOption: true,
     })
     .option('app', {
-      describe: 'The name of the App, or "id:<app-id>" to env delete',
+      describe: 'The name of the App, or "id:<app-id>"',
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),

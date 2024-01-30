@@ -20,7 +20,7 @@ export function setVarsOptions(yargs: CommonVarsYargsArgv) {
       demandOption: true,
     })
     .option('app', {
-      describe: 'The name of the App, or "id:<app-id>" to set',
+      describe: 'The name of the App, or "id:<app-id>"',
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),
