@@ -60,7 +60,7 @@ function createCLIParser(argv: string[]) {
       )
       .command(
         'delete',
-        '🗑️  Delete one or more Apps. Defaults to the App of the current directory.',
+        '🗑️  Delete one or more Apps.',
         deleteOptions,
         authenticateAndHandleWith(deleteHandler)
           .withWarmup(deleteApp)
