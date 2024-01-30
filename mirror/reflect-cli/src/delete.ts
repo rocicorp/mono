@@ -17,9 +17,13 @@ import {
 import {deploymentViewDataConverter} from 'mirror-schema/src/external/deployment.js';
 import {watchDoc} from 'mirror-schema/src/external/watch.js';
 import {must} from 'shared/src/must.js';
-import {readAppConfig, writeAppConfig} from './app-config.js';
+import {
+  getDefaultApp,
+  readAppConfig,
+  writeAppConfig,
+  getAppID,
+} from './app-config.js';
 import {checkbox, confirm} from './inquirer.js';
-import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
 import {getSingleTeam} from './teams.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
@@ -27,17 +31,12 @@ import type {AuthContext} from './handler.js';
 
 export function deleteOptions(yargs: CommonYargsArgv) {
   return yargs
-    .positional('name', {
-      describe:
-        'Delete the specified app rather than the one for the current directory.',
+    .positional('app', {
+      describe: 'The name of the App, or "id:<app-id>"',
       type: 'string',
-      conflicts: ['appID', 'all'],
-    })
-    .option('appID', {
-      describe: 'Internal ID of the app',
-      type: 'string',
-      conflicts: ['all', 'name'],
-      hidden: true,
+      requiresArg: true,
+      default: getDefaultApp(),
+      required: !getDefaultApp(),
     })
     .option('all', {
       describe: 'Choose which apps to delete.',
@@ -55,7 +54,7 @@ export async function deleteHandler(
   const firestore = getFirestore();
   const {all} = yargs;
   const {userID} = authContext.user;
-  const apps = await getAppsToDelete(firestore, userID, yargs);
+  const apps = await getAppsToDelete(firestore, userID, yargs, authContext);
   let selectedApps = [];
   if (apps.length === 1 && !all) {
     if (
@@ -136,31 +135,20 @@ async function getAppsToDelete(
   firestore: Firestore,
   userID: string,
   yargs: DeleteHandlerArgs,
+  authContext: AuthContext,
 ): Promise<AppInfo[]> {
-  const {appID, name, all} = yargs;
-  if (appID) {
-    return getApp(firestore, appID);
-  }
-  if (all || name) {
+  const {all} = yargs;
+  if (all) {
     const teamID = await getSingleTeam(firestore, userID, 'admin');
-    let q = query(
+    const q = query(
       collection(firestore, APP_COLLECTION).withConverter(appViewDataConverter),
       where('teamID', '==', teamID),
     );
-    if (name) {
-      q = query(q, where('name', '==', name));
-    }
     const apps = await getDocs(q);
     return apps.docs.map(doc => ({id: doc.id, name: doc.data().name}));
   }
-  const config = readAppConfig();
-  const defaultAppID = config?.apps?.default?.appID;
-  if (defaultAppID) {
-    return getApp(firestore, defaultAppID, true);
-  }
-  logErrorAndExit(
-    'Missing reflect.config.json Could not determine App to delete.',
-  );
+  const appID = await getAppID(authContext, yargs);
+  return getApp(firestore, appID, true);
 }
 
 async function getApp(
