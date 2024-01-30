@@ -158,7 +158,7 @@ export function mustReadAppConfig(
 export async function ensureTeamID(authContext: AuthContext): Promise<string> {
   const {userID, additionalUserInfo} = authContext.user;
   const requester = makeRequester(userID);
-  if (userID.startsWith('team/')) {
+  if (userID.startsWith('teams/')) {
     // API key authentication is already associated with a team.
     return userID.split('/')[1];
   }
