@@ -193,7 +193,7 @@ export async function getAppID(
 ): Promise<string> {
   const {app} = yargs;
   if (app.startsWith('id:')) {
-    return app.split(':')[0]; // already have an appID
+    return app.split(':')[1]; // already have an appID
   }
   // Otherwise it's a name.
   const teamID = await ensureTeamID(authContext);
