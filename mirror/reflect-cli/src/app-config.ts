@@ -124,7 +124,7 @@ export function getAppIDfromConfig(instance = 'default') {
 export function getDefaultApp() {
   const configAppId = getAppIDfromConfig();
   if (configAppId) {
-    return 'App with ID: ' + configAppId + ' from config file';
+    return `id:${configAppId}`;
   }
   return getDefaultAppName();
 }
@@ -165,66 +165,97 @@ export function mustReadAppConfig(
 export async function ensureTeamID(authContext: AuthContext): Promise<string> {
   const {userID, additionalUserInfo} = authContext.user;
   const requester = makeRequester(userID);
-  let teamID: string;
   if (userID.startsWith('team/')) {
     // API key authentication is already associated with a team.
-    teamID = userID.split('/')[1];
-  } else {
-    const defaultTeamName = additionalUserInfo?.username;
-    if (!defaultTeamName) {
-      throw new Error('Could not determine GitHub username from OAuth');
-    }
-    const ensured = await ensureTeam.call({
-      requester,
-      name: defaultTeamName,
-    });
-    teamID = ensured.teamID;
+    return userID.split('/')[1];
   }
-  return teamID;
+  const defaultTeamName = additionalUserInfo?.username;
+  if (!defaultTeamName) {
+    throw new Error('Could not determine GitHub username from OAuth');
+  }
+  const ensured = await ensureTeam.call({
+    requester,
+    name: defaultTeamName,
+  });
+  return ensured.teamID;
 }
 
-export async function ensureAppInstantiated(
-  authContext: AuthContext,
-  instance = 'default',
-): Promise<LocalConfig & AppInstance> {
-  const config = mustReadAppConfig();
-  if (config.apps?.[instance]) {
-    return {
-      ...config,
-      ...config.apps?.[instance],
-    };
+async function getAppIDfromAppName(
+  teamID: string,
+  appName: string,
+): Promise<string | undefined> {
+  const firestore = getFirestore();
+  const nameEntry = await getDoc(
+    doc(firestore, appNameIndexPath(teamID, appName)).withConverter(
+      appNameIndexDataConverter,
+    ),
+  );
+  if (!nameEntry.exists()) {
+    return undefined;
   }
-  const {userID, additionalUserInfo} = authContext.user;
-  const requester = makeRequester(userID);
-  let teamID: string;
-  if (userID.startsWith('team/')) {
-    // API key authentication is already associated with a team.
-    teamID = userID.split('/')[1];
-  } else {
-    const defaultTeamName = additionalUserInfo?.username;
-    if (!defaultTeamName) {
-      throw new Error('Could not determine GitHub username from OAuth');
+  return nameEntry.data()?.appID;
+}
+
+async function ensureAppId(appID: string): Promise<string> {
+  const firestore = getFirestore();
+  const appEntry = await getDoc(
+    doc(firestore, appPath(appID)).withConverter(appViewDataConverter),
+  );
+  if (!appEntry.exists()) {
+    throw new Error(`No app found with ID ${appID}`);
+  }
+  return appID;
+}
+
+async function lookupAppID(
+  teamID: string,
+  app: string,
+): Promise<string | undefined> {
+  if (app.startsWith('id:')) {
+    const appID = getAppIDfromConfig();
+    if (!appID) {
+      logErrorAndExit(
+        'No app ID found in config file even though app ID was specified from default config file',
+      );
     }
-    const ensured = await ensureTeam.call({
-      requester,
-      name: defaultTeamName,
-    });
-    teamID = ensured.teamID;
+    await ensureAppId(appID);
+    return appID;
   }
-  const app = await getNewAppNameOrExistingID(teamID);
-  const appID =
-    app.id !== undefined
-      ? app.id
-      : (
-          await createApp.call({
-            requester,
-            teamID,
-            name: app.name,
-            serverReleaseChannel: 'stable',
-          })
-        ).appID;
-  writeAppConfig({...config, apps: {[instance]: {appID}}});
-  return {...config, appID};
+  const foundAppID = await getAppIDfromAppName(teamID, app);
+  return foundAppID;
+}
+
+export async function getAppID(
+  authContext: AuthContext,
+  yargs: {app: string},
+  create = false,
+): Promise<string> {
+  const {app} = yargs;
+  if (app.startsWith('id:')) {
+    return app.split(':')[0]; // already have an appID
+  }
+  // Otherwise it's a name.
+  const teamID = await ensureTeamID(authContext);
+  const appID = await lookupAppID(teamID, app); // From the index in Firestore
+  if (appID) {
+    return appID;
+  }
+  if (!create) {
+    console.log(
+      `The "${app}" app must first be published with "npx reflect publish"`,
+    );
+    process.exit(-1);
+  }
+  console.log(`Creating the "${app}" app ...`);
+  const requester = makeRequester(authContext.user.userID);
+  const resp = await createApp.call({
+    requester,
+    teamID,
+    name: app,
+    serverReleaseChannel: 'stable',
+  });
+
+  return resp.appID;
 }
 
 export function writeAppConfig(
@@ -240,7 +271,7 @@ export async function getApp(appID: string) {
   const appDoc = await getDoc(
     doc(firestore, appPath(appID)).withConverter(appViewDataConverter),
   );
-  return appDoc.exists() ? appDoc.data() : null;
+  return appDoc.data();
 }
 
 export async function createFirestoreApp(
@@ -297,26 +328,6 @@ export async function lookupAndCreateAppName(
     }
     return {name, id};
   }
-}
-
-async function getNewAppNameOrExistingID(
-  teamID: string,
-): Promise<{name: string; id?: string | undefined}> {
-  const firestore = getFirestore();
-  const defaultAppName = await getDefaultAppName();
-  if (isValidAppName(defaultAppName)) {
-    const nameEntry = await getDoc(
-      doc(firestore, appNameIndexPath(teamID, defaultAppName)).withConverter(
-        appNameIndexDataConverter,
-      ),
-    );
-    if (!nameEntry.exists()) {
-      // Common case. The name in package.json is not taken. Create an app with it.
-      return {name: defaultAppName};
-    }
-  }
-
-  return lookupAndCreateAppName(teamID, defaultAppName);
 }
 
 function getDefaultAppName(): string {

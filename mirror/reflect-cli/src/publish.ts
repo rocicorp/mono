@@ -7,15 +7,7 @@ import {
 import assert from 'node:assert';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {
-  createFirestoreApp,
-  lookupAndCreateAppName,
-  ensureTeamID,
-  getApp,
-  getAppIDfromConfig,
-  getDefaultApp,
-  getDefaultServerPath,
-} from './app-config.js';
+import {getDefaultApp, getDefaultServerPath, getAppID} from './app-config.js';
 import {CompileResult, compile} from './compile.js';
 import {ErrorWrapper} from './error.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
@@ -24,7 +16,6 @@ import {logErrorAndExit} from './log-error-and-exit.js';
 import {checkForServerDeprecation} from './version.js';
 import {watchDeployment} from './watch-deployment.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import {confirm} from './inquirer.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -38,12 +29,6 @@ export function publishOptions(yargs: CommonYargsArgv) {
       type: 'string',
       requiresArg: true,
       hidden: true,
-    })
-    .option('disable-prompt', {
-      describe: 'Disable all prompts for confirmation',
-      type: 'boolean',
-      default: false,
-      requiresArg: false,
     })
     .option('server-path', {
       describe: 'Path to the Reflect server entry file',
@@ -74,55 +59,15 @@ type PublishHandlerArgs = YargvToInterface<ReturnType<typeof publishOptions>>;
 
 export type PublishCaller = typeof publishCaller;
 
-async function resolveAppNameAndID(
-  app: string,
-  teamID: string,
-  disablePrompt: boolean,
-): Promise<{appName: string; appID?: string | undefined}> {
-  if (app.startsWith('App with ID: ')) {
-    const appID = getAppIDfromConfig();
-    if (!appID) {
-      logErrorAndExit(
-        'No app ID found in config file even though app ID was specified from default config file',
-      );
-    }
-    const foundApp = await getApp(appID);
-    if (!foundApp) {
-      throw new Error(`No app found with ID ${appID}`);
-    }
-    app = foundApp.name;
-    if (!disablePrompt) {
-      const publishApp = await confirm({
-        message: `Publish to app with name ${app} and id ${appID}?`,
-        default: true,
-      });
-      if (!publishApp) {
-        logErrorAndExit('Publish cancelled');
-      }
-    }
-    return {appName: app, appID};
-  }
-
-  const appInfo = await lookupAndCreateAppName(teamID, app, disablePrompt);
-  return {appName: appInfo.name, appID: appInfo.id};
-}
-
 export async function publishHandler(
   yargs: PublishHandlerArgs,
   authContext: AuthContext,
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
-  const {reflectChannel, serverPath, disablePrompt} = yargs;
-  let {app} = yargs;
+  const {reflectChannel, serverPath} = yargs;
   if (!serverPath) logErrorAndExit('No server path found');
-  const teamID = await ensureTeamID(authContext);
-  const appNameAndID = await resolveAppNameAndID(app, teamID, disablePrompt);
-  let {appID} = appNameAndID;
-  app = appNameAndID.appName;
-  if (!appID) {
-    appID = await createFirestoreApp(authContext, app, teamID);
-  }
+  const appID = await getAppID(authContext, yargs, true);
   const absPath = path.resolve(serverPath);
   if (!absPath || !(await exists(absPath))) {
     logErrorAndExit(`File not found: ${absPath}`);
