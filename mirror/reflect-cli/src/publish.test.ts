@@ -154,7 +154,7 @@ async function testPublishedCode(source: string, expectedOutputs: string[]) {
   );
 
   await publishHandler(
-    {serverPath: testFilePath, app: '0000'} as Args,
+    {serverPath: testFilePath, app: 'id:test-app-id'} as Args,
     teamAuthContext,
     publishMock as unknown as PublishCaller,
     firestore,
