@@ -26,7 +26,8 @@ import type {AuthContext} from './handler.js';
 
 export function deleteOptions(yargs: CommonYargsArgv) {
   return yargs.option('app', {
-    describe: 'The name of the App, or "id:<app-id>"',
+    describe:
+      'The name of the App, or "id:<app-id>". Omit this to choose the Apps from a list.',
     type: 'string',
     requiresArg: true,
   });
