@@ -3,7 +3,7 @@ import type {Reflect} from '@rocicorp/reflect/client';
 import {useSubscribe} from '@rocicorp/reflect/react';
 import classNames from 'classnames';
 import type {M} from '../shared/mutators';
-import {getBot, getClient} from './client-model';
+import {ClientModel, getBot, getClient} from './client-model';
 import {Rect, coordinateToPosition, simpleHash} from './util';
 
 export function Cursor({
@@ -25,9 +25,13 @@ export function Cursor({
   hideArrow: boolean;
   setBodyClass: (cls: string, enabled: boolean) => void;
 }) {
+  type T = Omit<ClientModel, 'clientID'> | undefined;
   const client = useSubscribe(
     r,
-    tx => (type === 'client' ? getClient(tx, id) : getBot(tx, id)),
+    tx =>
+      (type === 'client'
+        ? getClient(tx, {clientID: id})
+        : getBot(tx, id)) as Promise<T>,
     undefined,
     [id, type],
   );

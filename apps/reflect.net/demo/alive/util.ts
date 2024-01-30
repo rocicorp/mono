@@ -29,21 +29,18 @@ export const rotatePosition = (
   return {x: nx, y: ny};
 };
 
-export const center = (box: BoundingBox) => {
-  return {
-    x: box.x + box.width / 2,
-    y: box.y + box.height / 2,
-  };
-};
+export const center = (box: BoundingBox) => ({
+  x: box.x + box.width / 2,
+  y: box.y + box.height / 2,
+});
 
 export const addRadians = (value: number, add: number) => {
   const c = Math.PI * 2;
   return (c + value + add) % c;
 };
 
-export const getAngle = (center: Position, to: Position) => {
-  return Math.atan2(to.y - center.y, to.x - center.x);
-};
+export const getAngle = (center: Position, to: Position) =>
+  Math.atan2(to.y - center.y, to.x - center.x);
 
 export function must<T>(val: T | undefined | null, name?: string): T {
   if (val === undefined || val === null) {
@@ -52,9 +49,8 @@ export function must<T>(val: T | undefined | null, name?: string): T {
   return val;
 }
 
-export const randFloat = (min: number, max: number) => {
-  return Math.random() * (max - min) + min;
-};
+export const randFloat = (min: number, max: number) =>
+  Math.random() * (max - min) + min;
 
 export const randInt = (min: number, max: number) => {
   min = Math.ceil(min);
@@ -62,9 +58,7 @@ export const randInt = (min: number, max: number) => {
   return Math.round(Math.random() * (max - min) + min);
 };
 
-export const randElm = <T>(arr: Readonly<T[]>) => {
-  return arr[randInt(0, arr.length)];
-};
+export const randElm = <T>(arr: Readonly<T[]>) => arr[randInt(0, arr.length)];
 
 export const randIndices = (count: number, max: number) => {
   const res: number[] = [];
@@ -112,7 +106,7 @@ export function generateRandomPieces(home: Rect, stage: Rect) {
   // position that's farthese from other pieces.
 
   const getCandidates = () => {
-    var cands = new Array<{pos: Position; minDist: number}>();
+    const cands = new Array<{pos: Position; minDist: number}>();
     // Most of the time put the pieces outside the letters, so you can still
     // read "alive", but it looks nicer if a few are allowed inside.
     const allowCandidateOverLetters = Math.random() < 0;
@@ -144,12 +138,12 @@ export function generateRandomPieces(home: Rect, stage: Rect) {
   };
 
   const initiallyPlacedPieces = new Array<number>();
-  for (let letter of ['A', 'L', 'I', 'V', 'E']) {
+  for (const letter of ['A', 'L', 'I', 'V', 'E']) {
     const first = PIECE_DEFINITIONS.findIndex(def => def.letter === letter);
     const pieces = PIECE_DEFINITIONS.filter(def => def.letter === letter);
     const numPlacedPieces = randInt(1, 2);
     const placedIndicies = randIndices(numPlacedPieces, pieces.length - 1);
-    for (let idx of placedIndicies) {
+    for (const idx of placedIndicies) {
       initiallyPlacedPieces.push(first + idx);
     }
   }
@@ -308,7 +302,7 @@ export class Rect {
 }
 
 export const simpleHash = (s: string) => {
-  var hash = 0,
+  let hash = 0,
     i,
     chr;
   if (s.length === 0) return hash;

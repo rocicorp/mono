@@ -1,6 +1,6 @@
+import {CursorField} from '@/demo/alive/CursorField';
 import {Puzzle} from '@/demo/alive/Puzzle';
 import {hasClient, listBots} from '@/demo/alive/client-model';
-import {CursorField} from '@/demo/alive/CursorField';
 import {
   ORCHESTRATOR_ROOM,
   getClientRoomAssignment,
@@ -17,7 +17,7 @@ import {Location, getLocationString} from '@/util/get-location-string';
 import {closeReflect} from '@/util/reflect';
 import {getWorkerHost} from '@/util/worker-host';
 import {Reflect} from '@rocicorp/reflect/client';
-import {useSubscribe, usePresence} from '@rocicorp/reflect/react';
+import {usePresence, useSubscribe} from '@rocicorp/reflect/react';
 import classNames from 'classnames';
 import {event} from 'nextjs-google-analytics';
 import {useCallback, useEffect, useState} from 'react';
@@ -172,7 +172,7 @@ function useThisClient(r: Reflect<M> | null): string | undefined {
     r,
     async tx => {
       const cid = tx.clientID;
-      if (await hasClient(tx, cid)) {
+      if (await hasClient(tx)) {
         return cid;
       }
       return undefined;

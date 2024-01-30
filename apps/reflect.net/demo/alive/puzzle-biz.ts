@@ -89,7 +89,7 @@ export function checkSnap(
 }
 
 export function selectIfAvailable(
-  id: string,
+  clientID: string,
   type: 'client' | 'bot',
   piece: PieceInfo,
   r: Reflect<M>,
@@ -99,14 +99,14 @@ export function selectIfAvailable(
     return false;
   }
 
-  if (piece.selector === id) {
+  if (piece.selector === clientID) {
     // already selected by this client, nothing to do.
     return true;
   }
 
   if (piece.selector !== null) {
     console.debug(
-      `${type} ${id} cannot select piece ${piece.id}, already selected by ${piece.selector}}`,
+      `${type} ${clientID} cannot select piece ${piece.id}, already selected by ${piece.selector}}`,
     );
     return false;
   }
@@ -114,7 +114,7 @@ export function selectIfAvailable(
   if (type === 'client') {
     r.mutate.updateClient({selectedPieceID: piece.id});
   } else {
-    r.mutate.updateBot({id, selectedPieceID: piece.id});
+    r.mutate.updateBot({id: clientID, selectedPieceID: piece.id});
   }
   r.mutate.updatePiece({id: piece.id, handleRotation: -Math.PI / 2});
   return true;

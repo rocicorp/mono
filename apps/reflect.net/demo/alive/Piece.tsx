@@ -1,10 +1,10 @@
 import classNames from 'classnames';
-import {PIECE_DEFINITIONS} from './piece-definitions';
-import React, {PointerEventHandler} from 'react';
-import type {PieceInfo} from './piece-info';
-import type {ClientModel} from './client-model';
-import {center} from './util';
 import {event} from 'nextjs-google-analytics';
+import React, {PointerEventHandler} from 'react';
+import type {ClientModel} from './client-model';
+import {PIECE_DEFINITIONS} from './piece-definitions';
+import type {PieceInfo} from './piece-info';
+import {center} from './util';
 
 export function Piece({
   piece,
@@ -46,7 +46,7 @@ export function Piece({
   };
 
   const active = Boolean(selectorID);
-  const animate = selectorID === myClient.id;
+  const animate = selectorID === myClient.clientID;
 
   const c = center({
     x: piece.x,
