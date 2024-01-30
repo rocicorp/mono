@@ -14,10 +14,10 @@ import {
   type Month,
 } from 'mirror-schema/src/external/metrics.js';
 import {must} from 'shared/src/must.js';
-import {readAppConfig} from './app-config.js';
-import {authenticate} from './auth-config.js';
+import {getAppID, getDefaultApp} from './app-config.js';
 import color from './colors.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import type {AuthContext} from './handler.js';
 
 export function usageOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -43,20 +43,24 @@ export function usageOptions(yargs: CommonYargsArgv) {
       describe: 'Equivalent to --month=<current-month> --day=<current-day>.',
       type: 'boolean',
       conflicts: ['year', 'month', 'day'],
+    })
+    .option('app', {
+      describe: 'Specific app to display usage for',
+      type: 'string',
+      requiresArg: true,
+      default: getDefaultApp(),
+      required: !getDefaultApp(),
     });
 }
 
 type UsageHandlerArgs = YargvToInterface<ReturnType<typeof usageOptions>>;
 
-export async function usageHandler(yargs: UsageHandlerArgs): Promise<void> {
-  await authenticate(yargs);
+export async function usageHandler(
+  yargs: UsageHandlerArgs,
+  authContext: AuthContext,
+): Promise<void> {
   const firestore = getFirestore();
-  const config = readAppConfig();
-  const appID = config?.apps?.default?.appID;
-  if (!appID) {
-    console.info('Publish your app with `npx reflect publish` to view usage');
-    return;
-  }
+  const appID = await getAppID(authContext, yargs);
 
   const appDoc = await getDoc(
     doc(firestore, appPath(appID)).withConverter(appViewDataConverter),
