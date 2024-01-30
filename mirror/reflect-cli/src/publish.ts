@@ -38,7 +38,7 @@ export function publishOptions(yargs: CommonYargsArgv) {
       required: !getDefaultServerPath(),
     })
     .option('app', {
-      describe: 'Specific app to publish to',
+      describe: 'The name of the App, or "id:<app-id>" to publish',
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),

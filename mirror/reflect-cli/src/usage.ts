@@ -45,7 +45,7 @@ export function usageOptions(yargs: CommonYargsArgv) {
       conflicts: ['year', 'month', 'day'],
     })
     .option('app', {
-      describe: 'Specific app to display usage for',
+      describe: 'The name of the App, or "id:<app-id>" to display usage for',
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),

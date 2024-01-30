@@ -16,7 +16,7 @@ export function listVarsOptions(yargs: CommonVarsYargsArgv) {
       default: false,
     })
     .option('app', {
-      describe: 'Specific app to list',
+      describe: 'The name of the App, or "id:<app-id>" to list',
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),
