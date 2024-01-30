@@ -2,7 +2,6 @@ import {doc, getDoc, getFirestore} from 'firebase/firestore';
 import {readFileSync} from 'fs';
 import {createApp} from 'mirror-protocol/src/app.js';
 import {ensureTeam} from 'mirror-protocol/src/team.js';
-import {appPath, appViewDataConverter} from 'mirror-schema/src/external/app.js';
 import {
   appNameIndexDataConverter,
   appNameIndexPath,
@@ -226,14 +225,6 @@ export function writeAppConfig(
 ) {
   const configFilePath = getConfigFilePath(configDirPath);
   fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
-}
-
-export async function getApp(appID: string) {
-  const firestore = getFirestore();
-  const appDoc = await getDoc(
-    doc(firestore, appPath(appID)).withConverter(appViewDataConverter),
-  );
-  return appDoc.data();
 }
 
 function getDefaultAppName(): string {

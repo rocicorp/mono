@@ -84,7 +84,12 @@ async function writeTempFiles(
 
 test('it should throw warning if the source has syntax errors', async () => {
   const testFilePath = await writeTempFiles('const x =');
-  await expect(publishHandler({serverPath: testFilePath, app: '0000'} as Args, teamAuthContext)).rejects.toEqual(
+  await expect(
+    publishHandler(
+      {serverPath: testFilePath, app: '0000'} as Args,
+      teamAuthContext,
+    ),
+  ).rejects.toEqual(
     expect.objectContaining({
       constructor: ErrorWrapper,
       message: expect.stringMatching(/Unexpected end of file/),
@@ -94,8 +99,17 @@ test('it should throw warning if the source has syntax errors', async () => {
 });
 
 test('it should throw warning if invalid version', async () => {
-  const testFilePath = await writeTempFiles('const x = 42;', 'test.ts', '1.0.0');
-  await expect(publishHandler({serverPath: testFilePath, app: '0000'} as Args, teamAuthContext)).rejects.toEqual(
+  const testFilePath = await writeTempFiles(
+    'const x = 42;',
+    'test.ts',
+    '1.0.0',
+  );
+  await expect(
+    publishHandler(
+      {serverPath: testFilePath, app: '0000'} as Args,
+      teamAuthContext,
+    ),
+  ).rejects.toEqual(
     expect.objectContaining({
       constructor: ErrorWrapper,
       message: expect.stringMatching(
