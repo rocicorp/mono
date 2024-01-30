@@ -5,7 +5,8 @@ export function logErrorAndExit(
   format: (input: string) => string = color.red,
 ): never {
   console.log(format(message));
-  process.exit(1);
+  throw new Error(message);
+  //process.exit(1);
 }
 
 export const noFormat = (input: string) => input;

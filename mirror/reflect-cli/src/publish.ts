@@ -67,7 +67,6 @@ export async function publishHandler(
 ) {
   const {reflectChannel, serverPath} = yargs;
   if (!serverPath) logErrorAndExit('No server path found');
-  const appID = await getAppID(authContext, yargs, true);
   const absPath = path.resolve(serverPath);
   if (!absPath || !(await exists(absPath))) {
     logErrorAndExit(`File not found: ${absPath}`);
@@ -88,6 +87,8 @@ export async function publishHandler(
     'production',
   );
   assert(sourcemap);
+
+  const appID = await getAppID(authContext, yargs, true);
 
   const data: PublishRequest = {
     requester: authContext.requester,
