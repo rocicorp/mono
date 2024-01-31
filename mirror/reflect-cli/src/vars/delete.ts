@@ -7,6 +7,7 @@ import {makeRequester} from '../requester.js';
 import {watchDeployment} from '../watch-deployment.js';
 import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
+import {logErrorAndExit} from '../log-error-and-exit.js';
 
 export function deleteVarsOptions(yargs: CommonVarsYargsArgv) {
   return yargs
@@ -17,7 +18,7 @@ export function deleteVarsOptions(yargs: CommonVarsYargsArgv) {
       demandOption: true,
     })
     .option('app', {
-      describe: 'The name of the App, or "id:<app-id>"',
+      describe: 'The name of the App',
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),
@@ -40,6 +41,9 @@ export async function deleteVarsHandler(
     return;
   }
   const {userID} = authContext.user;
+  if (!app) {
+    logErrorAndExit('App name is required');
+  }
   const appID = await getAppID(authContext, app, false);
 
   const data = {requester: makeRequester(userID), appID, vars};

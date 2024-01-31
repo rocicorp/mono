@@ -9,6 +9,7 @@ import {getAppID, getDefaultApp} from '../app-config.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 import {createTailEventSource} from './tail-event-source.js';
 import type {AuthContext} from '../handler.js';
+import {logErrorAndExit} from '../log-error-and-exit.js';
 
 export function tailOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -19,7 +20,7 @@ export function tailOptions(yargs: CommonYargsArgv) {
       demandOption: true,
     })
     .option('app', {
-      describe: 'The name of the App, or "id:<app-id>"',
+      describe: 'The name of the App',
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),
@@ -34,6 +35,9 @@ export async function tailHandler(
   authContext: AuthContext,
 ) {
   const {app} = yargs;
+  if (!app) {
+    logErrorAndExit('App name is required');
+  }
   const appID = await getAppID(authContext, app, false);
   const idToken = await authContext.user.getIdToken();
   const {room: roomID} = yargs;

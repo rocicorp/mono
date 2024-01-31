@@ -7,7 +7,7 @@ import {startDevServer} from './dev/start-dev-server.js';
 import {ErrorWrapper} from './error.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import {getDefaultServerPath} from './app-config.js';
+import {getDefaultServerPath, mustReadAppConfig} from './app-config.js';
 import * as path from 'node:path';
 
 export function devOptions(yargs: CommonYargsArgv) {
@@ -56,8 +56,10 @@ async function exists(path: string) {
 type DevHandlerArgs = YargvToInterface<ReturnType<typeof devOptions>>;
 
 export async function devHandler(yargs: DevHandlerArgs) {
-  const {serverPath} = yargs;
-
+  let {serverPath} = yargs;
+  if (serverPath === '(from reflect.config.json)') {
+    serverPath = mustReadAppConfig().server;
+  }
   if (!serverPath) {
     logErrorAndExit(`Server path not provided`);
   }

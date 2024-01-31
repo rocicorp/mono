@@ -168,7 +168,7 @@ async function testPublishedCode(source: string, expectedOutputs: string[]) {
   );
 
   await publishHandler(
-    {serverPath: testFilePath, app: 'id:test-app-id'} as Args,
+    {serverPath: testFilePath, app: '(from reflect.config.json)'} as Args,
     teamAuthContext,
     publishMock as unknown as PublishCaller,
     firestore,

@@ -5,11 +5,9 @@ import {ensureTeam} from 'mirror-protocol/src/team.js';
 import {
   appNameIndexDataConverter,
   appNameIndexPath,
-  sanitizeForSubdomain,
 } from 'mirror-schema/src/external/team.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {basename, resolve} from 'node:path';
 import {pkgUpSync} from 'pkg-up';
 
 import * as v from 'shared/src/valita.js';
@@ -70,25 +68,26 @@ function findConfigRoot(): string | undefined {
   return findGitRoot();
 }
 
-export function mustFindAppConfigRoot(): string {
+export function findAppConfigRoot(): string | undefined {
   const configRoot = findConfigRoot();
   if (!configRoot) {
-    throw new Error(
-      'Could not find config root. Either a package.json or a .git directory is required.',
-    );
+    return undefined;
   }
   return configRoot;
 }
 
-function mustFindConfigFilePath(): string {
-  const configRoot = mustFindAppConfigRoot();
+function findConfigFilePath(): string | undefined {
+  const configRoot = findAppConfigRoot();
+  if (!configRoot) {
+    return undefined;
+  }
   return path.join(configRoot, configFileName);
 }
 
 function getConfigFilePath(configDirPath?: string | undefined) {
   return configDirPath
     ? path.join(configDirPath, configFileName)
-    : mustFindConfigFilePath();
+    : findConfigFilePath();
 }
 
 const configFileName = 'reflect.config.json';
@@ -101,12 +100,18 @@ export function setAppConfigForTesting(config: AppConfig | undefined) {
 
 export function configFileExists(configDirPath: string): boolean {
   const configFilePath = getConfigFilePath(configDirPath);
+  if (!configFilePath) {
+    return false;
+  }
   return fs.existsSync(configFilePath);
 }
 
 export function getDefaultServerPath() {
   const config = readAppConfig();
-  return config?.server;
+  if (config?.server) {
+    return '(from reflect.config.json)';
+  }
+  return './src/reflect/server.ts';
 }
 
 export function getAppIDfromConfig(instance = 'default') {
@@ -117,7 +122,7 @@ export function getAppIDfromConfig(instance = 'default') {
 export function getDefaultApp() {
   const configAppId = getAppIDfromConfig();
   if (configAppId) {
-    return `id:${configAppId}`;
+    return `(from reflect.config.json)`;
   }
   return getDefaultAppName();
 }
@@ -131,6 +136,9 @@ export function readAppConfig(
     return appConfigForTesting;
   }
   const configFilePath = getConfigFilePath(configDirPath);
+  if (!configFilePath) {
+    return undefined;
+  }
   if (fs.existsSync(configFilePath)) {
     try {
       const json = JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
@@ -141,7 +149,6 @@ export function readAppConfig(
       throw new ErrorWrapper(e, 'WARNING');
     }
   }
-
   return undefined;
 }
 
@@ -191,8 +198,12 @@ export async function getAppID(
   app: string,
   create = false,
 ): Promise<string> {
-  if (app.startsWith('id:')) {
-    return app.split(':')[1]; // already have an appID
+  if (app === '(from reflect.config.json)') {
+    const appID = getAppIDfromConfig();
+    if (!appID) {
+      logErrorAndExit('No appID found in reflect.config.json');
+    }
+    return appID;
   }
   // Otherwise it's a name.
   const teamID = await ensureTeamID(authContext);
@@ -223,10 +234,13 @@ export function writeAppConfig(
   configDirPath?: string | undefined,
 ) {
   const configFilePath = getConfigFilePath(configDirPath);
+  if (!configFilePath) {
+    throw new Error('Could not find config file path');
+  }
   fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
 }
 
-function getDefaultAppName(): string {
+function getDefaultAppName(): string | undefined {
   const pkg = pkgUpSync();
   if (pkg) {
     const {name} = JSON.parse(readFileSync(pkg, 'utf-8'));
@@ -234,12 +248,7 @@ function getDefaultAppName(): string {
       return String(name);
     }
   }
-  return getDefaultAppNameFromDir('./');
-}
-
-function getDefaultAppNameFromDir(dir: string): string {
-  const dirname = basename(resolve(dir));
-  return sanitizeForSubdomain(dirname);
+  return undefined;
 }
 
 type TemplatePlaceholders = {

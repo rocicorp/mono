@@ -18,6 +18,7 @@ import {getAppID, getDefaultApp} from './app-config.js';
 import color from './colors.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import type {AuthContext} from './handler.js';
+import {logErrorAndExit} from './log-error-and-exit.js';
 
 export function usageOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -45,7 +46,7 @@ export function usageOptions(yargs: CommonYargsArgv) {
       conflicts: ['year', 'month', 'day'],
     })
     .option('app', {
-      describe: 'The name of the App, or "id:<app-id>"',
+      describe: 'The name of the App',
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),
@@ -61,6 +62,9 @@ export async function usageHandler(
 ): Promise<void> {
   const firestore = getFirestore();
   const {app} = yargs;
+  if (!app) {
+    logErrorAndExit('App name is required');
+  }
   const appID = await getAppID(authContext, app);
   const appDoc = await getDoc(
     doc(firestore, appPath(appID)).withConverter(appViewDataConverter),

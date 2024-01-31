@@ -7,6 +7,7 @@ import {padColumns} from '../table.js';
 import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
 import {getAppID, getDefaultApp} from '../app-config.js';
+import {logErrorAndExit} from '../log-error-and-exit.js';
 
 export function listVarsOptions(yargs: CommonVarsYargsArgv) {
   return yargs
@@ -16,7 +17,7 @@ export function listVarsOptions(yargs: CommonVarsYargsArgv) {
       default: false,
     })
     .option('app', {
-      describe: 'The name of the App, or "id:<app-id>"',
+      describe: 'The name of the App',
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),
@@ -51,6 +52,9 @@ export async function listVarsHandler(
   } else {
     const {app} = yargs;
     const {userID} = authContext.user;
+    if (!app) {
+      logErrorAndExit('App name is required');
+    }
     const appID = await getAppID(authContext, app, false);
     const data = {requester: makeRequester(userID), appID, decrypted: show};
 

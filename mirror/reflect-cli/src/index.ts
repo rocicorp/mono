@@ -17,7 +17,7 @@ import {
 import {createHandler, createOptions} from './create.js';
 import {deleteHandler, deleteOptions} from './delete.js';
 import {devHandler, devOptions} from './dev.js';
-import {authenticateAndHandleWith, handleWith} from './handler.js';
+import {AuthContext, authenticateAndHandleWith, handleWith} from './handler.js';
 import {createKeyHandler, createKeyOptions} from './keys/create.js';
 import {deleteKeysHandler, deleteKeysOptions} from './keys/delete.js';
 import {editKeyHandler, editKeyOptions} from './keys/edit.js';
@@ -108,6 +108,24 @@ function createCLIParser(argv: string[]) {
     '🦚 Start a log tailing session',
     tailOptions,
     authenticateAndHandleWith(tailHandler).andCleanup(),
+  );
+
+  reflectCLI.command(
+    'whoami',
+    '💡 Show your team, provider, email and name',
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    () => {},
+    authenticateAndHandleWith(
+      (
+        _yargs: YargvToInterface<CommonYargsArgv>,
+        authContext: AuthContext,
+      ): Promise<void> => {
+        console.log(
+          `Team: ${authContext.user.additionalUserInfo?.username}\nProvider: ${authContext.user.additionalUserInfo?.providerId}\nEmail: ${authContext.user.email}\nName: ${authContext.user.additionalUserInfo?.profile?.name}`,
+        );
+        return Promise.resolve();
+      },
+    ).andCleanup(),
   );
 
   reflectCLI.command('env', '🎛️  Manage environment variables', yargs => {
