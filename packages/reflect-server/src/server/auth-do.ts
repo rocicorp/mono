@@ -65,10 +65,10 @@ import {
 import {
   BaseContext,
   Router,
-  bearerToken,
   bodyOnly,
   get,
   noInputParams,
+  optionalBearerToken,
   post,
   queryParams,
   queryParamsIgnoreBody,
@@ -314,7 +314,7 @@ export class BaseAuthDO implements DurableObject {
 
   #closeBeacon = post()
     .with(queryParamsIgnoreBody(closeBeaconQueryParamsSchema))
-    .with(bearerToken())
+    .with(optionalBearerToken())
     .handle((ctx, request) => {
       const lc = ctx.lc.withContext('handler', 'closeBeacon');
       lc.info?.('authDO received close beacon request:', request.url);
