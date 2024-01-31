@@ -12,6 +12,7 @@ import {
   getDefaultServerPath,
   getAppID,
   mustReadAppConfig,
+  DEFAULT_FROM_REFLECT_CONFIG,
 } from './app-config.js';
 import {CompileResult, compile} from './compile.js';
 import {ErrorWrapper} from './error.js';
@@ -72,7 +73,7 @@ export async function publishHandler(
 ) {
   const {reflectChannel, app} = yargs;
   let {serverPath} = yargs;
-  if (serverPath === '(from reflect.config.json)') {
+  if (serverPath === DEFAULT_FROM_REFLECT_CONFIG) {
     serverPath = mustReadAppConfig().server;
   }
   if (!app) {

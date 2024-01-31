@@ -5,7 +5,7 @@ import {Miniflare} from 'miniflare';
 import {SERVER_VARIABLE_PREFIX} from 'mirror-schema/src/external/vars.js';
 import {nanoid} from 'nanoid';
 import * as path from 'node:path';
-import {findAppConfigRoot} from '../app-config.js';
+import {mustFindAppConfigRoot} from '../app-config.js';
 import {buildReflectServerContent} from '../compile.js';
 import {ErrorWrapper} from '../error.js';
 import {getScriptTemplate} from '../get-script-template.js';
@@ -23,10 +23,7 @@ export async function startDevServer(
   signal: AbortSignal,
 ): Promise<URL> {
   const appDir = path.dirname(code.path);
-  const appConfigRoot = findAppConfigRoot();
-  if (!appConfigRoot) {
-    throw new Error('Could not project root directory');
-  }
+  const appConfigRoot = mustFindAppConfigRoot();
   const inspectorPort = await getPort({port: 9229});
 
   const devVars = listDevVars();

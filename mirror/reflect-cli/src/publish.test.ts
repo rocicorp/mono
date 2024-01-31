@@ -13,7 +13,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {setAppConfigForTesting} from './app-config.js';
+import {DEFAULT_FROM_REFLECT_CONFIG, setAppConfigForTesting} from './app-config.js';
 import {ErrorWrapper} from './error.js';
 import {initFirebase} from './firebase.js';
 import {teamAuthContext} from './login.test.helper.js';
@@ -168,7 +168,7 @@ async function testPublishedCode(source: string, expectedOutputs: string[]) {
   );
 
   await publishHandler(
-    {serverPath: testFilePath, app: '(from reflect.config.json)'} as Args,
+    {serverPath: testFilePath, app: DEFAULT_FROM_REFLECT_CONFIG} as Args,
     teamAuthContext,
     publishMock as unknown as PublishCaller,
     firestore,

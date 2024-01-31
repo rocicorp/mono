@@ -57,7 +57,7 @@ type DevHandlerArgs = YargvToInterface<ReturnType<typeof devOptions>>;
 
 export async function devHandler(yargs: DevHandlerArgs) {
   let {serverPath} = yargs;
-  if (serverPath === '(from reflect.config.json)') {
+  if (serverPath === DEFAULT_FROM_REFLECT_CONFIG) {
     serverPath = mustReadAppConfig().server;
   }
   if (!serverPath) {

@@ -19,6 +19,7 @@ import {makeRequester} from './requester.js';
 // { srcFile: destFile }
 const templateFiles = v.record(v.string());
 
+export const DEFAULT_FROM_REFLECT_CONFIG = '(from reflect.config.json)';
 // AppInstance identifies an app that has been initialized on mirror via app-create.
 const appInstanceSchema = v.object({
   appID: v.string(),
@@ -68,16 +69,18 @@ function findConfigRoot(): string | undefined {
   return findGitRoot();
 }
 
-export function findAppConfigRoot(): string | undefined {
+export function mustFindAppConfigRoot(): string {
   const configRoot = findConfigRoot();
   if (!configRoot) {
-    return undefined;
+    throw new Error(
+      'Could not find config root. Either a package.json or a .git directory is required.',
+    );
   }
   return configRoot;
 }
 
 function findConfigFilePath(): string | undefined {
-  const configRoot = findAppConfigRoot();
+  const configRoot = findConfigRoot();
   if (!configRoot) {
     return undefined;
   }
@@ -98,18 +101,10 @@ export function setAppConfigForTesting(config: AppConfig | undefined) {
   appConfigForTesting = config;
 }
 
-export function configFileExists(configDirPath: string): boolean {
-  const configFilePath = getConfigFilePath(configDirPath);
-  if (!configFilePath) {
-    return false;
-  }
-  return fs.existsSync(configFilePath);
-}
-
 export function getDefaultServerPath() {
   const config = readAppConfig();
   if (config?.server) {
-    return '(from reflect.config.json)';
+    return DEFAULT_FROM_REFLECT_CONFIG;
   }
   return './src/reflect/index.ts';
 }
@@ -122,7 +117,7 @@ export function getAppIDfromConfig(instance = 'default') {
 export function getDefaultApp() {
   const configAppId = getAppIDfromConfig();
   if (configAppId) {
-    return `(from reflect.config.json)`;
+    return DEFAULT_FROM_REFLECT_CONFIG;
   }
   return getDefaultAppName();
 }
@@ -198,7 +193,7 @@ export async function getAppID(
   app: string,
   create = false,
 ): Promise<string> {
-  if (app === '(from reflect.config.json)') {
+  if (app === DEFAULT_FROM_REFLECT_CONFIG) {
     const appID = getAppIDfromConfig();
     if (!appID) {
       logErrorAndExit('No appID found in reflect.config.json');

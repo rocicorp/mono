@@ -9,7 +9,7 @@ import {
 import path from 'path';
 import {getProperties} from 'properties-file';
 import {escapeKey, escapeValue} from 'properties-file/escape';
-import {findAppConfigRoot} from '../app-config.js';
+import {mustFindAppConfigRoot} from '../app-config.js';
 import {UserError} from '../error.js';
 
 export function listDevVars(): Record<string, string> {
@@ -48,8 +48,7 @@ function varsFilePaths(): {dir: string; file: string} {
   if (fileOverrideForTests) {
     return fileOverrideForTests;
   }
-  const appConfigRoot = findAppConfigRoot();
-  if (!appConfigRoot) throw new UserError('Could not find config file path');
+  const appConfigRoot = mustFindAppConfigRoot();
   const dir = path.join(appConfigRoot, '.reflect');
   return {dir, file: path.join(dir, 'dev-vars.env')};
 }
