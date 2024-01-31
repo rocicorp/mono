@@ -5,18 +5,26 @@ import {
 } from 'mirror-protocol/src/tail-message.js';
 import type {RoomTailRequest} from 'mirror-protocol/src/tail.js';
 import * as valita from 'shared/src/valita.js';
-import {ensureAppInstantiated} from '../app-config.js';
+import {getAppID, getDefaultApp} from '../app-config.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 import {createTailEventSource} from './tail-event-source.js';
 import type {AuthContext} from '../handler.js';
 
 export function tailOptions(yargs: CommonYargsArgv) {
-  return yargs.option('room', {
-    describe: 'The room ID of the room to tail',
-    type: 'string',
-    requiresArg: true,
-    demandOption: true,
-  });
+  return yargs
+    .option('room', {
+      describe: 'The room ID of the room to tail',
+      type: 'string',
+      requiresArg: true,
+      demandOption: true,
+    })
+    .option('app', {
+      describe: 'The name of the App, or "id:<app-id>"',
+      type: 'string',
+      requiresArg: true,
+      default: getDefaultApp(),
+      required: !getDefaultApp(),
+    });
 }
 
 type TailHandlerArgs = YargvToInterface<ReturnType<typeof tailOptions>>;
@@ -25,7 +33,8 @@ export async function tailHandler(
   yargs: TailHandlerArgs,
   authContext: AuthContext,
 ) {
-  const {appID} = await ensureAppInstantiated(authContext);
+  const {app} = yargs;
+  const appID = await getAppID(authContext, app, false);
   const idToken = await authContext.user.getIdToken();
   const {room: roomID} = yargs;
 

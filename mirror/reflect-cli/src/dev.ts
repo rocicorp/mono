@@ -8,6 +8,7 @@ import {ErrorWrapper} from './error.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import {getDefaultServerPath} from './app-config.js';
+import * as path from 'node:path';
 
 export function devOptions(yargs: CommonYargsArgv) {
   return (
@@ -34,7 +35,7 @@ export function devOptions(yargs: CommonYargsArgv) {
         requiresArg: true,
       })
       .option('server-path', {
-        describe: 'Path to the server configuration file',
+        describe: 'Path to the reflect server entry file',
         type: 'string',
         requiresArg: true,
         default: getDefaultServerPath(),
@@ -57,8 +58,12 @@ type DevHandlerArgs = YargvToInterface<ReturnType<typeof devOptions>>;
 export async function devHandler(yargs: DevHandlerArgs) {
   const {serverPath} = yargs;
 
-  if (!serverPath || !(await exists(serverPath))) {
-    logErrorAndExit(`File not found: ${serverPath}`);
+  if (!serverPath) {
+    logErrorAndExit(`Server path not provided`);
+  }
+  const absPath = path.resolve(serverPath);
+  if (!absPath || !(await exists(absPath))) {
+    logErrorAndExit(`File not found: ${absPath}`);
   }
 
   const {port, silenceStartupMessage, logLevel} = yargs;
@@ -73,7 +78,7 @@ export async function devHandler(yargs: DevHandlerArgs) {
 
   try {
     for await (const {code, sourcemap} of watch(
-      serverPath,
+      absPath,
       'linked',
       mode,
       ac.signal,

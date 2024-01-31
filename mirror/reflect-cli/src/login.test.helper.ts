@@ -61,3 +61,23 @@ export const authContext: AuthContext = {
     },
   },
 };
+
+export const teamAuthContext: AuthContext = {
+  user: {
+    userID: 'fake-uid',
+    getIdToken: () => new Promise(() => 'fake-token'),
+    additionalUserInfo: {
+      username: 'fake-team',
+      isNewUser: false,
+      profile: {},
+      providerId: 'github.com',
+    },
+  },
+  requester: {
+    userID: 'fake-uid',
+    userAgent: {
+      type: 'reflect-cli',
+      version: '0.28.0',
+    },
+  },
+};

@@ -52,6 +52,7 @@ describe('set vars', () => {
     await setVarsHandler(
       {
         ...ignoredYargs,
+        app: '000',
         authContext,
         dev: true,
         keysAndValues: ['FOO=bar', 'BAR=baz'],
@@ -68,6 +69,7 @@ describe('set vars', () => {
   test('set keys with javascript Object method names', async () => {
     await setVarsHandler(
       {
+        app: '000',
         ...ignoredYargs,
         dev: true,
         keysAndValues: ['FOO=bar', 'toString=this-should-still-work'],
@@ -85,6 +87,7 @@ describe('set vars', () => {
     try {
       await setVarsHandler(
         {
+          app: '000',
           ...ignoredYargs,
           dev: true,
           keysAndValues: ['FOO=bar', 'FOO=boo'],

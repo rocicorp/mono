@@ -7,7 +7,7 @@ import {
 import assert from 'node:assert';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {ensureAppInstantiated} from './app-config.js';
+import {getDefaultApp, getDefaultServerPath, getAppID} from './app-config.js';
 import {CompileResult, compile} from './compile.js';
 import {ErrorWrapper} from './error.js';
 import {findServerVersionRange} from './find-reflect-server-version.js';
@@ -29,6 +29,20 @@ export function publishOptions(yargs: CommonYargsArgv) {
       type: 'string',
       requiresArg: true,
       hidden: true,
+    })
+    .option('server-path', {
+      describe: 'Path to the Reflect server entry file',
+      type: 'string',
+      requiresArg: true,
+      default: getDefaultServerPath(),
+      required: !getDefaultServerPath(),
+    })
+    .option('app', {
+      describe: 'The name of the App, or "id:<app-id>"',
+      type: 'string',
+      requiresArg: true,
+      default: getDefaultApp(),
+      required: !getDefaultApp(),
     });
 }
 
@@ -51,14 +65,12 @@ export async function publishHandler(
   publish: PublishCaller = publishCaller, // Overridden in tests.
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
-  const {reflectChannel} = yargs;
-  const {appID, server: script} = await ensureAppInstantiated(authContext);
-
-  const absPath = path.resolve(script);
-  if (!(await exists(absPath))) {
+  const {reflectChannel, serverPath, app} = yargs;
+  if (!serverPath) logErrorAndExit('No server path found');
+  const absPath = path.resolve(serverPath);
+  if (!absPath || !(await exists(absPath))) {
     logErrorAndExit(`File not found: ${absPath}`);
   }
-
   let serverVersionRange;
   if (yargs.forceVersionRange) {
     serverVersionRange = yargs.forceVersionRange;
@@ -68,13 +80,15 @@ export async function publishHandler(
     serverVersionRange = yargs.forceVersionRange ?? range.raw;
   }
 
-  console.log(`Compiling ${script}`);
+  console.log(`Compiling ${serverPath}`);
   const {code, sourcemap} = await compileOrReportWarning(
     absPath,
     'linked',
     'production',
   );
   assert(sourcemap);
+
+  const appID = await getAppID(authContext, app, true);
 
   const data: PublishRequest = {
     requester: authContext.requester,

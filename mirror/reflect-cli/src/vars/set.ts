@@ -1,6 +1,6 @@
 import {getFirestore} from 'firebase/firestore';
 import {setVars} from 'mirror-protocol/src/vars.js';
-import {ensureAppInstantiated} from '../app-config.js';
+import {getAppID, getDefaultApp} from '../app-config.js';
 import {setDevVars} from '../dev/vars.js';
 import {UserError} from '../error.js';
 import type {AuthContext} from '../handler.js';
@@ -11,13 +11,21 @@ import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
 
 export function setVarsOptions(yargs: CommonVarsYargsArgv) {
-  return yargs.positional('keysAndValues', {
-    describe:
-      'Space-separated KEY=VALUE pairs, or KEY only to input its VALUE with a password prompt',
-    type: 'string',
-    array: true,
-    demandOption: true,
-  });
+  return yargs
+    .positional('keysAndValues', {
+      describe:
+        'Space-separated KEY=VALUE pairs, or KEY only to input its VALUE with a password prompt',
+      type: 'string',
+      array: true,
+      demandOption: true,
+    })
+    .option('app', {
+      describe: 'The name of the App, or "id:<app-id>"',
+      type: 'string',
+      requiresArg: true,
+      default: getDefaultApp(),
+      required: !getDefaultApp(),
+    });
 }
 
 type SetVarsHandlerArgs = YargvToInterface<ReturnType<typeof setVarsOptions>>;
@@ -26,7 +34,7 @@ export async function setVarsHandler(
   yargs: SetVarsHandlerArgs,
   authContext: AuthContext,
 ): Promise<void> {
-  const {keysAndValues, dev} = yargs;
+  const {keysAndValues, dev, app} = yargs;
 
   const vars: Record<string, string> = {};
   for (const kv of keysAndValues) {
@@ -54,7 +62,7 @@ export async function setVarsHandler(
   }
 
   const {userID} = authContext.user;
-  const {appID} = await ensureAppInstantiated(authContext);
+  const appID = await getAppID(authContext, app, false);
   const data = {requester: makeRequester(userID), appID, vars};
   const {deploymentPath} = await setVars.call(data);
   if (!deploymentPath) {

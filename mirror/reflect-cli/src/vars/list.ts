@@ -1,19 +1,27 @@
 import {listVars, ListVarsResponse} from 'mirror-protocol/src/vars.js';
 import color from 'picocolors';
-import {ensureAppInstantiated} from '../app-config.js';
 import {listDevVars} from '../dev/vars.js';
 import type {AuthContext} from '../handler.js';
 import {makeRequester} from '../requester.js';
 import {padColumns} from '../table.js';
 import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
+import {getAppID, getDefaultApp} from '../app-config.js';
 
 export function listVarsOptions(yargs: CommonVarsYargsArgv) {
-  return yargs.option('show', {
-    desc: 'Show the decrypted environment variables',
-    type: 'boolean',
-    default: false,
-  });
+  return yargs
+    .option('show', {
+      desc: 'Show the decrypted environment variables',
+      type: 'boolean',
+      default: false,
+    })
+    .option('app', {
+      describe: 'The name of the App, or "id:<app-id>"',
+      type: 'string',
+      requiresArg: true,
+      default: getDefaultApp(),
+      required: !getDefaultApp(),
+    });
 }
 
 type ListVarsHandlerArgs = YargvToInterface<ReturnType<typeof listVarsOptions>>;
@@ -41,8 +49,9 @@ export async function listVarsHandler(
       },
     };
   } else {
+    const {app} = yargs;
     const {userID} = authContext.user;
-    const {appID} = await ensureAppInstantiated(authContext);
+    const appID = await getAppID(authContext, app, false);
     const data = {requester: makeRequester(userID), appID, decrypted: show};
 
     response = await listVars.call(data);
