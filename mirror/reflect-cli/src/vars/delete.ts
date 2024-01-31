@@ -43,7 +43,7 @@ export async function deleteVarsHandler(
   const {userID} = authContext.user;
   if (!app) {
     logErrorAndExit('App name is required');
-  }
+  } 
   const appID = await getAppID(authContext, app, false);
 
   const data = {requester: makeRequester(userID), appID, vars};
