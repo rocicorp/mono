@@ -194,14 +194,36 @@ export function bearerToken<Context extends BaseContext>(): RequestValidator<
   Context,
   Context & {bearerToken: string}
 > {
+  return bearerTokenImpl(true);
+}
+
+export function optionalBearerToken<
+  Context extends BaseContext,
+>(): RequestValidator<Context, Context & {bearerToken?: string}> {
+  return bearerTokenImpl(false);
+}
+
+function bearerTokenImpl<Context extends BaseContext>(
+  required: true,
+): RequestValidator<Context, Context & {bearerToken: string}>;
+function bearerTokenImpl<Context extends BaseContext>(
+  required: false,
+): RequestValidator<Context, Context & {bearerToken: string}>;
+function bearerTokenImpl<Context extends BaseContext>(
+  required: boolean,
+): RequestValidator<Context, Context & {bearerToken?: string}> {
   function throwError(kind: string): never {
     throw new APIError(401, 'request', `${kind} Authorization header`);
   }
   return (ctx: Context, req: Request) => {
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throwError('Missing');
+    if (authHeader === null) {
+      if (required) {
+        throwError('Missing');
+      }
+      return {ctx};
     }
+
     const parts = authHeader.split(/\s+/);
     if (parts.length !== 2) {
       throwError('Invalid');
