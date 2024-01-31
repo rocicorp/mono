@@ -14,6 +14,7 @@ import {
   bodyOnly,
   checkAuthAPIKey,
   get,
+  optionalBearerToken,
   post,
   queryParams,
   queryParamsIgnoreBody,
@@ -959,7 +960,7 @@ describe('with bearerToken', () => {
       error: {
         code: 401,
         resource: 'request',
-        message: 'Missing Authorization header',
+        message: 'Invalid Authorization header',
       },
     },
     {
@@ -1017,6 +1018,115 @@ describe('with bearerToken', () => {
         .handle(
           ctx =>
             new Response(ctx.bearerToken, {
+              status: 200,
+            }),
+        );
+      const url = `https://roci.dev/`;
+      const request = new Request(url, {headers: c.headers ?? {}});
+      const ctx = {
+        parsedURL: must(new URLPattern().exec(url)),
+        lc: createSilentLogContext(),
+      };
+
+      const response = await handler(ctx, request);
+      if (response.status === 200) {
+        const result = {
+          status: response.status,
+          text: await response.text(),
+        };
+        expect(result).toEqual(c.expected);
+      } else {
+        expect(response.status).toBe(c.error?.code);
+        expect(await response.json()).toEqual({
+          error: c.error,
+        });
+      }
+    });
+  }
+});
+
+describe('with optionalBearerToken', () => {
+  type Case = {
+    name: string;
+    headers?: Record<string, string>;
+    expected?: {text: string; status: number};
+    error?: APIErrorInfo;
+  };
+
+  const cases: Case[] = [
+    {
+      name: 'no auth header',
+      expected: {text: 'bearerToken undefined', status: 200},
+      error: {
+        code: 401,
+        resource: 'request',
+        message: 'Missing Authorization header',
+      },
+    },
+    {
+      name: 'empty header lowercase',
+      headers: {authorization: ''},
+      error: {
+        code: 401,
+        resource: 'request',
+        message: 'Invalid Authorization header',
+      },
+    },
+    {
+      name: 'valid header',
+      headers: {authorization: 'Bearer abc'},
+      expected: {text: 'abc', status: 200},
+    },
+    {
+      name: 'valid header with escapes',
+      headers: {authorization: 'Bearer abc%20def'},
+      expected: {text: 'abc def', status: 200},
+    },
+    {
+      name: 'invalid header',
+      headers: {authorization: 'Bearer'},
+      error: {
+        code: 401,
+        resource: 'request',
+        message: 'Invalid Authorization header',
+      },
+    },
+    {
+      name: 'invalid header',
+      headers: {authorization: 'Bear grizzly'},
+      error: {
+        code: 401,
+        resource: 'request',
+        message: 'Invalid Authorization header',
+      },
+    },
+    {
+      name: 'invalid header',
+      headers: {authorization: 'Bearer a b c'},
+      error: {
+        code: 401,
+        resource: 'request',
+        message: 'Invalid Authorization header',
+      },
+    },
+    {
+      name: 'invalid header',
+      headers: {authorization: 'Bearer a%'},
+      error: {
+        code: 401,
+        resource: 'request',
+        message: 'Malformed Authorization header',
+      },
+    },
+  ];
+
+  for (const c of cases) {
+    test(c.name, async () => {
+      const handler = get()
+        .with(optionalBearerToken())
+        .handle(
+          ctx =>
+            new Response(ctx.bearerToken ?? 'bearerToken undefined', {
               status: 200,
             }),
         );
