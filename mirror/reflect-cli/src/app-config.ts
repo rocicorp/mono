@@ -111,7 +111,7 @@ export function getDefaultServerPath() {
   if (config?.server) {
     return '(from reflect.config.json)';
   }
-  return './src/reflect/server.ts';
+  return './src/reflect/index.ts';
 }
 
 export function getAppIDfromConfig(instance = 'default') {
