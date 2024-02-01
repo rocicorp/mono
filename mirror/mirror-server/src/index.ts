@@ -63,7 +63,10 @@ export const api = {
 
 export const app = {
   create: https.onCall(
-    baseHttpsOptions,
+    {
+      ...baseHttpsOptions,
+      secrets: [INTERNAL_FUNCTION_SECRET_NAME],
+    },
     appFunctions.create(getFirestore(), secrets),
   ),
   publish: https.onCall(
