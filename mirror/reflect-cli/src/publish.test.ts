@@ -13,7 +13,10 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {DEFAULT_FROM_REFLECT_CONFIG, setAppConfigForTesting} from './app-config.js';
+import {
+  DEFAULT_FROM_REFLECT_CONFIG,
+  setAppConfigForTesting,
+} from './app-config.js';
 import {ErrorWrapper} from './error.js';
 import {initFirebase} from './firebase.js';
 import {teamAuthContext} from './login.test.helper.js';

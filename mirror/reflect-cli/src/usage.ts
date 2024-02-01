@@ -62,9 +62,6 @@ export async function usageHandler(
 ): Promise<void> {
   const firestore = getFirestore();
   const {app} = yargs;
-  if (!app) {
-    logErrorAndExit('App name is required');
-  }
   const appID = await getAppID(authContext, app);
   const appDoc = await getDoc(
     doc(firestore, appPath(appID)).withConverter(appViewDataConverter),

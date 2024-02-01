@@ -21,7 +21,7 @@ export function listVarsOptions(yargs: CommonVarsYargsArgv) {
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),
-      required: !getDefaultApp(),
+      required: true,
     });
 }
 
@@ -52,9 +52,6 @@ export async function listVarsHandler(
   } else {
     const {app} = yargs;
     const {userID} = authContext.user;
-    if (!app) {
-      logErrorAndExit('App name is required');
-    }
     const appID = await getAppID(authContext, app, false);
     const data = {requester: makeRequester(userID), appID, decrypted: show};
 

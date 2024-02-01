@@ -7,7 +7,11 @@ import {startDevServer} from './dev/start-dev-server.js';
 import {ErrorWrapper} from './error.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import {DEFAULT_FROM_REFLECT_CONFIG, getDefaultServerPath, mustReadAppConfig} from './app-config.js';
+import {
+  DEFAULT_FROM_REFLECT_CONFIG,
+  getDefaultServerPath,
+  mustReadAppConfig,
+} from './app-config.js';
 import * as path from 'node:path';
 
 export function devOptions(yargs: CommonYargsArgv) {

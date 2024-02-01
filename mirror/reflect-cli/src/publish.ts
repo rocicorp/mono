@@ -41,14 +41,14 @@ export function publishOptions(yargs: CommonYargsArgv) {
       type: 'string',
       requiresArg: true,
       default: getDefaultServerPath(),
-      required: !getDefaultServerPath(),
+      required: true,
     })
     .option('app', {
       describe: 'The name of the App',
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),
-      required: !getDefaultApp(),
+      required: true,
     });
 }
 
@@ -75,9 +75,6 @@ export async function publishHandler(
   let {serverPath} = yargs;
   if (serverPath === DEFAULT_FROM_REFLECT_CONFIG) {
     serverPath = mustReadAppConfig().server;
-  }
-  if (!app) {
-    logErrorAndExit('App name is required');
   }
   if (!serverPath) logErrorAndExit('No server path found');
   const absPath = path.resolve(serverPath);

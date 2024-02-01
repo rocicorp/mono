@@ -35,9 +35,6 @@ export async function tailHandler(
   authContext: AuthContext,
 ) {
   const {app} = yargs;
-  if (!app) {
-    logErrorAndExit('App name is required');
-  }
   const appID = await getAppID(authContext, app, false);
   const idToken = await authContext.user.getIdToken();
   const {room: roomID} = yargs;

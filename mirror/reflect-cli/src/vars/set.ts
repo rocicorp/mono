@@ -24,7 +24,7 @@ export function setVarsOptions(yargs: CommonVarsYargsArgv) {
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),
-      required: !getDefaultApp(),
+      required: true,
     });
 }
 
@@ -35,9 +35,6 @@ export async function setVarsHandler(
   authContext: AuthContext,
 ): Promise<void> {
   const {keysAndValues, dev, app} = yargs;
-  if (!app) {
-    throw new UserError('App name is required');
-  }
   const vars: Record<string, string> = {};
   for (const kv of keysAndValues) {
     const eq = kv.indexOf('=');

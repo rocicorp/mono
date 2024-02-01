@@ -22,7 +22,7 @@ export function deleteVarsOptions(yargs: CommonVarsYargsArgv) {
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),
-      required: !getDefaultApp(),
+      required: true,
     });
 }
 
@@ -41,9 +41,6 @@ export async function deleteVarsHandler(
     return;
   }
   const {userID} = authContext.user;
-  if (!app) {
-    logErrorAndExit('App name is required');
-  } 
   const appID = await getAppID(authContext, app, false);
 
   const data = {requester: makeRequester(userID), appID, vars};
