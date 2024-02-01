@@ -46,11 +46,12 @@ export class MiniflareWrapper {
   }
 
   #createMiniflare() {
-    this.#readyResolver = resolver<URL>();
+    const r = resolver<URL>();
+    this.#readyResolver = r;
     const mf = new Miniflare(this.#options);
     mf.ready.then(
-      url => this.#readyResolver.resolve(url),
-      e => this.#readyResolver.reject(e),
+      url => r.resolve(url),
+      e => r.reject(e),
     );
     return mf;
   }
