@@ -35,6 +35,7 @@ async function main() {
     define: {
       REFLECT_VERSION: JSON.stringify(reflectVersion),
       REFLECT_CLI_NAME: JSON.stringify(reflectCliName),
+      TESTING: 'false',
     },
   });
 }

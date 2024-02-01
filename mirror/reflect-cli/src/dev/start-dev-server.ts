@@ -1,7 +1,6 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {OutputFile} from 'esbuild';
 import getPort from 'get-port';
-import {Miniflare} from 'miniflare';
 import {SERVER_VARIABLE_PREFIX} from 'mirror-schema/src/external/vars.js';
 import {nanoid} from 'nanoid';
 import * as path from 'node:path';
@@ -9,10 +8,11 @@ import {mustFindAppConfigRoot} from '../app-config.js';
 import {buildReflectServerContent} from '../compile.js';
 import {ErrorWrapper} from '../error.js';
 import {getScriptTemplate} from '../get-script-template.js';
+import {MiniflareWrapper} from './miniflare-wrapper.js';
 import {listDevVars} from './vars.js';
 
 /**
- * Returns a function that shuts down the dev server.
+ * To shut down the dev server, abort the passed in signal.
  */
 export async function startDevServer(
   code: OutputFile,
@@ -35,7 +35,7 @@ export async function startDevServer(
   );
 
   // Create a new Miniflare instance, starting a workerd server
-  const mf = new Miniflare({
+  const mf = new MiniflareWrapper({
     port,
     modules: [
       {
