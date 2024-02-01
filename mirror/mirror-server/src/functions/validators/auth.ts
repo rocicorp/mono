@@ -6,6 +6,7 @@ import type {BaseAppRequest} from 'mirror-protocol/src/app.js';
 import type {BaseRequest} from 'mirror-protocol/src/base.js';
 import type {BaseTeamRequest} from 'mirror-protocol/src/team.js';
 import {
+  APP_CREATE_PERMISSION,
   ApiKey,
   apiKeyDataConverter,
   type RequiredPermission,
@@ -363,7 +364,10 @@ export function appOrKeyAuthorization<
         if (!apiKey.permissions[keyPermission]) {
           throw new HttpsError(
             'permission-denied',
-            `Key "${apiKeyDoc.id}" has not been granted "${keyPermission}" permission`,
+            keyPermission === APP_CREATE_PERMISSION
+              ? `Key "${apiKeyDoc.id}" is not configured to create new Apps. ` +
+                'Add "(created apps)" to the list of allowed apps for this key.'
+              : `Key "${apiKeyDoc.id}" has not been granted "${keyPermission}" permission`,
           );
         }
         logger.info(
