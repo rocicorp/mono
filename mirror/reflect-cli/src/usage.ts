@@ -18,7 +18,6 @@ import {getAppID, getDefaultApp} from './app-config.js';
 import color from './colors.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import type {AuthContext} from './handler.js';
-import {logErrorAndExit} from './log-error-and-exit.js';
 
 export function usageOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -50,7 +49,7 @@ export function usageOptions(yargs: CommonYargsArgv) {
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),
-      required: !getDefaultApp(),
+      required: true,
     });
 }
 

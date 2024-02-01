@@ -9,7 +9,6 @@ import {getAppID, getDefaultApp} from '../app-config.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 import {createTailEventSource} from './tail-event-source.js';
 import type {AuthContext} from '../handler.js';
-import {logErrorAndExit} from '../log-error-and-exit.js';
 
 export function tailOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -24,7 +23,7 @@ export function tailOptions(yargs: CommonYargsArgv) {
       type: 'string',
       requiresArg: true,
       default: getDefaultApp(),
-      required: !getDefaultApp(),
+      required: true,
     });
 }
 

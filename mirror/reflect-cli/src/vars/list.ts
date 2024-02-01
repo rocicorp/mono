@@ -7,7 +7,6 @@ import {padColumns} from '../table.js';
 import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
 import {getAppID, getDefaultApp} from '../app-config.js';
-import {logErrorAndExit} from '../log-error-and-exit.js';
 
 export function listVarsOptions(yargs: CommonVarsYargsArgv) {
   return yargs

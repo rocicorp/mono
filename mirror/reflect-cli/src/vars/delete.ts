@@ -7,7 +7,6 @@ import {makeRequester} from '../requester.js';
 import {watchDeployment} from '../watch-deployment.js';
 import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
-import {logErrorAndExit} from '../log-error-and-exit.js';
 
 export function deleteVarsOptions(yargs: CommonVarsYargsArgv) {
   return yargs
