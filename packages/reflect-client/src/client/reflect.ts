@@ -43,6 +43,8 @@ import {
 } from 'replicache';
 import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
+import {getDocument} from 'shared/src/get-document.js';
+import {getWindow} from 'shared/src/get-window.js';
 import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import * as valita from 'shared/src/valita.js';
 import {nanoid} from '../util/nanoid.js';
@@ -1501,24 +1503,6 @@ function addWebSocketIDFromSocketToLogContext(
 
 function addWebSocketIDToLogContext(wsid: string, lc: LogContext): LogContext {
   return lc.withContext('wsid', wsid);
-}
-
-/**
- * Returns the window object. This is wrapped in a function because Reflect
- * runs in environments that do not have a window (such as Web Workers, Deno
- * etc)
- */
-function getWindow(): Window | undefined {
-  return typeof window !== 'undefined' ? window : undefined;
-}
-
-/**
- * Returns the document object. This is wrapped in a function because Reflect
- * runs in environments that do not have a document (such as Web Workers, Deno
- * etc)
- */
-function getDocument(): Document | undefined {
-  return typeof document !== 'undefined' ? document : undefined;
 }
 
 /**
