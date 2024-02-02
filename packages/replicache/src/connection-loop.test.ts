@@ -727,16 +727,11 @@ test('Send promise', async () => {
   nextInvokeSendResult = expectedError;
   const p2 = loop.send(false);
   await tickUntilTimeIs(250);
-  let err;
-  try {
-    await p2;
-  } catch (e) {
-    err = e;
-  }
-  expect(err).to.equal(expectedError);
+  const err = await p2;
+  expect(err?.error).to.equal(expectedError);
 });
 
-suite('Send when closed should reject', () => {
+suite('Send when closed should resolve with error', () => {
   for (const now of [true, false] as const) {
     test(`now = ${now}`, async () => {
       loop = new ConnectionLoop({
@@ -758,9 +753,9 @@ suite('Send when closed should reject', () => {
         loop.close();
       }
 
-      const err = await sendP.catch(e => e);
-      expect(err).instanceOf(Error);
-      expect((err as Error).message).equal('Closed');
+      const err = await sendP;
+      expect(err?.error).instanceOf(Error);
+      expect((err?.error as Error).message).equal('Closed');
     });
   }
 });
