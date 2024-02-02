@@ -42,13 +42,13 @@ import {
   dropDatabase,
 } from 'replicache';
 import {assert} from 'shared/src/asserts.js';
+import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import * as valita from 'shared/src/valita.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {CloseBeaconManager} from './close-beacon.js';
 import {checkConnectivity} from './connect-checks.js';
-import {getDocumentVisibilityWatcher} from './document-visible.js';
 import {shouldEnableAnalytics} from './enable-analytics.js';
 import {toWSString, type HTTPString, type WSString} from './http-string.js';
 import {LogOptions, createLogOptions} from './log-options.js';
