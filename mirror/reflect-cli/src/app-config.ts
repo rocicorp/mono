@@ -106,7 +106,7 @@ export function getDefaultServerPath() {
   if (config?.server) {
     return DEFAULT_FROM_REFLECT_CONFIG;
   }
-  return './src/reflect/index.ts';
+  return './reflect-server/index.ts';
 }
 
 export function getAppIDfromConfig(instance = 'default') {
@@ -257,23 +257,24 @@ export function writeTemplatedFilePlaceholders(
   dir = './',
   logConsole = true,
 ) {
-  const appConfig = readAppConfig(dir);
-  if (appConfig) {
-    Object.entries(appConfig.templates ?? {}).forEach(([src, dst]) => {
-      copyAndEditFile(
-        dir,
-        src,
-        dst,
-        content => {
-          for (const [key, value] of Object.entries(placeholders)) {
-            content = content.replaceAll(`{{${key}}}`, value);
-          }
-          return content;
-        },
-        logConsole,
-      );
-    });
-  }
+  const templates = {
+    'package.json': 'package.json',
+  };
+
+  Object.entries(templates).forEach(([src, dst]) => {
+    copyAndEditFile(
+      dir,
+      src,
+      dst,
+      content => {
+        for (const [key, value] of Object.entries(placeholders)) {
+          content = content.replaceAll(`{{${key}}}`, value);
+        }
+        return content;
+      },
+      logConsole,
+    );
+  });
 }
 
 function copyAndEditFile(
