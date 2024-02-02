@@ -1,24 +1,17 @@
 import type {ConnectionLoopDelegate} from './connection-loop.js';
-import type {OptionalLogger} from '@rocicorp/logger';
 import type {Replicache} from './replicache.js';
 
-class ConnectionLoopDelegateImpl implements OptionalLogger {
+class ConnectionLoopDelegateImpl {
   readonly rep: Replicache;
   readonly invokeSend: () => Promise<boolean>;
-  readonly logger: OptionalLogger;
 
   // TODO: Remove the ability to have more than one concurrent connection and update tests.
   // Bug: https://github.com/rocicorp/replicache-internal/issues/303
   readonly maxConnections = 1;
 
-  constructor(
-    rep: Replicache,
-    invokeSend: () => Promise<boolean>,
-    logger: OptionalLogger,
-  ) {
+  constructor(rep: Replicache, invokeSend: () => Promise<boolean>) {
     this.rep = rep;
     this.invokeSend = invokeSend;
-    this.logger = logger;
   }
 
   get maxDelayMs(): number {
@@ -27,10 +20,6 @@ class ConnectionLoopDelegateImpl implements OptionalLogger {
 
   get minDelayMs(): number {
     return this.rep.requestOptions.minDelayMs;
-  }
-
-  get debug(): ((...args: unknown[]) => void) | undefined {
-    return this.logger.debug;
   }
 }
 
