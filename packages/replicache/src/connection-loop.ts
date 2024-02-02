@@ -1,4 +1,4 @@
-import type {OptionalLogger} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {sleep} from 'shared/src/sleep.js';
 
@@ -9,7 +9,7 @@ export const MAX_DELAY_MS = 60_000;
 
 type SendRecord = {duration: number; ok: boolean};
 
-export interface ConnectionLoopDelegate extends OptionalLogger {
+export interface ConnectionLoopDelegate {
   invokeSend(): Promise<boolean>;
   debounceDelay: number;
   // If null, no watchdog timer is used.
@@ -71,8 +71,10 @@ export class ConnectionLoop {
    * send to resolve we should reject the send promise.
    */
   #sendCounter = 0;
+  readonly #lc: LogContext;
 
-  constructor(delegate: ConnectionLoopDelegate) {
+  constructor(lc: LogContext, delegate: ConnectionLoopDelegate) {
+    this.#lc = lc;
     this.#delegate = delegate;
     void this.run();
   }
@@ -94,7 +96,7 @@ export class ConnectionLoop {
       return {error: closeError()};
     }
     this.#sendCounter++;
-    this.#delegate.debug?.('send', now);
+    this.#lc.debug?.('send', now);
     if (now) {
       this.#skipSleepsResolver.resolve();
     }
@@ -114,7 +116,7 @@ export class ConnectionLoop {
     // The number of active connections.
     let counter = 0;
     const delegate = this.#delegate;
-    const {debug} = delegate;
+    const {debug} = this.#lc;
     let delay = 0;
 
     debug?.('Starting connection loop');

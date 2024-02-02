@@ -581,19 +581,13 @@ export class Replicache<MD extends MutatorDefs = {}> {
     this.#requestOptions = {maxDelayMs, minDelayMs};
 
     this.#pullConnectionLoop = new ConnectionLoop(
-      new PullDelegate(
-        this,
-        () => this.#invokePull(),
-        this.#lc.withContext('PULL'),
-      ),
+      this.#lc.withContext('PULL'),
+      new PullDelegate(this, () => this.#invokePull()),
     );
 
     this.#pushConnectionLoop = new ConnectionLoop(
-      new PushDelegate(
-        this,
-        () => this.#invokePush(),
-        this.#lc.withContext('PUSH'),
-      ),
+      this.#lc.withContext('PUSH'),
+      new PushDelegate(this, () => this.#invokePush()),
     );
 
     this.mutate = this.#registerMutators(mutators);
