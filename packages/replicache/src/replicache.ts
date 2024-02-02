@@ -1256,7 +1256,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * will not be reflected in the promise.
    */
   push({now = false} = {}): Promise<void> {
-    return this.#pushConnectionLoop.send(now);
+    return throwIfError(this.#pushConnectionLoop.send(now));
   }
 
   /**
@@ -1274,7 +1274,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * will not be reflected in the promise.
    */
   pull({now = false} = {}): Promise<void> {
-    return this.#pullConnectionLoop.send(now);
+    return throwIfError(this.#pullConnectionLoop.send(now));
   }
 
   /**
@@ -1778,3 +1778,10 @@ function reload(): void {
  * Wrapper error class that should be reported as error (logger.error)
  */
 class ReportError extends Error {}
+
+async function throwIfError(p: Promise<undefined | {error: unknown}>) {
+  const res = await p;
+  if (res) {
+    throw res.error;
+  }
+}
