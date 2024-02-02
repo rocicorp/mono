@@ -3,7 +3,7 @@ import type {Version} from 'reflect-protocol';
 import type {Env} from 'reflect-shared/src/types.js';
 import type {PendingMutation} from 'replicache';
 import {equals as setEquals} from 'shared/src/set-utils.js';
-import {updateLastSeen} from '../server/client-gc.js';
+import {collectClientIfDeleted, updateLastSeen} from '../server/client-gc.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {
@@ -70,6 +70,9 @@ export async function processDisconnects(
       );
       try {
         await disconnectHandler(tx);
+
+        await collectClientIfDeleted(lc, clientID, cache, nextVersion);
+
         // TODO only update version if disconnectHandler modifies state
         await putVersion(nextVersion, cache);
         await cache.flush();

@@ -1,5 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {ClientID} from 'reflect-shared/src/mod.js';
+import {assert} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.js';
 import {difference} from 'shared/src/set-utils.js';
 import type {Storage} from '../storage/storage.js';
 import {
@@ -159,4 +161,60 @@ export async function collectOldUserSpaceClientKeys(
   }
   await Promise.all(ps);
   lc.debug?.(`Deleted ${ps.length} old client keys`);
+}
+
+export async function collectClientIfDeleted(
+  lc: LogContext,
+  clientID: ClientID,
+  cache: Storage,
+  nextVersion: number,
+): Promise<void> {
+  const {lastMutationID, lastMutationIDAtClose} = must(
+    await getClientRecord(clientID, cache),
+  );
+  if (lastMutationIDAtClose === undefined) {
+    lc.debug?.(
+      `Client ${clientID} has no lastMutationIDAtClose. Not collecting.`,
+    );
+    return;
+  }
+
+  lc.debug?.('Maybe collecting client', {
+    clientID,
+    lastMutationID,
+    lastMutationIDAtClose,
+  });
+
+  if (lastMutationID < lastMutationIDAtClose) {
+    // This means that the client still has pending clients that we haven't seen
+    // yet. We need to keep the client alive.
+    lc.debug?.(
+      `Client has lastMutationID < lastMutationIDAtClose. Not collecting.`,
+    );
+
+    // TODO(arv): Collect client when the lastMutationIDAtClose gets pushed using mutation recovery.
+
+    return;
+  }
+
+  if (lastMutationID > lastMutationIDAtClose) {
+    // This means that we received a mutation after the client closed. This can
+    // happen if we have a race between closing the client and sending a
+    // mutation at close.
+    //
+    // It is safe to collect the client here because these mutations have been
+    // applied and the client is not connected anymore.
+    //
+    // It is not possible for the client to have persisted pending mutations
+    // during "close" because persist is async and writes to IDB which does not
+    // block unloading.
+    lc.debug?.(
+      `Client applied mutations after close beacon was sent/received. Collecting.`,
+    );
+  } else {
+    assert(lastMutationID === lastMutationIDAtClose);
+    lc.debug?.(`Client and server are fully synced. Collecting.`);
+  }
+
+  await collectOldUserSpaceClientKeys(lc, cache, [clientID], nextVersion);
 }

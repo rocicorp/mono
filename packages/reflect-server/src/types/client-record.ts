@@ -14,6 +14,9 @@ export const clientRecordSchema = valita.object({
 
   // Used for garbage collection of old clients.
   lastSeen: valita.number().optional(),
+
+  // This gets sent by the client (browser) when it sends the close beacon.
+  lastMutationIDAtClose: valita.number().optional(),
 });
 
 export type ClientRecord = valita.Infer<typeof clientRecordSchema>;
