@@ -1702,7 +1702,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
         // Update this after the commit in case the commit fails.
         this.#lastMutationID = lastMutationID;
 
-        this.#pushConnectionLoop.send(false).catch(noop);
+        // Send is not supposed to reject
+        void this.#pushConnectionLoop.send(false);
         await this.#checkChange(ref, diffs);
         void this.#schedulePersist();
         return {result, ref};

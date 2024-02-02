@@ -731,7 +731,7 @@ test('Send promise', async () => {
   expect(err?.error).to.equal(expectedError);
 });
 
-suite('Send when closed should reject', () => {
+suite('Send when closed should resolve with error', () => {
   for (const now of [true, false] as const) {
     test(`now = ${now}`, async () => {
       loop = new ConnectionLoop({
@@ -753,7 +753,7 @@ suite('Send when closed should reject', () => {
         loop.close();
       }
 
-      const err = await sendP.catch(e => e);
+      const err = await sendP;
       expect(err?.error).instanceOf(Error);
       expect((err?.error as Error).message).equal('Closed');
     });

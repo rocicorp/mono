@@ -91,7 +91,7 @@ export class ConnectionLoop {
    */
   async send(now: boolean): Promise<undefined | {error: unknown}> {
     if (this.#closed) {
-      throw closeError();
+      return {error: closeError()};
     }
     this.#sendCounter++;
     this.#delegate.debug?.('send', now);
