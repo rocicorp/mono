@@ -9,6 +9,7 @@ import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from 'shared/src/abort-error.js';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
+import {getDocument} from 'shared/src/get-document.js';
 import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
 import {initBgIntervalProcess} from './bg-interval.js';
@@ -1759,15 +1760,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
 // This map is used to keep track of closing instances of Replicache. When an
 // instance is opening we wait for any currently closing instances.
 const closingInstances: Map<string, Promise<unknown>> = new Map();
-
-/**
- * Returns the document object. This is wrapped in a function because Replicache
- * runs in environments that do not have a document (such as Web Workers, Deno
- * etc)
- */
-function getDocument(): Document | undefined {
-  return typeof document !== 'undefined' ? document : undefined;
-}
 
 function reload(): void {
   if (typeof location !== 'undefined') {
