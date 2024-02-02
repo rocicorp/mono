@@ -1,7 +1,7 @@
 import fs, {existsSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {writeTemplatedFilePlaceholders} from './app-config.js';
+import {writePackageJson} from './app-config.js';
 import {findReflectVersion} from './version.js';
 
 const templateDir = (templateName: string) =>
@@ -31,7 +31,7 @@ export function copyTemplate(name: string, dest: string) {
 export function scaffold(appName: string, dest: string) {
   const reflectVersion = findReflectVersion();
   copyTemplate('create', dest);
-  writeTemplatedFilePlaceholders({appName, reflectVersion}, dest, false);
+  writePackageJson({appName, reflectVersion}, dest, false);
 }
 
 function copy(src: string, dest: string) {
