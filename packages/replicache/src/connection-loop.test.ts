@@ -1,3 +1,4 @@
+import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {sleep} from 'shared/src/sleep.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
@@ -80,7 +81,7 @@ function createLoop(
     },
   };
 
-  return (loop = new ConnectionLoop(delegate));
+  return (loop = new ConnectionLoop(new LogContext(), delegate));
 }
 
 test('basic sequential by awaiting', async () => {
@@ -604,7 +605,7 @@ test('watchdog timer again', async () => {
 test('mutate minDelayMs', async () => {
   let minDelayMs = 50;
   const log: number[] = [];
-  loop = new ConnectionLoop({
+  loop = new ConnectionLoop(new LogContext(), {
     invokeSend() {
       log.push(Date.now());
       return promiseTrue;
@@ -646,7 +647,7 @@ test('mutate minDelayMs', async () => {
 test('Send now', async () => {
   const log: number[] = [];
   let nextInvokeSendResult: boolean = true;
-  loop = new ConnectionLoop({
+  loop = new ConnectionLoop(new LogContext(), {
     invokeSend() {
       log.push(Date.now());
       return Promise.resolve(nextInvokeSendResult);
@@ -704,7 +705,7 @@ test('Send now', async () => {
 
 test('Send promise', async () => {
   let nextInvokeSendResult: boolean | Error = true;
-  loop = new ConnectionLoop({
+  loop = new ConnectionLoop(new LogContext(), {
     // eslint-disable-next-line require-await
     async invokeSend() {
       if (nextInvokeSendResult instanceof Error) {
@@ -734,7 +735,7 @@ test('Send promise', async () => {
 suite('Send when closed should resolve with error', () => {
   for (const now of [true, false] as const) {
     test(`now = ${now}`, async () => {
-      loop = new ConnectionLoop({
+      loop = new ConnectionLoop(new LogContext(), {
         invokeSend: () => Promise.resolve(true),
         debounceDelay: 100,
         minDelayMs: 200,
