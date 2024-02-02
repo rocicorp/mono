@@ -1,15 +1,12 @@
-import {expect} from 'chai';
-import * as sinon from 'sinon';
+import {afterEach, beforeEach, expect, jest, test} from '@jest/globals';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 
-let clock: sinon.SinonFakeTimers;
-
-setup(() => {
-  clock = sinon.useFakeTimers();
+beforeEach(() => {
+  jest.useFakeTimers();
 });
 
-teardown(() => {
-  sinon.restore();
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 class Document extends EventTarget {
@@ -47,9 +44,9 @@ test('waitForHidden', async () => {
     resolved = true;
   });
   doc.visibilityState = 'hidden';
-  expect(resolved).false;
-  await clock.tickAsync(1000);
-  expect(resolved).true;
+  expect(resolved).toBe(false);
+  await jest.advanceTimersByTimeAsync(1000);
+  expect(resolved).toBe(true);
   await p;
 });
 
@@ -64,17 +61,17 @@ test('waitForHidden flip back to visible', async () => {
   });
 
   doc.visibilityState = 'hidden';
-  expect(resolved).false;
-  await clock.tickAsync(500);
-  expect(resolved).false;
+  expect(resolved).toBe(false);
+  await jest.advanceTimersByTimeAsync(500);
+  expect(resolved).toBe(false);
 
   // Flip back to visible.
   doc.visibilityState = 'visible';
-  expect(resolved).false;
+  expect(resolved).toBe(false);
 
   // And wait a bit more.
-  await clock.tickAsync(50_000);
-  expect(resolved).false;
+  await jest.advanceTimersByTimeAsync(50_000);
+  expect(resolved).toBe(false);
 });
 
 test('waitForHidden flip back and forth', async () => {
@@ -88,21 +85,21 @@ test('waitForHidden flip back and forth', async () => {
   });
 
   doc.visibilityState = 'hidden';
-  expect(resolved).false;
-  await clock.tickAsync(500);
-  expect(resolved).false;
+  expect(resolved).toBe(false);
+  await jest.advanceTimersByTimeAsync(500);
+  expect(resolved).toBe(false);
 
   // Flip back to visible.
   doc.visibilityState = 'visible';
-  expect(resolved).false;
-  await clock.tickAsync(500);
-  expect(resolved).false;
+  expect(resolved).toBe(false);
+  await jest.advanceTimersByTimeAsync(500);
+  expect(resolved).toBe(false);
 
   doc.visibilityState = 'hidden';
-  await clock.tickAsync(500);
-  expect(resolved).false;
-  await clock.tickAsync(500);
-  expect(resolved).true;
+  await jest.advanceTimersByTimeAsync(500);
+  expect(resolved).toBe(false);
+  await jest.advanceTimersByTimeAsync(500);
+  expect(resolved).toBe(true);
 
   await p;
 });
@@ -123,12 +120,12 @@ test('waitForHidden no document', async () => {
   void w.waitForHidden().then(() => {
     resolved = true;
   });
-  expect(resolved).false;
-  await clock.tickAsync(1000);
-  expect(resolved).false;
+  expect(resolved).toBe(false);
+  await jest.advanceTimersByTimeAsync(1000);
+  expect(resolved).toBe(false);
 
-  await clock.tickAsync(100_000);
-  expect(resolved).false;
+  await jest.advanceTimersByTimeAsync(100_000);
+  expect(resolved).toBe(false);
 });
 
 test('DocumentVisibleWatcher', async () => {
@@ -143,13 +140,13 @@ test('DocumentVisibleWatcher', async () => {
   const p = w.waitForHidden().then(() => {
     resolved = true;
   });
-  expect(resolved).false;
+  expect(resolved).toBe(false);
   doc.visibilityState = 'hidden';
-  expect(resolved).false;
-  await clock.tickAsync(1_000 - 1);
-  expect(resolved).false;
-  await clock.tickAsync(1);
-  expect(resolved).true;
+  expect(resolved).toBe(false);
+  await jest.advanceTimersByTimeAsync(1_000 - 1);
+  expect(resolved).toBe(false);
+  await jest.advanceTimersByTimeAsync(1);
+  expect(resolved).toBe(true);
   await p;
 
   await w.waitForHidden();
@@ -160,10 +157,10 @@ test('DocumentVisibleWatcher', async () => {
     const p = w.waitForVisible().then(() => {
       resolved = true;
     });
-    expect(resolved).false;
+    expect(resolved).toBe(false);
     doc.visibilityState = 'visible';
-    await clock.tickAsync(0);
-    expect(resolved).true;
+    await jest.advanceTimersByTimeAsync(0);
+    expect(resolved).toBe(true);
     await p;
   }
 });
@@ -180,8 +177,8 @@ test('DocumentVisibleWatcher controller abort', async () => {
     resolved = true;
   });
   doc.visibilityState = 'visible';
-  await clock.tickAsync(0);
-  expect(resolved).false;
-  await clock.tickAsync(10_000);
-  expect(resolved).false;
+  await jest.advanceTimersByTimeAsync(0);
+  expect(resolved).toBe(false);
+  await jest.advanceTimersByTimeAsync(10_000);
+  expect(resolved).toBe(false);
 });
