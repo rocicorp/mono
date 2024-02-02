@@ -1256,7 +1256,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * will not be reflected in the promise.
    */
   push({now = false} = {}): Promise<void> {
-    return this.#pushConnectionLoop.send(now);
+    return throwIfError(this.#pushConnectionLoop.send(now));
   }
 
   /**
@@ -1274,7 +1274,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * will not be reflected in the promise.
    */
   pull({now = false} = {}): Promise<void> {
-    return this.#pullConnectionLoop.send(now);
+    return throwIfError(this.#pullConnectionLoop.send(now));
   }
 
   /**
@@ -1702,7 +1702,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
         // Update this after the commit in case the commit fails.
         this.#lastMutationID = lastMutationID;
 
-        this.#pushConnectionLoop.send(false).catch(noop);
+        // Send is not supposed to reject
+        void this.#pushConnectionLoop.send(false);
         await this.#checkChange(ref, diffs);
         void this.#schedulePersist();
         return {result, ref};
@@ -1778,3 +1779,10 @@ function reload(): void {
  * Wrapper error class that should be reported as error (logger.error)
  */
 class ReportError extends Error {}
+
+async function throwIfError(p: Promise<undefined | {error: unknown}>) {
+  const res = await p;
+  if (res) {
+    throw res.error;
+  }
+}

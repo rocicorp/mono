@@ -56,8 +56,10 @@ export class ConnectionLoop {
    */
   #skipSleepsResolver = resolver<void>();
 
-  /** Resolver for the next send */
-  #sendResolver = resolver<void>();
+  /**
+   * Resolver for the next send. Never rejects.
+   */
+  #sendResolver = resolver<undefined | {error: unknown}>();
 
   readonly #delegate: ConnectionLoopDelegate;
   #closed = false;
@@ -78,13 +80,18 @@ export class ConnectionLoop {
   close(): void {
     this.#closed = true;
     if (this.#sendCounter > 0) {
-      this.#sendResolver.reject(closeError());
+      this.#sendResolver.resolve({error: closeError()});
     }
   }
 
-  async send(now: boolean): Promise<void> {
+  /**
+   *
+   * @returns Returns undefined if ok, otherwise it return the error that caused
+   * the send to fail.
+   */
+  async send(now: boolean): Promise<undefined | {error: unknown}> {
     if (this.#closed) {
-      throw closeError();
+      return {error: closeError()};
     }
     this.#sendCounter++;
     this.#delegate.debug?.('send', now);
@@ -92,8 +99,10 @@ export class ConnectionLoop {
       this.#skipSleepsResolver.resolve();
     }
     this.#pendingResolver.resolve();
-    await this.#sendResolver.promise;
+
+    const result = await this.#sendResolver.promise;
     this.#sendCounter--;
+    return result;
   }
 
   async run(): Promise<void> {
@@ -211,13 +220,10 @@ export class ConnectionLoop {
         this.#connectionAvailable();
         const sendResolver = this.#sendResolver;
         this.#sendResolver = resolver();
-        this.#sendResolver.promise.catch(() => {
-          // We do not want this promise to be treated as unhandled.
-        });
         if (ok) {
-          sendResolver.resolve();
+          sendResolver.resolve(undefined);
         } else {
-          sendResolver.reject(error ?? new Error('Send failed'));
+          sendResolver.resolve({error: error ?? new Error('Send failed')});
 
           // Keep trying
           this.#pendingResolver.resolve();
