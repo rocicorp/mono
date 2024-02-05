@@ -108,11 +108,11 @@ Meanwhile some other client `c2` sends a push `p2`. The push endpoint obtains th
 
 Before `p2` commits, the server finishes processing `p1`. It obtains the current timestamp, `t3` and returns the read records with the cookie `t3`.
 
-Now `c1` it has records up to `t3`, but is actually missing the ones from `p1`. This problem will never resolve. On the next pull, the client will send timestamp `t3`. The server won't send the records that were missed from `p1` since they have an earlier timestamp. Unlike in a traditional web app, a refresh won't solve this problem. Since Replicache is local-first, it will just read the incorrectly cached data.
+Now `c1` it has records up to `t3`, but is actually missing the ones from `p2`. This problem will never resolve. On the next pull, the client will send timestamp `t3`. The server won't send the records that were missed from `p1` since they have an earlier timestamp. Unlike in a traditional web app, a refresh won't solve this problem. On Refresh, Replicache will just read the incorrectly cached data from the browser.
 
 In local-first systems it's important to ensure correct synchronization, since cached data is permanent. The problem with using timestamps is that the linear nature of timestamps assumes a linear series of modifications to the database. But databases don't work that way – they can (and often do) do things in parallel.
 
-The Global Version strategy resolves this problem by forcing serialization of pushes, making a single monotonic integer sufficient to represent the state of the DB. The Row Version strategy resolve it by using a cookie that can correctly represent DB state, even with parallel execution.
+The Global Version strategy resolves this problem by forcing the database to process pushes serially, making a single monotonic integer cookie sufficient to represent the state of the DB. The Row Version strategy resolve it by using a cookie that can correctly represent DB state, even with parallel execution.
 
 ## Challenges
 
