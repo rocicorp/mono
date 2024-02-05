@@ -330,8 +330,6 @@ export class Reflect<MD extends MutatorDefs> {
       options.enableAnalytics,
     );
 
-    console.log('enableAnalytics', this.#enableAnalytics);
-
     if (jurisdiction !== undefined && jurisdiction !== 'eu') {
       throw new Error('ReflectOptions.jurisdiction must be "eu" if present.');
     }
@@ -392,6 +390,7 @@ export class Reflect<MD extends MutatorDefs> {
       {roomID, clientID: this.#rep.clientID},
       logOptions.logSink,
     );
+
     reportReloadReason(this.#lc);
 
     this.#metrics = new MetricManager({
