@@ -3,13 +3,18 @@ import {jsonSchema} from 'shared/src/json-schema.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import type {Storage} from '../storage/storage.js';
-import {getClientRecord, putClientRecord} from '../types/client-record.js';
+import {
+  ClientRecord,
+  getClientRecord,
+  putClientRecord,
+} from '../types/client-record.js';
 import type {ClientID} from '../types/client-state.js';
 import {putConnectedClients} from '../types/connected-clients.js';
-import {putUserValue} from '../types/user-value.js';
+import {getUserValue, putUserValue} from '../types/user-value.js';
 import {putVersion} from '../types/version.js';
 import {createSilentLogContext, setUserEntries} from '../util/test-utils.js';
 import {
+  collectClientIfDeleted,
   collectClients,
   collectOldUserSpaceClientKeys,
   updateLastSeen,
@@ -604,4 +609,65 @@ Map {
   },
 }
 `);
+});
+
+describe('collectClientIfDeleted', () => {
+  const lc = createSilentLogContext();
+
+  const cases = [
+    {
+      name: 'client not deleted because it has pending mutations',
+      lastMutationID: 1,
+      lastMutationIDAtClose: 2,
+      expectDeleted: false,
+    },
+    {
+      name: 'client  deleted because it no pending mutations',
+      lastMutationID: 2,
+      lastMutationIDAtClose: 2,
+      expectDeleted: true,
+    },
+    {
+      name: 'client  deleted because it finished processing extra mutations',
+      lastMutationID: 3,
+      lastMutationIDAtClose: 2,
+      expectDeleted: true,
+    },
+  ];
+
+  for (const c of cases) {
+    test(c.name, async () => {
+      const {expectDeleted, lastMutationID, lastMutationIDAtClose} = c;
+
+      const durable = await getMiniflareDurableObjectStorage(id);
+      await durable.deleteAll();
+      const storage = new DurableStorage(durable);
+      const cache = new EntryCache(storage);
+      const version = 1;
+      const clientID = 'client-a';
+      const clientGroupID = 'client-group-id';
+
+      // Set a presence state key value
+      const keyToTest = `-/p/${clientID}/test`;
+      await setUserEntries(cache, version, {
+        [keyToTest]: 1,
+      });
+
+      const clientRecord: ClientRecord = {
+        baseCookie: 1,
+        clientGroupID,
+        lastMutationID,
+        lastMutationIDVersion: null,
+        lastSeen: 4,
+        lastMutationIDAtClose,
+      };
+
+      await putClientRecord(clientID, clientRecord, cache);
+
+      await collectClientIfDeleted(lc, clientID, cache, version);
+
+      const testEntry = await getUserValue(keyToTest, cache);
+      expect(testEntry?.deleted).toBe(expectDeleted);
+    });
+  }
 });

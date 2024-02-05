@@ -11,6 +11,7 @@ import {
   listClientRecords,
   putClientRecord,
 } from '../types/client-record.js';
+import {putConnectedClients} from '../types/connected-clients.js';
 import {UserValue, userValueKey, userValueSchema} from '../types/user-value.js';
 import {putVersion} from '../types/version.js';
 import {TestLogSink, setUserEntries} from '../util/test-utils.js';
@@ -59,6 +60,7 @@ describe('Close beacon behavior', () => {
   const roomID = 'testRoomID';
   const clientID = 'testClientID';
   const userID = 'testUserID';
+  const clientGroupID = 'testClientGroupID';
 
   const cases: {
     name: string;
@@ -66,9 +68,10 @@ describe('Close beacon behavior', () => {
     expectedStatus: number;
     storedLastMutationID: number;
     body: unknown;
-    expectedClientIDs: Iterable<ClientID>;
     entries?: Record<string, ReadonlyJSONValue>;
     expectedEntries?: Record<string, UserValue>;
+    connectedClients?: ClientID[];
+    expectedClientRecords: Record<ClientID, ClientRecord>;
   }[] = [
     {
       name: 'Config not enabled',
@@ -76,21 +79,28 @@ describe('Close beacon behavior', () => {
       expectedStatus: 404,
       storedLastMutationID: 0,
       body: {lastMutationID: 0},
-      expectedClientIDs: [clientID],
+      expectedClientRecords: {
+        [clientID]: {
+          clientGroupID,
+          baseCookie: null,
+          lastMutationID: 0,
+          lastMutationIDVersion: null,
+          lastSeen: 0,
+        },
+      },
     },
     {
       name: 'Same lmid sent',
       expectedStatus: 200,
       storedLastMutationID: 10,
       body: {lastMutationID: 10},
-      expectedClientIDs: [],
+      expectedClientRecords: {},
     },
     {
       name: 'Same lmid sent remove old presence keys',
       expectedStatus: 200,
       storedLastMutationID: 10,
       body: {lastMutationID: 10},
-      expectedClientIDs: [],
       entries: {
         [`-/p/${clientID}`]: 1,
         [`-/p/${clientID}/2`]: 2,
@@ -102,48 +112,114 @@ describe('Close beacon behavior', () => {
           value: 3,
           version: 100,
         },
-        'user/-/p/testClientID': {
+        [`user/-/p/${clientID}`]: {
           deleted: true,
           value: 1,
           version: 101,
         },
-        'user/-/p/testClientID/2': {
+        [`user/-/p/${clientID}/2`]: {
           deleted: true,
           value: 2,
           version: 101,
         },
       },
+      expectedClientRecords: {},
     },
     {
       name: 'sent lmid is less than stored lmid',
       expectedStatus: 500,
       storedLastMutationID: 2,
       body: {lastMutationID: 1},
-      expectedClientIDs: [clientID],
+      expectedClientRecords: {
+        [clientID]: {
+          clientGroupID,
+          baseCookie: null,
+          lastMutationID: 2,
+          lastMutationIDVersion: null,
+          lastSeen: 0,
+        },
+      },
     },
     {
       name: 'sent lmid is greater than stored lmid',
       expectedStatus: 200,
       storedLastMutationID: 3,
       body: {lastMutationID: 4},
-      expectedClientIDs: [clientID],
+      expectedClientRecords: {
+        [clientID]: {
+          clientGroupID,
+          baseCookie: null,
+          lastMutationID: 3,
+          lastMutationIDVersion: null,
+          lastSeen: 0,
+        },
+      },
     },
     {
       name: 'bad body',
       expectedStatus: 400,
       storedLastMutationID: 2,
       body: {invalidBody: true},
-      expectedClientIDs: [clientID],
+      expectedClientRecords: {
+        [clientID]: {
+          clientGroupID,
+          baseCookie: null,
+          lastMutationID: 2,
+          lastMutationIDVersion: null,
+          lastSeen: 0,
+        },
+      },
+    },
+
+    {
+      name: 'Same lmid sent but still connected so do not remove old presence keys',
+      expectedStatus: 200,
+      storedLastMutationID: 10,
+      body: {lastMutationID: 10},
+      connectedClients: [clientID],
+      entries: {
+        [`-/p/${clientID}`]: 1,
+        [`-/p/${clientID}/2`]: 2,
+        [`-/p/someOtherClientID`]: 3,
+      },
+      expectedEntries: {
+        'user/-/p/someOtherClientID': {
+          deleted: false,
+          value: 3,
+          version: 100,
+        },
+        [`user/-/p/${clientID}`]: {
+          deleted: false,
+          value: 1,
+          version: 100,
+        },
+        [`user/-/p/${clientID}/2`]: {
+          deleted: false,
+          value: 2,
+          version: 100,
+        },
+      },
+      expectedClientRecords: {
+        [clientID]: {
+          clientGroupID,
+          baseCookie: null,
+          lastMutationID: 10,
+          lastMutationIDVersion: null,
+          lastSeen: 0,
+          lastMutationIDAtClose: 10,
+        },
+      },
     },
   ];
   for (const c of cases) {
-    test(`c.name`, async () => {
+    test(c.name, async () => {
       const {
         enabled = true,
         body,
-        expectedClientIDs = [],
         entries = {},
         expectedEntries = entries,
+        connectedClients,
+        expectedClientRecords,
       } = c;
       const version = 100;
       setConfig('closeBeacon', enabled);
@@ -170,8 +246,12 @@ describe('Close beacon behavior', () => {
 
       await putVersion(version, storage);
 
+      if (connectedClients) {
+        await putConnectedClients(new Set(connectedClients), storage);
+      }
+
       const clientRecord: ClientRecord = {
-        clientGroupID: 'testClientGroupID',
+        clientGroupID,
         baseCookie: null,
         lastMutationID: c.storedLastMutationID,
         lastMutationIDVersion: null,
@@ -188,8 +268,8 @@ describe('Close beacon behavior', () => {
 
       expect(response.status).toBe(c.expectedStatus);
 
-      expect(new Set((await listClientRecords(storage)).keys())).toEqual(
-        new Set(expectedClientIDs),
+      expect(Object.fromEntries(await listClientRecords(storage))).toEqual(
+        expectedClientRecords,
       );
       expect(
         await storage.list({prefix: userValueKey('-/p/')}, userValueSchema),
