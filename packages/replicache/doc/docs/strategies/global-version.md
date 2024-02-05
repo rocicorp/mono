@@ -11,12 +11,6 @@ The global version is returned as the cookie to Replicache in each pull, and sen
 
 While simple, the Global Version Strategy does have concurrency limits because all pushes server-wide are serialized, and it doesn't support advanced features like incremental sync and read authorization as easily as [row versioning](/strategies/row-version).
 
-:::info
-
-You may wonder why not use a timestamp for the version instead of a counter. While this would scale much better, it is not possible to implement correctly on most servers due to [unreliable clocks](https://www.ics.uci.edu/~cs230/lectures20/distrsyslectureset2-win20.pdf).
-
-:::
-
 ## Schema
 
 The schema builds on the schema for the [Reset Strategy](./reset.md), and adds a few things to support the global version concept.
@@ -82,7 +76,7 @@ Then, for each mutation described in the [`PushRequest`](/reference/server-push#
 
 As with the Reset Strategy, it's important that each mutation is processed within a serializable transaction.
 
-### Pull
+## Pull
 
 <ol>
   <li>Verify that requesting user owns the requested <code>ReplicacheClientGroup</code>.</li>
@@ -103,6 +97,22 @@ As with the Reset Strategy, it's important that each mutation is processed withi
 ## Example
 
 See [todo-nextjs](https://github.com/rocicorp/todo-nextjs) for an example of this strategy.
+
+## Why Not Use Timestamps?
+
+When presented with the pull endpoint, most developers' first instinct will be to implement it using timestamps. This can't be done correctly, and we strongly advise against trying. Here's why:
+
+Imagine that a Replicache client `c1` sends a pull `p1`, having the cookie `t1`. The server begins processing `p1`, reading all records with `lastModified > t1`.
+
+Meanwhile some other client `c2` sends a push `p2`. The push endpoint obtains the current server timestamp `t2`, and starts upating records, tagging them with `lastModified = t2`.
+
+Before `p2` commits, the server finishes processing `p1`. It obtains the current timestamp, `t3` and returns the read records with the cookie `t3`.
+
+Now `c1` it has records up to `t3`, but is actually missing the ones from `p1`. This problem will never resolve. On the next pull, the client will send timestamp `t3`. The server won't send the records that were missed from `p1` since they have an earlier timestamp. Unlike in a traditional web app, a refresh won't solve this problem. Since Replicache is local-first, it will just read the incorrectly cached data.
+
+In local-first systems it's important to ensure correct synchronization, since cached data is permanent. The problem with using timestamps is that the linear nature of timestamps assumes a linear series of modifications to the database. But databases don't work that way – they can (and often do) do things in parallel.
+
+The Global Version strategy resolves this problem by forcing serialization of pushes, making a single monotonic integer sufficient to represent the state of the DB. The Row Version strategy resolve it by using a cookie that can correctly represent DB state, even with parallel execution.
 
 ## Challenges
 
