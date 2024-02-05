@@ -2,7 +2,12 @@ import type {LogContext} from '@rocicorp/logger';
 import {must} from 'shared/src/must.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import type {Storage} from '../storage/storage.js';
-import {delClientRecords, getClientRecord} from '../types/client-record.js';
+import {
+  delClientRecords,
+  getClientRecord,
+  putClientRecord,
+} from '../types/client-record.js';
+import {getConnectedClients} from '../types/connected-clients.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {collectOldUserSpaceClientKeys} from './client-gc.js';
 
@@ -27,6 +32,25 @@ export async function closeBeacon(
   if (!existingRecord) {
     lc.debug?.('Client record not found');
     return new Response('client record not found', {status: 404});
+  }
+
+  const storedConnectedClients = await getConnectedClients(storage);
+  if (storedConnectedClients.has(clientID)) {
+    const clientRecord = must(await getClientRecord(clientID, storage));
+    await putClientRecord(
+      clientID,
+      {
+        ...clientRecord,
+        lastMutationIDAtClose: lastMutationID,
+      },
+      storage,
+    );
+    lc.debug?.(
+      'Client is still connected. Will try to clean it in disconnect handler.',
+    );
+    return new Response('Client is still connected', {
+      status: 200,
+    });
   }
 
   if (lastMutationID < existingRecord.lastMutationID) {
