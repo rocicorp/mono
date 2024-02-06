@@ -1,7 +1,0 @@
-{
-  "server": "./src/reflect/index.ts",
-  "templates": {
-    "package.json": "package.json",
-    ".env.template": ".env"
-  }
-}
