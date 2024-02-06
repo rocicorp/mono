@@ -4,6 +4,7 @@ import type {Env} from 'reflect-shared/src/types.js';
 import type {PendingMutation} from 'replicache';
 import {equals as setEquals} from 'shared/src/set-utils.js';
 import {collectClientIfDeleted, updateLastSeen} from '../server/client-gc.js';
+import type {CloseHandler} from '../server/close-handler.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {
@@ -22,6 +23,7 @@ export async function processDisconnects(
   lc: LogContext,
   env: Env,
   disconnectHandler: DisconnectHandler,
+  closeHandler: CloseHandler,
   connectedClients: ClientID[],
   pendingMutations: PendingMutation[],
   numPendingMutationsProcessed: number,
@@ -71,14 +73,21 @@ export async function processDisconnects(
       try {
         await disconnectHandler(tx);
 
-        await collectClientIfDeleted(lc, clientID, cache, nextVersion);
-
         // TODO only update version if disconnectHandler modifies state
         await putVersion(nextVersion, cache);
         await cache.flush();
       } catch (e) {
         lc.info?.('Error executing disconnectHandler for:', clientID, e);
       }
+
+      await collectClientIfDeleted(
+        lc,
+        env,
+        clientID,
+        closeHandler,
+        storage,
+        nextVersion,
+      );
     }
   }
 

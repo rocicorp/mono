@@ -70,9 +70,18 @@ export function delClientRecords(
   clientIDs: ClientID[],
   storage: Storage,
 ): Promise<void> {
+  // TODO(arv): Create tombstones for the deleted client records.
   return storage.delEntries(
     clientIDs.map(clientID => clientRecordKey(clientID)),
   );
+}
+
+export function delClientRecord(
+  clientID: ClientID,
+  storage: Storage,
+): Promise<void> {
+  // TODO(arv): Create tombstones for the deleted client records.
+  return storage.del(clientRecordKey(clientID));
 }
 
 function toClientRecordMap(

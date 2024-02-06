@@ -1422,6 +1422,7 @@ describe('processPending', () => {
         c.pendingMutations,
         mutators,
         () => Promise.resolve(),
+        () => Promise.resolve(),
         c.maxProcessedMutationTimestamp,
         fakeBufferSizer,
         c.maxMutationsToProcess ?? Number.MAX_SAFE_INTEGER,

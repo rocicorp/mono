@@ -1,4 +1,5 @@
 import {describe, expect, test} from '@jest/globals';
+import type {Env} from 'reflect-shared/src/types.js';
 import {jsonSchema} from 'shared/src/json-schema.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {EntryCache} from '../storage/entry-cache.js';
@@ -646,6 +647,8 @@ describe('collectClientIfDeleted', () => {
       const version = 1;
       const clientID = 'client-a';
       const clientGroupID = 'client-group-id';
+      const env: Env = {a: 'b'};
+      const closeHandler = async () => {};
 
       // Set a presence state key value
       const keyToTest = `-/p/${clientID}/test`;
@@ -664,7 +667,14 @@ describe('collectClientIfDeleted', () => {
 
       await putClientRecord(clientID, clientRecord, cache);
 
-      await collectClientIfDeleted(lc, clientID, cache, version);
+      await collectClientIfDeleted(
+        lc,
+        env,
+        clientID,
+        closeHandler,
+        cache,
+        version,
+      );
 
       const testEntry = await getUserValue(keyToTest, cache);
       expect(testEntry?.deleted).toBe(expectDeleted);

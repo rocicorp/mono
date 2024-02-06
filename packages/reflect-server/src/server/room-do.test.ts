@@ -43,6 +43,12 @@ async function createRoom<MD extends MutatorDefs>(
   expect(createResponse.status).toBe(expectedStatus);
 }
 
+const noopHandlers = {
+  roomStartHandler: () => Promise.resolve(),
+  disconnectHandler: () => Promise.resolve(),
+  closeHandler: () => Promise.resolve(),
+} as const;
+
 test('inits storage schema', async () => {
   const testLogSink = new TestLogSink();
   const state = await createTestDurableObjectState('test-do-id');
@@ -51,8 +57,7 @@ test('inits storage schema', async () => {
 
   new BaseRoomDO({
     mutators: {},
-    roomStartHandler: () => Promise.resolve(),
-    disconnectHandler: () => Promise.resolve(),
+    ...noopHandlers,
     state,
     logSink: testLogSink,
     logLevel: 'info',
@@ -87,13 +92,13 @@ test('runs roomStartHandler on first fetch', async () => {
   let roomStartHandlerCallCount = 0;
   const roomDO = new BaseRoomDO({
     mutators: {},
+    ...noopHandlers,
     roomStartHandler: async (tx: WriteTransaction, roomID: string) => {
       expect(roomID).toEqual(testRoomID);
       roomStartHandlerCallCount++;
       const value = await tx.get('foo');
       await tx.set('foo', `${value}+${roomStartHandlerCallCount}`);
     },
-    disconnectHandler: () => Promise.resolve(),
     state,
     logSink: testLogSink,
     logLevel: 'info',
@@ -147,6 +152,7 @@ test('runs roomStartHandler on next fetch if throws on first fetch', async () =>
   let roomStartHandlerCallCount = 0;
   const roomDO = new BaseRoomDO({
     mutators: {},
+    ...noopHandlers,
     roomStartHandler: async (tx: WriteTransaction, roomID: string) => {
       expect(roomID).toEqual(testRoomID);
       roomStartHandlerCallCount++;
@@ -156,7 +162,6 @@ test('runs roomStartHandler on next fetch if throws on first fetch', async () =>
       const value = await tx.get('foo');
       await tx.set('foo', `${value}+${roomStartHandlerCallCount}`);
     },
-    disconnectHandler: () => Promise.resolve(),
     state,
 
     logSink: testLogSink,
@@ -203,8 +208,7 @@ test('deleteAllData deletes all data', async () => {
 
   const roomDO = new BaseRoomDO({
     mutators: {},
-    roomStartHandler: () => Promise.resolve(),
-    disconnectHandler: () => Promise.resolve(),
+    ...noopHandlers,
     state,
 
     logSink: testLogSink,
@@ -234,8 +238,7 @@ test('after deleteAllData the roomDO just 410s', async () => {
 
   const roomDO = new BaseRoomDO({
     mutators: {},
-    roomStartHandler: () => Promise.resolve(),
-    disconnectHandler: () => Promise.resolve(),
+    ...noopHandlers,
     state: await createTestDurableObjectState('test-do-id'),
     logSink: testLogSink,
     logLevel: 'info',
@@ -263,8 +266,7 @@ test('Logs version during construction', async () => {
   const testLogSink = new TestLogSink();
   new BaseRoomDO({
     mutators: {},
-    roomStartHandler: () => Promise.resolve(),
-    disconnectHandler: () => Promise.resolve(),
+    ...noopHandlers,
     state: await createTestDurableObjectState('test-do-id'),
     logSink: testLogSink,
     logLevel: 'info',
@@ -288,8 +290,7 @@ test('Avoids queueing many intervals in the lock', async () => {
   const testLogSink = new TestLogSink();
   const room = new BaseRoomDO({
     mutators: {},
-    roomStartHandler: () => Promise.resolve(),
-    disconnectHandler: () => Promise.resolve(),
+    ...noopHandlers,
     state: await createTestDurableObjectState('test-do-id'),
     logSink: testLogSink,
     logLevel: 'info',
@@ -346,8 +347,7 @@ async function makeBaseRoomDO(state?: DurableObjectState) {
   const testLogSink = new TestLogSink();
   return new BaseRoomDO({
     mutators: {},
-    roomStartHandler: () => Promise.resolve(),
-    disconnectHandler: () => Promise.resolve(),
+    ...noopHandlers,
     state: state ?? (await createTestDurableObjectState('test-do-id')),
     logSink: testLogSink,
     logLevel: 'info',
@@ -510,6 +510,7 @@ describe('good, bad, invalid tail requests', () => {
         mutators: {},
         roomStartHandler: () => Promise.resolve(),
         disconnectHandler: () => Promise.resolve(),
+        closeHandler: () => Promise.resolve(),
         state,
         logSink: testLogSink,
         logLevel: 'info',

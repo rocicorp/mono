@@ -651,6 +651,7 @@ describe('processRoom', () => {
         c.pendingMutations.length,
         mutators,
         () => Promise.resolve(),
+        () => Promise.resolve(),
         storage,
         () => true,
       );

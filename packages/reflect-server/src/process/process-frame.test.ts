@@ -8,10 +8,10 @@ import {
 } from '@jest/globals';
 import type {Version} from 'reflect-protocol';
 import type {Env, WriteTransaction} from 'reflect-shared/src/types.js';
-import {jsonSchema} from 'shared/src/json-schema.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
 import {
+  ClientRecord,
   ClientRecordMap,
   clientRecordKey,
   putClientRecord,
@@ -60,7 +60,10 @@ mockMathRandom();
 describe('processFrame', () => {
   const startVersion = 1;
   const disconnectHandlerWriteKey = (clientID: string) =>
-    'test-disconnected-' + clientID;
+    `test-disconnected-${clientID}`;
+  const closeHandlerWriteKey = (clientID: string) => `test-closed-${clientID}`;
+  const closeHandlerWritePresenceKey = (clientID: string) =>
+    `-/p/${clientID}/closeHandler`;
 
   type Case = {
     name: string;
@@ -74,9 +77,11 @@ describe('processFrame', () => {
     expectedUserValues: Map<string, UserValue>;
     expectedClientRecords: ClientRecordMap;
     expectedVersion: Version;
-    expectedDisconnectedClients: ClientID[];
-    expectedConnectedClients: ClientID[];
-    disconnectHandlerThrows: boolean;
+    expectedDisconnectedCalls?: ClientID[];
+    expectedConnectedClients?: ClientID[];
+    expectedClosedCalls?: ClientID[];
+    disconnectHandlerThrows?: boolean;
+    closeHandlerThrows?: boolean;
     shouldGCClients?: boolean;
   };
 
@@ -114,9 +119,6 @@ describe('processFrame', () => {
       expectedUserValues: new Map(),
       expectedClientRecords: records,
       expectedVersion: startVersion,
-      expectedDisconnectedClients: [],
-      expectedConnectedClients: [],
-      disconnectHandlerThrows: false,
     },
     {
       name: 'no mutations, one client',
@@ -129,9 +131,7 @@ describe('processFrame', () => {
       expectedUserValues: new Map(),
       expectedClientRecords: records,
       expectedVersion: startVersion,
-      expectedDisconnectedClients: [],
       expectedConnectedClients: ['c1'],
-      disconnectHandlerThrows: false,
     },
     {
       name: 'one mutation, one client',
@@ -176,9 +176,7 @@ describe('processFrame', () => {
         ['c1', clientRecord('cg1', startVersion + 1, 2, startVersion + 1)],
       ]),
       expectedVersion: startVersion + 1,
-      expectedDisconnectedClients: [],
       expectedConnectedClients: ['c1'],
-      disconnectHandlerThrows: false,
     },
     {
       name: 'one mutation, two clients',
@@ -241,9 +239,7 @@ describe('processFrame', () => {
         ['c2', clientRecord('cg1', startVersion + 1, 7, startVersion)],
       ]),
       expectedVersion: startVersion + 1,
-      expectedDisconnectedClients: [],
       expectedConnectedClients: ['c1', 'c2'],
-      disconnectHandlerThrows: false,
     },
     {
       name: 'one mutation, two clients, debugPerf',
@@ -316,9 +312,7 @@ describe('processFrame', () => {
         ['c2', clientRecord('cg1', startVersion + 1, 7, startVersion)],
       ]),
       expectedVersion: startVersion + 1,
-      expectedDisconnectedClients: [],
       expectedConnectedClients: ['c1', 'c2'],
-      disconnectHandlerThrows: false,
     },
     {
       name: 'two mutations, three clients, two client groups',
@@ -466,9 +460,7 @@ describe('processFrame', () => {
         ['c3', clientRecord('cg2', startVersion + 2, 8, startVersion + 2)],
       ]),
       expectedVersion: startVersion + 2,
-      expectedDisconnectedClients: [],
       expectedConnectedClients: ['c1', 'c2', 'c3'],
-      disconnectHandlerThrows: false,
     },
     {
       name: 'two mutations, one client, one key',
@@ -538,9 +530,7 @@ describe('processFrame', () => {
         ['c1', clientRecord('cg1', startVersion + 2, 3, startVersion + 2)],
       ]),
       expectedVersion: startVersion + 2,
-      expectedDisconnectedClients: [],
       expectedConnectedClients: ['c1'],
-      disconnectHandlerThrows: false,
     },
     {
       name: 'no mutations, no clients, 1 client disconnects',
@@ -555,9 +545,7 @@ describe('processFrame', () => {
       ]),
       expectedClientRecords: records,
       expectedVersion: startVersion + 1,
-      expectedDisconnectedClients: ['c1'],
-      expectedConnectedClients: [],
-      disconnectHandlerThrows: false,
+      expectedDisconnectedCalls: ['c1'],
     },
     {
       name: 'no mutations, no clients, 1 client disconnects, disconnect handler throws',
@@ -572,8 +560,7 @@ describe('processFrame', () => {
       expectedClientRecords: records,
       // version not incremented for same reason
       expectedVersion: startVersion,
-      expectedDisconnectedClients: ['c1'],
-      expectedConnectedClients: [],
+      expectedDisconnectedCalls: ['c1'],
       disconnectHandlerThrows: true,
     },
     {
@@ -610,9 +597,8 @@ describe('processFrame', () => {
         ['c2', clientRecord('cg1', startVersion + 1, 7, startVersion)],
       ]),
       expectedVersion: startVersion + 1,
-      expectedDisconnectedClients: ['c1'],
+      expectedDisconnectedCalls: ['c1'],
       expectedConnectedClients: ['c2'],
-      disconnectHandlerThrows: false,
     },
     {
       name: 'no mutations, 1 client, 2 clients disconnected',
@@ -654,9 +640,8 @@ describe('processFrame', () => {
         ['c2', clientRecord('cg1', startVersion + 1, 7, startVersion)],
       ]),
       expectedVersion: startVersion + 1,
-      expectedDisconnectedClients: ['c1', 'c3'],
+      expectedDisconnectedCalls: ['c1', 'c3'],
       expectedConnectedClients: ['c2'],
-      disconnectHandlerThrows: false,
     },
     {
       name: '1 mutation, 2 clients, 1 client disconnects',
@@ -754,9 +739,8 @@ describe('processFrame', () => {
         ['c2', clientRecord('cg1', startVersion + 2, 7, startVersion)],
       ]),
       expectedVersion: startVersion + 2,
-      expectedDisconnectedClients: ['c3'],
+      expectedDisconnectedCalls: ['c3'],
       expectedConnectedClients: ['c1', 'c2'],
-      disconnectHandlerThrows: false,
     },
     {
       name: '1 mutation, 2 clients, 1 client disconnects but has pending not process in this frame',
@@ -830,9 +814,7 @@ describe('processFrame', () => {
         ['c2', clientRecord('cg1', startVersion + 1, 7, startVersion)],
       ]),
       expectedVersion: startVersion + 1,
-      expectedDisconnectedClients: [],
       expectedConnectedClients: ['c1', 'c2', 'c3'],
-      disconnectHandlerThrows: false,
     },
     {
       name: '1 mutation, 2 clients, 1 client disconnects and has pending processed in this frame',
@@ -942,9 +924,8 @@ describe('processFrame', () => {
         ['c3', clientRecord('cg2', startVersion, 8, startVersion + 1)],
       ]),
       expectedVersion: startVersion + 2,
-      expectedDisconnectedClients: ['c3'],
+      expectedDisconnectedCalls: ['c3'],
       expectedConnectedClients: ['c1', 'c2'],
-      disconnectHandlerThrows: false,
     },
     {
       name: '1 mutation, 2 clients. 1 client should be garbage collected',
@@ -1011,9 +992,7 @@ describe('processFrame', () => {
         ['c1', clientRecord('cg1', startVersion + 2, 2, startVersion + 1)],
       ]),
       expectedVersion: startVersion + 2,
-      expectedDisconnectedClients: [],
       expectedConnectedClients: ['c1'],
-      disconnectHandlerThrows: false,
     },
     {
       name: '1 mutation, 3 clients. 1 client should be garbage collected. 1 got disconnected',
@@ -1102,9 +1081,8 @@ describe('processFrame', () => {
         ['c3', clientRecord('cg3', null, 1, startVersion)],
       ]),
       expectedVersion: startVersion + 3,
-      expectedDisconnectedClients: ['c3'],
+      expectedDisconnectedCalls: ['c3'],
       expectedConnectedClients: ['c1'],
-      disconnectHandlerThrows: false,
     },
 
     {
@@ -1145,9 +1123,7 @@ describe('processFrame', () => {
         ['c1', clientRecord('cg1', startVersion + 1, 1, startVersion)],
       ]),
       expectedVersion: startVersion + 1,
-      expectedDisconnectedClients: [],
       expectedConnectedClients: ['c1'],
-      disconnectHandlerThrows: false,
     },
 
     {
@@ -1177,14 +1153,98 @@ describe('processFrame', () => {
         ['c2', clientRecord('cg2', 1, 7, 1, startTime - TWO_WEEKS)],
       ]),
       expectedVersion: startVersion,
-      expectedDisconnectedClients: [],
       expectedConnectedClients: ['c1'],
-      disconnectHandlerThrows: false,
+    },
+
+    {
+      name: 'no mutations, 1 client disconnects, close handler should be called',
+      pendingMutations: [],
+      numPendingMutationsToProcess: 0,
+      clients: new Map(),
+      clientRecords: recordsWith('c1', {lastMutationIDAtClose: 1}),
+      storedConnectedClients: ['c1'],
+      // No user values or pokes because only write was in disconnect handler which threw
+      expectedPokes: [],
+      expectedUserValues: new Map([
+        [disconnectHandlerWriteKey('c1'), userValue(true, startVersion + 1)],
+        [closeHandlerWriteKey('c1'), userValue(true, startVersion + 1)],
+        [
+          closeHandlerWritePresenceKey('c1'),
+          userValue(true, startVersion + 1, true),
+        ],
+      ]),
+      expectedClientRecords: recordsWithoutClientID('c1'),
+      // version incremented because close handler changed keys
+      expectedVersion: startVersion + 1,
+      expectedDisconnectedCalls: ['c1'],
+      expectedClosedCalls: ['c1'],
+
+      shouldGCClients: true,
+    },
+    {
+      name: 'no mutations, 1 client disconnects, close handler throws',
+      pendingMutations: [],
+      numPendingMutationsToProcess: 0,
+      clients: new Map(),
+      clientRecords: recordsWith('c1', {lastMutationIDAtClose: 1}),
+      storedConnectedClients: ['c1'],
+      // No user values or pokes because only write was in disconnect handler which threw
+      expectedPokes: [],
+      expectedUserValues: new Map([
+        [disconnectHandlerWriteKey('c1'), userValue(true, startVersion + 1)],
+      ]),
+      expectedClientRecords: recordsWithoutClientID('c1'),
+      // version incremented because disconnect handler changed keys
+      expectedVersion: startVersion + 1,
+      expectedDisconnectedCalls: ['c1'],
+      expectedClosedCalls: ['c1'],
+
+      closeHandlerThrows: true,
+      shouldGCClients: true,
+    },
+    {
+      name: 'no mutations, 1 client disconnects, disconnect and close handler throw',
+      pendingMutations: [],
+      numPendingMutationsToProcess: 0,
+      clients: new Map(),
+      clientRecords: recordsWith('c1', {lastMutationIDAtClose: 1}),
+      storedConnectedClients: ['c1'],
+      // No user values or pokes because only write was in disconnect handler which threw
+      expectedPokes: [],
+      expectedUserValues: new Map(),
+      expectedClientRecords: recordsWithoutClientID('c1'),
+      // version not incremented because both disconnect nad close handler threw
+      expectedVersion: startVersion,
+      expectedDisconnectedCalls: ['c1'],
+      expectedClosedCalls: ['c1'],
+
+      closeHandlerThrows: true,
+      disconnectHandlerThrows: true,
+      shouldGCClients: true,
     },
   ];
 
+  function recordsWith(clientID: string, props: Partial<ClientRecord>) {
+    return new Map(records).set(clientID, {
+      ...records.get(clientID)!,
+      ...props,
+    });
+  }
+
+  function recordsWithoutClientID(clientID: string): ClientRecordMap {
+    const newRecords = new Map(records);
+    newRecords.delete(clientID);
+    return newRecords;
+  }
+
   for (const c of cases) {
     test(c.name, async () => {
+      const {
+        expectedDisconnectedCalls = [],
+        expectedConnectedClients = [],
+        expectedClosedCalls = [],
+      } = c;
+
       const durable = await getMiniflareDurableObjectStorage(id);
       await durable.deleteAll();
       const storage = new DurableStorage(durable);
@@ -1202,6 +1262,7 @@ describe('processFrame', () => {
       }
 
       const disconnectCallClients: ClientID[] = [];
+      const closedCallClients: ClientID[] = [];
       const result = await processFrame(
         createSilentLogContext(),
         env,
@@ -1216,6 +1277,18 @@ describe('processFrame', () => {
             throw new Error('disconnectHandler threw');
           }
         },
+        async write => {
+          await write.set(closeHandlerWriteKey(write.clientID), true);
+
+          // write presence state too... which should be collected
+          await write.set(`-/p/${write.clientID}/closeHandler`, true);
+
+          closedCallClients.push(write.clientID);
+          // Throw after writes to confirm they are not saved.
+          if (c.closeHandlerThrows) {
+            throw new Error('closeHandler threw');
+          }
+        },
         c.clients,
         storage,
         () => c.shouldGCClients ?? true,
@@ -1224,8 +1297,10 @@ describe('processFrame', () => {
       expect(result).toEqual(c.expectedPokes);
 
       expect(disconnectCallClients.sort()).toEqual(
-        c.expectedDisconnectedClients.sort(),
+        expectedDisconnectedCalls.sort(),
       );
+
+      expect(closedCallClients.sort()).toEqual(expectedClosedCalls.sort());
 
       const expectedState = new Map([
         ...new Map<string, ReadonlyJSONValue>(
@@ -1241,13 +1316,10 @@ describe('processFrame', () => {
           ]),
         ),
         [versionKey, c.expectedVersion],
-        [connectedClientsKey, [...c.expectedConnectedClients]],
+        [connectedClientsKey, [...expectedConnectedClients]],
       ]);
 
-      expect((await durable.list()).size).toEqual(expectedState.size);
-      for (const [key, value] of expectedState) {
-        expect(await storage.get(key, jsonSchema)).toEqual(value);
-      }
+      expect(await durable.list()).toEqual(expectedState);
     });
   }
 });

@@ -2,7 +2,7 @@ import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
 import type {ClientID} from 'reflect-shared/src/mod.js';
 import {CLOSE_BEACON_PATH} from 'reflect-shared/src/paths.js';
-import type {MutatorDefs} from 'reflect-shared/src/types.js';
+import type {MutatorDefs, WriteTransaction} from 'reflect-shared/src/types.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {newCreateRoomRequest} from '../client/room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
@@ -33,12 +33,17 @@ async function createRoom<MD extends MutatorDefs>(
   expect(createResponse.status).toBe(expectedStatus);
 }
 
+const noopHandlers = {
+  roomStartHandler: () => Promise.resolve(),
+  disconnectHandler: () => Promise.resolve(),
+  closeHandler: () => Promise.resolve(),
+} as const;
+
 async function makeBaseRoomDO(state?: DurableObjectState) {
   const testLogSink = new TestLogSink();
   return new BaseRoomDO({
     mutators: {},
-    roomStartHandler: () => Promise.resolve(),
-    disconnectHandler: () => Promise.resolve(),
+    ...noopHandlers,
     state: state ?? (await createTestDurableObjectState('test-do-id')),
     logSink: testLogSink,
     logLevel: 'info',
@@ -72,6 +77,7 @@ describe('Close beacon behavior', () => {
     expectedEntries?: Record<string, UserValue>;
     connectedClients?: ClientID[];
     expectedClientRecords: Record<ClientID, ClientRecord>;
+    closeHandler?: (tx: WriteTransaction) => Promise<void>;
   }[] = [
     {
       name: 'Config not enabled',
@@ -210,6 +216,54 @@ describe('Close beacon behavior', () => {
         },
       },
     },
+
+    {
+      name: 'Same lmid sent with a closeHandler',
+      expectedStatus: 200,
+      storedLastMutationID: 10,
+      body: {lastMutationID: 10},
+      expectedClientRecords: {},
+      async closeHandler(tx) {
+        await tx.set('x/hold', 'door');
+        await tx.set(`-/p/${tx.clientID}/collect`, 'me');
+      },
+      entries: {
+        [`-/p/${clientID}`]: 1,
+        [`-/p/someOtherClientID`]: 2,
+      },
+      expectedEntries: {
+        'user/x/hold': {
+          deleted: false,
+          value: 'door',
+          version: 101,
+        },
+        [`user/-/p/${clientID}/collect`]: {
+          deleted: true,
+          value: 'me',
+          version: 101,
+        },
+        [`user/-/p/${clientID}`]: {
+          deleted: true,
+          value: 1,
+          version: 101,
+        },
+        'user/-/p/someOtherClientID': {
+          deleted: false,
+          value: 2,
+          version: 100,
+        },
+      },
+    },
+
+    {
+      name: 'Same lmid sent with a closeHandler throws',
+      expectedStatus: 200,
+      storedLastMutationID: 10,
+      body: {lastMutationID: 10},
+      expectedClientRecords: {},
+      closeHandler: () =>
+        Promise.reject(new Error('closeHandler intentional error')),
+    },
   ];
   for (const c of cases) {
     test(c.name, async () => {
@@ -220,6 +274,7 @@ describe('Close beacon behavior', () => {
         expectedEntries = entries,
         connectedClients,
         expectedClientRecords,
+        closeHandler = () => Promise.resolve(),
       } = c;
       const version = 100;
       setConfig('closeBeacon', enabled);
@@ -230,8 +285,8 @@ describe('Close beacon behavior', () => {
       const testLogSink = new TestLogSink();
       const roomDO = new BaseRoomDO({
         mutators: {},
-        roomStartHandler: () => Promise.resolve(),
-        disconnectHandler: () => Promise.resolve(),
+        ...noopHandlers,
+        closeHandler,
         state,
         logSink: testLogSink,
         logLevel: 'info',
@@ -272,7 +327,7 @@ describe('Close beacon behavior', () => {
         expectedClientRecords,
       );
       expect(
-        await storage.list({prefix: userValueKey('-/p/')}, userValueSchema),
+        await storage.list({prefix: userValueKey('')}, userValueSchema),
       ).toEqual(new Map(Object.entries(expectedEntries)));
     });
   }
