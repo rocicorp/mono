@@ -26,7 +26,8 @@ import {
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
 const version = 2;
-const auth: AuthData = {userID: 'testUser1', foo: 'bar'};
+const userID = 'testUser1';
+const auth: AuthData = {userID, foo: 'bar'};
 const env: Env = {env: 'baby'};
 
 test('processMutation', async () => {
@@ -61,6 +62,7 @@ test('processMutation', async () => {
         baseCookie: null,
         lastMutationID: 1,
         lastMutationIDVersion: 1,
+        userID,
       }),
       pendingMutation: pendingMutation({
         clientID: 'c1',
@@ -85,6 +87,7 @@ test('processMutation', async () => {
         baseCookie: null,
         lastMutationID: 1,
         lastMutationIDVersion: 1,
+        userID,
       }),
       pendingMutation: pendingMutation({
         clientID: 'c1',
@@ -109,6 +112,7 @@ test('processMutation', async () => {
         baseCookie: null,
         lastMutationID: 1,
         lastMutationIDVersion: 1,
+        userID,
       }),
       pendingMutation: pendingMutation({
         clientID: 'c1',
@@ -134,6 +138,7 @@ test('processMutation', async () => {
         baseCookie: null,
         lastMutationID: 1,
         lastMutationIDVersion: 1,
+        userID,
       }),
       pendingMutation: pendingMutation({
         clientID: 'c1',
@@ -159,6 +164,7 @@ test('processMutation', async () => {
         baseCookie: null,
         lastMutationID: 1,
         lastMutationIDVersion: 1,
+        userID,
       }),
       pendingMutation: pendingMutation({
         clientID: 'c1',

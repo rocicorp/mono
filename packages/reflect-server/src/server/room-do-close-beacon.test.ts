@@ -92,6 +92,7 @@ describe('Close beacon behavior', () => {
           lastMutationID: 0,
           lastMutationIDVersion: null,
           lastSeen: 0,
+          userID,
         },
       },
     },
@@ -143,6 +144,7 @@ describe('Close beacon behavior', () => {
           lastMutationID: 2,
           lastMutationIDVersion: null,
           lastSeen: 0,
+          userID,
         },
       },
     },
@@ -158,6 +160,7 @@ describe('Close beacon behavior', () => {
           lastMutationID: 3,
           lastMutationIDVersion: null,
           lastSeen: 0,
+          userID,
         },
       },
     },
@@ -173,6 +176,7 @@ describe('Close beacon behavior', () => {
           lastMutationID: 2,
           lastMutationIDVersion: null,
           lastSeen: 0,
+          userID,
         },
       },
     },
@@ -213,6 +217,7 @@ describe('Close beacon behavior', () => {
           lastMutationIDVersion: null,
           lastSeen: 0,
           lastMutationIDAtClose: 10,
+          userID,
         },
       },
     },
@@ -311,6 +316,7 @@ describe('Close beacon behavior', () => {
         lastMutationID: c.storedLastMutationID,
         lastMutationIDVersion: null,
         lastSeen: 0,
+        userID,
       };
       await putClientRecord(clientID, clientRecord, storage);
 

@@ -1,4 +1,4 @@
-import {describe, expect, test} from '@jest/globals';
+import {describe, expect, jest, test} from '@jest/globals';
 import type {Env} from 'reflect-shared/src/types.js';
 import {jsonSchema} from 'shared/src/json-schema.js';
 import {DurableStorage} from '../storage/durable-storage.js';
@@ -20,6 +20,7 @@ import {
   collectOldUserSpaceClientKeys,
   updateLastSeen,
 } from './client-gc.js';
+import type {CloseHandler} from './close-handler.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -37,6 +38,7 @@ async function setLastSeenEntries(
         clientGroupID: 'client-group-id',
         lastMutationID: 2,
         lastMutationIDVersion: 3,
+        userID: 'u1',
       },
       cache,
     );
@@ -229,6 +231,7 @@ Map {
 describe('collectClients', () => {
   test('empty storage', async () => {
     const lc = createSilentLogContext();
+    const env = {a: 'b'};
     const durable = await getMiniflareDurableObjectStorage(id);
     await durable.deleteAll();
     const storage = new DurableStorage(durable);
@@ -236,12 +239,17 @@ describe('collectClients', () => {
     const now = 123;
     const maxAge = 456;
     const version = 789;
+    const closeHandler = jest
+      .fn<CloseHandler>()
+      .mockRejectedValue('should not be called');
 
     await putVersion(version, storage);
 
     await collectClients(
       lc,
+      env,
       storage,
+      closeHandler,
       connectedClients,
       now,
       maxAge,
@@ -253,10 +261,12 @@ Map {
   "version" => 789,
 }
 `);
+    expect(closeHandler).not.toHaveBeenCalled();
   });
 
   test('normal operation', async () => {
     const lc = createSilentLogContext();
+    const env = {a: 'b'};
     const durable = await getMiniflareDurableObjectStorage(id);
     await durable.deleteAll();
     const storage = new DurableStorage(durable);
@@ -264,6 +274,7 @@ Map {
     const now = 4500;
     const maxAge = 2000;
     const connectedClients = new Set(['client-a', 'client-c']);
+    const closeHandler = jest.fn<CloseHandler>().mockResolvedValue(undefined);
 
     await putVersion(version, storage);
     await setUserEntries(storage, version, {
@@ -287,7 +298,9 @@ Map {
 
     await collectClients(
       lc,
+      env,
       storage,
+      closeHandler,
       connectedClients,
       now,
       maxAge,
@@ -295,14 +308,23 @@ Map {
     );
     await storage.flush();
 
+    expect(closeHandler).toHaveBeenCalledTimes(1);
+    expect(closeHandler).toHaveBeenCalledWith(
+      expect.objectContaining({clientID: 'client-b'}),
+    );
+
     expect(await storage.list({}, jsonSchema)).toMatchInlineSnapshot(`
 Map {
+  "clientTombstone/client-b" => {
+    "userID": "u1",
+  },
   "clientV1/client-a" => {
     "baseCookie": 1,
     "clientGroupID": "client-group-id",
     "lastMutationID": 2,
     "lastMutationIDVersion": 3,
     "lastSeen": 1000,
+    "userID": "u1",
   },
   "clientV1/client-c" => {
     "baseCookie": 1,
@@ -310,6 +332,7 @@ Map {
     "lastMutationID": 2,
     "lastMutationIDVersion": 3,
     "lastSeen": 3000,
+    "userID": "u1",
   },
   "clientV1/client-d" => {
     "baseCookie": 1,
@@ -317,6 +340,7 @@ Map {
     "lastMutationID": 2,
     "lastMutationIDVersion": 3,
     "lastSeen": 4000,
+    "userID": "u1",
   },
   "connectedclients" => [
     "client-a",
@@ -369,6 +393,7 @@ Map {
 
   test('no client key space used', async () => {
     const lc = createSilentLogContext();
+    const env = {a: 'b'};
     const durable = await getMiniflareDurableObjectStorage(id);
     await durable.deleteAll();
     const storage = new DurableStorage(durable);
@@ -376,6 +401,7 @@ Map {
     const now = 4500;
     const maxAge = 2000;
     const connectedClients = new Set(['client-a', 'client-c']);
+    const closeHandler = jest.fn<CloseHandler>().mockResolvedValue(undefined);
 
     await putVersion(version, storage);
     await setLastSeenEntries(storage, {
@@ -389,21 +415,32 @@ Map {
 
     await collectClients(
       lc,
+      env,
       storage,
+      closeHandler,
       connectedClients,
       now,
       maxAge,
       version + 1,
     );
 
+    expect(closeHandler).toHaveBeenCalledTimes(1);
+    expect(closeHandler).toHaveBeenCalledWith(
+      expect.objectContaining({clientID: 'client-b'}),
+    );
+
     expect(await storage.list({}, jsonSchema)).toMatchInlineSnapshot(`
 Map {
+  "clientTombstone/client-b" => {
+    "userID": "u1",
+  },
   "clientV1/client-a" => {
     "baseCookie": 1,
     "clientGroupID": "client-group-id",
     "lastMutationID": 2,
     "lastMutationIDVersion": 3,
     "lastSeen": 1000,
+    "userID": "u1",
   },
   "clientV1/client-c" => {
     "baseCookie": 1,
@@ -411,6 +448,7 @@ Map {
     "lastMutationID": 2,
     "lastMutationIDVersion": 3,
     "lastSeen": 3000,
+    "userID": "u1",
   },
   "clientV1/client-d" => {
     "baseCookie": 1,
@@ -418,6 +456,7 @@ Map {
     "lastMutationID": 2,
     "lastMutationIDVersion": 3,
     "lastSeen": 4000,
+    "userID": "u1",
   },
   "connectedclients" => [
     "client-a",
@@ -430,6 +469,7 @@ Map {
 
   test('client record missing lastSeen', async () => {
     const lc = createSilentLogContext();
+    const env: Env = {a: 'b'};
     const durable = await getMiniflareDurableObjectStorage(id);
     await durable.deleteAll();
     const storage = new DurableStorage(durable);
@@ -437,6 +477,9 @@ Map {
     const now = 4500;
     const maxAge = 2000;
     const connectedClients = new Set(['client-a', 'client-c']);
+    const closeHandler = jest
+      .fn<CloseHandler>()
+      .mockRejectedValue('should not be called');
 
     await putVersion(version, storage);
     await setLastSeenEntries(storage, {
@@ -464,13 +507,16 @@ Map {
       clientGroupID: 'client-group-id',
       lastMutationID: 2,
       lastMutationIDVersion: 3,
+      userID: 'u1',
     });
 
     // client-b does not get deleted because it has no lastSeen so it just now
     // gets a lastSeen value.
     await collectClients(
       lc,
+      env,
       storage,
+      closeHandler,
       connectedClients,
       now,
       maxAge,
@@ -481,12 +527,16 @@ Map {
     // client-b gets a lastSeen of now
     expect(await storage.list({}, jsonSchema)).toMatchInlineSnapshot(`
 Map {
+  "clientTombstone/client-d" => {
+    "userID": "u1",
+  },
   "clientV1/client-a" => {
     "baseCookie": 1,
     "clientGroupID": "client-group-id",
     "lastMutationID": 2,
     "lastMutationIDVersion": 3,
     "lastSeen": 1000,
+    "userID": "u1",
   },
   "clientV1/client-b" => {
     "baseCookie": 1,
@@ -494,6 +544,7 @@ Map {
     "lastMutationID": 2,
     "lastMutationIDVersion": 3,
     "lastSeen": 4500,
+    "userID": "u1",
   },
   "clientV1/client-c" => {
     "baseCookie": 1,
@@ -501,6 +552,7 @@ Map {
     "lastMutationID": 2,
     "lastMutationIDVersion": 3,
     "lastSeen": 3000,
+    "userID": "u1",
   },
   "connectedclients" => [
     "client-a",
@@ -567,6 +619,7 @@ test('touchClients', async () => {
         clientGroupID: 'client-group-id',
         lastMutationID: 2,
         lastMutationIDVersion: 3,
+        userID: 'u1',
       },
       storage,
     );
@@ -589,24 +642,28 @@ Map {
     "lastMutationID": 2,
     "lastMutationIDVersion": 3,
     "lastSeen": 1969,
+    "userID": "u1",
   },
   "clientV1/client-b" => {
     "baseCookie": 1,
     "clientGroupID": "client-group-id",
     "lastMutationID": 2,
     "lastMutationIDVersion": 3,
+    "userID": "u1",
   },
   "clientV1/client-c" => {
     "baseCookie": 1,
     "clientGroupID": "client-group-id",
     "lastMutationID": 2,
     "lastMutationIDVersion": 3,
+    "userID": "u1",
   },
   "clientV1/client-d" => {
     "baseCookie": 1,
     "clientGroupID": "client-group-id",
     "lastMutationID": 2,
     "lastMutationIDVersion": 3,
+    "userID": "u1",
   },
 }
 `);
@@ -649,6 +706,7 @@ describe('collectClientIfDeleted', () => {
       const clientGroupID = 'client-group-id';
       const env: Env = {a: 'b'};
       const closeHandler = async () => {};
+      const userID = 'user-id-xyz';
 
       // Set a presence state key value
       const keyToTest = `-/p/${clientID}/test`;
@@ -663,6 +721,7 @@ describe('collectClientIfDeleted', () => {
         lastMutationIDVersion: null,
         lastSeen: 4,
         lastMutationIDAtClose,
+        userID,
       };
 
       await putClientRecord(clientID, clientRecord, cache);

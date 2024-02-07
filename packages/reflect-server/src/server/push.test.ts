@@ -1,6 +1,6 @@
 import {describe, expect, test} from '@jest/globals';
 import {LogContext} from '@rocicorp/logger';
-import type {Mutation} from 'reflect-protocol';
+import type {Mutation, PushBody} from 'reflect-protocol';
 import {handlePush} from '../server/push.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {
@@ -274,6 +274,7 @@ describe('handlePush', () => {
             lastMutationID: 2,
             lastMutationIDVersion: 1,
             lastSeen: 50,
+            userID: 'u1',
           }),
         ],
       ]),
@@ -312,6 +313,7 @@ describe('handlePush', () => {
             lastMutationID: 2,
             lastMutationIDVersion: 1,
             lastSeen: 50,
+            userID: 'u1',
           }),
         ],
         [
@@ -322,6 +324,7 @@ describe('handlePush', () => {
             lastMutationID: 0,
             lastMutationIDVersion: null,
             lastSeen: 50,
+            userID: 'u1',
           }),
         ],
       ]),
@@ -1045,7 +1048,7 @@ describe('handlePush', () => {
       expect(await listClientRecords(storage)).toEqual(c.clientRecords);
 
       const requestID = randomID();
-      const push = {
+      const push: PushBody = {
         clientGroupID,
         mutations: c.mutations,
         pushVersion: 1,

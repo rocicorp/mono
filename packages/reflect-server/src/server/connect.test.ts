@@ -111,12 +111,13 @@ describe('handleConnection', () => {
     version: NullableVersion;
     wsid?: string | undefined;
   };
+  const userID = 'u1';
   const c2 = client('c2', 'u2', 'cg1');
   const cases: Case[] = [
     {
       name: 'invalid clientid',
       url: 'http://google.com/?clientGroupID=cg1&baseCookie=1&timestamp=t1&lmid=0&wsid=wsidx',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       expectErrorKind: 'InvalidConnectionRequest',
       expectErrorMessage: 'invalid querystring - missing clientID',
       existingClients: new Map(),
@@ -126,7 +127,7 @@ describe('handleConnection', () => {
     {
       name: 'invalid clientGroupID',
       url: 'http://google.com/?clientID=c1&baseCookie=1&timestamp=t1&lmid=0',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       expectErrorKind: 'InvalidConnectionRequest',
       expectErrorMessage: 'invalid querystring - missing clientGroupID',
       existingClients: new Map(),
@@ -136,7 +137,7 @@ describe('handleConnection', () => {
     {
       name: 'invalid timestamp',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=1&lmid=0&wsid=wsidx',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       expectErrorKind: 'InvalidConnectionRequest',
       expectErrorMessage: 'invalid querystring - missing ts',
       existingClients: new Map(),
@@ -146,7 +147,7 @@ describe('handleConnection', () => {
     {
       name: 'invalid (non-numeric) timestamp',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=1&ts=xx&lmid=0&wsid=wsidx',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       expectErrorKind: 'InvalidConnectionRequest',
       expectErrorMessage:
         'invalid querystring parameter ts, got: xx, url: http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=1&ts=xx&lmid=0&wsid=wsidx',
@@ -157,7 +158,7 @@ describe('handleConnection', () => {
     {
       name: 'missing lmid',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=1&ts=123',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       expectErrorKind: 'InvalidConnectionRequest',
       expectErrorMessage: 'invalid querystring - missing lmid',
       existingClients: new Map(),
@@ -167,7 +168,7 @@ describe('handleConnection', () => {
     {
       name: 'invalid (non-numeric) lmid',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=1&ts=123&lmid=xx',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       expectErrorKind: 'InvalidConnectionRequest',
       expectErrorMessage:
         'invalid querystring parameter lmid, got: xx, url: http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=1&ts=123&lmid=xx',
@@ -178,16 +179,17 @@ describe('handleConnection', () => {
     {
       name: 'baseCookie: null and version: null',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=&ts=42&lmid=0&wsid=wsidx',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       existingClients: new Map(),
       expectedClients: socket =>
-        new Map([freshClient('c1', 'u1', 'cg1', socket)]),
+        new Map([freshClient('c1', userID, 'cg1', socket)]),
       existingRecord: clientRecord({
         clientGroupID: 'cg1',
         baseCookie: null,
         lastMutationID: 0,
         lastMutationIDVersion: undefined,
         lastSeen: START_TIME - 100,
+        userID,
       }),
       expectedRecord: clientRecord({
         clientGroupID: 'cg1',
@@ -195,13 +197,14 @@ describe('handleConnection', () => {
         lastMutationID: 0,
         lastMutationIDVersion: undefined,
         lastSeen: START_TIME,
+        userID,
       }),
       version: null,
     },
     {
       name: 'baseCookie: 1 and version null',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=1&ts=42&lmid=0&wsid=wsidx',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       expectErrorKind: 'InvalidConnectionRequestBaseCookie',
       expectErrorMessage: `Unexpected baseCookie.`,
       existingClients: new Map(),
@@ -211,7 +214,7 @@ describe('handleConnection', () => {
     {
       name: 'baseCookie: 2 and version: 1',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=2&ts=42&lmid=0&wsid=wsidx',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       expectErrorKind: 'InvalidConnectionRequestBaseCookie',
       expectErrorMessage: `Unexpected baseCookie.`,
       existingClients: new Map(),
@@ -221,16 +224,17 @@ describe('handleConnection', () => {
     {
       name: 'baseCookie: 1 and version: 2',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=1&ts=42&lmid=0&wsid=wsidx',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       existingClients: new Map(),
       expectedClients: socket =>
-        new Map([freshClient('c1', 'u1', 'cg1', socket)]),
+        new Map([freshClient('c1', userID, 'cg1', socket)]),
       existingRecord: clientRecord({
         clientGroupID: 'cg1',
         baseCookie: 2,
         lastMutationID: 0,
         lastMutationIDVersion: undefined,
         lastSeen: START_TIME - 100,
+        userID,
       }),
       expectedRecord: clientRecord({
         clientGroupID: 'cg1',
@@ -238,22 +242,24 @@ describe('handleConnection', () => {
         lastMutationID: 0,
         lastMutationIDVersion: undefined,
         lastSeen: START_TIME,
+        userID,
       }),
       version: 2,
     },
     {
       name: 'baseCookie: 1 and version: 2, debugPerf',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=1&ts=42&lmid=0&wsid=wsidx&debugPerf=true',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       existingClients: new Map(),
       expectedClients: socket =>
-        new Map([freshClient('c1', 'u1', 'cg1', socket, true)]),
+        new Map([freshClient('c1', userID, 'cg1', socket, true)]),
       existingRecord: clientRecord({
         clientGroupID: 'cg1',
         baseCookie: 2,
         lastMutationID: 0,
         lastMutationIDVersion: undefined,
         lastSeen: START_TIME - 100,
+        userID,
       }),
       expectedRecord: clientRecord({
         clientGroupID: 'cg1',
@@ -261,38 +267,41 @@ describe('handleConnection', () => {
         lastMutationID: 0,
         lastMutationIDVersion: undefined,
         lastSeen: START_TIME,
+        userID,
       }),
       version: 2,
     },
     {
       name: 'baseCookie: null w/existing clients',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=&ts=42&lmid=0&wsid=wsidx',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       existingClients: new Map([c2]),
       expectedClients: socket =>
-        new Map([freshClient('c1', 'u1', 'cg1', socket), c2]),
+        new Map([freshClient('c1', userID, 'cg1', socket), c2]),
       expectedRecord: clientRecord({
         clientGroupID: 'cg1',
         baseCookie: null,
         lastMutationID: 0,
         lastMutationIDVersion: null,
         lastSeen: START_TIME,
+        userID,
       }),
       version: 1,
     },
     {
       name: 'existing record',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=7&ts=42&lmid=0&wsid=wsidx',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       existingClients: new Map(),
       expectedClients: socket =>
-        new Map([freshClient('c1', 'u1', 'cg1', socket)]),
+        new Map([freshClient('c1', userID, 'cg1', socket)]),
       existingRecord: clientRecord({
         clientGroupID: 'cg1',
         baseCookie: 4,
         lastMutationID: 0,
         lastMutationIDVersion: undefined,
         lastSeen: START_TIME - 100,
+        userID,
       }),
       expectedRecord: clientRecord({
         clientGroupID: 'cg1',
@@ -300,22 +309,24 @@ describe('handleConnection', () => {
         lastMutationID: 0,
         lastMutationIDVersion: undefined,
         lastSeen: START_TIME,
+        userID,
       }),
       version: 7,
     },
     {
       name: 'missing wsid',
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=7&ts=123&lmid=0',
-      headers: createHeadersWithValidAuthData('u1'),
+      headers: createHeadersWithValidAuthData(userID),
       existingClients: new Map(),
       expectedClients: socket =>
-        new Map([freshClient('c1', 'u1', 'cg1', socket)]),
+        new Map([freshClient('c1', userID, 'cg1', socket)]),
       existingRecord: clientRecord({
         clientGroupID: 'cg1',
         baseCookie: 4,
         lastMutationID: 0,
         lastMutationIDVersion: undefined,
         lastSeen: START_TIME - 100,
+        userID,
       }),
       expectedRecord: clientRecord({
         clientGroupID: 'cg1',
@@ -323,6 +334,7 @@ describe('handleConnection', () => {
         lastMutationID: 0,
         lastMutationIDVersion: undefined,
         lastSeen: START_TIME,
+        userID,
       }),
       version: 7,
       wsid: '',
@@ -372,16 +384,37 @@ describe('handleConnection', () => {
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=7&ts=42&lmid=100&wsid=wsidx',
       existingClients: new Map(),
       expectedClients: socket =>
-        new Map([freshClient('c1', 'u1', 'cg1', socket)]),
-      headers: createHeadersWithValidAuthData('u1'),
+        new Map([freshClient('c1', userID, 'cg1', socket)]),
+      headers: createHeadersWithValidAuthData(userID),
       existingRecord: clientRecord({
         clientGroupID: 'cg1',
         baseCookie: 7,
         lastMutationID: 0,
+        userID,
       }),
       expectErrorKind: 'InvalidConnectionRequestLastMutationID',
       expectErrorMessage: `Unexpected lmid.`,
       version: 7,
+    },
+
+    {
+      name: 'existing record but different userID',
+      url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=7&ts=42&lmid=0&wsid=wsidx',
+      headers: createHeadersWithValidAuthData('u2'),
+      existingClients: new Map(),
+      expectedClients: socket =>
+        new Map([freshClient('c1', userID, 'cg1', socket)]),
+      existingRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: 4,
+        lastMutationID: 0,
+        lastMutationIDVersion: undefined,
+        lastSeen: START_TIME,
+        userID,
+      }),
+      expectErrorKind: 'InvalidConnectionRequest',
+      expectErrorMessage: `Unexpected userID`,
+      version: 6,
     },
   ];
 
@@ -453,6 +486,7 @@ describe('handleConnection', () => {
 });
 
 test('getConnectRequest', () => {
+  const userID = 'u1';
   const testError = (
     url: string,
     expectedError: string,
@@ -531,7 +565,7 @@ test('getConnectRequest', () => {
     {
       clientID: 'cid1',
       clientGroupID: 'cg1',
-      auth: {userID: 'u1', more: 'data'},
+      auth: {userID, more: 'data'},
       timestamp: 123,
       lmid: 456,
       baseCookie: null,
@@ -545,7 +579,7 @@ test('getConnectRequest', () => {
     {
       clientID: 'cid1',
       clientGroupID: 'cg1',
-      auth: {userID: 'u1', more: 'data'},
+      auth: {userID, more: 'data'},
       timestamp: 123,
       lmid: 456,
       baseCookie: 789,
@@ -559,7 +593,7 @@ test('getConnectRequest', () => {
     {
       clientID: 'cid1',
       clientGroupID: 'cg1',
-      auth: {userID: 'u1', more: 'data'},
+      auth: {userID, more: 'data'},
       timestamp: 123,
       lmid: 456,
       baseCookie: 789,

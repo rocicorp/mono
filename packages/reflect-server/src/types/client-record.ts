@@ -1,4 +1,5 @@
 import {nullableVersionSchema} from 'reflect-protocol';
+import {must} from 'shared/src/must.js';
 import * as valita from 'shared/src/valita.js';
 import type {Storage} from '../storage/storage.js';
 import type {ClientID} from './client-state.js';
@@ -17,6 +18,10 @@ export const clientRecordSchema = valita.object({
 
   // This gets sent by the client (browser) when it sends the close beacon.
   lastMutationIDAtClose: valita.number().optional(),
+
+  // The user ID of the user who was using this client.
+  // This is optional because old records did not have this field.
+  userID: valita.string().optional(),
 });
 
 export type ClientRecord = valita.Infer<typeof clientRecordSchema>;
@@ -66,22 +71,31 @@ export function putClientRecord(
   return storage.put(clientRecordKey(clientID), record);
 }
 
-export function delClientRecords(
+/**
+ * Deletes the client records and puts tombstones for them.
+ */
+export async function delClientRecords(
   clientIDs: ClientID[],
   storage: Storage,
 ): Promise<void> {
-  // TODO(arv): Create tombstones for the deleted client records.
-  return storage.delEntries(
-    clientIDs.map(clientID => clientRecordKey(clientID)),
-  );
+  const recordKeys = clientIDs.map(clientID => clientRecordKey(clientID));
+  const records = await storage.getEntries(recordKeys, clientRecordSchema);
+  await Promise.all([
+    putClientTombstones(toClientRecordMap(records), storage),
+    storage.delEntries(recordKeys),
+  ]);
 }
 
-export function delClientRecord(
+/** Deletes the client record and puts a tombstone for it. */
+export async function delClientRecord(
   clientID: ClientID,
   storage: Storage,
 ): Promise<void> {
-  // TODO(arv): Create tombstones for the deleted client records.
-  return storage.del(clientRecordKey(clientID));
+  const {userID} = must(await getClientRecord(clientID, storage));
+  await Promise.all([
+    putClientTombstone(clientID, userID, storage),
+    storage.del(clientRecordKey(clientID)),
+  ]);
 }
 
 function toClientRecordMap(
@@ -92,4 +106,29 @@ function toClientRecordMap(
     clientRecords.set(key.substring(clientRecordPrefix.length), record);
   }
   return clientRecords;
+}
+
+const clientTombstonePrefix = 'clientTombstone/';
+
+export function clientTombstoneKey(clientID: ClientID): string {
+  return `${clientTombstonePrefix}${clientID}`;
+}
+
+function putClientTombstone(
+  clientID: ClientID,
+  userID: string | undefined,
+  storage: Storage,
+): Promise<void> {
+  return storage.put(clientTombstoneKey(clientID), {userID});
+}
+
+function putClientTombstones(
+  records: ClientRecordMap,
+  storage: Storage,
+): Promise<void> {
+  const entries: Record<string, {userID?: string | undefined}> = {};
+  for (const [clientID, {userID}] of records) {
+    entries[clientTombstoneKey(clientID)] = {userID};
+  }
+  return storage.putEntries(entries);
 }

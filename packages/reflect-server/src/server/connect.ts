@@ -76,20 +76,39 @@ export async function handleConnection(
   const existingRecord = await getClientRecord(requestClientID, storage);
   lc.debug?.('Existing client record', existingRecord);
 
-  if (existingRecord && requestClientGroupID !== existingRecord.clientGroupID) {
-    lc.info?.(
-      'Unexpected client group id ',
-      requestClientGroupID,
-      ' received when connecting with a client id ',
-      requestClientID,
-      ' with existing client group id ',
-      existingRecord.clientGroupID,
-    );
-    closeWithErrorLocal(
-      'InvalidConnectionRequest',
-      'Unexpected clientGroupID.',
-    );
-    return;
+  if (existingRecord) {
+    if (requestClientGroupID !== existingRecord.clientGroupID) {
+      lc.info?.(
+        'Unexpected client group id ',
+        requestClientGroupID,
+        ' received when connecting with a client id ',
+        requestClientID,
+        ' with existing client group id ',
+        existingRecord.clientGroupID,
+      );
+      closeWithErrorLocal(
+        'InvalidConnectionRequest',
+        'Unexpected clientGroupID.',
+      );
+      return;
+    }
+
+    if (
+      // Old records may not have userID.
+      existingRecord.userID !== undefined &&
+      existingRecord.userID !== auth.userID
+    ) {
+      lc.info?.(
+        'Unexpected userID received',
+        auth.userID,
+        'when connecting to client with clientID',
+        requestClientID,
+        'which was created by userID',
+        existingRecord.userID,
+      );
+      closeWithErrorLocal('InvalidConnectionRequest', 'Unexpected userID');
+      return;
+    }
   }
 
   const existingLastMutationID = existingRecord?.lastMutationID ?? 0;
@@ -135,6 +154,7 @@ export async function handleConnection(
     lastMutationID: existingLastMutationID,
     lastMutationIDVersion: existingRecordLastMutationIDVersion,
     lastSeen: Date.now(),
+    userID: auth.userID,
   };
   await putClientRecord(clientID, record, storage);
   lc.debug?.('Put client record', record);

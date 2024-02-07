@@ -83,6 +83,7 @@ describe('processFrame', () => {
     disconnectHandlerThrows?: boolean;
     closeHandlerThrows?: boolean;
     shouldGCClients?: boolean;
+    clientTombstoneEntries?: [string, ReadonlyJSONValue][];
   };
 
   const mutators = new Map(
@@ -1122,6 +1123,7 @@ describe('processFrame', () => {
             baseCookie: null,
             lastMutationID: 1,
             lastMutationIDVersion: 1,
+            userID: 'u1',
           }),
         ],
         [
@@ -1132,6 +1134,7 @@ describe('processFrame', () => {
             lastMutationID: 7,
             lastMutationIDVersion: 1,
             lastSeen: startTime - TWO_WEEKS,
+            userID: 'u2',
           }),
         ],
       ]),
@@ -1161,7 +1164,18 @@ describe('processFrame', () => {
             cookie: startVersion + 2,
             lastMutationIDChanges: {},
             presence: [],
-            patch: [{op: 'del', key: '-/p/c2/b'}],
+            patch: [
+              {
+                key: 'test-closed-c2',
+                op: 'put',
+                value: true,
+              },
+              {
+                key: '-/p/c2/closeHandler',
+                op: 'del',
+              },
+              {op: 'del', key: '-/p/c2/b'},
+            ],
             timestamp: undefined,
           },
         },
@@ -1172,7 +1186,10 @@ describe('processFrame', () => {
         ['-/p/c2/b', userValue('bb', startVersion + 2, true)],
         // The next one was already deleted so no update to startVersion
         ['-/p/c2/c', userValue('cc', startVersion, true)],
+        ['-/p/c2/closeHandler', userValue(true, startVersion + 2, true)],
+        ['test-closed-c2', userValue(true, startVersion + 2)],
       ]),
+      clientTombstoneEntries: [['clientTombstone/c2', {userID: 'u2'}]],
       expectedClientRecords: new Map([
         [
           'c1',
@@ -1181,11 +1198,13 @@ describe('processFrame', () => {
             baseCookie: startVersion + 2,
             lastMutationID: 2,
             lastMutationIDVersion: startVersion + 1,
+            userID: 'u1',
           }),
         ],
       ]),
       expectedVersion: startVersion + 2,
       expectedConnectedClients: ['c1'],
+      expectedClosedCalls: ['c2'],
     },
     {
       name: '1 mutation, 3 clients. 1 client should be garbage collected. 1 got disconnected',
@@ -1215,6 +1234,7 @@ describe('processFrame', () => {
             baseCookie: null,
             lastMutationID: 1,
             lastMutationIDVersion: 1,
+            userID: 'u1',
           }),
         ],
         [
@@ -1225,6 +1245,7 @@ describe('processFrame', () => {
             lastMutationID: 7,
             lastMutationIDVersion: 1,
             lastSeen: startTime - TWO_WEEKS,
+            userID: 'u2',
           }),
         ],
         [
@@ -1234,6 +1255,7 @@ describe('processFrame', () => {
             baseCookie: null,
             lastMutationID: 1,
             lastMutationIDVersion: 1,
+            userID: 'u3',
           }),
         ],
       ]),
@@ -1263,7 +1285,18 @@ describe('processFrame', () => {
             cookie: startVersion + 2,
             lastMutationIDChanges: {},
             presence: [],
-            patch: [{op: 'del', key: '-/p/c2/b'}],
+            patch: [
+              {
+                key: 'test-closed-c2',
+                op: 'put',
+                value: true,
+              },
+              {
+                key: '-/p/c2/closeHandler',
+                op: 'del',
+              },
+              {op: 'del', key: '-/p/c2/b'},
+            ],
             timestamp: undefined,
           },
         },
@@ -1293,7 +1326,10 @@ describe('processFrame', () => {
         ['-/p/c2/c', userValue('cc', startVersion, true)],
         ['-/p/c3/d', userValue('dd', startVersion)],
         ['test-disconnected-c3', userValue(true, startVersion + 3)],
+        ['-/p/c2/closeHandler', userValue(true, startVersion + 2, true)],
+        ['test-closed-c2', userValue(true, startVersion + 2)],
       ]),
+      clientTombstoneEntries: [['clientTombstone/c2', {userID: 'u2'}]],
       expectedClientRecords: new Map([
         [
           'c1',
@@ -1302,6 +1338,7 @@ describe('processFrame', () => {
             baseCookie: startVersion + 3,
             lastMutationID: 2,
             lastMutationIDVersion: startVersion + 1,
+            userID: 'u1',
           }),
         ],
         [
@@ -1311,12 +1348,14 @@ describe('processFrame', () => {
             baseCookie: null,
             lastMutationID: 1,
             lastMutationIDVersion: startVersion,
+            userID: 'u3',
           }),
         ],
       ]),
       expectedVersion: startVersion + 3,
       expectedDisconnectedCalls: ['c3'],
       expectedConnectedClients: ['c1'],
+      expectedClosedCalls: ['c2'],
     },
 
     {
@@ -1337,6 +1376,7 @@ describe('processFrame', () => {
             baseCookie: null,
             lastMutationID: 1,
             lastMutationIDVersion: 1,
+            userID: 'u1',
           }),
         ],
         [
@@ -1347,6 +1387,7 @@ describe('processFrame', () => {
             lastMutationID: 7,
             lastMutationIDVersion: 1,
             lastSeen: startTime - TWO_WEEKS,
+            userID: 'u2',
           }),
         ],
       ]),
@@ -1359,7 +1400,18 @@ describe('processFrame', () => {
             cookie: startVersion + 1,
             lastMutationIDChanges: {},
             presence: [],
-            patch: [{op: 'del', key: '-/p/c2/b'}],
+            patch: [
+              {
+                key: 'test-closed-c2',
+                op: 'put',
+                value: true,
+              },
+              {
+                key: '-/p/c2/closeHandler',
+                op: 'del',
+              },
+              {op: 'del', key: '-/p/c2/b'},
+            ],
             timestamp: undefined,
           },
         },
@@ -1369,6 +1421,22 @@ describe('processFrame', () => {
         ['-/p/c2/b', userValue('bb', startVersion + 1, true)],
         // The next one was already deleted so no update to startVersion
         ['-/p/c2/c', userValue('cc', startVersion, true)],
+        [
+          '-/p/c2/closeHandler',
+          {
+            deleted: true,
+            value: true,
+            version: 2,
+          },
+        ],
+        [
+          'test-closed-c2',
+          {
+            deleted: false,
+            value: true,
+            version: 2,
+          },
+        ],
       ]),
       expectedClientRecords: new Map([
         [
@@ -1378,9 +1446,12 @@ describe('processFrame', () => {
             baseCookie: startVersion + 1,
             lastMutationID: 1,
             lastMutationIDVersion: startVersion,
+            userID: 'u1',
           }),
         ],
       ]),
+      expectedClosedCalls: ['c2'],
+      clientTombstoneEntries: [['clientTombstone/c2', {userID: 'u2'}]],
       expectedVersion: startVersion + 1,
       expectedConnectedClients: ['c1'],
     },
@@ -1471,7 +1542,7 @@ describe('processFrame', () => {
       expectedVersion: startVersion + 1,
       expectedDisconnectedCalls: ['c1'],
       expectedClosedCalls: ['c1'],
-
+      clientTombstoneEntries: [['clientTombstone/c1', {userID: 'testUser1'}]],
       shouldGCClients: true,
     },
     {
@@ -1491,7 +1562,7 @@ describe('processFrame', () => {
       expectedVersion: startVersion + 1,
       expectedDisconnectedCalls: ['c1'],
       expectedClosedCalls: ['c1'],
-
+      clientTombstoneEntries: [['clientTombstone/c1', {userID: 'testUser1'}]],
       closeHandlerThrows: true,
       shouldGCClients: true,
     },
@@ -1510,7 +1581,7 @@ describe('processFrame', () => {
       expectedVersion: startVersion,
       expectedDisconnectedCalls: ['c1'],
       expectedClosedCalls: ['c1'],
-
+      clientTombstoneEntries: [['clientTombstone/c1', {userID: 'testUser1'}]],
       closeHandlerThrows: true,
       disconnectHandlerThrows: true,
       shouldGCClients: true,
@@ -1536,6 +1607,7 @@ describe('processFrame', () => {
         expectedDisconnectedCalls = [],
         expectedConnectedClients = [],
         expectedClosedCalls = [],
+        clientTombstoneEntries = [],
       } = c;
 
       const durable = await getMiniflareDurableObjectStorage(id);
@@ -1610,6 +1682,7 @@ describe('processFrame', () => {
         ),
         [versionKey, c.expectedVersion],
         [connectedClientsKey, [...expectedConnectedClients]],
+        ...clientTombstoneEntries,
       ]);
 
       expect(await durable.list()).toEqual(expectedState);

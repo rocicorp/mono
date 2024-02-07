@@ -222,6 +222,7 @@ export async function handlePush(
     });
     inserts.push([insertIndex, mWithNormalizedTimestamp]);
   }
+
   await Promise.all(
     newClientIDs.map(clientID =>
       putClientRecord(
@@ -232,6 +233,7 @@ export async function handlePush(
           lastMutationID: 0,
           lastMutationIDVersion: null,
           lastSeen: now(),
+          userID: client.auth.userID,
         },
         storage,
       ),

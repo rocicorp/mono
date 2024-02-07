@@ -40,11 +40,10 @@ export async function closeBeacon(
 
   const storedConnectedClients = await getConnectedClients(storage);
   if (storedConnectedClients.has(clientID)) {
-    const clientRecord = must(await getClientRecord(clientID, storage));
     await putClientRecord(
       clientID,
       {
-        ...clientRecord,
+        ...existingRecord,
         lastMutationIDAtClose: lastMutationID,
       },
       storage,

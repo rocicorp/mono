@@ -1,10 +1,10 @@
-import {test, expect} from '@jest/globals';
+import {expect, test} from '@jest/globals';
+import {fastForwardRoom} from '../ff/fast-forward.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import type {ClientPoke} from '../types/client-poke.js';
 import {ClientRecordMap, putClientRecord} from '../types/client-record.js';
 import type {ClientID} from '../types/client-state.js';
-import {putUserValue, UserValue} from '../types/user-value.js';
-import {fastForwardRoom} from '../ff/fast-forward.js';
+import {UserValue, putUserValue} from '../types/user-value.js';
 import {createSilentLogContext, mockMathRandom} from '../util/test-utils.js';
 
 const {roomDO} = getMiniflareBindings();
@@ -36,6 +36,7 @@ test('fastForward', async () => {
             baseCookie: 0,
             clientGroupID: 'cg1',
             lastMutationIDVersion: 1,
+            userID: 'u1',
           },
         ],
       ]),
@@ -53,6 +54,7 @@ test('fastForward', async () => {
             baseCookie: 10,
             clientGroupID: 'cg1',
             lastMutationIDVersion: 20,
+            userID: 'u1',
           },
         ],
       ]),
@@ -82,6 +84,7 @@ test('fastForward', async () => {
             clientGroupID: 'cg1',
             lastMutationID: 1,
             lastMutationIDVersion: 20,
+            userID: 'u1',
           },
         ],
       ]),
@@ -108,6 +111,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             clientGroupID: 'cg1',
             lastMutationIDVersion: 41,
+            userID: 'u1',
           },
         ],
       ]),
@@ -153,6 +157,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             clientGroupID: 'cg1',
             lastMutationIDVersion: 41,
+            userID: 'u1',
           },
         ],
         [
@@ -162,6 +167,7 @@ test('fastForward', async () => {
             baseCookie: 41,
             clientGroupID: 'cg1',
             lastMutationIDVersion: CURRENT_VERSION_FOR_TEST,
+            userID: 'u1',
           },
         ],
       ]),
@@ -223,6 +229,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             clientGroupID: 'cg1',
             lastMutationIDVersion: 41,
+            userID: 'u1',
           },
         ],
         [
@@ -232,6 +239,7 @@ test('fastForward', async () => {
             baseCookie: 41,
             clientGroupID: 'cg1',
             lastMutationIDVersion: CURRENT_VERSION_FOR_TEST,
+            userID: 'u1',
           },
         ],
       ]),
@@ -271,6 +279,7 @@ test('fastForward', async () => {
             baseCookie: 30,
             clientGroupID: 'cg1',
             lastMutationIDVersion: 41,
+            userID: 'u1',
           },
         ],
         [
@@ -280,6 +289,7 @@ test('fastForward', async () => {
             baseCookie: 30,
             clientGroupID: 'cg1',
             lastMutationIDVersion: 31,
+            userID: 'u1',
           },
         ],
         [
@@ -289,6 +299,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             clientGroupID: 'cg1',
             lastMutationIDVersion: 31,
+            userID: 'u1',
           },
         ],
         [
@@ -298,6 +309,7 @@ test('fastForward', async () => {
             baseCookie: 30,
             clientGroupID: 'cg2',
             lastMutationIDVersion: 40,
+            userID: 'u2',
           },
         ],
         [
@@ -307,6 +319,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             clientGroupID: 'cg2',
             lastMutationIDVersion: 40,
+            userID: 'u2',
           },
         ],
       ]),
@@ -386,6 +399,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             clientGroupID: 'cg1',
             lastMutationIDVersion: 41,
+            userID: 'u1',
           },
         ],
         [
@@ -395,6 +409,7 @@ test('fastForward', async () => {
             baseCookie: 41,
             clientGroupID: 'cg1',
             lastMutationIDVersion: CURRENT_VERSION_FOR_TEST,
+            userID: 'u1',
           },
         ],
         [
@@ -404,6 +419,7 @@ test('fastForward', async () => {
             baseCookie: 40,
             clientGroupID: 'cg2',
             lastMutationIDVersion: 41,
+            userID: 'u2',
           },
         ],
         [
@@ -413,6 +429,7 @@ test('fastForward', async () => {
             baseCookie: 41,
             clientGroupID: 'cg2',
             lastMutationIDVersion: CURRENT_VERSION_FOR_TEST,
+            userID: 'u2',
           },
         ],
       ]),
