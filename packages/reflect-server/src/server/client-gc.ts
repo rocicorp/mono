@@ -70,7 +70,9 @@ export function updateLastSeen(
 
 export async function collectClients(
   lc: LogContext,
+  env: Env,
   storage: Storage,
+  closeHandler: CloseHandler,
   connectedClients: Set<ClientID>,
   now: number,
   maxAge: number,
@@ -93,13 +95,24 @@ export async function collectClients(
   );
 
   if (clientsToCollect.length > 0) {
-    await delClientRecords(clientsToCollect, storage);
+    for (const clientID of clientsToCollect) {
+      await callCloseHandler(
+        lc,
+        clientID,
+        env,
+        closeHandler,
+        nextVersion,
+        storage,
+      );
+    }
+
     await collectOldUserSpaceClientKeys(
       lc,
       storage,
       clientsToCollect,
       nextVersion,
     );
+    await delClientRecords(clientsToCollect, storage);
 
     await putVersion(nextVersion, storage);
   }

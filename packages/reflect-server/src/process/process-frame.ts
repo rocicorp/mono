@@ -102,7 +102,9 @@ export async function processFrame(
     const gcCache = new EntryCache(cache);
     await collectClients(
       lc,
+      env,
       gcCache,
+      closeHandler,
       new Set(clientIDs),
       now,
       GC_MAX_AGE,
