@@ -294,9 +294,12 @@ export function isValidAppName(name: string): boolean {
 }
 
 export function mustValidAppName(argv: {app: string}) {
-  if (!isValidAppName(argv.app)) {
-    logErrorAndExit(
-      `Invalid App Name "${argv.app}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
+  if (!isValidAppName(argv.app) && argv.app !== DEFAULT_FROM_REFLECT_CONFIG) {
+    throw new ErrorWrapper(
+      new Error(
+        `Invalid App Name "${argv.app}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
+      ),
+      'WARNING',
     );
   }
 }

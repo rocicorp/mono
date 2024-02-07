@@ -89,13 +89,29 @@ test('it should throw warning if the source has syntax errors', async () => {
   const testFilePath = await writeTempFiles('const x =');
   await expect(
     publishHandler(
-      {serverPath: testFilePath, app: '0000'} as Args,
+      {serverPath: testFilePath, app: 'abc123'} as Args,
       teamAuthContext,
     ),
   ).rejects.toEqual(
     expect.objectContaining({
       constructor: ErrorWrapper,
       message: expect.stringMatching(/Unexpected end of file/),
+      severity: 'WARNING',
+    }),
+  );
+});
+
+test('it should throw if an invalid appname', async () => {
+  const testFilePath = await writeTempFiles('const x = 42;', 'test.ts');
+  await expect(
+    publishHandler(
+      {serverPath: testFilePath, app: '0000'} as Args,
+      teamAuthContext,
+    ),
+  ).rejects.toEqual(
+    expect.objectContaining({
+      constructor: ErrorWrapper,
+      message: expect.stringMatching(/^Invalid App Name/),
       severity: 'WARNING',
     }),
   );
@@ -109,7 +125,7 @@ test('it should throw warning if invalid version', async () => {
   );
   await expect(
     publishHandler(
-      {serverPath: testFilePath, app: '0000'} as Args,
+      {serverPath: testFilePath, app: 'abc123'} as Args,
       teamAuthContext,
     ),
   ).rejects.toEqual(
