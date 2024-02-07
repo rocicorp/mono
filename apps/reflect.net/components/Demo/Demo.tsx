@@ -70,10 +70,6 @@ function usePuzzleRoomID() {
       aliveIfVisible();
     };
     document.addEventListener('visibilitychange', visibilityChangeListener);
-    const pageHideListener = () => {
-      void orchestratorClient.mutate.unload();
-    };
-    window.addEventListener('pagehide', pageHideListener);
 
     return () => {
       clearInterval(aliveInterval);
@@ -81,7 +77,6 @@ function usePuzzleRoomID() {
         'visibilitychange',
         visibilityChangeListener,
       );
-      window.removeEventListener('pagehide', pageHideListener);
       closeReflect(orchestratorClient);
     };
     // Run once.

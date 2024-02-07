@@ -8,7 +8,7 @@ import {
   updateBot,
   updateClient,
 } from '../alive/client-model';
-import {alive, unload} from '../alive/orchestrator-model';
+import {alive} from '../alive/orchestrator-model';
 import {PIECE_DEFINITIONS} from '../alive/piece-definitions';
 import {
   PieceModel,
@@ -151,7 +151,6 @@ export const mutators = {
 
   // orchestrator mutators
   alive,
-  unload,
 };
 
 function filterBadLocationForClient<
