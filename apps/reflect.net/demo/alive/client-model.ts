@@ -73,11 +73,9 @@ export const {
   delete: deleteBot,
 } = botGenerateResult;
 
-export const ensureNotBotController = async (
-  tx: WriteTransaction,
-  clientID: string,
-) => {
+export async function ensureNotBotController(tx: WriteTransaction) {
   if (tx.location === 'server') {
+    const {clientID} = tx;
     const botController = await getBotController(tx);
     await deleteBotsControlledBy(tx, clientID);
     if (botController?.clientID === clientID) {
@@ -110,7 +108,7 @@ export const ensureNotBotController = async (
       }
     }
   }
-};
+}
 
 function canModifyBot(
   tx: WriteTransaction,

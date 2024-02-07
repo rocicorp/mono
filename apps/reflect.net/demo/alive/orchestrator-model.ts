@@ -157,14 +157,11 @@ export async function alive(tx: WriteTransaction) {
   }
 }
 
-export async function unload(tx: WriteTransaction) {
-  if (tx.location !== 'server') {
-    return;
-  }
+export async function closeHandler(tx: WriteTransaction) {
   const assignment = await getClientRoomAssignment(tx, tx.clientID);
   if (assignment !== undefined) {
     console.log(
-      'removing assignment due to unload',
+      'closeHandler: removing assignment due to unload',
       JSON.stringify(assignment),
     );
     await Promise.all([
