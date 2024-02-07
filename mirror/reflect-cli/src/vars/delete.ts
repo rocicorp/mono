@@ -1,6 +1,6 @@
 import {getFirestore} from 'firebase/firestore';
 import {deleteVars} from 'mirror-protocol/src/vars.js';
-import {getAppID, getDefaultApp} from '../app-config.js';
+import {getAppID, getDefaultApp, mustValidAppName} from '../app-config.js';
 import {deleteDevVars} from '../dev/vars.js';
 import type {AuthContext} from '../handler.js';
 import {makeRequester} from '../requester.js';
@@ -34,6 +34,7 @@ export async function deleteVarsHandler(
   authContext: AuthContext,
 ): Promise<void> {
   const {keys: vars, dev, app} = yargs;
+  mustValidAppName(yargs);
   if (dev) {
     deleteDevVars(vars);
     console.log('Deleted specified Dev Variables');

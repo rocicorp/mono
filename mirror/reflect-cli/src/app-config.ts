@@ -1,5 +1,4 @@
 import {doc, getDoc, getFirestore} from 'firebase/firestore';
-import {readFileSync} from 'fs';
 import {createApp} from 'mirror-protocol/src/app.js';
 import {ensureTeam} from 'mirror-protocol/src/team.js';
 import {
@@ -119,7 +118,7 @@ export function getDefaultApp() {
   if (configAppId) {
     return DEFAULT_FROM_REFLECT_CONFIG;
   }
-  return getDefaultAppName();
+  return undefined;
 }
 /**
  * Reads reflect.config.json in the "project root".
@@ -235,17 +234,6 @@ export function writeAppConfig(
   fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
 }
 
-function getDefaultAppName(): string | undefined {
-  const pkg = pkgUpSync();
-  if (pkg) {
-    const {name} = JSON.parse(readFileSync(pkg, 'utf-8'));
-    if (name) {
-      return String(name);
-    }
-  }
-  return undefined;
-}
-
 type TemplatePlaceholders = {
   appName: string;
   appHostname: string;
@@ -297,5 +285,18 @@ function copyAndEditFile(
     // In case the user has deleted the template source file, classify this as a
     // warning instead.
     throw new ErrorWrapper(e, 'WARNING');
+  }
+}
+
+const VALID_APP_NAME = /^[a-z]([a-z0-9-])*[a-z0-9]$/;
+export function isValidAppName(name: string): boolean {
+  return VALID_APP_NAME.test(name);
+}
+
+export function mustValidAppName(argv: {app: string}) {
+  if (!isValidAppName(argv.app)) {
+    logErrorAndExit(
+      `Invalid App Name "${argv.app}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
+    );
   }
 }

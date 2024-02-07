@@ -6,7 +6,7 @@ import {makeRequester} from '../requester.js';
 import {padColumns} from '../table.js';
 import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
-import {getAppID, getDefaultApp} from '../app-config.js';
+import {getAppID, getDefaultApp, mustValidAppName} from '../app-config.js';
 
 export function listVarsOptions(yargs: CommonVarsYargsArgv) {
   return yargs
@@ -50,6 +50,7 @@ export async function listVarsHandler(
     };
   } else {
     const {app} = yargs;
+    mustValidAppName(yargs);
     const {userID} = authContext.user;
     const appID = await getAppID(authContext, app, false);
     const data = {requester: makeRequester(userID), appID, decrypted: show};

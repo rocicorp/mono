@@ -13,6 +13,7 @@ import {
   getAppID,
   mustReadAppConfig,
   DEFAULT_FROM_REFLECT_CONFIG,
+  mustValidAppName,
 } from './app-config.js';
 import {CompileResult, compile} from './compile.js';
 import {ErrorWrapper} from './error.js';
@@ -21,6 +22,7 @@ import type {AuthContext} from './handler.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {checkForServerDeprecation} from './version.js';
 import {watchDeployment} from './watch-deployment.js';
+
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
@@ -72,6 +74,7 @@ export async function publishHandler(
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
   const {reflectChannel, app} = yargs;
+  mustValidAppName(yargs);
   let {serverPath} = yargs;
   if (serverPath === DEFAULT_FROM_REFLECT_CONFIG) {
     serverPath = mustReadAppConfig().server;
