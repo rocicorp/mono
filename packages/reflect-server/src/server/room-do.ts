@@ -30,6 +30,7 @@ import {randomID} from '../util/rand.js';
 import {AlarmManager} from './alarms.js';
 import {CLIENT_GC_FREQUENCY} from './client-gc.js';
 import {closeBeacon} from './close-beacon.js';
+import type {CloseHandler} from './close-handler.js';
 import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
 import {closeConnections, getConnections} from './connections.js';
@@ -61,6 +62,7 @@ export interface RoomDOOptions<MD extends MutatorDefs> {
   state: DurableObjectState;
   roomStartHandler: RoomStartHandler;
   disconnectHandler: DisconnectHandler;
+  closeHandler: CloseHandler;
   logSink: LogSink;
   logLevel: LogLevel;
   allowUnconfirmedWrites: boolean;
@@ -94,6 +96,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   readonly #mutators: MutatorMap;
   readonly #roomStartHandler: RoomStartHandler;
   readonly #disconnectHandler: DisconnectHandler;
+  readonly #closeHandler: CloseHandler;
   readonly #maxMutationsPerTurn: number;
   #roomIDDependentInitCompleted = false;
   #lc: LogContext;
@@ -114,6 +117,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       mutators,
       roomStartHandler,
       disconnectHandler,
+      closeHandler,
       state,
       logSink,
       logLevel,
@@ -124,6 +128,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     this.#mutators = new Map([...Object.entries(mutators)]) as MutatorMap;
     this.#roomStartHandler = roomStartHandler;
     this.#disconnectHandler = disconnectHandler;
+    this.#closeHandler = closeHandler;
     this.#maxMutationsPerTurn = maxMutationsPerTurn;
     this.#storage = new DurableStorage(
       state.storage,
@@ -319,10 +324,12 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
       return closeBeacon(
         ctx.lc.withContext('handler', 'closeBeacon'),
+        this.#env,
         clientID,
         roomID,
         userID,
         lastMutationID,
+        this.#closeHandler,
         this.#storage,
       );
     });
@@ -509,6 +516,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         this.#pendingMutations,
         this.#mutators,
         this.#disconnectHandler,
+        this.#closeHandler,
         this.#maxProcessedMutationTimestamp,
         this.#bufferSizer,
         this.#maxMutationsPerTurn,

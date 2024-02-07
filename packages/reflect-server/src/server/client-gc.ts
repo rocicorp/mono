@@ -1,11 +1,13 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {ClientID} from 'reflect-shared/src/mod.js';
+import type {ClientID, Env} from 'reflect-shared/src/mod.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {difference} from 'shared/src/set-utils.js';
+import {EntryCache} from '../storage/entry-cache.js';
 import type {Storage} from '../storage/storage.js';
 import {
   ClientRecordMap,
+  delClientRecord,
   delClientRecords,
   getClientRecord,
   listClientRecords,
@@ -13,6 +15,7 @@ import {
 } from '../types/client-record.js';
 import {userValueKey, userValueSchema} from '../types/user-value.js';
 import {putVersion} from '../types/version.js';
+import {callCloseHandler, type CloseHandler} from './close-handler.js';
 
 /**
  * Thw frequency at which we run the client GC. This is used to not do gc in
@@ -165,12 +168,14 @@ export async function collectOldUserSpaceClientKeys(
 
 export async function collectClientIfDeleted(
   lc: LogContext,
+  env: Env,
   clientID: ClientID,
-  cache: Storage,
+  closeHandler: CloseHandler,
+  storage: Storage,
   nextVersion: number,
 ): Promise<void> {
   const {lastMutationID, lastMutationIDAtClose} = must(
-    await getClientRecord(clientID, cache),
+    await getClientRecord(clientID, storage),
   );
   if (lastMutationIDAtClose === undefined) {
     lc.debug?.(
@@ -216,5 +221,11 @@ export async function collectClientIfDeleted(
     lc.debug?.(`Client and server are fully synced. Collecting.`);
   }
 
+  await callCloseHandler(lc, clientID, env, closeHandler, nextVersion, storage);
+
+  const cache = new EntryCache(storage);
   await collectOldUserSpaceClientKeys(lc, cache, [clientID], nextVersion);
+
+  await delClientRecord(clientID, cache);
+  await cache.flush();
 }

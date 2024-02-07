@@ -1,22 +1,26 @@
 import type {LogContext} from '@rocicorp/logger';
+import type {Env} from 'reflect-shared/src/types.js';
 import {must} from 'shared/src/must.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import type {Storage} from '../storage/storage.js';
 import {
-  delClientRecords,
+  delClientRecord,
   getClientRecord,
   putClientRecord,
 } from '../types/client-record.js';
 import {getConnectedClients} from '../types/connected-clients.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {collectOldUserSpaceClientKeys} from './client-gc.js';
+import {callCloseHandler, type CloseHandler} from './close-handler.js';
 
 export async function closeBeacon(
   lc: LogContext,
+  env: Env,
   clientID: string,
   roomID: string,
   userID: string,
   lastMutationID: number,
+  closeHandler: CloseHandler,
   storage: Storage,
 ): Promise<Response> {
   lc.debug?.(
@@ -77,7 +81,7 @@ export async function closeBeacon(
   const startVersion = must(await getVersion(cache));
   const nextVersion = startVersion + 1;
 
-  await delClientRecords([clientID], cache);
+  await callCloseHandler(lc, clientID, env, closeHandler, nextVersion, cache);
 
   // Use a second cache so that we only update the version if we actually
   // deleted any presence keys.
@@ -89,6 +93,7 @@ export async function closeBeacon(
     await innerCache.flush();
   }
 
+  await delClientRecord(clientID, cache);
   await cache.flush();
 
   return new Response('ok');

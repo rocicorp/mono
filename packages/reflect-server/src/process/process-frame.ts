@@ -4,6 +4,7 @@ import type {Env} from 'reflect-shared/src/types.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {GC_MAX_AGE, collectClients} from '../server/client-gc.js';
+import type {CloseHandler} from '../server/close-handler.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {unwrapPatch} from '../storage/replicache-transaction.js';
@@ -33,6 +34,7 @@ export async function processFrame(
   numPendingMutationsToProcess: number,
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
+  closeHandler: CloseHandler,
   clients: ClientMap,
   storage: Storage,
   shouldGCClients: (now: number) => boolean,
@@ -126,6 +128,7 @@ export async function processFrame(
     lc,
     env,
     disconnectHandler,
+    closeHandler,
     clientIDs,
     pendingMutations,
     numPendingMutationsToProcess,

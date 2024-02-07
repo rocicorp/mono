@@ -2,6 +2,7 @@ import {consoleLogSink, LogLevel, LogSink, TeeLogSink} from '@rocicorp/logger';
 import type {MutatorDefs} from 'reflect-shared/src/types.js';
 import {BaseAuthDO} from './auth-do.js';
 import type {AuthHandler} from './auth.js';
+import type {CloseHandler} from './close-handler.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
 import type {RoomStartHandler} from './room-start.js';
@@ -20,6 +21,8 @@ export interface ReflectServerOptions<MD extends MutatorDefs> {
   roomStartHandler?: RoomStartHandler | undefined;
 
   disconnectHandler?: DisconnectHandler | undefined;
+
+  closeHandler?: CloseHandler | undefined;
 
   /**
    * Where to send logs. By default logs are sent to `console.log`.
@@ -65,6 +68,7 @@ export type NormalizedOptions<MD extends MutatorDefs> = {
   authHandler?: AuthHandler | undefined;
   roomStartHandler: RoomStartHandler;
   disconnectHandler: DisconnectHandler;
+  closeHandler: CloseHandler;
   logSink: LogSink;
   logLevel: LogLevel;
   datadogMetricsOptions?: DatadogMetricsOptions | undefined;
@@ -125,6 +129,8 @@ type GetNormalizedOptions<
   MD extends MutatorDefs,
 > = (env: Env) => NormalizedOptions<MD>;
 
+const noopAsync = () => Promise.resolve();
+
 function makeNormalizedOptionsGetter<
   Env extends ReflectServerBaseEnv,
   MD extends MutatorDefs,
@@ -135,8 +141,9 @@ function makeNormalizedOptionsGetter<
     const {
       mutators,
       authHandler,
-      roomStartHandler = () => Promise.resolve(),
-      disconnectHandler = () => Promise.resolve(),
+      roomStartHandler = noopAsync,
+      disconnectHandler = noopAsync,
+      closeHandler = noopAsync,
       logSinks,
       logLevel = 'debug',
       allowUnconfirmedWrites = false,
@@ -149,6 +156,7 @@ function makeNormalizedOptionsGetter<
       authHandler,
       roomStartHandler,
       disconnectHandler,
+      closeHandler,
       logSink,
       logLevel,
       allowUnconfirmedWrites,
@@ -170,6 +178,7 @@ function createRoomDOClass<
         mutators,
         roomStartHandler,
         disconnectHandler,
+        closeHandler,
         logSink,
         logLevel,
         allowUnconfirmedWrites,
@@ -180,6 +189,7 @@ function createRoomDOClass<
         state,
         roomStartHandler,
         disconnectHandler,
+        closeHandler,
         logSink,
         logLevel,
         allowUnconfirmedWrites,
