@@ -133,13 +133,19 @@ export class Mocket extends EventTarget implements Socket {
   }
 }
 
-export function clientRecord(
-  clientGroupID: ClientGroupID,
-  baseCookie: NullableVersion = null,
+export function clientRecord({
+  clientGroupID,
+  baseCookie = null,
   lastMutationID = 1,
-  lastMutationIDVersion: NullableVersion = 1,
+  lastMutationIDVersion = 1,
   lastSeen = 1000,
-): ClientRecord {
+}: {
+  clientGroupID: ClientGroupID;
+  baseCookie?: NullableVersion | undefined;
+  lastMutationID?: number | undefined;
+  lastMutationIDVersion?: NullableVersion | undefined;
+  lastSeen?: number | undefined;
+}): ClientRecord {
   return {
     clientGroupID,
     baseCookie,

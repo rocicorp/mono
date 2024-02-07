@@ -102,9 +102,33 @@ describe('processFrame', () => {
   );
 
   const records = new Map([
-    ['c1', clientRecord('cg1', null, 1, 1)],
-    ['c2', clientRecord('cg1', 1, 7, 1)],
-    ['c3', clientRecord('cg2', 1, 7, 1)],
+    [
+      'c1',
+      clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: null,
+        lastMutationID: 1,
+        lastMutationIDVersion: 1,
+      }),
+    ],
+    [
+      'c2',
+      clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: 1,
+        lastMutationID: 7,
+        lastMutationIDVersion: 1,
+      }),
+    ],
+    [
+      'c3',
+      clientRecord({
+        clientGroupID: 'cg2',
+        baseCookie: 1,
+        lastMutationID: 7,
+        lastMutationIDVersion: 1,
+      }),
+    ],
   ]);
 
   const cases: Case[] = [
@@ -173,7 +197,15 @@ describe('processFrame', () => {
       ]),
       expectedClientRecords: new Map([
         ...records,
-        ['c1', clientRecord('cg1', startVersion + 1, 2, startVersion + 1)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: startVersion + 1,
+          }),
+        ],
       ]),
       expectedVersion: startVersion + 1,
       expectedConnectedClients: ['c1'],
@@ -235,8 +267,24 @@ describe('processFrame', () => {
       ]),
       expectedClientRecords: new Map([
         ...records,
-        ['c1', clientRecord('cg1', startVersion + 1, 2, startVersion + 1)],
-        ['c2', clientRecord('cg1', startVersion + 1, 7, startVersion)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: startVersion + 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: startVersion,
+          }),
+        ],
       ]),
       expectedVersion: startVersion + 1,
       expectedConnectedClients: ['c1', 'c2'],
@@ -308,8 +356,24 @@ describe('processFrame', () => {
       ]),
       expectedClientRecords: new Map([
         ...records,
-        ['c1', clientRecord('cg1', startVersion + 1, 2, startVersion + 1)],
-        ['c2', clientRecord('cg1', startVersion + 1, 7, startVersion)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: startVersion + 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: startVersion,
+          }),
+        ],
       ]),
       expectedVersion: startVersion + 1,
       expectedConnectedClients: ['c1', 'c2'],
@@ -455,9 +519,33 @@ describe('processFrame', () => {
       ]),
       expectedClientRecords: new Map([
         ...records,
-        ['c1', clientRecord('cg1', startVersion + 2, 2, startVersion + 1)],
-        ['c2', clientRecord('cg1', startVersion + 2, 7, startVersion)],
-        ['c3', clientRecord('cg2', startVersion + 2, 8, startVersion + 2)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 2,
+            lastMutationID: 2,
+            lastMutationIDVersion: startVersion + 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 2,
+            lastMutationID: 7,
+            lastMutationIDVersion: startVersion,
+          }),
+        ],
+        [
+          'c3',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: startVersion + 2,
+            lastMutationID: 8,
+            lastMutationIDVersion: startVersion + 2,
+          }),
+        ],
       ]),
       expectedVersion: startVersion + 2,
       expectedConnectedClients: ['c1', 'c2', 'c3'],
@@ -527,7 +615,15 @@ describe('processFrame', () => {
       ]),
       expectedClientRecords: new Map([
         ...records,
-        ['c1', clientRecord('cg1', startVersion + 2, 3, startVersion + 2)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 2,
+            lastMutationID: 3,
+            lastMutationIDVersion: startVersion + 2,
+          }),
+        ],
       ]),
       expectedVersion: startVersion + 2,
       expectedConnectedClients: ['c1'],
@@ -594,7 +690,15 @@ describe('processFrame', () => {
       ]),
       expectedClientRecords: new Map([
         ...records,
-        ['c2', clientRecord('cg1', startVersion + 1, 7, startVersion)],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: startVersion,
+          }),
+        ],
       ]),
       expectedVersion: startVersion + 1,
       expectedDisconnectedCalls: ['c1'],
@@ -637,7 +741,15 @@ describe('processFrame', () => {
       ]),
       expectedClientRecords: new Map([
         ...records,
-        ['c2', clientRecord('cg1', startVersion + 1, 7, startVersion)],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: startVersion,
+          }),
+        ],
       ]),
       expectedVersion: startVersion + 1,
       expectedDisconnectedCalls: ['c1', 'c3'],
@@ -735,8 +847,24 @@ describe('processFrame', () => {
       ]),
       expectedClientRecords: new Map([
         ...records,
-        ['c1', clientRecord('cg1', startVersion + 2, 2, startVersion + 1)],
-        ['c2', clientRecord('cg1', startVersion + 2, 7, startVersion)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 2,
+            lastMutationID: 2,
+            lastMutationIDVersion: startVersion + 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 2,
+            lastMutationID: 7,
+            lastMutationIDVersion: startVersion,
+          }),
+        ],
       ]),
       expectedVersion: startVersion + 2,
       expectedDisconnectedCalls: ['c3'],
@@ -810,8 +938,24 @@ describe('processFrame', () => {
       ]),
       expectedClientRecords: new Map([
         ...records,
-        ['c1', clientRecord('cg1', startVersion + 1, 2, startVersion + 1)],
-        ['c2', clientRecord('cg1', startVersion + 1, 7, startVersion)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: startVersion + 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: startVersion,
+          }),
+        ],
       ]),
       expectedVersion: startVersion + 1,
       expectedConnectedClients: ['c1', 'c2', 'c3'],
@@ -919,9 +1063,33 @@ describe('processFrame', () => {
       ]),
       expectedClientRecords: new Map([
         ...records,
-        ['c1', clientRecord('cg1', startVersion + 2, 1, startVersion)],
-        ['c2', clientRecord('cg1', startVersion + 2, 7, startVersion)],
-        ['c3', clientRecord('cg2', startVersion, 8, startVersion + 1)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 2,
+            lastMutationID: 1,
+            lastMutationIDVersion: startVersion,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 2,
+            lastMutationID: 7,
+            lastMutationIDVersion: startVersion,
+          }),
+        ],
+        [
+          'c3',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: startVersion,
+            lastMutationID: 8,
+            lastMutationIDVersion: startVersion + 1,
+          }),
+        ],
       ]),
       expectedVersion: startVersion + 2,
       expectedDisconnectedCalls: ['c3'],
@@ -947,8 +1115,25 @@ describe('processFrame', () => {
       numPendingMutationsToProcess: 1,
       clients: new Map([client('c1', 'u1', 'cg1')]),
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', null, 1, 1)],
-        ['c2', clientRecord('cg2', 1, 7, 1, startTime - TWO_WEEKS)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: null,
+            lastMutationID: 1,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: 1,
+            lastSeen: startTime - TWO_WEEKS,
+          }),
+        ],
       ]),
       storedConnectedClients: ['c1'],
       expectedPokes: [
@@ -989,7 +1174,15 @@ describe('processFrame', () => {
         ['-/p/c2/c', userValue('cc', startVersion, true)],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', startVersion + 2, 2, startVersion + 1)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 2,
+            lastMutationID: 2,
+            lastMutationIDVersion: startVersion + 1,
+          }),
+        ],
       ]),
       expectedVersion: startVersion + 2,
       expectedConnectedClients: ['c1'],
@@ -1015,9 +1208,34 @@ describe('processFrame', () => {
       numPendingMutationsToProcess: 1,
       clients: new Map([client('c1', 'u1', 'cg1')]),
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', null, 1, 1)],
-        ['c2', clientRecord('cg2', 1, 7, 1, startTime - TWO_WEEKS)],
-        ['c3', clientRecord('cg3', null, 1, 1)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: null,
+            lastMutationID: 1,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: 1,
+            lastSeen: startTime - TWO_WEEKS,
+          }),
+        ],
+        [
+          'c3',
+          clientRecord({
+            clientGroupID: 'cg3',
+            baseCookie: null,
+            lastMutationID: 1,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       storedConnectedClients: ['c1', 'c3'],
       expectedPokes: [
@@ -1077,8 +1295,24 @@ describe('processFrame', () => {
         ['test-disconnected-c3', userValue(true, startVersion + 3)],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', startVersion + 3, 2, startVersion + 1)],
-        ['c3', clientRecord('cg3', null, 1, startVersion)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 3,
+            lastMutationID: 2,
+            lastMutationIDVersion: startVersion + 1,
+          }),
+        ],
+        [
+          'c3',
+          clientRecord({
+            clientGroupID: 'cg3',
+            baseCookie: null,
+            lastMutationID: 1,
+            lastMutationIDVersion: startVersion,
+          }),
+        ],
       ]),
       expectedVersion: startVersion + 3,
       expectedDisconnectedCalls: ['c3'],
@@ -1096,8 +1330,25 @@ describe('processFrame', () => {
       numPendingMutationsToProcess: 0,
       clients: new Map([client('c1', 'u1', 'cg1')]),
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', null, 1, 1)],
-        ['c2', clientRecord('cg2', 1, 7, 1, startTime - TWO_WEEKS)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: null,
+            lastMutationID: 1,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: 1,
+            lastSeen: startTime - TWO_WEEKS,
+          }),
+        ],
       ]),
       storedConnectedClients: ['c1'],
       expectedPokes: [
@@ -1120,7 +1371,15 @@ describe('processFrame', () => {
         ['-/p/c2/c', userValue('cc', startVersion, true)],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', startVersion + 1, 1, startVersion)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: startVersion + 1,
+            lastMutationID: 1,
+            lastMutationIDVersion: startVersion,
+          }),
+        ],
       ]),
       expectedVersion: startVersion + 1,
       expectedConnectedClients: ['c1'],
@@ -1138,8 +1397,25 @@ describe('processFrame', () => {
       numPendingMutationsToProcess: 0,
       clients: new Map([client('c1', 'u1', 'cg1')]),
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', null, 1, 1)],
-        ['c2', clientRecord('cg2', 1, 7, 1, startTime - TWO_WEEKS)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: null,
+            lastMutationID: 1,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: 1,
+            lastSeen: startTime - TWO_WEEKS,
+          }),
+        ],
       ]),
       storedConnectedClients: ['c1'],
       expectedPokes: [],
@@ -1149,8 +1425,25 @@ describe('processFrame', () => {
         ['-/p/c2/c', userValue('cc', startVersion, true)],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', null, 1, 1)],
-        ['c2', clientRecord('cg2', 1, 7, 1, startTime - TWO_WEEKS)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: null,
+            lastMutationID: 1,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: 1,
+            lastSeen: startTime - TWO_WEEKS,
+          }),
+        ],
       ]),
       expectedVersion: startVersion,
       expectedConnectedClients: ['c1'],

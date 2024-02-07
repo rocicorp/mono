@@ -336,9 +336,9 @@ describe('processRoom', () => {
     {
       name: 'no mutations, clients out of date',
       clientRecords: new Map([
-        ['c1', clientRecord('cg1')],
-        ['c2', clientRecord('cg1')],
-        ['c3', clientRecord('cg2')],
+        ['c1', clientRecord({clientGroupID: 'cg1'})],
+        ['c2', clientRecord({clientGroupID: 'cg1'})],
+        ['c3', clientRecord({clientGroupID: 'cg2'})],
       ]),
       headVersion: 2,
       clients: new Map([
@@ -390,9 +390,9 @@ describe('processRoom', () => {
         ],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 2)],
-        ['c2', clientRecord('cg1', 2)],
-        ['c3', clientRecord('cg2', 2)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 2})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 2})],
+        ['c3', clientRecord({clientGroupID: 'cg2', baseCookie: 2})],
       ]),
       expectedUserValues: new Map(),
       expectedVersion: 2,
@@ -400,9 +400,9 @@ describe('processRoom', () => {
     {
       name: 'no mutations, one client out of date',
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 2)],
-        ['c2', clientRecord('cg1')],
-        ['c3', clientRecord('cg2', 2)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 2})],
+        ['c2', clientRecord({clientGroupID: 'cg1'})],
+        ['c3', clientRecord({clientGroupID: 'cg2', baseCookie: 2})],
       ]),
       headVersion: 2,
       clients: new Map([
@@ -428,16 +428,18 @@ describe('processRoom', () => {
         ],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 2)],
-        ['c2', clientRecord('cg1', 2)],
-        ['c3', clientRecord('cg2', 2)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 2})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 2})],
+        ['c3', clientRecord({clientGroupID: 'cg2', baseCookie: 2})],
       ]),
       expectedUserValues: new Map(),
       expectedVersion: 2,
     },
     {
       name: 'one mutation',
-      clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
+      clientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+      ]),
       headVersion: 1,
       clients: new Map([client('c1', 'u1', 'cg1')]),
       storedConnectedClients: ['c1'],
@@ -471,13 +473,25 @@ describe('processRoom', () => {
           ],
         ],
       ]),
-      expectedClientRecords: new Map([['c1', clientRecord('cg1', 2, 2, 2)]]),
+      expectedClientRecords: new Map([
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 2,
+            lastMutationID: 2,
+            lastMutationIDVersion: 2,
+          }),
+        ],
+      ]),
       expectedUserValues: new Map(),
       expectedVersion: 2,
     },
     {
       name: 'mutations before range are included',
-      clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
+      clientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+      ]),
       headVersion: 1,
       clients: new Map([client('c1', 'u1', 'cg1')]),
       storedConnectedClients: ['c1'],
@@ -532,17 +546,35 @@ describe('processRoom', () => {
           ],
         ],
       ]),
-      expectedClientRecords: new Map([['c1', clientRecord('cg1', 3, 3, 3)]]),
+      expectedClientRecords: new Map([
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 3,
+            lastMutationID: 3,
+            lastMutationIDVersion: 3,
+          }),
+        ],
+      ]),
       expectedUserValues: new Map(),
       expectedVersion: 3,
     },
     {
       name: 'mutations in different client groups',
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 1)],
-        ['c2', clientRecord('cg1', 1)],
-        ['c3', clientRecord('cg2', 1, 4, 1)],
-        ['c4', clientRecord('cg3', 1)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+        [
+          'c3',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: 1,
+            lastMutationID: 4,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        ['c4', clientRecord({clientGroupID: 'cg3', baseCookie: 1})],
       ]),
       headVersion: 1,
       clients: new Map([
@@ -555,10 +587,34 @@ describe('processRoom', () => {
       pendingMutations: pendingMutations1,
       expectedPokes: new Map(expectedPokesForPendingMutations1),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 5, 3, 4)],
-        ['c2', clientRecord('cg1', 5, 2, 5)],
-        ['c3', clientRecord('cg2', 5, 5, 3)],
-        ['c4', clientRecord('cg3', 5)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 5,
+            lastMutationID: 3,
+            lastMutationIDVersion: 4,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 5,
+            lastMutationID: 2,
+            lastMutationIDVersion: 5,
+          }),
+        ],
+        [
+          'c3',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: 5,
+            lastMutationID: 5,
+            lastMutationIDVersion: 3,
+          }),
+        ],
+        ['c4', clientRecord({clientGroupID: 'cg3', baseCookie: 5})],
       ]),
       expectedUserValues: new Map(),
       expectedVersion: 5,
@@ -566,10 +622,18 @@ describe('processRoom', () => {
     {
       name: '2 clients need to be fast forwarded, and mutations in different client groups',
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', null)],
-        ['c2', clientRecord('cg1', 1)],
-        ['c3', clientRecord('cg2', null, 4, 1)],
-        ['c4', clientRecord('cg3', 1)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: null})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+        [
+          'c3',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: null,
+            lastMutationID: 4,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        ['c4', clientRecord({clientGroupID: 'cg3', baseCookie: 1})],
       ]),
       headVersion: 1,
       clients: new Map([
@@ -612,10 +676,34 @@ describe('processRoom', () => {
         return pokesByClientID;
       })(),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 5, 3, 4)],
-        ['c2', clientRecord('cg1', 5, 2, 5)],
-        ['c3', clientRecord('cg2', 5, 5, 3)],
-        ['c4', clientRecord('cg3', 5)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 5,
+            lastMutationID: 3,
+            lastMutationIDVersion: 4,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 5,
+            lastMutationID: 2,
+            lastMutationIDVersion: 5,
+          }),
+        ],
+        [
+          'c3',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: 5,
+            lastMutationID: 5,
+            lastMutationIDVersion: 3,
+          }),
+        ],
+        ['c4', clientRecord({clientGroupID: 'cg3', baseCookie: 5})],
       ]),
       expectedUserValues: new Map(),
       expectedVersion: 5,

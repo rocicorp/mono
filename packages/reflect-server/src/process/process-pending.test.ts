@@ -115,7 +115,9 @@ describe('processPending', () => {
     {
       name: 'no pending mutations connects or disconnects',
       version: 1,
-      clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
+      clientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+      ]),
       clients: new Map(),
       storedConnectedClients: [],
       pendingMutations: [],
@@ -124,15 +126,17 @@ describe('processPending', () => {
       expectedPokes: new Map(),
       expectedUserValues: new Map(),
       expectNothingToProcess: true,
-      expectedClientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
+      expectedClientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+      ]),
       expectedMissableRecords: [],
     },
     {
       name: 'no pending mutations, but connect pending',
       version: 3,
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 3)],
-        ['c2', clientRecord('cg1', 1)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
       ]),
       clients: new Map([
         client('c1', 'u1', 'cg1', s1, 0),
@@ -197,8 +201,8 @@ describe('processPending', () => {
       expectedUserValues: new Map(),
       expectNothingToProcess: false,
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 4)],
-        ['c2', clientRecord('cg1', 4)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 4})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 4})],
       ]),
       expectedMissableRecords: [],
     },
@@ -206,8 +210,8 @@ describe('processPending', () => {
       name: 'no pending mutations, but disconnect pending',
       version: 1,
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 1)],
-        ['c2', clientRecord('cg1', 1)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
       ]),
       clients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
       storedConnectedClients: ['c1', 'c2'],
@@ -240,15 +244,17 @@ describe('processPending', () => {
       expectedUserValues: new Map(),
       expectNothingToProcess: false,
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 2)],
-        ['c2', clientRecord('cg1', 1)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 2})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
       ]),
       expectedMissableRecords: [],
     },
     {
       name: 'one client, one mutation, all processed',
       version: 1,
-      clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
+      clientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+      ]),
       clients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
       storedConnectedClients: ['c1'],
       pendingMutations: [
@@ -289,7 +295,17 @@ describe('processPending', () => {
       expectedUserValues: new Map([
         ['count', {value: 1, version: 2, deleted: false}],
       ]),
-      expectedClientRecords: new Map([['c1', clientRecord('cg1', 2, 2, 2)]]),
+      expectedClientRecords: new Map([
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 2,
+            lastMutationID: 2,
+            lastMutationIDVersion: 2,
+          }),
+        ],
+      ]),
       expectedMaxProcessedMutationTimestamp: 750,
       expectedMissableRecords: [
         {
@@ -302,7 +318,9 @@ describe('processPending', () => {
     {
       name: 'one client, one mutation, all processed, debugPerf',
       version: 1,
-      clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
+      clientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+      ]),
       clients: new Map([
         client(
           'c1',
@@ -361,7 +379,17 @@ describe('processPending', () => {
       expectedUserValues: new Map([
         ['count', {value: 1, version: 2, deleted: false}],
       ]),
-      expectedClientRecords: new Map([['c1', clientRecord('cg1', 2, 2, 2)]]),
+      expectedClientRecords: new Map([
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 2,
+            lastMutationID: 2,
+            lastMutationIDVersion: 2,
+          }),
+        ],
+      ]),
       expectedMaxProcessedMutationTimestamp: 750,
       expectedMissableRecords: [
         {
@@ -375,9 +403,9 @@ describe('processPending', () => {
       name: 'three clients, two client groups, three mutations, all processed',
       version: 1,
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 1)],
-        ['c2', clientRecord('cg1', 1)],
-        ['c3', clientRecord('cg2', 1)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+        ['c3', clientRecord({clientGroupID: 'cg2', baseCookie: 1})],
       ]),
       clients: new Map([
         client('c1', 'u1', 'cg1', s1, 0),
@@ -566,9 +594,33 @@ describe('processPending', () => {
         ['count', {value: 3, version: 4, deleted: false}],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 4, 2, 2)],
-        ['c2', clientRecord('cg1', 4, 2, 3)],
-        ['c3', clientRecord('cg2', 4, 2, 4)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 4,
+            lastMutationID: 2,
+            lastMutationIDVersion: 2,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 4,
+            lastMutationID: 2,
+            lastMutationIDVersion: 3,
+          }),
+        ],
+        [
+          'c3',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: 4,
+            lastMutationID: 2,
+            lastMutationIDVersion: 4,
+          }),
+        ],
       ]),
       expectedMaxProcessedMutationTimestamp: 740,
       expectedMissableRecords: [
@@ -583,9 +635,9 @@ describe('processPending', () => {
       name: 'three clients, two client groups, three mutations, only 2 processed due to maxMutationsToProcess',
       version: 1,
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 1)],
-        ['c2', clientRecord('cg1', 1)],
-        ['c3', clientRecord('cg2', 1)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+        ['c3', clientRecord({clientGroupID: 'cg2', baseCookie: 1})],
       ]),
       clients: new Map([
         client('c1', 'u1', 'cg1', s1, 0),
@@ -733,9 +785,33 @@ describe('processPending', () => {
         ['count', {value: 2, version: 3, deleted: false}],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 3, 2, 2)],
-        ['c2', clientRecord('cg1', 3, 2, 3)],
-        ['c3', clientRecord('cg2', 3, 1, 1)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 3,
+            lastMutationID: 2,
+            lastMutationIDVersion: 2,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 3,
+            lastMutationID: 2,
+            lastMutationIDVersion: 3,
+          }),
+        ],
+        [
+          'c3',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: 3,
+            lastMutationID: 1,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -759,8 +835,8 @@ describe('processPending', () => {
       name: 'two clients, two client groups, four mutations all w timestamps, two processed',
       version: 1,
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 1)],
-        ['c2', clientRecord('cg1', 1)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
       ]),
       clients: new Map([
         client('c1', 'u1', 'cg1', s1, 0),
@@ -877,8 +953,24 @@ describe('processPending', () => {
         ['count', {value: 2, version: 3, deleted: false}],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 3, 2, 2)],
-        ['c2', clientRecord('cg1', 3, 2, 3)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 3,
+            lastMutationID: 2,
+            lastMutationIDVersion: 2,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 3,
+            lastMutationID: 2,
+            lastMutationIDVersion: 3,
+          }),
+        ],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -909,8 +1001,8 @@ describe('processPending', () => {
       name: 'two clients, two client groups, four mutations all w timestamps, three processed, different bufferNeededMs',
       version: 1,
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 1)],
-        ['c2', clientRecord('cg1', 1)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
       ]),
       clients: new Map([
         client('c1', 'u1', 'cg1', s1, 0),
@@ -1072,8 +1164,26 @@ describe('processPending', () => {
         ['count', {value: 3, version: 4, deleted: false}],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 4, 3, 4, 1000)],
-        ['c2', clientRecord('cg1', 4, 2, 3, 1000)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 4,
+            lastMutationID: 3,
+            lastMutationIDVersion: 4,
+            lastSeen: 1000,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 4,
+            lastMutationID: 2,
+            lastMutationIDVersion: 3,
+            lastSeen: 1000,
+          }),
+        ],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -1101,8 +1211,8 @@ describe('processPending', () => {
       name: 'two clients, two client groups, four mutations some with undefined timestamps, two processed',
       version: 1,
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 1)],
-        ['c2', clientRecord('cg1', 1)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
       ]),
       clients: new Map([
         client('c1', 'u1', 'cg1', s1, 0),
@@ -1219,8 +1329,26 @@ describe('processPending', () => {
         ['count', {value: 2, version: 3, deleted: false}],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 3, 2, 2, 1000)],
-        ['c2', clientRecord('cg1', 3, 2, 3, 1000)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 3,
+            lastMutationID: 2,
+            lastMutationIDVersion: 2,
+            lastSeen: 1000,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 3,
+            lastMutationID: 2,
+            lastMutationIDVersion: 3,
+            lastSeen: 1000,
+          }),
+        ],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -1250,7 +1378,9 @@ describe('processPending', () => {
     {
       name: 'one client, one mutation, all processed, passed maxProcessedMutationTimestamp is greater than processed',
       version: 1,
-      clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
+      clientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+      ]),
       clients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
       storedConnectedClients: ['c1'],
       pendingMutations: [
@@ -1296,7 +1426,16 @@ describe('processPending', () => {
         ['count', {value: 1, version: 2, deleted: false}],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 2, 2, 2, 1000)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 2,
+            lastMutationID: 2,
+            lastMutationIDVersion: 2,
+            lastSeen: 1000,
+          }),
+        ],
       ]),
       expectedMaxProcessedMutationTimestamp: 800,
       expectedMissableRecords: [
@@ -1310,7 +1449,9 @@ describe('processPending', () => {
     {
       name: 'one client, two mutations, all processed, maxProcessedMutationTimestamp returned is not last mutation',
       version: 1,
-      clientRecords: new Map([['c1', clientRecord('cg1', 1)]]),
+      clientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+      ]),
       clients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
       storedConnectedClients: ['c1'],
       pendingMutations: [
@@ -1373,7 +1514,16 @@ describe('processPending', () => {
         ['count', {value: 2, version: 3, deleted: false}],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 3, 3, 3, 1000)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 3,
+            lastMutationID: 3,
+            lastMutationIDVersion: 3,
+            lastSeen: 1000,
+          }),
+        ],
       ]),
       expectedMaxProcessedMutationTimestamp: 750,
       expectedMissableRecords: [

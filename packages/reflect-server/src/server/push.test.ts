@@ -75,7 +75,15 @@ describe('handlePush', () => {
       pendingMutations: [],
       mutations: [],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       expectedPendingMutations: [],
     },
@@ -85,7 +93,15 @@ describe('handlePush', () => {
       pendingMutations: [],
       mutations: [mutation(clientID, 3, 10)],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -104,7 +120,15 @@ describe('handlePush', () => {
       pendingMutations: [],
       mutations: [mutation(clientID, 3, 10), mutation(clientID, 4, 20)],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -135,7 +159,15 @@ describe('handlePush', () => {
         mutation(clientID, 5, 51),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       pushTimestamp: 100,
       expectedPendingMutations: [
@@ -178,8 +210,24 @@ describe('handlePush', () => {
         mutation(clientID, 4, 20),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
-        ['c2', clientRecord(clientGroupID, 1, 4, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 4,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -218,7 +266,16 @@ describe('handlePush', () => {
         mutation(clientID, 4, 20),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1, 50)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+            lastSeen: 50,
+          }),
+        ],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -247,8 +304,26 @@ describe('handlePush', () => {
         }),
       ],
       expectedClientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1, 50)],
-        ['c2', clientRecord(clientGroupID, null, 0, null, 50)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+            lastSeen: 50,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID,
+            baseCookie: null,
+            lastMutationID: 0,
+            lastMutationIDVersion: null,
+            lastSeen: 50,
+          }),
+        ],
       ]),
     },
     {
@@ -264,8 +339,24 @@ describe('handlePush', () => {
         mutation(clientID, 4, 20),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 3, 1)],
-        ['c2', clientRecord(clientGroupID, 1, 4, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 3,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 4,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -316,8 +407,24 @@ describe('handlePush', () => {
         mutation(clientID, 4, 20),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
-        ['c2', clientRecord(clientGroupID, 1, 4, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 4,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -359,8 +466,24 @@ describe('handlePush', () => {
         mutation(clientID, 4, 20),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
-        ['c2', clientRecord('cg2', 1, 4, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: 1,
+            lastMutationID: 4,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       // no mutations enqueued
       expectedPendingMutations: [],
@@ -377,7 +500,15 @@ describe('handlePush', () => {
         mutation(clientID, 4, 20),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       // no mutations enqueued
       expectedPendingMutations: [],
@@ -395,8 +526,24 @@ describe('handlePush', () => {
         mutation(clientID, 4, 20),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
-        ['c2', clientRecord(clientGroupID, 1, 4, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 4,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       // no mutations enqueued
       expectedPendingMutations: [],
@@ -413,7 +560,15 @@ describe('handlePush', () => {
       pendingMutations: [],
       mutations: [mutation(clientID, 3, 10)],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       pushTimestamp: 5,
       now: 500,
@@ -441,7 +596,15 @@ describe('handlePush', () => {
       pendingMutations: [],
       mutations: [mutation(clientID, 3, 10)],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       pushTimestamp: 5,
       now: 700, // offset would be 695 if not reused
@@ -469,7 +632,15 @@ describe('handlePush', () => {
       pendingMutations: [],
       mutations: [mutation(clientID, 3, 10)],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       pushTimestamp: 5,
       now: 1110,
@@ -499,7 +670,15 @@ describe('handlePush', () => {
       pendingMutations: [],
       mutations: [mutation(clientID, 3, 10), mutation(clientID, 5, 20)],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 2, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       pushTimestamp: 5,
       now: 500,
@@ -542,8 +721,24 @@ describe('handlePush', () => {
         mutation(clientID, 10, 70),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 4, 1)],
-        ['c2', clientRecord(clientGroupID, 1, 2, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 4,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -644,8 +839,24 @@ describe('handlePush', () => {
         mutation(clientID, 8, 70),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 4, 1)],
-        ['c2', clientRecord(clientGroupID, 1, 2, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 4,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       expectedPendingMutations: [
         pendingMutation({
@@ -737,8 +948,24 @@ describe('handlePush', () => {
         mutation(clientID, 8, 70),
       ],
       clientRecords: new Map([
-        [clientID, clientRecord(clientGroupID, 1, 4, 1)],
-        ['c2', clientRecord(clientGroupID, 1, 2, 1)],
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 4,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
       ]),
       expectedPendingMutations: [
         pendingMutation({

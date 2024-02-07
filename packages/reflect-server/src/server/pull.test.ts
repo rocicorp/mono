@@ -1,11 +1,14 @@
-import {test, expect} from '@jest/globals';
-import {ClientRecordMap, putClientRecord} from '../types/client-record.js';
+import {expect, test} from '@jest/globals';
+import type {
+  NullableVersion,
+  PullRequestBody,
+  PullResponseBody,
+} from 'reflect-protocol';
 import {DurableStorage} from '../storage/durable-storage.js';
-import type {NullableVersion} from 'reflect-protocol';
-import {handlePull} from './pull.js';
-import {clientRecord, Mocket} from '../util/test-utils.js';
-import type {PullRequestBody, PullResponseBody} from 'reflect-protocol';
+import {ClientRecordMap, putClientRecord} from '../types/client-record.js';
 import {putVersion} from '../types/version.js';
+import {Mocket, clientRecord} from '../util/test-utils.js';
+import {handlePull} from './pull.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -38,9 +41,33 @@ test('pull', async () => {
     {
       name: 'pull returns mutation id changes for specified clientGroupID and no others',
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 1, 1, 2)],
-        ['c2', clientRecord('cg1', 1, 7, 2)],
-        ['c4', clientRecord('cg2', 1, 7, 2)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 1,
+            lastMutationID: 1,
+            lastMutationIDVersion: 2,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: 2,
+          }),
+        ],
+        [
+          'c4',
+          clientRecord({
+            clientGroupID: 'cg2',
+            baseCookie: 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: 2,
+          }),
+        ],
       ]),
       version: 3,
       pullRequest: {
@@ -57,8 +84,24 @@ test('pull', async () => {
     {
       name: 'pull only returns lastMutationID if it has changed since cookie, one change',
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 1, 1, 2)],
-        ['c2', clientRecord('cg1', 1, 7, 4)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 1,
+            lastMutationID: 1,
+            lastMutationIDVersion: 2,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: 4,
+          }),
+        ],
       ]),
       version: 5,
       pullRequest: {
@@ -76,8 +119,24 @@ test('pull', async () => {
     {
       name: 'pull only returns lastMutationID if it has changed since cookie, no changes',
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 1, 1, 2)],
-        ['c2', clientRecord('cg1', 1, 7, 4)],
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 1,
+            lastMutationID: 1,
+            lastMutationIDVersion: 2,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: 4,
+          }),
+        ],
       ]),
       version: 5,
       pullRequest: {

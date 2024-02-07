@@ -182,8 +182,20 @@ describe('handleConnection', () => {
       existingClients: new Map(),
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket)]),
-      existingRecord: clientRecord('cg1', null, 0, undefined, START_TIME - 100),
-      expectedRecord: clientRecord('cg1', null, 0, undefined, START_TIME),
+      existingRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: null,
+        lastMutationID: 0,
+        lastMutationIDVersion: undefined,
+        lastSeen: START_TIME - 100,
+      }),
+      expectedRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: null,
+        lastMutationID: 0,
+        lastMutationIDVersion: undefined,
+        lastSeen: START_TIME,
+      }),
       version: null,
     },
     {
@@ -213,8 +225,20 @@ describe('handleConnection', () => {
       existingClients: new Map(),
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket)]),
-      existingRecord: clientRecord('cg1', 2, 0, undefined, START_TIME - 100),
-      expectedRecord: clientRecord('cg1', 1, 0, undefined, START_TIME),
+      existingRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: 2,
+        lastMutationID: 0,
+        lastMutationIDVersion: undefined,
+        lastSeen: START_TIME - 100,
+      }),
+      expectedRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: 1,
+        lastMutationID: 0,
+        lastMutationIDVersion: undefined,
+        lastSeen: START_TIME,
+      }),
       version: 2,
     },
     {
@@ -224,8 +248,20 @@ describe('handleConnection', () => {
       existingClients: new Map(),
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket, true)]),
-      existingRecord: clientRecord('cg1', 2, 0, undefined, START_TIME - 100),
-      expectedRecord: clientRecord('cg1', 1, 0, undefined, START_TIME),
+      existingRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: 2,
+        lastMutationID: 0,
+        lastMutationIDVersion: undefined,
+        lastSeen: START_TIME - 100,
+      }),
+      expectedRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: 1,
+        lastMutationID: 0,
+        lastMutationIDVersion: undefined,
+        lastSeen: START_TIME,
+      }),
       version: 2,
     },
     {
@@ -235,7 +271,13 @@ describe('handleConnection', () => {
       existingClients: new Map([c2]),
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket), c2]),
-      expectedRecord: clientRecord('cg1', null, 0, null, START_TIME),
+      expectedRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: null,
+        lastMutationID: 0,
+        lastMutationIDVersion: null,
+        lastSeen: START_TIME,
+      }),
       version: 1,
     },
     {
@@ -245,8 +287,20 @@ describe('handleConnection', () => {
       existingClients: new Map(),
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket)]),
-      existingRecord: clientRecord('cg1', 4, 0, undefined, START_TIME - 100),
-      expectedRecord: clientRecord('cg1', 7, 0, undefined, START_TIME),
+      existingRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: 4,
+        lastMutationID: 0,
+        lastMutationIDVersion: undefined,
+        lastSeen: START_TIME - 100,
+      }),
+      expectedRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: 7,
+        lastMutationID: 0,
+        lastMutationIDVersion: undefined,
+        lastSeen: START_TIME,
+      }),
       version: 7,
     },
     {
@@ -256,8 +310,20 @@ describe('handleConnection', () => {
       existingClients: new Map(),
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket)]),
-      existingRecord: clientRecord('cg1', 4, 0, undefined, START_TIME - 100),
-      expectedRecord: clientRecord('cg1', 7, 0, undefined, START_TIME),
+      existingRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: 4,
+        lastMutationID: 0,
+        lastMutationIDVersion: undefined,
+        lastSeen: START_TIME - 100,
+      }),
+      expectedRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: 7,
+        lastMutationID: 0,
+        lastMutationIDVersion: undefined,
+        lastSeen: START_TIME,
+      }),
       version: 7,
       wsid: '',
     },
@@ -308,7 +374,11 @@ describe('handleConnection', () => {
       expectedClients: socket =>
         new Map([freshClient('c1', 'u1', 'cg1', socket)]),
       headers: createHeadersWithValidAuthData('u1'),
-      existingRecord: clientRecord('cg1', 7, 0),
+      existingRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: 7,
+        lastMutationID: 0,
+      }),
       expectErrorKind: 'InvalidConnectionRequestLastMutationID',
       expectErrorMessage: `Unexpected lmid.`,
       version: 7,

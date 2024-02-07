@@ -1,15 +1,15 @@
 import {describe, expect, test} from '@jest/globals';
+import type {Poke, Version} from 'reflect-protocol';
+import {DurableStorage} from '../storage/durable-storage.js';
 import {
+  listClientRecords,
   putClientRecord,
   type ClientRecordMap,
-  listClientRecords,
 } from '../types/client-record.js';
-import type {Poke, Version} from 'reflect-protocol';
 import type {ClientID, ClientMap} from '../types/client-state.js';
-import {addPresence} from './add-presence.js';
-import {DurableStorage} from '../storage/durable-storage.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {client, clientRecord} from '../util/test-utils.js';
+import {addPresence} from './add-presence.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -43,7 +43,9 @@ describe('addPresence', () => {
         ),
       ]),
       pokesByClientID: new Map(),
-      clientRecords: new Map([['c1', clientRecord('cg1', 3)]]),
+      clientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+      ]),
       version: 3,
       previousConnectedClients: [],
       nextConnectedClients: ['c1'],
@@ -70,7 +72,9 @@ describe('addPresence', () => {
           ],
         ],
       ]),
-      expectedClientRecords: new Map([['c1', clientRecord('cg1', 4)]]),
+      expectedClientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 4})],
+      ]),
       expectedVersion: 4,
     },
     {
@@ -102,7 +106,9 @@ describe('addPresence', () => {
           ],
         ],
       ]),
-      clientRecords: new Map([['c1', clientRecord('cg1', 3)]]),
+      clientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+      ]),
       version: 3,
       previousConnectedClients: [],
       nextConnectedClients: ['c1'],
@@ -131,7 +137,9 @@ describe('addPresence', () => {
           ],
         ],
       ]),
-      expectedClientRecords: new Map([['c1', clientRecord('cg1', 3)]]),
+      expectedClientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+      ]),
       expectedVersion: 3,
     },
     {
@@ -151,8 +159,8 @@ describe('addPresence', () => {
       ]),
       pokesByClientID: new Map(),
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 3)],
-        ['c2', clientRecord('cg1', 3)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
       ]),
       version: 3,
       previousConnectedClients: ['c1'],
@@ -204,8 +212,8 @@ describe('addPresence', () => {
         ],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 4)],
-        ['c2', clientRecord('cg1', 4)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 4})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 4})],
       ]),
       expectedVersion: 4,
     },
@@ -264,8 +272,8 @@ describe('addPresence', () => {
         ],
       ]),
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 3)],
-        ['c2', clientRecord('cg1', 3)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
       ]),
       version: 3,
       previousConnectedClients: ['c1'],
@@ -330,8 +338,8 @@ describe('addPresence', () => {
         ],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 3)],
-        ['c2', clientRecord('cg1', 3)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
       ]),
       expectedVersion: 3,
     },
@@ -340,9 +348,9 @@ describe('addPresence', () => {
       clients: new Map([client('c1', 'u1', 'cg1'), client('c2', 'u2', 'cg1')]),
       pokesByClientID: new Map(),
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 3)],
-        ['c2', clientRecord('cg1', 3)],
-        ['c3', clientRecord('cg1', 3)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+        ['c3', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
       ]),
       version: 3,
       previousConnectedClients: ['c1', 'c2', 'c3'],
@@ -384,9 +392,9 @@ describe('addPresence', () => {
         ],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 4)],
-        ['c2', clientRecord('cg1', 4)],
-        ['c3', clientRecord('cg1', 3)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 4})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 4})],
+        ['c3', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
       ]),
       expectedVersion: 4,
     },
@@ -395,10 +403,10 @@ describe('addPresence', () => {
       clients: new Map([client('c1', 'u1', 'cg1'), client('c2', 'u2', 'cg1')]),
       pokesByClientID: new Map(),
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 3)],
-        ['c2', clientRecord('cg1', 3)],
-        ['c3', clientRecord('cg1', 3)],
-        ['c4', clientRecord('cg1', 3)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+        ['c3', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+        ['c4', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
       ]),
       version: 3,
       previousConnectedClients: ['c1', 'c2', 'c3', 'c4'],
@@ -448,10 +456,10 @@ describe('addPresence', () => {
         ],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 4)],
-        ['c2', clientRecord('cg1', 4)],
-        ['c3', clientRecord('cg1', 3)],
-        ['c4', clientRecord('cg1', 3)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 4})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 4})],
+        ['c3', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+        ['c4', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
       ]),
       expectedVersion: 4,
     },
@@ -472,9 +480,9 @@ describe('addPresence', () => {
       ]),
       pokesByClientID: new Map(),
       clientRecords: new Map([
-        ['c1', clientRecord('cg1', 3)],
-        ['c2', clientRecord('cg1', 3)],
-        ['c3', clientRecord('cg1', 3)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
+        ['c3', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
       ]),
       version: 3,
       previousConnectedClients: ['c1', 'c3'],
@@ -530,9 +538,9 @@ describe('addPresence', () => {
         ],
       ]),
       expectedClientRecords: new Map([
-        ['c1', clientRecord('cg1', 4)],
-        ['c2', clientRecord('cg1', 4)],
-        ['c3', clientRecord('cg1', 3)],
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 4})],
+        ['c2', clientRecord({clientGroupID: 'cg1', baseCookie: 4})],
+        ['c3', clientRecord({clientGroupID: 'cg1', baseCookie: 3})],
       ]),
       expectedVersion: 4,
     },
