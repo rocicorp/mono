@@ -21,7 +21,6 @@ import type {AuthContext} from './handler.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {checkForServerDeprecation} from './version.js';
 import {watchDeployment} from './watch-deployment.js';
-
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function publishOptions(yargs: CommonYargsArgv) {
