@@ -16,7 +16,7 @@ teardown(() => {
 
 test('sendCloseBeacon', () => {
   const fetchStub = sinon
-    .stub(window, 'fetch')
+    .stub(globalThis, 'fetch')
     .returns(Promise.resolve(new Response()));
   const sink = new TestLogSink();
   const lc = new LogContext('debug', {}, sink);
@@ -57,7 +57,7 @@ suite('sendCloseBeacon no auth', () => {
   for (const auth of [undefined, ''] as const) {
     test(typeof auth, () => {
       const fetchStub = sinon
-        .stub(window, 'fetch')
+        .stub(globalThis, 'fetch')
         .returns(Promise.resolve(new Response()));
       const sink = new TestLogSink();
       const lc = new LogContext('debug', {}, sink);
@@ -97,7 +97,7 @@ suite('sendCloseBeacon no auth', () => {
 
 test('sendCloseBeacon no server is a noop', () => {
   const fetchStub = sinon
-    .stub(window, 'fetch')
+    .stub(globalThis, 'fetch')
     .returns(Promise.resolve(new Response()));
   const sink = new TestLogSink();
   const lc = new LogContext('debug', {}, sink);
@@ -145,7 +145,7 @@ suite('initCloseBeaconForPageHide', () => {
   for (const c of cases) {
     test(`persisted: ${c.persisted}`, () => {
       const fetchStub = sinon
-        .stub(window, 'fetch')
+        .stub(globalThis, 'fetch')
         .returns(Promise.resolve(new Response()));
 
       const sink = new TestLogSink();
