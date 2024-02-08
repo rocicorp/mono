@@ -9,6 +9,7 @@ import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from 'shared/src/abort-error.js';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
+import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/get-document.js';
 import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
@@ -580,9 +581,16 @@ export class Replicache<MD extends MutatorDefs = {}> {
       requestOptions;
     this.#requestOptions = {maxDelayMs, minDelayMs};
 
+    const visibilityWatcher = getDocumentVisibilityWatcher(
+      getDocument(),
+      0,
+      this.#closeAbortController.signal,
+    );
+
     this.#pullConnectionLoop = new ConnectionLoop(
       this.#lc.withContext('PULL'),
       new PullDelegate(this, () => this.#invokePull()),
+      visibilityWatcher,
     );
 
     this.#pushConnectionLoop = new ConnectionLoop(
