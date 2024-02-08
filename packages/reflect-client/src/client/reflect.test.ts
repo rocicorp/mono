@@ -61,7 +61,7 @@ setup(() => {
     MockSocket as unknown as typeof WebSocket,
   );
   fetchStub = sinon
-    .stub(window, 'fetch')
+    .stub(globalThis, 'fetch')
     .returns(Promise.resolve(new Response()));
 });
 

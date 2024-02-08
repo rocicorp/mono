@@ -25,7 +25,7 @@ const TEST_BUFFER_SIZER_OPTIONS = {
 setup(() => {
   clock = sinon.useFakeTimers();
   clock.setSystemTime(startTime);
-  rafStub = sinon.stub(window, 'requestAnimationFrame');
+  rafStub = sinon.stub(globalThis, 'requestAnimationFrame');
 });
 
 teardown(() => {
