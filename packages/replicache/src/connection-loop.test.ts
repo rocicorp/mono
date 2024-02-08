@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
+import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {sleep} from 'shared/src/sleep.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {
@@ -757,6 +758,145 @@ suite('Send when closed should resolve with error', () => {
       const err = await sendP;
       expect(err?.error).instanceOf(Error);
       expect((err?.error as Error).message).equal('Closed');
+    });
+  }
+});
+
+suite('With Document Visibility Watcher', () => {
+  class Document extends EventTarget {
+    #visibilityState: DocumentVisibilityState = 'visible';
+    set visibilityState(v) {
+      if (this.#visibilityState === v) {
+        return;
+      }
+      this.#visibilityState = v;
+      this.dispatchEvent(new Event('visibilitychange'));
+    }
+    get visibilityState() {
+      return this.#visibilityState;
+    }
+  }
+
+  const watchdogTimer = 100;
+  let doc = new Document();
+
+  const hide = () => {
+    doc.visibilityState = 'hidden';
+  };
+  const show = () => {
+    doc.visibilityState = 'visible';
+  };
+  const sendNow = () => {
+    send(true);
+  };
+
+  type Case = {
+    name: string;
+    actions: [number, () => void][];
+    expectedSendTimes: number[];
+  };
+
+  const cases: Case[] = [
+    {
+      name: 'No visibility watcher',
+      actions: [[10, send]],
+      expectedSendTimes: [10],
+    },
+    {
+      name: 'Hidden',
+      actions: [
+        [0, hide],
+        [20, send],
+      ],
+      expectedSendTimes: [watchdogTimer],
+    },
+    {
+      name: 'Hidden. Multiple sends get collapsed',
+      actions: [
+        [0, hide],
+        [20, send],
+        [40, send],
+        [60, send],
+        [80, send],
+        [150, send],
+        [200, send],
+        [250, send],
+      ],
+      expectedSendTimes: [watchdogTimer, 2 * watchdogTimer, 3 * watchdogTimer],
+    },
+    {
+      name: 'Hidden when send is called but shown before watchdog timer',
+      actions: [
+        [0, hide],
+        [20, send],
+        [50, show],
+      ],
+      expectedSendTimes: [50],
+    },
+    {
+      name: 'Hidden when send is called (multiple) but shown before watchdog timer',
+      actions: [
+        [0, hide],
+        [20, send],
+        [30, send],
+        [40, send],
+        [50, show],
+      ],
+      expectedSendTimes: [50],
+    },
+    {
+      name: 'Hidden when sendNow is called. Should ignore hidden state',
+      actions: [
+        [0, hide],
+        [50, sendNow],
+      ],
+      expectedSendTimes: [50],
+    },
+    {
+      name: 'Hidden when sendNow is called. Should ignore hidden state. Keeps going due to pullInterval',
+      actions: [
+        [0, hide],
+        [50, sendNow],
+      ],
+      expectedSendTimes: [50, 150],
+    },
+  ];
+
+  for (const c of cases) {
+    test(c.name, async () => {
+      const {expectedSendTimes} = c;
+      doc = new Document();
+
+      const {signal} = new AbortController();
+      const visibilityWatcher = getDocumentVisibilityWatcher(doc, 0, signal);
+
+      const actualSendTimes: number[] = [];
+
+      loop = new ConnectionLoop(
+        new LogContext(),
+        {
+          invokeSend: () => {
+            actualSendTimes.push(Date.now());
+            return Promise.resolve(true);
+          },
+          debounceDelay: 0,
+          minDelayMs: 0,
+          maxDelayMs: 10_000,
+          maxConnections: 1,
+          watchdogTimer,
+        },
+        visibilityWatcher,
+      );
+
+      for (const [time, action] of c.actions) {
+        setTimeout(action, time);
+      }
+
+      while (actualSendTimes.length < expectedSendTimes.length) {
+        await clock.tickAsync(10);
+      }
+
+      expect(actualSendTimes).to.deep.equal(expectedSendTimes);
     });
   }
 });

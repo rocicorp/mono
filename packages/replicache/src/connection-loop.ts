@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import type {DocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {sleep} from 'shared/src/sleep.js';
 
 export const DEBOUNCE_DELAY_MS = 10;
@@ -72,10 +73,16 @@ export class ConnectionLoop {
    */
   #sendCounter = 0;
   readonly #lc: LogContext;
+  readonly #visibilityWatcher: DocumentVisibilityWatcher | undefined;
 
-  constructor(lc: LogContext, delegate: ConnectionLoopDelegate) {
+  constructor(
+    lc: LogContext,
+    delegate: ConnectionLoopDelegate,
+    visibilityWatcher?: DocumentVisibilityWatcher,
+  ) {
     this.#lc = lc;
     this.#delegate = delegate;
+    this.#visibilityWatcher = visibilityWatcher;
     void this.run();
   }
 
@@ -99,7 +106,10 @@ export class ConnectionLoop {
     this.#lc.debug?.('send', now);
     if (now) {
       this.#skipSleepsResolver.resolve();
+    } else {
+      await this.#visibilityWatcher?.waitForVisible();
     }
+
     this.#pendingResolver.resolve();
 
     const result = await this.#sendResolver.promise;

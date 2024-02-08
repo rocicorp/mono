@@ -15,7 +15,7 @@ export function getDocumentVisibilityWatcher(
     : new DocumentVisibilityWatcherNoDoc();
 }
 
-interface DocumentVisibilityWatcher {
+export interface DocumentVisibilityWatcher {
   readonly visibilityState: DocumentVisibilityState;
   waitForVisible(): Promise<unknown>;
   waitForHidden(): Promise<unknown>;
@@ -28,7 +28,7 @@ class DocumentVisibilityWatcherImpl implements DocumentVisibilityWatcher {
 
   // This trails doc.visibilityState by hiddenIntervalMS when being hidden. This
   // is because we want to wait for the tab to be hidden for a while before
-  // disconnecting.
+  // considering as hidden.
   visibilityState: DocumentVisibilityState;
 
   readonly #promises = new Set<{
