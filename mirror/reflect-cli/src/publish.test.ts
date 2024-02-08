@@ -108,12 +108,8 @@ test('it should throw if an invalid appname', async () => {
       {serverPath: testFilePath, app: '0000'} as Args,
       teamAuthContext,
     ),
-  ).rejects.toEqual(
-    expect.objectContaining({
-      constructor: ErrorWrapper,
-      message: expect.stringMatching(/^Invalid App Name/),
-      severity: 'WARNING',
-    }),
+  ).rejects.toThrow(
+    /Invalid App Name "0000".*lowercased alphanumeric, starting with a letter and not ending with a hyphen./,
   );
 });
 

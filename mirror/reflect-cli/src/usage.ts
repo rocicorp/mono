@@ -14,7 +14,7 @@ import {
   type Month,
 } from 'mirror-schema/src/external/metrics.js';
 import {must} from 'shared/src/must.js';
-import {getAppID, getDefaultApp, mustValidAppName} from './app-config.js';
+import {getAppID, getDefaultApp} from './app-config.js';
 import color from './colors.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import type {AuthContext} from './handler.js';
@@ -61,7 +61,6 @@ export async function usageHandler(
 ): Promise<void> {
   const firestore = getFirestore();
   const {app} = yargs;
-  mustValidAppName(yargs);
   const appID = await getAppID(authContext, app);
   const appDoc = await getDoc(
     doc(firestore, appPath(appID)).withConverter(appViewDataConverter),

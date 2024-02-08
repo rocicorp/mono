@@ -13,7 +13,6 @@ import {
   getAppID,
   mustReadAppConfig,
   DEFAULT_FROM_REFLECT_CONFIG,
-  mustValidAppName,
 } from './app-config.js';
 import {CompileResult, compile} from './compile.js';
 import {ErrorWrapper} from './error.js';
@@ -74,7 +73,6 @@ export async function publishHandler(
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
   const {reflectChannel, app} = yargs;
-  mustValidAppName(yargs);
   let {serverPath} = yargs;
   if (serverPath === DEFAULT_FROM_REFLECT_CONFIG) {
     serverPath = mustReadAppConfig().server;

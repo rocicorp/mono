@@ -1,6 +1,6 @@
 import {getFirestore} from 'firebase/firestore';
 import {setVars} from 'mirror-protocol/src/vars.js';
-import {getAppID, getDefaultApp, mustValidAppName} from '../app-config.js';
+import {getAppID, getDefaultApp} from '../app-config.js';
 import {setDevVars} from '../dev/vars.js';
 import {UserError} from '../error.js';
 import type {AuthContext} from '../handler.js';
@@ -35,7 +35,6 @@ export async function setVarsHandler(
   authContext: AuthContext,
 ): Promise<void> {
   const {keysAndValues, dev, app} = yargs;
-  mustValidAppName(yargs);
   const vars: Record<string, string> = {};
   for (const kv of keysAndValues) {
     const eq = kv.indexOf('=');

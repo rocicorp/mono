@@ -10,11 +10,11 @@ import * as path from 'node:path';
 import {pkgUpSync} from 'pkg-up';
 
 import * as v from 'shared/src/valita.js';
-import {ErrorWrapper} from './error.js';
+import {ErrorWrapper, UserError} from './error.js';
 import type {AuthContext} from './handler.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {makeRequester} from './requester.js';
-
+import {isValidAppName} from 'mirror-schema/src/external/app.js';
 // { srcFile: destFile }
 const templateFiles = v.record(v.string());
 
@@ -178,6 +178,7 @@ async function getAppIDfromAppName(
   teamID: string,
   appName: string,
 ): Promise<string | undefined> {
+  mustValidAppName(appName);
   const firestore = getFirestore();
   const nameEntry = await getDoc(
     doc(firestore, appNameIndexPath(teamID, appName)).withConverter(
@@ -288,18 +289,10 @@ function copyAndEditFile(
   }
 }
 
-const VALID_APP_NAME = /^[a-z]([a-z0-9-])*[a-z0-9]$/;
-export function isValidAppName(name: string): boolean {
-  return VALID_APP_NAME.test(name);
-}
-
-export function mustValidAppName(argv: {app: string}) {
-  if (!isValidAppName(argv.app) && argv.app !== DEFAULT_FROM_REFLECT_CONFIG) {
-    throw new ErrorWrapper(
-      new Error(
-        `Invalid App Name "${argv.app}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
-      ),
-      'WARNING',
+export function mustValidAppName(appName: string) {
+  if (!isValidAppName(appName) && appName !== DEFAULT_FROM_REFLECT_CONFIG) {
+    throw new UserError(
+      `Invalid App Name "${appName}". Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.`,
     );
   }
 }

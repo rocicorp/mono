@@ -64,7 +64,7 @@ export const authContext: AuthContext = {
 
 export const teamAuthContext: AuthContext = {
   user: {
-    userID: 'fake-uid',
+    userID: 'teams/fake-uid',
     getIdToken: () => new Promise(() => 'fake-token'),
     additionalUserInfo: {
       username: 'fake-team',
