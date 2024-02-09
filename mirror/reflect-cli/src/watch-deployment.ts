@@ -56,12 +56,12 @@ function logSuccess(
   message: string,
   outputFormat: OutputFormat,
 ) {
-  const successMessage = `https://${deployment.spec.hostname}`;
+  const url = `https://${deployment.spec.hostname}`;
   if (outputFormat === 'json') {
-    console.log(JSON.stringify({success: true, url: successMessage}, null, 2));
+    console.log(JSON.stringify({success: true, url}, null, 2));
   } else {
     console.log(`🎁 ${message} successfully to:`);
-    console.log(successMessage);
+    console.log(url);
   }
 }
 
