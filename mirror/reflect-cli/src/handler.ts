@@ -31,7 +31,8 @@ export function authenticateAndHandleWith<
       const eventName =
         args._ && args._.length ? `cmd_${args._[0]}` : 'cmd_unknown';
 
-      const user = await authenticate(args);
+      const displayLogin = args['output'] !== 'json';
+      const user = await authenticate(args, displayLogin);
       const requester = makeRequester(user.userID);
 
       const context = {requester, user};

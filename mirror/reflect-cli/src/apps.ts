@@ -22,7 +22,8 @@ export function appListOptions(yargs: CommonYargsArgv) {
     describe: 'Output the result in a specified format',
     type: 'string',
     requiresArg: true,
-    choices: ['json'],
+    choices: ['json', 'text'],
+    default: 'text',
   });
 }
 

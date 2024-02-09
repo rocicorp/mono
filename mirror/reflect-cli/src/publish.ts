@@ -54,7 +54,8 @@ export function publishOptions(yargs: CommonYargsArgv) {
       describe: 'Output the result in a specified format',
       type: 'string',
       requiresArg: true,
-      choices: ['json'],
+      choices: ['json', 'text'],
+      default: 'text',
     });
 }
 
@@ -97,8 +98,9 @@ export async function publishHandler(
     await checkForServerDeprecation(yargs, range);
     serverVersionRange = yargs.forceVersionRange ?? range.raw;
   }
-
-  console.log(`Compiling ${serverPath}`);
+  if (output !== 'json') {
+    console.log(`Compiling ${serverPath}`);
+  }
   const {code, sourcemap} = await compileOrReportWarning(
     absPath,
     'linked',
@@ -125,7 +127,9 @@ export async function publishHandler(
     data.serverReleaseChannel = reflectChannel;
   }
 
-  console.log('Requesting deployment');
+  if (output !== 'json') {
+    console.log('Requesting deployment');
+  }
   const {deploymentPath} = await publish.call(data);
 
   await watchDeployment(firestore, deploymentPath, 'Published', output);
