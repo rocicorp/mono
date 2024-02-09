@@ -36,7 +36,7 @@ async function createRoom<MD extends MutatorDefs>(
 const noopHandlers = {
   roomStartHandler: () => Promise.resolve(),
   disconnectHandler: () => Promise.resolve(),
-  closeHandler: () => Promise.resolve(),
+  onClientDelete: () => Promise.resolve(),
 } as const;
 
 async function makeBaseRoomDO(state?: DurableObjectState) {
@@ -77,7 +77,7 @@ describe('Close beacon behavior', () => {
     expectedEntries?: Record<string, UserValue>;
     connectedClients?: ClientID[];
     expectedClientRecords: Record<ClientID, ClientRecord>;
-    closeHandler?: (tx: WriteTransaction) => Promise<void>;
+    onClientDelete?: (tx: WriteTransaction) => Promise<void>;
   }[] = [
     {
       name: 'Config not enabled',
@@ -223,12 +223,12 @@ describe('Close beacon behavior', () => {
     },
 
     {
-      name: 'Same lmid sent with a closeHandler',
+      name: 'Same lmid sent with a onClientDelete',
       expectedStatus: 200,
       storedLastMutationID: 10,
       body: {lastMutationID: 10},
       expectedClientRecords: {},
-      async closeHandler(tx) {
+      async onClientDelete(tx) {
         await tx.set('x/hold', 'door');
         await tx.set(`-/p/${tx.clientID}/collect`, 'me');
       },
@@ -261,13 +261,13 @@ describe('Close beacon behavior', () => {
     },
 
     {
-      name: 'Same lmid sent with a closeHandler throws',
+      name: 'Same lmid sent with a onClientDelete throws',
       expectedStatus: 200,
       storedLastMutationID: 10,
       body: {lastMutationID: 10},
       expectedClientRecords: {},
-      closeHandler: () =>
-        Promise.reject(new Error('closeHandler intentional error')),
+      onClientDelete: () =>
+        Promise.reject(new Error('onClientDelete intentional error')),
     },
   ];
   for (const c of cases) {
@@ -279,7 +279,7 @@ describe('Close beacon behavior', () => {
         expectedEntries = entries,
         connectedClients,
         expectedClientRecords,
-        closeHandler = () => Promise.resolve(),
+        onClientDelete = () => Promise.resolve(),
       } = c;
       const version = 100;
       setConfig('closeBeacon', enabled);
@@ -291,7 +291,7 @@ describe('Close beacon behavior', () => {
       const roomDO = new BaseRoomDO({
         mutators: {},
         ...noopHandlers,
-        closeHandler,
+        onClientDelete,
         state,
         logSink: testLogSink,
         logLevel: 'info',

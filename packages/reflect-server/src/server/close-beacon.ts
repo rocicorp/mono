@@ -10,8 +10,11 @@ import {
 } from '../types/client-record.js';
 import {getConnectedClients} from '../types/connected-clients.js';
 import {getVersion, putVersion} from '../types/version.js';
+import {
+  callClientDeleteHandler,
+  type ClientDeleteHandler,
+} from './client-delete-handler.js';
 import {collectOldUserSpaceClientKeys} from './client-gc.js';
-import {callCloseHandler, type CloseHandler} from './close-handler.js';
 
 export async function closeBeacon(
   lc: LogContext,
@@ -20,7 +23,7 @@ export async function closeBeacon(
   roomID: string,
   userID: string,
   lastMutationID: number,
-  closeHandler: CloseHandler,
+  clientDeleteHandler: ClientDeleteHandler,
   storage: Storage,
 ): Promise<Response> {
   lc.debug?.(
@@ -80,7 +83,14 @@ export async function closeBeacon(
   const startVersion = must(await getVersion(cache));
   const nextVersion = startVersion + 1;
 
-  await callCloseHandler(lc, clientID, env, closeHandler, nextVersion, cache);
+  await callClientDeleteHandler(
+    lc,
+    clientID,
+    env,
+    clientDeleteHandler,
+    nextVersion,
+    cache,
+  );
 
   // Use a second cache so that we only update the version if we actually
   // deleted any presence keys.

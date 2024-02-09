@@ -3,8 +3,8 @@ import type {Version} from 'reflect-protocol';
 import type {Env} from 'reflect-shared/src/types.js';
 import type {PendingMutation} from 'replicache';
 import {equals as setEquals} from 'shared/src/set-utils.js';
+import type {ClientDeleteHandler} from '../server/client-delete-handler.js';
 import {collectClientIfDeleted, updateLastSeen} from '../server/client-gc.js';
-import type {CloseHandler} from '../server/close-handler.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {
@@ -23,7 +23,7 @@ export async function processDisconnects(
   lc: LogContext,
   env: Env,
   disconnectHandler: DisconnectHandler,
-  closeHandler: CloseHandler,
+  clientDeleteHandler: ClientDeleteHandler,
   connectedClients: ClientID[],
   pendingMutations: PendingMutation[],
   numPendingMutationsProcessed: number,
@@ -84,7 +84,7 @@ export async function processDisconnects(
         lc,
         env,
         clientID,
-        closeHandler,
+        clientDeleteHandler,
         storage,
         nextVersion,
       );

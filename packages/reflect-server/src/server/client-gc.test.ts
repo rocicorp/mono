@@ -14,13 +14,13 @@ import {putConnectedClients} from '../types/connected-clients.js';
 import {getUserValue, putUserValue} from '../types/user-value.js';
 import {putVersion} from '../types/version.js';
 import {createSilentLogContext, setUserEntries} from '../util/test-utils.js';
+import type {ClientDeleteHandler} from './client-delete-handler.js';
 import {
   collectClientIfDeleted,
   collectClients,
   collectOldUserSpaceClientKeys,
   updateLastSeen,
 } from './client-gc.js';
-import type {CloseHandler} from './close-handler.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
@@ -239,8 +239,8 @@ describe('collectClients', () => {
     const now = 123;
     const maxAge = 456;
     const version = 789;
-    const closeHandler = jest
-      .fn<CloseHandler>()
+    const clientDeleteHandler = jest
+      .fn<ClientDeleteHandler>()
       .mockRejectedValue('should not be called');
 
     await putVersion(version, storage);
@@ -249,7 +249,7 @@ describe('collectClients', () => {
       lc,
       env,
       storage,
-      closeHandler,
+      clientDeleteHandler,
       connectedClients,
       now,
       maxAge,
@@ -261,7 +261,7 @@ Map {
   "version" => 789,
 }
 `);
-    expect(closeHandler).not.toHaveBeenCalled();
+    expect(clientDeleteHandler).not.toHaveBeenCalled();
   });
 
   test('normal operation', async () => {
@@ -274,7 +274,9 @@ Map {
     const now = 4500;
     const maxAge = 2000;
     const connectedClients = new Set(['client-a', 'client-c']);
-    const closeHandler = jest.fn<CloseHandler>().mockResolvedValue(undefined);
+    const clientDeleteHandler = jest
+      .fn<ClientDeleteHandler>()
+      .mockResolvedValue(undefined);
 
     await putVersion(version, storage);
     await setUserEntries(storage, version, {
@@ -300,7 +302,7 @@ Map {
       lc,
       env,
       storage,
-      closeHandler,
+      clientDeleteHandler,
       connectedClients,
       now,
       maxAge,
@@ -308,8 +310,8 @@ Map {
     );
     await storage.flush();
 
-    expect(closeHandler).toHaveBeenCalledTimes(1);
-    expect(closeHandler).toHaveBeenCalledWith(
+    expect(clientDeleteHandler).toHaveBeenCalledTimes(1);
+    expect(clientDeleteHandler).toHaveBeenCalledWith(
       expect.objectContaining({clientID: 'client-b'}),
     );
 
@@ -401,7 +403,9 @@ Map {
     const now = 4500;
     const maxAge = 2000;
     const connectedClients = new Set(['client-a', 'client-c']);
-    const closeHandler = jest.fn<CloseHandler>().mockResolvedValue(undefined);
+    const clientDeleteHandler = jest
+      .fn<ClientDeleteHandler>()
+      .mockResolvedValue(undefined);
 
     await putVersion(version, storage);
     await setLastSeenEntries(storage, {
@@ -417,15 +421,15 @@ Map {
       lc,
       env,
       storage,
-      closeHandler,
+      clientDeleteHandler,
       connectedClients,
       now,
       maxAge,
       version + 1,
     );
 
-    expect(closeHandler).toHaveBeenCalledTimes(1);
-    expect(closeHandler).toHaveBeenCalledWith(
+    expect(clientDeleteHandler).toHaveBeenCalledTimes(1);
+    expect(clientDeleteHandler).toHaveBeenCalledWith(
       expect.objectContaining({clientID: 'client-b'}),
     );
 
@@ -477,8 +481,8 @@ Map {
     const now = 4500;
     const maxAge = 2000;
     const connectedClients = new Set(['client-a', 'client-c']);
-    const closeHandler = jest
-      .fn<CloseHandler>()
+    const clientDeleteHandler = jest
+      .fn<ClientDeleteHandler>()
       .mockRejectedValue('should not be called');
 
     await putVersion(version, storage);
@@ -516,7 +520,7 @@ Map {
       lc,
       env,
       storage,
-      closeHandler,
+      clientDeleteHandler,
       connectedClients,
       now,
       maxAge,
@@ -705,7 +709,7 @@ describe('collectClientIfDeleted', () => {
       const clientID = 'client-a';
       const clientGroupID = 'client-group-id';
       const env: Env = {a: 'b'};
-      const closeHandler = async () => {};
+      const clientDeleteHandler = async () => {};
       const userID = 'user-id-xyz';
 
       // Set a presence state key value
@@ -730,7 +734,7 @@ describe('collectClientIfDeleted', () => {
         lc,
         env,
         clientID,
-        closeHandler,
+        clientDeleteHandler,
         cache,
         version,
       );

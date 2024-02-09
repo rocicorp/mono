@@ -46,7 +46,7 @@ async function createRoom<MD extends MutatorDefs>(
 const noopHandlers = {
   roomStartHandler: () => Promise.resolve(),
   disconnectHandler: () => Promise.resolve(),
-  closeHandler: () => Promise.resolve(),
+  onClientDelete: () => Promise.resolve(),
 } as const;
 
 test('inits storage schema', async () => {
@@ -510,7 +510,7 @@ describe('good, bad, invalid tail requests', () => {
         mutators: {},
         roomStartHandler: () => Promise.resolve(),
         disconnectHandler: () => Promise.resolve(),
-        closeHandler: () => Promise.resolve(),
+        onClientDelete: () => Promise.resolve(),
         state,
         logSink: testLogSink,
         logLevel: 'info',

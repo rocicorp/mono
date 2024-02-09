@@ -2,7 +2,7 @@ import {consoleLogSink, LogLevel, LogSink, TeeLogSink} from '@rocicorp/logger';
 import type {MutatorDefs} from 'reflect-shared/src/types.js';
 import {BaseAuthDO} from './auth-do.js';
 import type {AuthHandler} from './auth.js';
-import type {CloseHandler} from './close-handler.js';
+import type {ClientDeleteHandler} from './client-delete-handler.js';
 import type {DisconnectHandler} from './disconnect.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
 import type {RoomStartHandler} from './room-start.js';
@@ -22,7 +22,7 @@ export interface ReflectServerOptions<MD extends MutatorDefs> {
 
   disconnectHandler?: DisconnectHandler | undefined;
 
-  closeHandler?: CloseHandler | undefined;
+  onClientDelete?: ClientDeleteHandler | undefined;
 
   /**
    * Where to send logs. By default logs are sent to `console.log`.
@@ -68,7 +68,7 @@ export type NormalizedOptions<MD extends MutatorDefs> = {
   authHandler?: AuthHandler | undefined;
   roomStartHandler: RoomStartHandler;
   disconnectHandler: DisconnectHandler;
-  closeHandler: CloseHandler;
+  onClientDelete: ClientDeleteHandler;
   logSink: LogSink;
   logLevel: LogLevel;
   datadogMetricsOptions?: DatadogMetricsOptions | undefined;
@@ -143,7 +143,7 @@ function makeNormalizedOptionsGetter<
       authHandler,
       roomStartHandler = noopAsync,
       disconnectHandler = noopAsync,
-      closeHandler = noopAsync,
+      onClientDelete = noopAsync,
       logSinks,
       logLevel = 'debug',
       allowUnconfirmedWrites = false,
@@ -156,7 +156,7 @@ function makeNormalizedOptionsGetter<
       authHandler,
       roomStartHandler,
       disconnectHandler,
-      closeHandler,
+      onClientDelete,
       logSink,
       logLevel,
       allowUnconfirmedWrites,
@@ -178,7 +178,7 @@ function createRoomDOClass<
         mutators,
         roomStartHandler,
         disconnectHandler,
-        closeHandler,
+        onClientDelete,
         logSink,
         logLevel,
         allowUnconfirmedWrites,
@@ -189,7 +189,7 @@ function createRoomDOClass<
         state,
         roomStartHandler,
         disconnectHandler,
-        closeHandler,
+        onClientDelete,
         logSink,
         logLevel,
         allowUnconfirmedWrites,

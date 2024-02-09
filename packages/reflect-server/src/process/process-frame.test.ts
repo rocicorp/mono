@@ -61,9 +61,10 @@ describe('processFrame', () => {
   const startVersion = 1;
   const disconnectHandlerWriteKey = (clientID: string) =>
     `test-disconnected-${clientID}`;
-  const closeHandlerWriteKey = (clientID: string) => `test-closed-${clientID}`;
-  const closeHandlerWritePresenceKey = (clientID: string) =>
-    `-/p/${clientID}/closeHandler`;
+  const clientDeleteHandlerWriteKey = (clientID: string) =>
+    `test-client-delete-${clientID}`;
+  const clientDeleteHandlerWritePresenceKey = (clientID: string) =>
+    `-/p/${clientID}/clientDeleteHandler`;
 
   type Case = {
     name: string;
@@ -79,9 +80,9 @@ describe('processFrame', () => {
     expectedVersion: Version;
     expectedDisconnectedCalls?: ClientID[];
     expectedConnectedClients?: ClientID[];
-    expectedClosedCalls?: ClientID[];
+    expectedClientDeletedCalls?: ClientID[];
     disconnectHandlerThrows?: boolean;
-    closeHandlerThrows?: boolean;
+    clientDeleteHandlerThrows?: boolean;
     shouldGCClients?: boolean;
     clientTombstoneEntries?: [string, ReadonlyJSONValue][];
   };
@@ -1166,12 +1167,12 @@ describe('processFrame', () => {
             presence: [],
             patch: [
               {
-                key: 'test-closed-c2',
+                key: 'test-client-delete-c2',
                 op: 'put',
                 value: true,
               },
               {
-                key: '-/p/c2/closeHandler',
+                key: '-/p/c2/clientDeleteHandler',
                 op: 'del',
               },
               {op: 'del', key: '-/p/c2/b'},
@@ -1186,8 +1187,8 @@ describe('processFrame', () => {
         ['-/p/c2/b', userValue('bb', startVersion + 2, true)],
         // The next one was already deleted so no update to startVersion
         ['-/p/c2/c', userValue('cc', startVersion, true)],
-        ['-/p/c2/closeHandler', userValue(true, startVersion + 2, true)],
-        ['test-closed-c2', userValue(true, startVersion + 2)],
+        ['-/p/c2/clientDeleteHandler', userValue(true, startVersion + 2, true)],
+        ['test-client-delete-c2', userValue(true, startVersion + 2)],
       ]),
       clientTombstoneEntries: [['clientTombstone/c2', {userID: 'u2'}]],
       expectedClientRecords: new Map([
@@ -1204,7 +1205,7 @@ describe('processFrame', () => {
       ]),
       expectedVersion: startVersion + 2,
       expectedConnectedClients: ['c1'],
-      expectedClosedCalls: ['c2'],
+      expectedClientDeletedCalls: ['c2'],
     },
     {
       name: '1 mutation, 3 clients. 1 client should be garbage collected. 1 got disconnected',
@@ -1287,12 +1288,12 @@ describe('processFrame', () => {
             presence: [],
             patch: [
               {
-                key: 'test-closed-c2',
+                key: 'test-client-delete-c2',
                 op: 'put',
                 value: true,
               },
               {
-                key: '-/p/c2/closeHandler',
+                key: '-/p/c2/clientDeleteHandler',
                 op: 'del',
               },
               {op: 'del', key: '-/p/c2/b'},
@@ -1326,8 +1327,8 @@ describe('processFrame', () => {
         ['-/p/c2/c', userValue('cc', startVersion, true)],
         ['-/p/c3/d', userValue('dd', startVersion)],
         ['test-disconnected-c3', userValue(true, startVersion + 3)],
-        ['-/p/c2/closeHandler', userValue(true, startVersion + 2, true)],
-        ['test-closed-c2', userValue(true, startVersion + 2)],
+        ['-/p/c2/clientDeleteHandler', userValue(true, startVersion + 2, true)],
+        ['test-client-delete-c2', userValue(true, startVersion + 2)],
       ]),
       clientTombstoneEntries: [['clientTombstone/c2', {userID: 'u2'}]],
       expectedClientRecords: new Map([
@@ -1355,7 +1356,7 @@ describe('processFrame', () => {
       expectedVersion: startVersion + 3,
       expectedDisconnectedCalls: ['c3'],
       expectedConnectedClients: ['c1'],
-      expectedClosedCalls: ['c2'],
+      expectedClientDeletedCalls: ['c2'],
     },
 
     {
@@ -1402,12 +1403,12 @@ describe('processFrame', () => {
             presence: [],
             patch: [
               {
-                key: 'test-closed-c2',
+                key: 'test-client-delete-c2',
                 op: 'put',
                 value: true,
               },
               {
-                key: '-/p/c2/closeHandler',
+                key: '-/p/c2/clientDeleteHandler',
                 op: 'del',
               },
               {op: 'del', key: '-/p/c2/b'},
@@ -1422,7 +1423,7 @@ describe('processFrame', () => {
         // The next one was already deleted so no update to startVersion
         ['-/p/c2/c', userValue('cc', startVersion, true)],
         [
-          '-/p/c2/closeHandler',
+          '-/p/c2/clientDeleteHandler',
           {
             deleted: true,
             value: true,
@@ -1430,7 +1431,7 @@ describe('processFrame', () => {
           },
         ],
         [
-          'test-closed-c2',
+          'test-client-delete-c2',
           {
             deleted: false,
             value: true,
@@ -1450,7 +1451,7 @@ describe('processFrame', () => {
           }),
         ],
       ]),
-      expectedClosedCalls: ['c2'],
+      expectedClientDeletedCalls: ['c2'],
       clientTombstoneEntries: [['clientTombstone/c2', {userID: 'u2'}]],
       expectedVersion: startVersion + 1,
       expectedConnectedClients: ['c1'],
@@ -1521,7 +1522,7 @@ describe('processFrame', () => {
     },
 
     {
-      name: 'no mutations, 1 client disconnects, close handler should be called',
+      name: 'no mutations, 1 client disconnects, client delete handler should be called',
       pendingMutations: [],
       numPendingMutationsToProcess: 0,
       clients: new Map(),
@@ -1531,22 +1532,22 @@ describe('processFrame', () => {
       expectedPokes: [],
       expectedUserValues: new Map([
         [disconnectHandlerWriteKey('c1'), userValue(true, startVersion + 1)],
-        [closeHandlerWriteKey('c1'), userValue(true, startVersion + 1)],
+        [clientDeleteHandlerWriteKey('c1'), userValue(true, startVersion + 1)],
         [
-          closeHandlerWritePresenceKey('c1'),
+          clientDeleteHandlerWritePresenceKey('c1'),
           userValue(true, startVersion + 1, true),
         ],
       ]),
       expectedClientRecords: recordsWithoutClientID('c1'),
-      // version incremented because close handler changed keys
+      // version incremented because client delete handler changed keys
       expectedVersion: startVersion + 1,
       expectedDisconnectedCalls: ['c1'],
-      expectedClosedCalls: ['c1'],
+      expectedClientDeletedCalls: ['c1'],
       clientTombstoneEntries: [['clientTombstone/c1', {userID: 'testUser1'}]],
       shouldGCClients: true,
     },
     {
-      name: 'no mutations, 1 client disconnects, close handler throws',
+      name: 'no mutations, 1 client disconnects, client delete handler throws',
       pendingMutations: [],
       numPendingMutationsToProcess: 0,
       clients: new Map(),
@@ -1561,13 +1562,13 @@ describe('processFrame', () => {
       // version incremented because disconnect handler changed keys
       expectedVersion: startVersion + 1,
       expectedDisconnectedCalls: ['c1'],
-      expectedClosedCalls: ['c1'],
+      expectedClientDeletedCalls: ['c1'],
       clientTombstoneEntries: [['clientTombstone/c1', {userID: 'testUser1'}]],
-      closeHandlerThrows: true,
+      clientDeleteHandlerThrows: true,
       shouldGCClients: true,
     },
     {
-      name: 'no mutations, 1 client disconnects, disconnect and close handler throw',
+      name: 'no mutations, 1 client disconnects, disconnect and client delete handler throw',
       pendingMutations: [],
       numPendingMutationsToProcess: 0,
       clients: new Map(),
@@ -1577,12 +1578,12 @@ describe('processFrame', () => {
       expectedPokes: [],
       expectedUserValues: new Map(),
       expectedClientRecords: recordsWithoutClientID('c1'),
-      // version not incremented because both disconnect nad close handler threw
+      // version not incremented because both disconnect and client delete handler threw
       expectedVersion: startVersion,
       expectedDisconnectedCalls: ['c1'],
-      expectedClosedCalls: ['c1'],
+      expectedClientDeletedCalls: ['c1'],
       clientTombstoneEntries: [['clientTombstone/c1', {userID: 'testUser1'}]],
-      closeHandlerThrows: true,
+      clientDeleteHandlerThrows: true,
       disconnectHandlerThrows: true,
       shouldGCClients: true,
     },
@@ -1606,7 +1607,7 @@ describe('processFrame', () => {
       const {
         expectedDisconnectedCalls = [],
         expectedConnectedClients = [],
-        expectedClosedCalls = [],
+        expectedClientDeletedCalls = [],
         clientTombstoneEntries = [],
       } = c;
 
@@ -1627,7 +1628,7 @@ describe('processFrame', () => {
       }
 
       const disconnectCallClients: ClientID[] = [];
-      const closedCallClients: ClientID[] = [];
+      const clientDeletedCalls: ClientID[] = [];
       const result = await processFrame(
         createSilentLogContext(),
         env,
@@ -1643,15 +1644,15 @@ describe('processFrame', () => {
           }
         },
         async write => {
-          await write.set(closeHandlerWriteKey(write.clientID), true);
+          await write.set(clientDeleteHandlerWriteKey(write.clientID), true);
 
           // write presence state too... which should be collected
-          await write.set(`-/p/${write.clientID}/closeHandler`, true);
+          await write.set(`-/p/${write.clientID}/clientDeleteHandler`, true);
 
-          closedCallClients.push(write.clientID);
+          clientDeletedCalls.push(write.clientID);
           // Throw after writes to confirm they are not saved.
-          if (c.closeHandlerThrows) {
-            throw new Error('closeHandler threw');
+          if (c.clientDeleteHandlerThrows) {
+            throw new Error('clientDeleteHandler threw');
           }
         },
         c.clients,
@@ -1665,7 +1666,9 @@ describe('processFrame', () => {
         expectedDisconnectedCalls.sort(),
       );
 
-      expect(closedCallClients.sort()).toEqual(expectedClosedCalls.sort());
+      expect(clientDeletedCalls.sort()).toEqual(
+        expectedClientDeletedCalls.sort(),
+      );
 
       const expectedState = new Map([
         ...new Map<string, ReadonlyJSONValue>(

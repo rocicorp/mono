@@ -3,7 +3,7 @@ import type {Patch, Poke} from 'reflect-protocol';
 import type {Env} from 'reflect-shared/src/types.js';
 import type {BufferSizer} from 'shared/src/buffer-sizer.js';
 import {must} from 'shared/src/must.js';
-import type {CloseHandler} from '../server/close-handler.js';
+import type {ClientDeleteHandler} from '../server/client-delete-handler.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import type {ClientID, ClientMap, ClientState} from '../types/client-state.js';
@@ -27,7 +27,7 @@ export async function processPending(
   pendingMutations: PendingMutation[],
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
-  closeHandler: CloseHandler,
+  clientDeleteHandler: ClientDeleteHandler,
   maxProcessedMutationTimestamp: number,
   bufferSizer: BufferSizer,
   maxMutationsToProcess: number,
@@ -129,7 +129,7 @@ export async function processPending(
     endIndex,
     mutators,
     disconnectHandler,
-    closeHandler,
+    clientDeleteHandler,
     storage,
     shouldGCClients,
   );
