@@ -6,7 +6,7 @@ import type {Env} from 'reflect-shared/src/types.js';
 import {must} from 'shared/src/must.js';
 import {fastForwardRoom} from '../ff/fast-forward.js';
 import type {ClientDeleteHandler} from '../server/client-delete-handler.js';
-import type {DisconnectHandler} from '../server/disconnect.js';
+import type {ClientDisconnectHandler} from '../server/client-disconnect-handler.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import type {ClientPoke} from '../types/client-poke.js';
@@ -29,7 +29,7 @@ export async function processRoom(
   pendingMutations: PendingMutation[],
   numPendingMutationsToProcess: number,
   mutators: MutatorMap,
-  disconnectHandler: DisconnectHandler,
+  clientDisconnectHandler: ClientDisconnectHandler,
   clientDeleteHandler: ClientDeleteHandler,
   storage: DurableStorage,
   shouldGCClients: (now: number) => boolean,
@@ -75,7 +75,7 @@ export async function processRoom(
       pendingMutations,
       numPendingMutationsToProcess,
       mutators,
-      disconnectHandler,
+      clientDisconnectHandler,
       clientDeleteHandler,
       clients,
       cache,

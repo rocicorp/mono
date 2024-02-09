@@ -52,7 +52,7 @@ export async function closeBeacon(
       storage,
     );
     lc.debug?.(
-      'Client is still connected. Will try to clean it in disconnect handler.',
+      'Client is still connected. Will try to clean it in client disconnect handler.',
     );
     return new Response('Client is still connected', {
       status: 200,

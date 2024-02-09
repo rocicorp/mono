@@ -3,7 +3,10 @@ import type {MutatorDefs} from 'reflect-shared/src/types.js';
 import {BaseAuthDO} from './auth-do.js';
 import type {AuthHandler} from './auth.js';
 import type {ClientDeleteHandler} from './client-delete-handler.js';
-import type {DisconnectHandler} from './disconnect.js';
+import type {
+  ClientDisconnectHandler,
+  DisconnectHandler,
+} from './client-disconnect-handler.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
 import type {RoomStartHandler} from './room-start.js';
 import {extractVars} from './vars.js';
@@ -20,7 +23,12 @@ export interface ReflectServerOptions<MD extends MutatorDefs> {
 
   roomStartHandler?: RoomStartHandler | undefined;
 
+  /**
+   * @deprecated Use {@link onClientDisconnect} instead.
+   */
   disconnectHandler?: DisconnectHandler | undefined;
+
+  onClientDisconnect?: ClientDisconnectHandler | undefined;
 
   onClientDelete?: ClientDeleteHandler | undefined;
 
@@ -67,7 +75,7 @@ export type NormalizedOptions<MD extends MutatorDefs> = {
   mutators: MD;
   authHandler?: AuthHandler | undefined;
   roomStartHandler: RoomStartHandler;
-  disconnectHandler: DisconnectHandler;
+  onClientDisconnect: ClientDisconnectHandler;
   onClientDelete: ClientDeleteHandler;
   logSink: LogSink;
   logLevel: LogLevel;
@@ -142,7 +150,8 @@ function makeNormalizedOptionsGetter<
       mutators,
       authHandler,
       roomStartHandler = noopAsync,
-      disconnectHandler = noopAsync,
+      disconnectHandler,
+      onClientDisconnect,
       onClientDelete = noopAsync,
       logSinks,
       logLevel = 'debug',
@@ -155,7 +164,7 @@ function makeNormalizedOptionsGetter<
       mutators,
       authHandler,
       roomStartHandler,
-      disconnectHandler,
+      onClientDisconnect: onClientDisconnect ?? disconnectHandler ?? noopAsync,
       onClientDelete,
       logSink,
       logLevel,
@@ -177,7 +186,7 @@ function createRoomDOClass<
       const {
         mutators,
         roomStartHandler,
-        disconnectHandler,
+        onClientDisconnect,
         onClientDelete,
         logSink,
         logLevel,
@@ -188,7 +197,7 @@ function createRoomDOClass<
         mutators,
         state,
         roomStartHandler,
-        disconnectHandler,
+        onClientDisconnect,
         onClientDelete,
         logSink,
         logLevel,

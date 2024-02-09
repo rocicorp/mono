@@ -4,8 +4,8 @@ import type {Env} from 'reflect-shared/src/types.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import type {ClientDeleteHandler} from '../server/client-delete-handler.js';
+import type {ClientDisconnectHandler} from '../server/client-disconnect-handler.js';
 import {GC_MAX_AGE, collectClients} from '../server/client-gc.js';
-import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {unwrapPatch} from '../storage/replicache-transaction.js';
 import type {Storage} from '../storage/storage.js';
@@ -33,7 +33,7 @@ export async function processFrame(
   pendingMutations: PendingMutation[],
   numPendingMutationsToProcess: number,
   mutators: MutatorMap,
-  disconnectHandler: DisconnectHandler,
+  clientDisconnectHandler: ClientDisconnectHandler,
   clientDeleteHandler: ClientDeleteHandler,
   clients: ClientMap,
   storage: Storage,
@@ -129,7 +129,7 @@ export async function processFrame(
   await processDisconnects(
     lc,
     env,
-    disconnectHandler,
+    clientDisconnectHandler,
     clientDeleteHandler,
     clientIDs,
     pendingMutations,
@@ -138,7 +138,7 @@ export async function processFrame(
     nextVersion,
   );
   // If processDisconnects updated version it successfully executed
-  // disconnectHandler for one or more disconnected clients, create client
+  // clientDisconnectHandler for one or more disconnected clients, create client
   // pokes for the resulting user value changes.
   await addPokesIfUpdated(
     disconnectsCache,

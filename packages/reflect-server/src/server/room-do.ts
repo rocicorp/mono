@@ -29,12 +29,12 @@ import {populateLogContextFromRequest} from '../util/log-context-common.js';
 import {randomID} from '../util/rand.js';
 import {AlarmManager} from './alarms.js';
 import type {ClientDeleteHandler} from './client-delete-handler.js';
+import type {ClientDisconnectHandler} from './client-disconnect-handler.js';
 import {CLIENT_GC_FREQUENCY} from './client-gc.js';
 import {closeBeacon} from './close-beacon.js';
 import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
 import {closeConnections, getConnections} from './connections.js';
-import type {DisconnectHandler} from './disconnect.js';
 import {requireUpgradeHeader, upgradeWebsocketResponse} from './http-util.js';
 import {ROOM_ID_HEADER_NAME} from './internal-headers.js';
 import {handleMessage} from './message.js';
@@ -61,7 +61,7 @@ export interface RoomDOOptions<MD extends MutatorDefs> {
   mutators: MD;
   state: DurableObjectState;
   roomStartHandler: RoomStartHandler;
-  disconnectHandler: DisconnectHandler;
+  onClientDisconnect: ClientDisconnectHandler;
   onClientDelete: ClientDeleteHandler;
   logSink: LogSink;
   logLevel: LogLevel;
@@ -95,7 +95,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   readonly #lock = new LoggingLock();
   readonly #mutators: MutatorMap;
   readonly #roomStartHandler: RoomStartHandler;
-  readonly #disconnectHandler: DisconnectHandler;
+  readonly #onClientDisconnect: ClientDisconnectHandler;
   readonly #onClientDelete: ClientDeleteHandler;
   readonly #maxMutationsPerTurn: number;
   #roomIDDependentInitCompleted = false;
@@ -116,7 +116,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     const {
       mutators,
       roomStartHandler,
-      disconnectHandler,
+      onClientDisconnect,
       onClientDelete,
       state,
       logSink,
@@ -127,7 +127,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
     this.#mutators = new Map([...Object.entries(mutators)]) as MutatorMap;
     this.#roomStartHandler = roomStartHandler;
-    this.#disconnectHandler = disconnectHandler;
+    this.#onClientDisconnect = onClientDisconnect;
     this.#onClientDelete = onClientDelete;
     this.#maxMutationsPerTurn = maxMutationsPerTurn;
     this.#storage = new DurableStorage(
@@ -515,7 +515,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
         this.#clients,
         this.#pendingMutations,
         this.#mutators,
-        this.#disconnectHandler,
+        this.#onClientDisconnect,
         this.#onClientDelete,
         this.#maxProcessedMutationTimestamp,
         this.#bufferSizer,
