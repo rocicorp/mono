@@ -41,8 +41,8 @@ const {
 } = createReflectServer(
   newOptionsBuilder((_: ReflectNetServerEnv) => ({
     mutators,
-    disconnectHandler: async tx => {
-      console.log('disconnectHandler: deleting old client', tx.clientID);
+    onClientDisconnect: async tx => {
+      console.log('onClientDisconnect: deleting old client', tx.clientID);
       await ensureNotBotController(tx);
     },
     onClientDelete,

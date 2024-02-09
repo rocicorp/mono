@@ -217,7 +217,7 @@ describe('processPending', () => {
       storedConnectedClients: ['c1', 'c2'],
       pendingMutations: [],
       maxProcessedMutationTimestamp: 500,
-      // version updated by disconnectHandler
+      // version updated by clientDisconnectHandler
       expectedVersion: 2,
       expectedPokes: new Map([
         [

@@ -1,9 +1,12 @@
 export type {AuthHandler} from './server/auth.js';
+export type {
+  ClientDisconnectHandler,
+  DisconnectHandler,
+} from './server/client-disconnect-handler.js';
 export {
   createWorkerDatadogLogSink,
   type WorkerDatadogLogSinkOptions,
 } from './server/create-worker-datadog-log-sink.js';
-export type {DisconnectHandler} from './server/disconnect.js';
 export {
   datadogLogging,
   datadogMetrics,

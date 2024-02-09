@@ -4,8 +4,8 @@ import type {Env} from 'reflect-shared/src/types.js';
 import type {PendingMutation} from 'replicache';
 import {equals as setEquals} from 'shared/src/set-utils.js';
 import type {ClientDeleteHandler} from '../server/client-delete-handler.js';
+import type {ClientDisconnectHandler} from '../server/client-disconnect-handler.js';
 import {collectClientIfDeleted, updateLastSeen} from '../server/client-gc.js';
-import type {DisconnectHandler} from '../server/disconnect.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {
   NOOP_MUTATION_ID,
@@ -22,7 +22,7 @@ import {putVersion} from '../types/version.js';
 export async function processDisconnects(
   lc: LogContext,
   env: Env,
-  disconnectHandler: DisconnectHandler,
+  clientDisconnectHandler: ClientDisconnectHandler,
   clientDeleteHandler: ClientDeleteHandler,
   connectedClients: ClientID[],
   pendingMutations: PendingMutation[],
@@ -54,13 +54,13 @@ export async function processDisconnects(
       newStoredConnectedClients.add(clientID);
       if (!currentlyConnectedClients.has(clientID)) {
         lc.debug?.(
-          'Not Executing disconnectHandler for disconnected:',
+          'Not Executing clientDisconnectHandler for disconnected:',
           clientID,
           'because it has pending mutations',
         );
       }
     } else {
-      lc.debug?.('Executing disconnectHandler for:', clientID);
+      lc.debug?.('Executing clientDisconnectHandler for:', clientID);
       const cache = new EntryCache(storage);
       const tx = new ReplicacheTransaction(
         cache,
@@ -71,13 +71,13 @@ export async function processDisconnects(
         env,
       );
       try {
-        await disconnectHandler(tx);
+        await clientDisconnectHandler(tx);
 
-        // TODO only update version if disconnectHandler modifies state
+        // TODO only update version if clientDisconnectHandler modifies state
         await putVersion(nextVersion, cache);
         await cache.flush();
       } catch (e) {
-        lc.info?.('Error executing disconnectHandler for:', clientID, e);
+        lc.info?.('Error executing clientDisconnectHandler for:', clientID, e);
       }
 
       await collectClientIfDeleted(

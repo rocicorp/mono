@@ -20,7 +20,7 @@ test('Make sure makeOptions is called every time DO is constructed or worker fet
       mutators: {},
       authHandler: () => Promise.resolve({userID: 'abc'}),
       allowUnconfirmedWrites: false,
-      disconnectHandler: () => Promise.resolve(),
+      onClientDisconnect: () => Promise.resolve(),
     };
   };
   // eslint-disable-next-line @typescript-eslint/naming-convention

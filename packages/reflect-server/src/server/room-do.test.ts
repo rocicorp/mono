@@ -45,7 +45,7 @@ async function createRoom<MD extends MutatorDefs>(
 
 const noopHandlers = {
   roomStartHandler: () => Promise.resolve(),
-  disconnectHandler: () => Promise.resolve(),
+  onClientDisconnect: () => Promise.resolve(),
   onClientDelete: () => Promise.resolve(),
 } as const;
 
@@ -509,7 +509,7 @@ describe('good, bad, invalid tail requests', () => {
       const roomDO = new BaseRoomDO({
         mutators: {},
         roomStartHandler: () => Promise.resolve(),
-        disconnectHandler: () => Promise.resolve(),
+        onClientDisconnect: () => Promise.resolve(),
         onClientDelete: () => Promise.resolve(),
         state,
         logSink: testLogSink,

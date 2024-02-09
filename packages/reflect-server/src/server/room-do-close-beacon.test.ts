@@ -35,7 +35,7 @@ async function createRoom<MD extends MutatorDefs>(
 
 const noopHandlers = {
   roomStartHandler: () => Promise.resolve(),
-  disconnectHandler: () => Promise.resolve(),
+  onClientDisconnect: () => Promise.resolve(),
   onClientDelete: () => Promise.resolve(),
 } as const;
 

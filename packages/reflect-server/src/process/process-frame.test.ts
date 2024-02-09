@@ -646,13 +646,13 @@ describe('processFrame', () => {
       expectedDisconnectedCalls: ['c1'],
     },
     {
-      name: 'no mutations, no clients, 1 client disconnects, disconnect handler throws',
+      name: 'no mutations, no clients, 1 client disconnects, client disconnect handler throws',
       pendingMutations: [],
       numPendingMutationsToProcess: 0,
       clients: new Map(),
       clientRecords: records,
       storedConnectedClients: ['c1'],
-      // No user values or pokes because only write was in disconnect handler which threw
+      // No user values or pokes because only write was in client disconnect handler which threw
       expectedPokes: [],
       expectedUserValues: new Map(),
       expectedClientRecords: records,
@@ -1528,7 +1528,7 @@ describe('processFrame', () => {
       clients: new Map(),
       clientRecords: recordsWith('c1', {lastMutationIDAtClose: 1}),
       storedConnectedClients: ['c1'],
-      // No user values or pokes because only write was in disconnect handler which threw
+      // No user values or pokes because only write was in client disconnect handler which threw
       expectedPokes: [],
       expectedUserValues: new Map([
         [disconnectHandlerWriteKey('c1'), userValue(true, startVersion + 1)],
@@ -1553,13 +1553,13 @@ describe('processFrame', () => {
       clients: new Map(),
       clientRecords: recordsWith('c1', {lastMutationIDAtClose: 1}),
       storedConnectedClients: ['c1'],
-      // No user values or pokes because only write was in disconnect handler which threw
+      // No user values or pokes because only write was in client disconnect handler which threw
       expectedPokes: [],
       expectedUserValues: new Map([
         [disconnectHandlerWriteKey('c1'), userValue(true, startVersion + 1)],
       ]),
       expectedClientRecords: recordsWithoutClientID('c1'),
-      // version incremented because disconnect handler changed keys
+      // version incremented because client disconnect handler changed keys
       expectedVersion: startVersion + 1,
       expectedDisconnectedCalls: ['c1'],
       expectedClientDeletedCalls: ['c1'],
@@ -1574,7 +1574,7 @@ describe('processFrame', () => {
       clients: new Map(),
       clientRecords: recordsWith('c1', {lastMutationIDAtClose: 1}),
       storedConnectedClients: ['c1'],
-      // No user values or pokes because only write was in disconnect handler which threw
+      // No user values or pokes because only write was in client disconnect handler which threw
       expectedPokes: [],
       expectedUserValues: new Map(),
       expectedClientRecords: recordsWithoutClientID('c1'),
@@ -1640,7 +1640,7 @@ describe('processFrame', () => {
           disconnectCallClients.push(write.clientID);
           // Throw after writes to confirm they are not saved.
           if (c.disconnectHandlerThrows) {
-            throw new Error('disconnectHandler threw');
+            throw new Error('clientDisconnectHandler threw');
           }
         },
         async write => {
