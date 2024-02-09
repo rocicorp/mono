@@ -157,11 +157,11 @@ export async function alive(tx: WriteTransaction) {
   }
 }
 
-export async function closeHandler(tx: WriteTransaction) {
+export async function onClientDelete(tx: WriteTransaction) {
   const assignment = await getClientRoomAssignment(tx, tx.clientID);
   if (assignment !== undefined) {
     console.log(
-      'closeHandler: removing assignment due to unload',
+      'onClientDelete: removing assignment due to unload',
       JSON.stringify(assignment),
     );
     await Promise.all([

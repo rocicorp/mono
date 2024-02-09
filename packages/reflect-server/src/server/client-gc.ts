@@ -15,7 +15,10 @@ import {
 } from '../types/client-record.js';
 import {userValueKey, userValueSchema} from '../types/user-value.js';
 import {putVersion} from '../types/version.js';
-import {callCloseHandler, type CloseHandler} from './close-handler.js';
+import {
+  callClientDeleteHandler,
+  type ClientDeleteHandler,
+} from './client-delete-handler.js';
 
 /**
  * Thw frequency at which we run the client GC. This is used to not do gc in
@@ -72,7 +75,7 @@ export async function collectClients(
   lc: LogContext,
   env: Env,
   storage: Storage,
-  closeHandler: CloseHandler,
+  clientDeleteHandler: ClientDeleteHandler,
   connectedClients: Set<ClientID>,
   now: number,
   maxAge: number,
@@ -96,11 +99,11 @@ export async function collectClients(
 
   if (clientsToCollect.length > 0) {
     for (const clientID of clientsToCollect) {
-      await callCloseHandler(
+      await callClientDeleteHandler(
         lc,
         clientID,
         env,
-        closeHandler,
+        clientDeleteHandler,
         nextVersion,
         storage,
       );
@@ -183,7 +186,7 @@ export async function collectClientIfDeleted(
   lc: LogContext,
   env: Env,
   clientID: ClientID,
-  closeHandler: CloseHandler,
+  clientDeleteHandler: ClientDeleteHandler,
   storage: Storage,
   nextVersion: number,
 ): Promise<void> {
@@ -234,7 +237,14 @@ export async function collectClientIfDeleted(
     lc.debug?.(`Client and server are fully synced. Collecting.`);
   }
 
-  await callCloseHandler(lc, clientID, env, closeHandler, nextVersion, storage);
+  await callClientDeleteHandler(
+    lc,
+    clientID,
+    env,
+    clientDeleteHandler,
+    nextVersion,
+    storage,
+  );
 
   const cache = new EntryCache(storage);
   await collectOldUserSpaceClientKeys(lc, cache, [clientID], nextVersion);

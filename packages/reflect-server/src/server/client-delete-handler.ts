@@ -9,23 +9,23 @@ import type {Storage} from '../storage/storage.js';
 import {putVersion} from '../types/version.js';
 
 /**
- * A `CloseHandler` can modify room state in response to a client closing from
- * the room. A client gets "closed" when it can no longer reconnect. These
- * changes will be synced to all clients of the room just like mutator changes.
- * `write.clientID` will be the id of the disconnected client.
- * `write.mutationID` will be -1.
+ * A `ClientDeleteHandler` can modify room state in response to a client being
+ * garbage collected from the room. A client gets "deleted" when it can no
+ * longer reconnect. These changes will be synced to all clients of the room
+ * just like mutator changes. `write.clientID` will be the id of the deleted
+ * client. `write.mutationID` will be -1.
  */
-export type CloseHandler = (write: WriteTransaction) => Promise<void>;
+export type ClientDeleteHandler = (write: WriteTransaction) => Promise<void>;
 
-export async function callCloseHandler(
+export async function callClientDeleteHandler(
   lc: LogContext,
   clientID: string,
   env: Env,
-  closeHandler: CloseHandler,
+  clientDeleteHandler: ClientDeleteHandler,
   nextVersion: number,
   storage: Storage,
 ): Promise<void> {
-  lc.debug?.('Executing closeHandler for:', clientID);
+  lc.debug?.('Executing clientDeleteHandler for:', clientID);
   const cache = new EntryCache(storage);
   const tx = new ReplicacheTransaction(
     cache,
@@ -36,13 +36,13 @@ export async function callCloseHandler(
     env,
   );
   try {
-    await closeHandler(tx);
+    await clientDeleteHandler(tx);
     if (cache.isDirty()) {
       await putVersion(nextVersion, cache);
       await cache.flush();
     }
   } catch (e) {
-    lc.error?.('Error executing closeHandler for:', clientID);
+    lc.error?.('Error executing clientDeleteHandler for:', clientID);
     // We let the caller continue...
   }
 }

@@ -9,7 +9,7 @@ import {
   newOptionsBuilder,
 } from '@rocicorp/reflect/server';
 import {ensureNotBotController} from '../alive/client-model';
-import {closeHandler} from '../alive/orchestrator-model';
+import {onClientDelete} from '../alive/orchestrator-model';
 import {mutators} from '../shared/mutators';
 
 console.log(version);
@@ -45,7 +45,7 @@ const {
       console.log('disconnectHandler: deleting old client', tx.clientID);
       await ensureNotBotController(tx);
     },
-    closeHandler,
+    onClientDelete,
     maxMutationsPerTurn: 100,
   }))
     .add(logLevel(DEFAULT_LOG_LEVEL))

@@ -5,7 +5,7 @@ import type {Poke} from 'reflect-protocol';
 import type {Env} from 'reflect-shared/src/types.js';
 import {must} from 'shared/src/must.js';
 import {fastForwardRoom} from '../ff/fast-forward.js';
-import type {CloseHandler} from '../server/close-handler.js';
+import type {ClientDeleteHandler} from '../server/client-delete-handler.js';
 import type {DisconnectHandler} from '../server/disconnect.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {EntryCache} from '../storage/entry-cache.js';
@@ -30,7 +30,7 @@ export async function processRoom(
   numPendingMutationsToProcess: number,
   mutators: MutatorMap,
   disconnectHandler: DisconnectHandler,
-  closeHandler: CloseHandler,
+  clientDeleteHandler: ClientDeleteHandler,
   storage: DurableStorage,
   shouldGCClients: (now: number) => boolean,
 ): Promise<Map<ClientID, Poke[]>> {
@@ -76,7 +76,7 @@ export async function processRoom(
       numPendingMutationsToProcess,
       mutators,
       disconnectHandler,
-      closeHandler,
+      clientDeleteHandler,
       clients,
       cache,
       shouldGCClients,
