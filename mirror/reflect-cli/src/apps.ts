@@ -17,10 +17,22 @@ import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import type {AuthContext} from './handler.js';
 import {getSingleTeam} from './teams.js';
 
+export function appListOptions(yargs: CommonYargsArgv) {
+  return yargs.option('output', {
+    describe: 'Output the result in a specified format',
+    type: 'string',
+    requiresArg: true,
+    choices: ['json'],
+  });
+}
+
+type AppListOptionArgs = YargvToInterface<ReturnType<typeof appListOptions>>;
+
 export async function appListHandler(
-  _yargs: YargvToInterface<CommonYargsArgv>,
+  yargs: AppListOptionArgs,
   authContext: AuthContext,
 ): Promise<void> {
+  const {output} = yargs;
   const firestore = getFirestore();
   const teamID = await getSingleTeam(
     firestore,
@@ -38,9 +50,24 @@ export async function appListHandler(
     return;
   }
 
-  for (const doc of apps.docs) {
-    const appView = doc.data();
-    displayApp(doc.id, appView);
+  if (output === 'json') {
+    const appList = [];
+    for (const doc of apps.docs) {
+      const appView = doc.data();
+      appList.push({
+        name: appView?.name,
+        id: doc.id,
+        status: getDeploymentStatus(appView?.runningDeployment),
+        hostname: appView?.runningDeployment?.spec.hostname,
+        serverVersion: appView?.runningDeployment?.spec.serverVersion,
+      });
+    }
+    console.log(JSON.stringify(appList, null, 2));
+  } else {
+    for (const doc of apps.docs) {
+      const appView = doc.data();
+      displayApp(doc.id, appView);
+    }
   }
 }
 
@@ -73,7 +100,7 @@ function displayApp(appID?: string, appView?: AppView): void {
 function getDeploymentStatus(deployment?: DeploymentView): string {
   switch (deployment?.status) {
     case 'RUNNING':
-      return `${deployment?.status}🏃`;
+      return `${deployment?.status}`;
     case undefined:
       return 'Awaiting first publish';
   }

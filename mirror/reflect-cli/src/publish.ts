@@ -49,6 +49,12 @@ export function publishOptions(yargs: CommonYargsArgv) {
       requiresArg: true,
       default: getDefaultApp(),
       required: true,
+    })
+    .option('output', {
+      describe: 'Output the result in a specified format',
+      type: 'string',
+      requiresArg: true,
+      choices: ['json'],
     });
 }
 
@@ -72,6 +78,8 @@ export async function publishHandler(
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
   const {reflectChannel, app} = yargs;
+  const {output} = yargs;
+
   let {serverPath} = yargs;
   if (serverPath === DEFAULT_FROM_REFLECT_CONFIG) {
     serverPath = mustReadAppConfig().server;
@@ -120,7 +128,7 @@ export async function publishHandler(
   console.log('Requesting deployment');
   const {deploymentPath} = await publish.call(data);
 
-  await watchDeployment(firestore, deploymentPath, 'Published');
+  await watchDeployment(firestore, deploymentPath, 'Published', output);
 }
 
 async function compileOrReportWarning(

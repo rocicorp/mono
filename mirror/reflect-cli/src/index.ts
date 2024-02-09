@@ -8,7 +8,7 @@ import {deleteApp} from 'mirror-protocol/src/app.js';
 import {publish} from 'mirror-protocol/src/publish.js';
 import {deleteVars, listVars, setVars} from 'mirror-protocol/src/vars.js';
 import {hideBin} from 'yargs/helpers';
-import {appListHandler} from './apps.js';
+import {appListHandler, appListOptions} from './apps.js';
 import {authenticate} from './auth-config.js';
 import {
   CommandLineArgsError,
@@ -54,8 +54,7 @@ function createCLIParser(argv: string[]) {
       .command(
         'list',
         'List apps',
-        // eslint-disable-next-line @typescript-eslint/no-empty-function
-        () => {},
+        appListOptions,
         authenticateAndHandleWith(appListHandler).andCleanup(),
       )
       .command(
