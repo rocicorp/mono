@@ -58,7 +58,9 @@ export class ConnectionLoop {
   #skipSleepsResolver = resolver<void>();
 
   /**
-   * Resolver for the next send. Never rejects.
+   * Resolver for the next send. Never rejects. Returns an error instead since
+   * this resolver is used in cases where they might not be someone waiting,
+   * and we don't want an unhandled promise rejection in that case.
    */
   #sendResolver = resolver<undefined | {error: unknown}>();
 
@@ -232,11 +234,12 @@ export class ConnectionLoop {
         this.#connectionAvailable();
         const sendResolver = this.#sendResolver;
         this.#sendResolver = resolver();
-        if (ok) {
-          sendResolver.resolve(undefined);
+        if (error) {
+          sendResolver.resolve({error});
         } else {
-          sendResolver.resolve({error: error ?? new Error('Send failed')});
-
+          sendResolver.resolve(undefined);
+        }
+        if (!ok) {
           // Keep trying
           this.#pendingResolver.resolve();
         }
