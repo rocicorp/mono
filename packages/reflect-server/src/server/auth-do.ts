@@ -42,6 +42,7 @@ import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
+  GET_CONTENTS_ROOM_PATH,
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
@@ -63,6 +64,7 @@ import {
   closeRoom,
   createRoom,
   deleteRoom,
+  getRoomContents,
   internalCreateRoom,
   markRoomDeleted,
   objectIDByRoomID,
@@ -114,6 +116,7 @@ export type ConnectionRecord = valita.Infer<typeof connectionRecordSchema>;
 export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
   listRoomProperties: LIST_ROOMS_PATH,
   getRoomProperties: LEGACY_GET_ROOM_PATH,
+  getRoomContents: GET_CONTENTS_ROOM_PATH,
   closeRoom: CLOSE_ROOM_PATH,
   deleteRoom: DELETE_ROOM_PATH,
   legacyCloseRoom: LEGACY_CLOSE_ROOM_PATH,
@@ -269,6 +272,21 @@ export class BaseAuthDO implements DurableObject {
         ),
       );
     });
+
+  #getRoomContents = get()
+    .with(roomID())
+    .with(noInputParams())
+    .handleAPIResult((ctx, req) =>
+      this.#roomRecordLock.withWrite(() =>
+        getRoomContents(
+          ctx.lc,
+          this.#roomDO,
+          this.#durableStorage,
+          ctx.roomID,
+          req,
+        ),
+      ),
+    );
 
   // TODO: Remove
   #legacyCreateRoom = post()
@@ -462,6 +480,7 @@ export class BaseAuthDO implements DurableObject {
       AUTH_ROUTES.listRoomProperties,
       this.#listRoomProperties,
     );
+    this.#router.register(AUTH_ROUTES.getRoomContents, this.#getRoomContents);
     this.#router.register(
       AUTH_ROUTES.getRoomProperties,
       this.#getRoomProperties,

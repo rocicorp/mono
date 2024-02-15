@@ -162,6 +162,27 @@ export class ReplicacheTransaction implements WriteTransaction {
   }
 }
 
+export async function* scanStorage(
+  storage: Storage,
+  options: ScanNoIndexOptions,
+) {
+  const {prefix, start} = options;
+
+  const optsInternal = {
+    ...options,
+    limit: undefined,
+    prefix: userValueKey(prefix || ''),
+    start: start && {key: userValueKey(start.key)},
+  };
+
+  for await (const [k, v] of storage.scan(optsInternal, userValueSchema)) {
+    if (!v.deleted) {
+      const entry: [string, ReadonlyJSONValue] = [stripPrefix(k), v.value];
+      yield entry;
+    }
+  }
+}
+
 function stripPrefix(key: string) {
   return key.slice(userValuePrefix.length);
 }

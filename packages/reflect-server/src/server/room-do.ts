@@ -44,6 +44,7 @@ import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
+  GET_CONTENTS_ROOM_PATH,
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
@@ -68,6 +69,7 @@ import {
 } from './router.js';
 import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import {scanStorage} from '../storage/replicache-transaction.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -88,6 +90,7 @@ export interface RoomDOOptions<MD extends MutatorDefs> {
 export const ROOM_ROUTES = {
   deletePath: DELETE_ROOM_PATH,
   legacyDeletePath: LEGACY_DELETE_ROOM_PATH,
+  getContent: GET_CONTENTS_ROOM_PATH,
   authInvalidateAll: INVALIDATE_ALL_CONNECTIONS_PATH,
   authInvalidateForUser: INVALIDATE_USER_CONNECTIONS_PATH,
   authInvalidateForRoom: INVALIDATE_ROOM_CONNECTIONS_PATH,
@@ -187,6 +190,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   #initRoutes() {
     this.#router.register(ROOM_ROUTES.deletePath, this.#deleteRoom);
     this.#router.register(ROOM_ROUTES.legacyDeletePath, this.#legacyDeleteRoom);
+    this.#router.register(ROOM_ROUTES.getContent, this.#getContent);
     this.#router.register(
       ROOM_ROUTES.authInvalidateAll,
       this.#authInvalidateAll,
@@ -420,6 +424,24 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     connectTail(serverWS);
 
     return upgradeWebsocketResponse(clientWS, request.headers);
+  });
+
+  #getContent = get().handle(async (ctx, _req): Promise<Response> => {
+    const {lc} = ctx;
+    // Maybe we should validate that the roomID in the request matches?
+    lc.info?.('getting room content');
+    const allItems = [];
+
+    try {
+      for await (const [key, value] of scanStorage(this.#storage, {})) {
+        allItems.push({key, value});
+      }
+      console.log('Retrieved items:', allItems);
+    } catch (error) {
+      console.error('Error retrieving items:', error);
+    }
+    lc.info?.('done deleting all data');
+    return new Response(JSON.stringify({contents: {allItems}}));
   });
 
   #authInvalidateForRoom = post()
