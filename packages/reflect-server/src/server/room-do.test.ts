@@ -198,13 +198,44 @@ test('runs roomStartHandler on next fetch if throws on first fetch', async () =>
     value: 'bar+2',
   });
 });
-
-test('deleteAllData deletes all data', async () => {
+test('deleteRoom rejects request for wrong room roomID', async () => {
   const testLogSink = new TestLogSink();
   const state = await createTestDurableObjectState('test-do-id');
   const someKey = 'foo';
   await state.storage.put(someKey, 'bar');
-  expect(await (await state.storage.list()).size).toBeGreaterThan(0);
+  expect((await state.storage.list()).size).toBeGreaterThan(0);
+
+  const roomDO = new BaseRoomDO({
+    mutators: {},
+    ...noopHandlers,
+    state,
+
+    logSink: testLogSink,
+    logLevel: 'info',
+    allowUnconfirmedWrites: true,
+    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+    env: {foo: 'bar'},
+  });
+
+  await createRoom(roomDO, 'testRoomID');
+
+  const deleteRequest = addRoomIDHeader(
+    newDeleteRoomRequest('http://example.com/', 'API KEY', 'wrongRoomID'),
+    'wrongRoomID',
+  );
+  const response = await roomDO.fetch(deleteRequest);
+  expect(response.status).toBe(500);
+  const gotValue = await state.storage.get(someKey);
+  expect(gotValue).toBe('bar');
+  expect(await state.storage.get('/system/deleted')).toBeUndefined;
+});
+
+test('deleteRoom deletes all data except roomID', async () => {
+  const testLogSink = new TestLogSink();
+  const state = await createTestDurableObjectState('test-do-id');
+  const someKey = 'foo';
+  await state.storage.put(someKey, 'bar');
+  expect((await state.storage.list()).size).toBeGreaterThan(0);
 
   const roomDO = new BaseRoomDO({
     mutators: {},
@@ -228,9 +259,10 @@ test('deleteAllData deletes all data', async () => {
   expect(response.status).toBe(200);
   const gotValue = await state.storage.get(someKey);
   expect(gotValue).toBeUndefined();
-  expect(await (await state.storage.list()).size).toEqual(
-    1 /* deleted record */,
-  );
+  expect([...(await state.storage.list()).keys()]).toEqual([
+    '/system/deleted',
+    '/system/roomID',
+  ]);
 });
 
 test('after deleteAllData the roomDO just 410s', async () => {
