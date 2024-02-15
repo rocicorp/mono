@@ -5,7 +5,7 @@
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "TYPEDOC_WATCH=true docusaurus start",
-    "build": "docusaurus build",
+    "build": "docusaurus build && cp vercel.json build/",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",

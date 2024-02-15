@@ -4,6 +4,11 @@
       "source": "/howto/licensing",
       "destination": "/concepts/licensing",
       "permanent": false
+    },
+    {
+      "source": "/concepts/faq",
+      "destination": "/",
+      "permanent": false
     }
   ]
 }
