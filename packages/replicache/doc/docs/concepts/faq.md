@@ -7,10 +7,6 @@ import TOCInline from '@theme/TOCInline';
 
 <TOCInline toc={toc} />
 
-## What if I don’t have a dedicated backend? I use serverless functions for my backend
-
-No problem. You can implement the integration points as serverless functions. For example, see [todo-nextjs](https://github.com/rocicorp/todo-nextjs) which is built with Vercel serverless functions.
-
 ## How can I programmatically prevent Replicache from syncing?
 
 Options:
