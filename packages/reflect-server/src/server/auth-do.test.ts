@@ -64,6 +64,7 @@ import {
   RoomStatus,
   roomRecordByObjectIDForTest as getRoomRecordByObjectIDOriginal,
   roomRecordByRoomID as getRoomRecordOriginal,
+  roomRecordByRoomID,
   type RoomRecord,
 } from './rooms.js';
 import {createWorker} from './worker.js';
@@ -516,6 +517,71 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
       ) {
         gotDeleteForObjectIDString = id.toString();
         return new Response();
+      }
+      return new Response('', {status: 200});
+    });
+
+  const authDO = new TestAuthDO({
+    roomDO: testRoomDO,
+    state,
+    authHandler: () => Promise.reject('should not be called'),
+    logSink: new TestLogSink(),
+    logLevel: 'debug',
+    env: {foo: 'bar'},
+  });
+  await createRoom(authDO, testRoomID);
+
+  const closeRoomRequest = newCloseRoomRequest(
+    'https://test.roci.dev',
+    TEST_API_KEY,
+    testRoomID,
+  );
+  const closeRoomResponse = await authDO.fetch(closeRoomRequest);
+  await expectSuccessfulAPIResponse(closeRoomResponse);
+
+  const deleteRoomRequest = newDeleteRoomRequest(
+    'https://test.roci.dev',
+    TEST_API_KEY,
+    testRoomID,
+  );
+  const deleteRoomResponse = await authDO.fetch(deleteRoomRequest);
+  await expectSuccessfulAPIResponse(deleteRoomResponse);
+  expect(gotDeleteForObjectIDString).not.toBeUndefined();
+  expect(gotDeleteForObjectIDString).toEqual('unique-room-do-0');
+
+  const getRoomRequest = newGetRoomRequest(
+    'https://test.roci.dev',
+    TEST_API_KEY,
+    testRoomID,
+  );
+  const getRoomResponse = await authDO.fetch(getRoomRequest);
+  await expectSuccessfulAPIResponse(getRoomResponse, {
+    results: [
+      {
+        roomID: testRoomID,
+        jurisdiction: '',
+        status: RoomStatus.Deleted,
+      },
+    ],
+    numResults: 1,
+    more: false,
+  });
+});
+
+test('deleteRoom calls into already deleted roomDO and marks room deleted', async () => {
+  const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
+
+  let gotDeleteForObjectIDString;
+  testRoomDO.get = (id: DurableObjectId) =>
+    // eslint-disable-next-line require-await
+    new TestDurableObjectStub(id, async (request: Request) => {
+      const url = new URL(request.url);
+      if (
+        url.pathname === fmtPath(DELETE_ROOM_PATH) &&
+        url.search === `?roomID=${testRoomID}`
+      ) {
+        gotDeleteForObjectIDString = id.toString();
+        return new Response('Gone', {status: 410});
       }
       return new Response('', {status: 200});
     });
@@ -1738,7 +1804,7 @@ test('authInvalidateForUser when any request to roomDOs returns error response',
   );
 });
 
-test('authInvalidateForRoom when request to roomDO is successful', async () => {
+test('authInvalidateForRoom when request to roomDO is successful or deleted', async () => {
   const testRoomID = 'testRoomID1';
   const testRequest = new Request(
     `https://test.roci.dev${fmtPath(
@@ -1755,6 +1821,7 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
 
   let roomDORequestCount = 0;
   let gotObjectId: DurableObjectId | undefined;
+  let invalidateStatus = 200;
   const testRoomDO: DurableObjectNamespace = {
     ...createTestDurableObjectNamespace(),
     get: (id: DurableObjectId) => {
@@ -1766,7 +1833,7 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
           roomDORequestCount++;
           expectForwardedAuthInvalidateRequest(request, testRequestClone);
         }
-        return new Response('Test Success', {status: 200});
+        return new Response('Test Success', {status: invalidateStatus});
       });
     },
   };
@@ -1790,6 +1857,12 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
   expect(roomID).toEqual(testRoomID);
   expect(roomDORequestCount).toEqual(1);
   await expectSuccessfulAPIResponse(response);
+
+  // Now test with the room returning deleted.
+  invalidateStatus = 410;
+  const responseFor410 = await authDO.fetch(testRequest.clone());
+  expect(roomDORequestCount).toEqual(2);
+  await expectSuccessfulAPIResponse(responseFor410);
 });
 
 test('authInvalidateForRoom when roomID has no open connections no invalidate request is made to roomDO', async () => {
@@ -1962,7 +2035,7 @@ test('authInvalidateForRoom when request to roomDO returns error response', asyn
   );
 });
 
-test('authInvalidateAll when requests to roomDOs are successful', async () => {
+test('authInvalidateAll when requests to roomDOs are successful or deleted', async () => {
   const testRequest = new Request(
     `https://test.roci.dev${fmtPath(INVALIDATE_ALL_CONNECTIONS_PATH)}`,
     {
@@ -1974,6 +2047,8 @@ test('authInvalidateAll when requests to roomDOs are successful', async () => {
   const testRequestClone = testRequest.clone();
 
   await storeTestConnectionState();
+
+  const testRoomIDs = ['testRoomID1', 'testRoomID2', 'testRoomID3'];
 
   const roomDORequestCountsByRoomID = new Map();
   const testRoomDO: DurableObjectNamespace = {
@@ -1991,6 +2066,11 @@ test('authInvalidateAll when requests to roomDOs are successful', async () => {
           );
           expect(request.headers.get(ROOM_ID_HEADER_NAME)).toEqual(roomID);
           expectForwardedAuthInvalidateRequest(request, testRequestClone);
+
+          // Return 410: Gone for one of the rooms.
+          if (roomID === testRoomIDs[0]) {
+            return new Response('Room Deleted', {status: 410});
+          }
         }
         return new Response('Test Success', {status: 200});
       }),
@@ -2005,17 +2085,17 @@ test('authInvalidateAll when requests to roomDOs are successful', async () => {
     logLevel: 'debug',
     env: {foo: 'bar'},
   });
-  await createRoom(authDO, 'testRoomID1');
-  await createRoom(authDO, 'testRoomID2');
-  await createRoom(authDO, 'testRoomID3');
+  for (const testRoomID of testRoomIDs) {
+    await createRoom(authDO, testRoomID);
+  }
 
   const response = await authDO.fetch(testRequest);
   await expectSuccessfulAPIResponse(response);
 
   expect(roomDORequestCountsByRoomID.size).toEqual(3);
-  expect(roomDORequestCountsByRoomID.get('testRoomID1')).toEqual(1);
-  expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
-  expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(1);
+  for (const testRoomID of testRoomIDs) {
+    expect(roomDORequestCountsByRoomID.get(testRoomID)).toEqual(1);
+  }
 });
 
 function expectForwardedAuthInvalidateRequest(
@@ -2204,7 +2284,11 @@ describe('test unexpected query params or body rejected', () => {
 
 async function createRevalidateConnectionsTestFixture({
   roomDOIDWithErrorResponse,
-}: {roomDOIDWithErrorResponse?: string} = {}) {
+  errorStatus,
+}: {
+  roomDOIDWithErrorResponse?: string;
+  errorStatus?: number;
+} = {}) {
   await storeTestConnectionState();
 
   const roomDORequestCountsByRoomID = new Map();
@@ -2228,9 +2312,7 @@ async function createRevalidateConnectionsTestFixture({
           if (roomDOIDWithErrorResponse === roomID) {
             return new Response(
               'Test revalidateConnections Internal Server Error Msg',
-              {
-                status: 500,
-              },
+              {status: errorStatus ?? 500},
             );
           }
           switch (roomID) {
@@ -2346,6 +2428,35 @@ test('revalidateConnections continues if one roomDO returns an error', async () 
     'conns_by_room/testRoomID1/conn/testUserID2/testRoomID1/testClientID4/',
     'conns_by_room/testRoomID2/conn/testUserID1/testRoomID2/testClientID3/',
   ]);
+});
+
+test('revalidateConnections cleans up connections from deleted roomDO', async () => {
+  const {authDO, roomDORequestCountsByRoomID, storage} =
+    await createRevalidateConnectionsTestFixture({
+      roomDOIDWithErrorResponse: 'testRoomID1',
+      errorStatus: 410,
+    });
+
+  await authDO.runRevalidateConnectionsTaskForTest();
+
+  expect(roomDORequestCountsByRoomID.get('testRoomID1')).toEqual(1);
+  expect(roomDORequestCountsByRoomID.get('testRoomID2')).toEqual(1);
+  expect(roomDORequestCountsByRoomID.get('testRoomID3')).toEqual(1);
+
+  expect([...(await storage.list({prefix: 'conn/'})).keys()]).toEqual([
+    'conn/testUserID1/testRoomID2/testClientID3/',
+  ]);
+  expect([...(await storage.list({prefix: 'conns_by_room/'})).keys()]).toEqual([
+    'conns_by_room/testRoomID2/conn/testUserID1/testRoomID2/testClientID3/',
+  ]);
+
+  // Should also mark the room as deleted.
+  expect(
+    await roomRecordByRoomID(new DurableStorage(storage), 'testRoomID1'),
+  ).toMatchObject({
+    roomID: 'testRoomID1',
+    status: 'deleted',
+  });
 });
 
 function createTailTestFixture(
