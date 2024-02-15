@@ -1,0 +1,9 @@
+{
+  "redirects": [
+    {
+      "source": "/howto/licensing",
+      "destination": "/concepts/licensing",
+      "permanent": false
+    }
+  ]
+}
