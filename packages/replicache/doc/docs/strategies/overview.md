@@ -7,58 +7,52 @@ slug: /strategies/overview
 
 Replicache defines abstract [push](/reference/server-push.md) and [pull](/reference/server-pull.md) endpoints that servers must implement to sync. There are a number of possible strategies to implement these endpoints with different tradeoffs.
 
-The main difference between the strategies is how they calcuate the `patch` required by the pull endpoint. Different approaches to calculating this patch require different state to be stored in the backend database, affect the push and pull implementations, and also some features Replicache can support.
+The main difference between the strategies is how they calcuate the `patch` required by the pull endpoint. Different approaches require different state to be stored in the backend database, and different logic in the push and pull endpoints.
 
-<br/>
+Also some use-cases are only supported well with some strategies. Notably:
 
-<table>
-    <thead>
-        <tr>
-            <th>Strategy</th>
-            <th>When to Use</th>
-            <th>Push Performance</th>
-            <th>Pull Performance</th>
-            <th>Implementation</th>
-            <th>Partial Sync</th>
-            <th>Dynamic Auth</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td align="center" nowrap="true"><a href="/strategies/reset"><b>🤪 Reset</b></a></td>
-            <td>For very tiny or slowly-updating applications.</td>
-            <td align="center">👍🏼 Little overhead compared to standard web app</td>
-            <td align="center">👎🏼 Read and transmit entire client view on each pull</td>
-            <td align="center" nowrap="true">👍🏼 Trivial</td>
-            <td align="center" nowrap="true">👍🏼 Automatic</td>
-            <td align="center" nowrap="true">👍🏼 Automatic</td>
-        </tr>
-        <tr>
-            <td align="center" nowrap="true"><a href="/strategies/global-version"><b>🌏 Global Version</b></a></td>
-            <td>Simple apps with low concurrency and no need for partial sync or dynamic auth</td>
-            <td align="center">👎🏼 Limited to about 50/second</td>
-            <td align="center">👍🏼 Efficient to compute patch</td>
-            <td align="center" nowrap="true">👍🏼 Trivial</td>
-            <td align="center" nowrap="true">👎🏼 Possible but inefficient.</td>
-            <td align="center" nowrap="true">🤷🏻 Extra effort.</td>
-        </tr>
-        <tr>
-            <td align="center" nowrap="true"><a href="/strategies/per-space-version"><b>🛸 Per-Space Version</b></a></td>
-            <td>Simple apps that can be partitioned easily along some boundary like organization or account</td>
-            <td align="center">👎🏼 Limited to about 50/second/space</td>
-            <td align="center">👍🏼 Efficient to compute patch</td>
-            <td align="center" nowrap="true">👍🏼 Trivial</td>
-            <td align="center" nowrap="true">👎🏼 Possible but inefficient.</td>
-            <td align="center" nowrap="true">🤷🏻 Extra effort.</td>
-        </tr>
-        <tr>
-            <td align="center" nowrap="true"><a href="/strategies/row-version"><b>🚣 Row Versioning</b></a></td>
-            <td>Apps that need greater concurrency, partial sync, or dynamic auth</td>
-            <td align="center">👍🏼 Little overhead compared to standard web app</td>
-            <td align="center">👍🏼 More overhead than standard web app but scales well</td>
-            <td align="center" nowrap="true">🤷🏻 Moderately difficult</td>
-            <td align="center" nowrap="true">👍🏼 Automatic</td>
-            <td align="center" nowrap="true">👍🏼 Automatic</td>
-        </tr>
-    </tbody>
-</table>
+- **Read Auth:** When not all data is accessible to all users. In an application like Google Docs, read authorization is required to implement the fact that a private doc must be shared with you before you can access it.
+
+- **Partial Sync:** When a user only syncs _some_ of the data they have access to. In an application like GitHub, each user has access to many GB of data, but only a small subset of that should be synced to the client at any point in time.
+
+Here are the strategies in increasing order of implementation difficulty:
+
+## 🤪 Reset Strategy
+
+- **When to use:** For apps with very small amounts of data, or where the data changes infrequently. Also useful for learning Replicache.
+- **Implementation:** 👍🏼 Easy.
+- **Performance:** 👎🏼 Each pull computes and retransmits the entire client view.
+- **Read Auth:** 👍🏼 Easy.
+- **Partial sync:** 👍🏼 Easy.
+
+**[Get started with the Reset Strategy →](./reset)**
+
+## 🌏 Global Version Strategy
+
+- **When to use:** Simple apps with low concurrency, and where all data is synced to all users.
+- **Performance:** 👎🏼 Limited to about 50 pushes/second across entire app.
+- **Implementation:** 👍🏼 Easy.
+- **Read Auth:** 👎🏼 Difficult.
+- **Partial sync:** 👎🏼 Difficult.
+
+**[Get started with the Global Version Strategy →](./global-version)**
+
+## 🛸 Per-Space Version Strategy
+
+- **When to use:** Apps where data can be naturally partitioned into _spaces_, where all users in a space sync that space in its entirety. For example, in an app like GitHub, each repository might be a space.
+- **Performance:** 🤷‍♂️ Limited to about 50 pushes/second/space.
+- **Implementation:** 👍🏼 Easy.
+- **Read Auth:** 🤷‍♂️ You can restrict access to a space to certain users, but all users within a space see everything in that space.
+- **Partial sync:** 🤷‍♂️ You can choose which spaces to sync to each client, but within a space all data is synced.
+
+**[Get started with the Per-Space Version Strategy →](./per-space-version)**
+
+## 🛸 Row Version Strategy
+
+- **When to use:** Apps that need greater performance, fine-grained read authorization, or partial sync that can't be served by per-space versioning. This is the most flexible and powerful strategy, but also the hardest to implement.
+- **Performance:** 👍🏼 Close to traditional web app.
+- **Implementation:** 👎🏼 Most difficult.
+- **Read Auth:** 👍🏼 Fully supported. Each individual data item can be authorized based on arbitrary code.
+- **Partial sync:** 👍🏼 Fully supported. Sync any arbitrary subset of the database based on any logic you like.
+
+**[Get started with the Row Version Strategy →](./row-version)**
