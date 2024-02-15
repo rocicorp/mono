@@ -20,7 +20,10 @@ export function newInvalidateForUserAuthRequest(
   authApiKey: string,
   userID: string,
 ) {
-  const path = fmtPath(INVALIDATE_USER_CONNECTIONS_PATH, {userID});
+  const path = fmtPath(
+    INVALIDATE_USER_CONNECTIONS_PATH,
+    new URLSearchParams({userID}),
+  );
   const url = new URL(path, reflectServerURL);
   return newAuthedPostRequest(url, authApiKey);
 }
@@ -30,7 +33,10 @@ export function newInvalidateForRoomAuthRequest(
   authApiKey: string,
   roomID: string,
 ) {
-  const path = fmtPath(INVALIDATE_ROOM_CONNECTIONS_PATH, {roomID});
+  const path = fmtPath(
+    INVALIDATE_ROOM_CONNECTIONS_PATH,
+    new URLSearchParams({roomID}),
+  );
   const url = new URL(path, reflectServerURL);
   return newAuthedPostRequest(url, authApiKey);
 }

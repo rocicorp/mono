@@ -1,4 +1,5 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import {createRoomRequestSchema} from 'reflect-protocol';
 import {
   closeBeaconQueryParamsSchema,
   closeBeaconSchema,
@@ -46,11 +47,25 @@ import {
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
+  LEGACY_CREATE_ROOM_PATH,
+  LEGACY_DELETE_ROOM_PATH,
+  LEGACY_INVALIDATE_ROOM_CONNECTIONS_PATH,
+  LEGACY_INVALIDATE_USER_CONNECTIONS_PATH,
   TAIL_URL_PATH,
+  roomIDParams,
+  userIDParams,
 } from './paths.js';
 import {initRoomSchema} from './room-schema.js';
 import type {RoomStartHandler} from './room-start.js';
-import {Router, get, inputParams, post, roomID, userID} from './router.js';
+import {
+  Router,
+  get,
+  inputParams,
+  post,
+  queryParams,
+  roomID,
+  userID,
+} from './router.js';
 import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 
@@ -72,11 +87,15 @@ export interface RoomDOOptions<MD extends MutatorDefs> {
 
 export const ROOM_ROUTES = {
   deletePath: DELETE_ROOM_PATH,
+  legacyDeletePath: LEGACY_DELETE_ROOM_PATH,
   authInvalidateAll: INVALIDATE_ALL_CONNECTIONS_PATH,
   authInvalidateForUser: INVALIDATE_USER_CONNECTIONS_PATH,
   authInvalidateForRoom: INVALIDATE_ROOM_CONNECTIONS_PATH,
+  legacyAuthInvalidateForUser: LEGACY_INVALIDATE_USER_CONNECTIONS_PATH,
+  legacyAuthInvalidateForRoom: LEGACY_INVALIDATE_ROOM_CONNECTIONS_PATH,
   authConnections: AUTH_CONNECTIONS_PATH,
   createRoom: CREATE_ROOM_PATH,
+  legacyCreateRoom: LEGACY_CREATE_ROOM_PATH,
   connect: CONNECT_URL_PATTERN,
   closeBeacon: CLOSE_BEACON_PATH,
   tail: TAIL_URL_PATH,
@@ -167,6 +186,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
 
   #initRoutes() {
     this.#router.register(ROOM_ROUTES.deletePath, this.#deleteAllData);
+    this.#router.register(ROOM_ROUTES.legacyDeletePath, this.#deleteAllData);
     this.#router.register(
       ROOM_ROUTES.authInvalidateAll,
       this.#authInvalidateAll,
@@ -179,8 +199,17 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       ROOM_ROUTES.authInvalidateForRoom,
       this.#authInvalidateForRoom,
     );
+    this.#router.register(
+      ROOM_ROUTES.legacyAuthInvalidateForUser,
+      this.#legacyAuthInvalidateForUser,
+    );
+    this.#router.register(
+      ROOM_ROUTES.legacyAuthInvalidateForRoom,
+      this.#legacyAuthInvalidateForRoom,
+    );
     this.#router.register(ROOM_ROUTES.authConnections, this.#authConnections);
     this.#router.register(ROOM_ROUTES.createRoom, this.#createRoom);
+    this.#router.register(ROOM_ROUTES.legacyCreateRoom, this.#legacyCreateRoom);
     this.#router.register(ROOM_ROUTES.connect, this.#connect);
     this.#router.register(ROOM_ROUTES.tail, this.#tail);
     if (getConfig('closeBeacon')) {
@@ -254,6 +283,18 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
    *
    */
   #createRoom = post()
+    .with(inputParams(roomIDParams, createRoomRequestSchema))
+    .handle(async ctx => {
+      const {roomID} = ctx.query;
+      this.#lc.info?.('Handling create room request for roomID', roomID);
+      await this.#setRoomID(roomID);
+      await this.#storage.flush();
+      this.#lc.debug?.('Flushed roomID to storage', roomID);
+      return new Response('ok');
+    });
+
+  // TODO: Delete
+  #legacyCreateRoom = post()
     .with(roomID())
     .handle(async ctx => {
       const {roomID} = ctx;
@@ -352,6 +393,21 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   });
 
   #authInvalidateForRoom = post()
+    .with(queryParams(roomIDParams))
+    .handle(async ctx => {
+      const {
+        lc,
+        query: {roomID},
+      } = ctx;
+      lc.debug?.(
+        `Closing room ${roomID}'s connections fulfilling auth api invalidateForRoom request.`,
+      );
+      await this.#closeConnections(_ => true);
+      return new Response('Success', {status: 200});
+    });
+
+  // TODO: Delete
+  #legacyAuthInvalidateForRoom = post()
     .with(roomID())
     .handle(async ctx => {
       const {lc, roomID} = ctx;
@@ -363,6 +419,23 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     });
 
   #authInvalidateForUser = post()
+    .with(queryParams(userIDParams))
+    .handle(async ctx => {
+      const {
+        lc,
+        query: {userID},
+      } = ctx;
+      lc.debug?.(
+        `Closing user ${userID}'s connections fulfilling auth api invalidateForUser request.`,
+      );
+      await this.#closeConnections(
+        clientState => clientState.auth.userID === userID,
+      );
+      return new Response('Success', {status: 200});
+    });
+
+  // TODO: Delete
+  #legacyAuthInvalidateForUser = post()
     .with(userID())
     .handle(async ctx => {
       const {lc, userID} = ctx;
