@@ -274,15 +274,14 @@ export class BaseAuthDO implements DurableObject {
     });
 
   #getRoomContents = get()
-    .with(roomID())
-    .with(noInputParams())
+    .with(queryParams(roomIDParams))
     .handleAPIResult((ctx, req) =>
       this.#roomRecordLock.withWrite(() =>
         getRoomContents(
           ctx.lc,
           this.#roomDO,
           this.#durableStorage,
-          ctx.roomID,
+          ctx.query.roomID,
           req,
         ),
       ),
