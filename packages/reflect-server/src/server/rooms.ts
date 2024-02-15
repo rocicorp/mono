@@ -227,7 +227,7 @@ export async function deleteRoom(
     roomID,
     lc,
   );
-  if (!response.ok) {
+  if (!response.ok && response.status !== 410 /* Gone */) {
     lc.debug?.(
       `Received error response from ${roomID}. ${
         response.status
@@ -236,6 +236,24 @@ export async function deleteRoom(
     throw new ErrorWithForwardedResponse(response);
   }
 
+  await markRoomDeleted(lc, storage, roomID, roomRecord);
+}
+
+export async function markRoomDeleted(
+  lc: LogContext,
+  storage: DurableStorage,
+  roomID: string,
+  roomRecord?: RoomRecord,
+) {
+  roomRecord ??= await roomRecordByRoomID(storage, roomID);
+  if (!roomRecord) {
+    lc.error?.(`No RoomRecord for ${roomID}. Nothing to mark deleted.`);
+    return;
+  }
+  if (roomRecord.status === RoomStatus.Deleted) {
+    lc.debug?.(`RoomRecord for ${roomID} already marked Deleted.`);
+    return;
+  }
   roomRecord.status = RoomStatus.Deleted;
   const roomRecordKey = roomKeyToString(roomRecord);
   await storage.put(roomRecordKey, roomRecord);

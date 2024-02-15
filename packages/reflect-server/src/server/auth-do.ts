@@ -64,6 +64,7 @@ import {
   createRoom,
   deleteRoom,
   internalCreateRoom,
+  markRoomDeleted,
   objectIDByRoomID,
   roomProperties,
   roomPropertiesByRoomIDs,
@@ -877,7 +878,9 @@ export class BaseAuthDO implements DurableObject {
           roomID,
           lc,
         );
-        if (!response.ok) {
+        // 410: Gone is considered a success since a deleted room has no connections.
+        // Cleanup is handled by revalidate.
+        if (!response.ok && response.status !== 410) {
           lc.debug?.(
             `Received error response from ${roomID}. ${
               response.status
@@ -921,7 +924,9 @@ export class BaseAuthDO implements DurableObject {
           roomID,
           lc,
         );
-        if (!response.ok) {
+        // 410: Gone is considered a success since a deleted room has no connections.
+        // Cleanup is handled by revalidate.
+        if (!response.ok && response.status !== 410) {
           lc.debug?.(
             `Received error response from ${roomID}. ${
               response.status
@@ -1076,9 +1081,7 @@ export class BaseAuthDO implements DurableObject {
           const stub = this.#roomDO.get(roomObjectID);
           const req = new Request(
             `https://unused-reflect-room-do.dev${ROOM_ROUTES.authConnections}`,
-            {
-              method: 'POST',
-            },
+            {method: 'POST'},
           );
           const response = await roomDOFetch(
             req,
@@ -1089,11 +1092,17 @@ export class BaseAuthDO implements DurableObject {
           );
           let connectionsResponse: ConnectionsResponse;
           try {
-            const responseJSON = valita.parse(
-              await response.json(),
-              connectionsResponseSchema,
-            );
-            connectionsResponse = responseJSON;
+            if (response.status === 410 /* Gone */) {
+              // In case deleteRoom() failed to record the delete state in RoomRecords, ensure it here.
+              // Once all of the rooms connections are cleaned up, this path won't happen.
+              await markRoomDeleted(lc, this.#durableStorage, roomID);
+              connectionsResponse = [];
+            } else {
+              connectionsResponse = valita.parse(
+                await response.json(),
+                connectionsResponseSchema,
+              );
+            }
           } catch (e) {
             lc.error?.(
               `Bad ${ROOM_ROUTES.authConnections} response from roomDO ${roomID}`,
@@ -1188,7 +1197,9 @@ export class BaseAuthDO implements DurableObject {
     }
     for (let i = 0; i < responsePromises.length; i++) {
       const response = await responsePromises[i];
-      if (!response.ok) {
+      // 410: Gone is considered a success since a deleted room has no connections.
+      // Cleanup is handled by revalidate.
+      if (!response.ok && response.status !== 410) {
         errorResponses.push(response);
         lc.error?.(
           `Received error response from ${roomIDs[i]}. ${
