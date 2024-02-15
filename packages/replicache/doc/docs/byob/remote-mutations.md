@@ -49,28 +49,7 @@ export default async function (req: NextApiRequest, res: NextApiResponse) {
         // Handle errors inside mutations by skipping and moving on. This is
         // convenient in development but you may want to reconsider as your app
         // gets close to production:
-        //
         // https://doc.replicache.dev/server-push#error-handling
-        //
-        // Ideally we would run the mutator itself in a nested transaction, and
-        // if that fails, rollback just the mutator and allow the lmid and
-        // version updates to commit. However, nested transaction support in
-        // Postgres is not great:
-        //
-        // https://postgres.ai/blog/20210831-postgresql-subtransactions-considered-harmful
-        //
-        // Instead we implement skipping of failed mutations by *re-runing*
-        // them, but passing a flag that causes the mutator logic to be skipped.
-        //
-        // This ensures that the lmid and version bookkeeping works exactly the
-        // same way as in the happy path. A way to look at this is that for the
-        // error-case we replay the mutation but it just does something
-        // different the second time.
-        //
-        // This is allowed in Replicache because mutators don't have to be
-        // deterministic!:
-        //
-        // https://doc.replicache.dev/concepts/how-it-works#speculative-execution-and-confirmation
         await tx(t => processMutation(t, push.clientGroupID, mutation, e));
       }
 
