@@ -426,22 +426,20 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     return upgradeWebsocketResponse(clientWS, request.headers);
   });
 
-  #getContent = get().handle(async (ctx, _req): Promise<Response> => {
+  #getContent = get().handleAPIResult(async (ctx, _req) => {
     const {lc} = ctx;
-    // Maybe we should validate that the roomID in the request matches?
     lc.info?.('getting room content');
-    const allItems = [];
+    const entries = [];
 
     try {
       for await (const [key, value] of scanStorage(this.#storage, {})) {
-        allItems.push({key, value});
+        entries.push([key, value]);
       }
-      console.log('Retrieved items:', allItems);
+      console.log('Retrieved items:', entries);
     } catch (error) {
       console.error('Error retrieving items:', error);
     }
-    lc.info?.('done deleting all data');
-    return new Response(JSON.stringify({contents: {allItems}}));
+    return {contents: Object.fromEntries(entries)};
   });
 
   #authInvalidateForRoom = post()

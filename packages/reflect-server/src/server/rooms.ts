@@ -266,12 +266,11 @@ export async function getRoomContents(
   storage: DurableStorage,
   roomID: string,
   request: Request,
-): Promise<void> {
+): Promise<Response> {
   const roomRecord = await roomRecordByRoomID(storage, roomID);
   if (roomRecord === undefined) {
     throw roomNotFoundAPIError(roomID);
   }
-
   const objectID = roomDO.idFromString(roomRecord.objectIDString);
   const roomDOStub = roomDO.get(objectID);
   const response = await roomDOFetch(
@@ -289,11 +288,7 @@ export async function getRoomContents(
     );
     throw new ErrorWithForwardedResponse(response);
   }
-
-  roomRecord.status = RoomStatus.Deleted;
-  const roomRecordKey = roomKeyToString(roomRecord);
-  await storage.put(roomRecordKey, roomRecord);
-  lc.debug?.(`deleted room ${JSON.stringify(roomRecord)}`);
+  return response;
 }
 
 function validateRoomID(roomID: string) {
