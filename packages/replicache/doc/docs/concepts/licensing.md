@@ -30,10 +30,40 @@ new Replicache({
 });
 ```
 
+## Monthly Active Profiles
+
+We charge for Replicache by Monthly Active Profiles ("MAPs"). A MAP is a unique browser profile that used your application during a month.
+
+For example, if within one month, one of your users used your Replicache-enabled app on Firefox and Chrome on their Desktop computer and Safari on their phone, that would be 3 MAPs.
+
+The reason for counting this way is because as a client-side JavaScript library, Replicache is sandboxed within a browser profile. It can't tell the difference between two profiles on the same machine or two profiles on different machines.
+
+MAPs are typically a small fraction (like 50%) higher than MAUs because some users, but not all, use applications on multiple profiles/devices.
+
+## Pricing Exemption
+
+We offer Replicache free of charge to non-commercial or pre-revenue/funding companies. See the [Terms of Service](https://rocicorp.dev/terms) for our definition of "commercial" and the [Pricing](https://replicache.dev/#pricing) page for details on the revenue/funding hurdle.
+
+After your two-month trial of Replicache, you will receive an invoice. If you believe you qualify for one of our exemptions, you can reply to the invoice with the details.
+
+## License Pings
+
+We track usage by sending a ping to our servers containing your license key and a unique browser profile
+identifier when Replicache is instantiated, and every 24 hours that it is running.
+
+We check at instantiation time that your license key is valid. If your license key
+is invalid, Replicache disables itself.
+
+The license key check is asynchronous and doesn't block any other code from running. The
+check is also setup so that it "fails open". The only way Replicache disables itself is
+if it receives a specific message from our server. Network errors, HTTP errors, or server
+errors won't cause Replicache to disable.
+
+Disabling Replicache's pings other than via the `TEST_LICENSE_KEY` (see below) is against our [Terms of Service](https://roci.dev/terms.html). If the pings are a problem for your environment, please get in touch with us at [hello@replicache.dev](mailto:hello@replicache.dev).
+
 ## Unit testing
 
-For reasons explained below, Replicache by default pings our server with your license key
-when Replicache is instantiated. This behavior is almost certainly undesirable in automated
+Replicache's license pings are almost certainly undesirable in automated
 tests for a variety of reasons (hermeticity, inflated Replicache usage charges, etc.). For automated tests, pass
 `TEST_LICENSE_KEY` instead of your key. For example:
 
@@ -53,19 +83,10 @@ test('my test', () => {
 Using the `TEST_LICENSE_KEY` skips the server ping, but a Replicache instance
 instantiated with it will shut itself down after a few minutes.
 
-## License pings
+## Pricing Examples
 
-Per [Replicache Pricing](https://replicache.dev/#pricing), we charge post-funding/revenue
-commercial customers based on _Monthly Active Browser Profiles_, meaning unique browser
-instances that instantiate Replicache in a calendar month. The way we accomplish this
-is to send a ping to our servers containing your license key and a unique browser profile
-identifier when Replicache is instantiated, and every 24 hours that it is running.
-We also check at instantiation time that your license key is valid, and complain loudly
-to the console if it is not. We may in the future add a feature to disable Replicache in the event that the license key is not valid.
-
-The licensing pings explain why you want to pass `TEST_LICENSE_KEY` to Replicache in
-automated tests: so that you're not potentially charged for large numbers of Replicache
-instances used when running tests. (Not to mention network calls are typically undesirable
-in unit tests).
-
-Disabling Replicache's pings other than via the `TEST_LICENSE_KEY` is against our [Terms of Service](https://roci.dev/terms.html). If the pings are a problem for your environment, please get in touch with us at [hello@replicache.dev](mailto:hello@replicache.dev).
+- Example 1: You are a non-profit organization with 4M MAPs. **Your price is zero**.
+- Example 2: You are using Replicache for a personal blog with 5k MAPs. **Your price is zero**.
+- Example 3: You are a startup using Replicache for a revolutionary productivity application. You have raised a seed of $150k and have $100k annual revenue. **Your price is zero**.
+- Example 4: You are using Replicache for a new version of your company's SaaS offering, but it's in internal testing and has only 50 MAPs (your dev team). You have been using Replicache for more than 2 months. Your company has raised $600k in total funding, but you are pre-revenue. **Your price is $500/mo**.
+- Example 5: You are using Replicache for a new product that is a free add-on to your company's SaaS offering. You have been using Replicache for more than 2 months and are generating 15k MAPs. Your company is bootstrapped and making $300k/yr. **Your price is $3000/mo**.
