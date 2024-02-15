@@ -1698,6 +1698,7 @@ test('online', async () => {
     pushURL,
     pushDelay: 0,
     mutators: {addData},
+    logLevel: 'debug',
   });
 
   const log: boolean[] = [];
@@ -1705,7 +1706,7 @@ test('online', async () => {
     log.push(b);
   };
 
-  const consoleInfoStub = sinon.stub(console, 'info');
+  const consoleDebugStub = sinon.stub(console, 'debug');
 
   fetchMock.post(pushURL, async () => {
     await sleep(10);
@@ -1720,17 +1721,25 @@ test('online', async () => {
   await tickAFewTimes();
 
   expect(rep.online).to.equal(false);
-  expect(consoleInfoStub.callCount).to.be.greaterThan(0);
+  expect(
+    consoleDebugStub
+      .getCalls()
+      .some(({args}) => args.join('\n').indexOf('Push threw') > -1),
+  );
   expect(log).to.deep.equal([false]);
 
-  consoleInfoStub.resetHistory();
+  consoleDebugStub.resetHistory();
 
   fetchMock.post(pushURL, 'ok');
   await rep.mutate.addData({a: 1});
 
   await tickAFewTimes(20);
 
-  expect(consoleInfoStub.callCount).to.equal(0);
+  expect(
+    !consoleDebugStub
+      .getCalls()
+      .some(({args}) => args.join('\n').indexOf('Push threw') > -1),
+  );
   expect(rep.online).to.equal(true);
   expect(log).to.deep.equal([false, true]);
 });
