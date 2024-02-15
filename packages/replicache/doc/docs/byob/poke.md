@@ -3,13 +3,15 @@ title: Poke
 slug: /byob/poke
 ---
 
-Many realtime systems use WebSockets to push live updates to clients. This has performance benefits, but comes at a steep operational cost. WebSocket-based services are more complex to scale because they have to keep state in memory for each connected client.
+By default, Replicache pulls new changes periodically. The frequency is controlled by the [`pullInterval`](/api/interfaces/ReplicacheOptions#pullInterval) parameter which defaults to 60 seconds.
 
-Replicache instead uses WebSockets only to hint the client that it should pull again. No data is sent over the socket. This enables developers to build their realtime web applications in the standard stateless request/response style. You can even build Replicache-enabled apps serverlessly (as we are here with Next.js)! We have found that we can get most of the performance back with HTTP/2, anyway.
+To get more responsive updates, you could reduce the pull interval, but that gets expensive quick. Most Replicache applications instead have the server send a special message called a _poke_ to the app, telling it when it should pull again.
 
-We refer to this WebSocket hint as a _poke_, to go along with _push_ and _pull_. You can use any hosted WebSocket service to send pokes, such as [socket.io](https://socket.io) or [Pusher](https://pusher.com/), and it's trivial to setup.
+A Replicache poke caries no data – it's only a hint telling the client to pull soon. This enables developers to build their realtime apps in the standard stateless request/response style. You can even build Replicache-enabled apps serverlessly (as we are here with Next.js)!
 
-For this sample, we'll use Pusher. Get thee to [pusher.com](https://pusher.com) and setup a free "Channels" project with client type "React" and server type "Node.js".
+Because pokes are simple, you can implement them many ways. Any hosted WebSocket service like [Pusher](https://pusher.com/) or [PubNub](https://www.pubnub.com/) works. You can also implement your own WebSocket server or use server-sent events. And some databases come with features that can be used for pokes. For several different examples to implementing pokes, see [Todo, Three Ways](/examples/todo).
+
+For this sample, we'll use Pusher. Go to [pusher.com](https://pusher.com) and setup a free "Channels" project with client type "React" and server type "Node.js".
 
 Store the settings from the project in the following environment variables:
 
