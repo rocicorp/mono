@@ -14,9 +14,13 @@ import {
 import {
   CLOSE_ROOM_PATH,
   DELETE_ROOM_PATH,
-  GET_ROOM_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
+  LEGACY_CLOSE_ROOM_PATH,
+  LEGACY_DELETE_ROOM_PATH,
+  LEGACY_GET_ROOM_PATH,
+  LEGACY_INVALIDATE_ROOM_CONNECTIONS_PATH,
+  LEGACY_INVALIDATE_USER_CONNECTIONS_PATH,
   LIST_ROOMS_PATH,
   LOG_LOGS_PATH,
   REPORT_METRICS_PATH,
@@ -198,31 +202,48 @@ test('worker does not forward connect requests to authDO when DISABLE is true', 
 });
 
 test('worker forwards authDO api requests to authDO', async () => {
-  const roomStatusByRoomIDPathWithRoomID = fmtPath(GET_ROOM_PATH, {
-    roomID: 'ae4565',
+  const roomID = 'ae4565';
+  const roomStatusByRoomIDPathWithRoomID = fmtPath(LEGACY_GET_ROOM_PATH, {
+    roomID,
   });
   type TestCase = {
     path: string;
     method: string;
     body: undefined | Record<string, unknown>;
   };
-  const closeRoomPathWithRoomID = fmtPath(CLOSE_ROOM_PATH, {roomID: 'ae4565'});
-  const deleteRoomPathWithRoomID = fmtPath(DELETE_ROOM_PATH, {
-    roomID: 'ae4656',
-  });
+  const closeRoomPathWithRoomID = fmtPath(LEGACY_CLOSE_ROOM_PATH, {roomID});
+  const deleteRoomPathWithRoomID = fmtPath(LEGACY_DELETE_ROOM_PATH, {roomID});
   const testCases: TestCase[] = [
     // Auth API calls.
     {
-      path: `https://test.roci.dev${fmtPath(INVALIDATE_USER_CONNECTIONS_PATH, {
-        userID: 'userID1',
-      })}`,
+      path: `https://test.roci.dev${fmtPath(
+        LEGACY_INVALIDATE_USER_CONNECTIONS_PATH,
+        {userID: 'userID1'},
+      )}`,
       method: 'post',
       body: undefined,
     },
     {
-      path: `https://test.roci.dev${fmtPath(INVALIDATE_ROOM_CONNECTIONS_PATH, {
-        roomID: 'roomID1',
-      })}`,
+      path: `https://test.roci.dev${fmtPath(
+        INVALIDATE_USER_CONNECTIONS_PATH,
+        new URLSearchParams({userID: 'userID1'}),
+      )}`,
+      method: 'post',
+      body: undefined,
+    },
+    {
+      path: `https://test.roci.dev${fmtPath(
+        LEGACY_INVALIDATE_ROOM_CONNECTIONS_PATH,
+        {roomID: 'roomID1'},
+      )}`,
+      method: 'post',
+      body: undefined,
+    },
+    {
+      path: `https://test.roci.dev${fmtPath(
+        INVALIDATE_ROOM_CONNECTIONS_PATH,
+        new URLSearchParams({roomID}),
+      )}`,
       method: 'post',
       body: undefined,
     },
@@ -244,7 +265,23 @@ test('worker forwards authDO api requests to authDO', async () => {
       body: undefined,
     },
     {
+      path: `https://test.roci.dev${fmtPath(
+        CLOSE_ROOM_PATH,
+        new URLSearchParams({roomID}),
+      )}`,
+      method: 'post',
+      body: undefined,
+    },
+    {
       path: `https://test.roci.dev${closeRoomPathWithRoomID}`,
+      method: 'post',
+      body: undefined,
+    },
+    {
+      path: `https://test.roci.dev${fmtPath(
+        DELETE_ROOM_PATH,
+        new URLSearchParams({roomID}),
+      )}`,
       method: 'post',
       body: undefined,
     },

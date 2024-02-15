@@ -46,13 +46,16 @@ import {
 } from './internal-headers.js';
 import {
   AUTH_CONNECTIONS_PATH,
-  CLOSE_ROOM_PATH,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
-  GET_ROOM_PATH,
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
+  LEGACY_CLOSE_ROOM_PATH,
+  LEGACY_DELETE_ROOM_PATH,
+  LEGACY_GET_ROOM_PATH,
+  LEGACY_INVALIDATE_ROOM_CONNECTIONS_PATH,
+  LEGACY_INVALIDATE_USER_CONNECTIONS_PATH,
   LIST_ROOMS_PATH,
   TAIL_URL_PATH,
   fmtPath,
@@ -259,9 +262,15 @@ test('createRoom allows slashes in roomIDs', async () => {
   );
   expect(await response.json()).toEqual({
     result: {
-      roomID: '/',
-      jurisdiction: '',
-      status: 'open',
+      results: [
+        {
+          roomID: '/',
+          jurisdiction: '',
+          status: 'open',
+        },
+      ],
+      numResults: 1,
+      more: false,
     },
   });
 });
@@ -286,19 +295,11 @@ test('createRoom requires roomIDs to not contain weird characters', async () => 
       roomID,
     );
     const response = await authDO.fetch(testRequest);
-    if (roomID.length === 0) {
-      await expectAPIErrorResponse(response, {
-        code: 404,
-        resource: 'request',
-        message: `Unknown or invalid URL`,
-      });
-    } else {
-      await expectAPIErrorResponse(response, {
-        code: 400,
-        resource: 'rooms',
-        message: `Invalid roomID "${roomID}" (must match /^[A-Za-z0-9_/-]+$/)`,
-      });
-    }
+    await expectAPIErrorResponse(response, {
+      code: 400,
+      resource: 'rooms',
+      message: `Invalid roomID "${roomID}" (must match /^[A-Za-z0-9_/-]+$/)`,
+    });
   }
 });
 
@@ -381,7 +382,7 @@ test('createRoom sets jurisdiction if requested', async () => {
 test('400 bad body requests', async () => {
   const {testRoomDO, state} = createCreateRoomTestFixture();
   const badCreateRoomRequest = createBadBodyRequest(
-    fmtPath(CREATE_ROOM_PATH, {roomID: 'foo'}),
+    fmtPath(CREATE_ROOM_PATH, new URLSearchParams({roomID: 'foo'})),
     JSON.stringify({badJurisdiction: 'foo'}),
   );
 
@@ -438,9 +439,15 @@ test('closeRoom closes an open room', async () => {
   );
   const getRoomResponse = await authDO.fetch(getRoomRequest);
   await expectSuccessfulAPIResponse(getRoomResponse, {
-    roomID: testRoomID,
-    jurisdiction: '',
-    status: RoomStatus.Closed,
+    results: [
+      {
+        roomID: testRoomID,
+        jurisdiction: '',
+        status: RoomStatus.Closed,
+      },
+    ],
+    numResults: 1,
+    more: false,
   });
 });
 
@@ -498,16 +505,15 @@ test('calling closeRoom on closed room is ok', async () => {
 test('deleteRoom calls into roomDO and marks room deleted', async () => {
   const {testRoomID, testRoomDO, state} = createCreateRoomTestFixture();
 
-  const deleteRoomPathWithRoomID = fmtPath(DELETE_ROOM_PATH, {
-    roomID: testRoomID,
-  });
-
   let gotDeleteForObjectIDString;
   testRoomDO.get = (id: DurableObjectId) =>
     // eslint-disable-next-line require-await
     new TestDurableObjectStub(id, async (request: Request) => {
       const url = new URL(request.url);
-      if (url.pathname === deleteRoomPathWithRoomID) {
+      if (
+        url.pathname === fmtPath(DELETE_ROOM_PATH) &&
+        url.search === `?roomID=${testRoomID}`
+      ) {
         gotDeleteForObjectIDString = id.toString();
         return new Response();
       }
@@ -549,9 +555,15 @@ test('deleteRoom calls into roomDO and marks room deleted', async () => {
   );
   const getRoomResponse = await authDO.fetch(getRoomRequest);
   await expectSuccessfulAPIResponse(getRoomResponse, {
-    roomID: testRoomID,
-    jurisdiction: '',
-    status: RoomStatus.Deleted,
+    results: [
+      {
+        roomID: testRoomID,
+        jurisdiction: '',
+        status: RoomStatus.Deleted,
+      },
+    ],
+    numResults: 1,
+    more: false,
   });
 });
 
@@ -587,9 +599,15 @@ test('deleteRoom requires room to be closed', async () => {
   );
   const getRoomResponse = await authDO.fetch(getRoomRequest);
   await expectSuccessfulAPIResponse(getRoomResponse, {
-    roomID: testRoomID,
-    jurisdiction: '',
-    status: RoomStatus.Open,
+    results: [
+      {
+        roomID: testRoomID,
+        jurisdiction: '',
+        status: RoomStatus.Open,
+      },
+    ],
+    numResults: 1,
+    more: false,
   });
 });
 
@@ -616,9 +634,15 @@ test('get room that exists', async () => {
   );
   const getRoomResponse = await authDO.fetch(getRoomRequest);
   await expectSuccessfulAPIResponse(getRoomResponse, {
-    roomID: testRoomID,
-    jurisdiction: '',
-    status: RoomStatus.Open,
+    results: [
+      {
+        roomID: testRoomID,
+        jurisdiction: '',
+        status: RoomStatus.Open,
+      },
+    ],
+    numResults: 1,
+    more: false,
   });
 });
 
@@ -640,14 +664,14 @@ test('get room that does not exist', async () => {
     'no-such-room',
   );
   const getRoomResponse = await authDO.fetch(getRoomRequest);
-  await expectAPIErrorResponse(getRoomResponse, {
-    code: 404,
-    resource: 'rooms',
-    message: 'Room "no-such-room" not found',
+  await expectSuccessfulAPIResponse(getRoomResponse, {
+    results: [],
+    numResults: 0,
+    more: false,
   });
 });
 
-function newRoomRecordsRequest(queryParams?: Record<string, string>) {
+function newRoomRecordsRequest(queryParams?: URLSearchParamsInit) {
   const query = queryParams
     ? `?${new URLSearchParams(queryParams).toString()}`
     : '';
@@ -681,7 +705,7 @@ test('roomRecords returns HTTP error for malformed request', async () => {
     code: 400,
     resource: 'request',
     message:
-      'Query string error. Cannot specify both startKey and startAfterKey. Got object',
+      'Query string error. startKey, startAfterKey, and roomID are mutually exclusive. Got object',
   });
 });
 
@@ -771,6 +795,39 @@ test('roomRecords returns rooms that exists', async () => {
     results: [{roomID: '3', jurisdiction: '', status: 'open'}],
     numResults: 1,
     more: false,
+  });
+
+  let roomSpecificRequest = newRoomRecordsRequest([
+    ['roomID', '3'],
+    ['roomID', '-'],
+    ['roomID', '2'],
+    ['maxResults', '3'],
+  ]);
+  let roomSpecificResponse = await authDO.fetch(roomSpecificRequest);
+  await expectSuccessfulAPIResponse(roomSpecificResponse, {
+    results: [
+      {roomID: '-', jurisdiction: '', status: 'open'},
+      {roomID: '2', jurisdiction: '', status: 'open'},
+      {roomID: '3', jurisdiction: '', status: 'open'},
+    ],
+    numResults: 3,
+    more: false,
+  });
+
+  roomSpecificRequest = newRoomRecordsRequest([
+    ['roomID', '3'],
+    ['roomID', '-'],
+    ['roomID', '2'],
+    ['maxResults', '2'],
+  ]);
+  roomSpecificResponse = await authDO.fetch(roomSpecificRequest);
+  await expectSuccessfulAPIResponse(roomSpecificResponse, {
+    results: [
+      {roomID: '-', jurisdiction: '', status: 'open'},
+      {roomID: '3', jurisdiction: '', status: 'open'},
+    ],
+    numResults: 2,
+    more: true,
   });
 });
 
@@ -1475,9 +1532,10 @@ describe('connect sends VersionNotSupported error over ws if path is for unsuppo
 test('authInvalidateForUser when requests to roomDOs are successful', async () => {
   const testUserID = 'testUserID1';
   const testRequest = new Request(
-    `https://test.roci.dev${fmtPath(INVALIDATE_USER_CONNECTIONS_PATH, {
-      userID: testUserID,
-    })}`,
+    `https://test.roci.dev${fmtPath(
+      INVALIDATE_USER_CONNECTIONS_PATH,
+      new URLSearchParams({userID: testUserID}),
+    )}`,
     {
       method: 'post',
       headers: createAPIHeaders(TEST_API_KEY),
@@ -1537,9 +1595,10 @@ test('authInvalidateForUser when requests to roomDOs are successful', async () =
 test('authInvalidateForUser when connection ids have chars that need to be percent escaped', async () => {
   const testUserID = '/testUserID/?';
   const testRequest = new Request(
-    `https://test.roci.dev${fmtPath(INVALIDATE_USER_CONNECTIONS_PATH, {
-      userID: testUserID,
-    })}`,
+    `https://test.roci.dev${fmtPath(
+      INVALIDATE_USER_CONNECTIONS_PATH,
+      new URLSearchParams({userID: testUserID}),
+    )}`,
     {
       method: 'post',
       headers: createAPIHeaders(TEST_API_KEY),
@@ -1611,9 +1670,10 @@ test('authInvalidateForUser when connection ids have chars that need to be perce
 test('authInvalidateForUser when any request to roomDOs returns error response', async () => {
   const testUserID = 'testUserID1';
   const testRequest = new Request(
-    `https://test.roci.dev${fmtPath(INVALIDATE_USER_CONNECTIONS_PATH, {
-      userID: testUserID,
-    })}`,
+    `https://test.roci.dev${fmtPath(
+      INVALIDATE_USER_CONNECTIONS_PATH,
+      new URLSearchParams({userID: testUserID}),
+    )}`,
     {
       method: 'post',
       headers: createAPIHeaders(TEST_API_KEY),
@@ -1681,9 +1741,10 @@ test('authInvalidateForUser when any request to roomDOs returns error response',
 test('authInvalidateForRoom when request to roomDO is successful', async () => {
   const testRoomID = 'testRoomID1';
   const testRequest = new Request(
-    `https://test.roci.dev${fmtPath(INVALIDATE_ROOM_CONNECTIONS_PATH, {
-      roomID: testRoomID,
-    })}`,
+    `https://test.roci.dev${fmtPath(
+      INVALIDATE_ROOM_CONNECTIONS_PATH,
+      new URLSearchParams({roomID: testRoomID}),
+    )}`,
     {
       method: 'post',
       headers: createAPIHeaders(TEST_API_KEY),
@@ -1734,9 +1795,10 @@ test('authInvalidateForRoom when request to roomDO is successful', async () => {
 test('authInvalidateForRoom when roomID has no open connections no invalidate request is made to roomDO', async () => {
   const testRoomID = 'testRoomIDNoConnections';
   const testRequest = new Request(
-    `https://test.roci.dev${fmtPath(INVALIDATE_ROOM_CONNECTIONS_PATH, {
-      roomID: testRoomID,
-    })}`,
+    `https://test.roci.dev${fmtPath(
+      INVALIDATE_ROOM_CONNECTIONS_PATH,
+      new URLSearchParams({roomID: testRoomID}),
+    )}`,
     {
       method: 'post',
       headers: createAPIHeaders(TEST_API_KEY),
@@ -1841,9 +1903,10 @@ async function createRoom(
 test('authInvalidateForRoom when request to roomDO returns error response', async () => {
   const testRoomID = 'testRoomID1';
   const testRequest = new Request(
-    `https://test.roci.dev${fmtPath(INVALIDATE_ROOM_CONNECTIONS_PATH, {
-      roomID: testRoomID,
-    })}`,
+    `https://test.roci.dev${fmtPath(
+      INVALIDATE_ROOM_CONNECTIONS_PATH,
+      new URLSearchParams({roomID: testRoomID}),
+    )}`,
     {
       method: 'post',
       headers: createAPIHeaders(TEST_API_KEY),
@@ -2067,16 +2130,19 @@ describe('test unexpected query params or body rejected', () => {
       url: `${URL_PREFIX}${fmtPath(LIST_ROOMS_PATH)}`,
       acceptsQueryString: true,
     },
-    {method: 'GET', url: `${URL_PREFIX}${fmtPath(GET_ROOM_PATH, {roomID})}`},
+    {
+      method: 'GET',
+      url: `${URL_PREFIX}${fmtPath(LEGACY_GET_ROOM_PATH, {roomID})}`,
+    },
     {
       method: 'POST',
-      url: `${URL_PREFIX}${fmtPath(INVALIDATE_ROOM_CONNECTIONS_PATH, {
+      url: `${URL_PREFIX}${fmtPath(LEGACY_INVALIDATE_ROOM_CONNECTIONS_PATH, {
         roomID,
       })}`,
     },
     {
       method: 'POST',
-      url: `${URL_PREFIX}${fmtPath(INVALIDATE_USER_CONNECTIONS_PATH, {
+      url: `${URL_PREFIX}${fmtPath(LEGACY_INVALIDATE_USER_CONNECTIONS_PATH, {
         userID: 'foo',
       })}`,
     },
@@ -2084,10 +2150,13 @@ describe('test unexpected query params or body rejected', () => {
       method: 'POST',
       url: `${URL_PREFIX}${fmtPath(INVALIDATE_ALL_CONNECTIONS_PATH)}`,
     },
-    {method: 'POST', url: `${URL_PREFIX}${fmtPath(CLOSE_ROOM_PATH, {roomID})}`},
     {
       method: 'POST',
-      url: `${URL_PREFIX}${fmtPath(DELETE_ROOM_PATH, {roomID})}`,
+      url: `${URL_PREFIX}${fmtPath(LEGACY_CLOSE_ROOM_PATH, {roomID})}`,
+    },
+    {
+      method: 'POST',
+      url: `${URL_PREFIX}${fmtPath(LEGACY_DELETE_ROOM_PATH, {roomID})}`,
       expectedSuccessStatus: 409, // Can't delete without close
     },
   ];

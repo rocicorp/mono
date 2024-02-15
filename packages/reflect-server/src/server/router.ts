@@ -300,9 +300,20 @@ function validateQuery<T>(
   schema: valita.Type<T>,
 ): T {
   const queryString = parsedURL.search.input;
-  const queryObj = Object.fromEntries(
-    new URLSearchParams(queryString).entries(),
-  );
+
+  // Parses duplicate keys as arrays.
+  const params = new Map<string, string | string[]>();
+  for (const [key, val] of new URLSearchParams(queryString).entries()) {
+    const existing = params.get(key);
+    if (Array.isArray(existing)) {
+      existing.push(val);
+    } else if (typeof existing === 'string') {
+      params.set(key, [existing, val]);
+    } else {
+      params.set(key, val);
+    }
+  }
+  const queryObj = Object.fromEntries(params);
   if (schema.name === 'null') {
     if (Object.keys(queryObj).length > 0) {
       throw new APIError(400, 'request', 'Unexpected query parameters');

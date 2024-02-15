@@ -510,7 +510,12 @@ test('withQueryParams', async () => {
     error?: APIErrorInfo;
   };
 
-  const fooSchema = valita.object({foo: valita.string()});
+  const fooSchema = valita.object({
+    foo: valita.string(),
+    bar: valita
+      .union(valita.string(), valita.array(valita.string()))
+      .optional(),
+  });
 
   const cases: Case[] = [
     {
@@ -549,6 +554,29 @@ test('withQueryParams', async () => {
         new URLPattern().exec('https://roci.dev/room/monkey?foo=bar'),
       ),
       expected: {result: {text: 'query: {"foo":"bar"}', status: 200}},
+    },
+    {
+      schema: fooSchema,
+      parsedURL: must(
+        new URLPattern().exec('https://roci.dev/room/monkey?foo=bar&bar=baz'),
+      ),
+      expected: {
+        result: {text: 'query: {"foo":"bar","bar":"baz"}', status: 200},
+      },
+    },
+    {
+      schema: fooSchema,
+      parsedURL: must(
+        new URLPattern().exec(
+          'https://roci.dev/room/monkey?foo=bar&bar=baz&bar=bonk',
+        ),
+      ),
+      expected: {
+        result: {
+          text: 'query: {"foo":"bar","bar":["baz","bonk"]}',
+          status: 200,
+        },
+      },
     },
     {
       schema: fooSchema,

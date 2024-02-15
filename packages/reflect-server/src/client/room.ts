@@ -5,7 +5,7 @@ import {
   CLOSE_ROOM_PATH,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
-  GET_ROOM_PATH,
+  LIST_ROOMS_PATH,
   fmtPath,
 } from '../server/paths.js';
 import {roomStatusSchema, type RoomStatus} from '../server/rooms.js';
@@ -106,7 +106,7 @@ export function newGetRoomRequest(
   authApiKey: string,
   roomID: string,
 ) {
-  const path = fmtPath(GET_ROOM_PATH, {roomID});
+  const path = fmtPath(LIST_ROOMS_PATH, new URLSearchParams({roomID}));
   const url = new URL(path, reflectServerURL);
   return new Request(url.toString(), {
     method: 'get',
@@ -131,7 +131,10 @@ export function newCreateRoomRequest(
   roomID: string,
   jurisdiction?: 'eu',
 ) {
-  const url = new URL(fmtPath(CREATE_ROOM_PATH, {roomID}), reflectServerURL);
+  const url = new URL(
+    fmtPath(CREATE_ROOM_PATH, new URLSearchParams({roomID})),
+    reflectServerURL,
+  );
   const req: CreateRoomRequest = {jurisdiction};
   return newAuthedPostRequest(url, authApiKey, req);
 }
@@ -141,7 +144,10 @@ export function newCloseRoomRequest(
   authApiKey: string,
   roomID: string,
 ) {
-  const url = new URL(fmtPath(CLOSE_ROOM_PATH, {roomID}), reflectServerURL);
+  const url = new URL(
+    fmtPath(CLOSE_ROOM_PATH, new URLSearchParams({roomID})),
+    reflectServerURL,
+  );
   return newAuthedPostRequest(url, authApiKey);
 }
 
@@ -150,6 +156,9 @@ export function newDeleteRoomRequest(
   authApiKey: string,
   roomID: string,
 ) {
-  const url = new URL(fmtPath(DELETE_ROOM_PATH, {roomID}), reflectServerURL);
+  const url = new URL(
+    fmtPath(DELETE_ROOM_PATH, new URLSearchParams({roomID})),
+    reflectServerURL,
+  );
   return newAuthedPostRequest(url, authApiKey);
 }

@@ -1,11 +1,14 @@
 import {describe, expect, test} from '@jest/globals';
 import {
-  CLOSE_ROOM_PATH,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
-  GET_ROOM_PATH,
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
+  LEGACY_CLOSE_ROOM_PATH,
+  LEGACY_CREATE_ROOM_PATH,
+  LEGACY_DELETE_ROOM_PATH,
+  LEGACY_GET_ROOM_PATH,
+  LEGACY_INVALIDATE_USER_CONNECTIONS_PATH,
   LIST_ROOMS_PATH,
   fmtPath,
 } from './paths.js';
@@ -16,26 +19,46 @@ describe('paths', () => {
       name: string;
       pattern: string;
       groups?: Record<string, string>;
+      query?: URLSearchParamsInit;
       result: string;
     };
     const cases: Case[] = [
       {
-        name: 'simple roomID',
-        pattern: CREATE_ROOM_PATH,
+        name: 'legacy simple roomID',
+        pattern: LEGACY_CREATE_ROOM_PATH,
         groups: {roomID: 'foo-room'},
         result: '/api/v1/rooms/foo-room:create',
       },
       {
-        name: 'roomID with special characters',
-        pattern: DELETE_ROOM_PATH,
+        name: 'simple roomID',
+        pattern: CREATE_ROOM_PATH,
+        query: {roomID: 'foo-room'},
+        result: '/api/v1/rooms:create?roomID=foo-room',
+      },
+      {
+        name: 'legacy roomID with special characters',
+        pattern: LEGACY_DELETE_ROOM_PATH,
         groups: {roomID: 'room/id?with\\special:characters'},
         result: '/api/v1/rooms/room%2Fid%3Fwith%5Cspecial%3Acharacters:delete',
       },
       {
-        name: 'userID',
-        pattern: INVALIDATE_USER_CONNECTIONS_PATH,
+        name: 'roomID with special characters',
+        pattern: DELETE_ROOM_PATH,
+        query: {roomID: 'room/id?with\\special:characters'},
+        result:
+          '/api/v1/rooms:delete?roomID=room%2Fid%3Fwith%5Cspecial%3Acharacters',
+      },
+      {
+        name: 'legacy userID',
+        pattern: LEGACY_INVALIDATE_USER_CONNECTIONS_PATH,
         groups: {userID: 'foo-user'},
         result: '/api/v1/connections/users/foo-user:invalidate',
+      },
+      {
+        name: 'userID',
+        pattern: INVALIDATE_USER_CONNECTIONS_PATH,
+        query: {userID: 'foo-user'},
+        result: '/api/v1/connections/users:invalidate?userID=foo-user',
       },
       {
         name: 'no groups',
@@ -44,7 +67,7 @@ describe('paths', () => {
       },
       {
         name: 'get room',
-        pattern: GET_ROOM_PATH,
+        pattern: LEGACY_GET_ROOM_PATH,
         groups: {roomID: 'my/room/id'},
         result: '/api/v1/rooms/my%2Froom%2Fid',
       },
@@ -57,7 +80,13 @@ describe('paths', () => {
 
     cases.forEach(c => {
       test(c.name, () => {
-        expect(fmtPath(c.pattern, c.groups)).toBe(c.result);
+        if (c.query) {
+          expect(fmtPath(c.pattern, new URLSearchParams(c.query))).toBe(
+            c.result,
+          );
+        } else {
+          expect(fmtPath(c.pattern, c.groups)).toBe(c.result);
+        }
         const parsed = new URLPattern({pathname: c.pattern}).exec(
           `https://api.reflect-server.net${c.result}`,
         );
@@ -92,11 +121,11 @@ describe('paths', () => {
   ]) {
     test(`strict id matching (${url})`, () => {
       for (const pathname of [
-        GET_ROOM_PATH,
+        LEGACY_GET_ROOM_PATH,
         LIST_ROOMS_PATH,
-        CREATE_ROOM_PATH,
-        CLOSE_ROOM_PATH,
-        DELETE_ROOM_PATH,
+        LEGACY_CREATE_ROOM_PATH,
+        LEGACY_CLOSE_ROOM_PATH,
+        LEGACY_DELETE_ROOM_PATH,
       ])
         expect(new URLPattern({pathname}).test(url)).toBe(false);
     });
@@ -121,22 +150,30 @@ describe('paths', () => {
     ];
     for (const url of LIST_ROOMS_URLS) {
       expect(new URLPattern({pathname: LIST_ROOMS_PATH}).test(url)).toBe(true);
-      expect(new URLPattern({pathname: GET_ROOM_PATH}).test(url)).toBe(false);
-      expect(new URLPattern({pathname: CREATE_ROOM_PATH}).test(url)).toBe(
+      expect(new URLPattern({pathname: LEGACY_GET_ROOM_PATH}).test(url)).toBe(
         false,
       );
+      expect(
+        new URLPattern({pathname: LEGACY_CREATE_ROOM_PATH}).test(url),
+      ).toBe(false);
     }
     for (const url of GET_ROOM_URLS) {
       expect(new URLPattern({pathname: LIST_ROOMS_PATH}).test(url)).toBe(false);
-      expect(new URLPattern({pathname: GET_ROOM_PATH}).test(url)).toBe(true);
-      expect(new URLPattern({pathname: CREATE_ROOM_PATH}).test(url)).toBe(
-        false,
+      expect(new URLPattern({pathname: LEGACY_GET_ROOM_PATH}).test(url)).toBe(
+        true,
       );
+      expect(
+        new URLPattern({pathname: LEGACY_CREATE_ROOM_PATH}).test(url),
+      ).toBe(false);
     }
     for (const url of CREATE_ROOM_URLS) {
       expect(new URLPattern({pathname: LIST_ROOMS_PATH}).test(url)).toBe(false);
-      expect(new URLPattern({pathname: GET_ROOM_PATH}).test(url)).toBe(false);
-      expect(new URLPattern({pathname: CREATE_ROOM_PATH}).test(url)).toBe(true);
+      expect(new URLPattern({pathname: LEGACY_GET_ROOM_PATH}).test(url)).toBe(
+        false,
+      );
+      expect(
+        new URLPattern({pathname: LEGACY_CREATE_ROOM_PATH}).test(url),
+      ).toBe(true);
     }
   });
 });
