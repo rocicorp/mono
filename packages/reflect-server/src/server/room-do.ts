@@ -185,8 +185,8 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   }
 
   #initRoutes() {
-    this.#router.register(ROOM_ROUTES.deletePath, this.#deleteAllData);
-    this.#router.register(ROOM_ROUTES.legacyDeletePath, this.#deleteAllData);
+    this.#router.register(ROOM_ROUTES.deletePath, this.#deleteRoom);
+    this.#router.register(ROOM_ROUTES.legacyDeletePath, this.#legacyDeleteRoom);
     this.#router.register(
       ROOM_ROUTES.authInvalidateAll,
       this.#authInvalidateAll,
@@ -268,7 +268,10 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     return this.#storage.get(roomIDKey, valita.string());
   }
 
-  #setDeleted() {
+  async #setDeleted(roomID: string | undefined) {
+    if (roomID) {
+      await this.#setRoomID(roomID);
+    }
     return this.#storage.put(deletedKey, true);
   }
 
@@ -305,21 +308,48 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
       return new Response('ok');
     });
 
-  // There's a bit of a question here about whether we really want to delete *all* the
-  // data when a room is deleted. This deletes everything, including values kept by the
-  // system e.g. the roomID. If we store more system keys in the future we might want to have
-  // delete room only delete the room user data and not the system keys, because once
-  // system keys are deleted who knows what behavior the room will have when its apis are
-  // called. Maybe it's fine if they error out, dunno.
-  #deleteAllData = post().handle(async ctx => {
-    const {lc} = ctx;
-    // Maybe we should validate that the roomID in the request matches?
-    lc.info?.('delete all data');
+  #deleteRoom = post()
+    .with(queryParams(roomIDParams))
+    .handle(ctx => {
+      const {
+        lc,
+        query: {roomID},
+      } = ctx;
+      return this.#invalidateConnectionsAndDeleteRoom(lc, roomID);
+    });
+
+  #legacyDeleteRoom = post()
+    .with(roomID())
+    .handle(ctx => {
+      const {lc, roomID} = ctx;
+      return this.#invalidateConnectionsAndDeleteRoom(lc, roomID);
+    });
+
+  // - Invalidates all connections
+  // - Deletes all data
+  // - Restores: system/roomID
+  // - Sets: system/deleted
+  // If we store more system keys in the future we might want to add logic to fetch
+  // all system entries and restore them after deleteAll().
+  #invalidateConnectionsAndDeleteRoom = async (
+    lc: LogContext,
+    roomID: string,
+  ) => {
+    const myRoomID = await this.maybeRoomID();
+    if (myRoomID && myRoomID !== roomID) {
+      // Sanity check. This would indicate a bug in the AuthDO.
+      throw new Error(
+        `Specified roomID ${roomID} does not match expected ${myRoomID}`,
+      );
+    }
+    lc.debug?.(`Closing room ${roomID}'s connections before deleting data.`);
+    await this.#closeConnections(_ => true);
+    lc.info?.(`delete all data for ${roomID}`);
     await this.#storage.deleteAll();
     lc.info?.('done deleting all data');
-    await this.#setDeleted();
+    await this.#setDeleted(myRoomID);
     return new Response('ok');
-  });
+  };
 
   #connect = get().handle((ctx, request) => {
     const {lc} = ctx;
