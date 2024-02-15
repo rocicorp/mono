@@ -36,18 +36,25 @@ import {ErrorWithForwardedResponse, makeErrorResponse} from './errors.js';
 import {getRequiredSearchParams} from './get-required-search-params.js';
 import {requireUpgradeHeader} from './http-util.js';
 import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
-import {listParamsSchema, makeListControl} from './list.js';
+import {listRoomsParamsSchema, makeListControl} from './list.js';
 import {
   CLOSE_ROOM_PATH,
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
-  GET_ROOM_PATH,
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
+  LEGACY_CLOSE_ROOM_PATH,
+  LEGACY_CREATE_ROOM_PATH,
+  LEGACY_DELETE_ROOM_PATH,
+  LEGACY_GET_ROOM_PATH,
+  LEGACY_INVALIDATE_ROOM_CONNECTIONS_PATH,
+  LEGACY_INVALIDATE_USER_CONNECTIONS_PATH,
   LIST_ROOMS_PATH,
   TAIL_URL_PATH,
+  roomIDParams,
+  userIDParams,
 } from './paths.js';
 import {ROOM_ROUTES} from './room-do.js';
 import {
@@ -59,7 +66,7 @@ import {
   internalCreateRoom,
   objectIDByRoomID,
   roomProperties,
-  roomPropertiesByRoomID,
+  roomPropertiesByRoomIDs,
   roomRecordByRoomID,
 } from './rooms.js';
 import {
@@ -67,6 +74,7 @@ import {
   Router,
   bodyOnly,
   get,
+  inputParams,
   noInputParams,
   optionalBearerToken,
   post,
@@ -104,13 +112,18 @@ export type ConnectionRecord = valita.Infer<typeof connectionRecordSchema>;
 
 export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
   listRoomProperties: LIST_ROOMS_PATH,
-  getRoomProperties: GET_ROOM_PATH,
+  getRoomProperties: LEGACY_GET_ROOM_PATH,
   closeRoom: CLOSE_ROOM_PATH,
   deleteRoom: DELETE_ROOM_PATH,
+  legacyCloseRoom: LEGACY_CLOSE_ROOM_PATH,
+  legacyDeleteRoom: LEGACY_DELETE_ROOM_PATH,
   authInvalidateAll: INVALIDATE_ALL_CONNECTIONS_PATH,
   authInvalidateForUser: INVALIDATE_USER_CONNECTIONS_PATH,
   authInvalidateForRoom: INVALIDATE_ROOM_CONNECTIONS_PATH,
+  legacyAuthInvalidateForUser: LEGACY_INVALIDATE_USER_CONNECTIONS_PATH,
+  legacyAuthInvalidateForRoom: LEGACY_INVALIDATE_ROOM_CONNECTIONS_PATH,
   createRoom: CREATE_ROOM_PATH,
+  legacyCreateRoom: LEGACY_CREATE_ROOM_PATH,
 } as const;
 
 export const AUTH_WEBSOCKET_ROUTES_AUTHED_BY_API_KEY = {
@@ -199,32 +212,65 @@ export class BaseAuthDO implements DurableObject {
     }
   }
 
+  // TODO: Delete
   #getRoomProperties = get()
     .with(roomID())
     .with(noInputParams())
     .handleAPIResult(async ctx => {
       const {roomID} = ctx;
       const roomProperties = await this.#roomRecordLock.withRead(() =>
-        roomPropertiesByRoomID(this.#durableStorage, roomID),
+        roomPropertiesByRoomIDs(this.#durableStorage, [roomID]),
       );
-      if (roomProperties === undefined) {
+      if (roomProperties.length === 0) {
         throw roomNotFoundAPIError(roomID);
       }
-      return roomProperties;
+      return roomProperties[0];
     });
 
   #listRoomProperties = get()
-    .with(queryParams(listParamsSchema))
-    .handleAPIResult(async ctx => {
+    .with(queryParams(listRoomsParamsSchema))
+    .handleAPIResult(ctx => {
       const {query: listParams} = ctx;
       const listControl = makeListControl(listParams, 1000);
-      const roomIDToProperties = await this.#roomRecordLock.withRead(() =>
-        roomProperties(this.#durableStorage, listControl.getOptions()),
-      );
-      return listControl.makeListResults(roomIDToProperties);
+      return this.#roomRecordLock.withRead(async () => {
+        if (listParams.roomID) {
+          const maxResults = Math.min(1000, listParams.maxResults ?? 1000);
+          const more = listParams.roomID.length > maxResults;
+          const results = await roomPropertiesByRoomIDs(
+            this.#durableStorage,
+            more ? listParams.roomID.slice(0, maxResults) : listParams.roomID,
+          );
+          return {results, numResults: results.length, more};
+        }
+        return listControl.makeListResults(
+          await roomProperties(this.#durableStorage, listControl.getOptions()),
+        );
+      });
     });
 
   #createRoom = post()
+    .with(inputParams(roomIDParams, createRoomRequestSchema))
+    .handleAPIResult((ctx, req) => {
+      const {
+        lc,
+        body,
+        query: {roomID},
+      } = ctx;
+      const {jurisdiction} = body;
+      return this.#roomRecordLock.withWrite(() =>
+        createRoom(
+          lc,
+          this.#roomDO,
+          this.#durableStorage,
+          req,
+          roomID,
+          jurisdiction,
+        ),
+      );
+    });
+
+  // TODO: Remove
+  #legacyCreateRoom = post()
     .with(roomID())
     .with(bodyOnly(createRoomRequestSchema))
     .handleAPIResult((ctx, req) => {
@@ -245,6 +291,15 @@ export class BaseAuthDO implements DurableObject {
   // A call to closeRoom should be followed by a call to authInvalidateForRoom
   // to ensure users are logged out.
   #closeRoom = post()
+    .with(queryParams(roomIDParams))
+    .handleAPIResult(ctx =>
+      this.#roomRecordLock.withWrite(() =>
+        closeRoom(ctx.lc, this.#durableStorage, ctx.query.roomID),
+      ),
+    );
+
+  // TODO: Delete
+  #legacyCloseRoom = post()
     .with(roomID())
     .with(noInputParams())
     .handleAPIResult(ctx =>
@@ -256,6 +311,20 @@ export class BaseAuthDO implements DurableObject {
   // A room must first be closed before it can be deleted. Once deleted, a room
   // will return 410 Gone for all requests.
   #deleteRoom = post()
+    .with(queryParams(roomIDParams))
+    .handleAPIResult((ctx, req) =>
+      this.#roomRecordLock.withWrite(() =>
+        deleteRoom(
+          ctx.lc,
+          this.#roomDO,
+          this.#durableStorage,
+          ctx.query.roomID,
+          req,
+        ),
+      ),
+    );
+
+  #legacyDeleteRoom = post()
     .with(roomID())
     .with(noInputParams())
     .handleAPIResult((ctx, req) =>
@@ -396,9 +465,12 @@ export class BaseAuthDO implements DurableObject {
       AUTH_ROUTES.getRoomProperties,
       this.#getRoomProperties,
     );
-    this.#router.register(AUTH_ROUTES.closeRoom, this.#closeRoom);
     this.#router.register(AUTH_ROUTES.createRoom, this.#createRoom);
+    this.#router.register(AUTH_ROUTES.closeRoom, this.#closeRoom);
     this.#router.register(AUTH_ROUTES.deleteRoom, this.#deleteRoom);
+    this.#router.register(AUTH_ROUTES.legacyCloseRoom, this.#legacyCloseRoom);
+    this.#router.register(AUTH_ROUTES.legacyCreateRoom, this.#legacyCreateRoom);
+    this.#router.register(AUTH_ROUTES.legacyDeleteRoom, this.#legacyDeleteRoom);
     this.#router.register(
       AUTH_ROUTES.authInvalidateAll,
       this.#authInvalidateAll,
@@ -410,6 +482,14 @@ export class BaseAuthDO implements DurableObject {
     this.#router.register(
       AUTH_ROUTES.authInvalidateForRoom,
       this.#authInvalidateForRoom,
+    );
+    this.#router.register(
+      AUTH_ROUTES.legacyAuthInvalidateForUser,
+      this.#legacyAuthInvalidateForUser,
+    );
+    this.#router.register(
+      AUTH_ROUTES.legacyAuthInvalidateForRoom,
+      this.#legacyAuthInvalidateForRoom,
     );
 
     this.#router.register(AUTH_ROUTES.connect, this.#connect);
@@ -764,6 +844,52 @@ export class BaseAuthDO implements DurableObject {
   }
 
   #authInvalidateForRoom = post()
+    .with(queryParams(roomIDParams))
+    .handleAPIResult((ctx, req) => {
+      const {
+        lc,
+        query: {roomID},
+      } = ctx;
+      lc.debug?.(`authInvalidateForRoom ${roomID} waiting for lock.`);
+      return this.#authLock.withWrite(async () => {
+        lc.debug?.(`authInvalidateForRoom ${roomID} acquired lock.`);
+        if (!(await roomHasConnections(this.#durableStorage, roomID))) {
+          lc.debug?.(
+            `authInvalidateForRoom ${roomID} no connections to invalidate returning 200.`,
+          );
+          return;
+        }
+
+        lc.debug?.(`Sending authInvalidateForRoom request to ${roomID}`);
+        // The request to the Room DO must be completed inside the write lock
+        // to avoid races with connect requests for this room.
+        const roomObjectID = await this.#roomRecordLock.withRead(() =>
+          objectIDByRoomID(this.#durableStorage, this.#roomDO, roomID),
+        );
+        if (roomObjectID === undefined) {
+          throw roomNotFoundAPIError(roomID);
+        }
+        const stub = this.#roomDO.get(roomObjectID);
+        const response = await roomDOFetch(
+          req,
+          'authInvalidateForRoom',
+          stub,
+          roomID,
+          lc,
+        );
+        if (!response.ok) {
+          lc.debug?.(
+            `Received error response from ${roomID}. ${
+              response.status
+            } ${await response.clone().text()}`,
+          );
+          throw new ErrorWithForwardedResponse(response);
+        }
+      });
+    });
+
+  // TODO: Delete
+  #legacyAuthInvalidateForRoom = post()
     .with(roomID())
     .with(noInputParams())
     .handleAPIResult((ctx, req) => {
@@ -807,6 +933,38 @@ export class BaseAuthDO implements DurableObject {
     });
 
   #authInvalidateForUser = post()
+    .with(queryParams(userIDParams))
+    .handleAPIResult((ctx, req) => {
+      const {
+        lc,
+        query: {userID},
+      } = ctx;
+      lc.debug?.(`authInvalidateForUser waiting for lock.`);
+      return this.#authLock.withWrite(async () => {
+        lc.debug?.(`authInvalidateForUser acquired lock.`);
+        const connections = await this.#durableStorage.list(
+          {
+            prefix: getConnectionKeyStringUserPrefix(userID),
+          },
+          connectionRecordSchema,
+        );
+        // The requests to the Room DOs must be completed inside the write lock
+        // to avoid races with new connect requests for this user.
+        const response = await this.#forwardInvalidateRequest(
+          lc,
+          'authInvalidateForUser',
+          req,
+          '',
+          connections,
+        );
+        if (!response.ok) {
+          throw new ErrorWithForwardedResponse(response);
+        }
+      });
+    });
+
+  // TODO: Delete
+  #legacyAuthInvalidateForUser = post()
     .with(userID())
     .with(noInputParams())
     .handleAPIResult((ctx, req) => {

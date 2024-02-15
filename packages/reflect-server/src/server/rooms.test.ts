@@ -4,24 +4,39 @@ import {
   CLOSE_ROOM_PATH,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
+  LEGACY_CLOSE_ROOM_PATH,
+  LEGACY_CREATE_ROOM_PATH,
+  LEGACY_DELETE_ROOM_PATH,
   fmtPath,
 } from './paths.js';
 import {convertListOptionKeysToRoomKeys} from './rooms.js';
 
 describe('rooms', () => {
   test('makeCreateRoomPath', () => {
-    expect(fmtPath(CREATE_ROOM_PATH, {roomID: 'foo-bar'})).toBe(
+    expect(fmtPath(LEGACY_CREATE_ROOM_PATH, {roomID: 'foo-bar'})).toBe(
       '/api/v1/rooms/foo-bar:create',
     );
     expect(
-      fmtPath(CREATE_ROOM_PATH, {roomID: 'id\\with/slashes-and:colons'}),
+      fmtPath(CREATE_ROOM_PATH, new URLSearchParams({roomID: 'foo-bar'})),
+    ).toBe('/api/v1/rooms:create?roomID=foo-bar');
+    expect(
+      fmtPath(LEGACY_CREATE_ROOM_PATH, {roomID: 'id\\with/slashes-and:colons'}),
     ).toBe('/api/v1/rooms/id%5Cwith%2Fslashes-and%3Acolons:create');
-    expect(fmtPath(CLOSE_ROOM_PATH, {roomID: 'foo-bar'})).toBe(
+    expect(fmtPath(LEGACY_CLOSE_ROOM_PATH, {roomID: 'foo-bar'})).toBe(
       '/api/v1/rooms/foo-bar:close',
     );
     expect(
-      fmtPath(DELETE_ROOM_PATH, {roomID: 'id\\with/slashes-and:colons'}),
+      fmtPath(CLOSE_ROOM_PATH, new URLSearchParams({roomID: 'foo-bar'})),
+    ).toBe('/api/v1/rooms:close?roomID=foo-bar');
+    expect(
+      fmtPath(LEGACY_DELETE_ROOM_PATH, {roomID: 'id\\with/slashes-and:colons'}),
     ).toBe('/api/v1/rooms/id%5Cwith%2Fslashes-and%3Acolons:delete');
+    expect(
+      fmtPath(
+        DELETE_ROOM_PATH,
+        new URLSearchParams({roomID: 'id\\with/slashes-and:colons'}),
+      ),
+    ).toBe('/api/v1/rooms:delete?roomID=id%5Cwith%2Fslashes-and%3Acolons');
   });
 
   describe('convertListOptionKeysToRoomKeys', () => {
