@@ -68,6 +68,7 @@ module.exports = {
       'How To': [
         'howto/share-mutators',
         'howto/blobs',
+        'howto/text',
         'howto/launch',
         'howto/unit-test',
       ],
