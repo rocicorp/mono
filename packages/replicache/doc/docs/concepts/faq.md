@@ -7,12 +7,6 @@ import TOCInline from '@theme/TOCInline';
 
 <TOCInline toc={toc} />
 
-## How can I tell if Replicache has unpushed local mutations? {#unpushed}
-
-See [`experimentalPendingMutations`](https://doc.replicache.dev/api/classes/Replicache#experimentalpendingmutations).
-
-You can also implement an "unconfirmed changes" monitor using the Client View, by keeping your own mutation sequence number and having the server include its high-water mark in the Client View.
-
 ## Do you support collaborative text editing?
 
 You can implement collaborative text elements within a Replicache applications by sending [Yjs](https://github.com/yjs/yjs) documents over push and pull. This works fairly well. It's easy to send just deltas upstream via Replicache mutations. For downstream, sending just deltas is more difficult. Current users we are aware of just send the whole document which is fine for smaller documents. See [`replicache-yjs`](https://github.com/rocicorp/replicache-yjs) for a small example of this.
