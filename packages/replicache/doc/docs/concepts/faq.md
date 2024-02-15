@@ -7,14 +7,6 @@ import TOCInline from '@theme/TOCInline';
 
 <TOCInline toc={toc} />
 
-## How can I programmatically prevent Replicache from syncing?
-
-Options:
-
-- Set `pullURL` and `pushURL` to `undefined`. These are read/write so clearing them prevents next push/pull.
-- Set a large delay: setting a large `pushDelay` will prevent automatically pushing after a mutation. Setting `pullInterval` will increase the time to the next pull.
-- You could implement a custom `puller`/`pusher`.
-
 ## How can I tell if Replicache has unpushed local mutations? {#unpushed}
 
 See [`experimentalPendingMutations`](https://doc.replicache.dev/api/classes/Replicache#experimentalpendingmutations).
