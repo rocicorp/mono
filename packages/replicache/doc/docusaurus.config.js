@@ -32,7 +32,7 @@ module.exports = {
   ].filter(Boolean),
   scripts: [
     {
-      src: '/js/supabase-redirect.js',
+      src: '/js/redirects.js',
       async: false,
     },
   ],
