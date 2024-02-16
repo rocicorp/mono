@@ -71,6 +71,7 @@ import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import {scanUserValues} from '../storage/replicache-transaction.js';
 import type {RoomContents} from './rooms.js';
+import {RWLock} from '@rocicorp/lock';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -91,7 +92,7 @@ export interface RoomDOOptions<MD extends MutatorDefs> {
 export const ROOM_ROUTES = {
   deletePath: DELETE_ROOM_PATH,
   legacyDeletePath: LEGACY_DELETE_ROOM_PATH,
-  getContent: GET_CONTENTS_ROOM_PATH,
+  getContents: GET_CONTENTS_ROOM_PATH,
   authInvalidateAll: INVALIDATE_ALL_CONNECTIONS_PATH,
   authInvalidateForUser: INVALIDATE_USER_CONNECTIONS_PATH,
   authInvalidateForRoom: INVALIDATE_ROOM_CONNECTIONS_PATH,
@@ -116,6 +117,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   });
   #maxProcessedMutationTimestamp = 0;
   readonly #lock = new LoggingLock();
+  readonly #roomRecordLock = new RWLock();
   readonly #mutators: MutatorMap;
   readonly #roomStartHandler: RoomStartHandler;
   readonly #onClientDisconnect: ClientDisconnectHandler;
@@ -191,7 +193,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   #initRoutes() {
     this.#router.register(ROOM_ROUTES.deletePath, this.#deleteRoom);
     this.#router.register(ROOM_ROUTES.legacyDeletePath, this.#legacyDeleteRoom);
-    this.#router.register(ROOM_ROUTES.getContent, this.#getContent);
+    this.#router.register(ROOM_ROUTES.getContents, this.#getContents);
     this.#router.register(
       ROOM_ROUTES.authInvalidateAll,
       this.#authInvalidateAll,
@@ -427,10 +429,10 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     return upgradeWebsocketResponse(clientWS, request.headers);
   });
 
-  #getContent = get().handleAPIResult((ctx, _req): Promise<RoomContents> => {
+  #getContents = get().handleAPIResult((ctx, _req): Promise<RoomContents> => {
     const {lc} = ctx;
-    lc.info?.('getting room content');
-    return this.#lock.withLock(this.#lc, 'getContent', async () => {
+    lc.info?.('getting room contents');
+    return this.#roomRecordLock.withRead(async () => {
       const entries = await scanUserValues(this.#storage, {})
         .entries()
         .toArray();

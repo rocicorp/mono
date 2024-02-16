@@ -18,7 +18,7 @@ import {Queue} from 'shared/src/queue.js';
 import {
   newCreateRoomRequest,
   newDeleteRoomRequest,
-  newGetRoomContentRequest,
+  newGetRoomContentsRequest,
 } from '../client/room.js';
 import {REPORTING_INTERVAL_MS} from '../events/connection-seconds.js';
 import {DurableStorage} from '../storage/durable-storage.js';
@@ -314,7 +314,7 @@ test('getRoomContents returns all contents of a room', async () => {
   );
 
   const getRoomContentsRequest = addRoomIDHeader(
-    newGetRoomContentRequest('http://example.com/', 'API KEY', 'testRoomID'),
+    newGetRoomContentsRequest('http://example.com/', 'API KEY', 'testRoomID'),
     'testRoomID',
   );
   const response = await roomDO.fetch(getRoomContentsRequest);

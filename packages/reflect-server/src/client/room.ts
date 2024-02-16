@@ -164,7 +164,7 @@ export function newDeleteRoomRequest(
   return newAuthedPostRequest(url, authApiKey);
 }
 
-export function newGetRoomContentRequest(
+export function newGetRoomContentsRequest(
   reflectServerURL: string,
   authApiKey: string,
   roomID: string,
