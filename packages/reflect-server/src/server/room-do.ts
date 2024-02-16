@@ -69,7 +69,8 @@ import {
 } from './router.js';
 import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
-import {scanStorage} from '../storage/replicache-transaction.js';
+import {scanUserValues} from '../storage/replicache-transaction.js';
+import type {RoomContents} from './rooms.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -426,20 +427,15 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     return upgradeWebsocketResponse(clientWS, request.headers);
   });
 
-  #getContent = get().handleAPIResult(async (ctx, _req) => {
+  #getContent = get().handleAPIResult((ctx, _req): Promise<RoomContents> => {
     const {lc} = ctx;
     lc.info?.('getting room content');
-    const entries = [];
-
-    try {
-      for await (const [key, value] of scanStorage(this.#storage, {})) {
-        entries.push([key, value]);
-      }
-      console.log('Retrieved items:', entries);
-    } catch (error) {
-      console.error('Error retrieving items:', error);
-    }
-    return {contents: Object.fromEntries(entries)};
+    return this.#lock.withLock(this.#lc, 'getContent', async () => {
+      const entries = await scanUserValues(this.#storage, {})
+        .entries()
+        .toArray();
+      return {contents: Object.fromEntries(entries)};
+    });
   });
 
   #authInvalidateForRoom = post()

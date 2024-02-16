@@ -4,6 +4,7 @@ import {
   CLOSE_ROOM_PATH,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
+  GET_CONTENTS_ROOM_PATH,
   LEGACY_CLOSE_ROOM_PATH,
   LEGACY_CREATE_ROOM_PATH,
   LEGACY_DELETE_ROOM_PATH,
@@ -28,6 +29,9 @@ describe('rooms', () => {
     expect(
       fmtPath(CLOSE_ROOM_PATH, new URLSearchParams({roomID: 'foo-bar'})),
     ).toBe('/api/v1/rooms:close?roomID=foo-bar');
+    expect(
+      fmtPath(GET_CONTENTS_ROOM_PATH, new URLSearchParams({roomID: 'foo-bar'})),
+    ).toBe('/api/v1/rooms/contents?roomID=foo-bar');
     expect(
       fmtPath(LEGACY_DELETE_ROOM_PATH, {roomID: 'id\\with/slashes-and:colons'}),
     ).toBe('/api/v1/rooms/id%5Cwith%2Fslashes-and%3Acolons:delete');

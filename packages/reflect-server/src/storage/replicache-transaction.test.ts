@@ -5,7 +5,10 @@ import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
 import {EntryCache} from '../../src/storage/entry-cache.js';
-import {ReplicacheTransaction} from '../../src/storage/replicache-transaction.js';
+import {
+  ReplicacheTransaction,
+  scanUserValues,
+} from '../../src/storage/replicache-transaction.js';
 import {
   UserValue,
   userValueKey,
@@ -299,6 +302,89 @@ test('ReplicacheTransaction scan()', async () => {
   await cache.flush();
   [tx, cache] = makeTx();
   await testScanForDels(tx);
+});
+
+test('ReplicacheTransaction scanUserValues()', async () => {
+  const cfStorage = await getMiniflareDurableObjectStorage(id);
+  const durableStorage = new DurableStorage(cfStorage);
+  // add some non-user data to durable storage
+  await durableStorage.put('internal-value-1', 'foo');
+  await durableStorage.put('internal-value-2', null);
+
+  async function expectScan(
+    opts: ScanNoIndexOptions,
+    expected: [string, string][],
+  ) {
+    const actual = await scanUserValues(durableStorage, opts)
+      .entries()
+      .toArray();
+
+    expect(actual).toEqual(expected);
+
+    // ensure the keys are in order
+    for (let i = 0; i < actual.length - 1; i++) {
+      const a = actual[i][0];
+      const b = actual[i + 1][0];
+      expect(compareUTF8(a, b)).toBeLessThan(0);
+    }
+  }
+
+  const existingKeys: string[] = [
+    'item/3',
+    'item/1',
+    'item/2',
+    'user/5',
+    'user/4',
+    'user/6',
+  ];
+
+  const cache = new EntryCache(durableStorage);
+  const tx = new ReplicacheTransaction(cache, 'name', 1, 1, undefined, env);
+
+  for (const k of existingKeys) {
+    await tx.set(k, k);
+  }
+  await cache.flush();
+
+  // scan with no pending changes
+  await expectScan({}, [
+    ['item/1', 'item/1'],
+    ['item/2', 'item/2'],
+    ['item/3', 'item/3'],
+    ['user/4', 'user/4'],
+    ['user/5', 'user/5'],
+    ['user/6', 'user/6'],
+  ]);
+  await expectScan({prefix: ''}, [
+    ['item/1', 'item/1'],
+    ['item/2', 'item/2'],
+    ['item/3', 'item/3'],
+    ['user/4', 'user/4'],
+    ['user/5', 'user/5'],
+    ['user/6', 'user/6'],
+  ]);
+  await expectScan({limit: 3}, [
+    ['item/1', 'item/1'],
+    ['item/2', 'item/2'],
+    ['item/3', 'item/3'],
+  ]);
+  await expectScan({prefix: 'i'}, [
+    ['item/1', 'item/1'],
+    ['item/2', 'item/2'],
+    ['item/3', 'item/3'],
+  ]);
+  await expectScan({limit: 2, prefix: 'user'}, [
+    ['user/4', 'user/4'],
+    ['user/5', 'user/5'],
+  ]);
+  await expectScan({limit: 2, prefix: 'user', start: {key: 'user/5'}}, [
+    ['user/5', 'user/5'],
+    ['user/6', 'user/6'],
+  ]);
+  await expectScan(
+    {limit: 2, prefix: 'user', start: {key: 'user/5', exclusive: true}},
+    [['user/6', 'user/6']],
+  );
 });
 
 test('set with non JSON value', async () => {

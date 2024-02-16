@@ -11,6 +11,7 @@ import {APIError, roomNotFoundAPIError} from './api-errors.js';
 import {roomDOFetch} from './auth-do.js';
 import {ErrorWithForwardedResponse} from './errors.js';
 import {CREATE_ROOM_PATH, fmtPath} from './paths.js';
+import {jsonSchema} from 'shared/src/json-schema.js';
 
 export enum RoomStatus {
   // An Open room can be used by users. We will accept connect()s to it.
@@ -83,6 +84,12 @@ export const roomPropertiesSchema = roomRecordSchema.chain(record =>
 );
 
 export type RoomProperties = valita.Infer<typeof roomPropertiesSchema>;
+
+export const roomContentsSchema = valita.object({
+  contents: valita.record(jsonSchema),
+});
+
+export type RoomContents = valita.Infer<typeof roomContentsSchema>;
 
 export function internalCreateRoom(
   lc: LogContext,

@@ -15,7 +15,11 @@ import {version} from 'reflect-shared/src/version.js';
 import {CONNECTION_SECONDS_CHANNEL_NAME} from 'shared/src/events/connection-seconds.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {Queue} from 'shared/src/queue.js';
-import {newCreateRoomRequest, newDeleteRoomRequest} from '../client/room.js';
+import {
+  newCreateRoomRequest,
+  newDeleteRoomRequest,
+  newGetRoomContentRequest,
+} from '../client/room.js';
 import {REPORTING_INTERVAL_MS} from '../events/connection-seconds.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {getUserValue, putUserValue} from '../types/user-value.js';
@@ -28,6 +32,8 @@ import {createTestDurableObjectState} from './do-test-utils.js';
 import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
 import {TAIL_URL_PATH} from './paths.js';
 import {BaseRoomDO, getDefaultTurnDuration} from './room-do.js';
+import type {RoomContents} from './rooms.js';
+import type {APIResponse} from 'shared/src/api/responses.js';
 
 async function createRoom<MD extends MutatorDefs>(
   roomDO: BaseRoomDO<MD>,
@@ -263,6 +269,69 @@ test('deleteRoom deletes all data except roomID', async () => {
     '/system/deleted',
     '/system/roomID',
   ]);
+});
+
+test('getRoomContents returns all contents of a room', async () => {
+  const testLogSink = new TestLogSink();
+  const state = await createTestDurableObjectState('test-do-id');
+  const storage = new DurableStorage(state.storage);
+
+  const roomDO = new BaseRoomDO({
+    mutators: {},
+    ...noopHandlers,
+    state,
+    logSink: testLogSink,
+    logLevel: 'info',
+    allowUnconfirmedWrites: true,
+    maxMutationsPerTurn: Number.MAX_SAFE_INTEGER,
+    env: {foo: 'bar'},
+  });
+  await createRoom(roomDO, 'testRoomID');
+  const startingVersion = 23;
+  await putVersion(startingVersion, storage);
+  await putUserValue(
+    'baz',
+    {version: startingVersion, deleted: false, value: 'boo'},
+    storage,
+  );
+  // make sure that deleted entries are not included in the response
+  await putUserValue(
+    'bee',
+    {version: startingVersion, deleted: true, value: 'bop'},
+    storage,
+  );
+
+  await putUserValue(
+    'bap',
+    {version: startingVersion - 1, deleted: false, value: 'bom'},
+    storage,
+  );
+
+  await putUserValue(
+    'loo',
+    {version: startingVersion, deleted: false, value: 'far'},
+    storage,
+  );
+
+  const getRoomContentsRequest = addRoomIDHeader(
+    newGetRoomContentRequest('http://example.com/', 'API KEY', 'testRoomID'),
+    'testRoomID',
+  );
+  const response = await roomDO.fetch(getRoomContentsRequest);
+  const respJson = await response.json();
+  assert(respJson !== null && typeof respJson === 'object');
+  expect(respJson).toEqual({
+    result: {contents: {bap: 'bom', baz: 'boo', loo: 'far'}},
+  });
+  const respRoomContents = respJson as APIResponse<RoomContents>;
+  assert('result' in respRoomContents);
+  //assert keys are in correct order
+  expect([...Object.keys(respRoomContents.result.contents)]).toEqual([
+    'bap',
+    'baz',
+    'loo',
+  ]);
+  expect(response.status).toBe(200);
 });
 
 test('after deleteAllData the roomDO just 410s', async () => {

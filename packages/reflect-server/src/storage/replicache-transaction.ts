@@ -132,47 +132,26 @@ export class ReplicacheTransaction implements WriteTransaction {
     if (isScanIndexOptions(options)) {
       throw new Error('not implemented');
     }
-
-    return makeScanResult<ScanNoIndexOptions>(options, () =>
-      this.#scan(options),
-    );
-  }
-
-  async *#scan(options: ScanNoIndexOptions) {
-    const {prefix, start} = options;
-
-    const optsInternal = {
-      ...options,
-      // We cannot use the limit option because we soft-delete entries,
-      // so we grab all entries and let makeScanResult() implement the limit.
-      limit: undefined,
-      prefix: userValueKey(prefix || ''),
-      start: start && {key: userValueKey(start.key)}, // remove exclusive option, as makeScanResult will take care of it
-    };
-
-    for await (const [k, v] of this.#storage.scan(
-      optsInternal,
-      userValueSchema,
-    )) {
-      if (!v.deleted) {
-        const entry: [string, ReadonlyJSONValue] = [stripPrefix(k), v.value];
-        yield entry;
-      }
-    }
+    return scanUserValues(this.#storage, options);
   }
 }
 
-export async function* scanStorage(
-  storage: Storage,
-  options: ScanNoIndexOptions,
-) {
+export function scanUserValues(storage: Storage, options: ScanNoIndexOptions) {
+  return makeScanResult<ScanNoIndexOptions>(options, () =>
+    scanStorage(storage, options),
+  );
+}
+
+async function* scanStorage(storage: Storage, options: ScanNoIndexOptions) {
   const {prefix, start} = options;
 
   const optsInternal = {
     ...options,
+    // We cannot use the limit option because we soft-delete entries,
+    // so we grab all entries and let makeScanResult() implement the limit.
     limit: undefined,
     prefix: userValueKey(prefix || ''),
-    start: start && {key: userValueKey(start.key)},
+    start: start && {key: userValueKey(start.key)}, // remove exclusive option, as makeScanResult will take care of it
   };
 
   for await (const [k, v] of storage.scan(optsInternal, userValueSchema)) {

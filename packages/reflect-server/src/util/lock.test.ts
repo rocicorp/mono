@@ -19,6 +19,19 @@ describe('LoggingLock', () => {
     expect(sink.messages).toHaveLength(0);
   });
 
+  test('returns return value of fn', async () => {
+    const lock = new LoggingLock(100 /* ms threshold */);
+    const sink = new TestLogSink();
+    const lc = new LogContext('debug', {}, sink);
+
+    const result = await lock.withLock(lc, 'test fn', async () => {
+      await 1;
+      return 'test';
+    });
+    await lc.flush();
+    expect(result).toEqual('test');
+  });
+
   test('adds lockHoldID to the LogContext', async () => {
     const lock = new LoggingLock(100 /* ms threshold */);
     const sink = new TestLogSink();
