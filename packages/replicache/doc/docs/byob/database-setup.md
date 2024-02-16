@@ -25,8 +25,7 @@ Create a new file `db.ts` with this code:
 
 ```ts
 import {newDb} from 'pg-mem';
-import pgp, {IDatabase, ITask} from 'pg-promise';
-import {txMode} from 'pg-promise';
+import pgp, {IDatabase, ITask, txMode} from 'pg-promise';
 
 const {isolationLevel} = pgp.txMode;
 
@@ -47,10 +46,7 @@ function getDB() {
 }
 
 // Helper to make sure we always access database at serializable level.
-export async function tx<R>(
-  f: (t: ITask<{}> & {}) => Promise<R>,
-  dbp = getDB(),
-) {
+export async function tx<R>(f: (t: ITask<{}>) => Promise<R>, dbp = getDB()) {
   const db = await dbp;
   return await db.tx(
     {
