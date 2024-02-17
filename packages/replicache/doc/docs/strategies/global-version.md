@@ -52,51 +52,123 @@ type Todo = {
 
 ## Push
 
-The push handler is the same as the Reset Strategy, but with changes to annotate entities with the version they were changed at.
+The push handler is the same as in the Reset Strategy, but with changes to mark domain entities with the version they were changed at.
 
-1. Create a new `ReplicacheClientGroup` if necessary.
-1. Verify that the requesting user owns the specified `ReplicacheClientGroup`.
+Replicache sends a [`PushRequest`](/reference/server-push#http-request-body) to the push endpoint. For each mutation described in the request body, the push endpoint should:
 
-Then, for each mutation described in the [`PushRequest`](/reference/server-push#http-request-body):
+1. `let errorMode = false`
+1. Begin transaction
+1. Read the `ReplicacheClientGroup` for `body.clientGroupID` from the database, or default to:
 
-<ol>
-  <li value="3">Create the <code>ReplicacheClient</code> if necessary.</li>
-  <li>Validate that the <code>ReplicacheClient</code> is part of the requested <code>ReplicacheClientGroup</code>.</li>
-  <li>Validate that the received mutation ID is the next expected mutation ID from this client.</li>
-  <li>Increment the global version.</li>
-  <li>Run the applicable business logic to apply the mutation.
-    <ul>
-      <li>For each domain entity that is changed or deleted, update its <code>lastModifiedVersion</code> to the current global version.</li>
-      <li>For each domain entity that is deleted, set its <code>deleted</code> field to true.</li>
-    </ul>
-  </li>
-  <li>Update the <code>lastMutationID</code> of the client to store that the mutation was processed.</li>
-  <li>Update the <code>lastModifiedVersion</code> of the client to the current global version.</li>
-</ol>
+```json
+{
+  id: body.clientGroupID,
+  userID
+}
+```
 
-As with the Reset Strategy, it's important that each mutation is processed within a serializable transaction.
+4. Verify the requesting user owns the specified client group.
+1. Read the `ReplicacheClient` for `mutation.clientID` or default to:
+
+```json
+{
+  id: mutation.clientID,
+  clientGroupID: body.clientGroupID,
+  lastMutationID: 0,
+  lastModifiedVersion
+}
+```
+
+6. Verify the requesting client group owns the requested client.
+1. `let nextMutationID = client.lastMutationID + 1`
+1. Read the global `ReplicacheSpace`.
+1. `let nextVersion = replicacheSpace.version`
+1. Rollback transaction and skip this mutation if already processed (`mutation.id < nextMutationID`)
+1. Rollback transaction and error if mutation from the future (`mutation.id > nextMutationID`)
+1. If `errorMode != true` then:
+   1. Try to run business logic for mutation
+      1. Set `lastModifiedVersion` for any modified rows to `nextVersion`.
+      1. Set `deleted = true` for any deleted entities.
+   1. If error:
+      1. Log error
+      1. `set errorMode = true`
+      1. Abort transaction
+      1. Repeat these steps at the beginning
+1. Write `ReplicacheSpace`:
+
+```json
+{
+  version: nextVersion,
+}
+```
+
+14. Write `ReplicacheClientGroup`:
+
+```json
+{
+  id: body.clientGroupID,
+  userID,
+}
+```
+
+15. Write `ReplicacheClient`:
+
+```json
+{
+  id: mutation.clientID,
+  clientGroupID: body.clientGroupID,
+  lastMutationID: nextMutationID,
+  lastModifiedVersion: nextVersion,
+}
+```
+
+16. Commit transaction
+
+After the loop is complete, poke clients to cause them to pull.
+
+:::info
+
+It is important that each mutation is processed within a serializable transaction, so that the `ReplicacheClient` and `ReplicacheSpace` entities are updated atomically with the changes made by the mutation.
+
+:::
 
 ## Pull
 
-<ol>
-  <li>Verify that requesting user owns the requested <code>ReplicacheClientGroup</code>.</li>
-  <li>Return a <code><a href="/reference/server-pull#http-response-body">PullResponse</a></code> with:
-    <ul>
-      <li>The current global version as the cookie.</li>
-      <li>The <code>lastMutatationID</code> for each client that has changed since the requesting cookie.</li>
-      <li>A patch with:
-        <ul>
-          <li><code>put</code> ops for every entity created or changed since the request cookie.</li>
-          <li><code>del</code> ops for every entity deleted since the request cookie.</li>
-        </ul>
-      </li>
-    </ul>
-  </li>
-</ol>
+The pull handler is the same as in the Reset Strategy, but with changes to read only entities that are newer than the last pull.
+
+Replicache sends a [`PullRequest`](/reference/server-pull#http-request-body) to the pull endpoint. The endpoint should:
+
+1. Begin transaction
+1. `let prevVersion = body.cookie ?? 0`
+1. Read the `ReplicacheClientGroup` for `body.clientGroupID` from the database, or default to:
+
+```json
+{
+  id: body.clientGroupID,
+  userID
+}
+```
+
+4. Verify the requesting client group owns the requested client.
+1. Read the `ReplicacheSpace` entity
+1. Read all domain entities from the database that have `lastModifiedVersion > prevVersion`
+1. Read all `ReplicacheClient` records for the requested client group that have `lastModifiedVersion > prevVersion`.
+1. Create a `PullResponse` with:
+   1. `cookie` set to `space.version`
+   1. `lastMutationIDChanges` set to the `lastMutationID` for every client that has changed.
+   1. `patch` set to:
+      1. `op:del` for all domain entities that have changed and are deleted
+      1. `op:put` for all domain entities that have changed and aren't deleted
+
+:::info
+
+It is important that the pull is processed within a serializable transaction, so that the the `lastMutationIDChanges`, `cookie`, and `patch` that are returned are all consistent.
+
+:::
 
 ## Example
 
-See [todo-nextjs](https://github.com/rocicorp/todo-nextjs) for an example of this strategy.
+See [todo-nextjs](https://github.com/rocicorp/todo-nextjs) for an example of this strategy. Note that this sample also uses [Shared Mutators](../howto/share-mutators) and [batches the mutations](#early-exit-batch-size) into a single transaction.
 
 ## Why Not Use Last-Modified?
 
@@ -138,7 +210,7 @@ To correctly implement auth changes with this strategy, you also need to track t
 
 ### Early Exit, Batch Size
 
-Just as in the Reset strategy, you can [early exit](./reset#early-exit) the push handler or process mutations in [smaller batches](./reset#batch-size).
+Just as in the Reset strategy, you can [early exit](./reset#early-exit) the push handler or process mutations in [batches](./reset#batch-size).
 
 ### Alternative Soft Delete
 

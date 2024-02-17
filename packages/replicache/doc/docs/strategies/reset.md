@@ -100,7 +100,7 @@ After the loop is complete, poke clients to cause them to pull.
 
 :::info
 
-It is important that each mutation is processed within a serializable transaction, so that the `lastMutationID` is updated atomically with the changes made by the mutation.
+It is important that each mutation is processed within a serializable transaction, so that the `ReplicacheClient` entities are updated atomically with the changes made by the mutation.
 
 :::
 
@@ -118,7 +118,8 @@ Replicache sends a [`PullRequest`](/reference/server-pull#http-request-body) to 
 }
 ```
 
-4. Read all rows from the database that should be in the client view.
+3. Verify the requesting client group owns the requested client.
+1. Read all rows from the database that should be in the client view.
 1. Read all `ReplicacheClient` records for the requested client group.
 1. Create a `PullResponse` with:
    1. `cookie` set to the server's current timestamp as an integer.
