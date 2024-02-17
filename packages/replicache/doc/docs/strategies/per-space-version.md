@@ -51,7 +51,7 @@ type ReplicacheClient = {
   lastModifiedVersion: number;
 };
 
-// Each of your domain entities will have one additional fields.
+// Each of your domain entities will have three additional fields.
 type Todo = {
   // ... fields needed for your application (id, title, complete, etc)
 
@@ -65,53 +65,129 @@ type Todo = {
 
 ## Push
 
-The push handler should receive the `spaceID` being operated on as an HTTP parameter. The logic is otherwise almost identical to the Global Version Strategy, with minor changes to deal with spaces.
+The push handler should receive the `spaceID` being operated on as an HTTP parameter. The logic is otherwise almost identical to the Global Version Strategy, with minor changes to deal with spaces. The changes from the Global Version Strategy are marked below **in bold**.
 
-1. Create a new `ReplicacheClientGroup` if necessary.
-1. Verify that the requesting user owns the specified `ReplicacheClientGroup`.
-1. **Verify that the `ReplicacheClientGroup` is in the requested space.**
+Replicache sends a [`PushRequest`](/reference/server-push#http-request-body) to the push endpoint. For each mutation described in the request body, the push endpoint should:
 
-Then, for each mutation described in the [`PushRequest`](/reference/server-push#http-request-body):
+1. `let errorMode = false`
+1. Begin transaction
+1. **Read the `ReplicacheClientGroup` for `body.clientGroupID` from the database, or default to:**
 
-<ol>
-  <li value="3">Create the <code>ReplicacheClient</code> if necessary.</li>
-  <li>Validate that the <code>ReplicacheClient</code> is part of the requested <code>ReplicacheClientGroup</code>.</li>
-  <li>Validate that the received mutation ID is the next expected mutation ID from this client.</li>
-  <li>Increment the per-space version.</li>
-  <li>Run the applicable business logic to apply the mutation.
-    <ul>
-      <li>For each domain entity that is changed or deleted, update its <code>lastModifiedVersion</code> to the current per-space version.</li>
-      <li>For each domain entity that is deleted, set its <code>deleted</code> field to true.</li>
-    </ul>
-  </li>
-  <li>Update the <code>lastMutationID</code> of the client to store that the mutation was processed.</li>
-  <li>Update the <code>lastModifiedVersion</code> of the client to the current per-space version.</li>
-</ol>
+```json
+{
+  id: body.clientGroupID,
+  spaceID,
+  userID
+}
+```
+
+4. Verify the requesting user owns the specified client group.
+1. **Verify the specified client group is part of the requesting space.**
+1. Read the `ReplicacheClient` for `mutation.clientID` or default to:
+
+```json
+{
+  id: mutation.clientID,
+  clientGroupID: body.clientGroupID,
+  lastMutationID: 0,
+  lastModifiedVersion
+}
+```
+
+7. Verify the requesting client group owns the requested client.
+1. `let nextMutationID = client.lastMutationID + 1`
+1. **Read the `ReplicacheSpace` for `request.params.spaceID`**
+1. `let nextVersion = replicacheSpace.version`
+1. Rollback transaction and skip this mutation if already processed (`mutation.id < nextMutationID`)
+1. Rollback transaction and error if mutation from the future (`mutation.id > nextMutationID`)
+1. If `errorMode != true` then:
+   1. Try to run business logic for mutation
+      1. Set `lastModifiedVersion` for any modified rows to `nextVersion`.
+      1. Set `deleted = true` for any deleted entities.
+   1. If error:
+      1. Log error
+      1. `set errorMode = true`
+      1. Abort transaction
+      1. Repeat these steps at the beginning
+1. **Write `ReplicacheSpace`:**
+
+```json
+{
+  id: body.clientGroupID,
+  spaceID: request.params.spaceID,
+  version: nextVersion,
+}
+```
+
+15. **Write `ReplicacheClientGroup`:**
+
+```json
+{
+  id: body.clientGroupID,
+  userID,
+  spaceId,
+}
+```
+
+16. Write `ReplicacheClient`:
+
+```json
+{
+  id: mutation.clientID,
+  clientGroupID: body.clientGroupID,
+  lastMutationID: nextMutationID,
+  lastModifiedVersion: nextVersion,
+}
+```
+
+17. Commit transaction
+
+After the loop is complete, poke clients to cause them to pull.
+
+:::info
+
+It is important that each mutation is processed within a serializable transaction, so that the `ReplicacheClient` and `ReplicacheSpace` entities are updated atomically with the changes made by the mutation.
+
+:::
 
 ### Pull
 
-The pull handler should also receive the `spaceID` being operated on as an HTTP parameter.
+The pull handler is the same as in the Global Version Strategy, but with mionr changes to support multiple spaces. Changes from the Global Version Strategy are **marked in bold**.
 
-<ol>
-  <li>Verify that requesting user owns the requested <code>ReplicacheClientGroup</code>.</li>
-  <li>Verify that the requested <code>ReplicacheClientGroup</code> is within the requested space.</li>
-  <li>Return a <code><a href="/reference/server-pull#http-response-body">PullResponse</a></code> with:
-    <ul>
-      <li>The current per-space version as the cookie.</li>
-      <li>The <code>lastMutatationID</code> for each client that has changed since the requesting cookie.</li>
-      <li>A patch with:
-        <ul>
-          <li><code>put</code> ops for every entity created or changed since the request cookie.</li>
-          <li><code>del</code> ops for every entity deleted since the request cookie.</li>
-        </ul>
-      </li>
-    </ul>
-  </li>
-</ol>
+Replicache sends a [`PullRequest`](/reference/server-pull#http-request-body) to the pull endpoint. The pull handler should also receive the `spaceID` being operated on as an HTTP parameter. The endpoint should:
+
+1. Begin transaction
+1. `let prevVersion = body.cookie ?? 0`
+1. Read the `ReplicacheClientGroup` for `body.clientGroupID` from the database, or default to:
+
+```json
+{
+  id: body.clientGroupID,
+  userID
+}
+```
+
+4. Verify the requesting client group owns the requested client.
+1. Verify the client group is part of the requesed space.
+1. **Read the `ReplicacheSpace` entity for `request.params.spaceID`**
+1. **Read all domain entities from the database that have `spaceID == request.params.spaceID AND lastModifiedVersion > prevVersion`**
+1. Read all `ReplicacheClient` records for the requested client group that have `lastModifiedVersion > prevVersion`.
+1. Create a `PullResponse` with:
+   1. `cookie` set to `space.version`
+   1. `lastMutationIDChanges` set to the `lastMutationID` for every client that has changed.
+   1. `patch` set to:
+      1. `op:del` for all domain entities that have changed and are deleted
+      1. `op:put` for all domain entities that have changed and aren't deleted
+
+:::info
+
+It is important that the pull is processed within a serializable transaction, so that the the `lastMutationIDChanges`, `cookie`, and `patch` that are returned are all consistent.
+
+:::
 
 ## Example
 
-[Todo-WC](https://github.com/rocicorp/todo-wc) is a simple example of per-space versioning. [Repliear](/examples/repliear) is a more involved example.
+[Todo-WC](https://github.com/rocicorp/todo-wc) is a simple example of per-space versioning. [Repliear](/examples/repliear) is a more involved example. Note that both examples also uses [Shared Mutators](../howto/share-mutators) and [batch the mutations](#early-exit-batch-size) into a single transaction. So the logic is a little different than described above, but equivalent.
 
 ## Challenges
 

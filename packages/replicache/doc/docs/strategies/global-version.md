@@ -52,7 +52,7 @@ type Todo = {
 
 ## Push
 
-The push handler is the same as in the Reset Strategy, but with changes to mark domain entities with the version they were changed at.
+The push handler is the same as in the Reset Strategy, but with changes to mark domain entities with the version they were changed at. The changes from the Reset Strategy are marked below **in bold**.
 
 Replicache sends a [`PushRequest`](/reference/server-push#http-request-body) to the push endpoint. For each mutation described in the request body, the push endpoint should:
 
@@ -68,7 +68,7 @@ Replicache sends a [`PushRequest`](/reference/server-push#http-request-body) to 
 ```
 
 4. Verify the requesting user owns the specified client group.
-1. Read the `ReplicacheClient` for `mutation.clientID` or default to:
+1. **Read the `ReplicacheClient` for `mutation.clientID` or default to:**
 
 ```json
 {
@@ -81,20 +81,20 @@ Replicache sends a [`PushRequest`](/reference/server-push#http-request-body) to 
 
 6. Verify the requesting client group owns the requested client.
 1. `let nextMutationID = client.lastMutationID + 1`
-1. Read the global `ReplicacheSpace`.
-1. `let nextVersion = replicacheSpace.version`
+1. **Read the global `ReplicacheSpace`.**
+1. **`let nextVersion = replicacheSpace.version`**
 1. Rollback transaction and skip this mutation if already processed (`mutation.id < nextMutationID`)
 1. Rollback transaction and error if mutation from the future (`mutation.id > nextMutationID`)
 1. If `errorMode != true` then:
    1. Try to run business logic for mutation
-      1. Set `lastModifiedVersion` for any modified rows to `nextVersion`.
-      1. Set `deleted = true` for any deleted entities.
+      1. **Set `lastModifiedVersion` for any modified rows to `nextVersion`.**
+      1. **Set `deleted = true` for any deleted entities.**
    1. If error:
       1. Log error
       1. `set errorMode = true`
       1. Abort transaction
       1. Repeat these steps at the beginning
-1. Write `ReplicacheSpace`:
+1. **Write `ReplicacheSpace`:**
 
 ```json
 {
@@ -111,7 +111,7 @@ Replicache sends a [`PushRequest`](/reference/server-push#http-request-body) to 
 }
 ```
 
-15. Write `ReplicacheClient`:
+15. **Write `ReplicacheClient`:**
 
 ```json
 {
@@ -134,12 +134,12 @@ It is important that each mutation is processed within a serializable transactio
 
 ## Pull
 
-The pull handler is the same as in the Reset Strategy, but with changes to read only entities that are newer than the last pull.
+The pull handler is the same as in the Reset Strategy, but with changes to read only entities that are newer than the last pull. The changes from the Reset Strategy are marked below **in bold**.
 
 Replicache sends a [`PullRequest`](/reference/server-pull#http-request-body) to the pull endpoint. The endpoint should:
 
 1. Begin transaction
-1. `let prevVersion = body.cookie ?? 0`
+1. **`let prevVersion = body.cookie ?? 0`**
 1. Read the `ReplicacheClientGroup` for `body.clientGroupID` from the database, or default to:
 
 ```json
@@ -150,15 +150,15 @@ Replicache sends a [`PullRequest`](/reference/server-pull#http-request-body) to 
 ```
 
 4. Verify the requesting client group owns the requested client.
-1. Read the `ReplicacheSpace` entity
-1. Read all domain entities from the database that have `lastModifiedVersion > prevVersion`
-1. Read all `ReplicacheClient` records for the requested client group that have `lastModifiedVersion > prevVersion`.
+1. **Read the global `ReplicacheSpace` entity**
+1. **Read all domain entities from the database that have `lastModifiedVersion > prevVersion`**
+1. **Read all `ReplicacheClient` records for the requested client group that have `lastModifiedVersion > prevVersion`.**
 1. Create a `PullResponse` with:
-   1. `cookie` set to `space.version`
-   1. `lastMutationIDChanges` set to the `lastMutationID` for every client that has changed.
+   1. **`cookie` set to `space.version`**
+   1. **`lastMutationIDChanges` set to the `lastMutationID` for every client that has changed.**
    1. `patch` set to:
-      1. `op:del` for all domain entities that have changed and are deleted
-      1. `op:put` for all domain entities that have changed and aren't deleted
+      1. **`op:del` for all domain entities that have changed and are deleted**
+      1. **`op:put` for all domain entities that have changed and aren't deleted**
 
 :::info
 
@@ -168,7 +168,7 @@ It is important that the pull is processed within a serializable transaction, so
 
 ## Example
 
-See [todo-nextjs](https://github.com/rocicorp/todo-nextjs) for an example of this strategy. Note that this sample also uses [Shared Mutators](../howto/share-mutators) and [batches the mutations](#early-exit-batch-size) into a single transaction.
+See [todo-nextjs](https://github.com/rocicorp/todo-nextjs) for an example of this strategy. Note that this sample also uses [Shared Mutators](../howto/share-mutators) and [batches the mutations](#early-exit-batch-size) into a single transaction. So the logic is a little different than above, but equivalent.
 
 ## Why Not Use Last-Modified?
 
