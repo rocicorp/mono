@@ -40,35 +40,96 @@ type ReplicacheClient = {
 
 ### Push
 
-Replicache sends a [`PushRequest`](/reference/server-push#http-request-body) to the push endpoint. The endpoint should:
+Replicache sends a [`PushRequest`](/reference/server-push#http-request-body) to the push endpoint. For each mutation described in the request body, the push endpoint should:
 
-1. Create a new `ReplicacheClientGroup` if necessary.
-1. Verify the requesting user owns the specified `ReplicacheClientGroup`.
+1. `let errorMode = false`
+1. Begin transaction
+1. Read the `ReplicacheClientGroup` for `body.clientGroupID` from the database, or default to:
 
-Then, for each mutation described in the `PushRequest`:
+```json
+{
+  id: body.clientGroupID,
+  userID
+}
+```
 
-3. Create a new `ReplicacheClient` if necessary.
-4. Validate the `ReplicacheClient` is part of the requested `ReplicacheClientGroup`.
-5. Validate the received mutation ID is the next expected mutation ID from this client.
-6. Run the applicable business logic to apply the mutation.
-7. Update the `lastMutationID` of the client to store that the mutation was processed.
+4. Verify the requesting user owns the specified client group.
+1. Read the `ReplicacheClient` for `mutation.clientID` or default to:
+
+```json
+{
+  id: mutation.clientID,
+  clientGroupID: body.clientGroupID,
+  lastMutationID: 0,
+}
+```
+
+6. Verify the requesting client group owns the requested client.
+1. `let nextMutationID = client.lastMutationID + 1`
+1. Rollback transaction and skip this mutation if already processed (`mutation.id < nextMutationID`)
+1. Rollback transaction and error if mutation from the future (`mutation.id > nextMutationID`)
+1. If `errorMode != true` then:
+   1. Try to run business logic for mutation
+   1. If error:
+      1. Log error
+      1. `set errorMode = true`
+      1. Abort transaction
+      1. Repeat these steps at the beginning
+1. Write `ReplicacheClientGroup`:
+
+```json
+{
+  id: body.clientGroupID,
+  userID,
+}
+```
+
+12. Write `ReplicacheClient`:
+
+```json
+{
+  id: mutation.clientID,
+  clientGroupID: body.clientGroupID,
+  lastMutationID: nextMutationID,
+}
+```
+
+13. Commit transaction
+
+After the loop is complete, poke clients to cause them to pull.
+
+:::info
 
 It is important that each mutation is processed within a serializable transaction, so that the `lastMutationID` is updated atomically with the changes made by the mutation.
+
+:::
 
 ## Pull
 
 Replicache sends a [`PullRequest`](/reference/server-pull#http-request-body) to the pull endpoint. The endpoint should:
 
-<ol>
-  <li>Verify that requesting user owns the requested <code>ReplicacheClientGroup</code>.</li>
-  <li>Return a <code><a href="/reference/server-pull#http-response-body">PullResponse</a></code> with:
-    <ul>
-      <li>Some monotonically increasing <code>cookie</code>.</li>
-      <li>The <code>lastMutatationID</code> for every client in the client group.</li>
-      <li>A patch which clears the client view and replaces it with the entire current client view.</li>
-    </ul>
-  </li>
-</ol>
+1. Begin transaction
+1. Read the `ReplicacheClientGroup` for `body.clientGroupID` from the database, or default to:
+
+```json
+{
+  id: body.clientGroupID,
+  userID
+}
+```
+
+4. Read all rows from the database that should be in the client view.
+1. Read all `ReplicacheClient` records for the requested client group.
+1. Create a `PullResponse` with:
+   1. `cookie` set to the server's current timestamp as an integer.
+   1. `lastMutationIDChanges` set to the `lastMutationID` for every client in the client group.
+   1. `patch` set to `op:clear` followed by `op:put` for every row in the view.
+
+:::info
+
+It is important that the pull is processed within a serializable transaction, so that the the `lastMutationIDs` read are consistent with the rows that are read.
+
+:::
 
 ## Example
 
