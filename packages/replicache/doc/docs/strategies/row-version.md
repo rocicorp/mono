@@ -21,9 +21,10 @@ In TypeScript, it might look like:
 
 ```ts
 type CVR = {
-  // Value of ReplicacheClientGroup.clientVersion at time of generation.
-  clientVersion: number;
-
+  id: string;
+  // Map of clientID->lastMutationID pairs, one for each client in the
+  // client group.
+  lastMutationIDs: Record<string, number>;
   // Map of key->version pairs, one for each entity in the client view.
   entities: Record<string, number>;
 };
@@ -31,7 +32,7 @@ type CVR = {
 
 One CVR is generated for each pull response and stored in some ephemeral storage. The storage doesn’t need to be durable — if the CVR is lost, the server can just send a reset patch. And the storage doesn’t need to be transactional with the database. Redis is fine.
 
-The CVRs are stored keyed under an incrementing ID which becomes the cookie sent to Replicache.
+The CVRs are stored keyed under a random unique ID which becomes the cookie sent to Replicache.
 
 During pull, the server uses the cookie to lookup the CVR associated with the previous pull response. It then computes a new CVR for the latest server state and diffs the two CVRs to compute the delta to send to the client.
 
@@ -43,12 +44,9 @@ type ReplicacheClientGroup = {
   id: string;
   userID: any;
 
-  // Incremented on each mutation from a client in the group.
-  clientVersion: number;
-
-  // Increments each time we generate a CVR. Null is used as a sentinel to
-  // indicate that a pull hasn't happened yet.
-  cvrVersion: number | null;
+  // Replicache requires that cookies are ordered within a client group.
+  // To establish this order we simply keep a counter.
+  cvrVersion: number;
 };
 
 type ReplicacheClient = {
@@ -56,8 +54,6 @@ type ReplicacheClient = {
   id: string;
   clientGroupID: string;
   lastMutationID: number;
-
-  lastModifiedClientVersion: number;
 };
 
 // Each of your domain entities will have one extra field.
@@ -65,60 +61,164 @@ type Todo = {
   // ... fields needed for your application (id, title, complete, etc)
 
   // Incremented each time this row is updated.
-  // Note this is not the same as the global or per-space versioning scheme.
-  // Each entity has their *own* version which increments independently.
+  // In Postgres, there is no need to declare this as Postgres tracks its
+  // own per-row version 'xmin' which we can use for this purpose:
+  // https://www.postgresql.org/docs/current/ddl-system-columns.html
   version: number;
 };
 ```
 
 ## Push
 
-The push handler is similar to the Reset Strategy, except for with some modifications to track changes to clients and domain entities.
+The push handler is similar to the Reset Strategy, except for with some modifications to track changes to clients and domain entities. The changes from the Reset Strategy are marked **in bold**.
 
-1. Create a new `ReplicacheClientGroup` if necessary, initializing the `cvrVersion` to `null`.
-1. Verify that the requesting user owns the specified `ReplicacheClientGroup`.
+Replicache sends a [`PushRequest`](/reference/server-push#http-request-body) to the push endpoint. For each mutation described in the request body, the push endpoint should:
 
-Then, for each mutation described in the [`PushRequest`](/reference/server-push#http-request-body):
+1. `let errorMode = false`
+1. Begin transaction
+1. **`getClientGroup(body.clientGroupID)`, or default to:**
 
-<ol>
-	<li value="3">Create the <code>ReplicacheClient</code> if necessary.</li>
-	<li>Validate that the <code>ReplicacheClient</code> is part of the requested <code>ReplicacheClientGroup</code>.</li>
-	<li>Increment the <code>clientVersion</code> field of the <code>ReplicacheClientGroup</code>.</li>
-	<li>Validate that the received mutation ID is the next expected mutation ID from this client.</li>
-	<li>Run the applicable business logic to apply the mutation.
-		<ul>
-			<li>Increment the <code>version</code> field of any affected domain entities.</li>
-		</ul>
-	</li>
-	<li>Update the <code>lastMutationID</code> of the client to store that the mutation was processed.</li>
-	<li>Update the <code>lastModifiedClientVersion</code> field of the client to the current <code>clientVersion</code> value.</li>
-</ol>
+```json
+{
+  id: body.clientGroupID,
+  userID
+  cvrVersion: 0,
+}
+```
+
+4. Verify requesting user owns specified client group.
+1. `getClient(mutation.clientID)` or default to:
+
+```json
+{
+  id: mutation.clientID,
+  clientGroupID: body.clientGroupID,
+  lastMutationID: 0,
+}
+```
+
+6. Verify requesting client group owns requested client
+1. `let nextMutationID = client.lastMutationID + 1`
+1. Rollback transaction and skip mutation if already processed (`mutation.id < nextMutationID`)
+1. Rollback transaction and error if mutation from future (`mutation.id > nextMutationID`)
+1. If `errorMode != true` then:
+   1. Try business logic for mutation
+      1. **Increment `version` for modified rows**
+      1. Note: Soft-deletes _not_ required – you can delete rows normally as part of mutations
+   1. If error:
+      1. Log error
+      1. Abort transaction
+      1. Retry this transaction with `errorMode = true`
+1. **`putClientGroup()`**:
+
+```json
+{
+  id: body.clientGroupID,
+  userID,
+  cvrVersion: clientGroup.cvrVersion,
+}
+```
+
+12. `putClient()`:
+
+```json
+{
+  id: mutation.clientID,
+  clientGroupID: body.clientGroupID,
+  lastMutationID: nextMutationID,
+}
+```
+
+13. Commit transaction
+
+After the loop is complete, poke clients to cause them to pull.
+
+:::info
+
+It is important that each mutation is processed within a serializable transaction, so that the `ReplicacheClient` entities are updated atomically with the changes made by the mutation.
+
+:::
 
 ## Pull
 
-The pull logic is more involved than in other strategies because of the need to manage the CVRs:
+The pull logic is more involved than other strategies because of the need to manage the CVRs.
 
-<ol>
-  <li>Verify that requesting user owns the requested <code>ReplicacheClientGroup</code>.</li>
-	<li>Use the request cookie to fetch the previous CVR, or default to an empty CVR.</li>
-	<li>Increment the <code>ReplicacheClientGroup</code> record's <code>cvrVersion</code> field.</li>
-	<li>Fetch the ids and versions of the current Client View from the DB and use it to build the next CVR. This query can be any arbitrary function of the DB, including read authorization, paging, etc.</li>
-	<li>Store the new CVR keyed by <code>clientGroupID</code> and the current <code>cvrVersion</code>.</li>
-	<li>Fetch the values of all entities that are either new or have a greater version in the latest CVR.</li>
-	<li>Fetch all <code>ReplicacheClient</code> records that have changed since the old CVR's <code>clientVersion</code>.</li>
-  <li>Return a <code><a href="/reference/server-pull#http-response-body">PullResponse</a></code> with:
-    <ul>
-      <li><code>&#123;order: $nextCVRVersion, clientGroupID: $clientGroupID&#125;</code> as the cookie.</li>
-      <li>The <code>lastMutatationID</code> for each changed client.</li>
-      <li>A patch with:
-        <ul>
-          <li><code>put</code> ops for every created or changed entity.</li>
-          <li><code>del</code> ops for every deleted entity.</li>
-        </ul>
-      </li>
-    </ul>
-  </li>
-</ol>
+Replicache sends a [`PullRequest`](/reference/server-pull#http-request-body) to the pull endpoint. The endpoint should:
+
+1. `let prevCVR = getCVR(body.cookie.cvrID)`
+1. `let baseCVR = prevCVR` or default to:
+
+```json
+{
+  "id": "",
+  "entries": {}
+}
+```
+
+3. Begin transaction
+1. `getClientGroup(body.clientGroupID)`, or default to:
+
+```json
+{
+  id: body.clientGroupID,
+  userID,
+  cvrVersion: 0,
+}
+```
+
+5. Verify requesting client group owns requested client.
+1. Read all id/version pairs from the database that should be in the client view. This query can be any arbitrary function of the DB, including read authorization, paging, etc.
+1. Read all clients in the client group.
+1. Build `nextCVR` from entities and clients.
+1. Calculate the difference between `baseCVR` and `nextCVR`
+1. If prevCVR was found and two CVRs are identical then exit this transaction and return a no-op PullResopnse to client:
+
+```json
+{
+  cookie: prevCookie,
+  lastMutationIDChanges: {},
+  patch: [],
+}
+```
+
+11. Fetch all entities from database that are new or changed between `baseCVR` and `nextCVR`
+1. `let clientChanges = clients that are new or changed since baseCVR`
+1. `let nextCVRVersion = Math.max(pull.cookie?.order ?? 0, clientGroup.cvrVersion) + 1`
+
+:::caution
+
+It's important to default to the incoming cookie's order because when
+Replicache creates a new ClientGroup, it can fork from an existing one,
+and we need the order to not go backward.
+
+:::
+
+14. `putClientGroup()`:
+
+```json
+{
+  id: clientGroup.id,
+  userID: clientGroup.userID,
+  cvrVersion: nextCVRVersion,
+}
+```
+
+15. Commit
+1. `let nextCVRID = randomID()`
+1. `putCVR(nextCVR)`
+1. Create a `PullResponse` with:
+   1. A patch with:
+      1. `op:clear` if `prevCVR === undefined`
+      1. `op:put` for every created or changed entity
+      1. `op:del` for every deleted entity
+   1. `{order: nextCVRVersion, cvrID}` as the cookie.
+   1. `lastMutationIDChanges` with entries for every client that has changed.
+
+:::info
+
+It is important that the pull is processed within a serializable transaction, so that the the `lastMutationIDs` read are consistent with the rows that are read.
+
+:::
 
 ## Example
 
@@ -130,7 +230,7 @@ The query that builds the client view can change at any time, and can even be pe
 
 The solution is to sync the current query with Replicache (🤯). That way it will be automatically synced to all tabs.
 
-- Add a new entity to the backend database to store the current query for a profile. Like other entities it should have a `version` field. Let’s say: `/control/<profile-id>/query`.
+- Add a new entity to the backend database to store the current query for a profile. Like other entities it should have a `version` field. Let’s say: `/control/<userid>/query`.
 - When computing the pull, first read this value. If not present, use the default query. Include this entity in the pull response as any other entity.
 - In the UI can use the query data in the client view to check and uncheck filter boxes, etc., just like other Replicache data!
 - Add mutations that modify this entity.
@@ -138,7 +238,5 @@ The solution is to sync the current query with Replicache (🤯). That way it wi
 ## Variations
 
 - The CVR can be passed into the database as an argument enabling the pull to be computed in a single DB round-trip.
-- The CVR can be **stored** in the primary database, allowing the pull to be computed with a single network round trip (no redis required). The downside is you must expire the CVR entries manually as you can’t rely on Redis caching.
+- The CVR can be **stored** in the primary database, allowing the patch to be computed with database joins and dramatically reducing amount of data read from DB.
 - The per-row version number can also be a hash over the row serialization, or even a random GUID. These approaches might perform better in some datastores since it eliminates a read of the existing row during write.
-- The changed clients can also be computed using the CVR approach rather than the <code>clientVersion</code>. The downside to doing that is that the set of Clients per ClientGroup only grows, and so the size of the diff in memory in the app server grows forever too.
-- It is still totally fine to partition data into spaces and have a per-space `version` column ([aka a “semaphore”](https://dev.mysql.com/doc/refman/5.7/en/innodb-deadlocks-handling.html)) to enforce serialization and avoid deadlocks. This just becomes orthogonal to computing pulls.
