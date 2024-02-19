@@ -267,37 +267,6 @@ export async function markRoomDeleted(
   lc.debug?.(`deleted room ${JSON.stringify(roomRecord)}`);
 }
 
-export async function getRoomContents(
-  lc: LogContext,
-  roomDO: DurableObjectNamespace,
-  storage: DurableStorage,
-  roomID: string,
-  request: Request,
-): Promise<Response> {
-  const roomRecord = await roomRecordByRoomID(storage, roomID);
-  if (roomRecord === undefined) {
-    throw roomNotFoundAPIError(roomID);
-  }
-  const objectID = roomDO.idFromString(roomRecord.objectIDString);
-  const roomDOStub = roomDO.get(objectID);
-  const response = await roomDOFetch(
-    request,
-    'roomContent',
-    roomDOStub,
-    roomID,
-    lc,
-  );
-  if (!response.ok) {
-    lc.debug?.(
-      `Received error response from ${roomID}. ${
-        response.status
-      } ${await response.clone().text()}`,
-    );
-    throw new ErrorWithForwardedResponse(response);
-  }
-  return response;
-}
-
 function validateRoomID(roomID: string) {
   if (!isValidRoomID(roomID)) {
     throw new APIError(400, 'rooms', makeInvalidRoomIDMessage(roomID));

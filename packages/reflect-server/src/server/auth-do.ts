@@ -64,7 +64,6 @@ import {
   closeRoom,
   createRoom,
   deleteRoom,
-  getRoomContents,
   internalCreateRoom,
   markRoomDeleted,
   objectIDByRoomID,
@@ -275,17 +274,41 @@ export class BaseAuthDO implements DurableObject {
 
   #getRoomContents = get()
     .with(queryParams(roomIDParams))
-    .handle((ctx, req) =>
-      this.#roomRecordLock.withRead(() =>
-        getRoomContents(
-          ctx.lc,
-          this.#roomDO,
+    .handle(async (ctx, req) => {
+      let roomRecord: RoomRecord | undefined;
+
+      await this.#roomRecordLock.withRead(async () => {
+        roomRecord = await roomRecordByRoomID(
           this.#durableStorage,
           ctx.query.roomID,
-          req,
-        ),
-      ),
-    );
+        );
+      });
+
+      if (roomRecord === undefined) {
+        throw roomNotFoundAPIError(ctx.query.roomID);
+      }
+
+      const objectID = this.#roomDO.idFromString(roomRecord.objectIDString);
+      const roomDOStub = this.#roomDO.get(objectID);
+      const response = await roomDOFetch(
+        req,
+        'roomContent',
+        roomDOStub,
+        ctx.query.roomID,
+        ctx.lc,
+      );
+
+      if (!response.ok) {
+        ctx.lc.debug?.(
+          `Received error response from ${ctx.query.roomID}. ${
+            response.status
+          } ${await response.clone().text()}`,
+        );
+        throw new ErrorWithForwardedResponse(response);
+      }
+
+      return response;
+    });
 
   // TODO: Remove
   #legacyCreateRoom = post()

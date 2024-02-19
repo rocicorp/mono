@@ -71,7 +71,6 @@ import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 import {scanUserValues} from '../storage/replicache-transaction.js';
 import type {RoomContents} from './rooms.js';
-import {RWLock} from '@rocicorp/lock';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -117,7 +116,6 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   });
   #maxProcessedMutationTimestamp = 0;
   readonly #lock = new LoggingLock();
-  readonly #roomRecordLock = new RWLock();
   readonly #mutators: MutatorMap;
   readonly #roomStartHandler: RoomStartHandler;
   readonly #onClientDisconnect: ClientDisconnectHandler;
@@ -432,11 +430,15 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   #getContents = get().handleAPIResult((ctx, _req): Promise<RoomContents> => {
     const {lc} = ctx;
     lc.info?.('getting room contents');
-    return this.#roomRecordLock.withRead(async () => {
-      const entries = await scanUserValues(this.#storage, {})
-        .entries()
-        .toArray();
-      return {contents: Object.fromEntries(entries)};
+    return this.#lock.withLock(lc, 'getContents', async () => {
+      const response: RoomContents = {contents: {}};
+      for await (const [key, value] of scanUserValues(
+        this.#storage,
+        {},
+      ).entries()) {
+        response.contents[key] = value;
+      }
+      return response;
     });
   });
 
