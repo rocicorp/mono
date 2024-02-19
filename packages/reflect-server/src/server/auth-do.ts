@@ -42,6 +42,7 @@ import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
+  GET_CONTENTS_ROOM_PATH,
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
@@ -114,6 +115,7 @@ export type ConnectionRecord = valita.Infer<typeof connectionRecordSchema>;
 export const AUTH_ROUTES_AUTHED_BY_API_KEY = {
   listRoomProperties: LIST_ROOMS_PATH,
   getRoomProperties: LEGACY_GET_ROOM_PATH,
+  getRoomContents: GET_CONTENTS_ROOM_PATH,
   closeRoom: CLOSE_ROOM_PATH,
   deleteRoom: DELETE_ROOM_PATH,
   legacyCloseRoom: LEGACY_CLOSE_ROOM_PATH,
@@ -268,6 +270,44 @@ export class BaseAuthDO implements DurableObject {
           jurisdiction,
         ),
       );
+    });
+
+  #getRoomContents = get()
+    .with(queryParams(roomIDParams))
+    .handle(async (ctx, req) => {
+      let roomRecord: RoomRecord | undefined;
+
+      await this.#roomRecordLock.withRead(async () => {
+        roomRecord = await roomRecordByRoomID(
+          this.#durableStorage,
+          ctx.query.roomID,
+        );
+      });
+
+      if (roomRecord === undefined) {
+        throw roomNotFoundAPIError(ctx.query.roomID);
+      }
+
+      const objectID = this.#roomDO.idFromString(roomRecord.objectIDString);
+      const roomDOStub = this.#roomDO.get(objectID);
+      const response = await roomDOFetch(
+        req,
+        'roomContent',
+        roomDOStub,
+        ctx.query.roomID,
+        ctx.lc,
+      );
+
+      if (!response.ok) {
+        ctx.lc.debug?.(
+          `Received error response from ${ctx.query.roomID}. ${
+            response.status
+          } ${await response.clone().text()}`,
+        );
+        throw new ErrorWithForwardedResponse(response);
+      }
+
+      return response;
     });
 
   // TODO: Remove
@@ -462,6 +502,7 @@ export class BaseAuthDO implements DurableObject {
       AUTH_ROUTES.listRoomProperties,
       this.#listRoomProperties,
     );
+    this.#router.register(AUTH_ROUTES.getRoomContents, this.#getRoomContents);
     this.#router.register(
       AUTH_ROUTES.getRoomProperties,
       this.#getRoomProperties,

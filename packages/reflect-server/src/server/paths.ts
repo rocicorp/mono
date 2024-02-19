@@ -19,6 +19,7 @@ export const LEGACY_GET_ROOM_PATH = `/api/v1/rooms/:roomID(${ID_REGEX})`;
 export const CREATE_ROOM_PATH = `/api/v1/rooms\\:create`;
 export const CLOSE_ROOM_PATH = `/api/v1/rooms\\:close`;
 export const DELETE_ROOM_PATH = `/api/v1/rooms\\:delete`;
+export const GET_CONTENTS_ROOM_PATH = `/api/v1/rooms/contents`;
 
 export const LEGACY_CREATE_ROOM_PATH = `/api/v1/rooms/:roomID(${ID_REGEX})\\:create`;
 export const LEGACY_CLOSE_ROOM_PATH = `/api/v1/rooms/:roomID(${ID_REGEX})\\:close`;

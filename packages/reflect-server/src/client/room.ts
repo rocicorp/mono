@@ -5,6 +5,7 @@ import {
   CLOSE_ROOM_PATH,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
+  GET_CONTENTS_ROOM_PATH,
   LIST_ROOMS_PATH,
   fmtPath,
 } from '../server/paths.js';
@@ -161,4 +162,19 @@ export function newDeleteRoomRequest(
     reflectServerURL,
   );
   return newAuthedPostRequest(url, authApiKey);
+}
+
+export function newGetRoomContentsRequest(
+  reflectServerURL: string,
+  authApiKey: string,
+  roomID: string,
+) {
+  const url = new URL(
+    fmtPath(GET_CONTENTS_ROOM_PATH, new URLSearchParams({roomID})),
+    reflectServerURL,
+  );
+  return new Request(url.toString(), {
+    method: 'GET',
+    headers: createAPIHeaders(authApiKey),
+  });
 }

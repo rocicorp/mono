@@ -44,6 +44,7 @@ import {
   CONNECT_URL_PATTERN,
   CREATE_ROOM_PATH,
   DELETE_ROOM_PATH,
+  GET_CONTENTS_ROOM_PATH,
   INVALIDATE_ALL_CONNECTIONS_PATH,
   INVALIDATE_ROOM_CONNECTIONS_PATH,
   INVALIDATE_USER_CONNECTIONS_PATH,
@@ -68,6 +69,8 @@ import {
 } from './router.js';
 import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
+import {scanUserValues} from '../storage/replicache-transaction.js';
+import type {RoomContents} from './rooms.js';
 
 const roomIDKey = '/system/roomID';
 const deletedKey = '/system/deleted';
@@ -88,6 +91,7 @@ export interface RoomDOOptions<MD extends MutatorDefs> {
 export const ROOM_ROUTES = {
   deletePath: DELETE_ROOM_PATH,
   legacyDeletePath: LEGACY_DELETE_ROOM_PATH,
+  getContents: GET_CONTENTS_ROOM_PATH,
   authInvalidateAll: INVALIDATE_ALL_CONNECTIONS_PATH,
   authInvalidateForUser: INVALIDATE_USER_CONNECTIONS_PATH,
   authInvalidateForRoom: INVALIDATE_ROOM_CONNECTIONS_PATH,
@@ -187,6 +191,7 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
   #initRoutes() {
     this.#router.register(ROOM_ROUTES.deletePath, this.#deleteRoom);
     this.#router.register(ROOM_ROUTES.legacyDeletePath, this.#legacyDeleteRoom);
+    this.#router.register(ROOM_ROUTES.getContents, this.#getContents);
     this.#router.register(
       ROOM_ROUTES.authInvalidateAll,
       this.#authInvalidateAll,
@@ -420,6 +425,21 @@ export class BaseRoomDO<MD extends MutatorDefs> implements DurableObject {
     connectTail(serverWS);
 
     return upgradeWebsocketResponse(clientWS, request.headers);
+  });
+
+  #getContents = get().handleAPIResult((ctx, _req): Promise<RoomContents> => {
+    const {lc} = ctx;
+    lc.info?.('getting room contents');
+    return this.#lock.withLock(lc, 'getContents', async () => {
+      const response: RoomContents = {contents: {}};
+      for await (const [key, value] of scanUserValues(
+        this.#storage,
+        {},
+      ).entries()) {
+        response.contents[key] = value;
+      }
+      return response;
+    });
   });
 
   #authInvalidateForRoom = post()

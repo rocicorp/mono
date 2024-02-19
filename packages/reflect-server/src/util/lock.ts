@@ -34,12 +34,12 @@ export class LoggingLock {
     }
   }
 
-  async withLock(
+  async withLock<T>(
     lc: LogContext,
     name: string,
-    fn: (lc: LogContext) => MaybePromise<void>,
+    fn: (lc: LogContext) => MaybePromise<T>,
     flushLogsIfLockHeldForMs = 100,
-  ): Promise<void> {
+  ): Promise<T> {
     // Note: It is important that there are no `await`s before the lock
     // acquisition is attempted (i.e. withLock()), as the calling logic relies
     // on lock acquisition happening in chronological order.
@@ -49,7 +49,7 @@ export class LoggingLock {
     let flushAfterLock = false;
     const t0 = Date.now();
 
-    await this.#lock.withLock(async () => {
+    const result: T = await this.#lock.withLock(async () => {
       const t1 = Date.now();
 
       const lockHoldID = randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -66,7 +66,7 @@ export class LoggingLock {
       }
 
       try {
-        await fn(lc);
+        return await fn(lc);
       } finally {
         const t2 = Date.now();
         const elapsed = t2 - t1;
@@ -87,5 +87,6 @@ export class LoggingLock {
     if (flushAfterLock) {
       await lc.flush();
     }
+    return result;
   }
 }
