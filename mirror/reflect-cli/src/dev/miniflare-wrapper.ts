@@ -2,7 +2,6 @@ import {resolver} from '@rocicorp/resolver';
 import {Miniflare, MiniflareOptions} from 'miniflare';
 import * as readline from 'node:readline';
 import color from 'picocolors';
-import {getLogger} from '../logger.js';
 
 declare const TESTING: boolean;
 
@@ -61,22 +60,22 @@ export class MiniflareWrapper {
     stdout: NodeJS.ReadableStream,
     stderr: NodeJS.ReadableStream,
   ) {
-    readline.createInterface(stdout).on('line', data => getLogger().log(data));
+    readline.createInterface(stdout).on('line', data => console.log(data));
     const rli = readline.createInterface(stderr);
     rli.on('line', data => {
       switch (classifyStdErrMessage(data)) {
         case StdErrClassification.Debug:
-          getLogger().log(data);
+          console.log(data);
           return;
         case StdErrClassification.Crash:
-          getLogger().error(color.red(data));
-          getLogger().error(color.red('Detected server crash...'));
+          console.error(color.red(data));
+          console.error(color.red('Detected server crash...'));
           this.restart().catch(e => {
-            getLogger().error('Failed to restart dev server', e);
+            console.error('Failed to restart dev server', e);
           });
           return;
         case StdErrClassification.Unknown:
-          getLogger().error(color.red(data));
+          console.error(color.red(data));
           break;
         case StdErrClassification.Silence:
           break;
