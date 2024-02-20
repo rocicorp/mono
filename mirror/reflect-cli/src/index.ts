@@ -30,6 +30,7 @@ import {deleteVarsHandler, deleteVarsOptions} from './vars/delete.js';
 import {listVarsHandler, listVarsOptions} from './vars/list.js';
 import {setVarsHandler, setVarsOptions} from './vars/set.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import {getLogger} from './logger.js';
 
 async function main(argv: string[]): Promise<void> {
   const reflectCLI = createCLIParser(argv);
@@ -38,7 +39,7 @@ async function main(argv: string[]): Promise<void> {
     await reflectCLI.parse();
   } catch (e) {
     if (e instanceof CommandLineArgsError) {
-      console.log(e.message);
+      getLogger().log(e.message);
       await createCLIParser([...argv, '--help']).parse();
     } else {
       throw e;
@@ -119,7 +120,7 @@ function createCLIParser(argv: string[]) {
         _yargs: YargvToInterface<CommonYargsArgv>,
         authContext: AuthContext,
       ): Promise<void> => {
-        console.log(
+        getLogger().log(
           `Team: ${authContext.user.additionalUserInfo?.username}\nProvider: ${authContext.user.additionalUserInfo?.providerId}\nEmail: ${authContext.user.email}\nName: ${authContext.user.additionalUserInfo?.profile?.name}`,
         );
         return Promise.resolve();

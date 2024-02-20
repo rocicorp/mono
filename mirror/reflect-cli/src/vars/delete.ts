@@ -7,6 +7,7 @@ import {makeRequester} from '../requester.js';
 import {watchDeployment} from '../watch-deployment.js';
 import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
+import {getLogger} from '../logger.js';
 
 export function deleteVarsOptions(yargs: CommonVarsYargsArgv) {
   return yargs
@@ -36,7 +37,7 @@ export async function deleteVarsHandler(
   const {keys: vars, dev, app} = yargs;
   if (dev) {
     deleteDevVars(vars);
-    console.log('Deleted specified Dev Variables');
+    getLogger().log('Deleted specified Dev Variables');
     return;
   }
   const {userID} = authContext.user;
@@ -45,9 +46,9 @@ export async function deleteVarsHandler(
   const data = {requester: makeRequester(userID), appID, vars};
   const {deploymentPath} = await deleteVars.call(data);
   if (!deploymentPath) {
-    console.log('Deleted specified environment variables');
+    getLogger().log('Deleted specified environment variables');
   } else {
-    console.log('Deploying updated environment variables');
+    getLogger().log('Deploying updated environment variables');
     await watchDeployment(getFirestore(), deploymentPath, 'Deployed');
   }
 }

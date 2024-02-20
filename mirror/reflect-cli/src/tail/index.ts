@@ -9,6 +9,7 @@ import {getAppID, getDefaultApp} from '../app-config.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 import {createTailEventSource} from './tail-event-source.js';
 import type {AuthContext} from '../handler.js';
+import {getLogger} from '../logger.js';
 
 export function tailOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -52,16 +53,16 @@ export async function tailHandler(
   );
 
   try {
-    console.log(`Connecting to room ${roomID} to tail log...`);
+    getLogger().log(`Connecting to room ${roomID} to tail log...`);
     for await (const entry of tailEventSource) {
       logTailMessage(entry);
     }
   } catch (e) {
     if (e instanceof Error) {
       if (/\b404\b/.test(e.message)) {
-        console.error('404 Not found');
-        console.error('Could not connect to room to tail log.');
-        console.error(
+        getLogger().error('404 Not found');
+        getLogger().error('Could not connect to room to tail log.');
+        getLogger().error(
           'Please update your app dependencies to @rocicorp/reflect@latest.',
         );
         return;
@@ -73,13 +74,13 @@ export async function tailHandler(
 
 function logTailMessage(entry: TailMessage) {
   if (valita.is(entry, connectedMessageSchema)) {
-    console.log('Connected.');
+    getLogger().log('Connected.');
     return;
   }
 
   if (valita.is(entry, errorMessageSchema)) {
     // failed to connect
-    console.error(`${entry.kind}: ${entry.message}`);
+    getLogger().error(`${entry.kind}: ${entry.message}`);
     process.exit(1);
   }
 

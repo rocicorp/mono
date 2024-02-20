@@ -22,7 +22,7 @@ import {logErrorAndExit} from './log-error-and-exit.js';
 import {checkForServerDeprecation} from './version.js';
 import {watchDeployment} from './watch-deployment.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-
+import {getLogger} from './logger.js';
 export function publishOptions(yargs: CommonYargsArgv) {
   return yargs
     .option('reflect-channel', {
@@ -79,7 +79,6 @@ export async function publishHandler(
   firestore: Firestore = getFirestore(), // Overridden in tests.
 ) {
   const {reflectChannel, app} = yargs;
-  const {output} = yargs;
 
   let {serverPath} = yargs;
   if (serverPath === DEFAULT_FROM_REFLECT_CONFIG) {
@@ -98,9 +97,9 @@ export async function publishHandler(
     await checkForServerDeprecation(yargs, range);
     serverVersionRange = yargs.forceVersionRange ?? range.raw;
   }
-  if (output !== 'json') {
-    console.log(`Compiling ${serverPath}`);
-  }
+
+  getLogger().log(`Compiling ${serverPath}`);
+
   const {code, sourcemap} = await compileOrReportWarning(
     absPath,
     'linked',
@@ -127,12 +126,11 @@ export async function publishHandler(
     data.serverReleaseChannel = reflectChannel;
   }
 
-  if (output !== 'json') {
-    console.log('Requesting deployment');
-  }
+  getLogger().log('Requesting deployment');
+
   const {deploymentPath} = await publish.call(data);
 
-  await watchDeployment(firestore, deploymentPath, 'Published', output);
+  await watchDeployment(firestore, deploymentPath, 'Published');
 }
 
 async function compileOrReportWarning(

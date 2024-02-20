@@ -2,6 +2,7 @@ import {SemVer} from 'semver';
 import makeCLI, {Argv} from 'yargs';
 import {initFirebase} from './firebase.js';
 import {tryDeprecationCheck, version} from './version.js';
+import {getLogger} from './logger.js';
 
 export class CommandLineArgsError extends Error {}
 
@@ -66,7 +67,7 @@ export function createCLIParserBase(argv: string[]): Argv<{
     if (args._.length > 0) {
       throw new CommandLineArgsError(`Unknown command: ${args._}.`);
     } else if (args.v) {
-      console.log(version);
+      getLogger().log(version);
     } else {
       reflectCLI.showHelp();
     }
@@ -74,16 +75,16 @@ export function createCLIParserBase(argv: string[]): Argv<{
 
   // version
   reflectCLI.command('version', false, {}, () => {
-    console.log(version);
+    getLogger().log(version);
   });
 
   reflectCLI.middleware(() => {
     const nodeVersion = new SemVer(process.versions.node);
     if (nodeVersion.major < 18) {
-      console.log(
+      getLogger().log(
         `\nNode.js v18 or higher is required. (Current: v${nodeVersion})`,
       );
-      console.log('Please update to newer version.\n');
+      getLogger().log('Please update to newer version.\n');
       process.exit(-1);
     }
   });

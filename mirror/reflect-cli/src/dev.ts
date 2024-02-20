@@ -13,6 +13,7 @@ import {
   mustReadAppConfig,
 } from './app-config.js';
 import * as path from 'node:path';
+import {getLogger} from './logger.js';
 
 export function devOptions(yargs: CommonYargsArgv) {
   return (
@@ -108,7 +109,7 @@ export async function devHandler(yargs: DevHandlerArgs) {
       );
       process.stdout.write(` Done in ${Date.now() - start}ms.\n`);
       if (first && !silenceStartupMessage) {
-        console.log(`
+        getLogger().log(`
 Dev server running at:
   ${href}
 `);

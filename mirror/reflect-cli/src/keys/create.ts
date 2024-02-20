@@ -31,6 +31,7 @@ import {padColumns} from '../table.js';
 import {getSingleTeam} from '../teams.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 import {CREATED_APPS} from './list.js';
+import {getLogger} from '../logger.js';
 
 export function createKeyOptions(yargs: CommonYargsArgv) {
   return yargs.positional('name', {
@@ -83,7 +84,7 @@ export async function createKeyHandler(
     appIDs,
     permissions: Object.fromEntries(perms.map(perm => [perm, true])),
   });
-  console.log(`Created key "${color.bold(name)}": ${value}`);
+  getLogger().log(`Created key "${color.bold(name)}": ${value}`);
 }
 
 export async function promptForKeyConfiguration(

@@ -1,8 +1,7 @@
 import {doc, type Firestore} from 'firebase/firestore';
 import {deploymentViewDataConverter} from 'mirror-schema/src/external/deployment.js';
 import {watchDoc} from 'mirror-schema/src/external/watch.js';
-
-type OutputFormat = 'json' | string | undefined;
+import {getLogger} from './logger.js';
 
 interface Deployment {
   status?: string | undefined;
@@ -16,7 +15,6 @@ export async function watchDeployment(
   firestore: Firestore,
   deploymentPath: string,
   completedAction: string,
-  output?: OutputFormat,
 ): Promise<void> {
   const deploymentDoc = doc(firestore, deploymentPath).withConverter(
     deploymentViewDataConverter,
@@ -25,52 +23,42 @@ export async function watchDeployment(
     const deployment = snapshot.data();
 
     if (!deployment) {
-      logError('Deployment not found', output);
+      logError('Deployment not found');
       break;
     }
 
     switch (deployment.status) {
       case 'RUNNING':
-        logSuccess(deployment, completedAction, output);
+        logSuccess(deployment, completedAction);
         return;
       case 'FAILED':
       case 'STOPPED':
-        logError('Deployment failed', output);
+        logError('Deployment failed');
         return;
       default:
-        logStatus(deployment, output);
+        logStatus(deployment);
     }
   }
 }
 
-function logError(errorMessage: string, outputFormat: OutputFormat) {
-  if (outputFormat === 'json') {
-    console.log(JSON.stringify({success: false, error: errorMessage}, null, 2));
-  } else {
-    console.error(errorMessage);
-  }
+function logError(errorMessage: string) {
+  getLogger().log(
+    JSON.stringify({success: false, error: errorMessage}, null, 2),
+  );
+  getLogger().error(errorMessage);
 }
 
-function logSuccess(
-  deployment: Deployment,
-  message: string,
-  outputFormat: OutputFormat,
-) {
+function logSuccess(deployment: Deployment, message: string) {
   const url = `https://${deployment.spec.hostname}`;
-  if (outputFormat === 'json') {
-    console.log(JSON.stringify({success: true, url}, null, 2));
-  } else {
-    console.log(`🎁 ${message} successfully to:`);
-    console.log(url);
-  }
+  getLogger().json({success: true, url});
+  getLogger().log(`🎁 ${message} successfully to:`);
+  getLogger().log(url);
 }
 
-function logStatus(deployment: Deployment, outputFormat: OutputFormat) {
-  if (outputFormat !== 'json') {
-    console.info(
-      `Status: ${deployment.status}${
-        deployment.statusMessage ? ': ' + deployment.statusMessage : ''
-      }`,
-    );
-  }
+function logStatus(deployment: Deployment) {
+  getLogger().info(
+    `Status: ${deployment.status}${
+      deployment.statusMessage ? ': ' + deployment.statusMessage : ''
+    }`,
+  );
 }

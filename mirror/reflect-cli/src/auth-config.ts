@@ -22,6 +22,7 @@ import {scriptName} from './create-cli-parser.js';
 import {loginHandler} from './login.js';
 
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import {getLogger} from './logger.js';
 
 function getUserAuthConfigFile(
   yargs: YargvToInterface<CommonYargsArgv>,
@@ -118,20 +119,16 @@ export type AuthenticatedUser = {
 };
 
 export function getAuthentication(yargs: YargvToInterface<CommonYargsArgv>) {
-  return authenticateImpl(yargs, false, false);
+  return authenticateImpl(yargs, false);
 }
 
 /** Prompts user to login if not authenticated. */
-export function authenticate(
-  yargs: YargvToInterface<CommonYargsArgv>,
-  output = true,
-) {
-  return authenticateImpl(yargs, output, true);
+export function authenticate(yargs: YargvToInterface<CommonYargsArgv>) {
+  return authenticateImpl(yargs, true);
 }
 
 async function authenticateImpl(
   yargs: YargvToInterface<CommonYargsArgv>,
-  output = true,
   promptLogin = true,
 ): Promise<AuthenticatedUser> {
   const {runAs, authKeyFromEnv} = yargs;
@@ -180,18 +177,17 @@ async function authenticateImpl(
     user: {email, uid},
   } = userCredentials;
 
-  if (output) {
-    if (email) {
-      console.info(`Logged in as ${email}`);
-    } else {
-      console.info(
-        // For UIDs such as "teams/ln3ddtrj/keys/abc-key", just show "abc-key".
-        `Authenticated with ${uid.substring(uid.lastIndexOf('/') + 1)}`,
-      );
-    }
+  if (email) {
+    getLogger().info(`Logged in as ${email}`);
+  } else {
+    getLogger().info(
+      // For UIDs such as "teams/ln3ddtrj/keys/abc-key", just show "abc-key".
+      `Authenticated with ${uid.substring(uid.lastIndexOf('/') + 1)}`,
+    );
   }
+
   if (runAs) {
-    console.info(color.yellow(`Running as ${runAs}`));
+    getLogger().info(color.yellow(`Running as ${runAs}`));
   }
   return {
     email: email ?? undefined,

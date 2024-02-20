@@ -4,6 +4,7 @@ import type {AuthContext} from '../handler.js';
 import {makeRequester} from '../requester.js';
 import {getSingleTeam} from '../teams.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
+import {getLogger} from '../logger.js';
 
 export function deleteKeysOptions(yargs: CommonYargsArgv) {
   return yargs.positional('names', {
@@ -33,13 +34,13 @@ export async function deleteKeysHandler(
     names,
   });
   if (deleted.length === 0) {
-    console.warn(
+    getLogger().warn(
       `No keys with the specified names (${asList(
         names,
       )}) were found. They may have already been deleted.`,
     );
   } else {
-    console.log(`Deleted ${asList(deleted)}.`);
+    getLogger().log(`Deleted ${asList(deleted)}.`);
   }
 }
 

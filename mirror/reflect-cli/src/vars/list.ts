@@ -7,6 +7,7 @@ import {padColumns} from '../table.js';
 import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
 import {getAppID, getDefaultApp} from '../app-config.js';
+import {getLogger} from '../logger.js';
 
 export function listVarsOptions(yargs: CommonVarsYargsArgv) {
   return yargs
@@ -59,7 +60,7 @@ export async function listVarsHandler(
   for (const env of Object.values(response.envs)) {
     const entries = Object.entries(env.vars);
     if (entries.length === 0) {
-      console.log(
+      getLogger().log(
         `No environment variables set. Use '${command} ${subcommand} set${
           dev ? ' --dev' : ''
         }' to add them.`,
@@ -71,20 +72,20 @@ export async function listVarsHandler(
       entries.forEach(entry => {
         entry[1] = color.italic(color.gray('Encrypted'));
       });
-      console.log(
+      getLogger().log(
         `\n${name} environment variables (use --show to see their values):\n`,
       );
     } else {
-      console.log(`\n${name} environment variables:\n`);
+      getLogger().log(`\n${name} environment variables:\n`);
     }
 
     const lines = padColumns([['name', 'value'], ...entries]);
     lines.forEach(([key, value], i) => {
       if (i === 0) {
         // Header row
-        console.log(`${color.gray(key)}     ${color.gray(value)}`);
+        getLogger().log(`${color.gray(key)}     ${color.gray(value)}`);
       } else {
-        console.log(`${color.bold(key)}     ${value}`);
+        getLogger().log(`${color.bold(key)}     ${value}`);
       }
     });
   }

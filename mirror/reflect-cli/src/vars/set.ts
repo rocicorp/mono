@@ -9,6 +9,7 @@ import {makeRequester} from '../requester.js';
 import {watchDeployment} from '../watch-deployment.js';
 import type {YargvToInterface} from '../yarg-types.js';
 import type {CommonVarsYargsArgv} from './types.js';
+import {getLogger} from '../logger.js';
 
 export function setVarsOptions(yargs: CommonVarsYargsArgv) {
   return yargs
@@ -56,7 +57,7 @@ export async function setVarsHandler(
 
   if (dev) {
     setDevVars(vars);
-    console.log('Set dev variables');
+    getLogger().log('Set dev variables');
     return;
   }
 
@@ -65,9 +66,9 @@ export async function setVarsHandler(
   const data = {requester: makeRequester(userID), appID, vars};
   const {deploymentPath} = await setVars.call(data);
   if (!deploymentPath) {
-    console.log('Stored encrypted environment variables');
+    getLogger().log('Stored encrypted environment variables');
   } else {
-    console.log('Deploying updated environment variables');
+    getLogger().log('Deploying updated environment variables');
     await watchDeployment(getFirestore(), deploymentPath, 'Deployed');
   }
 }

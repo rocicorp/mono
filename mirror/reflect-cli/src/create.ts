@@ -6,6 +6,7 @@ import {execOrReportWarning} from './exec.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
 import {scaffold} from './scaffold.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import {getLogger} from './logger.js';
 
 export function createOptions(yargs: CommonYargsArgv) {
   return yargs.option('name', {
@@ -36,16 +37,16 @@ export async function createHandler(createYargs: CreatedHandlerArgs) {
 
   await mkdir(name, {recursive: true});
   scaffold(name, name);
-  console.log(color.blue(`Installing @rocicorp/reflect`));
+  getLogger().log(color.blue(`Installing @rocicorp/reflect`));
   execOrReportWarning(`npm install --silent`, {
     cwd: name,
     stdio: ['ignore', 'inherit', 'inherit'],
   });
 
-  console.log(color.green(`\nYou're all set! 🎉`));
-  console.log(color.reset(`\nRun Reflect dev server and UI:`));
-  console.log(color.reset(`\ncd ${name} && npm run watch`));
-  console.log(
+  getLogger().log(color.green(`\nYou're all set! 🎉`));
+  getLogger().log(color.reset(`\nRun Reflect dev server and UI:`));
+  getLogger().log(color.reset(`\ncd ${name} && npm run watch`));
+  getLogger().log(
     color.reset(`\nQuestions? Something not working? Join us on Discord: `) +
       color.magenta(`https://discord.reflect.net`),
   );
