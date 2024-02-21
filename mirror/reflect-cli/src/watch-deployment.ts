@@ -2,14 +2,7 @@ import {doc, type Firestore} from 'firebase/firestore';
 import {deploymentViewDataConverter} from 'mirror-schema/src/external/deployment.js';
 import {watchDoc} from 'mirror-schema/src/external/watch.js';
 import {getLogger} from './logger.js';
-
-interface Deployment {
-  status?: string | undefined;
-  spec: {
-    hostname?: string | undefined;
-  };
-  statusMessage?: string | undefined;
-}
+import type {DeploymentView} from 'mirror-schema/src/external/deployment.js';
 
 export async function watchDeployment(
   firestore: Firestore,
@@ -23,8 +16,7 @@ export async function watchDeployment(
     const deployment = snapshot.data();
 
     if (!deployment) {
-      logError('Deployment not found');
-      break;
+      throw new Error('Deployment not found');
     }
 
     switch (deployment.status) {
@@ -33,29 +25,21 @@ export async function watchDeployment(
         return;
       case 'FAILED':
       case 'STOPPED':
-        logError('Deployment failed');
-        return;
+        throw Error('Deployment failed');
       default:
         logStatus(deployment);
     }
   }
 }
 
-function logError(errorMessage: string) {
-  getLogger().log(
-    JSON.stringify({success: false, error: errorMessage}, null, 2),
-  );
-  getLogger().error(errorMessage);
-}
-
-function logSuccess(deployment: Deployment, message: string) {
+function logSuccess(deployment: DeploymentView, message: string) {
   const url = `https://${deployment.spec.hostname}`;
   getLogger().json({success: true, url});
   getLogger().log(`🎁 ${message} successfully to:`);
   getLogger().log(url);
 }
 
-function logStatus(deployment: Deployment) {
+function logStatus(deployment: DeploymentView) {
   getLogger().info(
     `Status: ${deployment.status}${
       deployment.statusMessage ? ': ' + deployment.statusMessage : ''

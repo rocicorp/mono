@@ -143,7 +143,7 @@ async function authenticateImpl(
   if (authKeyFromEnv) {
     const key = process.env[authKeyFromEnv];
     if (!key) {
-      console.error(
+      getLogger().error(
         `${color.red(
           color.bold('Error'),
         )}: No key found in ${authKeyFromEnv} env variable`,

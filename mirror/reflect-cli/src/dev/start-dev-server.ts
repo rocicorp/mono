@@ -10,6 +10,7 @@ import {ErrorWrapper} from '../error.js';
 import {getScriptTemplate} from '../get-script-template.js';
 import {MiniflareWrapper} from './miniflare-wrapper.js';
 import {listDevVars} from './vars.js';
+import {getLogger} from '../logger.js';
 
 /**
  * To shut down the dev server, abort the passed in signal.
@@ -95,7 +96,7 @@ export async function startDevServer(
     'abort',
     () => {
       mf.dispose().catch(e => {
-        console.error('Failed to shut down dev server', e);
+        getLogger().error('Failed to shut down dev server', e);
       });
     },
     {once: true},

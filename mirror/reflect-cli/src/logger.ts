@@ -3,9 +3,10 @@ import type {ReadonlyJSONValue} from '@rocicorp/reflect';
 interface Logger {
   log: typeof console.log;
   info: typeof console.info;
+  debug: typeof console.debug;
   warn: typeof console.warn;
   error: typeof console.error;
-  json(output: ReadonlyJSONValue, level?: 'info' | 'error'): void;
+  json(output: ReadonlyJSONValue): void;
 }
 
 let logger = getLoggerOfType('text');
@@ -24,17 +25,10 @@ export function getLoggerOfType(type: 'json' | 'text'): Logger {
       return {
         log: () => {},
         info: () => {},
-        warn: () => {},
-        error: () => {},
-        json: (
-          output: ReadonlyJSONValue,
-          level?: 'info' | 'error' | undefined,
-        ) => {
-          if (level === 'info') {
-            console.info(JSON.stringify(output, null, 2));
-          } else if (level === 'error') {
-            console.error(JSON.stringify(output, null, 2));
-          }
+        debug: () => {},
+        warn: console.warn,
+        error: console.error,
+        json: (output: ReadonlyJSONValue) => {
           console.log(JSON.stringify(output, null, 2));
         },
       };
@@ -42,6 +36,7 @@ export function getLoggerOfType(type: 'json' | 'text'): Logger {
       return {
         log: console.log,
         info: console.info,
+        debug: console.debug,
         warn: console.warn,
         error: console.error,
         json: () => {},

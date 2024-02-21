@@ -39,8 +39,9 @@ async function main(argv: string[]): Promise<void> {
     await reflectCLI.parse();
   } catch (e) {
     if (e instanceof CommandLineArgsError) {
-      getLogger().log(e.message);
+      getLogger().error(e.message);
       await createCLIParser([...argv, '--help']).parse();
+      process.exit(-1);
     } else {
       throw e;
     }

@@ -1,6 +1,8 @@
 // This is based on the spec at
 // https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
 
+import {getLogger} from '../logger.js';
+
 export type EventSourceEntry = {
   data: string;
   event: string;
@@ -39,7 +41,7 @@ export function eventSourceStream(): TransformStream<string, EventSourceEntry> {
             // ignore for now
             break;
           default:
-            console.warn('Unknown field', name);
+            getLogger().warn('Unknown field', name);
             break;
         }
       }

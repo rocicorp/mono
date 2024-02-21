@@ -2,6 +2,7 @@ import {afterEach, expect, jest, test} from '@jest/globals';
 import getPort from 'get-port';
 import {sleep} from 'shared/src/sleep.js';
 import {MiniflareWrapper, fakeCrashForTesting} from './miniflare-wrapper.js';
+import {getLogger} from '../logger.js';
 
 afterEach(() => {
   jest.restoreAllMocks();
@@ -54,7 +55,9 @@ test('induced fake crash', async () => {
   let i = 0;
 
   const log: unknown[] = [];
-  jest.spyOn(console, 'error').mockImplementation((...args) => log.push(args));
+  jest
+    .spyOn(getLogger(), 'error')
+    .mockImplementation((...args) => log.push(args));
 
   const port = await getPort();
   const mf = new MiniflareWrapper({

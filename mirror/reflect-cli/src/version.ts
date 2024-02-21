@@ -9,6 +9,7 @@ import color from 'picocolors';
 import {Range, SemVer, gt, gtr} from 'semver';
 import type {ArgumentsCamelCase} from 'yargs';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
+import {getLogger} from './logger.js';
 
 declare const REFLECT_VERSION: string;
 declare const REFLECT_CLI_NAME: string;
@@ -99,7 +100,7 @@ export async function checkForServerDeprecation(
 }
 
 function notifyUnsupported() {
-  console.error(
+  getLogger().error(
     `${color.red('This version of Reflect is no longer supported.')}\n` +
       `Please update to ${color.bold('@rocicorp/reflect@latest')}.\n`,
   );
@@ -107,7 +108,7 @@ function notifyUnsupported() {
 }
 
 function notifyDeprecated() {
-  console.error(
+  getLogger().error(
     `${color.yellow(
       'Note: This version of Reflect is deprecated and will stop working soon.',
     )}\n` + `Please update to ${color.bold('@rocicorp/reflect@latest')}.\n`,
@@ -115,7 +116,7 @@ function notifyDeprecated() {
 }
 
 function notifyLatest(latest: SemVer, current: string) {
-  console.error(
+  getLogger().error(
     `${color.green(
       `Tip: Reflect ${latest.version} is now available. Version ${current} is out of date.`,
     )}\n` +

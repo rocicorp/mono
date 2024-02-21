@@ -18,6 +18,7 @@ import {getAppID, getDefaultApp} from './app-config.js';
 import color from './colors.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import type {AuthContext} from './handler.js';
+import {getLogger} from './logger.js';
 
 export function usageOptions(yargs: CommonYargsArgv) {
   return yargs
@@ -139,8 +140,8 @@ export async function usageHandler(
   lines[lines.length - 1] += '═'.repeat(maxDurLen);
 
   // Output!
-  console.log();
-  console.log(lines.join('\n'));
+  getLogger().log();
+  getLogger().log(lines.join('\n'));
 }
 
 function chartTitle(

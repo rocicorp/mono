@@ -52,7 +52,7 @@ export async function createKeyHandler(
 ): Promise<void> {
   const {name} = yargs;
   if (!isValidApiKeyName(name)) {
-    console.error(
+    getLogger().error(
       color.yellow(`Invalid name "${name}"\n`) +
         'Names must be lowercased alphanumeric, starting with a letter and not ending with a hyphen.',
     );

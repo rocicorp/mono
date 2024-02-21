@@ -35,7 +35,7 @@ export async function editKeyHandler(
   });
   const key = keys.find(key => key.name === name);
   if (!key) {
-    console.warn(color.yellow(`Key named "${name}" was not found.`));
+    getLogger().warn(color.yellow(`Key named "${name}" was not found.`));
     process.exit(-1);
   }
 

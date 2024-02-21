@@ -8,7 +8,7 @@ import {reportE} from './error.js';
 import {sendAnalyticsEvent} from './metrics/send-ga-event.js';
 import {Requester, makeRequester} from './requester.js';
 import type {CommonYargsOptions} from './yarg-types.js';
-import {setLoggerType} from './logger.js';
+import {getLogger, setLoggerType} from './logger.js';
 // Wraps a command handler with cleanup code (e.g. terminating any Firestore client)
 // to ensure that the process exits after the handler completes.
 
@@ -74,7 +74,7 @@ export function handleWith<T extends ArgumentsCamelCase<CommonYargsOptions>>(
       } catch (e) {
         await reportE(args, eventName, e);
         const message = e instanceof Error ? e.message : String(e);
-        console.error(`\n${color.red(color.bold('Error'))}: ${message}`);
+        getLogger().error(`\n${color.red(color.bold('Error'))}: ${message}`);
       } finally {
         await terminate(getFirestore());
       }

@@ -1,10 +1,11 @@
 import color from 'picocolors';
+import {getLogger} from './logger.js';
 
 export function logErrorAndExit(
   message: string,
   format: (input: string) => string = color.red,
 ): never {
-  console.log(format(message));
+  getLogger().error(format(message));
   process.exit(1);
 }
 

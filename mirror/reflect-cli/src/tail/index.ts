@@ -91,9 +91,11 @@ function logTailMessage(entry: TailMessage) {
     case 'info':
     case 'log':
     case 'warn':
+      getLogger()[level](...message);
       console[level](...message);
       break;
     default:
+      getLogger().log(`(${level})`, ...message);
       console.log(`(${level})`, ...message);
   }
 }

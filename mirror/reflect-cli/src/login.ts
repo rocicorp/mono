@@ -134,6 +134,6 @@ export async function loginHandler(
 export default async function openInBrowserImpl(url: string): Promise<void> {
   const childProcess = await open(url);
   childProcess.on('error', () => {
-    console.warn('Failed to open');
+    getLogger().warn('Failed to open');
   });
 }
