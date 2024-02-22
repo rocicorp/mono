@@ -7,9 +7,9 @@
   },
   "include": [
     "**/*.ts",
-    "../subscriptions.ts",
-    "../client-state.ts",
-    "../mutators.ts"
+    "../src/subscriptions.ts",
+    "../src/client-state.ts",
+    "../src/mutators.ts"
   ],
-  "extends": "../../tsconfig.json"
+  "extends": "../tsconfig.json"
 }
