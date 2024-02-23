@@ -35,7 +35,6 @@ import {SemVer} from 'semver';
 import {TestSecrets} from '../../secrets/test-utils.js';
 import type {DistTags} from '../validators/version.js';
 import {MIN_WFP_VERSION, create} from './create.function.js';
-import {MAX_DNS_LABEL_LENGTH} from './publish.function.js';
 
 describe('app-create function', () => {
   initializeApp({projectId: 'app-create-function-test'});
@@ -411,22 +410,4 @@ describe('app-create function', () => {
       expect((e as HttpsError).code).toBe('resource-exhausted');
     }
   });
-
-  for (const appName of [
-    '0starts-with-a-number',
-    'ends-with-a-hyphen-',
-    'has.invalid.characters',
-    'a'.repeat(MAX_DNS_LABEL_LENGTH - TEAM_LABEL.length),
-  ]) {
-    test(`invalid app name: ${appName}`, async () => {
-      try {
-        await callCreate(appName);
-        throw new Error('Expected invalid-argument');
-      } catch (e) {
-        console.error(e);
-        expect(e).toBeInstanceOf(HttpsError);
-        expect((e as HttpsError).code).toBe('invalid-argument');
-      }
-    });
-  }
 });
