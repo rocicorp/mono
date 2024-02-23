@@ -136,9 +136,29 @@ export async function computeDeploymentSpec(
     serverVersionRange,
     serverVersion,
     // Note: Hyphens are not allowed in teamLabels.
-    hostname: `${appName}-${teamLabel}.${zoneName}`,
+    hostname: `${getHostname(appName, teamLabel)}.${zoneName}`,
     envUpdateTime,
   };
+}
+
+// https://developers.cloudflare.com/dns/manage-dns-records/reference/dns-record-types/#cname
+export const MAX_DNS_LABEL_LENGTH = 63;
+
+export function getHostname(
+  appName: string,
+  teamLabel: string,
+  additionalErrorMsg?: string,
+): string {
+  const dnsLabel = `${appName}-${teamLabel}`;
+  if (dnsLabel.length > MAX_DNS_LABEL_LENGTH) {
+    throw new HttpsError(
+      'invalid-argument',
+      `DNS label ${dnsLabel} exceeds 63 characters. ${
+        additionalErrorMsg ?? ''
+      }`,
+    );
+  }
+  return dnsLabel;
 }
 
 function saveToGoogleCloudStorage(

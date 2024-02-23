@@ -45,6 +45,7 @@ import {
 import {getDataOrFail} from '../validators/data.js';
 import {validateSchema} from '../validators/schema.js';
 import {DistTags, userAgentVersion} from '../validators/version.js';
+import {getHostname} from './publish.function.js';
 import {REFLECT_API_KEY} from './secrets.js';
 
 export const create = (
@@ -138,6 +139,10 @@ export const create = (
           Buffer.from(secretKey, 'base64url'),
           {version},
         );
+
+        // Check the resulting hostname under which the app would be published
+        // to ensure that it is within the length limit.
+        getHostname(appName, team.label, 'Please choose a shorter App name.');
 
         const app: WithFieldValue<App> = {
           name: appName,
