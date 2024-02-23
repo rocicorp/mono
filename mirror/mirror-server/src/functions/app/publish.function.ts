@@ -1,3 +1,4 @@
+import {createHash} from 'crypto';
 import type {Firestore} from 'firebase-admin/firestore';
 import type {Storage} from 'firebase-admin/storage';
 import {HttpsError} from 'firebase-functions/v2/https';
@@ -136,7 +137,7 @@ export async function computeDeploymentSpec(
     serverVersionRange,
     serverVersion,
     // Note: Hyphens are not allowed in teamLabels.
-    hostname: `${getHostname(appName, teamLabel)}.${zoneName}`,
+    hostname: `${getHostLabel(appName, teamLabel)}.${zoneName}`,
     envUpdateTime,
   };
 }
@@ -144,21 +145,13 @@ export async function computeDeploymentSpec(
 // https://developers.cloudflare.com/dns/manage-dns-records/reference/dns-record-types/#cname
 export const MAX_DNS_LABEL_LENGTH = 63;
 
-export function getHostname(
-  appName: string,
-  teamLabel: string,
-  additionalErrorMsg?: string,
-): string {
-  const dnsLabel = `${appName}-${teamLabel}`;
-  if (dnsLabel.length > MAX_DNS_LABEL_LENGTH) {
-    throw new HttpsError(
-      'invalid-argument',
-      `DNS label ${dnsLabel} exceeds 63 characters. ${
-        additionalErrorMsg ?? ''
-      }`,
-    );
+export function getHostLabel(appName: string, teamLabel: string): string {
+  const maxLen = MAX_DNS_LABEL_LENGTH - 1 - teamLabel.length;
+  if (appName.length > maxLen) {
+    const hash = createHash('sha256').update(appName).digest().toString('hex');
+    appName = `${appName.substring(0, maxLen - 7)}-${hash.substring(0, 6)}`;
   }
-  return dnsLabel;
+  return `${appName}-${teamLabel}`;
 }
 
 function saveToGoogleCloudStorage(

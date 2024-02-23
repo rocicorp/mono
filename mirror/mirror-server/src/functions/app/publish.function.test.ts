@@ -29,7 +29,7 @@ import {serverDataConverter, serverPath} from 'mirror-schema/src/server.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {SemVer} from 'semver';
 import type {DistTags} from '../validators/version.js';
-import {publish} from './publish.function.js';
+import {getHostLabel, publish} from './publish.function.js';
 
 describe('publish', () => {
   initializeApp({projectId: 'publish-function-test'});
@@ -151,6 +151,28 @@ describe('publish', () => {
       batch.delete(firestore.doc(path));
     }
     await batch.commit();
+  });
+
+  test('hostnames', () => {
+    expect(getHostLabel('appname', 'teamlabel')).toBe('appname-teamlabel');
+    expect(
+      getHostLabel(
+        'app-name-that-is-juuust-fits-within-63-char-limit',
+        'longteamlabel',
+      ),
+    ).toBe('app-name-that-is-juuust-fits-within-63-char-limit-longteamlabel');
+    expect(
+      getHostLabel(
+        'app-name-that-is-too-long-to-fit-within-63-char-limit',
+        'longteamlabel',
+      ),
+    ).toBe('app-name-that-is-too-long-to-fit-within-63-9317df-longteamlabel');
+    expect(
+      getHostLabel(
+        'app-name-that-is-too-long-to-fit-within-63-char-limit',
+        'longerteamlabel',
+      ),
+    ).toBe('app-name-that-is-too-long-to-fit-within--9317df-longerteamlabel');
   });
 
   type Case = {
