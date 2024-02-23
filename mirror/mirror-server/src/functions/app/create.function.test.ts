@@ -410,4 +410,21 @@ describe('app-create function', () => {
       expect((e as HttpsError).code).toBe('resource-exhausted');
     }
   });
+
+  for (const appName of [
+    '0starts-with-a-number',
+    'ends-with-a-hyphen-',
+    'has.invalid.characters',
+  ]) {
+    test(`invalid app name: ${appName}`, async () => {
+      try {
+        await callCreate(appName);
+        throw new Error('Expected invalid-argument');
+      } catch (e) {
+        console.error(e);
+        expect(e).toBeInstanceOf(HttpsError);
+        expect((e as HttpsError).code).toBe('invalid-argument');
+      }
+    });
+  }
 });
