@@ -408,8 +408,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
   }
 
   /**
-   * `onSync` is called when a sync begins (the `syncing` parameter is then set
-   * to `true`), and again when the sync ends (`syncing` is set to `false`).
+   * `onSync(true)` is called when Replicache transitions from no push or pull
+   * happening to at least one happening. `onSync(false)` is called in the
+   * opposite case: when Replicache transitions from at least one push or pull
+   * happening to none happening.
    *
    * This can be used in a React like app by doing something like the following:
    *
