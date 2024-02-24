@@ -3,7 +3,7 @@ import {initializeApp} from 'firebase-admin/app';
 import type {DecodedIdToken} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
 import {https} from 'firebase-functions/v2';
-import type {Request} from 'firebase-functions/v2/https';
+import {HttpsError, type Request} from 'firebase-functions/v2/https';
 import {teamMembershipPath} from 'mirror-schema/src/membership.js';
 import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
 import {
@@ -18,7 +18,11 @@ import {
   setUser,
 } from 'mirror-schema/src/test-helpers.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
-import {DEFAULT_MAX_APPS, ensure} from './ensure.function.js';
+import {
+  DEFAULT_MAX_APPS,
+  MAX_TEAM_NAME_LENGTH,
+  ensure,
+} from './ensure.function.js';
 
 describe('team-ensure function', () => {
   initializeApp({projectId: 'team-ensure-function-test'});
@@ -91,6 +95,14 @@ describe('team-ensure function', () => {
         expect(teamDoc.exists).toBe(false);
       });
     }
+  });
+
+  test('disallow long team names', async () => {
+    const resp = await callEnsure('a'.repeat(MAX_TEAM_NAME_LENGTH + 1)).catch(
+      e => e,
+    );
+    expect(resp).toBeInstanceOf(HttpsError);
+    expect((resp as HttpsError).code).toBe('invalid-argument');
   });
 
   test('ensure when no team', async () => {

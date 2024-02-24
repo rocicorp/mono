@@ -10,22 +10,27 @@ import {
   membershipDataConverter,
   teamMembershipPath,
 } from 'mirror-schema/src/membership.js';
+import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
 import {
   sanitizeForLabel,
   teamDataConverter,
-  teamPath,
   teamLabelIndexDataConverter,
   teamLabelIndexPath,
+  teamPath,
 } from 'mirror-schema/src/team.js';
 import {userDataConverter, userPath} from 'mirror-schema/src/user.js';
 import {must} from 'shared/src/must.js';
 import {newTeamID} from '../../ids.js';
 import {userAuthorization} from '../validators/auth.js';
 import {validateSchema} from '../validators/schema.js';
-import {DEFAULT_PROVIDER_ID} from 'mirror-schema/src/provider.js';
 import {userAgentVersion} from '../validators/version.js';
 
 export const DEFAULT_MAX_APPS = null;
+
+// Slightly higher than the Github username length limit of 39.
+// Capping the length ensures that there's room for the
+// app name in the dns hostname, which is limited to 63 chars.
+export const MAX_TEAM_NAME_LENGTH = 40;
 
 export const ensure = (firestore: Firestore) =>
   validateSchema(ensureTeamRequestSchema, ensureTeamResponseSchema)
@@ -57,6 +62,13 @@ export const ensure = (firestore: Firestore) =>
         }
         if (teamIDs.length === 1) {
           return teamIDs[0];
+        }
+
+        if (name.length > MAX_TEAM_NAME_LENGTH) {
+          throw new HttpsError(
+            'invalid-argument',
+            `Team name ${name} exceeds the limit of ${MAX_TEAM_NAME_LENGTH} characters.`,
+          );
         }
 
         const teamID = newTeamID();
