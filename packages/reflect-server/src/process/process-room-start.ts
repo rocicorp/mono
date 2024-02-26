@@ -15,7 +15,7 @@ import {getVersion, putVersion} from '../types/version.js';
 export async function processRoomStart(
   lc: LogContext,
   env: Env,
-  roomStartHandler: RoomStartHandler,
+  onRoomStart: RoomStartHandler,
   storage: Storage,
   roomID: string,
 ): Promise<void> {
@@ -34,7 +34,7 @@ export async function processRoomStart(
     env,
   );
   try {
-    await roomStartHandler(tx, roomID);
+    await onRoomStart(tx, roomID);
     if (!cache.isDirty()) {
       lc.debug?.('noop onRoomStart');
       return;
