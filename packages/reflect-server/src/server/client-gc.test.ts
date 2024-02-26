@@ -317,9 +317,7 @@ Map {
 
     expect(await storage.list({}, jsonSchema)).toMatchInlineSnapshot(`
 Map {
-  "clientTombstone/client-b" => {
-    "userID": "u1",
-  },
+  "clientTombstone/client-b" => {},
   "clientV1/client-a" => {
     "baseCookie": 1,
     "clientGroupID": "client-group-id",
@@ -435,9 +433,7 @@ Map {
 
     expect(await storage.list({}, jsonSchema)).toMatchInlineSnapshot(`
 Map {
-  "clientTombstone/client-b" => {
-    "userID": "u1",
-  },
+  "clientTombstone/client-b" => {},
   "clientV1/client-a" => {
     "baseCookie": 1,
     "clientGroupID": "client-group-id",
@@ -531,9 +527,7 @@ Map {
     // client-b gets a lastSeen of now
     expect(await storage.list({}, jsonSchema)).toMatchInlineSnapshot(`
 Map {
-  "clientTombstone/client-d" => {
-    "userID": "u1",
-  },
+  "clientTombstone/client-d" => {},
   "clientV1/client-a" => {
     "baseCookie": 1,
     "clientGroupID": "client-group-id",

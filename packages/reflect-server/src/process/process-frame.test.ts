@@ -1190,7 +1190,7 @@ describe('processFrame', () => {
         ['-/p/c2/clientDeleteHandler', userValue(true, startVersion + 2, true)],
         ['test-client-delete-c2', userValue(true, startVersion + 2)],
       ]),
-      clientTombstoneEntries: [['clientTombstone/c2', {userID: 'u2'}]],
+      clientTombstoneEntries: [['clientTombstone/c2', {}]],
       expectedClientRecords: new Map([
         [
           'c1',
@@ -1330,7 +1330,7 @@ describe('processFrame', () => {
         ['-/p/c2/clientDeleteHandler', userValue(true, startVersion + 2, true)],
         ['test-client-delete-c2', userValue(true, startVersion + 2)],
       ]),
-      clientTombstoneEntries: [['clientTombstone/c2', {userID: 'u2'}]],
+      clientTombstoneEntries: [['clientTombstone/c2', {}]],
       expectedClientRecords: new Map([
         [
           'c1',
@@ -1452,7 +1452,7 @@ describe('processFrame', () => {
         ],
       ]),
       expectedClientDeletedCalls: ['c2'],
-      clientTombstoneEntries: [['clientTombstone/c2', {userID: 'u2'}]],
+      clientTombstoneEntries: [['clientTombstone/c2', {}]],
       expectedVersion: startVersion + 1,
       expectedConnectedClients: ['c1'],
     },
@@ -1543,7 +1543,7 @@ describe('processFrame', () => {
       expectedVersion: startVersion + 1,
       expectedDisconnectedCalls: ['c1'],
       expectedClientDeletedCalls: ['c1'],
-      clientTombstoneEntries: [['clientTombstone/c1', {userID: 'testUser1'}]],
+      clientTombstoneEntries: [['clientTombstone/c1', {}]],
       shouldGCClients: true,
     },
     {
@@ -1563,7 +1563,7 @@ describe('processFrame', () => {
       expectedVersion: startVersion + 1,
       expectedDisconnectedCalls: ['c1'],
       expectedClientDeletedCalls: ['c1'],
-      clientTombstoneEntries: [['clientTombstone/c1', {userID: 'testUser1'}]],
+      clientTombstoneEntries: [['clientTombstone/c1', {}]],
       clientDeleteHandlerThrows: true,
       shouldGCClients: true,
     },
@@ -1582,7 +1582,7 @@ describe('processFrame', () => {
       expectedVersion: startVersion,
       expectedDisconnectedCalls: ['c1'],
       expectedClientDeletedCalls: ['c1'],
-      clientTombstoneEntries: [['clientTombstone/c1', {userID: 'testUser1'}]],
+      clientTombstoneEntries: [['clientTombstone/c1', {}]],
       clientDeleteHandlerThrows: true,
       disconnectHandlerThrows: true,
       shouldGCClients: true,
