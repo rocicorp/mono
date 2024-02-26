@@ -12,7 +12,7 @@ const {roomDO} = getMiniflareBindings();
 describe('processRoomStart', () => {
   type Case = {
     name: string;
-    roomStartHandler: RoomStartHandler;
+    onRoomStart: RoomStartHandler;
     startingVersion?: number;
     endingVersion?: number;
     expectedError?: string;
@@ -22,12 +22,12 @@ describe('processRoomStart', () => {
   const cases: Case[] = [
     {
       name: 'no room handler',
-      roomStartHandler: () => Promise.resolve(),
+      onRoomStart: () => Promise.resolve(),
       expectFooBar: false,
     },
     {
       name: 'room handler with no starting version',
-      roomStartHandler: async (tx: WriteTransaction) => {
+      onRoomStart: async (tx: WriteTransaction) => {
         await tx.set('foo', 'bar');
       },
       endingVersion: 1,
@@ -35,7 +35,7 @@ describe('processRoomStart', () => {
     },
     {
       name: 'room handler with starting version',
-      roomStartHandler: async (tx: WriteTransaction) => {
+      onRoomStart: async (tx: WriteTransaction) => {
         await tx.set('foo', 'bar');
       },
       startingVersion: 12,
@@ -44,7 +44,7 @@ describe('processRoomStart', () => {
     },
     {
       name: 'throwing room handler',
-      roomStartHandler: () => Promise.reject('tossed!'),
+      onRoomStart: () => Promise.reject('tossed!'),
       startingVersion: 12,
       endingVersion: 12,
       expectFooBar: false,
@@ -52,7 +52,7 @@ describe('processRoomStart', () => {
     },
     {
       name: 'room start handler is passed roomID and env',
-      roomStartHandler: (tx: WriteTransaction, roomID: string) => {
+      onRoomStart: (tx: WriteTransaction, roomID: string) => {
         expect(roomID).toEqual('testRoomID');
         expect(tx.env).toEqual({env: 'yo'});
         return Promise.resolve();
@@ -76,7 +76,7 @@ describe('processRoomStart', () => {
         await processRoomStart(
           createSilentLogContext(),
           {env: 'yo'},
-          c.roomStartHandler,
+          c.onRoomStart,
           storage,
           'testRoomID',
         );

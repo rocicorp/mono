@@ -19,9 +19,15 @@ export type DatadogMetricsOptions = {
 
 export interface ReflectServerOptions<MD extends MutatorDefs> {
   mutators: MD;
+
   authHandler?: AuthHandler | undefined;
 
+  /**
+   * @deprecated Use {@link onRoomStart} instead.
+   */
   roomStartHandler?: RoomStartHandler | undefined;
+
+  onRoomStart?: RoomStartHandler | undefined;
 
   /**
    * @deprecated Use {@link onClientDisconnect} instead.
@@ -74,7 +80,7 @@ export interface ReflectServerOptions<MD extends MutatorDefs> {
 export type NormalizedOptions<MD extends MutatorDefs> = {
   mutators: MD;
   authHandler?: AuthHandler | undefined;
-  roomStartHandler: RoomStartHandler;
+  onRoomStart: RoomStartHandler;
   onClientDisconnect: ClientDisconnectHandler;
   onClientDelete: ClientDeleteHandler;
   logSink: LogSink;
@@ -149,7 +155,8 @@ function makeNormalizedOptionsGetter<
     const {
       mutators,
       authHandler,
-      roomStartHandler = noopAsync,
+      roomStartHandler,
+      onRoomStart,
       disconnectHandler,
       onClientDisconnect,
       onClientDelete = noopAsync,
@@ -163,7 +170,7 @@ function makeNormalizedOptionsGetter<
     return {
       mutators,
       authHandler,
-      roomStartHandler,
+      onRoomStart: onRoomStart ?? roomStartHandler ?? noopAsync,
       onClientDisconnect: onClientDisconnect ?? disconnectHandler ?? noopAsync,
       onClientDelete,
       logSink,
@@ -185,7 +192,7 @@ function createRoomDOClass<
     constructor(state: DurableObjectState, env: Env) {
       const {
         mutators,
-        roomStartHandler,
+        onRoomStart,
         onClientDisconnect,
         onClientDelete,
         logSink,
@@ -196,7 +203,7 @@ function createRoomDOClass<
       super({
         mutators,
         state,
-        roomStartHandler,
+        onRoomStart,
         onClientDisconnect,
         onClientDelete,
         logSink,
