@@ -9,13 +9,13 @@ import {
 import type {Storage} from '../storage/storage.js';
 import {getVersion, putVersion} from '../types/version.js';
 
-// Processes the roomStartHandler. Errors in starting the room are logged
+// Processes the onRoomStart. Errors in starting the room are logged
 // and thrown for the caller to handle appropriately (i.e. consider the room
 // to be in an invalid state).
 export async function processRoomStart(
   lc: LogContext,
   env: Env,
-  roomStartHandler: RoomStartHandler,
+  onRoomStart: RoomStartHandler,
   storage: Storage,
   roomID: string,
 ): Promise<void> {
@@ -34,16 +34,16 @@ export async function processRoomStart(
     env,
   );
   try {
-    await roomStartHandler(tx, roomID);
+    await onRoomStart(tx, roomID);
     if (!cache.isDirty()) {
-      lc.debug?.('noop roomStartHandler');
+      lc.debug?.('noop onRoomStart');
       return;
     }
     await putVersion(nextVersion, cache);
     await cache.flush();
-    lc.debug?.(`finished roomStartHandler (${startVersion} => ${nextVersion})`);
+    lc.debug?.(`finished onRoomStart (${startVersion} => ${nextVersion})`);
   } catch (e) {
-    lc.info?.('roomStartHandler failed', e);
+    lc.info?.('onRoomStart failed', e);
     throw e;
   }
 }
