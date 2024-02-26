@@ -10,6 +10,7 @@ export const errorKindSchema = v.union(
   v.literal('InvalidConnectionRequest'),
   v.literal('InvalidConnectionRequestBaseCookie'),
   v.literal('InvalidConnectionRequestLastMutationID'),
+  v.literal('InvalidConnectionRequestClientDeleted'),
   v.literal('InvalidMessage'),
   v.literal('InvalidPush'),
   v.literal('RoomClosed'),

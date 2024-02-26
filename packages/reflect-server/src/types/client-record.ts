@@ -1,5 +1,5 @@
 import {nullableVersionSchema} from 'reflect-protocol';
-import {must} from 'shared/src/must.js';
+import {jsonSchema} from 'shared/src/json-schema.js';
 import * as valita from 'shared/src/valita.js';
 import type {Storage} from '../storage/storage.js';
 import type {ClientID} from './client-state.js';
@@ -81,7 +81,7 @@ export async function delClientRecords(
   const recordKeys = clientIDs.map(clientID => clientRecordKey(clientID));
   const records = await storage.getEntries(recordKeys, clientRecordSchema);
   await Promise.all([
-    putClientTombstones(toClientRecordMap(records), storage),
+    putClientTombstones(clientIDsOf(records), storage),
     storage.delEntries(recordKeys),
   ]);
 }
@@ -91,9 +91,8 @@ export async function delClientRecord(
   clientID: ClientID,
   storage: Storage,
 ): Promise<void> {
-  const {userID} = must(await getClientRecord(clientID, storage));
   await Promise.all([
-    putClientTombstone(clientID, userID, storage),
+    putClientTombstone(clientID, storage),
     storage.del(clientRecordKey(clientID)),
   ]);
 }
@@ -108,6 +107,12 @@ function toClientRecordMap(
   return clientRecords;
 }
 
+function* clientIDsOf(entries: Map<string, unknown>) {
+  for (const key of entries.keys()) {
+    yield key.substring(clientRecordPrefix.length);
+  }
+}
+
 const clientTombstonePrefix = 'clientTombstone/';
 
 export function clientTombstoneKey(clientID: ClientID): string {
@@ -116,19 +121,24 @@ export function clientTombstoneKey(clientID: ClientID): string {
 
 function putClientTombstone(
   clientID: ClientID,
-  userID: string | undefined,
   storage: Storage,
 ): Promise<void> {
-  return storage.put(clientTombstoneKey(clientID), {userID});
+  return storage.put(clientTombstoneKey(clientID), {});
 }
 
-function putClientTombstones(
-  records: ClientRecordMap,
+export function putClientTombstones(
+  clientIDs: Iterable<ClientID>,
   storage: Storage,
 ): Promise<void> {
   const entries: Record<string, {userID?: string | undefined}> = {};
-  for (const [clientID, {userID}] of records) {
-    entries[clientTombstoneKey(clientID)] = {userID};
+  for (const clientID of clientIDs) {
+    entries[clientTombstoneKey(clientID)] = {};
   }
   return storage.putEntries(entries);
+}
+
+export async function hasClientTombstone(clientID: ClientID, storage: Storage) {
+  return (
+    (await storage.get(clientTombstoneKey(clientID), jsonSchema)) !== undefined
+  );
 }

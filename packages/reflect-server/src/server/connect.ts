@@ -11,6 +11,7 @@ import type {DurableStorage} from '../storage/durable-storage.js';
 import {
   ClientRecord,
   getClientRecord,
+  hasClientTombstone,
   putClientRecord,
 } from '../types/client-record.js';
 import type {
@@ -107,6 +108,19 @@ export async function handleConnection(
         existingRecord.userID,
       );
       closeWithErrorLocal('InvalidConnectionRequest', 'Unexpected userID');
+      return;
+    }
+  } else {
+    if (await hasClientTombstone(requestClientID, storage)) {
+      lc.info?.(
+        'Client with clientID',
+        requestClientID,
+        'is deleted and cannot reconnect.',
+      );
+      closeWithErrorLocal(
+        'InvalidConnectionRequestClientDeleted',
+        'Client is deleted',
+      );
       return;
     }
   }
