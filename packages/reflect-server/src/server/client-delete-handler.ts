@@ -14,6 +14,9 @@ import {putVersion} from '../types/version.js';
  * longer reconnect. These changes will be synced to all clients of the room
  * just like mutator changes. `write.clientID` will be the id of the deleted
  * client. `write.mutationID` will be -1.
+ *
+ * This is run before the presence keys for `clientID` are deleted and before
+ * other client state is removed.
  */
 export type ClientDeleteHandler = (write: WriteTransaction) => Promise<void>;
 
