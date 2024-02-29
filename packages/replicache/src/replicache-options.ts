@@ -209,11 +209,8 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
 
   /**
    * Allows providing a custom implementation of the underlying storage layer.
-   *
-   * @experimental This option is experimental and might be removed or changed
-   * in the future without following semver versioning. Please be cautious.
    */
-  experimentalCreateKVStore?: CreateStore | undefined;
+  kvStore?: 'mem' | 'idb' | CreateStore | undefined;
 
   /**
    * Defines the indexes, if any, to use on the data.

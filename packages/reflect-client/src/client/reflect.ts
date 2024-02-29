@@ -315,6 +315,7 @@ export class Reflect<MD extends MutatorDefs> {
       onOnlineChange,
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
+      kvStore = 'mem'
     } = options;
     if (!userID) {
       throw new Error('ReflectOptions.userID must not be empty.');
@@ -364,7 +365,7 @@ export class Reflect<MD extends MutatorDefs> {
         minDelayMs: 0,
       },
       licenseKey: 'reflect-client-static-key',
-      experimentalCreateKVStore: getCreateKVStore(options),
+      kvStore
     };
     let internalAPI: ReplicacheInternalAPI;
     const replicacheInternalOptions = {
@@ -1518,23 +1519,3 @@ class TimedOutError extends Error {
 }
 
 class CloseError extends Error {}
-
-function createMemStore(name: string): ExperimentalMemKVStore {
-  return new ExperimentalMemKVStore(name);
-}
-
-function getCreateKVStore<MD extends MutatorDefs>(
-  options: ReflectOptions<MD>,
-): ExperimentalCreateKVStore | undefined {
-  switch (options.kvStore) {
-    case 'idb':
-      return undefined;
-
-    case 'mem':
-    case undefined:
-      return createMemStore;
-
-    default:
-      return options.kvStore;
-  }
-}
