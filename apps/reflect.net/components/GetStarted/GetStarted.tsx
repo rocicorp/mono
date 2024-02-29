@@ -7,7 +7,7 @@ export function GetStarted() {
     event('Hello Reflect Clicked', {
       action: 'click',
       category: 'CTA Buttons',
-      label: 'Hello Reflect Link'
+      label: 'Hello Reflect Link',
     });
   };
 
