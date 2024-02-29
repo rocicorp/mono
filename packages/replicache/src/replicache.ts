@@ -103,7 +103,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.js';
-import { MemStore } from './kv/mem-store.js';
+import {MemStore} from './kv/mem-store.js';
 
 declare const TESTING: boolean;
 export interface TestingReplicacheWithTesting extends Replicache {

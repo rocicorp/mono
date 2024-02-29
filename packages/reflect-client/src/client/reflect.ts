@@ -20,8 +20,6 @@ import {version} from 'reflect-shared/src/version.js';
 import {
   ClientGroupID,
   ClientID,
-  ExperimentalCreateKVStore,
-  ExperimentalMemKVStore,
   ExperimentalWatchCallbackForOptions,
   ExperimentalWatchNoIndexCallback,
   ExperimentalWatchOptions,
@@ -315,7 +313,7 @@ export class Reflect<MD extends MutatorDefs> {
       onOnlineChange,
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-      kvStore = 'mem'
+      kvStore = 'mem',
     } = options;
     if (!userID) {
       throw new Error('ReflectOptions.userID must not be empty.');
@@ -365,7 +363,7 @@ export class Reflect<MD extends MutatorDefs> {
         minDelayMs: 0,
       },
       licenseKey: 'reflect-client-static-key',
-      kvStore
+      kvStore,
     };
     let internalAPI: ReplicacheInternalAPI;
     const replicacheInternalOptions = {

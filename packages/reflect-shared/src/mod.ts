@@ -5,7 +5,7 @@ export {
   type LogSink,
 } from '@rocicorp/logger';
 export {
-  ExperimentalMemKVStore,
+  MemKVStore,
   filterAsyncIterable,
   isScanIndexOptions,
   makeIDBName,

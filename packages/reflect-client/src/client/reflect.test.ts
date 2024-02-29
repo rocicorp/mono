@@ -10,8 +10,8 @@ import type {
   WriteTransaction,
 } from 'reflect-shared/src/mod.js';
 import {
-  ExperimentalCreateKVStore,
-  ExperimentalMemKVStore,
+  CreateKVStore,
+  MemKVStore,
   PullRequestV1,
   PushRequestV1,
 } from 'replicache';
@@ -1600,8 +1600,7 @@ test('kvStore option', async () => {
   await t('mem', 'kv-store-test-user-id-2', false);
   await t(undefined, 'kv-store-test-user-id-3', false);
 
-  const kvStore: ExperimentalCreateKVStore = name =>
-    new ExperimentalMemKVStore(name);
+  const kvStore: CreateKVStore = name => new MemKVStore(name);
   await t(kvStore, 'kv-store-test-user-id-4', false, undefined);
   await t(kvStore, 'kv-store-test-user-id-4', false, 'bar');
 });
