@@ -11,6 +11,7 @@ import {
 import {DurableStorage} from '../../src/storage/durable-storage.js';
 import {
   ClientRecord,
+  IncludeDeleted,
   getClientRecord,
   putClientRecord,
 } from '../../src/types/client-record.js';
@@ -230,7 +231,9 @@ test('processMutation', async () => {
     }
 
     expect(err).toEqual(c.expectedError);
-    expect(await getClientRecord(clientID, storage)).toEqual(c.expectedRecord);
+    expect(
+      await getClientRecord(clientID, IncludeDeleted.Include, storage),
+    ).toEqual(c.expectedRecord);
     expect(await getUserValue('foo', storage)).toEqual(
       c.expectAppWrite ? {version, deleted: false, value: 'bar'} : undefined,
     );

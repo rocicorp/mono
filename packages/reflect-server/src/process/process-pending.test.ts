@@ -13,6 +13,7 @@ import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import {DurableStorage} from '../../src/storage/durable-storage.js';
 import {
   ClientRecordMap,
+  IncludeDeleted,
   getClientRecord,
   putClientRecord,
 } from '../../src/types/client-record.js';
@@ -1621,7 +1622,9 @@ describe('processPending', () => {
       }
       for (const [expClientID, expRecord] of c.expectedClientRecords ??
         new Map()) {
-        expect(await getClientRecord(expClientID, storage)).toEqual(expRecord);
+        expect(
+          await getClientRecord(expClientID, IncludeDeleted.Include, storage),
+        ).toEqual(expRecord);
       }
       expect(fakeBufferSizer.missableRecords).toEqual(
         c.expectedMissableRecords,

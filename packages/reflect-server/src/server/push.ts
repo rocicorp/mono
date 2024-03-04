@@ -4,6 +4,7 @@ import {must} from 'shared/src/must.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {
   ClientRecord,
+  IncludeDeleted,
   getClientRecord,
   putClientRecord,
 } from '../types/client-record.js';
@@ -79,10 +80,10 @@ export async function handlePush(
     await Promise.all(
       [...mutationClientIDs].map(
         async mClientID =>
-          [mClientID, await getClientRecord(mClientID, storage)] as [
-            ClientID,
-            ClientRecord | undefined,
-          ],
+          [
+            mClientID,
+            await getClientRecord(mClientID, IncludeDeleted.Exclude, storage),
+          ] as [ClientID, ClientRecord | undefined],
       ),
     ),
   );

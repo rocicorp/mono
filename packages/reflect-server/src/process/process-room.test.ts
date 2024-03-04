@@ -5,6 +5,7 @@ import {processRoom} from '../process/process-room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {
   ClientRecordMap,
+  IncludeDeleted,
   getClientRecord,
   putClientRecord,
 } from '../types/client-record.js';
@@ -756,7 +757,9 @@ describe('processRoom', () => {
       }
 
       for (const [clientID, record] of c.expectedClientRecords ?? new Map()) {
-        expect(await getClientRecord(clientID, storage)).toEqual(record);
+        expect(
+          await getClientRecord(clientID, IncludeDeleted.Include, storage),
+        ).toEqual(record);
       }
 
       for (const [key, value] of c.expectedUserValues ?? new Map()) {

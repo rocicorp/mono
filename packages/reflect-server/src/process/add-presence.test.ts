@@ -2,6 +2,7 @@ import {describe, expect, test} from '@jest/globals';
 import type {Poke, Version} from 'reflect-protocol';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {
+  IncludeDeleted,
   listClientRecords,
   putClientRecord,
   type ClientRecordMap,
@@ -569,7 +570,9 @@ describe('addPresence', () => {
       pokesByClientID;
 
       expect(await getVersion(storage)).toEqual(c.expectedVersion);
-      expect(await listClientRecords(storage)).toEqual(c.expectedClientRecords);
+      expect(await listClientRecords(IncludeDeleted.Include, storage)).toEqual(
+        c.expectedClientRecords,
+      );
       expect(pokesByClientID).toEqual(c.expectedPokes);
     });
   }

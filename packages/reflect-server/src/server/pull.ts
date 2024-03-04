@@ -1,8 +1,8 @@
-import {compareVersions, getVersion} from '../types/version.js';
-import {listClientRecords} from '../types/client-record.js';
-import type {DurableStorage} from '../storage/durable-storage.js';
-import type {Socket, ClientID} from '../types/client-state.js';
 import type {PullRequestBody, PullResponseMessage} from 'reflect-protocol';
+import type {DurableStorage} from '../storage/durable-storage.js';
+import {IncludeDeleted, listClientRecords} from '../types/client-record.js';
+import type {ClientID, Socket} from '../types/client-state.js';
+import {compareVersions, getVersion} from '../types/version.js';
 import {send} from '../util/socket.js';
 
 export async function handlePull(
@@ -11,7 +11,7 @@ export async function handlePull(
   ws: Socket,
 ): Promise<void> {
   const {clientGroupID, cookie, requestID} = pullRequest;
-  const records = await listClientRecords(storage);
+  const records = await listClientRecords(IncludeDeleted.Exclude, storage);
   const lastMutationIDChanges: Record<ClientID, number> = {};
   for (const [clientID, record] of records) {
     if (

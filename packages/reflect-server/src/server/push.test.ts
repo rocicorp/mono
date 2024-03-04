@@ -5,6 +5,7 @@ import {handlePush} from '../server/push.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {
   ClientRecordMap,
+  IncludeDeleted,
   listClientRecords,
   putClientRecord,
 } from '../types/client-record.js';
@@ -1045,7 +1046,9 @@ describe('handlePush', () => {
       for (const [clientID, record] of c.clientRecords) {
         await putClientRecord(clientID, record, storage);
       }
-      expect(await listClientRecords(storage)).toEqual(c.clientRecords);
+      expect(await listClientRecords(IncludeDeleted.Include, storage)).toEqual(
+        c.clientRecords,
+      );
 
       const requestID = randomID();
       const push: PushBody = {
@@ -1084,7 +1087,9 @@ describe('handlePush', () => {
         expect(message).toContain(c.expectedErrorAndSocketClosed);
         expect(s1.log[1][0]).toEqual('close');
         expect(c.pendingMutations).toEqual(pendingMutationsPrePush);
-        expect(await listClientRecords(storage)).toEqual(clientRecordsPrePush);
+        expect(
+          await listClientRecords(IncludeDeleted.Include, storage),
+        ).toEqual(clientRecordsPrePush);
         expect(clientMapSansSockets(c.clientMap)).toEqual(
           clientMapSansSockets(clientMapPrePush),
         );
@@ -1092,9 +1097,9 @@ describe('handlePush', () => {
         expect(processUntilDoneCallCount).toEqual(1);
         expect(s1.log).toEqual([]);
         expect(c.pendingMutations).toEqual(c.expectedPendingMutations);
-        expect(await listClientRecords(storage)).toEqual(
-          c.expectedClientRecords ?? clientRecordsPrePush,
-        );
+        expect(
+          await listClientRecords(IncludeDeleted.Include, storage),
+        ).toEqual(c.expectedClientRecords ?? clientRecordsPrePush);
         expect(clientMapSansSockets(c.clientMap)).toEqual(
           clientMapSansSockets(c.expectedClientMap ?? clientMapPrePush),
         );

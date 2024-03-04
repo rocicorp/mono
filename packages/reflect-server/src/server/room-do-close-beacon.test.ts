@@ -8,13 +8,14 @@ import {newCreateRoomRequest} from '../client/room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {
   ClientRecord,
+  IncludeDeleted,
   listClientRecords,
   putClientRecord,
 } from '../types/client-record.js';
 import {putConnectedClients} from '../types/connected-clients.js';
 import {UserValue, userValueKey, userValueSchema} from '../types/user-value.js';
 import {putVersion} from '../types/version.js';
-import {TestLogSink, setUserEntries} from '../util/test-utils.js';
+import {TestLogSink, clientRecord, setUserEntries} from '../util/test-utils.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
 import {addRoomIDHeader} from './internal-headers.js';
 import {BaseRoomDO} from './room-do.js';
@@ -101,7 +102,16 @@ describe('Close beacon behavior', () => {
       expectedStatus: 200,
       storedLastMutationID: 10,
       body: {lastMutationID: 10},
-      expectedClientRecords: {},
+      expectedClientRecords: {
+        [clientID]: clientRecord({
+          clientGroupID,
+          userID,
+          lastMutationID: 10,
+          lastMutationIDVersion: null,
+          lastSeen: 0,
+          deleted: true,
+        }),
+      },
     },
     {
       name: 'Same lmid sent remove old presence keys',
@@ -130,7 +140,16 @@ describe('Close beacon behavior', () => {
           version: 101,
         },
       },
-      expectedClientRecords: {},
+      expectedClientRecords: {
+        [clientID]: clientRecord({
+          clientGroupID,
+          userID,
+          lastMutationID: 10,
+          lastMutationIDVersion: null,
+          lastSeen: 0,
+          deleted: true,
+        }),
+      },
     },
     {
       name: 'sent lmid is less than stored lmid',
@@ -227,7 +246,16 @@ describe('Close beacon behavior', () => {
       expectedStatus: 200,
       storedLastMutationID: 10,
       body: {lastMutationID: 10},
-      expectedClientRecords: {},
+      expectedClientRecords: {
+        [clientID]: clientRecord({
+          clientGroupID,
+          userID,
+          lastMutationID: 10,
+          lastMutationIDVersion: null,
+          lastSeen: 0,
+          deleted: true,
+        }),
+      },
       async onClientDelete(tx) {
         await tx.set('x/hold', 'door');
         await tx.set(`-/p/${tx.clientID}/collect`, 'me');
@@ -265,7 +293,16 @@ describe('Close beacon behavior', () => {
       expectedStatus: 200,
       storedLastMutationID: 10,
       body: {lastMutationID: 10},
-      expectedClientRecords: {},
+      expectedClientRecords: {
+        [clientID]: clientRecord({
+          clientGroupID,
+          userID,
+          lastMutationID: 10,
+          lastMutationIDVersion: null,
+          lastSeen: 0,
+          deleted: true,
+        }),
+      },
       onClientDelete: () =>
         Promise.reject(new Error('onClientDelete intentional error')),
     },
@@ -329,9 +366,11 @@ describe('Close beacon behavior', () => {
 
       expect(response.status).toBe(c.expectedStatus);
 
-      expect(Object.fromEntries(await listClientRecords(storage))).toEqual(
-        expectedClientRecords,
-      );
+      expect(
+        Object.fromEntries(
+          await listClientRecords(IncludeDeleted.Include, storage),
+        ),
+      ).toEqual(expectedClientRecords);
       expect(
         await storage.list({prefix: userValueKey('')}, userValueSchema),
       ).toEqual(new Map(Object.entries(expectedEntries)));

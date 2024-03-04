@@ -14,7 +14,6 @@ import {
   ClientRecord,
   clientRecordKey,
   clientRecordSchema,
-  putClientTombstones,
 } from '../types/client-record.js';
 import type {
   ClientGroupID,
@@ -107,7 +106,6 @@ describe('handleConnection', () => {
     existingRecord?: ClientRecord;
     expectedRecord?: ClientRecord;
     existingClients: ClientMap;
-    clientTombstones?: ClientID[];
     expectedClients: (socket: Socket) => ClientMap;
     socket?: Socket;
     version: NullableVersion;
@@ -423,7 +421,10 @@ describe('handleConnection', () => {
       url: 'http://google.com/?clientID=c1&clientGroupID=cg1&baseCookie=7&ts=42&lmid=0&wsid=wsidx',
       headers: createHeadersWithValidAuthData(userID),
       existingClients: new Map(),
-      clientTombstones: ['c1'],
+      existingRecord: clientRecord({
+        clientGroupID: 'cg1',
+        deleted: true,
+      }),
       expectedClients: () => new Map(),
       expectErrorKind: 'InvalidConnectionRequestClientDeleted',
       expectErrorMessage: `Client is deleted`,
@@ -440,10 +441,6 @@ describe('handleConnection', () => {
       await durable.deleteAll();
       if (c.existingRecord) {
         await putEntry(durable, clientRecordKey('c1'), c.existingRecord, {});
-      }
-
-      if (c.clientTombstones) {
-        await putClientTombstones(c.clientTombstones, storage);
       }
 
       if (c.version !== null) {

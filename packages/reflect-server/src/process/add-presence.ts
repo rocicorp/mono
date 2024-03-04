@@ -4,6 +4,7 @@ import {EntryCache} from '../storage/entry-cache.js';
 import type {Storage} from '../storage/storage.js';
 import {
   ClientRecord,
+  IncludeDeleted,
   getClientRecord,
   putClientRecord,
 } from '../types/client-record.js';
@@ -71,7 +72,9 @@ export async function addPresence(
       patch: [],
     };
     for (const clientID of clients.keys()) {
-      const clientRecord = must(await getClientRecord(clientID, cache));
+      const clientRecord = must(
+        await getClientRecord(clientID, IncludeDeleted.Exclude, cache),
+      );
       const updatedClientRecord: ClientRecord = {
         ...clientRecord,
         baseCookie: nextVersion,
