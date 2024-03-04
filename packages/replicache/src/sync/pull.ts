@@ -344,14 +344,20 @@ export function handlePullResponseV0(
 
     const frozenCookie = deepFreeze(response.cookie ?? null);
 
-    // If there is no patch and the lmid and cookie don't change, it's a nop.
+    // If the cookie didn't change, it's a nop.
     // Otherwise, we will write a new commit, including for the case of just
     // a cookie change.
-    if (
-      response.patch.length === 0 &&
-      response.lastMutationID === baseLastMutationID &&
-      deepEqual(frozenCookie, baseCookie)
-    ) {
+    if (deepEqual(frozenCookie, baseCookie)) {
+      if (response.patch.length > 0) {
+        lc.error?.(
+          `handlePullResponse: cookie ${baseCookie} did not change, but patch is not empty`,
+        );
+      }
+      if (response.lastMutationID !== baseLastMutationID) {
+        lc.error?.(
+          `handlePullResponse: cookie ${baseCookie} did not change, but lastMutationID did change`,
+        );
+      }
       return {
         type: HandlePullResponseResultType.NoOp,
       };
@@ -509,24 +515,19 @@ export function handlePullResponseV1(
       );
     }
 
-    if (
-      deepEqual(frozenResponseCookie, baseCookie) &&
-      !anyMutationsToApply(
-        response.lastMutationIDChanges,
-        baseSnapshotMeta.lastMutationIDs,
-      )
-    ) {
-      if (
-        deepEqual(frozenResponseCookie, baseCookie) &&
-        response.patch.length > 0
-      ) {
-        lc.info?.(
-          `handlePullResponse: cookie ${baseCookie} and lastMutationIDs did not change, but patch is not empty`,
+    if (deepEqual(frozenResponseCookie, baseCookie)) {
+      if (response.patch.length > 0) {
+        lc.error?.(
+          `handlePullResponse: cookie ${baseCookie} did not change, but patch is not empty`,
         );
       }
-      // If there are no lmid changes and cookie doesn't
-      // change, it's a nop. Otherwise, something changed (maybe just the cookie)
-      // and we will write a new commit.
+      if (Object.keys(response.lastMutationIDChanges).length > 0) {
+        console.log(response.lastMutationIDChanges);
+        lc.error?.(
+          `handlePullResponse: cookie ${baseCookie} did not change, but lastMutationIDChanges is not empty`,
+        );
+      }
+      // If the cookie doesn't change, it's a nop.
       return {
         type: HandlePullResponseResultType.NoOp,
       };
@@ -714,18 +715,4 @@ export function maybeEndPull<M extends LocalMeta>(
       diffs: diffsMap,
     };
   });
-}
-
-function anyMutationsToApply(
-  lastMutationIDChanges: Record<string, number>,
-  lastMutationIDs: Record<string, number>,
-) {
-  for (const [clientID, lastMutationIDChange] of Object.entries(
-    lastMutationIDChanges,
-  )) {
-    if (lastMutationIDChange !== lastMutationIDs[clientID]) {
-      return true;
-    }
-  }
-  return false;
 }

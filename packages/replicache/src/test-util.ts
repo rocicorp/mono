@@ -193,7 +193,7 @@ export async function replicacheForTesting<
   const {clientID} = rep;
   // Wait for open to be done.
   await rep.clientGroupID;
-  fetchMock.post(pullURL, makePullResponseV1(clientID, 0, [], null));
+  fetchMock.post(pullURL, makePullResponseV1(clientID, undefined, [], null));
   fetchMock.post(pushURL, 'ok');
   await tickAFewTimes();
   return rep;
@@ -316,13 +316,14 @@ export const testSubscriptionsManagerOptions: DiffComputationConfig = {
 
 export function makePullResponseV1(
   clientID: ClientID,
-  lastMutationID: number,
+  lastMutationID: number | undefined,
   patch: PatchOperation[] = [],
   cookie: Cookie = '',
 ): PullResponseV1 {
   return {
     cookie,
-    lastMutationIDChanges: {[clientID]: lastMutationID},
+    lastMutationIDChanges:
+      lastMutationID === undefined ? {} : {[clientID]: lastMutationID},
     patch,
   };
 }

@@ -68,24 +68,33 @@ test('pull', async () => {
   await deleteTodo({id: id1});
   await deleteTodo({id: id2});
 
+  let cookie = 1;
   expect(deleteCount).to.equal(2);
   const {clientID} = rep;
   fetchMock.postOnce(
     pullURL,
-    makePullResponseV1(clientID, 2, [
-      {op: 'del', key: ''},
-      {
-        op: 'put',
-        key: '/list/1',
-        value: {id: 1, ownerUserID: 1},
-      },
-    ]),
+    makePullResponseV1(
+      clientID,
+      2,
+      [
+        {op: 'del', key: ''},
+        {
+          op: 'put',
+          key: '/list/1',
+          value: {id: 1, ownerUserID: 1},
+        },
+      ],
+      cookie,
+    ),
   );
   rep.pullIgnorePromise();
   await tickAFewTimes();
   expect(deleteCount).to.equal(2);
 
-  fetchMock.postOnce(pullURL, makePullResponseV1(clientID, 2));
+  fetchMock.postOnce(
+    pullURL,
+    makePullResponseV1(clientID, 2, undefined, cookie),
+  );
   beginPullResult = await rep.beginPull();
   ({syncHead} = beginPullResult);
   expect(syncHead).to.equal(emptyHash);
@@ -102,13 +111,18 @@ test('pull', async () => {
 
   fetchMock.postOnce(
     pullURL,
-    makePullResponseV1(clientID, 3, [
-      {
-        op: 'put',
-        key: '/todo/14323534',
-        value: {id: 14323534, text: 'Test'},
-      },
-    ]),
+    makePullResponseV1(
+      clientID,
+      3,
+      [
+        {
+          op: 'put',
+          key: '/todo/14323534',
+          value: {id: 14323534, text: 'Test'},
+        },
+      ],
+      ++cookie,
+    ),
   );
   beginPullResult = await rep.beginPull();
   ({syncHead} = beginPullResult);
@@ -129,7 +143,10 @@ test('pull', async () => {
     ((await rep.query(tx => tx.get(`/todo/${id2}`))) as {text: string}).text,
   ).to.equal('Test 2');
 
-  fetchMock.postOnce(pullURL, makePullResponseV1(clientID, 3));
+  fetchMock.postOnce(
+    pullURL,
+    makePullResponseV1(clientID, 3, undefined, ++cookie),
+  );
   await rep.maybeEndPull(syncHead, beginPullResult.requestID);
 
   expect(createCount).to.equal(3);
@@ -145,7 +162,12 @@ test('pull', async () => {
 
   fetchMock.postOnce(
     pullURL,
-    makePullResponseV1(clientID, 6, [{op: 'del', key: '/todo/14323534'}], ''),
+    makePullResponseV1(
+      clientID,
+      6,
+      [{op: 'del', key: '/todo/14323534'}],
+      ++cookie,
+    ),
   );
   rep.pullIgnorePromise();
   await tickAFewTimes();

@@ -674,6 +674,7 @@ test('subscribe pull and index update', async () => {
   );
 
   let lastMutationID = 0;
+  let cookie = 0;
 
   let expectedQueryCallCount = 1;
 
@@ -689,7 +690,7 @@ test('subscribe pull and index update', async () => {
     const {clientID} = rep;
     fetchMock.post(
       pullURL,
-      makePullResponseV1(clientID, lastMutationID++, opt.patch),
+      makePullResponseV1(clientID, lastMutationID++, opt.patch, cookie++),
     );
 
     rep.pullIgnorePromise();
