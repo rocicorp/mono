@@ -50,7 +50,7 @@ test('pending mutation', async () => {
   ]);
 
   rep.pullURL = 'https://diff.com/pull';
-  fetchMock.post(rep.pullURL, makePullResponseV1(clientID, 2));
+  fetchMock.post(rep.pullURL, makePullResponseV1(clientID, 2, undefined, 1));
   rep.pullIgnorePromise();
   await tickAFewTimes(100);
   await rep.mutate.addData({a: 3});
@@ -60,7 +60,7 @@ test('pending mutation', async () => {
   ]);
 
   fetchMock.reset();
-  fetchMock.post(rep.pullURL, makePullResponseV1(clientID, 3));
+  fetchMock.post(rep.pullURL, makePullResponseV1(clientID, 3, undefined, 2));
   rep.pullIgnorePromise();
   await tickAFewTimes(100);
   expect(await rep.experimentalPendingMutations()).to.deep.equal([]);

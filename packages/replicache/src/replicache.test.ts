@@ -487,7 +487,7 @@ test('HTTP status pull', async () => {
         return {status: 204};
       default: {
         okCalled = true;
-        return {body: makePullResponseV1(clientID, 0), status: 200};
+        return {body: makePullResponseV1(clientID, undefined), status: 200};
       }
     }
   });
@@ -1286,7 +1286,7 @@ test('onSync', async () => {
   expect(onSync.callCount).to.equal(0);
 
   const {clientID} = rep;
-  fetchMock.postOnce(pullURL, makePullResponseV1(clientID, 2));
+  fetchMock.postOnce(pullURL, makePullResponseV1(clientID, 2, undefined, 1));
   await rep.pull();
   await tickAFewTimes(15);
 
@@ -1444,7 +1444,7 @@ test('push and pull concurrently', async () => {
   });
   fetchMock.post(pullURL, () => {
     requests.push(pullURL);
-    return makePullResponseV1(clientID, 0, [], null);
+    return makePullResponseV1(clientID, 0, [], 1);
   });
 
   await add({a: 0});
@@ -1574,6 +1574,7 @@ test('pull and index update', async () => {
   const {clientID} = rep;
 
   let lastMutationID = 0;
+  let lastCookie = 0;
   async function testPull(opt: {
     patch: PatchOperation[];
     expectedResult: JSONValue;
@@ -1581,7 +1582,12 @@ test('pull and index update', async () => {
     let pullDone = false;
     fetchMock.post(pullURL, () => {
       pullDone = true;
-      return makePullResponseV1(clientID, lastMutationID++, opt.patch);
+      return makePullResponseV1(
+        clientID,
+        lastMutationID++,
+        opt.patch,
+        lastCookie++,
+      );
     });
 
     await rep.pull();
@@ -1691,7 +1697,7 @@ test('pull mutate options', async () => {
 
   fetchMock.post(pullURL, () => {
     log.push(Date.now());
-    return makePullResponseV1(clientID, 0, [], '');
+    return makePullResponseV1(clientID, undefined, [], '');
   });
 
   await tickUntilTimeIs(1000);
