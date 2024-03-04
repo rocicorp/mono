@@ -208,7 +208,7 @@ function buildClientPokesAndUpdateClientRecords(
   return Promise.all(
     clientIDs.map(async clientID => {
       const clientRecord = must(
-        await getClientRecord(clientID, IncludeDeleted.Exclude, cache),
+        await getClientRecord(clientID, IncludeDeleted.Include, cache),
       );
       const client = must(clients.get(clientID));
       const updatedClientRecord: ClientRecord = {

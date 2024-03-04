@@ -45,7 +45,7 @@ export async function fastForwardRoom(
   // No need to calculate a patch for the current version!
   distinctBaseCookies.delete(currentVersion);
   if (distinctBaseCookies.size === 0) {
-    lc.debug?.('No clients need to be fastforwarded.');
+    lc.debug?.('No clients need to be fast forwarded.');
     return [];
   }
 

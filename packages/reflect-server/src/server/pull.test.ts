@@ -150,6 +150,42 @@ test('pull', async () => {
         requestID: 'r1',
       },
     },
+
+    {
+      name: 'pull returns mutation id changes for specified clientGroupID including deleted clients',
+      clientRecords: new Map([
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 1,
+            lastMutationID: 1,
+            lastMutationIDVersion: 2,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 1,
+            lastMutationID: 7,
+            lastMutationIDVersion: 2,
+            deleted: true,
+          }),
+        ],
+      ]),
+      version: 3,
+      pullRequest: {
+        clientGroupID: 'cg1',
+        cookie: 1,
+        requestID: 'r1',
+      },
+      expectedPullResponse: {
+        cookie: 3,
+        lastMutationIDChanges: {c1: 1, c2: 7},
+        requestID: 'r1',
+      },
+    },
   ];
 
   const durable = await getMiniflareDurableObjectStorage(id);

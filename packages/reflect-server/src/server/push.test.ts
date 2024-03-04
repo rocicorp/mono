@@ -1022,6 +1022,67 @@ describe('handlePush', () => {
         }),
       ],
     },
+
+    {
+      name: 'empty pending, multiple mutations one deleted client with pending',
+      clientMap: new Map([
+        client(clientID, 'u1', clientGroupID, s1, 0),
+        client('c2', 'u2', clientGroupID),
+      ]),
+      pendingMutations: [],
+      mutations: [
+        mutation(clientID, 3, 10),
+        mutation('c2', 5, 20),
+        mutation(clientID, 4, 20),
+      ],
+      clientRecords: new Map([
+        [
+          clientID,
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 2,
+            lastMutationIDVersion: 1,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID,
+            baseCookie: 1,
+            lastMutationID: 4,
+            lastMutationIDVersion: 1,
+            deleted: true,
+          }),
+        ],
+      ]),
+      expectedPendingMutations: [
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 3,
+          timestamps: timestamps(10),
+          pusherClientIDs: new Set([clientID]),
+          auth: {userID: 'u1'},
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID,
+          id: 5,
+          timestamps: undefined,
+          pusherClientIDs: new Set([clientID]),
+          auth: {userID: 'u1'},
+        }),
+        pendingMutation({
+          clientID,
+          clientGroupID,
+          id: 4,
+          timestamps: timestamps(20),
+          pusherClientIDs: new Set([clientID]),
+          auth: {userID: 'u1'},
+        }),
+      ],
+    },
   ];
 
   // Special LC that waits for a requestID to be added to the context.

@@ -70,12 +70,12 @@ export async function listClientRecords(
 }
 
 export async function getClientRecords(
-  clientIDs: ClientID[],
+  clientIDs: Iterable<ClientID>,
   includedDeleted: IncludeDeleted,
   storage: Storage,
 ): Promise<ClientRecordMap> {
   const entries = await storage.getEntries(
-    clientIDs.map(clientRecordKey),
+    Array.from(clientIDs, clientRecordKey),
     clientRecordSchema,
   );
   return convertToClientRecordMapAndFilterDeleted(entries, includedDeleted);

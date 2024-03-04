@@ -1535,6 +1535,382 @@ describe('processPending', () => {
         },
       ],
     },
+    {
+      name: 'one client, two mutations, all processed',
+      version: 1,
+      clientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+      ]),
+      clients: new Map([client('c1', 'u1', 'cg1', s1, 0)]),
+      storedConnectedClients: ['c1'],
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamps: 750,
+          name: 'inc',
+        }),
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 3,
+          timestamps: 800,
+          name: 'inc',
+        }),
+      ],
+      maxProcessedMutationTimestamp: 700,
+      expectedVersion: 3,
+      expectedPokes: new Map([
+        [
+          'c1',
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                lastMutationIDChanges: {c1: 2},
+                presence: [],
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 750,
+              },
+              {
+                baseCookie: 2,
+                cookie: 3,
+                lastMutationIDChanges: {c1: 3},
+                presence: [],
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 2,
+                  },
+                ],
+                timestamp: 800,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
+        ],
+      ]),
+      expectedUserValues: new Map([
+        ['count', {value: 2, version: 3, deleted: false}],
+      ]),
+      expectedClientRecords: new Map([
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 3,
+            lastMutationID: 3,
+            lastMutationIDVersion: 3,
+          }),
+        ],
+      ]),
+      expectedMaxProcessedMutationTimestamp: 800,
+      expectedMissableRecords: [
+        {
+          bufferNeededMs: 0,
+          missed: false,
+          now: START_TIME,
+        },
+      ],
+    },
+
+    {
+      name: 'two clients, two mutations, all processed',
+      version: 1,
+      clientRecords: new Map([
+        ['c1', clientRecord({clientGroupID: 'cg1', baseCookie: 1})],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 1,
+            lastMutationID: 101,
+          }),
+        ],
+      ]),
+      clients: new Map([
+        client('c1', 'u1', 'cg1', s1, 0),
+        client('c2', 'u1', 'cg1', s2, 0),
+      ]),
+      storedConnectedClients: ['c1', 'c2'],
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 2,
+          timestamps: 750,
+          name: 'inc',
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID: 'cg1',
+          id: 102,
+          timestamps: 800,
+          name: 'inc',
+        }),
+      ],
+      maxProcessedMutationTimestamp: 700,
+      expectedVersion: 3,
+      expectedPokes: new Map([
+        [
+          'c1',
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                lastMutationIDChanges: {c1: 2},
+                presence: [],
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 750,
+              },
+              {
+                baseCookie: 2,
+                cookie: 3,
+                lastMutationIDChanges: {c2: 102},
+                presence: [],
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 2,
+                  },
+                ],
+                timestamp: 800,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
+        ],
+        [
+          'c2',
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                lastMutationIDChanges: {c1: 2},
+                presence: [],
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 750,
+              },
+              {
+                baseCookie: 2,
+                cookie: 3,
+                lastMutationIDChanges: {c2: 102},
+                presence: [],
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 2,
+                  },
+                ],
+                timestamp: 800,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
+        ],
+      ]),
+      expectedUserValues: new Map([
+        ['count', {value: 2, version: 3, deleted: false}],
+      ]),
+      expectedClientRecords: new Map([
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 3,
+            lastMutationID: 2,
+            lastMutationIDVersion: 2,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 3,
+            lastMutationID: 102,
+            lastMutationIDVersion: 3,
+          }),
+        ],
+      ]),
+      expectedMaxProcessedMutationTimestamp: 800,
+      expectedMissableRecords: [
+        {
+          bufferNeededMs: 0,
+          missed: false,
+          now: START_TIME,
+        },
+      ],
+    },
+
+    {
+      name: 'two clients, two mutations, one client deleted',
+      version: 1,
+      clientRecords: new Map([
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 1,
+            lastMutationID: 101,
+            deleted: true,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 1,
+            lastMutationID: 201,
+          }),
+        ],
+      ]),
+      clients: new Map([client('c2', 'u1', 'cg1', s2, 0)]),
+      storedConnectedClients: ['c2'],
+      pendingMutations: [
+        pendingMutation({
+          clientID: 'c1',
+          clientGroupID: 'cg1',
+          id: 102,
+          timestamps: 750,
+          name: 'inc',
+        }),
+        pendingMutation({
+          clientID: 'c2',
+          clientGroupID: 'cg1',
+          id: 202,
+          timestamps: 800,
+          name: 'inc',
+        }),
+      ],
+      maxProcessedMutationTimestamp: 700,
+      expectedVersion: 3,
+      expectedPokes: new Map([
+        [
+          'c1',
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                // no effect but still need to update the lmid
+                lastMutationIDChanges: {c1: 102},
+                presence: [],
+                patch: [
+                  // no effect from this deleted client
+                ],
+                timestamp: 750,
+              },
+              {
+                baseCookie: 2,
+                cookie: 3,
+                lastMutationIDChanges: {c2: 202},
+                presence: [],
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 800,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
+        ],
+        [
+          'c2',
+          {
+            pokes: [
+              {
+                baseCookie: 1,
+                cookie: 2,
+                // no effect but still need to update the lmid
+                lastMutationIDChanges: {c1: 102},
+                presence: [],
+                patch: [
+                  // no effect from this deleted client
+                ],
+                timestamp: 750,
+              },
+              {
+                baseCookie: 2,
+                cookie: 3,
+                lastMutationIDChanges: {c2: 202},
+                presence: [],
+                patch: [
+                  {
+                    op: 'put',
+                    key: 'count',
+                    value: 1,
+                  },
+                ],
+                timestamp: 800,
+              },
+            ],
+            requestID: '4fxcm49g2j9',
+          },
+        ],
+      ]),
+      expectedUserValues: new Map([
+        ['count', {value: 1, version: 3, deleted: false}],
+      ]),
+      expectedClientRecords: new Map([
+        [
+          'c1',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 1,
+            // lmid got updated for the deleted client
+            lastMutationID: 102,
+            lastMutationIDVersion: 2,
+            deleted: true,
+          }),
+        ],
+        [
+          'c2',
+          clientRecord({
+            clientGroupID: 'cg1',
+            baseCookie: 3,
+            lastMutationID: 202,
+            lastMutationIDVersion: 3,
+          }),
+        ],
+      ]),
+      expectedMaxProcessedMutationTimestamp: 800,
+      expectedMissableRecords: [
+        {
+          bufferNeededMs: 0,
+          missed: false,
+          now: START_TIME,
+        },
+      ],
+    },
   ];
 
   const env = {boo: 'far'};

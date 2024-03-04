@@ -11,7 +11,9 @@ export async function handlePull(
   ws: Socket,
 ): Promise<void> {
   const {clientGroupID, cookie, requestID} = pullRequest;
-  const records = await listClientRecords(IncludeDeleted.Exclude, storage);
+  // Include deleted client records so that we can update the pending mutations
+  // on the client.
+  const records = await listClientRecords(IncludeDeleted.Include, storage);
   const lastMutationIDChanges: Record<ClientID, number> = {};
   for (const [clientID, record] of records) {
     if (

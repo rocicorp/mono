@@ -3,9 +3,8 @@ import type {PushBody} from 'reflect-protocol';
 import {must} from 'shared/src/must.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {
-  ClientRecord,
   IncludeDeleted,
-  getClientRecord,
+  getClientRecords,
   putClientRecord,
 } from '../types/client-record.js';
 import type {ClientID, ClientMap} from '../types/client-state.js';
@@ -76,16 +75,10 @@ export async function handlePush(
 
   const {clientGroupID} = body;
   const mutationClientIDs = new Set(body.mutations.map(m => m.clientID));
-  const clientRecords = new Map(
-    await Promise.all(
-      [...mutationClientIDs].map(
-        async mClientID =>
-          [
-            mClientID,
-            await getClientRecord(mClientID, IncludeDeleted.Exclude, storage),
-          ] as [ClientID, ClientRecord | undefined],
-      ),
-    ),
+  const clientRecords = await getClientRecords(
+    mutationClientIDs,
+    IncludeDeleted.Include,
+    storage,
   );
   const mutationIdRangesByClientID: Map<ClientID, [number, number]> = new Map();
   for (const {clientID, id} of body.mutations) {

@@ -51,7 +51,7 @@ async function processMutationTimed(
   );
   const {clientID} = pendingMutation;
   const cache = new EntryCache(storage);
-  const record = await getClientRecord(clientID, IncludeDeleted.Exclude, cache);
+  const record = await getClientRecord(clientID, IncludeDeleted.Include, cache);
   if (!record) {
     lc.error?.('client not found', clientID);
     throw new Error(`Client ${clientID} not found`);
@@ -102,6 +102,7 @@ async function processMutationTimed(
   }
 
   record.lastMutationID = expectedMutationID;
+  // TODO(arv): Should this be updated for deleted clients?
   record.lastMutationIDVersion = version;
 
   await putClientRecord(clientID, record, cache);

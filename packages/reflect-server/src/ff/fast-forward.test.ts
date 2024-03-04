@@ -511,6 +511,59 @@ test('fastForward', async () => {
         },
       ],
     },
+
+    {
+      name: 'two clients, one of them deleted',
+      state: new Map([
+        ['foo', {value: 'bar', version: 41, deleted: false}],
+        [
+          'hot',
+          {value: 'dog', version: CURRENT_VERSION_FOR_TEST, deleted: true},
+        ],
+      ]),
+      clientRecords: new Map([
+        [
+          'c1',
+          {
+            lastMutationID: 3,
+            baseCookie: 40,
+            clientGroupID: 'cg1',
+            lastMutationIDVersion: 41,
+            userID: 'u1',
+            deleted: true,
+          },
+        ],
+        [
+          'c2',
+          {
+            lastMutationID: 4,
+            baseCookie: 41,
+            clientGroupID: 'cg1',
+            lastMutationIDVersion: CURRENT_VERSION_FOR_TEST,
+            userID: 'u1',
+          },
+        ],
+      ]),
+      clients: ['c2'],
+      expectedPokes: [
+        {
+          clientID: 'c2',
+          poke: {
+            baseCookie: 41,
+            cookie: CURRENT_VERSION_FOR_TEST,
+            lastMutationIDChanges: {c2: 4},
+            presence: [],
+            patch: [
+              {
+                op: 'del',
+                key: 'hot',
+              },
+            ],
+            timestamp: undefined,
+          },
+        },
+      ],
+    },
   ];
 
   const durable = await getMiniflareDurableObjectStorage(id);
