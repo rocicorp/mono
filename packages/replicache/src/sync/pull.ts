@@ -510,14 +510,21 @@ export function handlePullResponseV1(
     }
 
     if (
-      response.patch.length === 0 &&
       deepEqual(frozenResponseCookie, baseCookie) &&
       !anyMutationsToApply(
         response.lastMutationIDChanges,
         baseSnapshotMeta.lastMutationIDs,
       )
     ) {
-      // If there is no patch and there are no lmid changes and cookie doesn't
+      if (
+        deepEqual(frozenResponseCookie, baseCookie) &&
+        response.patch.length > 0
+      ) {
+        lc.info?.(
+          `handlePullResponse: cookie ${baseCookie} and lastMutationIDs did not change, but patch is not empty`,
+        );
+      }
+      // If there are no lmid changes and cookie doesn't
       // change, it's a nop. Otherwise, something changed (maybe just the cookie)
       // and we will write a new commit.
       return {

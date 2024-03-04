@@ -753,19 +753,14 @@ test('begin try pull DD31', async () => {
       },
     },
     {
-      name: 'new patch, same lmid, same cookie -> beginPull succeeds w/syncHead set',
+      name: 'new patch, same lmid, same cookie -> beginPull succeeds w/no syncHead set',
       numPendingMutations: 0,
       pullResult: {
         ...goodPullResp,
         lastMutationIDChanges: {[clientID]: baseLastMutationID},
         cookie: baseCookie,
       },
-      expNewSyncHead: {
-        cookie: baseCookie,
-        lastMutationID: baseLastMutationID,
-        valueMap: goodPullRespValueMap,
-        indexes: ['2'],
-      },
+      expNewSyncHead: undefined,
       expBeginPullResult: {
         httpRequestInfo: goodHttpRequestInfo,
         syncHead: emptyHash,
