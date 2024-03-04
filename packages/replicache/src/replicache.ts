@@ -1124,11 +1124,11 @@ export class Replicache<MD extends MutatorDefs = {}> {
       }
       const {errorMessage, httpStatusCode} = httpRequestInfo;
 
-      if (errorMessage || httpStatusCode >= 400) {
+      if (errorMessage || httpStatusCode !== 200) {
         // TODO(arv): Maybe we should not log the server URL when the error comes
         // from a Pusher/Puller?
         requestLc.error?.(
-          `Got error response doing ${verb}: ${httpStatusCode}` +
+          `Got a non 200 response doing ${verb}: ${httpStatusCode}` +
             (errorMessage ? `: ${errorMessage}` : ''),
         );
       }
@@ -1774,7 +1774,7 @@ function reload(): void {
 /**
  * Wrapper error class that should be reported as error (logger.error)
  */
-class ReportError extends Error {}
+export class ReportError extends Error {}
 
 async function throwIfError(p: Promise<undefined | {error: unknown}>) {
   const res = await p;

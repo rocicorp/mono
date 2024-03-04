@@ -186,7 +186,7 @@ test('reauth pull', async () => {
   expectConsoleLogContextStub(
     rep.name,
     consoleErrorStub.lastCall,
-    `Got error response doing pull: 401: xxx`,
+    `Got a non 200 response doing pull: 401: xxx`,
     ['pull', requestIDLogContextRegex],
   );
   {
@@ -273,7 +273,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
   expectConsoleLogContextStub(
     rep.name,
     consoleErrorStub.firstCall,
-    'Got error response doing pull: 500: Test failure',
+    'Got a non 200 response doing pull: 500: Test failure',
     ['pull', requestIDLogContextRegex],
   );
   consoleErrorStub.restore();
