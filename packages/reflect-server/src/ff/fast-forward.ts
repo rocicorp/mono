@@ -51,12 +51,12 @@ export async function fastForwardRoom(
 
   // TODO: Don't fetch all client records, build an index, or change client
   // record key scheme, to allow only fetching relevant client records.
-  const allClientsRecords = await listClientRecords(
-    IncludeDeleted.Exclude,
+  const allClientRecords = await listClientRecords(
+    IncludeDeleted.Include,
     storage,
   );
   lc.debug?.(
-    `Computing patches for ${distinctBaseCookies.size} cookies of ${clients.length} connected clients (${allClientsRecords.size} all client records)`,
+    `Computing patches for ${distinctBaseCookies.size} cookies of ${clients.length} connected clients (${allClientRecords.size} all client records)`,
   );
 
   // Calculate all the distinct patches in parallel
@@ -76,7 +76,7 @@ export async function fastForwardRoom(
     ClientGroupID,
     Map<NullableVersion, Record<ClientID, number>>
   > = new Map();
-  for (const [clientID, record] of allClientsRecords) {
+  for (const [clientID, record] of allClientRecords) {
     if (record.lastMutationIDVersion !== null) {
       const {clientGroupID} = record;
       let changesByBaseCookie =

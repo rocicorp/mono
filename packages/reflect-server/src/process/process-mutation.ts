@@ -77,7 +77,10 @@ async function processMutationTimed(
   }
 
   if (record.deleted) {
-    lc.info?.('Not running mutation for deleted client', pendingMutation);
+    lc.info?.(
+      'Not running mutation for deleted client',
+      describeMutation(pendingMutation),
+    );
   } else {
     const txCache = new EntryCache(storage);
     const tx = new ReplicacheTransaction(

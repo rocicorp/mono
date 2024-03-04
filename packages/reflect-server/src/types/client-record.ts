@@ -1,7 +1,8 @@
 import {nullableVersionSchema} from 'reflect-protocol';
+import {wrapIterable} from 'shared/src/iterables.js';
 import * as valita from 'shared/src/valita.js';
 import type {Storage} from '../storage/storage.js';
-import type {ClientID} from './client-state.js';
+import type {ClientGroupID, ClientID} from './client-state.js';
 
 export const clientRecordSchema = valita.object({
   clientGroupID: valita.string(),
@@ -22,7 +23,7 @@ export const clientRecordSchema = valita.object({
   // This is optional because old records did not have this field.
   userID: valita.string().optional(),
 
-  // Whether the client has been deleted du to it being collected
+  // Whether the client has been deleted due to it being collected
   deleted: valita.boolean().optional(),
 });
 
@@ -69,6 +70,24 @@ export async function listClientRecords(
   return convertToClientRecordMapAndFilterDeleted(entries, includeDeleted);
 }
 
+export async function listClientRecordsForClientGroup(
+  clientGroupID: ClientGroupID,
+  includeDeleted: IncludeDeleted,
+  storage: Storage,
+): Promise<ClientRecordMap> {
+  // TODO(arv): Restructure the key space to make this more efficient.
+  const entries = await storage.list(
+    {prefix: clientRecordPrefix},
+    clientRecordSchema,
+  );
+  return new Map(
+    wrapIterable(entries)
+      .filter(includeDeletedPredicate(includeDeleted))
+      .filter(entry => entry[1].clientGroupID === clientGroupID)
+      .map(convertKeyToClientID),
+  );
+}
+
 export async function getClientRecords(
   clientIDs: Iterable<ClientID>,
   includedDeleted: IncludeDeleted,
@@ -89,18 +108,24 @@ export function putClientRecord(
   return storage.put(clientRecordKey(clientID), record);
 }
 
+function includeDeletedPredicate(includedDeleted: IncludeDeleted) {
+  return (entry: [string, ClientRecord]) =>
+    !(includedDeleted === IncludeDeleted.Exclude && entry[1].deleted);
+}
+
+function convertKeyToClientID<T>(entry: [key: string, value: T]): [string, T] {
+  return [entry[0].substring(clientRecordPrefix.length), entry[1]];
+}
+
 function convertToClientRecordMapAndFilterDeleted(
   entries: Map<string, ClientRecord>,
   includeDeleted: IncludeDeleted,
 ): ClientRecordMap {
-  const clientRecords = new Map();
-  for (const [key, record] of entries) {
-    if (includeDeleted === IncludeDeleted.Exclude && record.deleted) {
-      continue;
-    }
-    clientRecords.set(key.substring(clientRecordPrefix.length), record);
-  }
-  return clientRecords;
+  return new Map(
+    wrapIterable(entries)
+      .filter(includeDeletedPredicate(includeDeleted))
+      .map(convertKeyToClientID),
+  );
 }
 
 /**

@@ -1,4 +1,4 @@
-import {expect, test} from '@jest/globals';
+import {describe, expect, test} from '@jest/globals';
 import type {
   AuthData,
   Env,
@@ -31,7 +31,7 @@ const userID = 'testUser1';
 const auth: AuthData = {userID, foo: 'bar'};
 const env: Env = {env: 'baby'};
 
-test('processMutation', async () => {
+describe('processMutation', () => {
   type Case = {
     name: string;
     existingRecord?: ClientRecord;
@@ -184,6 +184,34 @@ test('processMutation', async () => {
       expectAppWrite: true,
       expectVersionWrite: true,
     },
+    {
+      name: 'mutation from deleted client',
+      existingRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: null,
+        lastMutationID: 1,
+        lastMutationIDVersion: 1,
+        userID,
+        deleted: true,
+      }),
+      pendingMutation: pendingMutation({
+        clientID: 'c1',
+        clientGroupID: 'cg1',
+        id: 2,
+        timestamps: 100,
+        name: 'foo',
+        auth,
+      }),
+      expectedRecord: clientRecord({
+        clientGroupID: 'cg1',
+        baseCookie: null,
+        lastMutationID: 2,
+        lastMutationIDVersion: version,
+        deleted: true,
+      }),
+      expectAppWrite: false,
+      expectVersionWrite: true,
+    },
   ];
 
   const mutators: MutatorMap = new Map([
@@ -206,39 +234,40 @@ test('processMutation', async () => {
     ],
   ]);
 
-  const durable = await getMiniflareDurableObjectStorage(id);
-
   for (const c of cases) {
-    const storage = new DurableStorage(durable);
-    const {clientID} = c.pendingMutation;
+    test(c.name, async () => {
+      const durable = await getMiniflareDurableObjectStorage(id);
+      const storage = new DurableStorage(durable);
+      const {clientID} = c.pendingMutation;
 
-    if (c.existingRecord) {
-      await putClientRecord(clientID, c.existingRecord, storage);
-    }
+      if (c.existingRecord) {
+        await putClientRecord(clientID, c.existingRecord, storage);
+      }
 
-    let err: string | undefined;
-    try {
-      await processMutation(
-        createSilentLogContext(),
-        env,
-        c.pendingMutation,
-        mutators,
-        storage,
-        version,
+      let err: string | undefined;
+      try {
+        await processMutation(
+          createSilentLogContext(),
+          env,
+          c.pendingMutation,
+          mutators,
+          storage,
+          version,
+        );
+      } catch (e) {
+        err = String(e);
+      }
+
+      expect(err).toEqual(c.expectedError);
+      expect(
+        await getClientRecord(clientID, IncludeDeleted.Include, storage),
+      ).toEqual(c.expectedRecord);
+      expect(await getUserValue('foo', storage)).toEqual(
+        c.expectAppWrite ? {version, deleted: false, value: 'bar'} : undefined,
       );
-    } catch (e) {
-      err = String(e);
-    }
 
-    expect(err).toEqual(c.expectedError);
-    expect(
-      await getClientRecord(clientID, IncludeDeleted.Include, storage),
-    ).toEqual(c.expectedRecord);
-    expect(await getUserValue('foo', storage)).toEqual(
-      c.expectAppWrite ? {version, deleted: false, value: 'bar'} : undefined,
-    );
-
-    const expectedVersion = c.expectVersionWrite ? version : undefined;
-    expect(await getVersion(storage)).toEqual(expectedVersion);
+      const expectedVersion = c.expectVersionWrite ? version : undefined;
+      expect(await getVersion(storage)).toEqual(expectedVersion);
+    });
   }
 });

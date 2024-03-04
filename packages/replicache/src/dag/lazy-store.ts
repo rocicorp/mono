@@ -1,6 +1,6 @@
 import {RWLock} from '@rocicorp/lock';
+import {joinIterables} from 'shared/src/iterables.js';
 import type {Hash} from '../hash.js';
-import {joinIterables} from '../iterables.js';
 import type {MaybePromise} from '../replicache.js';
 import {promiseVoid} from '../resolved-promises.js';
 import {getSizeOfValue} from '../size-of-value.js';

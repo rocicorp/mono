@@ -5,6 +5,7 @@ import {
   assertNumber,
   assertString,
 } from 'shared/src/asserts.js';
+import {joinIterables} from 'shared/src/iterables.js';
 import {
   JSONValue,
   ReadonlyJSONValue,
@@ -21,7 +22,6 @@ import {
   type FrozenTag,
 } from '../frozen-json.js';
 import {Hash, emptyHash, newUUIDHash} from '../hash.js';
-import {joinIterables} from '../iterables.js';
 import type {BTreeRead} from './read.js';
 import type {BTreeWrite} from './write.js';
 
