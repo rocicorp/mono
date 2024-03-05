@@ -51,6 +51,7 @@ import type {ClientGroupID, ClientID} from './ids.js';
 import * as patch from './patch.js';
 import {PullError} from './pull-error.js';
 import {SYNC_HEAD_NAME} from './sync-head-name.js';
+import {ReportError} from '../replicache.js';
 
 export const PULL_VERSION_SDD = 0;
 export const PULL_VERSION_DD31 = 1;
@@ -270,23 +271,26 @@ async function callPuller(
 ): Promise<PullerResult> {
   lc.debug?.('Starting pull...');
   const pullStart = Date.now();
+  let pullerResult: PullerResult;
   try {
-    const pullerResult = await puller(pullReq, requestID);
+    pullerResult = await puller(pullReq, requestID);
     lc.debug?.(
       `...Pull ${pullerResult.response ? 'complete' : 'failed'} in `,
       Date.now() - pullStart,
       'ms',
     );
-
+  } catch (e) {
+    throw new PullError(toError(e));
+  }
+  try {
     if (isPullRequestV1(pullReq)) {
       assertPullerResultV1(pullerResult);
     } else {
       assertPullerResultV0(pullerResult);
     }
-
     return pullerResult;
   } catch (e) {
-    throw new PullError(toError(e));
+    throw new ReportError('Invalid puller result', toError(e));
   }
 }
 

@@ -27,6 +27,7 @@ import {
   type ClientGroupID,
   type ClientID,
 } from './ids.js';
+import {ReportError} from '../replicache.js';
 
 export const PUSH_VERSION_SDD = 0;
 export const PUSH_VERSION_DD31 = 1;
@@ -245,11 +246,16 @@ async function callPusher(
   body: PushRequestV0 | PushRequestV1,
   requestID: string,
 ): Promise<PusherResult> {
+  let pusherResult: PusherResult;
   try {
-    const pusherResult = await pusher(body, requestID);
+    pusherResult = await pusher(body, requestID);
+  } catch (e) {
+    throw new PushError(toError(e));
+  }
+  try {
     assertPusherResult(pusherResult);
     return pusherResult;
   } catch (e) {
-    throw new PushError(toError(e));
+    throw new ReportError('Invalid pusher result', toError(e));
   }
 }
