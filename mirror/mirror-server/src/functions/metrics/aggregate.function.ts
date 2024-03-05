@@ -1,4 +1,5 @@
 import {Analytics} from 'cloudflare-api/src/analytics.js';
+import {Errors, FetchResultError} from 'cloudflare-api/src/fetch.js';
 import {
   DocumentReference,
   FieldValue,
@@ -137,7 +138,17 @@ async function aggregateAllProviders(
     }
   }
   if (failure) {
-    throw failure; // Throw errors so that retries kick in.
+    // Throw errors so that retries kick in.
+    FetchResultError.throwIfCodeIsNot(failure, Errors.TooManyRequests);
+    // Immediate (cloud function) retries for 429 errors almost never resolve the issue
+    // and end up triggering unnecessary alerts. Instead, rely on the persisted
+    // aggregation-attempt schema to retry the aggregation at the next scheduled run.
+    //
+    // https://github.com/rocicorp/mono/issues/1380
+    logger.warn(
+      `Throttled by Cloudflare Analytics. Will retry at next run.`,
+      failure,
+    );
   }
 
   // Clear the attempt if successful.
