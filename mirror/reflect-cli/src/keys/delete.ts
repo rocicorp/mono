@@ -1,10 +1,10 @@
 import {getFirestore} from 'firebase/firestore';
 import {deleteApiKeys} from 'mirror-protocol/src/api-keys.js';
 import type {AuthContext} from '../handler.js';
+import {getLogger} from '../logger.js';
 import {makeRequester} from '../requester.js';
 import {getSingleTeam} from '../teams.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
-import {getLogger} from '../logger.js';
 
 export function deleteKeysOptions(yargs: CommonYargsArgv) {
   return yargs.positional('names', {
@@ -26,7 +26,7 @@ export async function deleteKeysHandler(
   const {names} = yargs;
   const {userID} = authContext.user;
   const firestore = getFirestore();
-  const teamID = await getSingleTeam(firestore, userID, 'admin');
+  const teamID = await getSingleTeam(firestore, authContext, 'admin');
 
   const {deleted} = await deleteApiKeys.call({
     requester: makeRequester(userID),

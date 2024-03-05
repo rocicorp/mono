@@ -10,19 +10,19 @@ import {
 } from 'firebase/firestore';
 import {deleteApp} from 'mirror-protocol/src/app.js';
 import {
-  appPath,
   APP_COLLECTION,
+  appPath,
   appViewDataConverter,
 } from 'mirror-schema/src/external/app.js';
 import {deploymentViewDataConverter} from 'mirror-schema/src/external/deployment.js';
 import {watchDoc} from 'mirror-schema/src/external/watch.js';
 import {must} from 'shared/src/must.js';
-import {readAppConfig, writeAppConfig, getAppID} from './app-config.js';
+import {getAppID, readAppConfig, writeAppConfig} from './app-config.js';
+import type {AuthContext} from './handler.js';
 import {checkbox, confirm} from './inquirer.js';
 import {makeRequester} from './requester.js';
 import {getSingleTeam} from './teams.js';
 import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
-import type {AuthContext} from './handler.js';
 
 export function deleteOptions(yargs: CommonYargsArgv) {
   return yargs.option('app', {
@@ -40,7 +40,7 @@ export async function deleteHandler(
 ): Promise<void> {
   const firestore = getFirestore();
   const {userID} = authContext.user;
-  const apps = await getAppsToDelete(firestore, userID, yargs, authContext);
+  const apps = await getAppsToDelete(firestore, yargs, authContext);
   let selectedApps = [];
   if (apps.length === 1) {
     if (
@@ -119,7 +119,6 @@ type AppInfo = {
 
 async function getAppsToDelete(
   firestore: Firestore,
-  userID: string,
   yargs: DeleteHandlerArgs,
   authContext: AuthContext,
 ): Promise<AppInfo[]> {
@@ -128,7 +127,7 @@ async function getAppsToDelete(
     const appID = await getAppID(authContext, app);
     return getApp(firestore, appID, true);
   }
-  const teamID = await getSingleTeam(firestore, userID, 'admin');
+  const teamID = await getSingleTeam(firestore, authContext, 'admin');
   const q = query(
     collection(firestore, APP_COLLECTION).withConverter(appViewDataConverter),
     where('teamID', '==', teamID),

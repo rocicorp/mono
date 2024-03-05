@@ -6,17 +6,17 @@ import {
   where,
 } from 'firebase/firestore';
 import {
+  APP_COLLECTION,
   AppView,
   appViewDataConverter,
-  APP_COLLECTION,
 } from 'mirror-schema/src/external/app.js';
 
 import type {DeploymentView} from 'mirror-schema/src/external/deployment.js';
 import color from 'picocolors';
-import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 import type {AuthContext} from './handler.js';
-import {getSingleTeam} from './teams.js';
 import {getLogger} from './logger.js';
+import {getSingleTeam} from './teams.js';
+import type {CommonYargsArgv, YargvToInterface} from './yarg-types.js';
 
 export function appListOptions(yargs: CommonYargsArgv) {
   return yargs.option('output', {
@@ -35,11 +35,7 @@ export async function appListHandler(
   authContext: AuthContext,
 ): Promise<void> {
   const firestore = getFirestore();
-  const teamID = await getSingleTeam(
-    firestore,
-    authContext.user.userID,
-    'admin',
-  );
+  const teamID = await getSingleTeam(firestore, authContext, 'admin');
   const q = query(
     collection(firestore, APP_COLLECTION).withConverter(appViewDataConverter),
     where('teamID', '==', teamID),

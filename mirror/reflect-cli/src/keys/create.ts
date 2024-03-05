@@ -27,11 +27,11 @@ import {makeRequester} from '../requester.js';
 
 import {must} from 'shared/src/must.js';
 import type {AuthContext} from '../handler.js';
+import {getLogger} from '../logger.js';
 import {padColumns} from '../table.js';
 import {getSingleTeam} from '../teams.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 import {CREATED_APPS} from './list.js';
-import {getLogger} from '../logger.js';
 
 export function createKeyOptions(yargs: CommonYargsArgv) {
   return yargs.positional('name', {
@@ -61,7 +61,7 @@ export async function createKeyHandler(
 
   const {userID} = authContext.user;
   const firestore = getFirestore();
-  const teamID = await getSingleTeam(firestore, userID, 'admin');
+  const teamID = await getSingleTeam(firestore, authContext, 'admin');
   const requester = makeRequester(userID);
 
   const {allPermissions} = await listApiKeys.call({

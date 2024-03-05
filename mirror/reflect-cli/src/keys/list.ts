@@ -3,11 +3,11 @@ import {listApiKeys} from 'mirror-protocol/src/api-keys.js';
 import {APP_CREATE_PERMISSION} from 'mirror-schema/src/external/api-key.js';
 import color from 'picocolors';
 import type {AuthContext} from '../handler.js';
+import {getLogger} from '../logger.js';
 import {makeRequester} from '../requester.js';
 import {padColumns} from '../table.js';
 import {getSingleTeam} from '../teams.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
-import {getLogger} from '../logger.js';
 
 export function listKeysOptions(yargs: CommonYargsArgv) {
   return yargs.option('show', {
@@ -29,7 +29,7 @@ export async function listKeysHandler(
 
   const {userID} = authContext.user;
   const firestore = getFirestore();
-  const teamID = await getSingleTeam(firestore, userID, 'admin');
+  const teamID = await getSingleTeam(firestore, authContext, 'admin');
 
   const {keys, allPermissions} = await listApiKeys.call({
     requester: makeRequester(userID),

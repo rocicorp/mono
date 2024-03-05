@@ -2,11 +2,11 @@ import {getFirestore} from 'firebase/firestore';
 import {editApiKey, listApiKeys} from 'mirror-protocol/src/api-keys.js';
 import color from 'picocolors';
 import type {AuthContext} from '../handler.js';
+import {getLogger} from '../logger.js';
 import {makeRequester} from '../requester.js';
 import {getSingleTeam} from '../teams.js';
 import type {CommonYargsArgv, YargvToInterface} from '../yarg-types.js';
 import {promptForKeyConfiguration} from './create.js';
-import {getLogger} from '../logger.js';
 
 export function editKeyOptions(yargs: CommonYargsArgv) {
   return yargs.positional('name', {
@@ -25,7 +25,7 @@ export async function editKeyHandler(
   const {name} = yargs;
   const {userID} = authContext.user;
   const firestore = getFirestore();
-  const teamID = await getSingleTeam(firestore, userID, 'admin');
+  const teamID = await getSingleTeam(firestore, authContext, 'admin');
   const requester = makeRequester(userID);
 
   const {keys, allPermissions} = await listApiKeys.call({
