@@ -545,6 +545,10 @@ test('HTTP status push', async () => {
         return {body: 'internal error', status: 500};
       case 1:
         return {body: 'not found', status: 404};
+      case 2:
+        return {body: 'created', status: 201};
+      case 3:
+        return {status: 204};
       default:
         okCalled = true;
         return {body: {}, status: 200};
@@ -557,9 +561,9 @@ test('HTTP status push', async () => {
     a: 0,
   });
 
-  await tickAFewTimes(20, 10);
+  await tickAFewTimes(60, 10);
 
-  expect(consoleErrorStub.callCount).to.equal(2);
+  expect(consoleErrorStub.callCount).to.equal(4);
   expectConsoleLogContextStub(
     rep.name,
     consoleErrorStub.firstCall,
@@ -568,8 +572,20 @@ test('HTTP status push', async () => {
   );
   expectConsoleLogContextStub(
     rep.name,
-    consoleErrorStub.lastCall,
+    consoleErrorStub.secondCall,
     'Got a non 200 response doing push: 404: not found',
+    ['push', requestIDLogContextRegex],
+  );
+  expectConsoleLogContextStub(
+    rep.name,
+    consoleErrorStub.thirdCall,
+    'Got a non 200 response doing push: 201: created',
+    ['push', requestIDLogContextRegex],
+  );
+  expectConsoleLogContextStub(
+    rep.name,
+    consoleErrorStub.lastCall,
+    'Got a non 200 response doing push: 204',
     ['push', requestIDLogContextRegex],
   );
 
