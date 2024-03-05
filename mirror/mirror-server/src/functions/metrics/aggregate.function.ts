@@ -92,12 +92,11 @@ export const aggregate = (firestore: Firestore, secretsClient: SecretsClient) =>
         }
         logger.info('All aggregations successful');
       } catch (e) {
+        // https://github.com/rocicorp/mono/issues/1380
         FetchResultError.throwIfCodeIsNot(e, Errors.TooManyRequests);
         // Immediate (cloud function) retries for 429 errors almost never resolve the issue
         // and end up triggering unnecessary alerts. Instead, rely on the persisted
         // aggregation-attempt schema to retry the aggregation at the next scheduled run.
-        //
-        // https://github.com/rocicorp/mono/issues/1380
         if (aggregations.length > 2) {
           throw e; // If failures keep happening, throw the error to trigger an alert.
         }
