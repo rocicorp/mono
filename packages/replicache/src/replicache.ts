@@ -531,10 +531,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this.#lc,
     );
 
-    const createStore = options.kvStore
-      ? getCreateKVStore(this.#lc, options)
-      : options.experimentalCreateKVStore ||
-        getCreateKVStore(this.#lc, options);
+    const createStore = getCreateKVStore(this.#lc, options);
     const perKVStore = createStore(this.idbName);
 
     this.#createStore = createStore;
@@ -1790,10 +1787,14 @@ function getCreateKVStore<MD extends MutatorDefs>(
 ): CreateStore {
   switch (options.kvStore) {
     case 'idb':
-    case undefined:
       return (name: string) => newIDBStoreWithMemFallback(lc, name);
     case 'mem':
       return createMemStore;
+    case undefined:
+      return (
+        options.experimentalCreateKVStore ||
+        ((name: string) => newIDBStoreWithMemFallback(lc, name))
+      );
     default:
       return options.kvStore;
   }
