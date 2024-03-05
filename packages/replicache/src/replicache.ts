@@ -103,6 +103,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.js';
+import {MemStore} from './kv/mem-store.js';
 
 declare const TESTING: boolean;
 export interface TestingReplicacheWithTesting extends Replicache {
@@ -480,7 +481,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
       puller,
       pusher,
       licenseKey,
-      experimentalCreateKVStore,
       indexes = {},
     } = options;
     this.auth = auth ?? '';
@@ -531,15 +531,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this.#lc,
     );
 
-    let createStore: CreateStore = name =>
-      newIDBStoreWithMemFallback(this.#lc, name);
-    let perKVStore;
-    if (experimentalCreateKVStore) {
-      createStore = experimentalCreateKVStore;
-      perKVStore = createStore(this.idbName);
-    } else {
-      perKVStore = createStore(this.idbName);
-    }
+    const createStore = getCreateKVStore(this.#lc, options);
+    const perKVStore = createStore(this.idbName);
+
     this.#createStore = createStore;
     this.#idbDatabases = new IDBDatabasesStore(createStore);
     this.#perdag = new StoreImpl(perKVStore, uuidChunkHasher, assertHash);
@@ -1780,5 +1774,28 @@ async function throwIfError(p: Promise<undefined | {error: unknown}>) {
   const res = await p;
   if (res) {
     throw res.error;
+  }
+}
+
+function createMemStore(name: string): MemStore {
+  return new MemStore(name);
+}
+
+function getCreateKVStore<MD extends MutatorDefs>(
+  lc: LogContext,
+  options: ReplicacheOptions<MD>,
+): CreateStore {
+  switch (options.kvStore) {
+    case 'idb':
+      return (name: string) => newIDBStoreWithMemFallback(lc, name);
+    case 'mem':
+      return createMemStore;
+    case undefined:
+      return (
+        options.experimentalCreateKVStore ||
+        ((name: string) => newIDBStoreWithMemFallback(lc, name))
+      );
+    default:
+      return options.kvStore;
   }
 }

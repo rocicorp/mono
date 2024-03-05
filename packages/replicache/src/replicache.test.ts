@@ -2115,12 +2115,12 @@ async function testMemStoreWithCounters<MD extends MutatorDefs>(
   expect(store.closeCount).to.equal(1, 'closeCount');
 }
 
-test('Experimental Create KV Store', async () => {
+test('Create KV Store', async () => {
   let store: MemStoreWithCounters | undefined;
 
-  const rep = await replicacheForTesting('experiment-kv-store', {
-    experimentalCreateKVStore: name => {
-      if (!store && name.includes('experiment-kv-store')) {
+  const rep = await replicacheForTesting('kv-store', {
+    kvStore: name => {
+      if (!store && name.includes('kv-store')) {
         store = new MemStoreWithCounters(name);
         return store;
       }
@@ -2169,7 +2169,7 @@ test('mutate args in mutation throws due to frozen', async () => {
   // store in the kv.Store.
   const store = new TestMemStore();
   const rep = await replicacheForTesting('mutate-args-in-mutation', {
-    experimentalCreateKVStore: () => store,
+    kvStore: () => store,
     mutators: {
       async mutArgs(tx: WriteTransaction, args: {v: number}) {
         args.v = 42;

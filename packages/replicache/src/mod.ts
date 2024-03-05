@@ -28,12 +28,12 @@ export type {HTTPRequestInfo} from './http-request-info.js';
 export type {IndexDefinition, IndexDefinitions} from './index-defs.js';
 export type {IterableUnion} from './iterable-union.js';
 export {IDBNotFoundError} from './kv/idb-store.js';
-export {MemStore as ExperimentalMemKVStore} from './kv/mem-store.js';
+export {MemStore as MemKVStore} from './kv/mem-store.js';
 export type {
-  CreateStore as ExperimentalCreateKVStore,
-  Read as ExperimentalKVRead,
-  Store as ExperimentalKVStore,
-  Write as ExperimentalKVWrite,
+  CreateStore as CreateKVStore,
+  Read as KVRead,
+  Store as KVStore,
+  Write as KVWrite,
 } from './kv/store.js';
 export {mergeAsyncIterables} from './merge-async-iterables.js';
 export type {PatchOperation} from './patch-operation.js';

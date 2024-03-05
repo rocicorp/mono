@@ -1,9 +1,6 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {MutatorDefs} from 'reflect-shared/src/types.js';
-import type {
-  ExperimentalCreateKVStore as CreateKVStore,
-  MaybePromise,
-} from 'replicache';
+import type {CreateKVStore, MaybePromise} from 'replicache';
 
 /**
  * Configuration for [[Reflect]].

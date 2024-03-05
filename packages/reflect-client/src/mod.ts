@@ -9,7 +9,7 @@ export {
   makeIDBName,
 } from 'replicache';
 export type {
-  ExperimentalCreateKVStore as CreateKVStore,
+  CreateKVStore,
   ExperimentalDiff,
   ExperimentalDiffOperation,
   ExperimentalDiffOperationAdd,
@@ -26,9 +26,9 @@ export type {
   IndexDefinition,
   IndexDefinitions,
   IndexKey,
-  ExperimentalKVRead as KVRead,
-  ExperimentalKVStore as KVStore,
-  ExperimentalKVWrite as KVWrite,
+  KVRead,
+  KVStore,
+  KVWrite,
   KeyTypeForScanOptions,
   PendingMutation,
   Puller,
