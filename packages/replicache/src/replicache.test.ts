@@ -470,7 +470,6 @@ test('HTTP status pull', async () => {
 
   const rep = await replicacheForTesting('http-status-pull', {
     pullURL,
-    logLevel: 'debug',
   });
 
   const {clientID} = rep;
