@@ -78,18 +78,34 @@ export const aggregate = (firestore: Firestore, secretsClient: SecretsClient) =>
         logger.debug(`Retrying ${aggregations.length - 1} past aggregations`);
       }
 
-      for (let i = 0; i < aggregations.length; i++) {
-        if (i > 0) {
-          await sleep(1000);
+      try {
+        for (let i = 0; i < aggregations.length; i++) {
+          if (i > 0) {
+            await sleep(1000);
+          }
+          await aggregateAllProviders(
+            firestore,
+            secrets,
+            providers.docs,
+            aggregations[i],
+          );
         }
-        await aggregateAllProviders(
-          firestore,
-          secrets,
-          providers.docs,
-          aggregations[i],
+        logger.info('All aggregations successful');
+      } catch (e) {
+        FetchResultError.throwIfCodeIsNot(e, Errors.TooManyRequests);
+        // Immediate (cloud function) retries for 429 errors almost never resolve the issue
+        // and end up triggering unnecessary alerts. Instead, rely on the persisted
+        // aggregation-attempt schema to retry the aggregation at the next scheduled run.
+        //
+        // https://github.com/rocicorp/mono/issues/1380
+        if (aggregations.length > 2) {
+          throw e; // If failures keep happening, throw the error to trigger an alert.
+        }
+        logger.warn(
+          `Throttled by Cloudflare Analytics. Will retry at next run.`,
+          e,
         );
       }
-      logger.info('All aggregations successful');
     },
   );
 
@@ -138,17 +154,7 @@ async function aggregateAllProviders(
     }
   }
   if (failure) {
-    // Throw errors so that retries kick in.
-    FetchResultError.throwIfCodeIsNot(failure, Errors.TooManyRequests);
-    // Immediate (cloud function) retries for 429 errors almost never resolve the issue
-    // and end up triggering unnecessary alerts. Instead, rely on the persisted
-    // aggregation-attempt schema to retry the aggregation at the next scheduled run.
-    //
-    // https://github.com/rocicorp/mono/issues/1380
-    logger.warn(
-      `Throttled by Cloudflare Analytics. Will retry at next run.`,
-      failure,
-    );
+    throw failure; // Throw errors so that retries kick in.
   }
 
   // Clear the attempt if successful.
