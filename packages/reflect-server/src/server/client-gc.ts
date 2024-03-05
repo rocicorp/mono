@@ -6,9 +6,11 @@ import {difference} from 'shared/src/set-utils.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import type {Storage} from '../storage/storage.js';
 import {
+  ClientRecord,
   ClientRecordMap,
-  delClientRecord,
-  delClientRecords,
+  IncludeDeleted,
+  deleteClientRecord,
+  deleteClientRecords,
   getClientRecord,
   listClientRecords,
   putClientRecord,
@@ -39,7 +41,11 @@ export async function updateLastSeenForClient(
   storage: Storage,
   now: number,
 ): Promise<void> {
-  const clientRecord = await getClientRecord(clientID, storage);
+  const clientRecord = await getClientRecord(
+    clientID,
+    IncludeDeleted.Exclude,
+    storage,
+  );
   if (!clientRecord) {
     lc.debug?.(`Not updating lastSeen for removed client ${clientID}`);
     return;
@@ -81,7 +87,10 @@ export async function collectClients(
   maxAge: number,
   nextVersion: number,
 ): Promise<void> {
-  const clientRecords = await listClientRecords(storage);
+  const clientRecords = await listClientRecords(
+    IncludeDeleted.Exclude,
+    storage,
+  );
   const clientsToCollect = await findClientsToCollect(
     connectedClients,
     clientRecords,
@@ -97,8 +106,8 @@ export async function collectClients(
     clientsToCollect,
   );
 
-  if (clientsToCollect.length > 0) {
-    for (const clientID of clientsToCollect) {
+  if (clientsToCollect.size > 0) {
+    for (const clientID of clientsToCollect.keys()) {
       await callClientDeleteHandler(
         lc,
         clientID,
@@ -112,10 +121,10 @@ export async function collectClients(
     await collectOldUserSpaceClientKeys(
       lc,
       storage,
-      clientsToCollect,
+      clientsToCollect.keys(),
       nextVersion,
     );
-    await delClientRecords(clientsToCollect, storage);
+    await deleteClientRecords(clientsToCollect, storage);
 
     await putVersion(nextVersion, storage);
   }
@@ -131,8 +140,8 @@ async function findClientsToCollect(
   storage: Storage,
   now: number,
   maxAge: number,
-): Promise<string[]> {
-  const clientsToCollect: ClientID[] = [];
+): Promise<Map<ClientID, ClientRecord>> {
+  const clientsToCollect: Map<ClientID, ClientRecord> = new Map();
   for (const [clientID, clientRecord] of clientRecords) {
     const {lastSeen} = clientRecord;
     if (lastSeen === undefined) {
@@ -147,7 +156,7 @@ async function findClientsToCollect(
       );
     } else if (!connectedClients.has(clientID) && lastSeen + maxAge <= now) {
       // Too old. We should collect it.
-      clientsToCollect.push(clientID);
+      clientsToCollect.set(clientID, clientRecord);
     }
   }
   return clientsToCollect;
@@ -156,7 +165,7 @@ async function findClientsToCollect(
 export async function collectOldUserSpaceClientKeys(
   lc: LogContext,
   storage: Storage,
-  clientsToCollect: string[],
+  clientsToCollect: Iterable<ClientID>,
   nextVersion: number,
 ): Promise<void> {
   // Delete all the keys starting with '-/p/${clientID}' for all old clients.
@@ -190,9 +199,10 @@ export async function collectClientIfDeleted(
   storage: Storage,
   nextVersion: number,
 ): Promise<void> {
-  const {lastMutationID, lastMutationIDAtClose} = must(
-    await getClientRecord(clientID, storage),
+  const clientRecord = must(
+    await getClientRecord(clientID, IncludeDeleted.Exclude, storage),
   );
+  const {lastMutationID, lastMutationIDAtClose} = clientRecord;
   if (lastMutationIDAtClose === undefined) {
     lc.debug?.(
       `Client ${clientID} has no lastMutationIDAtClose. Not collecting.`,
@@ -249,6 +259,6 @@ export async function collectClientIfDeleted(
   const cache = new EntryCache(storage);
   await collectOldUserSpaceClientKeys(lc, cache, [clientID], nextVersion);
 
-  await delClientRecord(clientID, cache);
+  await deleteClientRecord(clientID, clientRecord, cache);
   await cache.flush();
 }

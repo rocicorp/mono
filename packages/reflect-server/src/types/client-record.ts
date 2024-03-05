@@ -1,8 +1,8 @@
 import {nullableVersionSchema} from 'reflect-protocol';
-import {jsonSchema} from 'shared/src/json-schema.js';
+import {wrapIterable} from 'shared/src/iterables.js';
 import * as valita from 'shared/src/valita.js';
 import type {Storage} from '../storage/storage.js';
-import type {ClientID} from './client-state.js';
+import type {ClientGroupID, ClientID} from './client-state.js';
 
 export const clientRecordSchema = valita.object({
   clientGroupID: valita.string(),
@@ -22,6 +22,9 @@ export const clientRecordSchema = valita.object({
   // The user ID of the user who was using this client.
   // This is optional because old records did not have this field.
   userID: valita.string().optional(),
+
+  // Whether the client has been deleted due to it being collected
+  deleted: valita.boolean().optional(),
 });
 
 export type ClientRecord = valita.Infer<typeof clientRecordSchema>;
@@ -35,32 +38,66 @@ export function clientRecordKey(clientID: ClientID): string {
   return `${clientRecordPrefix}${clientID}`;
 }
 
-export function getClientRecord(
+export const enum IncludeDeleted {
+  Exclude,
+  Include,
+}
+
+export async function getClientRecord(
   clientID: ClientID,
+  includeDeleted: IncludeDeleted,
   storage: Storage,
 ): Promise<ClientRecord | undefined> {
-  return storage.get(clientRecordKey(clientID), clientRecordSchema);
+  const record = await storage.get(
+    clientRecordKey(clientID),
+    clientRecordSchema,
+  );
+  if (includeDeleted === IncludeDeleted.Exclude && record?.deleted) {
+    return undefined;
+  }
+
+  return record;
 }
 
 export async function listClientRecords(
+  includeDeleted: IncludeDeleted,
   storage: Storage,
 ): Promise<ClientRecordMap> {
   const entries = await storage.list(
     {prefix: clientRecordPrefix},
     clientRecordSchema,
   );
-  return toClientRecordMap(entries);
+  return convertToClientRecordMapAndFilterDeleted(entries, includeDeleted);
+}
+
+export async function listClientRecordsForClientGroup(
+  clientGroupID: ClientGroupID,
+  includeDeleted: IncludeDeleted,
+  storage: Storage,
+): Promise<ClientRecordMap> {
+  // TODO(arv): Restructure the key space to make this more efficient.
+  const entries = await storage.list(
+    {prefix: clientRecordPrefix},
+    clientRecordSchema,
+  );
+  return new Map(
+    wrapIterable(entries)
+      .filter(includeDeletedPredicate(includeDeleted))
+      .filter(entry => entry[1].clientGroupID === clientGroupID)
+      .map(convertKeyToClientID),
+  );
 }
 
 export async function getClientRecords(
-  clientIDs: ClientID[],
+  clientIDs: Iterable<ClientID>,
+  includedDeleted: IncludeDeleted,
   storage: Storage,
 ): Promise<ClientRecordMap> {
   const entries = await storage.getEntries(
-    clientIDs.map(clientRecordKey),
+    Array.from(clientIDs, clientRecordKey),
     clientRecordSchema,
   );
-  return toClientRecordMap(entries);
+  return convertToClientRecordMapAndFilterDeleted(entries, includedDeleted);
 }
 
 export function putClientRecord(
@@ -71,74 +108,54 @@ export function putClientRecord(
   return storage.put(clientRecordKey(clientID), record);
 }
 
-/**
- * Deletes the client records and puts tombstones for them.
- */
-export async function delClientRecords(
-  clientIDs: ClientID[],
-  storage: Storage,
-): Promise<void> {
-  const recordKeys = clientIDs.map(clientID => clientRecordKey(clientID));
-  const records = await storage.getEntries(recordKeys, clientRecordSchema);
-  await Promise.all([
-    putClientTombstones(clientIDsOf(records), storage),
-    storage.delEntries(recordKeys),
-  ]);
+function includeDeletedPredicate(includedDeleted: IncludeDeleted) {
+  return (entry: [string, ClientRecord]) =>
+    !(includedDeleted === IncludeDeleted.Exclude && entry[1].deleted);
 }
 
-/** Deletes the client record and puts a tombstone for it. */
-export async function delClientRecord(
-  clientID: ClientID,
-  storage: Storage,
-): Promise<void> {
-  await Promise.all([
-    putClientTombstone(clientID, storage),
-    storage.del(clientRecordKey(clientID)),
-  ]);
+function convertKeyToClientID<T>(entry: [key: string, value: T]): [string, T] {
+  return [entry[0].substring(clientRecordPrefix.length), entry[1]];
 }
 
-function toClientRecordMap(
+function convertToClientRecordMapAndFilterDeleted(
   entries: Map<string, ClientRecord>,
+  includeDeleted: IncludeDeleted,
 ): ClientRecordMap {
-  const clientRecords = new Map();
-  for (const [key, record] of entries) {
-    clientRecords.set(key.substring(clientRecordPrefix.length), record);
-  }
-  return clientRecords;
+  return new Map(
+    wrapIterable(entries)
+      .filter(includeDeletedPredicate(includeDeleted))
+      .map(convertKeyToClientID),
+  );
 }
 
-function* clientIDsOf(entries: Map<string, unknown>) {
-  for (const key of entries.keys()) {
-    yield key.substring(clientRecordPrefix.length);
-  }
-}
-
-const clientTombstonePrefix = 'clientTombstone/';
-
-export function clientTombstoneKey(clientID: ClientID): string {
-  return `${clientTombstonePrefix}${clientID}`;
-}
-
-function putClientTombstone(
-  clientID: ClientID,
+/**
+ * Marks the client records as deleted.
+ */
+export function deleteClientRecords(
+  records: Map<ClientID, ClientRecord>,
   storage: Storage,
 ): Promise<void> {
-  return storage.put(clientTombstoneKey(clientID), {});
-}
-
-export function putClientTombstones(
-  clientIDs: Iterable<ClientID>,
-  storage: Storage,
-): Promise<void> {
-  const entries: Record<string, {userID?: string | undefined}> = {};
-  for (const clientID of clientIDs) {
-    entries[clientTombstoneKey(clientID)] = {};
+  const entries: Record<ClientID, ClientRecord> = {};
+  for (const [clientID, record] of records) {
+    entries[clientRecordKey(clientID)] = {...record, deleted: true};
   }
   return storage.putEntries(entries);
 }
 
-export async function hasClientTombstone(clientID: ClientID, storage: Storage) {
-  return (
-    (await storage.get(clientTombstoneKey(clientID), jsonSchema)) !== undefined
+/**
+ * Marks the client record as deleted.
+ */
+export function deleteClientRecord(
+  clientID: ClientID,
+  record: ClientRecord,
+  storage: Storage,
+): Promise<void> {
+  return putClientRecord(
+    clientID,
+    {
+      ...record,
+      deleted: true,
+    },
+    storage,
   );
 }

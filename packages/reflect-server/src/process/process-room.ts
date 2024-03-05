@@ -10,7 +10,11 @@ import type {ClientDisconnectHandler} from '../server/client-disconnect-handler.
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import type {ClientPoke} from '../types/client-poke.js';
-import {getClientRecord, putClientRecord} from '../types/client-record.js';
+import {
+  IncludeDeleted,
+  getClientRecord,
+  putClientRecord,
+} from '../types/client-record.js';
 import type {ClientID, ClientMap} from '../types/client-state.js';
 import {getConnectedClients} from '../types/connected-clients.js';
 import type {PendingMutation} from '../types/mutation.js';
@@ -61,7 +65,11 @@ export async function processRoom(
 
   for (const ffClientPoke of clientPokes) {
     const cr = must(
-      await getClientRecord(ffClientPoke.clientID, cache),
+      await getClientRecord(
+        ffClientPoke.clientID,
+        IncludeDeleted.Exclude,
+        cache,
+      ),
       `Client record not found: ${ffClientPoke.clientID}`,
     );
     cr.baseCookie = ffClientPoke.poke.cookie;

@@ -140,6 +140,8 @@ export function clientRecord({
   lastMutationIDVersion = 1,
   lastSeen = 1000,
   userID = 'testUser1',
+  lastMutationIDAtClose,
+  deleted,
 }: {
   clientGroupID: ClientGroupID;
   baseCookie?: NullableVersion | undefined;
@@ -147,6 +149,8 @@ export function clientRecord({
   lastMutationIDVersion?: NullableVersion | undefined;
   lastSeen?: number | undefined;
   userID?: string | undefined;
+  lastMutationIDAtClose?: number | undefined;
+  deleted?: boolean | undefined;
 }): ClientRecord {
   return {
     clientGroupID,
@@ -155,6 +159,8 @@ export function clientRecord({
     lastMutationIDVersion,
     lastSeen,
     userID,
+    lastMutationIDAtClose,
+    deleted,
   };
 }
 

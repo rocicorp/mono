@@ -4,7 +4,8 @@ import {must} from 'shared/src/must.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import type {Storage} from '../storage/storage.js';
 import {
-  delClientRecord,
+  IncludeDeleted,
+  deleteClientRecord as delClientRecord,
   getClientRecord,
   putClientRecord,
 } from '../types/client-record.js';
@@ -35,7 +36,11 @@ export async function closeBeacon(
   );
 
   // Get the last mutationID for the client.
-  const existingRecord = await getClientRecord(clientID, storage);
+  const existingRecord = await getClientRecord(
+    clientID,
+    IncludeDeleted.Exclude,
+    storage,
+  );
   if (!existingRecord) {
     lc.debug?.('Client record not found');
     return new Response('client record not found', {status: 404});
@@ -102,7 +107,7 @@ export async function closeBeacon(
     await innerCache.flush();
   }
 
-  await delClientRecord(clientID, cache);
+  await delClientRecord(clientID, existingRecord, cache);
   await cache.flush();
 
   return new Response('ok');

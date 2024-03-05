@@ -12,6 +12,7 @@ import type {Storage} from '../storage/storage.js';
 import type {ClientPoke} from '../types/client-poke.js';
 import {
   ClientRecord,
+  IncludeDeleted,
   getClientRecord,
   putClientRecord,
 } from '../types/client-record.js';
@@ -206,7 +207,9 @@ function buildClientPokesAndUpdateClientRecords(
   const now = Date.now();
   return Promise.all(
     clientIDs.map(async clientID => {
-      const clientRecord = must(await getClientRecord(clientID, cache));
+      const clientRecord = must(
+        await getClientRecord(clientID, IncludeDeleted.Exclude, cache),
+      );
       const client = must(clients.get(clientID));
       const updatedClientRecord: ClientRecord = {
         ...clientRecord,

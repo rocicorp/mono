@@ -10,8 +10,8 @@ import {assert} from 'shared/src/asserts.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import {
   ClientRecord,
+  IncludeDeleted,
   getClientRecord,
-  hasClientTombstone,
   putClientRecord,
 } from '../types/client-record.js';
 import type {
@@ -74,10 +74,27 @@ export async function handleConnection(
     baseCookie: requestBaseCookie,
     clientGroupID: requestClientGroupID,
   } = result;
-  const existingRecord = await getClientRecord(requestClientID, storage);
+  const existingRecord = await getClientRecord(
+    requestClientID,
+    IncludeDeleted.Include,
+    storage,
+  );
   lc.debug?.('Existing client record', existingRecord);
 
   if (existingRecord) {
+    if (existingRecord.deleted) {
+      lc.info?.(
+        'Client with clientID',
+        requestClientID,
+        'is deleted and cannot reconnect.',
+      );
+      closeWithErrorLocal(
+        'InvalidConnectionRequestClientDeleted',
+        'Client is deleted',
+      );
+      return;
+    }
+
     if (requestClientGroupID !== existingRecord.clientGroupID) {
       lc.info?.(
         'Unexpected client group id ',
@@ -108,19 +125,6 @@ export async function handleConnection(
         existingRecord.userID,
       );
       closeWithErrorLocal('InvalidConnectionRequest', 'Unexpected userID');
-      return;
-    }
-  } else {
-    if (await hasClientTombstone(requestClientID, storage)) {
-      lc.info?.(
-        'Client with clientID',
-        requestClientID,
-        'is deleted and cannot reconnect.',
-      );
-      closeWithErrorLocal(
-        'InvalidConnectionRequestClientDeleted',
-        'Client is deleted',
-      );
       return;
     }
   }

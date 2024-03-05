@@ -5,7 +5,11 @@ import {timed} from 'shared/src/timed.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import {ReplicacheTransaction} from '../storage/replicache-transaction.js';
 import type {Storage} from '../storage/storage.js';
-import {getClientRecord, putClientRecord} from '../types/client-record.js';
+import {
+  IncludeDeleted,
+  getClientRecord,
+  putClientRecord,
+} from '../types/client-record.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {putVersion} from '../types/version.js';
 
@@ -47,7 +51,7 @@ async function processMutationTimed(
   );
   const {clientID} = pendingMutation;
   const cache = new EntryCache(storage);
-  const record = await getClientRecord(clientID, cache);
+  const record = await getClientRecord(clientID, IncludeDeleted.Include, cache);
   if (!record) {
     lc.error?.('client not found', clientID);
     throw new Error(`Client ${clientID} not found`);
@@ -72,28 +76,36 @@ async function processMutationTimed(
     return;
   }
 
-  const txCache = new EntryCache(storage);
-  const tx = new ReplicacheTransaction(
-    txCache,
-    clientID,
-    pendingMutation.id,
-    version,
-    pendingMutation.auth,
-    env,
-  );
-  try {
-    const mutator = mutators.get(pendingMutation.name);
-    if (!mutator) {
-      lc.error?.('skipping unknown mutator', pendingMutation);
-    } else {
-      await mutator(tx, pendingMutation.args);
-      await txCache.flush();
+  if (record.deleted) {
+    lc.info?.(
+      'Not running mutation for deleted client',
+      describeMutation(pendingMutation),
+    );
+  } else {
+    const txCache = new EntryCache(storage);
+    const tx = new ReplicacheTransaction(
+      txCache,
+      clientID,
+      pendingMutation.id,
+      version,
+      pendingMutation.auth,
+      env,
+    );
+    try {
+      const mutator = mutators.get(pendingMutation.name);
+      if (!mutator) {
+        lc.error?.('skipping unknown mutator', pendingMutation);
+      } else {
+        await mutator(tx, pendingMutation.args);
+        await txCache.flush();
+      }
+    } catch (e) {
+      lc.error?.('skipping mutation because of error', pendingMutation, e);
     }
-  } catch (e) {
-    lc.error?.('skipping mutation because of error', pendingMutation, e);
   }
 
   record.lastMutationID = expectedMutationID;
+  // TODO(arv): Should this be updated for deleted clients?
   record.lastMutationIDVersion = version;
 
   await putClientRecord(clientID, record, cache);
