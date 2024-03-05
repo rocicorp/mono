@@ -213,6 +213,12 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
   kvStore?: 'mem' | 'idb' | CreateStore | undefined;
 
   /**
+   * Allows providing a custom implementation of the underlying storage layer.
+   * @deprecated Use {@code kvStore} instead.
+   */
+  experimentalCreateKVStore?: CreateStore | undefined;
+
+  /**
    * Defines the indexes, if any, to use on the data.
    */
   readonly indexes?: IndexDefinitions | undefined;

@@ -531,7 +531,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this.#lc,
     );
 
-    const createStore = getCreateKVStore(this.#lc, options);
+    const createStore = options.kvStore
+      ? getCreateKVStore(this.#lc, options)
+      : options.experimentalCreateKVStore ||
+        getCreateKVStore(this.#lc, options);
     const perKVStore = createStore(this.idbName);
 
     this.#createStore = createStore;
