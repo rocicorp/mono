@@ -7,7 +7,7 @@ Replicache will periodically invoke your [push endpoint](/reference/server-push)
 
 The implementation of push will depend on the backend strategy you are using. For the [Global Version](/strategies/global-version) strategy we're using, the basics steps are:
 
-1. Open an exclusive (serializable) transaction.
+1. Open a transaction.
 1. Read the current global version and compute the next one.
 1. Create a client record for the requesting client if the client is new.
 1. Validate that the received mutation is the next expected one. If the received mutation has already been processed (by a previous push), skip it. If the received mutation is not expected, then error.
@@ -15,7 +15,7 @@ The implementation of push will depend on the backend strategy you are using. Fo
 1. Update the stored `version` and `lastMutationID` for the pushing client, so that `pull` can later report the last-processed mutationID.
 1. Store the new global version.
 
-At minimum, all of these changes **must** happen atomically in a serialized transaction for each mutation in a push. However, putting multiple mutations together in a single wider transaction is also acceptable.
+At minimum, all of these changes **must** happen atomically in a single transaction for each mutation in a push. However, putting multiple mutations together in a single wider transaction is also acceptable.
 
 ## Implement Push
 

@@ -8,7 +8,7 @@ Even though in the previous step we're making persistent changes in the database
 The implementation of pull will depend on the backend strategy you are using. For the [Global Version](/strategies/global-version) strategy we're using, the basics steps are:
 
 <ul>
-  <li>Open an exclusive (serializable) transaction</li>
+  <li>Open a transaction</li>
   <li>Read the latest global version from the database</li>
   <li>Build the response patch:
     <ul>

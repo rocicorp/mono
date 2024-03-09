@@ -3,17 +3,13 @@ title: Remote Database
 slug: /byob/remote-database
 ---
 
-Replicache is also backend-agnostic. You can use most backend languages and frameworks, and any backend datastore that supports [serializable transactions](https://en.wikipedia.org/wiki/Serializability).
+Replicache is also backend-agnostic. You can use most backend languages and frameworks, and any backend datastore that supports at least [Snapshot Isolation](https://en.wikipedia.org/wiki/Snapshot_isolation).
 
 Some examples of suitable datastores are: MySQL, Postgres, CockroachDB, CosmosDB, and Firebase Cloud Firestore. Some examples of non-suitable datastores are: DynamoDB and Firebase RealtimeDB.
 
 :::info
 
-Serializable transactions are needed so that user data changes and the corresponding update to Replicache sync metadata happen together atomically.
-
-For example, if a client's `lastMutationID` is 42, then the effects of all mutations <= 42 from that client must be visible in `pull` endpoint responses, and the effects of > 42 must not be present.
-
-If this invariant is violated by the server then Replicache may not function properly and the UI of your application may exhibit weird behavior, such as duplicate or missing mutations.
+Snapshot isolation is required for correct operation of Replicache. See [Database Isolation Level](/concepts/db-isolation-level) for more information.
 
 :::
 
@@ -48,13 +44,13 @@ function getDB() {
 export type Transaction = ITask<{}>;
 type TransactionCallback<R> = (t: Transaction) => Promise<R>;
 
-// Helper to make sure we always access database at serializable level.
+// In Postgres, snapshot isolation is known as "repeatable read".
 export async function tx<R>(f: TransactionCallback<R>, dbp = getDB()) {
   const db = await dbp;
   return await db.tx(
     {
       mode: new txMode.TransactionMode({
-        tiLevel: isolationLevel.serializable,
+        tiLevel: isolationLevel.repeatableRead,
       }),
     },
     f,

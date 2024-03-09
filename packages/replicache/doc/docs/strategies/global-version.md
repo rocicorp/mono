@@ -126,12 +126,6 @@ Replicache sends a [`PushRequest`](/reference/server-push#http-request-body) to 
 
 After the loop is complete, poke clients to cause them to pull.
 
-:::info
-
-It is important that each mutation is processed within a serializable transaction, so that the `ReplicacheClient` and `ReplicacheSpace` entities are updated atomically with the changes made by the mutation.
-
-:::
-
 ## Pull
 
 The pull handler is the same as in the Reset Strategy, but with changes to read only entities that are newer than the last pull. The changes from the Reset Strategy are marked below **in bold**.
@@ -159,12 +153,6 @@ Replicache sends a [`PullRequest`](/reference/server-pull#http-request-body) to 
    1. `patch` set to:
       1. **`op:del` for all domain entities that have changed and are deleted**
       1. **`op:put` for all domain entities that have changed and aren't deleted**
-
-:::info
-
-It is important that the pull is processed within a serializable transaction, so that the the `lastMutationIDChanges`, `cookie`, and `patch` that are returned are all consistent.
-
-:::
 
 ## Example
 

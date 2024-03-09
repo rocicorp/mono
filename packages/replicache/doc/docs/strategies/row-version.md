@@ -133,12 +133,6 @@ Replicache sends a [`PushRequest`](/reference/server-push#http-request-body) to 
 
 After the loop is complete, poke clients to cause them to pull.
 
-:::info
-
-It is important that each mutation is processed within a serializable transaction, so that the `ReplicacheClient` entities are updated atomically with the changes made by the mutation.
-
-:::
-
 ## Pull
 
 The pull logic is more involved than other strategies because of the need to manage the CVRs.
@@ -213,12 +207,6 @@ and we need the order to not go backward.
       1. `op:del` for every deleted entity
    1. `{order: nextCVRVersion, cvrID}` as the cookie.
    1. `lastMutationIDChanges` with entries for every client that has changed.
-
-:::info
-
-It is important that the pull is processed within a serializable transaction, so that the the `lastMutationIDs` read are consistent with the rows that are read.
-
-:::
 
 ## Example
 

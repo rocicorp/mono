@@ -98,12 +98,6 @@ Replicache sends a [`PushRequest`](/reference/server-push#http-request-body) to 
 
 After the loop is complete, poke clients to cause them to pull.
 
-:::info
-
-It is important that each mutation is processed within a serializable transaction, so that the `ReplicacheClient` entities are updated atomically with the changes made by the mutation.
-
-:::
-
 ## Pull
 
 Replicache sends a [`PullRequest`](/reference/server-pull#http-request-body) to the pull endpoint. The endpoint should:
@@ -125,12 +119,6 @@ Replicache sends a [`PullRequest`](/reference/server-pull#http-request-body) to 
    1. `cookie` set to the server's current timestamp as an integer.
    1. `lastMutationIDChanges` set to the `lastMutationID` for every client in the client group.
    1. `patch` set to `op:clear` followed by `op:put` for every row in the view.
-
-:::info
-
-It is important that the pull is processed within a serializable transaction, so that the the `lastMutationIDs` read are consistent with the rows that are read.
-
-:::
 
 ## Example
 
