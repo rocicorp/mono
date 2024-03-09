@@ -46,6 +46,7 @@ module.exports = {
         'concepts/performance',
         'concepts/offline',
         'concepts/consistency',
+        'concepts/isolation',
         'concepts/licensing',
       ],
     },
