@@ -249,13 +249,13 @@ export class Write extends Read {
   async commitWithDiffs(
     headName: string,
     diffConfig: DiffComputationConfig,
-  ): Promise<[Hash, DiffsMap]> {
+  ): Promise<DiffsMap> {
     const commit = this.putCommit();
     const diffMap = await this.#generateDiffs(diffConfig);
     const commitHash = (await commit).chunk.hash;
     await this.#dagWrite.setHead(headName, commitHash);
     await this.#dagWrite.commit();
-    return [commitHash, diffMap];
+    return diffMap;
   }
 
   async #generateDiffs(diffConfig: DiffComputationConfig): Promise<DiffsMap> {
