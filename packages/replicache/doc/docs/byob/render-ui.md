@@ -39,7 +39,7 @@ async function init() {
   }
 
   function Root() {
-    const [r, setR] = useState<Replicache<M> | null>(null);
+    const [r, setR] = useState<Replicache<any> | null>(null);
 
     useEffect(() => {
       console.log('updating replicache');
@@ -101,7 +101,7 @@ async function init() {
   );
 }
 
-function listen(rep: Replicache<M>) {
+function listen(rep: Replicache) {
   // TODO: Listen for changes on server
 }
 

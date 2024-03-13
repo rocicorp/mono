@@ -11,41 +11,25 @@ The two implementations need not match exactly. Replicache replaces the result o
 
 :::
 
-First, let's register a _mutator_ that speculatively creates a message.
+First, let's register a _mutator_ that speculatively creates a message. In `index.tsx`, expand the options passed to the `Replicache` constructor with:
 
-Create a file `mutators.ts` under `client/src/mutators.ts`
-
-Create a mutator named "createMessage".
-
-```js
-import type {WriteTransaction} from 'replicache';
-import {MessageWithID} from 'shared';
-
-export type M = typeof mutators;
-
-export const mutators = {
-  async createMessage(
-    tx: WriteTransaction,
-    {id, from, content, order}: MessageWithID,
-  ) {
-    await tx.set(`message/${id}`, {
-      from,
-      content,
-      order,
-    });
-  },
-};
-```
-
-Expand the options passed to the `Replicache` constructor in `index.tsx` with:
-
-```js
-import {M, mutators} from './mutators';
+```js {4-15}
 //...
 const r = new Replicache({
   name: 'chat-user-id',
   licenseKey,
-  mutators,
+  mutators: {
+    async createMessage(
+      tx: WriteTransaction,
+      {id, from, content, order}: MessageWithID,
+    ) {
+      await tx.set(`message/${id}`, {
+        from,
+        content,
+        order,
+      });
+    },
+  },
   pushURL: `/api/replicache/push`,
   pullURL: `/api/replicache/pull`,
   logLevel: 'debug',
