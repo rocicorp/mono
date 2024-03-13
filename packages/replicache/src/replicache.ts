@@ -1409,9 +1409,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
     if (this.#closed) {
       return;
     }
-    let result;
+    let diffs;
     try {
-      result = await refresh(
+      diffs = await refresh(
         this.#lc,
         this.#memdag,
         this.#perdag,
@@ -1430,8 +1430,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
         throw e;
       }
     }
-    if (result !== undefined) {
-      await this.#subscriptions.fire(result[1]);
+    if (diffs !== undefined) {
+      await this.#subscriptions.fire(diffs);
     }
   }
 
