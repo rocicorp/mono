@@ -13,7 +13,7 @@ The two implementations need not match exactly. Replicache replaces the result o
 
 First, let's register a _mutator_ that speculatively creates a message. In `index.tsx`, expand the options passed to the `Replicache` constructor with:
 
-```js {4-15}
+```js {5-16}
 //...
 const r = new Replicache({
   name: 'chat-user-id',
