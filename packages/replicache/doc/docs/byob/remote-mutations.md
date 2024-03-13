@@ -28,7 +28,6 @@ import {serverID, tx, type Transaction} from './db';
 import type {MessageWithID} from 'shared';
 import type {MutationV1, PushRequestV1} from 'replicache';
 import type {Request, Response, NextFunction} from 'express';
-import Pusher from 'pusher';
 
 export async function handlePush(
   req: Request,

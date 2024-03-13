@@ -29,6 +29,8 @@ Typically you'll establish one WebSocket _channel_ per-document or whatever the 
 Replace the implementation of `sendPoke()` in `push.ts`:
 
 ```ts
+import Pusher from 'pusher';
+//...
 async function sendPoke() {
   if (
     !process.env.REPLICHAT_PUSHER_APP_ID ||
