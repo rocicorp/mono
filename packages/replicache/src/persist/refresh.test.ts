@@ -176,7 +176,7 @@ suite('refresh', () => {
     await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 1);
     await makeMemdagChain(memdag, clientID, 1);
 
-    const result = await refresh(
+    const diffs = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -186,13 +186,12 @@ suite('refresh', () => {
       () => false,
       formatVersion,
     );
-    assert(result);
-    expect(result[0]).to.deep.equal(
+    assert(diffs);
+    expect(Object.fromEntries(diffs)).to.deep.equal({});
+    const hashes = [
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
-    );
-    expect(Object.fromEntries(result[1])).to.deep.equal({});
-
-    await assertRefreshHashes(perdag, clientID, [result[0]]);
+    ];
+    await assertRefreshHashes(perdag, clientID, hashes);
   });
 
   test('identical dags, multiple refreshHashes at start', async () => {
@@ -226,7 +225,7 @@ suite('refresh', () => {
     });
     await makeMemdagChain(memdag, clientID, 1);
 
-    const result = await refresh(
+    const diffs = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -236,13 +235,14 @@ suite('refresh', () => {
       () => false,
       formatVersion,
     );
-    assert(result);
-    expect(result[0]).to.deep.equal(
+    assert(diffs);
+    const hashes = [
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
-    );
-    expect(Object.fromEntries(result[1])).to.deep.equal({});
+    ];
 
-    await assertRefreshHashes(perdag, clientID, [result[0]]);
+    expect(Object.fromEntries(diffs)).to.deep.equal({});
+
+    await assertRefreshHashes(perdag, clientID, hashes);
   });
 
   test('memdag has one more LM', async () => {
@@ -261,7 +261,7 @@ suite('refresh', () => {
     );
     await memdagChainBuilder.addLocal(clientID, []);
 
-    const result = await refresh(
+    const diffs = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -271,11 +271,9 @@ suite('refresh', () => {
       () => false,
       formatVersion,
     );
-    assert(result);
-    expect(result[0]).to.deep.equal(
-      await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
-    );
-    expect(Object.fromEntries(result[1])).to.deep.equal({
+    assert(diffs);
+
+    expect(Object.fromEntries(diffs)).to.deep.equal({
       '': [
         {
           key: 'from mutator_name_3',
@@ -371,7 +369,7 @@ suite('refresh', () => {
     await memdagChainBuilder.addLocal(clientID, []);
     await memdagChainBuilder.addLocal(clientID, []);
 
-    const result = await refresh(
+    const diffs = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -381,11 +379,8 @@ suite('refresh', () => {
       () => false,
       formatVersion,
     );
-    assert(result);
-    expect(result[0]).to.deep.equal(
-      await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
-    );
-    expect(Object.fromEntries(result[1])).to.deep.equal({
+    assert(diffs);
+    expect(Object.fromEntries(diffs)).to.deep.equal({
       '': [
         {
           key: 'from mutator_name_3',
@@ -437,7 +432,7 @@ suite('refresh', () => {
     await memdagChainBuilder.addLocal(clientID1, []);
     await memdagChainBuilder.addLocal(clientID1, []);
 
-    const result = await refresh(
+    const diffs = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -447,11 +442,8 @@ suite('refresh', () => {
       () => false,
       formatVersion,
     );
-    assert(result);
-    expect(result[0]).to.deep.equal(
-      await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
-    );
-    expect(Object.fromEntries(result[1])).to.deep.equal({
+    assert(diffs);
+    expect(Object.fromEntries(diffs)).to.deep.equal({
       '': [
         {
           key: 'from mutator_name_3',
@@ -811,7 +803,7 @@ suite('refresh', () => {
       });
     }
 
-    const result = await refresh(
+    const diffs = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -823,11 +815,8 @@ suite('refresh', () => {
       () => false,
       formatVersion,
     );
-    assert(result);
-    expect(result[0]).to.deep.equal(
-      await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
-    );
-    expect(Object.fromEntries(result[1])).to.deep.equal({
+    assert(diffs);
+    expect(Object.fromEntries(diffs)).to.deep.equal({
       '': [{key: 'c', newValue: 3, op: 'add'}],
     });
 

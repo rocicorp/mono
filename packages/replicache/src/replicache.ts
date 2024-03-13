@@ -8,7 +8,7 @@ import {
 import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from 'shared/src/abort-error.js';
-import {assert, assertNotUndefined} from 'shared/src/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/get-document.js';
 import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
@@ -23,7 +23,6 @@ import {ChunkNotFoundError, mustGetHeadHash, Store} from './dag/store.js';
 import {DEFAULT_HEAD_NAME, isLocalMetaDD31, LocalMeta} from './db/commit.js';
 import {readFromDefaultHead} from './db/read.js';
 import {rebaseMutationAndCommit} from './db/rebase.js';
-import {getRoot} from './db/root.js';
 import {newWriteLocal} from './db/write.js';
 import {
   isClientStateNotFoundResponse,
@@ -38,6 +37,7 @@ import {assertHash, emptyHash, Hash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {IndexDefinitions} from './index-defs.js';
 import {newIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
+import {MemStore} from './kv/mem-store.js';
 import type {CreateStore} from './kv/store.js';
 import {MutationRecovery} from './mutation-recovery.js';
 import {initNewClientChannel} from './new-client-channel.js';
@@ -81,7 +81,6 @@ import {
   WatchNoIndexCallback,
   WatchOptions,
 } from './subscriptions.js';
-import type {DiffsMap} from './sync/diff.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
 import {PullError} from './sync/pull-error.js';
 import {
@@ -103,7 +102,6 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.js';
-import {MemStore} from './kv/mem-store.js';
 
 declare const TESTING: boolean;
 export interface TestingReplicacheWithTesting extends Replicache {
@@ -320,7 +318,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
   #closed = false;
   #online = true;
   readonly #clientID = makeUuid();
-  #root: Hash | undefined;
   readonly #ready: Promise<void>;
   readonly #profileIDPromise: Promise<string>;
   readonly #clientGroupIDPromise: Promise<string>;
@@ -658,8 +655,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
       write.setHead(DEFAULT_HEAD_NAME, headHash),
     );
 
-    this.#root = await getRoot(this.#memdag, DEFAULT_HEAD_NAME);
-
     // Now we have a profileID, a clientID, a clientGroupID and DB!
     resolveReady();
 
@@ -952,15 +947,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
     resolve();
   }
 
-  async #checkChange(root: Hash, diffs: DiffsMap): Promise<void> {
-    const currentRoot = this.#root;
-    assertNotUndefined(currentRoot);
-    if (root !== currentRoot) {
-      this.#root = root;
-      await this.#subscriptions.fire(diffs);
-    }
-  }
-
   async #maybeEndPull(syncHead: Hash, requestID: string): Promise<void> {
     for (;;) {
       if (this.#closed) {
@@ -983,7 +969,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
       if (!replayMutations || replayMutations.length === 0) {
         // All done.
-        await this.#checkChange(syncHead, diffs);
+        await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return;
       }
@@ -1423,9 +1409,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
     if (this.#closed) {
       return;
     }
-    let result;
+    let diffs;
     try {
-      result = await refresh(
+      diffs = await refresh(
         this.#lc,
         this.#memdag,
         this.#perdag,
@@ -1444,8 +1430,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
         throw e;
       }
     }
-    if (result !== undefined) {
-      await this.#checkChange(result[0], result[1]);
+    if (diffs !== undefined) {
+      await this.#subscriptions.fire(diffs);
     }
   }
 
@@ -1628,8 +1614,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
       args: JSONValue | undefined,
     ) => Promise<void | JSONValue>;
 
-    return async (args?: Args): Promise<Return> =>
-      (await this.#mutate(name, mutatorImpl, args, performance.now())).result;
+    return (args?: Args): Promise<Return> =>
+      this.#mutate(name, mutatorImpl, args, performance.now());
   }
 
   #registerMutators<
@@ -1656,7 +1642,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     mutatorImpl: (tx: WriteTransaction, args?: A) => MaybePromise<R>,
     args: A | undefined,
     timestamp: number,
-  ): Promise<{result: R; ref: Hash}> {
+  ): Promise<R> {
     const frozenArgs = deepFreeze(args ?? null);
 
     // Ensure that we run initial pending subscribe functions before starting a
@@ -1693,7 +1679,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         const result: R = await mutatorImpl(tx, args);
         throwIfClosed(dbWrite);
         const lastMutationID = await dbWrite.getMutationID();
-        const [ref, diffs] = await dbWrite.commitWithDiffs(
+        const diffs = await dbWrite.commitWithDiffs(
           DEFAULT_HEAD_NAME,
           this.#subscriptions,
         );
@@ -1703,9 +1689,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
         // Send is not supposed to reject
         void this.#pushConnectionLoop.send(false);
-        await this.#checkChange(ref, diffs);
+        await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
-        return {result, ref};
+        return result;
       } catch (ex) {
         throw await this.#convertToClientStateNotFoundError(ex);
       }
