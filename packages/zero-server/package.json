@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
     "pg-tests": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --env=node --testMatch=\"**/*.pg-test.ts\"",
     "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
     "check-types": "tsc --noEmit",

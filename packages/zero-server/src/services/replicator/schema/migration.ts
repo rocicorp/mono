@@ -65,23 +65,26 @@ export async function runSyncSchemaMigrations(
 
     if (meta.version < codeSchemaVersion) {
       for (const [dest, migration] of versionMigrations) {
-        meta = await sql.begin(async tx => {
-          let meta = await getSyncSchemaMeta(tx);
-          if (meta.version < dest) {
-            log.info?.(`Migrating schema from v${meta.version} to v${dest}`);
-            await log.flush(); // Flush logs before each migration to help debug crash-y migrations.
+        if (meta.version < dest) {
+          log.info?.(`Migrating schema from v${meta.version} to v${dest}`);
+          await log.flush(); // Flush logs before each migration to help debug crash-y migrations.
 
-            meta = await migrateSyncSchemaVersion(
-              log,
-              tx,
-              meta,
-              dest,
-              migration,
-            );
-            assert(meta.version === dest);
-          }
-          return meta;
-        });
+          meta = await sql.begin(async tx => {
+            // Fetch meta from with the transaction to make the migration atomic.
+            let meta = await getSyncSchemaMeta(tx);
+            if (meta.version < dest) {
+              meta = await migrateSyncSchemaVersion(
+                log,
+                tx,
+                meta,
+                dest,
+                migration,
+              );
+              assert(meta.version === dest);
+            }
+            return meta;
+          });
+        }
       }
     }
 
