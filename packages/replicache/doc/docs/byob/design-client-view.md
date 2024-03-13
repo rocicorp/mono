@@ -36,44 +36,65 @@ Therefore, Replicache requires that clients assign IDs. Our sample apps typicall
 
 Now that we know what our schema will look like, let's serve it. Initially, we'll just serve static data, but later we'll build it dynamically from data in the database.
 
-Create a file in the project at `pages/api/replicache-pull.ts` with the following contents:
+Create a file in the project at `server/src/pull.ts` with the following contents:
 
 ```ts
-import {NextApiRequest, NextApiResponse} from 'next';
+import type {Request, Response, NextFunction} from 'express';
 
-export default async function (_: NextApiRequest, res: NextApiResponse) {
-  res.json({
-    // We will discuss these two fields in later steps.
-    lastMutationIDChanges: {},
-    cookie: 42,
-    patch: [
-      {op: 'clear'},
-      {
-        op: 'put',
-        key: 'message/qpdgkvpb9ao',
-        value: {
-          from: 'Jane',
-          content: "Hey, what's for lunch?",
-          order: 1,
+export async function handlePull(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    res.json({
+      // We will discuss these two fields in later steps.
+      lastMutationIDChanges: {},
+      cookie: 42,
+      patch: [
+        {op: 'clear'},
+        {
+          op: 'put',
+          key: 'message/qpdgkvpb9ao',
+          value: {
+            from: 'Jane',
+            content: "Hey, what's for lunch?",
+            order: 1,
+          },
         },
-      },
-      {
-        op: 'put',
-        key: 'message/5ahljadc408',
-        value: {
-          from: 'Fred',
-          content: 'tacos?',
-          order: 2,
+        {
+          op: 'put',
+          key: 'message/5ahljadc408',
+          value: {
+            from: 'Fred',
+            content: 'tacos?',
+            order: 2,
+          },
         },
-      },
-    ],
-  });
+      ],
+    });
+  } catch (e) {
+    next(e);
+  }
 }
+```
+
+Add the handler to Express modifying the file `server/src/main.ts` with the `app.post` route:
+
+```ts {5}
+import { handlePull } from './pull';
+//...
+app.use(express.urlencoded({extended: true}), express.json(), errorHandler);
+
+app.post('/api/replicache/pull', handlePull);
+
+if (process.env.NODE_ENV === 'production') {
+//...
 ```
 
 You'll notice the JSON we're serving is a little different than our idealized schema above.
 
-The response from `replicache-pull` is actually a _patch_ — a series of changes to be applied to the map the client currently has, as a result of changes that have happened on the server. Replicache applies the patch operations one-by-one, in-order, to its existing map. See [Pull Endpoint](/reference/server-pull) for more details.
+The response from `replicache/pull` is actually a _patch_ — a series of changes to be applied to the map the client currently has, as a result of changes that have happened on the server. Replicache applies the patch operations one-by-one, in-order, to its existing map. See [Pull Endpoint](/reference/server-pull) for more details.
 
 Early in development, it's easiest to just return a patch that replaces the entire state with new values, which is what we've done here. Later in this tutorial we will improve this to return only what has changed.
 
@@ -85,11 +106,11 @@ Also, Replicache is a _transactional_ key/value store. So although the changes a
 
 :::
 
-Start your app with `npm run dev`, and navigate to [http://localhost:3000/api/replicache-pull](http://localhost:3000/api/replicache-pull) to ensure it's working:
+Start your client and server with `cd client && npm run watch`, and curl the pull endpoint to ensure it's working:
 
-<p class="text--center">
-  <img src="/img/setup/replicache-pull.webp" width="650"/>
-</p>
+```bash
+curl -X POST http://localhost:8080/api/replicache/pull
+```
 
 ## Next
 

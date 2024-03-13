@@ -19,19 +19,31 @@ At minimum, all of these changes **must** happen atomically in a single transact
 
 ## Implement Push
 
-Create a new file `pages/api/replicache-push.ts` and copy the below code into it.
+Create a file in the project at `server/src/push.ts` and copy the below code into it.
 
 This looks like a lot of code, but it's just implementing the description above. See the inline comments for additional details.
 
 ```ts
-import {NextApiRequest, NextApiResponse} from 'next';
-import {serverID, tx, Transaction} from '../../db';
+import {serverID, tx, type Transaction} from './db';
+import type {MessageWithID} from 'shared';
+import type {MutationV1, PushRequestV1} from 'replicache';
+import type {Request, Response, NextFunction} from 'express';
 import Pusher from 'pusher';
-import {MessageWithID} from '../../types';
-import {MutationV1} from 'replicache';
 
-export default async function (req: NextApiRequest, res: NextApiResponse) {
-  const push = req.body;
+export async function handlePush(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    await push(req, res);
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function push(req: Request, res: Response) {
+  const push: PushRequestV1 = req.body;
   console.log('Processing push', JSON.stringify(push));
 
   const t0 = Date.now();
@@ -49,7 +61,9 @@ export default async function (req: NextApiRequest, res: NextApiResponse) {
         // convenient in development but you may want to reconsider as your app
         // gets close to production:
         // https://doc.replicache.dev/reference/server-push#error-handling
-        await tx(t => processMutation(t, push.clientGroupID, mutation, e));
+        await tx(t =>
+          processMutation(t, push.clientGroupID, mutation, e as string),
+        );
       }
 
       console.log('Processed mutation in', Date.now() - t1);
@@ -57,12 +71,10 @@ export default async function (req: NextApiRequest, res: NextApiResponse) {
 
     res.send('{}');
 
-    // We need to await here otherwise, Next.js will frequently kill the request
-    // and the poke won't get sent.
     await sendPoke();
   } catch (e) {
     console.error(e);
-    res.status(500).send(e.toString());
+    res.status(500).send(e);
   } finally {
     console.log('Processed push in', Date.now() - t0);
   }
@@ -202,13 +214,27 @@ async function sendPoke() {
 }
 ```
 
+Add the handler to Express modifying the file `server/src/main.ts` with the `app.post` route:
+
+```ts {5}
+import { handlePush } from './push';
+//...
+app.use(express.urlencoded({extended: true}), express.json(), errorHandler);
+
+app.post('/api/replicache/pull', handlePull);
+app.post('/api/replicache/push', handlePush);
+
+if (process.env.NODE_ENV === 'production') {
+//...
+```
+
 :::info
 
 You may be wondering if it possible to share mutator code between the client and server. It is, but constrains how you can design your backend. See [Share Mutators](/howto/share-mutators) for more information.
 
 :::
 
-Restart the server, navigate to [http://localhost:3000/](http://localhost:3000/) and make some changes. You should now see changes getting saved in the server console output.
+Restart the server, navigate to [http://localhost:5173/](http://localhost:5173/) and make some changes. You should now see changes getting saved in the server console output.
 
 <p class="text--center">
   <img src="/img/setup/remote-mutation.webp" width="650"/>

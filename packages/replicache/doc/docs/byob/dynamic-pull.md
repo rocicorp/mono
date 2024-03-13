@@ -27,14 +27,27 @@ The implementation of pull will depend on the backend strategy you are using. Fo
 
 ## Implement Pull
 
-Replace the contents of `pages/api/replicache-pull.ts` with this code:
+Replace the contents of `client/src/pull.ts` with this code:
 
 ```ts
-import {NextApiRequest, NextApiResponse} from 'next';
-import {serverID, tx, Transaction} from '../../db';
-import {PullResponse} from 'replicache';
+import {serverID, tx, type Transaction} from './db';
+import type {PatchOperation, PullResponse} from 'replicache';
+import type {Request, Response, NextFunction} from 'express';
 
-export default async function (req: NextApiRequest, res: NextApiResponse) {
+export async function handlePull(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const resp = await pull(req, res);
+    res.json(resp);
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function pull(req: Request, res: Response) {
   const pull = req.body;
   console.log(`Processing pull`, JSON.stringify(pull));
   const {clientGroupID} = pull;
@@ -77,7 +90,7 @@ export default async function (req: NextApiRequest, res: NextApiResponse) {
       );
 
       // Build and return response.
-      const patch = [];
+      const patch: PatchOperation[] = [];
       for (const row of changed) {
         const {id, sender, content, ord, version: rowVersion, deleted} = row;
         if (deleted) {
@@ -93,7 +106,7 @@ export default async function (req: NextApiRequest, res: NextApiResponse) {
             key: `message/${id}`,
             value: {
               from: sender,
-              content: content,
+              content,
               order: ord,
             },
           });
@@ -110,7 +123,7 @@ export default async function (req: NextApiRequest, res: NextApiResponse) {
     });
   } catch (e) {
     console.error(e);
-    res.status(500).send(e.toString());
+    res.status(500).send(e);
   } finally {
     console.log('Processed pull in', Date.now() - t0);
   }
@@ -121,6 +134,7 @@ async function getLastMutationIDChanges(
   clientGroupID: string,
   fromVersion: number,
 ) {
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   const rows = await t.manyOrNone<{id: string; last_mutation_id: number}>(
     `select id, last_mutation_id
     from replicache_client
@@ -134,10 +148,6 @@ async function getLastMutationIDChanges(
 Because the previous pull response was hard-coded and not really reading from the database, you'll now have to clear your browser's application data to see consistent results. On Chrome/OSX for example: **cmd+opt+j → Application tab -> Storage -> Clear site data**.
 
 Once you do that, you can make a change in one browser and then refresh a different browser and see them round-trip:
-
-<p class="text--center">
-  <img src="/img/setup/manual-sync.webp" width="650"/>
-</p>
 
 Also notice that if we go offline for awhile, make some changes, then come back online, the mutations get sent when possible.
 

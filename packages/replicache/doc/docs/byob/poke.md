@@ -16,23 +16,33 @@ For this sample, we'll use Pusher. Go to [pusher.com](https://pusher.com) and se
 Store the settings from the project in the following environment variables:
 
 ```bash
-export NEXT_PUBLIC_REPLICHAT_PUSHER_APP_ID=<app id>
-export NEXT_PUBLIC_REPLICHAT_PUSHER_KEY=<key>
-export NEXT_PUBLIC_REPLICHAT_PUSHER_SECRET=<secret>
-export NEXT_PUBLIC_REPLICHAT_PUSHER_CLUSTER=<cluster>
+export REPLICHAT_PUSHER_APP_ID=<app id>
+export REPLICHAT_PUSHER_KEY=<key>
+export REPLICHAT_PUSHER_SECRET=<secret>
+export REPLICHAT_PUSHER_CLUSTER=<cluster>
+export VITE_PUBLIC_REPLICHAT_PUSHER_KEY=<key>
+export VITE_PUBLIC_REPLICHAT_PUSHER_CLUSTER=<cluster>
 ```
 
 Typically you'll establish one WebSocket _channel_ per-document or whatever the unit of collaboration is in your application. For this simple demo, we just create one channel, `"default"`.
 
-Replace the implementation of `sendPoke()` in `replicache-push.ts`:
+Replace the implementation of `sendPoke()` in `push.ts`:
 
 ```ts
 async function sendPoke() {
+  if (
+    !process.env.REPLICHAT_PUSHER_APP_ID ||
+    !process.env.REPLICHAT_PUSHER_KEY ||
+    !process.env.REPLICHAT_PUSHER_SECRET ||
+    !process.env.REPLICHAT_PUSHER_CLUSTER
+  ) {
+    throw new Error('Missing Pusher environment variables');
+  }
   const pusher = new Pusher({
-    appId: process.env.NEXT_PUBLIC_REPLICHAT_PUSHER_APP_ID,
-    key: process.env.NEXT_PUBLIC_REPLICHAT_PUSHER_KEY,
-    secret: process.env.NEXT_PUBLIC_REPLICHAT_PUSHER_SECRET,
-    cluster: process.env.NEXT_PUBLIC_REPLICHAT_PUSHER_CLUSTER,
+    appId: process.env.REPLICHAT_PUSHER_APP_ID,
+    key: process.env.REPLICHAT_PUSHER_KEY,
+    secret: process.env.REPLICHAT_PUSHER_SECRET,
+    cluster: process.env.REPLICHAT_PUSHER_CLUSTER,
     useTLS: true,
   });
   const t0 = Date.now();
@@ -41,24 +51,26 @@ async function sendPoke() {
 }
 ```
 
-Then on the client, in `index.tsx`, replace the implementation of `listen()` to tell Replicache to `pull()` whenever a poke is received:
+Then on the client, in `client/src/index.tsx`, replace the implementation of `listen()` to tell Replicache to `pull()` whenever a poke is received:
 
 ```ts
-function listen() {
-  if (!rep) {
-    return;
-  }
-
+function listen(rep: Replicache<M>) {
   console.log('listening');
   // Listen for pokes, and pull whenever we get one.
   Pusher.logToConsole = true;
-  const pusher = new Pusher(process.env.NEXT_PUBLIC_REPLICHAT_PUSHER_KEY, {
-    cluster: process.env.NEXT_PUBLIC_REPLICHAT_PUSHER_CLUSTER,
+  if (
+    !import.meta.env.VITE_PUBLIC_REPLICHAT_PUSHER_KEY ||
+    !import.meta.env.VITE_PUBLIC_REPLICHAT_PUSHER_CLUSTER
+  ) {
+    throw new Error('Missing PUSHER_KEY or PUSHER_CLUSTER in env');
+  }
+  const pusher = new Pusher(import.meta.env.VITE_PUBLIC_REPLICHAT_PUSHER_KEY, {
+    cluster: import.meta.env.VITE_PUBLIC_REPLICHAT_PUSHER_CLUSTER,
   });
   const channel = pusher.subscribe('default');
-  channel.bind('poke', () => {
+  channel.bind('poke', async () => {
     console.log('got poked');
-    rep.pull();
+    await rep.pull();
   });
 }
 ```

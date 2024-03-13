@@ -17,11 +17,13 @@ Snapshot isolation is required for correct operation of Replicache. See [Databas
 
 For this demo, we'll use [pg-mem](https://github.com/oguimbal/pg-mem) — an in-memory implementation of Postgres. This is a nice easy way to play locally, but you can easily adapt this sample to use a remote Postgres implementation like [Render](https://render.com/) or [Supabase](https://supabase.com/).
 
-Create a new file `db.ts` with this code:
+Create a new file `server/src/db.ts` with this code:
 
 ```ts
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
 import {newDb} from 'pg-mem';
-import pgp, {IDatabase, ITask, txMode} from 'pg-promise';
+import pgp, {IDatabase, ITask} from 'pg-promise';
 
 const {isolationLevel} = pgp.txMode;
 
@@ -38,9 +40,11 @@ function getDB() {
   if (!global.__db) {
     global.__db = initDB();
   }
+  // eslint-disable-next-line @typescript-eslint/ban-types
   return global.__db as IDatabase<{}>;
 }
 
+// eslint-disable-next-line @typescript-eslint/ban-types
 export type Transaction = ITask<{}>;
 type TransactionCallback<R> = (t: Transaction) => Promise<R>;
 
@@ -49,7 +53,7 @@ export async function tx<R>(f: TransactionCallback<R>, dbp = getDB()) {
   const db = await dbp;
   return await db.tx(
     {
-      mode: new txMode.TransactionMode({
+      mode: new pgp.txMode.TransactionMode({
         tiLevel: isolationLevel.repeatableRead,
       }),
     },

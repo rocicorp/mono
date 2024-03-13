@@ -37,19 +37,19 @@ async function initDB() {
 
     // Stores chat messages.
     await t.none(`create table message (
-      id text primary key not null,
-      sender varchar(255) not null,
-      content text not null,
-      ord integer not null,
-      deleted boolean not null,
-      version integer not null)`);
+        id text primary key not null,
+        sender varchar(255) not null,
+        content text not null,
+        ord integer not null,
+        deleted boolean not null,
+        version integer not null)`);
 
     // Stores last mutationID processed for each Replicache client.
     await t.none(`create table replicache_client (
-      id varchar(36) primary key not null,
-      client_group_id varchar(36) not null,
-      last_mutation_id integer not null,
-      version integer not null)`);
+        id varchar(36) primary key not null,
+        client_group_id varchar(36) not null,
+        last_mutation_id integer not null,
+        version integer not null)`);
 
     // TODO: indexes
   }, db);
