@@ -44,10 +44,12 @@ Now let's invoke the mutator when the user types a message. Replace the content 
 ```js
     const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      const last = (messages.length &&
-        messages[messages.length - 1][1]) as DeepReadonlyObject<Message>;
+      let last: Message | null = null;
+      if (messages.length) {
+        const lastMessageTuple = messages[messages.length - 1];
+        last = lastMessageTuple[1];
+      }
       const order = (last?.order ?? 0) + 1;
-
       const username = usernameRef.current?.value ?? '';
       const content = contentRef.current?.value ?? '';
 
