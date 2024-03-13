@@ -27,7 +27,7 @@ The implementation of pull will depend on the backend strategy you are using. Fo
 
 ## Implement Pull
 
-Replace the contents of `client/src/pull.ts` with this code:
+Replace the contents of `server/src/pull.ts` with this code:
 
 ```ts
 import {serverID, tx, type Transaction} from './db';

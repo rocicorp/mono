@@ -7,7 +7,7 @@ Replicache is framework agnostic, and you can use most any libraries and framewo
 
 We're going to use [Rocicorp's BYOB starter](https://github.com/rocicorp/byob-starter). This is an example of a standard [Express](https://expressjs.com/), [Vite](https://vitejs.dev/) web application.
 
-Clone the BYOB Started
+Clone the BYOB Starter
 
 ```bash
 git clone git@github.com:rocicorp/byob-starter.git

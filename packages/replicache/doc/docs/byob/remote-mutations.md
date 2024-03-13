@@ -216,7 +216,7 @@ async function sendPoke() {
 
 Add the handler to Express modifying the file `server/src/main.ts` with the `app.post` route:
 
-```ts {5}
+```ts {6}
 import { handlePush } from './push';
 //...
 app.use(express.urlencoded({extended: true}), express.json(), errorHandler);

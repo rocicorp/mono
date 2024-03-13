@@ -51,7 +51,7 @@ async function init() {
         logLevel: 'debug',
       });
       setR(r);
-      listen();
+      listen(r);
       return () => {
         void r.close();
       };
@@ -101,7 +101,7 @@ async function init() {
   );
 }
 
-function listen() {
+function listen(rep: Replicache<M>) {
   // TODO: Listen for changes on server
 }
 
