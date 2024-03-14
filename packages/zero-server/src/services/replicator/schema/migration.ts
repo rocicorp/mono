@@ -44,8 +44,6 @@ export async function runSyncSchemaMigrations(
       `Checking schema for compatibility with server at schema v${codeSchemaVersion}`,
     );
 
-    await ensureSyncSchemaMetaTable(sql);
-
     let meta = await sql.begin(async tx => {
       const meta = await getSyncSchemaMeta(tx);
       if (codeSchemaVersion < meta.minSafeRollbackVersion) {
@@ -118,15 +116,21 @@ export const syncSchemaMeta = v.object({
 // Exposed for tests.
 export type SyncSchemaMeta = v.Infer<typeof syncSchemaMeta>;
 
-export async function ensureSyncSchemaMetaTable(
+// Exposed for tests
+export async function getSyncSchemaMeta(
   sql: postgres.Sql,
-): Promise<void> {
-  await sql.begin(tx => [
-    tx`
-    CREATE SCHEMA IF NOT EXISTS zero`,
-
-    // Note: The `lock` column transparently ensures that only one row exists.
-    tx`
+): Promise<SyncSchemaMeta> {
+  // Use unsafe(...) here to send multiple statements in a single query,
+  // which eliminates a DB round trip when starting up.
+  //
+  // It is "safe" for our intents and purposes because the queries are constant
+  // (i.e. do not take any parameters).
+  //
+  // TODO: Use simple() when it is released: https://github.com/porsager/postgres/commit/2b85ea7fb8b50f7c69232bd8074aa11c8cbe9d3a
+  //
+  // Note: The `schema_meta.lock` column transparently ensures that at most one row exists.
+  const results = await sql.unsafe(`
+    CREATE SCHEMA IF NOT EXISTS zero;
     CREATE TABLE IF NOT EXISTS zero.schema_meta (
       version int NOT NULL,
       max_version int NOT NULL,
@@ -135,19 +139,11 @@ export async function ensureSyncSchemaMetaTable(
       lock char(1) NOT NULL CONSTRAINT DF_schema_meta_lock DEFAULT 'v',
       CONSTRAINT PK_schema_meta_lock PRIMARY KEY (lock),
       CONSTRAINT CK_schema_meta_lock CHECK (lock='v')
-    )
-    `,
-  ]);
-}
-
-// Exposed for tests
-export async function getSyncSchemaMeta(
-  sql: postgres.Sql,
-): Promise<SyncSchemaMeta> {
-  const rows = await sql`
-    SELECT version, max_version, min_safe_rollback_version FROM zero.schema_meta
-  `;
-  if (rows.count === 0) {
+    );
+    SELECT version, max_version, min_safe_rollback_version FROM zero.schema_meta;
+  `);
+  const rows = results[1];
+  if (rows.length === 0) {
     return {version: 0, maxVersion: 0, minSafeRollbackVersion: 0};
   }
   return v.parse(rows[0], syncSchemaMeta);
