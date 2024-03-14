@@ -127,6 +127,8 @@ export async function getSyncSchemaMeta(
   // (i.e. do not take any parameters).
   //
   // TODO: Use simple() when it is released: https://github.com/porsager/postgres/commit/2b85ea7fb8b50f7c69232bd8074aa11c8cbe9d3a
+  //
+  // Note: The `schema_meta.lock` column transparently ensures that at most one row exists.
   const results = await sql.unsafe(`
     CREATE SCHEMA IF NOT EXISTS zero;
     CREATE TABLE IF NOT EXISTS zero.schema_meta (
