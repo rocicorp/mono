@@ -10,7 +10,11 @@ import * as v from 'shared/src/valita.js';
  * will update the schema version and commit the transaction.
  */
 export type Migration =
-  | ((log: LogContext, tx: postgres.Sql) => Promise<void>)
+  | ((
+      log: LogContext,
+      tx: postgres.TransactionSql,
+      upstreamUri: string,
+    ) => Promise<void>)
   // A special Migration type that pushes the rollback limit forward.
   | {minSafeRollbackVersion: number};
 
@@ -26,6 +30,7 @@ export type VersionMigrationMap = {
 export async function runSyncSchemaMigrations(
   log: LogContext,
   sql: postgres.Sql,
+  upstreamUri: string,
   versionMigrationMap: VersionMigrationMap,
 ): Promise<void> {
   log = log.withContext(
@@ -68,12 +73,13 @@ export async function runSyncSchemaMigrations(
           await log.flush(); // Flush logs before each migration to help debug crash-y migrations.
 
           meta = await sql.begin(async tx => {
-            // Fetch meta from with the transaction to make the migration atomic.
+            // Fetch meta from within the transaction to make the migration atomic.
             let meta = await getSyncSchemaMeta(tx);
             if (meta.version < dest) {
               meta = await migrateSyncSchemaVersion(
                 log,
                 tx,
+                upstreamUri,
                 meta,
                 dest,
                 migration,
@@ -171,13 +177,14 @@ async function setSyncSchemaVersion(
 
 async function migrateSyncSchemaVersion(
   log: LogContext,
-  tx: postgres.Sql,
+  tx: postgres.TransactionSql,
+  upstreamUri: string,
   meta: SyncSchemaMeta,
   destinationVersion: number,
   migration: Migration,
 ): Promise<SyncSchemaMeta> {
   if (typeof migration === 'function') {
-    await migration(log, tx);
+    await migration(log, tx, upstreamUri);
   } else {
     meta = ensureRollbackLimit(migration.minSafeRollbackVersion, log, meta);
   }

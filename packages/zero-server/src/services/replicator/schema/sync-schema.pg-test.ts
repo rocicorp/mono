@@ -1,7 +1,7 @@
 import {
   afterAll,
   afterEach,
-  beforeAll,
+  beforeEach,
   describe,
   expect,
   test,
@@ -11,7 +11,7 @@ import {TestDBs} from '../../../test/db.js';
 import {createSilentLogContext} from '../../../test/logger.js';
 import {initSyncSchema} from './sync-schema.js';
 
-describe('sync schema', () => {
+describe('schema/sync', () => {
   type Case = {
     name: string;
     preState?: Record<string, object[]>;
@@ -36,12 +36,12 @@ describe('sync schema', () => {
 
   const testDBs = new TestDBs();
   let db: postgres.Sql;
-  beforeAll(async () => {
-    db = await testDBs.createAndConnect('sync_schema_test');
+  beforeEach(async () => {
+    db = await testDBs.create('sync_schema_test');
   });
 
   afterEach(async () => {
-    await db.begin(tx => [tx`DROP TABLE IF EXISTS zero.schema_meta`]);
+    await testDBs.drop(db);
   });
 
   afterAll(async () => {
@@ -56,7 +56,7 @@ describe('sync schema', () => {
         );
       }
 
-      await initSyncSchema(createSilentLogContext(), db);
+      await initSyncSchema(createSilentLogContext(), db, 'postgres://upstream');
 
       for (const [table, expected] of Object.entries(c.postState)) {
         if (expected.length === 0) {

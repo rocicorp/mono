@@ -1,7 +1,6 @@
 import {
   afterAll,
   afterEach,
-  beforeAll,
   beforeEach,
   describe,
   expect,
@@ -18,7 +17,7 @@ import {
   runSyncSchemaMigrations,
 } from './migration.js';
 
-describe('sync schema', () => {
+describe('schema/migration', () => {
   type Case = {
     name: string;
     preSchema?: SyncSchemaMeta;
@@ -29,7 +28,7 @@ describe('sync schema', () => {
   };
 
   const logMigrationHistory =
-    (name: string) => async (_log: LogContext, tx: postgres.Sql) => {
+    (name: string) => async (_log: LogContext, tx: postgres.TransactionSql) => {
       const meta = await getSyncSchemaMeta(tx);
       await tx`INSERT INTO migration_history ${tx({
         event: `${name}-at(${meta.version})`,
@@ -179,19 +178,14 @@ describe('sync schema', () => {
 
   const testDBs = new TestDBs();
   let db: postgres.Sql;
-  beforeAll(async () => {
-    db = await testDBs.createAndConnect('migration_test');
-  });
 
   beforeEach(async () => {
+    db = await testDBs.create('migration_test');
     await db`CREATE TABLE migration_history (event TEXT)`;
   });
 
   afterEach(async () => {
-    await db.begin(tx => [
-      tx`DROP TABLE IF EXISTS zero.schema_meta`,
-      tx`DROP TABLE IF EXISTS migration_history`,
-    ]);
+    await testDBs.drop(db);
   });
 
   afterAll(async () => {
@@ -210,6 +204,7 @@ describe('sync schema', () => {
         await runSyncSchemaMigrations(
           createSilentLogContext(),
           db,
+          'postgres://upstream',
           c.migrations,
         );
       } catch (e) {
