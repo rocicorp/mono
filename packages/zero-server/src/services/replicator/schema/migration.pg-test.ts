@@ -180,7 +180,7 @@ describe('schema/migration', () => {
   let db: postgres.Sql;
 
   beforeEach(async () => {
-    db = await testDBs.createRandom('migration_test');
+    db = await testDBs.create('migration_test');
     await db`CREATE TABLE migration_history (event TEXT)`;
   });
 

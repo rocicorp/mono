@@ -37,7 +37,7 @@ describe('schema/sync', () => {
   const testDBs = new TestDBs();
   let db: postgres.Sql;
   beforeEach(async () => {
-    db = await testDBs.createRandom('sync_schema_test');
+    db = await testDBs.create('sync_schema_test');
   });
 
   afterEach(async () => {
