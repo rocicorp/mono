@@ -173,7 +173,7 @@ export type WatchNoIndexOptions = {
    * When provided, the `watch` is limited to changes where the `key` starts
    * with `prefix`.
    */
-  prefix?: string;
+  prefix?: string | undefined;
 
   /**
    * When this is set to `true` (default is `false`), the `watch` callback will
@@ -181,7 +181,7 @@ export type WatchNoIndexOptions = {
    * case is a diff where we consider all the existing values in Replicache as
    * being added.
    */
-  initialValuesInFirstDiff?: boolean;
+  initialValuesInFirstDiff?: boolean | undefined;
 };
 
 export type WatchCallback = (diff: Diff) => void;
