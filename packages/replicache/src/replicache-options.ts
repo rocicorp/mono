@@ -1,6 +1,6 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
 import type {IndexDefinitions} from './index-defs.js';
-import type {CreateStore} from './kv/store.js';
+import type {CreateDropStore} from './kv/store.js';
 import type {Puller} from './puller.js';
 import type {Pusher} from './pusher.js';
 import type {MutatorDefs, RequestOptions} from './replicache.js';
@@ -209,14 +209,10 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
 
   /**
    * Allows providing a custom implementation of the underlying storage layer.
+   *
+   * @experimental This option is experimental and might be removed or changed
    */
-  kvStore?: 'mem' | 'idb' | CreateStore | undefined;
-
-  /**
-   * Allows providing a custom implementation of the underlying storage layer.
-   * @deprecated Use {@code kvStore} instead.
-   */
-  experimentalCreateKVStore?: CreateStore | undefined;
+  experimentalKvStore?: 'mem' | 'idb' | CreateDropStore | undefined;
 
   /**
    * Defines the indexes, if any, to use on the data.

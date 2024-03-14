@@ -37,8 +37,8 @@ import {assertHash, emptyHash, Hash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {IndexDefinitions} from './index-defs.js';
 import {newIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
-import {MemStore} from './kv/mem-store.js';
-import type {CreateStore} from './kv/store.js';
+import {deleteMemStore, MemStore} from './kv/mem-store.js';
+import type {CreateDropStore, CreateStore} from './kv/store.js';
 import {MutationRecovery} from './mutation-recovery.js';
 import {initNewClientChannel} from './new-client-channel.js';
 import {
@@ -102,6 +102,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.js';
+import {dropStore} from './kv/idb-util.js';
 
 declare const TESTING: boolean;
 export interface TestingReplicacheWithTesting extends Replicache {
@@ -293,6 +294,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * IDBStore(name)`.
    */
   readonly #createStore: CreateStore;
+
+  readonly #dropStore: (name: string) => Promise<void>;
 
   #lastMutationID: number = 0;
 
@@ -528,11 +531,12 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this.#lc,
     );
 
-    const createStore = getCreateKVStore(this.#lc, options);
-    const perKVStore = createStore(this.idbName);
+    const createDropStore = getCreateDropKVStore(this.#lc, options);
+    const perKVStore = createDropStore.create(this.idbName);
 
-    this.#createStore = createStore;
-    this.#idbDatabases = new IDBDatabasesStore(createStore);
+    this.#createStore = createDropStore.create;
+    this.#idbDatabases = new IDBDatabasesStore(createDropStore.create);
+    this.#dropStore = createDropStore.drop;
     this.#perdag = new StoreImpl(perKVStore, uuidChunkHasher, assertHash);
     this.#memdag = new LazyStore(
       this.#perdag,
@@ -677,7 +681,12 @@ export class Replicache<MD extends MutatorDefs = {}> {
       signal,
     );
     initClientGC(clientID, this.#perdag, this.#lc, signal);
-    initCollectIDBDatabases(this.#idbDatabases, this.#lc, signal);
+    initCollectIDBDatabases(
+      this.#idbDatabases,
+      this.#lc,
+      signal,
+      this.#dropStore,
+    );
     initClientGroupGC(this.#perdag, this.#lc, signal);
     initNewClientChannel(
       this.name,
@@ -1767,21 +1776,27 @@ function createMemStore(name: string): MemStore {
   return new MemStore(name);
 }
 
-function getCreateKVStore<MD extends MutatorDefs>(
+function getCreateDropKVStore<MD extends MutatorDefs>(
   lc: LogContext,
   options: ReplicacheOptions<MD>,
-): CreateStore {
-  switch (options.kvStore) {
+): CreateDropStore {
+  switch (options.experimentalKvStore) {
     case 'idb':
-      return (name: string) => newIDBStoreWithMemFallback(lc, name);
+      return {
+        create: (name: string) => newIDBStoreWithMemFallback(lc, name),
+        drop: (name: string) => dropStore(name),
+      };
     case 'mem':
-      return createMemStore;
+      return {
+        create: createMemStore,
+        drop: (name: string) => deleteMemStore(name),
+      };
     case undefined:
-      return (
-        options.experimentalCreateKVStore ||
-        ((name: string) => newIDBStoreWithMemFallback(lc, name))
-      );
+      return {
+        create: (name: string) => newIDBStoreWithMemFallback(lc, name),
+        drop: (name: string) => dropStore(name),
+      };
     default:
-      return options.kvStore;
+      return options.experimentalKvStore;
   }
 }
