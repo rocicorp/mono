@@ -12,6 +12,12 @@ const SCHEMA_VERSION_MIGRATION_MAP: VersionMigrationMap = {
 export async function initSyncSchema(
   log: LogContext,
   db: postgres.Sql,
+  upstreamUri: string,
 ): Promise<void> {
-  await runSyncSchemaMigrations(log, db, SCHEMA_VERSION_MIGRATION_MAP);
+  await runSyncSchemaMigrations(
+    log,
+    db,
+    upstreamUri,
+    SCHEMA_VERSION_MIGRATION_MAP,
+  );
 }

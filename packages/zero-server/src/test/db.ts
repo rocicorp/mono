@@ -1,5 +1,6 @@
 import postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
+import {randInt} from 'shared/src/rand.js';
 
 export class TestDBs {
   // Connects to the main "postgres" DB of the local Postgres cluster.
@@ -10,7 +11,8 @@ export class TestDBs {
   });
   readonly #dbs: Record<string, postgres.Sql> = {};
 
-  async createAndConnect(database: string) {
+  async createRandom(databasePrefix: string) {
+    const database = `${databasePrefix}_${randInt(0, 1000000)}`;
     assert(!(database in this.#dbs), `${database} has already been created`);
     await this.#sql`DROP DATABASE IF EXISTS ${this.#sql(database)}`;
     await this.#sql`CREATE DATABASE ${this.#sql(database)}`;
@@ -23,17 +25,15 @@ export class TestDBs {
     return db;
   }
 
-  async closeAndDrop(database: string) {
-    const db = this.#dbs[database];
-    assert(db, `${database} does not exist`);
+  async drop(db: postgres.Sql) {
+    const database = db.options.database;
     await db.end();
-    await this.#sql`DROP DATABASE IF EXISTS ${this.#sql(db.options.database)}`;
+    await this.#sql`DROP DATABASE IF EXISTS ${this.#sql(database)}`;
+    delete this.#dbs[database];
   }
 
   async end() {
-    await Promise.all(
-      [...Object.keys(this.#dbs)].map(db => this.closeAndDrop(db)),
-    );
+    await Promise.all([...Object.values(this.#dbs)].map(db => this.drop(db)));
     return this.#sql.end();
   }
 }
