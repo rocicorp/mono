@@ -102,7 +102,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.js';
-import {dropStore} from './kv/idb-util.js';
+import {dropIDBStore} from './kv/idb-util.js';
 
 declare const TESTING: boolean;
 export interface TestingReplicacheWithTesting extends Replicache {
@@ -1784,7 +1784,7 @@ function getCreateDropKVStore<MD extends MutatorDefs>(
     case 'idb':
       return {
         create: (name: string) => newIDBStoreWithMemFallback(lc, name),
-        drop: (name: string) => dropStore(name),
+        drop: (name: string) => dropIDBStore(name),
       };
     case 'mem':
       return {
@@ -1794,7 +1794,7 @@ function getCreateDropKVStore<MD extends MutatorDefs>(
     case undefined:
       return {
         create: (name: string) => newIDBStoreWithMemFallback(lc, name),
-        drop: (name: string) => dropStore(name),
+        drop: (name: string) => dropIDBStore(name),
       };
     default:
       return options.experimentalKvStore;

@@ -73,7 +73,7 @@ suite('collectIDBDatabases', () => {
     for (const legacy of legacyValues) {
       test(name + ' > time ' + now + (legacy ? ' > legacy' : ''), async () => {
         const store = new IDBDatabasesStore(_ => new TestMemStore());
-        const dropStore = (name:string) => store.deleteDatabases([name])
+        const dropStore = (name: string) => store.deleteDatabases([name]);
         const clientDagStores = new Map<IndexedDBName, Store>();
         for (const [db, clients, clientGroups] of entries) {
           const dagStore = new TestStore();
@@ -103,7 +103,14 @@ suite('collectIDBDatabases', () => {
 
         const maxAge = 1000;
 
-        await collectIDBDatabases(store, now, maxAge, maxAge, dropStore, newDagStore);
+        await collectIDBDatabases(
+          store,
+          now,
+          maxAge,
+          maxAge,
+          dropStore,
+          newDagStore,
+        );
 
         expect(Object.keys(await store.getDatabases())).to.deep.equal(
           expectedDatabases,

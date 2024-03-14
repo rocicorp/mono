@@ -23,7 +23,7 @@ import {StoreImpl} from './dag/store-impl.js';
 import type {Store} from './dag/store.js';
 import {assertHash} from './hash.js';
 import {IDBNotFoundError, IDBStore} from './kv/idb-store.js';
-import {dropStore as dropIDBStore} from './kv/idb-util.js';
+import {dropIDBStore} from './kv/idb-util.js';
 import {
   ClientGroup,
   deleteClientGroup,

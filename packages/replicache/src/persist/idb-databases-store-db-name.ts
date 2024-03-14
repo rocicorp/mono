@@ -1,4 +1,4 @@
-import {dropStore as dropIDBStore} from '../kv/idb-util.js';
+import {dropIDBStore} from '../kv/idb-util.js';
 import {uuid} from '../uuid.js';
 
 const IDB_DATABASES_VERSION = 0;

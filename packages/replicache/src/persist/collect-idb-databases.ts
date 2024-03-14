@@ -8,7 +8,7 @@ import {FormatVersion} from '../format-version.js';
 import {assertHash} from '../hash.js';
 import {newIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
 import {IDBStore} from '../kv/idb-store.js';
-import {dropStore} from '../kv/idb-util.js';
+import {dropIDBStore} from '../kv/idb-util.js';
 import type {CreateStore, DropStore} from '../kv/store.js';
 import {withRead} from '../with-transactions.js';
 import {
@@ -36,7 +36,7 @@ export function initCollectIDBDatabases(
   idbDatabasesStore: IDBDatabasesStore,
   lc: LogContext,
   signal: AbortSignal,
-  kvDropStore: DropStore = (name: string) => dropStore(name),
+  kvDropStore: DropStore = dropIDBStore,
 ): void {
   let initial = true;
   initBgIntervalProcess(
@@ -67,7 +67,7 @@ export async function collectIDBDatabases(
   now: number,
   maxAge: number,
   dd31MaxAge: number,
-  kvDropStore: DropStore = (name: string) => dropStore(name),
+  kvDropStore: DropStore = dropIDBStore,
   newDagStore = defaultNewDagStore,
 ): Promise<void> {
   const databases = await idbDatabasesStore.getDatabases();
@@ -100,7 +100,7 @@ export async function collectIDBDatabases(
 async function dropDatabaseInternal(
   name: string,
   idbDatabasesStore: IDBDatabasesStore,
-  kvDropStore: DropStore = (name: string) => dropStore(name),
+  kvDropStore: DropStore = dropIDBStore,
 ) {
   await kvDropStore(name);
   await idbDatabasesStore.deleteDatabases([name]);
@@ -109,7 +109,7 @@ async function dropDatabaseInternal(
 async function dropDatabases(
   idbDatabasesStore: IDBDatabasesStore,
   namesToRemove: string[],
-  kvDropStore: DropStore = (name: string) => dropStore(name),
+  kvDropStore: DropStore = dropIDBStore,
 ): Promise<{dropped: string[]; errors: unknown[]}> {
   // Try to remove the databases in parallel. Don't let a single reject fail the
   // other ones. We will check for failures afterwards.

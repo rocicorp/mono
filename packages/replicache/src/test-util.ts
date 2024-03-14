@@ -8,7 +8,7 @@ import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Cookie} from './cookies.js';
 import type {Store} from './dag/store.js';
 import type {Hash} from './hash.js';
-import {dropStore as dropIDBStore} from './kv/idb-util.js';
+import {dropIDBStore} from './kv/idb-util.js';
 import {MemStore} from './kv/mem-store.js';
 import type {Store as KVStore} from './kv/store.js';
 import type {PatchOperation} from './patch-operation.js';
