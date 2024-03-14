@@ -11,7 +11,7 @@ import {TestDBs} from '../../../test/db.js';
 import {createSilentLogContext} from '../../../test/logger.js';
 import {initSyncSchema} from './sync-schema.js';
 
-describe('sync schema', () => {
+describe('schema/sync', () => {
   type Case = {
     name: string;
     preState?: Record<string, object[]>;

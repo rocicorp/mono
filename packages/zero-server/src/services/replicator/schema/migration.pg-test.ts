@@ -17,7 +17,7 @@ import {
   runSyncSchemaMigrations,
 } from './migration.js';
 
-describe('sync schema', () => {
+describe('schema/migration', () => {
   type Case = {
     name: string;
     preSchema?: SyncSchemaMeta;

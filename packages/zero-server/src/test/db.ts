@@ -12,7 +12,7 @@ export class TestDBs {
   readonly #dbs: Record<string, postgres.Sql> = {};
 
   async createRandom(databasePrefix: string) {
-    const database = `${databasePrefix}_${randInt(0, 1000000)}`;
+    const database = `${databasePrefix}_${randInt(0, 1000000).toString(36)}`;
     assert(!(database in this.#dbs), `${database} has already been created`);
     await this.#sql`DROP DATABASE IF EXISTS ${this.#sql(database)}`;
     await this.#sql`CREATE DATABASE ${this.#sql(database)}`;
@@ -26,9 +26,11 @@ export class TestDBs {
   }
 
   async drop(db: postgres.Sql) {
-    const database = db.options.database;
+    const {database} = db.options;
     await db.end();
-    await this.#sql`DROP DATABASE IF EXISTS ${this.#sql(database)}`;
+    await this.#sql`DROP DATABASE IF EXISTS ${this.#sql(
+      database,
+    )} WITH (FORCE)`;
     delete this.#dbs[database];
   }
 
