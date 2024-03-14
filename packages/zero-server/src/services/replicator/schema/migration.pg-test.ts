@@ -14,7 +14,6 @@ import {createSilentLogContext} from '../../../test/logger.js';
 import {
   SyncSchemaMeta,
   VersionMigrationMap,
-  ensureSyncSchemaMetaTable,
   getSyncSchemaMeta,
   runSyncSchemaMigrations,
 } from './migration.js';
@@ -202,7 +201,7 @@ describe('sync schema', () => {
   for (const c of cases) {
     test(c.name, async () => {
       if (c.preSchema) {
-        await ensureSyncSchemaMetaTable(db);
+        await getSyncSchemaMeta(db); // Ensures that the table is created.
         await db`INSERT INTO zero.schema_meta ${db(c.preSchema)}`;
       }
 
