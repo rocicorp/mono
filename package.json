@@ -36,7 +36,7 @@
         "packages": [
           "mirror-cli",
           "mirror-workers",
-          "zero-server"
+          "zero-cache"
         ],
         "label": "TODO: Move reflect packages to 4.x.x"
       }
