@@ -1,5 +1,6 @@
 import {expect} from 'chai';
 import type {JSONValue} from 'shared/src/json.js';
+import {Queue} from 'shared/src/queue.js';
 import * as sinon from 'sinon';
 import {
   disableAllBackgroundProcesses,
@@ -509,4 +510,43 @@ test('watch with index and prefix and initial callback and data', async () => {
   ]);
 
   unwatch();
+});
+
+suite('watch with initial values', () => {
+  const cases = [
+    {name: 'with no prefix', prefix: undefined, key: 'a'},
+    {name: 'with prefix', prefix: 'ns/', key: 'ns/a'},
+  ] as const;
+  for (const {name, prefix, key} of cases) {
+    test(name, async () => {
+      const rep = await replicacheForTesting('watch', {
+        mutators: {
+          addData,
+        },
+      });
+
+      const q = new Queue();
+
+      const unwatch = rep.experimentalWatch(
+        diff => {
+          void q.enqueue(diff);
+        },
+        {initialValuesInFirstDiff: true, prefix},
+      );
+
+      expect(await q.dequeue()).to.deep.equal([]);
+
+      await rep.mutate.addData({[key]: true});
+
+      expect(await q.dequeue()).to.deep.equal([
+        {
+          op: 'add',
+          key,
+          newValue: true,
+        },
+      ]);
+
+      unwatch();
+    });
+  }
 });
