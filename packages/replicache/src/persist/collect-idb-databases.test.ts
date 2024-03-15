@@ -28,6 +28,8 @@ import {
 } from './idb-databases-store.js';
 import {dropIDBStoreWithMemFallback} from '../kv/idb-util.js';
 import {MemKVStore} from '../mod.js';
+import {dropMemStore} from '../kv/mem-store.js';
+import sinon from 'sinon';
 
 suite('collectIDBDatabases', () => {
   let clock: SinonFakeTimers;
@@ -337,8 +339,11 @@ suite('collectIDBDatabases', () => {
 async function testDropAllDatabase(storeType: string) {
   const kVStore = {
     create: (name: string) =>
-      storeType === 'IDB' ? new IDBStore(name) : new MemKVStore(name),
-    drop: dropIDBStoreWithMemFallback,
+      storeType === 'idb' ? new IDBStore(name) : new MemKVStore(name),
+    drop: (name: string) =>
+      storeType === 'idb'
+        ? dropIDBStoreWithMemFallback(name)
+        : dropMemStore(name),
   };
   const store = new IDBDatabasesStore(kVStore.create);
   const numDbs = 10;
@@ -366,11 +371,17 @@ async function testDropAllDatabase(storeType: string) {
 }
 
 test('dropAllDatabase IDB', async () => {
-  await testDropAllDatabase('IDB');
+  const indexDbSpy = sinon.spy(indexedDB, 'deleteDatabase');
+  await testDropAllDatabase('idb');
+  expect(indexDbSpy.callCount).equal(20);
+  indexDbSpy.restore();
 });
 
 test('dropAllDatabase Mem', async () => {
-  await testDropAllDatabase('Mem');
+  const indexDbSpy = sinon.spy(indexedDB, 'deleteDatabase');
+  await testDropAllDatabase('mem');
+  expect(indexDbSpy.callCount).equal(0);
+  indexDbSpy.restore();
 });
 
 test('dropDatabase', async () => {

@@ -68,7 +68,7 @@ export async function collectIDBDatabases(
   now: number,
   maxAge: number,
   dd31MaxAge: number,
-  kvDropStore: DropStore = dropIDBStoreWithMemFallback,
+  kvDropStore: DropStore,
   newDagStore = defaultNewDagStore,
 ): Promise<void> {
   const databases = await idbDatabasesStore.getDatabases();
@@ -227,7 +227,7 @@ export async function dropAllDatabases(
   const databases = await store.getDatabases();
   const dbNames = Object.values(databases).map(db => db.name);
 
-  const result = await dropDatabases(store, dbNames);
+  const result = await dropDatabases(store, dbNames, kvStoreProvider.drop);
   return result;
 }
 
