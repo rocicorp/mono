@@ -101,7 +101,7 @@ export async function collectIDBDatabases(
 async function dropDatabaseInternal(
   name: string,
   idbDatabasesStore: IDBDatabasesStore,
-  kvDropStore: DropStore = dropIDBStoreWithMemFallback,
+  kvDropStore: DropStore,
 ) {
   await kvDropStore(name);
   await idbDatabasesStore.deleteDatabases([name]);
@@ -110,7 +110,7 @@ async function dropDatabaseInternal(
 async function dropDatabases(
   idbDatabasesStore: IDBDatabasesStore,
   namesToRemove: string[],
-  kvDropStore: DropStore = dropIDBStoreWithMemFallback,
+  kvDropStore: DropStore,
 ): Promise<{dropped: string[]; errors: unknown[]}> {
   // Try to remove the databases in parallel. Don't let a single reject fail the
   // other ones. We will check for failures afterwards.
@@ -206,8 +206,13 @@ export async function dropDatabase(
   dbName: string,
   createKVStore: CreateStore = name =>
     newIDBStoreWithMemFallback(new LogContext(), name),
+  dropStore: DropStore = dropIDBStoreWithMemFallback,
 ) {
-  await dropDatabaseInternal(dbName, new IDBDatabasesStore(createKVStore));
+  await dropDatabaseInternal(
+    dbName,
+    new IDBDatabasesStore(createKVStore),
+    dropStore,
+  );
 }
 
 /**

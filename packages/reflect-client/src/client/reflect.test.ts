@@ -10,7 +10,7 @@ import type {
   WriteTransaction,
 } from 'reflect-shared/src/mod.js';
 import {
-  CreateKVStore,
+  dropKVMemStore,
   MemKVStore,
   PullRequestV1,
   PushRequestV1,
@@ -1600,7 +1600,10 @@ test('kvStore option', async () => {
   await t('mem', 'kv-store-test-user-id-2', false);
   await t(undefined, 'kv-store-test-user-id-3', false);
 
-  const kvStore: CreateKVStore = name => new MemKVStore(name);
+  const kvStore = {
+    create: (name: string) => new MemKVStore(name),
+    drop: (name: string) => dropKVMemStore(name),
+  };
   await t(kvStore, 'kv-store-test-user-id-4', false, undefined);
   await t(kvStore, 'kv-store-test-user-id-4', false, 'bar');
 });
