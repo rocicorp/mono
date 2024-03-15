@@ -1,8 +1,7 @@
 import type {ColumnSpec, TableSpec} from './specs.js';
 
 /**
- * Retrieves all tables and columns published under any PUBLICATION
- * whose name starts with the specified `pubPrefix` (e.g. "zero_").
+ * Constructs a `CREATE TABLE` statement for a {@link TableSpec}.
  */
 export function createTableStatement(spec: TableSpec): string {
   function colDef(name: string, colSpec: ColumnSpec): string {
