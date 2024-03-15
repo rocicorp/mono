@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
+import {startPostgresReplication} from '../initial-sync.js';
 import {
   runSyncSchemaMigrations,
   type VersionMigrationMap,
@@ -7,6 +8,7 @@ import {
 
 const SCHEMA_VERSION_MIGRATION_MAP: VersionMigrationMap = {
   1: {minSafeRollbackVersion: 1}, // The inaugural v1 understands the rollback limit.
+  2: startPostgresReplication,
 };
 
 export async function initSyncSchema(
