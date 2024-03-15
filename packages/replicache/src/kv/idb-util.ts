@@ -3,7 +3,7 @@ import {
   isFirefox,
   isFirefoxPrivateBrowsingError,
 } from './idb-store-with-mem-fallback.js';
-import {deleteMemStore} from './mem-store.js';
+import {dropMemStore} from './mem-store.js';
 
 export function dropIDBStoreWithMemFallback(name: string): Promise<void> {
   if (!isFirefox()) {
@@ -13,7 +13,7 @@ export function dropIDBStoreWithMemFallback(name: string): Promise<void> {
     return dropIDBStore(name);
   } catch (e) {
     if (isFirefoxPrivateBrowsingError(e)) {
-      return deleteMemStore(name);
+      return dropMemStore(name);
     }
   }
   return promiseVoid;

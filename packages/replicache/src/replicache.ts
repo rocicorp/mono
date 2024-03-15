@@ -37,7 +37,7 @@ import {assertHash, emptyHash, Hash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {IndexDefinitions} from './index-defs.js';
 import {newIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
-import {deleteMemStore, MemStore} from './kv/mem-store.js';
+import {dropMemStore, MemStore} from './kv/mem-store.js';
 import type {CreateDropStore, CreateStore} from './kv/store.js';
 import {MutationRecovery} from './mutation-recovery.js';
 import {initNewClientChannel} from './new-client-channel.js';
@@ -1784,17 +1784,17 @@ function getCreateDropKVStore<MD extends MutatorDefs>(
     case 'idb':
       return {
         create: (name: string) => newIDBStoreWithMemFallback(lc, name),
-        drop: (name: string) => dropIDBStoreWithMemFallback(name),
+        drop: dropIDBStoreWithMemFallback,
       };
     case 'mem':
       return {
         create: createMemStore,
-        drop: (name: string) => deleteMemStore(name),
+        drop: (name: string) => dropMemStore(name),
       };
     case undefined:
       return {
         create: (name: string) => newIDBStoreWithMemFallback(lc, name),
-        drop: (name: string) => dropIDBStoreWithMemFallback(name),
+        drop: dropIDBStoreWithMemFallback,
       };
     default:
       return options.experimentalKvStore;

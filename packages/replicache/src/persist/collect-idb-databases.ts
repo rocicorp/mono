@@ -36,7 +36,7 @@ export function initCollectIDBDatabases(
   idbDatabasesStore: IDBDatabasesStore,
   lc: LogContext,
   signal: AbortSignal,
-  kvDropStore: DropStore = dropIDBStoreWithMemFallback,
+  kvDropStore: DropStore,
 ): void {
   let initial = true;
   initBgIntervalProcess(
@@ -218,7 +218,7 @@ export async function dropDatabase(
 export async function dropAllDatabases(
   createDropKVStore: CreateDropStore = {
     create: name => newIDBStoreWithMemFallback(new LogContext(), name),
-    drop: name => dropIDBStoreWithMemFallback(name),
+    drop: dropIDBStoreWithMemFallback,
   },
 ): Promise<{
   dropped: string[];

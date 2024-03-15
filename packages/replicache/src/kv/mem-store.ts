@@ -15,7 +15,7 @@ export function clearAllNamedMemStoresForTesting(): void {
   stores.clear();
 }
 
-export function deleteMemStore(name: string): Promise<void> {
+export function dropMemStore(name: string): Promise<void> {
   stores.delete(name);
   return promiseVoid;
 }
