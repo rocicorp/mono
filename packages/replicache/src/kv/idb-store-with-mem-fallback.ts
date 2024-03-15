@@ -64,7 +64,7 @@ export class IDBStoreWithMemFallback implements Store {
   }
 }
 
-function isFirefoxPrivateBrowsingError(e: unknown): e is DOMException {
+export function isFirefoxPrivateBrowsingError(e: unknown): e is DOMException {
   return (
     isFirefox() &&
     e instanceof DOMException &&
@@ -74,7 +74,7 @@ function isFirefoxPrivateBrowsingError(e: unknown): e is DOMException {
   );
 }
 
-function isFirefox(): boolean {
+export function isFirefox(): boolean {
   return navigator.userAgent.includes('Firefox');
 }
 

@@ -8,7 +8,7 @@ import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Cookie} from './cookies.js';
 import type {Store} from './dag/store.js';
 import type {Hash} from './hash.js';
-import {dropIDBStore} from './kv/idb-util.js';
+import {dropIDBStoreWithMemFallback} from './kv/idb-util.js';
 import {MemStore} from './kv/mem-store.js';
 import type {Store as KVStore} from './kv/store.js';
 import type {PatchOperation} from './patch-operation.js';
@@ -133,7 +133,7 @@ async function closeAllCloseables(): Promise<void> {
 export const dbsToDrop: Set<string> = new Set();
 export async function deleteAllDatabases(): Promise<void> {
   for (const name of dbsToDrop) {
-    await dropIDBStore(name);
+    await dropIDBStoreWithMemFallback(name);
   }
   dbsToDrop.clear();
 }

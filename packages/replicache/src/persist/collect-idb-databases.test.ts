@@ -26,6 +26,7 @@ import {
   IndexedDBDatabase,
   IndexedDBName,
 } from './idb-databases-store.js';
+import {dropIDBStoreWithMemFallback} from '../kv/idb-util.js';
 
 suite('collectIDBDatabases', () => {
   let clock: SinonFakeTimers;
@@ -333,8 +334,11 @@ suite('collectIDBDatabases', () => {
 });
 
 test('dropAllDatabase', async () => {
-  const createKVStore = (name: string) => new IDBStore(name);
-  const store = new IDBDatabasesStore(createKVStore);
+  const createDropKVStore = {
+    create: (name: string) => new IDBStore(name),
+    drop: dropIDBStoreWithMemFallback,
+  };
+  const store = new IDBDatabasesStore(createDropKVStore.create);
   const numDbs = 10;
 
   for (const f of [dropAllDatabases, deleteAllReplicacheData] as const) {
@@ -351,7 +355,7 @@ test('dropAllDatabase', async () => {
 
     expect(Object.values(await store.getDatabases())).to.have.length(numDbs);
 
-    const result = await f(createKVStore);
+    const result = await f(createDropKVStore);
 
     expect(Object.values(await store.getDatabases())).to.have.length(0);
     expect(result.dropped).to.have.length(numDbs);
