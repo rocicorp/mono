@@ -38,7 +38,7 @@ import type {HTTPRequestInfo} from './http-request-info.js';
 import type {IndexDefinitions} from './index-defs.js';
 import {newIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
 import {dropMemStore, MemStore} from './kv/mem-store.js';
-import type {CreateDropStore, CreateStore} from './kv/store.js';
+import type {KVStoreProvider, CreateStore} from './kv/store.js';
 import {MutationRecovery} from './mutation-recovery.js';
 import {initNewClientChannel} from './new-client-channel.js';
 import {
@@ -531,12 +531,15 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this.#lc,
     );
 
-    const createDropStore = getCreateDropKVStore(this.#lc, options);
-    const perKVStore = createDropStore.create(this.idbName);
+    const kVStoreProvider = getKVStoreProvider(
+      this.#lc,
+      options.experimentalKvStore,
+    );
+    const perKVStore = kVStoreProvider.create(this.idbName);
 
-    this.#createStore = createDropStore.create;
-    this.#idbDatabases = new IDBDatabasesStore(createDropStore.create);
-    this.#dropStore = createDropStore.drop;
+    this.#createStore = kVStoreProvider.create;
+    this.#idbDatabases = new IDBDatabasesStore(kVStoreProvider.create);
+    this.#dropStore = kVStoreProvider.drop;
     this.#perdag = new StoreImpl(perKVStore, uuidChunkHasher, assertHash);
     this.#memdag = new LazyStore(
       this.#perdag,
@@ -1776,11 +1779,11 @@ function createMemStore(name: string): MemStore {
   return new MemStore(name);
 }
 
-function getCreateDropKVStore<MD extends MutatorDefs>(
+export function getKVStoreProvider(
   lc: LogContext,
-  options: ReplicacheOptions<MD>,
-): CreateDropStore {
-  switch (options.experimentalKvStore) {
+  experimentalKvStore: 'mem' | 'idb' | KVStoreProvider | undefined,
+): KVStoreProvider {
+  switch (experimentalKvStore) {
     case 'idb':
       return {
         create: (name: string) => newIDBStoreWithMemFallback(lc, name),
@@ -1797,6 +1800,6 @@ function getCreateDropKVStore<MD extends MutatorDefs>(
         drop: dropIDBStoreWithMemFallback,
       };
     default:
-      return options.experimentalKvStore;
+      return experimentalKvStore;
   }
 }

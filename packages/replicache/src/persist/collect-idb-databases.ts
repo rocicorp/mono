@@ -9,7 +9,7 @@ import {assertHash} from '../hash.js';
 import {newIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
 import {IDBStore} from '../kv/idb-store.js';
 import {dropIDBStoreWithMemFallback} from '../kv/idb-util.js';
-import type {CreateDropStore, CreateStore, DropStore} from '../kv/store.js';
+import type {KVStoreProvider, CreateStore, DropStore} from '../kv/store.js';
 import {withRead} from '../with-transactions.js';
 import {
   clientGroupHasPendingMutations,
@@ -18,6 +18,7 @@ import {
 import {ClientMap, getClients} from './clients.js';
 import type {IndexedDBDatabase} from './idb-databases-store.js';
 import {IDBDatabasesStore} from './idb-databases-store.js';
+import {getKVStoreProvider} from '../replicache.js';
 
 // How frequently to try to collect
 const COLLECT_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -216,15 +217,13 @@ export async function dropDatabase(
  * and any errors encountered while dropping.
  */
 export async function dropAllDatabases(
-  createDropKVStore: CreateDropStore = {
-    create: name => newIDBStoreWithMemFallback(new LogContext(), name),
-    drop: dropIDBStoreWithMemFallback,
-  },
+  kvStore: 'idb' | 'mem' | KVStoreProvider = 'idb',
 ): Promise<{
   dropped: string[];
   errors: unknown[];
 }> {
-  const store = new IDBDatabasesStore(createDropKVStore.create);
+  const kvStoreProvider = getKVStoreProvider(new LogContext(), kvStore);
+  const store = new IDBDatabasesStore(kvStoreProvider.create);
   const databases = await store.getDatabases();
   const dbNames = Object.values(databases).map(db => db.name);
 
@@ -240,8 +239,8 @@ export async function dropAllDatabases(
  *
  * @deprecated Use `dropAllDatabases` instead.
  */
-export function deleteAllReplicacheData(createDropKVStore?: CreateDropStore) {
-  return dropAllDatabases(createDropKVStore);
+export function deleteAllReplicacheData(kVStore?: KVStoreProvider) {
+  return dropAllDatabases(kVStore);
 }
 
 async function anyPendingMutationsInClientGroups(

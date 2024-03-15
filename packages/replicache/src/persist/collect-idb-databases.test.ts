@@ -27,6 +27,7 @@ import {
   IndexedDBName,
 } from './idb-databases-store.js';
 import {dropIDBStoreWithMemFallback} from '../kv/idb-util.js';
+import {MemKVStore} from '../mod.js';
 
 suite('collectIDBDatabases', () => {
   let clock: SinonFakeTimers;
@@ -333,12 +334,13 @@ suite('collectIDBDatabases', () => {
   }
 });
 
-test('dropAllDatabase', async () => {
-  const createDropKVStore = {
-    create: (name: string) => new IDBStore(name),
+async function testDropAllDatabase(storeType: string) {
+  const kVStore = {
+    create: (name: string) =>
+      storeType === 'IDB' ? new IDBStore(name) : new MemKVStore(name),
     drop: dropIDBStoreWithMemFallback,
   };
-  const store = new IDBDatabasesStore(createDropKVStore.create);
+  const store = new IDBDatabasesStore(kVStore.create);
   const numDbs = 10;
 
   for (const f of [dropAllDatabases, deleteAllReplicacheData] as const) {
@@ -355,12 +357,20 @@ test('dropAllDatabase', async () => {
 
     expect(Object.values(await store.getDatabases())).to.have.length(numDbs);
 
-    const result = await f(createDropKVStore);
+    const result = await f(kVStore);
 
     expect(Object.values(await store.getDatabases())).to.have.length(0);
     expect(result.dropped).to.have.length(numDbs);
     expect(result.errors).to.have.length(0);
   }
+}
+
+test('dropAllDatabase IDB', async () => {
+  await testDropAllDatabase('IDB');
+});
+
+test('dropAllDatabase Mem', async () => {
+  await testDropAllDatabase('Mem');
 });
 
 test('dropDatabase', async () => {

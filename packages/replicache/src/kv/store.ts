@@ -37,7 +37,7 @@ export type CreateStore = (name: string) => Store;
 
 export type DropStore = (name: string) => Promise<void>;
 
-export type CreateDropStore = {create: CreateStore; drop: DropStore};
+export type KVStoreProvider = {create: CreateStore; drop: DropStore};
 /**
  * This interface is used so that we can release the lock when the transaction
  * is done.
