@@ -39,7 +39,7 @@
     "rollup": "^3.24.0",
     "shared": "0.0.0",
     "sinon": "^13.0.1",
-    "typescript": "^5.2.2"
+    "typescript": "^5.4.2"
   },
   "exports": {
     ".": "./src/mod.ts"

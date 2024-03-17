@@ -20,7 +20,7 @@
     "replicache": "14.2.2",
     "rollup": "^3.24.0",
     "ts-jest": "^29.1.0",
-    "typescript": "^5.2.2"
+    "typescript": "^5.4.2"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
