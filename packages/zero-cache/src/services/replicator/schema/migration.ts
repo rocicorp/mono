@@ -12,6 +12,7 @@ import * as v from 'shared/src/valita.js';
 export type Migration =
   | ((
       log: LogContext,
+      replicaID: string,
       tx: postgres.TransactionSql,
       upstreamUri: string,
     ) => Promise<void>)
@@ -29,6 +30,7 @@ export type VersionMigrationMap = {
  */
 export async function runSyncSchemaMigrations(
   log: LogContext,
+  replicaID: string,
   sql: postgres.Sql,
   upstreamUri: string,
   versionMigrationMap: VersionMigrationMap,
@@ -78,6 +80,7 @@ export async function runSyncSchemaMigrations(
             if (meta.version < dest) {
               meta = await migrateSyncSchemaVersion(
                 log,
+                replicaID,
                 tx,
                 upstreamUri,
                 meta,
@@ -177,6 +180,7 @@ async function setSyncSchemaVersion(
 
 async function migrateSyncSchemaVersion(
   log: LogContext,
+  replicaID: string,
   tx: postgres.TransactionSql,
   upstreamUri: string,
   meta: SyncSchemaMeta,
@@ -184,7 +188,7 @@ async function migrateSyncSchemaVersion(
   migration: Migration,
 ): Promise<SyncSchemaMeta> {
   if (typeof migration === 'function') {
-    await migration(log, tx, upstreamUri);
+    await migration(log, replicaID, tx, upstreamUri);
   } else {
     meta = ensureRollbackLimit(migration.minSafeRollbackVersion, log, meta);
   }
