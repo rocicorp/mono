@@ -4,6 +4,12 @@ import {assert} from 'shared/src/asserts.js';
 
 export class TestDBs {
   // Connects to the main "postgres" DB of the local Postgres cluster.
+  //
+  // Note: In order to run all of the tests successfully, the following
+  // configuration needs to be set in postgresql.conf:
+  //
+  // wal_level = logical                    # default is replica
+  // max_logical_replication_workers = 20   # default is 4
   readonly #sql = postgres({
     database: 'postgres',
     transform: postgres.camel,
