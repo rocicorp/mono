@@ -9,10 +9,15 @@ import {
 import type postgres from 'postgres';
 import {TestDBs, expectTables, initDB} from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
-import {startPostgresReplication} from './initial-sync.js';
+import {
+  handoffPostgresReplication,
+  startPostgresReplication,
+  waitForInitialDataSynchronization,
+} from './initial-sync.js';
 import {getPublishedTables} from './tables/published.js';
 import type {TableSpec} from './tables/specs.js';
 
+const SUB = 'test_sync';
 const SLOT = 'test_slot';
 
 const ZERO_CLIENTS_SPEC: TableSpec = {
@@ -179,17 +184,18 @@ describe('replicator/initial-sync', () => {
   });
 
   afterEach(async () => {
-    // Theoretically, a simple DROP SUBSCRIPTION should take care of everything, but
-    // this involves inter-Postgres communication to drop the corresponding slot on the
-    // publisher DB which can results test flakiness.
-    //
-    // Things are more stable if the slot is released first, with the
-    // subscription and slot explicitly deleted.
-    await replica.unsafe(`
-      ALTER SUBSCRIPTION zero_sync DISABLE;
-      ALTER SUBSCRIPTION zero_sync SET(slot_name=NONE);
-      DROP SUBSCRIPTION IF EXISTS zero_sync;
-    `);
+    // Technically done by the tested code, but this helps clean things up in the event of failures.
+    await replica.begin(async tx => {
+      const subs =
+        await tx`SELECT subname FROM pg_subscription WHERE subname = ${SUB}`;
+      if (subs.count > 0) {
+        await tx.unsafe(`
+        ALTER SUBSCRIPTION ${SUB} DISABLE;
+        ALTER SUBSCRIPTION ${SUB} SET(slot_name=NONE);
+        DROP SUBSCRIPTION IF EXISTS ${SUB};
+      `);
+      }
+    });
     await upstream.begin(async tx => {
       const slots = await tx`
         SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${SLOT}`;
@@ -199,7 +205,7 @@ describe('replicator/initial-sync', () => {
       }
     });
     await testDBs.drop(upstream, replica);
-  });
+  }, 10000);
 
   afterAll(async () => {
     await testDBs.end();
@@ -210,11 +216,13 @@ describe('replicator/initial-sync', () => {
       await initDB(upstream, c.setupUpstreamQuery, c.upstream);
       await initDB(replica, c.setupReplicaQuery);
 
+      const lc = createSilentLogContext();
       await replica.begin(tx =>
         startPostgresReplication(
-          createSilentLogContext(),
+          lc,
           tx,
           'postgres:///initial_sync_upstream',
+          SUB,
           SLOT,
         ),
       );
@@ -222,14 +230,46 @@ describe('replicator/initial-sync', () => {
       const published = await getPublishedTables(upstream, 'zero_');
       expect(published).toEqual(c.published);
 
-      const slots =
-        await upstream`SELECT COUNT(*) FROM pg_replication_slots WHERE slot_name = ${SLOT}`;
-      expect(slots[0]).toEqual({count: '1'});
-
       const synced = await getPublishedTables(replica, 'synced_tables');
       expect(synced).toMatchObject(c.published);
 
+      await replica.begin(tx =>
+        waitForInitialDataSynchronization(
+          lc,
+          tx,
+          'postgres:///initial_sync_upstream',
+          SUB,
+        ),
+      );
+
       await expectTables(replica, c.replicated);
-    });
+
+      await replica.begin(tx =>
+        handoffPostgresReplication(
+          lc,
+          tx,
+          'postgres:///initial_sync_upstream',
+          SUB,
+        ),
+      );
+
+      // Now verify that the Replication tables are initialized.
+      await expectTables(replica, {
+        ['zero.tx_log']: [],
+        ['zero.change_log']: [],
+        ['zero.invalidation_registry']: [],
+        ['zero.invalidation_index']: [],
+      });
+
+      // Subscriptions should have been dropped.
+      const subs =
+        await replica`SELECT subname FROM pg_subscription WHERE subname = ${SUB}`;
+      expect(subs).toEqual([]);
+
+      // Slot should still exist.
+      const slots =
+        await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${SLOT}`;
+      expect(slots[0]).toEqual({slotName: SLOT});
+    }, 10000);
   }
 });

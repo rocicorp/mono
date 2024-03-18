@@ -1,6 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
+import {sleep} from 'shared/src/sleep.js';
 import * as v from 'shared/src/valita.js';
+import {CREATE_REPLICATION_TABLES} from './incremental-sync.js';
 import {createTableStatement} from './tables/create.js';
 import {getPublishedTables} from './tables/published.js';
 import type {ColumnSpec, TableSpec} from './tables/specs.js';
@@ -43,6 +45,7 @@ export async function startPostgresReplication(
   lc: LogContext,
   tx: postgres.TransactionSql,
   upstreamUri: string,
+  subName = 'zero_sync',
   slotName = 'zero_slot',
 ) {
   lc.info?.(`Starting initial data synchronization from ${upstreamUri}`);
@@ -73,7 +76,7 @@ export async function startPostgresReplication(
     ...schemaStmts,
     ...tablesStmts,
     `
-    CREATE SUBSCRIPTION zero_sync
+    CREATE SUBSCRIPTION ${subName}
       CONNECTION '${upstreamUri}'
       PUBLICATION ${published.publications.join(',')}
       WITH (slot_name='${slotName}', create_slot=false);`,
@@ -81,6 +84,110 @@ export async function startPostgresReplication(
 
   // Execute all statements in a single batch.
   await tx.unsafe(stmts.join('\n'));
+
+  lc.info?.(`Started initial data synchronization from ${upstreamUri}`);
+}
+
+type SubscribedTable = {
+  subname: string;
+  schema: string;
+  table: string;
+  state: string;
+};
+
+const MAX_POLLING_INTERVAL = 30000;
+
+/**
+ * Waits for the initial data synchronization, started by the {@link startPostgresReplication}
+ * migration, to complete. This is determined by polling the `pg_subscription_rel` table:
+ * https://www.postgresql.org/docs/current/catalog-pg-subscription-rel.html
+ *
+ * Once tables are synchronized, this migration step is considered complete, to be followed up
+ * with the {@link handoffPostgresReplication} step. Note that although the waiting and
+ * handoff can technically be done in a single step, holding a transaction for a long time
+ * and then attempting to modify a global table (`pg_subscription`) tends to cause deadlocks
+ * in the testing environment.
+ */
+export async function waitForInitialDataSynchronization(
+  // export async function handoffPostgresReplication(
+  lc: LogContext,
+  tx: postgres.TransactionSql,
+  upstreamUri: string,
+  subName = 'zero_sync',
+) {
+  lc.info?.(`Awaiting initial data synchronization from ${upstreamUri}`);
+  for (
+    let interval = 100; // Exponential backoff, up to 30 seconds between polls.
+    ;
+    interval = Math.min(interval * 2, MAX_POLLING_INTERVAL)
+  ) {
+    const subscribed = await tx<SubscribedTable[]>`
+    SELECT p.subname, n.nspname as schema, c.relname as table, r.srsubstate as state 
+      FROM pg_subscription p
+      JOIN pg_subscription_rel r ON p.oid = r.srsubid
+      JOIN pg_class c ON c.oid = r.srrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE p.subname = ${subName};`;
+
+    if (subscribed.length === 0) {
+      // This indicates that something is wrong.
+      // At minimum there should be the zero.clients table.
+      throw new Error('No subscribed tables');
+    }
+
+    const syncing = subscribed.filter(table => table.state !== 'r');
+    if (syncing.length === 0) {
+      lc.info?.(`Finished syncing ${subscribed.length} tables`, subscribed);
+      return;
+    }
+
+    if (interval >= MAX_POLLING_INTERVAL) {
+      const postInitialize = subscribed.filter(table => table.state !== 'i');
+      if (postInitialize.length === 0) {
+        // Something is wrong here, as Postgres should be able to transition
+        // at least one table from the 'i' (initialize) state to 'd' (data copy)
+        // or later. Manual inspection is warranted. For instance, it's possible
+        // that the Postgres instance needs to be configured with more
+        // max_logical_replication_workers.
+        throw new Error(
+          'Subscribed tables have failed to pass the "initialize" state',
+        );
+      }
+    }
+    lc.info?.(
+      `Still syncing ${syncing.length} tables (${syncing.map(
+        t => t.table,
+      )}). Polling in ${interval}ms.`,
+      subscribed,
+    );
+    await sleep(interval);
+  }
+}
+
+/**
+ * Following up after {@link waitForInitialDataSynchronization}, this migration step detaches
+ * and drops the subscription so that the replication slot can be used by the replicator.
+ * The replication tables are also set up in this step.
+ */
+export async function handoffPostgresReplication(
+  lc: LogContext,
+  tx: postgres.TransactionSql,
+  upstreamUri: string,
+  subName = 'zero_sync',
+) {
+  lc.info?.(`Taking over subscription from ${upstreamUri}`);
+  await tx.unsafe(
+    // Disable and detach the subscription from the replication slot so that the slot
+    // can be handed off to the Replicator logic. See the "Notes" section in
+    // https://www.postgresql.org/docs/current/sql-dropsubscription.html
+    `
+    ALTER SUBSCRIPTION ${subName} DISABLE;
+    ALTER SUBSCRIPTION ${subName} SET(slot_name=NONE);
+    DROP SUBSCRIPTION IF EXISTS ${subName};
+  ` +
+      // Create the Replication tables in the same transaction.
+      CREATE_REPLICATION_TABLES,
+  );
 }
 
 async function setupUpstream(

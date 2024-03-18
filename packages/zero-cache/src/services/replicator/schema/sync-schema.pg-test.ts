@@ -1,11 +1,17 @@
-import {afterAll, afterEach, beforeEach, describe, test} from '@jest/globals';
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from '@jest/globals';
 import type postgres from 'postgres';
-import {sleep} from 'shared/src/sleep.js';
 import {TestDBs, expectTables, initDB} from '../../../test/db.js';
 import {createSilentLogContext} from '../../../test/logger.js';
 import {initSyncSchema} from './sync-schema.js';
 
-describe('schema/sync', () => {
+describe('replicator/sync-schema', () => {
   type Case = {
     name: string;
 
@@ -29,8 +35,8 @@ describe('schema/sync', () => {
         ['zero.schema_meta']: [
           {
             // Update these as necessary.
-            version: 2,
-            maxVersion: 2,
+            version: 4,
+            maxVersion: 4,
             minSafeRollbackVersion: 1,
             lock: 'v', // Internal column, always 'v'
           },
@@ -57,8 +63,8 @@ describe('schema/sync', () => {
         ['zero.schema_meta']: [
           {
             // Update these as necessary.
-            version: 2,
-            maxVersion: 2,
+            version: 4,
+            maxVersion: 4,
             minSafeRollbackVersion: 1,
             lock: 'v', // Internal column, always 'v'
           },
@@ -82,12 +88,7 @@ describe('schema/sync', () => {
   });
 
   afterEach(async () => {
-    // Theoretically, a simple DROP SUBSCRIPTION should take care of everything, but
-    // this involves inter-Postgres communication to drop the corresponding slot on the
-    // publisher DB which can results test flakiness.
-    //
-    // Things are more stable if the slot is released first, with the
-    // subscription and slot explicitly deleted.
+    // Technically done by the tested code, but this helps clean things up in the event of failures.
     await replica.begin(async tx => {
       const subs =
         await tx`SELECT subname FROM pg_subscription WHERE subname = 'zero_sync'`;
@@ -108,35 +109,47 @@ describe('schema/sync', () => {
       }
     });
     await testDBs.drop(upstream, replica);
-  });
+  }, 10000);
 
   afterAll(async () => {
     await testDBs.end();
   });
 
   for (const c of cases) {
-    test(c.name, async () => {
-      await initDB(upstream, c.upstreamSetup, c.upstreamPreState);
-      await initDB(replica, c.replicaSetup, c.replicaPreState);
-      await initSyncSchema(
-        createSilentLogContext(),
-        replica,
-        `postgres:///${upstream.options.database}`,
-      );
+    test(
+      c.name,
+      async () => {
+        await initDB(upstream, c.upstreamSetup, c.upstreamPreState);
+        await initDB(replica, c.replicaSetup, c.replicaPreState);
 
-      // Poll the replica to wait for tables to sync.
-      // Note that this will eventually be moved into a migration step.
-      for (let i = 0; i < 100; i++) {
-        const syncingTables =
-          await replica`SELECT * FROM pg_subscription_rel WHERE srsubstate != 'r'`;
-        if (syncingTables.count > 0) {
-          console.debug(`Waiting for ${syncingTables.count} tables to sync`);
-          await sleep(50);
-        }
-      }
+        await initSyncSchema(
+          createSilentLogContext(),
+          replica,
+          `postgres:///${upstream.options.database}`,
+        );
 
-      await expectTables(upstream, c.upstreamPostState);
-      await expectTables(replica, c.replicaPostState);
-    });
+        await expectTables(upstream, c.upstreamPostState);
+        await expectTables(replica, c.replicaPostState);
+
+        // Check that internal replication tables have been created.
+        await expectTables(replica, {
+          ['zero.tx_log']: [],
+          ['zero.change_log']: [],
+          ['zero.invalidation_registry']: [],
+          ['zero.invalidation_index']: [],
+        });
+
+        // Subscriptions should have been dropped.
+        const subs =
+          await replica`SELECT subname FROM pg_subscription WHERE subname = 'zero_sync'`;
+        expect(subs).toEqual([]);
+
+        // Slot should still exist.
+        const slots =
+          await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = 'zero_slot'`;
+        expect(slots[0]).toEqual({slotName: 'zero_slot'});
+      },
+      10000,
+    );
   }
 });
