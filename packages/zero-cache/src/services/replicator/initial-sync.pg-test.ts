@@ -18,7 +18,7 @@ import {getPublishedTables} from './tables/published.js';
 import type {TableSpec} from './tables/specs.js';
 
 const SUB = 'test_sync';
-const SLOT = 'test_slot';
+const REPLICA_ID = 'initial_sync_test_id';
 
 const ZERO_CLIENTS_SPEC: TableSpec = {
   columns: {
@@ -198,10 +198,12 @@ describe('replicator/initial-sync', () => {
     });
     await upstream.begin(async tx => {
       const slots = await tx`
-        SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${SLOT}`;
+        SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${
+          'zero_slot_' + REPLICA_ID
+        }`;
       if (slots.count > 0) {
         await tx`
-          SELECT pg_drop_replication_slot(${SLOT});`;
+          SELECT pg_drop_replication_slot(${'zero_slot_' + REPLICA_ID});`;
       }
     });
     await testDBs.drop(upstream, replica);
@@ -220,10 +222,10 @@ describe('replicator/initial-sync', () => {
       await replica.begin(tx =>
         startPostgresReplication(
           lc,
+          REPLICA_ID,
           tx,
           'postgres:///initial_sync_upstream',
           SUB,
-          SLOT,
         ),
       );
 
@@ -236,6 +238,7 @@ describe('replicator/initial-sync', () => {
       await replica.begin(tx =>
         waitForInitialDataSynchronization(
           lc,
+          REPLICA_ID,
           tx,
           'postgres:///initial_sync_upstream',
           SUB,
@@ -247,6 +250,7 @@ describe('replicator/initial-sync', () => {
       await replica.begin(tx =>
         handoffPostgresReplication(
           lc,
+          REPLICA_ID,
           tx,
           'postgres:///initial_sync_upstream',
           SUB,
@@ -268,8 +272,10 @@ describe('replicator/initial-sync', () => {
 
       // Slot should still exist.
       const slots =
-        await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${SLOT}`;
-      expect(slots[0]).toEqual({slotName: SLOT});
+        await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${
+          'zero_slot_' + REPLICA_ID
+        }`;
+      expect(slots[0]).toEqual({slotName: `zero_slot_${REPLICA_ID}`});
     }, 10000);
   }
 });

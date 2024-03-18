@@ -28,7 +28,8 @@ describe('schema/migration', () => {
   };
 
   const logMigrationHistory =
-    (name: string) => async (_log: LogContext, tx: postgres.TransactionSql) => {
+    (name: string) =>
+    async (_log: LogContext, _id: string, tx: postgres.TransactionSql) => {
       const meta = await getSyncSchemaMeta(tx);
       await tx`INSERT INTO migration_history ${tx({
         event: `${name}-at(${meta.version})`,
@@ -203,6 +204,7 @@ describe('schema/migration', () => {
       try {
         await runSyncSchemaMigrations(
           createSilentLogContext(),
+          'foo-bar-replica-id',
           db,
           'postgres://upstream',
           c.migrations,

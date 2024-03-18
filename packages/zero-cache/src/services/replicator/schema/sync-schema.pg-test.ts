@@ -11,6 +11,8 @@ import {TestDBs, expectTables, initDB} from '../../../test/db.js';
 import {createSilentLogContext} from '../../../test/logger.js';
 import {initSyncSchema} from './sync-schema.js';
 
+const REPLICA_ID = 'sync_schema_test_id';
+
 describe('replicator/sync-schema', () => {
   type Case = {
     name: string;
@@ -102,10 +104,12 @@ describe('replicator/sync-schema', () => {
     });
     await upstream.begin(async tx => {
       const slots = await tx`
-        SELECT slot_name FROM pg_replication_slots WHERE slot_name = 'zero_slot'`;
+        SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${
+          'zero_slot_' + REPLICA_ID
+        }`;
       if (slots.count > 0) {
         await tx`
-          SELECT pg_drop_replication_slot('zero_slot');`;
+          SELECT pg_drop_replication_slot(${'zero_slot_' + REPLICA_ID});`;
       }
     });
     await testDBs.drop(upstream, replica);
@@ -124,6 +128,7 @@ describe('replicator/sync-schema', () => {
 
         await initSyncSchema(
           createSilentLogContext(),
+          REPLICA_ID,
           replica,
           `postgres:///${upstream.options.database}`,
         );
@@ -146,8 +151,10 @@ describe('replicator/sync-schema', () => {
 
         // Slot should still exist.
         const slots =
-          await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = 'zero_slot'`;
-        expect(slots[0]).toEqual({slotName: 'zero_slot'});
+          await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${
+            'zero_slot_' + REPLICA_ID
+          }`;
+        expect(slots[0]).toEqual({slotName: `zero_slot_${REPLICA_ID}`});
       },
       10000,
     );

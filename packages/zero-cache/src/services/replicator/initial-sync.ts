@@ -8,6 +8,7 @@ import {getPublishedTables} from './tables/published.js';
 import type {ColumnSpec, TableSpec} from './tables/specs.js';
 
 const PUB_PREFIX = 'zero_';
+const SLOT_PREFIX = `zero_slot_`;
 
 const publicationSchema = v.object({
   pubname: v.string(),
@@ -43,12 +44,13 @@ type Published = {
  */
 export async function startPostgresReplication(
   lc: LogContext,
+  replicaID: string,
   tx: postgres.TransactionSql,
   upstreamUri: string,
   subName = 'zero_sync',
-  slotName = 'zero_slot',
 ) {
   lc.info?.(`Starting initial data synchronization from ${upstreamUri}`);
+  const slotName = `${SLOT_PREFIX}${replicaID}`;
   const published = await setupUpstream(lc, upstreamUri, slotName);
 
   lc.info?.(`Upstream is setup for publishing`, published);
@@ -111,6 +113,7 @@ const MAX_POLLING_INTERVAL = 30000;
 export async function waitForInitialDataSynchronization(
   // export async function handoffPostgresReplication(
   lc: LogContext,
+  _replicaID: string,
   tx: postgres.TransactionSql,
   upstreamUri: string,
   subName = 'zero_sync',
@@ -171,6 +174,7 @@ export async function waitForInitialDataSynchronization(
  */
 export async function handoffPostgresReplication(
   lc: LogContext,
+  _replicaID: string,
   tx: postgres.TransactionSql,
   upstreamUri: string,
   subName = 'zero_sync',
@@ -214,6 +218,21 @@ async function setupUpstream(
   return publishedTables;
 }
 
+/**
+ * Ensures that the replication slot is created on upstream.
+ *
+ * Note that this performed in its own transaction because:
+ *
+ * * pg_create_logical_replication_slot() cannot be called in a transaction with other
+ *   writes. This is presumably because it modifies a top-level table of the Postgres instance.
+ *
+ * * Creating the slot explicitly on upstream, rather than implicitly from the `CREATE SUBSCRIPTION`
+ *   command on the replica, allows the latter to be performed transactionally with the rest of
+ *   the replica setup. Postgres will otherwise fail with the error:
+ *   ```
+ *   PostgresError: CREATE SUBSCRIPTION ... WITH (create_slot = true) cannot run inside a transaction block
+ *   ```
+ */
 function ensureReplicationSlot(
   lc: LogContext,
   upstreamDB: postgres.Sql,

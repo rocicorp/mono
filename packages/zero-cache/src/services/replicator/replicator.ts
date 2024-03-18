@@ -4,12 +4,18 @@ import type {Service} from '../service.js';
 import {initSyncSchema} from './schema/sync-schema.js';
 
 export class Replicator implements Service {
-  readonly id = 'replicator';
+  readonly id: string;
   readonly #lc: LogContext;
   readonly #upstreamUri: string;
   readonly #syncReplica: postgres.Sql;
 
-  constructor(lc: LogContext, upstreamUri: string, syncReplicaUri: string) {
+  constructor(
+    lc: LogContext,
+    replicaID: string,
+    upstreamUri: string,
+    syncReplicaUri: string,
+  ) {
+    this.id = replicaID;
     this.#lc = lc
       .withContext('component', 'Replicator')
       .withContext('serviceID', this.id);
@@ -22,7 +28,12 @@ export class Replicator implements Service {
   }
 
   async start() {
-    await initSyncSchema(this.#lc, this.#syncReplica, this.#upstreamUri);
+    await initSyncSchema(
+      this.#lc,
+      this.id,
+      this.#syncReplica,
+      this.#upstreamUri,
+    );
   }
   async stop() {}
 }
