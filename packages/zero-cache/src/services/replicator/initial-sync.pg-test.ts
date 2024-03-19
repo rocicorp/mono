@@ -15,7 +15,7 @@ import {
   startPostgresReplication,
   waitForInitialDataSynchronization,
 } from './initial-sync.js';
-import {getPublishedTables} from './tables/published.js';
+import {getPublicationInfo} from './tables/published.js';
 import type {TableSpec} from './tables/specs.js';
 
 const SUB = 'test_sync';
@@ -31,7 +31,7 @@ const ZERO_CLIENTS_SPEC: TableSpec = {
     ['last_mutation_id']: {
       characterMaximumLength: null,
       columnDefault: null,
-      dataType: 'bigint',
+      dataType: 'int8',
     },
   },
   name: 'clients',
@@ -102,12 +102,12 @@ describe('replicator/initial-sync', () => {
             ['issue_id']: {
               characterMaximumLength: null,
               columnDefault: null,
-              dataType: 'integer',
+              dataType: 'int4',
             },
             ['org_id']: {
               characterMaximumLength: null,
               columnDefault: null,
-              dataType: 'integer',
+              dataType: 'int4',
             },
           },
           name: 'issues',
@@ -143,7 +143,7 @@ describe('replicator/initial-sync', () => {
             ['user_id']: {
               characterMaximumLength: null,
               columnDefault: null,
-              dataType: 'integer',
+              dataType: 'int4',
             },
             // Note: password is not published
             ['handle']: {
@@ -232,11 +232,11 @@ describe('replicator/initial-sync', () => {
         ),
       );
 
-      const published = await getPublishedTables(upstream, 'zero_');
-      expect(published).toEqual(c.published);
+      const published = await getPublicationInfo(upstream, 'zero_');
+      expect(published.tables).toEqual(c.published);
 
-      const synced = await getPublishedTables(replica, 'synced_tables');
-      expect(synced).toMatchObject(c.published);
+      const synced = await getPublicationInfo(replica, 'synced_tables');
+      expect(synced.tables).toMatchObject(c.published);
 
       await replica.begin(tx =>
         waitForInitialDataSynchronization(

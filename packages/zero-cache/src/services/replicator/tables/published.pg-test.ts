@@ -8,21 +8,23 @@ import {
 } from '@jest/globals';
 import type postgres from 'postgres';
 import {TestDBs} from '../../../test/db.js';
-import {getPublishedTables} from './published.js';
-import type {TableSpec} from './specs.js';
+import {PublicationInfo, getPublicationInfo} from './published.js';
 
 describe('tables/published', () => {
   type Case = {
     name: string;
     setupQuery: string;
-    expectedResult: Record<string, TableSpec>;
+    expectedResult: PublicationInfo;
   };
 
   const cases: Case[] = [
     {
       name: 'Nothing published',
       setupQuery: `CREATE SCHEMA zero`,
-      expectedResult: {},
+      expectedResult: {
+        publications: [],
+        tables: {},
+      },
     },
     {
       name: 'zero.clients',
@@ -35,22 +37,33 @@ describe('tables/published', () => {
       );
       `,
       expectedResult: {
-        ['zero.clients']: {
-          schema: 'zero',
-          name: 'clients',
-          columns: {
-            ['client_id']: {
-              dataType: 'character varying',
-              characterMaximumLength: 180,
-              columnDefault: null,
-            },
-            ['last_mutation_id']: {
-              dataType: 'bigint',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
+        publications: [
+          {
+            pubname: 'zero_all',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
           },
-          primaryKey: ['client_id'],
+        ],
+        tables: {
+          ['zero.clients']: {
+            schema: 'zero',
+            name: 'clients',
+            columns: {
+              ['client_id']: {
+                dataType: 'varchar',
+                characterMaximumLength: 180,
+                columnDefault: null,
+              },
+              ['last_mutation_id']: {
+                dataType: 'int8',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+            },
+            primaryKey: ['client_id'],
+          },
         },
       },
     },
@@ -72,57 +85,68 @@ describe('tables/published', () => {
       CREATE PUBLICATION zero_data FOR TABLE test.users;
       `,
       expectedResult: {
-        ['test.users']: {
-          schema: 'test',
-          name: 'users',
-          columns: {
-            ['user_id']: {
-              dataType: 'integer',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
-            handle: {
-              characterMaximumLength: null,
-              columnDefault: null,
-              dataType: 'text',
-            },
-            address: {
-              characterMaximumLength: null,
-              columnDefault: null,
-              dataType: 'text[]',
-            },
-            ['timez']: {
-              dataType: 'timestamp with time zone[]',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
-            ['bigint_array']: {
-              characterMaximumLength: null,
-              columnDefault: null,
-              dataType: 'bigint[]',
-            },
-            ['bool_array']: {
-              characterMaximumLength: null,
-              columnDefault: null,
-              dataType: 'boolean[]',
-            },
-            ['real_array']: {
-              characterMaximumLength: null,
-              columnDefault: null,
-              dataType: 'real[]',
-            },
-            ['int_array']: {
-              dataType: 'integer[]',
-              characterMaximumLength: null,
-              columnDefault: "'{1,2,3}'::integer[]",
-            },
-            ['json_val']: {
-              dataType: 'jsonb',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
+        publications: [
+          {
+            pubname: 'zero_data',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
           },
-          primaryKey: ['user_id'],
+        ],
+        tables: {
+          ['test.users']: {
+            schema: 'test',
+            name: 'users',
+            columns: {
+              ['user_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+              handle: {
+                characterMaximumLength: null,
+                columnDefault: null,
+                dataType: 'text',
+              },
+              address: {
+                characterMaximumLength: null,
+                columnDefault: null,
+                dataType: 'text[]',
+              },
+              ['timez']: {
+                dataType: 'timestamptz[]',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+              ['bigint_array']: {
+                characterMaximumLength: null,
+                columnDefault: null,
+                dataType: 'int8[]',
+              },
+              ['bool_array']: {
+                characterMaximumLength: null,
+                columnDefault: null,
+                dataType: 'bool[]',
+              },
+              ['real_array']: {
+                characterMaximumLength: null,
+                columnDefault: null,
+                dataType: 'float4[]',
+              },
+              ['int_array']: {
+                dataType: 'int4[]',
+                characterMaximumLength: null,
+                columnDefault: "'{1,2,3}'::integer[]",
+              },
+              ['json_val']: {
+                dataType: 'jsonb',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+            },
+            primaryKey: ['user_id'],
+          },
         },
       },
     },
@@ -143,32 +167,43 @@ describe('tables/published', () => {
       CREATE PUBLICATION zero_data FOR TABLE test.users (user_id, timez, int_array, json_val);
       `,
       expectedResult: {
-        ['test.users']: {
-          schema: 'test',
-          name: 'users',
-          columns: {
-            ['user_id']: {
-              dataType: 'integer',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
-            ['timez']: {
-              dataType: 'timestamp with time zone',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
-            ['int_array']: {
-              dataType: 'integer[]',
-              characterMaximumLength: null,
-              columnDefault: "'{1,2,3}'::integer[]",
-            },
-            ['json_val']: {
-              dataType: 'jsonb',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
+        publications: [
+          {
+            pubname: 'zero_data',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
           },
-          primaryKey: ['user_id'],
+        ],
+        tables: {
+          ['test.users']: {
+            schema: 'test',
+            name: 'users',
+            columns: {
+              ['user_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+              ['timez']: {
+                dataType: 'timestamptz',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+              ['int_array']: {
+                dataType: 'int4[]',
+                characterMaximumLength: null,
+                columnDefault: "'{1,2,3}'::integer[]",
+              },
+              ['json_val']: {
+                dataType: 'jsonb',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+            },
+            primaryKey: ['user_id'],
+          },
         },
       },
     },
@@ -186,32 +221,43 @@ describe('tables/published', () => {
       CREATE PUBLICATION zero_keys FOR ALL TABLES;
       `,
       expectedResult: {
-        ['test.issues']: {
-          schema: 'test',
-          name: 'issues',
-          columns: {
-            ['issue_id']: {
-              dataType: 'integer',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
-            ['description']: {
-              dataType: 'text',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
-            ['org_id']: {
-              dataType: 'integer',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
-            ['component_id']: {
-              dataType: 'integer',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
+        publications: [
+          {
+            pubname: 'zero_keys',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
           },
-          primaryKey: ['org_id', 'component_id', 'issue_id'],
+        ],
+        tables: {
+          ['test.issues']: {
+            schema: 'test',
+            name: 'issues',
+            columns: {
+              ['issue_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+              ['description']: {
+                dataType: 'text',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+              ['org_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+              ['component_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+            },
+            primaryKey: ['org_id', 'component_id', 'issue_id'],
+          },
         },
       },
     },
@@ -242,66 +288,84 @@ describe('tables/published', () => {
       );
       `,
       expectedResult: {
-        ['test.issues']: {
-          schema: 'test',
-          name: 'issues',
-          columns: {
-            ['issue_id']: {
-              dataType: 'integer',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
-            ['description']: {
-              dataType: 'text',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
-            ['org_id']: {
-              dataType: 'integer',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
-            ['component_id']: {
-              dataType: 'integer',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
+        publications: [
+          {
+            pubname: 'zero_meta',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
           },
-          primaryKey: ['org_id', 'component_id', 'issue_id'],
-        },
-        ['test.users']: {
-          schema: 'test',
-          name: 'users',
-          columns: {
-            ['user_id']: {
-              dataType: 'integer',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
-            ['handle']: {
-              dataType: 'text',
-              characterMaximumLength: null,
-              columnDefault: "'foo'::text",
-            },
+          {
+            pubname: 'zero_tables',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
           },
-          primaryKey: ['user_id'],
-        },
-        ['zero.clients']: {
-          schema: 'zero',
-          name: 'clients',
-          columns: {
-            ['client_id']: {
-              dataType: 'character varying',
-              characterMaximumLength: 180,
-              columnDefault: null,
+        ],
+        tables: {
+          ['test.issues']: {
+            schema: 'test',
+            name: 'issues',
+            columns: {
+              ['issue_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+              ['description']: {
+                dataType: 'text',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+              ['org_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+              ['component_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
             },
-            ['last_mutation_id']: {
-              dataType: 'bigint',
-              characterMaximumLength: null,
-              columnDefault: null,
-            },
+            primaryKey: ['org_id', 'component_id', 'issue_id'],
           },
-          primaryKey: ['client_id'],
+          ['test.users']: {
+            schema: 'test',
+            name: 'users',
+            columns: {
+              ['user_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+              ['handle']: {
+                dataType: 'text',
+                characterMaximumLength: null,
+                columnDefault: "'foo'::text",
+              },
+            },
+            primaryKey: ['user_id'],
+          },
+          ['zero.clients']: {
+            schema: 'zero',
+            name: 'clients',
+            columns: {
+              ['client_id']: {
+                dataType: 'varchar',
+                characterMaximumLength: 180,
+                columnDefault: null,
+              },
+              ['last_mutation_id']: {
+                dataType: 'int8',
+                characterMaximumLength: null,
+                columnDefault: null,
+              },
+            },
+            primaryKey: ['client_id'],
+          },
         },
       },
     },
@@ -325,7 +389,7 @@ describe('tables/published', () => {
     test(c.name, async () => {
       await db.unsafe(c.setupQuery);
 
-      const tables = await getPublishedTables(db, 'zero_');
+      const tables = await getPublicationInfo(db, 'zero_');
       expect(tables).toEqual(c.expectedResult);
     });
   }

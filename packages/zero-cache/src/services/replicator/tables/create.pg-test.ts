@@ -9,7 +9,7 @@ import {
 import type postgres from 'postgres';
 import {TestDBs} from '../../../test/db.js';
 import {createTableStatement} from './create.js';
-import {getPublishedTables} from './published.js';
+import {getPublicationInfo} from './published.js';
 import type {TableSpec} from './specs.js';
 
 describe('tables/create', () => {
@@ -26,12 +26,12 @@ describe('tables/create', () => {
         name: 'clients',
         columns: {
           ['client_id']: {
-            dataType: 'character varying',
+            dataType: 'varchar',
             characterMaximumLength: 180,
             columnDefault: null,
           },
           ['last_mutation_id']: {
-            dataType: 'bigint',
+            dataType: 'int8',
             characterMaximumLength: null,
             columnDefault: null,
           },
@@ -46,14 +46,14 @@ describe('tables/create', () => {
         name: 'users',
         columns: {
           ['user_id']: {
-            dataType: 'integer',
+            dataType: 'int4',
             characterMaximumLength: null,
             columnDefault: null,
           },
           handle: {
             characterMaximumLength: 40,
             columnDefault: "'@foo'::text",
-            dataType: 'character varying',
+            dataType: 'varchar',
           },
           address: {
             characterMaximumLength: null,
@@ -61,27 +61,27 @@ describe('tables/create', () => {
             dataType: 'text[]',
           },
           ['timez']: {
-            dataType: 'timestamp with time zone[]',
+            dataType: 'timestamptz[]',
             characterMaximumLength: null,
             columnDefault: null,
           },
           ['bigint_array']: {
             characterMaximumLength: null,
             columnDefault: null,
-            dataType: 'bigint[]',
+            dataType: 'int8[]',
           },
           ['bool_array']: {
             characterMaximumLength: null,
             columnDefault: null,
-            dataType: 'boolean[]',
+            dataType: 'bool[]',
           },
           ['real_array']: {
             characterMaximumLength: null,
             columnDefault: null,
-            dataType: 'real[]',
+            dataType: 'float4[]',
           },
           ['int_array']: {
-            dataType: 'integer[]',
+            dataType: 'int4[]',
             characterMaximumLength: null,
             columnDefault: "'{1,2,3}'::integer[]",
           },
@@ -115,10 +115,10 @@ describe('tables/create', () => {
     test(c.name, async () => {
       await db.unsafe(createTableStatement(c.tableSpec));
 
-      const tables = await getPublishedTables(db, 'zero_');
-      expect(tables[`${c.tableSpec.schema}.${c.tableSpec.name}`]).toEqual(
-        c.tableSpec,
-      );
+      const published = await getPublicationInfo(db, 'zero_');
+      expect(
+        published.tables[`${c.tableSpec.schema}.${c.tableSpec.name}`],
+      ).toEqual(c.tableSpec);
     });
   }
 });
