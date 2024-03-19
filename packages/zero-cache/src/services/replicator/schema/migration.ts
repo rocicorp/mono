@@ -4,8 +4,10 @@ import {assert} from 'shared/src/asserts.js';
 import {randInt} from 'shared/src/rand.js';
 import * as v from 'shared/src/valita.js';
 
-// A PreMigrationFn executes logic outside of a database transaction, and is
-// suitable for potentially long running polling operations.
+/**
+ * A PreMigrationFn executes logic outside of a database transaction, and is
+ * suitable for potentially long running polling operations.
+ */
 type PreMigrationFn = (
   log: LogContext,
   replicaID: string,
