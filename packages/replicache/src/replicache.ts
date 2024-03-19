@@ -36,9 +36,12 @@ import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.js';
 import {assertHash, emptyHash, Hash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {IndexDefinitions} from './index-defs.js';
-import {newIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
+import {
+  dropIDBStoreWithMemFallback,
+  newIDBStoreWithMemFallback,
+} from './kv/idb-store-with-mem-fallback.js';
 import {dropMemStore, MemStore} from './kv/mem-store.js';
-import type {KVStoreProvider, CreateStore} from './kv/store.js';
+import type {StoreProvider} from './kv/store.js';
 import {MutationRecovery} from './mutation-recovery.js';
 import {initNewClientChannel} from './new-client-channel.js';
 import {
@@ -102,7 +105,6 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.js';
-import {dropIDBStoreWithMemFallback} from './kv/idb-util.js';
 
 declare const TESTING: boolean;
 export interface TestingReplicacheWithTesting extends Replicache {
@@ -289,13 +291,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    */
   #isClientGroupDisabled = false;
 
-  /**
-   * Factory function to create the persisted stores. Defaults to use `new
-   * IDBStore(name)`.
-   */
-  readonly #createStore: CreateStore;
-
-  readonly #dropStore: (name: string) => Promise<void>;
+  readonly #kvStoreProvider: StoreProvider;
 
   #lastMutationID: number = 0;
 
@@ -531,15 +527,12 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this.#lc,
     );
 
-    const kVStoreProvider = getKVStoreProvider(
-      this.#lc,
-      options.experimentalKvStore,
-    );
-    const perKVStore = kVStoreProvider.create(this.idbName);
+    const kvStoreProvider = getKVStoreProvider(this.#lc, options.kvStore);
+    this.#kvStoreProvider = kvStoreProvider;
 
-    this.#createStore = kVStoreProvider.create;
-    this.#idbDatabases = new IDBDatabasesStore(kVStoreProvider.create);
-    this.#dropStore = kVStoreProvider.drop;
+    const perKVStore = kvStoreProvider.create(this.idbName);
+
+    this.#idbDatabases = new IDBDatabasesStore(kvStoreProvider.create);
     this.#perdag = new StoreImpl(perKVStore, uuidChunkHasher, assertHash);
     this.#memdag = new LazyStore(
       this.#perdag,
@@ -688,7 +681,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this.#idbDatabases,
       this.#lc,
       signal,
-      this.#dropStore,
+      this.#kvStoreProvider.drop,
     );
     initClientGroupGC(this.#perdag, this.#lc, signal);
     initNewClientChannel(
@@ -1732,7 +1725,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       this.#perdag,
       this.#idbDatabase,
       this.#idbDatabases,
-      this.#createStore,
+      this.#kvStoreProvider.create,
     );
     if (TESTING) {
       void getTestInstance(this).onRecoverMutations(result);
@@ -1781,9 +1774,9 @@ function createMemStore(name: string): MemStore {
 
 export function getKVStoreProvider(
   lc: LogContext,
-  experimentalKvStore: 'mem' | 'idb' | KVStoreProvider | undefined,
-): KVStoreProvider {
-  switch (experimentalKvStore) {
+  kvStore: 'mem' | 'idb' | StoreProvider | undefined,
+): StoreProvider {
+  switch (kvStore) {
     case 'idb':
       return {
         create: (name: string) => newIDBStoreWithMemFallback(lc, name),
@@ -1800,6 +1793,6 @@ export function getKVStoreProvider(
         drop: dropIDBStoreWithMemFallback,
       };
     default:
-      return experimentalKvStore;
+      return kvStore;
   }
 }

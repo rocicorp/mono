@@ -2,8 +2,8 @@ import {expect} from 'chai';
 import * as sinon from 'sinon';
 import {withRead, withWrite} from '../with-transactions.js';
 import {IDBNotFoundError, IDBStore} from './idb-store.js';
-import {dropIDBStoreWithMemFallback} from './idb-util.js';
 import {runAll} from './store-test-util.js';
+import {dropIDBStoreWithMemFallback} from './idb-store-with-mem-fallback.js';
 
 async function newRandomIDBStore() {
   const name = `test-idbstore-${Math.random()}`;

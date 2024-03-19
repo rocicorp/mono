@@ -28,12 +28,8 @@ export type {HTTPRequestInfo} from './http-request-info.js';
 export type {IndexDefinition, IndexDefinitions} from './index-defs.js';
 export type {IterableUnion} from './iterable-union.js';
 export {IDBNotFoundError} from './kv/idb-store.js';
-export {
-  MemStore as MemKVStore,
-  dropMemStore as dropKVMemStore,
-} from './kv/mem-store.js';
 export type {
-  KVStoreProvider,
+  StoreProvider as KVStoreProvider,
   DropStore as DropKVStore,
   CreateStore as CreateKVStore,
   Read as KVRead,

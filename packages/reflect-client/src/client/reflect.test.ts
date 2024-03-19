@@ -9,12 +9,7 @@ import type {
   ReadonlyJSONValue,
   WriteTransaction,
 } from 'reflect-shared/src/mod.js';
-import {
-  dropKVMemStore,
-  MemKVStore,
-  PullRequestV1,
-  PushRequestV1,
-} from 'replicache';
+import type {PullRequestV1, PushRequestV1} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
 import type {JSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
@@ -1599,13 +1594,6 @@ test('kvStore option', async () => {
   await t('idb', 'kv-store-test-user-id-1', true, 'bar');
   await t('mem', 'kv-store-test-user-id-2', false);
   await t(undefined, 'kv-store-test-user-id-3', false);
-
-  const kvStore = {
-    create: (name: string) => new MemKVStore(name),
-    drop: (name: string) => dropKVMemStore(name),
-  };
-  await t(kvStore, 'kv-store-test-user-id-4', false, undefined);
-  await t(kvStore, 'kv-store-test-user-id-4', false, 'bar');
 });
 
 test('Close during connect should sleep', async () => {

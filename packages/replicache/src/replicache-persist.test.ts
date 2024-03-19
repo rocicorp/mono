@@ -23,7 +23,6 @@ import {StoreImpl} from './dag/store-impl.js';
 import type {Store} from './dag/store.js';
 import {assertHash} from './hash.js';
 import {IDBNotFoundError, IDBStore} from './kv/idb-store.js';
-import {dropIDBStoreWithMemFallback} from './kv/idb-util.js';
 import {
   ClientGroup,
   deleteClientGroup,
@@ -38,6 +37,7 @@ import {
 import type {MutatorDefs} from './replicache.js';
 import type {WriteTransaction} from './transactions.js';
 import {withRead, withWriteNoImplicitCommit} from './with-transactions.js';
+import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
 
 initReplicacheTesting();
 

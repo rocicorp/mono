@@ -20,6 +20,10 @@ export function dropMemStore(name: string): Promise<void> {
   return promiseVoid;
 }
 
+export function hasMemStore(name: string): boolean {
+  return stores.has(name);
+}
+
 /**
  * A named in-memory Store implementation.
  *

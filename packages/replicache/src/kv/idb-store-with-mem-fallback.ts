@@ -1,7 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import {IDBStore} from './idb-store.js';
-import {MemStore} from './mem-store.js';
+import {MemStore, dropMemStore} from './mem-store.js';
 import type {Read, Store, Write} from './store.js';
+import {promiseVoid} from '../resolved-promises.js';
 
 /**
  * This store uses an {@link IDBStore} by default. If the {@link IDBStore} fails
@@ -64,7 +65,7 @@ export class IDBStoreWithMemFallback implements Store {
   }
 }
 
-export function isFirefoxPrivateBrowsingError(e: unknown): e is DOMException {
+function isFirefoxPrivateBrowsingError(e: unknown): e is DOMException {
   return (
     isFirefox() &&
     e instanceof DOMException &&
@@ -74,7 +75,7 @@ export function isFirefoxPrivateBrowsingError(e: unknown): e is DOMException {
   );
 }
 
-export function isFirefox(): boolean {
+function isFirefox(): boolean {
   return navigator.userAgent.includes('Firefox');
 }
 
@@ -86,4 +87,26 @@ export function newIDBStoreWithMemFallback(
     return new IDBStoreWithMemFallback(lc, name);
   }
   return new IDBStore(name);
+}
+
+export function dropIDBStoreWithMemFallback(name: string): Promise<void> {
+  if (!isFirefox()) {
+    return dropIDBStore(name);
+  }
+  try {
+    return dropIDBStore(name);
+  } catch (e) {
+    if (isFirefoxPrivateBrowsingError(e)) {
+      return dropMemStore(name);
+    }
+  }
+  return promiseVoid;
+}
+
+function dropIDBStore(name: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(name);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
 }

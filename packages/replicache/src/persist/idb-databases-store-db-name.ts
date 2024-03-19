@@ -1,4 +1,4 @@
-import {dropIDBStoreWithMemFallback} from '../kv/idb-util.js';
+import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
 import {uuid} from '../uuid.js';
 
 const IDB_DATABASES_VERSION = 0;

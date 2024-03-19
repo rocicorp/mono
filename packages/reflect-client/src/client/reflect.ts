@@ -363,7 +363,7 @@ export class Reflect<MD extends MutatorDefs> {
         minDelayMs: 0,
       },
       licenseKey: 'reflect-client-static-key',
-      experimentalKvStore: kvStore,
+      kvStore,
     };
     let internalAPI: ReplicacheInternalAPI;
     const replicacheInternalOptions = {

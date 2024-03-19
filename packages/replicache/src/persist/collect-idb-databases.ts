@@ -1,4 +1,10 @@
-import {LogContext} from '@rocicorp/logger';
+import {
+  LogContext,
+  LogLevel,
+  LogSink,
+  TeeLogSink,
+  consoleLogSink,
+} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
 import {uuidChunkHasher} from '../dag/chunk.js';
@@ -6,10 +12,8 @@ import {StoreImpl} from '../dag/store-impl.js';
 import type {Store} from '../dag/store.js';
 import {FormatVersion} from '../format-version.js';
 import {assertHash} from '../hash.js';
-import {newIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
 import {IDBStore} from '../kv/idb-store.js';
-import {dropIDBStoreWithMemFallback} from '../kv/idb-util.js';
-import type {KVStoreProvider, CreateStore, DropStore} from '../kv/store.js';
+import type {StoreProvider, DropStore} from '../kv/store.js';
 import {withRead} from '../with-transactions.js';
 import {
   clientGroupHasPendingMutations,
@@ -202,16 +206,27 @@ function allClientsOlderThan(
  * @param dbName
  * @param createKVStore
  */
+
 export async function dropDatabase(
   dbName: string,
-  createKVStore: CreateStore = name =>
-    newIDBStoreWithMemFallback(new LogContext(), name),
-  dropStore: DropStore = dropIDBStoreWithMemFallback,
+  opts?:
+    | {
+        kvStore?: 'idb' | 'mem' | StoreProvider | undefined;
+        logLevel?: LogLevel | undefined;
+        logSinks?: LogSink[] | undefined;
+      }
+    | undefined,
 ) {
+  const logLevel = opts?.logLevel ? opts.logLevel : 'info';
+  const logSinks = opts?.logSinks ? opts.logSinks : [consoleLogSink];
+  const logSink =
+    logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
+  const logContext = new LogContext(logLevel, {name}, logSink);
+  const kvStoreProvider = getKVStoreProvider(logContext, opts?.kvStore);
   await dropDatabaseInternal(
     dbName,
-    new IDBDatabasesStore(createKVStore),
-    dropStore,
+    new IDBDatabasesStore(kvStoreProvider.create),
+    kvStoreProvider.drop,
   );
 }
 
@@ -222,16 +237,26 @@ export async function dropDatabase(
  * and any errors encountered while dropping.
  */
 export async function dropAllDatabases(
-  kvStore: 'idb' | 'mem' | KVStoreProvider = 'idb',
+  opts?:
+    | {
+        kvStore?: 'idb' | 'mem' | StoreProvider | undefined;
+        logLevel?: LogLevel | undefined;
+        logSinks?: LogSink[] | undefined;
+      }
+    | undefined,
 ): Promise<{
   dropped: string[];
   errors: unknown[];
 }> {
-  const kvStoreProvider = getKVStoreProvider(new LogContext(), kvStore);
+  const logLevel = opts?.logLevel ? opts.logLevel : 'info';
+  const logSinks = opts?.logSinks ? opts.logSinks : [consoleLogSink];
+  const logSink =
+    logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
+  const logContext = new LogContext(logLevel, {name}, logSink);
+  const kvStoreProvider = getKVStoreProvider(logContext, opts?.kvStore);
   const store = new IDBDatabasesStore(kvStoreProvider.create);
   const databases = await store.getDatabases();
   const dbNames = Object.values(databases).map(db => db.name);
-
   const result = await dropDatabases(store, dbNames, kvStoreProvider.drop);
   return result;
 }
@@ -244,8 +269,16 @@ export async function dropAllDatabases(
  *
  * @deprecated Use `dropAllDatabases` instead.
  */
-export function deleteAllReplicacheData(kVStore?: KVStoreProvider) {
-  return dropAllDatabases(kVStore);
+export function deleteAllReplicacheData(
+  opts?:
+    | {
+        kvStore?: 'idb' | 'mem' | StoreProvider | undefined;
+        logLevel?: LogLevel | undefined;
+        logSinks?: LogSink[] | undefined;
+      }
+    | undefined,
+) {
+  return dropAllDatabases(opts);
 }
 
 async function anyPendingMutationsInClientGroups(
