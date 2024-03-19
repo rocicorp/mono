@@ -217,11 +217,7 @@ export async function dropDatabase(
       }
     | undefined,
 ) {
-  const logLevel = opts?.logLevel ? opts.logLevel : 'info';
-  const logSinks = opts?.logSinks ? opts.logSinks : [consoleLogSink];
-  const logSink =
-    logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
-  const logContext = new LogContext(logLevel, {name}, logSink);
+  const logContext = createLogContext('dropDatabase', opts);
   const kvStoreProvider = getKVStoreProvider(logContext, opts?.kvStore);
   await dropDatabaseInternal(
     dbName,
@@ -248,17 +244,36 @@ export async function dropAllDatabases(
   dropped: string[];
   errors: unknown[];
 }> {
-  const logLevel = opts?.logLevel ? opts.logLevel : 'info';
-  const logSinks = opts?.logSinks ? opts.logSinks : [consoleLogSink];
-  const logSink =
-    logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
-  const logContext = new LogContext(logLevel, {name}, logSink);
+  const logContext = createLogContext('dropAllDatabases', opts);
   const kvStoreProvider = getKVStoreProvider(logContext, opts?.kvStore);
   const store = new IDBDatabasesStore(kvStoreProvider.create);
   const databases = await store.getDatabases();
   const dbNames = Object.values(databases).map(db => db.name);
   const result = await dropDatabases(store, dbNames, kvStoreProvider.drop);
   return result;
+}
+
+/**
+ * Creates a LogContext
+ *
+ * @param opts - Optional logging configuration options.
+ * @param operation - A unique identifier for the operation.
+ * @returns A LogContext instance configured with the provided options.
+ */
+function createLogContext(
+  operation: string,
+  opts?:
+    | {
+        logLevel?: LogLevel | undefined;
+        logSinks?: LogSink[] | undefined;
+      }
+    | undefined,
+): LogContext {
+  const logLevel = opts?.logLevel || 'info';
+  const logSinks = opts?.logSinks || [consoleLogSink];
+  const logSink =
+    logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
+  return new LogContext(logLevel, {[operation]: undefined}, logSink);
 }
 
 /**

@@ -1778,6 +1778,7 @@ export function getKVStoreProvider(
 ): StoreProvider {
   switch (kvStore) {
     case 'idb':
+    case undefined:
       return {
         create: (name: string) => newIDBStoreWithMemFallback(lc, name),
         drop: dropIDBStoreWithMemFallback,
@@ -1786,11 +1787,6 @@ export function getKVStoreProvider(
       return {
         create: createMemStore,
         drop: (name: string) => dropMemStore(name),
-      };
-    case undefined:
-      return {
-        create: (name: string) => newIDBStoreWithMemFallback(lc, name),
-        drop: dropIDBStoreWithMemFallback,
       };
     default:
       return kvStore;
