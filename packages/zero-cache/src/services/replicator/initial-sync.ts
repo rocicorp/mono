@@ -8,7 +8,6 @@ import {getPublishedTables} from './tables/published.js';
 import type {ColumnSpec, TableSpec} from './tables/specs.js';
 
 const PUB_PREFIX = 'zero_';
-const SLOT_PREFIX = `zero_slot_`;
 
 const publicationSchema = v.object({
   pubname: v.string(),
@@ -32,6 +31,10 @@ type Published = {
   tables: Record<string, TableSpec>;
 };
 
+export function replicationSlot(replicaID: string): string {
+  return `zero_slot_${replicaID}`;
+}
+
 /**
  * Starts Postgres logical replication from the upstream DB to the Sync Replica.
  * Specifically, we rely on Postgres to perform the "initial data synchronization" phase
@@ -50,7 +53,7 @@ export async function startPostgresReplication(
   subName = 'zero_sync',
 ) {
   lc.info?.(`Starting initial data synchronization from ${upstreamUri}`);
-  const slotName = `${SLOT_PREFIX}${replicaID}`;
+  const slotName = replicationSlot(replicaID);
   const published = await setupUpstream(lc, upstreamUri, slotName);
 
   lc.info?.(`Upstream is setup for publishing`, published);

@@ -11,6 +11,7 @@ import {TestDBs, expectTables, initDB} from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import {
   handoffPostgresReplication,
+  replicationSlot,
   startPostgresReplication,
   waitForInitialDataSynchronization,
 } from './initial-sync.js';
@@ -61,7 +62,9 @@ describe('replicator/initial-sync', () => {
     {
       name: 'replication slot already exists',
       setupUpstreamQuery: `
-        SELECT * FROM pg_create_logical_replication_slot('test_slot', 'pgoutput');
+        SELECT * FROM pg_create_logical_replication_slot('${replicationSlot(
+          REPLICA_ID,
+        )}', 'pgoutput');
       `,
       published: {
         ['zero.clients']: ZERO_CLIENTS_SPEC,
@@ -198,12 +201,12 @@ describe('replicator/initial-sync', () => {
     });
     await upstream.begin(async tx => {
       const slots = await tx`
-        SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${
-          'zero_slot_' + REPLICA_ID
-        }`;
+        SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${replicationSlot(
+          REPLICA_ID,
+        )}`;
       if (slots.count > 0) {
         await tx`
-          SELECT pg_drop_replication_slot(${'zero_slot_' + REPLICA_ID});`;
+          SELECT pg_drop_replication_slot(${replicationSlot(REPLICA_ID)});`;
       }
     });
     await testDBs.drop(upstream, replica);
@@ -272,10 +275,10 @@ describe('replicator/initial-sync', () => {
 
       // Slot should still exist.
       const slots =
-        await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${
-          'zero_slot_' + REPLICA_ID
-        }`;
-      expect(slots[0]).toEqual({slotName: `zero_slot_${REPLICA_ID}`});
+        await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${replicationSlot(
+          REPLICA_ID,
+        )}`;
+      expect(slots[0]).toEqual({slotName: replicationSlot(REPLICA_ID)});
     }, 10000);
   }
 });
