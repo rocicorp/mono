@@ -12,9 +12,11 @@ import {
 
 const SCHEMA_VERSION_MIGRATION_MAP: VersionMigrationMap = {
   1: {minSafeRollbackVersion: 1}, // The inaugural v1 understands the rollback limit.
-  2: startPostgresReplication,
-  3: waitForInitialDataSynchronization,
-  4: handoffPostgresReplication,
+  2: {run: startPostgresReplication},
+  3: {
+    pre: waitForInitialDataSynchronization,
+    run: handoffPostgresReplication,
+  },
 };
 
 export async function initSyncSchema(

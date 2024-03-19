@@ -38,8 +38,8 @@ describe('replicator/sync-schema', () => {
         ['zero.schema_meta']: [
           {
             // Update these as necessary.
-            version: 4,
-            maxVersion: 4,
+            version: 3,
+            maxVersion: 3,
             minSafeRollbackVersion: 1,
             lock: 'v', // Internal column, always 'v'
           },
@@ -66,8 +66,8 @@ describe('replicator/sync-schema', () => {
         ['zero.schema_meta']: [
           {
             // Update these as necessary.
-            version: 4,
-            maxVersion: 4,
+            version: 3,
+            maxVersion: 3,
             minSafeRollbackVersion: 1,
             lock: 'v', // Internal column, always 'v'
           },

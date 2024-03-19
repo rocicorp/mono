@@ -29,9 +29,9 @@ describe('schema/migration', () => {
 
   const logMigrationHistory =
     (name: string) =>
-    async (_log: LogContext, _id: string, tx: postgres.TransactionSql) => {
-      const meta = await getSyncSchemaMeta(tx);
-      await tx`INSERT INTO migration_history ${tx({
+    async (_log: LogContext, _id: string, sql: postgres.Sql) => {
+      const meta = await getSyncSchemaMeta(sql);
+      await sql`INSERT INTO migration_history ${sql({
         event: `${name}-at(${meta.version})`,
       })}`;
     };
@@ -45,13 +45,17 @@ describe('schema/migration', () => {
         minSafeRollbackVersion: 1,
       },
       migrations: {
-        5: logMigrationHistory('second'),
-        4: logMigrationHistory('first'),
+        5: {
+          pre: logMigrationHistory('pre-second'),
+          run: logMigrationHistory('second'),
+        },
+        4: {run: logMigrationHistory('first')},
         7: {minSafeRollbackVersion: 2},
-        8: logMigrationHistory('third'),
+        8: {run: logMigrationHistory('third')},
       },
       expectedMigrationHistory: [
         {event: 'first-at(2)'},
+        {event: 'pre-second-at(4)'},
         {event: 'second-at(4)'},
         {event: 'third-at(7)'},
       ],
@@ -63,7 +67,7 @@ describe('schema/migration', () => {
     },
     {
       name: 'initial migration',
-      migrations: {1: () => Promise.resolve()},
+      migrations: {1: {run: () => Promise.resolve()}},
       postSchema: {
         version: 1,
         maxVersion: 1,
@@ -77,7 +81,7 @@ describe('schema/migration', () => {
         maxVersion: 12,
         minSafeRollbackVersion: 6,
       },
-      migrations: {13: () => Promise.resolve()},
+      migrations: {13: {run: () => Promise.resolve()}},
       postSchema: {
         version: 13,
         maxVersion: 13,
@@ -91,7 +95,7 @@ describe('schema/migration', () => {
         maxVersion: 14,
         minSafeRollbackVersion: 6,
       },
-      migrations: {13: () => Promise.resolve()},
+      migrations: {13: {run: () => Promise.resolve()}},
       postSchema: {
         version: 13,
         maxVersion: 14,
@@ -105,7 +109,7 @@ describe('schema/migration', () => {
         maxVersion: 10,
         minSafeRollbackVersion: 8,
       },
-      migrations: {8: () => Promise.reject('should not be run')},
+      migrations: {8: {run: () => Promise.reject('should not be run')}},
       postSchema: {
         version: 8,
         maxVersion: 10,
@@ -119,7 +123,7 @@ describe('schema/migration', () => {
         maxVersion: 10,
         minSafeRollbackVersion: 8,
       },
-      migrations: {7: () => Promise.reject('should not be run')},
+      migrations: {7: {run: () => Promise.reject('should not be run')}},
       postSchema: {
         version: 10,
         maxVersion: 10,
@@ -164,8 +168,8 @@ describe('schema/migration', () => {
         minSafeRollbackVersion: 6,
       },
       migrations: {
-        13: logMigrationHistory('successful'),
-        14: () => Promise.reject('fails to get to 14'),
+        13: {run: logMigrationHistory('successful')},
+        14: {run: () => Promise.reject('fails to get to 14')},
       },
       postSchema: {
         version: 13,

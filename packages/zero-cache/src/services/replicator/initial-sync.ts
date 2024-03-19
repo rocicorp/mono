@@ -98,10 +98,9 @@ const MAX_POLLING_INTERVAL = 30000;
  * in the testing environment.
  */
 export async function waitForInitialDataSynchronization(
-  // export async function handoffPostgresReplication(
   lc: LogContext,
   _replicaID: string,
-  tx: postgres.TransactionSql,
+  tx: postgres.Sql,
   upstreamUri: string,
   subName = 'zero_sync',
 ) {

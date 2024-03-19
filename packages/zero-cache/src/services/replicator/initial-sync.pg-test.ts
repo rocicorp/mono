@@ -238,14 +238,12 @@ describe('replicator/initial-sync', () => {
       const synced = await getPublicationInfo(replica, 'synced_tables');
       expect(synced.tables).toMatchObject(c.published);
 
-      await replica.begin(tx =>
-        waitForInitialDataSynchronization(
-          lc,
-          REPLICA_ID,
-          tx,
-          'postgres:///initial_sync_upstream',
-          SUB,
-        ),
+      await waitForInitialDataSynchronization(
+        lc,
+        REPLICA_ID,
+        replica,
+        'postgres:///initial_sync_upstream',
+        SUB,
       );
 
       await expectTables(replica, c.replicated);
