@@ -32,7 +32,7 @@ export interface Store {
 export type CreateStore = (name: string) => Store;
 
 /**
- * Factory function for deleting {@link Store} instances.
+ * Function for deleting {@link Store} instances.
  *
  * The name is used to identify the store. If the same name is used for multiple
  * stores, they should share the same data.
