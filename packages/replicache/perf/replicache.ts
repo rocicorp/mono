@@ -13,7 +13,6 @@ import {
   UpdateNeededReason,
   WriteTransaction,
 } from '../out/replicache.js';
-import {dropStore as dropIDBStore} from '../src/kv/idb-util.js';
 import type {ReplicacheInternalAPI} from '../src/replicache-options.js';
 import {uuid} from '../src/uuid.js';
 import {
@@ -23,6 +22,7 @@ import {
   jsonObjectTestData,
 } from './data.js';
 import type {Bencher, Benchmark} from './perf.js';
+import {dropIDBStoreWithMemFallback} from '../src/kv/idb-store-with-mem-fallback.js';
 
 const valSize = 1024;
 
@@ -820,7 +820,7 @@ function createIndexDefinitions(numIndexes: number): IndexDefinitions {
 async function closeAndCleanupRep(rep: Replicache | undefined): Promise<void> {
   if (rep) {
     await rep.close();
-    await dropIDBStore(rep.idbName);
+    await dropIDBStoreWithMemFallback(rep.idbName);
   }
 }
 

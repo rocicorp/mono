@@ -7,7 +7,7 @@ import {FormatVersion} from '../format-version.js';
 import {fakeHash} from '../hash.js';
 import {IDBStore} from '../kv/idb-store.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
-import {withWriteNoImplicitCommit} from '../with-transactions.js';
+import {withWrite, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {ClientGroupMap, setClientGroups} from './client-groups.js';
 import {makeClientGroupMap} from './client-groups.test.js';
 import {
@@ -17,7 +17,6 @@ import {
 import type {ClientMap} from './clients.js';
 import {
   collectIDBDatabases,
-  deleteAllReplicacheData,
   dropAllDatabases,
   dropDatabase,
 } from './collect-idb-databases.js';
@@ -26,6 +25,9 @@ import {
   IndexedDBDatabase,
   IndexedDBName,
 } from './idb-databases-store.js';
+import {getKVStoreProvider} from '../replicache.js';
+import {LogContext} from '@rocicorp/logger';
+import {hasMemStore} from '../kv/mem-store.js';
 
 suite('collectIDBDatabases', () => {
   let clock: SinonFakeTimers;
@@ -73,6 +75,7 @@ suite('collectIDBDatabases', () => {
     for (const legacy of legacyValues) {
       test(name + ' > time ' + now + (legacy ? ' > legacy' : ''), async () => {
         const store = new IDBDatabasesStore(_ => new TestMemStore());
+        const dropStore = (name: string) => store.deleteDatabases([name]);
         const clientDagStores = new Map<IndexedDBName, Store>();
         for (const [db, clients, clientGroups] of entries) {
           const dagStore = new TestStore();
@@ -102,7 +105,14 @@ suite('collectIDBDatabases', () => {
 
         const maxAge = 1000;
 
-        await collectIDBDatabases(store, now, maxAge, maxAge, newDagStore);
+        await collectIDBDatabases(
+          store,
+          now,
+          maxAge,
+          maxAge,
+          dropStore,
+          newDagStore,
+        );
 
         expect(Object.keys(await store.getDatabases())).to.deep.equal(
           expectedDatabases,
@@ -324,31 +334,112 @@ suite('collectIDBDatabases', () => {
   }
 });
 
-test('dropAllDatabase', async () => {
-  const createKVStore = (name: string) => new IDBStore(name);
-  const store = new IDBDatabasesStore(createKVStore);
+test('dropDatabases mem', async () => {
+  const createStore = getKVStoreProvider(new LogContext(), 'mem').create;
+  const store = new IDBDatabasesStore(createStore);
   const numDbs = 10;
 
-  for (const f of [dropAllDatabases, deleteAllReplicacheData] as const) {
-    for (let i = 0; i < numDbs; i++) {
-      const db = {
-        name: `db${i}`,
-        replicacheName: `testReplicache${i}`,
-        replicacheFormatVersion: 1,
-        schemaVersion: 'testSchemaVersion1',
-      };
+  for (let i = 0; i < numDbs; i++) {
+    const db = {
+      name: `db${i}`,
+      replicacheName: `testReplicache${i}`,
+      replicacheFormatVersion: 1,
+      schemaVersion: 'testSchemaVersion1',
+    };
 
-      expect(await store.putDatabase(db)).to.have.property(db.name);
-    }
-
-    expect(Object.values(await store.getDatabases())).to.have.length(numDbs);
-
-    const result = await f(createKVStore);
-
-    expect(Object.values(await store.getDatabases())).to.have.length(0);
-    expect(result.dropped).to.have.length(numDbs);
-    expect(result.errors).to.have.length(0);
+    expect(await store.putDatabase(db)).to.have.property(db.name);
+    const kvStore = createStore(db.name);
+    await withWrite(kvStore, async write => {
+      await write.put('foo', {
+        baz: 'bar',
+      });
+    });
   }
+
+  for (let i = 0; i < numDbs; i++) {
+    const dbName = `db${i}`;
+    const store = hasMemStore(dbName);
+    expect(store).to.be.true;
+  }
+
+  expect(Object.values(await store.getDatabases())).to.have.length(numDbs);
+
+  const result = await dropAllDatabases({
+    kvStore: 'mem',
+  });
+
+  for (let i = 0; i < numDbs; i++) {
+    const dbName = `db${i}`;
+    const store = hasMemStore(dbName);
+    expect(store).to.be.false;
+  }
+
+  expect(Object.values(await store.getDatabases())).to.have.length(0);
+  expect(result.dropped).to.have.length(numDbs);
+  expect(result.errors).to.have.length(0);
+});
+
+test('dropDatabases idb', async () => {
+  const createStore = getKVStoreProvider(new LogContext(), 'idb').create;
+  const store = new IDBDatabasesStore(createStore);
+  const numDbs = 10;
+
+  for (let i = 0; i < numDbs; i++) {
+    const db = {
+      name: `db${i}`,
+      replicacheName: `testReplicache${i}`,
+      replicacheFormatVersion: 1,
+      schemaVersion: 'testSchemaVersion1',
+    };
+
+    expect(await store.putDatabase(db)).to.have.property(db.name);
+    const kvStore = createStore(db.name);
+    await withWrite(kvStore, async write => {
+      await write.put('foo', {
+        baz: 'bar',
+      });
+    });
+  }
+
+  for (let i = 0; i < numDbs; i++) {
+    const dbName = `db${i}`;
+    const request = indexedDB.open(dbName);
+    request.onsuccess = event => {
+      const db = (event.target as IDBRequest<IDBDatabase>).result;
+      const transaction = db.transaction(['chunks'], 'readonly');
+      const objectStore = transaction.objectStore('chunks');
+      const getRequest = objectStore.get('foo');
+      getRequest.onsuccess = _event => {
+        expect(getRequest.result).to.deep.equal({baz: 'bar'});
+        db.close();
+      };
+    };
+  }
+  //idb interfaces and loop and make sure that it actually wrote
+  expect(Object.values(await store.getDatabases())).to.have.length(numDbs);
+
+  const result = await dropAllDatabases({kvStore: 'idb'});
+
+  const dbPromise = [];
+  for (let i = 0; i < numDbs; i++) {
+    const dbName = `db${i}`;
+    const promise = new Promise((resolve, _reject) => {
+      const request = indexedDB.deleteDatabase(dbName);
+      request.onsuccess = event => {
+        const db = (event.target as IDBRequest<IDBDatabase>).result;
+        resolve(db);
+      };
+    });
+    dbPromise.push(promise);
+  }
+
+  const foundDbs = await Promise.all(dbPromise);
+  const foundDbCount = foundDbs.filter(db => db !== undefined).length;
+  expect(foundDbCount).to.equal(0);
+
+  expect(Object.values(await store.getDatabases())).to.have.length(0);
+  expect(result.dropped).to.have.length(numDbs);
+  expect(result.errors).to.have.length(0);
 });
 
 test('dropDatabase', async () => {

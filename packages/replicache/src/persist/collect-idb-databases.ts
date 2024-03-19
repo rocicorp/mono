@@ -1,4 +1,10 @@
-import {LogContext} from '@rocicorp/logger';
+import {
+  LogContext,
+  LogLevel,
+  LogSink,
+  TeeLogSink,
+  consoleLogSink,
+} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
 import {uuidChunkHasher} from '../dag/chunk.js';
@@ -6,10 +12,8 @@ import {StoreImpl} from '../dag/store-impl.js';
 import type {Store} from '../dag/store.js';
 import {FormatVersion} from '../format-version.js';
 import {assertHash} from '../hash.js';
-import {newIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
 import {IDBStore} from '../kv/idb-store.js';
-import {dropStore} from '../kv/idb-util.js';
-import type {CreateStore} from '../kv/store.js';
+import type {StoreProvider, DropStore} from '../kv/store.js';
 import {withRead} from '../with-transactions.js';
 import {
   clientGroupHasPendingMutations,
@@ -18,6 +22,7 @@ import {
 import {ClientMap, getClients} from './clients.js';
 import type {IndexedDBDatabase} from './idb-databases-store.js';
 import {IDBDatabasesStore} from './idb-databases-store.js';
+import {getKVStoreProvider} from '../replicache.js';
 
 // How frequently to try to collect
 const COLLECT_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -36,6 +41,7 @@ export function initCollectIDBDatabases(
   idbDatabasesStore: IDBDatabasesStore,
   lc: LogContext,
   signal: AbortSignal,
+  kvDropStore: DropStore,
 ): void {
   let initial = true;
   initBgIntervalProcess(
@@ -46,6 +52,7 @@ export function initCollectIDBDatabases(
         Date.now(),
         MAX_AGE,
         DD31_MAX_AGE,
+        kvDropStore,
       );
     },
     () => {
@@ -65,6 +72,7 @@ export async function collectIDBDatabases(
   now: number,
   maxAge: number,
   dd31MaxAge: number,
+  kvDropStore: DropStore,
   newDagStore = defaultNewDagStore,
 ): Promise<void> {
   const databases = await idbDatabasesStore.getDatabases();
@@ -84,7 +92,11 @@ export async function collectIDBDatabases(
     .filter(result => result[1])
     .map(result => result[0]);
 
-  const {errors} = await dropDatabases(idbDatabasesStore, namesToRemove);
+  const {errors} = await dropDatabases(
+    idbDatabasesStore,
+    namesToRemove,
+    kvDropStore,
+  );
   if (errors.length) {
     throw errors[0];
   }
@@ -93,20 +105,22 @@ export async function collectIDBDatabases(
 async function dropDatabaseInternal(
   name: string,
   idbDatabasesStore: IDBDatabasesStore,
+  kvDropStore: DropStore,
 ) {
-  await dropStore(name);
+  await kvDropStore(name);
   await idbDatabasesStore.deleteDatabases([name]);
 }
 
 async function dropDatabases(
   idbDatabasesStore: IDBDatabasesStore,
   namesToRemove: string[],
+  kvDropStore: DropStore,
 ): Promise<{dropped: string[]; errors: unknown[]}> {
   // Try to remove the databases in parallel. Don't let a single reject fail the
   // other ones. We will check for failures afterwards.
   const dropStoreResults = await Promise.allSettled(
     namesToRemove.map(async name => {
-      await dropDatabaseInternal(name, idbDatabasesStore);
+      await dropDatabaseInternal(name, idbDatabasesStore, kvDropStore);
       return name;
     }),
   );
@@ -188,16 +202,57 @@ function allClientsOlderThan(
 }
 
 /**
+ * Options for `dropDatabase` and `dropAllDatabases`.
+ */
+export type DropDatabaseOptions = {
+  /**
+   * Allows providing a custom implementation of the underlying storage layer.
+   * Default is `'idb'`.
+   */
+  kvStore?: 'idb' | 'mem' | StoreProvider | undefined;
+  /**
+   * Determines how much logging to do. When this is set to `'debug'`,
+   * Replicache will also log `'info'` and `'error'` messages. When set to
+   * `'info'` we log `'info'` and `'error'` but not `'debug'`. When set to
+   * `'error'` we only log `'error'` messages.
+   * Default is `'info'`.
+   */
+  logLevel?: LogLevel | undefined;
+  /**
+   * Enables custom handling of logs.
+   *
+   * By default logs are logged to the console.  If you would like logs to be
+   * sent elsewhere (e.g. to a cloud logging service like DataDog) you can
+   * provide an array of {@link LogSink}s.  Logs at or above
+   * {@link DropDatabaseOptions.logLevel} are sent to each of these {@link LogSink}s.
+   * If you would still like logs to go to the console, include
+   * `consoleLogSink` in the array.
+   *
+   * ```ts
+   * logSinks: [consoleLogSink, myCloudLogSink],
+   * ```
+   * Default is `[consoleLogSink]`.
+   */
+  logSinks?: LogSink[] | undefined;
+};
+
+/**
  * Deletes a single Replicache database.
  * @param dbName
  * @param createKVStore
  */
+
 export async function dropDatabase(
   dbName: string,
-  createKVStore: CreateStore = name =>
-    newIDBStoreWithMemFallback(new LogContext(), name),
+  opts?: DropDatabaseOptions | undefined,
 ) {
-  await dropDatabaseInternal(dbName, new IDBDatabasesStore(createKVStore));
+  const logContext = createLogContext('dropDatabase', opts);
+  const kvStoreProvider = getKVStoreProvider(logContext, opts?.kvStore);
+  await dropDatabaseInternal(
+    dbName,
+    new IDBDatabasesStore(kvStoreProvider.create),
+    kvStoreProvider.drop,
+  );
 }
 
 /**
@@ -207,18 +262,41 @@ export async function dropDatabase(
  * and any errors encountered while dropping.
  */
 export async function dropAllDatabases(
-  createKVStore: CreateStore = name =>
-    newIDBStoreWithMemFallback(new LogContext(), name),
+  opts?: DropDatabaseOptions | undefined,
 ): Promise<{
   dropped: string[];
   errors: unknown[];
 }> {
-  const store = new IDBDatabasesStore(createKVStore);
+  const logContext = createLogContext('dropAllDatabases', opts);
+  const kvStoreProvider = getKVStoreProvider(logContext, opts?.kvStore);
+  const store = new IDBDatabasesStore(kvStoreProvider.create);
   const databases = await store.getDatabases();
   const dbNames = Object.values(databases).map(db => db.name);
-
-  const result = await dropDatabases(store, dbNames);
+  const result = await dropDatabases(store, dbNames, kvStoreProvider.drop);
   return result;
+}
+
+/**
+ * Creates a LogContext
+ *
+ * @param opts - Optional logging configuration options.
+ * @param operation - A unique identifier for the operation.
+ * @returns A LogContext instance configured with the provided options.
+ */
+function createLogContext(
+  operation: string,
+  opts?:
+    | {
+        logLevel?: LogLevel | undefined;
+        logSinks?: LogSink[] | undefined;
+      }
+    | undefined,
+): LogContext {
+  const logLevel = opts?.logLevel || 'info';
+  const logSinks = opts?.logSinks || [consoleLogSink];
+  const logSink =
+    logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
+  return new LogContext(logLevel, {[operation]: undefined}, logSink);
 }
 
 /**
@@ -229,8 +307,16 @@ export async function dropAllDatabases(
  *
  * @deprecated Use `dropAllDatabases` instead.
  */
-export function deleteAllReplicacheData(createKVStore?: CreateStore) {
-  return dropAllDatabases(createKVStore);
+export function deleteAllReplicacheData(
+  opts?:
+    | {
+        kvStore?: 'idb' | 'mem' | StoreProvider | undefined;
+        logLevel?: LogLevel | undefined;
+        logSinks?: LogSink[] | undefined;
+      }
+    | undefined,
+) {
+  return dropAllDatabases(opts);
 }
 
 async function anyPendingMutationsInClientGroups(

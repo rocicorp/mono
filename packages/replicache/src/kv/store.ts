@@ -13,8 +13,6 @@ import type {ReadonlyJSONValue} from 'shared/src/json.js';
  * multiple read transactions are allowed in parallel, or one write.
  * Additionally writes from a transaction must appear all at one, atomically.
  *
- * @experimental This interface is experimental and might be removed or changed
- * in the future without following semver versioning. Please be cautious.
  */
 export interface Store {
   read(): Promise<Read>;
@@ -30,10 +28,23 @@ export interface Store {
  * stores, they should share the same data. It is also desirable to have these
  * stores share an {@link RWLock}.
  *
- * @experimental This type is experimental and might be removed or changed
- * in the future without following semver versioning. Please be cautious.
  */
 export type CreateStore = (name: string) => Store;
+
+/**
+ * Function for deleting {@link Store} instances.
+ *
+ * The name is used to identify the store. If the same name is used for multiple
+ * stores, they should share the same data.
+ *
+ */
+export type DropStore = (name: string) => Promise<void>;
+
+/**
+ * Provider for creating and deleting {@link Store} instances.
+ *
+ */
+export type StoreProvider = {create: CreateStore; drop: DropStore};
 
 /**
  * This interface is used so that we can release the lock when the transaction

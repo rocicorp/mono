@@ -1,6 +1,6 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {MutatorDefs} from 'reflect-shared/src/types.js';
-import type {CreateKVStore, MaybePromise} from 'replicache';
+import type {KVStoreProvider, MaybePromise} from 'replicache';
 
 /**
  * Configuration for [[Reflect]].
@@ -185,5 +185,5 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * You can also set this to a function that is used to create new KV stores,
    * allowing a custom implementation of the underlying storage layer.
    */
-  kvStore?: 'mem' | 'idb' | CreateKVStore | undefined;
+  kvStore?: 'mem' | 'idb' | KVStoreProvider | undefined;
 }

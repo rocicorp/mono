@@ -23,7 +23,6 @@ import {StoreImpl} from './dag/store-impl.js';
 import type {Store} from './dag/store.js';
 import {assertHash} from './hash.js';
 import {IDBNotFoundError, IDBStore} from './kv/idb-store.js';
-import {dropStore as dropIDBStore} from './kv/idb-util.js';
 import {
   ClientGroup,
   deleteClientGroup,
@@ -38,6 +37,7 @@ import {
 import type {MutatorDefs} from './replicache.js';
 import type {WriteTransaction} from './transactions.js';
 import {withRead, withWriteNoImplicitCommit} from './with-transactions.js';
+import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
 
 initReplicacheTesting();
 
@@ -313,7 +313,7 @@ test('Persist throws if idb dropped', async () => {
 
   await rep.mutate.addData({foo: 'bar'});
 
-  await dropIDBStore(rep.idbName);
+  await dropIDBStoreWithMemFallback(rep.idbName);
 
   const onClientStateNotFound = sinon.fake();
   rep.onClientStateNotFound = onClientStateNotFound;

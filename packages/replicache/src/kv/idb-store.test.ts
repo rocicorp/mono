@@ -2,12 +2,12 @@ import {expect} from 'chai';
 import * as sinon from 'sinon';
 import {withRead, withWrite} from '../with-transactions.js';
 import {IDBNotFoundError, IDBStore} from './idb-store.js';
-import {dropStore} from './idb-util.js';
 import {runAll} from './store-test-util.js';
+import {dropIDBStoreWithMemFallback} from './idb-store-with-mem-fallback.js';
 
 async function newRandomIDBStore() {
   const name = `test-idbstore-${Math.random()}`;
-  await dropStore(name);
+  await dropIDBStoreWithMemFallback(name);
   return new IDBStore(name);
 }
 
@@ -15,7 +15,7 @@ runAll('idbstore', newRandomIDBStore);
 
 test('dropStore', async () => {
   const name = `drop-store-${Math.random()}`;
-  await dropStore(name);
+  await dropIDBStoreWithMemFallback(name);
   let store = new IDBStore(name);
 
   // Write a value.
@@ -30,7 +30,7 @@ test('dropStore', async () => {
 
   // Drop db
   await store.close();
-  await dropStore(name);
+  await dropIDBStoreWithMemFallback(name);
 
   // Reopen store, verify data is gone
   store = new IDBStore(name);
@@ -46,7 +46,7 @@ suite('reopening IDB', () => {
 
   setup(async () => {
     name = `reopen-${Math.random()}`;
-    await dropStore(name);
+    await dropIDBStoreWithMemFallback(name);
 
     // Use spy to get a hold of the request object and then the idb instance.
     const openSpy = sinon.spy(indexedDB, 'open');
@@ -89,7 +89,7 @@ suite('reopening IDB', () => {
       await wt.put('foo', 'bar');
     });
 
-    await dropStore(name);
+    await dropIDBStoreWithMemFallback(name);
 
     let ex;
     try {
@@ -116,7 +116,7 @@ suite('reopening IDB', () => {
   });
 
   test('deletes corrupt IDB and throws error', async () => {
-    await dropStore(name);
+    await dropIDBStoreWithMemFallback(name);
 
     // create a corrupt IDB (ver. 1, no object stores)
     const createReq = new Promise<IDBDatabase>((resolve, reject) => {
@@ -162,7 +162,7 @@ test('Throws if IDB dropped while open', async () => {
 
   const idb = new IDBStore(name);
 
-  await dropStore(name);
+  await dropIDBStoreWithMemFallback(name);
 
   let err;
   try {

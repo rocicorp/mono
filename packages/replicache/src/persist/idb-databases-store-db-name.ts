@@ -1,4 +1,4 @@
-import {dropStore as dropIDBStore} from '../kv/idb-util.js';
+import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
 import {uuid} from '../uuid.js';
 
 const IDB_DATABASES_VERSION = 0;
@@ -14,7 +14,7 @@ export function setupForTest(): void {
 export function teardownForTest(): Promise<void> {
   const idbDatabasesDBName = getIDBDatabasesDBName();
   testNamespace = '';
-  return dropIDBStore(idbDatabasesDBName);
+  return dropIDBStoreWithMemFallback(idbDatabasesDBName);
 }
 
 export function getIDBDatabasesDBName(): string {

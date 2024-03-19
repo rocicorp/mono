@@ -15,6 +15,15 @@ export function clearAllNamedMemStoresForTesting(): void {
   stores.clear();
 }
 
+export function dropMemStore(name: string): Promise<void> {
+  stores.delete(name);
+  return promiseVoid;
+}
+
+export function hasMemStore(name: string): boolean {
+  return stores.has(name);
+}
+
 /**
  * A named in-memory Store implementation.
  *

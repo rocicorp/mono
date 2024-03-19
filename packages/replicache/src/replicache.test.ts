@@ -52,6 +52,7 @@ import type {ReadTransaction, WriteTransaction} from './transactions.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import {promiseVoid} from './resolved-promises.js';
 
 const {fail} = chaiAssert;
 
@@ -2125,13 +2126,22 @@ test('Create KV Store', async () => {
   let store: MemStoreWithCounters | undefined;
 
   const rep = await replicacheForTesting('kv-store', {
-    kvStore: name => {
-      if (!store && name.includes('kv-store')) {
-        store = new MemStoreWithCounters(name);
-        return store;
-      }
+    kvStore: {
+      create: name => {
+        if (!store && name.includes('kv-store')) {
+          store = new MemStoreWithCounters(name);
+          return store;
+        }
 
-      return new MemStoreWithCounters(name);
+        return new MemStoreWithCounters(name);
+      },
+      drop: (_name: string) => {
+        if (store) {
+          store = undefined;
+          return promiseVoid;
+        }
+        return promiseVoid;
+      },
     },
     mutators: {addData},
     ...disableAllBackgroundProcesses,
@@ -2175,7 +2185,7 @@ test('mutate args in mutation throws due to frozen', async () => {
   // store in the kv.Store.
   const store = new TestMemStore();
   const rep = await replicacheForTesting('mutate-args-in-mutation', {
-    kvStore: () => store,
+    kvStore: {create: () => store, drop: () => promiseVoid},
     mutators: {
       async mutArgs(tx: WriteTransaction, args: {v: number}) {
         args.v = 42;

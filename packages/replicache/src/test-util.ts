@@ -8,7 +8,6 @@ import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Cookie} from './cookies.js';
 import type {Store} from './dag/store.js';
 import type {Hash} from './hash.js';
-import {dropStore as dropIDBStore} from './kv/idb-util.js';
 import {MemStore} from './kv/mem-store.js';
 import type {Store as KVStore} from './kv/store.js';
 import type {PatchOperation} from './patch-operation.js';
@@ -37,6 +36,7 @@ import {uuid} from './uuid.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
 
 export class ReplicacheTest<
   // eslint-disable-next-line @typescript-eslint/ban-types
@@ -133,7 +133,7 @@ async function closeAllCloseables(): Promise<void> {
 export const dbsToDrop: Set<string> = new Set();
 export async function deleteAllDatabases(): Promise<void> {
   for (const name of dbsToDrop) {
-    await dropIDBStore(name);
+    await dropIDBStoreWithMemFallback(name);
   }
   dbsToDrop.clear();
 }

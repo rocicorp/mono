@@ -10,7 +10,6 @@ import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {assertHash, fakeHash} from '../hash.js';
 import {IDBNotFoundError, IDBStore} from '../kv/idb-store.js';
-import {dropStore as dropIDBStore} from '../kv/idb-util.js';
 import {withRead} from '../with-transactions.js';
 import {makeClientV5, setClientsForTesting} from './clients-test-helpers.js';
 import {ClientMap, ClientStateNotFoundError, getClients} from './clients.js';
@@ -19,6 +18,7 @@ import {
   startHeartbeats,
   writeHeartbeat,
 } from './heartbeat.js';
+import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
 
 let clock: SinonFakeTimers;
 const START_TIME = 100000;
@@ -274,7 +274,7 @@ test('heartbeat with dropped idb throws', async () => {
 
   await clock.tickAsync(ONE_MIN_IN_MS / 2);
 
-  await dropIDBStore(name);
+  await dropIDBStoreWithMemFallback(name);
 
   await clock.tickAsync(ONE_MIN_IN_MS / 2);
 
