@@ -100,7 +100,7 @@ const MAX_POLLING_INTERVAL = 30000;
 export async function waitForInitialDataSynchronization(
   lc: LogContext,
   _replicaID: string,
-  tx: postgres.Sql,
+  sql: postgres.Sql,
   upstreamUri: string,
   subName = 'zero_sync',
 ) {
@@ -110,7 +110,7 @@ export async function waitForInitialDataSynchronization(
     ;
     interval = Math.min(interval * 2, MAX_POLLING_INTERVAL)
   ) {
-    const subscribed = await tx<SubscribedTable[]>`
+    const subscribed = await sql<SubscribedTable[]>`
     SELECT p.subname, n.nspname as schema, c.relname as table, r.srsubstate as state 
       FROM pg_subscription p
       JOIN pg_subscription_rel r ON p.oid = r.srsubid
