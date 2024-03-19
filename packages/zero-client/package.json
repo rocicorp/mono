@@ -1,0 +1,51 @@
+{
+  "name": "zero-client",
+  "description": "",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write *",
+    "check-format": "prettier --check *",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "test": "web-test-runner",
+    "test:watch": "web-test-runner --watch",
+    "check-types": "tsc --noEmit",
+    "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
+    "build": "rm -rf out && npm run build-dts"
+  },
+  "dependencies": {
+    "@badrap/valita": "^0.3.0",
+    "@rocicorp/lock": "^1.0.3",
+    "@rocicorp/logger": "^5.2.1",
+    "@rocicorp/resolver": "^1.0.1"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/prettier-config": "^0.2.0",
+    "@types/mocha": "^10.0.1",
+    "@types/sinon": "^10.0.11",
+    "@web/dev-server": "^0.4.0",
+    "@web/dev-server-esbuild": "^1.0.0",
+    "@web/test-runner": "^0.18.0",
+    "@web/test-runner-playwright": "^0.11.0",
+    "chai": "^5.0.0-alpha.2",
+    "datadog": "0.0.0",
+    "esbuild": "^0.19.4",
+    "reflect-protocol": "0.0.0",
+    "reflect-shared": "0.0.0",
+    "replicache": "14.2.2",
+    "playwright": "^1.39.0",
+    "rollup": "^3.24.0",
+    "shared": "0.0.0",
+    "sinon": "^13.0.1",
+    "typescript": "^5.4.2"
+  },
+  "exports": {
+    ".": "./src/mod.ts"
+  },
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}
