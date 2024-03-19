@@ -5,85 +5,113 @@ import type {TableSpec} from './specs.js';
 
 const publishedColumnsSchema = v.array(
   v.object({
-    tableSchema: v.string(),
-    tableName: v.string(),
-    ordinalPosition: v.number(),
-    columnName: v.string(),
-    dataType: v.string(),
-    arrayType: v.string().nullable(),
-    characterMaximumLength: v.number().nullable(),
-    columnDefault: v.string().nullable(),
-    isNullable: v.union(v.literal('YES'), v.literal('NO')),
-    constraintType: v.string().nullable(),
-    keyPosition: v.number().nullable(),
+    schema: v.string(),
+    table: v.string(),
+    pos: v.number(),
+    name: v.string(),
+    type: v.string(),
+    typeId: v.number(),
+    maxLen: v.number(),
+    arrayDims: v.number(),
+    keyPos: v.number().nullable(),
+    default: v.string().nullable(),
+    pubname: v.string(),
   }),
 );
+
+const publicationSchema = v.object({
+  pubname: v.string(),
+  pubinsert: v.boolean(),
+  pubupdate: v.boolean(),
+  pubdelete: v.boolean(),
+  pubtruncate: v.boolean(),
+});
+
+const publicationsResultSchema = v.array(publicationSchema);
+
+export type Publication = v.Infer<typeof publicationSchema>;
+
+export type PublicationInfo = {
+  publications: Publication[];
+  tables: Record<string, TableSpec>;
+};
 
 /**
  * Retrieves all tables and columns published under any PUBLICATION
  * whose name starts with the specified `pubPrefix` (e.g. "zero_").
  */
-export async function getPublishedTables(
+export async function getPublicationInfo(
   sql: postgres.Sql,
   pubPrefix: string,
-): Promise<Record<string, TableSpec>> {
-  const result = await sql`
-  SELECT c.table_schema, 
-         c.table_name, 
-         c.ordinal_position, 
-         c.column_name, 
-         c.data_type, 
-         et.data_type as array_type, 
-         c.character_maximum_length, 
-         c.column_default, 
-         c.is_nullable, 
-         tc.constraint_type, 
-         kcu.ordinal_position as key_position
-  FROM information_schema.columns c
-  JOIN pg_publication_tables AS p 
-    ON p.schemaname = c.table_schema AND 
-    p.tablename = c.table_name AND 
-    c.column_name = ANY(p.attnames)
-  LEFT JOIN information_schema.element_types et 
-    ON c.table_schema = et.object_schema AND
-      c.table_name = et.object_name AND 
-      et.object_type = 'TABLE' AND 
-      c.ordinal_position::integer = et.collection_type_identifier::integer
-  LEFT JOIN (
-    information_schema.table_constraints tc
-    JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name)
-    JOIN information_schema.key_column_usage AS kcu USING (constraint_schema, constraint_name, column_name)
-  ) ON c.table_schema = ccu.table_schema and c.table_name = ccu.table_name and c.column_name = ccu.column_name
-  WHERE starts_with(p.pubname, ${pubPrefix})
-  ORDER BY c.table_schema, c.table_name, c.ordinal_position;
-  `;
+): Promise<PublicationInfo> {
+  const result = await sql.unsafe(`
+  SELECT ${Object.keys(publicationSchema.shape).join(',')} FROM pg_publication
+    WHERE STARTS_WITH(pubname, '${pubPrefix}')
+    ORDER BY pubname;
 
-  const columns = v.parse(result, publishedColumnsSchema);
+  SELECT 
+    nspname AS schema, 
+    pc.relname AS table, 
+    attnum AS pos, 
+    attname AS name, 
+    pt.typname AS type, 
+    atttypid AS type_id, 
+    atttypmod AS max_len, 
+    attndims array_dims, 
+    ARRAY_POSITION(conkey, attnum) AS key_pos,
+    pg_get_expr(pd.adbin, pd.adrelid) as default,
+    pb.pubname
+  FROM pg_attribute
+  JOIN pg_class pc ON pc.oid = attrelid
+  JOIN pg_namespace pns ON pns.oid = relnamespace
+  JOIN pg_type pt ON atttypid = pt.oid
+  JOIN pg_publication_tables as pb ON 
+    pb.schemaname = nspname AND 
+    pb.tablename = pc.relname AND
+    attname = ANY(pb.attnames)
+  LEFT JOIN pg_constraint pk ON pk.contype = 'p' AND pk.connamespace = relnamespace AND pk.conrelid = attrelid
+  LEFT JOIN pg_attrdef pd ON pd.adrelid = attrelid AND pd.adnum = attnum
+  WHERE STARTS_WITH(pb.pubname, '${pubPrefix}')
+  ORDER BY nspname, pc.relname, attnum;
+  `);
+
+  const publications = v.parse(result[0], publicationsResultSchema);
+  const columns = v.parse(result[1], publishedColumnsSchema);
   const tables: Record<string, TableSpec> = {};
   let table: TableSpec | undefined;
 
   columns.forEach(col => {
-    if (col.tableSchema !== table?.schema || col.tableName !== table?.name) {
+    if (col.schema !== table?.schema || col.table !== table?.name) {
       // New table
       table = {
-        schema: col.tableSchema,
-        name: col.tableName,
+        schema: col.schema,
+        name: col.table,
         columns: {},
         primaryKey: [],
       };
       tables[`${table.schema}.${table.name}`] = table;
     }
 
-    table.columns[col.columnName] = {
-      dataType: col.arrayType ? `${col.arrayType}[]` : col.dataType,
-      characterMaximumLength: col.characterMaximumLength,
-      columnDefault: col.columnDefault,
+    // https://stackoverflow.com/a/52376230
+    const maxLen =
+      col.maxLen < 0
+        ? null
+        : col.typeId === 1043 || col.typeId === 1042
+        ? col.maxLen - 4
+        : col.maxLen;
+
+    table.columns[col.name] = {
+      dataType: col.arrayDims
+        ? `${col.type.substring(1)}${'[]'.repeat(col.arrayDims)}`
+        : col.type,
+      characterMaximumLength: maxLen,
+      columnDefault: col.default,
     };
-    if (col.keyPosition) {
-      while (table.primaryKey.length < col.keyPosition) {
+    if (col.keyPos) {
+      while (table.primaryKey.length < col.keyPos) {
         table.primaryKey.push('');
       }
-      table.primaryKey[col.keyPosition - 1] = col.columnName;
+      table.primaryKey[col.keyPos - 1] = col.name;
     }
   });
 
@@ -95,5 +123,8 @@ export async function getPublishedTables(
     );
   });
 
-  return tables;
+  return {
+    publications,
+    tables,
+  };
 }

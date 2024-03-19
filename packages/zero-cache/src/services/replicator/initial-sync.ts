@@ -1,34 +1,18 @@
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {sleep} from 'shared/src/sleep.js';
-import * as v from 'shared/src/valita.js';
 import {CREATE_REPLICATION_TABLES} from './incremental-sync.js';
 import {createTableStatement} from './tables/create.js';
-import {getPublishedTables} from './tables/published.js';
-import type {ColumnSpec, TableSpec} from './tables/specs.js';
+import {PublicationInfo, getPublicationInfo} from './tables/published.js';
+import type {ColumnSpec} from './tables/specs.js';
 
 const PUB_PREFIX = 'zero_';
-
-const publicationSchema = v.object({
-  pubname: v.string(),
-  pubinsert: v.boolean(),
-  pubupdate: v.boolean(),
-  pubdelete: v.boolean(),
-  pubtruncate: v.boolean(),
-});
-
-const publicationsResultSchema = v.array(publicationSchema);
 
 const ZERO_VERSION_COLUMN_NAME = '_0_version';
 const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
   characterMaximumLength: 38,
   columnDefault: "'00'::text",
   dataType: 'character varying',
-};
-
-type Published = {
-  publications: string[];
-  tables: Record<string, TableSpec>;
 };
 
 export function replicationSlot(replicaID: string): string {
@@ -83,7 +67,7 @@ export async function startPostgresReplication(
     `
     CREATE SUBSCRIPTION ${subName}
       CONNECTION '${upstreamUri}'
-      PUBLICATION ${published.publications.join(',')}
+      PUBLICATION ${published.publications.map(p => p.pubname).join(',')}
       WITH (slot_name='${slotName}', create_slot=false);`,
   ];
 
@@ -201,13 +185,13 @@ async function setupUpstream(
   lc: LogContext,
   upstreamUri: string,
   slotName: string,
-): Promise<Published> {
+): Promise<PublicationInfo> {
   const upstreamDB = postgres(upstreamUri, {
     transform: postgres.camel,
     // eslint-disable-next-line @typescript-eslint/naming-convention
     fetch_types: false,
   });
-  const [_, publishedTables] = await Promise.all([
+  const [_, published] = await Promise.all([
     // Ensure that the replication slot exists. This must be done in its own
     // transaction, or else Postgres will complain with:
     //
@@ -218,7 +202,7 @@ async function setupUpstream(
     // Note that both transactions must succeed for the migration to continue.
     ensurePublishedTables(lc, upstreamDB),
   ]);
-  return publishedTables;
+  return published;
 }
 
 /**
@@ -259,27 +243,16 @@ function ensureReplicationSlot(
 function ensurePublishedTables(
   _: LogContext,
   upstreamDB: postgres.Sql,
-): Promise<Published> {
+): Promise<PublicationInfo> {
   return upstreamDB.begin(async tx => {
-    const pubInfo = v.parse(
-      await tx`
-    SELECT ${tx(Object.keys(publicationSchema.shape))} FROM pg_publication
-    WHERE STARTS_WITH(pubname, ${PUB_PREFIX})
-    `,
-      publicationsResultSchema,
-    );
-
-    const tables = await getPublishedTables(tx, PUB_PREFIX);
-    if ('zero.clients' in tables) {
+    const published = await getPublicationInfo(tx, PUB_PREFIX);
+    if ('zero.clients' in published.tables) {
       // upstream is already set up for replication.
-      return {
-        publications: pubInfo.map(p => p.pubname),
-        tables,
-      };
+      return published;
     }
 
     // Verify that any manually configured publications export the proper events.
-    pubInfo.forEach(pub => {
+    published.publications.forEach(pub => {
       if (
         !pub.pubinsert ||
         !pub.pubtruncate ||
@@ -298,14 +271,11 @@ function ensurePublishedTables(
       }
     });
 
-    const publications = pubInfo.map(p => p.pubname);
-
     let dataPublication = '';
-    if (pubInfo.length === 0) {
+    if (published.publications.length === 0) {
       // If there are no custom zero_* publications, set one up to publish all tables.
       const pubName = `${PUB_PREFIX}data`;
       dataPublication = `CREATE PUBLICATION ${pubName} FOR ALL TABLES;`;
-      publications.push(pubName);
     }
 
     // Send everything as a single batch.
@@ -321,11 +291,6 @@ function ensurePublishedTables(
     `,
     );
 
-    publications.push(`${PUB_PREFIX}metadata`);
-
-    return {
-      publications,
-      tables: await getPublishedTables(tx, PUB_PREFIX),
-    };
+    return getPublicationInfo(tx, PUB_PREFIX);
   });
 }
