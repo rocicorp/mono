@@ -1,4 +1,4 @@
-import {afterEach, beforeEach, describe, test} from '@jest/globals';
+import {afterAll, afterEach, beforeEach, describe, test} from '@jest/globals';
 import type postgres from 'postgres';
 import {expectTables, testDBs} from '../../test/db.js';
 import {CREATE_REPLICATION_TABLES} from './incremental-sync.js';
@@ -13,6 +13,10 @@ describe('replicator/incremental-sync', () => {
 
   afterEach(async () => {
     await testDBs.drop(db);
+  });
+
+  afterAll(async () => {
+    await testDBs.end();
   });
 
   test('create tables', async () => {
