@@ -1,14 +1,7 @@
-import {
-  afterAll,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
-import {TestDBs} from '../../../test/db.js';
+import {testDBs} from '../../../test/db.js';
 import {createSilentLogContext} from '../../../test/logger.js';
 import {
   SyncSchemaMeta,
@@ -181,7 +174,6 @@ describe('schema/migration', () => {
     },
   ];
 
-  const testDBs = new TestDBs();
   let db: postgres.Sql;
 
   beforeEach(async () => {
@@ -191,10 +183,6 @@ describe('schema/migration', () => {
 
   afterEach(async () => {
     await testDBs.drop(db);
-  });
-
-  afterAll(async () => {
-    await testDBs.end();
   });
 
   for (const c of cases) {

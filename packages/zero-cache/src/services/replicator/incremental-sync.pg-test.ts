@@ -1,10 +1,9 @@
 import {afterEach, beforeEach, describe, test} from '@jest/globals';
 import type postgres from 'postgres';
-import {TestDBs, expectTables} from '../../test/db.js';
+import {expectTables, testDBs} from '../../test/db.js';
 import {CREATE_REPLICATION_TABLES} from './incremental-sync.js';
 
 describe('replicator/incremental-sync', () => {
-  const testDBs = new TestDBs();
   let db: postgres.Sql;
 
   beforeEach(async () => {

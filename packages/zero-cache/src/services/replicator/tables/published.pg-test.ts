@@ -1,13 +1,6 @@
-import {
-  afterAll,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import type postgres from 'postgres';
-import {TestDBs} from '../../../test/db.js';
+import {testDBs} from '../../../test/db.js';
 import {PublicationInfo, getPublicationInfo} from './published.js';
 
 describe('tables/published', () => {
@@ -371,7 +364,6 @@ describe('tables/published', () => {
     },
   ];
 
-  const testDBs = new TestDBs();
   let db: postgres.Sql;
   beforeEach(async () => {
     db = await testDBs.create('published_tables_test');
@@ -379,10 +371,6 @@ describe('tables/published', () => {
 
   afterEach(async () => {
     await testDBs.drop(db);
-  });
-
-  afterAll(async () => {
-    await testDBs.end();
   });
 
   for (const c of cases) {

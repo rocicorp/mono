@@ -2,7 +2,7 @@ import {expect} from '@jest/globals';
 import postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 
-export class TestDBs {
+class TestDBs {
   // Connects to the main "postgres" DB of the local Postgres cluster.
   //
   // Note: In order to run all of the tests successfully, the following
@@ -53,6 +53,8 @@ export class TestDBs {
     return this.#sql.end();
   }
 }
+
+export const testDBs = new TestDBs();
 
 export async function initDB(
   db: postgres.Sql,

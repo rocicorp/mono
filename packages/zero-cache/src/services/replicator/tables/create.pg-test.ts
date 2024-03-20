@@ -7,7 +7,7 @@ import {
   test,
 } from '@jest/globals';
 import type postgres from 'postgres';
-import {TestDBs} from '../../../test/db.js';
+import {testDBs} from '../../../test/db.js';
 import {createTableStatement} from './create.js';
 import {getPublicationInfo} from './published.js';
 import type {TableSpec} from './specs.js';
@@ -96,7 +96,6 @@ describe('tables/create', () => {
     },
   ];
 
-  const testDBs = new TestDBs();
   let db: postgres.Sql;
   beforeEach(async () => {
     db = await testDBs.create('create_tables_test');

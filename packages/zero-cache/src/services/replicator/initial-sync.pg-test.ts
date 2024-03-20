@@ -1,13 +1,6 @@
-import {
-  afterAll,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import type postgres from 'postgres';
-import {TestDBs, expectTables, initDB} from '../../test/db.js';
+import {expectTables, initDB, testDBs} from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import {
   handoffPostgresReplication,
@@ -173,7 +166,6 @@ describe('replicator/initial-sync', () => {
     },
   ];
 
-  const testDBs = new TestDBs();
   let upstream: postgres.Sql;
   let replica: postgres.Sql;
 
@@ -211,10 +203,6 @@ describe('replicator/initial-sync', () => {
     });
     await testDBs.drop(upstream, replica);
   }, 10000);
-
-  afterAll(async () => {
-    await testDBs.end();
-  });
 
   for (const c of cases) {
     test(`startInitialDataSynchronization: ${c.name}`, async () => {
