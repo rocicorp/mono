@@ -48,8 +48,11 @@ export async function startPostgresReplication(
   const tablesStmts = Object.values(published.tables).map(table => {
     if (ZERO_VERSION_COLUMN_NAME in table.columns) {
       throw new Error(
-        `Table ${table.name} uses reserved name column name ${ZERO_VERSION_COLUMN_NAME}`,
+        `Table ${table.name} uses reserved column name ${ZERO_VERSION_COLUMN_NAME}`,
       );
+    }
+    if (table.primaryKey.length === 0) {
+      throw new Error(`Table ${table.name} does not have a PRIMARY KEY`);
     }
     schemas.add(table.schema);
     // Add the _0_version column with a default value of "00".
