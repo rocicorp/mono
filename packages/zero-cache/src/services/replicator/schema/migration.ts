@@ -5,17 +5,30 @@ import {randInt} from 'shared/src/rand.js';
 import * as v from 'shared/src/valita.js';
 
 /**
+ * A PreMigrationFn executes logic outside of a database transaction, and is
+ * suitable for potentially long running polling operations.
+ */
+type PreMigrationFn = (
+  log: LogContext,
+  replicaID: string,
+  sql: postgres.Sql,
+  upstreamUri: string,
+) => Promise<void>;
+
+type MigrationFn = (
+  log: LogContext,
+  replicaID: string,
+  tx: postgres.TransactionSql,
+  upstreamUri: string,
+) => Promise<void>;
+
+/**
  * Encapsulates the logic for upgrading to a new schema. After the
  * Migration code successfully completes, {@link runSyncSchemaMigrations}
  * will update the schema version and commit the transaction.
  */
 export type Migration =
-  | ((
-      log: LogContext,
-      replicaID: string,
-      tx: postgres.TransactionSql,
-      upstreamUri: string,
-    ) => Promise<void>)
+  | {pre?: PreMigrationFn; run: MigrationFn}
   // A special Migration type that pushes the rollback limit forward.
   | {minSafeRollbackVersion: number};
 
@@ -73,6 +86,11 @@ export async function runSyncSchemaMigrations(
         if (meta.version < dest) {
           log.info?.(`Migrating schema from v${meta.version} to v${dest}`);
           await log.flush(); // Flush logs before each migration to help debug crash-y migrations.
+
+          // Run the optional PreMigration step before starting the transaction.
+          if ('pre' in migration) {
+            await migration.pre(log, replicaID, sql, upstreamUri);
+          }
 
           meta = await sql.begin(async tx => {
             // Fetch meta from within the transaction to make the migration atomic.
@@ -187,8 +205,8 @@ async function migrateSyncSchemaVersion(
   destinationVersion: number,
   migration: Migration,
 ): Promise<SyncSchemaMeta> {
-  if (typeof migration === 'function') {
-    await migration(log, replicaID, tx, upstreamUri);
+  if ('run' in migration) {
+    await migration.run(log, replicaID, tx, upstreamUri);
   } else {
     meta = ensureRollbackLimit(migration.minSafeRollbackVersion, log, meta);
   }
