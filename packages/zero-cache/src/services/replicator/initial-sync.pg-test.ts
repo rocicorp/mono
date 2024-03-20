@@ -40,6 +40,7 @@ describe('replicator/initial-sync', () => {
     published: Record<string, TableSpec>;
     upstream?: Record<string, object[]>;
     replicated: Record<string, object[]>;
+    publications: string[];
   };
 
   const cases: Case[] = [
@@ -51,6 +52,7 @@ describe('replicator/initial-sync', () => {
       replicated: {
         ['zero.clients']: [],
       },
+      publications: ['zero_meta', 'zero_data'],
     },
     {
       name: 'replication slot already exists',
@@ -65,6 +67,7 @@ describe('replicator/initial-sync', () => {
       replicated: {
         ['zero.clients']: [],
       },
+      publications: ['zero_meta', 'zero_data'],
     },
     {
       name: 'publication already setup',
@@ -74,7 +77,8 @@ describe('replicator/initial-sync', () => {
         client_id TEXT PRIMARY KEY,
         last_mutation_id BIGINT
       );
-      CREATE PUBLICATION zero_metadata FOR TABLES IN SCHEMA zero;
+      CREATE PUBLICATION zero_meta FOR TABLES IN SCHEMA zero;
+      CREATE PUBLICATION zero_data FOR ALL TABLES;;
       `,
       published: {
         ['zero.clients']: ZERO_CLIENTS_SPEC,
@@ -82,6 +86,7 @@ describe('replicator/initial-sync', () => {
       replicated: {
         ['zero.clients']: [],
       },
+      publications: ['zero_meta', 'zero_data'],
     },
     {
       name: 'existing table, default publication',
@@ -121,6 +126,7 @@ describe('replicator/initial-sync', () => {
           {issueId: 321, orgId: 789, ['_0Version']: '00'},
         ],
       },
+      publications: ['zero_meta', 'zero_data'],
     },
     {
       name: 'existing partial publication',
@@ -163,6 +169,7 @@ describe('replicator/initial-sync', () => {
           {userId: 456, handle: '@bonk', ['_0Version']: '00'},
         ],
       },
+      publications: ['zero_meta', 'zero_custom'],
     },
   ];
 
@@ -172,10 +179,6 @@ describe('replicator/initial-sync', () => {
   beforeEach(async () => {
     upstream = await testDBs.create('initial_sync_upstream');
     replica = await testDBs.create('initial_sync_replica');
-
-    // This publication is used to query the tables that get created on the replica
-    // using the same logic that's used for querying the published tables on upstream.
-    await replica`CREATE PUBLICATION synced_tables FOR ALL TABLES`;
   });
 
   afterEach(async () => {
@@ -222,9 +225,15 @@ describe('replicator/initial-sync', () => {
 
       const published = await getPublicationInfo(upstream, 'zero_');
       expect(published.tables).toEqual(c.published);
+      expect(published.publications.map(p => p.pubname)).toEqual(
+        expect.arrayContaining(c.publications),
+      );
 
-      const synced = await getPublicationInfo(replica, 'synced_tables');
+      const synced = await getPublicationInfo(replica, 'zero_');
       expect(synced.tables).toMatchObject(c.published);
+      expect(synced.publications.map(p => p.pubname)).toEqual(
+        expect.arrayContaining(c.publications),
+      );
 
       await waitForInitialDataSynchronization(
         lc,
@@ -245,14 +254,6 @@ describe('replicator/initial-sync', () => {
           SUB,
         ),
       );
-
-      // Now verify that the Replication tables are initialized.
-      await expectTables(replica, {
-        ['zero.tx_log']: [],
-        ['zero.change_log']: [],
-        ['zero.invalidation_registry']: [],
-        ['zero.invalidation_index']: [],
-      });
 
       // Subscriptions should have been dropped.
       const subs =
@@ -288,6 +289,16 @@ describe('replicator/initial-sync', () => {
           org_id INTEGER, 
           _0_version INTEGER);
       `,
+      },
+      {
+        error: 'Schema _zero is reserved for internal use',
+        setupUpstreamQuery: `
+        CREATE SCHEMA _zero;
+        CREATE TABLE _zero.is_not_allowed(
+          issue_id INTEGER PRIMARY KEY, 
+          org_id INTEGER
+        );
+        `,
       },
     ];
 

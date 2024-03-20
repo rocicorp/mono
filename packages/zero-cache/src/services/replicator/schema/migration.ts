@@ -157,8 +157,8 @@ export async function getSyncSchemaMeta(
   //
   // Note: The `schema_meta.lock` column transparently ensures that at most one row exists.
   const results = await sql.unsafe(`
-    CREATE SCHEMA IF NOT EXISTS zero;
-    CREATE TABLE IF NOT EXISTS zero.schema_meta (
+    CREATE SCHEMA IF NOT EXISTS _zero;
+    CREATE TABLE IF NOT EXISTS _zero.schema_meta (
       version int NOT NULL,
       max_version int NOT NULL,
       min_safe_rollback_version int NOT NULL,
@@ -167,7 +167,7 @@ export async function getSyncSchemaMeta(
       CONSTRAINT PK_schema_meta_lock PRIMARY KEY (lock),
       CONSTRAINT CK_schema_meta_lock CHECK (lock='v')
     );
-    SELECT version, max_version, min_safe_rollback_version FROM zero.schema_meta;
+    SELECT version, max_version, min_safe_rollback_version FROM _zero.schema_meta;
   `);
   const rows = results[1];
   if (rows.length === 0) {
@@ -189,9 +189,9 @@ async function setSyncSchemaVersion(
   };
 
   if (prev.version === 0) {
-    await sql`INSERT INTO zero.schema_meta ${sql(meta)}`;
+    await sql`INSERT INTO _zero.schema_meta ${sql(meta)}`;
   } else {
-    await sql`UPDATE zero.schema_meta set ${sql(meta)}`;
+    await sql`UPDATE _zero.schema_meta set ${sql(meta)}`;
   }
   return meta;
 }

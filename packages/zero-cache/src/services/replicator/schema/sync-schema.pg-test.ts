@@ -28,11 +28,11 @@ describe('replicator/sync-schema', () => {
       },
       replicaPostState: {
         ['zero.clients']: [],
-        ['zero.schema_meta']: [
+        ['_zero.schema_meta']: [
           {
             // Update these as necessary.
-            version: 3,
-            maxVersion: 3,
+            version: 4,
+            maxVersion: 4,
             minSafeRollbackVersion: 1,
             lock: 'v', // Internal column, always 'v'
           },
@@ -56,11 +56,11 @@ describe('replicator/sync-schema', () => {
         ['zero.clients']: [],
       },
       replicaPostState: {
-        ['zero.schema_meta']: [
+        ['_zero.schema_meta']: [
           {
             // Update these as necessary.
-            version: 3,
-            maxVersion: 3,
+            version: 4,
+            maxVersion: 4,
             minSafeRollbackVersion: 1,
             lock: 'v', // Internal column, always 'v'
           },
@@ -127,10 +127,10 @@ describe('replicator/sync-schema', () => {
 
         // Check that internal replication tables have been created.
         await expectTables(replica, {
-          ['zero.tx_log']: [],
-          ['zero.change_log']: [],
-          ['zero.invalidation_registry']: [],
-          ['zero.invalidation_index']: [],
+          ['_zero.tx_log']: [],
+          ['_zero.change_log']: [],
+          ['_zero.invalidation_registry']: [],
+          ['_zero.invalidation_index']: [],
         });
 
         // Subscriptions should have been dropped.

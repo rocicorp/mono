@@ -189,7 +189,7 @@ describe('schema/migration', () => {
     test(c.name, async () => {
       if (c.preSchema) {
         await getSyncSchemaMeta(db); // Ensures that the table is created.
-        await db`INSERT INTO zero.schema_meta ${db(c.preSchema)}`;
+        await db`INSERT INTO _zero.schema_meta ${db(c.preSchema)}`;
       }
 
       let err: string | undefined;
