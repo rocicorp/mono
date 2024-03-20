@@ -1,6 +1,10 @@
-import {expect} from '@jest/globals';
+import {afterAll, expect} from '@jest/globals';
 import postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
+
+afterAll(async () => {
+  await testDBs.end();
+});
 
 class TestDBs {
   // Connects to the main "postgres" DB of the local Postgres cluster.
