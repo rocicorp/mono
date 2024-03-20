@@ -181,5 +181,6 @@ async function publishDispatcherScript({
     // no_minimal_subrequests is required to dispatch to non-namespaced workers by Custom Domain.
     compatibility_flags: ['no_minimal_subrequests'],
     /* eslint-enable @typescript-eslint/naming-convention */
+    logpush: true,
   });
 }
