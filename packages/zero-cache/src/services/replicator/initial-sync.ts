@@ -80,7 +80,9 @@ export async function startPostgresReplication(
   const schemaList = [...schemas].join(',');
   const publications = published.publications.map(p => p.pubname);
   const publicationStmts = publications.map(pub =>
-    // The publication that we manage, zero_meta is used to track all of the replicated schemas.
+    // The publication that we manage, "zero_meta", is used to track all of the
+    // replicated schemas. This is the only publication that would need to be
+    // altered if, for example, a new schema is encountered from upstream.
     pub === PUB_PREFIX + 'meta'
       ? `CREATE PUBLICATION ${pub} FOR TABLES IN SCHEMA ${schemaList};`
       : // All of the other publications are created simply to indicate that they should be
