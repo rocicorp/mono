@@ -2,110 +2,52 @@ import {expect} from 'chai';
 import {getServer} from './server-option.js';
 
 test('getServer', () => {
-  expect(getServer(null, null)).equal(null);
+  expect(getServer(null)).equal(null);
+  expect(getServer(undefined)).equal(null);
 
-  expect(getServer('https://myapp-myteam.reflect.net/', null)).equal(
-    'https://myapp-myteam.reflect.net/',
+  expect(getServer('http://myapp-myteam.zero.ms/')).equal(
+    'http://myapp-myteam.zero.ms/',
   );
-  expect(getServer('http://myapp-myteam.reflect.net/', null)).equal(
-    'http://myapp-myteam.reflect.net/',
+  expect(getServer('https://myapp-myteam.zero.ms')).equal(
+    'https://myapp-myteam.zero.ms/',
   );
-  expect(getServer('https://myapp-myteam.reflect.net', null)).equal(
-    'https://myapp-myteam.reflect.net/',
-  );
-  expect(getServer('http://myapp-myteam.reflect.net', null)).equal(
-    'http://myapp-myteam.reflect.net/',
+  expect(getServer('http://myapp-myteam.zero.ms')).equal(
+    'http://myapp-myteam.zero.ms/',
   );
 
-  expect(getServer(null, 'wss://myapp-myteam.reflect.net/')).equal(
-    'https://myapp-myteam.reflect.net/',
-  );
-  expect(getServer(null, 'ws://myapp-myteam.reflect.net/')).equal(
-    'http://myapp-myteam.reflect.net/',
-  );
-  expect(getServer(null, 'wss://myapp-myteam.reflect.net')).equal(
-    'https://myapp-myteam.reflect.net/',
-  );
-  expect(getServer(null, 'ws://myapp-myteam.reflect.net')).equal(
-    'http://myapp-myteam.reflect.net/',
-  );
-
-  expect(
-    getServer('https://myapp-myteam.reflect.net/', 'ws://ignore.net'),
-  ).equal('https://myapp-myteam.reflect.net/');
-  expect(
-    getServer('http://myapp-myteam.reflect.net/', 'ws://ignore.net'),
-  ).equal('http://myapp-myteam.reflect.net/');
-  expect(
-    getServer('https://myapp-myteam.reflect.net', 'ws://ignore.net'),
-  ).equal('https://myapp-myteam.reflect.net/');
-  expect(getServer('http://myapp-myteam.reflect.net', 'ws://ignore.net')).equal(
-    'http://myapp-myteam.reflect.net/',
-  );
-
-  const expectError = (
-    server: string | null,
-    socketOrigin: string | null,
-    expectedError: string,
-  ) => {
-    expect(() => getServer(server, socketOrigin)).to.throw(expectedError);
+  const expectError = (server: string, expectedError: string) => {
+    expect(() => getServer(server)).to.throw(expectedError);
   };
 
   expectError(
-    'myapp-myteam.reflect.net',
-    null,
-    `ReflectOptions.server must use the "http" or "https" scheme.`,
+    'myapp-myteam.zero.ms',
+    `ZeroOptions.server must use the "http" or "https" scheme.`,
   );
   expectError(
-    null,
-    'myapp-myteam.reflect.net',
-    `ReflectOptions.socketOrigin must use the "ws" or "wss" scheme.`,
-  );
-
-  expectError(
-    'https://myapp-myteam.reflect.net/x',
-    null,
-    'ReflectOptions.server must not contain a path component (other than "/"). For example: "https://myapp-myteam.reflect.net/".',
+    'https://myapp-myteam.zero.ms/x',
+    'ZeroOptions.server must not contain a path component (other than "/"). For example: "https://myapp-myteam.zero.ms/".',
   );
   expectError(
-    null,
-    'wss://myapp-myteam.reflect.net/x',
-    'ReflectOptions.socketOrigin must not contain a path component (other than "/"). For example: "wss://myapp-myteam.reflect.net/".',
+    'https://myapp-myteam.zero.ms/x/',
+    'ZeroOptions.server must not contain a path component (other than "/"). For example: "https://myapp-myteam.zero.ms/".',
+  );
+  expectError(
+    'https://myapp-myteam.zero.ms/?',
+    'ZeroOptions.server must not contain a search component. For example: "https://myapp-myteam.zero.ms/".',
   );
 
   expectError(
-    'https://myapp-myteam.reflect.net/x/',
-    null,
-    'ReflectOptions.server must not contain a path component (other than "/"). For example: "https://myapp-myteam.reflect.net/".',
-  );
-  expectError(
-    null,
-    'wss://myapp-myteam.reflect.net/x/',
-
-    'ReflectOptions.socketOrigin must not contain a path component (other than "/"). For example: "wss://myapp-myteam.reflect.net/".',
+    'https://myapp-myteam.zero.ms/?a',
+    'ZeroOptions.server must not contain a search component. For example: "https://myapp-myteam.zero.ms/".',
   );
 
   expectError(
-    'https://myapp-myteam.reflect.net/?',
-    null,
-    'ReflectOptions.server must not contain a search component. For example: "https://myapp-myteam.reflect.net/".',
+    'https://myapp-myteam.zero.ms/#a',
+    'ZeroOptions.server must not contain a hash component. For example: "https://myapp-myteam.zero.ms/".',
   );
 
   expectError(
-    'https://myapp-myteam.reflect.net/?a',
-    null,
-    'ReflectOptions.server must not contain a search component. For example: "https://myapp-myteam.reflect.net/".',
-  );
-
-  expectError(
-    'https://myapp-myteam.reflect.net/#a',
-    null,
-    'ReflectOptions.server must not contain a hash component. For example: "https://myapp-myteam.reflect.net/".',
-  );
-
-  expectError(
-    'https://myapp-myteam.reflect.net/#',
-    null,
-    'ReflectOptions.server must not contain a hash component. For example: "https://myapp-myteam.reflect.net/".',
+    'https://myapp-myteam.zero.ms/#',
+    'ZeroOptions.server must not contain a hash component. For example: "https://myapp-myteam.zero.ms/".',
   );
 });

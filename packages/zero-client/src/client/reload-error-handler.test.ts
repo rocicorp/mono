@@ -39,7 +39,7 @@ test('reloadWithReason', () => {
 
   reportReloadReason(lc);
   expect(sink.messages).deep.equal([
-    ['error', {foo: 'bar'}, ['Reflect reloaded the page.', 'my reason']],
+    ['error', {foo: 'bar'}, ['Zero reloaded the page.', 'my reason']],
   ]);
   expect(storage).deep.equal({unrelated: 'foo'});
 });
@@ -55,11 +55,11 @@ test('reloadWithReason no localStorage', () => {
   reloadWithReason(lc, reload, 'my reason');
   expect(reload.calledOnce).equal(true);
   expect(sink.messages).deep.equal([
-    ['error', {foo: 'bar'}, ['Reflect reloaded the page.', 'my reason']],
+    ['error', {foo: 'bar'}, ['Zero reloaded the page.', 'my reason']],
   ]);
 
   reportReloadReason(lc);
   expect(sink.messages).deep.equal([
-    ['error', {foo: 'bar'}, ['Reflect reloaded the page.', 'my reason']],
+    ['error', {foo: 'bar'}, ['Zero reloaded the page.', 'my reason']],
   ]);
 });

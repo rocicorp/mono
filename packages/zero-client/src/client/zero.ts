@@ -42,12 +42,10 @@ import {
 import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/get-document.js';
-import {getWindow} from 'shared/src/get-window.js';
 import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import * as valita from 'shared/src/valita.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
-import {CloseBeaconManager} from './close-beacon.js';
 import {checkConnectivity} from './connect-checks.js';
 import {shouldEnableAnalytics} from './enable-analytics.js';
 import {toWSString, type HTTPString, type WSString} from './http-string.js';
@@ -60,12 +58,8 @@ import {
   Series,
   getLastConnectErrorValue,
 } from './metrics.js';
-import type {ReflectOptions} from './options.js';
+import type {ZeroOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
-import {
-  PresenceManager,
-  type SubscribeToPresenceCallback,
-} from './presence-manager.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
@@ -86,7 +80,7 @@ export const onSetConnectionStateSymbol = Symbol();
 export const exposedToTestingSymbol = Symbol();
 export const createLogOptionsSymbol = Symbol();
 
-interface TestReflect {
+interface TestZero {
   [exposedToTestingSymbol]: TestingContext;
   [onSetConnectionStateSymbol]: (state: ConnectionState) => void;
   [createLogOptionsSymbol]: (options: {
@@ -95,8 +89,8 @@ interface TestReflect {
   }) => LogOptions;
 }
 
-function forTesting<MD extends MutatorDefs>(r: Reflect<MD>): TestReflect {
-  return r as unknown as TestReflect;
+function forTesting<MD extends MutatorDefs>(r: Zero<MD>): TestZero {
+  return r as unknown as TestZero;
 }
 
 export const enum ConnectionState {
@@ -147,12 +141,12 @@ export type UpdateNeededReason =
   // This tab cannot sync locally with this new tab until it updates to
   // the new code.
   | {type: 'NewClientGroup'}
-  // This is used When reflect tries to connect with a version that the server
+  // This is used when Zero tries to connect with a version that the server
   // does not support
   | {type: 'VersionNotSupported'};
 
 export function serverAheadReloadReason(kind: string) {
-  return `Server reported that client is ahead of server (${kind}). This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Reflect.`;
+  return `Server reported that client is ahead of server (${kind}). This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero.`;
 }
 
 function convertOnUpdateNeededReason(
@@ -171,7 +165,7 @@ export interface ReplicacheInternalAPI {
   lastMutationID(): number;
 }
 
-export class Reflect<MD extends MutatorDefs> {
+export class Zero<MD extends MutatorDefs> {
   readonly version = version;
 
   readonly #rep: Replicache<MD>;
@@ -184,7 +178,6 @@ export class Reflect<MD extends MutatorDefs> {
   readonly #enableAnalytics: boolean;
 
   readonly #pokeHandler: PokeHandler;
-  readonly #presenceManager: PresenceManager;
 
   #lastMutationIDSent: {clientID: string; id: number} =
     NULL_LAST_MUTATION_ID_SENT;
@@ -194,7 +187,7 @@ export class Reflect<MD extends MutatorDefs> {
   #online = false;
 
   /**
-   * `onOnlineChange` is called when the Reflect instance's online status
+   * `onOnlineChange` is called when the Zero instance's online status
    * changes.
    */
   onOnlineChange: ((online: boolean) => void) | null | undefined = null;
@@ -215,19 +208,16 @@ export class Reflect<MD extends MutatorDefs> {
     // intentionally empty
   };
 
-  #internalAPI: ReplicacheInternalAPI;
-  readonly #closeBeaconManager: CloseBeaconManager;
-
   /**
    * `onUpdateNeeded` is called when a code update is needed.
    *
    * A code update can be needed because:
    * - the server no longer supports the protocol version of the current code,
-   * - a new Reflect client has created a new client group, because its code
+   * - a new Zero client has created a new client group, because its code
    *   has different mutators, indexes, schema version and/or format version
-   *   from this Reflect client. This is likely due to the new client having
+   *   from this Zero client. This is likely due to the new client having
    *   newer code. A code update is needed to be able to locally sync with this
-   *   new Reflect client (i.e. to sync while offline, the clients can can
+   *   new Zero client (i.e. to sync while offline, the clients can can
    *   still sync with each other via the server).
    *
    * The default behavior is to reload the page (using `location.reload()`). Set
@@ -295,7 +285,7 @@ export class Reflect<MD extends MutatorDefs> {
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ReflectOptions<MD>;
+  readonly #options: ZeroOptions<MD>;
 
   #metrics: MetricManager;
 
@@ -304,9 +294,9 @@ export class Reflect<MD extends MutatorDefs> {
   #reload = () => location.reload();
 
   /**
-   * Constructs a new Reflect client.
+   * Constructs a new Zero client.
    */
-  constructor(options: ReflectOptions<MD>) {
+  constructor(options: ZeroOptions<MD>) {
     const {
       userID,
       roomID,
@@ -316,25 +306,25 @@ export class Reflect<MD extends MutatorDefs> {
       kvStore = 'mem',
     } = options;
     if (!userID) {
-      throw new Error('ReflectOptions.userID must not be empty.');
+      throw new Error('ZeroOptions.userID must not be empty.');
     }
     if (!isValidRoomID(roomID)) {
       throw new Error(
-        `ReflectOptions.roomID must match ${ROOM_ID_REGEX.toString()}.`,
+        `ZeroOptions.roomID must match ${ROOM_ID_REGEX.toString()}.`,
       );
     }
-    const server = getServer(options.server, options.socketOrigin);
+    const server = getServer(options.server);
     this.#enableAnalytics = shouldEnableAnalytics(
       server,
       options.enableAnalytics,
     );
 
     if (jurisdiction !== undefined && jurisdiction !== 'eu') {
-      throw new Error('ReflectOptions.jurisdiction must be "eu" if present.');
+      throw new Error('ZeroOptions.jurisdiction must be "eu" if present.');
     }
     if (hiddenTabDisconnectDelay < 0) {
       throw new Error(
-        'ReflectOptions.hiddenTabDisconnectDelay must not be negative.',
+        'ZeroOptions.hiddenTabDisconnectDelay must not be negative.',
       );
     }
 
@@ -353,7 +343,7 @@ export class Reflect<MD extends MutatorDefs> {
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: options.mutators,
-      name: `reflect-${userID}-${roomID}`,
+      name: `zero-${userID}-${roomID}`,
       pusher: (req, reqID) => this.#pusher(req, reqID),
       puller: (req, reqID) => this.#puller(req, reqID),
       // TODO: Do we need these?
@@ -362,22 +352,17 @@ export class Reflect<MD extends MutatorDefs> {
         maxDelayMs: 0,
         minDelayMs: 0,
       },
-      licenseKey: 'reflect-client-static-key',
+      licenseKey: 'zero-client-static-key',
       kvStore,
     };
-    let internalAPI: ReplicacheInternalAPI;
     const replicacheInternalOptions = {
       enableLicensing: false,
-      exposeInternalAPI: (api: ReplicacheInternalAPI) => {
-        internalAPI = api;
-      },
     };
 
     this.#rep = new Replicache({
       ...replicacheOptions,
       ...replicacheInternalOptions,
     });
-    this.#internalAPI = internalAPI!;
     this.#rep.getAuth = this.#getAuthToken;
     this.#onUpdateNeeded = this.#rep.onUpdateNeeded; // defaults to reload.
     this.#server = server;
@@ -403,11 +388,8 @@ export class Reflect<MD extends MutatorDefs> {
     });
     this.#metrics.tags.push(`version:${this.version}`);
 
-    this.#presenceManager = new PresenceManager(this.#rep.clientID, this.#lc);
-
     this.#pokeHandler = new PokeHandler(
       pokeDD31 => this.#rep.poke(pokeDD31),
-      this.#presenceManager,
       () => this.#onOutOfOrderPoke(),
       this.#rep.clientID,
       this.#lc,
@@ -417,16 +399,6 @@ export class Reflect<MD extends MutatorDefs> {
       getDocument(),
       hiddenTabDisconnectDelay,
       this.#closeAbortController.signal,
-    );
-
-    this.#closeBeaconManager = new CloseBeaconManager(
-      this,
-      this.#lc,
-      server,
-      () => this.#rep.auth,
-      () => this.#internalAPI.lastMutationID(),
-      this.#closeAbortController.signal,
-      getWindow(),
     );
 
     void this.#runLoop();
@@ -459,7 +431,7 @@ export class Reflect<MD extends MutatorDefs> {
 
   /**
    * The name of the IndexedDB database in which the data of this
-   * instance of Reflect is stored.
+   * instance of Zero is stored.
    */
   get idbName(): string {
     return this.#rep.idbName;
@@ -467,14 +439,14 @@ export class Reflect<MD extends MutatorDefs> {
 
   /**
    * The schema version of the data understood by this application.
-   * See [[ReflectOptions.schemaVersion]].
+   * See [[ZeroOptions.schemaVersion]].
    */
   get schemaVersion(): string {
     return this.#rep.schemaVersion;
   }
 
   /**
-   * The client ID for this instance of Reflect. Each instance
+   * The client ID for this instance of Zero. Each instance
    * gets a unique client ID.
    */
   get clientID(): ClientID {
@@ -486,14 +458,14 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   /**
-   * The registered mutators (see [[ReflectOptions.mutators]]).
+   * The registered mutators (see [[ZeroOptions.mutators]]).
    */
   get mutate() {
     return this.#rep.mutate;
   }
 
   /**
-   * Whether this Reflect instance has been closed. Once a Reflect instance has
+   * Whether this Zero instance has been closed. Once a Zero instance has
    * been closed it no longer syncs and you can no longer read or write data out
    * of it. After it has been closed it is pretty much useless and should not be
    * used any more.
@@ -503,7 +475,7 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   /**
-   * Closes this Reflect instance.
+   * Closes this Zero instance.
    *
    * When closed all subscriptions end and no more read or writes are allowed.
    */
@@ -512,19 +484,17 @@ export class Reflect<MD extends MutatorDefs> {
 
     if (this.#connectionState !== ConnectionState.Disconnected) {
       this.#disconnect(lc, {
-        client: 'ReflectClosed',
+        client: 'ClientClosed',
       });
     }
-    this.#closeBeaconManager.send('ReflectClosed');
     lc.debug?.('Aborting closeAbortController due to close()');
     this.#closeAbortController.abort();
     this.#metrics.stop();
-    this.#presenceManager.clearSubscriptions();
     return this.#rep.close();
   }
 
   /**
-   * Subscribe to changes to Reflect data. Every time the underlying data
+   * Subscribe to changes to Zero data. Every time the underlying data
    * changes `body` is called and if the result of `body` changes compared to
    * last time `onData` is called. The function is also called once the first
    * time the subscription is added.
@@ -542,14 +512,14 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   /**
-   * Transactionally read Reflect data.
+   * Transactionally read Zero data.
    */
   query<R>(body: (tx: ReadTransaction) => Promise<R> | R): Promise<R> {
     return this.#rep.query(body);
   }
 
   /**
-   * Watches Reflect for changes.
+   * Watches Zero for changes.
    *
    * The `callback` gets called whenever the underlying data changes and the
    * `key` changes matches the
@@ -573,18 +543,6 @@ export class Reflect<MD extends MutatorDefs> {
     options?: Options,
   ): () => void {
     return this.#rep.experimentalWatch(callback, options);
-  }
-
-  /**
-   * Subscribe to the set of present client ids.
-   *
-   * When offline this set will contain just this
-   * Reflect instances clientID.
-   *
-   * To cancel the subscription call the returned function.
-   */
-  subscribeToPresence(callback: SubscribeToPresenceCallback): () => void {
-    return this.#presenceManager.addSubscription(callback);
   }
 
   #onMessage = (e: MessageEvent<string>) => {
@@ -911,7 +869,6 @@ export class Reflect<MD extends MutatorDefs> {
     this.#socket = undefined;
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
     this.#pokeHandler.handleDisconnect();
-    this.#presenceManager.handleDisconnect();
   }
 
   async #handlePoke(_lc: LogContext, pokeMessage: PokeMessage) {
@@ -966,7 +923,7 @@ export class Reflect<MD extends MutatorDefs> {
     lc.debug?.(`pushing ${req.mutations.length} mutations`);
 
     // If pushVersion is 0 this is a mutation recovery push for a pre dd31
-    // client.  Reflect didn't support mutation recovery pre dd31, so don't
+    // client.  Zero didn't support mutation recovery pre dd31, so don't
     // try to recover these, just return no-op response.
     if (req.pushVersion === 0) {
       return {
@@ -1044,7 +1001,7 @@ export class Reflect<MD extends MutatorDefs> {
   }
 
   async #runLoop() {
-    this.#lc.info?.(`Starting Reflect version: ${this.version}`);
+    this.#lc.info?.(`Starting Zero version: ${this.version}`);
 
     if (this.#server === null) {
       this.#lc.info?.('No socket origin provided, not starting connect loop.');
@@ -1246,7 +1203,7 @@ export class Reflect<MD extends MutatorDefs> {
     const lc = this.#lc.withContext('requestID', requestID);
     lc.debug?.('Pull', req);
     // If pullVersion === 0 this is a mutation recovery pull for a pre dd31
-    // client.  Reflect didn't support mutation recovery pre dd31, so don't
+    // client.  Zero didn't support mutation recovery pre dd31, so don't
     // try to recover these, just return no-op response.
     if (req.pullVersion === 0) {
       return {

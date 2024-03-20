@@ -16,15 +16,15 @@ import type {MutatorDefs} from 'reflect-shared/src/types.js';
 import {assert} from 'shared/src/asserts.js';
 import type {SinonFakeTimers} from 'sinon';
 import type {LogOptions} from './log-options.js';
-import type {ReflectOptions} from './options.js';
+import type {ZeroOptions} from './options.js';
 import {
   ConnectionState,
-  Reflect,
+  Zero,
   TestingContext,
   createLogOptionsSymbol,
   exposedToTestingSymbol,
   onSetConnectionStateSymbol,
-} from './reflect.js';
+} from './zero.js';
 
 export async function tickAFewTimes(clock: SinonFakeTimers, duration = 100) {
   const n = 10;
@@ -58,7 +58,7 @@ export class MockSocket extends EventTarget {
   }
 }
 
-export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
+export class TestZero<MD extends MutatorDefs> extends Zero<MD> {
   #connectionStateResolvers: Set<{
     state: ConnectionState;
     resolve: (state: ConnectionState) => void;
@@ -182,17 +182,17 @@ export class TestReflect<MD extends MutatorDefs> extends Reflect<MD> {
 
 declare const TESTING: boolean;
 
-const testReflectInstances = new Set<TestReflect<MutatorDefs>>();
+const testZeroInstances = new Set<TestZero<MutatorDefs>>();
 
-let testReflectCounter = 0;
+let testZeroCounter = 0;
 
-export function reflectForTest<MD extends MutatorDefs>(
-  options: Partial<ReflectOptions<MD>> = {},
-): TestReflect<MD> {
-  const r = new TestReflect({
+export function zeroForTest<MD extends MutatorDefs>(
+  options: Partial<ZeroOptions<MD>> = {},
+): TestZero<MD> {
+  const r = new TestZero({
     server: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
-    userID: 'test-user-id-' + testReflectCounter++,
+    userID: 'test-user-id-' + testZeroCounter++,
     roomID: 'test-room-id',
     auth: 'test-auth',
     ...options,
@@ -204,17 +204,17 @@ export function reflectForTest<MD extends MutatorDefs>(
   };
 
   // Keep track of all instances so we can close them in teardown.
-  testReflectInstances.add(r);
+  testZeroInstances.add(r);
   return r;
 }
 // This file is imported in a worker and web-test-runner does not inject the
 // teardown function there.
 if (typeof teardown === 'function') {
   teardown(async () => {
-    for (const r of testReflectInstances) {
+    for (const r of testZeroInstances) {
       if (!r.closed) {
         await r.close();
-        testReflectInstances.delete(r);
+        testZeroInstances.delete(r);
       }
     }
   });
@@ -235,7 +235,7 @@ export class TestLogSink implements LogSink {
 }
 
 export async function waitForUpstreamMessage(
-  r: TestReflect<MutatorDefs>,
+  r: TestZero<MutatorDefs>,
   name: string,
   clock: SinonFakeTimers,
 ) {
