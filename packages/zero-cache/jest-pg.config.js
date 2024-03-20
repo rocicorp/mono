@@ -6,7 +6,6 @@ import {jestConfig} from '../shared/src/tool/jest-config.js';
 const config = {
   ...jestConfig,
   testMatch: ['**/?(*.)+(pg-test).[jt]s?(x)'],
-  globalTeardown: './src/test/teardown.ts',
 };
 
 export {config as default};

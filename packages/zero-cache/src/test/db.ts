@@ -2,10 +2,6 @@ import {afterAll, expect} from '@jest/globals';
 import postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 
-afterAll(async () => {
-  await testDBs.end();
-});
-
 class TestDBs {
   // Connects to the main "postgres" DB of the local Postgres cluster.
   //
@@ -52,6 +48,11 @@ class TestDBs {
     delete this.#dbs[database];
   }
 
+  /**
+   * This automatically is called on the exported `testDBs` instance
+   * in the `afterAll()` hook in this file, so there is no need to call
+   * it manually.
+   */
   async end() {
     await this.drop(...[...Object.values(this.#dbs)]);
     return this.#sql.end();
@@ -59,6 +60,10 @@ class TestDBs {
 }
 
 export const testDBs = new TestDBs();
+
+afterAll(async () => {
+  await testDBs.end();
+});
 
 export async function initDB(
   db: postgres.Sql,
