@@ -1,3 +1,8 @@
+import type {LogContext} from '@rocicorp/logger';
+import type postgres from 'postgres';
+import {ZERO_VERSION_COLUMN_NAME} from './initial-sync.js';
+import {getPublicationInfo} from './tables/published.js';
+
 /**
  * Replication metadata, used for invalidation and catchup. These tables
  * are created atomically with the logical replication handoff, after initial
@@ -7,7 +12,8 @@ export const CREATE_REPLICATION_TABLES =
   // The transaction log maps each LSN to transaction information.
   // Note that the lsn may become optional for supporting non-Postgres upstreams.
   `
-  CREATE TABLE zero.tx_log (
+  CREATE SCHEMA IF NOT EXISTS _zero;
+  CREATE TABLE _zero.tx_log (
     db_version VARCHAR(38) NOT NULL,
     lsn PG_LSN             NOT NULL,
     time TIMESTAMPTZ       NOT NULL,
@@ -25,7 +31,7 @@ export const CREATE_REPLICATION_TABLES =
   // throughput, as replication is critical bottleneck in the system. Row values are
   // only needed for catchup, for which JSONB is not particularly advantageous over JSON.
   `
-  CREATE TABLE zero.change_log (
+  CREATE TABLE _zero.change_log (
     db_version VARCHAR(38)  NOT NULL,
     table_name VARCHAR(128) NOT NULL,
     row_key TEXT            NOT NULL,
@@ -56,7 +62,7 @@ export const CREATE_REPLICATION_TABLES =
   //   exceeds some interval, for example. This is used to clean up specs that
   //   are no longer used.
   `
-CREATE TABLE zero.invalidation_registry (
+CREATE TABLE _zero.invalidation_registry (
   spec TEXT                   NOT NULL,
   bits SMALLINT               NOT NULL,
   from_db_version VARCHAR(38) NOT NULL,
@@ -66,9 +72,40 @@ CREATE TABLE zero.invalidation_registry (
 ` +
   // Invalidation index.
   `
-CREATE TABLE zero.invalidation_index (
+CREATE TABLE _zero.invalidation_index (
   hash           BIGINT      NOT NULL,
   db_version     VARCHAR(38) NOT NULL,
   PRIMARY KEY(hash)
 );
 `;
+
+/**
+ * Migration step that sets up the initialized Sync Replica for incremental replication.
+ * This includes:
+ *
+ * * Setting up in the internal _zero tables that track replication state.
+ *
+ * * Removing the _0_version DEFAULT (used only for initial sync)
+ *   and requiring that it be NOT NULL. This is a defensive measure to
+ *   enforce that the incremental replication logic always sets the _0_version.
+ */
+export async function setupReplicationTables(
+  lc: LogContext,
+  _replicaID: string,
+  tx: postgres.TransactionSql,
+  upstreamUri: string,
+) {
+  lc.info?.(`Setting up replication tables for ${upstreamUri}`);
+
+  const replicated = await getPublicationInfo(tx, 'zero_');
+  const alterStmts = Object.keys(replicated.tables).map(
+    table =>
+      `
+      ALTER TABLE ${table} 
+        ALTER COLUMN ${ZERO_VERSION_COLUMN_NAME} DROP DEFAULT, 
+        ALTER COLUMN ${ZERO_VERSION_COLUMN_NAME} SET NOT NULL;
+        `,
+  );
+
+  await tx.unsafe(alterStmts.join('') + CREATE_REPLICATION_TABLES);
+}

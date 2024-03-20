@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
+import {setupReplicationTables} from '../incremental-sync.js';
 import {
   handoffPostgresReplication,
   startPostgresReplication,
@@ -17,6 +18,7 @@ const SCHEMA_VERSION_MIGRATION_MAP: VersionMigrationMap = {
     pre: waitForInitialDataSynchronization,
     run: handoffPostgresReplication,
   },
+  4: {run: setupReplicationTables},
 };
 
 export async function initSyncSchema(

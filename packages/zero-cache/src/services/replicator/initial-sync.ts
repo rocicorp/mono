@@ -1,14 +1,13 @@
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {sleep} from 'shared/src/sleep.js';
-import {CREATE_REPLICATION_TABLES} from './incremental-sync.js';
 import {createTableStatement} from './tables/create.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
 import type {ColumnSpec} from './tables/specs.js';
 
 const PUB_PREFIX = 'zero_';
 
-const ZERO_VERSION_COLUMN_NAME = '_0_version';
+export const ZERO_VERSION_COLUMN_NAME = '_0_version';
 const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
   characterMaximumLength: 38,
   columnDefault: "'00'::text",
@@ -46,6 +45,9 @@ export async function startPostgresReplication(
   // additional _0_version column to track row versions.
   const schemas = new Set<string>();
   const tablesStmts = Object.values(published.tables).map(table => {
+    if (table.schema === '_zero') {
+      throw new Error(`Schema _zero is reserved for internal use`);
+    }
     if (ZERO_VERSION_COLUMN_NAME in table.columns) {
       throw new Error(
         `Table ${table.name} uses reserved column name ${ZERO_VERSION_COLUMN_NAME}`,
@@ -64,13 +66,38 @@ export async function startPostgresReplication(
     schema => `CREATE SCHEMA IF NOT EXISTS ${schema};`,
   );
 
+  // Emulate all of the upstream zero_* PUBLICATIONS to cover all of the
+  // replicated tables (simplifying with FOR TABLES IN SCHEMA). This serves two
+  // purposes:
+  //  1. It serves as a reference for which PUBLICATIONS to subscribe to during
+  //     incremental replication.
+  //  2. It facilitates replicated table selection logic used to initialize the
+  //     incremental replication process, as the destination tables and their
+  //     structure must be known.
+  //
+  // By using PUBLICATIONS for this, the same `getPublicationInfo()` logic can
+  // be used on both the upstream and replica.
+  const schemaList = [...schemas].join(',');
+  const publications = published.publications.map(p => p.pubname);
+  const publicationStmts = publications.map(pub =>
+    // The publication that we manage, "zero_meta", is used to track all of the
+    // replicated schemas. This is the only publication that would need to be
+    // altered if, for example, a new schema is encountered from upstream.
+    pub === PUB_PREFIX + 'meta'
+      ? `CREATE PUBLICATION ${pub} FOR TABLES IN SCHEMA ${schemaList};`
+      : // All of the other publications are created simply to indicate that they should be
+        // subscribed to on upstream.
+        `CREATE PUBLICATION ${pub};`,
+  );
+
   const stmts = [
     ...schemaStmts,
     ...tablesStmts,
+    ...publicationStmts,
     `
     CREATE SUBSCRIPTION ${subName}
       CONNECTION '${upstreamUri}'
-      PUBLICATION ${published.publications.map(p => p.pubname).join(',')}
+      PUBLICATION ${publications.join(',')}
       WITH (slot_name='${slotName}', create_slot=false);`,
   ];
 
@@ -159,7 +186,6 @@ export async function waitForInitialDataSynchronization(
 /**
  * Following up after {@link waitForInitialDataSynchronization}, this migration step detaches
  * and drops the subscription so that the replication slot can be used by the replicator.
- * The replication tables are also set up in this step.
  */
 export async function handoffPostgresReplication(
   lc: LogContext,
@@ -177,9 +203,7 @@ export async function handoffPostgresReplication(
     ALTER SUBSCRIPTION ${subName} DISABLE;
     ALTER SUBSCRIPTION ${subName} SET(slot_name=NONE);
     DROP SUBSCRIPTION IF EXISTS ${subName};
-  ` +
-      // Create the Replication tables in the same transaction.
-      CREATE_REPLICATION_TABLES,
+  `,
   );
 }
 
@@ -276,8 +300,7 @@ function ensurePublishedTables(
     let dataPublication = '';
     if (published.publications.length === 0) {
       // If there are no custom zero_* publications, set one up to publish all tables.
-      const pubName = `${PUB_PREFIX}data`;
-      dataPublication = `CREATE PUBLICATION ${pubName} FOR ALL TABLES;`;
+      dataPublication = `CREATE PUBLICATION ${PUB_PREFIX}data FOR ALL TABLES;`;
     }
 
     // Send everything as a single batch.
@@ -288,7 +311,7 @@ function ensurePublishedTables(
       client_id TEXT PRIMARY KEY,
       last_mutation_id BIGINT
     );
-    CREATE PUBLICATION ${PUB_PREFIX + 'metadata'} FOR TABLES IN SCHEMA zero;
+    CREATE PUBLICATION ${PUB_PREFIX}meta FOR TABLES IN SCHEMA zero;
     ${dataPublication}
     `,
     );
