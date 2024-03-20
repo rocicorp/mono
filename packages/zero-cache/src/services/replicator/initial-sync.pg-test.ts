@@ -266,5 +266,50 @@ describe('replicator/initial-sync', () => {
         )}`;
       expect(slots[0]).toEqual({slotName: replicationSlot(REPLICA_ID)});
     }, 10000);
+
+    type InvalidUpstreamCase = {
+      error: string;
+      setupUpstreamQuery?: string;
+      upstream?: Record<string, object[]>;
+    };
+
+    const invalidUpstreamCases: InvalidUpstreamCase[] = [
+      {
+        error: 'does not have a PRIMARY KEY',
+        setupUpstreamQuery: `
+        CREATE TABLE issues(issue_id INTEGER, org_id INTEGER);
+      `,
+      },
+      {
+        error: 'uses reserved column name _0_version',
+        setupUpstreamQuery: `
+        CREATE TABLE issues(
+          issue_id INTEGER PRIMARY KEY, 
+          org_id INTEGER, 
+          _0_version INTEGER);
+      `,
+      },
+    ];
+
+    for (const c of invalidUpstreamCases) {
+      test(`Invalid upstream: ${c.error}`, async () => {
+        await initDB(upstream, c.setupUpstreamQuery, c.upstream);
+
+        const result = await replica
+          .begin(tx =>
+            startPostgresReplication(
+              createSilentLogContext(),
+              REPLICA_ID,
+              tx,
+              'postgres:///initial_sync_upstream',
+              SUB,
+            ),
+          )
+          .catch(e => e);
+
+        expect(result).toBeInstanceOf(Error);
+        expect(String(result)).toContain(c.error);
+      });
+    }
   }
 });

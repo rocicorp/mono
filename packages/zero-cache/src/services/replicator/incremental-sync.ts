@@ -39,12 +39,12 @@ export const CREATE_REPLICATION_TABLES =
   // * `spec` defines the invalidation function to run,
   //
   // * `bits` indicates the number of bits used to create the
-  //    corresponding tag in the `invalidation_index`. The former is requested
-  //    by View Syncers, while the latter is decided by the system.
+  //    corresponding tag in the `invalidation_index`. The 'spec' is requested
+  //    by View Syncers, while 'bits' is decided by the system.
   //
   //    For example, we may decide to start off with 32-bit hashes and later
   //    determine that it is worth increasing the table size to 40-bit hashes
-  //    in order to reduce the number collisions. During the transition, the
+  //    in order to reduce the number of collisions. During the transition, the
   //    Replicator would compute both sizes until the new size has sufficient
   //    coverage (over old versions).
   //
