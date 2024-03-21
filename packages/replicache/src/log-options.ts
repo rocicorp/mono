@@ -9,9 +9,9 @@ import {
 
 /**
  * Creates a LogContext
- *
- * @param opts - Optional logging configuration options.
- * @param operation - A unique identifier for the operation.
+ * @param logLevel The log level to use. Default is `'info'`.
+ * @param logSinks Destination for logs. Default is `[consoleLogSink]`.
+ * @param context Optional: Additional information that can be associated with logs.
  * @returns A LogContext instance configured with the provided options.
  */
 export function createLogContext(
