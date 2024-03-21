@@ -61,11 +61,13 @@ describe('replicator/incremental-sync', () => {
               dataType: 'int4',
               characterMaximumLength: null,
               columnDefault: null,
+              notNull: true,
             },
             ['_0_version']: {
               dataType: 'varchar',
               characterMaximumLength: 38,
-              columnDefault: null, // Default should be cleared.
+              columnDefault: null,
+              notNull: true,
             },
           },
           primaryKey: ['issue_id'],
@@ -78,16 +80,19 @@ describe('replicator/incremental-sync', () => {
               dataType: 'text',
               characterMaximumLength: null,
               columnDefault: null,
+              notNull: true,
             },
             ['last_mutation_id']: {
               dataType: 'text',
               characterMaximumLength: null,
               columnDefault: null,
+              notNull: false,
             },
             ['_0_version']: {
               dataType: 'varchar',
               characterMaximumLength: 38,
               columnDefault: null, // Default should be cleared.
+              notNull: true,
             },
           },
           primaryKey: ['client_id'],

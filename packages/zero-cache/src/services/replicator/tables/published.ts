@@ -14,6 +14,7 @@ const publishedColumnsSchema = v.array(
     maxLen: v.number(),
     arrayDims: v.number(),
     keyPos: v.number().nullable(),
+    notNull: v.boolean(),
     default: v.string().nullable(),
     pubname: v.string(),
   }),
@@ -59,6 +60,7 @@ export async function getPublicationInfo(
     atttypmod AS max_len, 
     attndims array_dims, 
     ARRAY_POSITION(conkey, attnum) AS key_pos,
+    attnotnull as not_null,
     pg_get_expr(pd.adbin, pd.adrelid) as default,
     pb.pubname
   FROM pg_attribute
@@ -106,6 +108,7 @@ export async function getPublicationInfo(
         : col.type,
       characterMaximumLength: maxLen,
       columnDefault: col.default,
+      notNull: col.notNull,
     };
     if (col.keyPos) {
       while (table.primaryKey.length < col.keyPos) {

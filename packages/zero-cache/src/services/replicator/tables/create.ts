@@ -9,6 +9,9 @@ export function createTableStatement(spec: TableSpec): string {
     if (colSpec.characterMaximumLength !== null) {
       parts.push(`(${colSpec.characterMaximumLength})`);
     }
+    if (colSpec.notNull) {
+      parts.push(' NOT NULL');
+    }
     if (colSpec.columnDefault) {
       parts.push(` DEFAULT ${colSpec.columnDefault}`);
     }
