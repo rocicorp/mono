@@ -43,6 +43,7 @@ export {
   deleteAllReplicacheData,
   dropAllDatabases,
   dropDatabase,
+  DropDatabaseOptions,
 } from './persist/collect-idb-databases.js';
 export type {
   PullResponse,
