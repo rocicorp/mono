@@ -3,7 +3,7 @@ main = "demo/worker/index.ts"
 compatibility_date = "2022-11-30"
 compatibility_flags = ["nodejs_compat"]
 account_id = "085f6d8eb08e5b23debfb08b21bda1eb"
-logpush = false
+logpush = true 
 
 route = { pattern = "reflect-server.net", custom_domain = true }
 durable_objects.bindings = [
