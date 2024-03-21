@@ -12,6 +12,7 @@ const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
   characterMaximumLength: 38,
   columnDefault: "'00'::text",
   dataType: 'character varying',
+  notNull: false,
 };
 
 export function replicationSlot(replicaID: string): string {

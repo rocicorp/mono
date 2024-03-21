@@ -2,6 +2,7 @@ export type ColumnSpec = {
   dataType: string;
   characterMaximumLength: number | null;
   columnDefault: string | null;
+  notNull: boolean;
 };
 
 export type TableSpec = {
