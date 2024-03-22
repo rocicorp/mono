@@ -381,16 +381,17 @@ class TransactionProcessor {
   }
 
   processBegin(begin: Pgoutput.MessageBegin) {
-    return this.#process(tx => {
-      // Note: This is how redundant (already seen) transactions are prevented.
-      // TODO: Determine how to handle the resulting error.
-      return tx`INSERT INTO _zero.tx_log ${tx({
-        dbVersion: this.#version,
-        lsn: begin.commitLsn,
-        time: epochMicrosToTimestampTz(begin.commitTime.valueOf()),
-        xid: begin.xid,
-      })}`;
-    });
+    return this.#process(
+      tx =>
+        // Note: This is how redundant (already seen) transactions are prevented.
+        // TODO: Determine how to handle the resulting error.
+        tx`INSERT INTO _zero.tx_log ${tx({
+          dbVersion: this.#version,
+          lsn: begin.commitLsn,
+          time: epochMicrosToTimestampTz(begin.commitTime.valueOf()),
+          xid: begin.xid,
+        })}`,
+    );
   }
 
   processInsert(insert: Pgoutput.MessageInsert) {
@@ -407,21 +408,24 @@ class TransactionProcessor {
 
   processUpdate(update: Pgoutput.MessageUpdate) {
     return this.#process(tx => {
+      const row = {
+        ...update.new,
+        [ZERO_VERSION_COLUMN_NAME]: this.#version,
+      };
       const key =
-        // update.key is set to the old values if the key has changed.
+        // update.key is set with the old values if the key has changed.
         update.key ??
-        // Otherwise, the key is determined from the "new" values.
+        // Otherwise, the key must be determined from the "new" values.
         Object.fromEntries(
           update.relation.keyColumns.map(col => [col, update.new[col]]),
         );
       const conds = Object.entries(key).map(
         ([col, val]) => tx`${tx(col)} = ${val}`,
       );
-      const row = {
-        ...update.new,
-        [ZERO_VERSION_COLUMN_NAME]: this.#version,
-      };
 
+      // Note: The flatMap() dance for dynamic filters is a bit obtuse, but it is
+      //       what the Postgres.js author recommends until there's a better api for it.
+      //       https://github.com/porsager/postgres/issues/807#issuecomment-1949924843
       return tx`
       UPDATE ${tx(table(update))}
         SET ${tx(row)}
@@ -438,6 +442,10 @@ class TransactionProcessor {
       const conds = Object.entries(del.key).map(
         ([col, val]) => tx`${tx(col)} = ${val}`,
       );
+
+      // Note: The flatMap() dance for dynamic filters is a bit obtuse, but it is
+      //       what the Postgres.js author recommends until there's a better api for it.
+      //       https://github.com/porsager/postgres/issues/807#issuecomment-1949924843
       return tx`
       DELETE FROM ${tx(table(del))} 
         WHERE ${conds.flatMap((k, i) => (i ? [tx` AND `, k] : k))} `;
