@@ -438,10 +438,13 @@ describe('replicator/incremental-sync', () => {
         `
       TRUNCATE foo, baz;
       `,
+        `
+      INSERT INTO foo (id) VALUES (101);
+      `,
       ],
-      expectedTransactions: 2,
+      expectedTransactions: 3,
       data: {
-        ['public.foo']: [],
+        ['public.foo']: [{id: 101, ['_0Version']: '03'}],
         ['public.bar']: [
           {id: 4, ['_0Version']: '01'},
           {id: 5, ['_0Version']: '01'},
