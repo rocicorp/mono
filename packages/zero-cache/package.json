@@ -18,7 +18,7 @@
     "@rocicorp/logger": "^5.2.1",
     "@rocicorp/resolver": "^1.0.1",
     "pg-logical-replication": "^2.0.3",
-    "postgres": "^3.4.3",
+    "postgres": "^3.4.4",
     "shared": "0.0.0"
   },
   "devDependencies": {
