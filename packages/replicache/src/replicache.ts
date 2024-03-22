@@ -5,7 +5,7 @@ import {
   PROD_LICENSE_SERVER_URL,
   TEST_LICENSE_KEY,
 } from '@rocicorp/licensing/src/client';
-import {consoleLogSink, LogContext, TeeLogSink} from '@rocicorp/logger';
+import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from 'shared/src/abort-error.js';
 import {assert} from 'shared/src/asserts.js';
@@ -105,6 +105,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.js';
+import {createLogContext} from './log-options.js';
 
 declare const TESTING: boolean;
 export interface TestingReplicacheWithTesting extends Replicache {
@@ -514,9 +515,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
       });
     }
 
-    const logSink =
-      logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
-    this.#lc = new LogContext(logLevel, {name}, logSink);
+    this.#lc = createLogContext(logLevel, logSinks, {name});
     this.#lc.debug?.('Constructing Replicache', {
       name,
       'replicache version': version,

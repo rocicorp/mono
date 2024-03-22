@@ -1,10 +1,4 @@
-import {
-  LogContext,
-  LogLevel,
-  LogSink,
-  TeeLogSink,
-  consoleLogSink,
-} from '@rocicorp/logger';
+import type {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
 import {uuidChunkHasher} from '../dag/chunk.js';
@@ -23,6 +17,7 @@ import {ClientMap, getClients} from './clients.js';
 import type {IndexedDBDatabase} from './idb-databases-store.js';
 import {IDBDatabasesStore} from './idb-databases-store.js';
 import {getKVStoreProvider} from '../replicache.js';
+import {createLogContext} from '../log-options.js';
 
 // How frequently to try to collect
 const COLLECT_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -246,7 +241,9 @@ export async function dropDatabase(
   dbName: string,
   opts?: DropDatabaseOptions | undefined,
 ) {
-  const logContext = createLogContext('dropDatabase', opts);
+  const logContext = createLogContext(opts?.logLevel, opts?.logSinks, {
+    dropDatabase: undefined,
+  });
   const kvStoreProvider = getKVStoreProvider(logContext, opts?.kvStore);
   await dropDatabaseInternal(
     dbName,
@@ -267,36 +264,15 @@ export async function dropAllDatabases(
   dropped: string[];
   errors: unknown[];
 }> {
-  const logContext = createLogContext('dropAllDatabases', opts);
+  const logContext = createLogContext(opts?.logLevel, opts?.logSinks, {
+    dropAllDatabases: undefined,
+  });
   const kvStoreProvider = getKVStoreProvider(logContext, opts?.kvStore);
   const store = new IDBDatabasesStore(kvStoreProvider.create);
   const databases = await store.getDatabases();
   const dbNames = Object.values(databases).map(db => db.name);
   const result = await dropDatabases(store, dbNames, kvStoreProvider.drop);
   return result;
-}
-
-/**
- * Creates a LogContext
- *
- * @param opts - Optional logging configuration options.
- * @param operation - A unique identifier for the operation.
- * @returns A LogContext instance configured with the provided options.
- */
-function createLogContext(
-  operation: string,
-  opts?:
-    | {
-        logLevel?: LogLevel | undefined;
-        logSinks?: LogSink[] | undefined;
-      }
-    | undefined,
-): LogContext {
-  const logLevel = opts?.logLevel || 'info';
-  const logSinks = opts?.logSinks || [consoleLogSink];
-  const logSink =
-    logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
-  return new LogContext(logLevel, {[operation]: undefined}, logSink);
 }
 
 /**
@@ -308,13 +284,7 @@ function createLogContext(
  * @deprecated Use `dropAllDatabases` instead.
  */
 export function deleteAllReplicacheData(
-  opts?:
-    | {
-        kvStore?: 'idb' | 'mem' | StoreProvider | undefined;
-        logLevel?: LogLevel | undefined;
-        logSinks?: LogSink[] | undefined;
-      }
-    | undefined,
+  opts?: DropDatabaseOptions | undefined,
 ) {
   return dropAllDatabases(opts);
 }
