@@ -1,3 +1,10 @@
+/**
+ * TIMESTAMPTZ objects are internally represented in PostgreSQL as 64-bit
+ * integers and returned by the `pg-logical-replication` package as bigints.
+ * To stores these values in TIMESTAMPTZ columns, the bigints must be
+ * converted to string values that PostgreSQL automatically casts to
+ * a TIMESTAMPTZ object.
+ */
 export function epochMicrosToTimestampTz(epochMicros: bigint): string {
   // Get millisecond part
   const epochMillis = epochMicros / 1000n;
