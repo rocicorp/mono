@@ -25,20 +25,20 @@ describe('tables/create', () => {
         schema: 'public',
         name: 'clients',
         columns: {
-          ['client_id']: {
+          clientID: {
             dataType: 'varchar',
             characterMaximumLength: 180,
             columnDefault: null,
             notNull: true,
           },
-          ['last_mutation_id']: {
+          lastMutationID: {
             dataType: 'int8',
             characterMaximumLength: null,
             columnDefault: null,
             notNull: true,
           },
         },
-        primaryKey: ['client_id'],
+        primaryKey: ['clientID'],
       },
     },
     {

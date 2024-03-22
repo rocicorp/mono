@@ -25,8 +25,8 @@ describe('tables/published', () => {
       CREATE SCHEMA zero;
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA zero;
       CREATE TABLE zero.clients (
-        client_id VARCHAR (180) PRIMARY KEY,
-        last_mutation_id BIGINT
+        "clientID" VARCHAR (180) PRIMARY KEY,
+        "lastMutationID" BIGINT
       );
       `,
       expectedResult: {
@@ -44,20 +44,20 @@ describe('tables/published', () => {
             schema: 'zero',
             name: 'clients',
             columns: {
-              ['client_id']: {
+              clientID: {
                 dataType: 'varchar',
                 characterMaximumLength: 180,
                 columnDefault: null,
                 notNull: true,
               },
-              ['last_mutation_id']: {
+              lastMutationID: {
                 dataType: 'int8',
                 characterMaximumLength: null,
                 columnDefault: null,
                 notNull: false,
               },
             },
-            primaryKey: ['client_id'],
+            primaryKey: ['clientID'],
           },
         },
       },
@@ -295,8 +295,8 @@ describe('tables/published', () => {
       CREATE PUBLICATION zero_meta FOR TABLES IN SCHEMA zero;
 
       CREATE TABLE zero.clients (
-        client_id VARCHAR (180) PRIMARY KEY,
-        last_mutation_id BIGINT
+        "clientID" VARCHAR (180) PRIMARY KEY,
+        "lastMutationID" BIGINT
       );
       `,
       expectedResult: {
@@ -371,20 +371,20 @@ describe('tables/published', () => {
             schema: 'zero',
             name: 'clients',
             columns: {
-              ['client_id']: {
+              clientID: {
                 dataType: 'varchar',
                 characterMaximumLength: 180,
                 columnDefault: null,
                 notNull: true,
               },
-              ['last_mutation_id']: {
+              lastMutationID: {
                 dataType: 'int8',
                 characterMaximumLength: null,
                 columnDefault: null,
                 notNull: false,
               },
             },
-            primaryKey: ['client_id'],
+            primaryKey: ['clientID'],
           },
         },
       },

@@ -16,13 +16,13 @@ const REPLICA_ID = 'initial_sync_test_id';
 
 const ZERO_CLIENTS_SPEC: TableSpec = {
   columns: {
-    ['client_id']: {
+    clientID: {
       characterMaximumLength: null,
       columnDefault: null,
       dataType: 'text',
       notNull: true,
     },
-    ['last_mutation_id']: {
+    lastMutationID: {
       characterMaximumLength: null,
       columnDefault: null,
       dataType: 'int8',
@@ -30,7 +30,7 @@ const ZERO_CLIENTS_SPEC: TableSpec = {
     },
   },
   name: 'clients',
-  primaryKey: ['client_id'],
+  primaryKey: ['clientID'],
   schema: 'zero',
 } as const;
 
@@ -76,8 +76,8 @@ describe('replicator/initial-sync', () => {
       setupUpstreamQuery: `
       CREATE SCHEMA zero;
       CREATE TABLE zero.clients (
-        client_id TEXT PRIMARY KEY,
-        last_mutation_id BIGINT
+       "clientID" TEXT PRIMARY KEY,
+        "lastMutationID" BIGINT
       );
       CREATE PUBLICATION zero_meta FOR TABLES IN SCHEMA zero;
       CREATE PUBLICATION zero_data FOR ALL TABLES;;
@@ -93,19 +93,19 @@ describe('replicator/initial-sync', () => {
     {
       name: 'existing table, default publication',
       setupUpstreamQuery: `
-        CREATE TABLE issues(issue_id INTEGER, org_id INTEGER, PRIMARY KEY (org_id, issue_id));
+        CREATE TABLE issues("issueID" INTEGER, "orgID" INTEGER, PRIMARY KEY ("orgID", "issueID"));
       `,
       published: {
         ['zero.clients']: ZERO_CLIENTS_SPEC,
         ['public.issues']: {
           columns: {
-            ['issue_id']: {
+            issueID: {
               characterMaximumLength: null,
               columnDefault: null,
               dataType: 'int4',
               notNull: true,
             },
-            ['org_id']: {
+            orgID: {
               characterMaximumLength: null,
               columnDefault: null,
               dataType: 'int4',
@@ -113,21 +113,21 @@ describe('replicator/initial-sync', () => {
             },
           },
           name: 'issues',
-          primaryKey: ['org_id', 'issue_id'],
+          primaryKey: ['orgID', 'issueID'],
           schema: 'public',
         },
       },
       upstream: {
         issues: [
-          {issueId: 123, orgId: 456},
-          {issueId: 321, orgId: 789},
+          {issueID: 123, orgID: 456},
+          {issueID: 321, orgID: 789},
         ],
       },
       replicated: {
         ['zero.clients']: [],
         issues: [
-          {issueId: 123, orgId: 456, ['_0Version']: '00'},
-          {issueId: 321, orgId: 789, ['_0Version']: '00'},
+          {issueID: 123, orgID: 456, ['_0_version']: '00'},
+          {issueID: 321, orgID: 789, ['_0_version']: '00'},
         ],
       },
       publications: ['zero_meta', 'zero_data'],
@@ -135,22 +135,22 @@ describe('replicator/initial-sync', () => {
     {
       name: 'existing partial publication',
       setupUpstreamQuery: `
-        CREATE TABLE not_published(issue_id INTEGER, org_id INTEGER, PRIMARY KEY (org_id, issue_id));
-        CREATE TABLE users(user_id INTEGER, password TEXT, handle TEXT, PRIMARY KEY (user_id));
-        CREATE PUBLICATION zero_custom FOR TABLE users (user_id, handle);
+        CREATE TABLE not_published("issueID" INTEGER, "orgID" INTEGER, PRIMARY KEY ("orgID", "issueID"));
+        CREATE TABLE users("userID" INTEGER, password TEXT, handle TEXT, PRIMARY KEY ("userID"));
+        CREATE PUBLICATION zero_custom FOR TABLE users ("userID", handle);
       `,
       published: {
         ['zero.clients']: ZERO_CLIENTS_SPEC,
         ['public.users']: {
           columns: {
-            ['user_id']: {
+            userID: {
               characterMaximumLength: null,
               columnDefault: null,
               dataType: 'int4',
               notNull: true,
             },
             // Note: password is not published
-            ['handle']: {
+            handle: {
               characterMaximumLength: null,
               columnDefault: null,
               dataType: 'text',
@@ -158,21 +158,21 @@ describe('replicator/initial-sync', () => {
             },
           },
           name: 'users',
-          primaryKey: ['user_id'],
+          primaryKey: ['userID'],
           schema: 'public',
         },
       },
       upstream: {
         users: [
-          {userId: 123, password: 'not-replicated', handle: '@zoot'},
-          {userId: 456, password: 'super-secret', handle: '@bonk'},
+          {userID: 123, password: 'not-replicated', handle: '@zoot'},
+          {userID: 456, password: 'super-secret', handle: '@bonk'},
         ],
       },
       replicated: {
         ['zero.clients']: [],
         users: [
-          {userId: 123, handle: '@zoot', ['_0Version']: '00'},
-          {userId: 456, handle: '@bonk', ['_0Version']: '00'},
+          {userID: 123, handle: '@zoot', ['_0_version']: '00'},
+          {userID: 456, handle: '@bonk', ['_0_version']: '00'},
         ],
       },
       publications: ['zero_meta', 'zero_custom'],
@@ -270,8 +270,8 @@ describe('replicator/initial-sync', () => {
       const slots =
         await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${replicationSlot(
           REPLICA_ID,
-        )}`;
-      expect(slots[0]).toEqual({slotName: replicationSlot(REPLICA_ID)});
+        )}`.values();
+      expect(slots[0]).toEqual([replicationSlot(REPLICA_ID)]);
     }, 10000);
 
     type InvalidUpstreamCase = {
@@ -284,15 +284,15 @@ describe('replicator/initial-sync', () => {
       {
         error: 'does not have a PRIMARY KEY',
         setupUpstreamQuery: `
-        CREATE TABLE issues(issue_id INTEGER, org_id INTEGER);
+        CREATE TABLE issues("issueID" INTEGER, "orgID" INTEGER);
       `,
       },
       {
         error: 'uses reserved column name _0_version',
         setupUpstreamQuery: `
         CREATE TABLE issues(
-          issue_id INTEGER PRIMARY KEY, 
-          org_id INTEGER, 
+          "issueID" INTEGER PRIMARY KEY, 
+          "orgID" INTEGER, 
           _0_version INTEGER);
       `,
       },
@@ -301,8 +301,8 @@ describe('replicator/initial-sync', () => {
         setupUpstreamQuery: `
         CREATE SCHEMA _zero;
         CREATE TABLE _zero.is_not_allowed(
-          issue_id INTEGER PRIMARY KEY, 
-          org_id INTEGER
+          "issueID" INTEGER PRIMARY KEY, 
+          "orgID" INTEGER
         );
         `,
       },

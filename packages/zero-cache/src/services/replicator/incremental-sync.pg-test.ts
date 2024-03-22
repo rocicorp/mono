@@ -56,25 +56,25 @@ describe('replicator/incremental-sync', () => {
       name: 'create tables',
       specs: {},
       data: {
-        ['_zero.tx_log']: [],
-        ['_zero.change_log']: [],
-        ['_zero.invalidation_registry']: [],
-        ['_zero.invalidation_index']: [],
+        ['_zero.TxLog']: [],
+        ['_zero.ChangeLog']: [],
+        ['_zero.InvalidationRegistry']: [],
+        ['_zero.InvalidationIndex']: [],
       },
     },
     {
       name: 'alter version columns',
       setupReplica: `
       CREATE TABLE issues(
-        issue_id INTEGER PRIMARY KEY,
+        "issueID" INTEGER PRIMARY KEY,
         _0_version VARCHAR(38) DEFAULT '00'
       );
       CREATE PUBLICATION zero_data FOR TABLES IN SCHEMA public;
 
       CREATE SCHEMA zero;
       CREATE TABLE zero.clients(
-        client_id TEXT PRIMARY KEY,
-        last_mutation_id TEXT,
+        "clientID" TEXT PRIMARY KEY,
+        "lastMutationID" TEXT,
         _0_version VARCHAR(38) DEFAULT '00'
       );
       CREATE PUBLICATION zero_meta FOR TABLES IN SCHEMA zero;
@@ -84,7 +84,7 @@ describe('replicator/incremental-sync', () => {
           schema: 'public',
           name: 'issues',
           columns: {
-            ['issue_id']: {
+            issueID: {
               dataType: 'int4',
               characterMaximumLength: null,
               columnDefault: null,
@@ -97,19 +97,19 @@ describe('replicator/incremental-sync', () => {
               notNull: true,
             },
           },
-          primaryKey: ['issue_id'],
+          primaryKey: ['issueID'],
         },
         ['zero.clients']: {
           schema: 'zero',
           name: 'clients',
           columns: {
-            ['client_id']: {
+            clientID: {
               dataType: 'text',
               characterMaximumLength: null,
               columnDefault: null,
               notNull: true,
             },
-            ['last_mutation_id']: {
+            lastMutationID: {
               dataType: 'text',
               characterMaximumLength: null,
               columnDefault: null,
@@ -122,28 +122,28 @@ describe('replicator/incremental-sync', () => {
               notNull: true,
             },
           },
-          primaryKey: ['client_id'],
+          primaryKey: ['clientID'],
         },
       },
       data: {
-        ['_zero.tx_log']: [],
-        ['_zero.change_log']: [],
-        ['_zero.invalidation_registry']: [],
-        ['_zero.invalidation_index']: [],
+        ['_zero.TxLog']: [],
+        ['_zero.ChangeLog']: [],
+        ['_zero.InvalidationRegistry']: [],
+        ['_zero.InvalidationIndex']: [],
       },
     },
     {
       name: 'insert rows',
       setupUpstream: `
       CREATE TABLE issues(
-        issue_id INTEGER PRIMARY KEY,
+        "issueID" INTEGER PRIMARY KEY,
         description TEXT
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
       setupReplica: `
       CREATE TABLE issues(
-        issue_id INTEGER PRIMARY KEY,
+        "issueID" INTEGER PRIMARY KEY,
         description TEXT,
         _0_version VARCHAR(38) DEFAULT '00'
       );
@@ -154,7 +154,7 @@ describe('replicator/incremental-sync', () => {
           schema: 'public',
           name: 'issues',
           columns: {
-            ['issue_id']: {
+            issueID: {
               dataType: 'int4',
               characterMaximumLength: null,
               columnDefault: null,
@@ -173,24 +173,24 @@ describe('replicator/incremental-sync', () => {
               notNull: true,
             },
           },
-          primaryKey: ['issue_id'],
+          primaryKey: ['issueID'],
         },
       },
       writeUpstream: [
         `
-      INSERT INTO issues (issue_id) VALUES (123);
-      INSERT INTO issues (issue_id) VALUES (456);
+      INSERT INTO issues ("issueID") VALUES (123);
+      INSERT INTO issues ("issueID") VALUES (456);
       `,
         `
-      INSERT INTO issues (issue_id) VALUES (789);
+      INSERT INTO issues ("issueID") VALUES (789);
       `,
       ],
       expectedTransactions: 2,
       data: {
         ['public.issues']: [
-          {['issueId']: 123, description: null, ['_0Version']: '01'},
-          {['issueId']: 456, description: null, ['_0Version']: '01'},
-          {['issueId']: 789, description: null, ['_0Version']: '02'},
+          {issueID: 123, description: null, ['_0_version']: '01'},
+          {issueID: 456, description: null, ['_0_version']: '01'},
+          {issueID: 789, description: null, ['_0_version']: '02'},
         ],
       },
     },
@@ -198,20 +198,20 @@ describe('replicator/incremental-sync', () => {
       name: 'update rows with multiple key columns and key value updates',
       setupUpstream: `
       CREATE TABLE issues(
-        issue_id INTEGER,
-        org_id INTEGER,
+        "issueID" INTEGER,
+        "orgID" INTEGER,
         description TEXT,
-        PRIMARY KEY(org_id, issue_id)
+        PRIMARY KEY("orgID", "issueID")
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
       setupReplica: `
       CREATE TABLE issues(
-        issue_id INTEGER,
-        org_id INTEGER,
+        "issueID" INTEGER,
+        "orgID" INTEGER,
         description TEXT,
         _0_version VARCHAR(38) DEFAULT '00',
-        PRIMARY KEY(org_id, issue_id)
+        PRIMARY KEY("orgID", "issueID")
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
@@ -220,13 +220,13 @@ describe('replicator/incremental-sync', () => {
           schema: 'public',
           name: 'issues',
           columns: {
-            ['issue_id']: {
+            issueID: {
               dataType: 'int4',
               characterMaximumLength: null,
               columnDefault: null,
               notNull: true,
             },
-            ['org_id']: {
+            orgID: {
               dataType: 'int4',
               characterMaximumLength: null,
               columnDefault: null,
@@ -245,26 +245,26 @@ describe('replicator/incremental-sync', () => {
               notNull: true,
             },
           },
-          primaryKey: ['org_id', 'issue_id'],
+          primaryKey: ['orgID', 'issueID'],
         },
       },
       writeUpstream: [
         `
-      INSERT INTO issues (org_id, issue_id) VALUES (1, 123);
-      INSERT INTO issues (org_id, issue_id) VALUES (1, 456);
-      INSERT INTO issues (org_id, issue_id) VALUES (2, 789);
+      INSERT INTO issues ("orgID", "issueID") VALUES (1, 123);
+      INSERT INTO issues ("orgID", "issueID") VALUES (1, 456);
+      INSERT INTO issues ("orgID", "issueID") VALUES (2, 789);
       `,
         `
-      UPDATE issues SET (description) = ROW('foo') WHERE issue_id = 456;
-      UPDATE issues SET (org_id, description) = ROW(2, 'bar') WHERE issue_id = 123;
+      UPDATE issues SET (description) = ROW('foo') WHERE "issueID" = 456;
+      UPDATE issues SET ("orgID", description) = ROW(2, 'bar') WHERE "issueID" = 123;
       `,
       ],
       expectedTransactions: 2,
       data: {
         ['public.issues']: [
-          {orgId: 2, issueId: 123, description: 'bar', ['_0Version']: '02'},
-          {orgId: 1, issueId: 456, description: 'foo', ['_0Version']: '02'},
-          {orgId: 2, issueId: 789, description: null, ['_0Version']: '01'},
+          {orgID: 2, issueID: 123, description: 'bar', ['_0_version']: '02'},
+          {orgID: 1, issueID: 456, description: 'foo', ['_0_version']: '02'},
+          {orgID: 2, issueID: 789, description: null, ['_0_version']: '01'},
         ],
       },
     },
@@ -272,20 +272,20 @@ describe('replicator/incremental-sync', () => {
       name: 'delete rows',
       setupUpstream: `
       CREATE TABLE issues(
-        issue_id INTEGER,
-        org_id INTEGER,
+        "issueID" INTEGER,
+        "orgID" INTEGER,
         description TEXT,
-        PRIMARY KEY(org_id, issue_id)
+        PRIMARY KEY("orgID", "issueID")
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
       setupReplica: `
       CREATE TABLE issues(
-        issue_id INTEGER,
-        org_id INTEGER,
+        "issueID" INTEGER,
+        "orgID" INTEGER,
         description TEXT,
         _0_version VARCHAR(38) DEFAULT '00',
-        PRIMARY KEY(org_id, issue_id)
+        PRIMARY KEY("orgID", "issueID")
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
@@ -294,13 +294,13 @@ describe('replicator/incremental-sync', () => {
           schema: 'public',
           name: 'issues',
           columns: {
-            ['issue_id']: {
+            issueID: {
               dataType: 'int4',
               characterMaximumLength: null,
               columnDefault: null,
               notNull: true,
             },
-            ['org_id']: {
+            orgID: {
               dataType: 'int4',
               characterMaximumLength: null,
               columnDefault: null,
@@ -319,25 +319,25 @@ describe('replicator/incremental-sync', () => {
               notNull: true,
             },
           },
-          primaryKey: ['org_id', 'issue_id'],
+          primaryKey: ['orgID', 'issueID'],
         },
       },
       writeUpstream: [
         `
-      INSERT INTO issues (org_id, issue_id) VALUES (1, 123);
-      INSERT INTO issues (org_id, issue_id) VALUES (1, 456);
-      INSERT INTO issues (org_id, issue_id) VALUES (2, 789);
-      INSERT INTO issues (org_id, issue_id) VALUES (2, 987);
+      INSERT INTO issues ("orgID", "issueID") VALUES (1, 123);
+      INSERT INTO issues ("orgID", "issueID") VALUES (1, 456);
+      INSERT INTO issues ("orgID", "issueID") VALUES (2, 789);
+      INSERT INTO issues ("orgID", "issueID") VALUES (2, 987);
       `,
         `
-      DELETE FROM issues WHERE org_id = 1;
-      DELETE FROM issues WHERE issue_id = 987;
+      DELETE FROM issues WHERE "orgID" = 1;
+      DELETE FROM issues WHERE "issueID" = 987;
       `,
       ],
       expectedTransactions: 2,
       data: {
         ['public.issues']: [
-          {orgId: 2, issueId: 789, description: null, ['_0Version']: '01'},
+          {orgID: 2, issueID: 789, description: null, ['_0_version']: '01'},
         ],
       },
     },
@@ -369,7 +369,7 @@ describe('replicator/incremental-sync', () => {
           schema: 'public',
           name: 'foo',
           columns: {
-            ['id']: {
+            id: {
               dataType: 'int4',
               characterMaximumLength: null,
               columnDefault: null,
@@ -388,7 +388,7 @@ describe('replicator/incremental-sync', () => {
           schema: 'public',
           name: 'bar',
           columns: {
-            ['id']: {
+            id: {
               dataType: 'int4',
               characterMaximumLength: null,
               columnDefault: null,
@@ -407,7 +407,7 @@ describe('replicator/incremental-sync', () => {
           schema: 'public',
           name: 'baz',
           columns: {
-            ['id']: {
+            id: {
               dataType: 'int4',
               characterMaximumLength: null,
               columnDefault: null,
@@ -444,11 +444,11 @@ describe('replicator/incremental-sync', () => {
       ],
       expectedTransactions: 3,
       data: {
-        ['public.foo']: [{id: 101, ['_0Version']: '03'}],
+        ['public.foo']: [{id: 101, ['_0_version']: '03'}],
         ['public.bar']: [
-          {id: 4, ['_0Version']: '01'},
-          {id: 5, ['_0Version']: '01'},
-          {id: 6, ['_0Version']: '01'},
+          {id: 4, ['_0_version']: '01'},
+          {id: 5, ['_0_version']: '01'},
+          {id: 6, ['_0_version']: '01'},
         ],
         ['public.baz']: [],
       },
@@ -486,7 +486,7 @@ describe('replicator/incremental-sync', () => {
         // TODO: Replace this with the mechanism that will be used to notify ViewSyncers.
         for (let i = 0; i < 100; i++) {
           const result =
-            await replica`SELECT db_version FROM _zero.tx_log`.values();
+            await replica`SELECT "dbVersion" FROM _zero."TxLog"`.values();
           versions = result.flat();
           expect(versions.length).toBeLessThanOrEqual(c.expectedTransactions);
           if (versions.length === c.expectedTransactions) {
@@ -510,11 +510,11 @@ describe('replicator/incremental-sync', () => {
   ): Record<string, object[]> {
     Object.values(data).forEach(table =>
       table.forEach(row => {
-        if ('_0Version' in row) {
-          const v = row['_0Version'] as LexiVersion;
+        if ('_0_version' in row) {
+          const v = row['_0_version'] as LexiVersion;
           const index = Number(versionFromLexi(v));
           if (index > 0) {
-            row['_0Version'] = versions[index - 1];
+            row['_0_version'] = versions[index - 1];
           }
         }
       }),

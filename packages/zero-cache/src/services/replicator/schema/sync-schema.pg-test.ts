@@ -22,13 +22,13 @@ describe('replicator/sync-schema', () => {
 
   const cases: Case[] = [
     {
-      name: 'sync schema meta',
+      name: 'sync schema versions',
       upstreamPostState: {
         ['zero.clients']: [],
       },
       replicaPostState: {
         ['zero.clients']: [],
-        ['_zero.schema_meta']: [
+        ['_zero.SchemaVersions']: [
           {
             // Update these as necessary.
             version: 4,
@@ -43,20 +43,20 @@ describe('replicator/sync-schema', () => {
       name: 'sync partially published upstream data',
       upstreamSetup: `
         CREATE TABLE unpublished(issue_id INTEGER, org_id INTEGER, PRIMARY KEY (org_id, issue_id));
-        CREATE TABLE users(user_id INTEGER, password TEXT, handle TEXT, PRIMARY KEY (user_id));
-        CREATE PUBLICATION zero_custom FOR TABLE users (user_id, handle);
+        CREATE TABLE users("userID" INTEGER, password TEXT, handle TEXT, PRIMARY KEY ("userID"));
+        CREATE PUBLICATION zero_custom FOR TABLE users ("userID", handle);
     `,
       upstreamPreState: {
         users: [
-          {userId: 123, password: 'not-replicated', handle: '@zoot'},
-          {userId: 456, password: 'super-secret', handle: '@bonk'},
+          {userID: 123, password: 'not-replicated', handle: '@zoot'},
+          {userID: 456, password: 'super-secret', handle: '@bonk'},
         ],
       },
       upstreamPostState: {
         ['zero.clients']: [],
       },
       replicaPostState: {
-        ['_zero.schema_meta']: [
+        ['_zero.SchemaVersions']: [
           {
             // Update these as necessary.
             version: 4,
@@ -67,8 +67,8 @@ describe('replicator/sync-schema', () => {
         ],
         ['zero.clients']: [],
         users: [
-          {userId: 123, handle: '@zoot', ['_0Version']: '00'},
-          {userId: 456, handle: '@bonk', ['_0Version']: '00'},
+          {userID: 123, handle: '@zoot', ['_0_version']: '00'},
+          {userID: 456, handle: '@bonk', ['_0_version']: '00'},
         ],
       },
     },
@@ -127,10 +127,10 @@ describe('replicator/sync-schema', () => {
 
         // Check that internal replication tables have been created.
         await expectTables(replica, {
-          ['_zero.tx_log']: [],
-          ['_zero.change_log']: [],
-          ['_zero.invalidation_registry']: [],
-          ['_zero.invalidation_index']: [],
+          ['_zero.TxLog']: [],
+          ['_zero.ChangeLog']: [],
+          ['_zero.InvalidationRegistry']: [],
+          ['_zero.InvalidationIndex']: [],
         });
 
         // Subscriptions should have been dropped.
@@ -142,8 +142,8 @@ describe('replicator/sync-schema', () => {
         const slots =
           await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${replicationSlot(
             REPLICA_ID,
-          )}`;
-        expect(slots[0]).toEqual({slotName: replicationSlot(REPLICA_ID)});
+          )}`.values();
+        expect(slots[0]).toEqual([replicationSlot(REPLICA_ID)]);
       },
       10000,
     );

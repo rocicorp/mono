@@ -1,3 +1,4 @@
+import {id, idList} from '../../../types/sql.js';
 import type {ColumnSpec, TableSpec} from './specs.js';
 
 /**
@@ -5,7 +6,7 @@ import type {ColumnSpec, TableSpec} from './specs.js';
  */
 export function createTableStatement(spec: TableSpec): string {
   function colDef(name: string, colSpec: ColumnSpec): string {
-    const parts = [`${name} ${colSpec.dataType}`];
+    const parts = [`${id(name)} ${colSpec.dataType}`];
     if (colSpec.characterMaximumLength !== null) {
       parts.push(`(${colSpec.characterMaximumLength})`);
     }
@@ -22,11 +23,11 @@ export function createTableStatement(spec: TableSpec): string {
     colDef(name, col),
   );
   if (spec.primaryKey) {
-    defs.push(`PRIMARY KEY (${spec.primaryKey.join(',')})`);
+    defs.push(`PRIMARY KEY (${idList(spec.primaryKey)})`);
   }
 
   return [
-    `CREATE TABLE ${spec.schema}.${spec.name} (`,
+    `CREATE TABLE ${id(spec.schema)}.${id(spec.name)} (`,
     defs.join(',\n'),
     ');',
   ].join('\n');

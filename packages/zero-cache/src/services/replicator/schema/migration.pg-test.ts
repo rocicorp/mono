@@ -4,18 +4,18 @@ import type postgres from 'postgres';
 import {testDBs} from '../../../test/db.js';
 import {createSilentLogContext} from '../../../test/logger.js';
 import {
-  SyncSchemaMeta,
+  SyncSchemaVersions,
   VersionMigrationMap,
-  getSyncSchemaMeta,
+  getSyncSchemaVersions,
   runSyncSchemaMigrations,
 } from './migration.js';
 
 describe('schema/migration', () => {
   type Case = {
     name: string;
-    preSchema?: SyncSchemaMeta;
+    preSchema?: SyncSchemaVersions;
     migrations: VersionMigrationMap;
-    postSchema: SyncSchemaMeta;
+    postSchema: SyncSchemaVersions;
     expectedErr?: string;
     expectedMigrationHistory?: {event: string}[];
   };
@@ -23,8 +23,8 @@ describe('schema/migration', () => {
   const logMigrationHistory =
     (name: string) =>
     async (_log: LogContext, _id: string, sql: postgres.Sql) => {
-      const meta = await getSyncSchemaMeta(sql);
-      await sql`INSERT INTO migration_history ${sql({
+      const meta = await getSyncSchemaVersions(sql);
+      await sql`INSERT INTO "MigrationHistory" ${sql({
         event: `${name}-at(${meta.version})`,
       })}`;
     };
@@ -178,7 +178,7 @@ describe('schema/migration', () => {
 
   beforeEach(async () => {
     db = await testDBs.create('migration_test');
-    await db`CREATE TABLE migration_history (event TEXT)`;
+    await db`CREATE TABLE "MigrationHistory" (event TEXT)`;
   });
 
   afterEach(async () => {
@@ -188,8 +188,8 @@ describe('schema/migration', () => {
   for (const c of cases) {
     test(c.name, async () => {
       if (c.preSchema) {
-        await getSyncSchemaMeta(db); // Ensures that the table is created.
-        await db`INSERT INTO _zero.schema_meta ${db(c.preSchema)}`;
+        await getSyncSchemaVersions(db); // Ensures that the table is created.
+        await db`INSERT INTO _zero."SchemaVersions" ${db(c.preSchema)}`;
       }
 
       let err: string | undefined;
@@ -209,8 +209,8 @@ describe('schema/migration', () => {
       }
       expect(err).toBe(c.expectedErr);
 
-      expect(await getSyncSchemaMeta(db)).toEqual(c.postSchema);
-      expect(await db`SELECT * FROM migration_history`).toEqual(
+      expect(await getSyncSchemaVersions(db)).toEqual(c.postSchema);
+      expect(await db`SELECT * FROM "MigrationHistory"`).toEqual(
         c.expectedMigrationHistory ?? [],
       );
     });

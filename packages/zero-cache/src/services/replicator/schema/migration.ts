@@ -65,7 +65,7 @@ export async function runSyncSchemaMigrations(
     );
 
     let meta = await sql.begin(async tx => {
-      const meta = await getSyncSchemaMeta(tx);
+      const meta = await getSyncSchemaVersions(tx);
       if (codeSchemaVersion < meta.minSafeRollbackVersion) {
         throw new Error(
           `Cannot run server at schema v${codeSchemaVersion} because rollback limit is v${meta.minSafeRollbackVersion}`,
@@ -94,7 +94,7 @@ export async function runSyncSchemaMigrations(
 
           meta = await sql.begin(async tx => {
             // Fetch meta from within the transaction to make the migration atomic.
-            let meta = await getSyncSchemaMeta(tx);
+            let meta = await getSyncSchemaVersions(tx);
             if (meta.version < dest) {
               meta = await migrateSyncSchemaVersion(
                 log,
@@ -134,45 +134,45 @@ function sorted(
 }
 
 // Exposed for tests.
-export const syncSchemaMeta = v.object({
+export const syncSchemaVersions = v.object({
   version: v.number(),
   maxVersion: v.number(),
   minSafeRollbackVersion: v.number(),
 });
 
 // Exposed for tests.
-export type SyncSchemaMeta = v.Infer<typeof syncSchemaMeta>;
+export type SyncSchemaVersions = v.Infer<typeof syncSchemaVersions>;
 
 // Exposed for tests
-export async function getSyncSchemaMeta(
+export async function getSyncSchemaVersions(
   sql: postgres.Sql,
-): Promise<SyncSchemaMeta> {
+): Promise<SyncSchemaVersions> {
   // Note: The `schema_meta.lock` column transparently ensures that at most one row exists.
   const results = await sql`
     CREATE SCHEMA IF NOT EXISTS _zero;
-    CREATE TABLE IF NOT EXISTS _zero.schema_meta (
+    CREATE TABLE IF NOT EXISTS _zero."SchemaVersions" (
       version int NOT NULL,
-      max_version int NOT NULL,
-      min_safe_rollback_version int NOT NULL,
+      "maxVersion" int NOT NULL,
+      "minSafeRollbackVersion" int NOT NULL,
 
       lock char(1) NOT NULL CONSTRAINT DF_schema_meta_lock DEFAULT 'v',
       CONSTRAINT PK_schema_meta_lock PRIMARY KEY (lock),
       CONSTRAINT CK_schema_meta_lock CHECK (lock='v')
     );
-    SELECT version, max_version, min_safe_rollback_version FROM _zero.schema_meta;
+    SELECT version, "maxVersion", "minSafeRollbackVersion" FROM _zero."SchemaVersions";
   `.simple();
   const rows = results[1];
   if (rows.length === 0) {
     return {version: 0, maxVersion: 0, minSafeRollbackVersion: 0};
   }
-  return v.parse(rows[0], syncSchemaMeta);
+  return v.parse(rows[0], syncSchemaVersions);
 }
 
 async function setSyncSchemaVersion(
   sql: postgres.Sql,
-  prev: SyncSchemaMeta,
+  prev: SyncSchemaVersions,
   newVersion: number,
-): Promise<SyncSchemaMeta> {
+): Promise<SyncSchemaVersions> {
   assert(newVersion > 0);
   const meta = {
     ...prev,
@@ -181,9 +181,9 @@ async function setSyncSchemaVersion(
   };
 
   if (prev.version === 0) {
-    await sql`INSERT INTO _zero.schema_meta ${sql(meta)}`;
+    await sql`INSERT INTO _zero."SchemaVersions" ${sql(meta)}`;
   } else {
-    await sql`UPDATE _zero.schema_meta set ${sql(meta)}`;
+    await sql`UPDATE _zero."SchemaVersions" set ${sql(meta)}`;
   }
   return meta;
 }
@@ -193,10 +193,10 @@ async function migrateSyncSchemaVersion(
   replicaID: string,
   tx: postgres.TransactionSql,
   upstreamUri: string,
-  meta: SyncSchemaMeta,
+  meta: SyncSchemaVersions,
   destinationVersion: number,
   migration: Migration,
-): Promise<SyncSchemaMeta> {
+): Promise<SyncSchemaVersions> {
   if ('run' in migration) {
     await migration.run(log, replicaID, tx, upstreamUri);
   } else {
@@ -212,8 +212,8 @@ async function migrateSyncSchemaVersion(
 function ensureRollbackLimit(
   toAtLeast: number,
   log: LogContext,
-  meta: SyncSchemaMeta,
-): SyncSchemaMeta {
+  meta: SyncSchemaVersions,
+): SyncSchemaVersions {
   // Sanity check to maintain the invariant that running code is never
   // earlier than the rollback limit.
   assert(toAtLeast <= meta.version + 1);

@@ -29,12 +29,12 @@ export const CREATE_REPLICATION_TABLES =
   // Note that the lsn may become optional for supporting non-Postgres upstreams.
   `
   CREATE SCHEMA IF NOT EXISTS _zero;
-  CREATE TABLE _zero.tx_log (
-    db_version VARCHAR(38) NOT NULL,
-    lsn PG_LSN             NOT NULL,
-    time TIMESTAMPTZ       NOT NULL,
-    xid INTEGER            NOT NULL,
-    PRIMARY KEY(db_version)
+  CREATE TABLE _zero."TxLog" (
+    "dbVersion" VARCHAR(38) NOT NULL,
+    lsn PG_LSN              NOT NULL,
+    time TIMESTAMPTZ        NOT NULL,
+    xid INTEGER             NOT NULL,
+    PRIMARY KEY("dbVersion")
   );
 ` +
   // The change log contains row changes.
@@ -47,13 +47,13 @@ export const CREATE_REPLICATION_TABLES =
   // throughput, as replication is critical bottleneck in the system. Row values are
   // only needed for catchup, for which JSONB is not particularly advantageous over JSON.
   `
-  CREATE TABLE _zero.change_log (
-    db_version VARCHAR(38)  NOT NULL,
-    table_name VARCHAR(128) NOT NULL,
-    row_key TEXT            NOT NULL,
-    op CHAR(1)              NOT NULL,
+  CREATE TABLE _zero."ChangeLog" (
+    "dbVersion" VARCHAR(38)  NOT NULL,
+    "tableName" VARCHAR(128) NOT NULL,
+    "rowKey" TEXT            NOT NULL,
+    op CHAR(1)               NOT NULL,
     row JSON,
-    PRIMARY KEY(db_version, table_name, row_key)
+    PRIMARY KEY("dbVersion", "tableName", "rowKey")
   );
 ` +
   // Invalidation registry.
@@ -70,27 +70,27 @@ export const CREATE_REPLICATION_TABLES =
   //    Replicator would compute both sizes until the new size has sufficient
   //    coverage (over old versions).
   //
-  // * `from_db_version` indicates when the Replicator first started running
+  // * `fromDBVersion` indicates when the Replicator first started running
   //   the filter. CVRs at or newer than the version are considered covered.
   //
-  // * `last_requested` records (approximately) the last time the spec was
+  // * `lastRequested` records (approximately) the last time the spec was
   //   requested. This is not exact. It may only be updated if the difference
   //   exceeds some interval, for example. This is used to clean up specs that
   //   are no longer used.
   `
-CREATE TABLE _zero.invalidation_registry (
+CREATE TABLE _zero."InvalidationRegistry" (
   spec TEXT                   NOT NULL,
   bits SMALLINT               NOT NULL,
-  from_db_version VARCHAR(38) NOT NULL,
-  last_requested TIMESTAMPTZ  NOT NULL,
+  "fromDBVersion" VARCHAR(38) NOT NULL,
+  "lastRequested" TIMESTAMPTZ NOT NULL,
   PRIMARY KEY(spec, bits)
 );
 ` +
   // Invalidation index.
   `
-CREATE TABLE _zero.invalidation_index (
-  hash           BIGINT      NOT NULL,
-  db_version     VARCHAR(38) NOT NULL,
+CREATE TABLE _zero."InvalidationIndex" (
+  hash        BIGINT      NOT NULL,
+  "dbVersion" VARCHAR(38) NOT NULL,
   PRIMARY KEY(hash)
 );
 `;
@@ -99,7 +99,7 @@ CREATE TABLE _zero.invalidation_index (
  * Migration step that sets up the initialized Sync Replica for incremental replication.
  * This includes:
  *
- * * Setting up in the internal _zero tables that track replication state.
+ * * Setting up the internal _zero tables that track replication state.
  *
  * * Removing the _0_version DEFAULT (used only for initial sync)
  *   and requiring that it be NOT NULL. This is a defensive measure to
@@ -385,7 +385,7 @@ class TransactionProcessor {
       tx =>
         // Note: This is how redundant (already seen) transactions are prevented.
         // TODO: Determine how to handle the resulting error.
-        tx`INSERT INTO _zero.tx_log ${tx({
+        tx`INSERT INTO _zero."TxLog" ${tx({
           dbVersion: this.#version,
           lsn: begin.commitLsn,
           time: epochMicrosToTimestampTz(begin.commitTime.valueOf()),
