@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {sleep} from 'shared/src/sleep.js';
+import {id, idList} from '../../types/sql.js';
 import {createTableStatement} from './tables/create.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
 import type {ColumnSpec} from './tables/specs.js';
@@ -64,7 +65,7 @@ export async function startPostgresReplication(
   });
 
   const schemaStmts = [...schemas].map(
-    schema => `CREATE SCHEMA IF NOT EXISTS ${schema};`,
+    schema => `CREATE SCHEMA IF NOT EXISTS ${id(schema)};`,
   );
 
   // Emulate all of the upstream zero_* PUBLICATIONS to cover all of the
@@ -78,17 +79,16 @@ export async function startPostgresReplication(
   //
   // By using PUBLICATIONS for this, the same `getPublicationInfo()` logic can
   // be used on both the upstream and replica.
-  const schemaList = [...schemas].join(',');
   const publications = published.publications.map(p => p.pubname);
   const publicationStmts = publications.map(pub =>
     // The publication that we manage, "zero_meta", is used to track all of the
     // replicated schemas. This is the only publication that would need to be
     // altered if, for example, a new schema is encountered from upstream.
     pub === PUB_PREFIX + 'meta'
-      ? `CREATE PUBLICATION ${pub} FOR TABLES IN SCHEMA ${schemaList};`
+      ? `CREATE PUBLICATION ${id(pub)} FOR TABLES IN SCHEMA ${idList(schemas)};`
       : // All of the other publications are created simply to indicate that they should be
         // subscribed to on upstream.
-        `CREATE PUBLICATION ${pub};`,
+        `CREATE PUBLICATION ${id(pub)};`,
   );
 
   const stmts = [
@@ -96,9 +96,9 @@ export async function startPostgresReplication(
     ...tablesStmts,
     ...publicationStmts,
     `
-    CREATE SUBSCRIPTION ${subName}
+    CREATE SUBSCRIPTION ${id(subName)}
       CONNECTION '${upstreamUri}'
-      PUBLICATION ${publications.join(',')}
+      PUBLICATION ${idList(publications)}
       WITH (slot_name='${slotName}', create_slot=false);`,
   ];
 
@@ -201,9 +201,9 @@ export async function handoffPostgresReplication(
     // can be handed off to the Replicator logic. See the "Notes" section in
     // https://www.postgresql.org/docs/current/sql-dropsubscription.html
     `
-    ALTER SUBSCRIPTION ${subName} DISABLE;
-    ALTER SUBSCRIPTION ${subName} SET(slot_name=NONE);
-    DROP SUBSCRIPTION IF EXISTS ${subName};
+    ALTER SUBSCRIPTION ${id(subName)} DISABLE;
+    ALTER SUBSCRIPTION ${id(subName)} SET(slot_name=NONE);
+    DROP SUBSCRIPTION IF EXISTS ${id(subName)};
   `,
   );
 }
@@ -215,7 +215,6 @@ export async function setupUpstream(
   slotName: string,
 ): Promise<PublicationInfo> {
   const upstreamDB = postgres(upstreamUri, {
-    transform: postgres.camel,
     // eslint-disable-next-line @typescript-eslint/naming-convention
     fetch_types: false,
   });
@@ -310,10 +309,10 @@ function ensurePublishedTables(
       `
     CREATE SCHEMA zero;
     CREATE TABLE zero.clients (
-      client_id TEXT PRIMARY KEY,
-      last_mutation_id BIGINT
+      "clientID" TEXT PRIMARY KEY,
+      "lastMutationID" BIGINT
     );
-    CREATE PUBLICATION ${PUB_PREFIX}meta FOR TABLES IN SCHEMA zero;
+    CREATE PUBLICATION "${PUB_PREFIX}meta" FOR TABLES IN SCHEMA zero;
     ${dataPublication}
     `,
     );

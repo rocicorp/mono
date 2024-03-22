@@ -10,7 +10,7 @@ const publishedColumnsSchema = v.array(
     pos: v.number(),
     name: v.string(),
     type: v.string(),
-    typeId: v.number(),
+    typeID: v.number(),
     maxLen: v.number(),
     arrayDims: v.number(),
     keyPos: v.number().nullable(),
@@ -56,11 +56,11 @@ export async function getPublicationInfo(
     attnum AS pos, 
     attname AS name, 
     pt.typname AS type, 
-    atttypid AS type_id, 
-    atttypmod AS max_len, 
-    attndims array_dims, 
-    ARRAY_POSITION(conkey, attnum) AS key_pos,
-    attnotnull as not_null,
+    atttypid AS "typeID", 
+    atttypmod AS "maxLen", 
+    attndims "arrayDims", 
+    ARRAY_POSITION(conkey, attnum) AS "keyPos",
+    attnotnull as "notNull",
     pg_get_expr(pd.adbin, pd.adrelid) as default,
     pb.pubname
   FROM pg_attribute
@@ -98,7 +98,7 @@ export async function getPublicationInfo(
     const maxLen =
       col.maxLen < 0
         ? null
-        : col.typeId === 1043 || col.typeId === 1042
+        : col.typeID === 1043 || col.typeID === 1042
         ? col.maxLen - 4
         : col.maxLen;
 

@@ -21,7 +21,6 @@ export class Replicator implements Service {
       .withContext('serviceID', this.id);
     this.#upstreamUri = upstreamUri;
     this.#syncReplica = postgres(syncReplicaUri, {
-      transform: postgres.camel,
       // eslint-disable-next-line @typescript-eslint/naming-convention
       fetch_types: false,
     });

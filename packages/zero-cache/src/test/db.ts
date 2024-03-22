@@ -12,7 +12,6 @@ class TestDBs {
   // max_logical_replication_workers = 20   # default is 4
   readonly #sql = postgres({
     database: 'postgres',
-    transform: postgres.camel,
     onnotice: () => {},
   });
   readonly #dbs: Record<string, postgres.Sql> = {};
@@ -28,7 +27,6 @@ class TestDBs {
 
     const db = postgres({
       database,
-      transform: postgres.camel,
       onnotice: () => {},
     });
     this.#dbs[database] = db;
