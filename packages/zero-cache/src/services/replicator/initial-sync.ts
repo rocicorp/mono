@@ -5,7 +5,7 @@ import {createTableStatement} from './tables/create.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
 import type {ColumnSpec} from './tables/specs.js';
 
-const PUB_PREFIX = 'zero_';
+export const PUB_PREFIX = 'zero_';
 
 export const ZERO_VERSION_COLUMN_NAME = '_0_version';
 const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
@@ -208,7 +208,8 @@ export async function handoffPostgresReplication(
   );
 }
 
-async function setupUpstream(
+// Exported for testing
+export async function setupUpstream(
   lc: LogContext,
   upstreamUri: string,
   slotName: string,

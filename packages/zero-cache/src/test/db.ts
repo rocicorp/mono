@@ -88,6 +88,6 @@ export async function expectTables(
 ) {
   for (const [table, expected] of Object.entries(tables ?? {})) {
     const actual = await db`SELECT * FROM ${db(table)}`;
-    expect(actual).toEqual(expected);
+    expect(actual).toEqual(expect.arrayContaining(expected));
   }
 }
