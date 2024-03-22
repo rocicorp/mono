@@ -10,10 +10,13 @@
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "local": "node --loader ts-node/esm tool/local.ts"
   },
   "dependencies": {
+    "@rocicorp/lock": "^1.0.3",
     "@rocicorp/logger": "^5.2.1",
+    "@rocicorp/resolver": "^1.0.1",
     "pg-logical-replication": "^2.0.3",
     "postgres": "^3.4.3",
     "shared": "0.0.0"
