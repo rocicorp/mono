@@ -441,11 +441,13 @@ describe('replicator/incremental-sync', () => {
       ],
       expectedTransactions: 2,
       data: {
+        ['public.foo']: [],
         ['public.bar']: [
           {id: 4, ['_0Version']: '01'},
           {id: 5, ['_0Version']: '01'},
           {id: 6, ['_0Version']: '01'},
         ],
+        ['public.baz']: [],
       },
     },
   ];
