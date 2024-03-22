@@ -360,7 +360,7 @@ class TransactionProcessor {
 
   /**
    * Ensures that all messages are processed serially. The callback returns
-   * its final postgres query, or `undefined` if no query is needed.
+   * the postgres statement to execute, or `undefined` if no statement is needed.
    */
   #process(
     statement: (
@@ -368,7 +368,10 @@ class TransactionProcessor {
     ) => postgres.PendingQuery<readonly postgres.MaybeRow[]> | undefined,
   ) {
     return this.#processLock.withLock(async () => {
+      // Note: This will block until it is this Transaction's turn to be processed,
+      // as coordinated by the `#txSerializer` logic in the {@link MessageProceessor}.
       const tx = await this.#tx;
+
       // execute() sends the statement to the replica. Note that we do not `await`
       // the result, as the transaction itself automatically guarantees serialization.
       // On the contrary, avoiding the `await` allows the processing of next message
