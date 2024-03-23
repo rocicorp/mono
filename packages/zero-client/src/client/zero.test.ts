@@ -3,7 +3,7 @@ import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
-import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
+import {resetAllConfig} from 'reflect-shared/src/config.js';
 import type {
   MutatorDefs,
   ReadonlyJSONValue,
@@ -16,7 +16,7 @@ import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
 import type {WSString} from './http-string.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
-import type {ReflectOptions} from './options.js';
+import type {ZeroOptions} from './options.js';
 import {
   CONNECT_TIMEOUT_MS,
   ConnectionState,
@@ -27,14 +27,14 @@ import {
   RUN_LOOP_INTERVAL_MS,
   createSocket,
   serverAheadReloadReason,
-} from './reflect.js';
+} from './zero.js';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
 import {ServerError} from './server-error.js';
 import {
   MockSocket,
   TestLogSink,
-  TestReflect,
-  reflectForTest,
+  TestZero,
+  zeroForTest,
   tickAFewTimes,
   waitForUpstreamMessage,
 } from './test-utils.js'; // Why use fakes when we can use the real thing!
@@ -69,7 +69,7 @@ test('onOnlineChange callback', async () => {
   let onlineCount = 0;
   let offlineCount = 0;
 
-  const r = reflectForTest({
+  const r = zeroForTest({
     logLevel: 'debug',
     onOnlineChange: online => {
       if (online) {
@@ -211,9 +211,9 @@ test('onOnlineChange callback', async () => {
   }
 });
 
-test('onOnlineChange reflection on Reflect class', async () => {
+test('onOnlineChange reflection on Zero class', async () => {
   const f = () => 42;
-  const r = reflectForTest({
+  const r = zeroForTest({
     onOnlineChange: f,
   });
   await tickAFewTimes(clock);
@@ -224,7 +224,7 @@ test('onOnlineChange reflection on Reflect class', async () => {
 test('disconnects if ping fails', async () => {
   const watchdogInterval = RUN_LOOP_INTERVAL_MS;
   const pingTimeout = 5000;
-  const r = reflectForTest();
+  const r = zeroForTest();
 
   await r.waitForConnectionState(ConnectionState.Connecting);
   expect(r.connectionState).to.equal(ConnectionState.Connecting);
@@ -419,7 +419,7 @@ test('pusher sends one mutation per push message', async () => {
       requestID?: string;
     }[],
   ) => {
-    const r = reflectForTest();
+    const r = zeroForTest();
     await r.triggerConnected();
 
     const mockSocket = await r.socket;
@@ -522,7 +522,7 @@ test('pusher sends one mutation per push message', async () => {
 });
 
 test('pusher adjusts mutation timestamps to be unix timestamps', async () => {
-  const r = reflectForTest();
+  const r = zeroForTest();
   await r.triggerConnected();
 
   const mockSocket = await r.socket;
@@ -562,7 +562,7 @@ test('pusher adjusts mutation timestamps to be unix timestamps', async () => {
 });
 
 test('puller with mutation recovery pull, success response', async () => {
-  const r = reflectForTest();
+  const r = zeroForTest();
   await r.triggerConnected();
 
   const mockSocket = await r.socket;
@@ -611,7 +611,7 @@ test('puller with mutation recovery pull, success response', async () => {
 });
 
 test('puller with mutation recovery pull, response timeout', async () => {
-  const r = reflectForTest();
+  const r = zeroForTest();
   await r.triggerConnected();
 
   const mockSocket = await r.socket;
@@ -650,7 +650,7 @@ test('puller with mutation recovery pull, response timeout', async () => {
 });
 
 test('puller with normal non-mutation recovery pull', async () => {
-  const r = reflectForTest();
+  const r = zeroForTest();
   const pullReq: PullRequestV1 = {
     profileID: 'test-profile-id',
     clientGroupID: await r.clientGroupID,
@@ -685,9 +685,9 @@ test('smokeTest', async () => {
   ];
 
   for (const c of cases) {
-    // reflectForTest adds the socket by default.
+    // zeroForTest adds the socket by default.
     const serverOptions = c.enableServer ? {} : {server: null};
-    const r = reflectForTest({
+    const r = zeroForTest({
       roomID: 'smokeTestRoom',
       mutators: {
         addData: async (
@@ -769,7 +769,7 @@ test('poke log context includes requestID', async () => {
 
   const {promise: foundRequestIDFromLogPromise, resolve} = resolver<string>();
 
-  const r = new TestReflect({
+  const r = new TestZero({
     server: url,
     auth: '',
     userID: 'user-id',
@@ -807,10 +807,10 @@ test('poke log context includes requestID', async () => {
 
 test('Metrics', async () => {
   // This is just a smoke test -- it ensures that we send metrics once at startup.
-  // Ideally we would run Reflect and put it into different error conditions and see
+  // Ideally we would run Zero and put it into different error conditions and see
   // that the metrics are reported appropriately.
 
-  const r = reflectForTest();
+  const r = zeroForTest();
   await r.waitForConnectionState(ConnectionState.Connecting);
   await r.triggerConnected();
   await r.waitForConnectionState(ConnectionState.Connected);
@@ -828,7 +828,7 @@ test('Metrics', async () => {
 });
 
 test('Metrics not reported when enableAnalytics is false', async () => {
-  const r = reflectForTest({enableAnalytics: false});
+  const r = zeroForTest({enableAnalytics: false});
   await r.waitForConnectionState(ConnectionState.Connecting);
   await r.triggerConnected();
   await r.waitForConnectionState(ConnectionState.Connected);
@@ -846,7 +846,7 @@ test('Metrics not reported when enableAnalytics is false', async () => {
 });
 
 test('Metrics not reported when server indicates local development', async () => {
-  const r = reflectForTest({server: 'http://localhost:8000'});
+  const r = zeroForTest({server: 'http://localhost:8000'});
   await r.waitForConnectionState(ConnectionState.Connecting);
   await r.triggerConnected();
   await r.waitForConnectionState(ConnectionState.Connected);
@@ -879,7 +879,7 @@ test('Authentication', async () => {
     return 'auth-token';
   };
 
-  const r = reflectForTest({auth});
+  const r = zeroForTest({auth});
 
   const emulateErrorWhenConnecting = async (
     tickMS: number,
@@ -948,7 +948,7 @@ test('AuthInvalidated', async () => {
 
   let authCounter = 1;
 
-  const r = reflectForTest({
+  const r = zeroForTest({
     auth: () => `auth-token-${authCounter++}`,
   });
 
@@ -963,7 +963,7 @@ test('AuthInvalidated', async () => {
 });
 
 test('Disconnect on error', async () => {
-  const r = reflectForTest();
+  const r = zeroForTest();
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
   await r.triggerError('ClientNotFound', 'client not found');
@@ -971,7 +971,7 @@ test('Disconnect on error', async () => {
 });
 
 test('No backoff on errors', async () => {
-  const r = reflectForTest();
+  const r = zeroForTest();
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
 
@@ -1001,7 +1001,7 @@ test('No backoff on errors', async () => {
 });
 
 test('Ping pong', async () => {
-  const r = reflectForTest();
+  const r = zeroForTest();
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
 
@@ -1018,7 +1018,7 @@ test('Ping pong', async () => {
 });
 
 test('Ping timeout', async () => {
-  const r = reflectForTest();
+  const r = zeroForTest();
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
 
@@ -1035,7 +1035,7 @@ test('Ping timeout', async () => {
 
 const connectTimeoutMessage = 'Rejecting connect resolver due to timeout';
 
-function expectLogMessages(r: TestReflect<MutatorDefs>) {
+function expectLogMessages(r: TestZero<MutatorDefs>) {
   return expect(
     r.testLogSink.messages.flatMap(([level, _context, msg]) =>
       level === 'debug' ? msg : [],
@@ -1044,7 +1044,7 @@ function expectLogMessages(r: TestReflect<MutatorDefs>) {
 }
 
 test('Connect timeout', async () => {
-  const r = reflectForTest({logLevel: 'debug'});
+  const r = zeroForTest({logLevel: 'debug'});
 
   await r.waitForConnectionState(ConnectionState.Connecting);
 
@@ -1098,7 +1098,7 @@ test('socketOrigin', async () => {
   ];
 
   for (const c of cases) {
-    const r = reflectForTest(c.socketEnabled ? {} : {server: null});
+    const r = zeroForTest(c.socketEnabled ? {} : {server: null});
 
     await tickAFewTimes(clock);
 
@@ -1111,7 +1111,7 @@ test('socketOrigin', async () => {
 });
 
 test('Logs errors in connect', async () => {
-  const r = reflectForTest({});
+  const r = zeroForTest({});
   await r.triggerError('ClientNotFound', 'client-id-a');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
   await clock.tickAsync(0);
@@ -1126,7 +1126,7 @@ test('Logs errors in connect', async () => {
 
 test('New connection logs', async () => {
   clock.setSystemTime(1000);
-  const r = reflectForTest({logLevel: 'info'});
+  const r = zeroForTest({logLevel: 'info'});
   await r.waitForConnectionState(ConnectionState.Connecting);
   await clock.tickAsync(500);
   await r.triggerConnected();
@@ -1164,9 +1164,9 @@ test('New connection logs', async () => {
 });
 
 async function testWaitsForConnection(
-  fn: (r: TestReflect<MutatorDefs>) => Promise<unknown>,
+  fn: (r: TestZero<MutatorDefs>) => Promise<unknown>,
 ) {
-  const r = reflectForTest();
+  const r = zeroForTest();
 
   const log: ('resolved' | 'rejected')[] = [];
 
@@ -1219,7 +1219,7 @@ test('puller waits for connection', async () => {
 
 test('Protocol mismatch', async () => {
   const fake = sinon.fake();
-  const r = reflectForTest();
+  const r = zeroForTest();
   r.onUpdateNeeded = fake;
 
   await r.triggerError('VersionNotSupported', 'prot mismatch');
@@ -1238,7 +1238,7 @@ test('server ahead', async () => {
   const {promise, resolve} = resolver();
   const storage: Record<string, string> = {};
   sinon.replaceGetter(window, 'localStorage', () => storage as Storage);
-  const r = reflectForTest();
+  const r = zeroForTest();
   r.reload = resolve;
 
   await r.triggerError(
@@ -1252,10 +1252,10 @@ test('server ahead', async () => {
   );
 });
 
-test('Constructing Reflect with a negative hiddenTabDisconnectDelay option throws an error', () => {
+test('Constructing Zero with a negative hiddenTabDisconnectDelay option throws an error', () => {
   let expected;
   try {
-    reflectForTest({hiddenTabDisconnectDelay: -1});
+    zeroForTest({hiddenTabDisconnectDelay: -1});
   } catch (e) {
     expected = e;
   }
@@ -1263,23 +1263,20 @@ test('Constructing Reflect with a negative hiddenTabDisconnectDelay option throw
     .instanceOf(Error)
     .property(
       'message',
-      'ReflectOptions.hiddenTabDisconnectDelay must not be negative.',
+      'ZeroOptions.hiddenTabDisconnectDelay must not be negative.',
     );
 });
 
-test('Constructing Reflect with an invalid roomID option throws an error', () => {
+test('Constructing Zero with an invalid roomID option throws an error', () => {
   let expected;
   try {
-    reflectForTest({roomID: 'invalid^RoomID'});
+    zeroForTest({roomID: 'invalid^RoomID'});
   } catch (e) {
     expected = e;
   }
   expect(expected)
     .instanceOf(Error)
-    .property(
-      'message',
-      'ReflectOptions.roomID must match /^[A-Za-z0-9_/-]+$/.',
-    );
+    .property('message', 'ZeroOptions.roomID must match /^[A-Za-z0-9_/-]+$/.');
 });
 
 suite('Disconnect on hide', () => {
@@ -1287,7 +1284,7 @@ suite('Disconnect on hide', () => {
     name: string;
     hiddenTabDisconnectDelay?: number | undefined;
     test: (
-      r: TestReflect<MutatorDefs>,
+      r: TestZero<MutatorDefs>,
       changeVisibilityState: (
         newVisibilityState: DocumentVisibilityState,
       ) => void,
@@ -1440,7 +1437,7 @@ suite('Disconnect on hide', () => {
         document.dispatchEvent(new Event('visibilitychange'));
       };
 
-      const r = reflectForTest({
+      const r = zeroForTest({
         hiddenTabDisconnectDelay,
       });
       const makeOnOnlineChangePromise = () =>
@@ -1485,7 +1482,7 @@ suite('Disconnect on hide', () => {
 });
 
 test('InvalidConnectionRequest', async () => {
-  const r = reflectForTest({});
+  const r = zeroForTest({});
   await r.triggerError('InvalidConnectionRequest', 'test');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
   await clock.tickAsync(0);
@@ -1518,7 +1515,7 @@ suite('Invalid Downstream message', () => {
 
   for (const c of cases) {
     test(c.name, async () => {
-      const r = reflectForTest({
+      const r = zeroForTest({
         logLevel: 'debug',
       });
       await r.triggerConnected();
@@ -1564,12 +1561,12 @@ test('kvStore option', async () => {
   const spy = sinon.spy(IDBFactory.prototype, 'open');
 
   const t = async (
-    kvStore: ReflectOptions<Record<string, never>>['kvStore'],
+    kvStore: ZeroOptions<Record<string, never>>['kvStore'],
     userID: string,
     expectedIDBOpenCalled: boolean,
     expectedValue: JSONValue | undefined = undefined,
   ) => {
-    const r = reflectForTest({
+    const r = zeroForTest({
       server: null,
       userID,
       kvStore,
@@ -1597,7 +1594,7 @@ test('kvStore option', async () => {
 });
 
 test('Close during connect should sleep', async () => {
-  const r = reflectForTest({
+  const r = zeroForTest({
     logLevel: 'debug',
   });
 
@@ -1630,7 +1627,7 @@ test('Close during connect should sleep', async () => {
 });
 
 test('Reflect close should stop timeout', async () => {
-  const r = reflectForTest({
+  const r = zeroForTest({
     logLevel: 'debug',
   });
 
@@ -1643,7 +1640,7 @@ test('Reflect close should stop timeout', async () => {
 test('subscribe where body returns non json', async () => {
   const log: unknown[] = [];
 
-  const reflect = reflectForTest({
+  const reflect = zeroForTest({
     logLevel: 'debug',
     mutators: {
       async addData(tx, x: Record<string, ReadonlyJSONValue>) {
@@ -1686,24 +1683,4 @@ test('subscribe where body returns non json', async () => {
   ]);
 
   cancel();
-});
-
-test('Reflect close should call close beacon', async () => {
-  setConfig('closeBeacon', true);
-  const r = reflectForTest();
-
-  await r.close();
-
-  expect(fetchStub.calledOnce).equal(true);
-  expect(fetchStub.firstCall.args[0].toString()).equal(
-    `https://example.com/api/sync/v1/close?roomID=${r.roomID}&userID=${r.userID}&clientID=${r.clientID}`,
-  );
-  expect(fetchStub.firstCall.args[1]).deep.equal({
-    body: '{"lastMutationID":0}',
-    headers: {
-      'content-type': 'application/json',
-    },
-    keepalive: true,
-    method: 'POST',
-  });
 });

@@ -2,7 +2,7 @@
 
 import {expect} from 'chai';
 import {sleep} from 'shared/src/sleep.js';
-import {reflectForTest} from './test-utils.js';
+import {zeroForTest} from './test-utils.js';
 
 onmessage = async (e: MessageEvent) => {
   const {userID} = e.data;
@@ -17,7 +17,7 @@ onmessage = async (e: MessageEvent) => {
 async function testBasics(userID: string) {
   console.log('testBasics', WebSocket);
 
-  const r = reflectForTest({
+  const r = zeroForTest({
     userID,
     mutators: {
       async inc(tx, key: string) {

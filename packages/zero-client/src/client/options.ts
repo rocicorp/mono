@@ -3,19 +3,13 @@ import type {MutatorDefs} from 'reflect-shared/src/types.js';
 import type {KVStoreProvider, MaybePromise} from 'replicache';
 
 /**
- * Configuration for [[Reflect]].
+ * Configuration for [[Zero]].
  */
-export interface ReflectOptions<MD extends MutatorDefs> {
+export interface ZeroOptions<MD extends MutatorDefs> {
   /**
-   * Server to connect to, for example "https://myapp-myteam.reflect.net/".
+   * Server to connect to, for example "https://myapp-myteam.zero.ms/".
    */
   server?: string | null | undefined;
-
-  /**
-   * Server to connect to, for example "wss://myapp-myteam.reflect.net/".
-   * @deprecated Use {@code server} instead.
-   */
-  socketOrigin?: string | null | undefined;
 
   /**
    * Identifies and authenticates the user.
@@ -37,8 +31,8 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   /**
    * A unique identifier for the user. Must be non-empty.
    *
-   * For efficiency, a new Reflect instance will initialize its state from
-   * the persisted state of an existing Reflect instance with the same
+   * For efficiency, a new Zero instance will initialize its state from
+   * the persisted state of an existing Zero instance with the same
    * `userID`, `roomID`, domain and browser profile.
    */
   userID: string;
@@ -49,12 +43,12 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * Must be non-empty and must only contain characters from the character set
    * `[A-Za-z0-9_/-]`.
    *
-   * For efficiency, a new Reflect instance will initialize its state from
-   * the persisted state of an existing Reflect instance with the same
+   * For efficiency, a new Zero instance will initialize its state from
+   * the persisted state of an existing Zero instance with the same
    * `userID`, `roomID`, domain and browser profile.
    *
-   * Mutations from one Reflect instance may be pushed using the
-   * [[Reflect.auth]] of another Reflect instance with the same
+   * Mutations from one Zero instance may be pushed using the
+   * [[Zero.auth]] of another Zero instance with the same
    * `userID`, `roomID`, domain and browser profile.
    */
   roomID: string;
@@ -72,7 +66,7 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   schemaVersion?: string | undefined;
 
   /**
-   * Determines the level of detail at which Reflect logs messages about
+   * Determines the level of detail at which Zero logs messages about
    * its operation. Messages are logged to the `console`.
    *
    * When this is set to `'debug'`, `'info'` and `'error'` messages are also
@@ -87,15 +81,15 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   /**
    * An object used as a map to define the *mutators* for this application.
    *
-   * *Mutators* are used to make changes to the Reflect data.
+   * *Mutators* are used to make changes to the Zero data.
    *
    * The registered *mutations* are reflected on the
-   * [[Reflect.mutate|mutate]] property of the [[Reflect]] instance.
+   * [[Zero.mutate|mutate]] property of the [[Zero]] instance.
    *
    * #### Example
    *
    * ```ts
-   * const reflect = new Reflect({
+   * const zero = new Zero({
    *   server: 'https://example.com/',
    *   userID: 'user-id',
    *   roomID: 'room-id',
@@ -117,7 +111,7 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * This will create the function to later use:
    *
    * ```ts
-   * await reflect.mutate.createTodo({
+   * await zero.mutate.createTodo({
    *   id: 1234,
    *   title: 'Make things realtime',
    *   complete: true,
@@ -129,7 +123,7 @@ export interface ReflectOptions<MD extends MutatorDefs> {
    * *Mutators* run once when they are initially invoked, but they might also be
    * *replayed* multiple times during sync. As such *mutators* should not modify
    * application state directly. Also, it is important that the set of
-   * registered mutator names only grows over time. If Reflect syncs and a
+   * registered mutator names only grows over time. If Zero syncs and a
    * needed *mutator* is not registered, it will substitute a no-op mutator, but
    * this might be a poor user experience.
    *
@@ -151,12 +145,12 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   mutators?: MD | undefined;
 
   /**
-   * `onOnlineChange` is called when the Reflect instance's online status changes
+   * `onOnlineChange` is called when the Zero instance's online status changes
    */
   onOnlineChange?: ((online: boolean) => void) | undefined;
 
   /**
-   * The number of milliseconds to wait before disconnecting a Reflect
+   * The number of milliseconds to wait before disconnecting a Zero
    * instance whose tab has become hidden.
    *
    * Instances in hidden tabs are disconnected to save resources.
@@ -166,7 +160,7 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   hiddenTabDisconnectDelay?: number | undefined;
 
   /**
-   * Help Reflect improve its service by automatically sending diagnostic and
+   * Help Zero improve its service by automatically sending diagnostic and
    * usage data.
    *
    * Default is true.
@@ -176,7 +170,7 @@ export interface ReflectOptions<MD extends MutatorDefs> {
   /**
    * Determines what kind of storage implementation to use on the client.
    *
-   * Defaults to `'mem'` which means that Reflect uses an in memory storage and
+   * Defaults to `'mem'` which means that Zero uses an in memory storage and
    * the data is not persisted on the client.
    *
    * By setting this to `'idb'` the data is persisted on the client using

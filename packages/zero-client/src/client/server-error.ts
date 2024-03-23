@@ -1,7 +1,7 @@
 import type {ErrorKind} from 'reflect-protocol';
 
 /**
- * Represents an error sent by server as part of Reflect protocol.
+ * Represents an error sent by server as part of Zero protocol.
  */
 export class ServerError<K extends ErrorKind = ErrorKind> extends Error {
   readonly kind: K;

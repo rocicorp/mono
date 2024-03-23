@@ -22,7 +22,7 @@ export const REPORT_INTERVAL_MS = 5_000;
 type ClientDisconnectReason =
   | 'AbruptClose'
   | 'CleanClose'
-  | 'ReflectClosed'
+  | 'ClientClosed'
   | 'ConnectTimeout'
   | 'UnexpectedBaseCookie'
   | 'PingTimeout'

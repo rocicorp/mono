@@ -1,18 +1,16 @@
-import {WSString, toHTTPString, type HTTPString} from './http-string.js';
+import type {HTTPString} from './http-string.js';
 
-function validateServerParam<
-  S extends 'ws' | 'http',
-  R = S extends 'ws' ? WSString : HTTPString,
->(paramName: string, server: string, expectedProtocol: S): R {
+function validateServerParam(paramName: string, server: string): HTTPString {
+  const expectedProtocol = 'http';
   const forExample = () =>
-    ` For example: "${expectedProtocol}s://myapp-myteam.reflect.net/".`;
+    ` For example: "${expectedProtocol}s://myapp-myteam.zero.ms/".`;
 
   if (
     !server.startsWith(`${expectedProtocol}://`) &&
     !server.startsWith(`${expectedProtocol}s://`)
   ) {
     throw new Error(
-      `ReflectOptions.${paramName} must use the "${expectedProtocol}" or "${expectedProtocol}s" scheme.`,
+      `ZeroOptions.${paramName} must use the "${expectedProtocol}" or "${expectedProtocol}s" scheme.`,
     );
   }
   let url;
@@ -20,7 +18,7 @@ function validateServerParam<
     url = new URL(server);
   } catch {
     throw new Error(
-      `ReflectOptions.${paramName} must be a valid URL.${forExample()}`,
+      `ZeroOptions.${paramName} must be a valid URL.${forExample()}`,
     );
   }
 
@@ -28,7 +26,7 @@ function validateServerParam<
 
   if (url.pathname !== '/') {
     throw new Error(
-      `ReflectOptions.${paramName} must not contain a path component (other than "/").${forExample()}`,
+      `ZeroOptions.${paramName} must not contain a path component (other than "/").${forExample()}`,
     );
   }
 
@@ -38,30 +36,19 @@ function validateServerParam<
   ] as const) {
     if (url[property] || urlString.endsWith(invalidEndsWith)) {
       throw new Error(
-        `ReflectOptions.${paramName} must not contain a ${property} component.${forExample()}`,
+        `ZeroOptions.${paramName} must not contain a ${property} component.${forExample()}`,
       );
     }
   }
 
-  return urlString as R;
+  return urlString as HTTPString;
 }
 
 export function getServer(
-  server: string | null | undefined,
-  socketOrigin: string | null | undefined,
+  server: string | undefined | null,
 ): HTTPString | null {
-  if (server) {
-    return validateServerParam('server', server, 'http') as HTTPString;
+  if (server === undefined || server === null) {
+    return null;
   }
-
-  if (socketOrigin) {
-    const validatedSocketOrigin = validateServerParam(
-      'socketOrigin',
-      socketOrigin,
-      'ws',
-    );
-    return toHTTPString(validatedSocketOrigin);
-  }
-
-  return null;
+  return validateServerParam('server', server);
 }

@@ -33,7 +33,7 @@ class LevelFilterLogSink implements LogSink {
 }
 
 const DATADOG_LOG_LEVEL = 'info';
-const REFLECT_SAAS_DOMAIN = '.reflect-server.net';
+const ZERO_SASS_DOMAIN = '.reflect-server.net';
 
 export type LogOptions = {
   readonly logLevel: LogLevel;
@@ -61,9 +61,9 @@ export function createLogOptions(
 
   const serverURL = new URL(server);
   const socketHostname = serverURL.hostname;
-  const datadogServiceLabel = socketHostname.endsWith(REFLECT_SAAS_DOMAIN)
+  const datadogServiceLabel = socketHostname.endsWith(ZERO_SASS_DOMAIN)
     ? socketHostname
-        .substring(0, socketHostname.length - REFLECT_SAAS_DOMAIN.length)
+        .substring(0, socketHostname.length - ZERO_SASS_DOMAIN.length)
         .toLowerCase()
     : socketHostname;
   const baseURL = new URL('/api/logs/v0/log', server);
