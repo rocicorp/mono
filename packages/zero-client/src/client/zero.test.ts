@@ -3,7 +3,7 @@ import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
-import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
+import {resetAllConfig} from 'reflect-shared/src/config.js';
 import type {
   MutatorDefs,
   ReadonlyJSONValue,
