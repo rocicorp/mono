@@ -211,7 +211,7 @@ test('onOnlineChange callback', async () => {
   }
 });
 
-test('onOnlineChange reflection on Reflect class', async () => {
+test('onOnlineChange reflection on Zero class', async () => {
   const f = () => 42;
   const r = zeroForTest({
     onOnlineChange: f,
@@ -807,7 +807,7 @@ test('poke log context includes requestID', async () => {
 
 test('Metrics', async () => {
   // This is just a smoke test -- it ensures that we send metrics once at startup.
-  // Ideally we would run Reflect and put it into different error conditions and see
+  // Ideally we would run Zero and put it into different error conditions and see
   // that the metrics are reported appropriately.
 
   const r = zeroForTest();
@@ -1252,7 +1252,7 @@ test('server ahead', async () => {
   );
 });
 
-test('Constructing Reflect with a negative hiddenTabDisconnectDelay option throws an error', () => {
+test('Constructing Zero with a negative hiddenTabDisconnectDelay option throws an error', () => {
   let expected;
   try {
     zeroForTest({hiddenTabDisconnectDelay: -1});
@@ -1263,11 +1263,11 @@ test('Constructing Reflect with a negative hiddenTabDisconnectDelay option throw
     .instanceOf(Error)
     .property(
       'message',
-      'ReflectOptions.hiddenTabDisconnectDelay must not be negative.',
+      'ZeroOptions.hiddenTabDisconnectDelay must not be negative.',
     );
 });
 
-test('Constructing Reflect with an invalid roomID option throws an error', () => {
+test('Constructing Zero with an invalid roomID option throws an error', () => {
   let expected;
   try {
     zeroForTest({roomID: 'invalid^RoomID'});
@@ -1276,10 +1276,7 @@ test('Constructing Reflect with an invalid roomID option throws an error', () =>
   }
   expect(expected)
     .instanceOf(Error)
-    .property(
-      'message',
-      'ReflectOptions.roomID must match /^[A-Za-z0-9_/-]+$/.',
-    );
+    .property('message', 'ZeroOptions.roomID must match /^[A-Za-z0-9_/-]+$/.');
 });
 
 suite('Disconnect on hide', () => {
