@@ -234,7 +234,6 @@ describe('replicator/message-processor', () => {
         ],
 
         // Simulate a reconnect with the replication stream sending the same tx again.
-        // Currently this results in an error but we should add detection for it.
         '0/2': [
           {tag: 'begin', commitLsn: '0/a', commitTime: 123n, xid: 123},
           {tag: 'insert', relation: FOO_RELATION, new: {id: 123}},
@@ -248,7 +247,7 @@ describe('replicator/message-processor', () => {
           },
         ],
 
-        // This should succeed once replay detection is implemented.
+        // This should succeed.
         '0/40': [
           {tag: 'begin', commitLsn: '0/f', commitTime: 127n, xid: 127},
           {tag: 'insert', relation: FOO_RELATION, new: {id: 789}},
@@ -264,20 +263,18 @@ describe('replicator/message-processor', () => {
       },
       acknowledged: [
         '0/a',
-        // TODO: Make this work.
-        // '0/f',
+        '0/a', // Note: The acknowledgement should be resent.
+        '0/f',
       ],
       replicated: {
         foo: [
           {id: 123, big: null, ['_0_version']: '0a'},
           {id: 234, big: null, ['_0_version']: '0a'},
-          // TODO: Make this work.
-          // {id: 789, big: null, ['_0_version']: '0f'},
-          // {id: 987, big: null, ['_0_version']: '0f'},
+          {id: 789, big: null, ['_0_version']: '0f'},
+          {id: 987, big: null, ['_0_version']: '0f'},
         ],
       },
-      // TODO: Make false
-      expectFailure: true,
+      expectFailure: false,
     },
   ];
 
