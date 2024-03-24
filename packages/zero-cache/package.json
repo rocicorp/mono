@@ -14,6 +14,7 @@
     "local": "node --loader ts-node/esm tool/local.ts"
   },
   "dependencies": {
+    "@drdgvhbh/postgres-error-codes": "^0.0.6",
     "@rocicorp/lock": "^1.0.3",
     "@rocicorp/logger": "^5.2.1",
     "@rocicorp/resolver": "^1.0.1",

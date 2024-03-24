@@ -1,3 +1,4 @@
+import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
@@ -6,7 +7,7 @@ import {
   Pgoutput,
   PgoutputPlugin,
 } from 'pg-logical-replication';
-import type postgres from 'postgres';
+import postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {epochMicrosToTimestampTz} from '../../types/big-time.js';
@@ -374,7 +375,21 @@ export class MessageProcessor {
         this.#acknowledge(commitLsn);
         lc.debug?.(`Committed tx`);
       } catch (e) {
-        this.#failInLock(lc, e);
+        if (
+          // A unique violation on the TxLog means that the transaction has already been
+          // processed. This is not a real error, and can happen, for example, if the upstream
+          // the connection was lost before the acknowledgment was sent. Recover by resending
+          // the acknowledgement, and continue processing the stream.
+          e instanceof postgres.PostgresError &&
+          e.code === PG_UNIQUE_VIOLATION &&
+          e.schema_name === '_zero' &&
+          e.table_name === 'TxLog'
+        ) {
+          this.#acknowledge(commitLsn);
+          lc.debug?.(`Skipped repeat tx`);
+        } else {
+          this.#failInLock(lc, e);
+        }
       }
     });
 
@@ -519,7 +534,7 @@ class TransactionProcessor {
   readonly #setTxFailed: (err: unknown) => void;
   readonly #txCommitted: Promise<void>;
 
-  readonly #pendingQueries: postgres.PendingQuery<postgres.Row[]>[] = [];
+  readonly #pendingQueries: Promise<postgres.RowList<postgres.Row[]>>[] = [];
   readonly #processLock = new Lock();
   #failure: Error | undefined;
 
@@ -566,11 +581,21 @@ class TransactionProcessor {
         if (qs !== 'commit') {
           // Call execute() to send the statements immediately, allowing other messages
           // to be processed while the statements are being applied.
-          this.#pendingQueries.push(...qs.map(q => q.execute()));
+          //
+          // Optimization: Fail immediately to drop subsequent transaction processing
+          // (instead of waiting until the Promise.all() in 'commit'). This can save a
+          // lot of time, for example, if a large transaction is re-received from upstream.
+          this.#pendingQueries.push(
+            ...qs.map(q =>
+              q.execute().catch(e => {
+                this.fail(e);
+                throw e;
+              }),
+            ),
+          );
         } else {
           // `await` all queries at the final commit.
           this.#setTxProcessed(await Promise.all(this.#pendingQueries));
-          return this.#txCommitted; // allows tests to await completion of the full postgres transaction
         }
       });
     } catch (e) {
@@ -672,8 +697,9 @@ class TransactionProcessor {
     return this.#process(truncate, tx => [tx`TRUNCATE ${tx(tables)}`]);
   }
 
-  processCommit(commit: Pgoutput.MessageCommit) {
-    return this.#process(commit, () => 'commit');
+  async processCommit(commit: Pgoutput.MessageCommit) {
+    await this.#process(commit, () => 'commit');
+    return this.#txCommitted; // allows tests to await completion of the full postgres transaction
   }
 }
 
