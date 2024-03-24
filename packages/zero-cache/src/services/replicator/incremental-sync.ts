@@ -177,6 +177,7 @@ export class IncrementalSyncer {
         replicated,
         txSerializer,
         (lsn: string) => service.acknowledge(lsn),
+        (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
       this.#service.on(
         'data',
@@ -204,12 +205,31 @@ export class IncrementalSyncer {
     lc.info?.('IncrementalSyncer stopped');
   }
 
-  async stop(lc: LogContext) {
+  async stop(lc: LogContext, err?: unknown) {
     if (this.#service) {
-      lc.info?.(`Stopping IncrementalSyncer`);
+      if (err) {
+        lc.error?.('IncrementalSyncer stopped with error', err);
+      } else {
+        lc.info?.(`Stopping IncrementalSyncer`);
+      }
       this.#stopped = true;
       await this.#service.stop();
     }
+  }
+}
+function ensureError(err: unknown): Error {
+  if (err instanceof Error) {
+    return err;
+  }
+  const error = new Error();
+  error.cause = err;
+  return error;
+}
+
+class PrecedingTransactionError extends Error {
+  constructor(err: unknown) {
+    super();
+    this.cause = err;
   }
 }
 
@@ -227,13 +247,80 @@ export class IncrementalSyncer {
  * Note that the processing of transactions must be serialized to guarantee that each
  * transaction can see the results of its predecessors. This is done with the
  * singleton `txSerializer` lock created in the IncrementalSyncer service.
+ *
+ * The logic for handling a transaction happens in two stages.
+ *
+ * 1. In the **Assembly** stage, logical replication messages from upstream are
+ *    gathered by the MessageProcessor and passed to the TransactionProcessor.
+ *    At the very first `Begin` message, a downstream Postgres transaction
+ *    is enqueued to be started in the `txSerializer` lock.
+ *
+ * 2. In the **Processing** stage, all preceding transactions have completed,
+ *    the downstream Postgres transaction has started, and the Transaction
+ *    Processor executes statements on it.
+ *
+ * Note that the two stages can overlap; for example, a transaction with a
+ * large number of messages may still be streaming in when the downstream
+ * transaction handle becomes ready. However, it is more common for the
+ * transaction to have already been assembled when it comes time for it
+ * to be processed, either because it has a small number of messages, or
+ * because a preceding transaction is still being processed while the next
+ * one is assembled.
+ *
+ * Here is an example timeline of assembly stages `A*` and
+ * their corresponding processing stages `P*`:
+ *
+ * ```
+ *  ----> Upstream Logical Replication Messages ---->
+ * ---------------------------     -------------------
+ * |      A1       | A2 | A3 |     |   A4   |   A5   |
+ * -------------------------------------------------------------------------
+ *         |      P1        |   P2   |   P3    |      |   P4   |    P5     |
+ *         -------------------------------------      ----------------------
+ *                      ----> Downstream Transactions ---->
+ * ```
+ *
+ * This is important to understand in the context of error handling. Although
+ * errors are not expected to happen in the steady state, error handling is
+ * necessary to avoid corrupting the replica with a state that is
+ * inconsistent with a snapshot of upstream.
+ *
+ * An error may happen in the Assembly stage (e.g. unexpected Message formats,
+ * unsupported schema changes), or the Processing stage (e.g. query execution
+ * errors, constraint violations, etc.). The desired behavior when encountering
+ * an error is to:
+ *
+ * 1. allow all preceding transactions to successfully finish processing
+ *
+ * 2. cancel/rollback the erroneous transaction, and disallow all subsequent
+ *    transactions from proceeding
+ *
+ * 3. shut down the service (after which manual intervention is likely needed
+ *    to address the unhandled condition).
+ *
+ * In order to satisfy (1) and (2), error handling is plumbed through the
+ * TransactionProcessor object so that it is always surfaced in the Processing
+ * stage, even if the error was encountered in the Assembly stage.
+ *
+ * In the unlikely event that an error is encountered _between_ assembling
+ * transactions (e.g. an unexpected Message between the last MessageCommit
+ * and the next MessageBegin) and there is no TransactionProcessor being
+ * assembled, a callback to fail the service is manually enqueued on the
+ * `txSerializer` to allow preceding transactions to complete before shutting
+ * down.
+ *
+ * It follows that, from an implementation perspective, the MessageProcessor's
+ * failure handling must always done from within the `txSerializer` lock.
  */
-class MessageProcessor {
+// Exported for testing.
+export class MessageProcessor {
   readonly #replica: postgres.Sql;
   readonly #replicated: PublicationInfo;
   readonly #txSerializer: Lock;
   readonly #acknowledge: (lsn: string) => unknown;
+  readonly #failService: (lc: LogContext, err: unknown) => void;
 
+  #failure: Error | undefined;
   #tx: TransactionProcessor | undefined;
 
   constructor(
@@ -241,38 +328,120 @@ class MessageProcessor {
     replicated: PublicationInfo,
     txSerializer: Lock,
     acknowledge: (lsn: string) => unknown,
+    failService: (lc: LogContext, err: unknown) => void,
   ) {
     this.#replica = replica;
     this.#replicated = replicated;
     this.#txSerializer = txSerializer;
     this.#acknowledge = acknowledge;
+    this.#failService = failService;
   }
 
-  processMessage(lc: LogContext, lsn: string, message: Pgoutput.Message) {
+  #createAndEnqueueNewTransaction(
+    lc: LogContext,
+    commitLsn: string,
+  ): TransactionProcessor {
+    // The `tx` resolver manages the availability of the downstream
+    // Postgres transaction handle, resolving when it is the
+    // TransactionProcessor's turn to be processed.
+    const {
+      promise: tx,
+      resolve: setTx,
+      reject: failTx,
+    } = resolver<postgres.TransactionSql>();
+
+    // The `processed` resolver manages the lifetime and status of the
+    // processing stage. This is the logical "output" of the
+    // TransactionProcessor.
+    const {
+      promise: processed,
+      resolve: setProcessed,
+      reject: setFailed,
+    } = resolver();
+
+    const txCommitted = this.#txSerializer.withLock(async () => {
+      try {
+        if (this.#failure) {
+          // If a preceding transaction failed, all subsequent transactions must also fail.
+          failTx(new PrecedingTransactionError(this.#failure));
+          return await processed;
+        }
+        await this.#replica.begin(tx => {
+          lc.debug?.('Began tx');
+          setTx(tx); // allows the TransactionProcessor to start processing
+          return processed; // signalled when the TransactionProcessor finishes
+        });
+        this.#acknowledge(commitLsn);
+        lc.debug?.(`Committed tx`);
+      } catch (e) {
+        this.#failInLock(lc, e);
+      }
+    });
+
+    return new TransactionProcessor(
+      lc,
+      commitLsn,
+      tx,
+      setProcessed,
+      setFailed,
+      txCommitted,
+    );
+  }
+
+  /** See {@link MessageProcessor} documentation for error handling semantics. */
+  #fail(lc: LogContext, err: unknown) {
+    if (this.#tx) {
+      // If a current transaction is being assembled, fail it so that the `err` is surfaced
+      // from within the transaction's processing stage, i.e. from within the `txSerializer`
+      // lock via the TransactionProcessor's `setFailed` rejection callback.
+      this.#tx.fail(err);
+    } else {
+      // Otherwise, manually enqueue the failure on the `txSerializer` to allow previous
+      // transactions to complete, and prevent subsequent transactions from proceeding.
+      void this.#txSerializer.withLock(() => {
+        this.#failInLock(lc, err);
+      });
+    }
+  }
+
+  // This must be called from within the txSerializer lock to allow pending
+  // (not-failed) transactions to complete.
+  #failInLock(lc: LogContext, err: unknown) {
+    if (!this.#failure) {
+      this.#failure = ensureError(err);
+      lc.error?.('Message Processing failed:', this.#failure);
+      this.#failService(lc, this.#failure);
+    }
+  }
+
+  async processMessage(lc: LogContext, lsn: string, message: Pgoutput.Message) {
+    lc = lc.withContext('lsn', lsn);
+    if (this.#failure) {
+      lc.debug?.(`Dropping ${message.tag}`);
+      return;
+    }
+    try {
+      await this.#processMessage(lc, lsn, message);
+    } catch (e) {
+      this.#fail(lc, e);
+    }
+  }
+
+  #processMessage(lc: LogContext, lsn: string, message: Pgoutput.Message) {
     if (message.tag === 'begin') {
+      const {commitLsn} = message;
+      assert(commitLsn);
+
       if (this.#tx) {
         throw new Error(`Already in a transaction ${safeStringify(message)}`);
       }
-      assert(message.commitLsn);
-
-      // The two resolvers are used to coordinate the beginning and ending of the transaction
-      // processing within the `txSerializer` lock.
-      const {promise: tx, resolve: setTx} = resolver<postgres.TransactionSql>();
-      const {promise: processed, resolve: setProcessed} = resolver();
-
-      void this.#txSerializer.withLock(async () => {
-        await this.#replica.begin(tx => {
-          lc.debug?.('Began tx', safeJSON(message));
-          setTx(tx); // Allows TransactionProcessor to start processing its queue of messages.
-          return processed; // Signalled by the TransactionProcessor when processing its MessageCommit.
-        });
-        this.#acknowledge(lsn);
-        lc.debug?.(`Committed tx`, safeJSON(message));
-      });
-
-      this.#tx = new TransactionProcessor(message.commitLsn, tx, setProcessed);
+      this.#tx = this.#createAndEnqueueNewTransaction(
+        lc.withContext('txBegin', lsn).withContext('txCommit', commitLsn),
+        commitLsn,
+      );
       return this.#tx.processBegin(message);
     }
+
     // For non-begin messages, there should be a TransactionProcessor set.
     if (!this.#tx) {
       throw new Error(
@@ -291,7 +460,7 @@ class MessageProcessor {
       case 'truncate':
         return this.#tx.processTruncate(message);
       case 'commit': {
-        // Undef this.#tx to allow the queuing of the next transaction.
+        // Undef this.#tx to allow the assembly of the next transaction.
         const tx = this.#tx;
         this.#tx = undefined;
         return tx.processCommit(message);
@@ -343,82 +512,123 @@ class MessageProcessor {
  * on the {@link postgres.TransactionSql} on the replica.
  */
 class TransactionProcessor {
+  readonly #lc: LogContext;
   readonly #version: LexiVersion;
   readonly #tx: Promise<postgres.TransactionSql>;
-  readonly #setProcessed: () => void;
+  readonly #setTxProcessed: (queries: unknown) => void;
+  readonly #setTxFailed: (err: unknown) => void;
+  readonly #txCommitted: Promise<void>;
+
+  readonly #pendingQueries: postgres.PendingQuery<postgres.Row[]>[] = [];
   readonly #processLock = new Lock();
+  #failure: Error | undefined;
 
   constructor(
+    lc: LogContext,
     lsn: string,
     tx: Promise<postgres.TransactionSql>,
     setProcessed: () => void,
+    setFailed: (err: unknown) => void,
+    txCommitted: Promise<void>,
   ) {
     this.#version = toLexiVersion(lsn);
+    this.#lc = lc.withContext('tx', this.#version);
     this.#tx = tx;
-    this.#setProcessed = setProcessed;
+    this.#setTxProcessed = setProcessed;
+    this.#setTxFailed = setFailed;
+    this.#txCommitted = txCommitted;
   }
 
   /**
    * Ensures that all messages are processed serially. The callback returns
-   * the postgres statement to execute, or `undefined` if no statement is needed.
+   * the postgres statements to execute, or `"commit"` when processing has
+   * completed.
    */
-  #process(
-    statement: (
+  async #process(
+    message: Pgoutput.Message,
+    stmts: (
       tx: postgres.TransactionSql,
-    ) => postgres.PendingQuery<readonly postgres.MaybeRow[]> | undefined,
+    ) => postgres.PendingQuery<postgres.Row[]>[] | 'commit',
   ) {
-    return this.#processLock.withLock(async () => {
-      // Note: This will block until it is this Transaction's turn to be processed,
-      // as coordinated by the `#txSerializer` logic in the {@link MessageProceessor}.
-      const tx = await this.#tx;
+    try {
+      return await this.#processLock.withLock(async () => {
+        // All queued messages are dropped if anything failed.
+        if (this.#failure) {
+          this.#lc.debug?.(`Dropping ${message.tag}`);
+          return;
+        }
 
-      // execute() sends the statement to the replica. Note that we do not `await`
-      // the result, as the transaction itself automatically guarantees serialization.
-      // On the contrary, avoiding the `await` allows the processing of next message
-      // to begin while the replica is applying the statement.
-      void statement(tx)?.execute();
-    });
+        // This will block until it is this Transaction's turn to be processed,
+        // as coordinated by the `txSerializer` logic in the {@link MessageProcessor}.
+        const tx = await this.#tx;
+
+        const qs = stmts(tx);
+        if (qs !== 'commit') {
+          // Call execute() to send the statements immediately, allowing other messages
+          // to be processed while the statements are being applied.
+          this.#pendingQueries.push(...qs.map(q => q.execute()));
+        } else {
+          // `await` all queries at the final commit.
+          this.#setTxProcessed(await Promise.all(this.#pendingQueries));
+          return this.#txCommitted; // allows tests to await completion of the full postgres transaction
+        }
+      });
+    } catch (e) {
+      return this.fail(e);
+    }
+  }
+
+  fail(err: unknown) {
+    if (!this.#failure) {
+      this.#failure = ensureError(err);
+      if (this.#failure instanceof PrecedingTransactionError) {
+        this.#lc.debug?.('Preceding transaction failed');
+      } else {
+        this.#lc.error?.('Transaction failed:', this.#failure);
+      }
+      // surfaces the error in the txSerializer of the MessageProcessor
+      this.#setTxFailed(this.#failure);
+    }
   }
 
   processBegin(begin: Pgoutput.MessageBegin) {
-    return this.#process(
-      tx =>
-        // Note: This is how redundant (already seen) transactions are prevented.
-        // TODO: Determine how to handle the resulting error.
-        tx`INSERT INTO _zero."TxLog" ${tx({
-          dbVersion: this.#version,
-          lsn: begin.commitLsn,
-          time: epochMicrosToTimestampTz(begin.commitTime.valueOf()),
-          xid: begin.xid,
-        })}`,
-    );
+    const row = {
+      dbVersion: this.#version,
+      lsn: begin.commitLsn,
+      time: epochMicrosToTimestampTz(begin.commitTime.valueOf()),
+      xid: begin.xid,
+    };
+
+    return this.#process(begin, tx => [
+      tx`INSERT INTO _zero."TxLog" ${tx(row)}`,
+    ]);
   }
 
   processInsert(insert: Pgoutput.MessageInsert) {
-    return this.#process(tx => {
-      const row = {
-        ...insert.new,
-        [ZERO_VERSION_COLUMN_NAME]: this.#version,
-      };
+    const row = {
+      ...insert.new,
+      [ZERO_VERSION_COLUMN_NAME]: this.#version,
+    };
 
-      return tx`
-      INSERT INTO ${tx(table(insert))} ${tx(row)}`;
-    });
+    return this.#process(insert, tx => [
+      tx`INSERT INTO ${tx(table(insert))} ${tx(row)}`,
+    ]);
   }
 
   processUpdate(update: Pgoutput.MessageUpdate) {
-    return this.#process(tx => {
-      const row = {
-        ...update.new,
-        [ZERO_VERSION_COLUMN_NAME]: this.#version,
-      };
-      const key =
-        // update.key is set with the old values if the key has changed.
-        update.key ??
-        // Otherwise, the key must be determined from the "new" values.
-        Object.fromEntries(
-          update.relation.keyColumns.map(col => [col, update.new[col]]),
-        );
+    const row = {
+      ...update.new,
+      [ZERO_VERSION_COLUMN_NAME]: this.#version,
+    };
+    const key =
+      // update.key is set with the old values if the key has changed.
+      update.key ??
+      // Otherwise, the key must be determined from the "new" values.
+      Object.fromEntries(
+        update.relation.keyColumns.map(col => [col, update.new[col]]),
+      );
+
+    return this.#process(update, tx => {
       const conds = Object.entries(key).map(
         ([col, val]) => tx`${tx(col)} = ${val}`,
       );
@@ -426,15 +636,17 @@ class TransactionProcessor {
       // Note: The flatMap() dance for dynamic filters is a bit obtuse, but it is
       //       what the Postgres.js author recommends until there's a better api for it.
       //       https://github.com/porsager/postgres/issues/807#issuecomment-1949924843
-      return tx`
-      UPDATE ${tx(table(update))}
-        SET ${tx(row)}
-        WHERE ${conds.flatMap((k, i) => (i ? [tx` AND `, k] : k))}`;
+      return [
+        tx`
+        UPDATE ${tx(table(update))}
+          SET ${tx(row)}
+          WHERE ${conds.flatMap((k, i) => (i ? [tx` AND `, k] : k))}`,
+      ];
     });
   }
 
   processDelete(del: Pgoutput.MessageDelete) {
-    return this.#process(tx => {
+    return this.#process(del, tx => {
       // REPLICA IDENTITY DEFAULT means the `key` must be set.
       // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html
       assert(del.relation.replicaIdentity === 'default');
@@ -446,24 +658,22 @@ class TransactionProcessor {
       // Note: The flatMap() dance for dynamic filters is a bit obtuse, but it is
       //       what the Postgres.js author recommends until there's a better api for it.
       //       https://github.com/porsager/postgres/issues/807#issuecomment-1949924843
-      return tx`
+      return [
+        tx`
       DELETE FROM ${tx(table(del))} 
-        WHERE ${conds.flatMap((k, i) => (i ? [tx` AND `, k] : k))} `;
+        WHERE ${conds.flatMap((k, i) => (i ? [tx` AND `, k] : k))} `,
+      ];
     });
   }
 
   processTruncate(truncate: Pgoutput.MessageTruncate) {
-    return this.#process(tx => {
-      const tables = truncate.relations.map(r => `${r.schema}.${r.name}`);
-      return tx`TRUNCATE ${tx(tables)}`;
-    });
+    const tables = truncate.relations.map(r => `${r.schema}.${r.name}`);
+
+    return this.#process(truncate, tx => [tx`TRUNCATE ${tx(tables)}`]);
   }
 
-  processCommit(_: Pgoutput.MessageCommit) {
-    return this.#process(() => {
-      this.#setProcessed();
-      return undefined;
-    });
+  processCommit(commit: Pgoutput.MessageCommit) {
+    return this.#process(commit, () => 'commit');
   }
 }
 
