@@ -714,6 +714,6 @@ function table(msg: {relation: Pgoutput.MessageRelation}): string {
 
 function safeStringify(m: object) {
   return JSON.stringify(m, (_, v) =>
-    typeof v === 'bigint' ? `BigInt(${v.toString()})` : v,
+    typeof v === 'bigint' ? `${v.toString()}n` : v,
   );
 }
