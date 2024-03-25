@@ -127,8 +127,8 @@ export async function setupReplicationTables(
   await tx.unsafe(alterStmts.join('') + CREATE_REPLICATION_TABLES);
 }
 
-const INITIAL_RETRY_DELAY = 100;
-const MAX_RETRY_DELAY = 10000;
+const INITIAL_RETRY_DELAY_MS = 100;
+const MAX_RETRY_DELAY_MS = 10000;
 
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
@@ -141,8 +141,13 @@ export class IncrementalSyncer {
   readonly #replicaID: string;
   readonly #replica: postgres.Sql;
 
-  #retryDelay = INITIAL_RETRY_DELAY;
+  // This lock ensures that transactions are processed serially, even
+  // across re-connects to the upstream db.
+  readonly #txSerializer = new Lock();
+
+  #retryDelay = INITIAL_RETRY_DELAY_MS;
   #service: LogicalReplicationService | undefined;
+  #started = false;
   #stopped = false;
 
   constructor(upstreamUri: string, replicaID: string, replica: postgres.Sql) {
@@ -152,18 +157,12 @@ export class IncrementalSyncer {
   }
 
   async start(lc: LogContext) {
-    assert(
-      this.#service === undefined,
-      `IncrementalSyncer has already been started`,
-    );
+    assert(!this.#started, `IncrementalSyncer has already been started`);
+    this.#started = true;
 
     lc.info?.(`Starting IncrementalSyncer`);
     const replicated = await getPublicationInfo(this.#replica, PUB_PREFIX);
     const publicationNames = replicated.publications.map(p => p.pubname);
-
-    // This lock ensures that transactions are processed serially, even
-    // across re-connects to the upstream db.
-    const txSerializer = new Lock();
 
     lc.info?.(`Syncing publications ${publicationNames}`);
     while (!this.#stopped) {
@@ -176,14 +175,14 @@ export class IncrementalSyncer {
       const processor = new MessageProcessor(
         this.#replica,
         replicated,
-        txSerializer,
+        this.#txSerializer,
         (lsn: string) => service.acknowledge(lsn),
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
       this.#service.on(
         'data',
         async (lsn: string, message: Pgoutput.Message) => {
-          this.#retryDelay = INITIAL_RETRY_DELAY; // Reset exponential backoff.
+          this.#retryDelay = INITIAL_RETRY_DELAY_MS; // Reset exponential backoff.
           await processor.processMessage(lc, lsn, message);
         },
       );
@@ -197,7 +196,7 @@ export class IncrementalSyncer {
       } catch (e) {
         if (!this.#stopped) {
           const delay = this.#retryDelay;
-          this.#retryDelay = Math.min(this.#retryDelay * 2, MAX_RETRY_DELAY);
+          this.#retryDelay = Math.min(this.#retryDelay * 2, MAX_RETRY_DELAY_MS);
           lc.error?.(`Error in Replication Stream. Retrying in ${delay}ms`, e);
           await sleep(delay);
         }
@@ -311,7 +310,7 @@ class PrecedingTransactionError extends Error {
  * down.
  *
  * It follows that, from an implementation perspective, the MessageProcessor's
- * failure handling must always done from within the `txSerializer` lock.
+ * failure handling must always be done from within the `txSerializer` lock.
  */
 // Exported for testing.
 export class MessageProcessor {
@@ -360,46 +359,44 @@ export class MessageProcessor {
       reject: setFailed,
     } = resolver();
 
-    const txCommitted = this.#txSerializer.withLock(async () => {
-      try {
-        if (this.#failure) {
-          // If a preceding transaction failed, all subsequent transactions must also fail.
-          failTx(new PrecedingTransactionError(this.#failure));
-          return await processed;
-        }
-        await this.#replica.begin(tx => {
-          lc.debug?.('Began tx');
-          setTx(tx); // allows the TransactionProcessor to start processing
-          return processed; // signalled when the TransactionProcessor finishes
-        });
-        this.#acknowledge(commitLsn);
-        lc.debug?.(`Committed tx`);
-      } catch (e) {
-        if (
-          // A unique violation on the TxLog means that the transaction has already been
-          // processed. This is not a real error, and can happen, for example, if the upstream
-          // the connection was lost before the acknowledgment was sent. Recover by resending
-          // the acknowledgement, and continue processing the stream.
-          e instanceof postgres.PostgresError &&
-          e.code === PG_UNIQUE_VIOLATION &&
-          e.schema_name === '_zero' &&
-          e.table_name === 'TxLog'
-        ) {
-          this.#acknowledge(commitLsn);
-          lc.debug?.(`Skipped repeat tx`);
-        } else {
-          this.#failInLock(lc, e);
-        }
-      }
-    });
-
     return new TransactionProcessor(
       lc,
       commitLsn,
       tx,
       setProcessed,
       setFailed,
-      txCommitted,
+      this.#txSerializer.withLock(async () => {
+        try {
+          if (this.#failure) {
+            // If a preceding transaction failed, all subsequent transactions must also fail.
+            failTx(new PrecedingTransactionError(this.#failure));
+            return await processed;
+          }
+          await this.#replica.begin(tx => {
+            lc.debug?.('Began tx');
+            setTx(tx); // allows the TransactionProcessor to start processing
+            return processed; // signalled when the TransactionProcessor finishes
+          });
+          this.#acknowledge(commitLsn);
+          lc.debug?.(`Committed tx`);
+        } catch (e) {
+          if (
+            // A unique violation on the TxLog means that the transaction has already been
+            // processed. This is not a real error, and can happen, for example, if the upstream
+            // the connection was lost before the acknowledgment was sent. Recover by resending
+            // the acknowledgement, and continue processing the stream.
+            e instanceof postgres.PostgresError &&
+            e.code === PG_UNIQUE_VIOLATION &&
+            e.schema_name === '_zero' &&
+            e.table_name === 'TxLog'
+          ) {
+            this.#acknowledge(commitLsn);
+            lc.debug?.(`Skipped repeat tx`);
+          } else {
+            this.#failInLock(lc, e);
+          }
+        }
+      }),
     );
   }
 
@@ -536,6 +533,8 @@ class TransactionProcessor {
 
   readonly #pendingQueries: Promise<postgres.RowList<postgres.Row[]>>[] = [];
   readonly #processLock = new Lock();
+
+  #commitProcessed = false;
   #failure: Error | undefined;
 
   constructor(
@@ -572,6 +571,10 @@ class TransactionProcessor {
           this.#lc.debug?.(`Dropping ${message.tag}`);
           return;
         }
+        assert(
+          !this.#commitProcessed,
+          `Received a ${message.tag} message after commit`,
+        );
 
         // This will block until it is this Transaction's turn to be processed,
         // as coordinated by the `txSerializer` logic in the {@link MessageProcessor}.
@@ -595,7 +598,9 @@ class TransactionProcessor {
           );
         } else {
           // `await` all queries at the final commit.
-          this.#setTxProcessed(await Promise.all(this.#pendingQueries));
+          const results = await Promise.all(this.#pendingQueries);
+          this.#setTxProcessed(results);
+          this.#commitProcessed = true;
         }
       });
     } catch (e) {
@@ -707,19 +712,8 @@ function table(msg: {relation: Pgoutput.MessageRelation}): string {
   return `${msg.relation.schema}.${msg.relation.name}`;
 }
 
-function safeJSON(m: object) {
-  let replaced: Record<string, string> | undefined;
-  Object.entries(m).map(([key, value]) => {
-    if (typeof value === 'bigint') {
-      if (!replaced) {
-        replaced = {};
-      }
-      replaced[key] = value.toString();
-    }
-  });
-  return !replaced ? m : {...m, ...replaced};
-}
-
 function safeStringify(m: object) {
-  return JSON.stringify(safeJSON(m));
+  return JSON.stringify(m, (_, v) =>
+    typeof v === 'bigint' ? `${v.toString()}n` : v,
+  );
 }
