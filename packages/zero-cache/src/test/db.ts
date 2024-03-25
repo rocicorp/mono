@@ -1,6 +1,7 @@
 import {afterAll, expect} from '@jest/globals';
 import postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
+import {sleep} from 'shared/src/sleep.js';
 
 class TestDBs {
   // Connects to the main "postgres" DB of the local Postgres cluster.
@@ -87,5 +88,27 @@ export async function expectTables(
   for (const [table, expected] of Object.entries(tables ?? {})) {
     const actual = await db`SELECT * FROM ${db(table)}`;
     expect(actual).toEqual(expect.arrayContaining(expected));
+  }
+}
+
+export async function dropReplicationSlot(db: postgres.Sql, slotName: string) {
+  // A replication slot can't be dropped when it is still marked "active" on the upstream
+  // database. The slot becomes inactive when the downstream connection is closed (e.g. the
+  // initial-sync SUBSCRIPTION is disabled, or the incremental-sync connection is closed),
+  // but because this is a non-transactional process that happens in the internals of Postgres,
+  // we have to poll the status and wait for the slot to be released.
+  for (let i = 0; i < 100; i++) {
+    const results = await db<{slotName: string; active: boolean}[]>`
+    SELECT slot_name as "slotName", active FROM pg_replication_slots WHERE slot_name = ${slotName}`;
+
+    if (results.count === 0) {
+      break;
+    }
+    const result = results[0];
+    if (!result.active) {
+      await db`SELECT pg_drop_replication_slot(${slotName})`;
+      break;
+    }
+    await sleep(10);
   }
 }

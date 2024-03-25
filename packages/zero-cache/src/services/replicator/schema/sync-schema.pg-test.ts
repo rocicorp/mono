@@ -1,6 +1,11 @@
 import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import type postgres from 'postgres';
-import {expectTables, initDB, testDBs} from '../../../test/db.js';
+import {
+  dropReplicationSlot,
+  expectTables,
+  initDB,
+  testDBs,
+} from '../../../test/db.js';
 import {createSilentLogContext} from '../../../test/logger.js';
 import {replicationSlot} from '../initial-sync.js';
 import {initSyncSchema} from './sync-schema.js';
@@ -95,16 +100,7 @@ describe('replicator/sync-schema', () => {
       `);
       }
     });
-    await upstream.begin(async tx => {
-      const slots = await tx`
-        SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${replicationSlot(
-          REPLICA_ID,
-        )}`;
-      if (slots.count > 0) {
-        await tx`
-          SELECT pg_drop_replication_slot(${replicationSlot(REPLICA_ID)});`;
-      }
-    });
+    await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
     await testDBs.drop(upstream, replica);
   }, 10000);
 

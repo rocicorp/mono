@@ -1,7 +1,12 @@
 import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import type postgres from 'postgres';
 import {sleep} from 'shared/src/sleep.js';
-import {expectTables, initDB, testDBs} from '../../test/db.js';
+import {
+  dropReplicationSlot,
+  expectTables,
+  initDB,
+  testDBs,
+} from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import {versionFromLexi, type LexiVersion} from '../../types/lexi-version.js';
 import {IncrementalSyncer, setupReplicationTables} from './incremental-sync.js';
@@ -28,16 +33,7 @@ describe('replicator/incremental-sync', () => {
 
   afterEach(async () => {
     await syncer.stop(createSilentLogContext());
-    await upstream.begin(async tx => {
-      const slots = await tx`
-        SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${replicationSlot(
-          REPLICA_ID,
-        )}`;
-      if (slots.count > 0) {
-        await tx`
-          SELECT pg_drop_replication_slot(${replicationSlot(REPLICA_ID)});`;
-      }
-    });
+    await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
     await testDBs.drop(replica, upstream);
   });
 
