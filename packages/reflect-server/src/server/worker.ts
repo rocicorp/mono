@@ -9,6 +9,7 @@ import {
   SEC_WEBSOCKET_PROTOCOL_HEADER,
   createWSAndCloseWithTailError,
 } from '../util/socket.js';
+import xxhash from '../util/xxhash.js';
 import {
   AUTH_ROUTES_AUTHED_BY_API_KEY,
   AUTH_ROUTES_CUSTOM_AUTH,
@@ -203,9 +204,13 @@ const logLogs = post<WorkerContext>().handle(
   },
 );
 
-const hello = get<WorkerContext>().handleJSON(() => ({
-  reflectServerVersion: version,
-}));
+const hello = get<WorkerContext>().handleJSON(async () => {
+  const {h64ToString} = await xxhash();
+  return {
+    reflectServerVersion: version,
+    h64: h64ToString(version),
+  };
+});
 
 const canaryGet = get<WorkerContext>().handle(
   (ctx: WorkerContext, req: Request) => {
