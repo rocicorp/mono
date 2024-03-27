@@ -281,7 +281,7 @@ describe('replicator/incremental-sync', () => {
               bigs: null,
               time: null,
               description: null,
-              _0_version: '01',
+              ['_0_version']: '01',
             },
           },
           {
@@ -297,7 +297,7 @@ describe('replicator/incremental-sync', () => {
               bigs: null,
               time: '2024-03-21T18:50:23.646Z',
               description: null,
-              _0_version: '01',
+              ['_0_version']: '01',
             },
           },
           {
@@ -313,7 +313,7 @@ describe('replicator/incremental-sync', () => {
               bigs: null,
               time: null,
               description: null,
-              _0_version: '02',
+              ['_0_version']: '02',
             },
           },
           {
@@ -329,7 +329,7 @@ describe('replicator/incremental-sync', () => {
               bigs: null,
               time: null,
               description: null,
-              _0_version: '02',
+              ['_0_version']: '02',
             },
           },
         ],
@@ -418,7 +418,7 @@ describe('replicator/incremental-sync', () => {
               orgID: 1,
               issueID: 123,
               description: null,
-              _0_version: '01',
+              ['_0_version']: '01',
             },
           },
           {
@@ -431,7 +431,7 @@ describe('replicator/incremental-sync', () => {
               orgID: 1,
               issueID: 456,
               description: null,
-              _0_version: '01',
+              ['_0_version']: '01',
             },
           },
           {
@@ -444,7 +444,7 @@ describe('replicator/incremental-sync', () => {
               orgID: 2,
               issueID: 789,
               description: null,
-              _0_version: '01',
+              ['_0_version']: '01',
             },
           },
           {
@@ -457,7 +457,7 @@ describe('replicator/incremental-sync', () => {
               orgID: 1,
               issueID: 456,
               description: 'foo',
-              _0_version: '02',
+              ['_0_version']: '02',
             },
           },
           {
@@ -470,7 +470,7 @@ describe('replicator/incremental-sync', () => {
               orgID: 2,
               issueID: 123,
               description: 'bar',
-              _0_version: '02',
+              ['_0_version']: '02',
             },
           },
         ],
@@ -558,7 +558,7 @@ describe('replicator/incremental-sync', () => {
               orgID: 1,
               issueID: 123,
               description: null,
-              _0_version: '01',
+              ['_0_version']: '01',
             },
           },
           {
@@ -571,7 +571,7 @@ describe('replicator/incremental-sync', () => {
               orgID: 1,
               issueID: 456,
               description: null,
-              _0_version: '01',
+              ['_0_version']: '01',
             },
           },
           {
@@ -584,7 +584,7 @@ describe('replicator/incremental-sync', () => {
               orgID: 2,
               issueID: 789,
               description: null,
-              _0_version: '01',
+              ['_0_version']: '01',
             },
           },
           {
@@ -597,7 +597,7 @@ describe('replicator/incremental-sync', () => {
               orgID: 2,
               issueID: 987,
               description: null,
-              _0_version: '01',
+              ['_0_version']: '01',
             },
           },
           {
@@ -884,7 +884,7 @@ describe('replicator/incremental-sync', () => {
               orgID: 1,
               issueID: 456,
               description: 'foo',
-              _0_version: '01',
+              ['_0_version']: '01',
             },
           },
         ],

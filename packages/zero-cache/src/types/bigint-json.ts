@@ -51,6 +51,7 @@ export function stringify(
   return customStringify(obj, replacer, indent, customSerializer);
 }
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export const BigIntJSON = {
   parse,
   stringify,
