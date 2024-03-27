@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {sleep} from 'shared/src/sleep.js';
+import {postgresTypeConfig} from '../../types/pg.js';
 import {id, idList} from '../../types/sql.js';
 import {createTableStatement} from './tables/create.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
@@ -215,8 +216,7 @@ export async function setupUpstream(
   slotName: string,
 ): Promise<PublicationInfo> {
   const upstreamDB = postgres(upstreamUri, {
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    fetch_types: false,
+    ...postgresTypeConfig(),
   });
   const [_, published] = await Promise.all([
     // Ensure that the replication slot exists. This must be done in its own

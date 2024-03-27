@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
+import {postgresTypeConfig} from '../../types/pg.js';
 import type {Service} from '../service.js';
 import {initSyncSchema} from './schema/sync-schema.js';
 
@@ -21,8 +22,7 @@ export class Replicator implements Service {
       .withContext('serviceID', this.id);
     this.#upstreamUri = upstreamUri;
     this.#syncReplica = postgres(syncReplicaUri, {
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      fetch_types: false,
+      ...postgresTypeConfig(),
     });
   }
 

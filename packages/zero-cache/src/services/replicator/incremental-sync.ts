@@ -11,7 +11,10 @@ import postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {epochMicrosToTimestampTz} from '../../types/big-time.js';
+import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
+import {registerPostgresTypeParsers} from '../../types/pg.js';
+import {rowKeyHash} from '../../types/row-key.js';
 import {
   PUB_PREFIX,
   ZERO_VERSION_COLUMN_NAME,
@@ -31,30 +34,32 @@ export const CREATE_REPLICATION_TABLES =
   `
   CREATE SCHEMA IF NOT EXISTS _zero;
   CREATE TABLE _zero."TxLog" (
-    "dbVersion" VARCHAR(38) NOT NULL,
-    lsn PG_LSN              NOT NULL,
-    time TIMESTAMPTZ        NOT NULL,
-    xid INTEGER             NOT NULL,
-    PRIMARY KEY("dbVersion")
+    "stateVersion" VARCHAR(38) NOT NULL,
+    lsn            PG_LSN      NOT NULL,
+    time           TIMESTAMPTZ NOT NULL,
+    xid            INTEGER     NOT NULL,
+    PRIMARY KEY("stateVersion")
   );
 ` +
   // The change log contains row changes.
   //
-  // * `op`: 'i' for INSERT, 'u' for UPDATE, 'd' for DELETE, 't' for TRUNCATE
-  // * `row_key`: Empty string for the TRUNCATE op (because primary keys cannot be NULL).
-  // * `row`: JSON formatted full row contents, NULL for DELETE / TRUNCATE
+  // * `op`        : 't' for table truncation, 's' for set (insert/update), and 'd' for delete
+  // * `rowKeyHash`: Hash of the row key for row identification (see {@link rowKeyHash}). Empty string for truncate op.
+  // * `rowKey`    : JSON row key, NULL for TRUNCATE
+  // * `row`       : JSON formatted full row contents, NULL for DELETE / TRUNCATE
   //
   // Note that the `row` data is stored as JSON rather than JSONB to prioritize write
   // throughput, as replication is critical bottleneck in the system. Row values are
   // only needed for catchup, for which JSONB is not particularly advantageous over JSON.
   `
   CREATE TABLE _zero."ChangeLog" (
-    "dbVersion" VARCHAR(38)  NOT NULL,
-    "tableName" VARCHAR(128) NOT NULL,
-    "rowKey" TEXT            NOT NULL,
-    op CHAR(1)               NOT NULL,
-    row JSON,
-    PRIMARY KEY("dbVersion", "tableName", "rowKey")
+    "stateVersion" VARCHAR(38)  NOT NULL,
+    "tableName"    VARCHAR(128) NOT NULL,
+    "op"           CHAR         NOT NULL,
+    "rowKeyHash"   VARCHAR(22)  NOT NULL,
+    "rowKey"       JSON,
+    "row"          JSON,
+    CONSTRAINT PK_change_log PRIMARY KEY("stateVersion", "tableName", "rowKeyHash")
   );
 ` +
   // Invalidation registry.
@@ -71,7 +76,7 @@ export const CREATE_REPLICATION_TABLES =
   //    Replicator would compute both sizes until the new size has sufficient
   //    coverage (over old versions).
   //
-  // * `fromDBVersion` indicates when the Replicator first started running
+  // * `fromStateVersion` indicates when the Replicator first started running
   //   the filter. CVRs at or newer than the version are considered covered.
   //
   // * `lastRequested` records (approximately) the last time the spec was
@@ -80,18 +85,18 @@ export const CREATE_REPLICATION_TABLES =
   //   are no longer used.
   `
 CREATE TABLE _zero."InvalidationRegistry" (
-  spec TEXT                   NOT NULL,
-  bits SMALLINT               NOT NULL,
-  "fromDBVersion" VARCHAR(38) NOT NULL,
-  "lastRequested" TIMESTAMPTZ NOT NULL,
+  spec               TEXT        NOT NULL,
+  bits               SMALLINT    NOT NULL,
+  "fromStateVersion" VARCHAR(38) NOT NULL,
+  "lastRequested"    TIMESTAMPTZ NOT NULL,
   PRIMARY KEY(spec, bits)
 );
 ` +
   // Invalidation index.
   `
 CREATE TABLE _zero."InvalidationIndex" (
-  hash        BIGINT      NOT NULL,
-  "dbVersion" VARCHAR(38) NOT NULL,
+  hash           BIGINT      NOT NULL,
+  "stateVersion" VARCHAR(38) NOT NULL,
   PRIMARY KEY(hash)
 );
 `;
@@ -126,6 +131,9 @@ export async function setupReplicationTables(
 
   await tx.unsafe(alterStmts.join('') + CREATE_REPLICATION_TABLES);
 }
+
+// BigInt support from LogicalReplicationService.
+registerPostgresTypeParsers();
 
 const INITIAL_RETRY_DELAY_MS = 100;
 const MAX_RETRY_DELAY_MS = 10000;
@@ -445,7 +453,7 @@ export class MessageProcessor {
       assert(commitLsn);
 
       if (this.#tx) {
-        throw new Error(`Already in a transaction ${safeStringify(message)}`);
+        throw new Error(`Already in a transaction ${stringify(message)}`);
       }
       this.#tx = this.#createAndEnqueueNewTransaction(
         lc.withContext('txBegin', lsn).withContext('txCommit', commitLsn),
@@ -457,7 +465,7 @@ export class MessageProcessor {
     // For non-begin messages, there should be a TransactionProcessor set.
     if (!this.#tx) {
       throw new Error(
-        `Received message outside of transaction: ${safeStringify(message)}`,
+        `Received message outside of transaction: ${stringify(message)}`,
       );
     }
     switch (message.tag) {
@@ -623,7 +631,7 @@ class TransactionProcessor {
 
   processBegin(begin: Pgoutput.MessageBegin) {
     const row = {
-      dbVersion: this.#version,
+      stateVersion: this.#version,
       lsn: begin.commitLsn,
       time: epochMicrosToTimestampTz(begin.commitTime.valueOf()),
       xid: begin.xid,
@@ -639,9 +647,13 @@ class TransactionProcessor {
       ...insert.new,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
     };
+    const key = Object.fromEntries(
+      insert.relation.keyColumns.map(col => [col, insert.new[col]]),
+    );
 
     return this.#process(insert, tx => [
-      tx`INSERT INTO ${tx(table(insert))} ${tx(row)}`,
+      tx`INSERT INTO ${tx(table(insert.relation))} ${tx(row)}`,
+      ...this.#upsertChanges(tx, insert.relation, key, row),
     ]);
   }
 
@@ -650,16 +662,15 @@ class TransactionProcessor {
       ...update.new,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
     };
-    const key =
-      // update.key is set with the old values if the key has changed.
-      update.key ??
-      // Otherwise, the key must be determined from the "new" values.
-      Object.fromEntries(
-        update.relation.keyColumns.map(col => [col, update.new[col]]),
-      );
+    // update.key is set with the old values if the key has changed.
+    const oldKey = update.key;
+    const newKey = Object.fromEntries(
+      update.relation.keyColumns.map(col => [col, update.new[col]]),
+    );
+    const currKey = oldKey ?? newKey;
 
     return this.#process(update, tx => {
-      const conds = Object.entries(key).map(
+      const conds = Object.entries(currKey).map(
         ([col, val]) => tx`${tx(col)} = ${val}`,
       );
 
@@ -668,9 +679,10 @@ class TransactionProcessor {
       //       https://github.com/porsager/postgres/issues/807#issuecomment-1949924843
       return [
         tx`
-        UPDATE ${tx(table(update))}
+        UPDATE ${tx(table(update.relation))}
           SET ${tx(row)}
           WHERE ${conds.flatMap((k, i) => (i ? [tx` AND `, k] : k))}`,
+        ...this.#upsertChanges(tx, update.relation, newKey, row, oldKey),
       ];
     });
   }
@@ -690,8 +702,9 @@ class TransactionProcessor {
       //       https://github.com/porsager/postgres/issues/807#issuecomment-1949924843
       return [
         tx`
-      DELETE FROM ${tx(table(del))} 
+      DELETE FROM ${tx(table(del.relation))} 
         WHERE ${conds.flatMap((k, i) => (i ? [tx` AND `, k] : k))} `,
+        ...this.#upsertChanges(tx, del.relation, del.key),
       ];
     });
   }
@@ -699,21 +712,71 @@ class TransactionProcessor {
   processTruncate(truncate: Pgoutput.MessageTruncate) {
     const tables = truncate.relations.map(r => `${r.schema}.${r.name}`);
 
-    return this.#process(truncate, tx => [tx`TRUNCATE ${tx(tables)}`]);
+    return this.#process(truncate, tx => [
+      tx`TRUNCATE ${tx(tables)}`,
+      ...truncate.relations
+        .map(relation => this.#upsertChanges(tx, relation))
+        .flat(),
+    ]);
   }
 
   async processCommit(commit: Pgoutput.MessageCommit) {
     await this.#process(commit, () => 'commit');
     return this.#txCommitted; // allows tests to await completion of the full postgres transaction
   }
+
+  #upsertChanges(
+    tx: postgres.TransactionSql,
+    relation: Pgoutput.MessageRelation,
+    key?: Record<string, postgres.JSONValue>,
+    row?: Record<string, postgres.JSONValue>,
+    oldKey?: Record<string, postgres.JSONValue> | null,
+  ) {
+    const change: ChangeLogEntry = {
+      stateVersion: this.#version,
+      tableName: table(relation),
+      op: row ? 's' : key ? 'd' : 't',
+      rowKeyHash: key ? rowKeyHash(key) : '', // Empty string for truncate,
+      rowKey: key ?? null,
+      row: row ?? null,
+    };
+    const changes = [];
+    if (!key) {
+      // For truncate, first remove all ChangeLog entries for the table
+      // in this transaction.
+      changes.push(tx`
+      DELETE FROM _zero."ChangeLog"
+        WHERE "stateVersion" = ${this.#version} AND
+              "tableName" = ${table(relation)};`);
+    }
+    if (oldKey) {
+      // If an update changed the row key in this transaction, that entry must
+      // must be deleted if present.
+      changes.push(tx`
+      DELETE FROM _zero."ChangeLog"
+        WHERE "stateVersion" = ${this.#version} AND
+              "tableName" = ${table(relation)} AND
+              "rowKeyHash" = ${rowKeyHash(oldKey)};`);
+    }
+    changes.push(tx`
+      INSERT INTO _zero."ChangeLog" ${tx(change)} 
+        ON CONFLICT ON CONSTRAINT PK_change_log
+        DO UPDATE SET 
+          op = EXCLUDED.op,
+          row = EXCLUDED.row;`);
+    return changes;
+  }
 }
 
-function table(msg: {relation: Pgoutput.MessageRelation}): string {
-  return `${msg.relation.schema}.${msg.relation.name}`;
-}
+type ChangeLogEntry = {
+  stateVersion: string;
+  tableName: string;
+  op: 't' | 's' | 'd';
+  rowKeyHash: string;
+  rowKey: postgres.JSONValue | null;
+  row: postgres.JSONValue | null;
+};
 
-function safeStringify(m: object) {
-  return JSON.stringify(m, (_, v) =>
-    typeof v === 'bigint' ? `${v.toString()}n` : v,
-  );
+function table(table: Pgoutput.MessageRelation): string {
+  return `${table.schema}.${table.name}`;
 }

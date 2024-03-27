@@ -2,6 +2,7 @@ import {afterAll, expect} from '@jest/globals';
 import postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
+import {postgresTypeConfig} from '../types/pg.js';
 
 class TestDBs {
   // Connects to the main "postgres" DB of the local Postgres cluster.
@@ -14,6 +15,7 @@ class TestDBs {
   readonly #sql = postgres({
     database: 'postgres',
     onnotice: () => {},
+    ...postgresTypeConfig(),
   });
   readonly #dbs: Record<string, postgres.Sql> = {};
 
@@ -29,6 +31,7 @@ class TestDBs {
     const db = postgres({
       database,
       onnotice: () => {},
+      ...postgresTypeConfig(),
     });
     this.#dbs[database] = db;
     return db;
@@ -83,11 +86,12 @@ export async function initDB(
 
 export async function expectTables(
   db: postgres.Sql,
-  tables?: Record<string, object[]>,
+  tables?: Record<string, unknown[]>,
 ) {
   for (const [table, expected] of Object.entries(tables ?? {})) {
     const actual = await db`SELECT * FROM ${db(table)}`;
     expect(actual).toEqual(expect.arrayContaining(expected));
+    expect(expected).toEqual(expect.arrayContaining(actual));
   }
 }
 
