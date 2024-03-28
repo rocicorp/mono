@@ -1,13 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {Queue} from 'shared/src/queue.js';
 
 type MaybePromise<T> = Promise<T> | T;
 
-export type Statement = postgres.PendingQuery<
-  (postgres.Row & Iterable<postgres.Row>)[]
->;
+export type Statement =
+  | postgres.PendingQuery<(postgres.Row & Iterable<postgres.Row>)[]>
+  | postgres.PendingQuery<postgres.Row[]>;
 
 /**
  * A {@link Task} is logic run from within a transaction in a {@link TransactionPool}.
@@ -199,6 +200,55 @@ export class TransactionPool {
       }
     }
   }
+}
+
+type SynchronizeSnapshotTasks = {
+  /**
+   * The `init` Task for the TransactionPool from which the snapshot
+   * originates.
+   */
+  exportSnapshot: Task;
+
+  /**
+   * The `init` Task for the TransactionPool in which workers will
+   * consequently see the same snapshot as that of the first pool.
+   * In addition to setting the snapshot, the transaction mode will be
+   * set to `ISOLATION LEVEL REPEATABLE READ` and `READ ONLY`.
+   */
+  setSnapshot: Task;
+};
+
+/**
+ * Init Tasks for Postgres snapshot synchronization across transactions.
+ *
+ * https://www.postgresql.org/docs/9.3/functions-admin.html#:~:text=Snapshot%20Synchronization%20Functions,identical%20content%20in%20the%20database.
+ */
+export function synchronizedSnapshots(): SynchronizeSnapshotTasks {
+  const {
+    promise: snapshot,
+    resolve: setSnapshot,
+    reject: failSnapshot,
+  } = resolver<string>();
+
+  // Note: Neither task should `await`, as processing in each pool can proceed
+  //       as soon as the statements have been sent to the db.
+  return {
+    exportSnapshot: tx => {
+      const stmt = tx`SELECT pg_export_snapshot() AS snapshot;`.simple();
+      // Intercept the promise to propagate the information to the other task.
+      stmt.then(result => setSnapshot(result[0].snapshot), failSnapshot);
+      // Also return the stmt so that it gets awaited (and errors handled).
+      return [stmt];
+    },
+
+    setSnapshot: tx =>
+      snapshot.then(snapshotID => [
+        tx.unsafe(`
+      SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
+      SET TRANSACTION SNAPSHOT '${snapshotID}';
+      `),
+      ]),
+  };
 }
 
 /**
