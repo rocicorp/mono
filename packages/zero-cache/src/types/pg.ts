@@ -7,19 +7,26 @@ const {
   types: {builtins, setTypeParser},
 } = pg;
 
+const builtinsINT8ARRAY = 1016; // No definition in builtins for int8[]
+
 /** Registers types for the 'pg' library used by `pg-logical-replication`. */
 export function registerPostgresTypeParsers() {
   setTypeParser(builtins.INT8, val => BigInt(val));
-  setTypeParser(1016, val => array.parse(val, val => BigInt(val)));
+  setTypeParser(builtinsINT8ARRAY, val => array.parse(val, val => BigInt(val)));
 }
+
+// Type these as `number` so that Typescript doesn't complain about
+// referencing external types during type inference.
+const builtinsJSON: number = builtins.JSON;
+const builtinsJSONB: number = builtins.JSONB;
 
 /** Configures types for the Postgres.js client library (`postgres`). */
 export const postgresTypeConfig = () => ({
   types: {
     bigint: postgres.BigInt,
     json: {
-      to: 114, // builtins.JSON
-      from: [114, 3802], // [builtins.JSON, builtins.JSONB]
+      to: builtinsJSON,
+      from: [builtinsJSON, builtinsJSONB],
       serialize: BigIntJSON.stringify,
       parse: BigIntJSON.parse,
     },

@@ -463,6 +463,14 @@ describe('replicator/incremental-sync', () => {
           {
             stateVersion: '02',
             tableName: 'public.issues',
+            op: 'd',
+            rowKeyHash: 'd4LTXQRobCPxSnobs_FcLg',
+            rowKey: {orgID: 1, issueID: 123},
+            row: null,
+          },
+          {
+            stateVersion: '02',
+            tableName: 'public.issues',
             op: 's',
             rowKeyHash: '2qJu-IDPIs7PqBsrtmwZRg',
             rowKey: {orgID: 2, issueID: 123},
@@ -872,6 +880,14 @@ describe('replicator/incremental-sync', () => {
             op: 'd',
             rowKeyHash: 'kHZmjyGbDssRKHHEbU2z2g',
             rowKey: {orgID: 2, issueID: 789},
+            row: null,
+          },
+          {
+            stateVersion: '01',
+            tableName: 'public.issues',
+            op: 'd',
+            rowKeyHash: 'd4LTXQRobCPxSnobs_FcLg',
+            rowKey: {orgID: 1, issueID: 123},
             row: null,
           },
           {
