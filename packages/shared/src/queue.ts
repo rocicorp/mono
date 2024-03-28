@@ -48,6 +48,16 @@ export class Queue<T> {
     return consumer.promise;
   }
 
+  /**
+   * @returns The instantaneous number of outstanding values waiting to be
+   *          dequeued. Note that if a value was enqueued while a consumer
+   *          was waiting (with `await dequeue()`), the value is immediately
+   *          handed to the consumer and the Queue's size remains 0.
+   */
+  size(): number {
+    return this.#produced.length;
+  }
+
   //todo(darick): add a test for this
   asAsyncIterator(
     cleanup = () => {

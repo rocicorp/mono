@@ -512,10 +512,7 @@ class TransactionProcessor {
 
   constructor(lc: LogContext, lsn: string) {
     this.#version = toLexiVersion(lsn);
-    this.#pool = new TransactionPool(
-      lc.withContext('tx', this.#version),
-      1 /* single worker */,
-    );
+    this.#pool = new TransactionPool(lc.withContext('tx', this.#version));
   }
 
   execute(db: postgres.Sql) {
