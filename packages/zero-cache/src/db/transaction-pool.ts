@@ -34,24 +34,36 @@ export class TransactionPool {
   readonly #init: Task | undefined;
   readonly #tasks = new Queue<Task | Error | 'done'>();
   readonly #workers: Promise<unknown>[] = [];
-
+  readonly #maxWorkers: number;
   #numWorkers: number;
-  #db: postgres.Sql | undefined; // set when running. stored to allow dynamic pool sizing.
+  #db: postgres.Sql | undefined; // set when running. stored to allow adaptive pool sizing.
 
   #done = false;
   #failure: Error | undefined;
 
   /**
-   * @param numWorkers The number of transaction objects to use to process tasks.
-   * TODO: Add `maxWorkers` option for dynamic pool sizing.
    * @param init A {@link Task} that is run in each Transaction before it begins
    *             processing general tasks. This can be used to to set the transaction
    *             mode, export/set snapshots, etc.
+   * @param initialWorkers The number of transaction workers to process tasks.
+   *                       This must be greater than 0. Defaults to 1.
+   * @param maxWorkers When specified, allows the pool to grow to `maxWorkers`. This
+   *                   must be greater than or equal to `initialWorkers`.
    */
-  constructor(lc: LogContext, numWorkers = 1, init?: Task) {
+  constructor(
+    lc: LogContext,
+    init?: Task,
+    initialWorkers = 1,
+    maxWorkers?: number,
+  ) {
+    maxWorkers ??= initialWorkers;
+    assert(initialWorkers > 0);
+    assert(maxWorkers >= initialWorkers);
+
     this.#lc = lc;
-    this.#numWorkers = numWorkers;
     this.#init = init;
+    this.#numWorkers = initialWorkers;
+    this.#maxWorkers = maxWorkers;
   }
 
   /**
@@ -68,7 +80,16 @@ export class TransactionPool {
     for (let i = 0; i < this.#numWorkers; i++) {
       this.#addWorker(db);
     }
+    const initialWorkers = this.#workers.length;
     await Promise.all(this.#workers);
+
+    if (initialWorkers < this.#workers.length) {
+      // If workers were added after the initial set, they must be awaited to ensure
+      // that the results (i.e. rejections) of all workers are accounted for. This only
+      // needs to be re-done once, because the fact that the first `await` completed
+      // guarantees that the pool is in a terminal state and no new workers can be added.
+      await Promise.all(this.#workers);
+    }
     this.#lc.debug?.('transaction pool done');
   }
 
@@ -110,9 +131,9 @@ export class TransactionPool {
 
     this.#workers.push(db.begin(worker));
 
-    // After adding the worker, enqueue a signal if we are in either of the terminal
-    // states (both of which prevent more tasks from being enqueued), to ensure that
-    // the new worker eventually exits.
+    // After adding the worker, enqueue a terminal signal if we are in either of the
+    // terminal states (both of which prevent more tasks from being enqueued), to ensure
+    // that the added worker eventually exits.
     if (this.#done) {
       void this.#tasks.enqueue('done');
     }
@@ -127,8 +148,24 @@ export class TransactionPool {
       this.#lc.debug?.('dropping task after failure');
       return;
     }
-    // TODO: Add dynamic pool sizing with a maxWorkers parameter.
+
     void this.#tasks.enqueue(task);
+
+    // Check if the pool size can and should be increased.
+    if (this.#numWorkers < this.#maxWorkers) {
+      const outstanding = this.#tasks.size();
+
+      if (
+        // Not running yet; the number of initial workers should be increased.
+        (!this.#db && outstanding > this.#numWorkers) ||
+        // Running but task was not picked up. Add a worker.
+        (this.#db && outstanding > 0)
+      ) {
+        this.#db && this.#addWorker(this.#db);
+        this.#numWorkers++;
+        this.#lc.info?.(`Increased pool size to: ${this.#numWorkers}`);
+      }
+    }
   }
 
   /**

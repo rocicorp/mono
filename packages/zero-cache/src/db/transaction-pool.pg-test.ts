@@ -1,6 +1,8 @@
 import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
 import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
+import {resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
+import {Queue} from 'shared/src/queue.js';
 import {sleep} from 'shared/src/sleep.js';
 import {expectTables, testDBs} from '../test/db.js';
 import {createSilentLogContext} from '../test/logger.js';
@@ -17,7 +19,7 @@ describe('db/transaction-pool', () => {
       id int PRIMARY KEY,
       val text
     );
-    CREATE TABLE tasks (
+    CREATE TABLE workers (
       id SERIAL
     );`.simple();
   });
@@ -33,8 +35,10 @@ describe('db/transaction-pool', () => {
     return [tx.unsafe(stmt)];
   };
 
+  const initTask = task(`INSERT INTO workers (id) VALUES (DEFAULT);`);
+
   test('single transaction, serialized processing', async () => {
-    const single = new TransactionPool(lc);
+    const single = new TransactionPool(lc, initTask, 1, 1);
 
     single.process(task(`INSERT INTO foo (id) VALUES (1)`));
     single.process(task(`INSERT INTO foo (id) VALUES (6)`));
@@ -50,11 +54,12 @@ describe('db/transaction-pool', () => {
         {id: 3, val: null},
         {id: 6, val: null},
       ],
+      ['public.workers']: [{id: 1}],
     });
   });
 
   test('multiple transactions', async () => {
-    const pool = new TransactionPool(lc, 3);
+    const pool = new TransactionPool(lc, initTask, 3, 3);
 
     pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
     pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
@@ -75,15 +80,12 @@ describe('db/transaction-pool', () => {
         {id: 6, val: 'foo'},
         {id: 8, val: 'foo'},
       ],
+      ['public.workers']: [{id: 1}, {id: 2}, {id: 3}],
     });
   });
 
-  test('multiple transactions with init', async () => {
-    const pool = new TransactionPool(
-      lc,
-      3,
-      task(`INSERT INTO tasks (id) VALUES (DEFAULT);`),
-    );
+  test('pool resizing before run', async () => {
+    const pool = new TransactionPool(lc, initTask, 2, 5);
 
     pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
     pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
@@ -104,12 +106,61 @@ describe('db/transaction-pool', () => {
         {id: 6, val: 'foo'},
         {id: 8, val: 'foo'},
       ],
-      ['public.tasks']: [{id: 1}, {id: 2}, {id: 3}],
+      ['public.workers']: [{id: 1}, {id: 2}, {id: 3}, {id: 4}, {id: 5}],
+    });
+  });
+
+  test('pool resizing after run', async () => {
+    const pool = new TransactionPool(lc, initTask, 2, 5);
+
+    const processing = new Queue<boolean>();
+    const {promise: canProceed, resolve: allowProceed} = resolver();
+
+    const blockingTask =
+      (stmt: string) => async (tx: postgres.TransactionSql) => {
+        void processing.enqueue(true);
+        await canProceed;
+        return task(stmt)(tx);
+      };
+
+    const done = pool.run(db);
+
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
+    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+
+    for (let i = 0; i < 2; i++) {
+      await processing.dequeue();
+    }
+
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (3)`));
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (2)`));
+    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (5)`));
+    pool.setDone();
+
+    for (let i = 2; i < 5; i++) {
+      await processing.dequeue();
+    }
+
+    allowProceed();
+
+    await done;
+
+    await expectTables(db, {
+      ['public.foo']: [
+        {id: 1, val: null},
+        {id: 2, val: null},
+        {id: 3, val: null},
+        {id: 5, val: null},
+        {id: 6, val: 'foo'},
+        {id: 8, val: 'foo'},
+      ],
+      ['public.workers']: [{id: 1}, {id: 2}, {id: 3}, {id: 4}, {id: 5}],
     });
   });
 
   test('external failure before running', async () => {
-    const pool = new TransactionPool(lc, 3);
+    const pool = new TransactionPool(lc, initTask, 3, 3);
 
     pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
     pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
@@ -128,11 +179,12 @@ describe('db/transaction-pool', () => {
     // Nothing should have succeeded.
     await expectTables(db, {
       ['public.foo']: [],
+      ['public.workers']: [],
     });
   });
 
   test('external failure while running', async () => {
-    const pool = new TransactionPool(lc, 3);
+    const pool = new TransactionPool(lc, initTask, 3, 3);
 
     pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
     pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
@@ -150,11 +202,12 @@ describe('db/transaction-pool', () => {
     // Nothing should have succeeded.
     await expectTables(db, {
       ['public.foo']: [],
+      ['public.workers']: [],
     });
   });
 
   test('postgres error is surfaced', async () => {
-    const pool = new TransactionPool(lc, 3);
+    const pool = new TransactionPool(lc, initTask, 3, 3);
 
     // With a total of 4 insert statements with id = 1, at least one tx is guaranteed to fail.
     pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
@@ -175,6 +228,58 @@ describe('db/transaction-pool', () => {
     // Nothing should have succeeded.
     await expectTables(db, {
       ['public.foo']: [],
+      ['public.workers']: [],
     });
+  });
+
+  test('partial success; error from post-resize worker', async () => {
+    const pool = new TransactionPool(lc, initTask, 2, 5);
+
+    const processing = new Queue<boolean>();
+    const {promise: canProceed, resolve: allowProceed} = resolver();
+
+    const blockingTask =
+      (stmt: string) => async (tx: postgres.TransactionSql) => {
+        void processing.enqueue(true);
+        await canProceed;
+        return task(stmt)(tx);
+      };
+
+    // Note: run() will `await` its two initial workers.
+    const done = pool.run(db);
+
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
+    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+
+    for (let i = 0; i < 2; i++) {
+      await processing.dequeue();
+    }
+
+    // For the last of the new tasks, induce an error with a unique key violation.
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (3)`));
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (2)`));
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
+
+    // Set done so that the workers exit as soon as they've processed their task.
+    // This means that the initial two workers will likely exit successfully.
+    pool.setDone();
+
+    for (let i = 2; i < 5; i++) {
+      await processing.dequeue();
+    }
+
+    allowProceed();
+
+    // run() should throw the error even though it may not have come from the
+    // two initially started workers.
+    const result = await done.catch(e => e);
+
+    // Ensure that the postgres error is surfaced.
+    expect(result).toBeInstanceOf(postgres.PostgresError);
+    expect((result as postgres.PostgresError).code).toBe(PG_UNIQUE_VIOLATION);
+
+    // Note: We don't verify table expectations here because some transactions
+    //       may have successfully completed. That's fine, because in practice
+    //       it only makes sense to do writes in single-transaction pools.
   });
 });
