@@ -6,9 +6,9 @@ import {Queue} from 'shared/src/queue.js';
 
 type MaybePromise<T> = Promise<T> | T;
 
-export type Statement = postgres.PendingQuery<
-  (postgres.Row & Iterable<postgres.Row>)[]
->;
+export type Statement =
+  | postgres.PendingQuery<(postgres.Row & Iterable<postgres.Row>)[]>
+  | postgres.PendingQuery<postgres.Row[]>;
 
 /**
  * A {@link Task} is logic run from within a transaction in a {@link TransactionPool}.
@@ -234,14 +234,13 @@ export function synchronizedSnapshots(): SynchronizeSnapshotTasks {
   //       as soon as the statements have been sent to the db.
   return {
     exportSnapshot: tx => {
-      tx<{snapshot: string}[]>`
-      SELECT pg_export_snapshot() AS snapshot;`
-        .simple()
+      const stmt = tx`SELECT pg_export_snapshot() AS snapshot;`.simple();
+      // Intercept the promise to propagate the information to setSnapshot.
+      stmt
         .then(result => setSnapshot(result[0].snapshot))
-        .catch(e => {
-          failSnapshot(e);
-          throw e;
-        });
+        .catch(e => failSnapshot(e));
+      // Also return the stmt so that it gets awaited (and errors handled).
+      return [stmt];
     },
 
     setSnapshot: tx =>
