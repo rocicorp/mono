@@ -5,14 +5,14 @@ import {Queue} from 'shared/src/queue.js';
 import {sleep} from 'shared/src/sleep.js';
 import {expectTables, testDBs} from '../test/db.js';
 import {createSilentLogContext} from '../test/logger.js';
-import {TransactionPool} from './transaction-pool.js';
+import {TransactionPool, synchronizedSnapshots} from './transaction-pool.js';
 
 describe('db/transaction-pool', () => {
   let db: postgres.Sql<{bigint: bigint}>;
   const lc = createSilentLogContext();
 
   beforeEach(async () => {
-    db = await testDBs.create('transaction_pool');
+    db = await testDBs.create('transaction_pool_test');
     await db`
     CREATE TABLE foo (
       id int PRIMARY KEY,
@@ -288,5 +288,78 @@ describe('db/transaction-pool', () => {
     // Note: We don't verify table expectations here because some transactions
     //       may have successfully completed. That's fine, because in practice
     //       it only makes sense to do writes in single-transaction pools.
+  });
+
+  test('snapshot synchronization', async () => {
+    const processing = new Queue<boolean>();
+    const blockingTask = (stmt: string) => (tx: postgres.TransactionSql) => {
+      void processing.enqueue(true);
+      return task(stmt)(tx);
+    };
+
+    const {exportSnapshot, setSnapshot} = synchronizedSnapshots();
+    const leader = new TransactionPool(lc, exportSnapshot);
+    const followers = new TransactionPool(lc, setSnapshot, 3);
+
+    // Start off with some existing values in the db.
+    await db`
+    INSERT INTO foo (id) VALUES (1);
+    INSERT INTO foo (id) VALUES (2);
+    INSERT INTO foo (id) VALUES (3);
+    `.simple();
+
+    // Run the leader pool.
+    const leaderDone = leader.run(db);
+
+    // Process some writes on leader.
+    leader.process(blockingTask(`INSERT INTO foo (id) VALUES (4);`));
+    leader.process(blockingTask(`INSERT INTO foo (id) VALUES (5);`));
+    leader.process(blockingTask(`INSERT INTO foo (id) VALUES (6);`));
+
+    // Verify that at least one task is processed, which guarantees that
+    // the snapshot was exported.
+    await processing.dequeue();
+
+    // Run the follower pool. This should get set to the initial snapshot.
+    const followerDone = followers.run(db);
+
+    // Do some writes outside of the transaction.
+    await db`
+    INSERT INTO foo (id) VALUES (7);
+    INSERT INTO foo (id) VALUES (8);
+    INSERT INTO foo (id) VALUES (9);
+    `.simple();
+
+    // Verify that the followers only see the initial snapshot.
+    const queryResults = new Queue<number[]>();
+    for (let i = 0; i < 3; i++) {
+      followers.process(async tx => {
+        const ids = await tx<{id: number}[]>`SELECT id FROM foo;`.values();
+        void queryResults.enqueue(ids.flat());
+      });
+    }
+    for (let i = 0; i < 3; i++) {
+      // Neither [4, 5, 6] nor [7, 8, 9] should appear.
+      expect(await queryResults.dequeue()).toEqual([1, 2, 3]);
+    }
+
+    followers.setDone();
+    leader.setDone();
+
+    await Promise.all([leaderDone, followerDone]);
+
+    await expectTables(db, {
+      ['public.foo']: [
+        {id: 1, val: null},
+        {id: 2, val: null},
+        {id: 3, val: null},
+        {id: 4, val: null},
+        {id: 5, val: null},
+        {id: 6, val: null},
+        {id: 7, val: null},
+        {id: 8, val: null},
+        {id: 9, val: null},
+      ],
+    });
   });
 });
