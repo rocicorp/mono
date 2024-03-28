@@ -9,7 +9,11 @@ import {
 import postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
-import {Statement, TransactionPool} from '../../db/transaction-pool.js';
+import {
+  ControlFlowError,
+  Statement,
+  TransactionPool,
+} from '../../db/transaction-pool.js';
 import {epochMicrosToTimestampTz} from '../../types/big-time.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
@@ -234,10 +238,9 @@ function ensureError(err: unknown): Error {
   return error;
 }
 
-class PrecedingTransactionError extends Error {
+class PrecedingTransactionError extends ControlFlowError {
   constructor(err: unknown) {
-    super();
-    this.cause = err;
+    super(err);
   }
 }
 
