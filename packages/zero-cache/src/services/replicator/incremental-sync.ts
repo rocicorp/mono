@@ -49,7 +49,7 @@ export const CREATE_REPLICATION_TABLES =
   //
   // * `op`        : 't' for table truncation, 's' for set (insert/update), and 'd' for delete
   // * `rowKeyHash`: Hash of the row key for row identification (see {@link rowKeyHash}). Empty string for truncate op.
-  // * `rowKey`    : JSON row key, NULL for TRUNCATE
+  // * `rowKey`    : JSON row key, as `{[$columnName]: $columnValue}`, or NULL for TRUNCATE
   // * `row`       : JSON formatted full row contents, NULL for DELETE / TRUNCATE
   //
   // Note that the `row` data is stored as JSON rather than JSONB to prioritize write
@@ -641,13 +641,21 @@ class TransactionProcessor {
               "tableName" = ${table(relation)};`);
     }
     if (oldKey) {
-      // If an update changed the row key in this transaction, that entry must
-      // must be deleted if present.
+      // If an update changed the row key, insert a delete for the oldKey.
+      const del: ChangeLogEntry = {
+        stateVersion: this.#version,
+        tableName: table(relation),
+        op: 'd',
+        rowKeyHash: rowKeyHash(oldKey),
+        rowKey: oldKey,
+        row: null,
+      };
       changes.push(tx`
-      DELETE FROM _zero."ChangeLog"
-        WHERE "stateVersion" = ${this.#version} AND
-              "tableName" = ${table(relation)} AND
-              "rowKeyHash" = ${rowKeyHash(oldKey)};`);
+      INSERT INTO _zero."ChangeLog" ${tx(del)} 
+        ON CONFLICT ON CONSTRAINT PK_change_log
+        DO UPDATE SET 
+          op = EXCLUDED.op,
+          row = EXCLUDED.row;`);
     }
     changes.push(tx`
       INSERT INTO _zero."ChangeLog" ${tx(change)} 
