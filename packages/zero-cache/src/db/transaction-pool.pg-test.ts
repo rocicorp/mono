@@ -1,6 +1,5 @@
 import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
 import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
-import {resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
 import {Queue} from 'shared/src/queue.js';
 import {sleep} from 'shared/src/sleep.js';
@@ -114,12 +113,12 @@ describe('db/transaction-pool', () => {
     const pool = new TransactionPool(lc, initTask, 2, 5);
 
     const processing = new Queue<boolean>();
-    const {promise: canProceed, resolve: allowProceed} = resolver();
+    const canProceed = new Queue<boolean>();
 
     const blockingTask =
       (stmt: string) => async (tx: postgres.TransactionSql) => {
         void processing.enqueue(true);
-        await canProceed;
+        await canProceed.dequeue();
         return task(stmt)(tx);
       };
 
@@ -142,7 +141,10 @@ describe('db/transaction-pool', () => {
       await processing.dequeue();
     }
 
-    allowProceed();
+    // Let all 6 tasks proceed.
+    for (let i = 0; i < 6; i++) {
+      void canProceed.enqueue(true);
+    }
 
     await done;
 
@@ -236,12 +238,12 @@ describe('db/transaction-pool', () => {
     const pool = new TransactionPool(lc, initTask, 2, 5);
 
     const processing = new Queue<boolean>();
-    const {promise: canProceed, resolve: allowProceed} = resolver();
+    const canProceed = new Queue<boolean>();
 
     const blockingTask =
       (stmt: string) => async (tx: postgres.TransactionSql) => {
         void processing.enqueue(true);
-        await canProceed;
+        await canProceed.dequeue();
         return task(stmt)(tx);
       };
 
@@ -268,7 +270,12 @@ describe('db/transaction-pool', () => {
       await processing.dequeue();
     }
 
-    allowProceed();
+    // Allow the tasks to proceed in order. This maximizes the chance that the
+    // first tasks complete (and succeed) before the last task errors, exercising
+    // the scenario being tested.
+    for (let i = 0; i < 5; i++) {
+      await canProceed.enqueue(true);
+    }
 
     // run() should throw the error even though it may not have come from the
     // two initially started workers.
