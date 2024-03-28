@@ -1,14 +1,9 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  jest,
-  test,
-} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import {Lock} from '@rocicorp/lock';
+import type {LogContext} from '@rocicorp/logger';
 import type {Pgoutput} from 'pg-logical-replication';
 import type postgres from 'postgres';
+import {Queue} from 'shared/src/queue.js';
 import {expectTables, testDBs} from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import {MessageProcessor, setupReplicationTables} from './incremental-sync.js';
@@ -280,8 +275,8 @@ describe('replicator/message-processor', () => {
 
   for (const c of cases) {
     test(c.name, async () => {
-      const acknowledge = jest.fn();
-      const failService = jest.fn();
+      const failures = new Queue<unknown>();
+      const acknowledgements = new Queue<string>();
 
       const processor = new MessageProcessor(
         replica,
@@ -291,8 +286,8 @@ describe('replicator/message-processor', () => {
           tables: {},
         },
         new Lock(),
-        acknowledge,
-        failService,
+        (lsn: string) => acknowledgements.enqueue(lsn),
+        (_: LogContext, err: unknown) => failures.enqueue(err),
       );
 
       const lc = createSilentLogContext();
@@ -304,10 +299,12 @@ describe('replicator/message-processor', () => {
       }
       await Promise.all(pending);
 
-      expect(acknowledge.mock.calls.map(call => call[0])).toEqual(
-        c.acknowledged,
-      );
-      expect(failService).toHaveBeenCalledTimes(c.expectFailure ? 1 : 0);
+      for (const lsn of c.acknowledged) {
+        expect(await acknowledgements.dequeue()).toBe(lsn);
+      }
+      if (c.expectFailure) {
+        expect(await failures.dequeue()).toBeInstanceOf(Error);
+      }
       await expectTables(replica, c.replicated);
     });
   }
