@@ -78,7 +78,7 @@ export class TransactionPool {
    *
    * * rejects if processing was aborted with {@link fail} or if processing any of
    *   the tasks resulted in an error. All uncommitted transactions will have been
-   *    rolled back.
+   *   rolled back.
    *
    * Note that partial failures are possible if processing writes with multiple workers
    * (e.g. `setDone` is called, allowing some workers to commit, after which other
