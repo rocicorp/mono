@@ -222,7 +222,7 @@ describe('db/transaction-pool', () => {
 
     const result = await pool.run(db).catch(e => e);
 
-    // Ensure that the postgres error is surfaced.
+    // Ensure that the error is surfaced.
     expect(result).toBe(readError);
 
     // Nothing should have succeeded.
