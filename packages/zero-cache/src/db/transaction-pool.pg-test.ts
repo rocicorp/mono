@@ -208,6 +208,30 @@ describe('db/transaction-pool', () => {
     });
   });
 
+  test('non-statement task error fails pool', async () => {
+    const pool = new TransactionPool(lc, initTask, 3, 3);
+
+    const readError = new Error('doh');
+
+    pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
+    pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+    pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
+    pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
+    pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
+    pool.process(() => Promise.reject(readError));
+
+    const result = await pool.run(db).catch(e => e);
+
+    // Ensure that the postgres error is surfaced.
+    expect(result).toBe(readError);
+
+    // Nothing should have succeeded.
+    await expectTables(db, {
+      ['public.foo']: [],
+      ['public.workers']: [],
+    });
+  });
+
   test('postgres error is surfaced', async () => {
     const pool = new TransactionPool(lc, initTask, 3, 3);
 

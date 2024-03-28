@@ -110,37 +110,42 @@ export class TransactionPool {
   #addWorker(db: postgres.Sql) {
     const lc = this.#lc.withContext('worker', `#${this.#workers.length + 1}`);
     const worker = async (tx: postgres.TransactionSql) => {
-      lc.debug?.('started worker');
+      try {
+        lc.debug?.('started worker');
 
-      const pending: Promise<unknown>[] = [];
+        const pending: Promise<unknown>[] = [];
 
-      let task: Task | Error | 'done' =
-        this.#init ?? (await this.#tasks.dequeue());
+        let task: Task | Error | 'done' =
+          this.#init ?? (await this.#tasks.dequeue());
 
-      while (task !== 'done') {
-        if (this.#failure || task instanceof Error) {
-          await Promise.all(pending); // avoid unhandled rejections
-          throw this.#failure ?? task;
+        while (task !== 'done') {
+          if (this.#failure || task instanceof Error) {
+            await Promise.all(pending); // avoid unhandled rejections
+            throw this.#failure ?? task;
+          }
+          const result = await task(tx, this.#lc);
+          if (Array.isArray(result)) {
+            // Execute the statements (i.e. send to the db) immediately and add them to
+            // `pending` for the final await.
+            //
+            // Optimization: Fail immediately on rejections to prevent more tasks from
+            // queueing up. This can save a lot of time if an initial task fails before
+            // many subsequent tasks (e.g. transaction replay detection).
+            pending.push(
+              ...result.map(stmt => stmt.execute().catch(e => this.fail(e))),
+            );
+            lc.debug?.(`executed ${result.length} statement(s)`, result);
+          }
+          // await the next task.
+          task = await this.#tasks.dequeue();
         }
-        const result = await task(tx, this.#lc);
-        if (Array.isArray(result)) {
-          // Execute the statements (i.e. send to the db) immediately and add them to
-          // `pending` for the final await.
-          //
-          // Optimization: Fail immediately on rejections to prevent more tasks from
-          // queueing up. This can save a lot of time if an initial task fails before
-          // many subsequent tasks (e.g. transaction replay detection).
-          pending.push(
-            ...result.map(stmt => stmt.execute().catch(e => this.fail(e))),
-          );
-          lc.debug?.(`executed ${result.length} statement(s)`, result);
-        }
-        // await the next task.
-        task = await this.#tasks.dequeue();
+
+        lc.debug?.('worker done');
+        return Promise.all(pending);
+      } catch (e) {
+        this.fail(e); // A failure in any worker should fail the pool.
+        throw e;
       }
-
-      lc.debug?.('worker done');
-      return Promise.all(pending);
     };
 
     this.#workers.push(db.begin(worker));
