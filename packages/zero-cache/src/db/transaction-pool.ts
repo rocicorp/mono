@@ -71,9 +71,22 @@ export class TransactionPool {
    * Starts the pool of workers to process Tasks with transactions opened from the
    * specified {@link db}.
    *
-   * Returns a promise that resolves when all workers have closed their transactions,
-   * which happens after they have all received the {@link setDone} signal, or if
-   * processing was aborted with {@link fail}.
+   * Returns a promise that:
+   *
+   * * resolves after {@link setDone} has been called, once all added tasks have
+   *   been processed and all transactions have been committed or closed.
+   *
+   * * rejects if processing was aborted with {@link fail} or if processing any of
+   *   the tasks resulted in an error. All uncommitted transactions will have been
+   *   rolled back.
+   *
+   * Note that partial failures are possible if processing writes with multiple workers
+   * (e.g. `setDone` is called, allowing some workers to commit, after which other
+   *  workers encounter errors). Using a TransactionPool in this manner does not make
+   * sense in terms of transactional semantics, and is thus not recommended.
+   *
+   * For reads, however, multiple workers is useful for performing parallel reads
+   * at the same snapshot. See {@link synchronizedSnapshots} for an example.
    */
   async run(db: postgres.Sql): Promise<void> {
     assert(!this.#db, 'already running');
@@ -146,7 +159,6 @@ export class TransactionPool {
   process(task: Task) {
     assert(!this.#done, 'already set done');
     if (this.#failure) {
-      this.#lc.debug?.('dropping task after failure');
       return;
     }
 
