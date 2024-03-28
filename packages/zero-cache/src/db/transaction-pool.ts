@@ -236,9 +236,7 @@ export function synchronizedSnapshots(): SynchronizeSnapshotTasks {
     exportSnapshot: tx => {
       const stmt = tx`SELECT pg_export_snapshot() AS snapshot;`.simple();
       // Intercept the promise to propagate the information to setSnapshot.
-      stmt
-        .then(result => setSnapshot(result[0].snapshot))
-        .catch(e => failSnapshot(e));
+      stmt.then(result => setSnapshot(result[0].snapshot), failSnapshot);
       // Also return the stmt so that it gets awaited (and errors handled).
       return [stmt];
     },
