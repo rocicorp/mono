@@ -24,13 +24,15 @@ import {
   ZERO_VERSION_COLUMN_NAME,
   replicationSlot,
 } from './initial-sync.js';
+import {CREATE_INVALIDATION_TABLES} from './invalidation.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
 import {toLexiVersion} from './types/lsn.js';
 
 /**
- * Replication metadata, used for invalidation and catchup. These tables
- * are created atomically with the logical replication handoff, after initial
- * data synchronization has completed.
+ * Replication metadata, used for incremental view maintenance and catchup.
+ *
+ * These tables are created atomically in {@link setupReplicationTables} after
+ * the logical replication handoff when initial data synchronization has completed.
  */
 export const CREATE_REPLICATION_TABLES =
   // The transaction log maps each LSN to transaction information.
@@ -65,44 +67,6 @@ export const CREATE_REPLICATION_TABLES =
     "row"          JSON,
     CONSTRAINT PK_change_log PRIMARY KEY("stateVersion", "tableName", "rowKeyHash")
   );
-` +
-  // Invalidation registry.
-  //
-  // * `spec` defines the invalidation function to run,
-  //
-  // * `bits` indicates the number of bits used to create the
-  //    corresponding tag in the `invalidation_index`. The 'spec' is requested
-  //    by View Syncers, while 'bits' is decided by the system.
-  //
-  //    For example, we may decide to start off with 32-bit hashes and later
-  //    determine that it is worth increasing the table size to 40-bit hashes
-  //    in order to reduce the number of collisions. During the transition, the
-  //    Replicator would compute both sizes until the new size has sufficient
-  //    coverage (over old versions).
-  //
-  // * `fromStateVersion` indicates when the Replicator first started running
-  //   the filter. CVRs at or newer than the version are considered covered.
-  //
-  // * `lastRequested` records (approximately) the last time the spec was
-  //   requested. This is not exact. It may only be updated if the difference
-  //   exceeds some interval, for example. This is used to clean up specs that
-  //   are no longer used.
-  `
-CREATE TABLE _zero."InvalidationRegistry" (
-  spec               TEXT        NOT NULL,
-  bits               SMALLINT    NOT NULL,
-  "fromStateVersion" VARCHAR(38) NOT NULL,
-  "lastRequested"    TIMESTAMPTZ NOT NULL,
-  PRIMARY KEY(spec, bits)
-);
-` +
-  // Invalidation index.
-  `
-CREATE TABLE _zero."InvalidationIndex" (
-  hash           BIGINT      NOT NULL,
-  "stateVersion" VARCHAR(38) NOT NULL,
-  PRIMARY KEY(hash)
-);
 `;
 
 /**
@@ -133,7 +97,11 @@ export async function setupReplicationTables(
         `,
   );
 
-  await tx.unsafe(alterStmts.join('') + CREATE_REPLICATION_TABLES);
+  await tx.unsafe(
+    alterStmts.join('') +
+      CREATE_REPLICATION_TABLES +
+      CREATE_INVALIDATION_TABLES,
+  );
 }
 
 // BigInt support from LogicalReplicationService.
