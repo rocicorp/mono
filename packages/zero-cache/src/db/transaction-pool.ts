@@ -71,6 +71,19 @@ export class TransactionPool {
    * Starts the pool of workers to process Tasks with transactions opened from the
    * specified {@link db}.
    *
+   * Returns {@link done()}.
+   */
+  async run(db: postgres.Sql): Promise<void> {
+    assert(!this.#db, 'already running');
+    this.#db = db;
+    for (let i = 0; i < this.#numWorkers; i++) {
+      this.#addWorker(db);
+    }
+    await this.done();
+    this.#lc.debug?.('transaction pool done');
+  }
+
+  /**
    * Returns a promise that:
    *
    * * resolves after {@link setDone} has been called, once all added tasks have
@@ -87,24 +100,19 @@ export class TransactionPool {
    *
    * For reads, however, multiple workers is useful for performing parallel reads
    * at the same snapshot. See {@link synchronizedSnapshots} for an example.
+   * Resolves or rejects when all workers are done or failed.
    */
-  async run(db: postgres.Sql): Promise<void> {
-    assert(!this.#db, 'already running');
-    this.#db = db;
-    for (let i = 0; i < this.#numWorkers; i++) {
-      this.#addWorker(db);
-    }
-    const initialWorkers = this.#workers.length;
+  async done() {
+    const numWorkers = this.#workers.length;
     await Promise.all(this.#workers);
 
-    if (initialWorkers < this.#workers.length) {
+    if (numWorkers < this.#workers.length) {
       // If workers were added after the initial set, they must be awaited to ensure
       // that the results (i.e. rejections) of all workers are accounted for. This only
       // needs to be re-done once, because the fact that the first `await` completed
       // guarantees that the pool is in a terminal state and no new workers can be added.
       await Promise.all(this.#workers);
     }
-    this.#lc.debug?.('transaction pool done');
   }
 
   #addWorker(db: postgres.Sql) {
