@@ -1,5 +1,5 @@
 import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
-import {Lock} from '@rocicorp/lock';
+import type {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {
   LogicalReplicationService,
@@ -123,17 +123,23 @@ export class IncrementalSyncer {
 
   // This lock ensures that transactions are processed serially, even
   // across re-connects to the upstream db.
-  readonly #txSerializer = new Lock();
+  readonly #txSerializer: Lock;
 
   #retryDelay = INITIAL_RETRY_DELAY_MS;
   #service: LogicalReplicationService | undefined;
   #started = false;
   #stopped = false;
 
-  constructor(upstreamUri: string, replicaID: string, replica: postgres.Sql) {
+  constructor(
+    upstreamUri: string,
+    replicaID: string,
+    replica: postgres.Sql,
+    txSerializer: Lock,
+  ) {
     this.#upstreamUri = upstreamUri;
     this.#replicaID = replicaID;
     this.#replica = replica;
+    this.#txSerializer = txSerializer;
   }
 
   async start(lc: LogContext) {
