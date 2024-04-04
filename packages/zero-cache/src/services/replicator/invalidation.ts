@@ -116,7 +116,6 @@ export class Invalidator {
   constructor(replica: postgres.Sql, txSerializer: Lock) {
     this.#replica = replica;
     this.#txSerializer = txSerializer;
-    this.#txSerializer; // TODO
   }
 
   async registerInvalidationFilters(

@@ -2,8 +2,8 @@ import {describe, expect, test} from '@jest/globals';
 import {compareUTF8} from 'compare-utf8';
 import {parse, stringify} from './bigint-json.js';
 import {
+  InvalidationFilterSpec,
   InvalidationTag,
-  NormalizedInvalidationFilterSpec,
   invalidationHash,
   normalizeFilterSpec,
   parseFilterSpec,
@@ -83,7 +83,7 @@ describe('types/invalidation', () => {
 
   type SpecCase = {
     name: string;
-    specs: NormalizedInvalidationFilterSpec[];
+    specs: InvalidationFilterSpec[];
     json: string;
   };
 
