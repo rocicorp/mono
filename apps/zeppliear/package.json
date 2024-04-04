@@ -6,9 +6,8 @@
     "start": "next start",
     "check-types": "tsc --noEmit",
     "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
-    "check-format": "prettier --check './**/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
+    "check-format": "prettier --check *",
     "lint": "next lint",
-    "lint-fix": "next lint --fix",
     "test": "env TS_NODE_COMPILER_OPTIONS='{\"module\": \"commonjs\" }' mocha -r ts-node/register 'backend/**/*.test.ts'"
   },
   "dependencies": {
@@ -65,5 +64,12 @@
     "tailwindcss": "^3.0.23",
     "ts-node": "^10.9.1",
     "typescript": "^5.4.2"
-  }
+  },
+  "eslintConfig": {
+    "extends": [
+      "@rocicorp/eslint-config",
+      "next/core-web-vitals"
+    ]
+  },
+  "prettier": "@rocicorp/prettier-config"
 }

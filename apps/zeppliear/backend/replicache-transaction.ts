@@ -11,13 +11,13 @@ import type {
   TransactionEnvironment,
   TransactionReason,
   WriteTransaction,
-} from "replicache";
-import { delEntries, getEntry, putEntries } from "./data";
-import type { Executor } from "./pg";
+} from 'replicache';
+import {delEntries, getEntry, putEntries} from './data';
+import type {Executor} from './pg';
 
 export type SyncOrderFn = (
   tx: ReadTransaction,
-  entry: [key: string, value: JSONValue]
+  entry: [key: string, value: JSONValue],
 ) => Promise<string>;
 
 /**
@@ -25,16 +25,14 @@ export type SyncOrderFn = (
  * transaction.
  */
 export class ReplicacheTransaction implements WriteTransaction {
-  private readonly _spaceID: string;
-  private readonly _clientID: string;
-  private readonly _version: number;
-  private readonly _mutationID: number;
-  private readonly _executor: Executor;
-  private readonly _getSyncOrder: SyncOrderFn;
-  private readonly _cache: Map<
-    string,
-    { value: JSONValue | undefined; dirty: boolean }
-  > = new Map();
+  readonly #spaceID: string;
+  readonly #clientID: string;
+  readonly #version: number;
+  readonly #mutationID: number;
+  readonly #executor: Executor;
+  readonly #getSyncOrder: SyncOrderFn;
+  readonly #cache: Map<string, {value: JSONValue | undefined; dirty: boolean}> =
+    new Map();
 
   constructor(
     executor: Executor,
@@ -42,22 +40,22 @@ export class ReplicacheTransaction implements WriteTransaction {
     clientID: string,
     version: number,
     mutationId: number,
-    getSyncOrder: SyncOrderFn
+    getSyncOrder: SyncOrderFn,
   ) {
-    this._spaceID = spaceID;
-    this._clientID = clientID;
-    this._version = version;
-    this._mutationID = mutationId;
-    this._executor = executor;
-    this._getSyncOrder = getSyncOrder;
+    this.#spaceID = spaceID;
+    this.#clientID = clientID;
+    this.#version = version;
+    this.#mutationID = mutationId;
+    this.#executor = executor;
+    this.#getSyncOrder = getSyncOrder;
   }
 
   get reason(): TransactionReason {
-    return "authoritative";
+    return 'authoritative';
   }
 
   get environment(): TransactionEnvironment {
-    return "server";
+    return 'server';
   }
 
   get location() {
@@ -65,31 +63,32 @@ export class ReplicacheTransaction implements WriteTransaction {
   }
 
   get mutationID(): number {
-    return this._mutationID;
+    return this.#mutationID;
   }
 
   get clientID(): string {
-    return this._clientID;
+    return this.#clientID;
   }
 
   async put(key: string, value: JSONValue): Promise<void> {
     await this.set(key, value);
   }
-  async set(key: string, value: JSONValue): Promise<void> {
-    this._cache.set(key, { value, dirty: true });
+  set(key: string, value: JSONValue): Promise<void> {
+    this.#cache.set(key, {value, dirty: true});
+    return Promise.resolve();
   }
   async del(key: string): Promise<boolean> {
     const had = await this.has(key);
-    this._cache.set(key, { value: undefined, dirty: true });
+    this.#cache.set(key, {value: undefined, dirty: true});
     return had;
   }
   async get(key: string): Promise<JSONValue | undefined> {
-    const entry = this._cache.get(key);
+    const entry = this.#cache.get(key);
     if (entry) {
       return entry.value;
     }
-    const value = await getEntry(this._executor, this._spaceID, key);
-    this._cache.set(key, { value, dirty: false });
+    const value = await getEntry(this.#executor, this.#spaceID, key);
+    this.#cache.set(key, {value, dirty: false});
     return value;
   }
   async has(key: string): Promise<boolean> {
@@ -98,29 +97,29 @@ export class ReplicacheTransaction implements WriteTransaction {
   }
 
   // TODO!
-  async isEmpty(): Promise<boolean> {
-    throw new Error("Method isEmpty not implemented");
+  isEmpty(): Promise<boolean> {
+    throw new Error('Method isEmpty not implemented');
   }
 
   scan(options: ScanIndexOptions): ScanResult<IndexKey, ReadonlyJSONValue>;
   scan(options?: ScanNoIndexOptions): ScanResult<string, ReadonlyJSONValue>;
   scan(options?: ScanOptions): ScanResult<IndexKey | string, ReadonlyJSONValue>;
   scan<V extends ReadonlyJSONValue>(
-    options: ScanIndexOptions
+    options: ScanIndexOptions,
   ): ScanResult<IndexKey, DeepReadonly<V>>;
   scan<V extends ReadonlyJSONValue>(
-    options?: ScanNoIndexOptions
+    options?: ScanNoIndexOptions,
   ): ScanResult<string, DeepReadonly<V>>;
   scan<V extends ReadonlyJSONValue>(
-    options?: ScanOptions
+    options?: ScanOptions,
   ): ScanResult<IndexKey | string, DeepReadonly<V>>;
   scan(): ScanResult<IndexKey | string, ReadonlyJSONValue> {
-    throw new Error("Method scan not implemented.");
+    throw new Error('Method scan not implemented.');
   }
 
   async flush(): Promise<void> {
-    const dirtyEntries = [...this._cache.entries()].filter(
-      ([, { dirty }]) => dirty
+    const dirtyEntries = [...this.#cache.entries()].filter(
+      ([, {dirty}]) => dirty,
     );
     const entriesToPut: [string, JSONValue, string][] = [];
     for (const dirtyEntry of dirtyEntries) {
@@ -128,16 +127,16 @@ export class ReplicacheTransaction implements WriteTransaction {
         entriesToPut.push([
           dirtyEntry[0],
           dirtyEntry[1].value,
-          await this._getSyncOrder(this, [dirtyEntry[0], dirtyEntry[1].value]),
+          await this.#getSyncOrder(this, [dirtyEntry[0], dirtyEntry[1].value]),
         ]);
       }
     }
     const keysToDel = dirtyEntries
-      .filter(([, { value }]) => value === undefined)
+      .filter(([, {value}]) => value === undefined)
       .map(([key]) => key);
     await Promise.all([
-      delEntries(this._executor, this._spaceID, keysToDel, this._version),
-      putEntries(this._executor, this._spaceID, entriesToPut, this._version),
+      delEntries(this.#executor, this.#spaceID, keysToDel, this.#version),
+      putEntries(this.#executor, this.#spaceID, entriesToPut, this.#version),
     ]);
   }
 }

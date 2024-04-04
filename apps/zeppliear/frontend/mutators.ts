@@ -1,4 +1,4 @@
-import type { WriteTransaction } from "replicache";
+import type {WriteTransaction} from 'replicache';
 import {
   putIssue,
   getIssue,
@@ -9,7 +9,7 @@ import {
   Issue,
   commentKey,
   IssueUpdateWithID,
-} from "./issue";
+} from './issue';
 
 export type M = typeof mutators;
 export const mutators = {
@@ -21,27 +21,23 @@ export const mutators = {
     }: {
       issue: Issue;
       description: Description;
-    }
+    },
   ): Promise<void> => {
     await putIssue(tx, issue);
     await putIssueDescription(tx, issue.id, description);
   },
   updateIssues: async (
     tx: WriteTransaction,
-    issueUpdates: IssueUpdateWithID[]
+    issueUpdates: IssueUpdateWithID[],
   ): Promise<void> => {
     const modified = Date.now();
-    for (const {
-      id,
-      issueChanges: changes,
-      descriptionChange,
-    } of issueUpdates) {
+    for (const {id, issueChanges: changes, descriptionChange} of issueUpdates) {
       const issue = await getIssue(tx, id);
       if (issue === undefined) {
         console.info(`Issue ${id} not found`);
         return;
       }
-      const changed = { ...issue, ...changes };
+      const changed = {...issue, ...changes};
       changed.modified = modified;
       await putIssue(tx, changed);
       if (descriptionChange) {
@@ -52,7 +48,7 @@ export const mutators = {
   putIssueComment: async (
     tx: WriteTransaction,
     comment: Comment,
-    updateIssueModifed = true
+    updateIssueModifed = true,
   ): Promise<void> => {
     if (updateIssueModifed) {
       const issue = await getIssue(tx, comment.issueID);
@@ -60,14 +56,14 @@ export const mutators = {
         console.info(`Issue ${comment.issueID} not found`);
         return;
       }
-      const changed = { ...issue, modified: Date.now() };
+      const changed = {...issue, modified: Date.now()};
       await putIssue(tx, changed);
     }
     await putIssueComment(tx, comment);
   },
   deleteIssueComment: async (
     tx: WriteTransaction,
-    comment: Comment
+    comment: Comment,
   ): Promise<void> => {
     await tx.del(commentKey(comment.issueID, comment.id));
   },

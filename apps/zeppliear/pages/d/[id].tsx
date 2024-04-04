@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { Replicache, TEST_LICENSE_KEY } from "replicache";
-import { M, mutators } from "../../frontend/mutators";
-import App from "../../frontend/app";
-import Pusher from "pusher-js";
-import { UndoManager } from "@rocicorp/undo";
+import {useEffect, useRef, useState} from 'react';
+import {Replicache, TEST_LICENSE_KEY} from 'replicache';
+import {M, mutators} from '../../frontend/mutators';
+import App from '../../frontend/app';
+import Pusher from 'pusher-js';
+import {UndoManager} from '@rocicorp/undo';
 
 export default function Home() {
   const [rep, setRep] = useState<Replicache<M> | null>(null);
@@ -16,7 +16,7 @@ export default function Home() {
         return;
       }
 
-      const [, , spaceID] = location.pathname.split("/");
+      const [, , spaceID] = location.pathname.split('/');
       const r = new Replicache({
         pushURL: `/api/replicache-push?spaceID=${spaceID}`,
         pullURL: `/api/replicache-pull?spaceID=${spaceID}`,
@@ -25,7 +25,8 @@ export default function Home() {
         pullInterval: 30000,
         // To get your own license key run `npx replicache get-license`. (It's free.)
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        licenseKey: process.env.NEXT_PUBLIC_REPLICACHE_LICENSE_KEY ?? TEST_LICENSE_KEY,
+        licenseKey:
+          process.env.NEXT_PUBLIC_REPLICACHE_LICENSE_KEY ?? TEST_LICENSE_KEY,
       });
 
       if (
@@ -37,8 +38,8 @@ export default function Home() {
           cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
         });
 
-        const channel = pusher.subscribe("default");
-        channel.bind("poke", () => {
+        const channel = pusher.subscribe('default');
+        channel.bind('poke', () => {
           void r.pull();
         });
       }

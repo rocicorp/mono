@@ -1,13 +1,13 @@
-import React, { memo, MouseEvent, RefObject, useRef, useState } from "react";
-import { usePopper } from "react-popper";
-import StatusIcon from "./status-icon";
-import CancelIcon from "./assets/icons/cancel.svg";
-import BacklogIcon from "./assets/icons/circle-dot.svg";
-import TodoIcon from "./assets/icons/circle.svg";
-import DoneIcon from "./assets/icons/done.svg";
-import InProgressIcon from "./assets/icons/half-circle.svg";
-import { Status, StatusEnum } from "./issue";
-import { useClickOutside } from "./hooks/useClickOutside";
+import React, {memo, MouseEvent, RefObject, useRef, useState} from 'react';
+import {usePopper} from 'react-popper';
+import StatusIcon from './status-icon';
+import CancelIcon from './assets/icons/cancel.svg';
+import BacklogIcon from './assets/icons/circle-dot.svg';
+import TodoIcon from './assets/icons/circle.svg';
+import DoneIcon from './assets/icons/done.svg';
+import InProgressIcon from './assets/icons/half-circle.svg';
+import {Status, StatusEnum} from './issue';
+import {useClickOutside} from './hooks/useClickOutside';
 
 interface Props {
   labelVisible?: boolean;
@@ -16,31 +16,31 @@ interface Props {
 }
 
 export const statuses = [
-  [BacklogIcon, Status.BACKLOG, "Backlog"],
-  [TodoIcon, Status.TODO, "Todo"],
-  [InProgressIcon, Status.IN_PROGRESS, "In Progress"],
-  [DoneIcon, Status.DONE, "Done"],
-  [CancelIcon, Status.CANCELED, "Canceled"],
+  [BacklogIcon, Status.Backlog, 'Backlog'],
+  [TodoIcon, Status.Todo, 'Todo'],
+  [InProgressIcon, Status.InProgress, 'In Progress'],
+  [DoneIcon, Status.Done, 'Done'],
+  [CancelIcon, Status.Canceled, 'Canceled'],
 ];
 
 const getStatusString = (status: StatusEnum) => {
   switch (status) {
-    case Status.BACKLOG:
-      return "Backlog";
-    case Status.TODO:
-      return "Todo";
-    case Status.IN_PROGRESS:
-      return "In Progress";
-    case Status.DONE:
-      return "Done";
-    case Status.CANCELED:
-      return "Canceled";
+    case Status.Backlog:
+      return 'Backlog';
+    case Status.Todo:
+      return 'Todo';
+    case Status.InProgress:
+      return 'In Progress';
+    case Status.Done:
+      return 'Done';
+    case Status.Canceled:
+      return 'Canceled';
     default:
-      return "Backlog";
+      return 'Backlog';
   }
 };
 
-const StatusMenu = ({ labelVisible = false, onSelect, status }: Props) => {
+function StatusMenu({labelVisible = false, onSelect, status}: Props) {
   const [buttonRef, setButtonRef] = useState<HTMLButtonElement | null>(null);
   const [statusDropDownVisible, setStatusDropDownVisible] = useState(false);
 
@@ -57,8 +57,16 @@ const StatusMenu = ({ labelVisible = false, onSelect, status }: Props) => {
     }
   });
 
-  const options = statuses.map(([Icon, status, label], idx) => {
-    return (
+  const options = statuses.map(
+    (
+      [
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        Icon,
+        status,
+        label,
+      ],
+      idx,
+    ) => (
       <div
         key={idx}
         className="flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
@@ -71,8 +79,8 @@ const StatusMenu = ({ labelVisible = false, onSelect, status }: Props) => {
         <Icon className="mr-3" />
         <span>{label}</span>
       </div>
-    );
-  });
+    ),
+  );
 
   return (
     <div ref={ref}>
@@ -93,19 +101,19 @@ const StatusMenu = ({ labelVisible = false, onSelect, status }: Props) => {
       )}
     </div>
   );
-};
+}
 
-const Popper = ({
+function Popper({
   buttonRef,
   children,
 }: {
   buttonRef: HTMLButtonElement | null;
   children: React.ReactNode;
-}) => {
+}) {
   const [popperRef, setPopperRef] = useState<HTMLDivElement | null>(null);
 
-  const { styles, attributes } = usePopper(buttonRef, popperRef, {
-    placement: "bottom-start",
+  const {styles, attributes} = usePopper(buttonRef, popperRef, {
+    placement: 'bottom-start',
   });
 
   return (
@@ -120,6 +128,6 @@ const Popper = ({
       <div style={styles.offset}>{children}</div>
     </div>
   );
-};
+}
 
 export default memo(StatusMenu);

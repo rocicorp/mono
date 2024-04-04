@@ -1,4 +1,4 @@
-declare module "*comments-react.js.gz" {
+declare module '*comments-react.js.gz' {
   const gitHubComments: {
     number: number;
     // eslint-disable-next-line @typescript-eslint/naming-convention

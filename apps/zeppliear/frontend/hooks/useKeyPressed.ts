@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import {useEffect} from 'react';
 
 export function useKeyPressed(key: string, onKeyPress: () => void) {
   useEffect(() => {
@@ -7,10 +7,10 @@ export function useKeyPressed(key: string, onKeyPress: () => void) {
         onKeyPress();
       }
     };
-    window.addEventListener("keydown", downHandler);
+    window.addEventListener('keydown', downHandler);
 
     return () => {
-      window.removeEventListener("keydown", downHandler);
+      window.removeEventListener('keydown', downHandler);
     };
   }, [key, onKeyPress]);
 }

@@ -1,13 +1,13 @@
-import React, { memo, MouseEvent, RefObject, useRef, useState } from "react";
-import { usePopper } from "react-popper";
-import PriorityIcon from "./priority-icon";
-import HighPriorityIcon from "./assets/icons/signal-strong.svg";
-import LowPriorityIcon from "./assets/icons/signal-weak.svg";
-import MediumPriorityIcon from "./assets/icons/signal-medium.svg";
-import NoPriorityIcon from "./assets/icons/dots.svg";
-import UrgentPriorityIcon from "./assets/icons/rounded-claim.svg";
-import { Priority, PriorityEnum } from "./issue";
-import { useClickOutside } from "./hooks/useClickOutside";
+import React, {memo, MouseEvent, RefObject, useRef, useState} from 'react';
+import {usePopper} from 'react-popper';
+import PriorityIcon from './priority-icon';
+import HighPriorityIcon from './assets/icons/signal-strong.svg';
+import LowPriorityIcon from './assets/icons/signal-weak.svg';
+import MediumPriorityIcon from './assets/icons/signal-medium.svg';
+import NoPriorityIcon from './assets/icons/dots.svg';
+import UrgentPriorityIcon from './assets/icons/rounded-claim.svg';
+import {Priority, PriorityEnum} from './issue';
+import {useClickOutside} from './hooks/useClickOutside';
 
 interface Props {
   labelVisible?: boolean;
@@ -16,18 +16,18 @@ interface Props {
 }
 
 export const statusOpts = [
-  [NoPriorityIcon, "No priority", Priority.NONE],
-  [UrgentPriorityIcon, "Urgent", Priority.URGENT],
-  [HighPriorityIcon, "High", Priority.HIGH],
-  [MediumPriorityIcon, "Medium", Priority.MEDIUM],
-  [LowPriorityIcon, "Low", Priority.LOW],
+  [NoPriorityIcon, 'No priority', Priority.None],
+  [UrgentPriorityIcon, 'Urgent', Priority.Urgent],
+  [HighPriorityIcon, 'High', Priority.High],
+  [MediumPriorityIcon, 'Medium', Priority.Medium],
+  [LowPriorityIcon, 'Low', Priority.Low],
 ];
 
-const PriorityMenu = ({
+function PriorityMenu({
   labelVisible,
   onSelect,
-  priority = Priority.NONE,
-}: Props) => {
+  priority = Priority.None,
+}: Props) {
   const [buttonRef, setButtonRef] = useState<HTMLButtonElement | null>(null);
   const [priorityDropDownVisible, setPriorityDropDownVisible] = useState(false);
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>;
@@ -39,18 +39,18 @@ const PriorityMenu = ({
 
   const getPriorityString = (priority: PriorityEnum) => {
     switch (priority) {
-      case Priority.NONE:
-        return "None";
-      case Priority.HIGH:
-        return "High";
-      case Priority.MEDIUM:
-        return "Medium";
-      case Priority.LOW:
-        return "Low";
-      case Priority.URGENT:
-        return "Urgent";
+      case Priority.None:
+        return 'None';
+      case Priority.High:
+        return 'High';
+      case Priority.Medium:
+        return 'Medium';
+      case Priority.Low:
+        return 'Low';
+      case Priority.Urgent:
+        return 'Urgent';
       default:
-        return "Priority";
+        return 'Priority';
     }
   };
 
@@ -60,8 +60,16 @@ const PriorityMenu = ({
     }
   });
 
-  const options = statusOpts.map(([Icon, label, priority], idx) => {
-    return (
+  const options = statusOpts.map(
+    (
+      [
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        Icon,
+        label,
+        priority,
+      ],
+      idx,
+    ) => (
       <div
         key={idx}
         className="flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
@@ -74,8 +82,8 @@ const PriorityMenu = ({
         <Icon className="mr-3" />
         <span>{label}</span>
       </div>
-    );
-  });
+    ),
+  );
 
   return (
     <div ref={ref}>
@@ -96,19 +104,19 @@ const PriorityMenu = ({
       )}
     </div>
   );
-};
+}
 
-const Popper = ({
+function Popper({
   buttonRef,
   children,
 }: {
   buttonRef: HTMLButtonElement | null;
   children: React.ReactNode;
-}) => {
+}) {
   const [popperRef, setPopperRef] = useState<HTMLDivElement | null>(null);
 
-  const { styles, attributes } = usePopper(buttonRef, popperRef, {
-    placement: "bottom-start",
+  const {styles, attributes} = usePopper(buttonRef, popperRef, {
+    placement: 'bottom-start',
   });
 
   return (
@@ -123,6 +131,6 @@ const Popper = ({
       <div style={styles.offset}>{children}</div>
     </div>
   );
-};
+}
 
 export default memo(PriorityMenu);

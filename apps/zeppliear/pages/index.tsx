@@ -1,13 +1,13 @@
-import { transact } from "../backend/pg";
-import { createDatabase, initSpace } from "../backend/data";
-import { getReactSampleData } from "../backend/sample-issues";
+import {transact} from '../backend/pg';
+import {createDatabase, initSpace} from '../backend/data';
+import {getReactSampleData} from '../backend/sample-issues';
 
 function Page() {
-  return "";
+  return '';
 }
 
 export async function getServerSideProps() {
-  const spaceID = await transact(async (executor) => {
+  const spaceID = await transact(async executor => {
     await createDatabase(executor);
     return initSpace(executor, getReactSampleData);
   });

@@ -1,36 +1,36 @@
-import { generateNKeysBetween } from "fractional-indexing";
-import { groupBy, indexOf } from "lodash";
-import React, { memo, useCallback } from "react";
-import { DragDropContext, DropResult } from "react-beautiful-dnd";
+import {generateNKeysBetween} from 'fractional-indexing';
+import {groupBy, indexOf} from 'lodash';
+import React, {memo, useCallback} from 'react';
+import {DragDropContext, DropResult} from 'react-beautiful-dnd';
 
-import { Status, Issue, IssueUpdate, Priority } from "./issue";
-import IssueCol from "./issue-col";
+import {Status, Issue, IssueUpdate, Priority} from './issue';
+import IssueCol from './issue-col';
 
 export type IssuesByStatusType = {
-  [Status.BACKLOG]: Issue[];
-  [Status.TODO]: Issue[];
-  [Status.IN_PROGRESS]: Issue[];
-  [Status.DONE]: Issue[];
-  [Status.CANCELED]: Issue[];
+  [Status.Backlog]: Issue[];
+  [Status.Todo]: Issue[];
+  [Status.InProgress]: Issue[];
+  [Status.Done]: Issue[];
+  [Status.Canceled]: Issue[];
 };
 
 export const getIssueByType = (allIssues: Issue[]): IssuesByStatusType => {
-  const issuesBySType = groupBy(allIssues, "status");
+  const issuesBySType = groupBy(allIssues, 'status');
   const defaultIssueByType = {
-    [Status.BACKLOG]: [],
-    [Status.TODO]: [],
-    [Status.IN_PROGRESS]: [],
-    [Status.DONE]: [],
-    [Status.CANCELED]: [],
+    [Status.Backlog]: [],
+    [Status.Todo]: [],
+    [Status.InProgress]: [],
+    [Status.Done]: [],
+    [Status.Canceled]: [],
   };
-  const result = { ...defaultIssueByType, ...issuesBySType };
+  const result = {...defaultIssueByType, ...issuesBySType};
   return result;
 };
 
 export function getKanbanOrderIssueUpdates(
   issueToMove: Issue,
   issueToInsertBefore: Issue,
-  issues: Issue[]
+  issues: Issue[],
 ): IssueUpdate[] {
   const indexInKanbanOrder = indexOf(issues, issueToInsertBefore);
   let beforeKey: string | null = null;
@@ -52,19 +52,19 @@ export function getKanbanOrderIssueUpdates(
   const newKanbanOrderKeys = generateNKeysBetween(
     beforeKey,
     afterKey,
-    issuesToReKey.length + 1 // +1 for the dragged issue
+    issuesToReKey.length + 1, // +1 for the dragged issue
   );
 
   const issueUpdates = [
     {
       issue: issueToMove,
-      issueChanges: { kanbanOrder: newKanbanOrderKeys[0] },
+      issueChanges: {kanbanOrder: newKanbanOrderKeys[0]},
     },
   ];
   for (let i = 0; i < issuesToReKey.length; i++) {
     issueUpdates.push({
       issue: issuesToReKey[i],
-      issueChanges: { kanbanOrder: newKanbanOrderKeys[i + 1] },
+      issueChanges: {kanbanOrder: newKanbanOrderKeys[i + 1]},
     });
   }
   return issueUpdates;
@@ -76,11 +76,11 @@ interface Props {
   onOpenDetail: (issue: Issue) => void;
 }
 
-function IssueBoard({ issues, onUpdateIssues, onOpenDetail }: Props) {
+function IssueBoard({issues, onUpdateIssues, onOpenDetail}: Props) {
   const issuesByType = getIssueByType(issues);
 
   const handleDragEnd = useCallback(
-    ({ source, destination }: DropResult) => {
+    ({source, destination}: DropResult) => {
       if (!destination) {
         return;
       }
@@ -100,7 +100,7 @@ function IssueBoard({ issues, onUpdateIssues, onOpenDetail }: Props) {
       }
       const issueUpdates = issueToInsertBefore
         ? getKanbanOrderIssueUpdates(draggedIssue, issueToInsertBefore, issues)
-        : [{ issue: draggedIssue, issueChanges: {} }];
+        : [{issue: draggedIssue, issueChanges: {}}];
       if (newStatus !== sourceStatus) {
         issueUpdates[0] = {
           ...issueUpdates[0],
@@ -112,7 +112,7 @@ function IssueBoard({ issues, onUpdateIssues, onOpenDetail }: Props) {
       }
       onUpdateIssues(issueUpdates);
     },
-    [issues, issuesByType, onUpdateIssues]
+    [issues, issuesByType, onUpdateIssues],
   );
 
   const handleChangePriority = useCallback(
@@ -120,48 +120,48 @@ function IssueBoard({ issues, onUpdateIssues, onOpenDetail }: Props) {
       onUpdateIssues([
         {
           issue,
-          issueChanges: { priority },
+          issueChanges: {priority},
         },
       ]);
     },
-    [onUpdateIssues]
+    [onUpdateIssues],
   );
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <div className="flex flex-1 pt-6 pl-8 overflow-scroll-x bg-gray border-color-gray-50 border-right-width-1">
         <IssueCol
-          title={"Backlog"}
-          status={Status.BACKLOG}
-          issues={issuesByType[Status.BACKLOG]}
+          title={'Backlog'}
+          status={Status.Backlog}
+          issues={issuesByType[Status.Backlog]}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
         />
         <IssueCol
-          title={"Todo"}
-          status={Status.TODO}
-          issues={issuesByType[Status.TODO]}
+          title={'Todo'}
+          status={Status.Todo}
+          issues={issuesByType[Status.Todo]}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
         />
         <IssueCol
-          title={"In Progress"}
-          status={Status.IN_PROGRESS}
-          issues={issuesByType[Status.IN_PROGRESS]}
+          title={'In Progress'}
+          status={Status.InProgress}
+          issues={issuesByType[Status.InProgress]}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
         />
         <IssueCol
-          title={"Done"}
-          status={Status.DONE}
-          issues={issuesByType[Status.DONE]}
+          title={'Done'}
+          status={Status.Done}
+          issues={issuesByType[Status.Done]}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
         />
         <IssueCol
-          title={"Canceled"}
-          status={Status.CANCELED}
-          issues={issuesByType[Status.CANCELED]}
+          title={'Canceled'}
+          status={Status.Canceled}
+          issues={issuesByType[Status.Canceled]}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
         />

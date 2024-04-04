@@ -2,9 +2,9 @@ import type {
   ReadonlyJSONValue,
   ReadTransaction,
   WriteTransaction,
-} from "replicache";
-import { z } from "zod";
-import type { Immutable } from "./immutable";
+} from 'replicache';
+import {z} from 'zod';
+import type {Immutable} from './immutable';
 
 export const ISSUE_KEY_PREFIX = `issue/`;
 export const issueKey = (id: string) => `${ISSUE_KEY_PREFIX}${id}`;
@@ -16,11 +16,11 @@ export const issueID = (key: string) => {
 };
 
 export enum Priority {
-  NONE = "NONE",
-  LOW = "LOW",
-  MEDIUM = "MEDIUM",
-  HIGH = "HIGH",
-  URGENT = "URGENT",
+  None = 'NONE',
+  Low = 'LOW',
+  Medium = 'MEDIUM',
+  High = 'HIGH',
+  Urgent = 'URGENT',
 }
 
 export const priorityEnumSchema = z.nativeEnum(Priority);
@@ -28,55 +28,55 @@ export type PriorityEnum = z.infer<typeof priorityEnumSchema>;
 
 export const priorityOrderValues: Record<Priority, string> = {
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  URGENT: "1",
+  URGENT: '1',
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  HIGH: "2",
+  HIGH: '2',
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  MEDIUM: "3",
+  MEDIUM: '3',
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  LOW: "4",
+  LOW: '4',
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  NONE: "5",
+  NONE: '5',
 };
 
 export enum Status {
-  BACKLOG = "BACKLOG",
-  TODO = "TODO",
-  IN_PROGRESS = "IN_PROGRESS",
-  DONE = "DONE",
-  CANCELED = "CANCELED",
+  Backlog = 'BACKLOG',
+  Todo = 'TODO',
+  InProgress = 'IN_PROGRESS',
+  Done = 'DONE',
+  Canceled = 'CANCELED',
 }
 
 export const statusOrderValues: Record<Status, string> = {
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  BACKLOG: "1",
+  BACKLOG: '1',
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  TODO: "2",
+  TODO: '2',
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  IN_PROGRESS: "3",
+  IN_PROGRESS: '3',
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  DONE: "4",
+  DONE: '4',
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  CANCELED: "5",
+  CANCELED: '5',
 };
 
 export const statusEnumSchema = z.nativeEnum(Status);
 export type StatusEnum = z.infer<typeof statusEnumSchema>;
 
 export enum Order {
-  CREATED = "CREATED",
-  MODIFIED = "MODIFIED",
-  STATUS = "STATUS",
-  PRIORITY = "PRIORITY",
-  KANBAN = "KANBAN",
+  Created = 'CREATED',
+  Modified = 'MODIFIED',
+  Status = 'STATUS',
+  Priority = 'PRIORITY',
+  Kanban = 'KANBAN',
 }
 
 export const orderEnumSchema = z.nativeEnum(Order);
 export type OrderEnum = z.infer<typeof orderEnumSchema>;
 
 export enum Filter {
-  PRIORITY,
-  STATUS,
+  Priority,
+  Status,
 }
 
 const filterEnumSchema = z.nativeEnum(Filter);
@@ -118,7 +118,7 @@ export type IssueUpdateWithID = Immutable<{
 
 export async function getIssue(
   tx: ReadTransaction,
-  id: string
+  id: string,
 ): Promise<Issue | undefined> {
   const val = await tx.get(issueKey(id));
   if (val === undefined) {
@@ -132,14 +132,14 @@ export async function getIssue(
 
 export async function putIssue(
   tx: WriteTransaction,
-  issue: Issue
+  issue: Issue,
 ): Promise<void> {
   await tx.set(issueKey(issue.id), issue);
 }
 
 export function issueFromKeyAndValue(
   key: string,
-  value: ReadonlyJSONValue
+  value: ReadonlyJSONValue,
 ): Issue {
   return {
     ...issueValueSchema.parse(value),
@@ -161,7 +161,7 @@ export const getDescriptionIssueId = (key: string) => {
 export type Description = Immutable<z.TypeOf<typeof descriptionSchema>>;
 export async function getIssueDescription(
   tx: ReadTransaction,
-  issueID: string
+  issueID: string,
 ): Promise<Description | undefined> {
   const entry = await tx.get(descriptionKey(issueID));
   if (entry === undefined) {
@@ -173,7 +173,7 @@ export async function getIssueDescription(
 export async function putIssueDescription(
   tx: WriteTransaction,
   issueID: string,
-  description: Description
+  description: Description,
 ): Promise<void> {
   await tx.set(descriptionKey(issueID), description);
 }
@@ -185,7 +185,7 @@ export const commentIDs = (key: string) => {
   if (!key.startsWith(COMMENT_KEY_PREFIX)) {
     throw new Error(`Invalid comment key: ${key}`);
   }
-  const ids = key.substring(COMMENT_KEY_PREFIX.length).split("/");
+  const ids = key.substring(COMMENT_KEY_PREFIX.length).split('/');
   if (ids.length !== 2) {
     throw new Error(`Invalid comment key: ${key}`);
   }
@@ -212,10 +212,10 @@ export const commentValueSchema = commentSchema.omit({
 
 export async function getIssueComments(
   tx: ReadTransaction,
-  issueID: string
+  issueID: string,
 ): Promise<Comment[]> {
   const entries = await tx
-    .scan({ prefix: COMMENT_KEY_PREFIX + issueID })
+    .scan({prefix: COMMENT_KEY_PREFIX + issueID})
     .entries()
     .toArray();
   return entries.map(([key, val]) => {
@@ -230,7 +230,7 @@ export async function getIssueComments(
 
 export async function putIssueComment(
   tx: WriteTransaction,
-  comment: Comment
+  comment: Comment,
 ): Promise<void> {
   await tx.set(commentKey(comment.issueID, comment.id), comment);
 }
@@ -241,8 +241,8 @@ export function reverseTimestampSortKey(timestamp: number, id: string): string {
   return (
     Math.floor(Number.MAX_SAFE_INTEGER - timestamp)
       .toString()
-      .padStart(REVERSE_TIMESTAMP_LENGTH, "0") +
-    "-" +
+      .padStart(REVERSE_TIMESTAMP_LENGTH, '0') +
+    '-' +
     id
   );
 }

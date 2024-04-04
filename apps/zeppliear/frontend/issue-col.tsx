@@ -1,16 +1,16 @@
-import StatusIcon from "./status-icon";
-import React, { CSSProperties, memo, useMemo } from "react";
+import StatusIcon from './status-icon';
+import React, {CSSProperties, memo, useMemo} from 'react';
 import {
   Draggable,
   DraggableProvided,
   Droppable,
   DroppableProvided,
   DroppableStateSnapshot,
-} from "react-beautiful-dnd";
-import type { Issue, Priority, Status } from "./issue";
-import IssueItem from "./issue-item";
-import { FixedSizeList } from "react-window";
-import AutoSizer from "react-virtualized-auto-sizer";
+} from 'react-beautiful-dnd';
+import type {Issue, Priority, Status} from './issue';
+import IssueItem from './issue-item';
+import {FixedSizeList} from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
 
 interface Props {
   status: Status;
@@ -30,7 +30,7 @@ interface RowProps {
   style: CSSProperties;
 }
 
-const RowPreMemo = ({ data, index, style }: RowProps) => {
+function RowPreMemo({data, index, style}: RowProps) {
   const issue = data.issues[index];
   // We are rendering an extra item for the placeholder.
   // To do this we increased our data set size to include one 'fake' item.
@@ -40,29 +40,29 @@ const RowPreMemo = ({ data, index, style }: RowProps) => {
 
   return (
     <Draggable draggableId={issue.id} index={index} key={issue.id}>
-      {(provided: DraggableProvided) => {
-        return (
-          <div
-            {...provided.draggableProps}
-            {...provided.dragHandleProps}
-            style={{
-              ...provided.draggableProps.style,
-              ...style,
-            }}
-            ref={provided.innerRef}
-          >
-            <IssueItem
-              issue={issue}
-              key={index}
-              onChangePriority={data.onChangePriority}
-              onOpenDetail={data.onOpenDetail}
-            />
-          </div>
-        );
-      }}
+      {(provided: DraggableProvided) => (
+        <div
+          {...provided.draggableProps}
+          {...provided.dragHandleProps}
+          style={{
+            ...provided.draggableProps.style,
+            ...style,
+          }}
+          ref={provided.innerRef}
+        >
+          <IssueItem
+            issue={issue}
+            key={index}
+            onChangePriority={data.onChangePriority}
+            onOpenDetail={data.onOpenDetail}
+          />
+        </div>
+      )}
     </Draggable>
   );
-};
+}
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
 const Row = memo(RowPreMemo);
 
 function IssueCol({
@@ -78,7 +78,7 @@ function IssueCol({
       onChangePriority,
       onOpenDetail,
     }),
-    [issues, onChangePriority, onOpenDetail]
+    [issues, onChangePriority, onOpenDetail],
   );
   const statusIcon = <StatusIcon className="flex-shrink-0" status={status} />;
   return (
@@ -121,20 +121,18 @@ function IssueCol({
               : issues.length;
             return (
               <AutoSizer>
-                {({ height, width }) => {
-                  return (
-                    <FixedSizeList
-                      height={height}
-                      itemCount={itemCount}
-                      itemSize={100}
-                      width={width}
-                      outerRef={provided.innerRef}
-                      itemData={itemData}
-                    >
-                      {Row}
-                    </FixedSizeList>
-                  );
-                }}
+                {({height, width}) => (
+                  <FixedSizeList
+                    height={height}
+                    itemCount={itemCount}
+                    itemSize={100}
+                    width={width}
+                    outerRef={provided.innerRef}
+                    itemData={itemData}
+                  >
+                    {Row}
+                  </FixedSizeList>
+                )}
               </AutoSizer>
             );
           }}

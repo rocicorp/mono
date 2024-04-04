@@ -1,15 +1,15 @@
-import ArrowDropDown from "@mui/icons-material/ArrowDropDown";
-import ArrowRight from "@mui/icons-material/ArrowRight";
-import * as React from "react";
-import { useState } from "react";
+import ArrowDropDown from '@mui/icons-material/ArrowDropDown';
+import ArrowRight from '@mui/icons-material/ArrowRight';
+import * as React from 'react';
+import {useState} from 'react';
 
 interface Props {
   title: string;
   children: React.ReactNode;
 }
-function ItemGroup({ title, children }: Props) {
+function ItemGroup({title, children}: Props) {
   const [itemsVisible, setItemsVisible] = useState(true);
-
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   const Icon = itemsVisible ? ArrowDropDown : ArrowRight;
   return (
     <div className="flex flex-col w-full text-sm">

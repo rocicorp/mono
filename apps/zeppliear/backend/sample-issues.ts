@@ -1,17 +1,17 @@
-import { Priority, Status } from "../frontend/issue";
-import type { SampleData } from "./data";
-import { generateNKeysBetween } from "fractional-indexing";
-import { sortBy } from "lodash";
+import {Priority, Status} from '../frontend/issue';
+import type {SampleData} from './data';
+import {generateNKeysBetween} from 'fractional-indexing';
+import {sortBy} from 'lodash';
 
 export async function getReactSampleData(): Promise<SampleData> {
-  const issuesDefault = (await import("./issues-react.js.gz")).default;
+  const issuesDefault = (await import('./issues-react.js.gz')).default;
   const sortedIssues = sortBy(
     issuesDefault,
-    (reactIssue) =>
+    reactIssue =>
       Number.MAX_SAFE_INTEGER -
       Date.parse(reactIssue.updated_at) +
-      "-" +
-      reactIssue.number
+      '-' +
+      reactIssue.number,
   );
 
   const issuesCount = issuesDefault.length;
@@ -27,21 +27,21 @@ export async function getReactSampleData(): Promise<SampleData> {
       creator: reactIssue.creator_user_login,
       kanbanOrder: kanbanOrderKeys[idx],
     },
-    description: reactIssue.body || "",
+    description: reactIssue.body || '',
     comments: [],
   }));
 
-  const comments = (await import("./comments-react.js.gz")).default.map(
-    (reactComment) => ({
+  const comments = (await import('./comments-react.js.gz')).default.map(
+    reactComment => ({
       id: reactComment.comment_id,
       issueID: reactComment.number.toString(),
       created: Date.parse(reactComment.created_at),
-      body: reactComment.body || "",
+      body: reactComment.body || '',
       creator: reactComment.creator_user_login,
-    })
+    }),
   );
   for (const comment of comments) {
-    const issue = issues.find((issue) => issue.issue.id === comment.issueID);
+    const issue = issues.find(issue => issue.issue.id === comment.issueID);
     if (issue) {
       issue.comments.push(comment);
     }
@@ -52,17 +52,17 @@ export async function getReactSampleData(): Promise<SampleData> {
   const multiplied: SampleData = [];
   for (let i = 0; i < 1; i++) {
     multiplied.push(
-      ...issues.map((issue) => ({
+      ...issues.map(issue => ({
         ...issue,
         issue: {
           ...issue.issue,
-          id: issue.issue.id + "-" + i,
+          id: issue.issue.id + '-' + i,
         },
-        comments: issue.comments.map((comment) => ({
+        comments: issue.comments.map(comment => ({
           ...comment,
-          issueID: comment.issueID + "-" + i,
+          issueID: comment.issueID + '-' + i,
         })),
-      }))
+      })),
     );
   }
 
@@ -71,10 +71,11 @@ export async function getReactSampleData(): Promise<SampleData> {
 
 function getStatus({
   number,
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   created_at,
 }: {
   number: number;
-  state: "open" | "closed";
+  state: 'open' | 'closed';
   // eslint-disable-next-line @typescript-eslint/naming-convention
   created_at: string;
 }): Status {
@@ -85,28 +86,29 @@ function getStatus({
     switch (stableRandom % 3) {
       case 0:
       case 1:
-        return Status.DONE;
+        return Status.Done;
       case 2:
-        return Status.CANCELED;
+        return Status.Canceled;
     }
   }
   switch (stableRandom % 6) {
     // 2/6 backlog, 3/6 todo, 1/6 in progress
     case 0:
     case 1:
-      return Status.BACKLOG;
+      return Status.Backlog;
     case 2:
     case 3:
     case 4:
-      return Status.TODO;
+      return Status.Todo;
     case 5:
-      return Status.IN_PROGRESS;
+      return Status.InProgress;
   }
-  return Status.TODO;
+  return Status.Todo;
 }
 
 function getPriority({
   number,
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   created_at,
 }: {
   number: number;
@@ -117,20 +119,20 @@ function getPriority({
   // bell curve priorities
   switch (stableRandom % 10) {
     case 0:
-      return Priority.NONE;
+      return Priority.None;
     case 1:
     case 2:
-      return Priority.LOW;
+      return Priority.Low;
     case 3:
     case 4:
     case 5:
     case 6:
-      return Priority.MEDIUM;
+      return Priority.Medium;
     case 7:
     case 8:
-      return Priority.HIGH;
+      return Priority.High;
     case 9:
-      return Priority.URGENT;
+      return Priority.Urgent;
   }
-  return Priority.NONE;
+  return Priority.None;
 }

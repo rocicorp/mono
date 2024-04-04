@@ -1,11 +1,11 @@
-import MenuIcon from "./assets/icons/menu.svg";
-import React, { memo } from "react";
+import MenuIcon from './assets/icons/menu.svg';
+import React, {memo} from 'react';
 
-import SortOrderMenu from "./sort-order-menu";
-import { queryTypes, useQueryState } from "next-usequerystate";
-import FilterMenu from "./filter-menu";
-import { Order, Priority, Status } from "./issue";
-import { noop } from "lodash";
+import SortOrderMenu from './sort-order-menu';
+import {queryTypes, useQueryState} from 'next-usequerystate';
+import FilterMenu from './filter-menu';
+import {Order, Priority, Status} from './issue';
+import {noop} from 'lodash';
 
 interface Props {
   title: string;
@@ -22,20 +22,20 @@ interface FilterStatusProps {
 }
 
 const displayStrings: Record<Priority | Status, string> = {
-  [Priority.NONE]: "None",
-  [Priority.LOW]: "Low",
-  [Priority.MEDIUM]: "Medium",
-  [Priority.HIGH]: "High",
-  [Priority.URGENT]: "Urgent",
+  [Priority.None]: 'None',
+  [Priority.Low]: 'Low',
+  [Priority.Medium]: 'Medium',
+  [Priority.High]: 'High',
+  [Priority.Urgent]: 'Urgent',
 
-  [Status.BACKLOG]: "Backlog",
-  [Status.TODO]: "Todo",
-  [Status.IN_PROGRESS]: "In Progress",
-  [Status.DONE]: "Done",
-  [Status.CANCELED]: "Canceled",
+  [Status.Backlog]: 'Backlog',
+  [Status.Todo]: 'Todo',
+  [Status.InProgress]: 'In Progress',
+  [Status.Done]: 'Done',
+  [Status.Canceled]: 'Canceled',
 };
 
-const FilterStatus = ({ filter, onDelete, label }: FilterStatusProps) => {
+function FilterStatus({filter, onDelete, label}: FilterStatusProps) {
   if (!filter || filter.length === 0) return null;
   return (
     <div className="flex items-center pr-4 space-x-[1px]">
@@ -43,7 +43,7 @@ const FilterStatus = ({ filter, onDelete, label }: FilterStatusProps) => {
         {label} is
       </span>
       <span className="px-1 text-gray-50 bg-gray-850 ">
-        {filter.map((f) => displayStrings[f]).join(", ")}
+        {filter.map(f => displayStrings[f]).join(', ')}
       </span>
       <span
         className="px-1 text-gray-50 bg-gray-850 rounded-r cursor-pointer"
@@ -53,32 +53,32 @@ const FilterStatus = ({ filter, onDelete, label }: FilterStatusProps) => {
       </span>
     </div>
   );
-};
+}
 
-const TopFilter = ({
+function TopFilter({
   title,
   onToggleMenu = noop,
   filteredIssuesCount,
   issuesCount,
   showSortOrderMenu,
-}: Props) => {
+}: Props) {
   const [orderBy, setOrderByParam] = useQueryState(
-    "orderBy",
+    'orderBy',
     queryTypes
       .stringEnum<Order>(Object.values(Order))
-      .withDefault(Order.MODIFIED)
+      .withDefault(Order.Modified),
   );
   const [statusFilters, setStatusFilterByParam] = useQueryState(
-    "statusFilter",
+    'statusFilter',
     queryTypes.array<Status>(
-      queryTypes.stringEnum<Status>(Object.values(Status))
-    )
+      queryTypes.stringEnum<Status>(Object.values(Status)),
+    ),
   );
   const [priorityFilters, setPriorityFilterByParam] = useQueryState(
-    "priorityFilter",
+    'priorityFilter',
     queryTypes.array<Priority>(
-      queryTypes.stringEnum<Priority>(Object.values(Priority))
-    )
+      queryTypes.stringEnum<Priority>(Object.values(Priority)),
+    ),
   );
 
   return (
@@ -101,7 +101,7 @@ const TopFilter = ({
             <span>{issuesCount}</span>
           )}
           <FilterMenu
-            onSelectPriority={async (priority) => {
+            onSelectPriority={async priority => {
               const prioritySet = new Set(priorityFilters);
               if (prioritySet.has(priority)) {
                 prioritySet.delete(priority);
@@ -109,10 +109,10 @@ const TopFilter = ({
                 prioritySet.add(priority);
               }
               await setPriorityFilterByParam(
-                prioritySet.size === 0 ? null : [...prioritySet]
+                prioritySet.size === 0 ? null : [...prioritySet],
               );
             }}
-            onSelectStatus={async (status) => {
+            onSelectStatus={async status => {
               const statusSet = new Set(statusFilters);
               if (statusSet.has(status)) {
                 statusSet.delete(status);
@@ -120,7 +120,7 @@ const TopFilter = ({
                 statusSet.add(status);
               }
               await setStatusFilterByParam(
-                statusSet.size === 0 ? null : [...statusSet]
+                statusSet.size === 0 ? null : [...statusSet],
               );
             }}
           />
@@ -130,7 +130,7 @@ const TopFilter = ({
         <div className="flex items-center">
           {showSortOrderMenu && (
             <SortOrderMenu
-              onSelect={(orderBy) => setOrderByParam(orderBy)}
+              onSelect={orderBy => setOrderByParam(orderBy)}
               order={orderBy}
             />
           )}
@@ -153,6 +153,6 @@ const TopFilter = ({
       ) : null}
     </>
   );
-};
+}
 
 export default memo(TopFilter);

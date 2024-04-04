@@ -1,11 +1,11 @@
-import CloseIcon from "./assets/icons/close.svg";
-import Modal from "./modal";
-import React, { useState } from "react";
-import { Description, Issue, Priority, Status } from "./issue";
-import { nanoid } from "nanoid";
+import CloseIcon from './assets/icons/close.svg';
+import Modal from './modal';
+import React, {useState} from 'react';
+import {Description, Issue, Priority, Status} from './issue';
+import {nanoid} from 'nanoid';
 
-import PriorityMenu from "./priority-menu";
-import StatusMenu from "./status-menu";
+import PriorityMenu from './priority-menu';
+import StatusMenu from './status-menu';
 
 // import { showInfo, showWarning } from 'utils/notification';
 
@@ -13,23 +13,19 @@ interface Props {
   isOpen: boolean;
   onDismiss?: () => void;
   onCreateIssue: (
-    i: Omit<Issue, "kanbanOrder">,
-    description: Description
+    i: Omit<Issue, 'kanbanOrder'>,
+    description: Description,
   ) => void;
 }
 
-export default function IssueModal({
-  isOpen,
-  onDismiss,
-  onCreateIssue,
-}: Props) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState(Priority.NONE);
-  const [status, setStatus] = useState(Status.BACKLOG);
+export default function IssueModal({isOpen, onDismiss, onCreateIssue}: Props) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState(Priority.None);
+  const [status, setStatus] = useState(Status.Backlog);
 
   const handleSubmit = () => {
-    if (title === "") {
+    if (title === '') {
       //   showWarning("Please enter a title before submiting", "Title required");
       return;
     }
@@ -41,19 +37,19 @@ export default function IssueModal({
         status,
         modified: new Date().getTime(),
         created: new Date().getTime(),
-        creator: "Me",
+        creator: 'Me',
       },
-      description
+      description,
     );
     if (onDismiss) onDismiss();
     resetModalState();
   };
 
   const resetModalState = () => {
-    setTitle("");
-    setDescription("");
-    setPriority(Priority.NONE);
-    setStatus(Status.BACKLOG);
+    setTitle('');
+    setDescription('');
+    setPriority(Priority.None);
+    setStatus(Status.Backlog);
   };
 
   const handleClickCloseBtn = () => {
@@ -84,7 +80,7 @@ export default function IssueModal({
             className="w-full ml-1.5 text-lg font-semibold placeholder-white  border-none h-7 focus:outline-none bg-gray-900 text-white"
             placeholder="Issue title"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={e => setTitle(e.target.value)}
           />
         </div>
 
@@ -92,7 +88,7 @@ export default function IssueModal({
         <div className="flex w-full px-4">
           <textarea
             rows={5}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={e => setDescription(e.target.value)}
             value={description}
             className="w-full mt-4 ml-5 font-normal border-none appearance-none min-h-12 text-md focus:outline-none placeholder-white bg-gray-900 text-white"
             placeholder="Add description..."

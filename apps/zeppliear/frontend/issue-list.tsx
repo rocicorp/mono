@@ -5,11 +5,11 @@ import React, {
   useEffect,
   useMemo,
   useRef,
-} from "react";
-import IssueRow from "./issue-row";
-import AutoSizer from "react-virtualized-auto-sizer";
-import { FixedSizeList } from "react-window";
-import type { Issue, IssueUpdate, Priority, Status } from "./issue";
+} from 'react';
+import IssueRow from './issue-row';
+import AutoSizer from 'react-virtualized-auto-sizer';
+import {FixedSizeList} from 'react-window';
+import type {Issue, IssueUpdate, Priority, Status} from './issue';
 
 interface Props {
   onUpdateIssues: (issueUpdates: IssueUpdate[]) => void;
@@ -27,7 +27,7 @@ type ListData = {
 
 const itemKey = (index: number, data: ListData) => data.issues[index].id;
 
-const RawRow = ({
+function RawRow({
   data,
   index,
   style,
@@ -35,20 +35,23 @@ const RawRow = ({
   data: ListData;
   index: number;
   style: CSSProperties;
-}) => (
-  <div style={style}>
-    <IssueRow
-      issue={data.issues[index]}
-      onChangePriority={data.handleChangePriority}
-      onChangeStatus={data.handleChangeStatus}
-      onOpenDetail={data.onOpenDetail}
-    />
-  </div>
-);
+}) {
+  return (
+    <div style={style}>
+      <IssueRow
+        issue={data.issues[index]}
+        onChangePriority={data.handleChangePriority}
+        onChangeStatus={data.handleChangeStatus}
+        onOpenDetail={data.onOpenDetail}
+      />
+    </div>
+  );
+}
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 const Row = memo(RawRow);
 
-const IssueList = ({ onUpdateIssues, onOpenDetail, issues, view }: Props) => {
+function IssueList({onUpdateIssues, onOpenDetail, issues, view}: Props) {
   const fixedSizeListRef = useRef<FixedSizeList>(null);
   useEffect(() => {
     fixedSizeListRef.current?.scrollTo(0);
@@ -59,11 +62,11 @@ const IssueList = ({ onUpdateIssues, onOpenDetail, issues, view }: Props) => {
       onUpdateIssues([
         {
           issue,
-          issueChanges: { priority },
+          issueChanges: {priority},
         },
       ]);
     },
-    [onUpdateIssues]
+    [onUpdateIssues],
   );
 
   const handleChangeStatus = useCallback(
@@ -71,22 +74,22 @@ const IssueList = ({ onUpdateIssues, onOpenDetail, issues, view }: Props) => {
       onUpdateIssues([
         {
           issue,
-          issueChanges: { status },
+          issueChanges: {status},
         },
       ]);
     },
-    [onUpdateIssues]
+    [onUpdateIssues],
   );
 
   const itemData = useMemo(
-    () => ({ issues, handleChangePriority, handleChangeStatus, onOpenDetail }),
-    [issues, handleChangePriority, handleChangeStatus, onOpenDetail]
+    () => ({issues, handleChangePriority, handleChangeStatus, onOpenDetail}),
+    [issues, handleChangePriority, handleChangeStatus, onOpenDetail],
   );
 
   return (
     <div className="flex flex-col flex-grow overflow-auto">
       <AutoSizer>
-        {({ height, width }) => (
+        {({height, width}) => (
           <FixedSizeList
             ref={fixedSizeListRef}
             height={height}
@@ -103,6 +106,6 @@ const IssueList = ({ onUpdateIssues, onOpenDetail, issues, view }: Props) => {
       </AutoSizer>
     </div>
   );
-};
+}
 
 export default memo(IssueList);

@@ -1,18 +1,18 @@
-import { transact } from "../../backend/pg";
+import {transact} from '../../backend/pg';
 import {
   createDatabase,
   getLastMutationIDs,
   getVersion,
   setLastMutationIDs,
   setVersion,
-} from "../../backend/data";
-import type { NextApiRequest, NextApiResponse } from "next";
-import { ReplicacheTransaction } from "../../backend/replicache-transaction";
-import { getSyncOrder } from "../../backend/sync-order";
-import { mutators } from "../../frontend/mutators";
-import { z } from "zod";
-import type { MutatorDefs } from "replicache";
-import Pusher from "pusher";
+} from '../../backend/data';
+import type {NextApiRequest, NextApiResponse} from 'next';
+import {ReplicacheTransaction} from '../../backend/replicache-transaction';
+import {getSyncOrder} from '../../backend/sync-order';
+import {mutators} from '../../frontend/mutators';
+import {z} from 'zod';
+import type {MutatorDefs} from 'replicache';
+import Pusher from 'pusher';
 
 // TODO: Either generate schema from mutator types, or vice versa, to tighten this.
 // See notes in bug: https://github.com/rocicorp/replidraw/issues/47
@@ -37,11 +37,11 @@ const pushRequestV1Schema = z.object({
 const pushRequestSchema = z.union([pushRequestV0Schema, pushRequestV1Schema]);
 
 const push = async (req: NextApiRequest, res: NextApiResponse) => {
-  console.log("Processing push", JSON.stringify(req.body, null, ""));
+  console.log('Processing push', JSON.stringify(req.body, null, ''));
 
-  const spaceID = req.query["spaceID"]?.toString() ?? "";
+  const spaceID = req.query['spaceID']?.toString() ?? '';
   const push = pushRequestSchema.parse(req.body);
-  const { pushVersion } = push;
+  const {pushVersion} = push;
 
   // NOTE:
   // If pushVersion === 0, it is a user that is using an old client pre Replicache 13
@@ -49,15 +49,15 @@ const push = async (req: NextApiRequest, res: NextApiResponse) => {
   if (pushVersion === 0) {
     res.status(200);
     res.json({
-      error: "ClientStateNotFound",
+      error: 'ClientStateNotFound',
     });
     res.end();
     return;
   }
-  const { clientGroupID } = push;
+  const {clientGroupID} = push;
 
   const t0 = Date.now();
-  const result = await transact(async (executor) => {
+  const result = await transact(async executor => {
     await createDatabase(executor);
 
     const prevVersion = await getVersion(executor, spaceID);
@@ -65,26 +65,26 @@ const push = async (req: NextApiRequest, res: NextApiResponse) => {
       return undefined;
     }
     const nextVersion = prevVersion + 1;
-    const clientIDs = [...new Set(push.mutations.map((m) => m.clientID))];
+    const clientIDs = [...new Set(push.mutations.map(m => m.clientID))];
 
     const lastMutationIDs = await getLastMutationIDs(executor, clientIDs);
 
-    console.log(JSON.stringify({ prevVersion, nextVersion, lastMutationIDs }));
+    console.log(JSON.stringify({prevVersion, nextVersion, lastMutationIDs}));
 
     for (let i = 0; i < push.mutations.length; i++) {
       const mutation = push.mutations[i];
-      const { clientID } = mutation;
+      const {clientID} = mutation;
       const lastMutationID = lastMutationIDs[clientID];
       if (lastMutationID === undefined) {
         throw new Error(
-          "invalid state - lastMutationID not found for client: " + clientID
+          'invalid state - lastMutationID not found for client: ' + clientID,
         );
       }
       const expectedMutationID = lastMutationID + 1;
 
       if (mutation.id < expectedMutationID) {
         console.log(
-          `Mutation ${mutation.id} has already been processed - skipping`
+          `Mutation ${mutation.id} has already been processed - skipping`,
         );
         continue;
       }
@@ -98,9 +98,9 @@ const push = async (req: NextApiRequest, res: NextApiResponse) => {
         clientID,
         nextVersion,
         mutation.id,
-        getSyncOrder
+        getSyncOrder,
       );
-      console.log("Processing mutation:", JSON.stringify(mutation, null, ""));
+      console.log('Processing mutation:', JSON.stringify(mutation, null, ''));
 
       const t1 = Date.now();
       const mutator = (mutators as MutatorDefs)[mutation.name];
@@ -114,17 +114,17 @@ const push = async (req: NextApiRequest, res: NextApiResponse) => {
       } catch (e) {
         console.error(
           `Error executing mutator: ${JSON.stringify(mutation)}`,
-          e
+          e,
         );
       }
       lastMutationIDs[clientID] = expectedMutationID;
-      console.log("Processed mutation in", Date.now() - t1);
+      console.log('Processed mutation in', Date.now() - t1);
       await Promise.all([
         setLastMutationIDs(
           executor,
           clientGroupID,
           lastMutationIDs,
-          nextVersion
+          nextVersion,
         ),
         setVersion(executor, spaceID, nextVersion),
         tx.flush(),
@@ -139,7 +139,7 @@ const push = async (req: NextApiRequest, res: NextApiResponse) => {
     return;
   }
 
-  console.log("Processed all mutations in", Date.now() - t0);
+  console.log('Processed all mutations in', Date.now() - t0);
 
   if (
     process.env.NEXT_PUBLIC_PUSHER_APP_ID &&
@@ -157,10 +157,10 @@ const push = async (req: NextApiRequest, res: NextApiResponse) => {
       useTLS: true,
     });
 
-    await pusher.trigger("default", "poke", {});
-    console.log("Poke took", Date.now() - startPoke);
+    await pusher.trigger('default', 'poke', {});
+    console.log('Poke took', Date.now() - startPoke);
   } else {
-    console.log("Not poking because Pusher is not configured");
+    console.log('Not poking because Pusher is not configured');
   }
   res.status(200).json({});
 };

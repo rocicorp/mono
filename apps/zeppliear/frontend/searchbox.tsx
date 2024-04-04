@@ -1,9 +1,9 @@
-import React, { ChangeEventHandler, useState, RefObject, useRef } from "react";
-import SearchIcon from "./assets/icons/search.svg";
-import classnames from "classnames";
-import { usePopper } from "react-popper";
-import { useClickOutside } from "./hooks/useClickOutside";
-import { noop } from "lodash";
+import React, {ChangeEventHandler, useState, RefObject, useRef} from 'react';
+import SearchIcon from './assets/icons/search.svg';
+import classnames from 'classnames';
+import {usePopper} from 'react-popper';
+import {useClickOutside} from './hooks/useClickOutside';
+import {noop} from 'lodash';
 
 interface Props {
   placeholder: string;
@@ -13,7 +13,7 @@ interface Props {
 }
 
 function SearchBox({
-  placeholder = "Search",
+  placeholder = 'Search',
   onChange = noop,
   className,
 }: Props) {
@@ -23,12 +23,12 @@ function SearchBox({
 
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>;
 
-  const { styles, attributes, update } = usePopper(alertRef, popperRef, {
-    placement: "top",
+  const {styles, attributes, update} = usePopper(alertRef, popperRef, {
+    placement: 'top',
   });
 
-  const handleDropdownClick = () => {
-    update && update();
+  const handleDropdownClick = async () => {
+    update && (await update());
     setFocus(true);
     setAlertVisible(!alertVisible);
   };
@@ -41,7 +41,7 @@ function SearchBox({
 
   const [focus, setFocus] = useState(false);
   return (
-    <div className={classnames("relative", className)} ref={ref}>
+    <div className={classnames('relative', className)} ref={ref}>
       <input
         ref={setAlertRef}
         type="search"
@@ -52,16 +52,16 @@ function SearchBox({
         className="w-full pl-8 pr-6 text-sm font-medium placeholder-white text-white bg-gray-900 border-gray-850 border-transparent rounded h-7 ring-0 focus:outline-none"
       />
       <SearchIcon
-        className={classnames("absolute w-3.5 h-3.5 text-white left-2 top-2", {
+        className={classnames('absolute w-3.5 h-3.5 text-white left-2 top-2', {
           // eslint-disable-next-line @typescript-eslint/naming-convention
-          "text-gray-300": focus,
+          'text-gray-300': focus,
         })}
       />
       <div
         ref={setPopperRef}
         style={{
           ...styles.popper,
-          display: alertVisible ? "" : "none",
+          display: alertVisible ? '' : 'none',
         }}
         {...attributes.popper}
         className="cursor-default bg-blue rounded shadow-modal z-100 w-34 p-2 mt-2"

@@ -1,16 +1,16 @@
 export function formatDate(
   date?: Date | undefined,
-  includeYear = false
+  includeYear = false,
 ): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: includeYear ? "numeric" : undefined,
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: includeYear ? 'numeric' : undefined,
   }).format(date);
 }
 
 export function timeAgo(
-  timestamp?: string | number | Date
+  timestamp?: string | number | Date,
 ): string | undefined {
   const second = 1000;
   const minute = 60 * 1000;
@@ -21,7 +21,7 @@ export function timeAgo(
   if (!timestamp) return undefined;
 
   if (isNaN(new Date(timestamp).getTime())) {
-    throw new Error("Invalid timestamp");
+    throw new Error('Invalid timestamp');
   }
 
   const difference = new Date().getTime() - new Date(timestamp).getTime();

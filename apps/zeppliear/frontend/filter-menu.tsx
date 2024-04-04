@@ -1,30 +1,30 @@
-import React, { RefObject, useRef, useState } from "react";
-import { usePopper } from "react-popper";
-import { Filter, Priority, Status } from "./issue";
-import { useClickOutside } from "./hooks/useClickOutside";
-import SignalStrongIcon from "./assets/icons/signal-strong.svg";
-import TodoIcon from "./assets/icons/circle.svg";
-import { statusOpts } from "./priority-menu";
-import { statuses } from "./status-menu";
+import React, {RefObject, useRef, useState} from 'react';
+import {usePopper} from 'react-popper';
+import {Filter, Priority, Status} from './issue';
+import {useClickOutside} from './hooks/useClickOutside';
+import SignalStrongIcon from './assets/icons/signal-strong.svg';
+import TodoIcon from './assets/icons/circle.svg';
+import {statusOpts} from './priority-menu';
+import {statuses} from './status-menu';
 interface Props {
   onSelectStatus: (filter: Status) => void;
   onSelectPriority: (filter: Priority) => void;
 }
 
-const FilterMenu = ({ onSelectStatus, onSelectPriority }: Props) => {
+function FilterMenu({onSelectStatus, onSelectPriority}: Props) {
   const [filterRef, setFilterRef] = useState<HTMLButtonElement | null>(null);
   const [popperRef, setPopperRef] = useState<HTMLDivElement | null>(null);
   const [filter, setFilter] = useState<Filter | null>(null);
   const [filterDropDownVisible, setFilterDropDownVisible] = useState(false);
 
-  const { styles, attributes, update } = usePopper(filterRef, popperRef, {
-    placement: "bottom-start",
+  const {styles, attributes, update} = usePopper(filterRef, popperRef, {
+    placement: 'bottom-start',
   });
 
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>;
 
-  const handleDropdownClick = () => {
-    update && update();
+  const handleDropdownClick = async () => {
+    update && (await update());
     setFilterDropDownVisible(!filterDropDownVisible);
   };
 
@@ -36,16 +36,24 @@ const FilterMenu = ({ onSelectStatus, onSelectPriority }: Props) => {
   });
 
   const filterBys = [
-    [SignalStrongIcon, Filter.PRIORITY, "Priority"],
-    [TodoIcon, Filter.STATUS, "Status"],
+    [SignalStrongIcon, Filter.Priority, 'Priority'],
+    [TodoIcon, Filter.Status, 'Status'],
   ];
 
   //
   const options = (filter: Filter | null) => {
     switch (filter) {
-      case Filter.PRIORITY:
-        return statusOpts.map(([Icon, label, priority], idx) => {
-          return (
+      case Filter.Priority:
+        return statusOpts.map(
+          (
+            [
+              // eslint-disable-next-line @typescript-eslint/naming-convention
+              Icon,
+              label,
+              priority,
+            ],
+            idx,
+          ) => (
             <div
               key={idx}
               className="flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
@@ -58,12 +66,20 @@ const FilterMenu = ({ onSelectStatus, onSelectPriority }: Props) => {
               <Icon className="mr-4" />
               {label}
             </div>
-          );
-        });
+          ),
+        );
 
-      case Filter.STATUS:
-        return statuses.map(([Icon, status, label], idx) => {
-          return (
+      case Filter.Status:
+        return statuses.map(
+          (
+            [
+              // eslint-disable-next-line @typescript-eslint/naming-convention
+              Icon,
+              status,
+              label,
+            ],
+            idx,
+          ) => (
             <div
               key={idx}
               className="flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
@@ -76,11 +92,19 @@ const FilterMenu = ({ onSelectStatus, onSelectPriority }: Props) => {
               <Icon className="mr-4" />
               {label}
             </div>
-          );
-        });
+          ),
+        );
       default:
-        return filterBys.map(([Icon, filter, label], idx) => {
-          return (
+        return filterBys.map(
+          (
+            [
+              // eslint-disable-next-line @typescript-eslint/naming-convention
+              Icon,
+              filter,
+              label,
+            ],
+            idx,
+          ) => (
             <div
               key={idx}
               className="flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
@@ -91,8 +115,8 @@ const FilterMenu = ({ onSelectStatus, onSelectPriority }: Props) => {
               <Icon className="mr-4" />
               {label}
             </div>
-          );
-        });
+          ),
+        );
     }
   };
 
@@ -109,7 +133,7 @@ const FilterMenu = ({ onSelectStatus, onSelectPriority }: Props) => {
         ref={setPopperRef}
         style={{
           ...styles.popper,
-          display: filterDropDownVisible ? "" : "none",
+          display: filterDropDownVisible ? '' : 'none',
         }}
         {...attributes.popper}
         className="cursor-default bg-white rounded shadow-modal z-100 w-34"
@@ -118,6 +142,6 @@ const FilterMenu = ({ onSelectStatus, onSelectPriority }: Props) => {
       </div>
     </div>
   );
-};
+}
 
 export default FilterMenu;

@@ -1,7 +1,7 @@
-import React, { memo, useCallback } from "react";
-import type { Issue, Priority } from "./issue";
-import classnames from "classnames";
-import PriorityMenu from "./priority-menu";
+import React, {memo, useCallback} from 'react';
+import type {Issue, Priority} from './issue';
+import classnames from 'classnames';
+import PriorityMenu from './priority-menu';
 
 interface Props {
   issue: Issue;
@@ -9,12 +9,12 @@ interface Props {
   onOpenDetail?: (issue: Issue) => void;
 }
 
-const IssueItem = ({ issue, onChangePriority, onOpenDetail }: Props) => {
+function IssueItem({issue, onChangePriority, onOpenDetail}: Props) {
   const handleChangePriority = useCallback(
     (p: Priority) => {
       onChangePriority && onChangePriority(issue, p);
     },
-    [issue, onChangePriority]
+    [issue, onChangePriority],
   );
 
   const handleIssueItemClick = () => onOpenDetail && onOpenDetail(issue);
@@ -22,7 +22,7 @@ const IssueItem = ({ issue, onChangePriority, onOpenDetail }: Props) => {
   return (
     <div
       className={classnames(
-        "bg-gray-850 cursor-pointer flex flex-col px-4 py-2 text-white rounded focus:outline-none"
+        'bg-gray-850 cursor-pointer flex flex-col px-4 py-2 text-white rounded focus:outline-none',
       )}
       onClick={handleIssueItemClick}
     >
@@ -43,6 +43,6 @@ const IssueItem = ({ issue, onChangePriority, onOpenDetail }: Props) => {
       </div>
     </div>
   );
-};
+}
 
 export default memo(IssueItem);

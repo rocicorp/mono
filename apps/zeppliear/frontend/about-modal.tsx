@@ -1,18 +1,18 @@
-import CloseIcon from "./assets/icons/close.svg";
-import Modal from "./modal";
-import React from "react";
-import classNames from "classnames";
+import CloseIcon from './assets/icons/close.svg';
+import Modal from './modal';
+import React from 'react';
+import classNames from 'classnames';
 
 interface Props {
   isOpen: boolean;
   onDismiss?: () => void;
 }
 
-function Title({ children }: { children: string }) {
+function Title({children}: {children: string}) {
   return <div className="text-lg font-normal text-white">{children}</div>;
 }
 
-function H1({ children }: { children: string }) {
+function H1({children}: {children: string}) {
   return <div className="mt-5 text-lg font-normal text-white">{children}</div>;
 }
 
@@ -25,9 +25,9 @@ function P({
 }) {
   return (
     <div
-      className={classNames("text-sm font-normal text-gray-100", {
+      className={classNames('text-sm font-normal text-gray-100', {
         // eslint-disable-next-line @typescript-eslint/naming-convention
-        "mt-3": !noTopMargin,
+        'mt-3': !noTopMargin,
       })}
     >
       {children}
@@ -35,7 +35,7 @@ function P({
   );
 }
 
-function Feature({ title, children }: { title: string; children: string }) {
+function Feature({title, children}: {title: string; children: string}) {
   return (
     <li className="ml-3 mt-3">
       <span className="font-semibold">{title}:</span> {children}
@@ -43,7 +43,7 @@ function Feature({ title, children }: { title: string; children: string }) {
   );
 }
 
-function A({ href, children }: { href: string; children: string }) {
+function A({href, children}: {href: string; children: string}) {
   return (
     <span className="text-blue">
       <a target="_blank" rel="noreferrer" href={href}>
@@ -53,7 +53,7 @@ function A({ href, children }: { href: string; children: string }) {
   );
 }
 
-export default function AboutModal({ isOpen, onDismiss }: Props) {
+export default function AboutModal({isOpen, onDismiss}: Props) {
   const handleClickCloseBtn = () => {
     if (onDismiss) onDismiss();
   };
@@ -71,8 +71,8 @@ export default function AboutModal({ isOpen, onDismiss }: Props) {
       </div>
       <div className="flex flex-col flex-1 px-8 pt-4 pb-8 overflow-y-auto">
         <P noTopMargin>
-          Repliear is a loving &hearts; tribute to the{" "}
-          <A href="https://linear.app/">Linear issue tracker</A> built with{" "}
+          Repliear is a loving &hearts; tribute to the{' '}
+          <A href="https://linear.app/">Linear issue tracker</A> built with{' '}
           <A href="https://replicache.dev">Replicache.</A>
         </P>
 
@@ -86,7 +86,7 @@ export default function AboutModal({ isOpen, onDismiss }: Props) {
         <ul
           /* tailwind doesnt have circle option built in */
           style={{
-            listStyleType: "circle",
+            listStyleType: 'circle',
           }}
           className="text-sm font-normal text-gray-100"
         >
@@ -113,7 +113,7 @@ export default function AboutModal({ isOpen, onDismiss }: Props) {
         </P>
 
         <P>
-          Check out the source for this demo at{" "}
+          Check out the source for this demo at{' '}
           <A href="https://github.com/rocicorp/repliear">
             github.com/rocicorp/repliear
           </A>

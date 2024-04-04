@@ -1,7 +1,7 @@
-import type { Issue, Priority } from "./issue";
-import React, { memo } from "react";
-import PriorityMenu from "./priority-menu";
-import classNames from "classnames";
+import type {Issue, Priority} from './issue';
+import React, {memo} from 'react';
+import PriorityMenu from './priority-menu';
+import classNames from 'classnames';
 
 interface IssueItemBaseProps {
   issue: Issue;
@@ -9,15 +9,15 @@ interface IssueItemBaseProps {
   handleChangePriority?: (priority: Priority) => void;
 }
 
-const IssueItemBase = ({
+function IssueItemBase({
   issue,
   handleIssueItemClick = () => null,
   handleChangePriority = () => null,
-}: IssueItemBaseProps) => {
+}: IssueItemBaseProps) {
   return (
     <div
       className={classNames(
-        "bg-gray-850 cursor-pointer flex flex-col px-4 py-2 text-white rounded focus:outline-none"
+        'bg-gray-850 cursor-pointer flex flex-col px-4 py-2 text-white rounded focus:outline-none',
       )}
       onClick={handleIssueItemClick}
     >
@@ -38,6 +38,6 @@ const IssueItemBase = ({
       </div>
     </div>
   );
-};
+}
 
 export default memo(IssueItemBase);

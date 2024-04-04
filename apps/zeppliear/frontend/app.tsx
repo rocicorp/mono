@@ -1,18 +1,18 @@
-import type { UndoManager } from "@rocicorp/undo";
-import classnames from "classnames";
-import { generateKeyBetween } from "fractional-indexing";
-import { isEqual, minBy, partial, pickBy, sortBy, sortedIndexBy } from "lodash";
-import { useQueryState } from "next-usequerystate";
-import { memo, useCallback, useEffect, useReducer, useState } from "react";
-import { HotKeys } from "react-hotkeys";
+import type {UndoManager} from '@rocicorp/undo';
+import classnames from 'classnames';
+import {generateKeyBetween} from 'fractional-indexing';
+import {isEqual, minBy, partial, pickBy, sortBy, sortedIndexBy} from 'lodash';
+import {useQueryState} from 'next-usequerystate';
+import {memo, useCallback, useEffect, useReducer, useState} from 'react';
+import {HotKeys} from 'react-hotkeys';
 import type {
   ExperimentalDiff as Diff,
   ReadTransaction,
   ReadonlyJSONValue,
   Replicache,
-} from "replicache";
-import { useSubscribe } from "replicache-react";
-import { getPartialSyncState } from "./control";
+} from 'replicache';
+import {useSubscribe} from 'replicache-react';
+import {getPartialSyncState} from './control';
 import {
   Comment,
   Description,
@@ -30,85 +30,85 @@ import {
   reverseTimestampSortKey,
   statusEnumSchema,
   statusOrderValues,
-} from "./issue";
-import IssueBoard from "./issue-board";
-import IssueDetail from "./issue-detail";
-import IssueList from "./issue-list";
-import LeftMenu from "./left-menu";
-import type { M } from "./mutators";
-import TopFilter from "./top-filter";
+} from './issue';
+import IssueBoard from './issue-board';
+import IssueDetail from './issue-detail';
+import IssueList from './issue-list';
+import LeftMenu from './left-menu';
+import type {M} from './mutators';
+import TopFilter from './top-filter';
 
 class Filters {
-  private readonly _viewStatuses: Set<Status> | undefined;
-  private readonly _issuesStatuses: Set<Status> | undefined;
-  private readonly _issuesPriorities: Set<Priority> | undefined;
+  readonly #viewStatuses: Set<Status> | undefined;
+  readonly #issuesStatuses: Set<Status> | undefined;
+  readonly #issuesPriorities: Set<Priority> | undefined;
   readonly hasNonViewFilters: boolean;
   constructor(
     view: string | null,
     priorityFilter: string | null,
-    statusFilter: string | null
+    statusFilter: string | null,
   ) {
-    this._viewStatuses = undefined;
+    this.#viewStatuses = undefined;
     switch (view?.toLowerCase()) {
-      case "active":
-        this._viewStatuses = new Set([Status.IN_PROGRESS, Status.TODO]);
+      case 'active':
+        this.#viewStatuses = new Set([Status.InProgress, Status.Todo]);
         break;
-      case "backlog":
-        this._viewStatuses = new Set([Status.BACKLOG]);
+      case 'backlog':
+        this.#viewStatuses = new Set([Status.Backlog]);
         break;
       default:
-        this._viewStatuses = undefined;
+        this.#viewStatuses = undefined;
     }
 
-    this._issuesStatuses = undefined;
-    this._issuesPriorities = undefined;
+    this.#issuesStatuses = undefined;
+    this.#issuesPriorities = undefined;
     this.hasNonViewFilters = false;
     if (statusFilter) {
-      this._issuesStatuses = new Set<Status>();
+      this.#issuesStatuses = new Set<Status>();
       console.error('!!!!!!!', statusFilter);
-      console.error('AAAAAAA', statusFilter.split(","))
-      for (const s of statusFilter.split(",")) {
+      console.error('AAAAAAA', statusFilter.split(','));
+      for (const s of statusFilter.split(',')) {
         const parseResult = statusEnumSchema.safeParse(s);
         if (
           parseResult.success &&
-          (!this._viewStatuses || this._viewStatuses.has(parseResult.data))
+          (!this.#viewStatuses || this.#viewStatuses.has(parseResult.data))
         ) {
           this.hasNonViewFilters = true;
-          this._issuesStatuses.add(parseResult.data);
+          this.#issuesStatuses.add(parseResult.data);
         }
       }
     }
     if (!this.hasNonViewFilters) {
-      this._issuesStatuses = this._viewStatuses;
+      this.#issuesStatuses = this.#viewStatuses;
     }
 
     if (priorityFilter) {
-      this._issuesPriorities = new Set<Priority>();
-      for (const p of priorityFilter.split(",")) {
+      this.#issuesPriorities = new Set<Priority>();
+      for (const p of priorityFilter.split(',')) {
         const parseResult = priorityEnumSchema.safeParse(p);
         if (parseResult.success) {
           this.hasNonViewFilters = true;
-          this._issuesPriorities.add(parseResult.data);
+          this.#issuesPriorities.add(parseResult.data);
         }
       }
-      if (this._issuesPriorities.size === 0) {
-        this._issuesPriorities = undefined;
+      if (this.#issuesPriorities.size === 0) {
+        this.#issuesPriorities = undefined;
       }
     }
   }
 
   viewFilter(issue: Issue): boolean {
-    return this._viewStatuses ? this._viewStatuses.has(issue.status) : true;
+    return this.#viewStatuses ? this.#viewStatuses.has(issue.status) : true;
   }
 
   issuesFilter(issue: Issue): boolean {
-    if (this._issuesStatuses) {
-      if (!this._issuesStatuses.has(issue.status)) {
+    if (this.#issuesStatuses) {
+      if (!this.#issuesStatuses.has(issue.status)) {
         return false;
       }
     }
-    if (this._issuesPriorities) {
-      if (!this._issuesPriorities.has(issue.priority)) {
+    if (this.#issuesPriorities) {
+      if (!this.#issuesPriorities.has(issue.priority)) {
         return false;
       }
     }
@@ -118,9 +118,9 @@ class Filters {
   equals(other: Filters): boolean {
     return (
       this === other ||
-      (isEqual(this._viewStatuses, other._viewStatuses) &&
-        isEqual(this._issuesStatuses, other._issuesStatuses) &&
-        isEqual(this._issuesPriorities, other._issuesPriorities) &&
+      (isEqual(this.#viewStatuses, other.#viewStatuses) &&
+        isEqual(this.#issuesStatuses, other.#issuesStatuses) &&
+        isEqual(this.#issuesPriorities, other.#issuesPriorities) &&
         isEqual(this.hasNonViewFilters, other.hasNonViewFilters))
     );
   }
@@ -129,29 +129,29 @@ class Filters {
 function getFilters(
   view: string | null,
   priorityFilter: string | null,
-  statusFilter: string | null
+  statusFilter: string | null,
 ): Filters {
   return new Filters(view, priorityFilter, statusFilter);
 }
 
 function getIssueOrder(view: string | null, orderBy: string | null): Order {
-  if (view === "board") {
-    return Order.KANBAN;
+  if (view === 'board') {
+    return Order.Kanban;
   }
   const parseResult = orderEnumSchema.safeParse(orderBy);
-  return parseResult.success ? parseResult.data : Order.MODIFIED;
+  return parseResult.success ? parseResult.data : Order.Modified;
 }
 
 function getTitle(view: string | null) {
   switch (view?.toLowerCase()) {
-    case "active":
-      return "Active issues";
-    case "backlog":
-      return "Backlog issues";
-    case "board":
-      return "Board";
+    case 'active':
+      return 'Active issues';
+    case 'backlog':
+      return 'Backlog issues';
+    case 'board':
+      return 'Board';
     default:
-      return "All issues";
+      return 'All issues';
   }
 }
 
@@ -166,17 +166,17 @@ function timedReducer(
   state: State,
   action:
     | {
-        type: "diff";
+        type: 'diff';
         diff: Diff;
       }
     | {
-        type: "setFilters";
+        type: 'setFilters';
         filters: Filters;
       }
     | {
-        type: "setIssueOrder";
+        type: 'setIssueOrder';
         issueOrder: Order;
-      }
+      },
 ): State {
   const start = Date.now();
   const result = reducer(state, action);
@@ -187,26 +187,26 @@ function timedReducer(
 function getOrderValue(issueOrder: Order, issue: Issue): string {
   let orderValue: string;
   switch (issueOrder) {
-    case Order.CREATED:
+    case Order.Created:
       orderValue = reverseTimestampSortKey(issue.created, issue.id);
       break;
-    case Order.MODIFIED:
+    case Order.Modified:
       orderValue = reverseTimestampSortKey(issue.modified, issue.id);
       break;
-    case Order.STATUS:
+    case Order.Status:
       orderValue =
         statusOrderValues[issue.status] +
-        "-" +
+        '-' +
         reverseTimestampSortKey(issue.modified, issue.id);
       break;
-    case Order.PRIORITY:
+    case Order.Priority:
       orderValue =
         priorityOrderValues[issue.priority] +
-        "-" +
+        '-' +
         reverseTimestampSortKey(issue.modified, issue.id);
       break;
-    case Order.KANBAN:
-      orderValue = issue.kanbanOrder + "-" + issue.id;
+    case Order.Kanban:
+      orderValue = issue.kanbanOrder + '-' + issue.id;
       break;
   }
   return orderValue;
@@ -216,26 +216,26 @@ function reducer(
   state: State,
   action:
     | {
-        type: "diff";
+        type: 'diff';
         diff: Diff;
       }
     | {
-        type: "setFilters";
+        type: 'setFilters';
         filters: Filters;
       }
     | {
-        type: "setIssueOrder";
+        type: 'setIssueOrder';
         issueOrder: Order;
-      }
+      },
 ): State {
-  const filters = action.type === "setFilters" ? action.filters : state.filters;
+  const filters = action.type === 'setFilters' ? action.filters : state.filters;
   const issueOrder =
-    action.type === "setIssueOrder" ? action.issueOrder : state.issueOrder;
+    action.type === 'setIssueOrder' ? action.issueOrder : state.issueOrder;
   const orderIteratee = partial(getOrderValue, issueOrder);
   function filterAndSort(issues: Issue[]): Issue[] {
     return sortBy(
-      issues.filter((issue) => filters.issuesFilter(issue)),
-      orderIteratee
+      issues.filter(issue => filters.issuesFilter(issue)),
+      orderIteratee,
     );
   }
   function countViewIssues(issues: Issue[]): number {
@@ -249,10 +249,10 @@ function reducer(
   }
 
   switch (action.type) {
-    case "diff": {
+    case 'diff': {
       return diffReducer(state, action.diff);
     }
-    case "setFilters": {
+    case 'setFilters': {
       if (action.filters.equals(state.filters)) {
         return state;
       }
@@ -264,7 +264,7 @@ function reducer(
         filteredIssues: filterAndSort(allIssues),
       };
     }
-    case "setIssueOrder": {
+    case 'setIssueOrder': {
       if (action.issueOrder === state.issueOrder) {
         return state;
       }
@@ -298,7 +298,7 @@ function diffReducer(state: State, diff: Diff): State {
       newFilteredIssues.splice(
         sortedIndexBy(newFilteredIssues, newIssue, orderIteratee),
         0,
-        newIssue
+        newIssue,
       );
     }
   }
@@ -315,15 +315,15 @@ function diffReducer(state: State, diff: Diff): State {
   }
   for (const diffOp of diff) {
     switch (diffOp.op) {
-      case "add": {
+      case 'add': {
         add(diffOp.key as string, diffOp.newValue);
         break;
       }
-      case "del": {
+      case 'del': {
         del(diffOp.key as string, diffOp.oldValue);
         break;
       }
-      case "change": {
+      case 'change': {
         del(diffOp.key as string, diffOp.oldValue);
         add(diffOp.key as string, diffOp.newValue);
         break;
@@ -343,13 +343,14 @@ type AppProps = {
   undoManager: UndoManager;
 };
 
-const App = ({ rep, undoManager }: AppProps) => {
-  const [view] = useQueryState("view");
-  const [priorityFilter] = useQueryState("priorityFilter");
-  const [statusFilter] = useQueryState("statusFilter");
+// eslint-disable-next-line @typescript-eslint/naming-convention
+const App = ({rep, undoManager}: AppProps) => {
+  const [view] = useQueryState('view');
+  const [priorityFilter] = useQueryState('priorityFilter');
+  const [statusFilter] = useQueryState('statusFilter');
   console.log('useQueryState', statusFilter, typeof statusFilter);
-  const [orderBy] = useQueryState("orderBy");
-  const [detailIssueID, setDetailIssueID] = useQueryState("iss");
+  const [orderBy] = useQueryState('orderBy');
+  const [detailIssueID, setDetailIssueID] = useQueryState('iss');
   const [menuVisible, setMenuVisible] = useState(false);
 
   const [state, dispatch] = useReducer(timedReducer, {
@@ -362,15 +363,14 @@ const App = ({ rep, undoManager }: AppProps) => {
 
   const partialSync = useSubscribe(
     rep,
-    async (tx: ReadTransaction) => {
-      return (await getPartialSyncState(tx)) || "NOT_RECEIVED_FROM_SERVER";
-    },
-    "NOT_RECEIVED_FROM_SERVER" as const
+    async (tx: ReadTransaction) =>
+      (await getPartialSyncState(tx)) || 'NOT_RECEIVED_FROM_SERVER',
+    'NOT_RECEIVED_FROM_SERVER' as const,
   );
 
-  const partialSyncComplete = partialSync === "PARTIAL_SYNC_COMPLETE";
+  const partialSyncComplete = partialSync === 'PARTIAL_SYNC_COMPLETE';
   useEffect(() => {
-    console.log("partialSync", partialSync);
+    console.log('partialSync', partialSync);
     if (!partialSyncComplete) {
       void rep.pull();
     }
@@ -378,35 +378,38 @@ const App = ({ rep, undoManager }: AppProps) => {
 
   useEffect(() => {
     rep.experimentalWatch(
-      (diff) => {
+      diff =>
         dispatch({
-          type: "diff",
+          type: 'diff',
           diff,
-        });
-      },
-      { prefix: ISSUE_KEY_PREFIX, initialValuesInFirstDiff: true }
+        }),
+      {prefix: ISSUE_KEY_PREFIX, initialValuesInFirstDiff: true},
     );
   }, [rep]);
 
-  useEffect(() => {
-    dispatch({
-      type: "setFilters",
-      filters: getFilters(view, priorityFilter, statusFilter),
-    });
-  }, [view, priorityFilter, statusFilter]);
+  useEffect(
+    () =>
+      dispatch({
+        type: 'setFilters',
+        filters: getFilters(view, priorityFilter, statusFilter),
+      }),
+    [view, priorityFilter, statusFilter],
+  );
 
-  useEffect(() => {
-    dispatch({
-      type: "setIssueOrder",
-      issueOrder: getIssueOrder(view, orderBy),
-    });
-  }, [view, orderBy]);
+  useEffect(
+    () =>
+      dispatch({
+        type: 'setIssueOrder',
+        issueOrder: getIssueOrder(view, orderBy),
+      }),
+    [view, orderBy],
+  );
 
   const handleCreateIssue = useCallback(
-    async (issue: Omit<Issue, "kanbanOrder">, description: Description) => {
+    async (issue: Omit<Issue, 'kanbanOrder'>, description: Description) => {
       const minKanbanOrderIssue = minBy(
         [...state.allIssuesMap.values()],
-        (issue) => issue.kanbanOrder
+        issue => issue.kanbanOrder,
       );
       const minKanbanOrder = minKanbanOrderIssue
         ? minKanbanOrderIssue.kanbanOrder
@@ -420,7 +423,7 @@ const App = ({ rep, undoManager }: AppProps) => {
         description,
       });
     },
-    [rep.mutate, state.allIssuesMap]
+    [rep.mutate, state.allIssuesMap],
   );
   const handleCreateComment = useCallback(
     async (comment: Comment) => {
@@ -429,54 +432,52 @@ const App = ({ rep, undoManager }: AppProps) => {
         undo: () => rep.mutate.deleteIssueComment(comment),
       });
     },
-    [rep.mutate, undoManager]
+    [rep.mutate, undoManager],
   );
 
   const handleUpdateIssues = useCallback(
     async (issueUpdates: Array<IssueUpdate>) => {
-      const uChanges: Array<IssueUpdateWithID> = issueUpdates.map<IssueUpdateWithID>(
-        (issueUpdate) => {
+      const uChanges: Array<IssueUpdateWithID> =
+        issueUpdates.map<IssueUpdateWithID>(issueUpdate => {
           const undoChanges = pickBy(
             issueUpdate.issue,
-            (_, key) => key in issueUpdate.issueChanges
+            (_, key) => key in issueUpdate.issueChanges,
           );
           return {
             id: issueUpdate.issue.id,
             issueChanges: undoChanges,
             descriptionChange: issueUpdate.descriptionUpdate?.description,
           };
-        }
-      );
+        });
       await undoManager.add({
         execute: () =>
           rep.mutate.updateIssues(
-            issueUpdates.map(({ issue, issueChanges, descriptionUpdate }) => {
-              return {
-                id: issue.id,
-                issueChanges,
-                descriptionChange: descriptionUpdate?.description,
-              };
-            })
+            issueUpdates.map(({issue, issueChanges, descriptionUpdate}) => ({
+              id: issue.id,
+              issueChanges,
+              descriptionChange: descriptionUpdate?.description,
+            })),
           ),
         undo: () => rep.mutate.updateIssues(uChanges),
       });
     },
-    [rep.mutate, undoManager]
+    [rep.mutate, undoManager],
   );
 
   const handleOpenDetail = useCallback(
     async (issue: Issue) => {
-      await setDetailIssueID(issue.id, { scroll: false, shallow: true });
+      await setDetailIssueID(issue.id, {scroll: false, shallow: true});
     },
-    [setDetailIssueID]
+    [setDetailIssueID],
   );
-  const handleCloseMenu = useCallback(() => setMenuVisible(false), [
-    setMenuVisible,
-  ]);
-  const handleToggleMenu = useCallback(() => setMenuVisible(!menuVisible), [
-    setMenuVisible,
-    menuVisible,
-  ]);
+  const handleCloseMenu = useCallback(
+    () => setMenuVisible(false),
+    [setMenuVisible],
+  );
+  const handleToggleMenu = useCallback(
+    () => setMenuVisible(!menuVisible),
+    [setMenuVisible, menuVisible],
+  );
 
   const handlers = {
     undo: () => undoManager.undo(),
@@ -509,8 +510,8 @@ const App = ({ rep, undoManager }: AppProps) => {
 };
 
 const keyMap = {
-  undo: ["ctrl+z", "command+z"],
-  redo: ["ctrl+y", "command+shift+z", "ctrl+shift+z"],
+  undo: ['ctrl+z', 'command+z'],
+  redo: ['ctrl+y', 'command+shift+z', 'ctrl+shift+z'],
 };
 
 interface LayoutProps {
@@ -524,14 +525,14 @@ interface LayoutProps {
   onToggleMenu: () => void;
   onUpdateIssues: (issueUpdates: IssueUpdate[]) => void;
   onCreateIssue: (
-    issue: Omit<Issue, "kanbanOrder">,
-    description: Description
+    issue: Omit<Issue, 'kanbanOrder'>,
+    description: Description,
   ) => void;
   onCreateComment: (comment: Comment) => void;
   onOpenDetail: (issue: Issue) => void;
 }
 
-const RawLayout = ({
+function RawLayout({
   menuVisible,
   view,
   detailIssueID,
@@ -544,7 +545,7 @@ const RawLayout = ({
   onCreateIssue,
   onCreateComment,
   onOpenDetail,
-}: LayoutProps) => {
+}: LayoutProps) {
   return (
     <div>
       <div className="flex w-full h-screen overflow-y-hidden">
@@ -555,7 +556,7 @@ const RawLayout = ({
         />
         <div className="flex flex-col flex-grow min-w-0">
           <div
-            className={classnames("flex flex-col", {
+            className={classnames('flex flex-col', {
               hidden: detailIssueID,
             })}
           >
@@ -568,7 +569,7 @@ const RawLayout = ({
                   : undefined
               }
               issuesCount={state.viewIssueCount}
-              showSortOrderMenu={view !== "board"}
+              showSortOrderMenu={view !== 'board'}
             />
           </div>
           <div className="relative flex flex-1 min-h-0">
@@ -582,13 +583,13 @@ const RawLayout = ({
               />
             )}
             <div
-              className={classnames("absolute inset-0 flex flex-col", {
-                invisible: detailIssueID,
+              className={classnames('absolute inset-0 flex flex-col', {
+                'invisible': detailIssueID,
                 // eslint-disable-next-line @typescript-eslint/naming-convention
-                "pointer-events-none": detailIssueID,
+                'pointer-events-none': detailIssueID,
               })}
             >
-              {view === "board" ? (
+              {view === 'board' ? (
                 <IssueBoard
                   issues={state.filteredIssues}
                   onUpdateIssues={onUpdateIssues}
@@ -608,8 +609,9 @@ const RawLayout = ({
       </div>
     </div>
   );
-};
+}
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 const Layout = memo(RawLayout);
 
 export default App;

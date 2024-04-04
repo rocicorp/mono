@@ -1,11 +1,15 @@
-import React from "react";
-import type { AppProps } from "next/app";
+import React from 'react';
+import type {AppProps} from 'next/app';
 
-import Head from "next/head";
+import Head from 'next/head';
 
-import "../styles/index.css";
+import '../styles/index.css';
 
-function MyApp({ Component, pageProps }: AppProps) {
+function MyApp({
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  Component,
+  pageProps,
+}: AppProps) {
   return (
     <>
       <Head>
