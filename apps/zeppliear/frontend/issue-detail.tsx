@@ -99,7 +99,8 @@ export default function IssueDetail({
       }
       return null;
     },
-    { default: null, dependencies: [detailIssueID] }
+    null, 
+    [detailIssueID]
   );
   const description = useSubscribe(
     rep,
@@ -109,7 +110,8 @@ export default function IssueDetail({
       }
       return null;
     },
-    { default: null, dependencies: [detailIssueID] }
+    null, 
+    [detailIssueID]
   );
 
   const comments = useSubscribe(
@@ -120,7 +122,8 @@ export default function IssueDetail({
       }
       return [];
     },
-    { default: [], dependencies: [detailIssueID] }
+    [], 
+    [detailIssueID]
   );
 
   const handleClose = useCallback(async () => {

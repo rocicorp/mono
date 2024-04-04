@@ -67,7 +67,7 @@
     "mirror-protocol": "0.0.0",
     "mobx": "^6.9.0",
     "mobx-react": "^7.6.0",
-    "next": "13.1.5",
+    "next": "13.5.6",
     "path-browserify": "^1.0.1",
     "process": "^0.11.10",
     "puppeteer": "^19.9.0",

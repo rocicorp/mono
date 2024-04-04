@@ -39,7 +39,7 @@ const pushRequestSchema = z.union([pushRequestV0Schema, pushRequestV1Schema]);
 const push = async (req: NextApiRequest, res: NextApiResponse) => {
   console.log("Processing push", JSON.stringify(req.body, null, ""));
 
-  const spaceID = req.query["spaceID"].toString();
+  const spaceID = req.query["spaceID"]?.toString() ?? "";
   const push = pushRequestSchema.parse(req.body);
   const { pushVersion } = push;
 

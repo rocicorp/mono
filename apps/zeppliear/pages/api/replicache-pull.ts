@@ -44,7 +44,7 @@ const pullRequestSchema = z.union([pullRequestV0, pullRequestV1]);
 const pull = async (req: NextApiRequest, res: NextApiResponse) => {
   const startPull = Date.now();
   console.log(`Processing pull`, JSON.stringify(req.body, null, ""));
-  const spaceID = req.query["spaceID"].toString();
+  const spaceID = req.query["spaceID"]?.toString() ?? "";
   const startRequestParse = Date.now();
   const pull = pullRequestSchema.parse(req.body);
   const { pullVersion } = pull;

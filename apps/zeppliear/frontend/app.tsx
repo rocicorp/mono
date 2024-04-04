@@ -65,6 +65,8 @@ class Filters {
     this.hasNonViewFilters = false;
     if (statusFilter) {
       this._issuesStatuses = new Set<Status>();
+      console.error('!!!!!!!', statusFilter);
+      console.error('AAAAAAA', statusFilter.split(","))
       for (const s of statusFilter.split(",")) {
         const parseResult = statusEnumSchema.safeParse(s);
         if (
@@ -345,6 +347,7 @@ const App = ({ rep, undoManager }: AppProps) => {
   const [view] = useQueryState("view");
   const [priorityFilter] = useQueryState("priorityFilter");
   const [statusFilter] = useQueryState("statusFilter");
+  console.log('useQueryState', statusFilter, typeof statusFilter);
   const [orderBy] = useQueryState("orderBy");
   const [detailIssueID, setDetailIssueID] = useQueryState("iss");
   const [menuVisible, setMenuVisible] = useState(false);
@@ -362,7 +365,7 @@ const App = ({ rep, undoManager }: AppProps) => {
     async (tx: ReadTransaction) => {
       return (await getPartialSyncState(tx)) || "NOT_RECEIVED_FROM_SERVER";
     },
-    { default: "NOT_RECEIVED_FROM_SERVER" as const }
+    "NOT_RECEIVED_FROM_SERVER" as const
   );
 
   const partialSyncComplete = partialSync === "PARTIAL_SYNC_COMPLETE";
