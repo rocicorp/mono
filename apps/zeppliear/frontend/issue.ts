@@ -2,7 +2,7 @@ import type {
   ReadonlyJSONValue,
   ReadTransaction,
   WriteTransaction,
-} from 'replicache';
+} from 'zero-client';
 import {z} from 'zod';
 import type {Immutable} from './immutable';
 

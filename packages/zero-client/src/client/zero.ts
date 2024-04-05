@@ -16,7 +16,7 @@ import {
 } from 'reflect-protocol';
 import {ROOM_ID_REGEX, isValidRoomID} from 'reflect-shared/src/room-id.js';
 import type {MutatorDefs, ReadTransaction} from 'reflect-shared/src/types.js';
-import {version} from 'reflect-shared/src/version.js';
+import {version} from './version.js';
 import {
   ClientGroupID,
   ClientID,

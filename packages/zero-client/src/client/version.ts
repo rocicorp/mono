@@ -1,6 +1,6 @@
-import {version as sharedVersion} from 'reflect-shared/src/version.js';
+declare const ZERO_VERSION: string;
+
 /**
  * The current version of Zero.
- * @deprecated Use `version` from `@rocicorp/reflect` instead.
  */
-export const version = sharedVersion;
+export const version = ZERO_VERSION;

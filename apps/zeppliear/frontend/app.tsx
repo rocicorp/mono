@@ -7,12 +7,9 @@ import {memo, useCallback, useEffect, useReducer, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
 import type {
   ExperimentalDiff as Diff,
-  ReadTransaction,
   ReadonlyJSONValue,
-  Replicache,
-} from 'replicache';
-import {useSubscribe} from 'replicache-react';
-import {getPartialSyncState} from './control';
+  Zero,
+} from 'zero-client';
 import {
   Comment,
   Description,
@@ -339,12 +336,12 @@ function diffReducer(state: State, diff: Diff): State {
 }
 
 type AppProps = {
-  rep: Replicache<M>;
+  zero: Zero<M>;
   undoManager: UndoManager;
 };
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
-const App = ({rep, undoManager}: AppProps) => {
+const App = ({zero, undoManager}: AppProps) => {
   const [view] = useQueryState('view');
   const [priorityFilter] = useQueryState('priorityFilter');
   const [statusFilter] = useQueryState('statusFilter');
@@ -361,23 +358,8 @@ const App = ({rep, undoManager}: AppProps) => {
     issueOrder: getIssueOrder(view, orderBy),
   });
 
-  const partialSync = useSubscribe(
-    rep,
-    async (tx: ReadTransaction) =>
-      (await getPartialSyncState(tx)) || 'NOT_RECEIVED_FROM_SERVER',
-    'NOT_RECEIVED_FROM_SERVER' as const,
-  );
-
-  const partialSyncComplete = partialSync === 'PARTIAL_SYNC_COMPLETE';
   useEffect(() => {
-    console.log('partialSync', partialSync);
-    if (!partialSyncComplete) {
-      void rep.pull();
-    }
-  }, [rep, partialSync, partialSyncComplete]);
-
-  useEffect(() => {
-    rep.experimentalWatch(
+    zero.experimentalWatch(
       diff =>
         dispatch({
           type: 'diff',
@@ -385,7 +367,7 @@ const App = ({rep, undoManager}: AppProps) => {
         }),
       {prefix: ISSUE_KEY_PREFIX, initialValuesInFirstDiff: true},
     );
-  }, [rep]);
+  }, [zero]);
 
   useEffect(
     () =>
@@ -415,7 +397,7 @@ const App = ({rep, undoManager}: AppProps) => {
         ? minKanbanOrderIssue.kanbanOrder
         : null;
 
-      await rep.mutate.putIssue({
+      await zero.mutate.putIssue({
         issue: {
           ...issue,
           kanbanOrder: generateKeyBetween(null, minKanbanOrder),
@@ -423,16 +405,16 @@ const App = ({rep, undoManager}: AppProps) => {
         description,
       });
     },
-    [rep.mutate, state.allIssuesMap],
+    [zero.mutate, state.allIssuesMap],
   );
   const handleCreateComment = useCallback(
     async (comment: Comment) => {
       await undoManager.add({
-        execute: () => rep.mutate.putIssueComment(comment),
-        undo: () => rep.mutate.deleteIssueComment(comment),
+        execute: () => zero.mutate.putIssueComment(comment),
+        undo: () => zero.mutate.deleteIssueComment(comment),
       });
     },
-    [rep.mutate, undoManager],
+    [zero.mutate, undoManager],
   );
 
   const handleUpdateIssues = useCallback(
@@ -451,17 +433,17 @@ const App = ({rep, undoManager}: AppProps) => {
         });
       await undoManager.add({
         execute: () =>
-          rep.mutate.updateIssues(
+          zero.mutate.updateIssues(
             issueUpdates.map(({issue, issueChanges, descriptionUpdate}) => ({
               id: issue.id,
               issueChanges,
               descriptionChange: descriptionUpdate?.description,
             })),
           ),
-        undo: () => rep.mutate.updateIssues(uChanges),
+        undo: () => zero.mutate.updateIssues(uChanges),
       });
     },
-    [rep.mutate, undoManager],
+    [zero.mutate, undoManager],
   );
 
   const handleOpenDetail = useCallback(
@@ -495,9 +477,10 @@ const App = ({rep, undoManager}: AppProps) => {
         menuVisible={menuVisible}
         view={view}
         detailIssueID={detailIssueID}
-        isLoading={!partialSyncComplete}
+        // TODO: base on whether initial sync is done
+        isLoading={false}
         state={state}
-        rep={rep}
+        zero={zero}
         onCloseMenu={handleCloseMenu}
         onToggleMenu={handleToggleMenu}
         onUpdateIssues={handleUpdateIssues}
@@ -520,7 +503,7 @@ interface LayoutProps {
   detailIssueID: string | null;
   isLoading: boolean;
   state: State;
-  rep: Replicache<M>;
+  zero: Zero<M>;
   onCloseMenu: () => void;
   onToggleMenu: () => void;
   onUpdateIssues: (issueUpdates: IssueUpdate[]) => void;
@@ -538,7 +521,7 @@ function RawLayout({
   detailIssueID,
   isLoading,
   state,
-  rep,
+  zero,
   onCloseMenu,
   onToggleMenu,
   onUpdateIssues,
@@ -576,7 +559,7 @@ function RawLayout({
             {detailIssueID && (
               <IssueDetail
                 issues={state.filteredIssues}
-                rep={rep}
+                zero={zero}
                 onUpdateIssues={onUpdateIssues}
                 onAddComment={onCreateComment}
                 isLoading={isLoading}
