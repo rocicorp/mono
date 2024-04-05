@@ -17,7 +17,7 @@ export default function Home() {
 
       const [, , spaceID] = location.pathname.split('/');
       const z = new Zero({
-        server: 'https://zeppliear-rocicorpreflectservices.reflect-server.net',
+        server: process.env.NEXT_PUBLIC_SERVER,
         userID: 'anon',
         roomID: spaceID,
         mutators,

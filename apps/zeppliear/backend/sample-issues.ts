@@ -1,8 +1,8 @@
 import {Issue, Comment, Description, Priority, Status} from '../frontend/issue';
 import {generateNKeysBetween} from 'fractional-indexing';
 import {sortBy} from 'lodash';
-import {reactIssues} from './issues-react';
-import {reactComments} from './comments-react';
+import {reactIssues} from '../sample-data/issues-react';
+import {reactComments} from '../sample-data/comments-react';
 
 export type SampleData = {
   issue: Issue;
