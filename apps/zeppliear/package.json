@@ -1,4 +1,5 @@
 {
+  "name": "zeppliear",
   "private": true,
   "scripts": {
     "dev": "next",
@@ -6,7 +7,7 @@
     "start": "next start",
     "check-types": "tsc --noEmit",
     "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
-    "check-format": "prettier --check *",
+    "check-format": "prettier --check './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "next lint"
   },
   "dependencies": {
