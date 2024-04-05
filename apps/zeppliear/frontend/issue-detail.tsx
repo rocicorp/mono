@@ -18,7 +18,7 @@ import {
 import StatusMenu from './status-menu';
 import {useQueryState} from 'next-usequerystate';
 
-import type {Replicache} from 'replicache';
+import type {Zero} from 'zero-client';
 import type {M} from './mutators';
 import {useSubscribe} from 'replicache-react';
 import {Remark} from 'react-remark';
@@ -32,7 +32,7 @@ interface Props {
   onAddComment: (comment: Comment) => void;
   issues: Issue[];
   isLoading: boolean;
-  rep: Replicache<M>;
+  zero: Zero<M>;
 }
 
 function CommentsList(comments: Comment[], isLoading: boolean) {
@@ -64,7 +64,7 @@ function CommentsList(comments: Comment[], isLoading: boolean) {
 }
 
 export default function IssueDetail({
-  rep,
+  zero,
   onUpdateIssues,
   onAddComment,
   issues,
@@ -90,7 +90,7 @@ export default function IssueDetail({
   }, [issues, detailIssueID]);
 
   const issue = useSubscribe(
-    rep,
+    zero,
     async tx => {
       if (detailIssueID) {
         return (await getIssue(tx, detailIssueID)) || null;
@@ -101,7 +101,7 @@ export default function IssueDetail({
     [detailIssueID],
   );
   const description = useSubscribe(
-    rep,
+    zero,
     async tx => {
       if (detailIssueID) {
         return (await getIssueDescription(tx, detailIssueID)) || null;
@@ -113,7 +113,7 @@ export default function IssueDetail({
   );
 
   const comments = useSubscribe(
-    rep,
+    zero,
     async tx => {
       if (detailIssueID) {
         return (await getIssueComments(tx, detailIssueID)) || [];

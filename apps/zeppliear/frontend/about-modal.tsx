@@ -1,4 +1,4 @@
-import CloseIcon from './assets/icons/close.svg';
+//import CloseIcon from './assets/icons/close.svg';
 import Modal from './modal';
 import React from 'react';
 import classNames from 'classnames';
@@ -65,9 +65,7 @@ export default function AboutModal({isOpen, onDismiss}: Props) {
         <div
           className="flex items-center justify-center h-7 w-7 rounded hover:bg-gray-850"
           onMouseDown={handleClickCloseBtn}
-        >
-          <CloseIcon className="w-4" />
-        </div>
+        ></div>
       </div>
       <div className="flex flex-col flex-1 px-8 pt-4 pb-8 overflow-y-auto">
         <P noTopMargin>

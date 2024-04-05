@@ -2,15 +2,23 @@
 
 /* eslint-env node, es2022 */
 
+import {readFileSync} from 'node:fs';
 import {esbuildPlugin} from '@web/dev-server-esbuild';
 import {playwrightLauncher} from '@web/test-runner-playwright';
-import {getVersion} from '../reflect-shared/tool/get-version.js';
 import {makeDefine} from '../shared/src/build.js';
 
 const chromium = playwrightLauncher({product: 'chromium'});
 const webkit = playwrightLauncher({product: 'webkit'});
 const firefox = playwrightLauncher({product: 'firefox'});
 const define = makeDefine('unknown');
+
+/**
+ * @returns {string}
+ */
+export function getVersion() {
+  const url = new URL('./package.json', import.meta.url);
+  return JSON.parse(readFileSync(url, 'utf-8')).version;
+}
 
 /** @type {import('@web/test-runner').TestRunnerConfig} */
 const config = {
@@ -25,7 +33,7 @@ const config = {
       target: 'es2022',
       define: {
         ...define,
-        ['REFLECT_VERSION']: JSON.stringify(getVersion()),
+        ['ZERO_VERSION']: JSON.stringify(getVersion()),
         ['TESTING']: 'true',
       },
       banner: 'var process = { env: { NODE_ENV: "development" } }',

@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "lib": ["dom", "es2022"]
+    "lib": ["dom", "esnext"]
   },
   "include": ["src/**/*.ts"]
 }

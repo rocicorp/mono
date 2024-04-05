@@ -1,12 +1,18 @@
-import {Priority, Status} from '../frontend/issue';
-import type {SampleData} from './data';
+import {Issue, Comment, Description, Priority, Status} from '../frontend/issue';
 import {generateNKeysBetween} from 'fractional-indexing';
 import {sortBy} from 'lodash';
+import {reactIssues} from '../sample-data/issues-react';
+import {reactComments} from '../sample-data/comments-react';
 
-export async function getReactSampleData(): Promise<SampleData> {
-  const issuesDefault = (await import('./issues-react.js.gz')).default;
+export type SampleData = {
+  issue: Issue;
+  description: Description;
+  comments: Comment[];
+}[];
+
+export function getReactSampleData(): SampleData {
   const sortedIssues = sortBy(
-    issuesDefault,
+    reactIssues,
     reactIssue =>
       Number.MAX_SAFE_INTEGER -
       Date.parse(reactIssue.updated_at) +
@@ -14,7 +20,7 @@ export async function getReactSampleData(): Promise<SampleData> {
       reactIssue.number,
   );
 
-  const issuesCount = issuesDefault.length;
+  const issuesCount = reactIssues.length;
   const kanbanOrderKeys = generateNKeysBetween(null, null, issuesCount);
   const issues: SampleData = sortedIssues.map((reactIssue, idx) => ({
     issue: {
@@ -31,15 +37,13 @@ export async function getReactSampleData(): Promise<SampleData> {
     comments: [],
   }));
 
-  const comments = (await import('./comments-react.js.gz')).default.map(
-    reactComment => ({
-      id: reactComment.comment_id,
-      issueID: reactComment.number.toString(),
-      created: Date.parse(reactComment.created_at),
-      body: reactComment.body || '',
-      creator: reactComment.creator_user_login,
-    }),
-  );
+  const comments = reactComments.map(reactComment => ({
+    id: reactComment.comment_id,
+    issueID: reactComment.number.toString(),
+    created: Date.parse(reactComment.created_at),
+    body: reactComment.body || '',
+    creator: reactComment.creator_user_login,
+  }));
   for (const comment of comments) {
     const issue = issues.find(issue => issue.issue.id === comment.issueID);
     if (issue) {
@@ -75,7 +79,6 @@ function getStatus({
   created_at,
 }: {
   number: number;
-  state: 'open' | 'closed';
   // eslint-disable-next-line @typescript-eslint/naming-convention
   created_at: string;
 }): Status {

@@ -1,16 +1,11 @@
-import {transact} from '../backend/pg';
-import {createDatabase, initSpace} from '../backend/data';
-import {getReactSampleData} from '../backend/sample-issues';
+import {nanoid} from 'nanoid';
 
 function Page() {
   return '';
 }
 
-export async function getServerSideProps() {
-  const spaceID = await transact(async executor => {
-    await createDatabase(executor);
-    return initSpace(executor, getReactSampleData);
-  });
+export function getServerSideProps() {
+  const spaceID = nanoid(10);
   return {
     redirect: {
       destination: `/d/${spaceID}`,
