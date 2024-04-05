@@ -33,6 +33,7 @@ export type Task = (
 export class TransactionPool {
   readonly #lc: LogContext;
   readonly #init: Task | undefined;
+  readonly #cleanup: Task | undefined;
   readonly #tasks = new Queue<Task | Error | 'done'>();
   readonly #workers: Promise<unknown>[] = [];
   readonly #maxWorkers: number;
@@ -46,6 +47,8 @@ export class TransactionPool {
    * @param init A {@link Task} that is run in each Transaction before it begins
    *             processing general tasks. This can be used to to set the transaction
    *             mode, export/set snapshots, etc.
+   * @param cleanup A {@link Task} that is run in each Transaction before it closes.
+   *                This may be skipped if {@link fail} is called.
    * @param initialWorkers The number of transaction workers to process tasks.
    *                       This must be greater than 0. Defaults to 1.
    * @param maxWorkers When specified, allows the pool to grow to `maxWorkers`. This
@@ -54,6 +57,7 @@ export class TransactionPool {
   constructor(
     lc: LogContext,
     init?: Task,
+    cleanup?: Task,
     initialWorkers = 1,
     maxWorkers?: number,
   ) {
@@ -63,6 +67,7 @@ export class TransactionPool {
 
     this.#lc = lc;
     this.#init = init;
+    this.#cleanup = cleanup;
     this.#numWorkers = initialWorkers;
     this.#maxWorkers = maxWorkers;
   }
@@ -123,14 +128,7 @@ export class TransactionPool {
 
         const pending: Promise<unknown>[] = [];
 
-        let task: Task | Error | 'done' =
-          this.#init ?? (await this.#tasks.dequeue());
-
-        while (task !== 'done') {
-          if (this.#failure || task instanceof Error) {
-            await Promise.all(pending); // avoid unhandled rejections
-            throw this.#failure ?? task;
-          }
+        const executeTask = async (task: Task) => {
           const result = await task(tx, this.#lc);
           if (Array.isArray(result)) {
             // Execute the statements (i.e. send to the db) immediately and add them to
@@ -142,10 +140,25 @@ export class TransactionPool {
             pending.push(
               ...result.map(stmt => stmt.execute().catch(e => this.fail(e))),
             );
-            lc.debug?.(`executed ${result.length} statement(s)`, result);
+            lc.debug?.(`executed ${result.length} statement(s)`);
           }
+        };
+
+        let task: Task | Error | 'done' =
+          this.#init ?? (await this.#tasks.dequeue());
+
+        while (task !== 'done') {
+          if (this.#failure || task instanceof Error) {
+            await Promise.all(pending); // avoid unhandled rejections
+            throw this.#failure ?? task;
+          }
+          await executeTask(task);
+
           // await the next task.
           task = await this.#tasks.dequeue();
+        }
+        if (this.#cleanup) {
+          await executeTask(this.#cleanup);
         }
 
         lc.debug?.('worker done');
@@ -235,6 +248,12 @@ type SynchronizeSnapshotTasks = {
   exportSnapshot: Task;
 
   /**
+   * The `cleanup` Task for the TransactionPool from which the snapshot
+   * originates.
+   */
+  cleanupExport: Task;
+
+  /**
    * The `init` Task for the TransactionPool in which workers will
    * consequently see the same snapshot as that of the first pool.
    * In addition to setting the snapshot, the transaction mode will be
@@ -250,29 +269,44 @@ type SynchronizeSnapshotTasks = {
  */
 export function synchronizedSnapshots(): SynchronizeSnapshotTasks {
   const {
-    promise: snapshot,
-    resolve: setSnapshot,
-    reject: failSnapshot,
+    promise: snapshotExported,
+    resolve: exportSnapshot,
+    reject: failExport,
   } = resolver<string>();
 
-  // Note: Neither task should `await`, as processing in each pool can proceed
-  //       as soon as the statements have been sent to the db.
+  const {
+    promise: snapshotCaptured,
+    resolve: captureSnapshot,
+    reject: failCapture,
+  } = resolver<unknown>();
+
+  // Note: Neither init task should `await`, as processing in each pool can proceed
+  //       as soon as the statements have been sent to the db. However, the `cleanupExport`
+  //       task must `await` the result of `setSnapshot` to ensure that exporting transaction
+  //       does not close before the snapshot has been captured.
   return {
     exportSnapshot: tx => {
       const stmt = tx`SELECT pg_export_snapshot() AS snapshot;`.simple();
-      // Intercept the promise to propagate the information to the other task.
-      stmt.then(result => setSnapshot(result[0].snapshot), failSnapshot);
+      // Intercept the promise to propagate the information to `setSnapshot`.
+      stmt.then(result => exportSnapshot(result[0].snapshot), failExport);
       // Also return the stmt so that it gets awaited (and errors handled).
       return [stmt];
     },
 
     setSnapshot: tx =>
-      snapshot.then(snapshotID => [
-        tx.unsafe(`
-      SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
-      SET TRANSACTION SNAPSHOT '${snapshotID}';
-      `),
-      ]),
+      snapshotExported.then(snapshotID => {
+        const stmt = tx.unsafe(`
+        SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
+        SET TRANSACTION SNAPSHOT '${snapshotID}';
+        `);
+        // Intercept the promise to propagate the information to `cleanupExport`.
+        stmt.then(captureSnapshot, failCapture);
+        return [stmt];
+      }),
+
+    cleanupExport: async () => {
+      await snapshotCaptured;
+    },
   };
 }
 
