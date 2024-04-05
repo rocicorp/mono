@@ -140,7 +140,7 @@ export class TransactionPool {
             pending.push(
               ...result.map(stmt => stmt.execute().catch(e => this.fail(e))),
             );
-            lc.debug?.(`executed ${result.length} statement(s)`, result);
+            lc.debug?.(`executed ${result.length} statement(s)`);
           }
         };
 
