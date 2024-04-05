@@ -33,7 +33,7 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
 
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>;
   const [issueModalVisible, setIssueModalVisible] = useState(false);
-  const [aboutModalVisible, setAboutModalVisible] = useState(true);
+  const [aboutModalVisible, setAboutModalVisible] = useState(false);
 
   const classes = classnames(
     'absolute lg:static inset-0 lg:relative lg:translate-x-0 flex flex-col flex-shrink-0 w-56 font-sans text-sm border-r lg:shadow-none justify-items-start bg-gray border-gray-850 text-white bg-opacity-1',
