@@ -21,6 +21,7 @@ export default function Home() {
         userID: 'anon',
         roomID: spaceID,
         mutators,
+        kvStore: 'idb',
       });
 
       setZero(z);
