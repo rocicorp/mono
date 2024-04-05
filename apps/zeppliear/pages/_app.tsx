@@ -13,7 +13,7 @@ function MyApp({
   return (
     <>
       <Head>
-        <title>Repliear</title>
+        <title>Zeppliear</title>
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <link
           rel="icon"

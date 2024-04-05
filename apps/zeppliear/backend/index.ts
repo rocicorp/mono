@@ -6,9 +6,7 @@ function makeOptions(): ReflectServerOptions<M> {
   return {
     mutators,
     roomStartHandler: async write => {
-      console.log('onRoomStart');
       const inited = await write.get('inited');
-      console.log(inited);
       if (inited !== true) {
         const sampleData = getReactSampleData();
         for (const {issue, description, comments} of sampleData) {
