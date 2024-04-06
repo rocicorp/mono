@@ -12,11 +12,9 @@ import type {
 } from 'zero-client';
 import {
   Comment,
-  Description,
   ISSUE_KEY_PREFIX,
   Issue,
   IssueUpdate,
-  IssueUpdateWithID,
   Order,
   Priority,
   Status,
@@ -388,7 +386,7 @@ const App = ({zero, undoManager}: AppProps) => {
   );
 
   const handleCreateIssue = useCallback(
-    async (issue: Omit<Issue, 'kanbanOrder'>, description: Description) => {
+    async (issue: Omit<Issue, 'kanbanOrder'>) => {
       const minKanbanOrderIssue = minBy(
         [...state.allIssuesMap.values()],
         issue => issue.kanbanOrder,
@@ -402,7 +400,6 @@ const App = ({zero, undoManager}: AppProps) => {
           ...issue,
           kanbanOrder: generateKeyBetween(null, minKanbanOrder),
         },
-        description,
       });
     },
     [zero.mutate, state.allIssuesMap],
@@ -410,37 +407,30 @@ const App = ({zero, undoManager}: AppProps) => {
   const handleCreateComment = useCallback(
     async (comment: Comment) => {
       await undoManager.add({
-        execute: () => zero.mutate.putIssueComment(comment),
-        undo: () => zero.mutate.deleteIssueComment(comment),
+        execute: () => zero.mutate.putIssueComment({comment}),
+        undo: () => zero.mutate.deleteIssueComment({comment}),
       });
     },
     [zero.mutate, undoManager],
   );
 
   const handleUpdateIssues = useCallback(
-    async (issueUpdates: Array<IssueUpdate>) => {
-      const uChanges: Array<IssueUpdateWithID> =
-        issueUpdates.map<IssueUpdateWithID>(issueUpdate => {
-          const undoChanges = pickBy(
-            issueUpdate.issue,
-            (_, key) => key in issueUpdate.issueChanges,
-          );
+    async (issueUpdates: Array<{issue: Issue; update: IssueUpdate}>) => {
+      const uChanges: Array<IssueUpdate> = issueUpdates.map<IssueUpdate>(
+        ({issue, update}) => {
+          const undoChanges = pickBy(issue, (_, key) => key in update);
           return {
-            id: issueUpdate.issue.id,
+            id: issue.id,
             issueChanges: undoChanges,
-            descriptionChange: issueUpdate.descriptionUpdate?.description,
           };
-        });
+        },
+      );
       await undoManager.add({
         execute: () =>
-          zero.mutate.updateIssues(
-            issueUpdates.map(({issue, issueChanges, descriptionUpdate}) => ({
-              id: issue.id,
-              issueChanges,
-              descriptionChange: descriptionUpdate?.description,
-            })),
-          ),
-        undo: () => zero.mutate.updateIssues(uChanges),
+          zero.mutate.updateIssues({
+            issueUpdates: issueUpdates.map<IssueUpdate>(({update}) => update),
+          }),
+        undo: () => zero.mutate.updateIssues({issueUpdates: uChanges}),
       });
     },
     [zero.mutate, undoManager],
@@ -506,11 +496,8 @@ interface LayoutProps {
   zero: Zero<M>;
   onCloseMenu: () => void;
   onToggleMenu: () => void;
-  onUpdateIssues: (issueUpdates: IssueUpdate[]) => void;
-  onCreateIssue: (
-    issue: Omit<Issue, 'kanbanOrder'>,
-    description: Description,
-  ) => void;
+  onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
+  onCreateIssue: (issue: Omit<Issue, 'kanbanOrder'>) => void;
   onCreateComment: (comment: Comment) => void;
   onOpenDetail: (issue: Issue) => void;
 }

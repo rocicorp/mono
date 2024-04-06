@@ -31,7 +31,7 @@ export function getKanbanOrderIssueUpdates(
   issueToMove: Issue,
   issueToInsertBefore: Issue,
   issues: Issue[],
-): IssueUpdate[] {
+): {issue: Issue; update: IssueUpdate}[] {
   const indexInKanbanOrder = indexOf(issues, issueToInsertBefore);
   let beforeKey: string | null = null;
   if (indexInKanbanOrder > 0) {
@@ -58,13 +58,13 @@ export function getKanbanOrderIssueUpdates(
   const issueUpdates = [
     {
       issue: issueToMove,
-      issueChanges: {kanbanOrder: newKanbanOrderKeys[0]},
+      update: {id: issueToMove.id, kanbanOrder: newKanbanOrderKeys[0]},
     },
   ];
   for (let i = 0; i < issuesToReKey.length; i++) {
     issueUpdates.push({
       issue: issuesToReKey[i],
-      issueChanges: {kanbanOrder: newKanbanOrderKeys[i + 1]},
+      update: {id: issuesToReKey[i].id, kanbanOrder: newKanbanOrderKeys[i + 1]},
     });
   }
   return issueUpdates;
@@ -72,7 +72,7 @@ export function getKanbanOrderIssueUpdates(
 
 interface Props {
   issues: Issue[];
-  onUpdateIssues: (issueUpdates: IssueUpdate[]) => void;
+  onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onOpenDetail: (issue: Issue) => void;
 }
 
@@ -100,12 +100,12 @@ function IssueBoard({issues, onUpdateIssues, onOpenDetail}: Props) {
       }
       const issueUpdates = issueToInsertBefore
         ? getKanbanOrderIssueUpdates(draggedIssue, issueToInsertBefore, issues)
-        : [{issue: draggedIssue, issueChanges: {}}];
+        : [{issue: draggedIssue, update: {id: draggedIssue.id}}];
       if (newStatus !== sourceStatus) {
         issueUpdates[0] = {
           ...issueUpdates[0],
-          issueChanges: {
-            ...issueUpdates[0].issueChanges,
+          update: {
+            ...issueUpdates[0].update,
             status: newStatus,
           },
         };
@@ -120,7 +120,7 @@ function IssueBoard({issues, onUpdateIssues, onOpenDetail}: Props) {
       onUpdateIssues([
         {
           issue,
-          issueChanges: {priority},
+          update: {id: issue.id, priority},
         },
       ]);
     },

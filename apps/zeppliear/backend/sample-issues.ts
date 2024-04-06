@@ -1,14 +1,15 @@
-import {Issue, Comment, Description, Priority, Status} from '../frontend/issue';
+import {Issue, Comment, Priority, Status, Member} from '../frontend/issue';
 import {generateNKeysBetween} from 'fractional-indexing';
 import {sortBy} from 'lodash';
 import {reactIssues} from '../sample-data/issues-react';
 import {reactComments} from '../sample-data/comments-react';
+import {nanoid} from 'nanoid';
 
 export type SampleData = {
-  issue: Issue;
-  description: Description;
+  issues: Issue[];
   comments: Comment[];
-}[];
+  members: Member[];
+};
 
 export function getReactSampleData(): SampleData {
   const sortedIssues = sortBy(
@@ -22,55 +23,54 @@ export function getReactSampleData(): SampleData {
 
   const issuesCount = reactIssues.length;
   const kanbanOrderKeys = generateNKeysBetween(null, null, issuesCount);
-  const issues: SampleData = sortedIssues.map((reactIssue, idx) => ({
-    issue: {
-      id: reactIssue.number.toString(),
+  const memberLoginToID: Record<string, string> = {};
+  const issueNumberToID: Record<string, string> = {};
+  const issues: Issue[] = sortedIssues.map((reactIssue, idx) => {
+    let creatorID = memberLoginToID[reactIssue.creator_user_login];
+    if (!creatorID) {
+      creatorID = nanoid();
+      memberLoginToID[reactIssue.creator_user_login] = creatorID;
+    }
+    const issueID = nanoid();
+    issueNumberToID[reactIssue.number.toString()] = issueID;
+
+    return {
+      id: issueID,
       title: reactIssue.title,
       priority: getPriority(reactIssue),
       status: getStatus(reactIssue),
       modified: Date.parse(reactIssue.updated_at),
       created: Date.parse(reactIssue.created_at),
-      creator: reactIssue.creator_user_login,
+      creatorID,
       kanbanOrder: kanbanOrderKeys[idx],
-    },
-    description: reactIssue.body || '',
-    comments: [],
-  }));
+      description: (reactIssue.body || '').substring(0, 10000),
+    };
+  });
 
-  const comments = reactComments.map(reactComment => ({
-    id: reactComment.comment_id,
-    issueID: reactComment.number.toString(),
-    created: Date.parse(reactComment.created_at),
-    body: reactComment.body || '',
-    creator: reactComment.creator_user_login,
-  }));
-  for (const comment of comments) {
-    const issue = issues.find(issue => issue.issue.id === comment.issueID);
-    if (issue) {
-      issue.comments.push(comment);
+  const comments: Comment[] = reactComments.map(reactComment => {
+    let creatorID = memberLoginToID[reactComment.creator_user_login];
+    if (!creatorID) {
+      creatorID = nanoid();
+      memberLoginToID[reactComment.creator_user_login] = creatorID;
     }
-  }
-  issues;
+    return {
+      id: reactComment.comment_id,
+      issueID: issueNumberToID[reactComment.number.toString()],
+      created: Date.parse(reactComment.created_at),
+      body: reactComment.body || '',
+      creatorID,
+    };
+  });
 
-  // Can use this to generate artifically larger datasets for stress testing.
-  const multiplied: SampleData = [];
-  for (let i = 0; i < 1; i++) {
-    multiplied.push(
-      ...issues.map(issue => ({
-        ...issue,
-        issue: {
-          ...issue.issue,
-          id: issue.issue.id + '-' + i,
-        },
-        comments: issue.comments.map(comment => ({
-          ...comment,
-          issueID: comment.issueID + '-' + i,
-        })),
-      })),
-    );
-  }
+  const members: Member[] = Object.entries(memberLoginToID).map(
+    ([login, id]) => ({id, name: login}),
+  );
 
-  return multiplied;
+  return {
+    issues,
+    comments,
+    members,
+  };
 }
 
 function getStatus({

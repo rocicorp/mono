@@ -89,32 +89,13 @@ export const issueSchema = z.object({
   status: statusEnumSchema,
   modified: z.number(),
   created: z.number(),
-  creator: z.string(),
+  creatorID: z.string(),
   kanbanOrder: z.string(),
+  description: z.string(),
 });
 
 export type Issue = Immutable<z.TypeOf<typeof issueSchema>>;
-export type IssueValue = Immutable<z.TypeOf<typeof issueValueSchema>>;
-export const issueValueSchema = issueSchema.omit({
-  id: true,
-});
-
-export type IssueUpdate = {
-  issue: Issue;
-  issueChanges: Partial<IssueValue>;
-  descriptionUpdate?:
-    | {
-        description: Description;
-        descriptionChange: Description;
-      }
-    | undefined;
-};
-
-export type IssueUpdateWithID = Immutable<{
-  id: string;
-  issueChanges: Partial<IssueValue>;
-  descriptionChange?: Description | undefined;
-}>;
+export type IssueUpdate = Omit<Partial<Issue>, 'modified'> & {id: string};
 
 export async function getIssue(
   tx: ReadTransaction,
@@ -124,10 +105,7 @@ export async function getIssue(
   if (val === undefined) {
     return undefined;
   }
-  return {
-    ...issueValueSchema.parse(val),
-    id,
-  };
+  return issueSchema.parse(val);
 }
 
 export async function putIssue(
@@ -138,61 +116,20 @@ export async function putIssue(
 }
 
 export function issueFromKeyAndValue(
-  key: string,
+  _key: string,
   value: ReadonlyJSONValue,
 ): Issue {
-  return {
-    ...issueValueSchema.parse(value),
-    id: issueID(key),
-  };
-}
-
-export const DESCRIPTION_KEY_PREFIX = `description/`;
-export const descriptionKey = (issueID: string) =>
-  `${DESCRIPTION_KEY_PREFIX}${issueID}`;
-export const descriptionSchema = z.string();
-export const getDescriptionIssueId = (key: string) => {
-  if (!key.startsWith(DESCRIPTION_KEY_PREFIX)) {
-    throw new Error(`Invalid description key: ${key}`);
-  }
-  return key.substring(DESCRIPTION_KEY_PREFIX.length);
-};
-
-export type Description = Immutable<z.TypeOf<typeof descriptionSchema>>;
-export async function getIssueDescription(
-  tx: ReadTransaction,
-  issueID: string,
-): Promise<Description | undefined> {
-  const entry = await tx.get(descriptionKey(issueID));
-  if (entry === undefined) {
-    return undefined;
-  }
-  return descriptionSchema.parse(entry);
-}
-
-export async function putIssueDescription(
-  tx: WriteTransaction,
-  issueID: string,
-  description: Description,
-): Promise<void> {
-  await tx.set(descriptionKey(issueID), description);
+  return issueSchema.parse(value);
 }
 
 export const COMMENT_KEY_PREFIX = `comment/`;
-export const commentKey = (issueID: string, commentID: string) =>
-  `${COMMENT_KEY_PREFIX}${issueID}/${commentID}`;
-export const commentIDs = (key: string) => {
+export const commentKey = (commentID: string) =>
+  `${COMMENT_KEY_PREFIX}${commentID}`;
+export const commentID = (key: string) => {
   if (!key.startsWith(COMMENT_KEY_PREFIX)) {
     throw new Error(`Invalid comment key: ${key}`);
   }
-  const ids = key.substring(COMMENT_KEY_PREFIX.length).split('/');
-  if (ids.length !== 2) {
-    throw new Error(`Invalid comment key: ${key}`);
-  }
-  return {
-    issueID: ids[0],
-    commentID: ids[1],
-  };
+  return key.substring(COMMENT_KEY_PREFIX.length);
 };
 
 export const commentSchema = z.object({
@@ -200,40 +137,71 @@ export const commentSchema = z.object({
   issueID: z.string(),
   created: z.number(),
   body: z.string(),
-  creator: z.string(),
+  creatorID: z.string(),
 });
 
 export type Comment = Immutable<z.TypeOf<typeof commentSchema>>;
-export type CommentValue = Immutable<z.TypeOf<typeof commentValueSchema>>;
-export const commentValueSchema = commentSchema.omit({
-  id: true,
-  issueID: true,
-});
 
 export async function getIssueComments(
   tx: ReadTransaction,
   issueID: string,
 ): Promise<Comment[]> {
-  const entries = await tx
-    .scan({prefix: COMMENT_KEY_PREFIX + issueID})
-    .entries()
+  const comments = await tx
+    .scan({prefix: COMMENT_KEY_PREFIX})
+    .values()
     .toArray();
-  return entries.map(([key, val]) => {
-    const ids = commentIDs(key);
-    return {
-      ...commentValueSchema.parse(val),
-      id: ids.commentID,
-      issueID: ids.issueID,
-    };
-  });
+
+  console.log(comments);
+
+  return comments
+    .filter(
+      comment =>
+        (comment as {issueID?: string | undefined}).issueID === issueID,
+    )
+    .map(val => commentSchema.parse(val));
 }
 
 export async function putIssueComment(
   tx: WriteTransaction,
   comment: Comment,
 ): Promise<void> {
-  await tx.set(commentKey(comment.issueID, comment.id), comment);
+  await tx.set(commentKey(comment.id), comment);
 }
+
+export const MEMBER_KEY_PREFIX = `member/`;
+export const memberKey = (memberId: string) =>
+  `${MEMBER_KEY_PREFIX}${memberId}`;
+export const memberID = (key: string) => {
+  if (!key.startsWith(MEMBER_KEY_PREFIX)) {
+    throw new Error(`Invalid member key: ${key}`);
+  }
+  return key.substring(MEMBER_KEY_PREFIX.length);
+};
+
+export async function getMember(
+  tx: ReadTransaction,
+  id: string,
+): Promise<Member | undefined> {
+  const val = await tx.get(memberKey(id));
+  if (val === undefined) {
+    return undefined;
+  }
+  return memberSchema.parse(val);
+}
+
+export async function putMember(
+  tx: WriteTransaction,
+  member: Member,
+): Promise<void> {
+  await tx.set(memberKey(member.id), member);
+}
+
+export const memberSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
+export type Member = Immutable<z.TypeOf<typeof memberSchema>>;
 
 const REVERSE_TIMESTAMP_LENGTH = Number.MAX_SAFE_INTEGER.toString().length;
 

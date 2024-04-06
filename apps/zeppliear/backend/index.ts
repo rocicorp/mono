@@ -9,14 +9,21 @@ function makeOptions(): ReflectServerOptions<M> {
       const inited = await write.get('inited');
       if (inited !== true) {
         const sampleData = getReactSampleData();
-        for (const {issue, description, comments} of sampleData) {
+        for (const member of sampleData.members) {
+          await mutators.putMember(write, {
+            member,
+          });
+        }
+        for (const issue of sampleData.issues) {
           await mutators.putIssue(write, {
             issue,
-            description: description.substring(0, 10000),
           });
-          for (const comment of comments) {
-            await mutators.putIssueComment(write, comment);
-          }
+        }
+        for (const comment of sampleData.comments) {
+          await mutators.putIssueComment(write, {
+            comment,
+            updateIssueModifed: false,
+          });
         }
         await write.set('inited', true);
       }
