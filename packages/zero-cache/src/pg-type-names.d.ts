@@ -8,7 +8,7 @@ declare module 'pg-type-names';
 //   const api: {
 //     names: Record<string, string>;
 //     oids: Record<string, number>;
-//     decsriptions: Record<string, string>;
+//     descriptions: Record<string, string>;
 //   };
 //   export default api;
 // }
