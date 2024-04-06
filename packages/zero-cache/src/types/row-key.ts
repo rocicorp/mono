@@ -1,6 +1,26 @@
 import {compareUTF8} from 'compare-utf8';
+import type postgres from 'postgres';
 import xxh from 'xxhashjs'; // TODO: Use xxhash-wasm
 import {stringify} from './bigint-json.js';
+
+export type ColumnType = {typeOid: number};
+export type RowKeyType = Record<string, ColumnType>;
+export type RowKeyValue = Record<string, postgres.Serializable>;
+
+/**
+ * Returns a normalized string suitable for representing a row key in a form
+ * that can be used as a Map key.
+ */
+// TODO: Change `key` to RowKeyValue.
+export function rowKeyString(key: Record<string, unknown>): string {
+  const tuples = Object.entries(key)
+    .sort(([col1], [col2]) => compareUTF8(col1, col2))
+    .flat();
+
+  // xxhash only computes 64-bit values. Run it on the forward and reverse string
+  // to get better collision resistance.
+  return stringify(tuples);
+}
 
 /**
  * A RowKeyHash is a 128-bit order-agnostic hash of the column name / value tuples of a
@@ -14,14 +34,12 @@ import {stringify} from './bigint-json.js';
  *
  * The hash is encoded in `base64url`, with the maximum 128-bit value being 22 characters long.
  */
+// TODO: Change `key` to RowKeyValue.
 export function rowKeyHash(key: Record<string, unknown>): string {
-  const tuples = Object.entries(key)
-    .sort(([col1], [col2]) => compareUTF8(col1, col2))
-    .flat();
+  const str = rowKeyString(key);
 
   // xxhash only computes 64-bit values. Run it on the forward and reverse string
   // to get better collision resistance.
-  const str = stringify(tuples);
   const forward = BigInt(xxh.h64().update(str).digest().toString());
   const backward = BigInt(xxh.h64().update(reverse(str)).digest().toString());
   const full = (forward << 64n) + backward;
