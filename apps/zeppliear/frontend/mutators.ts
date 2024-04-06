@@ -2,13 +2,13 @@ import type {WriteTransaction} from 'zero-client';
 import {
   putIssue,
   getIssue,
-  Description,
-  putIssueDescription,
   putIssueComment,
   Comment,
   Issue,
   commentKey,
-  IssueUpdateWithID,
+  Member,
+  putMember,
+  IssueUpdate,
 } from './issue';
 
 export type M = typeof mutators;
@@ -17,38 +17,34 @@ export const mutators = {
     tx: WriteTransaction,
     {
       issue,
-      description,
     }: {
       issue: Issue;
-      description: Description;
     },
   ): Promise<void> => {
     await putIssue(tx, issue);
-    await putIssueDescription(tx, issue.id, description);
   },
   updateIssues: async (
     tx: WriteTransaction,
-    issueUpdates: IssueUpdateWithID[],
+    {issueUpdates}: {issueUpdates: IssueUpdate[]},
   ): Promise<void> => {
     const modified = Date.now();
-    for (const {id, issueChanges: changes, descriptionChange} of issueUpdates) {
-      const issue = await getIssue(tx, id);
+    for (const issueUpdate of issueUpdates) {
+      const issue = await getIssue(tx, issueUpdate.id);
       if (issue === undefined) {
-        console.info(`Issue ${id} not found`);
+        console.info(`Issue ${issueUpdate.id} not found`);
         return;
       }
-      const changed = {...issue, ...changes};
+      const changed = {...issue, ...issueUpdate};
       changed.modified = modified;
       await putIssue(tx, changed);
-      if (descriptionChange) {
-        await putIssueDescription(tx, id, descriptionChange);
-      }
     }
   },
   putIssueComment: async (
     tx: WriteTransaction,
-    comment: Comment,
-    updateIssueModifed = true,
+    {
+      comment,
+      updateIssueModifed = true,
+    }: {comment: Comment; updateIssueModifed?: boolean | undefined},
   ): Promise<void> => {
     if (updateIssueModifed) {
       const issue = await getIssue(tx, comment.issueID);
@@ -63,8 +59,18 @@ export const mutators = {
   },
   deleteIssueComment: async (
     tx: WriteTransaction,
-    comment: Comment,
+    {comment}: {comment: Comment},
   ): Promise<void> => {
-    await tx.del(commentKey(comment.issueID, comment.id));
+    await tx.del(commentKey(comment.id));
+  },
+  putMember: async (
+    tx: WriteTransaction,
+    {
+      member,
+    }: {
+      member: Member;
+    },
+  ): Promise<void> => {
+    await putMember(tx, member);
   },
 };

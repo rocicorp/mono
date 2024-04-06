@@ -12,7 +12,7 @@ import {FixedSizeList} from 'react-window';
 import type {Issue, IssueUpdate, Priority, Status} from './issue';
 
 interface Props {
-  onUpdateIssues: (issueUpdates: IssueUpdate[]) => void;
+  onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onOpenDetail: (issue: Issue) => void;
   issues: Issue[];
   view: string | null;
@@ -62,7 +62,7 @@ function IssueList({onUpdateIssues, onOpenDetail, issues, view}: Props) {
       onUpdateIssues([
         {
           issue,
-          issueChanges: {priority},
+          update: {id: issue.id, priority},
         },
       ]);
     },
@@ -74,7 +74,7 @@ function IssueList({onUpdateIssues, onOpenDetail, issues, view}: Props) {
       onUpdateIssues([
         {
           issue,
-          issueChanges: {status},
+          update: {id: issue.id, status},
         },
       ]);
     },

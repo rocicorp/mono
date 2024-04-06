@@ -8,7 +8,6 @@ import PriorityMenu from './priority-menu';
 import {
   Comment,
   getIssueComments,
-  getIssueDescription,
   Issue,
   Priority,
   Status,
@@ -28,13 +27,14 @@ import {useKeyPressed} from './hooks/useKeyPressed';
 import {sortBy} from 'lodash';
 
 interface Props {
-  onUpdateIssues: (issueUpdates: IssueUpdate[]) => void;
+  onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onAddComment: (comment: Comment) => void;
   issues: Issue[];
   isLoading: boolean;
   zero: Zero<M>;
 }
 
+// TODO: join comment.creatorID with members
 function CommentsList(comments: Comment[], isLoading: boolean) {
   const elements = sortBy(comments, comment => comment.created).map(comment => (
     <div
@@ -43,7 +43,7 @@ function CommentsList(comments: Comment[], isLoading: boolean) {
     >
       <div className="h-6 mb-1 -mt-px relative">
         <DefaultAvatarIcon className="w-4.5 h-4.5 rounded-full overflow-hidden flex-shrink-0 float-left mr-2" />
-        {comment.creator} {timeAgo(comment.created)}
+        {comment.creatorID} {timeAgo(comment.created)}
       </div>
       <div className="block flex-1 whitespace-pre-wrap">
         <Remark>{comment.body}</Remark>
@@ -100,17 +100,6 @@ export default function IssueDetail({
     null,
     [detailIssueID],
   );
-  const description = useSubscribe(
-    zero,
-    async tx => {
-      if (detailIssueID) {
-        return (await getIssueDescription(tx, detailIssueID)) || null;
-      }
-      return null;
-    },
-    null,
-    [detailIssueID],
-  );
 
   const comments = useSubscribe(
     zero,
@@ -130,25 +119,26 @@ export default function IssueDetail({
 
   const handleChangePriority = useCallback(
     (priority: Priority) => {
-      issue && onUpdateIssues([{issue, issueChanges: {priority}}]);
+      issue && onUpdateIssues([{issue, update: {id: issue.id, priority}}]);
     },
     [onUpdateIssues, issue],
   );
 
   const handleChangeStatus = useCallback(
     (status: Status) => {
-      issue && onUpdateIssues([{issue, issueChanges: {status}}]);
+      issue && onUpdateIssues([{issue, update: {id: issue.id, status}}]);
     },
     [onUpdateIssues, issue],
   );
 
   const handleAddComment = useCallback(() => {
-    if (commentText !== '') {
+    if (commentText !== '' && issue) {
       onAddComment({
         id: nanoid(),
-        issueID: issue?.id as string,
+        issueID: issue.id as string,
         created: Date.now(),
-        creator: 'Me',
+        // TODO: Create member for this user
+        creatorID: 'Me',
         body: commentText,
       });
       setCommentText('');
@@ -194,7 +184,7 @@ export default function IssueDetail({
 
   const handleEdit = () => {
     setTitleText(issue?.title || '');
-    setDescriptionText(description || '');
+    setDescriptionText(issue?.description || '');
     setEditMode(true);
   };
 
@@ -204,24 +194,17 @@ export default function IssueDetail({
 
   const handleSave = () => {
     if (issue) {
-      const descriptionUpdate =
-        descriptionText !== description
-          ? {
-              description: description || '',
-              descriptionChange: descriptionText,
-            }
-          : undefined;
-
+      let update: IssueUpdate = {id: issue.id};
+      if (descriptionText !== issue.description) {
+        update = {...update, description: descriptionText};
+      }
+      if (titleText !== issue.title) {
+        update = {...update, title: titleText};
+      }
       onUpdateIssues([
         {
           issue,
-          issueChanges:
-            titleText !== issue.title
-              ? {
-                  title: titleText,
-                }
-              : {},
-          descriptionUpdate,
+          update,
         },
       ]);
     }
@@ -328,15 +311,15 @@ export default function IssueDetail({
                     onChange={e => setDescriptionText(e.target.value)}
                     value={descriptionText}
                   />
-                ) : isLoading && description === null ? (
+                ) : isLoading && issue?.description === null ? (
                   'Loading...'
                 ) : (
-                  <Remark>{description || ''}</Remark>
+                  <Remark>{issue?.description || ''}</Remark>
                 )}
               </div>
             </div>
             <div className="text-md py-4 px-5 text-white">Comments</div>
-            {CommentsList(comments, isLoading && description === null)}
+            {CommentsList(comments, isLoading && issue?.description === null)}
             <div className="mx-3 bg-gray-850 flex-1 mx- mt-0 mb-3 flex-1 border-transparent rounded full py-3 px-3 relative whitespace-pre-wrap ">
               <textarea
                 className="block flex-1 whitespace-pre-wrap text-size-sm w-full bg-gray-850 min-h-[6rem] placeholder-gray-300 placeholder:text-sm"
