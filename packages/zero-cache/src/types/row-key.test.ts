@@ -1,9 +1,9 @@
 import {describe, expect, test} from '@jest/globals';
-import {rowKeyHash, rowKeyString} from './row-key.js';
+import {RowKeyValue, rowKeyHash, rowKeyString} from './row-key.js';
 
 describe('types/row-key', () => {
   type Case = {
-    keys: Record<string, unknown>[];
+    keys: RowKeyValue[];
     rowKeyString: string;
     rowKeyHash: string;
   };

@@ -41,7 +41,17 @@ describe('replicator/message-processor', () => {
     schema: 'public',
     name: 'foo',
     replicaIdentity: 'default',
-    columns: [], // Unused at the moment
+    columns: [
+      {
+        flags: 1,
+        name: 'id',
+        typeOid: 23,
+        typeMod: -1,
+        typeSchema: null,
+        typeName: null,
+        parser: () => {},
+      },
+    ],
     keyColumns: ['id'],
   } as const;
 
@@ -291,13 +301,11 @@ describe('replicator/message-processor', () => {
       );
 
       const lc = createSilentLogContext();
-      const pending: Promise<unknown>[] = [];
       for (const [lsn, msgs] of Object.entries(c.messages)) {
         for (const msg of msgs) {
-          pending.push(processor.processMessage(lc, lsn, msg));
+          processor.processMessage(lc, lsn, msg);
         }
       }
-      await Promise.all(pending);
 
       for (const lsn of c.acknowledged) {
         expect(await acknowledgements.dequeue()).toBe(lsn);

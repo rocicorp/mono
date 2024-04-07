@@ -879,22 +879,6 @@ describe('replicator/incremental-sync', () => {
           {
             stateVersion: '01',
             tableName: 'public.issues',
-            op: 'd',
-            rowKeyHash: 'kHZmjyGbDssRKHHEbU2z2g',
-            rowKey: {orgID: 2, issueID: 789},
-            row: null,
-          },
-          {
-            stateVersion: '01',
-            tableName: 'public.issues',
-            op: 'd',
-            rowKeyHash: 'd4LTXQRobCPxSnobs_FcLg',
-            rowKey: {orgID: 1, issueID: 123},
-            row: null,
-          },
-          {
-            stateVersion: '01',
-            tableName: 'public.issues',
             op: 's',
             rowKeyHash: 'HFQhV6itMdKyZv81WpOGAg',
             rowKey: {orgID: 1, issueID: 456},
