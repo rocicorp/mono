@@ -18,7 +18,7 @@ import {epochMicrosToTimestampTz} from '../../types/big-time.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {registerPostgresTypeParsers} from '../../types/pg.js';
-import {rowKeyHash} from '../../types/row-key.js';
+import {RowKeyType, RowKeyValue, rowKeyHash} from '../../types/row-key.js';
 import {
   PUB_PREFIX,
   ZERO_VERSION_COLUMN_NAME,
@@ -27,6 +27,7 @@ import {
 import {CREATE_INVALIDATION_TABLES} from './invalidation.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
 import {toLexiVersion} from './types/lsn.js';
+import {TableTracker} from './types/table-tracker.js';
 
 /**
  * Replication metadata, used for incremental view maintenance and catchup.
@@ -383,14 +384,14 @@ export class MessageProcessor {
     }
   }
 
-  async processMessage(lc: LogContext, lsn: string, message: Pgoutput.Message) {
+  processMessage(lc: LogContext, lsn: string, message: Pgoutput.Message) {
     lc = lc.withContext('lsn', lsn);
     if (this.#failure) {
       lc.debug?.(`Dropping ${message.tag}`);
       return;
     }
     try {
-      await this.#processMessage(lc, lsn, message);
+      this.#processMessage(lc, lsn, message);
     } catch (e) {
       this.#fail(lc, e);
     }
@@ -483,6 +484,7 @@ export class MessageProcessor {
 class TransactionProcessor {
   readonly #version: LexiVersion;
   readonly #pool: TransactionPool;
+  readonly #tableTrackers = new Map<string, TableTracker>();
 
   constructor(lc: LogContext, lsn: string) {
     this.#version = toLexiVersion(lsn);
@@ -516,10 +518,14 @@ class TransactionProcessor {
     const key = Object.fromEntries(
       insert.relation.keyColumns.map(col => [col, insert.new[col]]),
     );
+    this.#getTableTracker(insert.relation).add({
+      preValue: null,
+      postRowKey: key,
+      postValue: row,
+    });
 
     return this.#pool.process(tx => [
       tx`INSERT INTO ${tx(table(insert.relation))} ${tx(row)}`,
-      ...this.#upsertChanges(tx, insert.relation, key, row),
     ]);
   }
 
@@ -533,9 +539,15 @@ class TransactionProcessor {
     const newKey = Object.fromEntries(
       update.relation.keyColumns.map(col => [col, update.new[col]]),
     );
-    const currKey = oldKey ?? newKey;
+    this.#getTableTracker(update.relation).add({
+      preRowKey: oldKey,
+      preValue: undefined,
+      postRowKey: newKey,
+      postValue: row,
+    });
 
     return this.#pool.process(tx => {
+      const currKey = oldKey ?? newKey;
       const conds = Object.entries(currKey).map(
         ([col, val]) => tx`${tx(col)} = ${val}`,
       );
@@ -548,18 +560,25 @@ class TransactionProcessor {
         UPDATE ${tx(table(update.relation))}
           SET ${tx(row)}
           WHERE ${conds.flatMap((k, i) => (i ? [tx` AND `, k] : k))}`,
-        ...this.#upsertChanges(tx, update.relation, newKey, row, oldKey),
       ];
     });
   }
 
   processDelete(del: Pgoutput.MessageDelete) {
+    // REPLICA IDENTITY DEFAULT means the `key` must be set.
+    // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html
+    assert(del.relation.replicaIdentity === 'default');
+    assert(del.key);
+    const rowKey = del.key;
+
+    this.#getTableTracker(del.relation).add({
+      preValue: undefined,
+      postRowKey: rowKey,
+      postValue: null,
+    });
+
     return this.#pool.process(tx => {
-      // REPLICA IDENTITY DEFAULT means the `key` must be set.
-      // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html
-      assert(del.relation.replicaIdentity === 'default');
-      assert(del.key);
-      const conds = Object.entries(del.key).map(
+      const conds = Object.entries(rowKey).map(
         ([col, val]) => tx`${tx(col)} = ${val}`,
       );
 
@@ -570,74 +589,80 @@ class TransactionProcessor {
         tx`
       DELETE FROM ${tx(table(del.relation))} 
         WHERE ${conds.flatMap((k, i) => (i ? [tx` AND `, k] : k))} `,
-        ...this.#upsertChanges(tx, del.relation, del.key),
       ];
     });
   }
 
   processTruncate(truncate: Pgoutput.MessageTruncate) {
-    const tables = truncate.relations.map(r => `${r.schema}.${r.name}`);
+    for (const relation of truncate.relations) {
+      this.#getTableTracker(relation).truncate();
+    }
 
-    return this.#pool.process(tx => [
-      tx`TRUNCATE ${tx(tables)}`,
-      ...truncate.relations
-        .map(relation => this.#upsertChanges(tx, relation))
-        .flat(),
-    ]);
+    const tables = truncate.relations.map(r => `${r.schema}.${r.name}`);
+    return this.#pool.process(tx => [tx`TRUNCATE ${tx(tables)}`]);
   }
 
-  processCommit(_: Pgoutput.MessageCommit) {
+  processCommit(_commit: Pgoutput.MessageCommit) {
+    this.#pool.process(tx => {
+      // Construct ChangeLog entries based on the effective row changes.
+      const changeLogEntries: Statement[] = [];
+      for (const table of this.#tableTrackers.values()) {
+        const {truncated, changes} = table.getEffectiveRowChanges();
+        if (truncated) {
+          changeLogEntries.push(
+            this.#changeLogEntry(tx, table.schema, table.table),
+          );
+        }
+        for (const [_, change] of changes) {
+          changeLogEntries.push(
+            this.#changeLogEntry(
+              tx,
+              table.schema,
+              table.table,
+              change.rowKey,
+              change.postValue,
+            ),
+          );
+        }
+      }
+      return changeLogEntries;
+    });
     this.#pool.setDone();
   }
 
-  #upsertChanges(
+  #changeLogEntry(
     tx: postgres.TransactionSql,
-    relation: Pgoutput.MessageRelation,
-    key?: Record<string, postgres.JSONValue>,
-    row?: Record<string, postgres.JSONValue>,
-    oldKey?: Record<string, postgres.JSONValue> | null,
+    schema: string,
+    table: string,
+    key?: RowKeyValue,
+    row?: RowKeyValue | null,
   ) {
     const change: ChangeLogEntry = {
       stateVersion: this.#version,
-      tableName: table(relation),
+      tableName: `${schema}.${table}`,
       op: row ? 's' : key ? 'd' : 't',
       rowKeyHash: key ? rowKeyHash(key) : '', // Empty string for truncate,
-      rowKey: key ?? null,
-      row: row ?? null,
+      rowKey: (key as postgres.JSONValue) ?? null,
+      row: (row as postgres.JSONValue) ?? null,
     };
-    const changes: Statement[] = [];
-    if (!key) {
-      // For truncate, first remove all ChangeLog entries for the table
-      // in this transaction.
-      changes.push(tx`
-      DELETE FROM _zero."ChangeLog"
-        WHERE "stateVersion" = ${this.#version} AND
-              "tableName" = ${table(relation)};`);
+    return tx`INSERT INTO _zero."ChangeLog" ${tx(change)};`;
+  }
+
+  #getTableTracker(relation: Pgoutput.MessageRelation) {
+    const key = table(relation);
+    const rowKeyType: RowKeyType = Object.fromEntries(
+      relation.keyColumns.map(name => {
+        const column = relation.columns.find(c => c.name === name);
+        assert(column);
+        return [name, column];
+      }),
+    );
+    let tracker = this.#tableTrackers.get(key);
+    if (!tracker) {
+      tracker = new TableTracker(relation.schema, relation.name, rowKeyType);
+      this.#tableTrackers.set(key, tracker);
     }
-    if (oldKey) {
-      // If an update changed the row key, insert a delete for the oldKey.
-      const del: ChangeLogEntry = {
-        stateVersion: this.#version,
-        tableName: table(relation),
-        op: 'd',
-        rowKeyHash: rowKeyHash(oldKey),
-        rowKey: oldKey,
-        row: null,
-      };
-      changes.push(tx`
-      INSERT INTO _zero."ChangeLog" ${tx(del)} 
-        ON CONFLICT ON CONSTRAINT PK_change_log
-        DO UPDATE SET 
-          op = EXCLUDED.op,
-          row = EXCLUDED.row;`);
-    }
-    changes.push(tx`
-      INSERT INTO _zero."ChangeLog" ${tx(change)} 
-        ON CONFLICT ON CONSTRAINT PK_change_log
-        DO UPDATE SET 
-          op = EXCLUDED.op,
-          row = EXCLUDED.row;`);
-    return changes;
+    return tracker;
   }
 }
 
@@ -646,8 +671,8 @@ type ChangeLogEntry = {
   tableName: string;
   op: 't' | 's' | 'd';
   rowKeyHash: string;
-  rowKey: postgres.JSONValue | null;
-  row: postgres.JSONValue | null;
+  rowKey: postgres.JSONValue;
+  row: postgres.JSONValue;
 };
 
 function table(table: Pgoutput.MessageRelation): string {
