@@ -4,15 +4,15 @@
  * for UPDATE and DELETE changes.
  *
  * During the course of a transaction, however, a row may be updated multiple times,
- * producing the intermediate state which is irrelevant for the purpose of
+ * producing the intermediate state that is irrelevant for the purpose of
  * invalidation. A row may even appear and disappear within a transaction and
  * produce no effective change outside of the transaction (i.e. an "ephemeral" row).
  *
  * Similarly, the `ChangeLog` entries for a transaction represents the final state
  * for each row that changed; intermediate changes should not be manifested.
  *
- * The {@link TableTracker} class is used to distill a chronological sequence of
- * row changes into the effective pre- and post- transaction values, dropping
+ * The {@link TableTracker} distills a chronological sequence of row changes
+ * into the effective pre- and post- transaction values, dropping
  * intermediate and ephemeral changes.
  */
 import {assert} from 'shared/src/asserts.js';
@@ -35,6 +35,8 @@ export type RowChange = {
   preValue: null | undefined;
 
   postRowKey: RowKeyValue;
+
+  /** `null` represents a DELETE'd row. */
   postValue: RowValue | null;
 };
 
