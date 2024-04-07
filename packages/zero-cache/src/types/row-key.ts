@@ -16,7 +16,6 @@ export type RowValue = RowKeyValue;
  * Returns a normalized string suitable for representing a row key in a form
  * that can be used as a Map key.
  */
-// TODO: Change `key` to RowKeyValue.
 export function rowKeyString(key: RowKeyValue): string {
   const tuples = Object.entries(key)
     .sort(([col1], [col2]) => compareUTF8(col1, col2))
@@ -39,7 +38,6 @@ export function rowKeyString(key: RowKeyValue): string {
  *
  * The hash is encoded in `base64url`, with the maximum 128-bit value being 22 characters long.
  */
-// TODO: Change `key` to RowKeyValue.
 export function rowKeyHash(key: RowKeyValue): string {
   const str = rowKeyString(key);
 
