@@ -1,10 +1,10 @@
 import {compareUTF8} from 'compare-utf8';
 import {describe, expect, test} from 'vitest';
 import {z} from 'zod';
-import {Entity} from '../../generate.js';
-import {AST, Condition, SimpleCondition} from '../ast/ast.js';
+import type {Entity} from '../../entity.js';
+import type {AST, Condition, SimpleCondition} from '../ast/ast.js';
 import {makeTestContext} from '../context/context.js';
-import {DifferenceStream} from '../ivm/graph/difference-stream.js';
+import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
 import {Materialite} from '../ivm/materialite.js';
 import * as agg from '../query/agg.js';
 import {conditionToString} from '../query/condition-to-string.js';

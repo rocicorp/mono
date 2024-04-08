@@ -3,10 +3,10 @@ import {Materialite} from '../materialite.js';
 import {applySelect, orderingProp} from '../../ast-to-ivm/pipeline-builder.js';
 import {MutableTreeView} from './tree-view.js';
 import {ascComparator, descComparator} from '../../query/statement.js';
-import {DifferenceStream} from '../graph/difference-stream.js';
+import type {DifferenceStream} from '../graph/difference-stream.js';
 import fc from 'fast-check';
-import {Primitive} from '../../ast/ast.js';
-import {Entity} from '../../../generate.js';
+import type {Primitive} from '../../ast/ast.js';
+import type {Entity} from '../../../entity.js';
 
 const numberComparator = (l: number, r: number) => l - r;
 

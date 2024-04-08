@@ -1,9 +1,9 @@
-import {Entity} from '../../../generate.js';
-import {Primitive} from '../../ast/ast.js';
+import type {Entity} from '../../../entity.js';
+import type {Primitive} from '../../ast/ast.js';
 import {invariant} from '../../error/asserts.js';
-import {Multiset} from '../multiset.js';
-import {Version} from '../types.js';
-import {Reply, Request} from './message.js';
+import type {Multiset} from '../multiset.js';
+import type {Version} from '../types.js';
+import type {Reply, Request} from './message.js';
 import {ConcatOperator} from './operators/concat-operator.js';
 import {DebugOperator} from './operators/debug-operator.js';
 import {DifferenceEffectOperator} from './operators/difference-effect-operator.js';
@@ -16,7 +16,7 @@ import {
   FullSumOperator,
 } from './operators/full-agg-operators.js';
 import {MapOperator} from './operators/map-operator.js';
-import {Operator} from './operators/operator.js';
+import type {Operator} from './operators/operator.js';
 import {ReduceOperator} from './operators/reduce-operator.js';
 
 export type Listener<T> = {
