@@ -27,7 +27,7 @@ export async function* mergeAsyncIterables<A, B>(
   while (true) {
     if (iterResultA.done) {
       if (iterResultB.done) {
-        break;
+        return;
       }
       yield iterResultB.value;
       iterResultB = await b.next();
@@ -52,13 +52,5 @@ export async function* mergeAsyncIterables<A, B>(
       yield iterResultB.value;
       iterResultB = await b.next();
     }
-  }
-
-  // Both done. Call return if defined.
-  if (a.return) {
-    await a.return();
-  }
-  if (b.return) {
-    await b.return();
   }
 }
