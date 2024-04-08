@@ -87,3 +87,38 @@ test('mergeAsyncIterables', async () => {
     (a, b) => stringCompare(a[0], b[0]),
   );
 });
+
+test('mergeAsyncIterables with return', async () => {
+  const log: unknown[] = [];
+  const iterA = makeAsyncIterable([1, 2, 3, 4]);
+  const iterB: Iterable<number> = {
+    [Symbol.iterator]() {
+      let i = 0.5;
+      return {
+        next() {
+          log.push('next:' + i);
+          if (i > 3.5) {
+            return {done: true, value: -2};
+          }
+          return {done: false, value: i++};
+        },
+        return() {
+          log.push('return:' + i);
+          return {done: true, value: -22};
+        },
+      };
+    },
+  };
+
+  const merged = mergeAsyncIterables(iterA, iterB, (a, b) => a - b);
+  const result = await asyncIterableToArray(merged);
+  expect(result).to.deep.equal([0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4]);
+  expect(log).to.deep.equal([
+    'next:0.5',
+    'next:1.5',
+    'next:2.5',
+    'next:3.5',
+    'next:4.5',
+    'return:4.5',
+  ]);
+});
