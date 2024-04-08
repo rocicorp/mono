@@ -6,7 +6,7 @@ import {normalizedFilterSpecSchema} from '../../types/invalidation.js';
 import {postgresTypeConfig} from '../../types/pg.js';
 import type {Service} from '../service.js';
 import {IncrementalSyncer} from './incremental-sync.js';
-import {Invalidator} from './invalidation.js';
+import {InvalidationFilters, Invalidator} from './invalidation.js';
 import {initSyncSchema} from './schema/sync-schema.js';
 
 export const registerInvalidationFiltersRequest = v.object({
@@ -70,10 +70,6 @@ export class ReplicatorService implements Replicator, Service {
   readonly #incrementalSyncer: IncrementalSyncer;
   readonly #invalidator: Invalidator;
 
-  // This lock ensures that transactions are processed serially, even
-  // across re-connects to the upstream db.
-  readonly #txSerializer = new Lock();
-
   constructor(
     lc: LogContext,
     replicaID: string,
@@ -88,13 +84,24 @@ export class ReplicatorService implements Replicator, Service {
     this.#syncReplica = postgres(syncReplicaUri, {
       ...postgresTypeConfig(),
     });
+
+    // This lock ensures that transactions are processed serially, even
+    // across re-connects to the upstream db.
+    const txSerializer = new Lock();
+    const invalidationFilters = new InvalidationFilters();
+
     this.#incrementalSyncer = new IncrementalSyncer(
       upstreamUri,
       replicaID,
       this.#syncReplica,
-      this.#txSerializer,
+      txSerializer,
+      invalidationFilters,
     );
-    this.#invalidator = new Invalidator(this.#syncReplica, this.#txSerializer);
+    this.#invalidator = new Invalidator(
+      this.#syncReplica,
+      txSerializer,
+      invalidationFilters,
+    );
   }
 
   async start() {
