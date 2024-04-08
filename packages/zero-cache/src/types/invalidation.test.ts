@@ -35,7 +35,7 @@ describe('types/invalidation', () => {
         filteredColumns: {},
         selectedColumns: ['bar'],
       },
-      hash: '438451ab415ecac', // Different from TableTag
+      hash: '0438451ab415ecac', // Different from TableTag
     },
     {
       name: 'FullTableTag',
@@ -78,6 +78,8 @@ describe('types/invalidation', () => {
   for (const c of hashCases) {
     test(`invalidationHash: ${c.name}`, () => {
       expect(invalidationHash(c.tag)).toBe(c.hash);
+      // Verify back/forth serialization (requires whole-byte padding of hex string).
+      expect(Buffer.from(c.hash, 'hex').toString('hex')).toBe(c.hash);
     });
   }
 

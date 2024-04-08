@@ -9,9 +9,15 @@ import {
   testDBs,
 } from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
+import {
+  invalidationHash,
+  normalizeFilterSpec,
+  type InvalidationFilterSpec,
+} from '../../types/invalidation.js';
 import {versionFromLexi, type LexiVersion} from '../../types/lexi-version.js';
 import {IncrementalSyncer, setupReplicationTables} from './incremental-sync.js';
 import {replicationSlot, setupUpstream} from './initial-sync.js';
+import {InvalidationFilters, Invalidator} from './invalidation.js';
 import {getPublicationInfo} from './tables/published.js';
 import type {TableSpec} from './tables/specs.js';
 
@@ -21,16 +27,21 @@ describe('replicator/incremental-sync', () => {
   let upstream: postgres.Sql;
   let replica: postgres.Sql;
   let syncer: IncrementalSyncer;
+  let invalidator: Invalidator;
 
   beforeEach(async () => {
     upstream = await testDBs.create('incremental_sync_test_upstream');
     replica = await testDBs.create('incremental_sync_test_replica');
+    const txSerializer = new Lock();
+    const invalidationFilters = new InvalidationFilters();
     syncer = new IncrementalSyncer(
       'postgres:///incremental_sync_test_upstream',
       REPLICA_ID,
       replica,
-      new Lock(),
+      txSerializer,
+      invalidationFilters,
     );
+    invalidator = new Invalidator(replica, txSerializer, invalidationFilters);
   });
 
   afterEach(async () => {
@@ -44,6 +55,7 @@ describe('replicator/incremental-sync', () => {
     setupUpstream?: string;
     setupReplica?: string;
     writeUpstream?: string[];
+    invalidationFilters?: InvalidationFilterSpec[];
     expectedTransactions?: number;
     specs: Record<string, TableSpec>;
     data: Record<string, Record<string, unknown>[]>;
@@ -155,6 +167,9 @@ describe('replicator/incremental-sync', () => {
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
+      invalidationFilters: [
+        {schema: 'public', table: 'issues', filteredColumns: {issueID: '='}},
+      ],
       specs: {
         ['public.issues']: {
           schema: 'public',
@@ -333,6 +348,63 @@ describe('replicator/incremental-sync', () => {
               description: null,
               ['_0_version']: '02',
             },
+          },
+        ],
+        ['_zero.InvalidationIndex']: [
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '123'},
+              }),
+              'hex',
+            ),
+            stateVersion: '01',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '123'},
+              }),
+              'hex',
+            ),
+            stateVersion: '01',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '456'},
+              }),
+              'hex',
+            ),
+            stateVersion: '01',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '789'},
+              }),
+              'hex',
+            ),
+            stateVersion: '02',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '987'},
+              }),
+              'hex',
+            ),
+            stateVersion: '02',
           },
         ],
       },
@@ -660,6 +732,11 @@ describe('replicator/incremental-sync', () => {
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
+      invalidationFilters: [
+        {schema: 'public', table: 'foo', filteredColumns: {id: '='}},
+        {schema: 'public', table: 'bar', filteredColumns: {id: '='}},
+        {schema: 'public', table: 'baz', filteredColumns: {id: '='}},
+      ],
       specs: {
         ['public.foo']: {
           schema: 'public',
@@ -805,6 +882,55 @@ describe('replicator/incremental-sync', () => {
             row: {id: 101, ['_0_version']: '02'},
           },
         ],
+        ['_zero.InvalidationIndex']: [
+          {
+            hash: Buffer.from(
+              invalidationHash({schema: 'public', table: 'baz', allRows: true}),
+              'hex',
+            ),
+            stateVersion: '01',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'bar',
+                filteredColumns: {id: '4'},
+              }),
+              'hex',
+            ),
+            stateVersion: '01',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'bar',
+                filteredColumns: {id: '5'},
+              }),
+              'hex',
+            ),
+            stateVersion: '01',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'bar',
+                filteredColumns: {id: '6'},
+              }),
+              'hex',
+            ),
+            stateVersion: '01',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({schema: 'public', table: 'foo', allRows: true}),
+              'hex',
+            ),
+            stateVersion: '02',
+          },
+        ],
       },
     },
     {
@@ -828,6 +954,14 @@ describe('replicator/incremental-sync', () => {
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
+      invalidationFilters: [
+        {schema: 'public', table: 'issues', filteredColumns: {orgID: '='}},
+        {
+          schema: 'public',
+          table: 'issues',
+          filteredColumns: {orgID: '=', issueID: '='},
+        },
+      ],
       specs: {
         ['public.issues']: {
           schema: 'public',
@@ -890,6 +1024,30 @@ describe('replicator/incremental-sync', () => {
             },
           },
         ],
+        ['_zero.InvalidationIndex']: [
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {orgID: '1'},
+              }),
+              'hex',
+            ),
+            stateVersion: '01',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '456', orgID: '1'},
+              }),
+              'hex',
+            ),
+            stateVersion: '01',
+          },
+        ],
       },
     },
   ];
@@ -913,6 +1071,13 @@ describe('replicator/incremental-sync', () => {
           'postgresql:///incremental_sync_test_upstream',
         ),
       );
+
+      if (c.invalidationFilters?.length) {
+        const specs = c.invalidationFilters.map(spec =>
+          normalizeFilterSpec(spec),
+        );
+        await invalidator.registerInvalidationFilters(lc, {specs});
+      }
 
       const syncing = syncer.start(lc);
 

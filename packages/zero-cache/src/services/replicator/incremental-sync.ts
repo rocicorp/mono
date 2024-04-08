@@ -13,6 +13,7 @@ import {
   ControlFlowError,
   Statement,
   TransactionPool,
+  synchronizedSnapshots,
 } from '../../db/transaction-pool.js';
 import {epochMicrosToTimestampTz} from '../../types/big-time.js';
 import {stringify} from '../../types/bigint-json.js';
@@ -24,7 +25,11 @@ import {
   ZERO_VERSION_COLUMN_NAME,
   replicationSlot,
 } from './initial-sync.js';
-import {CREATE_INVALIDATION_TABLES} from './invalidation.js';
+import {
+  CREATE_INVALIDATION_TABLES,
+  InvalidationFilters,
+  InvalidationProcessor,
+} from './invalidation.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
 import {toLexiVersion} from './types/lsn.js';
 import {TableTracker} from './types/table-tracker.js';
@@ -125,6 +130,7 @@ export class IncrementalSyncer {
   // This lock ensures that transactions are processed serially, even
   // across re-connects to the upstream db.
   readonly #txSerializer: Lock;
+  readonly #invalidationFilters: InvalidationFilters;
 
   #retryDelay = INITIAL_RETRY_DELAY_MS;
   #service: LogicalReplicationService | undefined;
@@ -136,11 +142,13 @@ export class IncrementalSyncer {
     replicaID: string,
     replica: postgres.Sql,
     txSerializer: Lock,
+    invalidationFilters: InvalidationFilters,
   ) {
     this.#upstreamUri = upstreamUri;
     this.#replicaID = replicaID;
     this.#replica = replica;
     this.#txSerializer = txSerializer;
+    this.#invalidationFilters = invalidationFilters;
   }
 
   async start(lc: LogContext) {
@@ -163,6 +171,7 @@ export class IncrementalSyncer {
         this.#replica,
         replicated,
         this.#txSerializer,
+        this.#invalidationFilters,
         (lsn: string) => service.acknowledge(lsn),
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
@@ -303,6 +312,7 @@ export class MessageProcessor {
   readonly #replica: postgres.Sql;
   readonly #replicated: PublicationInfo;
   readonly #txSerializer: Lock;
+  readonly #invalidationFilters: InvalidationFilters;
   readonly #acknowledge: (lsn: string) => unknown;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
@@ -313,12 +323,14 @@ export class MessageProcessor {
     replica: postgres.Sql,
     replicated: PublicationInfo,
     txSerializer: Lock,
+    invalidationFilters: InvalidationFilters,
     acknowledge: (lsn: string) => unknown,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
     this.#replica = replica;
     this.#replicated = replicated;
     this.#txSerializer = txSerializer;
+    this.#invalidationFilters = invalidationFilters;
     this.#acknowledge = acknowledge;
     this.#failService = failService;
   }
@@ -327,7 +339,11 @@ export class MessageProcessor {
     lc: LogContext,
     commitLsn: string,
   ): TransactionProcessor {
-    const txProcessor = new TransactionProcessor(lc, commitLsn);
+    const txProcessor = new TransactionProcessor(
+      lc,
+      commitLsn,
+      this.#invalidationFilters,
+    );
     void this.#txSerializer.withLock(async () => {
       try {
         if (this.#failure) {
@@ -482,24 +498,64 @@ export class MessageProcessor {
  * on the {@link postgres.TransactionSql} on the replica.
  */
 class TransactionProcessor {
+  readonly #lc: LogContext;
   readonly #version: LexiVersion;
-  readonly #pool: TransactionPool;
+  readonly #invalidation: InvalidationProcessor;
+  readonly #writer: TransactionPool;
+  readonly #readers: TransactionPool;
   readonly #tableTrackers = new Map<string, TableTracker>();
 
-  constructor(lc: LogContext, lsn: string) {
+  constructor(lc: LogContext, lsn: string, filters: InvalidationFilters) {
     this.#version = toLexiVersion(lsn);
-    this.#pool = new TransactionPool(lc.withContext('tx', this.#version));
+    this.#lc = lc.withContext('tx', this.#version);
+    this.#invalidation = new InvalidationProcessor(filters);
+
+    const {exportSnapshot, cleanupExport, setSnapshot} =
+      synchronizedSnapshots();
+    this.#writer = new TransactionPool(
+      this.#lc.withContext('pool', 'writer'),
+      exportSnapshot,
+      cleanupExport,
+    );
+    this.#readers = new TransactionPool(
+      this.#lc.withContext('pool', 'readers'),
+      setSnapshot,
+      undefined,
+      1,
+      5, // TODO: Parameterize the max workers for the readers pool.
+    );
   }
 
-  execute(db: postgres.Sql) {
-    return this.#pool.run(db);
+  async execute(db: postgres.Sql) {
+    const [writes, reads] = await Promise.allSettled([
+      this.#writer.run(db),
+      this.#readers.run(db),
+    ]);
+    if (reads.status === 'rejected') {
+      // An error from the readers pool is logged but otherwise dropped, because meaningful
+      // errors from the readers pool must necessarily be propagated to the writer pool.
+      //
+      // In particular, an error from the reader pool may arise because of a transaction
+      // error from the writer pool (i.e. UNIQUE violation constraint from a transaction
+      // replay preventing a snapshot capture from happening). In such a case, it is
+      // imperative that the writer pool error is surfaced directly, rather than masking it
+      // with an auxiliary error from the reader pool
+      this.#lc.info?.(`Error from reader pool`, reads.reason);
+    }
+    if (writes.status === 'rejected') {
+      throw writes.reason;
+    }
+    return writes.value;
   }
 
   fail(err: unknown) {
-    this.#pool.fail(err);
+    this.#writer.fail(err);
+    this.#readers.fail(err);
   }
 
   processBegin(begin: Pgoutput.MessageBegin) {
+    this.#invalidation.processInitTasks(this.#readers, this.#writer);
+
     const row = {
       stateVersion: this.#version,
       lsn: begin.commitLsn,
@@ -507,7 +563,9 @@ class TransactionProcessor {
       xid: begin.xid,
     };
 
-    return this.#pool.process(tx => [tx`INSERT INTO _zero."TxLog" ${tx(row)}`]);
+    return this.#writer.process(tx => [
+      tx`INSERT INTO _zero."TxLog" ${tx(row)}`,
+    ]);
   }
 
   processInsert(insert: Pgoutput.MessageInsert) {
@@ -524,7 +582,7 @@ class TransactionProcessor {
       postValue: row,
     });
 
-    return this.#pool.process(tx => [
+    return this.#writer.process(tx => [
       tx`INSERT INTO ${tx(table(insert.relation))} ${tx(row)}`,
     ]);
   }
@@ -546,7 +604,7 @@ class TransactionProcessor {
       postValue: row,
     });
 
-    return this.#pool.process(tx => {
+    return this.#writer.process(tx => {
       const currKey = oldKey ?? newKey;
       const conds = Object.entries(currKey).map(
         ([col, val]) => tx`${tx(col)} = ${val}`,
@@ -577,7 +635,7 @@ class TransactionProcessor {
       postValue: null,
     });
 
-    return this.#pool.process(tx => {
+    return this.#writer.process(tx => {
       const conds = Object.entries(rowKey).map(
         ([col, val]) => tx`${tx(col)} = ${val}`,
       );
@@ -599,11 +657,11 @@ class TransactionProcessor {
     }
 
     const tables = truncate.relations.map(r => `${r.schema}.${r.name}`);
-    return this.#pool.process(tx => [tx`TRUNCATE ${tx(tables)}`]);
+    return this.#writer.process(tx => [tx`TRUNCATE ${tx(tables)}`]);
   }
 
   processCommit(_commit: Pgoutput.MessageCommit) {
-    this.#pool.process(tx => {
+    this.#writer.process(tx => {
       // Construct ChangeLog entries based on the effective row changes.
       const changeLogEntries: Statement[] = [];
       for (const table of this.#tableTrackers.values()) {
@@ -627,7 +685,18 @@ class TransactionProcessor {
       }
       return changeLogEntries;
     });
-    this.#pool.setDone();
+    // Invalidation tagging involves blocking on reader pool queries
+    // (which read the pre-transaction state of UPDATE'd and DELETE'd rows).
+    // Process these tasks last so that all of the user table and ChangeLog
+    // writes can be applied in parallel with the computation of the invalidation tags.
+    this.#invalidation.processFinalTasks(
+      this.#readers,
+      this.#writer,
+      this.#version,
+      this.#tableTrackers.values(),
+    );
+    this.#readers.setDone();
+    this.#writer.setDone();
   }
 
   #changeLogEntry(

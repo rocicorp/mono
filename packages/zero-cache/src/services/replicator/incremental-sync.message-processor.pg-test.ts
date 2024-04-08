@@ -7,6 +7,7 @@ import {Queue} from 'shared/src/queue.js';
 import {expectTables, testDBs} from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import {MessageProcessor, setupReplicationTables} from './incremental-sync.js';
+import {InvalidationFilters} from './invalidation.js';
 
 describe('replicator/message-processor', () => {
   let replica: postgres.Sql;
@@ -296,6 +297,7 @@ describe('replicator/message-processor', () => {
           tables: {},
         },
         new Lock(),
+        new InvalidationFilters(),
         (lsn: string) => acknowledgements.enqueue(lsn),
         (_: LogContext, err: unknown) => failures.enqueue(err),
       );

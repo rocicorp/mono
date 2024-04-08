@@ -188,5 +188,8 @@ export function invalidationHash(tag: InvalidationTag): string {
   } else {
     // TableTag (already done)
   }
-  return hasher.digest().toString(16);
+  const hex = hasher.digest().toString(16);
+  // Pad to whole byte lengths to ensure roundtrip integrity when
+  // serialized to/from BYTEA / Buffer.
+  return hex.length % 2 ? '0' + hex : hex;
 }
