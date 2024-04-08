@@ -149,7 +149,7 @@ export class TransactionPool {
 
         while (task !== 'done') {
           if (this.#failure || task instanceof Error) {
-            await Promise.all(pending); // avoid unhandled rejections
+            await Promise.allSettled(pending); // avoid unhandled rejections
             throw this.#failure ?? task;
           }
           await executeTask(task);
