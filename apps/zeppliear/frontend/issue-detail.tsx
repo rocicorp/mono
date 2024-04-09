@@ -1,30 +1,28 @@
-import React, {useCallback, useEffect, useState} from 'react';
-import CloseIcon from './assets/icons/close.svg';
-import ArrowIcon from './assets/icons/arrow.svg';
-
-import DefaultAvatarIcon from './assets/icons/avatar.svg';
 import EditIcon from '@mui/icons-material/Edit';
-import PriorityMenu from './priority-menu';
+import {sortBy} from 'lodash';
+import {nanoid} from 'nanoid';
+import {useQueryState} from 'next-usequerystate';
+import {useCallback, useEffect, useState} from 'react';
+import {Remark} from 'react-remark';
+import type {Zero} from 'zero-client';
+import {timeAgo} from '../util/date';
+import ArrowIcon from './assets/icons/arrow.svg';
+import DefaultAvatarIcon from './assets/icons/avatar.svg';
+import CloseIcon from './assets/icons/close.svg';
+import {useKeyPressed} from './hooks/useKeyPressed';
 import {
+  COMMENT_ENTITY_NAME,
   Comment,
-  getIssueComments,
+  ISSUE_ENTITY_NAME,
   Issue,
+  IssueUpdate,
   Priority,
   Status,
-  getIssue,
-  IssueUpdate,
 } from './issue';
-import StatusMenu from './status-menu';
-import {useQueryState} from 'next-usequerystate';
-
-import type {Zero} from 'zero-client';
 import type {M} from './mutators';
-import {useSubscribe} from 'replicache-react';
-import {Remark} from 'react-remark';
-import {nanoid} from 'nanoid';
-import {timeAgo} from '../util/date';
-import {useKeyPressed} from './hooks/useKeyPressed';
-import {sortBy} from 'lodash';
+import PriorityMenu from './priority-menu';
+import StatusMenu from './status-menu';
+import {getQuery, useQuery} from './zql';
 
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
@@ -89,27 +87,17 @@ export default function IssueDetail({
     }
   }, [issues, detailIssueID]);
 
-  const issue = useSubscribe(
-    zero,
-    async tx => {
-      if (detailIssueID) {
-        return (await getIssue(tx, detailIssueID)) || null;
-      }
-      return null;
-    },
-    null,
-    [detailIssueID],
-  );
+  const issueQuery = getQuery<{issue: Issue}>(zero, ISSUE_ENTITY_NAME);
+  const commentQuery = getQuery<{comment: Comment}>(zero, COMMENT_ENTITY_NAME);
 
-  const comments = useSubscribe(
-    zero,
-    async tx => {
-      if (detailIssueID) {
-        return (await getIssueComments(tx, detailIssueID)) || [];
-      }
-      return [];
-    },
-    [],
+  const issue =
+    useQuery(
+      issueQuery.select('issue.*').where('id', '=', detailIssueID ?? ''),
+      [detailIssueID],
+    )[0] ?? null;
+
+  const comments = useQuery(
+    commentQuery.select('comment.*').where('issueID', '=', detailIssueID ?? ''),
     [detailIssueID],
   );
 

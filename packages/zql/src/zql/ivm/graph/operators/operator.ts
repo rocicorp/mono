@@ -1,6 +1,6 @@
 import type {Version} from '../../types.js';
+import type {DifferenceStream} from '../difference-stream.js';
 import type {Request} from '../message.js';
-import {DifferenceStream} from '../difference-stream.js';
 
 export interface Operator {
   /**

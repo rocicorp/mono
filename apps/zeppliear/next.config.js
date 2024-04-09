@@ -1,4 +1,5 @@
-module.exports = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   eslint: {
     // Warning: This allows production builds to successfully complete even if
     // your project has ESLint errors.
@@ -17,6 +18,15 @@ module.exports = {
       use: 'gzip-loader',
     });
 
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      '.js': ['.js', '.ts'],
+      '.jsx': ['.jsx', '.tsx'],
+    };
+
     return config;
   },
+  transpilePackages: ['shared', '@rocicorp/zql'],
 };
+
+export default nextConfig;

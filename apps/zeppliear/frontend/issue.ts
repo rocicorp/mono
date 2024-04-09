@@ -6,7 +6,8 @@ import type {
 import {z} from 'zod';
 import type {Immutable} from './immutable';
 
-export const ISSUE_KEY_PREFIX = `issue/`;
+export const ISSUE_ENTITY_NAME = `issue`;
+export const ISSUE_KEY_PREFIX = `${ISSUE_ENTITY_NAME}/`;
 export const issueKey = (id: string) => `${ISSUE_KEY_PREFIX}${id}`;
 export const issueID = (key: string) => {
   if (!key.startsWith(ISSUE_KEY_PREFIX)) {
@@ -122,7 +123,8 @@ export function issueFromKeyAndValue(
   return issueSchema.parse(value);
 }
 
-export const COMMENT_KEY_PREFIX = `comment/`;
+export const COMMENT_ENTITY_NAME = `comment`;
+export const COMMENT_KEY_PREFIX = `${COMMENT_ENTITY_NAME}/`;
 export const commentKey = (commentID: string) =>
   `${COMMENT_KEY_PREFIX}${commentID}`;
 export const commentID = (key: string) => {
@@ -141,25 +143,6 @@ export const commentSchema = z.object({
 });
 
 export type Comment = Immutable<z.TypeOf<typeof commentSchema>>;
-
-export async function getIssueComments(
-  tx: ReadTransaction,
-  issueID: string,
-): Promise<Comment[]> {
-  const comments = await tx
-    .scan({prefix: COMMENT_KEY_PREFIX})
-    .values()
-    .toArray();
-
-  console.log(comments);
-
-  return comments
-    .filter(
-      comment =>
-        (comment as {issueID?: string | undefined}).issueID === issueID,
-    )
-    .map(val => commentSchema.parse(val));
-}
 
 export async function putIssueComment(
   tx: WriteTransaction,

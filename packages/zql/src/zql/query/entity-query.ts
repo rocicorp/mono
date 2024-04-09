@@ -11,7 +11,7 @@ import type {
 } from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {Misuse} from '../error/misuse.js';
-import {EntitySchema} from '../schema/entity-schema.js';
+import type {EntitySchema} from '../schema/entity-schema.js';
 import {AggArray, Aggregate, isAggregate} from './agg.js';
 import {Statement} from './statement.js';
 

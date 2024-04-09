@@ -1,4 +1,4 @@
-import {FromSet, WhereCondition} from './entity-query.js';
+import type {FromSet, WhereCondition} from './entity-query.js';
 
 export function conditionToString<From extends FromSet>(
   c: WhereCondition<From>,

@@ -1,8 +1,8 @@
-import {Materialite} from '../ivm/materialite.js';
-import type {Source} from '../ivm/source/source.js';
+import {compareUTF8} from 'compare-utf8';
 import type {Entity} from '../../entity.js';
 import type {Ordering} from '../ast/ast.js';
-import {compareUTF8} from 'compare-utf8';
+import {Materialite} from '../ivm/materialite.js';
+import type {Source} from '../ivm/source/source.js';
 
 /**
  * Used to integrate with the host environment.
@@ -23,7 +23,7 @@ export function makeTestContext(): Context {
     if (!sources.has(name)) {
       sources.set(
         name,
-        materialite.newSetSource<T>((l, r) =>
+        materialite.newSetSource((l: T, r: T) =>
           compareUTF8(l.id, r.id),
         ) as unknown as Source<object>,
       );
