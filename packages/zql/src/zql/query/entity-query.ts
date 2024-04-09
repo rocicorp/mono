@@ -46,8 +46,6 @@ export type FromSet = {
   [tableOrAlias: string]: EntitySchema;
 };
 
-export type As<Field extends string, Alias extends string> = [Field, Alias];
-
 type NestedKeys<T> = {
   [K in keyof T]: keyof T[K];
 }[keyof T];
@@ -66,7 +64,6 @@ type Selector<F extends FromSet> =
       [K in keyof F]:
         | `${string & K}.${string & keyof F[K]}`
         | `${string & K}.*`
-        | Aliaser<F>
         | Exclude<string & keyof F[K], NestedKeys<Omit<F, K>>>;
     }[keyof F]
   | SimpleSelector<F>;
@@ -85,32 +82,25 @@ type ExtractAggregatePiece<
   ? {[K in Alias]: number}
   : never;
 
-type ExtractFieldPiece<From extends FromSet, Selection extends Selector<From>> =
-  // ['table.column', 'alias']
-  Selection extends As<infer Field, infer Alias>
-    ? {
-        [K in Alias]: ExtractFieldValue<
-          From,
-          Field extends SimpleSelector<From> ? Field : never
-        >;
-      }
-    : // 'table.*'
-    Selection extends `${infer Table}.*`
-    ? Table extends keyof From
-      ? From[Table]
-      : never
-    : // 'table.column'
-    Selection extends `${string}.${infer Column}`
-    ? {
-        [K in Column]: ExtractFieldValue<From, Selection>;
-      }
-    : // 'column'
-      {
-        [P in string & Selection]: ExtractNestedTypeByName<
-          From,
-          string & Selection
-        >;
-      };
+type ExtractFieldPiece<
+  From extends FromSet,
+  Selection extends Selector<From>,
+> = Selection extends `${infer Table}.*`
+  ? Table extends keyof From
+    ? From[Table]
+    : never
+  : // 'table.column'
+  Selection extends `${string}.${infer Column}`
+  ? {
+      [K in Column]: ExtractFieldValue<From, Selection>;
+    }
+  : // 'column'
+    {
+      [P in string & Selection]: ExtractNestedTypeByName<
+        From,
+        string & Selection
+      >;
+    };
 
 type ExtractNestedTypeByName<T, S extends string> = {
   [K in keyof T]: S extends keyof T[K] ? T[K][S] : never;
@@ -141,14 +131,6 @@ type CombineSelections<
   : unknown;
 
 type Aggregator<From extends FromSet> = Aggregate<SimpleSelector<From>, string>;
-type Aliaser<From extends FromSet> = As<SimpleSelector<From>, string>;
-
-export function as<Field extends SimpleSelector<FromSet>, Alias extends string>(
-  field: Field,
-  alias: Alias,
-): As<Field, Alias> {
-  return [field, alias];
-}
 
 /**
  * Have you ever noticed that when you hover over Types in TypeScript, it shows
@@ -210,19 +192,11 @@ export class EntityQuery<From extends FromSet, Return = []> {
     const select = [...(this.#ast.select ?? [])];
     for (const more of x) {
       if (!isAggregate(more)) {
-        if (Array.isArray(more)) {
-          if (seen.has(more[1])) {
-            continue;
-          }
-          seen.add(more[1]);
-          select.push(more);
-        } else {
-          if (seen.has(more)) {
-            continue;
-          }
-          seen.add(more);
-          select.push([more, more]);
+        if (seen.has(more)) {
+          continue;
         }
+        seen.add(more);
+        select.push([more, more]);
 
         continue;
       }
