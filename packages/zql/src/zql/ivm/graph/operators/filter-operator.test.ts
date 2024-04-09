@@ -1,7 +1,7 @@
 import {expect, test} from 'vitest';
-import {Entry, Multiset} from '../../multiset.js';
+import type {Entry, Multiset} from '../../multiset.js';
 import {DifferenceStream} from '../difference-stream.js';
-import {Version} from '../../types.js';
+import type {Version} from '../../types.js';
 
 type E = {id: number};
 

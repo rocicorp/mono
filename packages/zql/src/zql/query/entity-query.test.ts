@@ -1,6 +1,6 @@
 import {describe, expect, expectTypeOf, test} from 'vitest';
 import {z} from 'zod';
-import {AST, SimpleOperator} from '../ast/ast.js';
+import type {AST, SimpleOperator} from '../ast/ast.js';
 import {makeTestContext} from '../context/context.js';
 import * as agg from './agg.js';
 import {conditionToString} from './condition-to-string.js';
@@ -45,7 +45,7 @@ test('query types', () => {
     Promise<readonly {id: string}[]>
   >();
   expectTypeOf(q.select('optStr').prepare().exec()).toMatchTypeOf<
-    Promise<readonly {optStr?: string}[]>
+    Promise<readonly {optStr?: string | undefined}[]>
   >();
 
   // where/order/limit do not change return type

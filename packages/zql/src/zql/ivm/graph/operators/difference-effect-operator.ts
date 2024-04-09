@@ -1,6 +1,6 @@
-import {Multiset} from '../../multiset.js';
-import {Version} from '../../types.js';
-import {DifferenceStream} from '../difference-stream.js';
+import type {Multiset} from '../../multiset.js';
+import type {Version} from '../../types.js';
+import type {DifferenceStream} from '../difference-stream.js';
 import {UnaryOperator} from './unary-operator.js';
 
 /**

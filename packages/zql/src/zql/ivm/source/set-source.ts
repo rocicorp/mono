@@ -1,12 +1,12 @@
 import {Treap} from '@vlcn.io/ds-and-algos/Treap';
-import {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
+import type {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
 import {must} from '../../error/asserts.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
 import {PullMsg, Request, createPullResponseMessage} from '../graph/message.js';
-import {MaterialiteForSourceInternal} from '../materialite.js';
-import {Entry, Multiset} from '../multiset.js';
-import {Version} from '../types.js';
-import {Source, SourceInternal} from './source.js';
+import type {MaterialiteForSourceInternal} from '../materialite.js';
+import type {Entry, Multiset} from '../multiset.js';
+import type {Version} from '../types.js';
+import type {Source, SourceInternal} from './source.js';
 
 /**
  * A source that remembers what values it contains.

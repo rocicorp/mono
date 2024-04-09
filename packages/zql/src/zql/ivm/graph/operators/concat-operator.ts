@@ -1,6 +1,6 @@
-import {DifferenceStream, Listener} from '../difference-stream.js';
-import {PullMsg} from '../message.js';
-import {Operator} from './operator.js';
+import type {DifferenceStream, Listener} from '../difference-stream.js';
+import type {PullMsg} from '../message.js';
+import type {Operator} from './operator.js';
 
 /**
  * A dataflow operator (node) that has many incoming edges and

@@ -1,13 +1,13 @@
-import {Entity} from '../../generate.js';
+import type {Entity} from '../../entity.js';
 import {buildPipeline, orderingProp} from '../ast-to-ivm/pipeline-builder.js';
-import {AST, Primitive} from '../ast/ast.js';
-import {Context} from '../context/context.js';
+import type {AST, Primitive} from '../ast/ast.js';
+import type {Context} from '../context/context.js';
 import {invariant, must} from '../error/asserts.js';
 import {compareEntityFields} from '../ivm/compare.js';
-import {DifferenceStream} from '../ivm/graph/difference-stream.js';
+import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
 import {MutableTreeView} from '../ivm/view/tree-view.js';
-import {View} from '../ivm/view/view.js';
-import {MakeHumanReadable} from './entity-query.js';
+import type {View} from '../ivm/view/view.js';
+import type {MakeHumanReadable} from './entity-query.js';
 
 export interface IStatement<TReturn> {
   subscribe(cb: (value: MakeHumanReadable<TReturn>) => void): () => void;

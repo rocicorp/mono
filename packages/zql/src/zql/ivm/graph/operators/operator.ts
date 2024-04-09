@@ -1,5 +1,5 @@
-import {Version} from '../../types.js';
-import {Request} from '../message.js';
+import type {Version} from '../../types.js';
+import type {Request} from '../message.js';
 
 export interface Operator {
   /**

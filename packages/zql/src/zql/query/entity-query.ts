@@ -1,4 +1,4 @@
-import {
+import type {
   AST,
   Aggregation,
   Condition,
@@ -9,10 +9,10 @@ import {
   Primitive,
   SimpleOperator,
 } from '../ast/ast.js';
-import {Context} from '../context/context.js';
+import type {Context} from '../context/context.js';
 import {must} from '../error/asserts.js';
 import {Misuse} from '../error/misuse.js';
-import {EntitySchema} from '../schema/entity-schema.js';
+import type {EntitySchema} from '../schema/entity-schema.js';
 import {AggArray, Aggregate, Count, isAggregate} from './agg.js';
 import {Statement} from './statement.js';
 
@@ -26,26 +26,28 @@ export type FieldValue<
   ? Op extends InOps
     ? NotUndefined<S[K]>[]
     : Op extends LikeOps
-      ? S[K] extends string | undefined
-        ? NotUndefined<S[K]>
-        : never
-      : Op extends OrderOps
-        ? S[K] extends boolean | undefined
-          ? never
-          : NotUndefined<S[K]>
-        : Op extends EqualityOps
-          ? NotUndefined<S[K]>
-          : never
+    ? S[K] extends string | undefined
+      ? NotUndefined<S[K]>
+      : never
+    : Op extends OrderOps
+    ? S[K] extends boolean | undefined
+      ? never
+      : NotUndefined<S[K]>
+    : Op extends EqualityOps
+    ? NotUndefined<S[K]>
+    : never
   : never;
 
-type AggregateValue<S extends EntitySchema, K extends Aggregable<S>> =
-  K extends Count<string>
-    ? number
-    : K extends AggArray<string, string>
-      ? S[K['field']][]
-      : K extends Exclude<Aggregable<S>, Count<string>>
-        ? S[K['field']]
-        : never;
+type AggregateValue<
+  S extends EntitySchema,
+  K extends Aggregable<S>,
+> = K extends Count<string>
+  ? number
+  : K extends AggArray<string, string>
+  ? S[K['field']][]
+  : K extends Exclude<Aggregable<S>, Count<string>>
+  ? S[K['field']]
+  : never;
 
 export type SelectedFields<
   S extends EntitySchema,

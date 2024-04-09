@@ -1,4 +1,4 @@
-import {Ordering, SimpleCondition} from '../../ast/ast.js';
+import type {Ordering, SimpleCondition} from '../../ast/ast.js';
 
 export type Request = PullMsg;
 

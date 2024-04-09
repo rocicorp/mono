@@ -1,5 +1,5 @@
-import {EntitySchema} from '../schema/entity-schema.js';
-import {WhereCondition} from './entity-query.js';
+import type {EntitySchema} from '../schema/entity-schema.js';
+import type {WhereCondition} from './entity-query.js';
 
 export function conditionToString<S extends EntitySchema>(
   c: WhereCondition<S>,
@@ -19,5 +19,7 @@ export function conditionToString<S extends EntitySchema>(
     }
     return s;
   }
-  return `${(c as {field: string}).field} ${c.op} ${(c as {value: {value: unknown}}).value.value}`;
+  return `${(c as {field: string}).field} ${c.op} ${
+    (c as {value: {value: unknown}}).value.value
+  }`;
 }

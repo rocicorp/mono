@@ -2,8 +2,8 @@ import {nanoid} from 'nanoid';
 import {Replicache, TEST_LICENSE_KEY} from 'replicache';
 import {expect, test} from 'vitest';
 import {z} from 'zod';
-import {generate} from '../../generate.js';
-import {SetSource} from '../ivm/source/set-source.js';
+import {generate} from '@rocicorp/rails';
+import type {SetSource} from '../ivm/source/set-source.js';
 import {EntityQuery} from '../query/entity-query.js';
 import {makeReplicacheContext} from './replicache-context.js';
 

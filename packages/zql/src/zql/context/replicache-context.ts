@@ -1,12 +1,12 @@
-import {ExperimentalNoIndexDiff} from 'replicache';
-import {Entity} from '../../generate.js';
-import {ReplicacheLike} from '../../replicache-like.js';
-import {Ordering} from '../ast/ast.js';
+import type {ExperimentalNoIndexDiff} from 'replicache';
+import type {Entity} from '../../entity.js';
+import type {ReplicacheLike} from '../../replicache-like.js';
+import type {Ordering} from '../ast/ast.js';
 import {assert} from '../error/asserts.js';
 import {compareEntityFields} from '../ivm/compare.js';
 import {Materialite} from '../ivm/materialite.js';
-import {MutableSetSource} from '../ivm/source/set-source.js';
-import {Source} from '../ivm/source/source.js';
+import type {MutableSetSource} from '../ivm/source/set-source.js';
+import type {Source} from '../ivm/source/source.js';
 import {mapIter} from '../util/iterables.js';
 import type {Context} from './context.js';
 

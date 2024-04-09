@@ -1,4 +1,4 @@
-import {ReadonlyJSONValue} from './json.js';
+import type {ReadonlyJSONValue} from './json.js';
 
 type DiffOperationAdd = {
   readonly op: 'add';

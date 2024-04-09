@@ -1,10 +1,10 @@
 import {Treap} from '@vlcn.io/ds-and-algos/Treap';
-import {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
-import {Ordering} from '../../ast/ast.js';
-import {DifferenceStream} from '../graph/difference-stream.js';
+import type {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
+import type {Ordering} from '../../ast/ast.js';
+import type {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullMessage} from '../graph/message.js';
-import {Materialite} from '../materialite.js';
-import {Multiset} from '../multiset.js';
+import type {Materialite} from '../materialite.js';
+import type {Multiset} from '../multiset.js';
 import {AbstractView} from './abstract-view.js';
 
 /**
@@ -22,9 +22,9 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
 
   #jsSlice: T[] = [];
 
-  #limit?: number;
-  #min?: T;
-  #max?: T;
+  #limit?: number | undefined;
+  #min?: T | undefined;
+  #max?: T | undefined;
   readonly #order;
   readonly id = id++;
   readonly #comparator;

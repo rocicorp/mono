@@ -1,7 +1,7 @@
 import {Issue, Comment, Priority, Status, Member} from '../frontend/issue';
 import {generateNKeysBetween} from 'fractional-indexing';
 import {sortBy} from 'lodash';
-import {reactIssues} from '../sample-data/issues-react';
+import {reactIssues} from './issues-react';
 import {reactComments} from '../sample-data/comments-react';
 import {nanoid} from 'nanoid';
 

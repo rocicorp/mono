@@ -1,9 +1,9 @@
-import {Primitive} from '../../../ast/ast.js';
+import type {Primitive} from '../../../ast/ast.js';
 import {assert} from '../../../error/asserts.js';
 import {flatMapIter} from '../../../util/iterables.js';
-import {Entry, Multiset} from '../../multiset.js';
-import {Version} from '../../types.js';
-import {DifferenceStream} from '../difference-stream.js';
+import type {Entry, Multiset} from '../../multiset.js';
+import type {Version} from '../../types.js';
+import type {DifferenceStream} from '../difference-stream.js';
 import {UnaryOperator} from './unary-operator.js';
 
 /**

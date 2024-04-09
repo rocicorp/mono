@@ -1,7 +1,7 @@
-import {Comparator} from '@vlcn.io/ds-and-algos/types';
-import {SourceInternal} from './source/source.js';
+import type {Comparator} from '@vlcn.io/ds-and-algos/types';
+import type {SourceInternal} from './source/source.js';
 import {MutableSetSource} from './source/set-source.js';
-import {Version} from './types.js';
+import type {Version} from './types.js';
 import {must} from '../error/asserts.js';
 
 export type MaterialiteForSourceInternal = {

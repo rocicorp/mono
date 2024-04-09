@@ -1,8 +1,8 @@
-import {DifferenceStream, Listener} from '../graph/difference-stream.js';
-import {Materialite} from '../materialite.js';
-import {Multiset} from '../multiset.js';
-import {Version} from '../types.js';
-import {View} from './view.js';
+import type {DifferenceStream, Listener} from '../graph/difference-stream.js';
+import type {Materialite} from '../materialite.js';
+import type {Multiset} from '../multiset.js';
+import type {Version} from '../types.js';
+import type {View} from './view.js';
 
 export abstract class AbstractView<T extends object, CT> implements View<CT> {
   readonly #stream;

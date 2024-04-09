@@ -1,7 +1,7 @@
 import {Materialite} from '../ivm/materialite.js';
-import {Source} from '../ivm/source/source.js';
-import {Entity} from '../../generate.js';
-import {Ordering} from '../ast/ast.js';
+import type {Source} from '../ivm/source/source.js';
+import type {Entity} from '../../entity.js';
+import type {Ordering} from '../ast/ast.js';
 import {compareUTF8} from 'compare-utf8';
 
 /**

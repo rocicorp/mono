@@ -1,8 +1,8 @@
-import {Entity} from '../../../../generate.js';
-import {Entry, Multiset} from '../../multiset.js';
-import {Version} from '../../types.js';
-import {DifferenceStream} from '../difference-stream.js';
-import {Request} from '../message.js';
+import type {Entity} from '../../../../entity.js';
+import type {Entry, Multiset} from '../../multiset.js';
+import type {Version} from '../../types.js';
+import type {DifferenceStream} from '../difference-stream.js';
+import type {Request} from '../message.js';
 import {UnaryOperator} from './unary-operator.js';
 
 /**

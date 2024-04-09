@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {Multiset} from '../../multiset.js';
+import type {Multiset} from '../../multiset.js';
 import {DifferenceStream} from '../difference-stream.js';
 
 test('distinct', () => {

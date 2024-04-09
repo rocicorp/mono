@@ -1,6 +1,6 @@
-import {DifferenceStream} from '../graph/difference-stream.js';
-import {Version} from '../types.js';
-import {Request} from '../graph/message.js';
+import type {DifferenceStream} from '../graph/difference-stream.js';
+import type {Version} from '../types.js';
+import type {Request} from '../graph/message.js';
 
 export interface Source<T extends object> {
   readonly stream: DifferenceStream<T>;

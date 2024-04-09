@@ -1,5 +1,5 @@
-import {Entity} from '../../generate.js';
-import {
+import type {Entity} from '../../entity.js';
+import type {
   AST,
   Aggregation,
   Condition,

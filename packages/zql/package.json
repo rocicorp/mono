@@ -23,15 +23,15 @@
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/logger": "^5.2.1",
     "@rocicorp/prettier-config": "^0.2.0",
-    "@rocicorp/reflect": "^0.39.202402230127",
+    "@rocicorp/rails": "^0.10.0",
     "@vitest/browser": "1.4.0",
     "fast-check": "^3.16.0",
-    "nanoid": "^5.0.6",
-    "playwright": "^1.42.1",
+    "nanoid": "^4.0.2",
+    "playwright": "^1.39.0",
     "replicache": "14.2.2",
     "typescript": "^5.4.2",
     "vitest": "1.4.0",
-    "zod": "^3.22.4"
+    "zod": "^3.21.4"
   },
   "files": [
     "out/",

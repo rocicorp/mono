@@ -1,8 +1,8 @@
-import {Multiset} from '../../multiset.js';
-import {Version} from '../../types.js';
-import {DifferenceStream, Listener} from '../difference-stream.js';
-import {Request} from '../message.js';
-import {Operator} from './operator.js';
+import type {Multiset} from '../../multiset.js';
+import type {Version} from '../../types.js';
+import type {DifferenceStream, Listener} from '../difference-stream.js';
+import type {Request} from '../message.js';
+import type {Operator} from './operator.js';
 
 /**
  * Operator that only takes a single argument

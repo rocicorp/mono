@@ -3,7 +3,7 @@ import {nanoid} from 'nanoid';
 import {Replicache, TEST_LICENSE_KEY} from 'replicache';
 import {expect, test} from 'vitest';
 import {z} from 'zod';
-import {generate} from '../generate.js';
+import {generate} from '@rocicorp/rails';
 import {makeReplicacheContext} from './context/replicache-context.js';
 import * as agg from './query/agg.js';
 import {EntityQuery, expression, not, or} from './query/entity-query.js';
