@@ -1,8 +1,7 @@
-import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
-import {buildPipeline, orderingProp} from '../ast-to-ivm/pipeline-builder.js';
-import type {AST, Primitive} from '../ast/ast.js';
+import {buildPipeline} from '../ast-to-ivm/pipeline-builder.js';
+import type {AST} from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {compareEntityFields} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
@@ -45,7 +44,10 @@ export class Statement<Return> implements IStatement<Return> {
         this.#pipeline as unknown as DifferenceStream<
           Return extends [] ? Return[number] : never
         >,
-        this.#ast.orderBy[1] === 'asc' ? ascComparator : descComparator,
+        makeComparator<readonly string[], Record<string, unknown>>(
+          this.#ast.orderBy[0],
+          this.#ast.orderBy[1],
+        ),
         this.#ast.orderBy,
         this.#ast.limit,
       ) as unknown as View<Return extends [] ? Return[number] : Return>;
@@ -94,34 +96,21 @@ export class Statement<Return> implements IStatement<Return> {
   }
 }
 
-export function ascComparator<T extends {[orderingProp]: Primitive[]}>(
-  l: T,
-  r: T,
-): number {
-  const leftVals = l[orderingProp];
-  const rightVals = r[orderingProp];
-
-  assert(
-    leftVals.length === rightVals.length,
-    'orderingProp lengths must match',
-  );
-
-  let comp = 0;
-  for (let i = 0; i < leftVals.length; i++) {
-    const leftVal = leftVals[i];
-    const rightVal = rightVals[i];
-    comp = compareEntityFields(leftVal, rightVal);
-    if (comp !== 0) {
-      return comp;
+export function makeComparator<
+  Keys extends ReadonlyArray<keyof T>,
+  T extends object,
+>(sortKeys: Keys, direction: 'asc' | 'desc'): (l: T, r: T) => number {
+  const comparator = (l: T, r: T) => {
+    let comp = 0;
+    for (const key of sortKeys) {
+      comp = compareEntityFields(l[key], r[key]);
+      if (comp !== 0) {
+        return comp;
+      }
     }
-  }
 
-  return comp;
-}
+    return comp;
+  };
 
-export function descComparator<T extends {[orderingProp]: Primitive[]}>(
-  l: T,
-  r: T,
-): number {
-  return ascComparator(r, l);
+  return direction === 'asc' ? comparator : (l, r) => comparator(r, l);
 }

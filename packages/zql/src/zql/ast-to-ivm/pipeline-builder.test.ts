@@ -54,13 +54,10 @@ test('A simple select', () => {
     () => s.stream as unknown as DifferenceStream<Entity>,
     ast(q.select('a', 'd')),
   );
-  const expected2 = [
-    {a: 1, d: true},
-    {a: 2, d: false},
-  ];
   effectRunCount = 0;
   pipeline.effect(x => {
-    expect(x).toEqual(expected2[effectRunCount++]);
+    // We actually return the full data. It is just the types that change based on selection.
+    expect(x).toEqual(expected[effectRunCount++]);
   });
 
   s.add(expected[0]);
@@ -111,7 +108,7 @@ test('Where', () => {
   pipeline.effect(x => {
     expect(x).toEqual(expected[effectRunCount++]);
   });
-  const expected = [{id: 'b'}];
+  const expected = [{id: 'b', a: 2, b: 1, d: false}];
 
   s.add({id: 'a', a: 1, b: 1, d: false});
   s.add({id: 'b', a: 2, b: 1, d: false});

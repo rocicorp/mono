@@ -138,7 +138,7 @@ test('prepare a query before the collection has writes then run it', async () =>
   await Promise.all(issues.map(r.mutate.initIssue));
 
   const rows = await stmt.exec();
-  expect(rows).toEqual(issues.map(({id}) => ({id})).sort(compareIds));
+  expect(rows).toEqual(issues.sort(compareIds));
 
   await r.close();
 });
@@ -153,7 +153,7 @@ test('prepare a query then run it once `experimentalWatch` has completed', async
   await new Promise(resolve => setTimeout(resolve, 0));
   const rows = await stmt.exec();
 
-  expect(rows).toEqual(issues.map(({id}) => ({id})).sort(compareIds));
+  expect(rows).toEqual(issues.sort(compareIds));
 
   await r.close();
 });
@@ -167,7 +167,7 @@ test('exec a query before the source has been filled by anything', async () => {
   // before returning.
   const rows = await q.select('id').prepare().exec();
 
-  expect(rows).toEqual(issues.map(({id}) => ({id})).sort(compareIds));
+  expect(rows).toEqual(issues.sort(compareIds));
 
   await r.close();
 });
@@ -186,7 +186,7 @@ test('subscribing to a query calls us with the complete query results on change'
   q.select('id')
     .prepare()
     .subscribe(value => {
-      expect(value).toEqual(issues.map(({id}) => ({id})).sort(compareIds));
+      expect(value).toEqual(issues.sort(compareIds));
       if (callCount === 0) {
         resolve(value);
       }
@@ -258,23 +258,23 @@ test('each where operator', async () => {
 
   let stmt = q.select('id').where('id', '=', 'a').prepare();
   const rows = await stmt.exec();
-  expect(rows).toEqual([{id: 'a'}]);
+  expect(rows).toEqual([issues[0]]);
   stmt.destroy();
 
   stmt = q.select('id').where('id', '<', 'b').prepare();
-  expect(await stmt.exec()).toEqual([{id: 'a'}]);
+  expect(await stmt.exec()).toEqual([issues[0]]);
   stmt.destroy();
 
   stmt = q.select('id').where('id', '>', 'a').prepare();
-  expect(await stmt.exec()).toEqual([{id: 'b'}, {id: 'c'}]);
+  expect(await stmt.exec()).toEqual([issues[1], issues[2]]);
   stmt.destroy();
 
   stmt = q.select('id').where('id', '>=', 'b').prepare();
-  expect(await stmt.exec()).toEqual([{id: 'b'}, {id: 'c'}]);
+  expect(await stmt.exec()).toEqual([issues[1], issues[2]]);
   stmt.destroy();
 
   stmt = q.select('id').where('id', '<=', 'b').prepare();
-  expect(await stmt.exec()).toEqual([{id: 'a'}, {id: 'b'}]);
+  expect(await stmt.exec()).toEqual([issues[0], issues[1]]);
   stmt.destroy();
 
   // TODO: this breaks
@@ -283,11 +283,11 @@ test('each where operator', async () => {
   // stmt.destroy();
 
   stmt = q.select('id').where('assignee', 'LIKE', 'al%').prepare();
-  expect(await stmt.exec()).toEqual([{id: 'c'}]);
+  expect(await stmt.exec()).toEqual([issues[2]]);
   stmt.destroy();
 
   stmt = q.select('id').where('assignee', 'ILIKE', 'AL%').prepare();
-  expect(await stmt.exec()).toEqual([{id: 'c'}]);
+  expect(await stmt.exec()).toEqual([issues[2]]);
   stmt.destroy();
 
   // now compare against created date
@@ -297,19 +297,19 @@ test('each where operator', async () => {
   // stmt.destroy();
 
   stmt = q.select('id').where('created', '<', now).prepare();
-  expect(await stmt.exec()).toEqual([{id: 'a'}]);
+  expect(await stmt.exec()).toEqual([issues[0]]);
   stmt.destroy();
 
   stmt = q.select('id').where('created', '>', now).prepare();
-  expect(await stmt.exec()).toEqual([{id: 'c'}]);
+  expect(await stmt.exec()).toEqual([issues[2]]);
   stmt.destroy();
 
   stmt = q.select('id').where('created', '>=', now).prepare();
-  expect(await stmt.exec()).toEqual([{id: 'b'}, {id: 'c'}]);
+  expect(await stmt.exec()).toEqual([issues[1], issues[2]]);
   stmt.destroy();
 
   stmt = q.select('id').where('created', '<=', now).prepare();
-  expect(await stmt.exec()).toEqual([{id: 'a'}, {id: 'b'}]);
+  expect(await stmt.exec()).toEqual([issues[0], issues[1]]);
   stmt.destroy();
 
   await r.close();
@@ -326,11 +326,7 @@ test('order by single field', async () => {
       const stmt = q.select('id', 'assignee').asc('assignee').prepare();
       const rows = await stmt.exec();
       try {
-        expect(rows).toEqual(
-          issues
-            .map(({id, assignee}) => ({id, assignee}))
-            .sort(compareAssignees),
-        );
+        expect(rows).toEqual(issues.sort(compareAssignees));
       } finally {
         await r.close();
       }
@@ -347,7 +343,7 @@ test('order by id', async () => {
 
       const stmt = q.select('id').asc('id').prepare();
       const rows = await stmt.exec();
-      expect(rows).toEqual(issues.map(({id}) => ({id})).sort(compareIds));
+      expect(rows).toEqual(issues.sort(compareIds));
 
       await r.close();
     }),
@@ -367,11 +363,7 @@ test('order by compound fields', async () => {
         .asc('assignee', 'created')
         .prepare();
       const rows = await stmt.exec();
-      expect(rows).toEqual(
-        issues
-          .map(({id, created, assignee}) => ({id, created, assignee}))
-          .sort(compareExpected),
-      );
+      expect(rows).toEqual(issues.sort(compareExpected));
 
       await r.close();
     }),
@@ -388,9 +380,7 @@ test('order by optional field', async () => {
       const compareExpected = makeComparator('closed', 'id');
       const stmt = q.select('id', 'closed').asc('closed').prepare();
       const rows = await stmt.exec();
-      expect(rows).toEqual(
-        issues.map(({id, closed}) => ({id, closed})).sort(compareExpected),
-      );
+      expect(rows).toEqual(issues.sort(compareExpected));
 
       await r.close();
     }),
@@ -403,7 +393,7 @@ test('having', () => {});
 
 test('group by', async () => {
   const {q, r} = setup();
-  const issues: Issue[] = [
+  const issues: readonly Issue[] = [
     {
       id: 'a',
       title: 'foo',
@@ -437,8 +427,14 @@ test('group by', async () => {
   const rows = await stmt.exec();
 
   expect(rows).toEqual([
-    {status: 'open', count: 2},
-    {status: 'closed', count: 1},
+    {
+      ...issues[0],
+      count: 2,
+    },
+    {
+      ...issues[2],
+      count: 1,
+    },
   ]);
 
   stmt.destroy();
@@ -450,8 +446,14 @@ test('group by', async () => {
   const rows2 = await stmt2.exec();
 
   expect(rows2).toEqual([
-    {status: 'open', assignee: ['charles', 'bob']},
-    {status: 'closed', assignee: ['alice']},
+    {
+      ...issues[0],
+      assignee: ['charles', 'bob'],
+    },
+    {
+      ...issues[2],
+      assignee: ['alice'],
+    },
   ]);
 
   const stmt3 = q
@@ -462,12 +464,12 @@ test('group by', async () => {
 
   expect(rows3).toEqual([
     {
-      status: 'open',
+      ...issues[0],
       assignee: ['charles', 'bob'],
       created: issues[0].created,
     },
     {
-      status: 'closed',
+      ...issues[2],
       assignee: ['alice'],
       created: issues[2].created,
     },
@@ -486,12 +488,14 @@ test('group by', async () => {
 
   expect(rows4).toEqual([
     {
+      ...issues[0],
       status: 'open',
       assignee: ['charles', 'bob'],
       minCreated: issues[0].created,
       maxCreated: issues[1].created,
     },
     {
+      ...issues[2],
       status: 'closed',
       assignee: ['alice'],
       minCreated: issues[2].created,
@@ -506,7 +510,7 @@ test('sorted groupings', () => {});
 
 test('compound where', async () => {
   const {q, r} = setup();
-  const issues: Issue[] = [
+  const issues: readonly Issue[] = [
     {
       id: 'a',
       title: 'foo',
@@ -543,9 +547,42 @@ test('compound where', async () => {
     .where('priority', '>=', 'medium')
     .prepare();
   const rows = await stmt.exec();
-  expect(rows).toEqual([{id: 'b'}]);
+  expect(rows).toEqual([issues[1]]);
 
   await r.close();
+});
+
+test('0 copy', async () => {
+  const issues = sampleTenUniqueIssues();
+  const {q, r} = setup();
+  await Promise.all(issues.map(r.mutate.initIssue));
+  const replicacheIssues = (await r.query(tx =>
+    tx
+      .scan({
+        prefix: 'issue',
+      })
+      .toArray(),
+  )) as Issue[];
+
+  const stmt = q.select('id').prepare();
+  const zqlIssues = await stmt.exec();
+
+  replicacheIssues.sort(compareIds);
+
+  expect(zqlIssues).toEqual(replicacheIssues);
+  for (let i = 0; i < zqlIssues.length; i++) {
+    expect(zqlIssues[i]).toBe(replicacheIssues[i]);
+  }
+
+  const stmt2 = q.select('title').prepare();
+  const zqlIssues2 = await stmt2.exec();
+  expect(zqlIssues2).toEqual(replicacheIssues);
+  for (let i = 0; i < zqlIssues2.length; i++) {
+    expect(zqlIssues2[i]).toBe(replicacheIssues[i]);
+  }
+
+  // just a sanity check to make sure the test actually checked items
+  expect(replicacheIssues.length).toBe(10);
 });
 
 // Need to pull this implementation into here from Materialite.
@@ -577,7 +614,7 @@ test('we do not do a full scan when the source order matches the view order', ()
 
 test('or where', async () => {
   const {q, r} = setup();
-  const issues: Issue[] = [
+  const issues: readonly Issue[] = [
     {
       id: 'a',
       title: 'foo',
@@ -618,18 +655,18 @@ test('or where', async () => {
     )
     .prepare();
   const rows = await stmt.exec();
-  expect(rows).toEqual([{id: 'a'}, {id: 'b'}]);
+  expect(rows).toEqual([issues[0], issues[1]]);
 
   await r.mutate.deleteIssue('a');
   const rows2 = await stmt.exec();
-  expect(rows2).toEqual([{id: 'b'}]);
+  expect(rows2).toEqual([issues[1]]);
 
   await r.close();
 });
 
 test('not', async () => {
   const {q, r} = setup();
-  const issues: Issue[] = [
+  const issues: readonly Issue[] = [
     {
       id: 'a',
       title: 'foo',
@@ -665,11 +702,11 @@ test('not', async () => {
     .where(not(expression('status', '=', 'closed')))
     .prepare();
   const rows = await stmt.exec();
-  expect(rows).toEqual([{id: 'a'}, {id: 'b'}]);
+  expect(rows).toEqual([issues[0], issues[1]]);
 
   await r.mutate.deleteIssue('a');
   const rows2 = await stmt.exec();
-  expect(rows2).toEqual([{id: 'b'}]);
+  expect(rows2).toEqual([issues[1]]);
 
   await r.close();
 });

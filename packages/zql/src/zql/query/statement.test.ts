@@ -1,9 +1,8 @@
 import {expect, test} from 'vitest';
 import {z} from 'zod';
-import {orderingProp} from '../ast-to-ivm/pipeline-builder.js';
 import {makeTestContext} from '../context/context.js';
 import {EntityQuery} from './entity-query.js';
-import {ascComparator} from './statement.js';
+import {makeComparator} from './statement.js';
 
 const e1 = z.object({
   id: z.string(),
@@ -60,8 +59,16 @@ test('sorted materialization', () => {
     n: 1,
   });
 
-  expect(ascView.value).toEqual([{id: 'c'}, {id: 'b'}, {id: 'a'}]);
-  expect(descView.value).toEqual([{id: 'a'}, {id: 'b'}, {id: 'c'}]);
+  expect(ascView.value).toEqual([
+    {id: 'c', n: 1},
+    {id: 'b', n: 2},
+    {id: 'a', n: 3},
+  ]);
+  expect(descView.value).toEqual([
+    {id: 'a', n: 3},
+    {id: 'b', n: 2},
+    {id: 'c', n: 1},
+  ]);
 });
 
 test('sorting is stable via suffixing the primary key to the order', () => {
@@ -84,33 +91,51 @@ test('sorting is stable via suffixing the primary key to the order', () => {
     id: 'c',
     n: 1,
   });
-  expect(ascView.value).toEqual([{id: 'a'}, {id: 'b'}, {id: 'c'}]);
-  expect(descView.value).toEqual([{id: 'c'}, {id: 'b'}, {id: 'a'}]);
+  expect(ascView.value).toEqual([
+    {id: 'a', n: 1},
+    {id: 'b', n: 1},
+    {id: 'c', n: 1},
+  ]);
+  expect(descView.value).toEqual([
+    {id: 'c', n: 1},
+    {id: 'b', n: 1},
+    {id: 'a', n: 1},
+  ]);
 });
 
-test('ascComparator', () => {
-  function make<T extends Array<unknown>>(x: T) {
-    return {[orderingProp]: x};
+test('makeComparator', () => {
+  function makeObject<T extends Array<unknown>>(x: T) {
+    const ret: Record<string, unknown> = {};
+    for (let i = 0; i < x.length; i++) {
+      ret['field' + i] = x[i];
+    }
+    return ret;
   }
-  expect(ascComparator(make([1, 2]), make([2, 3]))).toBeLessThan(0);
-  expect(ascComparator(make([1, 'a']), make([1, 'b']))).toBeLessThan(0);
-  expect(ascComparator(make([1, 'a']), make([1, 'a']))).toBe(0);
-  expect(ascComparator(make([1, 'b']), make([1, 'a']))).toBeGreaterThan(0);
-  expect(ascComparator(make([1, 2]), make([1, 3]))).toBeLessThan(0);
-  expect(ascComparator(make([1, 2]), make([1, 2]))).toBe(0);
-  expect(ascComparator(make([1, 3]), make([1, 2]))).toBeGreaterThan(0);
-  // no imbalance allowed
-  expect(() => ascComparator(make([1, 2]), make([1, 2, 3]))).toThrow();
-  expect(() => ascComparator(make([1, 2, 3]), make([1, 2]))).toThrow();
+  check([1, 2], [2, 3], -1);
+  check([1, 'a'], [1, 'b'], -1);
+  check([1, 'a'], [1, 'a'], 0);
+  check([1, 'b'], [1, 'a'], 1);
+  check([1, 2], [1, 3], -1);
+  check([1, 2], [1, 2], 0);
+  check([1, 3], [1, 2], 1);
 
-  expect(ascComparator(make([1]), make([2]))).toBeLessThan(0);
-  expect(ascComparator(make([1]), make([1]))).toBe(0);
-  expect(ascComparator(make([2]), make([1]))).toBeGreaterThan(0);
-  expect(ascComparator(make(['a']), make(['b']))).toBeLessThan(0);
-  expect(ascComparator(make(['a']), make(['a']))).toBe(0);
-  expect(ascComparator(make(['b']), make(['a']))).toBeGreaterThan(0);
+  check([1], [2], -1);
+  check([1], [1], 0);
+  check([2], [1], 1);
+  check(['a'], ['b'], -1);
+  check(['a'], ['a'], 0);
+  check(['b'], ['a'], 1);
 
-  expect(ascComparator(make([null]), make([null]))).toBe(0);
+  check([null], [null], 0);
+
+  function check(values1: unknown[], values2: unknown[], expected: number) {
+    expect(
+      makeComparator<string[], Record<string, unknown>>(
+        Array.from({length: values1.length}).map((_, i) => 'field' + i),
+        'asc',
+      )(makeObject(values1), makeObject(values2)),
+    ).toBe(expected);
+  }
 });
 
 test('destroying the statement stops updating the view', async () => {

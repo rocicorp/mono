@@ -1,38 +1,34 @@
 import {expect, test} from 'vitest';
 import {Materialite} from '../materialite.js';
-import {applySelect, orderingProp} from '../../ast-to-ivm/pipeline-builder.js';
 import {MutableTreeView} from './tree-view.js';
-import {ascComparator, descComparator} from '../../query/statement.js';
-import type {DifferenceStream} from '../graph/difference-stream.js';
 import fc from 'fast-check';
-import type {Primitive} from '../../ast/ast.js';
 import type {Entity} from '../../../entity.js';
+import {makeComparator} from '../../query/statement.js';
 
 const numberComparator = (l: number, r: number) => l - r;
 
-type Selected = {id: string; [orderingProp]: Primitive[]};
+type Selected = {id: string};
 test('asc and descComparator on Entities', () => {
   const m = new Materialite();
   const s = m.newSetSource<Entity>((l, r) => l.id.localeCompare(r.id));
 
-  const updatedStream = applySelect(
+  const view = new MutableTreeView<Selected>(
+    m,
     s.stream,
-    [['id', 'id']],
+    // eh... the comparator operates on the base type rather than the mapped
+    // type. So there's a disconnect between the type of the comparator and the
+    // type of the view.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    makeComparator(['n', 'id'] as any, 'asc'),
     [['n', 'id'], 'asc'],
-  ) as unknown as DifferenceStream<Selected>;
+  );
 
-  const view = new MutableTreeView<Selected>(m, updatedStream, ascComparator, [
-    ['n', 'id'],
-    'asc',
-  ]);
   const descView = new MutableTreeView<Selected>(
     m,
-    applySelect(
-      s.stream as unknown as DifferenceStream<Entity>,
-      [['id', 'id']],
-      [['n', 'id'], 'desc'],
-    ) as unknown as DifferenceStream<Selected>,
-    descComparator,
+    s.stream,
+    // see above for why this is any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    makeComparator(['n', 'id'] as any, 'desc'),
     [['n', 'id'], 'desc'],
   );
 
@@ -46,8 +42,16 @@ test('asc and descComparator on Entities', () => {
   s.add(items[1]);
   s.add(items[2]);
 
-  expect(view.value).toEqual([{id: 'a'}, {id: 'b'}, {id: 'c'}]);
-  expect(descView.value).toEqual([{id: 'c'}, {id: 'b'}, {id: 'a'}]);
+  expect(view.value).toEqual([
+    {id: 'a', n: 1},
+    {id: 'b', n: 1},
+    {id: 'c', n: 1},
+  ]);
+  expect(descView.value).toEqual([
+    {id: 'c', n: 1},
+    {id: 'b', n: 1},
+    {id: 'a', n: 1},
+  ]);
 });
 
 test('add & remove', () => {

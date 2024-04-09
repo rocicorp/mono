@@ -1,15 +1,7 @@
 import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
-import type {
-  AST,
-  Aggregation,
-  Condition,
-  Ordering,
-  SimpleCondition,
-} from '../ast/ast.js';
+import type {AST, Aggregation, Condition, SimpleCondition} from '../ast/ast.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
-
-export const orderingProp = Symbol();
 
 export function buildPipeline(
   sourceStreamProvider: (sourceName: string) => DifferenceStream<Entity>,
@@ -34,8 +26,6 @@ export function buildPipeline(
       ret as DifferenceStream<Entity>,
       ast.groupBy,
       ast.aggregate ?? [],
-      Array.isArray(ast.select) ? ast.select : [],
-      ast.orderBy,
     ) as unknown as DifferenceStream<Entity>;
   }
   // if there was no group-by then we could be aggregating the entire table
@@ -46,60 +36,9 @@ export function buildPipeline(
     );
   }
 
-  // group-by applies the selection set internally.
-  if (ast.groupBy === undefined) {
-    ret = applySelect(
-      ret as DifferenceStream<Entity>,
-      ast.select ?? [],
-      ast.orderBy,
-    );
-  }
-
   // Note: the stream is technically attached at this point.
   // We could detach it until the user actually runs (or subscribes to) the statement as a tiny optimization.
   return ret;
-}
-
-export function applySelect(
-  stream: DifferenceStream<Entity>,
-  select: [column: string, alias: string][],
-  orderBy: Ordering | undefined,
-) {
-  return stream.map(x => {
-    let ret: Record<string, unknown>;
-    if (select.length === 0) {
-      ret = {...x};
-    } else {
-      ret = {};
-      for (const selector of select) {
-        ret[selector[1]] = (x as Record<string, unknown>)[selector[0]];
-      }
-    }
-
-    addOrdering(ret, x, orderBy);
-
-    return ret;
-  }) as unknown as DifferenceStream<Entity>;
-}
-
-function addOrdering(
-  ret: Record<string, unknown>,
-  row: Record<string, unknown>,
-  orderBy: Ordering | undefined,
-) {
-  const orderingValues: unknown[] = [];
-  if (orderBy !== undefined) {
-    for (const field of orderBy[0]) {
-      orderingValues.push(row[field]);
-    }
-  }
-
-  Object.defineProperty(ret, orderingProp, {
-    enumerable: false,
-    writable: false,
-    configurable: false,
-    value: orderingValues,
-  });
 }
 
 function applyWhere<T extends Entity>(
@@ -168,8 +107,6 @@ function applyGroupBy<T extends Entity>(
   stream: DifferenceStream<T>,
   columns: string[],
   aggregations: Aggregation[],
-  select: [string, string][],
-  orderBy: Ordering | undefined,
 ) {
   const keyFunction = makeKeyFunction(columns);
   return stream.reduce(
@@ -177,11 +114,7 @@ function applyGroupBy<T extends Entity>(
     value => value.id as string,
     values => {
       const first = values[Symbol.iterator]().next().value;
-      const ret: Record<string, unknown> = {};
-      for (const selector of select) {
-        ret[selector[1]] = first[selector[0]];
-      }
-      addOrdering(ret, first, orderBy);
+      const ret: Record<string, unknown> = {...first};
 
       for (const aggregation of aggregations) {
         switch (aggregation.aggregate) {
