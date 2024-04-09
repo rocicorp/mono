@@ -578,7 +578,7 @@ class TransactionProcessor {
       insert.relation.keyColumns.map(col => [col, insert.new[col]]),
     );
     this.#getTableTracker(insert.relation).add({
-      preValue: null,
+      preValue: 'none',
       postRowKey: key,
       postValue: row,
     });
@@ -600,7 +600,7 @@ class TransactionProcessor {
     );
     this.#getTableTracker(update.relation).add({
       preRowKey: oldKey,
-      preValue: undefined,
+      preValue: 'unknown',
       postRowKey: newKey,
       postValue: row,
     });
@@ -631,9 +631,9 @@ class TransactionProcessor {
     const rowKey = del.key;
 
     this.#getTableTracker(del.relation).add({
-      preValue: undefined,
+      preValue: 'unknown',
       postRowKey: rowKey,
-      postValue: null,
+      postValue: 'none',
     });
 
     return this.#writer.process(tx => {
@@ -679,7 +679,7 @@ class TransactionProcessor {
               table.schema,
               table.table,
               change.rowKey,
-              change.postValue,
+              change.postValue === 'none' ? undefined : change.postValue,
             ),
           );
         }
@@ -705,7 +705,7 @@ class TransactionProcessor {
     schema: string,
     table: string,
     key?: RowKeyValue,
-    row?: RowKeyValue | null,
+    row?: RowKeyValue,
   ) {
     const change: ChangeLogEntry = {
       stateVersion: this.#version,

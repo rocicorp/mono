@@ -23,22 +23,30 @@ import type {
 } from '../../../types/row-key.js';
 import {rowKeyString} from '../../../types/row-key.js';
 
-/** A RowChange represents an INSERT, UPDATE, or DELETE. */
-export type RowChange = {
+export type InsertRowChange = {
+  preRowKey?: undefined;
+  preValue: 'none';
+  postRowKey: RowKeyValue;
+  postValue: RowValue;
+};
+
+export type UpdateRowChange = {
   /** `preRowKey` is set for an UPDATE in which the row key changed. */
   preRowKey?: RowKeyValue | null;
-
-  /**
-   * `null` for INSERT (the row could not have existed before), or
-   * `undefined` for UPDATE and DELETE.
-   */
-  preValue: null | undefined;
-
+  preValue: 'unknown';
   postRowKey: RowKeyValue;
-
-  /** `null` represents a DELETE'd row. */
-  postValue: RowValue | null;
+  postValue: RowValue;
 };
+
+export type DeleteRowChange = {
+  preRowKey?: undefined;
+  preValue: 'unknown';
+  postRowKey: RowKeyValue;
+  postValue: 'none';
+};
+
+/** A RowChange represents an INSERT, UPDATE, or DELETE. */
+export type RowChange = InsertRowChange | UpdateRowChange | DeleteRowChange;
 
 /**
  * The EffectiveRowChange encapsulates the pre- and post- state of a row
@@ -46,8 +54,8 @@ export type RowChange = {
  */
 export type EffectiveRowChange = {
   rowKey: RowKeyValue;
-  preValue: RowValue | null | undefined;
-  postValue: RowValue | null;
+  preValue: RowValue | 'none' | 'unknown';
+  postValue: RowValue | 'none';
 };
 
 /**
@@ -84,7 +92,7 @@ export class TableTracker {
     } else {
       // First time this row has appeared in this transaction.
       // If this was an UPDATE from a preRowKey, treat it as an INSERT of the postRowKey.
-      const preValue = change.preRowKey ? null /* INSERT */ : change.preValue;
+      const preValue = change.preRowKey ? 'none' /* INSERT */ : change.preValue;
       this.#rows.set(postKey, {
         rowKey: change.postRowKey,
         preValue,
@@ -99,13 +107,13 @@ export class TableTracker {
       // old row key to `null` as if it were DELETE'd.
       const parentNodes = this.#rows.get(preKey);
       if (parentNodes) {
-        parentNodes.postValue = null;
+        parentNodes.postValue = 'none';
       } else {
         // First time this row has appeared in this transaction.
         this.#rows.set(preKey, {
           rowKey: change.preRowKey,
           preValue: change.preValue,
-          postValue: null,
+          postValue: 'none',
         });
       }
     }
@@ -129,7 +137,7 @@ export class TableTracker {
           // Exclude non-changes, i.e. previously non-existent rows that were INSERT'ed
           // but ultimately DELETE'd.
           ([_, change]) =>
-            !(change.preValue === null && change.postValue === null),
+            !(change.preValue === 'none' && change.postValue === 'none'),
         ),
       ),
     };
