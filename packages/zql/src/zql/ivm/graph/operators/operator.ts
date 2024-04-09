@@ -1,5 +1,6 @@
 import type {Version} from '../../types.js';
 import type {Request} from '../message.js';
+import {DifferenceStream} from '../difference-stream.js';
 
 export interface Operator {
   /**
@@ -16,4 +17,28 @@ export class NoOp implements Operator {
   commit(_v: Version): void {}
   messageUpstream(): void {}
   destroy(): void {}
+}
+
+/**
+ * A dataflow operator (node) that has many incoming edges (stream) and one outgoing edge (stream).
+ */
+export abstract class OperatorBase<O extends object> implements Operator {
+  // downstream output
+  readonly #output: DifferenceStream<O>;
+  #lastCommit = -1;
+
+  constructor(output: DifferenceStream<O>) {
+    this.#output = output;
+  }
+
+  commit(v: Version) {
+    if (v <= this.#lastCommit) {
+      return;
+    }
+    this.#lastCommit = v;
+    this.#output.commit(v);
+  }
+
+  abstract messageUpstream(message: Request): void;
+  abstract destroy(): void;
 }

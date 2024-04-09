@@ -3,25 +3,27 @@ import type {Version} from '../../types.js';
 import type {DifferenceStream, Listener} from '../difference-stream.js';
 import type {Request} from '../message.js';
 import type {Operator} from './operator.js';
+import {OperatorBase} from './operator.js';
 
 /**
  * Operator that only takes a single argument
  */
 export class UnaryOperator<I extends object, O extends object>
+  extends OperatorBase<O>
   implements Operator
 {
   readonly #listener: Listener<I>;
   readonly #input: DifferenceStream<I>;
-  readonly #output: DifferenceStream<O>;
 
   constructor(
     input: DifferenceStream<I>,
     output: DifferenceStream<O>,
     fn: (version: Version, data: Multiset<I>) => Multiset<O>,
   ) {
+    super(output);
     this.#listener = {
       newDifference: (version, data) => {
-        output.newData(version, fn(version, data));
+        output.newDifference(version, fn(version, data));
       },
       commit: version => {
         this.commit(version);
@@ -29,11 +31,6 @@ export class UnaryOperator<I extends object, O extends object>
     };
     input.addDownstream(this.#listener);
     this.#input = input;
-    this.#output = output;
-  }
-
-  commit(version: Version): void {
-    this.#output.commit(version);
   }
 
   messageUpstream(message: Request): void {

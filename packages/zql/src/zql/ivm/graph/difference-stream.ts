@@ -2,7 +2,6 @@ import {assert} from 'shared/src/asserts.js';
 import type {Entity} from '../../../entity.js';
 import type {Primitive} from '../../ast/ast.js';
 import type {Multiset} from '../multiset.js';
-import type {Version} from '../types.js';
 import type {Reply, Request} from './message.js';
 import {ConcatOperator} from './operators/concat-operator.js';
 import {DebugOperator} from './operators/debug-operator.js';
@@ -18,6 +17,8 @@ import {
 import {MapOperator} from './operators/map-operator.js';
 import type {Operator} from './operators/operator.js';
 import {ReduceOperator} from './operators/reduce-operator.js';
+import {JoinResult, Version} from '../types.js';
+import {InnerJoinOperator, JoinArgs} from './operators/join-operator.js';
 
 export type Listener<T> = {
   newDifference: (
@@ -75,7 +76,11 @@ export class DifferenceStream<T extends object> {
     return this;
   }
 
-  newData(version: Version, data: Multiset<T>, reply?: Reply | undefined) {
+  newDifference(
+    version: Version,
+    data: Multiset<T>,
+    reply?: Reply | undefined,
+  ) {
     if (reply) {
       for (const requestor of this.#requestors) {
         requestor.newDifference(version, data, reply);
@@ -148,6 +153,26 @@ export class DifferenceStream<T extends object> {
     );
   }
 
+  join<
+    Key extends Primitive,
+    BValue extends object,
+    AAlias extends string | undefined,
+    BAlias extends string | undefined,
+  >(
+    args: Omit<JoinArgs<Key, T, BValue, AAlias, BAlias>, 'a' | 'output'>,
+  ): DifferenceStream<JoinResult<T, BValue, AAlias, BAlias>> {
+    const stream = new DifferenceStream<
+      JoinResult<T, BValue, AAlias, BAlias>
+    >();
+    return stream.setUpstream(
+      new InnerJoinOperator({
+        a: this,
+        output: stream,
+        ...args,
+      }),
+    );
+  }
+
   /**
    * This differs from count in that `size` just counts the entire
    * stream whereas `count` counts the number of times each key appears.
@@ -202,6 +227,10 @@ export class DifferenceStream<T extends object> {
     if (this.#downstreams.size === 0) {
       this.destroy();
     }
+  }
+
+  toString() {
+    return this.#upstream?.toString() ?? 'DifferenceStream';
   }
 }
 
