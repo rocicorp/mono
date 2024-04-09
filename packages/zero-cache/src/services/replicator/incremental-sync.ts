@@ -66,12 +66,13 @@ export const CREATE_REPLICATION_TABLES =
   `
   CREATE TABLE _zero."ChangeLog" (
     "stateVersion" VARCHAR(38)  NOT NULL,
-    "tableName"    VARCHAR(128) NOT NULL,
+    "schema"       VARCHAR(128) NOT NULL,
+    "table"        VARCHAR(128) NOT NULL,
     "op"           CHAR         NOT NULL,
     "rowKeyHash"   VARCHAR(22)  NOT NULL,
     "rowKey"       JSON,
     "row"          JSON,
-    CONSTRAINT PK_change_log PRIMARY KEY("stateVersion", "tableName", "rowKeyHash")
+    CONSTRAINT PK_change_log PRIMARY KEY("stateVersion", "schema", "table", "rowKeyHash")
   );
 `;
 
@@ -583,7 +584,7 @@ class TransactionProcessor {
     });
 
     return this.#writer.process(tx => [
-      tx`INSERT INTO ${tx(table(insert.relation))} ${tx(row)}`,
+      tx`INSERT INTO ${table(tx, insert)} ${tx(row)}`,
     ]);
   }
 
@@ -615,7 +616,7 @@ class TransactionProcessor {
       //       https://github.com/porsager/postgres/issues/807#issuecomment-1949924843
       return [
         tx`
-        UPDATE ${tx(table(update.relation))}
+        UPDATE ${table(tx, update)}
           SET ${tx(row)}
           WHERE ${conds.flatMap((k, i) => (i ? [tx` AND `, k] : k))}`,
       ];
@@ -645,7 +646,7 @@ class TransactionProcessor {
       //       https://github.com/porsager/postgres/issues/807#issuecomment-1949924843
       return [
         tx`
-      DELETE FROM ${tx(table(del.relation))} 
+      DELETE FROM ${table(tx, del)}
         WHERE ${conds.flatMap((k, i) => (i ? [tx` AND `, k] : k))} `,
       ];
     });
@@ -708,7 +709,8 @@ class TransactionProcessor {
   ) {
     const change: ChangeLogEntry = {
       stateVersion: this.#version,
-      tableName: `${schema}.${table}`,
+      schema,
+      table,
       op: row ? 's' : key ? 'd' : 't',
       rowKeyHash: key ? rowKeyHash(key) : '', // Empty string for truncate,
       rowKey: (key as postgres.JSONValue) ?? null,
@@ -718,7 +720,7 @@ class TransactionProcessor {
   }
 
   #getTableTracker(relation: Pgoutput.MessageRelation) {
-    const key = table(relation);
+    const key = stringify([relation.schema, relation.name]);
     const rowKeyType: RowKeyType = Object.fromEntries(
       relation.keyColumns.map(name => {
         const column = relation.columns.find(c => c.name === name);
@@ -737,13 +739,15 @@ class TransactionProcessor {
 
 type ChangeLogEntry = {
   stateVersion: string;
-  tableName: string;
+  schema: string;
+  table: string;
   op: 't' | 's' | 'd';
   rowKeyHash: string;
   rowKey: postgres.JSONValue;
   row: postgres.JSONValue;
 };
 
-function table(table: Pgoutput.MessageRelation): string {
-  return `${table.schema}.${table.name}`;
+function table(db: postgres.Sql, msg: {relation: Pgoutput.MessageRelation}) {
+  const {schema, name: table} = msg.relation;
+  return db`${db(schema)}.${db(table)}`;
 }
