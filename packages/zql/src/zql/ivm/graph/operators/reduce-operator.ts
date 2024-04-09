@@ -1,5 +1,5 @@
+import {assert} from 'shared/src/asserts.js';
 import type {Primitive} from '../../../ast/ast.js';
-import {assert} from '../../../error/asserts.js';
 import {flatMapIter} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
 import type {Version} from '../../types.js';

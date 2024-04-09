@@ -1,6 +1,6 @@
 import {Treap} from '@vlcn.io/ds-and-algos/Treap';
 import type {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
-import {must} from '../../error/asserts.js';
+import {must} from 'shared/src/must.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
 import {PullMsg, Request, createPullResponseMessage} from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';

@@ -1,8 +1,8 @@
 import type {ExperimentalNoIndexDiff} from 'replicache';
+import {assert} from 'shared/src//asserts.js';
 import type {Entity} from '../../entity.js';
 import type {ReplicacheLike} from '../../replicache-like.js';
 import type {Ordering} from '../ast/ast.js';
-import {assert} from '../error/asserts.js';
 import {compareEntityFields} from '../ivm/compare.js';
 import {Materialite} from '../ivm/materialite.js';
 import type {MutableSetSource} from '../ivm/source/set-source.js';

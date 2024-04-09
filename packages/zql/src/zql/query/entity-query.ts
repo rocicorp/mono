@@ -1,3 +1,4 @@
+import {must} from 'shared/src/must.js';
 import type {
   AST,
   Aggregation,
@@ -10,7 +11,6 @@ import type {
   SimpleOperator,
 } from '../ast/ast.js';
 import type {Context} from '../context/context.js';
-import {must} from '../error/asserts.js';
 import {Misuse} from '../error/misuse.js';
 import type {EntitySchema} from '../schema/entity-schema.js';
 import {AggArray, Aggregate, Count, isAggregate} from './agg.js';
