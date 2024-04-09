@@ -47,26 +47,26 @@ export type FromSet = {
 };
 
 type NestedKeys<T> = {
-  [K in keyof T]: keyof T[K];
+  [K in keyof T]: string & keyof T[K];
+}[keyof T];
+
+type ObjectHasSingleProperty<T> = {
+  [K in keyof T]: Exclude<keyof Omit<T, K>, K>;
 }[keyof T];
 
 type SimpleSelector<F extends FromSet> =
-  | 'id'
-  | {
-      [K in keyof F]: Exclude<string & keyof F[K], NestedKeys<Omit<F, K>>>;
-    }[keyof F]
   | {
       [K in keyof F]: `${string & K}.${string & keyof F[K]}`;
-    }[keyof F];
+    }[keyof F]
+  | (ObjectHasSingleProperty<F> extends never ? NestedKeys<F> : never);
 
 type Selector<F extends FromSet> =
   | {
       [K in keyof F]:
         | `${string & K}.${string & keyof F[K]}`
-        | `${string & K}.*`
-        | Exclude<string & keyof F[K], NestedKeys<Omit<F, K>>>;
+        | `${string & K}.*`;
     }[keyof F]
-  | SimpleSelector<F>;
+  | (ObjectHasSingleProperty<F> extends never ? NestedKeys<F> : never);
 
 type ExtractAggregatePiece<
   From extends FromSet,
