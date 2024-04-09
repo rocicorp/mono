@@ -177,8 +177,6 @@ export type MakeHumanReadable<T> = {} & {
   readonly [P in keyof T]: T[P] extends string ? T[P] : MakeHumanReadable<T[P]>;
 };
 
-let aliasCount = 0;
-
 export type WhereCondition<From extends FromSet> =
   | {
       op: 'AND' | 'OR';
@@ -207,7 +205,6 @@ export class EntityQuery<From extends FromSet, Return = []> {
   constructor(context: Context, tableName: string, ast?: AST) {
     this.#ast = ast ?? {
       table: tableName,
-      alias: aliasCount++,
       orderBy: [['id'], 'asc'],
     };
     this.#name = tableName;
