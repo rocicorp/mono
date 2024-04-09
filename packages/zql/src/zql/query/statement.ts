@@ -1,8 +1,9 @@
+import {assert} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
 import {buildPipeline, orderingProp} from '../ast-to-ivm/pipeline-builder.js';
 import type {AST, Primitive} from '../ast/ast.js';
 import type {Context} from '../context/context.js';
-import {invariant, must} from '../error/asserts.js';
 import {compareEntityFields} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
 import {MutableTreeView} from '../ivm/view/tree-view.js';
@@ -100,7 +101,7 @@ export function ascComparator<T extends {[orderingProp]: Primitive[]}>(
   const leftVals = l[orderingProp];
   const rightVals = r[orderingProp];
 
-  invariant(
+  assert(
     leftVals.length === rightVals.length,
     'orderingProp lengths must match',
   );

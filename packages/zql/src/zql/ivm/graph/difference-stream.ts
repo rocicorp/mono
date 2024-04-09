@@ -1,6 +1,6 @@
+import {assert} from 'shared/src/asserts.js';
 import type {Entity} from '../../../entity.js';
 import type {Primitive} from '../../ast/ast.js';
-import {invariant} from '../../error/asserts.js';
 import type {Multiset} from '../multiset.js';
 import type {Version} from '../types.js';
 import type {Reply, Request} from './message.js';
@@ -70,7 +70,7 @@ export class DifferenceStream<T extends object> {
   }
 
   setUpstream(operator: Operator) {
-    invariant(this.#upstream === undefined, 'upstream already set');
+    assert(this.#upstream === undefined, 'upstream already set');
     this.#upstream = operator;
     return this;
   }

@@ -29,6 +29,7 @@
     "nanoid": "^4.0.2",
     "playwright": "^1.39.0",
     "replicache": "14.2.2",
+    "shared": "0.0.0",
     "typescript": "^5.4.2",
     "vitest": "1.4.0",
     "zod": "^3.21.4"
