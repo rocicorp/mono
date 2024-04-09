@@ -77,6 +77,10 @@ test('query types', () => {
     q.select('id', agg.array('str')).groupBy('optStr').prepare().exec(),
   ).toMatchTypeOf<Promise<readonly {id: string; str: readonly string[]}[]>>();
 
+  expectTypeOf(q.select('*').prepare().exec()).toMatchTypeOf<
+    Promise<readonly E1[]>
+  >();
+
   expectTypeOf(
     q
       .select('id', agg.array('str', 'alias'))
