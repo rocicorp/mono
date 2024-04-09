@@ -1,8 +1,7 @@
-import type {EntitySchema} from '../schema/entity-schema.js';
-import type {WhereCondition} from './entity-query.js';
+import {FromSet, WhereCondition} from './entity-query.js';
 
-export function conditionToString<S extends EntitySchema>(
-  c: WhereCondition<S>,
+export function conditionToString<From extends FromSet>(
+  c: WhereCondition<From>,
   paren = false,
 ): string {
   if (c.op === 'AND' || c.op === 'OR') {

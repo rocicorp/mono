@@ -140,7 +140,7 @@ test('ZQL query with Replicache', async () => {
   const r = newRep();
   const context = makeReplicacheContext(r);
 
-  const q = new EntityQuery<E1>(context, 'e1');
+  const q = new EntityQuery<{e1: E1}>(context, 'e1');
 
   const view = q.select('id').where('str', '>', 'm').prepare().view();
 

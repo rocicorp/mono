@@ -17,7 +17,7 @@ test('asc and descComparator on Entities', () => {
 
   const updatedStream = applySelect(
     s.stream,
-    ['id'],
+    [['id', 'id']],
     [['n', 'id'], 'asc'],
   ) as unknown as DifferenceStream<Selected>;
 
@@ -29,7 +29,7 @@ test('asc and descComparator on Entities', () => {
     m,
     applySelect(
       s.stream as unknown as DifferenceStream<Entity>,
-      ['id'],
+      [['id', 'id']],
       [['n', 'id'], 'desc'],
     ) as unknown as DifferenceStream<Selected>,
     descComparator,

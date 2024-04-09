@@ -62,7 +62,7 @@ export function buildPipeline(
 
 export function applySelect(
   stream: DifferenceStream<Entity>,
-  select: string[],
+  select: [column: string, alias: string][],
   orderBy: Ordering | undefined,
 ) {
   return stream.map(x => {
@@ -71,8 +71,8 @@ export function applySelect(
       ret = {...x};
     } else {
       ret = {};
-      for (const field of select) {
-        ret[field] = (x as Record<string, unknown>)[field];
+      for (const selector of select) {
+        ret[selector[1]] = (x as Record<string, unknown>)[selector[0]];
       }
     }
 
@@ -168,7 +168,7 @@ function applyGroupBy<T extends Entity>(
   stream: DifferenceStream<T>,
   columns: string[],
   aggregations: Aggregation[],
-  select: string[],
+  select: [string, string][],
   orderBy: Ordering | undefined,
 ) {
   const keyFunction = makeKeyFunction(columns);
@@ -178,8 +178,8 @@ function applyGroupBy<T extends Entity>(
     values => {
       const first = values[Symbol.iterator]().next().value;
       const ret: Record<string, unknown> = {};
-      for (const column of select) {
-        ret[column] = first[column];
+      for (const selector of select) {
+        ret[selector[1]] = first[selector[0]];
       }
       addOrdering(ret, first, orderBy);
 
