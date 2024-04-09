@@ -2,23 +2,18 @@
   "name": "@rocicorp/zql",
   "version": "0.0.0",
   "description": "ZQL IVM Query library",
+  "private": true,
   "type": "module",
-  "main": "out/index.js",
-  "exports": "./out/index.js",
   "scripts": {
     "format": "prettier --write 'src/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check 'src/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "check-types": "tsc --noEmit",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "build": "tsc",
-    "prepack": "npm run check-format && npm run lint && npm run test && npm run build",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test-types": "vitest run --typecheck.only --no-browser.enabled",
     "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled"
   },
-  "author": "",
-  "license": "Apache-2.0",
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/logger": "^5.2.1",
@@ -34,10 +29,6 @@
     "vitest": "1.4.0",
     "zod": "^3.21.4"
   },
-  "files": [
-    "out/",
-    "!out/*.test.*"
-  ],
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
   },

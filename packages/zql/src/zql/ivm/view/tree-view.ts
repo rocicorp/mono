@@ -1,4 +1,8 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore next.js is having issues finding the .d.ts
 import {Treap} from '@vlcn.io/ds-and-algos/Treap';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore next.js is having issues finding the .d.ts
 import type {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
 import type {Ordering} from '../../ast/ast.js';
 import type {DifferenceStream} from '../graph/difference-stream.js';
