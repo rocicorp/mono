@@ -14,7 +14,7 @@ test('does not emit any rows that fail the filter', () => {
     items.push(e);
   });
 
-  input.newData(1, [
+  input.newDifference(1, [
     [{id: 1}, 1],
     [{id: 2}, 2],
     [{id: 1}, -1],
@@ -34,7 +34,7 @@ test('emits all rows that pass the filter (including deletes / retractions)', ()
     items.push([e, mult]);
   });
 
-  input.newData(1, [
+  input.newDifference(1, [
     [{id: 1}, 1],
     [{id: 2}, 2],
     [{id: 1}, -1],
@@ -62,7 +62,7 @@ test('test that filter is lazy / the filter is not actually run until we pull on
     msgs.push(data);
   });
 
-  input.newData(1, [
+  input.newDifference(1, [
     [{id: 1}, 1],
     [{id: 2}, 2],
     [{id: 1}, -1],

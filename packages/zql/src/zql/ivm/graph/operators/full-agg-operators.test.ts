@@ -10,7 +10,7 @@ test('count', () => {
   });
 
   // does not count things that do not exist
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         x: 'foo',
@@ -21,7 +21,7 @@ test('count', () => {
   check(1, [[{x: 'foo', count: 0}, 1]]);
 
   // counts multiplicity of 1
-  input.newData(2, [
+  input.newDifference(2, [
     [
       {
         x: 'foo',
@@ -35,7 +35,7 @@ test('count', () => {
   ]);
 
   // decrements if an item is removed
-  input.newData(3, [
+  input.newDifference(3, [
     [
       {
         x: 'foo',
@@ -49,7 +49,7 @@ test('count', () => {
   ]);
 
   // double counts doubly present items
-  input.newData(4, [
+  input.newDifference(4, [
     [
       {
         x: 'foo',
@@ -81,7 +81,7 @@ test('average', () => {
   });
 
   // does not avg things that do not exist
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         x: 1,
@@ -92,7 +92,7 @@ test('average', () => {
   check(1, [[{x: 0}, 1]]);
 
   // averages things that exist
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         x: 1,
@@ -112,13 +112,13 @@ test('average', () => {
       1,
     ],
   ]);
-  check(1, [
+  check(2, [
     [{x: 0}, -1],
     [{x: 2}, 1],
   ]);
 
   // updates the average when new items enter
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         x: 4,
@@ -132,13 +132,13 @@ test('average', () => {
       1,
     ],
   ]);
-  check(1, [
+  check(3, [
     [{x: 2}, -1],
     [{x: 3}, 1],
   ]);
 
   // updates the average when items leave
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         x: 4,
@@ -152,7 +152,7 @@ test('average', () => {
       -1,
     ],
   ]);
-  check(1, [
+  check(4, [
     [{x: 3}, -1],
     [{x: 2}, 1],
   ]);
@@ -173,7 +173,7 @@ test('sum', () => {
   });
 
   // does not sum things that do not exist
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         x: 1,
@@ -184,7 +184,7 @@ test('sum', () => {
   check(1, [[{x: 0}, 1]]);
 
   // sums things that exist
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         x: 1,
@@ -204,13 +204,13 @@ test('sum', () => {
       1,
     ],
   ]);
-  check(1, [
+  check(2, [
     [{x: 0}, -1],
     [{x: 6}, 1],
   ]);
 
   // updates the sum when new items enter
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         x: 4,
@@ -224,13 +224,13 @@ test('sum', () => {
       1,
     ],
   ]);
-  check(1, [
+  check(3, [
     [{x: 6}, -1],
     [{x: 15}, 1],
   ]);
 
   // updates the sum when items leave
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         x: 4,
@@ -244,7 +244,7 @@ test('sum', () => {
       -1,
     ],
   ]);
-  check(1, [
+  check(4, [
     [{x: 15}, -1],
     [{x: 6}, 1],
   ]);

@@ -15,7 +15,7 @@ test('lazy', () => {
     items.push(d);
   });
 
-  input.newData(1, [
+  input.newDifference(1, [
     [{id: 1}, 1],
     [{id: 2}, 2],
     [{id: 1}, -1],
@@ -43,7 +43,7 @@ test('applies to rows', () => {
     items.push([e, m]);
   });
 
-  input.newData(1, [
+  input.newDifference(1, [
     [{id: 1}, 1],
     [{id: 2}, 2],
     [{id: 1}, -1],
