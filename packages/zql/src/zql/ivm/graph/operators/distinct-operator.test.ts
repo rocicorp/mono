@@ -17,7 +17,7 @@ test('distinct', () => {
     items.push(d);
   });
 
-  input.newData(version, [
+  input.newDifference(version, [
     [{id: 'a'}, 1],
     [{id: 'b'}, 2],
     [{id: 'a'}, -1],
@@ -34,28 +34,28 @@ test('distinct', () => {
 
   version++;
   items.length = 0;
-  input.newData(version, [[{id: 'b'}, -2]]);
+  input.newDifference(version, [[{id: 'b'}, -2]]);
   input.commit(version);
   expect(items).toEqual([[[{id: 'b'}, -1]]]);
 
   version++;
   items.length = 0;
-  input.newData(version, [[{id: 'd'}, -1]]);
-  input.newData(version, [[{id: 'd'}, 1]]);
+  input.newDifference(version, [[{id: 'd'}, -1]]);
+  input.newDifference(version, [[{id: 'd'}, 1]]);
   input.commit(version);
   expect(items).toEqual([[[{id: 'd'}, -1]], [[{id: 'd'}, 1]]]);
 
   version++;
   items.length = 0;
-  input.newData(version, [[{id: 'e'}, -1]]);
-  input.newData(version, [[{id: 'e'}, 5]]);
+  input.newDifference(version, [[{id: 'e'}, -1]]);
+  input.newDifference(version, [[{id: 'e'}, 5]]);
   input.commit(version);
   expect(items).toEqual([[[{id: 'e'}, -1]], [[{id: 'e'}, 2]]]);
 
   version++;
   items.length = 0;
-  input.newData(version, [[{id: 'e'}, 5]]);
-  input.newData(version, [[{id: 'e'}, -6]]);
+  input.newDifference(version, [[{id: 'e'}, 5]]);
+  input.newDifference(version, [[{id: 'e'}, -6]]);
   input.commit(version);
   expect(items).toEqual([[[{id: 'e'}, 1]], [[{id: 'e'}, -2]]]);
 });

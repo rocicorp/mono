@@ -14,6 +14,7 @@ type Reduction = {
 
 test('collects all things with the same key', () => {
   const input = new DifferenceStream<Thing>();
+  let version = 0;
   function getGroupKey(t: Thing) {
     return t.groupKey;
   }
@@ -43,7 +44,7 @@ test('collects all things with the same key', () => {
     items.push([e, m]);
   });
 
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         id: 'a',
@@ -64,7 +65,7 @@ test('collects all things with the same key', () => {
   check([[{id: 'x', sum: 5}, 1]]);
 
   // retract an item
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         id: 'a',
@@ -80,7 +81,7 @@ test('collects all things with the same key', () => {
   ]);
 
   // fully retract items that constitute a grouping
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         id: 'b',
@@ -93,7 +94,7 @@ test('collects all things with the same key', () => {
   check([[{id: 'x', sum: 4}, -1]]);
 
   // add more entries
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         id: 'a',
@@ -104,7 +105,7 @@ test('collects all things with the same key', () => {
     ],
   ]);
   check([[{id: 'c', sum: 1}, 1]]);
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         id: 'b',
@@ -119,7 +120,7 @@ test('collects all things with the same key', () => {
     [{id: 'c', sum: 3}, 1],
   ]);
 
-  input.newData(1, [
+  input.newDifference(1, [
     [
       {
         id: 'a',
@@ -143,7 +144,7 @@ test('collects all things with the same key', () => {
   ]);
 
   function check(expected: [Reduction, number][]) {
-    input.commit(1);
+    input.commit(++version);
     expect(items).toEqual(expected);
     items.length = 0;
   }

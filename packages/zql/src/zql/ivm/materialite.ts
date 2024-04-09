@@ -8,6 +8,7 @@ import type {Version} from './types.js';
 
 export type MaterialiteForSourceInternal = {
   readonly materialite: Materialite;
+  nextVersion(): number;
   getVersion(): number;
   addDirtySource(source: SourceInternal): void;
 };
@@ -24,6 +25,10 @@ export class Materialite {
     this.#internal = {
       materialite: this,
       getVersion: () => this.#version,
+      nextVersion: () => {
+        this.#version += 1;
+        return this.#version;
+      },
       addDirtySource: (source: SourceInternal) => {
         this.#dirtySources.add(source);
         // auto-commit if not in a transaction

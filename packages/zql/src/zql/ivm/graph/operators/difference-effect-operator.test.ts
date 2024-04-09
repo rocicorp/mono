@@ -16,7 +16,7 @@ test('calls effect with raw difference events', () => {
     mult = m;
   });
 
-  input.newData(1, [[{x: 1}, 1]]);
+  input.newDifference(1, [[{x: 1}, 1]]);
 
   // effect not run until commit
   expect(called).toBe(false);
@@ -29,7 +29,7 @@ test('calls effect with raw difference events', () => {
   called = false;
   value = 0;
   mult = 0;
-  input.newData(2, [[{x: 1}, -1]]);
+  input.newDifference(2, [[{x: 1}, -1]]);
 
   // effect not run until commit
   expect(called).toBe(false);

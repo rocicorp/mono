@@ -27,7 +27,7 @@ type E1 = z.infer<typeof e1>;
 const context = makeTestContext();
 const comparator = (l: E1, r: E1) => compareUTF8(l.id, r.id);
 test('A simple select', () => {
-  const q = new EntityQuery<E1>(context, 'e1');
+  const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
   let s = m.newSetSource<E1>(comparator);
   let pipeline = buildPipeline(
@@ -69,7 +69,7 @@ test('A simple select', () => {
 });
 
 test('Count', () => {
-  const q = new EntityQuery<E1>(context, 'e1');
+  const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
   const s = m.newSetSource<E1>(comparator);
   const pipeline = buildPipeline(
@@ -99,7 +99,7 @@ test('Count', () => {
 });
 
 test('Where', () => {
-  const q = new EntityQuery<E1>(context, 'e1');
+  const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
   const s = m.newSetSource<E1>(comparator);
   const pipeline = buildPipeline(
@@ -133,7 +133,7 @@ describe('OR', () => {
 
   type Case = {
     name?: string | undefined;
-    where: WhereCondition<E>;
+    where: WhereCondition<{e1: E}>;
     values?: (E | DeleteE)[] | undefined;
     expected: (E | [v: E, multiplicity: number])[];
   };
@@ -377,7 +377,11 @@ describe('OR', () => {
 
       const ast: AST = {
         table: 'items',
-        select: ['id', 'a', 'b'],
+        select: [
+          ['id', 'id'],
+          ['a', 'a'],
+          ['b', 'b'],
+        ],
         where: c.where as Condition,
         orderBy: [['id'], 'asc'],
       };

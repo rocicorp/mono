@@ -84,7 +84,7 @@ function sampleTenUniqueIssues() {
 function setup() {
   const r = newRep();
   const c = makeReplicacheContext(r);
-  const q = new EntityQuery<Issue>(c, 'issue');
+  const q = new EntityQuery<{issue: Issue}>(c, 'issue');
   return {r, c, q};
 }
 

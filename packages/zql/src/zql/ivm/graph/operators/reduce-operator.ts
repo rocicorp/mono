@@ -2,9 +2,9 @@ import {assert} from 'shared/src/asserts.js';
 import type {Primitive} from '../../../ast/ast.js';
 import {flatMapIter} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
-import type {Version} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {UnaryOperator} from './unary-operator.js';
+import {StringOrNumber, Version} from '../../types.js';
 
 /**
  * Applies a `reduce` function against a stream of values.
@@ -30,7 +30,7 @@ export class ReduceOperator<
    * If a negative multiplicity comes through the pipeline,
    * it reduces the multiplicity of the existing value in the map.
    */
-  readonly #inIndex = new Map<K, Map<string, [V, number]>>();
+  readonly #inIndex = new Map<K, Map<StringOrNumber, [V, number]>>();
   /**
    * Our prior reduction for a given key.
    *
@@ -40,12 +40,12 @@ export class ReduceOperator<
    * so they can remove it from their count.
    */
   readonly #outIndex = new Map<K, O>();
-  readonly #getValueIdentity: (value: V) => string;
+  readonly #getValueIdentity;
 
   constructor(
     input: DifferenceStream<V>,
     output: DifferenceStream<O>,
-    getValueIdentity: (value: V) => string,
+    getValueIdentity: (value: V) => StringOrNumber,
     getGroupKey: (value: V) => K,
     f: (input: Iterable<V>) => O,
   ) {

@@ -6,9 +6,11 @@ import * as agg from './agg.js';
 import {conditionToString} from './condition-to-string.js';
 import {
   EntityQuery,
-  FieldValue,
+  FieldAsOperatorInput,
+  ValueAsOperatorInput,
   WhereCondition,
   and,
+  as,
   astForTesting,
   expression,
   not,
@@ -30,7 +32,7 @@ test('query types', () => {
     [sym]: boolean;
   };
 
-  const q = new EntityQuery<E1>(context, 'e1');
+  const q = new EntityQuery<{e1: E1}>(context, 'e1');
 
   // @ts-expect-error - selecting fields that do not exist in the schema is a type error
   q.select('does-not-exist');
@@ -71,6 +73,16 @@ test('query types', () => {
 
   // @ts-expect-error - 'x' is not a field that we can aggregate on
   q.select(agg.array('x')).groupBy('id');
+
+  expectTypeOf(
+    q
+      .select('optStr', as('e1.optStr', 'alias'))
+      .groupBy('optStr')
+      .prepare()
+      .exec(),
+  ).toMatchTypeOf<
+    Promise<readonly {optStr: string | undefined; alias: string | undefined}[]>
+  >();
 
   expectTypeOf(
     q.select('id', agg.array('str')).groupBy('optStr').prepare().exec(),
@@ -123,76 +135,131 @@ test('query types', () => {
 
 test('FieldValue type', () => {
   type E = {
-    id: string;
-    n: number;
-    s: string;
-    b: boolean;
-    optN?: number | undefined;
-    optS?: string | undefined;
-    optB?: boolean | undefined;
+    e: {
+      id: string;
+      n: number;
+      s: string;
+      b: boolean;
+      optN?: number | undefined;
+      optS?: string | undefined;
+      optB?: boolean | undefined;
+    };
   };
-  expectTypeOf<FieldValue<E, 'id', '='>>().toEqualTypeOf<string>();
-  expectTypeOf<FieldValue<E, 'n', '='>>().toEqualTypeOf<number>();
-  expectTypeOf<FieldValue<E, 's', '!='>>().toEqualTypeOf<string>();
-  expectTypeOf<FieldValue<E, 'b', '='>>().toEqualTypeOf<boolean>();
-  expectTypeOf<FieldValue<E, 'optN', '='>>().toEqualTypeOf<number>();
-  expectTypeOf<FieldValue<E, 'optS', '!='>>().toEqualTypeOf<string>();
-  expectTypeOf<FieldValue<E, 'optB', '='>>().toEqualTypeOf<boolean>();
+  expectTypeOf<FieldAsOperatorInput<E, 'id', '='>>().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 'e.id', '='>>().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 'n', '='>>().toEqualTypeOf<number>();
+  expectTypeOf<FieldAsOperatorInput<E, 'e.n', '='>>().toEqualTypeOf<number>();
+  expectTypeOf<FieldAsOperatorInput<E, 's', '!='>>().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 'e.s', '!='>>().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 'b', '='>>().toEqualTypeOf<boolean>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optN', '='>>().toEqualTypeOf<number>();
+  expectTypeOf<
+    FieldAsOperatorInput<E, 'e.optN', '='>
+  >().toEqualTypeOf<number>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optS', '!='>>().toEqualTypeOf<string>();
+  expectTypeOf<
+    FieldAsOperatorInput<E, 'e.optS', '!='>
+  >().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optB', '='>>().toEqualTypeOf<boolean>();
+  expectTypeOf<
+    FieldAsOperatorInput<E, 'e.optB', '='>
+  >().toEqualTypeOf<boolean>();
 
   // booleans not allowed with order operators
-  expectTypeOf<FieldValue<E, 'b', '<'>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 'b', '<='>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 'b', '>'>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 'b', '>='>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 'n', '<'>>().toEqualTypeOf<number>();
-  expectTypeOf<FieldValue<E, 'n', '<='>>().toEqualTypeOf<number>();
-  expectTypeOf<FieldValue<E, 'n', '>'>>().toEqualTypeOf<number>();
-  expectTypeOf<FieldValue<E, 'n', '>='>>().toEqualTypeOf<number>();
-  expectTypeOf<FieldValue<E, 's', '<'>>().toEqualTypeOf<string>();
-  expectTypeOf<FieldValue<E, 's', '<='>>().toEqualTypeOf<string>();
-  expectTypeOf<FieldValue<E, 's', '>'>>().toEqualTypeOf<string>();
-  expectTypeOf<FieldValue<E, 's', '>='>>().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 'b', '<'>>().toEqualTypeOf<never>();
+  expectTypeOf<FieldAsOperatorInput<E, 'b', '<='>>().toEqualTypeOf<never>();
+  expectTypeOf<FieldAsOperatorInput<E, 'b', '>'>>().toEqualTypeOf<never>();
+  expectTypeOf<FieldAsOperatorInput<E, 'b', '>='>>().toEqualTypeOf<never>();
+  expectTypeOf<FieldAsOperatorInput<E, 'n', '<'>>().toEqualTypeOf<number>();
+  expectTypeOf<FieldAsOperatorInput<E, 'n', '<='>>().toEqualTypeOf<number>();
+  expectTypeOf<FieldAsOperatorInput<E, 'n', '>'>>().toEqualTypeOf<number>();
+  expectTypeOf<FieldAsOperatorInput<E, 'n', '>='>>().toEqualTypeOf<number>();
+  expectTypeOf<FieldAsOperatorInput<E, 's', '<'>>().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 's', '<='>>().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 's', '>'>>().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 's', '>='>>().toEqualTypeOf<string>();
 
-  expectTypeOf<FieldValue<E, 'optB', '<'>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 'optB', '<='>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 'optB', '>'>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 'optB', '>='>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 'optN', '<'>>().toEqualTypeOf<number>();
-  expectTypeOf<FieldValue<E, 'optN', '<='>>().toEqualTypeOf<number>();
-  expectTypeOf<FieldValue<E, 'optN', '>'>>().toEqualTypeOf<number>();
-  expectTypeOf<FieldValue<E, 'optN', '>='>>().toEqualTypeOf<number>();
-  expectTypeOf<FieldValue<E, 'optS', '<'>>().toEqualTypeOf<string>();
-  expectTypeOf<FieldValue<E, 'optS', '<='>>().toEqualTypeOf<string>();
-  expectTypeOf<FieldValue<E, 'optS', '>'>>().toEqualTypeOf<string>();
-  expectTypeOf<FieldValue<E, 'optS', '>='>>().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optB', '<'>>().toEqualTypeOf<never>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optB', '<='>>().toEqualTypeOf<never>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optB', '>'>>().toEqualTypeOf<never>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optB', '>='>>().toEqualTypeOf<never>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optN', '<'>>().toEqualTypeOf<number>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optN', '<='>>().toEqualTypeOf<number>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optN', '>'>>().toEqualTypeOf<number>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optN', '>='>>().toEqualTypeOf<number>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optS', '<'>>().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optS', '<='>>().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optS', '>'>>().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optS', '>='>>().toEqualTypeOf<string>();
 
-  expectTypeOf<FieldValue<E, 'n', 'IN'>>().toEqualTypeOf<number[]>();
-  expectTypeOf<FieldValue<E, 'n', 'NOT IN'>>().toEqualTypeOf<number[]>();
-  expectTypeOf<FieldValue<E, 's', 'IN'>>().toEqualTypeOf<string[]>();
-  expectTypeOf<FieldValue<E, 's', 'NOT IN'>>().toEqualTypeOf<string[]>();
-  expectTypeOf<FieldValue<E, 'b', 'IN'>>().toEqualTypeOf<boolean[]>();
-  expectTypeOf<FieldValue<E, 'b', 'NOT IN'>>().toEqualTypeOf<boolean[]>();
+  expectTypeOf<FieldAsOperatorInput<E, 'n', 'IN'>>().toEqualTypeOf<number[]>();
+  expectTypeOf<FieldAsOperatorInput<E, 'n', 'NOT IN'>>().toEqualTypeOf<
+    number[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 's', 'IN'>>().toEqualTypeOf<string[]>();
+  expectTypeOf<FieldAsOperatorInput<E, 's', 'NOT IN'>>().toEqualTypeOf<
+    string[]
+  >();
+  expectTypeOf<ValueAsOperatorInput<boolean, 'IN'>>().toEqualTypeOf<
+    boolean[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'e.b', 'IN'>>().toEqualTypeOf<
+    boolean[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'b', 'NOT IN'>>().toEqualTypeOf<
+    boolean[]
+  >();
 
-  expectTypeOf<FieldValue<E, 'optN', 'IN'>>().toEqualTypeOf<number[]>();
-  expectTypeOf<FieldValue<E, 'optN', 'NOT IN'>>().toEqualTypeOf<number[]>();
-  expectTypeOf<FieldValue<E, 'optS', 'IN'>>().toEqualTypeOf<string[]>();
-  expectTypeOf<FieldValue<E, 'optS', 'NOT IN'>>().toEqualTypeOf<string[]>();
-  expectTypeOf<FieldValue<E, 'optB', 'IN'>>().toEqualTypeOf<boolean[]>();
-  expectTypeOf<FieldValue<E, 'optB', 'NOT IN'>>().toEqualTypeOf<boolean[]>();
+  expectTypeOf<FieldAsOperatorInput<E, 'optN', 'IN'>>().toEqualTypeOf<
+    number[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'optN', 'NOT IN'>>().toEqualTypeOf<
+    number[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'optS', 'IN'>>().toEqualTypeOf<
+    string[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'optS', 'NOT IN'>>().toEqualTypeOf<
+    string[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'optB', 'IN'>>().toEqualTypeOf<
+    boolean[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'optB', 'NOT IN'>>().toEqualTypeOf<
+    boolean[]
+  >();
 
-  expectTypeOf<FieldValue<E, 'n', 'LIKE'>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 'n', 'NOT LIKE'>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 's', 'LIKE'>>().toEqualTypeOf<string>();
-  expectTypeOf<FieldValue<E, 's', 'NOT LIKE'>>().toEqualTypeOf<string>();
-  expectTypeOf<FieldValue<E, 'b', 'LIKE'>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 'b', 'NOT LIKE'>>().toEqualTypeOf<never>();
+  expectTypeOf<FieldAsOperatorInput<E, 'n', 'LIKE'>>().toEqualTypeOf<never>();
+  expectTypeOf<
+    FieldAsOperatorInput<E, 'n', 'NOT LIKE'>
+  >().toEqualTypeOf<never>();
+  expectTypeOf<FieldAsOperatorInput<E, 's', 'LIKE'>>().toEqualTypeOf<string>();
+  expectTypeOf<
+    FieldAsOperatorInput<E, 's', 'NOT LIKE'>
+  >().toEqualTypeOf<string>();
+  expectTypeOf<FieldAsOperatorInput<E, 'b', 'LIKE'>>().toEqualTypeOf<never>();
+  expectTypeOf<
+    FieldAsOperatorInput<E, 'b', 'NOT LIKE'>
+  >().toEqualTypeOf<never>();
 
-  expectTypeOf<FieldValue<E, 'optN', 'LIKE'>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 'optN', 'NOT LIKE'>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 'optS', 'LIKE'>>().toEqualTypeOf<string>();
-  expectTypeOf<FieldValue<E, 'optS', 'NOT LIKE'>>().toEqualTypeOf<string>();
-  expectTypeOf<FieldValue<E, 'optB', 'LIKE'>>().toEqualTypeOf<never>();
-  expectTypeOf<FieldValue<E, 'optB', 'NOT LIKE'>>().toEqualTypeOf<never>();
+  expectTypeOf<
+    FieldAsOperatorInput<E, 'optN', 'LIKE'>
+  >().toEqualTypeOf<never>();
+  expectTypeOf<
+    FieldAsOperatorInput<E, 'optN', 'NOT LIKE'>
+  >().toEqualTypeOf<never>();
+  expectTypeOf<
+    FieldAsOperatorInput<E, 'optS', 'LIKE'>
+  >().toEqualTypeOf<string>();
+  expectTypeOf<
+    FieldAsOperatorInput<E, 'optS', 'NOT LIKE'>
+  >().toEqualTypeOf<string>();
+  expectTypeOf<
+    FieldAsOperatorInput<E, 'optB', 'LIKE'>
+  >().toEqualTypeOf<never>();
+  expectTypeOf<
+    FieldAsOperatorInput<E, 'optB', 'NOT LIKE'>
+  >().toEqualTypeOf<never>();
 
   const q = new EntityQuery<E>(context, 'e');
   q.where('n', '<', 1);
@@ -249,24 +316,24 @@ const dummyObject: E1 = {
 };
 describe('ast', () => {
   test('select', () => {
-    const q = new EntityQuery<E1>(context, 'e1');
+    const q = new EntityQuery<{e1: E1}>(context, 'e1');
 
     // each individual field is selectable on its own
     Object.keys(dummyObject).forEach(k => {
       const newq = q.select(k as keyof E1);
-      expect(ast(newq).select).toEqual([k]);
+      expect(ast(newq).select).toEqual([[k, k]]);
     });
 
     // all fields are selectable together
     let newq = q.select(...(Object.keys(dummyObject) as (keyof E1)[]));
-    expect(ast(newq).select).toEqual(Object.keys(dummyObject));
+    expect(ast(newq).select).toEqual(Object.keys(dummyObject).map(k => [k, k]));
 
     // we can call select many times to build up the selection set
     newq = q;
     Object.keys(dummyObject).forEach(k => {
       newq = newq.select(k as keyof E1);
     });
-    expect(ast(newq).select).toEqual(Object.keys(dummyObject));
+    expect(ast(newq).select).toEqual(Object.keys(dummyObject).map(k => [k, k]));
 
     // we remove duplicates
     newq = q;
@@ -276,11 +343,11 @@ describe('ast', () => {
     Object.keys(dummyObject).forEach(k => {
       newq = newq.select(k as keyof E1);
     });
-    expect(ast(newq).select).toEqual(Object.keys(dummyObject));
+    expect(ast(newq).select).toEqual(Object.keys(dummyObject).map(k => [k, k]));
   });
 
   test('where', () => {
-    let q = new EntityQuery<E1>(context, 'e1');
+    let q = new EntityQuery<{e1: E1}>(context, 'e1');
 
     // where is applied
     q = q.where('id', '=', 'a');
@@ -365,7 +432,7 @@ describe('ast', () => {
   });
 
   test('limit', () => {
-    const q = new EntityQuery<E1>(context, 'e1');
+    const q = new EntityQuery<{e1: E1}>(context, 'e1');
     expect(ast(q.limit(10))).toEqual({
       orderBy: [['id'], 'asc'],
       table: 'e1',
@@ -374,7 +441,7 @@ describe('ast', () => {
   });
 
   test('asc/desc', () => {
-    const q = new EntityQuery<E1>(context, 'e1');
+    const q = new EntityQuery<{e1: E1}>(context, 'e1');
 
     // order methods update the ast
     expect(ast(q.asc('id'))).toEqual({
@@ -392,7 +459,7 @@ describe('ast', () => {
   });
 
   test('independent of method call order', () => {
-    const base = new EntityQuery<E1>(context, 'e1');
+    const base = new EntityQuery<{e1: E1}>(context, 'e1');
 
     const calls = {
       select(q: typeof base) {
@@ -431,7 +498,7 @@ describe('ast', () => {
   });
 
   test('or', () => {
-    const q = new EntityQuery<E1>(context, 'e1');
+    const q = new EntityQuery<{e1: E1}>(context, 'e1');
 
     expect(
       ast(q.where(or(expression('a', '=', 123), expression('c', '=', 'abc')))),
@@ -476,7 +543,7 @@ describe('ast', () => {
   });
 
   test('flatten ands', () => {
-    type S = {id: string; a: number; b: string; c: boolean; d: string};
+    type S = {s: {id: string; a: number; b: string; c: boolean; d: string}};
 
     expect(
       and<S>(
@@ -539,7 +606,7 @@ describe('ast', () => {
   });
 
   test('flatten ors', () => {
-    type S = {id: string; a: number; b: string; c: boolean; d: string};
+    type S = {s: {id: string; a: number; b: string; c: boolean; d: string}};
 
     expect(
       or<S>(
@@ -558,7 +625,7 @@ describe('ast', () => {
   });
 
   test('consecutive wheres/ands should be merged', () => {
-    const q = new EntityQuery<E1>(context, 'e1');
+    const q = new EntityQuery<{e1: E1}>(context, 'e1');
 
     expect(
       ast(
@@ -693,7 +760,7 @@ describe('ast', () => {
   });
 
   test('consecutive ors', () => {
-    const q = new EntityQuery<E1>(context, 'e1');
+    const q = new EntityQuery<{e1: E1}>(context, 'e1');
 
     expect(
       ast(q.where(or(expression('a', '=', 123), expression('a', '=', 456))))
@@ -798,7 +865,7 @@ describe('NOT', () => {
 
     for (const c of cases) {
       test(`${c.in} -> ${c.out}`, () => {
-        const q = new EntityQuery<E1>(context, 'e1');
+        const q = new EntityQuery<{e1: E1}>(context, 'e1');
         expect(ast(q.where(not(expression('a', c.in, 1)))).where).toEqual({
           op: c.out,
           field: 'a',
@@ -811,9 +878,11 @@ describe('NOT', () => {
 
 describe("De Morgan's Law", () => {
   type S = {
-    id: string;
-    n: number;
-    s: string;
+    s: {
+      id: string;
+      n: number;
+      s: string;
+    };
   };
 
   const cases: {
