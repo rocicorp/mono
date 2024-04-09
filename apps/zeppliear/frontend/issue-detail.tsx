@@ -87,33 +87,17 @@ export default function IssueDetail({
     }
   }, [issues, detailIssueID]);
 
-  const issueQuery = getQuery<Issue>(zero, ISSUE_ENTITY_NAME);
-  const commentQuery = getQuery<Comment>(zero, COMMENT_ENTITY_NAME);
+  const issueQuery = getQuery<{issue: Issue}>(zero, ISSUE_ENTITY_NAME);
+  const commentQuery = getQuery<{comment: Comment}>(zero, COMMENT_ENTITY_NAME);
 
   const issue =
     useQuery(
-      issueQuery
-        .select(
-          // TODO(arv): Use '*' or allow skipping select?
-          'id',
-          'title',
-          'priority',
-          'status',
-          'modified',
-          'created',
-          'creatorID',
-          'kanbanOrder',
-          'description',
-        )
-        .where('id', '=', detailIssueID ?? ''),
+      issueQuery.select('issue.*').where('id', '=', detailIssueID ?? ''),
       [detailIssueID],
     )[0] ?? null;
 
   const comments = useQuery(
-    commentQuery
-      // TODO(arv): Use '*' or allow skipping select?
-      .select('id', 'issueID', 'created', 'body', 'creatorID')
-      .where('issueID', '=', detailIssueID ?? ''),
+    commentQuery.select('comment.*').where('issueID', '=', detailIssueID ?? ''),
     [detailIssueID],
   );
 

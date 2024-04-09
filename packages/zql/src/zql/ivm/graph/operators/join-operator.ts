@@ -1,7 +1,7 @@
-import {Primitive} from '../../../ast/ast.js';
-import {Entry, Multiset} from '../../multiset.js';
-import {JoinResult, StringOrNumber} from '../../types.js';
-import {DifferenceStream} from '../difference-stream.js';
+import type {Primitive} from '../../../ast/ast.js';
+import type {Entry, Multiset} from '../../multiset.js';
+import type {JoinResult, StringOrNumber} from '../../types.js';
+import type {DifferenceStream} from '../difference-stream.js';
 import {BinaryOperator} from './binary-operator.js';
 import {DifferenceIndex} from './difference-index.js';
 

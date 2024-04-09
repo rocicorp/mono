@@ -2,6 +2,7 @@ import {assert} from 'shared/src/asserts.js';
 import type {Entity} from '../../../entity.js';
 import type {Primitive} from '../../ast/ast.js';
 import type {Multiset} from '../multiset.js';
+import type {JoinResult, Version} from '../types.js';
 import type {Reply, Request} from './message.js';
 import {ConcatOperator} from './operators/concat-operator.js';
 import {DebugOperator} from './operators/debug-operator.js';
@@ -14,11 +15,10 @@ import {
   FullCountOperator,
   FullSumOperator,
 } from './operators/full-agg-operators.js';
+import {InnerJoinOperator, JoinArgs} from './operators/join-operator.js';
 import {MapOperator} from './operators/map-operator.js';
 import type {Operator} from './operators/operator.js';
 import {ReduceOperator} from './operators/reduce-operator.js';
-import {JoinResult, Version} from '../types.js';
-import {InnerJoinOperator, JoinArgs} from './operators/join-operator.js';
 
 export type Listener<T> = {
   newDifference: (

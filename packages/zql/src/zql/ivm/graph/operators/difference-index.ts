@@ -1,5 +1,5 @@
-import {Primitive} from '../../../ast/ast.js';
-import {Entry, Multiset} from '../../multiset.js';
+import type {Primitive} from '../../../ast/ast.js';
+import type {Entry, Multiset} from '../../multiset.js';
 import {
   JoinResult,
   StringOrNumber,

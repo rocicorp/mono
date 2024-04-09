@@ -2,9 +2,9 @@ import {assert} from 'shared/src/asserts.js';
 import type {Primitive} from '../../../ast/ast.js';
 import {flatMapIter} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
+import type {StringOrNumber, Version} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {UnaryOperator} from './unary-operator.js';
-import {StringOrNumber, Version} from '../../types.js';
 
 /**
  * Applies a `reduce` function against a stream of values.

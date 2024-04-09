@@ -1,10 +1,7 @@
-import {
-  Entity,
-  EntityQuery,
-  makeReplicacheContext,
-} from '@rocicorp/zql/src/index.js';
+import {EntityQuery, makeReplicacheContext} from '@rocicorp/zql/src/index.js';
 import type {ReplicacheLike} from '@rocicorp/zql/src/replicache-like.js';
 import type {Context} from '@rocicorp/zql/src/zql/context/context.js';
+import type {FromSet} from '@rocicorp/zql/src/zql/query/entity-query.js';
 import {useEffect, useMemo, useRef, useState} from 'react';
 
 const contextsMap = new Map<ReplicacheLike, Context>();
@@ -19,8 +16,8 @@ export function getContext(rep: ReplicacheLike): Context {
   return ctx;
 }
 
-export function useQuery<S extends Entity, Return>(
-  q: EntityQuery<S, Return>,
+export function useQuery<From extends FromSet, Return>(
+  q: EntityQuery<From, Return>,
   dependencies: unknown[] = [],
 ): Return {
   const [snapshot, setSnapshot] = useState([] as Return);
@@ -48,10 +45,10 @@ export function useQuery<S extends Entity, Return>(
   return snapshot;
 }
 
-export function getQuery<E extends Entity>(
+export function getQuery<From extends FromSet>(
   zero: ReplicacheLike,
   name: string,
-): EntityQuery<E> {
+): EntityQuery<From> {
   const context = getContext(zero);
-  return new EntityQuery<E>(context, name);
+  return new EntityQuery<From>(context, name);
 }
