@@ -68,33 +68,61 @@ type Selector<F extends FromSet> =
     }[keyof F]
   | (ObjectHasSingleProperty<F> extends never ? NestedKeys<F> : never);
 
-type ExtractAggregatePiece<
-  From extends FromSet,
-  K extends Aggregator<From>,
-> = K extends AggArray<infer S, infer Alias>
-  ? {
-      [K in Alias]: ExtractFieldValue<
-        From,
-        S extends SimpleSelector<From> ? S : never
-      >[];
-    }
-  : K extends Aggregate<string, infer Alias>
-  ? {[K in Alias]: number}
-  : never;
+type ExtractAggregatePiece<From extends FromSet, K extends Aggregator<From>> =
+  // array aggregation
+  K extends AggArray<infer Selection, infer Alias>
+    ? Selection extends `${infer Table}.${string}`
+      ? ObjectHasSingleProperty<From> extends never
+        ? {
+            [K in Alias]: ExtractFieldValue<
+              From,
+              Selection extends SimpleSelector<From> ? Selection : never
+            >[];
+          }
+        : {
+            [K in Table]: {
+              [K in Alias]: ExtractFieldValue<
+                From,
+                Selection extends SimpleSelector<From> ? Selection : never
+              >[];
+            };
+          }
+      : {
+          [K in Alias]: ExtractFieldValue<
+            From,
+            Selection extends SimpleSelector<From> ? Selection : never
+          >[];
+        }
+    : // all other aggregate functions
+    K extends Aggregate<infer Selection, infer Alias>
+    ? Selection extends `${infer Table}.${string}`
+      ? ObjectHasSingleProperty<From> extends never
+        ? {[K in Alias]: number}
+        : {[K in Table]: {[K in Alias]: number}}
+      : {[K in Alias]: number}
+    : never;
 
 type ExtractFieldPiece<
   From extends FromSet,
   Selection extends Selector<From>,
 > = Selection extends `${infer Table}.*`
   ? Table extends keyof From
-    ? From[Table]
+    ? ObjectHasSingleProperty<From> extends never
+      ? From[Table]
+      : {[K in Table]: From[Table]}
     : never
   : // 'table.column'
-  Selection extends `${string}.${infer Column}`
-  ? {
-      [K in Column]: ExtractFieldValue<From, Selection>;
-    }
-  : // 'column'
+  Selection extends `${infer Table}.${infer Column}`
+  ? ObjectHasSingleProperty<From> extends never
+    ? {
+        [K in Column]: ExtractFieldValue<From, Selection>;
+      }
+    : {
+        [K in Table]: {
+          [K in Column]: ExtractFieldValue<From, Selection>;
+        };
+      }
+  : // 'column' -- we're pre-validated that the object has a single property at this point
     {
       [P in string & Selection]: ExtractNestedTypeByName<
         From,
