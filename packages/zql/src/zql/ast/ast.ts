@@ -27,7 +27,7 @@ export type Aggregation = {
 export type AST = {
   readonly table?: string | undefined;
   readonly alias?: number | undefined;
-  readonly select?: string[] | undefined;
+  readonly select?: [string, string][] | undefined;
   readonly aggregate?: Aggregation[];
   // readonly subQueries?: {
   //   readonly alias: string;
