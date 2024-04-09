@@ -364,7 +364,7 @@ export class InvalidationProcessor {
       return;
     }
     // Lookup preValues for UPDATEs and DELETEs.
-    await lookupUndefinedPreValues(
+    await lookupUnknownPreValues(
       lc,
       tx,
       table.schema,
@@ -405,11 +405,11 @@ export class InvalidationProcessor {
     };
 
     for (const row of changes.values()) {
-      assert(row.preValue !== undefined); // all preValues should have looked up.
-      if (row.preValue) {
+      assert(row.preValue !== 'unknown'); // all preValues should have looked up.
+      if (row.preValue !== 'none') {
         processRow(row.preValue);
       }
-      if (row.postValue) {
+      if (row.postValue !== 'none') {
         processRow(row.postValue);
       }
       // TODO: For UPDATEs there will be both a preValue and postValue.
@@ -419,7 +419,7 @@ export class InvalidationProcessor {
   }
 }
 
-async function lookupUndefinedPreValues(
+async function lookupUnknownPreValues(
   lc: LogContext,
   tx: postgres.Sql,
   schema: string,
@@ -428,7 +428,7 @@ async function lookupUndefinedPreValues(
   changes: Map<string, EffectiveRowChange>,
 ) {
   const keys = [...changes.values()]
-    .filter(change => change.preValue === undefined)
+    .filter(change => change.preValue === 'unknown')
     .map(change => change.rowKey);
   if (keys.length === 0) {
     return;
@@ -444,7 +444,7 @@ async function lookupUndefinedPreValues(
     );
     const c = changes.get(key);
     assert(c, `Row does not correspond to change ${key}`);
-    assert(c.preValue === undefined, `Unexpected preValue: ${key}`);
+    assert(c.preValue === 'unknown', `Unexpected preValue: ${key}`);
     c.preValue = row;
     count++;
   });

@@ -237,7 +237,7 @@ describe('replicator/invalidation', () => {
         name: 'insert',
         fooChanges: [
           {
-            preValue: null,
+            preValue: 'none',
             postRowKey: {id: 4},
             postValue: {id: 4, name: 'for'},
           },
@@ -260,7 +260,7 @@ describe('replicator/invalidation', () => {
         name: 'update',
         fooChanges: [
           {
-            preValue: undefined,
+            preValue: 'unknown',
             postRowKey: {id: 3},
             postValue: {id: 3, name: 'free'},
           },
@@ -289,9 +289,9 @@ describe('replicator/invalidation', () => {
         name: 'delete',
         fooChanges: [
           {
-            preValue: undefined,
+            preValue: 'unknown',
             postRowKey: {id: 1},
-            postValue: null,
+            postValue: 'none',
           },
         ],
         expectedHashes: [
@@ -312,7 +312,7 @@ describe('replicator/invalidation', () => {
         name: 'update with row key change',
         fooChanges: [
           {
-            preValue: undefined,
+            preValue: 'unknown',
             preRowKey: {id: 3},
             postRowKey: {id: 4},
             postValue: {id: 4, name: 'more'},
@@ -348,36 +348,36 @@ describe('replicator/invalidation', () => {
         fooChanges: [
           {
             // insert
-            preValue: null,
+            preValue: 'none',
             postRowKey: {id: 4},
             postValue: {id: 4, name: 'more'},
           },
           {
             // update
-            preValue: undefined,
+            preValue: 'unknown',
             preRowKey: {id: 4},
             postRowKey: {id: 5},
             postValue: {id: 5, name: 'live'},
           },
           {
             // delete
-            preValue: undefined,
+            preValue: 'unknown',
             postRowKey: {id: 3},
-            postValue: null,
+            postValue: 'none',
           },
         ],
         barChanges: [
           {
             // update
-            preValue: undefined,
+            preValue: 'unknown',
             postRowKey: {id: 'two'},
             postValue: {id: 'two', name: 'blue'},
           },
           {
             // delete
-            preValue: undefined,
+            preValue: 'unknown',
             postRowKey: {id: 'three'},
-            postValue: null,
+            postValue: 'none',
           },
         ],
         expectedHashes: [
@@ -428,36 +428,36 @@ describe('replicator/invalidation', () => {
           // The rest of the changes need not produce an invalidation tag.
           {
             // insert
-            preValue: null,
+            preValue: 'none',
             postRowKey: {id: 4},
             postValue: {id: 4, name: 'more'},
           },
           {
             // update
-            preValue: undefined,
+            preValue: 'unknown',
             preRowKey: {id: 4},
             postRowKey: {id: 5},
             postValue: {id: 5, name: 'live'},
           },
           {
             // delete
-            preValue: undefined,
+            preValue: 'unknown',
             postRowKey: {id: 3},
-            postValue: null,
+            postValue: 'none',
           },
         ],
         barChanges: [
           {
             // update
-            preValue: undefined,
+            preValue: 'unknown',
             postRowKey: {id: 'two'},
             postValue: {id: 'two', name: 'blue'},
           },
           {
             // delete
-            preValue: undefined,
+            preValue: 'unknown',
             postRowKey: {id: 'three'},
-            postValue: null,
+            postValue: 'none',
           },
         ],
         expectedHashes: [
