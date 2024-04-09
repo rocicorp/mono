@@ -147,6 +147,90 @@ test('query types', () => {
   ).toMatchTypeOf<Promise<readonly {readonly bool: boolean}[]>>();
 });
 
+test('join types', () => {
+  type Issue = {
+    id: string;
+    title: string;
+    ownerId: string;
+    creatorId: string;
+  };
+
+  type User = {
+    id: string;
+    name: string;
+  };
+
+  const issueQuery = new EntityQuery<{issue: Issue}>(context, 'issue');
+  const userQuery = new EntityQuery<{user: User}>(context, 'user');
+
+  expectTypeOf(
+    issueQuery
+      .join(userQuery, 'owner', 'ownerId', 'id')
+      .select('issue.id', 'issue.title', 'owner.name')
+      .prepare()
+      .exec(),
+  ).toMatchTypeOf<
+    Promise<
+      readonly {
+        readonly owner: {
+          readonly name: string;
+        };
+        readonly issue: {
+          readonly title: string;
+          readonly id: string;
+        };
+      }[]
+    >
+  >();
+
+  expectTypeOf(
+    issueQuery
+      .join(userQuery, 'owner', 'ownerId', 'id')
+      .join(userQuery, 'creator', 'issue.creatorId', 'id')
+      .select('issue.id', 'issue.title', 'owner.name', 'creator.name')
+      .prepare()
+      .exec(),
+  ).toMatchTypeOf<
+    Promise<
+      readonly {
+        readonly creator: {
+          readonly name: string;
+        };
+        readonly owner: {
+          readonly name: string;
+        };
+        readonly issue: {
+          readonly title: string;
+          readonly id: string;
+        };
+      }[]
+    >
+  >();
+
+  expectTypeOf(
+    issueQuery
+      .join(userQuery, 'owner', 'ownerId', 'id')
+      .select('owner.id')
+      .prepare()
+      .exec(),
+  ).toMatchTypeOf<
+    Promise<
+      readonly {
+        readonly owner: {
+          readonly id: string;
+        };
+      }[]
+    >
+  >();
+
+  // ambiguity fails
+  issueQuery
+    .join(userQuery, 'owner', 'ownerId', 'id')
+    .join(userQuery, 'creator', 'issue.creatorId', 'id')
+    // @ts-expect-error - Argument of type '"name"' is not assignable to parameter of type
+    .select('name');
+});
+
 test('FieldValue type', () => {
   type E = {
     e: {

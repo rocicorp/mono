@@ -42,6 +42,10 @@ export function buildPipeline(
   return ret;
 }
 
+export function applyJoins() {
+  throw new Error('Not implemented');
+}
+
 function applyWhere<T extends Entity>(
   stream: DifferenceStream<T>,
   where: Condition,
