@@ -66,7 +66,8 @@ type Selector<F extends FromSet> =
         | `${string & K}.${string & keyof F[K]}`
         | `${string & K}.*`;
     }[keyof F]
-  | (ObjectHasSingleProperty<F> extends never ? NestedKeys<F> : never);
+  | (ObjectHasSingleProperty<F> extends never ? NestedKeys<F> : never)
+  | '*';
 
 type ExtractAggregatePiece<From extends FromSet, K extends Aggregator<From>> =
   // array aggregation
@@ -102,33 +103,37 @@ type ExtractAggregatePiece<From extends FromSet, K extends Aggregator<From>> =
       : {[K in Alias]: number}
     : never;
 
-type ExtractFieldPiece<
-  From extends FromSet,
-  Selection extends Selector<From>,
-> = Selection extends `${infer Table}.*`
-  ? Table extends keyof From
+type ExtractFieldPiece<From extends FromSet, Selection extends Selector<From>> =
+  // 'table.*'
+  Selection extends `${infer Table}.*`
+    ? Table extends keyof From
+      ? ObjectHasSingleProperty<From> extends never
+        ? From[Table]
+        : {[K in Table]: From[Table]}
+      : never
+    : // 'table.column'
+    Selection extends `${infer Table}.${infer Column}`
     ? ObjectHasSingleProperty<From> extends never
-      ? From[Table]
-      : {[K in Table]: From[Table]}
-    : never
-  : // 'table.column'
-  Selection extends `${infer Table}.${infer Column}`
-  ? ObjectHasSingleProperty<From> extends never
-    ? {
-        [K in Column]: ExtractFieldValue<From, Selection>;
-      }
-    : {
-        [K in Table]: {
+      ? {
           [K in Column]: ExtractFieldValue<From, Selection>;
-        };
-      }
-  : // 'column' -- we're pre-validated that the object has a single property at this point
-    {
-      [P in string & Selection]: ExtractNestedTypeByName<
-        From,
-        string & Selection
-      >;
-    };
+        }
+      : {
+          [K in Table]: {
+            [K in Column]: ExtractFieldValue<From, Selection>;
+          };
+        }
+    : // '*'
+    Selection extends '*'
+    ? ObjectHasSingleProperty<From> extends never
+      ? From[keyof From]
+      : From
+    : // 'column' -- we're pre-validated that the object has a single property at this point
+      {
+        [P in string & Selection]: ExtractNestedTypeByName<
+          From,
+          string & Selection
+        >;
+      };
 
 type ExtractNestedTypeByName<T, S extends string> = {
   [K in keyof T]: S extends keyof T[K] ? T[K][S] : never;
