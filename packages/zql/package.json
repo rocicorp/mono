@@ -1,0 +1,48 @@
+{
+  "name": "@rocicorp/zql",
+  "version": "0.0.0",
+  "description": "ZQL IVM Query library",
+  "type": "module",
+  "main": "out/index.js",
+  "exports": "./out/index.js",
+  "scripts": {
+    "format": "prettier --write 'src/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
+    "check-format": "prettier --check 'src/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "build": "tsc",
+    "prepack": "npm run check-format && npm run lint && npm run test && npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test-types": "vitest run --typecheck.only --no-browser.enabled",
+    "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled"
+  },
+  "author": "",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/logger": "^5.2.1",
+    "@rocicorp/prettier-config": "^0.2.0",
+    "@rocicorp/rails": "^0.10.0",
+    "@vitest/browser": "1.4.0",
+    "fast-check": "^3.16.0",
+    "nanoid": "^4.0.2",
+    "playwright": "^1.39.0",
+    "replicache": "14.2.2",
+    "typescript": "^5.4.2",
+    "vitest": "1.4.0",
+    "zod": "^3.21.4"
+  },
+  "files": [
+    "out/",
+    "!out/*.test.*"
+  ],
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config",
+  "dependencies": {
+    "@vlcn.io/ds-and-algos": "^3.0.2",
+    "compare-utf8": "^0.1.1"
+  }
+}
