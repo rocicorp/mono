@@ -1,9 +1,7 @@
 import {compareUTF8} from 'compare-utf8';
-import types from 'pg-type-names';
 import type postgres from 'postgres';
+import {typeNameByOID} from '../types/pg.js';
 import type {RowKeyType, RowKeyValue} from '../types/row-key.js';
-
-const typeNames = types.default.names;
 
 /**
  * Efficient lookup of multiple rows from a table from row keys.
@@ -35,7 +33,7 @@ export function lookupRowsWithKeys(
   // Explicit types must be declared for each value, e.g. `( $1::int4, $2::text )`.
   // See https://github.com/porsager/postgres/issues/842
   const colType = (col: string) =>
-    db.unsafe(typeNames[rowKeyType[col].typeOid]);
+    db.unsafe(typeNameByOID[rowKeyType[col].typeOid]);
   const values = rowKeys
     .map(row =>
       colNames

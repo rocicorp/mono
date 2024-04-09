@@ -1,3 +1,4 @@
+import {OID} from '@postgresql-typed/oids';
 import pg from 'pg';
 import postgres from 'postgres';
 import array from 'postgres-array';
@@ -32,3 +33,12 @@ export const postgresTypeConfig = () => ({
     },
   },
 });
+
+export const typeNameByOID: Record<number, string> = Object.fromEntries(
+  Object.entries(OID).map(([name, oid]) => [
+    oid,
+    name.startsWith('_') ? `${name.substring(1)}[]` : name,
+  ]),
+);
+
+Object.freeze(typeNameByOID);
