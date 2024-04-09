@@ -1,3 +1,4 @@
+import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
 import type {
   AST,
@@ -6,7 +7,6 @@ import type {
   Ordering,
   SimpleCondition,
 } from '../ast/ast.js';
-import {must} from '../error/asserts.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
 
 export const orderingProp = Symbol();
