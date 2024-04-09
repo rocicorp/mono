@@ -92,12 +92,26 @@ export default function IssueDetail({
 
   const issue =
     useQuery(
-      issueQuery.select('issue.*').where('id', '=', detailIssueID ?? ''),
+      issueQuery
+        .select(
+          'id',
+          'title',
+          'priority',
+          'status',
+          'modified',
+          'created',
+          'creatorID',
+          'kanbanOrder',
+          'description',
+        )
+        .where('id', '=', detailIssueID ?? ''),
       [detailIssueID],
     )[0] ?? null;
 
   const comments = useQuery(
-    commentQuery.select('comment.*').where('issueID', '=', detailIssueID ?? ''),
+    commentQuery
+      .select('id', 'issueID', 'created', 'body', 'creatorID')
+      .where('issueID', '=', detailIssueID ?? ''),
     [detailIssueID],
   );
 
