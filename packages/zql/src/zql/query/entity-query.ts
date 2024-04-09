@@ -258,6 +258,37 @@ export class EntityQuery<From extends FromSet, Return = []> {
     );
   }
 
+  // AFAICT `EntityQuery` would need to carry its table name in a third generic parameter
+  // in order for us to be able make `Alias` optional. Seems doable.
+  join<OtherFromSet extends FromSet, OtherReturn, Alias extends string>(
+    other: EntityQuery<OtherFromSet, OtherReturn>,
+    alias: Alias,
+    thisField: SimpleSelector<From>,
+    otherField: SimpleSelector<OtherFromSet>,
+  ): EntityQuery<
+    From & {
+      [K in Alias]: OtherReturn extends []
+        ? OtherFromSet[keyof OtherFromSet]
+        : OtherReturn extends Array<unknown>
+        ? OtherReturn[number]
+        : OtherReturn;
+    },
+    Return
+  > {
+    return new EntityQuery(this.#context, this.#name, {
+      ...this.#ast,
+      joins: [
+        ...(this.#ast.joins ?? []),
+        {
+          type: 'inner',
+          table: other.#name,
+          as: alias,
+          on: [thisField, otherField],
+        },
+      ],
+    });
+  }
+
   groupBy<Fields extends SimpleSelector<From>[]>(...x: Fields) {
     return new EntityQuery<From, Return>(this.#context, this.#name, {
       ...this.#ast,

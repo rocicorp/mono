@@ -37,11 +37,13 @@ export type AST = {
   //   readonly query: AST;
   // }[];
   readonly where?: Condition | undefined;
-  // readonly joins?: {
-  //   readonly table: string;
-  //   readonly as: string;
-  //   readonly on: ConditionList;
-  // }[];
+  readonly joins?: {
+    readonly type: 'inner' | 'left' | 'right' | 'full';
+    readonly table: string;
+    readonly as: string;
+    // only joiining by equality is supported at the moment.
+    readonly on: [leftTableColumn: string, rightTableColumn: string];
+  }[];
   readonly limit?: number | undefined;
   readonly groupBy?: string[] | undefined;
   readonly orderBy: Ordering;
