@@ -10,7 +10,6 @@ import {
   ValueAsOperatorInput,
   WhereCondition,
   and,
-  as,
   astForTesting,
   expression,
   not,
@@ -73,16 +72,6 @@ test('query types', () => {
 
   // @ts-expect-error - 'x' is not a field that we can aggregate on
   q.select(agg.array('x')).groupBy('id');
-
-  expectTypeOf(
-    q
-      .select('optStr', as('e1.optStr', 'alias'))
-      .groupBy('optStr')
-      .prepare()
-      .exec(),
-  ).toMatchTypeOf<
-    Promise<readonly {optStr: string | undefined; alias: string | undefined}[]>
-  >();
 
   expectTypeOf(
     q.select('id', agg.array('str')).groupBy('optStr').prepare().exec(),
