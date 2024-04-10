@@ -17,11 +17,11 @@
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
-    "prettier": "^3.0.3",
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
+    "prettier": "^3.0.3",
     "syncpack": "^9.8.4",
-    "turbo": "^1.10.3"
+    "turbo": "^1.13.2"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
