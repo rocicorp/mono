@@ -82,6 +82,11 @@ export type SimpleCondition =
     // };
   };
 
+/**
+ * Returns a normalized version the AST with all order-agnostic lists
+ * (everything except ORDER BY) sorted in a deterministic manner such that
+ * semantically equivalent ASTs have the same structure.
+ */
 export function normalizeAST(ast: AST): AST {
   return {
     table: ast.table,
