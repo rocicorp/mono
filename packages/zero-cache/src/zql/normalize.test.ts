@@ -297,6 +297,38 @@ describe('zql/normalize-query-hash', () => {
       values: [1234, 'foobar', 5, 2],
     },
     {
+      name: 'empty conjunctions removed',
+      asts: [
+        {
+          table: 'issues',
+          select: [
+            ['id', 'i'],
+            ['priority', 'p'],
+          ],
+          where: {
+            type: 'conjunction',
+            op: 'AND',
+            conditions: [],
+          },
+          orderBy: [['id'], 'asc'],
+        },
+        {
+          table: 'issues',
+          select: [
+            ['id', 'i'],
+            ['priority', 'p'],
+          ],
+          where: {
+            type: 'conjunction',
+            op: 'OR',
+            conditions: [],
+          },
+          orderBy: [['id'], 'asc'],
+        },
+      ],
+      query: 'SELECT id, priority FROM issues ORDER BY id asc',
+    },
+    {
       name: 'multiple conditions with same fields and operator',
       asts: [
         {
@@ -904,13 +936,32 @@ describe('zql/normalize-query-hash', () => {
                           },
                         ],
                       },
+                      {
+                        // Empty Conjunctions should be removed.
+                        type: 'conjunction',
+                        op: 'AND',
+                        conditions: [],
+                      },
                     ],
                   },
                   {
-                    type: 'simple',
-                    field: 'id',
-                    op: '=',
-                    value: {type: 'literal', value: 1234},
+                    // Single-condition conjunctions should also be flattened.
+                    type: 'conjunction',
+                    op: 'OR',
+                    conditions: [
+                      {
+                        type: 'conjunction',
+                        op: 'AND',
+                        conditions: [
+                          {
+                            type: 'simple',
+                            field: 'id',
+                            op: '=',
+                            value: {type: 'literal', value: 1234},
+                          },
+                        ],
+                      },
+                    ],
                   },
                   {
                     type: 'simple',

@@ -345,6 +345,45 @@ describe('zql/ast', () => {
       },
     },
     {
+      name: 'empty conjunctions removed',
+      asts: [
+        {
+          table: 'issues',
+          select: [
+            ['id', 'i'],
+            ['name', 'n'],
+          ],
+          where: {
+            type: 'conjunction',
+            op: 'AND',
+            conditions: [],
+          },
+          orderBy: [['id', 'name'], 'asc'],
+        },
+        {
+          table: 'issues',
+          select: [
+            ['id', 'i'],
+            ['name', 'n'],
+          ],
+          where: {
+            type: 'conjunction',
+            op: 'OR',
+            conditions: [],
+          },
+          orderBy: [['id', 'name'], 'asc'],
+        },
+      ],
+      normalized: {
+        table: 'issues',
+        select: [
+          ['id', 'i'],
+          ['name', 'n'],
+        ],
+        orderBy: [['id', 'name'], 'asc'],
+      },
+    },
+    {
       name: 'multiple conditions with same fields and operator',
       asts: [
         {
@@ -1147,13 +1186,32 @@ describe('zql/ast', () => {
                           },
                         ],
                       },
+                      {
+                        // Empty Conjunctions should be removed.
+                        type: 'conjunction',
+                        op: 'AND',
+                        conditions: [],
+                      },
                     ],
                   },
                   {
-                    type: 'simple',
-                    field: 'id',
-                    op: '=',
-                    value: {type: 'literal', value: 1234},
+                    // Single-condition conjunctions should also be flattened.
+                    type: 'conjunction',
+                    op: 'OR',
+                    conditions: [
+                      {
+                        type: 'conjunction',
+                        op: 'AND',
+                        conditions: [
+                          {
+                            type: 'simple',
+                            field: 'id',
+                            op: '=',
+                            value: {type: 'literal', value: 1234},
+                          },
+                        ],
+                      },
+                    ],
                   },
                   {
                     type: 'simple',
