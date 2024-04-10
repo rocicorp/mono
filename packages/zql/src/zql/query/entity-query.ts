@@ -46,65 +46,88 @@ export type FromSet = {
   [tableOrAlias: string]: EntitySchema;
 };
 
-export type As<Field extends string, Alias extends string> = [Field, Alias];
-
 type NestedKeys<T> = {
-  [K in keyof T]: keyof T[K];
+  [K in keyof T]: string & keyof T[K];
+}[keyof T];
+
+type ObjectHasSingleProperty<T> = {
+  [K in keyof T]: Exclude<keyof Omit<T, K>, K>;
 }[keyof T];
 
 type SimpleSelector<F extends FromSet> =
-  | 'id'
-  | {
-      [K in keyof F]: Exclude<string & keyof F[K], NestedKeys<Omit<F, K>>>;
-    }[keyof F]
   | {
       [K in keyof F]: `${string & K}.${string & keyof F[K]}`;
-    }[keyof F];
+    }[keyof F]
+  | (ObjectHasSingleProperty<F> extends never ? NestedKeys<F> : never);
 
 type Selector<F extends FromSet> =
   | {
       [K in keyof F]:
         | `${string & K}.${string & keyof F[K]}`
-        | `${string & K}.*`
-        | Aliaser<F>
-        | Exclude<string & keyof F[K], NestedKeys<Omit<F, K>>>;
+        | `${string & K}.*`;
     }[keyof F]
-  | SimpleSelector<F>;
+  | (ObjectHasSingleProperty<F> extends never ? NestedKeys<F> : never)
+  | '*';
 
-type ExtractAggregatePiece<
-  From extends FromSet,
-  K extends Aggregator<From>,
-> = K extends AggArray<infer S, infer Alias>
-  ? {
-      [K in Alias]: ExtractFieldValue<
-        From,
-        S extends SimpleSelector<From> ? S : never
-      >[];
-    }
-  : K extends Aggregate<string, infer Alias>
-  ? {[K in Alias]: number}
-  : never;
+type ExtractAggregatePiece<From extends FromSet, K extends Aggregator<From>> =
+  // array aggregation
+  K extends AggArray<infer Selection, infer Alias>
+    ? Selection extends `${infer Table}.${string}`
+      ? ObjectHasSingleProperty<From> extends never
+        ? {
+            [K in Alias]: ExtractFieldValue<
+              From,
+              Selection extends SimpleSelector<From> ? Selection : never
+            >[];
+          }
+        : {
+            [K in Table]: {
+              [K in Alias]: ExtractFieldValue<
+                From,
+                Selection extends SimpleSelector<From> ? Selection : never
+              >[];
+            };
+          }
+      : {
+          [K in Alias]: ExtractFieldValue<
+            From,
+            Selection extends SimpleSelector<From> ? Selection : never
+          >[];
+        }
+    : // all other aggregate functions
+    K extends Aggregate<infer Selection, infer Alias>
+    ? Selection extends `${infer Table}.${string}`
+      ? ObjectHasSingleProperty<From> extends never
+        ? {[K in Alias]: number}
+        : {[K in Table]: {[K in Alias]: number}}
+      : {[K in Alias]: number}
+    : never;
 
 type ExtractFieldPiece<From extends FromSet, Selection extends Selector<From>> =
-  // ['table.column', 'alias']
-  Selection extends As<infer Field, infer Alias>
-    ? {
-        [K in Alias]: ExtractFieldValue<
-          From,
-          Field extends SimpleSelector<From> ? Field : never
-        >;
-      }
-    : // 'table.*'
-    Selection extends `${infer Table}.*`
+  // 'table.*'
+  Selection extends `${infer Table}.*`
     ? Table extends keyof From
-      ? From[Table]
+      ? ObjectHasSingleProperty<From> extends never
+        ? From[Table]
+        : {[K in Table]: From[Table]}
       : never
     : // 'table.column'
-    Selection extends `${string}.${infer Column}`
-    ? {
-        [K in Column]: ExtractFieldValue<From, Selection>;
-      }
-    : // 'column'
+    Selection extends `${infer Table}.${infer Column}`
+    ? ObjectHasSingleProperty<From> extends never
+      ? {
+          [K in Column]: ExtractFieldValue<From, Selection>;
+        }
+      : {
+          [K in Table]: {
+            [K in Column]: ExtractFieldValue<From, Selection>;
+          };
+        }
+    : // '*'
+    Selection extends '*'
+    ? ObjectHasSingleProperty<From> extends never
+      ? From[keyof From]
+      : From
+    : // 'column' -- we're pre-validated that the object has a single property at this point
       {
         [P in string & Selection]: ExtractNestedTypeByName<
           From,
@@ -141,14 +164,6 @@ type CombineSelections<
   : unknown;
 
 type Aggregator<From extends FromSet> = Aggregate<SimpleSelector<From>, string>;
-type Aliaser<From extends FromSet> = As<SimpleSelector<From>, string>;
-
-export function as<Field extends SimpleSelector<FromSet>, Alias extends string>(
-  field: Field,
-  alias: Alias,
-): As<Field, Alias> {
-  return [field, alias];
-}
 
 /**
  * Have you ever noticed that when you hover over Types in TypeScript, it shows
@@ -161,8 +176,6 @@ export function as<Field extends SimpleSelector<FromSet>, Alias extends string>(
 export type MakeHumanReadable<T> = {} & {
   readonly [P in keyof T]: T[P] extends string ? T[P] : MakeHumanReadable<T[P]>;
 };
-
-let aliasCount = 0;
 
 export type WhereCondition<From extends FromSet> =
   | {
@@ -192,7 +205,6 @@ export class EntityQuery<From extends FromSet, Return = []> {
   constructor(context: Context, tableName: string, ast?: AST) {
     this.#ast = ast ?? {
       table: tableName,
-      alias: aliasCount++,
       orderBy: [['id'], 'asc'],
     };
     this.#name = tableName;
@@ -210,19 +222,11 @@ export class EntityQuery<From extends FromSet, Return = []> {
     const select = [...(this.#ast.select ?? [])];
     for (const more of x) {
       if (!isAggregate(more)) {
-        if (Array.isArray(more)) {
-          if (seen.has(more[1])) {
-            continue;
-          }
-          seen.add(more[1]);
-          select.push(more);
-        } else {
-          if (seen.has(more)) {
-            continue;
-          }
-          seen.add(more);
-          select.push([more, more]);
+        if (seen.has(more)) {
+          continue;
         }
+        seen.add(more);
+        select.push([more, more]);
 
         continue;
       }

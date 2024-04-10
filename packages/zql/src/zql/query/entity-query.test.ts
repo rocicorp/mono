@@ -10,7 +10,6 @@ import {
   ValueAsOperatorInput,
   WhereCondition,
   and,
-  as,
   astForTesting,
   expression,
   not,
@@ -75,18 +74,12 @@ test('query types', () => {
   q.select(agg.array('x')).groupBy('id');
 
   expectTypeOf(
-    q
-      .select('optStr', as('e1.optStr', 'alias'))
-      .groupBy('optStr')
-      .prepare()
-      .exec(),
-  ).toMatchTypeOf<
-    Promise<readonly {optStr: string | undefined; alias: string | undefined}[]>
-  >();
-
-  expectTypeOf(
     q.select('id', agg.array('str')).groupBy('optStr').prepare().exec(),
   ).toMatchTypeOf<Promise<readonly {id: string; str: readonly string[]}[]>>();
+
+  expectTypeOf(q.select('*').prepare().exec()).toMatchTypeOf<
+    Promise<readonly E1[]>
+  >();
 
   expectTypeOf(
     q

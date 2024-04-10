@@ -25,8 +25,8 @@ export type Aggregation = {
  * of sharing between queries.
  */
 export type AST = {
-  readonly table?: string | undefined;
-  readonly alias?: number | undefined;
+  readonly table: string;
+  readonly alias?: string | undefined;
   readonly select?: [selector: string, alias: string][] | undefined;
   readonly aggregate?: Aggregation[] | undefined;
   // readonly subQueries?: {
