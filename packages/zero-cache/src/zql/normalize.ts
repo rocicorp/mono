@@ -65,7 +65,7 @@ class Normalized {
   }
 
   #condition(cond: Condition): string {
-    if ('field' in cond) {
+    if (cond.type === 'simple') {
       const {
         value: {type, value},
       } = cond;
