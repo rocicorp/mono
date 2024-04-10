@@ -84,8 +84,9 @@ export type SimpleCondition =
 
 /**
  * Returns a normalized version the AST with all order-agnostic lists
- * (everything except ORDER BY) sorted in a deterministic manner such that
- * semantically equivalent ASTs have the same structure.
+ * (everything except ORDER BY) sorted in a deterministic manner, and
+ * condition trees flattened, such that semantically equivalent ASTs have
+ * the same structure.
  */
 export function normalizeAST(ast: AST): AST {
   return {
