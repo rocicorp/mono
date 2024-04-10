@@ -28,7 +28,7 @@ export type AST = {
   readonly table?: string | undefined;
   readonly alias?: number | undefined;
   readonly select?: [selector: string, alias: string][] | undefined;
-  readonly aggregate?: Aggregation[];
+  readonly aggregate?: Aggregation[] | undefined;
   // readonly subQueries?: {
   //   readonly alias: string;
   //   readonly query: AST;
@@ -40,7 +40,7 @@ export type AST = {
   //   readonly on: ConditionList;
   // }[];
   readonly limit?: number | undefined;
-  readonly groupBy?: string[];
+  readonly groupBy?: string[] | undefined;
   readonly orderBy: Ordering;
   // readonly after?: Primitive;
 };
