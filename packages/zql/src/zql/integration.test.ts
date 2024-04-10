@@ -1,9 +1,9 @@
+import {generate} from '@rocicorp/rails';
 import fc from 'fast-check';
 import {nanoid} from 'nanoid';
 import {Replicache, TEST_LICENSE_KEY} from 'replicache';
 import {expect, test} from 'vitest';
 import {z} from 'zod';
-import {generate} from '@rocicorp/rails';
 import {makeReplicacheContext} from './context/replicache-context.js';
 import * as agg from './query/agg.js';
 import {EntityQuery, expression, not, or} from './query/entity-query.js';
@@ -670,6 +670,50 @@ test('not', async () => {
   await r.mutate.deleteIssue('a');
   const rows2 = await stmt.exec();
   expect(rows2).toEqual([{id: 'b'}]);
+
+  await r.close();
+});
+
+test('count', async () => {
+  const {q, r} = setup();
+  const issues: Issue[] = [
+    {
+      id: 'a',
+      title: 'foo',
+      status: 'open',
+      priority: 'high',
+      assignee: 'charles',
+      created: Date.now(),
+      updated: Date.now(),
+    },
+    {
+      id: 'b',
+      title: 'bar',
+      status: 'open',
+      priority: 'medium',
+      assignee: 'bob',
+      created: Date.now(),
+      updated: Date.now(),
+    },
+    {
+      id: 'c',
+      title: 'baz',
+      status: 'closed',
+      priority: 'low',
+      assignee: 'alice',
+      created: Date.now(),
+      updated: Date.now(),
+    },
+  ] as const;
+  await Promise.all(issues.map(r.mutate.initIssue));
+
+  const stmt = q.select('count', agg.count()).prepare();
+  const rows = await stmt.exec();
+  expect(rows).toEqual([{count: 3}]);
+
+  await r.mutate.deleteIssue('a');
+  const rows2 = await stmt.exec();
+  expect(rows2).toEqual([{count: 2}]);
 
   await r.close();
 });
