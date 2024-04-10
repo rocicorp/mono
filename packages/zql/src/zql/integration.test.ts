@@ -707,13 +707,15 @@ test('count', async () => {
   ] as const;
   await Promise.all(issues.map(r.mutate.initIssue));
 
-  const stmt = q.select('count', agg.count()).prepare();
+  const stmt = q.select(agg.count()).prepare();
   const rows = await stmt.exec();
-  expect(rows).toEqual([{count: 3}]);
+  let {count} = rows[0];
+  expect(count).toBe(3);
 
   await r.mutate.deleteIssue('a');
   const rows2 = await stmt.exec();
-  expect(rows2).toEqual([{count: 2}]);
+  ({count} = rows2[0]);
+  expect(count).toBe(2);
 
   await r.close();
 });
