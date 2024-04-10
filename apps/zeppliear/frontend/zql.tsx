@@ -67,6 +67,6 @@ export function getQuery<From extends FromSet>(
   }
   const context = getContext(zero);
   const q = new EntityQuery<From>(context, name);
-  map.set(name, q);
+  map.set(name, q as EntityQuery<FromSet>);
   return q;
 }
