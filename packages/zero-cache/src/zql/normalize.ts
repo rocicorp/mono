@@ -163,7 +163,7 @@ function sorted<Cond extends Condition>(cond: Cond): Cond {
 function cmp(a: Condition, b: Condition): number {
   if ('field' in a) {
     if (!('field' in b)) {
-      return -1; // Arbitrary: order SimpleConditions first
+      return -1; // Order SimpleConditions first to simplify logic for invalidation filtering.
     }
     return (
       compareUTF8(a.field, b.field) ||
@@ -175,7 +175,7 @@ function cmp(a: Condition, b: Condition): number {
     );
   }
   if ('field' in b) {
-    return 1; // Arbitrary: order SimpleConditions first
+    return 1; // Order SimpleConditions first to simplify logic for invalidation filtering.
   }
   // For comparing two conjunctions, compare the ops first, and then compare
   // the conjunctions member-wise.
