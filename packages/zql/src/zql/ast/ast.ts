@@ -143,15 +143,18 @@ function flattened(cond: Condition | undefined): Condition | undefined {
     )
     .reduce((defined, c) => (c ? [...defined, c] : defined), [] as Condition[]);
 
-  return conditions.length === 0
-    ? undefined
-    : conditions.length === 1
-    ? conditions[0]
-    : {
+  switch (conditions.length) {
+    case 0:
+      return undefined;
+    case 1:
+      return conditions[0];
+    default:
+      return {
         type: cond.type,
         op: cond.op,
         conditions,
       };
+  }
 }
 
 /**
