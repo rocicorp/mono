@@ -36,9 +36,7 @@ class Normalized {
     const {table, select, aggregate, where, groupBy, orderBy, limit} =
       this.#ast;
 
-    assert(table);
     assert(select?.length || aggregate?.length);
-
     const selection = [
       ...(select ?? []).map(([col]) => ident(col)),
       ...(aggregate ?? []).map(a => {
