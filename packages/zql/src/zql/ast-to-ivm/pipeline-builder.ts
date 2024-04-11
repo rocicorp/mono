@@ -225,11 +225,27 @@ function applyFullTableAggregation<T extends Entity>(
   return ret;
 }
 
-function makeKeyFunction(columns: string[]) {
+function makeKeyFunction(selectors: string[]) {
+  const qualifiedColumns = selectors.map(x => {
+    if (x.includes('.')) {
+      return x.split('.') as [string, string];
+    }
+    return [undefined, x] as const;
+  });
   return (x: Record<string, unknown>) => {
     const ret: unknown[] = [];
-    for (const column of columns) {
-      ret.push(x[column]);
+    for (const qualifiedColumn of qualifiedColumns) {
+      if (isJoinResult(x)) {
+        ret.push(
+          (
+            (x as Record<string, unknown>)[must(qualifiedColumn[0])] as Record<
+              string,
+              unknown
+            >
+          )[qualifiedColumn[1]],
+        );
+      }
+      ret.push(x[qualifiedColumn[1]]);
     }
     // Would it be better to come up with some hash function
     // which can handle complex types?

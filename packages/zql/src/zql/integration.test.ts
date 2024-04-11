@@ -435,6 +435,19 @@ test('qualified selectors in where', async () => {
   await r.close();
 });
 
+test('qualified selectors in group-by', async () => {
+  const {q, r} = setup();
+  const issues = defaultIssues;
+  await Promise.all(issues.map(r.mutate.initIssue));
+
+  const stmt = q.select(agg.count()).groupBy('issue.status').prepare();
+
+  const rows = await stmt.exec();
+  expect(rows).toEqual([{count: 2}, {count: 1}]);
+
+  await r.close();
+});
+
 test('join', () => {});
 test('having', () => {});
 
