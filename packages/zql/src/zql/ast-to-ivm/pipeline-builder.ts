@@ -2,6 +2,7 @@ import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
 import type {AST, Aggregation, Condition, SimpleCondition} from '../ast/ast.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
+import {isJoinResult} from '../ivm/types.js';
 
 export function buildPipeline(
   sourceStreamProvider: (sourceName: string) => DifferenceStream<Entity>,
@@ -99,8 +100,14 @@ function applySimpleCondition<T extends Entity>(
   condition: SimpleCondition,
 ) {
   const operator = getOperator(condition);
-  const {field} = condition;
-  return stream.filter(x => operator((x as Record<string, unknown>)[field]));
+  const {field: selector} = condition;
+  let source: string = selector;
+  let field = selector;
+  if (selector.includes('.')) {
+    [source, field] = selector.split('.');
+  }
+  const qualifiedColumn = [source, field] as [string, string];
+  return stream.filter(x => operator(getValueFromEntity(x, qualifiedColumn)));
 }
 
 function applyGroupBy<T extends Entity>(
@@ -210,11 +217,12 @@ function applyFullTableAggregation<T extends Entity>(
   return ret;
 }
 
-function makeKeyFunction(columns: string[]) {
+function makeKeyFunction(selectors: string[]) {
+  const qualifiedColumns = selectorsToQualifiedColumns(selectors);
   return (x: Record<string, unknown>) => {
     const ret: unknown[] = [];
-    for (const column of columns) {
-      ret.push(x[column]);
+    for (const qualifiedColumn of qualifiedColumns) {
+      ret.push(getValueFromEntity(x, qualifiedColumn));
     }
     // Would it be better to come up with some hash function
     // which can handle complex types?
@@ -319,4 +327,30 @@ function patternToRegExp(source: string, flags: '' | 'i' = ''): RegExp {
     }
   }
   return new RegExp(pattern + '$', flags);
+}
+
+export function selectorsToQualifiedColumns(
+  selectors: string[],
+): [string | undefined, string][] {
+  return selectors.map(x => {
+    if (x.includes('.')) {
+      return x.split('.') as [string, string];
+    }
+    return [undefined, x] as const;
+  });
+}
+
+export function getValueFromEntity(
+  entity: Record<string, unknown>,
+  qualifiedColumn: [table: string | undefined, column: string],
+) {
+  if (isJoinResult(entity)) {
+    return (
+      (entity as Record<string, unknown>)[must(qualifiedColumn[0])] as Record<
+        string,
+        unknown
+      >
+    )[qualifiedColumn[1]];
+  }
+  return entity[qualifiedColumn[1]];
 }
