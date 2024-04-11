@@ -607,14 +607,14 @@ test('group by', async () => {
 
     expect(rows).toEqual([
       {
+        ...issues[0],
         maxAssignee: 'charles',
         minAssignee: 'bob',
-        status: 'open',
       },
       {
+        ...issues[2],
         maxAssignee: 'alice',
         minAssignee: 'alice',
-        status: 'closed',
       },
     ]);
   }

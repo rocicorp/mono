@@ -152,22 +152,22 @@ function applyGroupBy<T extends Entity>(
             break;
           }
           case 'min': {
-            let min: number | string | undefined;
+            let min;
             for (const value of values) {
               const newValue = value[aggregation.field as keyof T];
-              if (min === undefined || min > newValue) {
-                min = newValue as number | string;
+              if (min === undefined || (min as T[keyof T]) > newValue) {
+                min = newValue;
               }
             }
             ret[aggregation.alias] = min;
             break;
           }
           case 'max': {
-            let max: number | string | undefined;
+            let max;
             for (const value of values) {
               const newValue = value[aggregation.field as keyof T];
-              if (max === undefined || max < newValue) {
-                max = newValue as number | string;
+              if (max === undefined || (max as T[keyof T]) < newValue) {
+                max = newValue;
               }
             }
             ret[aggregation.alias] = max;
