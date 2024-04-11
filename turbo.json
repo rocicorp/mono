@@ -17,13 +17,13 @@
       "cache": true
     },
     "test": {
-      "dependsOn": ["build"]
+      "dependsOn": ["^test", "build"]
     },
     "test:watch": {
       "cache": false
     },
     "check-types": {
-      "dependsOn": ["build"],
+      "dependsOn": ["^check-types", "build"],
       "outputs": []
     }
   }
