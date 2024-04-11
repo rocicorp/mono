@@ -1,6 +1,10 @@
 import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
-import {buildPipeline} from '../ast-to-ivm/pipeline-builder.js';
+import {
+  buildPipeline,
+  getValueFromEntity,
+  selectorsToQualifiedColumns,
+} from '../ast-to-ivm/pipeline-builder.js';
 import type {AST} from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {compareEntityFields} from '../ivm/compare.js';
@@ -100,10 +104,16 @@ export function makeComparator<
   Keys extends ReadonlyArray<keyof T>,
   T extends object,
 >(sortKeys: Keys, direction: 'asc' | 'desc'): (l: T, r: T) => number {
+  const qualifiedColumns = selectorsToQualifiedColumns(
+    sortKeys as unknown as string[],
+  );
   const comparator = (l: T, r: T) => {
     let comp = 0;
-    for (const key of sortKeys) {
-      comp = compareEntityFields(l[key], r[key]);
+    for (const qualifiedColumn of qualifiedColumns) {
+      comp = compareEntityFields(
+        getValueFromEntity(l as Record<string, unknown>, qualifiedColumn),
+        getValueFromEntity(r as Record<string, unknown>, qualifiedColumn),
+      );
       if (comp !== 0) {
         return comp;
       }
