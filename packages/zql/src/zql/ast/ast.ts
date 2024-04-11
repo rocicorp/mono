@@ -24,7 +24,7 @@ export type Join = {
   readonly type: 'inner' | 'left' | 'right' | 'full';
   readonly other: AST;
   readonly as: string;
-  // only joiining by equality is supported at the moment.
+  // only joining by equality is supported at the moment.
   readonly on: [leftTableColumn: string, rightTableColumn: string];
 };
 
