@@ -107,7 +107,7 @@ function applySimpleCondition<T extends Entity>(
     [source, field] = selector.split('.');
   }
   const qualifiedColumn = [source, field] as [string, string];
-  return stream.filter(x => operator(pullValueFromEntity(x, qualifiedColumn)));
+  return stream.filter(x => operator(getValueFromEntity(x, qualifiedColumn)));
 }
 
 function applyGroupBy<T extends Entity>(
@@ -222,7 +222,7 @@ function makeKeyFunction(selectors: string[]) {
   return (x: Record<string, unknown>) => {
     const ret: unknown[] = [];
     for (const qualifiedColumn of qualifiedColumns) {
-      ret.push(pullValueFromEntity(x, qualifiedColumn));
+      ret.push(getValueFromEntity(x, qualifiedColumn));
     }
     // Would it be better to come up with some hash function
     // which can handle complex types?
@@ -340,7 +340,7 @@ export function selectorsToQualifiedColumns(
   });
 }
 
-export function pullValueFromEntity(
+export function getValueFromEntity(
   entity: Record<string, unknown>,
   qualifiedColumn: [table: string | undefined, column: string],
 ) {

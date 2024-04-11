@@ -2,7 +2,7 @@ import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
 import {
   buildPipeline,
-  pullValueFromEntity,
+  getValueFromEntity,
   selectorsToQualifiedColumns,
 } from '../ast-to-ivm/pipeline-builder.js';
 import type {AST} from '../ast/ast.js';
@@ -111,8 +111,8 @@ export function makeComparator<
     let comp = 0;
     for (const qualifiedColumn of qualifiedColumns) {
       comp = compareEntityFields(
-        pullValueFromEntity(l as Record<string, unknown>, qualifiedColumn),
-        pullValueFromEntity(r as Record<string, unknown>, qualifiedColumn),
+        getValueFromEntity(l as Record<string, unknown>, qualifiedColumn),
+        getValueFromEntity(r as Record<string, unknown>, qualifiedColumn),
       );
       if (comp !== 0) {
         return comp;
