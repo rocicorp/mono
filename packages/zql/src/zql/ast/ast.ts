@@ -87,8 +87,16 @@ export type SimpleCondition =
  * (everything except ORDER BY) sorted in a deterministic manner, and
  * condition trees flattened, such that semantically equivalent ASTs have
  * the same structure.
+ *
+ * Conjunctions are also normalized such that:
+ * * Those with an empty list of Conditions are removed and
+ * * Those with a singleton Condition are flattened.
+ *
+ * This means that in a normalized AST, Conjunctions are guaranteed to have at
+ * least 2 Conditions.
  */
 export function normalizeAST(ast: AST): AST {
+  const where = flattened(ast.where);
   return {
     table: ast.table,
     alias: ast.alias,
@@ -102,7 +110,7 @@ export function normalizeAST(ast: AST): AST {
             compareUTF8(a.field ?? '*', b.field ?? '*'),
         )
       : undefined,
-    where: ast.where ? sorted(flattened(ast.where)) : undefined,
+    where: where ? sorted(where) : undefined,
     groupBy: ast.groupBy ? [...ast.groupBy].sort(compareUTF8) : undefined,
     // The order of ORDER BY expressions is semantically significant, so it
     // is left as is (i.e. not sorted).
@@ -118,19 +126,35 @@ export function normalizeAST(ast: AST): AST {
  * ```
  * ((a AND b) AND (c AND (d OR (e OR f)))) -> (a AND b AND c AND (d OR e OR f))
  * ```
+ *
+ * Also flattens singleton Conjunctions regardless of operator, and removes
+ * empty Conjunctions.
  */
-function flattened(cond: Condition): Condition {
+function flattened(cond: Condition | undefined): Condition | undefined {
+  if (cond === undefined) {
+    return undefined;
+  }
   if (cond.type === 'simple') {
     return cond;
   }
-  const {type, op, conditions} = cond;
-  return {
-    type,
-    op,
-    conditions: conditions.flatMap(c =>
-      c.op === op ? c.conditions.map(c => flattened(c)) : flattened(c),
-    ),
-  };
+  const conditions = cond.conditions
+    .flatMap(c =>
+      c.op === cond.op ? c.conditions.map(c => flattened(c)) : flattened(c),
+    )
+    .reduce((defined, c) => (c ? [...defined, c] : defined), [] as Condition[]);
+
+  switch (conditions.length) {
+    case 0:
+      return undefined;
+    case 1:
+      return conditions[0];
+    default:
+      return {
+        type: cond.type,
+        op: cond.op,
+        conditions,
+      };
+  }
 }
 
 /**
