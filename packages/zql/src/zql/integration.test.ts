@@ -7,6 +7,7 @@ import {z} from 'zod';
 import {makeReplicacheContext} from './context/replicache-context.js';
 import * as agg from './query/agg.js';
 import {EntityQuery, expression, not, or} from './query/entity-query.js';
+import {joinSymbol} from './ivm/types.js';
 
 export async function tickAFewTimes(n = 10, time = 0) {
   for (let i = 0; i < n; i++) {
@@ -26,6 +27,8 @@ const issueSchema = z.object({
 });
 
 type Issue = z.infer<typeof issueSchema>;
+type Label = {id: string; name: string};
+type IssueLabel = {id: string; issueID: string; labelID: string};
 
 const {
   init: initIssue,
@@ -33,12 +36,32 @@ const {
   update: updateIssue,
   delete: deleteIssue,
 } = generate<Issue>('issue', issueSchema.parse);
+const {
+  init: initLabel,
+  set: setLabel,
+  update: updateLabel,
+  delete: deleteLabel,
+} = generate<Label>('label');
+const {
+  init: initIssueLabel,
+  set: setIssueLabel,
+  update: updateIssueLabel,
+  delete: deleteIssueLabel,
+} = generate<IssueLabel>('issueLabel');
 
 const mutators = {
   initIssue,
   setIssue,
   updateIssue,
   deleteIssue,
+  initLabel,
+  setLabel,
+  updateLabel,
+  deleteLabel,
+  initIssueLabel,
+  setIssueLabel,
+  updateIssueLabel,
+  deleteIssueLabel,
 };
 
 const defaultIssues: readonly Issue[] = [
@@ -70,6 +93,20 @@ const defaultIssues: readonly Issue[] = [
     updated: Date.now(),
   },
 ] as const;
+
+const defaultLabels: readonly Label[] = [
+  {id: 'a', name: 'foo'},
+  {id: 'b', name: 'bar'},
+  {id: 'c', name: 'baz'},
+];
+
+const defaultIssueLabels: readonly IssueLabel[] = [
+  {id: 'a-a', issueID: 'a', labelID: 'a'},
+  {id: 'a-b', issueID: 'a', labelID: 'b'},
+  {id: 'b-b', issueID: 'b', labelID: 'b'},
+  {id: 'b-c', issueID: 'b', labelID: 'c'},
+  {id: 'c-c', issueID: 'c', labelID: 'c'},
+];
 
 function newRep() {
   return new Replicache({
@@ -114,8 +151,13 @@ function sampleTenUniqueIssues() {
 function setup() {
   const r = newRep();
   const c = makeReplicacheContext(r);
-  const q = new EntityQuery<{issue: Issue}>(c, 'issue');
-  return {r, c, q};
+  const issueQuery = new EntityQuery<{issue: Issue}>(c, 'issue');
+  const labelQuery = new EntityQuery<{label: Label}>(c, 'label');
+  const issueLabelQuery = new EntityQuery<{issueLabel: IssueLabel}>(
+    c,
+    'issueLabel',
+  );
+  return {r, c, issueQuery, labelQuery, issueLabelQuery};
 }
 
 const compareIds = (a: {id: string}, b: {id: string}) =>
@@ -163,7 +205,7 @@ function makeComparator(...fields: (keyof Issue)[]) {
 
 test('prepare a query before the collection has writes then run it', async () => {
   const issues = sampleTenUniqueIssues();
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   const stmt = q.select('id').prepare();
   await Promise.all(issues.map(r.mutate.initIssue));
 
@@ -175,7 +217,7 @@ test('prepare a query before the collection has writes then run it', async () =>
 
 test('prepare a query then run it once `experimentalWatch` has completed', async () => {
   const issues = sampleTenUniqueIssues();
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   await Promise.all(issues.map(r.mutate.initIssue));
 
   const stmt = q.select('id').prepare();
@@ -190,7 +232,7 @@ test('prepare a query then run it once `experimentalWatch` has completed', async
 
 test('exec a query before the source has been filled by anything', async () => {
   const issues = sampleTenUniqueIssues();
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   await Promise.all(issues.map(r.mutate.initIssue));
 
   // it should wait until the source has been seeded
@@ -204,7 +246,7 @@ test('exec a query before the source has been filled by anything', async () => {
 
 test('subscribing to a query calls us with the complete query results on change', async () => {
   const issues = sampleTenUniqueIssues();
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   await Promise.all(issues.map(r.mutate.initIssue));
 
   let resolve: (v: unknown) => void;
@@ -283,7 +325,7 @@ test('each where operator', async () => {
     },
   ];
 
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   await Promise.all(issues.map(r.mutate.initIssue));
 
   let stmt = q.select('id').where('id', '=', 'a').prepare();
@@ -348,7 +390,7 @@ test('each where operator', async () => {
 test('order by single field', async () => {
   await fc.assert(
     fc.asyncProperty(uniqueNonEmptyIssuesArbitrary, async issues => {
-      const {q, r} = setup();
+      const {issueQuery: q, r} = setup();
       await Promise.all(issues.map(r.mutate.initIssue));
       await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -368,7 +410,7 @@ test('order by single field', async () => {
 test('order by id', async () => {
   await fc.assert(
     fc.asyncProperty(uniqueNonEmptyIssuesArbitrary, async issues => {
-      const {q, r} = setup();
+      const {issueQuery: q, r} = setup();
       await Promise.all(issues.map(r.mutate.initIssue));
 
       const stmt = q.select('id').asc('id').prepare();
@@ -384,7 +426,7 @@ test('order by id', async () => {
 test('order by compound fields', async () => {
   await fc.assert(
     fc.asyncProperty(uniqueNonEmptyIssuesArbitrary, async issues => {
-      const {q, r} = setup();
+      const {issueQuery: q, r} = setup();
       await Promise.all(issues.map(r.mutate.initIssue));
 
       const compareExpected = makeComparator('assignee', 'created', 'id');
@@ -404,7 +446,7 @@ test('order by compound fields', async () => {
 test('order by optional field', async () => {
   await fc.assert(
     fc.asyncProperty(uniqueNonEmptyIssuesArbitrary, async issues => {
-      const {q, r} = setup();
+      const {issueQuery: q, r} = setup();
       await Promise.all(issues.map(r.mutate.initIssue));
 
       const compareExpected = makeComparator('closed', 'id');
@@ -419,7 +461,7 @@ test('order by optional field', async () => {
 });
 
 test('qualified selectors in where', async () => {
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   const issues = defaultIssues;
   await Promise.all(issues.map(r.mutate.initIssue));
 
@@ -436,7 +478,7 @@ test('qualified selectors in where', async () => {
 });
 
 test('qualified selectors in group-by', async () => {
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   const issues = defaultIssues;
   await Promise.all(issues.map(r.mutate.initIssue));
 
@@ -452,23 +494,91 @@ test('qualified selectors in group-by', async () => {
 });
 
 test('qualified selectors in order-by', async () => {
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   const issues = defaultIssues;
   await Promise.all(issues.map(r.mutate.initIssue));
 
   const stmt = q.select('id').asc('issue.priority').prepare();
   const rows = await stmt.exec();
-  console.log(rows);
   expect(rows).toEqual([issues[0], issues[2], issues[1]]);
 
   await r.close();
 });
 
-test('join', () => {});
+test('join', async () => {
+  const {issueQuery, issueLabelQuery, labelQuery, r} = setup();
+  const issues = defaultIssues;
+  const labels = defaultLabels;
+  const issueLabels = defaultIssueLabels;
+
+  await Promise.all([
+    ...issues.map(r.mutate.initIssue),
+    ...labels.map(r.mutate.initLabel),
+    ...issueLabels.map(r.mutate.initIssueLabel),
+  ]);
+
+  const stmt = issueQuery
+    .join(issueLabelQuery, 'issueLabel', 'issue.id', 'issueLabel.issueID')
+    .join(labelQuery, 'label', 'issueLabel.labelID', 'label.id')
+    .select('issue.*', 'label.name')
+    .prepare();
+  const rows = await stmt.exec();
+
+  expect(rows).toEqual([
+    {
+      id: 'a_a-b_b',
+      issue: issues[0],
+      issueLabel: issueLabels[1],
+      label: labels[1],
+      [joinSymbol]: true,
+    },
+    {
+      id: 'a_a_a-a',
+      issue: issues[0],
+      issueLabel: issueLabels[0],
+      label: labels[0],
+      [joinSymbol]: true,
+    },
+    {
+      id: 'b_b-c_c',
+      issue: issues[1],
+      issueLabel: issueLabels[3],
+      label: labels[2],
+      [joinSymbol]: true,
+    },
+    {
+      id: 'b_b_b-b',
+      issue: issues[1],
+      issueLabel: issueLabels[2],
+      label: labels[1],
+      [joinSymbol]: true,
+    },
+    {
+      id: 'c_c_c-c',
+      issue: issues[2],
+      issueLabel: issueLabels[4],
+      label: labels[2],
+      [joinSymbol]: true,
+    },
+  ]);
+
+  // TODO:
+  // - order the joined result
+  // - group by
+  // - where
+  // - test deltas
+  // - test after
+  // - test limit
+  // - test deletes
+  // - benchmark
+
+  await r.close();
+});
+
 test('having', () => {});
 
 test('group by', async () => {
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   const issues: readonly Issue[] = [
     {
       id: 'a',
@@ -625,7 +735,7 @@ test('group by', async () => {
 test('sorted groupings', () => {});
 
 test('compound where', async () => {
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   const issues = defaultIssues;
   await Promise.all(issues.map(r.mutate.initIssue));
 
@@ -642,7 +752,7 @@ test('compound where', async () => {
 
 test('0 copy', async () => {
   const issues = sampleTenUniqueIssues();
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   await Promise.all(issues.map(r.mutate.initIssue));
   const replicacheIssues = (await r.query(tx =>
     tx
@@ -701,7 +811,7 @@ test('asc/desc difference does not create new sources', () => {});
 test('we do not do a full scan when the source order matches the view order', () => {});
 
 test('or where', async () => {
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   const issues: readonly Issue[] = [
     {
       id: 'a',
@@ -753,7 +863,7 @@ test('or where', async () => {
 });
 
 test('not', async () => {
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   const issues: readonly Issue[] = [
     {
       id: 'a',
@@ -800,7 +910,7 @@ test('not', async () => {
 });
 
 test('count', async () => {
-  const {q, r} = setup();
+  const {issueQuery: q, r} = setup();
   const issues: Issue[] = [
     {
       id: 'a',

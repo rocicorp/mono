@@ -26,7 +26,7 @@ export function buildPipeline(
   // TODO: start working on pipeline sharing so we don't have to
   // re-build the join index every time.
   if (ast.joins) {
-    stream = applyJoins(sourceStreamProvider, stream, ast.joins);
+    stream = applyJoins(sourceStreamProvider, ast.table, stream, ast.joins);
   }
 
   if (ast.where) {
@@ -57,6 +57,7 @@ export function buildPipeline(
 
 export function applyJoins<T extends Entity, O extends Entity>(
   sourceStreamProvider: (sourceName: string) => DifferenceStream<Entity>,
+  sourceTableOrAlias: string,
   stream: DifferenceStream<T>,
   joins: Join[],
 ): DifferenceStream<O> {
@@ -72,10 +73,10 @@ export function applyJoins<T extends Entity, O extends Entity>(
     const aQualifiedColumn = selectorToQualifiedColumn(join.on[0]);
     const bQualifiedColumn = selectorToQualifiedColumn(join.on[1]);
     ret = ret.join({
-      aAs: undefined,
+      aAs: sourceTableOrAlias,
       getAJoinKey(e: Entity) {
         // TODO: runtime validation?
-        return pullValueFromEntity(e, aQualifiedColumn) as Primitive;
+        return getValueFromEntity(e, aQualifiedColumn) as Primitive;
       },
       getAPrimaryKey: getId,
 
@@ -83,7 +84,7 @@ export function applyJoins<T extends Entity, O extends Entity>(
       bAs: join.as,
       getBJoinKey(e: Entity) {
         // TODO: runtime validation?
-        return pullValueFromEntity(e, bQualifiedColumn) as Primitive;
+        return getValueFromEntity(e, bQualifiedColumn) as Primitive;
       },
       getBPrimaryKey: getId,
     }) as unknown as DifferenceStream<Entity>;
@@ -397,7 +398,7 @@ export function getValueFromEntity(
   entity: Record<string, unknown>,
   qualifiedColumn: [table: string | undefined, column: string],
 ) {
-  if (isJoinResult(entity)) {
+  if (isJoinResult(entity) && qualifiedColumn[0] !== undefined) {
     return (
       (entity as Record<string, unknown>)[must(qualifiedColumn[0])] as Record<
         string,
