@@ -12,7 +12,7 @@ import type {
 import type {Context} from '../context/context.js';
 import {Misuse} from '../error/misuse.js';
 import type {EntitySchema} from '../schema/entity-schema.js';
-import {AggArray, Aggregate, isAggregate} from './agg.js';
+import {AggArray, Aggregate, Max, Min, isAggregate} from './agg.js';
 import {Statement} from './statement.js';
 
 type NotUndefined<T> = Exclude<T, undefined>;
@@ -69,38 +69,52 @@ type Selector<F extends FromSet> =
   | (ObjectHasSingleProperty<F> extends never ? NestedKeys<F> : never)
   | '*';
 
+type AggregateResult<
+  Selection extends string,
+  From extends FromSet,
+  Alias extends string,
+  Value,
+> = Selection extends `${infer Table}.${string}`
+  ? ObjectHasSingleProperty<From> extends never
+    ? {
+        [K in Alias]: Value;
+      }
+    : {
+        [K in Table]: {
+          [K in Alias]: Value;
+        };
+      }
+  : {
+      [K in Alias]: Value;
+    };
+
 type ExtractAggregatePiece<From extends FromSet, K extends Aggregator<From>> =
   // array aggregation
   K extends AggArray<infer Selection, infer Alias>
-    ? Selection extends `${infer Table}.${string}`
-      ? ObjectHasSingleProperty<From> extends never
-        ? {
-            [K in Alias]: ExtractFieldValue<
-              From,
-              Selection extends SimpleSelector<From> ? Selection : never
-            >[];
-          }
-        : {
-            [K in Table]: {
-              [K in Alias]: ExtractFieldValue<
-                From,
-                Selection extends SimpleSelector<From> ? Selection : never
-              >[];
-            };
-          }
-      : {
-          [K in Alias]: ExtractFieldValue<
-            From,
-            Selection extends SimpleSelector<From> ? Selection : never
-          >[];
-        }
+    ? AggregateResult<
+        Selection,
+        From,
+        Alias,
+        ExtractFieldValue<
+          From,
+          Selection extends SimpleSelector<From> ? Selection : never
+        >[]
+      >
+    : K extends
+        | Min<infer Selection, infer Alias>
+        | Max<infer Selection, infer Alias>
+    ? AggregateResult<
+        Selection,
+        From,
+        Alias,
+        ExtractFieldValue<
+          From,
+          Selection extends SimpleSelector<From> ? Selection : never
+        >
+      >
     : // all other aggregate functions
     K extends Aggregate<infer Selection, infer Alias>
-    ? Selection extends `${infer Table}.${string}`
-      ? ObjectHasSingleProperty<From> extends never
-        ? {[K in Alias]: number}
-        : {[K in Table]: {[K in Alias]: number}}
-      : {[K in Alias]: number}
+    ? AggregateResult<Selection, From, Alias, number>
     : never;
 
 type ExtractFieldPiece<From extends FromSet, Selection extends Selector<From>> =
