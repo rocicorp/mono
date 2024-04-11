@@ -485,18 +485,60 @@ test('junction and foreign key join, followed by aggregation: compose a playlist
     .prepare();
 
   const rows = await stmt.exec();
-  console.log(rows);
+
+  expect(rows).toEqual([
+    {
+      id: '1_1-1_1_1_1-1',
+      playlistTrack: {id: '1-1', playlistId: '1', trackId: '1', position: 1},
+      track: {id: '1', title: 'Track 1', length: 100, albumId: '1'},
+      album: {id: '1', title: 'Album 1', artistId: '1'},
+      trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
+      artists: [{id: '1', name: 'Artist 1'}],
+      [joinSymbol]: true,
+    },
+    {
+      id: '1_1_1-2_2_2-1',
+      playlistTrack: {id: '1-2', playlistId: '1', trackId: '2', position: 2},
+      track: {id: '2', title: 'Track 2', length: 100, albumId: '1'},
+      album: {id: '1', title: 'Album 1', artistId: '1'},
+      trackArtist: {id: '2-1', trackId: '2', artistId: '1'},
+      artists: [
+        {id: '1', name: 'Artist 1'},
+        {id: '2', name: 'Artist 2'},
+        {id: '3', name: 'Artist 3'},
+      ],
+      [joinSymbol]: true,
+    },
+    {
+      id: '1_1-3_3_2_3-1',
+      playlistTrack: {id: '1-3', playlistId: '1', trackId: '3', position: 3},
+      track: {id: '3', title: 'Track 3', length: 100, albumId: '2'},
+      album: {id: '2', title: 'Album 2', artistId: '1'},
+      trackArtist: {id: '3-1', trackId: '3', artistId: '1'},
+      artists: [{id: '1', name: 'Artist 1'}],
+      [joinSymbol]: true,
+    },
+    {
+      id: '1_1-4_4_2_4-1',
+      playlistTrack: {id: '1-4', playlistId: '1', trackId: '4', position: 4},
+      track: {id: '4', title: 'Track 4', length: 100, albumId: '2'},
+      album: {id: '2', title: 'Album 2', artistId: '1'},
+      trackArtist: {id: '4-1', trackId: '4', artistId: '1'},
+      artists: [
+        {id: '1', name: 'Artist 1'},
+        {id: '2', name: 'Artist 2'},
+        {id: '3', name: 'Artist 3'},
+      ],
+      [joinSymbol]: true,
+    },
+  ]);
 
   await r.close();
 });
 
 // Observations / future things to test:
 // - joining against a collection that had no writes hung forever.
-// -  it'd be nice if we could aggregate the whole row into an array, not just a column of the row
-//    `AggArray` would need to be able to take a table name as a selector.
-//    an example of this is `agg.array('artists.name', 'artists')`
-//    we really want to full `artists` row, not just the name.
-// - agg array not following a qualified selector
+// - we should add `HAVING` to the language. It'll let us filter against compeleted aggregations.
 // - proposal:
 //    - user defined lambdas for map and filter. Only applicable after `select`
 //      - select must then be the last operation before exec
