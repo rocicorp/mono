@@ -27,6 +27,8 @@ test('query types', () => {
   type E1 = {
     id: string;
     str: string;
+    num: number;
+    bool: boolean;
     optStr?: string | undefined;
     [sym]: boolean;
   };
@@ -124,6 +126,25 @@ test('query types', () => {
       or(expression('id2', '=', 'a'), expression('str', '=', 'b')),
     ),
   );
+
+  expectTypeOf(
+    q.select(agg.min('num')).groupBy('str').prepare().exec(),
+  ).toMatchTypeOf<Promise<readonly {readonly num: number}[]>>();
+  expectTypeOf(
+    q.select(agg.min('str')).groupBy('num').prepare().exec(),
+  ).toMatchTypeOf<Promise<readonly {readonly str: string}[]>>();
+  expectTypeOf(
+    q.select(agg.min('bool')).groupBy('num').prepare().exec(),
+  ).toMatchTypeOf<Promise<readonly {readonly bool: boolean}[]>>();
+  expectTypeOf(
+    q.select(agg.max('num')).groupBy('str').prepare().exec(),
+  ).toMatchTypeOf<Promise<readonly {readonly num: number}[]>>();
+  expectTypeOf(
+    q.select(agg.max('str')).groupBy('num').prepare().exec(),
+  ).toMatchTypeOf<Promise<readonly {readonly str: string}[]>>();
+  expectTypeOf(
+    q.select(agg.max('bool')).groupBy('num').prepare().exec(),
+  ).toMatchTypeOf<Promise<readonly {readonly bool: boolean}[]>>();
 });
 
 test('FieldValue type', () => {

@@ -11,11 +11,11 @@ export type Aggregate<Field extends string, Alias extends string> =
   | Avg<Field, Alias>
   | AggArray<Field, Alias>;
 
-type Min<Field extends string, Alias extends string> = {
+export type Min<Field extends string, Alias extends string> = {
   aggregate: 'min';
 } & AggregateBase<Field, Alias>;
 
-type Max<Field extends string, Alias extends string> = {
+export type Max<Field extends string, Alias extends string> = {
   aggregate: 'max';
 } & AggregateBase<Field, Alias>;
 
