@@ -1,27 +1,40 @@
 import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
-import type {AST, Aggregation, Condition, SimpleCondition} from '../ast/ast.js';
+import type {
+  AST,
+  Aggregation,
+  Condition,
+  Join,
+  Primitive,
+  SimpleCondition,
+} from '../ast/ast.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
 import {isJoinResult} from '../ivm/types.js';
+
+function getId(e: Entity) {
+  return e.id;
+}
 
 export function buildPipeline(
   sourceStreamProvider: (sourceName: string) => DifferenceStream<Entity>,
   ast: AST,
 ) {
-  // filters first
-  // select last
-  // order is a param to the source or view
-  // as well as limit? How does limit work in materialite again?
   let stream = sourceStreamProvider(
     must(ast.table, 'Table not specified in the AST'),
   );
+
+  // TODO: start working on pipeline sharing so we don't have to
+  // re-build the join index every time.
+  if (ast.joins) {
+    stream = applyJoins(sourceStreamProvider, stream, ast.joins);
+  }
 
   if (ast.where) {
     stream = applyWhere(stream, ast.where);
   }
 
   let ret: DifferenceStream<Entity> = stream;
-  // groupBy also applied aggregations
+  // groupBy also applies aggregations
   if (ast.groupBy) {
     ret = applyGroupBy(
       ret as DifferenceStream<Entity>,
@@ -42,8 +55,40 @@ export function buildPipeline(
   return ret;
 }
 
-export function applyJoins() {
-  throw new Error('Not implemented');
+export function applyJoins<T extends Entity, O extends Entity>(
+  sourceStreamProvider: (sourceName: string) => DifferenceStream<Entity>,
+  stream: DifferenceStream<T>,
+  joins: Join[],
+): DifferenceStream<O> {
+  let ret: DifferenceStream<Entity> =
+    stream as unknown as DifferenceStream<Entity>;
+  for (const join of joins) {
+    if (join.type !== 'inner') {
+      throw new Error('unimplemented');
+    }
+
+    const bPipeline = buildPipeline(sourceStreamProvider, join.other);
+
+    const aQualifiedColumn = selectorToQualifiedColumn(join.on[0]);
+    const bQualifiedColumn = selectorToQualifiedColumn(join.on[1]);
+    ret = ret.join({
+      aAs: undefined,
+      getAJoinKey(e: Entity) {
+        // TODO: runtime validation?
+        return pullValueFromEntity(e, aQualifiedColumn) as Primitive;
+      },
+      getAPrimaryKey: getId,
+
+      b: bPipeline,
+      bAs: join.as,
+      getBJoinKey(e: Entity) {
+        // TODO: runtime validation?
+        return pullValueFromEntity(e, bQualifiedColumn) as Primitive;
+      },
+      getBPrimaryKey: getId,
+    }) as unknown as DifferenceStream<Entity>;
+  }
+  return ret as unknown as DifferenceStream<O>;
 }
 
 function applyWhere<T extends Entity>(
@@ -336,12 +381,16 @@ function patternToRegExp(source: string, flags: '' | 'i' = ''): RegExp {
 export function selectorsToQualifiedColumns(
   selectors: string[],
 ): [string | undefined, string][] {
-  return selectors.map(x => {
-    if (x.includes('.')) {
-      return x.split('.') as [string, string];
-    }
-    return [undefined, x] as const;
-  });
+  return selectors.map(selectorToQualifiedColumn);
+}
+
+export function selectorToQualifiedColumn(
+  x: string,
+): [string | undefined, string] {
+  if (x.includes('.')) {
+    return x.split('.') as [string, string];
+  }
+  return [undefined, x] as const;
 }
 
 export function getValueFromEntity(
