@@ -97,3 +97,31 @@ jobs:
         run: npx playwright install --with-deps
 
       - run: npm run test
+
+  test-changed:
+    name: Test Changed
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: rocicorp
+      TURBO_REMOTE_ONLY: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: 'npm'
+
+      - name: configure npm auth token
+        run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
+        env:
+          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
+
+      - run: npm ci
+
+      - name: Install Playwright Deps
+        run: npx playwright install --with-deps
+
+      - run: npm run test -- --filter="...[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
