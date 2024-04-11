@@ -1,6 +1,6 @@
 import {generate} from '@rocicorp/rails';
 import {nanoid} from 'nanoid';
-import {Replicache, TEST_LICENSE_KEY} from 'replicache';
+import {Replicache, TEST_LICENSE_KEY, WriteTransaction} from 'replicache';
 import {expect, test} from 'vitest';
 import {makeReplicacheContext} from '../context/replicache-context.js';
 import {EntityQuery} from '../query/entity-query.js';
@@ -112,6 +112,64 @@ const mutators = {
   setPlaylistTrack,
   updatePlaylistTrack,
   deletePlaylistTrack,
+  bulkSet: async (
+    tx: WriteTransaction,
+    items: {
+      tracks?: Track[] | undefined;
+      albums?: Album[] | undefined;
+      artists?: Artist[] | undefined;
+      playlists?: Playlist[] | undefined;
+      trackArtists?: TrackArtist[] | undefined;
+    },
+  ) => {
+    const promises: Promise<void>[] = [];
+    for (const track of items.tracks ?? []) {
+      promises.push(tx.set(`track/${track.id}`, track));
+    }
+    for (const album of items.albums ?? []) {
+      promises.push(tx.set(`album/${album.id}`, album));
+    }
+    for (const artist of items.artists ?? []) {
+      promises.push(tx.set(`artist/${artist.id}`, artist));
+    }
+    for (const playlist of items.playlists ?? []) {
+      promises.push(tx.set(`playlist/${playlist.id}`, playlist));
+    }
+    for (const trackArtist of items.trackArtists ?? []) {
+      promises.push(tx.set(`trackArtist/${trackArtist.id}`, trackArtist));
+    }
+
+    await Promise.all(promises);
+  },
+  bulkRemove: async (
+    tx: WriteTransaction,
+    items: {
+      tracks?: Track[] | undefined;
+      albums?: Album[] | undefined;
+      artists?: Artist[] | undefined;
+      playlists?: Playlist[] | undefined;
+      trackArtists?: TrackArtist[] | undefined;
+    },
+  ) => {
+    const promises: Promise<boolean>[] = [];
+    for (const track of items.tracks ?? []) {
+      promises.push(tx.del(`track/${track.id}`));
+    }
+    for (const album of items.albums ?? []) {
+      promises.push(tx.del(`album/${album.id}`));
+    }
+    for (const artist of items.artists ?? []) {
+      promises.push(tx.del(`artist/${artist.id}`));
+    }
+    for (const playlist of items.playlists ?? []) {
+      promises.push(tx.del(`playlist/${playlist.id}`));
+    }
+    for (const trackArtist of items.trackArtists ?? []) {
+      promises.push(tx.del(`trackArtist/${trackArtist.id}`));
+    }
+
+    await Promise.all(promises);
+  },
 };
 
 function newRep() {
@@ -316,6 +374,21 @@ test('direct foreign key join: join a track to an album', async () => {
     track5Album1,
     track4Album2,
     track3Album3,
+  ]);
+
+  // sort by track id
+  const stmt2 = await trackQuery
+    .join(albumQuery, 'album', 'albumId', 'id')
+    .select('*')
+    .asc('track.id')
+    .prepare();
+
+  rows = await stmt2.exec();
+  expect(rows).toEqual([
+    track2Album1,
+    track3Album3,
+    track4Album2,
+    track5Album1,
   ]);
 
   // delete all the things
@@ -536,9 +609,105 @@ test('junction and foreign key join, followed by aggregation: compose a playlist
   await r.close();
 });
 
+test('track list composition with lots and lots of data then tracking incremental changes', async () => {
+  const {r, trackQuery, albumQuery, artistQuery, trackArtistQuery} = setup();
+
+  const artists = createRandomArtists(100);
+  const albums = createRandomAlbums(100, artists);
+  const tracks = createRandomTracks(10_000, albums);
+  const trackArtists = linkTracksToArtists(artists, tracks);
+
+  await r.mutate.bulkSet({
+    tracks,
+    albums,
+    artists,
+    trackArtists,
+    playlists: [],
+  });
+
+  const stmt = trackQuery
+    .join(albumQuery, 'album', 'track.albumId', 'id')
+    .join(trackArtistQuery, 'trackArtist', 'track.id', 'trackArtist.trackId')
+    .join(artistQuery, 'artists', 'trackArtist.artistId', 'id')
+    .groupBy('track.id')
+    .select('track.*', agg.array('artists.*', 'artists'))
+    .asc('track.id')
+    .prepare();
+
+  let rows = await stmt.exec();
+  expect(rows.length).toBe(10_000);
+
+  // add 100 more tracks
+  const newArtists = createRandomArtists(100);
+  const newAlbums = createRandomAlbums(100, newArtists);
+  const newTracks = createRandomTracks(100, newAlbums);
+  const newTrackArtists = linkTracksToArtists(newArtists, newTracks);
+
+  await r.mutate.bulkSet({
+    tracks: newTracks,
+    albums: newAlbums,
+    artists: newArtists,
+    trackArtists: newTrackArtists,
+    playlists: [],
+  });
+
+  // TODO: exec query may have run before we get here. In that
+  // the `experimentalWatch` callback has fired and updated the statement.
+  rows = await stmt.exec();
+  expect(rows.length).toBe(10_100);
+
+  // remove 100 tracks
+  const tracksToRemove = newTracks.slice(0, 100);
+  await r.mutate.bulkRemove({tracks: tracksToRemove});
+
+  rows = await stmt.exec();
+  expect(rows.length).toBe(10_000);
+});
+
+function createRandomArtists(n: number): Artist[] {
+  return Array.from({length: n}, () => ({
+    id: nanoid(),
+    name: nanoid(),
+  }));
+}
+
+function createRandomAlbums(n: number, artists: Artist[]): Album[] {
+  return Array.from({length: n}, () => ({
+    id: nanoid(),
+    title: nanoid(),
+    artistId: artists[Math.floor(Math.random() * artists.length)].id,
+  }));
+}
+
+function createRandomTracks(n: number, albums: Album[]): Track[] {
+  return Array.from({length: n}, () => ({
+    id: nanoid(),
+    title: nanoid(),
+    length: Math.floor(Math.random() * 300000) + 1000,
+    albumId: albums[Math.floor(Math.random() * albums.length)].id,
+  }));
+}
+
+function linkTracksToArtists(
+  artists: Artist[],
+  tracks: Track[],
+): TrackArtist[] {
+  // assign each track to 1-3 artists
+  return tracks.flatMap(t => {
+    const numArtists = Math.floor(Math.random() * 3) + 1;
+    const artistsForTrack = new Set<string>();
+    while (artistsForTrack.size < numArtists) {
+      artistsForTrack.add(
+        artists[Math.floor(Math.random() * artists.length)].id,
+      );
+    }
+    return [...artistsForTrack].map(a => ({
+      id: `${t.id}-${a}`,
+      trackId: t.id,
+      artistId: a,
+    }));
+  });
+}
+
 // Observations / future things to test:
-// - joining against a collection that had no writes hung forever.
 // - we should add `HAVING` to the language. It'll let us filter against compeleted aggregations.
-// - proposal:
-//    - user defined lambdas for map and filter. Only applicable after `select`
-//      - select must then be the last operation before exec
