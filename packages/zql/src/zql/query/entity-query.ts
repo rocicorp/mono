@@ -91,15 +91,19 @@ type AggregateResult<
 type ExtractAggregatePiece<From extends FromSet, K extends Aggregator<From>> =
   // array aggregation
   K extends AggArray<infer Selection, infer Alias>
-    ? AggregateResult<
-        Selection,
-        From,
-        Alias,
-        ExtractFieldValue<
+    ? Selection extends `${infer Table}.*`
+      ? {
+          [K in Alias]: From[Table][];
+        }
+      : AggregateResult<
+          Selection,
           From,
-          Selection extends SimpleSelector<From> ? Selection : never
-        >[]
-      >
+          Alias,
+          ExtractFieldValue<
+            From,
+            Selection extends SimpleSelector<From> ? Selection : never
+          >[]
+        >
     : K extends
         | Min<infer Selection, infer Alias>
         | Max<infer Selection, infer Alias>
@@ -177,7 +181,9 @@ type CombineSelections<
     : never
   : unknown;
 
-type Aggregator<From extends FromSet> = Aggregate<SimpleSelector<From>, string>;
+type Aggregator<From extends FromSet> =
+  | Aggregate<SimpleSelector<From>, string>
+  | AggArray<Selector<From>, string>;
 
 /**
  * Have you ever noticed that when you hover over Types in TypeScript, it shows

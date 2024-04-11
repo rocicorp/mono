@@ -410,6 +410,9 @@ export function getValueFromEntity(
   qualifiedColumn: [table: string | undefined, column: string],
 ) {
   if (isJoinResult(entity) && qualifiedColumn[0] !== undefined) {
+    if (qualifiedColumn[1] === '*') {
+      return (entity as Record<string, unknown>)[qualifiedColumn[0]];
+    }
     return (
       (entity as Record<string, unknown>)[must(qualifiedColumn[0])] as Record<
         string,

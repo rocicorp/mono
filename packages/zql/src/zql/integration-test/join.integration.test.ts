@@ -480,7 +480,7 @@ test('junction and foreign key join, followed by aggregation: compose a playlist
     .join(artistQuery, 'artists', 'trackArtist.artistId', 'id')
     .where('playlistTrack.playlistId', '=', '1')
     .groupBy('track.id')
-    .select('track.*', agg.array('artists.name', 'artists'))
+    .select('track.*', agg.array('artists.*', 'artists'))
     .asc('track.id')
     .prepare();
 
