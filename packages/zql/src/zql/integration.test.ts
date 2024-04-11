@@ -503,6 +503,46 @@ test('group by', async () => {
     },
   ]);
 
+  {
+    const statement = q
+      .select(
+        'status',
+        agg.min('created', 'minCreated'),
+        agg.max('created', 'maxCreated'),
+      )
+      .where('assignee', '=', 'dan')
+      .groupBy('status')
+      .prepare();
+    const rows = await statement.exec();
+
+    expect(rows).toEqual([]);
+  }
+
+  {
+    const statement = q
+      .select(
+        'status',
+        agg.min('assignee', 'minAssignee'),
+        agg.max('assignee', 'maxAssignee'),
+      )
+      .groupBy('status')
+      .prepare();
+    const rows = await statement.exec();
+
+    expect(rows).toEqual([
+      {
+        maxAssignee: 'charles',
+        minAssignee: 'bob',
+        status: 'open',
+      },
+      {
+        maxAssignee: 'alice',
+        minAssignee: 'alice',
+        status: 'closed',
+      },
+    ]);
+  }
+
   await r.close();
 });
 
